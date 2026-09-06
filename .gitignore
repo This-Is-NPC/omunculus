@@ -13,3 +13,6 @@ erl_crash.dump
 .elixir_ls
 .dialyzer
 *.beam
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
