@@ -77,9 +77,46 @@ tabela do documento.
    redelivery; `idempotency_key` igual com payload diferente é conflito
    explícito. Ambos testados.
 
+## Provider real
+
+Qualquer flag de provider (`--config`, `--model`, `--base-url`, `--api-key`)
+troca o `Chat.Fake` por um chat OpenAI-compatível construído pelo mesmo
+caminho de `run`. A configuração Agent continua genérica: só `kind`, tools e
+`system_prompt` mudam por depth.
+
+```sh
+./omunculus spike "conte até 10" --depth 2 --config presets/local.toml
+```
+
+Resultado com `qwen3.5:4b` servido pelo FastFlowLM em 2026-09-06:
+
+| Execução | Cadeia | Resultado | Observação |
+|---|---|---|---|
+| depth 1, sem `system_prompt` próprio | quebrou | prosa em português | o concierge herdou o prompt de coding agent e emitiu um tool call sem nome |
+| depth 1, com `system_prompt` e `nudge` | completa, 42 envelopes | `10` | duas execuções seguidas, ambas corretas |
+| depth 2, com `system_prompt` e `nudge` | completa, 78 envelopes | `20` | o concierge raiz reescreveu a instrução para "count up to 20." e o worker obedeceu |
+
+Achados que valem para o TO-BE:
+
+1. **Deriva de instrução na delegação.** `task.delegated` hoje carrega a
+   `instruction` que o modelo escreveu. O Work Item filho deveria referenciar
+   o Work Item pai (instrução original, critérios) e tratar o texto do modelo
+   como complemento, senão a árvore executa outra tarefa com a cadeia de
+   causação perfeitamente íntegra.
+2. **Prompt é parte da configuração Agent.** O base prompt fixo do `Agent`
+   presume filesystem e coding; um nó concierge precisa do seu próprio.
+   `system_prompt` e `nudge` viraram opções do `Agent` por isso.
+3. **`task.completed.result` é texto livre.** O worker devolveu "We've
+   reached the target of 10!..." numa execução e "10" noutra. Se o resultado
+   for contrato entre nós, o payload precisa de um campo estruturado além do
+   texto (por exemplo o checkpoint da tool).
+4. **Latência do round-trip pelo log é desprezível** frente ao modelo: cada
+   tool call custa dois appends e duas entregas, na casa de milissegundos,
+   contra 2 a 4 segundos por chamada de modelo local.
+
 ## Fora da spike
 
-Provider real, sandbox por node, budget além de profundidade máxima,
+Sandbox por node, budget além de profundidade máxima,
 reducers de `COMMENTS` além do resultado, retenção/compactação, sessão e
 workspace como agregados, GUI.
 
