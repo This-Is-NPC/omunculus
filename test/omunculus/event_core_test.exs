@@ -23,18 +23,23 @@ defmodule Omunculus.EventCoreTest do
     assert id == cmd.event_id
     assert [%Envelope{sequence: 1}] = EventCore.stream(core, 0)
 
-    evt = Envelope.event("noop", correlation_id: cmd.correlation_id, causation_id: cmd.event_id)
+    evt =
+      Envelope.event("run.completed",
+        correlation_id: cmd.correlation_id,
+        causation_id: cmd.event_id
+      )
+
     {:ok, %{sequence: 2}} = EventCore.append(core, evt)
   end
 
   test "events require a causation id", %{core: core} do
     assert {:error, :event_requires_causation} =
-             EventCore.append(core, Envelope.event("x", correlation_id: "c"))
+             EventCore.append(core, Envelope.event("run.completed", correlation_id: "c"))
   end
 
   test "redelivery of the same event_id is idempotent, different content conflicts", %{core: core} do
     :ok = EventCore.subscribe(core)
-    cmd = Envelope.command("task.requested", payload: %{a: 1})
+    cmd = Envelope.command("task.requested", payload: %{instruction: "a"})
     {:ok, first} = EventCore.append(core, cmd)
     {:ok, again} = EventCore.append(core, cmd)
     assert again == first
@@ -42,15 +47,15 @@ defmodule Omunculus.EventCoreTest do
     refute_receive {:event_core, _}, 50
 
     assert {:error, {:event_id_conflict, _}} =
-             EventCore.append(core, %{cmd | payload: %{"a" => 2}})
+             EventCore.append(core, %{cmd | payload: %{"instruction" => "b"}})
 
     assert length(EventCore.stream(core, 0)) == 1
   end
 
   test "idempotency key returns the first result or an explicit conflict", %{core: core} do
-    a = Envelope.command("task.requested", payload: %{a: 1}, idempotency_key: "k1")
-    b = Envelope.command("task.requested", payload: %{a: 1}, idempotency_key: "k1")
-    c = Envelope.command("task.requested", payload: %{a: 9}, idempotency_key: "k1")
+    a = Envelope.command("task.requested", payload: %{instruction: "a"}, idempotency_key: "k1")
+    b = Envelope.command("task.requested", payload: %{instruction: "a"}, idempotency_key: "k1")
+    c = Envelope.command("task.requested", payload: %{instruction: "z"}, idempotency_key: "k1")
 
     {:ok, stored_a} = EventCore.append(core, a)
     {:ok, stored_b} = EventCore.append(core, b)
@@ -60,13 +65,13 @@ defmodule Omunculus.EventCoreTest do
   end
 
   test "stream filters by correlation and reads in sequence order", %{core: core} do
-    c1 = EventCore.append!(core, Envelope.command("a", correlation_id: "c1"))
-    _c2 = EventCore.append!(core, Envelope.command("b", correlation_id: "c2"))
+    c1 = EventCore.append!(core, Envelope.command("task.resumed", correlation_id: "c1"))
+    _c2 = EventCore.append!(core, Envelope.command("task.resumed", correlation_id: "c2"))
 
     e1 =
       EventCore.append!(
         core,
-        Envelope.event("c", correlation_id: "c1", causation_id: c1.event_id)
+        Envelope.event("run.completed", correlation_id: "c1", causation_id: c1.event_id)
       )
 
     assert [^c1, ^e1] = EventCore.stream(core, 0, correlation_id: "c1")

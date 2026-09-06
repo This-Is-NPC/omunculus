@@ -29,6 +29,8 @@ defmodule Omunculus.Config do
       defaults: %{preset: @default_preset, max_turns: @default_max_turns},
       chat: %{api: "openai-completions", auth: nil, base_url: nil, model: nil, api_key: nil},
       output: %{timestamp_format: @default_timestamp_format},
+      interceptors: [],
+      automations: [],
       presets: %{
         "coding" => %{
           tools: Omunculus.Tools.default_names(),
@@ -67,6 +69,65 @@ defmodule Omunculus.Config do
          chat: config.chat,
          output: config.output
        }}
+    end
+  end
+
+  @doc """
+  Validate `[[interceptors]]` and `[[automations]]` against the event catalog
+  and the loaded modules. Returns `{:ok, %{interceptors: [...], automations: [...]}}`
+  with resolved modules, or the first error.
+  """
+  def check(config) do
+    with {:ok, interceptors} <- check_interceptors(config.interceptors),
+         {:ok, automations} <- check_automations(config.automations) do
+      {:ok, %{interceptors: interceptors, automations: automations}}
+    end
+  end
+
+  defp check_interceptors(list) do
+    Enum.reduce_while(list, {:ok, []}, fn item, {:ok, acc} ->
+      with :ok <- require_name(item, :interceptor),
+           :ok <- check_events(item, &Omunculus.Events.interceptable?/1, :not_interceptable),
+           {:ok, module} <- Omunculus.Interceptor.resolve(item.module || "") do
+        {:cont, {:ok, acc ++ [%{item | module: module}]}}
+      else
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp check_automations(list) do
+    Enum.reduce_while(list, {:ok, []}, fn item, {:ok, acc} ->
+      with :ok <- require_name(item, :automation),
+           :ok <- check_events(item, fn _ -> true end, :never),
+           :ok <-
+             if(is_binary(item.run) and item.run != "",
+               do: :ok,
+               else: {:error, {:automation_requires_run, item.name}}
+             ) do
+        {:cont, {:ok, acc ++ [item]}}
+      else
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp require_name(%{name: name}, _kind) when is_binary(name) and name != "", do: :ok
+  defp require_name(_item, kind), do: {:error, {:config_entry_requires_name, kind}}
+
+  defp check_events(%{name: name, events: events}, allowed?, reason) do
+    cond do
+      not is_list(events) or events == [] ->
+        {:error, {:config_entry_requires_events, name}}
+
+      type = Enum.find(events, &(not Omunculus.Events.known?(&1))) ->
+        {:error, {:unknown_event_type, name, type}}
+
+      type = Enum.find(events, &(not allowed?.(&1))) ->
+        {:error, {reason, name, type}}
+
+      true ->
+        :ok
     end
   end
 
@@ -151,6 +212,8 @@ defmodule Omunculus.Config do
     chat = Map.get(map, "chat", %{})
     output = Map.get(map, "output", %{})
     presets = Map.get(map, "presets", %{})
+    interceptors = Map.get(map, "interceptors", [])
+    automations = Map.get(map, "automations", [])
 
     %{
       defaults: %{
@@ -167,6 +230,19 @@ defmodule Omunculus.Config do
       output: %{
         timestamp_format: output["timestamp_format"]
       },
+      interceptors:
+        Enum.map(List.wrap(interceptors), fn item ->
+          %{
+            name: item["name"],
+            events: item["events"],
+            module: item["module"],
+            options: item["options"] || %{}
+          }
+        end),
+      automations:
+        Enum.map(List.wrap(automations), fn item ->
+          %{name: item["name"], events: item["events"], run: item["run"]}
+        end),
       presets:
         presets
         |> Enum.map(fn {name, body} ->
@@ -188,6 +264,8 @@ defmodule Omunculus.Config do
       defaults: deep_keep(base.defaults, Map.get(overlay, :defaults, %{})),
       chat: deep_keep(base.chat, Map.get(overlay, :chat, %{})),
       output: deep_keep(base.output, Map.get(overlay, :output, %{})),
+      interceptors: base.interceptors ++ Map.get(overlay, :interceptors, []),
+      automations: base.automations ++ Map.get(overlay, :automations, []),
       presets: Map.merge(base.presets, Map.get(overlay, :presets, %{}))
     }
   end

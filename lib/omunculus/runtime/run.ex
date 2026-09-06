@@ -151,32 +151,51 @@ defmodule Omunculus.Runtime.Run do
     if outcome == "completed", do: {:ok, body, context}, else: {:error, outcome, context}
   end
 
+  # Depth policy is not the node's business: a configured DepthGate
+  # interceptor may reject the delivery of task.delegated, in which case the
+  # child never starts and the rejection comes back to the model as a tool
+  # error, with delivery.rejected as the new head of the causation chain.
   defp delegate(state, args, context) do
-    if state.depth >= state.max_depth do
-      {:error, :max_depth_exceeded, context}
-    else
-      child = Envelope.generate_id("wi")
-      instruction = args["instruction"] || args[:instruction] || state.instruction
+    child = Envelope.generate_id("wi")
+    instruction = args["instruction"] || args[:instruction] || state.instruction
 
-      delegated =
-        append!(state, :event, "task.delegated", %{
-          instruction: instruction,
-          child_work_item_id: child,
-          to_depth: state.depth + 1,
-          parent_run_id: state.run_id,
-          originating_run_id: state.originating_run_id || state.run_id
-        })
+    delegated =
+      append!(state, :event, "task.delegated", %{
+        instruction: instruction,
+        child_work_item_id: child,
+        to_depth: state.depth + 1,
+        parent_run_id: state.run_id,
+        originating_run_id: state.originating_run_id || state.run_id
+      })
 
-      await_delivery(delegated.event_id)
+    case await_delivery_or_rejection(delegated.event_id) do
+      :ok ->
+        case await_child(child, state[:delegation_timeout] || 60_000) do
+          {:ok, completed} ->
+            Process.put(:chain_head, completed.event_id)
+            {:ok, "Sub-agent completed. Result: #{completed.payload["result"]}", context}
 
-      case await_child(child, state[:delegation_timeout] || 60_000) do
-        {:ok, completed} ->
-          Process.put(:chain_head, completed.event_id)
-          {:ok, "Sub-agent completed. Result: #{completed.payload["result"]}", context}
+          {:error, reason} ->
+            {:error, reason, context}
+        end
 
-        {:error, reason} ->
-          {:error, reason, context}
-      end
+      {:rejected, rejection} ->
+        Process.put(:chain_head, rejection.event_id)
+        {:error, {:delegation_rejected, rejection.payload["reason"]}, context}
+    end
+  end
+
+  # A delegation is either delivered back to us or rejected by the lane; the
+  # rejection carries causation to the envelope we appended.
+  defp await_delivery_or_rejection(event_id) do
+    receive do
+      {:event_core, %Envelope{event_id: ^event_id}} ->
+        :ok
+
+      {:event_core, %Envelope{type: "delivery.rejected", causation_id: ^event_id} = env} ->
+        {:rejected, env}
+    after
+      @delivery_timeout -> raise "event #{event_id} was committed but never delivered"
     end
   end
 

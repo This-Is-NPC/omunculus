@@ -17,6 +17,7 @@ defmodule Omunculus.EventCore do
 
   alias Omunculus.Event.Envelope
   alias Omunculus.EventCore.Store
+  alias Omunculus.Events
 
   @insert_sql """
   INSERT INTO EVENTS (#{Envelope.columns() |> Enum.reject(&(&1 == :sequence)) |> Enum.join(", ")}, content_hash)
@@ -74,28 +75,47 @@ defmodule Omunculus.EventCore do
 
   def path(core), do: GenServer.call(core, :path)
 
+  @doc "Per-interceptor counters: evaluated, delivered, rejected."
+  def interceptor_stats(core), do: GenServer.call(core, :interceptor_stats)
+
   # --- callbacks -------------------------------------------------------------
 
   @impl true
   def init(opts) do
     path = Keyword.get(opts, :path, ":memory:")
 
+    interceptors = Keyword.get(opts, :interceptors, [])
+
     case Store.open(path) do
-      {:ok, conn} -> {:ok, %{conn: conn, path: path, subscribers: %{}}}
-      {:error, reason} -> {:stop, {:sqlite_open, reason}}
+      {:ok, conn} ->
+        {:ok,
+         %{
+           conn: conn,
+           path: path,
+           subscribers: %{},
+           interceptors: interceptors,
+           interceptor_stats:
+             Map.new(interceptors, &{&1.name, %{evaluated: 0, delivered: 0, rejected: 0}})
+         }}
+
+      {:error, reason} ->
+        {:stop, {:sqlite_open, reason}}
     end
   end
 
   @impl true
   def handle_call({:append, env}, _from, state) do
     with :ok <- Envelope.validate(env),
+         :ok <- Events.validate(env),
          {:ok, stored, fresh?} <- persist(state.conn, env) do
-      if fresh?, do: notify(state.subscribers, stored)
+      state = if fresh?, do: dispatch(state, stored), else: state
       {:reply, {:ok, stored}, state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
+
+  def handle_call(:interceptor_stats, _from, state), do: {:reply, state.interceptor_stats, state}
 
   def handle_call({:stream, after_seq, opts}, _from, state) do
     {sql, args} = stream_query(after_seq, opts)
@@ -230,6 +250,59 @@ defmodule Omunculus.EventCore do
     {"SELECT #{@select_cols} FROM EVENTS WHERE #{Enum.join(where, " AND ")} ORDER BY sequence#{limit}",
      args}
   end
+
+  # The delivery path: commit happened already. Interceptors configured for
+  # this type run in order; the first rejection stops delivery and is recorded
+  # as delivery.rejected (itself dispatched, but never interceptable).
+  defp dispatch(state, env) do
+    lane = Enum.filter(state.interceptors, &(env.type in &1.events))
+
+    case run_lane(lane, env, state) do
+      {:deliver, state} ->
+        notify(state.subscribers, env)
+        state
+
+      {:reject, name, reason, state} ->
+        rejection =
+          Envelope.event("delivery.rejected",
+            correlation_id: env.correlation_id,
+            causation_id: env.event_id,
+            session_id: env.session_id,
+            workspace_id: env.workspace_id,
+            project_id: env.project_id,
+            work_item_id: env.work_item_id,
+            run_id: env.run_id,
+            payload: %{
+              rejected_event_id: env.event_id,
+              rejected_type: env.type,
+              interceptor: name,
+              reason: to_string(reason)
+            }
+          )
+
+        {:ok, stored, true} = persist(state.conn, rejection)
+        notify(state.subscribers, stored)
+        state
+    end
+  end
+
+  defp run_lane([], _env, state), do: {:deliver, state}
+
+  defp run_lane([interceptor | rest], env, state) do
+    stats = state.interceptor_stats
+
+    case interceptor.module.intercept(env, interceptor.options) do
+      :deliver ->
+        stats = bump(stats, interceptor.name, :evaluated) |> bump(interceptor.name, :delivered)
+        run_lane(rest, env, %{state | interceptor_stats: stats})
+
+      {:reject, reason} ->
+        stats = bump(stats, interceptor.name, :evaluated) |> bump(interceptor.name, :rejected)
+        {:reject, interceptor.name, reason, %{state | interceptor_stats: stats}}
+    end
+  end
+
+  defp bump(stats, name, key), do: update_in(stats[name][key], &(&1 + 1))
 
   defp notify(subscribers, env) do
     Enum.each(subscribers, fn {pid, {_ref, filter}} ->
