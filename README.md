@@ -48,6 +48,7 @@ uma string TOML inteira; mantenha segredos fora do versionamento.
 - [Modelo de dados TO-BE (planejado)](docs/to-be/data-model.md)
 - [Requisitos TO-BE (planejados)](docs/to-be/requirements.md)
 - [Event Core e eventos TO-BE (planejado)](docs/to-be/event-model.md)
+- [Catálogo de eventos, interceptores e automações TO-BE](docs/to-be/event-catalog.md)
 - [Execução e delegação TO-BE (planejado)](docs/to-be/execution-model.md)
 - [Comparação de harnesses TO-BE vs. Pi, Claude Code e Codex](docs/to-be/harness-comparison.md)
 - [Spike do Event Core (branch `spike/event-core`)](docs/spike/event-core-spike.md)

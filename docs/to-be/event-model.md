@@ -35,6 +35,9 @@ SQLite/WAL contém a tabela central `EVENTS`, append-only. O fluxo obrigatório 
 
 O dispatcher pode entregar várias vezes e pode parar entre persistência e
 entrega. Ele nunca é a autoridade do histórico e não apaga o evento aceito.
+Entre o commit e a entrega pode existir um **Interceptor** para os tipos que
+o declaram em configuração; os tipos válidos, o contrato do interceptor e as
+portas externas estão em [event-catalog.md](event-catalog.md).
 Consumers atualizam as projeções duráveis em transação, usando precondições e
 versões esperadas. Falha de consumer deixa o evento disponível para retry.
 
