@@ -81,13 +81,13 @@ sequenceDiagram
 
     U->>CLI: session create omacon
     CLI->>EC: session.created {session_id}
-    U->>CLI: workspace attach omunculus --session omacon
+    U->>CLI: workspace attach omunculus
     CLI->>EC: workspace.attached {workspace_id, roots, teto}
     EC-->>RT: deliver
     RT->>RT: cria node depth 1 (hash(sessão, omunculus, 1)); nenhuma Run ainda
     U->>CLI: workspace attach omakiten --session omacon
     CLI->>EC: workspace.attached
-    U->>CLI: send --session omacon "faça X no omunculus e Y no omakiten"
+    U->>CLI: send "faça X no omunculus e Y no omakiten"
     CLI->>EC: task.requested {session_id}
     EC-->>RT: deliver
     RT->>RT: Run no node depth 0
@@ -96,7 +96,8 @@ sequenceDiagram
 ```
 
 1. `session create` apenda `session.created`. Um log SQLite por sessão, uma
-   `sequence` só.
+   `sequence` só. A sessão padrão do usuário é criada implicitamente no
+   primeiro `send`.
 2. `workspace attach` apenda `workspace.attached` e cria o node de depth 1
    daquele workspace, **sem Run**. Anexar é membership, não spawn.
 3. `send` apenda `task.requested` com `session_id`. Nasce uma Run no node de
@@ -200,12 +201,54 @@ dos Work Items abertos. É a mesma regra de tudo o mais: se não está em
 `task.requested` ganha `requested_by` e `workspace`; `task.delegated` ganha
 `workspace`, válido só a partir do depth 0.
 
+## Ponto de entrada: o concierge resolve, não a flag
+
+O humano não escolhe sessão nem workspace a cada comando. Ele fala com o
+concierge da sessão, e o concierge é quem entende o pedido e o atribui ao
+workspace certo. Por isso:
+
+- existe **uma sessão padrão por usuário**, criada na primeira vez que
+  `send` roda, em `~/.omunculus/session.sqlite3`. `send "…"` sem flag vai
+  para ela;
+- o concierge de depth 0 vê os workspaces anexados pela tool `workspaces`
+  e delega com `workspace = …`. Um pedido que toca dois repositórios vira
+  duas delegações; um pedido ambíguo vira uma pergunta ao humano, por
+  `COMMENTS`, não uma adivinhação;
+- `--workspace w` é uma **dica** opcional: pina o workspace de destino e
+  tira a decisão do concierge. Serve para o atalho e para automações, que
+  não devem depender de interpretação;
+- `--session s` é opcional e raro: só para quem mantém mais de uma
+  orquestra. `OMUNCULUS_SESSION` no ambiente faz o mesmo. Sem nenhum dos
+  dois, é a sessão padrão do usuário;
+- `run <dir>` continua sendo o atalho "sessão efêmera com um único
+  workspace igual ao diretório", sem concierge de roteamento.
+
+```mermaid
+sequenceDiagram
+    actor U as Humano
+    participant CLI
+    participant EC as Event Core (sessão padrão)
+    participant C0 as Concierge depth 0
+    participant A as node depth 1 · omunculus
+    participant B as node depth 1 · omakiten
+
+    U->>CLI: send "corrija os testes do omunculus e atualize o changelog do omakiten"
+    CLI->>EC: task.requested (sem workspace)
+    EC-->>C0: deliver
+    C0->>C0: workspaces() → [omunculus, omakiten]
+    C0->>EC: task.delegated workspace=omunculus "corrija os testes"
+    C0->>EC: task.delegated workspace=omakiten "atualize o changelog"
+    EC-->>A: deliver
+    EC-->>B: deliver
+```
+
 ## Verbos da CLI
 
-- `session create|resume|list`;
-- `workspace attach|detach --session s`;
-- `send --session s [--workspace w] "…"`;
-- `events follow --session s` (viewport, não membership).
+- `send [--profile p] [--workspace w] [--session s] "…"`: só o texto é
+  obrigatório;
+- `workspace attach|detach <nome> [--session s]`;
+- `session create|resume|list`: administração, não uso diário;
+- `events follow [--session s]` (viewport, não membership).
 
 Follow é o que o cliente assiste; attach é o que pertence à sessão. Pode-se
 seguir uma sessão sem anexar um workspace, e anexar sem estar olhando.

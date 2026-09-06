@@ -146,7 +146,7 @@ mode = "allow"
 mode = "allow"
 ```
 
-`omunculus run --profile full --workspace sandbox "…"` dá ao agente tudo que
+`omunculus send --profile full --workspace sandbox "…"` dá ao agente tudo que
 o catálogo tem, em qualquer profundidade cujo teto seja `allow`. Quem
 configurou `infra` como `deny` continua protegido mesmo com `--profile full`,
 porque `full ∩ infra` é só leitura.
