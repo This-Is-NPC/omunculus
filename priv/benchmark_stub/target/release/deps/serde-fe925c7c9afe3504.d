@@ -1,0 +1,14 @@
+/home/howl/Projects/person/omunculus/priv/benchmark_stub/target/release/deps/serde-fe925c7c9afe3504.d: /home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /home/howl/Projects/person/omunculus/priv/benchmark_stub/target/release/build/serde-4779f8b2b297c69a/out/private.rs
+
+/home/howl/Projects/person/omunculus/priv/benchmark_stub/target/release/deps/libserde-fe925c7c9afe3504.rlib: /home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /home/howl/Projects/person/omunculus/priv/benchmark_stub/target/release/build/serde-4779f8b2b297c69a/out/private.rs
+
+/home/howl/Projects/person/omunculus/priv/benchmark_stub/target/release/deps/libserde-fe925c7c9afe3504.rmeta: /home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /home/howl/Projects/person/omunculus/priv/benchmark_stub/target/release/build/serde-4779f8b2b297c69a/out/private.rs
+
+/home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs:
+/home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs:
+/home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs:
+/home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs:
+/home/howl/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs:
+/home/howl/Projects/person/omunculus/priv/benchmark_stub/target/release/build/serde-4779f8b2b297c69a/out/private.rs:
+
+# env-dep:OUT_DIR=/home/howl/Projects/person/omunculus/priv/benchmark_stub/target/release/build/serde-4779f8b2b297c69a/out

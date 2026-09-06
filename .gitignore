@@ -1,0 +1,15 @@
+/_build
+/cover
+/deps
+/doc
+/.fetch
+erl_crash.dump
+*.ez
+/tmp
+/omunculus
+.env
+.env.local
+.env.*.local
+.elixir_ls
+.dialyzer
+*.beam

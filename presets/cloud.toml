@@ -1,0 +1,13 @@
+[chat]
+api = "openai-completions"
+auth = "api_key"
+base_url = "https://openrouter.ai/api/v1"
+model = "google/gemma-4-31b-it:free"
+api_key = "${OPENROUTER_API_KEY}"
+
+[defaults]
+preset = "coding"
+max_turns = 32
+
+[output]
+timestamp_format = "%d/%m/%Y %H:%M:%S"
