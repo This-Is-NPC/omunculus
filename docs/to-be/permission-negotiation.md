@@ -190,6 +190,51 @@ tool não estava na exposição dela, mas se o modelo tentar, o `ToolGate` lê a
 concessão na linhagem e entrega; se o modelo chamar `request_permission`, cai
 na linha "concedido" da tabela. Nos dois casos nenhum pedido novo nasce.
 
+### Entre tarefas diferentes
+
+Temporária não vaza de uma tarefa para outra, então duas tarefas que
+precisam da mesma tool no mesmo workspace geram dois pedidos, com
+`request_id` distintos. A inbox agrupa por workspace e tool para você ver
+que é a mesma decisão, e dois pedidos iguais são o sinal de que o workspace
+talvez deva mudar de política.
+
+Quando a resposta é **permanente**, o que resolve é a política, não o
+pedido:
+
+- **A pede depois de a permanente existir.** Antes de apendar qualquer
+  pedido, o harness consulta a política atual. A tool já é `granted` para
+  o workspace, então não há pedido: a Run fecha com `outcome = waiting` e
+  `awaiting = policy`, e o Runtime a reabre imediatamente por continuação.
+  A Run nova resolve a política do disco e nasce com a tool pinada. Nada
+  aparece na inbox.
+- **A já tinha pedido quando a permanente foi concedida para B.**
+  `policy.changed` é um evento. Ao recebê-lo, o Runtime varre os pedidos
+  abertos e fecha todo pedido cuja tool a política nova concede naquele
+  workspace, apendando `permission.granted` com `kind = permanent` e
+  `granter = policy`, com causação no `policy.changed`. Os Work Items
+  aguardando são reabertos por continuação; a linha de A some da inbox.
+
+Nos dois casos "Run em andamento não muda" continua valendo: a Run antiga
+não ganhou a tool, ela fechou e outra nasceu com a política nova.
+
+```mermaid
+sequenceDiagram
+    participant RA as Run de A (pinada sem T)
+    participant EC as Event Core
+    participant RT as Runtime
+    actor H as Humano
+
+    H->>EC: permission.granted {hash(B, T), kind=permanent} → TOML editado
+    EC->>EC: policy.changed
+    EC-->>RT: deliver policy.changed
+    RT->>EC: permission.granted {hash(A, T), kind=permanent, granter=policy} para cada pedido aberto de T no workspace
+    RT->>RT: reabre Work Items aguardando hash(A, T)
+    Note over RA: se A ainda não pediu e o modelo chamar request_permission(T) depois:
+    RA->>RA: política atual concede T → sem pedido
+    RA->>EC: run.completed {outcome=waiting, awaiting=policy}
+    RT->>RA: run.started (continuation) com T pinada
+```
+
 ## Escalada ao humano
 
 Quando o árbitro é humano, o pedido usa o que o TO-BE já reserva para
