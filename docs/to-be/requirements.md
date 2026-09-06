@@ -24,7 +24,9 @@ partida implementado está em [AS-IS requirements](../as-is/requirements.md).
    `ARCHIVE_RUNS` e `ARCHIVE_MODEL_CALLS` permanecem como as seis tabelas de
    domínio/archive; `EVENTS` é a tabela central adicional mínima.
 2. Work Item é a unidade durável de trabalho. Run é uma tentativa durável e
-   fechada; retry não reabre nem sobrescreve a Run anterior.
+   fechada; retry não reabre nem sobrescreve a Run anterior. Uma Run nunca
+   espera outro agente ou um humano: pedir é concluir, com
+   `outcome = waiting` e checkpoint, e a resposta abre uma Run nova.
 3. Agent é somente configuração genérica (identidade/kind, model/provider,
    prompt, tools, budget e params). Não pode conter `reports_to`, `parent` ou
    `depth` nem codificar uma árvore estática.

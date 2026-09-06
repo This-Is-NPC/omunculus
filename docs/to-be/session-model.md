@@ -91,8 +91,9 @@ sequenceDiagram
     CLI->>EC: task.requested {session_id}
     EC-->>RT: deliver
     RT->>RT: Run no node depth 0
-    Note over RT: depth 0 delega com workspace=omunculus → Run no node existente de depth 1
-    Note over RT: depth 0 delega com workspace=omakiten → Run no node existente de depth 1
+    Note over RT: depth 0 delega com workspace=omunculus e omakiten, fecha com outcome=waiting
+    Note over RT: cada task.delegated abre uma Run no node existente de depth 1
+    Note over RT: cada task.completed dos filhos reabre o depth 0 (continuation)
 ```
 
 1. `session create` apenda `session.created`. Um log SQLite por sessão, uma
@@ -147,8 +148,10 @@ Quando o concierge do omunculus precisa de algo do omakiten, chama a tool
   `cross_workspace` efetivo ou concedido;
 - em `cross_workspace = "routed"`, o Work Item nasce no node de depth 1 do
   destino, parented ao node da sessão, e A ganha uma linha em
-  `WORK_ITEM_DEPENDENCIES`. A bloqueia esperando o `task.completed` dele, a
-  mesma primitiva da delegação. Zero chamadas de modelo no depth 0;
+  `WORK_ITEM_DEPENDENCIES`. A Run de A fecha com `outcome = waiting`; o
+  `task.completed` do destino abre uma Run nova de A a partir do checkpoint
+  ([execution-model.md](execution-model.md)). Zero chamadas de modelo no
+  depth 0;
 - em `"mediated"`, antes de o Work Item nascer o depth 0 faz uma rodada de
   arbitragem com seu modelo, como na negociação de permissão: repassa,
   reescreve ou nega. A decisão fica no log com motivo. Custa uma chamada e

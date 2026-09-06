@@ -53,6 +53,10 @@ contrato exercitado na branch `spike/event-core`, ainda não em `main`.
   tipo de evento, que só observa ou veta. Consumidores externos são
   **automações** assíncronas sem poder de veto. De fora só entram comandos;
   para fora só saem eventos.
+- Uma Run **nunca bloqueia** esperando outro agente ou humano: delegar,
+  pedir trabalho a outro workspace ou pedir permissão conclui a Run com
+  `outcome = waiting`; a resposta abre uma Run nova a partir do checkpoint
+  ([execution-model.md](execution-model.md)).
 - **Session** é agregado durável e **workspace** é membro da sessão e
   identidade do Execution Node; nenhum dos dois é processo
   ([session-model.md](session-model.md)).

@@ -73,8 +73,42 @@ metadados de efeitos. Efeito externo confirmado é reproduzido sem reexecução;
 efeito desconhecido exige decisão antes de continuar. O modelo não recebe
 permissão para escapar do sandbox apenas por delegar.
 
-A primitiva de espera é uma só: uma Run bloqueia até um envelope específico
-ser entregue. Delegação espera `task.completed` do filho; trabalho entre
-workspaces espera o `task.completed` da dependência; pedido de permissão
-espera `permission.granted` ou `permission.denied`. Cada espera tem timeout
-e o timeout é sempre o resultado seguro.
+## Pedir é concluir: Runs não esperam
+
+Uma Run nunca bloqueia esperando outro agente ou um humano. Quando o modelo
+delega, pede trabalho a outro workspace ou pede permissão, **a conclusão
+daquela Run é o próprio pedido**: ela apenda o envelope de pedido, grava seu
+checkpoint e fecha com `run.completed` e `outcome = waiting`, dizendo qual
+envelope aguarda. O Work Item passa a `waiting`. Não há processo vivo, não
+há timeout de processo, e fechar o terminal não muda nada.
+
+Quando a resposta chega (`task.completed` do filho, `permission.granted` ou
+`permission.denied`, `task.commented` de um humano), o Runtime abre uma
+**Run nova** do mesmo Work Item, `attempt + 1`, com `reason = continuation`,
+partindo do checkpoint e recebendo a resposta como primeira observação. A
+causação dessa `run.started` é o envelope de resposta, então a cadeia mostra
+exatamente o que reativou o trabalho.
+
+```mermaid
+stateDiagram-v2
+    [*] --> requested: task.requested / task.delegated
+    requested --> running: run.started (initial)
+    running --> completed: task.completed
+    running --> failed: run.failed
+    running --> waiting: run.completed outcome=waiting<br/>awaiting = {type, id}
+    waiting --> running: resposta entregue → run.started (continuation)
+    waiting --> failed: prazo do pedido vencido → permission.denied timeout / run.failed
+    failed --> running: task.resumed → run.started (retry)
+    completed --> [*]
+```
+
+O checkpoint de uma Run em `waiting` precisa bastar para continuar: as
+mensagens da conversa até o pedido (ou um resumo delas), o estado das tools
+e o `request_id` aguardado. Ele vai no payload de `run.completed` e é
+referenciado em `WORK_ITEMS.checkpoint`. Prazo de pedido é um campo do
+envelope de pedido (`deadline`), materializado pelo Runtime ou por uma
+automação quando vencer; nunca um timer preso a um processo.
+
+A mesma regra vale para retry após falha: `task.resumed` abre uma Run nova a
+partir do último checkpoint. Há um único mecanismo de continuação, com três
+motivos: `initial`, `continuation`, `retry`.

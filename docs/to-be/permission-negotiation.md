@@ -93,46 +93,54 @@ O modelo pede por uma tool sempre exposta, `request_permission`, com schema
 fixo: `tool`, `reason`, `scope`. Ele não escolhe validade nem árbitro. Isso é
 decisão de quem concede.
 
-O Run do filho transforma a chamada em `permission.requested` e **bloqueia**
-esperando `permission.granted` ou `permission.denied` com o mesmo
-`request_id`, a mesma primitiva com que hoje espera o `task.completed` de uma
-delegação. O resultado volta como observação de tool: "granted until …" ou
-"denied: …". Se concedido, o Run passa a expor o schema da tool na rodada
-seguinte; a lista de allowlist e o `ToolGate` passam a aceitá-la.
+A Run do filho transforma a chamada em `permission.requested` e **fecha**:
+grava o checkpoint, apenda `run.completed` com `outcome = waiting` e
+`awaiting = {permission, request_id}`, e o processo termina. Não há espera
+em processo; o Work Item fica em `waiting`
+([execution-model.md](execution-model.md), "Pedir é concluir").
+
+Quando `permission.granted` ou `permission.denied` é entregue, o Runtime
+abre uma Run nova do mesmo Work Item a partir do checkpoint, com a decisão
+como primeira observação: "edit granted for this work item until …" ou
+"denied: …". Se concedido, essa Run expõe o schema da tool; allowlist e
+`ToolGate` passam a aceitá-la.
 
 ```mermaid
 sequenceDiagram
     participant CM as Modelo do filho
-    participant C as Run filho (depth 2)
+    participant C1 as Run filho #1 (depth 2)
     participant EC as Event Core
-    participant P as Run pai (depth 1)
-    participant PM as Modelo do pai
+    participant RT as Runtime
+    participant P as Run pai (arbitragem)
+    participant C2 as Run filho #2 (continuation)
     participant G as ToolGate
 
-    CM->>C: request_permission(tool=edit, reason, scope=run)
-    C->>EC: permission.requested {request_id, tool=edit, scope=run}
-    EC->>EC: append + commit
+    CM->>C1: request_permission(tool=edit, reason, scope=work_item)
+    C1->>EC: permission.requested {request_id, tool=edit, scope}
+    C1->>EC: run.completed {outcome=waiting, awaiting=request_id, checkpoint}
+    Note over C1: processo termina
+    EC->>EC: commit; Work Item → waiting
     Note over EC: edit ∈ negotiable(filho) ∧ edit ∈ autoridade(pai) → arbiter = run:pai
-    EC-->>P: deliver (pai está bloqueado em await_child)
-    P->>PM: rodada de arbitragem: pedido + tools grant / deny / escalate
-    PM-->>P: grant(scope=run, until=+30min, reason)
-    P->>EC: permission.granted {request_id, granter=run:pai, scope=run, until}
-    EC->>EC: append + commit
-    EC-->>C: deliver permission.granted
-    C-->>CM: "edit granted for this run until …"
-    CM->>C: edit(...)
-    C->>EC: tool.call.requested (tool=edit)
+    EC-->>RT: deliver permission.requested
+    RT->>P: abre Run de arbitragem no node do pai (reason=arbitration)
+    P->>EC: permission.granted {request_id, granter=run:pai, scope, until}
+    P->>EC: run.completed
+    EC-->>RT: deliver permission.granted
+    RT->>C2: run.started (attempt+1, reason=continuation, causation=permission.granted)
+    C2-->>CM: checkpoint + "edit granted for this work item"
+    CM->>C2: edit(...)
+    C2->>EC: tool.call.requested (tool=edit)
     EC->>G: intercept
-    Note over G: pinado ∪ grants ativos(run) − revogados ∋ edit → :deliver
-    EC-->>C: deliver
-    C->>C: executa edit
+    Note over G: pinado ∪ grants ativos(work item) − revogados ∋ edit → :deliver
+    EC-->>C2: deliver
+    C2->>C2: executa edit
 ```
 
-A "rodada de arbitragem" do pai é uma chamada ao seu próprio modelo com o
-pedido como mensagem e três tools efêmeras: `grant`, `deny`, `escalate`.
-Ela acontece dentro da espera da delegação, sem reabrir o loop principal do
-pai. A decisão do modelo vira comando no log com `reason`, então a auditoria
-mostra por que um pai concedeu.
+A arbitragem do pai também é uma Run: curta, no node do pai, com
+`reason = arbitration`, expondo três tools efêmeras, `grant`, `deny` e
+`escalate`. O pai não estava esperando: ele já tinha fechado sua Run em
+`waiting` ao delegar. A decisão do modelo vira comando no log com `reason`,
+então a auditoria mostra por que um pai concedeu.
 
 ## Escalada ao humano
 
@@ -150,11 +158,13 @@ omunculus emit permission.granted --db ./harness.sqlite3 \
 sequenceDiagram
     participant C as Run filho
     participant EC as Event Core
+    participant RT as Runtime
     participant A as automação notify
     actor H as Humano
     participant CLI as omunculus emit
 
-    C->>EC: permission.requested {tool=edit, workspace=infra}
+    C->>EC: permission.requested {tool=edit, workspace=infra, deadline}
+    C->>EC: run.completed {outcome=waiting}
     Note over EC: edit ∈ human(workspaces.infra) → arbiter = human
     EC->>EC: append + commit; Projector grava COMMENTS(kind=request)
     EC-->>A: deliver
@@ -162,19 +172,20 @@ sequenceDiagram
     H->>CLI: emit permission.granted {request_id, scope, until}
     CLI->>CLI: request_id existe, ainda aberto, tool ∈ human(teto)?
     CLI->>EC: append permission.granted (granter = human:<origin>)
-    EC-->>C: deliver
-    Note over C: timeout do pedido expirou? → tratado como permission.denied (reason = timeout)
+    EC-->>RT: deliver → Run nova do filho (continuation)
+    Note over EC: prazo vencido sem resposta → permission.denied (reason = timeout) → Run nova recebe a negação
 ```
 
 Regras da escalada:
 
-- o filho espera até `request_timeout` (configurável por perfil). Estourar é
-  `permission.denied` com `reason = timeout`, registrado pelo Runtime. O
-  padrão seguro é negar, nunca liberar;
-- enquanto espera, a Run não consome orçamento de modelo; se o processo
-  cair, a retomada reencontra o pedido aberto no log e volta a esperar;
+- o pedido carrega `deadline` (de `request_timeout`, configurável por
+  perfil). Vencido, o Runtime ou uma automação materializa
+  `permission.denied` com `reason = timeout`, e isso reativa o Work Item
+  com a negação. O padrão seguro é negar, nunca liberar;
+- nenhum processo fica vivo esperando. O Work Item está em `waiting` no
+  log; o humano responde quando quiser, e a resposta abre a Run nova;
 - um humano pode negar de vez com `permission.denied`, e pode incluir um
-  comentário que vira observação para o modelo.
+  comentário que vira observação para o modelo na continuação.
 
 ## Escopo e validade
 

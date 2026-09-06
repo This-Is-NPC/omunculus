@@ -49,8 +49,8 @@ reconhecido pelo `kind`, não pelo tempo verbal.
 | `task.resume_rejected` | event | `reason` | Runtime | não | não |
 | `tool.call.requested` | event | `tool`, `round` | Run | sim | não |
 | `tool.call.completed` | event | `tool`, `round`, `outcome` | Run | não | não |
-| `run.started` | event | `attempt`, `depth`, `agent_id`, `agent_kind` | Run | não | não |
-| `run.completed` | event | — | Run | não | não |
+| `run.started` | event | `attempt`, `depth`, `agent_id`, `agent_kind`, `reason` (`initial`, `continuation`, `retry`, `arbitration`) | Run | não | não |
+| `run.completed` | event | `outcome` (`completed` ou `waiting`), `awaiting` e `checkpoint` quando `waiting` | Run | não | não |
 | `run.failed` | event | `reason` | Run, Runtime | não | não |
 | `model.call.completed` | event | `round`, `outcome` | Run | não | não |
 | `delivery.rejected` | event | `rejected_event_id`, `rejected_type`, `interceptor`, `reason` | Core | não | não |
