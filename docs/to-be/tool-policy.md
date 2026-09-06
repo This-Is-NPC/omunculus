@@ -6,7 +6,9 @@ Este documento define como um nó recebe suas tools e como o harness garante
 que nenhum parâmetro, delegação ou automação amplie o que a política permite.
 Complementa [event-catalog.md](event-catalog.md) (tipos e interceptores),
 [execution-model.md](execution-model.md) (Execution Node) e
-[recommendations.md](recommendations.md) (workspace no nó).
+[recommendations.md](recommendations.md) (workspace no nó). O crescimento do
+conjunto efetivo durante a execução, por pedido e concessão, está em
+[permission-negotiation.md](permission-negotiation.md).
 
 ## Problema
 
