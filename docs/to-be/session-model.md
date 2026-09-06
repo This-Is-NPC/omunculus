@@ -7,7 +7,8 @@ reservou: Session como agregado durável, workspace como membro da sessão e
 identidade do Execution Node, e o trabalho com vários repositórios na mesma
 sessão. Entidades de runtime estão em
 [execution-model.md](execution-model.md); a política de tools por workspace
-em [tool-policy.md](tool-policy.md).
+em [tool-policy.md](tool-policy.md); times, interação entre linhagens e
+descoberta em [team-model.md](team-model.md).
 
 ## Entidades
 
@@ -34,7 +35,7 @@ campos existem no envelope.
 | Depth | Papel | Workspace | Identidade do node |
 |---|---|---|---|
 | 0 | concierge da sessão: administra, delega, roteia | nenhum | `hash(session_id, 0)` |
-| 1 | concierge de um workspace: repo ou conjunto de repos | um, fixo | `hash(session_id, workspace_id, 1)` |
+| 1 | concierge de um workspace, ou líder de um time nele | um, fixo | `hash(session_id, workspace_id, 1)`; com time de `scope = "node"`, `hash(session_id, workspace_id, team, 1)` |
 | 2 | worker | herdado do pai | gerado na delegação |
 
 A mesma configuração Agent pode ocupar qualquer depth. `kind` é capability,
@@ -46,7 +47,7 @@ roda.
 ```toml
 [session]
 max_depth = 2
-cross_workspace = "routed"        # ou "mediated"
+cross_lineage = "routed"          # ou "mediated"
 
 [workspaces.omunculus]
 roots = ["~/Projects/omacon/omunculus"]
@@ -60,11 +61,11 @@ mode = "allow"
 [ceiling.depth0]
 mode = "deny"
 granted    = ["delegate", "workspaces"]
-negotiable = ["cross_workspace"]
+negotiable = ["request_work"]
 
 [ceiling.depth1]
 mode = "allow"
-negotiable = ["edit", "write", "cross_workspace"]
+negotiable = ["edit", "write", "request_work"]
 ```
 
 Depth 0 não tem tools de arquivo e não tem `roots`: administra, não toca
@@ -140,13 +141,14 @@ graph TD
 ```
 
 Quando o concierge do omunculus precisa de algo do omakiten, chama a tool
-`cross_workspace` com `workspace` e `instruction`. O Run apenda
-`task.requested` com `requested_by = run:A`, `workspace = omakiten` e o
-`session_id`. Em sequência:
+`request_work` com o alvo e a instrução. É o caso particular do pedido pelo
+ancestral comum de [team-model.md](team-model.md) em que o LCA é o depth 0.
+O Run apenda `task.requested` com `requested_by = run:A`, `workspace =
+omakiten` e o `session_id`. Em sequência:
 
 - o **runtime** valida que o workspace destino está anexado e que A tem
-  `cross_workspace` efetivo ou concedido;
-- em `cross_workspace = "routed"`, o Work Item nasce no node de depth 1 do
+  `request_work` efetivo ou concedido;
+- em `cross_lineage = "routed"`, o Work Item nasce no node de depth 1 do
   destino, parented ao node da sessão, e A ganha uma linha em
   `WORK_ITEM_DEPENDENCIES`. A Run de A fecha com `outcome = waiting`; o
   `task.completed` do destino abre uma Run nova de A a partir do checkpoint

@@ -88,9 +88,9 @@ um pedido aberto que uma mudança de política satisfaz). `run.completed` com
 para renascer com a política atual.
 
 Campos de payload que as propostas acrescentam a tipos existentes:
-`task.requested` ganha `profile`, `agent`, `workspace`, `origin` e
-`requested_by`; `task.delegated` ganha `workspace` e `tools`; `run.started`
-ganha `profile`, `tools` e `roots`.
+`task.requested` ganha `profile`, `agent`, `workspace`, `team`, `origin` e
+`requested_by`; `task.delegated` ganha `workspace`, `team`, `agent` e
+`tools`; `run.started` ganha `profile`, `team`, `tools` e `roots`.
 
 ## Interceptor
 
@@ -135,8 +135,9 @@ outro tipo, ou um tipo inexistente, é erro de configuração na inicialização
 Um interceptor pode ser restrito por workspace com `workspaces = [...]`: ele
 só entra em envelopes cujo `workspace_id` esteja na lista. Há um único Event
 Core por sessão, então sem essa chave ele vê todos os workspaces. Os
-interceptores do catálogo são `DepthGate`, `WorkspaceGate`, `ToolGate` e
-`Audit`; `DepthGate` e `Audit` existem na spike, os outros dois são propostas.
+interceptores do catálogo são `DepthGate`, `WorkspaceGate`, `ToolGate`,
+`TeamGate` e `Audit`; `DepthGate` e `Audit` existem na spike, os outros são
+propostas.
 
 ## Automação
 

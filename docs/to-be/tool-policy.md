@@ -95,11 +95,11 @@ human      = ["edit", "write"]
 [ceiling.depth0]                  # concierge da sessão
 mode = "deny"
 granted    = ["delegate", "workspaces"]
-negotiable = ["cross_workspace"]
+negotiable = ["request_work"]
 
 [ceiling.depth1]                  # concierge de um repositório
 mode = "allow"
-negotiable = ["edit", "write", "cross_workspace"]
+negotiable = ["edit", "write", "request_work"]
 human      = ["delete"]
 
 # [ceiling.depth2] ausente: allow, o worker é limitado pelo workspace e pelo perfil
@@ -243,8 +243,10 @@ Regras:
    resolvida, senão é erro de uso. Nunca amplia.
 9. **A configuração Agent não lista tools.** `[agents.concierge]` e
    `[agents.worker]` trazem modelo, prompt e budget; a sessão atribui agente
-   por depth (`depth0 = "concierge"`, `depth2 = "worker"`); tools vêm da
-   tabela. É o que faz a mesma configuração servir a qualquer posição.
+   por depth (`depth0 = "concierge"`, `depth2 = "worker"`) ou o time atribui
+   líder e membros ([team-model.md](team-model.md)); tools vêm da tabela. O
+   perfil de um time é uma origem possível do perfil da linha, e só
+   estreita. É o que faz a mesma configuração servir a qualquer posição.
 10. **Schemas são fixos durante a Run.** A lista que o modelo vê é montada
     no nascimento: `granted` mais as concessões temporárias já presentes na
     linhagem, mais `request_permission`. Uma concessão que chega depois não
@@ -313,7 +315,7 @@ descer na árvore aumente o conjunto.
 
 ```mermaid
 graph TD
-    R0["depth 0 · sem workspace · perfil build<br/>granted = {delegate}<br/>autoridade = {delegate, cross_workspace}"]
+    R0["depth 0 · sem workspace · perfil build<br/>granted = {delegate}<br/>autoridade = {delegate, request_work}"]
     R1["depth 1 · workspace omunculus<br/>= teto.depth1 ∩ omunculus ∩ autoridade(R0)<br/>granted = {fs.read, delegate} · negotiable = {edit, write}"]
     R2a["depth 2 · workspace omunculus<br/>granted = {fs.read} · negotiable = {edit, write}"]
     R2b["depth 2 · workspace infra<br/>granted = {fs.read} · human = {edit, write}"]

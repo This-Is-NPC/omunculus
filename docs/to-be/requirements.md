@@ -62,7 +62,11 @@ partida implementado está em [AS-IS requirements](../as-is/requirements.md).
 3. Trabalho entre workspaces é um Work Item no destino, criado sob a
    autoridade do depth 0, ligado por `WORK_ITEM_DEPENDENCIES`; não existe
    canal direto entre nodes de mesmo depth.
-4. O humano só escolhe sessão e workspace quando quer; por padrão fala com
+4. Um time é formação nomeada com líder, membros e perfil; o concierge
+   escolhe time ao delegar e o líder escolhe membros pelo nome. Pedido de
+   trabalho entre linhagens sobe até o ancestral comum, que cria o Work
+   Item no alvo; descoberta lê a projeção da sessão com escopo por teto.
+5. O humano só escolhe sessão e workspace quando quer; por padrão fala com
    o concierge de depth 0, que roteia. Toda pergunta ao humano é
    `COMMENTS` com `kind = request` e toda resposta é comando; a inbox é a
    projeção dos pedidos abertos e dos resultados não lidos.

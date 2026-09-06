@@ -51,6 +51,7 @@ uma string TOML inteira; mantenha segredos fora do versionamento.
 - [Catálogo de eventos, interceptores e automações TO-BE](docs/to-be/event-catalog.md)
 - [Execução e delegação TO-BE](docs/to-be/execution-model.md)
 - [Sessão e workspaces TO-BE (proposta)](docs/to-be/session-model.md)
+- [Times, interação entre linhagens e descoberta TO-BE (proposta)](docs/to-be/team-model.md)
 - [Política de tools: teto, perfil, workspace e modos TO-BE (proposta)](docs/to-be/tool-policy.md)
 - [Permissões temporárias e negociação TO-BE (proposta)](docs/to-be/permission-negotiation.md)
 - [Recomendações de terreno (rationale)](docs/to-be/recommendations.md)

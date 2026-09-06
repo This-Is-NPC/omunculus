@@ -88,7 +88,9 @@ Quando a resposta chega (`task.completed` do filho, `permission.granted` ou
 **Run nova** do mesmo Work Item, `attempt + 1`, com `reason = continuation`,
 partindo do checkpoint e recebendo a resposta como primeira observação. A
 causação dessa `run.started` é o envelope de resposta, então a cadeia mostra
-exatamente o que reativou o trabalho.
+exatamente o que reativou o trabalho. `awaiting` pode ser uma lista: um
+líder que delegou a três membros é reaberto a cada resposta, e seu
+checkpoint guarda o que ainda falta ([team-model.md](team-model.md)).
 
 ```mermaid
 stateDiagram-v2

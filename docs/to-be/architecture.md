@@ -17,7 +17,8 @@ O que a spike validou e o que ela revelou está em
 | [event-model.md](event-model.md) | envelope, append, dispatch, replay, cenários `conte até 10` | planejado, spike |
 | [event-catalog.md](event-catalog.md) | tipos de envelope, interceptor, automação, portas da CLI | planejado, spike |
 | [execution-model.md](execution-model.md) | Agent config, Execution Node, Run, delegação | planejado, spike |
-| [session-model.md](session-model.md) | Session, workspaces, multi-repo, roteamento entre workspaces | proposta |
+| [session-model.md](session-model.md) | Session, workspaces, multi-repo, inbox | proposta |
+| [team-model.md](team-model.md) | times, interação entre linhagens pelo ancestral comum, descoberta | proposta |
 | [tool-policy.md](tool-policy.md) | teto, perfil, workspace, modos, três barreiras | proposta |
 | [permission-negotiation.md](permission-negotiation.md) | pedido, arbitragem, escopo, validade, revogação | proposta |
 | [recommendations.md](recommendations.md) | razões de terreno por trás de sessão, workspace e concierge | rationale |
@@ -61,6 +62,10 @@ contrato exercitado na branch `spike/event-core`, ainda não em `main`.
   identidade do Execution Node; nenhum dos dois é processo. O humano fala
   com o concierge da sessão e é ouvido pela **inbox**, projeção de
   `COMMENTS` ([session-model.md](session-model.md)).
+- **Times** são formações nomeadas (líder, membros, perfil) escolhidas na
+  delegação; interação entre linhagens sobe até o **ancestral comum** e
+  desce de lá, nunca de lado; descoberta é leitura de projeção com escopo
+  ([team-model.md](team-model.md)).
 - O que um nó pode invocar é a interseção de **teto por posição, teto por
   workspace e perfil**, pinada em `run.started` e aplicada em três barreiras
   independentes ([tool-policy.md](tool-policy.md)). Crescer durante a
