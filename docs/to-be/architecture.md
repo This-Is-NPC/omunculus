@@ -1,9 +1,30 @@
-Status: TO-BE — planejado, não implementado
+Status: TO-BE — planejado; Event Core, catálogo, interceptores e automações validados em spike (branch `spike/event-core`)
 
 # Arquitetura alvo
 
-Este é o desenho futuro; ele não descreve código disponível. A fotografia
-implementada está em [AS-IS architecture](../as-is/architecture.md).
+Este é o desenho futuro; ele não descreve código disponível em `main`. A
+fotografia implementada está em [AS-IS architecture](../as-is/architecture.md).
+O que a spike validou e o que ela revelou está em
+[../spike/event-core-spike.md](../spike/event-core-spike.md).
+
+## Mapa dos documentos
+
+| Documento | Responde | Status |
+|---|---|---|
+| [architecture.md](architecture.md) | decisões canônicas e fronteiras | planejado, spike |
+| [requirements.md](requirements.md) | contrato observável | planejado, spike |
+| [data-model.md](data-model.md) | tabelas, consistência, retenção | planejado, spike |
+| [event-model.md](event-model.md) | envelope, append, dispatch, replay, cenários `conte até 10` | planejado, spike |
+| [event-catalog.md](event-catalog.md) | tipos de envelope, interceptor, automação, portas da CLI | planejado, spike |
+| [execution-model.md](execution-model.md) | Agent config, Execution Node, Run, delegação | planejado, spike |
+| [session-model.md](session-model.md) | Session, workspaces, multi-repo, roteamento entre workspaces | proposta |
+| [tool-policy.md](tool-policy.md) | teto, perfil, workspace, modos, três barreiras | proposta |
+| [permission-negotiation.md](permission-negotiation.md) | pedido, arbitragem, escopo, validade, revogação | proposta |
+| [recommendations.md](recommendations.md) | razões de terreno por trás de sessão, workspace e concierge | rationale |
+| [harness-comparison.md](harness-comparison.md) | comparação com Pi, Claude Code e Codex | referência |
+
+"Proposta" é contrato escrito e ainda não validado por código. "Spike" é
+contrato exercitado na branch `spike/event-core`, ainda não em `main`.
 
 ## Decisões canônicas
 
@@ -26,6 +47,20 @@ implementada está em [AS-IS architecture](../as-is/architecture.md).
   `depth`. `kind` identifica capability/configuração, não uma posição fixa.
   Delegação cria dinamicamente Execution Node/Run e a árvore de reporting é
   derivada desses vínculos runtime e do depth.
+- Todo tipo de envelope está em um **catálogo** único em código; o Core
+  rejeita o que não está nele ([event-catalog.md](event-catalog.md)).
+- Entre o commit e a entrega pode existir um **Interceptor** configurado por
+  tipo de evento, que só observa ou veta. Consumidores externos são
+  **automações** assíncronas sem poder de veto. De fora só entram comandos;
+  para fora só saem eventos.
+- **Session** é agregado durável e **workspace** é membro da sessão e
+  identidade do Execution Node; nenhum dos dois é processo
+  ([session-model.md](session-model.md)).
+- O que um nó pode invocar é a interseção de **teto por posição, teto por
+  workspace e perfil**, pinada em `run.started` e aplicada em três barreiras
+  independentes ([tool-policy.md](tool-policy.md)). Crescer durante a
+  execução exige pedido e concessão registrados
+  ([permission-negotiation.md](permission-negotiation.md)).
 
 ## Fronteiras
 
@@ -69,5 +104,7 @@ sequenceDiagram
 ## Não-objetivos
 
 Não introduzir uma hierarquia estática de Agents, uma API pública HTTP/MCP/TUI,
-uma tabela de eventos por domínio, ou um mecanismo que trate `EVENTS` como
-cache temporário. O benchmark `http-load` não é contrato do harness.
+uma tabela de eventos por domínio, um segundo barramento além do Event Core,
+um canal direto entre nodes de mesmo depth, ou um mecanismo que trate
+`EVENTS` como cache temporário. O benchmark `http-load` não é contrato do
+harness.

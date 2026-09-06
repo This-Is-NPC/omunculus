@@ -1,4 +1,4 @@
-Status: TO-BE — planejado, não implementado
+Status: TO-BE — planejado; envelope, append, dispatch e replay validados em spike
 
 # Event Core e modelo de eventos
 
@@ -12,11 +12,15 @@ Todo comando ou evento possui, no mínimo:
 
 ```text
 event_id, kind, type, schema_version, sequence?, occurred_at,
-correlation_id, causation_id?, idempotency_key?, project_id?,
-work_item_id?, run_id?, payload
+correlation_id, causation_id?, idempotency_key?, session_id?,
+workspace_id?, project_id?, work_item_id?, run_id?, payload
 ```
 
-`kind` distingue `command` de `event`. O Core atribui `sequence` ao append e
+`kind` distingue `command` de `event`. `type` precisa existir no
+[catálogo](event-catalog.md), que também fixa o payload obrigatório.
+`session_id` identifica a orquestra e `workspace_id` o workspace a que o
+envelope pertence ([session-model.md](session-model.md)); ambos são
+opcionais e nunca substituem `correlation_id`. O Core atribui `sequence` ao append e
 preserva o payload versionado. `correlation_id` identifica uma operação lógica;
 `causation_id` aponta para o envelope que causou o atual. `event_id` e a chave
 de idempotência são estáveis em retries. Um payload novo exige
@@ -73,7 +77,13 @@ transitórios.
 
 Os cenários abaixo descrevem o comportamento genérico do sistema para uma
 tarefa, sem depender de sintaxe de CLI ou de uma implementação específica de
-agente. Em cada cenário, todos os envelopes compartilham um único
+agente. Eles mostram só a **cadeia principal**; os envelopes de ramo lateral
+do catálogo (`run.started`, `run.completed`, `run.failed`,
+`model.call.completed`) existem em toda execução, têm causação no envelope
+de ativação ou em `run.started`, e ficam fora dos diagramas para preservar
+a cadeia. A spike executa os quatro cenários como testes e os seis casos de
+profundidade × Interceptor estão em
+[../spike/event-core-spike.md](../spike/event-core-spike.md). Em cada cenário, todos os envelopes compartilham um único
 `correlation_id`; cada `causation_id` referencia o envelope que originou o
 seguinte. O Event Core sempre faz `append + commit` antes de qualquer entrega.
 
@@ -92,6 +102,10 @@ execução, não à configuração genérica do agente: a mesma configuração p
 ocupar posições diferentes em execuções distintas.
 
 ### Cenário 1 — execução em profundidade 1 com Interceptor
+
+O Interceptor é a raia configurada de [event-catalog.md](event-catalog.md):
+entra só nos tipos que declara, após o commit e antes da entrega, e só
+observa ou veta. O log é idêntico com e sem ele.
 
 O Concierge recebe a tarefa, delega o trabalho de contagem ao sub-agente e
 repassa seu resultado. Não existe uma raia para o contador: a operação aparece

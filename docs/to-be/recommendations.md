@@ -1,4 +1,4 @@
-Status: TO-BE — planejado, não implementado
+Status: TO-BE — rationale; as identidades abaixo estão especificadas em session-model.md, tool-policy.md e event-catalog.md
 
 # Recomendações de terreno
 
@@ -38,7 +38,13 @@ que o contrato precisa carregar mesmo antes dessas superfícies existirem.
 
 Essas decisões não devem ser revertidas para acomodar orquestra ou UI.
 
-## Quatro identidades que o contrato ainda mistura
+## Quatro identidades que o contrato misturava
+
+Cada uma tem agora um documento normativo: Session e workspace em
+[session-model.md](session-model.md); concierge como posição também lá;
+Event Core como único barramento, com interceptores e automações, em
+[event-catalog.md](event-catalog.md). Este texto permanece como a razão de
+cada decisão.
 
 ### 1. Session durável ≠ processo OTP
 
@@ -102,9 +108,8 @@ leitura ordenada de `EVENTS` (`sequence`, `schema_version`), filtrada por
 `session_id` / viewport — não um dump paralelo do TTY e não um snapshot
 que substitua o log.
 
-Campos a reservar no envelope, além do mínimo já em
-[event-model.md](event-model.md): `session_id`; `workspace_id` quando o
-evento for scoped a um workspace. `project_id`, `work_item_id` e `run_id`
+`session_id` e `workspace_id` já fazem parte do envelope em
+[event-model.md](event-model.md). `project_id`, `work_item_id` e `run_id`
 permanecem opcionais como hoje.
 
 ## Ingress e observação

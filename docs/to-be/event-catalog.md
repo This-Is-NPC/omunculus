@@ -1,4 +1,4 @@
-Status: TO-BE — planejado, em validação na branch `spike/event-core`
+Status: TO-BE — planejado; catálogo, interceptores, automações e portas validados em spike. Tipos propostos ao fim ainda não estão no módulo
 
 # Catálogo de eventos, interceptores e automações
 
@@ -59,6 +59,30 @@ Evoluir um payload é registrar uma `schema_version` nova no catálogo e manter
 a antiga aceita até que nenhum consumidor a declare. Nunca se edita uma versão
 publicada.
 
+### Tipos propostos, ainda fora do módulo
+
+Vêm de [session-model.md](session-model.md),
+[tool-policy.md](tool-policy.md) e
+[permission-negotiation.md](permission-negotiation.md). Entram no módulo
+quando a proposta correspondente for aceita.
+
+| Tipo | Kind | Emitido por | Interceptável | Injetável | Origem |
+|---|---|---|---|---|---|
+| `session.created` | command | CLI | não | sim | session-model |
+| `workspace.attached` | command | CLI | sim | sim | session-model |
+| `workspace.detached` | command | CLI | sim | sim | session-model |
+| `permission.requested` | event | Run | sim | não | permission-negotiation |
+| `permission.granted` | command | Run (pai) ou CLI (humano) | sim | sim | permission-negotiation |
+| `permission.denied` | command | Run, CLI ou Runtime | não | sim | permission-negotiation |
+| `permission.revoked` | command | Run (pai) ou CLI | sim | sim | permission-negotiation |
+| `permission.expired` | event | Runtime | não | não | permission-negotiation |
+| `policy.changed` | event | CLI | não | não | permission-negotiation |
+
+Campos de payload que as propostas acrescentam a tipos existentes:
+`task.requested` ganha `profile`, `agent`, `workspace`, `origin` e
+`requested_by`; `task.delegated` ganha `workspace` e `tools`; `run.started`
+ganha `profile`, `tools` e `roots`.
+
 ## Interceptor
 
 Interceptor é a raia entre o Event Core e o consumidor desenhada nos cenários
@@ -99,6 +123,12 @@ Contrato (`Omunculus.Interceptor`):
 Só tipos marcados `interceptable` no catálogo aceitam interceptor. Referenciar
 outro tipo, ou um tipo inexistente, é erro de configuração na inicialização.
 
+Um interceptor pode ser restrito por workspace com `workspaces = [...]`: ele
+só entra em envelopes cujo `workspace_id` esteja na lista. Há um único Event
+Core por sessão, então sem essa chave ele vê todos os workspaces. Os
+interceptores do catálogo são `DepthGate`, `WorkspaceGate`, `ToolGate` e
+`Audit`; `DepthGate` e `Audit` existem na spike, os outros dois são propostas.
+
 ## Automação
 
 Automação é um consumidor **externo**, assíncrono, que roda **depois** da
@@ -121,7 +151,10 @@ run = "./hooks/notify.sh"
 - se o script responder com um comando, deve derivar a `idempotency_key` do
   `event_id` que o originou. Retry não duplica efeito;
 - saída diferente de zero não bloqueia o cursor: o harness registra a falha
-  em log de processo e segue. Bloquear seria dar poder de veto a algo externo.
+  em log de processo e segue. Bloquear seria dar poder de veto a algo externo;
+- `may_request = { profiles = [...], workspaces = [...] }` limita o que a
+  automação pode pedir em `emit task.requested`, e o comando carrega
+  `origin = "automation:<name>"` ([tool-policy.md](tool-policy.md)).
 
 ## Portas da CLI
 

@@ -1,8 +1,8 @@
-Status: TO-BE — planejado, não implementado
+Status: TO-BE — planejado; itens marcados *(spike)* validados na branch `spike/event-core`
 
 # Requisitos alvo
 
-Este contrato é planejado e não está disponível na CLI atual. O ponto de
+Este contrato é planejado e não está disponível na CLI de `main`. O ponto de
 partida implementado está em [AS-IS requirements](../as-is/requirements.md).
 
 ## Ingress e autoridade
@@ -35,6 +35,46 @@ partida implementado está em [AS-IS requirements](../as-is/requirements.md).
    ao Work Item por referências duráveis; efeitos externos precisam de estado
    idempotente suficiente para não reexecutar um efeito confirmado.
 
+## Catálogo, interceptores e automações
+
+1. Todo tipo de envelope é declarado uma vez no catálogo, com `kind`,
+   versões de schema, payload obrigatório e as marcas `interceptable` e
+   `injectable`. O Core rejeita append fora do catálogo. *(spike)*
+2. Interceptores são configurados por tipo de evento, rodam após o commit e
+   antes da entrega, e só podem entregar ou rejeitar. Rejeição vira
+   `delivery.rejected` com causação no envelope barrado. *(spike)*
+3. Automações são consumidores externos assíncronos com cursor durável,
+   entrega at-least-once e sem poder de veto. *(spike)*
+4. De fora só entram comandos marcados `injectable`, pela CLI; para fora só
+   saem eventos, pela leitura ordenada do log. *(spike)*
+5. Um interceptor pode ser restrito por `workspace_id` e uma automação só
+   pode pedir os perfis e workspaces que a configuração lhe deu.
+
+## Sessão e workspaces
+
+1. Session é agregado durável com `session_id` próprio, distinto de
+   `correlation_id`; um log por sessão.
+2. Workspace é membro da sessão por `workspace.attached`/`detached` e
+   identidade do Execution Node de depth 1; nodes de depth 0 e 1 têm
+   identidade derivada e são reutilizados entre Runs.
+3. Trabalho entre workspaces é um Work Item no destino, criado sob a
+   autoridade do depth 0, ligado por `WORK_ITEM_DEPENDENCIES`; não existe
+   canal direto entre nodes de mesmo depth.
+
+## Política de tools e permissões
+
+1. O conjunto de tools de um nó é a interseção, faixa a faixa, de teto por
+   posição, teto por workspace e perfil; é pinado em `run.started` como
+   lista expandida.
+2. Modos `allow` e `deny` decidem apenas o padrão do que não foi escrito;
+   após normalização não existem curingas.
+3. A permissão é aplicada em exposição, execução e entrega, de forma
+   independente, lendo o mesmo conjunto pinado.
+4. Delegação nunca amplia: o filho herda a autoridade do pai.
+5. Crescer durante a execução exige `permission.requested` arbitrado por
+   quem tem autoridade, com escopo e validade; permanente é mudança de
+   configuração registrada no log; timeout é negação.
+
 ## Recuperação e operação
 
 Após falha, o sistema deve reconstruir projeções a partir de `EVENTS`, retomar
@@ -43,5 +83,9 @@ O CLI deve expor respostas/resultados duráveis e erros de conflito de forma
 repetível. Persistência e replay não devem alterar o contrato público para
 HTTP, MCP ou TUI: essas superfícies não fazem parte do alvo.
 
-Envelope e dispatch normativos estão em [event-model.md](event-model.md); as
-entidades e vínculos de runtime estão em [execution-model.md](execution-model.md).
+Envelope e dispatch normativos estão em [event-model.md](event-model.md); os
+tipos em [event-catalog.md](event-catalog.md); as entidades e vínculos de
+runtime em [execution-model.md](execution-model.md); sessão e workspaces em
+[session-model.md](session-model.md); tools e permissões em
+[tool-policy.md](tool-policy.md) e
+[permission-negotiation.md](permission-negotiation.md).

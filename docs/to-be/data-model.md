@@ -1,4 +1,4 @@
-Status: TO-BE — planejado, não implementado
+Status: TO-BE — planejado; sete tabelas e `PROJECTION_CURSORS` validadas em spike
 
 # Modelo de dados alvo
 
@@ -26,9 +26,16 @@ A sétima tabela obrigatória é:
 
 7. `EVENTS`: log central append-only de comandos e eventos, com `event_id`
   único, `sequence` monotônica, tipo, versão de schema, payload/envelope,
-  `occurred_at`, `correlation_id`, `causation_id`, `idempotency_key` e
-  referências opcionais a projeto/Work Item/Run. O Core é o único authority de
-  append; consumidores não atualizam nem removem linhas.
+  `occurred_at`, `correlation_id`, `causation_id`, `idempotency_key`,
+  `session_id`, `workspace_id` e referências opcionais a projeto/Work
+  Item/Run. O Core é o único authority de append; consumidores não atualizam
+  nem removem linhas.
+
+Um store adicional foi justificado pela spike e passa a fazer parte do
+contrato: `PROJECTION_CURSORS` guarda, por consumidor (projeção ou
+automação), a última `sequence` aplicada. É checkpoint reconstruível, nunca
+cópia de histórico, e existe para que aplicar um evento e avançar o cursor
+aconteçam na mesma transação.
 
 As relações entre as sete tabelas canônicas ficam resumidas no ER abaixo;
 `EVENTS` permanece o log central append-only:
@@ -59,11 +66,19 @@ erDiagram
         string correlation_id
         string causation_id
         string idempotency_key
+        string session_id
+        string workspace_id
         string project_id
         string work_item_id
         string run_id
     }
 ```
+
+Colunas que as propostas acrescentam às projeções: `WORK_ITEMS` ganha
+`workspace_id` e `requested_by` (Work Item criado entre workspaces);
+`ARCHIVE_RUNS` ganha `workspace_id`, `profile` e `tools` (faixas expandidas
+pinadas); `COMMENTS.kind` inclui `request` e `response` para pedidos humanos
+de [permission-negotiation.md](permission-negotiation.md).
 
 Não existe uma tabela de `Agent` exigida por este contrato: Agent é uma
 configuração genérica versionada/pinada quando necessário, sem
