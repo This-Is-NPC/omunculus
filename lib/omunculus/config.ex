@@ -4,6 +4,7 @@ defmodule Omunculus.Config do
   @default_max_turns 32
   @default_preset "coding"
   @default_timestamp_format "%H:%M:%S"
+  @policy_keys ~w(mode granted negotiable human deny directory)
 
   def load(opts) when is_list(opts) do
     cwd = Keyword.fetch!(opts, :cwd)
@@ -31,6 +32,11 @@ defmodule Omunculus.Config do
       output: %{timestamp_format: @default_timestamp_format},
       interceptors: [],
       automations: [],
+      agents: %{},
+      teams: %{},
+      workspaces: %{},
+      policy: %{},
+      session: %{},
       presets: %{
         "coding" => %{
           tools: Omunculus.Tools.default_names(),
@@ -78,10 +84,86 @@ defmodule Omunculus.Config do
   with resolved modules, or the first error.
   """
   def check(config) do
-    with {:ok, interceptors} <- check_interceptors(config.interceptors),
-         {:ok, automations} <- check_automations(config.automations) do
+    with :ok <- check_references(config),
+         {:ok, interceptors} <- check_interceptors(config.interceptors),
+         {:ok, automations} <- check_automations(config.automations, config) do
       {:ok, %{interceptors: interceptors, automations: automations}}
     end
+  end
+
+  # Teams reference agents, workspaces reference teams, roles reference
+  # agents; every reference must resolve. Policy bands are only shape-checked
+  # here: normalisation against the tool catalog is the next step.
+  defp check_references(config) do
+    agents = Map.keys(config.agents)
+    teams = Map.keys(config.teams)
+
+    with :ok <- each(config.teams, fn {name, team} -> check_team(name, team, agents) end),
+         :ok <-
+           each(config.workspaces, fn {name, ws} ->
+             case Enum.find(ws.teams || [], &(&1 not in teams)) do
+               nil -> :ok
+               missing -> {:error, {:unknown_team, name, missing}}
+             end
+           end),
+         :ok <-
+           each(config.session[:roles] || %{}, fn {depth, agent} ->
+             if agent in agents or config.agents == %{},
+               do: :ok,
+               else: {:error, {:unknown_agent, "session.roles.#{depth}", agent}}
+           end) do
+      each(policy_entries(config), fn {where, policy} -> check_policy(where, policy) end)
+    end
+  end
+
+  defp check_team(name, team, agents) do
+    cond do
+      is_nil(team.lead) ->
+        {:error, {:team_requires_lead, name}}
+
+      team.lead not in agents ->
+        {:error, {:unknown_agent, "teams.#{name}.lead", team.lead}}
+
+      member = Enum.find(team.members || [], &(&1 not in agents)) ->
+        {:error, {:unknown_agent, "teams.#{name}.members", member}}
+
+      team.scope not in [nil, "task", "node"] ->
+        {:error, {:invalid_team_scope, name, team.scope}}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp policy_entries(config) do
+    Enum.map(config.workspaces, fn {n, ws} -> {"workspaces.#{n}", ws.policy} end) ++
+      Enum.map(config.presets, fn {n, p} -> {"profiles.#{n}", p[:policy] || %{}} end) ++
+      Enum.map(config.policy, fn {d, p} -> {"policy.depth.#{d}", p} end)
+  end
+
+  defp check_policy(where, policy) do
+    cond do
+      policy["mode"] not in [nil, "allow", "deny"] ->
+        {:error, {:invalid_policy_mode, where, policy["mode"]}}
+
+      policy["directory"] not in [nil, "subtree", "session"] ->
+        {:error, {:invalid_policy_directory, where, policy["directory"]}}
+
+      key = Enum.find(~w(granted negotiable human deny), &(not is_list(policy[&1] || []))) ->
+        {:error, {:invalid_policy_list, where, key}}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp each(enum, fun) do
+    Enum.reduce_while(enum, :ok, fn item, :ok ->
+      case fun.(item) do
+        :ok -> {:cont, :ok}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
   end
 
   defp check_interceptors(list) do
@@ -96,7 +178,7 @@ defmodule Omunculus.Config do
     end)
   end
 
-  defp check_automations(list) do
+  defp check_automations(list, config) do
     Enum.reduce_while(list, {:ok, []}, fn item, {:ok, acc} ->
       with :ok <- require_name(item, :automation),
            :ok <- check_events(item, fn _ -> true end, :never),
@@ -104,13 +186,32 @@ defmodule Omunculus.Config do
              if(is_binary(item.run) and item.run != "",
                do: :ok,
                else: {:error, {:automation_requires_run, item.name}}
-             ) do
+             ),
+           :ok <- check_may_request(item, config) do
         {:cont, {:ok, acc ++ [item]}}
       else
         {:error, _} = error -> {:halt, error}
       end
     end)
   end
+
+  defp check_may_request(%{may_request: may} = item, config) when is_map(may) do
+    profiles = Map.keys(config.presets)
+    workspaces = Map.keys(config.workspaces)
+
+    cond do
+      p = Enum.find(may["profiles"] || [], &(&1 not in profiles)) ->
+        {:error, {:unknown_profile, "automations.#{item.name}.may_request", p}}
+
+      w = Enum.find(may["workspaces"] || [], &(&1 not in workspaces)) ->
+        {:error, {:unknown_workspace, "automations.#{item.name}.may_request", w}}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp check_may_request(_item, _config), do: :ok
 
   defp require_name(%{name: name}, _kind) when is_binary(name) and name != "", do: :ok
   defp require_name(_item, kind), do: {:error, {:config_entry_requires_name, kind}}
@@ -211,9 +312,12 @@ defmodule Omunculus.Config do
     defaults = Map.get(map, "defaults", %{})
     chat = Map.get(map, "chat", %{})
     output = Map.get(map, "output", %{})
-    presets = Map.get(map, "presets", %{})
-    interceptors = Map.get(map, "interceptors", [])
-    automations = Map.get(map, "automations", [])
+    # [profiles] absorbs [presets]; both are accepted, profiles win on clash.
+    presets = Map.merge(Map.get(map, "presets", %{}), Map.get(map, "profiles", %{}))
+    interceptors = named_entries(Map.get(map, "interceptors", []))
+    automations = named_entries(Map.get(map, "automations", []))
+    policy_depth = map |> Map.get("policy", %{}) |> Map.get("depth", %{})
+    session = Map.get(map, "session", %{})
 
     %{
       defaults: %{
@@ -231,18 +335,53 @@ defmodule Omunculus.Config do
         timestamp_format: output["timestamp_format"]
       },
       interceptors:
-        Enum.map(List.wrap(interceptors), fn item ->
+        Enum.map(interceptors, fn item ->
           %{
             name: item["name"],
             events: item["events"],
             module: item["module"],
-            options: item["options"] || %{}
+            options: item["options"] || %{},
+            workspaces: item["workspaces"]
           }
         end),
       automations:
-        Enum.map(List.wrap(automations), fn item ->
-          %{name: item["name"], events: item["events"], run: item["run"]}
+        Enum.map(automations, fn item ->
+          %{
+            name: item["name"],
+            events: item["events"],
+            run: item["run"],
+            may_request: item["may_request"]
+          }
         end),
+      agents:
+        Map.new(Map.get(map, "agents", %{}), fn {name, body} ->
+          {name,
+           %{
+             prompt: body["prompt"],
+             model: body["model"],
+             max_turns: parse_int(body["max_turns"])
+           }}
+        end),
+      teams:
+        Map.new(Map.get(map, "teams", %{}), fn {name, body} ->
+          {name,
+           %{
+             lead: body["lead"],
+             members: body["members"] || [],
+             profile: body["profile"],
+             scope: body["scope"]
+           }}
+        end),
+      workspaces:
+        Map.new(Map.get(map, "workspaces", %{}), fn {name, body} ->
+          {name, %{roots: body["roots"] || [], teams: body["teams"], policy: policy_of(body)}}
+        end),
+      policy: Map.new(policy_depth, fn {depth, body} -> {to_string(depth), policy_of(body)} end),
+      session: %{
+        roles: session["roles"],
+        cross_lineage: session["cross_lineage"],
+        tools_catalog: session["tools_catalog"]
+      },
       presets:
         presets
         |> Enum.map(fn {name, body} ->
@@ -250,12 +389,24 @@ defmodule Omunculus.Config do
            %{
              tools: body["tools"],
              instructions: body["instructions"],
-             max_turns: parse_int(body["max_turns"])
+             max_turns: parse_int(body["max_turns"]),
+             policy: policy_of(body)
            }}
         end)
         |> Map.new()
     }
   end
+
+  # [[section]] arrays with `name` and [section.name] tables are the same thing.
+  defp named_entries(list) when is_list(list), do: list
+
+  defp named_entries(map) when is_map(map),
+    do: Enum.map(map, fn {name, body} -> Map.put(body, "name", name) end)
+
+  defp named_entries(_), do: []
+
+  defp policy_of(body) when is_map(body), do: Map.take(body, @policy_keys)
+  defp policy_of(_), do: %{}
 
   defp merge(base, overlay) when overlay == %{}, do: base
 
@@ -266,6 +417,11 @@ defmodule Omunculus.Config do
       output: deep_keep(base.output, Map.get(overlay, :output, %{})),
       interceptors: base.interceptors ++ Map.get(overlay, :interceptors, []),
       automations: base.automations ++ Map.get(overlay, :automations, []),
+      agents: Map.merge(base.agents, Map.get(overlay, :agents, %{})),
+      teams: Map.merge(base.teams, Map.get(overlay, :teams, %{})),
+      workspaces: Map.merge(base.workspaces, Map.get(overlay, :workspaces, %{})),
+      policy: Map.merge(base.policy, Map.get(overlay, :policy, %{})),
+      session: deep_keep(base.session, Map.get(overlay, :session, %{})),
       presets: Map.merge(base.presets, Map.get(overlay, :presets, %{}))
     }
   end

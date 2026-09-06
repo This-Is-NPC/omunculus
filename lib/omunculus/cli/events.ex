@@ -71,6 +71,15 @@ defmodule Omunculus.CLI.Events do
         with {:ok, config} <-
                Config.load(cwd: File.cwd!(), config_file: flags["config"], env: env),
              {:ok, checked} <- Config.check(config) do
+          IO.puts("agents: #{map_size(config.agents)}")
+          IO.puts("teams: #{map_size(config.teams)}")
+          IO.puts("workspaces: #{map_size(config.workspaces)}")
+          IO.puts("profiles: #{map_size(config.presets)}")
+
+          IO.puts(
+            "policy.depth: #{config.policy |> Map.keys() |> Enum.sort() |> Enum.join(", ")}"
+          )
+
           IO.puts("interceptors: #{length(checked.interceptors)}")
 
           Enum.each(checked.interceptors, fn i ->
