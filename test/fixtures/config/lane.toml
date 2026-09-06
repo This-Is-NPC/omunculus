@@ -1,0 +1,20 @@
+# Overlay "com lane": aplica-se por cima de qualquer base via --config
+# (ou como arquivo de projeto sobre o global). O log deve ficar idêntico ao
+# da variante sem lane, exceto pelos delivery.rejected que o cenário espera.
+
+[interceptors.audit]
+events = ["task.requested", "task.delegated", "tool.call.requested", "task.completed"]
+module = "Omunculus.Interceptors.Audit"
+
+[interceptors.depth-gate]
+events = ["task.delegated"]
+module = "Omunculus.Interceptors.DepthGate"
+options = { max_depth = 2 }
+
+[interceptors.tool-gate]
+events = ["tool.call.requested"]
+module = "Omunculus.Interceptors.ToolGate"
+
+[interceptors.team-gate]
+events = ["task.delegated", "task.requested"]
+module = "Omunculus.Interceptors.TeamGate"

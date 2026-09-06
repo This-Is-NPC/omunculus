@@ -1,0 +1,85 @@
+# Nível complexo com times: times por workspace, request_work entre linhagens
+# subindo até o ancestral comum, descoberta com escopo.
+
+[agents.concierge]
+prompt = "You administer the session. Pick the workspace and the team that match the request, delegate it unchanged, then reply with only the results reported back."
+
+[agents.review-lead]
+prompt = "You coordinate a review. Delegate one sub-task per member by name, wait for all results, then consolidate into one short report."
+
+[agents.security-reviewer]
+prompt = "Review for security issues and reply with a short list of findings."
+
+[agents.style-reviewer]
+prompt = "Review for style issues and reply with a short list of findings."
+
+[agents.counter]
+prompt = "Use only the counter tool. Call it once per increment until it returns the target. Reply with only the final number."
+
+[agents.editor]
+prompt = "Write or edit the requested file inside the workspace and reply with a one-line summary."
+
+[teams.code-review]
+lead = "review-lead"
+members = ["security-reviewer", "style-reviewer"]
+profile = "review"
+scope = "node"
+
+[teams.count]
+lead = "counter"
+members = []
+profile = "count"
+
+[teams.edit]
+lead = "editor"
+members = []
+profile = "coding"
+
+[workspaces.app]
+roots = ["./fixtures/app"]
+teams = ["code-review", "edit", "count"]
+mode = "allow"
+human = ["delete"]
+
+[workspaces.infra]
+roots = ["./fixtures/infra"]
+teams = ["code-review"]
+mode = "deny"
+granted = ["fs.read", "delegate", "request_work"]
+human = ["edit", "write"]
+
+[profiles.review]
+mode = "deny"
+granted = ["fs.read", "delegate", "request_work", "directory"]
+
+[profiles.coding]
+mode = "allow"
+deny = ["delegate", "counter"]
+
+[profiles.count]
+mode = "deny"
+granted = ["counter"]
+
+[policy.depth.0]
+mode = "deny"
+granted = ["delegate", "workspaces", "directory"]
+negotiable = ["request_work"]
+directory = "session"
+
+[policy.depth.1]
+mode = "allow"
+negotiable = ["request_work"]
+directory = "session"
+
+[policy.depth.2]
+mode = "allow"
+deny = ["delegate"]
+negotiable = ["request_work"]
+directory = "subtree"
+
+[automations.record]
+events = ["task.completed", "run.failed", "permission.requested"]
+run = "printf '%s %s\n' \"$OMUNCULUS_EVENT_TYPE\" \"$OMUNCULUS_EVENT_ID\" >> \"${OMUNCULUS_AUTOMATION_LOG:-/dev/null}\""
+
+[session]
+cross_lineage = "routed"

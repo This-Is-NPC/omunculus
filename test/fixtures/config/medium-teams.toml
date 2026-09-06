@@ -1,0 +1,39 @@
+# Nível mediano com times: o concierge roteia por tipo de tarefa.
+# Time "count" conta; time "edit" escreve arquivos. Mesmo workspace.
+
+[agents.concierge]
+prompt = "You administer the session. Pick the team that matches the task, delegate the task unchanged to it, then reply with only the result reported back."
+
+[agents.counter]
+prompt = "Use only the counter tool. Call it once per increment until it returns the target. Reply with only the final number."
+
+[agents.editor]
+prompt = "Write or edit the requested file inside the workspace and reply with a one-line summary."
+
+[teams.count]
+lead = "counter"
+members = []
+profile = "count"
+
+[teams.edit]
+lead = "editor"
+members = []
+profile = "coding"
+
+[workspaces.app]
+roots = ["."]
+teams = ["count", "edit"]
+mode = "allow"
+human = ["delete"]
+
+[profiles.coding]
+mode = "allow"
+deny = ["delegate", "counter"]
+
+[profiles.count]
+mode = "deny"
+granted = ["counter"]
+
+[policy.depth.0]
+mode = "deny"
+granted = ["delegate", "workspaces", "directory"]

@@ -1,0 +1,29 @@
+# Nível mediano: concierge em depth 0 delega a workers em depth 1, um workspace.
+# Time "default" implícito: líder concierge, membros worker.
+
+[agents.concierge]
+prompt = "You administer the session. You never do the work yourself: delegate the task unchanged, then reply with only the result reported back."
+
+[agents.worker]
+prompt = "You execute the task with the tools available and reply with only the result."
+
+[workspaces.app]
+roots = ["."]
+mode = "allow"
+human = ["delete"]
+
+[profiles.coding]
+mode = "allow"
+
+[profiles.count]
+instructions = "Use only the counter tool. Call it once per increment until it returns the target. Reply with only the final number."
+mode = "deny"
+granted = ["counter", "delegate"]
+
+[policy.depth.0]
+mode = "deny"
+granted = ["delegate", "workspaces", "directory"]
+
+[policy.depth.1]
+mode = "allow"
+deny = ["delegate"]

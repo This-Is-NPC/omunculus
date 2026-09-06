@@ -1,0 +1,51 @@
+# Nível complexo: dois workspaces, depth 2, faixa human em um deles, automação.
+# Depth 0 roteia entre workspaces; depth 1 é o concierge do repo; depth 2 trabalha.
+
+[agents.concierge]
+prompt = "You administer the session. Route each request to the right workspace, delegate it unchanged, then reply with only the results reported back."
+
+[agents.repo-concierge]
+prompt = "You coordinate one repository. Delegate the task to a worker, then reply with only the result reported back."
+
+[agents.worker]
+prompt = "You execute the task with the tools available and reply with only the result."
+
+[workspaces.app]
+roots = ["./fixtures/app"]
+mode = "allow"
+human = ["delete"]
+
+[workspaces.infra]
+roots = ["./fixtures/infra"]
+mode = "deny"
+granted = ["fs.read", "counter", "delegate"]
+human = ["edit", "write"]
+
+[profiles.coding]
+mode = "allow"
+
+[profiles.count]
+mode = "deny"
+granted = ["counter", "delegate"]
+
+[policy.depth.0]
+mode = "deny"
+granted = ["delegate", "workspaces", "directory"]
+negotiable = ["request_work"]
+directory = "session"
+
+[policy.depth.1]
+mode = "allow"
+negotiable = ["request_work"]
+
+[policy.depth.2]
+mode = "allow"
+deny = ["delegate"]
+
+[automations.record]
+events = ["task.completed", "run.failed", "permission.requested"]
+run = "printf '%s %s\n' \"$OMUNCULUS_EVENT_TYPE\" \"$OMUNCULUS_EVENT_ID\" >> \"${OMUNCULUS_AUTOMATION_LOG:-/dev/null}\""
+may_request = { profiles = ["count"], workspaces = ["app"] }
+
+[session]
+roles = { depth0 = "concierge", depth1 = "repo-concierge", depth2 = "worker" }
