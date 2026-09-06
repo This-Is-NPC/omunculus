@@ -85,7 +85,7 @@ sequenceDiagram
     CLI->>EC: workspace.attached {workspace_id, roots, teto}
     EC-->>RT: deliver
     RT->>RT: cria node depth 1 (hash(sessão, omunculus, 1)); nenhuma Run ainda
-    U->>CLI: workspace attach omakiten --session omacon
+    U->>CLI: workspace attach omakiten
     CLI->>EC: workspace.attached
     U->>CLI: send "faça X no omunculus e Y no omakiten"
     CLI->>EC: task.requested {session_id}
