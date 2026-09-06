@@ -14,6 +14,7 @@ O que a spike validou e o que ela revelou está em
 | [architecture.md](architecture.md) | decisões canônicas e fronteiras | planejado, spike |
 | [requirements.md](requirements.md) | contrato observável | planejado, spike |
 | [config.md](config.md) | shape único do `omunculus.toml`, camadas, convenções | proposta |
+| [implementation-plan.md](implementation-plan.md) | fases, dependências e critérios de saída até o TO-BE | plano |
 | [data-model.md](data-model.md) | tabelas, consistência, retenção | planejado, spike |
 | [event-model.md](event-model.md) | envelope, append, dispatch, replay, cenários `conte até 10` | planejado, spike |
 | [event-catalog.md](event-catalog.md) | tipos de envelope, interceptor, automação, portas da CLI | planejado, spike |

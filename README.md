@@ -46,6 +46,7 @@ uma string TOML inteira; mantenha segredos fora do versionamento.
 - [Requisitos AS-IS](docs/as-is/requirements.md)
 - [Arquitetura TO-BE, com o mapa dos documentos](docs/to-be/architecture.md)
 - [Arquivo de configuração TO-BE (proposta)](docs/to-be/config.md)
+- [Plano de implementação para o TO-BE](docs/to-be/implementation-plan.md)
 - [Requisitos TO-BE](docs/to-be/requirements.md)
 - [Modelo de dados TO-BE](docs/to-be/data-model.md)
 - [Event Core e eventos TO-BE](docs/to-be/event-model.md)
