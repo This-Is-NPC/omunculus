@@ -14,7 +14,7 @@ De fora só entram **comandos**; para fora só saem **eventos**. Um sistema
 externo nunca escreve um evento: ele lê o log e responde com um comando pela
 CLI. Eventos são sempre derivados pelo harness. Essa regra é o que mantém o
 histórico interpretável e a administração pequena: existe um catálogo em
-código e duas seções de configuração, `[[interceptors]]` e `[[automations]]`.
+código e duas seções de configuração, `[interceptors.*]` e `[automations.*]`.
 Nenhum terceiro mecanismo.
 
 ## Catálogo
@@ -101,14 +101,12 @@ interceptor configurado para um tipo, a entrega é direta (cenários 3 e 4). O
 log é idêntico nos dois caminhos.
 
 ```toml
-[[interceptors]]
-name = "depth-gate"
+[interceptors.depth-gate]
 events = ["task.delegated"]
 module = "Omunculus.Interceptors.DepthGate"
 options = { max_depth = 2 }
 
-[[interceptors]]
-name = "audit"
+[interceptors.audit]
 events = ["task.requested", "task.completed"]
 module = "Omunculus.Interceptors.Audit"
 ```
@@ -146,8 +144,7 @@ entrega. Não pode vetar. Só reage, e a única forma de agir de volta é emitir
 um comando pela CLI.
 
 ```toml
-[[automations]]
-name = "notify"
+[automations.notify]
 events = ["task.completed", "run.failed"]
 run = "./hooks/notify.sh"
 ```
@@ -181,7 +178,7 @@ duas portas e nenhuma outra:
 - **catálogo** — `omunculus events catalog`: lista os tipos e suas
   propriedades a partir do módulo;
 - **verificação** — `omunculus config check [--config <arquivo>]`: valida
-  `[[interceptors]]` e `[[automations]]` contra o catálogo e a existência dos
+  `[interceptors.*]` e `[automations.*]` contra o catálogo e a existência dos
   módulos.
 
 ## Não-objetivos

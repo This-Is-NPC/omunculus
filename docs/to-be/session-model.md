@@ -45,10 +45,6 @@ roda.
 ## Configuração
 
 ```toml
-[session]
-max_depth = 2
-cross_lineage = "routed"          # ou "mediated"
-
 [workspaces.omunculus]
 roots = ["~/Projects/omacon/omunculus"]
 mode = "allow"
@@ -58,12 +54,12 @@ negotiable = ["delete"]
 roots = ["~/Projects/omacon/omakiten"]
 mode = "allow"
 
-[ceiling.depth0]
+[policy.depth.0]
 mode = "deny"
 granted    = ["delegate", "workspaces"]
 negotiable = ["request_work"]
 
-[ceiling.depth1]
+[policy.depth.1]
 mode = "allow"
 negotiable = ["edit", "write", "request_work"]
 ```
@@ -169,14 +165,12 @@ ser restrito por workspace. Há um único Event Core por sessão: o interceptor
 vê todos os workspaces e filtra pelo campo.
 
 ```toml
-[[interceptors]]
-name = "infra-readonly"
+[interceptors.infra-readonly]
 events = ["tool.call.requested", "permission.granted"]
 workspaces = ["infra"]
 module = "Omunculus.Interceptors.ToolGate"
 
-[[interceptors]]
-name = "no-cross-into-infra"
+[interceptors.no-cross-into-infra]
 events = ["task.requested"]
 module = "Omunculus.Interceptors.WorkspaceGate"
 options = { deny_targets = ["infra"] }

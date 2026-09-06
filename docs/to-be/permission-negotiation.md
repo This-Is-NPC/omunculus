@@ -17,7 +17,7 @@ nó se, no efetivo, está em `negotiable`; vai ao humano se está em `human`; é
 recusada sem escalar se está proibida.
 
 ```toml
-[ceiling.depth1]
+[policy.depth.1]
 mode = "allow"
 negotiable = ["edit", "write"]     # o pai pode conceder
 human      = ["delete"]            # só um humano concede
@@ -392,12 +392,12 @@ uma organização pode colocar um interceptor que veta qualquer concessão de
 ## Configuração completa de um caso
 
 ```toml
-[ceiling.depth0]
+[policy.depth.0]
 mode = "deny"
 granted    = ["fs.read", "delegate"]
 negotiable = ["edit"]
 
-[ceiling.depth1]
+[policy.depth.1]
 mode = "deny"
 granted    = ["fs.read", "delegate"]
 negotiable = ["edit", "write"]

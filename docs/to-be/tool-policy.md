@@ -32,7 +32,7 @@ silencioso.
 ```mermaid
 flowchart LR
     P["Perfil<br/>--profile ask<br/>granted = {read, grep, find, ls}"]
-    D["Teto por posição<br/>ceiling.depth0<br/>granted = {read, grep, find, ls, delegate}"]
+    D["Teto por posição<br/>policy.depth.0<br/>granted = {read, grep, find, ls, delegate}"]
     W["Teto por workspace<br/>workspaces.infra<br/>granted = {read, grep, find, ls}<br/>human = {edit, write}"]
     E["Efetivo<br/>granted = {read, grep, find, ls}<br/>negotiable = {}<br/>human = {edit, write}"]
     P --> I((∩))
@@ -92,17 +92,17 @@ granted    = ["read", "grep", "find", "ls"]
 negotiable = []
 human      = ["edit", "write"]
 
-[ceiling.depth0]                  # concierge da sessão
+[policy.depth.0]                  # concierge da sessão
 mode = "deny"
 granted    = ["delegate", "workspaces"]
 negotiable = ["request_work"]
 
-[ceiling.depth1]                  # concierge de um repositório
+[policy.depth.1]                  # concierge de um repositório
 mode = "allow"
 negotiable = ["edit", "write", "request_work"]
 human      = ["delete"]
 
-# [ceiling.depth2] ausente: allow, o worker é limitado pelo workspace e pelo perfil
+# [policy.depth.2] ausente: allow, o worker é limitado pelo workspace e pelo perfil
 
 [profiles.full]
 mode = "allow"
@@ -336,8 +336,7 @@ Uma automação não spawna nada. Ela emite um comando com **pedidos**, e cada
 pedido é validado antes de o nó nascer.
 
 ```toml
-[[automations]]
-name = "ci-fix"
+[automations.ci-fix]
 events = ["run.failed"]
 run = "./hooks/ci-fix.sh"
 may_request = { profiles = ["fix", "ask"], workspaces = ["omunculus"] }
@@ -361,7 +360,7 @@ sequenceDiagram
     H->>CLI: emit task.requested {profile=fix, agent=worker, workspace=omunculus}
     CLI->>CLI: perfil, agente e workspace existem no config?
     CLI->>CLI: automação "ci-fix" pode pedir fix/omunculus? (may_request)
-    CLI->>CLI: efetivo = fix ∩ ceiling.depth0 ∩ omunculus — granted não vazio?
+    CLI->>CLI: efetivo = fix ∩ policy.depth.0 ∩ omunculus — granted não vazio?
     alt qualquer checagem falha
         CLI-->>H: erro, nada é apendado
     else
@@ -398,7 +397,7 @@ workspace é uma tarefa nova, nunca uma retomada.
 |---|---|
 | Acesso total a um repositório | workspace e perfil em `allow` sem exceções |
 | "Só quero perguntar" a um agente que normalmente só delega | `--profile ask`: lê, não edita, não delega; o teto do depth 0 não muda |
-| Concierge nunca edita, workers editam | `ceiling.depth0` em `deny` sem `edit`; `ceiling.depth1` em `allow` |
+| Concierge nunca edita, workers editam | `policy.depth.0` em `deny` sem `edit`; `policy.depth.1` em `allow` |
 | Diretório de infra só leitura, para qualquer agente | `workspaces.infra` em `deny` com `fs.read`; independe de perfil e depth |
 | Tudo liberado menos apagar | `mode = "allow"`, `human = ["delete"]` |
 | Hook de CI abre um agente de correção | `emit` com `profile=fix`, limitado por `may_request` |
@@ -414,7 +413,7 @@ decisão não está em `EVENTS`, ela não aconteceu.
 
 ## Ordem de implementação proposta
 
-1. `[ceiling]`, `[profiles]`, `[workspaces]` com `mode`, faixas e grupos no
+1. `[policy.depth]`, `[profiles]`, `[workspaces]` com `mode`, faixas e grupos no
    `Config`; normalização e interseção em `resolve`; `config check` imprime
    as faixas expandidas e valida `tools_catalog`.
 2. `tools`, `profile`, `workspace` nos payloads de `task.requested`,

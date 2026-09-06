@@ -26,21 +26,18 @@ prompt = "…"
 lead    = "review-lead"
 members = ["security-reviewer", "style-reviewer", "test-reviewer"]
 profile = "review"            # estreita; nunca amplia o workspace
-scope   = "node"              # ou "task"
+scope   = "node"              # padrão: "task"
 
 [teams.product-review]
 lead    = "product-lead"
 members = ["ux-reviewer", "copy-reviewer"]
 profile = "ask"
-scope   = "task"
 
 [workspaces.x]
 roots = ["~/x"]
-teams = ["code-review", "product-review"]
-default_team = "default"
+teams = ["code-review", "product-review"]   # sem lista, só o time "default"
 
-[session]
-cross_lineage = "routed"      # ou "mediated"
+# [session] cross_lineage = "routed" é o padrão; "mediated" só se escrito
 ```
 
 A configuração Agent continua sem saber de posição, workspace ou time.
@@ -62,7 +59,7 @@ A tool `workspaces` do depth 0 devolve os workspaces **e seus times**, cada
 um com a descrição do líder. `delegate` ganha `team`. "Verifique as PRs do
 projeto X" vira `task.delegated` com `workspace = x` e `team = code-review`;
 um pedido que exige as duas revisões vira duas delegações. `--team` na CLI
-é dica opcional, como `--workspace`. Sem time, vale `default_team`.
+é dica opcional, como `--workspace`. Sem time, vale o time `default`.
 
 No depth 1, `delegate` ganha `agent`, restrito aos `members` do time. O
 Runtime pina a configuração daquele agente no worker. Nome fora da lista é
@@ -160,9 +157,9 @@ sessão: workspaces, times, agentes de cada time, Work Items abertos e seus
 resultados em `COMMENTS`. O escopo é política do teto:
 
 ```toml
-[ceiling.depth2]
+[policy.depth.2]
 directory = "subtree"      # só o próprio time
-[ceiling.depth1]
+[policy.depth.1]
 directory = "session"      # todos os times e workspaces
 ```
 
