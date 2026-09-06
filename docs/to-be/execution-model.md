@@ -80,7 +80,8 @@ delega, pede trabalho a outro workspace ou pede permissão, **a conclusão
 daquela Run é o próprio pedido**: ela apenda o envelope de pedido, grava seu
 checkpoint e fecha com `run.completed` e `outcome = waiting`, dizendo qual
 envelope aguarda. O Work Item passa a `waiting`. Não há processo vivo, não
-há timeout de processo, e fechar o terminal não muda nada.
+há timeout de processo, e fechar o terminal não muda nada. Um pedido a
+humano não tem vida útil: fica aberto até ser concedido ou negado.
 
 Quando a resposta chega (`task.completed` do filho, `permission.granted` ou
 `permission.denied`, `task.commented` de um humano), o Runtime abre uma
@@ -97,7 +98,6 @@ stateDiagram-v2
     running --> failed: run.failed
     running --> waiting: run.completed outcome=waiting<br/>awaiting = {type, id}
     waiting --> running: resposta entregue → run.started (continuation)
-    waiting --> failed: prazo do pedido vencido → permission.denied timeout / run.failed
     failed --> running: task.resumed → run.started (retry)
     completed --> [*]
 ```
@@ -105,9 +105,8 @@ stateDiagram-v2
 O checkpoint de uma Run em `waiting` precisa bastar para continuar: as
 mensagens da conversa até o pedido (ou um resumo delas), o estado das tools
 e o `request_id` aguardado. Ele vai no payload de `run.completed` e é
-referenciado em `WORK_ITEMS.checkpoint`. Prazo de pedido é um campo do
-envelope de pedido (`deadline`), materializado pelo Runtime ou por uma
-automação quando vencer; nunca um timer preso a um processo.
+referenciado em `WORK_ITEMS.checkpoint`. Pedidos não têm prazo: um Work
+Item em `waiting` permanece assim, a custo zero, até a resposta chegar.
 
 A mesma regra vale para retry após falha: `task.resumed` abre uma Run nova a
 partir do último checkpoint. Há um único mecanismo de continuação, com três

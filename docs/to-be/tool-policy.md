@@ -119,7 +119,6 @@ deny = ["fs.write", "delegate"]
 [profiles.fix]
 mode = "deny"
 granted = ["fs.read", "edit"]
-request_timeout = "10m"
 ```
 
 O modo existe só na escrita. Na inicialização tudo é **normalizado** contra o

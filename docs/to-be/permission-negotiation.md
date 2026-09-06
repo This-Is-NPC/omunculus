@@ -80,7 +80,7 @@ flowchart TD
     P -->|escala| ESC
     ESC --> HU
     HU -->|concede| OK
-    HU -->|nega ou timeout| NO
+    HU -->|nega| NO
 ```
 
 Um pai pode **escalar** em vez de decidir: ele tem autoridade, mas prefere
@@ -163,7 +163,7 @@ sequenceDiagram
     actor H as Humano
     participant CLI as omunculus emit
 
-    C->>EC: permission.requested {tool=edit, workspace=infra, deadline}
+    C->>EC: permission.requested {tool=edit, workspace=infra}
     C->>EC: run.completed {outcome=waiting}
     Note over EC: edit ∈ human(workspaces.infra) → arbiter = human
     EC->>EC: append + commit; Projector grava COMMENTS(kind=request)
@@ -173,17 +173,18 @@ sequenceDiagram
     CLI->>CLI: request_id existe, ainda aberto, tool ∈ human(teto)?
     CLI->>EC: append permission.granted (granter = human:<origin>)
     EC-->>RT: deliver → Run nova do filho (continuation)
-    Note over EC: prazo vencido sem resposta → permission.denied (reason = timeout) → Run nova recebe a negação
+    Note over EC: sem resposta, o pedido fica aberto indefinidamente; nada expira
 ```
 
 Regras da escalada:
 
-- o pedido carrega `deadline` (de `request_timeout`, configurável por
-  perfil). Vencido, o Runtime ou uma automação materializa
-  `permission.denied` com `reason = timeout`, e isso reativa o Work Item
-  com a negação. O padrão seguro é negar, nunca liberar;
+- **um pedido não tem vida útil.** Fica aberto até um humano conceder ou
+  negar. Não há prazo, não há negação automática, não há expiração de
+  pedido. O que expira é a concessão, pelo `scope` e pelo `until` de quem
+  concedeu, nunca o pedido;
 - nenhum processo fica vivo esperando. O Work Item está em `waiting` no
-  log; o humano responde quando quiser, e a resposta abre a Run nova;
+  log, o pedido aparece na inbox, o humano responde quando quiser, e a
+  resposta abre a Run nova. Um pedido aberto por dias custa zero;
 - um humano pode negar de vez com `permission.denied`, e pode incluir um
   comentário que vira observação para o modelo na continuação.
 
@@ -214,7 +215,7 @@ estado. Um pai jamais concede permanente: `permanent` só é válido com
 stateDiagram-v2
     [*] --> requested: permission.requested
     requested --> granted: permission.granted (scope, until)
-    requested --> denied: permission.denied / timeout / forbidden
+    requested --> denied: permission.denied / forbidden
     granted --> consumed: tool.call.completed (scope = call)
     granted --> expired: fim do escopo ou until
     granted --> revoked: permission.revoked
@@ -253,7 +254,7 @@ Run ou um Work Item, para que a projeção não dependa de relógio.
 |---|---|---|---|---|
 | `permission.requested` | event | Run | sim | não |
 | `permission.granted` | command | Run (pai) ou CLI (humano) | sim | sim |
-| `permission.denied` | command | Run (pai), CLI (humano) ou Runtime (timeout, forbidden) | não | sim |
+| `permission.denied` | command | Run (pai), CLI (humano) ou Runtime (forbidden) | não | sim |
 | `permission.revoked` | command | Run (pai) ou CLI | sim | sim |
 | `permission.expired` | event | Runtime | não | não |
 | `policy.changed` | event | CLI | não | não |
@@ -291,7 +292,6 @@ human   = ["edit", "write"]
 [profiles.fix]
 mode = "deny"
 granted = ["fs.read", "edit"]
-request_timeout = "10m"
 ```
 
 Leitura de dois pedidos:
@@ -308,7 +308,7 @@ Leitura de dois pedidos:
 
 Não há concessão fora do log, não há concessão implícita por delegação, não
 há "modo confiável" que pule o `ToolGate`, e o modelo nunca escolhe validade
-nem árbitro. Timeout é negação. Permanente é TOML.
+nem árbitro. Pedido não expira; concessão sim. Permanente é TOML.
 
 ## Impacto e ordem
 
@@ -321,6 +321,6 @@ Depende de [tool-policy.md](tool-policy.md) implementado (faixas, modos e
    Run e projeção em `COMMENTS`.
 3. arbitragem do pai como rodada efêmera com `grant`/`deny`/`escalate`.
 4. `emit permission.granted|denied|revoked` com validação de `request_id` e
-   de faixa; timeout no Runtime.
+   de faixa; `forbidden` materializado pelo Runtime.
 5. `ToolGate` lendo grants do log; `permission.expired` no fechamento.
 6. `policy grant --permanent` e `policy.changed`.

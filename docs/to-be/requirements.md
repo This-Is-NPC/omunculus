@@ -77,7 +77,8 @@ partida implementado está em [AS-IS requirements](../as-is/requirements.md).
 4. Delegação nunca amplia: o filho herda a autoridade do pai.
 5. Crescer durante a execução exige `permission.requested` arbitrado por
    quem tem autoridade, com escopo e validade; permanente é mudança de
-   configuração registrada no log; timeout é negação.
+   configuração registrada no log. Um pedido não tem vida útil: fica aberto
+   até ser concedido ou negado.
 
 ## Recuperação e operação
 
