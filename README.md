@@ -23,6 +23,8 @@ Use `./omunculus --help` para a referência completa.
 - `monkey-job <instrução...>` executa um diagnóstico com tools selecionáveis;
 - `benchmark` mede cenários de densidade, árvore residente sintética ou carga
   HTTP de diagnóstico;
+- `spike` executa a spike do Event Core planejado (SQLite, `EVENTS`,
+  delegação em runtime, replay) com uma tarefa de contagem sem provider;
 - `help` e `version` exibem ajuda e versão.
 
 As tools padrão são `read`, `edit`, `write`, `grep`, `find` e `ls`. A tool
@@ -48,6 +50,7 @@ uma string TOML inteira; mantenha segredos fora do versionamento.
 - [Event Core e eventos TO-BE (planejado)](docs/to-be/event-model.md)
 - [Execução e delegação TO-BE (planejado)](docs/to-be/execution-model.md)
 - [Comparação de harnesses TO-BE vs. Pi, Claude Code e Codex](docs/to-be/harness-comparison.md)
+- [Spike do Event Core (branch `spike/event-core`)](docs/spike/event-core-spike.md)
 
 ## Testes
 
