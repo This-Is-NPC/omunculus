@@ -5,6 +5,7 @@ defmodule Omunculus.CLI do
   alias Omunculus.Dotenv
 
   def main(argv) do
+    :ok = Omunculus.Native.ensure_nif!()
     {:ok, _} = Application.ensure_all_started(:omunculus)
     System.halt(dispatch(argv))
   end
@@ -26,6 +27,9 @@ defmodule Omunculus.CLI do
 
       {:ok, %{command: :"monkey-job"} = parsed} ->
         run_with_dotenv(argv, parsed, env)
+
+      {:ok, %{command: :spike} = parsed} ->
+        Omunculus.CLI.Spike.run(parsed)
 
       {:error, reason} ->
         IO.puts(:stderr, Help.usage_error(reason))

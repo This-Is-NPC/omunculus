@@ -68,6 +68,25 @@ cmd "monkey-job" {
   example "omunculus monkey-job \"count to 10\" --tools counter --delay 1s --increment 1"
 }
 
+cmd "spike" {
+  about "Run the planned Event Core end to end with a provider-free counting task"
+  long_about """
+  Exercises docs/to-be: the instruction enters as a task.requested envelope, Runs are activated from delivered events, delegation builds the tree at runtime, every tool call round-trips through the append-only EVENTS log in SQLite, projections are reduced from the log and rebuilt by replay. No model provider is contacted.
+  """
+  arg_required_else_help #true
+
+  arg "<instruction>..." help="Counting task, e.g. \"conte até 10\"" var_min=1
+
+  flag "--depth <n>" help="Delegation depth: 0 counts directly, 1 = scenario 3, 2 = scenario 4" default="1"
+  flag "--db <file>" help="SQLite file for EVENTS and projections (default: temporary file)"
+  flag "--fail-at <n>" help="Kill the counting worker after it reaches n, then resume it as a new attempt"
+  flag "--delay <duration>" help="Delay every tool result"
+  flag "--json-events" help="Write the ordered EVENTS log as one JSON envelope per line to stderr"
+
+  example "omunculus spike \"conte até 10\" --depth 2"
+  example "omunculus spike \"conte até 10\" --fail-at 3 --delay 50ms"
+}
+
 cmd "benchmark" {
   about "Measure concurrent actors, resident agent trees, or HTTP load"
 long_about "actor-density measures a provider-free Agent state plateau in the current BEAM runtime. agent-tree is a synthetic provider-free resident tree stress benchmark: nodes are created in waves and ancestors remain blocked at round_started. http-load drives the external Rust stub through a dedicated Finch pool. RSS and CPU scheduler limits are soft benchmark controls; --cpu-limit changes BEAM schedulers_online only and is restored after the run, not a cgroup or physical CPU quota. Durable trees are documented in docs/to-be/execution-model.md and are not implemented."

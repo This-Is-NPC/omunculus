@@ -192,6 +192,50 @@ defmodule Omunculus.CLI.Spec do
            nil}
         ]
       },
+      "spike" => %{
+        name: "spike",
+        about: "Run the planned Event Core end to end with a provider-free counting task",
+        long_about:
+          "Exercises docs/to-be: the instruction enters as a task.requested envelope, Runs are activated from delivered events, delegation builds the tree at runtime, every tool call round-trips through the append-only EVENTS log in SQLite, projections are reduced from the log and rebuilt by replay. No model provider is contacted.",
+        arg_required_else_help: true,
+        args: [
+          %{
+            name: :instruction,
+            metavar: "instruction",
+            required: true,
+            variadic: true,
+            var_min: 1,
+            help: "Counting task, e.g. \"conte até 10\""
+          }
+        ],
+        flags: [
+          flag("depth",
+            long: "depth",
+            value: "n",
+            default: "1",
+            help: "Delegation depth: 0 counts directly, 1 = scenario 3, 2 = scenario 4"
+          ),
+          flag("db",
+            long: "db",
+            value: "file",
+            help: "SQLite file for EVENTS and projections (default: temporary file)"
+          ),
+          flag("fail_at",
+            long: "fail-at",
+            value: "n",
+            help: "Kill the counting worker after it reaches n, then resume it as a new attempt"
+          ),
+          flag("delay", long: "delay", value: "duration", help: "Delay every tool result"),
+          flag("json_events",
+            long: "json-events",
+            help: "Write the ordered EVENTS log as one JSON envelope per line to stderr"
+          )
+        ],
+        examples: [
+          {"omunculus spike \"conte até 10\" --depth 2", nil, nil},
+          {"omunculus spike \"conte até 10\" --fail-at 3 --delay 50ms", nil, nil}
+        ]
+      },
       "benchmark" => %{
         name: "benchmark",
         about: "Measure concurrent actors, resident agent trees, or HTTP load",

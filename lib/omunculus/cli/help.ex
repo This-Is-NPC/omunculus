@@ -201,6 +201,9 @@ defmodule Omunculus.CLI.Help do
   defp describe({:invalid_delay, raw}),
     do: {"error: invalid delay #{inspect(raw)}", "Use a duration such as 500ms, 2s, or 10."}
 
+  defp describe({:invalid_flag_value, flag, raw}),
+    do: {"error: invalid value #{inspect(raw)} for #{flag}", "Use a non-negative integer."}
+
   defp describe({:invalid_increment, raw}),
     do: {"error: invalid increment #{inspect(raw)}", "Use a non-zero integer."}
 
