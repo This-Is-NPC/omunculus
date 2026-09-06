@@ -49,7 +49,7 @@ defmodule Omunculus.Runtime.SpikeAgents do
       tools: ["delegate"],
       max_turns: 4,
       chat:
-        Fake.new([
+        fake_chat(opts, "concierge@spike", ctx, [
           Fake.tool_call("delegate", %{"instruction" => ctx.instruction}, "call_delegate"),
           fn messages -> Fake.text(last_tool_result(messages, ~r/Result: (.*)$/)) end
         ]),
@@ -82,7 +82,7 @@ defmodule Omunculus.Runtime.SpikeAgents do
     }
   end
 
-  def resolve(%{instruction: instruction, checkpoint: checkpoint}, opts) do
+  def resolve(%{instruction: instruction, checkpoint: checkpoint} = ctx, opts) do
     target = target(instruction, opts[:target] || 10)
     current = get_in(checkpoint, ["counter", :value]) || 0
     remaining = max(target - current, 0)
@@ -91,17 +91,17 @@ defmodule Omunculus.Runtime.SpikeAgents do
       for n <- (current + 1)..target//1,
           do: Fake.tool_call("counter", %{}, "call_counter_#{n}")
 
+    turns =
+      calls ++
+        [fn messages -> Fake.text(last_tool_result(messages, ~r/Counter value: (\d+)/)) end]
+
     %{
       agent_id: "worker@spike",
       kind: "worker",
       model: "fake",
       tools: ["counter"],
       max_turns: remaining + 2,
-      chat:
-        Fake.new(
-          calls ++
-            [fn messages -> Fake.text(last_tool_result(messages, ~r/Counter value: (\d+)/)) end]
-        ),
+      chat: fake_chat(opts, "worker@spike", ctx, turns),
       tool_options: %{
         delay_ms: opts[:delay_ms] || 0,
         tools: %{"counter" => %{increment: 1}}
@@ -114,6 +114,16 @@ defmodule Omunculus.Runtime.SpikeAgents do
     case Regex.scan(~r/\d+/, instruction) do
       [] -> default
       matches -> matches |> List.last() |> hd() |> String.to_integer()
+    end
+  end
+
+  defp fake_chat(opts, agent_id, ctx, default_turns) do
+    case opts[:script] do
+      fun when is_function(fun, 4) ->
+        Fake.for_node(fun, agent_id, ctx.depth, ctx[:workspace], ctx[:team])
+
+      _ ->
+        Fake.new(default_turns)
     end
   end
 

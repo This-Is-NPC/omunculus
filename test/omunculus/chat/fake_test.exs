@@ -1,0 +1,173 @@
+defmodule Omunculus.Chat.FakeTest do
+  use ExUnit.Case, async: true
+
+  alias Omunculus.Chat.Fake
+  alias Omunculus.Runtime.SpikeAgents
+
+  test "new/1 still builds a scripted chat from a turn list" do
+    chat = Fake.new([Fake.text("hello")])
+
+    assert {:ok, %{content: "hello"}} = Fake.complete(chat, [], [])
+    assert {:error, :no_scripted_turns} = Fake.complete(chat, [], [])
+  end
+
+  test "for_node branches turns by agent_id" do
+    script = fn agent_id, depth, _workspace, _team ->
+      [Fake.text("#{agent_id}@#{depth}")]
+    end
+
+    concierge = Fake.for_node(script, "concierge@spike", 0, nil, nil)
+    worker = Fake.for_node(script, "worker@spike", 1, nil, nil)
+
+    assert {:ok, %{content: "concierge@spike@0"}} = Fake.complete(concierge, [], [])
+    assert {:ok, %{content: "worker@spike@1"}} = Fake.complete(worker, [], [])
+  end
+
+  test "for_node branches turns by team" do
+    script = fn _agent_id, _depth, _workspace, team ->
+      [Fake.text(if(team, do: "team:#{team}", else: "solo"))]
+    end
+
+    solo = Fake.for_node(script, "worker@spike", 1, nil, nil)
+    teamed = Fake.for_node(script, "worker@spike", 1, nil, "alpha")
+
+    assert {:ok, %{content: "solo"}} = Fake.complete(solo, [], [])
+    assert {:ok, %{content: "team:alpha"}} = Fake.complete(teamed, [], [])
+  end
+
+  test "SpikeAgents.resolver uses :script for fake concierge and worker chats" do
+    seen = :ets.new(:seen, [:set, :private])
+
+    script = fn agent_id, depth, workspace, team ->
+      :ets.insert(seen, {agent_id, depth, workspace, team})
+
+      case agent_id do
+        "concierge@spike" ->
+          [
+            Fake.tool_call("delegate", %{"instruction" => "conte até 1"}, "call_delegate"),
+            Fake.text("concierge-scripted")
+          ]
+
+        "worker@spike" ->
+          [
+            Fake.tool_call("counter", %{}, "call_counter_1"),
+            Fake.text("worker-scripted")
+          ]
+      end
+    end
+
+    resolver = SpikeAgents.resolver(script: script, target: 1)
+
+    concierge =
+      resolver.(%{
+        depth: 0,
+        max_depth: 1,
+        instruction: "conte até 1",
+        checkpoint: %{},
+        workspace: "ws-1",
+        team: "team-a"
+      })
+
+    assert [{"concierge@spike", 0, "ws-1", "team-a"}] = :ets.tab2list(seen)
+
+    assert {:ok, %{tool_calls: [_]}} = Fake.complete(concierge.chat, [], [])
+    assert {:ok, %{content: "concierge-scripted"}} = Fake.complete(concierge.chat, [], [])
+
+    worker =
+      resolver.(%{
+        depth: 1,
+        max_depth: 1,
+        instruction: "conte até 1",
+        checkpoint: %{},
+        workspace: "ws-1",
+        team: "team-a"
+      })
+
+    assert Enum.sort(:ets.tab2list(seen)) ==
+             Enum.sort([
+               {"concierge@spike", 0, "ws-1", "team-a"},
+               {"worker@spike", 1, "ws-1", "team-a"}
+             ])
+
+    assert {:ok, %{tool_calls: [_]}} = Fake.complete(worker.chat, [], [])
+    assert {:ok, %{content: "worker-scripted"}} = Fake.complete(worker.chat, [], [])
+  end
+
+  test "default spike scripts still delegate then text for concierge and counter then text for worker" do
+    resolver = SpikeAgents.resolver(target: 2)
+
+    concierge =
+      resolver.(%{
+        depth: 0,
+        max_depth: 1,
+        instruction: "conte até 2",
+        checkpoint: %{}
+      })
+
+    assert {:ok, %{tool_calls: [call]}} = Fake.complete(concierge.chat, [], [])
+    assert call["function"]["name"] == "delegate"
+
+    assert {:ok, %{content: content}} =
+             Fake.complete(concierge.chat, [%{"role" => "tool", "content" => "Result: 2"}], [])
+
+    assert content == "2"
+
+    worker =
+      resolver.(%{
+        depth: 1,
+        max_depth: 1,
+        instruction: "conte até 2",
+        checkpoint: %{}
+      })
+
+    assert {:ok, %{tool_calls: [call1]}} = Fake.complete(worker.chat, [], [])
+    assert call1["id"] == "call_counter_1"
+
+    assert {:ok, %{tool_calls: [call2]}} =
+             Fake.complete(
+               worker.chat,
+               [%{"role" => "tool", "content" => "Counter value: 1"}],
+               []
+             )
+
+    assert call2["id"] == "call_counter_2"
+
+    assert {:ok, %{content: "2"}} =
+             Fake.complete(
+               worker.chat,
+               [%{"role" => "tool", "content" => "Counter value: 2"}],
+               []
+             )
+  end
+
+  test "default worker script resumes from checkpoint with remaining counter calls" do
+    resolver = SpikeAgents.resolver(target: 3)
+
+    worker =
+      resolver.(%{
+        depth: 1,
+        max_depth: 1,
+        instruction: "conte até 3",
+        checkpoint: %{"counter" => %{value: 1}}
+      })
+
+    assert {:ok, %{tool_calls: [call]}} = Fake.complete(worker.chat, [], [])
+    assert call["id"] == "call_counter_2"
+
+    assert {:ok, %{tool_calls: [call]}} =
+             Fake.complete(
+               worker.chat,
+               [%{"role" => "tool", "content" => "Counter value: 2"}],
+               []
+             )
+
+    assert call["id"] == "call_counter_3"
+
+    assert {:ok, %{content: "3"}} =
+             Fake.complete(
+               worker.chat,
+               [%{"role" => "tool", "content" => "Counter value: 3"}],
+               []
+             )
+  end
+end

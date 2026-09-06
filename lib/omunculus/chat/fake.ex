@@ -7,6 +7,10 @@ defmodule Omunculus.Chat.Fake do
     %{mod: __MODULE__, pid: pid}
   end
 
+  def for_node(script, agent_id, depth, workspace, team) when is_function(script, 4) do
+    new(script.(agent_id, depth, workspace, team))
+  end
+
   @impl true
   def complete(%{pid: pid}, messages, _tools) do
     Agent.get_and_update(pid, fn

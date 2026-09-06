@@ -190,6 +190,8 @@ defmodule Omunculus.Runtime do
 
   defp start_run(state, spec) do
     run_id = Envelope.generate_id("run")
+    workspace = Map.get(spec, :workspace, spec.activation.workspace_id)
+    team = Map.get(spec, :team, spec.activation.payload["team"])
 
     agent =
       state.agents.(%{
@@ -197,7 +199,9 @@ defmodule Omunculus.Runtime do
         max_depth: state.max_depth,
         attempt: spec.attempt,
         instruction: spec.instruction,
-        checkpoint: spec.checkpoint
+        checkpoint: spec.checkpoint,
+        workspace: workspace,
+        team: team
       })
 
     opts =
