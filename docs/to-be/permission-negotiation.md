@@ -8,30 +8,26 @@ por um caminho: um pedido registrado no log, arbitrado por quem tem
 autoridade, com escopo e validade explícitos, e aplicado pelo mesmo
 `ToolGate`. Nada é concedido fora de `EVENTS`.
 
-## Três faixas por teto
+## As faixas que a negociação usa
 
-Cada entrada de teto (por posição e por workspace) deixa de ser uma lista e
-passa a ter três faixas. O que não está em nenhuma delas é **proibido**: nem
-pai nem humano concedem.
+As faixas `granted`, `negotiable`, `human` e proibido, os modos `allow` e
+`deny` e a interseção estão definidos em [tool-policy.md](tool-policy.md).
+Este documento só usa o resultado normalizado: uma tool é negociável para um
+nó se, no efetivo, está em `negotiable`; vai ao humano se está em `human`; é
+recusada sem escalar se está proibida.
 
 ```toml
 [ceiling.depth1]
-granted    = ["read", "grep", "find", "ls", "delegate"]   # efetivo desde o início
-negotiable = ["edit", "write"]                            # o pai pode conceder
-human      = ["delete"]                                   # só um humano concede
+mode = "allow"
+negotiable = ["edit", "write"]     # o pai pode conceder
+human      = ["delete"]            # só um humano concede
 
 [workspaces.infra]
 roots = ["./infra"]
-granted    = ["read", "grep", "find", "ls"]
-negotiable = []
-human      = ["edit"]                                     # editar infra exige humano, sempre
+mode = "deny"
+granted = ["read", "grep", "find", "ls"]
+human   = ["edit"]                 # editar infra exige humano, sempre
 ```
-
-A interseção de [tool-policy.md](tool-policy.md) continua valendo, faixa a
-faixa: uma tool é negociável para um nó se está em `negotiable` **tanto** no
-teto da posição **quanto** no do workspace. Se em qualquer um deles estiver
-em `human`, o pedido vai para o humano. Se em qualquer um estiver ausente, é
-proibida.
 
 | Faixa | Quem concede | Onde a decisão fica |
 |---|---|---|
@@ -260,29 +256,30 @@ uma organização pode colocar um interceptor que veta qualquer concessão de
 
 ```toml
 [ceiling.depth0]
-granted    = ["read", "grep", "find", "ls", "delegate"]
+mode = "deny"
+granted    = ["fs.read", "delegate"]
 negotiable = ["edit"]
-human      = []
 
 [ceiling.depth1]
-granted    = ["read", "grep", "find", "ls", "delegate"]
+mode = "deny"
+granted    = ["fs.read", "delegate"]
 negotiable = ["edit", "write"]
 human      = ["delete"]
 
 [workspaces.app]
 roots = ["./apps/web"]
-granted    = ["read", "grep", "find", "ls", "edit", "write", "delegate"]
+mode = "allow"
 negotiable = ["delete"]
-human      = []
 
 [workspaces.infra]
 roots = ["./infra"]
-granted    = ["read", "grep", "find", "ls"]
-negotiable = []
-human      = ["edit", "write"]
+mode = "deny"
+granted = ["fs.read"]
+human   = ["edit", "write"]
 
 [profiles.fix]
-tools = ["read", "grep", "find", "ls", "edit"]
+mode = "deny"
+granted = ["fs.read", "edit"]
 request_timeout = "10m"
 ```
 
@@ -304,9 +301,11 @@ nem árbitro. Timeout é negação. Permanente é TOML.
 
 ## Impacto e ordem
 
-Depende de [tool-policy.md](tool-policy.md) implementado. Depois:
+Depende de [tool-policy.md](tool-policy.md) implementado (faixas, modos e
+`ToolGate`). Depois:
 
-1. tetos com três faixas e cálculo de `autoridade`; `config check` valida.
+1. cálculo de `autoridade` do pai e do árbitro por faixa; `config check`
+   valida.
 2. tool `request_permission`, tipos `permission.*` no catálogo, espera no
    Run e projeção em `COMMENTS`.
 3. arbitragem do pai como rodada efêmera com `grant`/`deny`/`escalate`.

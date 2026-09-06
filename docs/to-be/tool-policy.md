@@ -1,39 +1,40 @@
 Status: TO-BE — proposta, aguardando avaliação
 
-# Política de tools: teto, perfil e workspace
+# Política de tools: teto, perfil, workspace e modos
 
 Este documento define como um nó recebe suas tools e como o harness garante
 que nenhum parâmetro, delegação ou automação amplie o que a política permite.
-Complementa [event-catalog.md](event-catalog.md) (tipos e interceptores),
-[execution-model.md](execution-model.md) (Execution Node) e
-[recommendations.md](recommendations.md) (workspace no nó). O crescimento do
-conjunto efetivo durante a execução, por pedido e concessão, está em
-[permission-negotiation.md](permission-negotiation.md).
+O crescimento do conjunto durante a execução, por pedido e concessão, está
+em [permission-negotiation.md](permission-negotiation.md). Sessão e
+workspaces como membros estão em [session-model.md](session-model.md).
 
 ## Problema
 
-Hoje a configuração Agent por posição decide ao mesmo tempo **o que o nó
-pode** e **o que o modelo vê**. Não dá para dizer "o concierge nunca edita" e
-ao mesmo tempo "nesta pergunta quero que ele leia arquivos e responda sem
-delegar". Toda mudança de interação vira mudança de permissão.
+A configuração Agent por posição decidia ao mesmo tempo **o que o nó pode**
+e **o que o modelo vê**. Não dava para dizer "o concierge nunca edita" e ao
+mesmo tempo "nesta pergunta quero que ele leia arquivos e responda sem
+delegar". Toda mudança de interação virava mudança de permissão. E o
+inverso também precisa existir: quem quer dar acesso total a um repositório
+não pode ter que listar tool por tool.
 
 ## Três conceitos, três donos
 
 | Conceito | Responde | Quem define | Pode ampliar? |
 |---|---|---|---|
-| **Teto** (`ceiling`) | o que um nó naquela posição e naquele workspace pode invocar | configuração, por depth/kind e por workspace | nunca |
-| **Perfil** (`profile`) | o que o modelo vê nesta interação | quem dispara, por parâmetro | só estreita |
+| **Teto** (`ceiling`) | o que um nó naquela posição pode invocar | configuração, por depth | nunca |
 | **Workspace** | onde o nó atua (`roots[]`) e o teto daquele lugar | configuração; escolhido pelo comando ou herdado | nunca |
+| **Perfil** (`profile`) | o que o modelo vê nesta interação | quem dispara, por parâmetro | só estreita |
 
-O conjunto efetivo de um nó é a interseção dos três. Um perfil que pede algo
-fora do teto é **erro na inicialização**, não estreitamento silencioso.
+O conjunto efetivo de um nó é a interseção dos três, faixa a faixa. Um perfil
+que pede algo fora do teto é **erro na inicialização**, não estreitamento
+silencioso.
 
 ```mermaid
 flowchart LR
-    P["Perfil<br/>--profile ask<br/>{read, grep, find, ls}"]
-    D["Teto por posição<br/>ceiling.depth0<br/>{read, grep, find, ls, delegate}"]
-    W["Teto por workspace<br/>workspaces.infra.ceiling<br/>{read, grep, find, ls}"]
-    E["Conjunto efetivo<br/>{read, grep, find, ls}"]
+    P["Perfil<br/>--profile ask<br/>granted = {read, grep, find, ls}"]
+    D["Teto por posição<br/>ceiling.depth0<br/>granted = {read, grep, find, ls, delegate}"]
+    W["Teto por workspace<br/>workspaces.infra<br/>granted = {read, grep, find, ls}<br/>human = {edit, write}"]
+    E["Efetivo<br/>granted = {read, grep, find, ls}<br/>negotiable = {}<br/>human = {edit, write}"]
     P --> I((∩))
     D --> I
     W --> I
@@ -41,41 +42,139 @@ flowchart LR
     E -->|pinado em| RS["run.started.payload.tools"]
 ```
 
-## Configuração
+## Faixas
+
+Cada entrada de teto, de workspace e de perfil resolve para **quatro faixas**
+disjuntas que cobrem todo o catálogo de tools:
+
+| Faixa | Significado | Quem concede |
+|---|---|---|
+| `granted` | efetivo desde o início | ninguém precisa |
+| `negotiable` | o pai pode conceder ao filho durante a execução | o pai, dentro da própria autoridade |
+| `human` | só um humano concede | humano, pela CLI |
+| proibido | ninguém concede | — |
+
+A interseção é faixa a faixa e pende para o mais restritivo: uma tool é
+`granted` no efetivo só se é `granted` nos três; é `negotiable` se em algum é
+`negotiable` e em nenhum é `human` ou proibida; é `human` se em algum é
+`human`; é proibida se em algum é proibida.
+
+## Modos: o valor padrão do que não foi escrito
+
+Escrever as quatro faixas tool por tool não escala nem para quem quer tudo
+liberado nem para quem quer tudo bloqueado. Por isso cada entrada declara um
+`mode`, e o modo decide **onde cai o que não foi citado**:
+
+- `mode = "allow"`: o que não é citado é `granted`. As linhas são exceções
+  que movem tools para `negotiable`, `human` ou `deny` (proibido).
+- `mode = "deny"`: o que não é citado é proibido. As linhas são permissões
+  que movem tools para `granted`, `negotiable` ou `human`.
+
+Se a mesma tool aparece em mais de uma lista, vale a mais restritiva:
+`deny` > `human` > `negotiable` > `granted`. Nenhuma linha amplia; só move
+para baixo. Entrada ausente equivale a `mode = "allow"` sem exceções: quem
+não configurou nada mantém o comportamento atual do preset `coding`.
 
 ```toml
-[ceiling]
-depth0 = ["read", "grep", "find", "ls", "delegate"]                 # concierge nunca edita
-depth1 = ["read", "grep", "find", "ls", "edit", "write", "delegate"]
-depth2 = ["read", "grep", "find", "ls", "edit", "write"]
+# tudo liberado, exceções por linha
+[workspaces.omunculus]
+roots = ["~/Projects/omacon/omunculus"]
+mode = "allow"
+negotiable = ["delete"]
+human      = []
+deny       = []
 
-[workspaces.app]
-roots = ["./apps/web"]
-ceiling = ["read", "grep", "find", "ls", "edit", "write"]
-
-[workspaces.docs]
-roots = ["./docs"]
-ceiling = ["read", "grep", "find", "ls", "write"]
-
+# tudo bloqueado, permissões por linha
 [workspaces.infra]
 roots = ["./infra"]
-ceiling = ["read", "grep", "find", "ls"]
+mode = "deny"
+granted    = ["read", "grep", "find", "ls"]
+negotiable = []
+human      = ["edit", "write"]
+
+[ceiling.depth0]                  # concierge da sessão
+mode = "deny"
+granted    = ["delegate", "workspaces"]
+negotiable = ["cross_workspace"]
+
+[ceiling.depth1]                  # concierge de um repositório
+mode = "allow"
+negotiable = ["edit", "write", "cross_workspace"]
+human      = ["delete"]
+
+# [ceiling.depth2] ausente: allow, o worker é limitado pelo workspace e pelo perfil
+
+[profiles.full]
+mode = "allow"
 
 [profiles.ask]
-tools = ["read", "grep", "find", "ls"]
+mode = "deny"
+granted = ["fs.read"]
 instructions = "Responda. Não altere arquivos. Não delegue."
 
-[profiles.build]
-tools = ["delegate"]
+[profiles.review]
+mode = "allow"
+deny = ["fs.write", "delegate"]
 
 [profiles.fix]
-tools = ["read", "grep", "find", "ls", "edit"]
+mode = "deny"
+granted = ["fs.read", "edit"]
+request_timeout = "10m"
 ```
 
-`omunculus config check` valida que todo nome em `profiles.*.tools`,
-`ceiling.*` e `workspaces.*.ceiling` existe no catálogo de tools, e que cada
-perfil cabe em pelo menos um teto. A configuração Agent continua genérica: ela
-não sabe em que workspace vai rodar nem qual perfil foi pedido.
+O modo existe só na escrita. Na inicialização tudo é **normalizado** contra o
+catálogo de tools, que é finito, e vira as quatro faixas explícitas. Teto,
+interseção, negociação e `ToolGate` nunca veem um "tudo" ou um "nada", só
+listas.
+
+### Grupos
+
+O catálogo de tools declara grupos, e qualquer lista aceita grupo ou tool.
+`fs.read` expande para `read`, `grep`, `find`, `ls`; `fs.write` para `edit`,
+`write`. Grupo é açúcar de configuração: desaparece na normalização.
+
+### Full access a um repositório
+
+Três entradas permissivas, porque a interseção continua valendo:
+
+```toml
+[workspaces.sandbox]
+roots = ["~/lab/sandbox"]
+mode = "allow"
+
+[profiles.full]
+mode = "allow"
+```
+
+`omunculus run --profile full --workspace sandbox "…"` dá ao agente tudo que
+o catálogo tem, em qualquer profundidade cujo teto seja `allow`. Quem
+configurou `infra` como `deny` continua protegido mesmo com `--profile full`,
+porque `full ∩ infra` é só leitura.
+
+### O que `config check` mostra
+
+Para cada combinação perfil × depth × workspace, as faixas expandidas:
+
+```
+profile=full depth=1 workspace=infra
+  granted    read grep find ls
+  negotiable —
+  human      edit write
+  forbidden  delegate delete
+```
+
+Ninguém calcula interseção de cabeça.
+
+### O único buraco do modo allow, e como fechar
+
+Se uma versão nova do harness adiciona uma tool ao catálogo, toda entrada em
+`allow` a ganharia em silêncio. Duas defesas:
+
+- `run.started.tools` é sempre a lista **expandida**. Replay de uma execução
+  antiga não muda de conjunto porque o catálogo cresceu;
+- a configuração pina `tools_catalog = "1"`. Tools que não existiam nessa
+  versão do catálogo entram como **proibidas** nas entradas `allow`, e
+  `config check` avisa. Subir o pin é a decisão humana de aceitar as novas.
 
 ## Onde a permissão é aplicada
 
@@ -90,14 +189,14 @@ sequenceDiagram
     participant G as ToolGate (interceptor)
     participant T as Tools.call_context
 
-    Note over R: 1. Exposição<br/>só os schemas do conjunto efetivo vão na requisição
-    R->>M: mensagens + schemas(efetivo)
+    Note over R: 1. Exposição<br/>só os schemas de granted vão na requisição<br/>(mais request_permission se houver negotiable/human)
+    R->>M: mensagens + schemas
     M-->>R: tool_calls [edit …]
     R->>EC: tool.call.requested (tool=edit)
     EC->>EC: append + commit
-    Note over G: 3. Entrega<br/>compara com run.started.tools pinado no log
+    Note over G: 3. Entrega<br/>granted pinado ∪ concessões ativas no log
     EC->>G: intercept
-    alt edit ∉ tools pinadas
+    alt edit não permitido
         G-->>EC: {:reject, "edit not in pinned tools"}
         EC->>EC: append delivery.rejected (causation = requested)
         EC-->>R: delivery.rejected
@@ -106,7 +205,7 @@ sequenceDiagram
         G-->>EC: :deliver
         EC-->>R: tool.call.requested
         Note over T: 2. Execução<br/>allowlist por nome, mesmo que o modelo invente a chamada
-        R->>T: call_context(edit, args, ctx, efetivo)
+        R->>T: call_context(edit, args, ctx, permitido)
         T-->>R: resultado
         R->>EC: tool.call.completed
     end
@@ -115,36 +214,37 @@ sequenceDiagram
 - **Exposição** decide o que o modelo vê. Um modelo pequeno que inventa um
   nome, como o tool call sem nome observado na spike, não passa da próxima.
 - **Execução** é o `Tools.call_context` de hoje, que já recusa por nome. Ele
-  passa a receber o conjunto efetivo, não a lista do preset.
+  passa a receber o conjunto permitido, não a lista do preset.
 - **Entrega** é o `ToolGate`, um interceptor do catálogo em
   `tool.call.requested`. Ele não confia no processo da Run: lê as tools
-  pinadas em `run.started` daquela `run_id` e veta a entrega se não bater.
-  O veto fica no histórico como `delivery.rejected`.
+  pinadas em `run.started` daquela `run_id`, soma as concessões ativas de
+  [permission-negotiation.md](permission-negotiation.md), e veta a entrega se
+  não bater. O veto fica no histórico como `delivery.rejected`.
 
 ## Delegação nunca amplia
 
 O filho nasce com `teto[posição do filho] ∩ teto[workspace do filho] ∩
-efetivo do pai`. O workspace é herdado, salvo se a delegação apontar outro
-workspace anexado à sessão. Não existe caminho em que descer na árvore
-aumente o conjunto.
+autoridade(pai)`, onde `autoridade(pai) = granted(pai) ∪ negotiable(pai)`: o
+que o pai poderia obter sem humano. O workspace é herdado, salvo se a
+delegação apontar outro workspace anexado à sessão. Não existe caminho em que
+descer na árvore aumente o conjunto.
 
 ```mermaid
 graph TD
-    R0["depth 0 · workspace app · perfil build<br/>efetivo = {delegate}<br/>teto = {read, grep, find, ls, delegate}"]
-    R1["depth 1 · workspace app (herdado)<br/>efetivo = teto.depth1 ∩ app ∩ teto do pai<br/>= {read, grep, find, ls, delegate}"]
-    R2a["depth 2 · workspace app<br/>= {read, grep, find, ls}"]
-    R2b["depth 2 · workspace infra (delegação para outro workspace)<br/>= teto.depth2 ∩ infra ∩ teto do pai<br/>= {read, grep, find, ls}"]
+    R0["depth 0 · sem workspace · perfil build<br/>granted = {delegate}<br/>autoridade = {delegate, cross_workspace}"]
+    R1["depth 1 · workspace omunculus<br/>= teto.depth1 ∩ omunculus ∩ autoridade(R0)<br/>granted = {fs.read, delegate} · negotiable = {edit, write}"]
+    R2a["depth 2 · workspace omunculus<br/>granted = {fs.read} · negotiable = {edit, write}"]
+    R2b["depth 2 · workspace infra<br/>granted = {fs.read} · human = {edit, write}"]
     R0 -->|task.delegated<br/>tools = herdadas| R1
     R1 -->|task.delegated| R2a
     R1 -->|task.delegated<br/>workspace = infra| R2b
 ```
 
-Repare que o pai em depth 0 tem `delegate` no teto mas não tem `edit`; por
-isso nenhum descendente ganha `edit` mesmo com `ceiling.depth1` permitindo.
-É a regra "o modelo não escapa do sandbox por delegar" de
-[execution-model.md](execution-model.md) aplicada a tools. Em `task.delegated`
-o campo `tools` carrega o resultado da interseção, e o `ToolGate` também o
-valida contra o teto do pai.
+Decisão registrada: o filho herda a **autoridade** do pai, não o efetivo do
+perfil. Um concierge em `--profile build` (efetivo só `delegate`) ainda gera
+workers com `edit` negociável, porque `edit` está na autoridade do depth 1.
+Se a alternativa for preferida, a interseção usa o efetivo do pai e o caso
+"só delega, mas os workers editam" deixa de existir.
 
 ## Automação que dispara um agente
 
@@ -156,12 +256,12 @@ pedido é validado antes de o nó nascer.
 name = "ci-fix"
 events = ["run.failed"]
 run = "./hooks/ci-fix.sh"
-may_request = { profiles = ["fix", "ask"], workspaces = ["app"] }
+may_request = { profiles = ["fix", "ask"], workspaces = ["omunculus"] }
 ```
 
 ```sh
 omunculus emit task.requested --db ./harness.sqlite3 \
-  --payload '{"instruction":"corrija os testes","profile":"fix","agent":"worker","workspace":"app"}' \
+  --payload '{"instruction":"corrija os testes","profile":"fix","agent":"worker","workspace":"omunculus"}' \
   --idempotency-key "ci-fix:$OMUNCULUS_EVENT_ID"
 ```
 
@@ -174,71 +274,63 @@ sequenceDiagram
     participant R as Run depth 0
 
     Note over H: recebeu run.failed via OMUNCULUS_ENVELOPE
-    H->>CLI: emit task.requested {profile=fix, agent=worker, workspace=app}
+    H->>CLI: emit task.requested {profile=fix, agent=worker, workspace=omunculus}
     CLI->>CLI: perfil, agente e workspace existem no config?
-    CLI->>CLI: automação "ci-fix" pode pedir fix/app? (may_request)
-    CLI->>CLI: efetivo = fix ∩ ceiling.depth0 ∩ app — não vazio e ⊆ tetos?
+    CLI->>CLI: automação "ci-fix" pode pedir fix/omunculus? (may_request)
+    CLI->>CLI: efetivo = fix ∩ ceiling.depth0 ∩ omunculus — granted não vazio?
     alt qualquer checagem falha
         CLI-->>H: erro, nada é apendado
     else
         CLI->>EC: append task.requested (origin = automation:ci-fix)
         EC->>EC: commit
         EC-->>RT: deliver
-        RT->>R: start (agent=worker, tools = efetivo, roots = app.roots)
+        RT->>R: start (agent=worker, tools = efetivo, roots = omunculus.roots)
         R->>EC: run.started (tools pinadas, workspace_id, profile)
     end
 ```
 
 O comando carrega `origin`, então o histórico mostra que foi o hook, não um
 humano, que pediu. `may_request` é o teto **do injetor**: um hook só consegue
-pedir os perfis e workspaces que a configuração lhe deu. A garantia de que o
-agente não faça o que não é permitido não vem do perfil; vem das três
-barreiras acima, que só olham para o conjunto pinado.
+pedir os perfis e workspaces que a configuração lhe deu.
 
 ## O que fica pinado em cada envelope
 
-| Envelope | Campos novos no payload |
+| Envelope | Campos no payload |
 |---|---|
 | `task.requested` | `profile`, `agent`, `workspace`, `origin` |
-| `task.delegated` | `workspace`, `tools` (interseção calculada pelo runtime) |
-| `run.started` | `profile`, `workspace_id`, `tools` (conjunto efetivo), `roots` |
+| `task.delegated` | `workspace`, `tools` (faixas calculadas pelo runtime) |
+| `run.started` | `profile`, `tools` (faixas expandidas), `roots`; `workspace_id` no envelope |
 | `delivery.rejected` | já existe; `interceptor = "tool-gate"` |
 
 Retomada (`task.resumed`) usa o snapshot de `run.started` da tentativa
-anterior. Trocar perfil ou workspace é uma tarefa nova, nunca uma retomada.
+anterior mais as concessões ativas. Trocar perfil ou workspace é uma tarefa
+nova, nunca uma retomada.
 
-## Casos de uso que isso cobre
+## Casos de uso
 
 | Situação | Como fica |
 |---|---|
-| "Só quero perguntar algo" com um agente que normalmente só delega | `--profile ask`: lê, não edita, não delega; o teto do depth 0 não muda |
-| Concierge nunca edita, workers editam | `ceiling.depth0` sem `edit`; `ceiling.depth1` com `edit`; delegação herda e o filho ganha `edit` só se o pai tinha no teto (não no efetivo) |
-| Diretório de infra só leitura para qualquer agente | `workspaces.infra.ceiling` sem `edit`/`write`; independe de perfil e depth |
+| Acesso total a um repositório | workspace e perfil em `allow` sem exceções |
+| "Só quero perguntar" a um agente que normalmente só delega | `--profile ask`: lê, não edita, não delega; o teto do depth 0 não muda |
+| Concierge nunca edita, workers editam | `ceiling.depth0` em `deny` sem `edit`; `ceiling.depth1` em `allow` |
+| Diretório de infra só leitura, para qualquer agente | `workspaces.infra` em `deny` com `fs.read`; independe de perfil e depth |
+| Tudo liberado menos apagar | `mode = "allow"`, `human = ["delete"]` |
 | Hook de CI abre um agente de correção | `emit` com `profile=fix`, limitado por `may_request` |
 | Modelo pequeno inventa tool | cai na exposição, na execução e no `ToolGate`; fica `delivery.rejected` no log |
-
-## Impacto no que já existe
-
-- `Config.resolve` passa a calcular a interseção e a falhar em perfil fora do
-  teto; `config check` valida os nomes.
-- `SpikeAgents` deixa de decidir tools por depth; recebe o conjunto efetivo.
-- Catálogo ganha os campos de payload da tabela acima e o interceptor
-  `Omunculus.Interceptors.ToolGate`.
-- `run`, `spike` e `emit` ganham `--profile` e `--workspace`.
-- Core, Projector e o formato do envelope não mudam. `workspace_id` já está
-  reservado no envelope.
 
 ## Não-objetivos
 
 Perfil não escolhe diretório: sandbox é do workspace. Perfil não escolhe
 modelo: isso é configuração Agent. Automação não define teto: só pede dentro
-dele. E nenhum desses mecanismos cria um segundo canal de permissão fora do
-log; se a decisão não está em `EVENTS`, ela não aconteceu.
+dele. Modo não é um caminho de permissão: só decide o padrão do que não foi
+escrito. E nenhum desses mecanismos cria um segundo canal fora do log; se a
+decisão não está em `EVENTS`, ela não aconteceu.
 
 ## Ordem de implementação proposta
 
-1. `[ceiling]`, `[profiles]`, `[workspaces]` no `Config`, interseção em
-   `resolve`, validação em `config check`.
+1. `[ceiling]`, `[profiles]`, `[workspaces]` com `mode`, faixas e grupos no
+   `Config`; normalização e interseção em `resolve`; `config check` imprime
+   as faixas expandidas e valida `tools_catalog`.
 2. `tools`, `profile`, `workspace` nos payloads de `task.requested`,
    `task.delegated` e `run.started`; herança na delegação no `Runtime`.
 3. `ToolGate` no catálogo de interceptores, lendo o snapshot do log.
