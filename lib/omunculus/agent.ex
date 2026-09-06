@@ -8,6 +8,8 @@ defmodule Omunculus.Agent do
     chat = Keyword.fetch!(opts, :chat)
     fs = Keyword.fetch!(opts, :fs)
     context = Omunculus.Tool.Context.new(fs, Keyword.get(opts, :tool_options, %{}))
+    context = %{context | state: Keyword.get(opts, :tool_state, %{})}
+    tool_executor = Keyword.get(opts, :tool_executor, &Tools.call_context/4)
     tools = Keyword.get(opts, :tools, Tools.default_names())
     max_turns = Keyword.get(opts, :max_turns, 32)
     extra = Keyword.get(opts, :instructions)
@@ -23,6 +25,7 @@ defmodule Omunculus.Agent do
       chat: chat,
       context: context,
       tools: tools,
+      tool_executor: tool_executor,
       schemas: Tools.schemas(tools),
       messages: messages,
       turn: 0,
@@ -177,7 +180,7 @@ defmodule Omunculus.Agent do
         )
 
         {body, context, outcome} =
-          case Tools.call_context(name, args, context, state.tools) do
+          case state.tool_executor.(name, args, context, state.tools) do
             {:ok, output, context} -> {output, context, :completed}
             {:error, reason, context} -> {format_tool_error(reason), context, {:error, reason}}
           end

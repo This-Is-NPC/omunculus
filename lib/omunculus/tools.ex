@@ -8,7 +8,8 @@ defmodule Omunculus.Tools do
     "grep" => Omunculus.Tools.Grep,
     "find" => Omunculus.Tools.Find,
     "ls" => Omunculus.Tools.Ls,
-    "counter" => Omunculus.Tools.Counter
+    "counter" => Omunculus.Tools.Counter,
+    "delegate" => Omunculus.Tools.Delegate
   }
 
   def catalog, do: @catalog
