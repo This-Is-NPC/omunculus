@@ -62,6 +62,10 @@ partida implementado está em [AS-IS requirements](../as-is/requirements.md).
 3. Trabalho entre workspaces é um Work Item no destino, criado sob a
    autoridade do depth 0, ligado por `WORK_ITEM_DEPENDENCIES`; não existe
    canal direto entre nodes de mesmo depth.
+4. O humano só escolhe sessão e workspace quando quer; por padrão fala com
+   o concierge de depth 0, que roteia. Toda pergunta ao humano é
+   `COMMENTS` com `kind = request` e toda resposta é comando; a inbox é a
+   projeção dos pedidos abertos e dos resultados não lidos.
 
 ## Política de tools e permissões
 

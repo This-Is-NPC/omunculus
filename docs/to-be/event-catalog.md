@@ -77,6 +77,15 @@ quando a proposta correspondente for aceita.
 | `permission.revoked` | command | Run (pai) ou CLI | sim | sim | permission-negotiation |
 | `policy.changed` | event | CLI | não | não | permission-negotiation |
 | `policy.loaded` | event | Runtime | não | não | tool-policy |
+| `task.commented` | command | CLI (humano) ou Runtime | sim | sim | session-model |
+| `inbox.read` | command | CLI | não | sim | session-model |
+
+`permission.granted` carrega `kind` (`temporary` ou `permanent`) e
+`granter` (`run:<id>`, `human:<origin>` ou `policy`, quando o Runtime fecha
+um pedido aberto que uma mudança de política satisfaz). `run.completed` com
+`outcome = waiting` carrega `awaiting`: um `request_id`, um
+`work_item_id` de filho ou dependência, ou `policy` quando a Run fecha só
+para renascer com a política atual.
 
 Campos de payload que as propostas acrescentam a tipos existentes:
 `task.requested` ganha `profile`, `agent`, `workspace`, `origin` e

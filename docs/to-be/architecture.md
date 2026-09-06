@@ -58,8 +58,9 @@ contrato exercitado na branch `spike/event-core`, ainda não em `main`.
   `outcome = waiting`; a resposta abre uma Run nova a partir do checkpoint
   ([execution-model.md](execution-model.md)).
 - **Session** é agregado durável e **workspace** é membro da sessão e
-  identidade do Execution Node; nenhum dos dois é processo
-  ([session-model.md](session-model.md)).
+  identidade do Execution Node; nenhum dos dois é processo. O humano fala
+  com o concierge da sessão e é ouvido pela **inbox**, projeção de
+  `COMMENTS` ([session-model.md](session-model.md)).
 - O que um nó pode invocar é a interseção de **teto por posição, teto por
   workspace e perfil**, pinada em `run.started` e aplicada em três barreiras
   independentes ([tool-policy.md](tool-policy.md)). Crescer durante a

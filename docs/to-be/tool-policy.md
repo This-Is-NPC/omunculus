@@ -200,8 +200,8 @@ flowchart TD
         PL --> RT["linha(perfil da tarefa, depth do node, workspace do node)"]
         RT --> PA["∩ autoridade do pai<br/>(só em delegação, vem de task.delegated)"]
         PA --> RS["run.started.tools (faixas pinadas) + policy_hash"]
-        RS --> AG["Agent recebe granted<br/>+ request_permission se negotiable ∪ human ≠ ∅"]
-        AG --> SC["schemas = Tools.schemas(granted ∪ concessões ativas)<br/>recalculado a cada rodada"]
+        RS --> AG["Agent recebe granted ∪ concessões temporárias da linhagem<br/>+ request_permission se negotiable ∪ human ≠ ∅"]
+        AG --> SC["schemas = Tools.schemas(lista) · fixos durante a Run"]
         SC --> PV["POST /chat/completions · \"tools\": [...]"]
     end
 ```
@@ -245,16 +245,18 @@ Regras:
    `[agents.worker]` trazem modelo, prompt e budget; a sessão atribui agente
    por depth (`depth0 = "concierge"`, `depth2 = "worker"`); tools vêm da
    tabela. É o que faz a mesma configuração servir a qualquer posição.
-10. **Schemas são recalculados por rodada.** `Tools.schemas` roda sobre
-    `granted ∪ concessões ativas` antes de cada chamada ao provider, porque
-    uma concessão de [permission-negotiation.md](permission-negotiation.md)
-    pode chegar entre rodadas. Essa parte também vem do log.
+10. **Schemas são fixos durante a Run.** A lista que o modelo vê é montada
+    no nascimento: `granted` mais as concessões temporárias já presentes na
+    linhagem, mais `request_permission`. Uma concessão que chega depois não
+    altera a Run em andamento; ela chega por continuação, porque pedir é
+    concluir ([execution-model.md](execution-model.md)). Nada muda no meio
+    de uma Run.
 
 O que muda no código de hoje: `Config.resolve` passa a produzir a tabela
 normalizada e a ser chamado pelo `Runtime.start_run`, não pela CLI;
 `Runtime` compara o hash, apenda `policy.loaded` quando preciso e pina em
 `run.started`; `SpikeAgents` deixa de decidir tools por depth; o `Agent`
-troca `state.schemas` fixo por um cálculo por rodada sobre `state.tools`.
+recebe a lista pronta e mantém `state.schemas` fixo, como hoje.
 
 ## Onde a permissão é aplicada
 
@@ -269,12 +271,12 @@ sequenceDiagram
     participant G as ToolGate (interceptor)
     participant T as Tools.call_context
 
-    Note over R: 1. Exposição<br/>só os schemas de granted vão na requisição<br/>(mais request_permission se houver negotiable/human)
+    Note over R: 1. Exposição<br/>schemas de granted ∪ concessões da linhagem no nascimento<br/>(mais request_permission se houver negotiable/human)
     R->>M: mensagens + schemas
     M-->>R: tool_calls [edit …]
     R->>EC: tool.call.requested (tool=edit)
     EC->>EC: append + commit
-    Note over G: 3. Entrega<br/>granted pinado ∪ concessões ativas no log
+    Note over G: 3. Entrega<br/>granted pinado ∪ concessões temporárias da linhagem no log
     EC->>G: intercept
     alt edit não permitido
         G-->>EC: {:reject, "edit not in pinned tools"}

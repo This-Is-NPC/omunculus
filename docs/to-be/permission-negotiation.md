@@ -158,7 +158,7 @@ das regras de dedupe do Core, sem código novo:
 |---|---|
 | não existe | apenda `permission.requested`; Run fecha em `waiting` sobre ele |
 | aberto (Run 2 já pediu) | o append é redelivery idempotente, nada novo no log; Run 1 fecha em `waiting` sobre o **mesmo** `request_id` |
-| concedido | nenhum pedido: a Run recebe a observação "já concedido para esta tarefa" e expõe a tool na rodada seguinte |
+| concedido | nenhum pedido: a Run fecha com `awaiting = policy` e renasce por continuação com a tool exposta |
 | negado | nenhum pedido: observação "negado para esta tarefa: motivo". Só um humano reabre, respondendo ao pedido negado pela inbox |
 
 ```mermaid
@@ -185,10 +185,10 @@ fecharam aguardando aquele `request_id`, cada um por continuação a partir do
 próprio checkpoint. A inbox mostra o pedido uma vez, com quantos Work Items
 esperam por ele.
 
-Uma Run que já estava em andamento quando a concessão chegou não pede: a
-tool não estava na exposição dela, mas se o modelo tentar, o `ToolGate` lê a
-concessão na linhagem e entrega; se o modelo chamar `request_permission`, cai
-na linha "concedido" da tabela. Nos dois casos nenhum pedido novo nasce.
+Uma Run que já estava em andamento quando a concessão chegou não a vê: a
+exposição é fixa por Run. Se o modelo chamar `request_permission`, cai na
+linha "concedido" da tabela e a tool chega na Run seguinte, por
+continuação. Nenhum pedido novo nasce.
 
 ### Entre tarefas diferentes
 
@@ -344,10 +344,12 @@ estado. Só humano concede permanente: `permission.granted` com
 
 ## Revogação
 
-`permission.revoked` é um comando com `request_id` ou `grant_id`. Pode vir
-do humano (CLI) ou do pai que concedeu. Vale a partir da próxima verificação
-do `ToolGate`; uma chamada já entregue termina. A Run recebe a revogação como
-observação na rodada seguinte e deixa de expor a tool.
+`permission.revoked` é um comando com `request_id`. Pode vir do humano
+(CLI) ou do pai que concedeu. Vale a partir da próxima verificação do
+`ToolGate`: uma chamada já entregue termina, a próxima é vetada com
+`delivery.rejected`, e o modelo vê isso como erro de tool. A exposição da
+Run em andamento não muda, porque nada muda no meio de uma Run; a Run
+seguinte, por continuação, nasce sem a tool.
 
 ## Como o ToolGate aplica
 

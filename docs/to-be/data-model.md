@@ -75,10 +75,14 @@ erDiagram
 ```
 
 Colunas que as propostas acrescentam às projeções: `WORK_ITEMS` ganha
-`workspace_id` e `requested_by` (Work Item criado entre workspaces);
-`ARCHIVE_RUNS` ganha `workspace_id`, `profile` e `tools` (faixas expandidas
-pinadas); `COMMENTS.kind` inclui `request` e `response` para pedidos humanos
-de [permission-negotiation.md](permission-negotiation.md).
+`workspace_id`, `requested_by` (Work Item criado entre workspaces) e
+`awaiting` (o que um Work Item em `waiting` espera); `ARCHIVE_RUNS` ganha
+`workspace_id`, `profile`, `policy_hash`, `reason` (`initial`,
+`continuation`, `retry`, `arbitration`), `outcome` (`completed`,
+`waiting`) e `tools` (faixas expandidas pinadas); `COMMENTS.kind` inclui
+`request` e `response` para a inbox de [session-model.md](session-model.md)
+e os pedidos de [permission-negotiation.md](permission-negotiation.md), e
+`read_at` para resultados lidos.
 
 Não existe uma tabela de `Agent` exigida por este contrato: Agent é uma
 configuração genérica versionada/pinada quando necessário, sem

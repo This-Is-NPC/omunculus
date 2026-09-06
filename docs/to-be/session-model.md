@@ -200,6 +200,8 @@ dos Work Items abertos. É a mesma regra de tudo o mais: se não está em
 | `session.created` | command | CLI | não | sim |
 | `workspace.attached` | command | CLI | sim | sim |
 | `workspace.detached` | command | CLI | sim | sim |
+| `task.commented` | command | CLI (humano) ou Runtime | sim | sim |
+| `inbox.read` | command | CLI | não | sim |
 
 `task.requested` ganha `requested_by` e `workspace`; `task.delegated` ganha
 `workspace`, válido só a partir do depth 0.
@@ -245,10 +247,37 @@ sequenceDiagram
     EC-->>B: deliver
 ```
 
+## Inbox: toda interação com o humano
+
+O harness só fala com o humano por `COMMENTS`: uma pergunta é uma linha com
+`kind = request`, uma resposta é um comando pela CLI que vira `kind =
+response`. Não existe outro canal; o que a CLI imprime é projeção do log.
+Perguntam ao humano: pedido de permissão em faixa `human` ou escalado pelo
+pai, pedido ambíguo do concierge, efeito externo `unknown` na recuperação.
+
+**Inbox** é a projeção dos pedidos abertos e dos resultados não lidos.
+
+- `omunculus inbox`: lista pedidos sem resposta agrupados por workspace e
+  tool, com `request_id`, tipo, tarefa e quantos Work Items aguardam; e os
+  `task.completed` de raiz ainda não lidos;
+- `omunculus inbox reply <request_id> --grant [--permanent] | --deny [--reason "…"] | "texto"`:
+  açúcar sobre `emit permission.granted`, `emit permission.denied` e
+  `emit task.commented`, preenchendo `request_id`, `correlation_id` e
+  `idempotency_key`;
+- `omunculus inbox read <id>` marca um resultado como lido; a marca é um
+  comando no log (`inbox.read`), então vale em qualquer terminal.
+
+`send` espera o resultado da raiz por padrão e o imprime. `send --detach`
+volta na hora; o resultado cai na inbox. Nos dois casos o resultado está na
+inbox, porque ela deriva do log e não de quem estava olhando o terminal.
+Fechar o terminal durante um `send` não perde nada: os Work Items estão em
+`waiting` ou `running` no log, e a inbox mostra o que precisa de você.
+
 ## Verbos da CLI
 
-- `send [--profile p] [--workspace w] [--session s] "…"`: só o texto é
-  obrigatório;
+- `send [--profile p] [--workspace w] [--session s] [--detach] "…"`: só o
+  texto é obrigatório;
+- `inbox`, `inbox reply`, `inbox read`;
 - `workspace attach|detach <nome> [--session s]`;
 - `session create|resume|list`: administração, não uso diário;
 - `events follow [--session s]` (viewport, não membership).
