@@ -75,7 +75,6 @@ quando a proposta correspondente for aceita.
 | `permission.granted` | command | Run (pai) ou CLI (humano) | sim | sim | permission-negotiation |
 | `permission.denied` | command | Run, CLI ou Runtime | não | sim | permission-negotiation |
 | `permission.revoked` | command | Run (pai) ou CLI | sim | sim | permission-negotiation |
-| `permission.expired` | event | Runtime | não | não | permission-negotiation |
 | `policy.changed` | event | CLI | não | não | permission-negotiation |
 | `policy.loaded` | event | Runtime | não | não | tool-policy |
 

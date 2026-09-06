@@ -76,7 +76,8 @@ partida implementado está em [AS-IS requirements](../as-is/requirements.md).
    independente, lendo o mesmo conjunto pinado.
 4. Delegação nunca amplia: o filho herda a autoridade do pai.
 5. Crescer durante a execução exige `permission.requested` arbitrado por
-   quem tem autoridade, com escopo e validade; permanente é mudança de
+   quem tem autoridade, temporária para a tarefa solicitante e seus
+   descendentes ou permanente; permanente é mudança de
    configuração registrada no log. Um pedido não tem vida útil: fica aberto
    até ser concedido ou negado.
 

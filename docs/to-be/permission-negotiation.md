@@ -5,8 +5,8 @@ Status: TO-BE — proposta, aguardando avaliação
 Complementa [tool-policy.md](tool-policy.md). Lá o conjunto efetivo de um nó
 é fixado no nascimento. Aqui ele pode **crescer durante a execução**, mas só
 por um caminho: um pedido registrado no log, arbitrado por quem tem
-autoridade, com escopo e validade explícitos, e aplicado pelo mesmo
-`ToolGate`. Nada é concedido fora de `EVENTS`.
+autoridade, temporário para aquela tarefa ou permanente na configuração, e
+aplicado pelo mesmo `ToolGate`. Nada é concedido fora de `EVENTS`.
 
 ## As faixas que a negociação usa
 
@@ -60,7 +60,7 @@ flowchart TD
     P["Pai arbitra<br/>(rodada de arbitragem)"]
     HU["Humano arbitra<br/>COMMENTS + events follow<br/>responde com emit"]
     DENY["permission.denied<br/>reason = forbidden"]
-    OK["permission.granted<br/>scope, until, granter"]
+    OK["permission.granted<br/>kind = temporary | permanent, granter"]
     NO["permission.denied<br/>reason do árbitro"]
     ESC["Pai escala<br/>permission.requested<br/>arbiter = human"]
 
@@ -90,8 +90,8 @@ só recebe o resultado.
 ## O pedido, visto pelo modelo
 
 O modelo pede por uma tool sempre exposta, `request_permission`, com schema
-fixo: `tool`, `reason`, `scope`. Ele não escolhe validade nem árbitro. Isso é
-decisão de quem concede.
+fixo: `tool` e `reason`. Ele não escolhe se a concessão é temporária ou
+permanente, nem quem arbitra. Isso é decisão de quem concede.
 
 A Run do filho transforma a chamada em `permission.requested` e **fecha**:
 grava o checkpoint, apenda `run.completed` com `outcome = waiting` e
@@ -101,8 +101,7 @@ em processo; o Work Item fica em `waiting`
 
 Quando `permission.granted` ou `permission.denied` é entregue, o Runtime
 abre uma Run nova do mesmo Work Item a partir do checkpoint, com a decisão
-como primeira observação: "edit granted for this work item until …" ou
-"denied: …". Se concedido, essa Run expõe o schema da tool; allowlist e
+como primeira observação: "edit granted for this task" ou "denied: …". Se concedido, essa Run expõe o schema da tool; allowlist e
 `ToolGate` passam a aceitá-la.
 
 ```mermaid
@@ -115,15 +114,15 @@ sequenceDiagram
     participant C2 as Run filho #2 (continuation)
     participant G as ToolGate
 
-    CM->>C1: request_permission(tool=edit, reason, scope=work_item)
-    C1->>EC: permission.requested {request_id, tool=edit, scope}
+    CM->>C1: request_permission(tool=edit, reason)
+    C1->>EC: permission.requested {request_id, tool=edit}
     C1->>EC: run.completed {outcome=waiting, awaiting=request_id, checkpoint}
     Note over C1: processo termina
     EC->>EC: commit; Work Item → waiting
     Note over EC: edit ∈ negotiable(filho) ∧ edit ∈ autoridade(pai) → arbiter = run:pai
     EC-->>RT: deliver permission.requested
     RT->>P: abre Run de arbitragem no node do pai (reason=arbitration)
-    P->>EC: permission.granted {request_id, granter=run:pai, scope, until}
+    P->>EC: permission.granted {request_id, granter=run:pai, kind=temporary}
     P->>EC: run.completed
     EC-->>RT: deliver permission.granted
     RT->>C2: run.started (attempt+1, reason=continuation, causation=permission.granted)
@@ -131,7 +130,7 @@ sequenceDiagram
     CM->>C2: edit(...)
     C2->>EC: tool.call.requested (tool=edit)
     EC->>G: intercept
-    Note over G: pinado ∪ grants ativos(work item) − revogados ∋ edit → :deliver
+    Note over G: pinado ∪ grants da tarefa e de seus ancestrais − revogados ∋ edit → :deliver
     EC-->>C2: deliver
     C2->>C2: executa edit
 ```
@@ -151,7 +150,7 @@ automação que escute `permission.requested`. O humano responde pela CLI:
 
 ```sh
 omunculus emit permission.granted --db ./harness.sqlite3 \
-  --payload '{"request_id":"req-…","scope":"work_item","until":"2026-09-06T21:00:00Z"}'
+  --payload '{"request_id":"req-…","kind":"temporary"}'
 ```
 
 ```mermaid
@@ -169,7 +168,7 @@ sequenceDiagram
     EC->>EC: append + commit; Projector grava COMMENTS(kind=request)
     EC-->>A: deliver
     A->>H: notificação com request_id, tool, reason, workspace
-    H->>CLI: emit permission.granted {request_id, scope, until}
+    H->>CLI: emit permission.granted {request_id, kind}
     CLI->>CLI: request_id existe, ainda aberto, tool ∈ human(teto)?
     CLI->>EC: append permission.granted (granter = human:<origin>)
     EC-->>RT: deliver → Run nova do filho (continuation)
@@ -180,50 +179,74 @@ Regras da escalada:
 
 - **um pedido não tem vida útil.** Fica aberto até um humano conceder ou
   negar. Não há prazo, não há negação automática, não há expiração de
-  pedido. O que expira é a concessão, pelo `scope` e pelo `until` de quem
-  concedeu, nunca o pedido;
+  pedido. Uma concessão temporária termina com a tarefa; uma permanente
+  vira configuração;
 - nenhum processo fica vivo esperando. O Work Item está em `waiting` no
   log, o pedido aparece na inbox, o humano responde quando quiser, e a
   resposta abre a Run nova. Um pedido aberto por dias custa zero;
 - um humano pode negar de vez com `permission.denied`, e pode incluir um
   comentário que vira observação para o modelo na continuação.
 
-## Escopo e validade
+## Temporária ou permanente
 
-Toda concessão tem `scope` e, opcionalmente, `until`. Quem concede escolhe
-os dois; o modelo só sugere o escopo no pedido.
+Uma concessão é de um de dois tipos. Quem concede escolhe; o modelo não
+opina.
 
-| `scope` | Vale para | Sobrevive a retry? | Expira |
+| `kind` | Vale para | Sobrevive a continuação e retry? | Termina |
 |---|---|---|---|
-| `call` | a próxima invocação daquela tool | não | ao ser consumida |
-| `run` | a Run atual | não | em `run.completed`/`run.failed` |
-| `work_item` | todas as tentativas do Work Item | sim | em `task.completed` |
-| `session` | toda a correlação/sessão | sim | ao fim da sessão |
-| `permanent` | configuração | sim | nunca; é mudança de TOML |
+| `temporary` | a **tarefa** que pediu: o Work Item solicitante e todo Work Item que ele delegar depois da concessão | sim | quando a tarefa fecha (`task.completed` ou falha definitiva) |
+| `permanent` | a configuração: o workspace, o teto ou o perfil que barrava | sim | nunca; é mudança de TOML |
 
-`until` é um teto de tempo em cima do escopo: `run` até 30 minutos, por
-exemplo. Expirou o que vier primeiro.
+Temporária não vaza para o lado. No exemplo de um workspace sem a API do
+GitHub habilitada:
 
-**Permanente não é concessão, é mudança de política.** Um humano que quer
-tornar `edit` permanente em `docs` edita o TOML, ou usa
-`omunculus policy grant --permanent`, que edita o TOML e registra
-`policy.changed` no log com o diff. O log guarda o fato; o TOML guarda o
-estado. Um pai jamais concede permanente: `permanent` só é válido com
-`granter = human:*`, e o `emit` recusa o resto.
+1. `send "corrija o bug X"` abre a tarefa A no depth 1 desse workspace. Ela
+   segue trabalhando.
+2. `send "verifique o histórico de CI no GitHub"` abre a tarefa B no mesmo
+   node. B precisa de `github.api`, que está em `human` no workspace, e pede.
+3. Você concede **temporária**. `permission.granted` com `kind = temporary`
+   fica ligado à tarefa B. B continua, delega o que precisar, e os workers
+   dela herdam a concessão porque são descendentes de B.
+4. A tarefa A não sabe de nada: a concessão não está na linhagem dela, e o
+   `ToolGate` só olha a linhagem da Run que pede.
+5. `send "gere o relatório de releases"` abre a tarefa C no mesmo workspace.
+   C não tem `github.api`: a concessão era de B, e B já fechou ou é outra
+   linhagem.
+6. Se em vez disso você tivesse concedido **permanente**, o harness teria
+   editado o TOML do workspace e registrado `policy.changed`; C, e qualquer
+   tarefa seguinte, resolveria a política nova antes de nascer.
+
+```mermaid
+graph TD
+    W["node depth 1 · workspace X<br/>teto: github.api ∈ human"]
+    A["tarefa A · corrigir bug<br/>sem github.api"]
+    B["tarefa B · verificar CI<br/>github.api concedido (temporary)"]
+    B2["worker de B<br/>herda github.api"]
+    C["tarefa C · relatório<br/>sem github.api"]
+    W --> A
+    W --> B
+    B --> B2
+    W --> C
+```
 
 ```mermaid
 stateDiagram-v2
     [*] --> requested: permission.requested
-    requested --> granted: permission.granted (scope, until)
+    requested --> granted: permission.granted (kind)
     requested --> denied: permission.denied / forbidden
-    granted --> consumed: tool.call.completed (scope = call)
-    granted --> expired: fim do escopo ou until
+    granted --> ended: tarefa fechou (temporary)
+    granted --> config: policy.changed (permanent)
     granted --> revoked: permission.revoked
-    consumed --> [*]
-    expired --> [*]
+    ended --> [*]
     revoked --> [*]
     denied --> [*]
 ```
+
+**Permanente não é concessão que dura, é mudança de política.** Ela edita o
+TOML (o mesmo que `omunculus policy grant --permanent` faria) e registra
+`policy.changed` no log com o diff. O log guarda o fato; o TOML guarda o
+estado. Só humano concede permanente: `permission.granted` com
+`kind = permanent` e `granter = run:*` é rejeitado pelo Core.
 
 ## Revogação
 
@@ -239,14 +262,21 @@ a cada `tool.call.requested`:
 
 ```
 permitido(run, T) = T ∈ run.started.tools
-                  ∨ ∃ grant ativo para T com escopo cobrindo run
-                      ∧ não revogado ∧ não expirado ∧ (scope ≠ call ∨ não consumido)
+                  ∨ ∃ grant temporário para T ligado a run.work_item
+                      ou a um ancestral de run.work_item
+                      ∧ tarefa da concessão ainda aberta ∧ não revogado
 ```
+
+Em palavras: a Run pode usar T se T foi pinada no nascimento, ou se existe
+uma concessão temporária de T ligada ao seu próprio Work Item ou a um
+ancestral dele, a tarefa dessa concessão ainda não fechou, e ninguém
+revogou. Concessão permanente nem entra aqui: ela já chegou pela política
+resolvida em `run.started`.
 
 Tudo isso é derivado do log, nunca do processo. É a mesma leitura que o
 replay faz, então o conjunto efetivo de qualquer rodada passada é
-reconstruível. O Runtime materializa `permission.expired` quando fecha uma
-Run ou um Work Item, para que a projeção não dependa de relógio.
+reconstruível. Não há evento de expiração: a concessão temporária termina
+porque a tarefa fechou, e isso já está no log.
 
 ## Catálogo: tipos novos
 
@@ -256,7 +286,6 @@ Run ou um Work Item, para que a projeção não dependa de relógio.
 | `permission.granted` | command | Run (pai) ou CLI (humano) | sim | sim |
 | `permission.denied` | command | Run (pai), CLI (humano) ou Runtime (forbidden) | não | sim |
 | `permission.revoked` | command | Run (pai) ou CLI | sim | sim |
-| `permission.expired` | event | Runtime | não | não |
 | `policy.changed` | event | CLI | não | não |
 
 `permission.granted` e `permission.revoked` são interceptáveis de propósito:
@@ -308,7 +337,8 @@ Leitura de dois pedidos:
 
 Não há concessão fora do log, não há concessão implícita por delegação, não
 há "modo confiável" que pule o `ToolGate`, e o modelo nunca escolhe validade
-nem árbitro. Pedido não expira; concessão sim. Permanente é TOML.
+nem árbitro. Pedido não expira. Temporária morre com a tarefa. Permanente é
+TOML.
 
 ## Impacto e ordem
 
@@ -322,5 +352,5 @@ Depende de [tool-policy.md](tool-policy.md) implementado (faixas, modos e
 3. arbitragem do pai como rodada efêmera com `grant`/`deny`/`escalate`.
 4. `emit permission.granted|denied|revoked` com validação de `request_id` e
    de faixa; `forbidden` materializado pelo Runtime.
-5. `ToolGate` lendo grants do log; `permission.expired` no fechamento.
+5. `ToolGate` lendo concessões temporárias por linhagem no log.
 6. `policy grant --permanent` e `policy.changed`.

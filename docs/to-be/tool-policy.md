@@ -233,8 +233,8 @@ Regras:
    ou uma concessão explícita.
 6. **Retomada resolve de novo.** `task.resumed` abre uma Run nova, e Run nova
    lê o config atual. Perfil e workspace são os do Work Item e não mudam;
-   as faixas podem mudar. Concessões com escopo `work_item` ou `session`
-   continuam valendo.
+   as faixas podem mudar. Concessões temporárias da tarefa continuam
+   valendo enquanto a tarefa estiver aberta.
 7. **Depth não entra na conta do Agent.** O Agent recebe uma lista pronta.
    Quem sabe de depth, workspace e perfil é o Runtime, no momento de abrir a
    Run.
@@ -385,7 +385,7 @@ pedir os perfis e workspaces que a configuração lhe deu.
 
 Retomada (`task.resumed`) abre uma Run nova e resolve a política de novo
 contra o config atual, mantendo perfil e workspace do Work Item e as
-concessões ativas de escopo `work_item` ou `session`. Trocar perfil ou
+concessões temporárias da tarefa. Trocar perfil ou
 workspace é uma tarefa nova, nunca uma retomada.
 
 ## Casos de uso
