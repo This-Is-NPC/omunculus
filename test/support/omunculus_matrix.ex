@@ -15,6 +15,17 @@ defmodule Omunculus.Matrix do
     run(1, base, overlay, task)
   end
 
+  def skipped_lane_modules(base \\ "medium.toml", overlay \\ "lane.toml") do
+    %{config: config} = Harness.tmp_fixture(base, overlay)
+
+    config.interceptors
+    |> Enum.map(&(&1.module || ""))
+    |> Enum.filter(fn module ->
+      match?({:error, _}, Interceptor.resolve(module))
+    end)
+    |> Enum.sort()
+  end
+
   def complex(base \\ "complex.toml", overlay \\ nil, task \\ "conte até 10") do
     run(2, base, overlay, task)
   end
@@ -144,7 +155,9 @@ defmodule Omunculus.Matrix do
   end
 
   defp resolve_interceptor(item) do
-    case Interceptor.resolve(item.module || "") do
+    module_name = item.module || ""
+
+    case Interceptor.resolve(module_name) do
       {:ok, module} ->
         %{
           name: item.name,

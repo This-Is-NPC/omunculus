@@ -3,6 +3,14 @@ defmodule Omunculus.MatrixTest do
 
   alias Omunculus.Matrix
 
+  test "lane overlay skips interceptors that are not implemented yet" do
+    # When ToolGate and TeamGate exist, this test must fail so the matrix starts loading them.
+    assert Matrix.skipped_lane_modules() == [
+             "Omunculus.Interceptors.TeamGate",
+             "Omunculus.Interceptors.ToolGate"
+           ]
+  end
+
   test "medium without overlay" do
     ctx = Matrix.medium()
     assert ctx.result == "10"
