@@ -141,6 +141,55 @@ A arbitragem do pai também é uma Run: curta, no node do pai, com
 `waiting` ao delegar. A decisão do modelo vira comando no log com `reason`,
 então a auditoria mostra por que um pai concedeu.
 
+## Um pedido por tool por tarefa
+
+Dentro de uma tarefa pode haver várias Runs ao mesmo tempo: continuações e
+workers. Duas delas podem descobrir, cada uma por si, que não têm a mesma
+tool. Não podem existir dois pedidos abertos para a mesma tool na mesma
+tarefa: o humano veria duas linhas na inbox para decidir uma coisa só.
+
+A solução é identidade derivada, não coordenação entre processos. O
+`request_id` de um pedido é `hash(tarefa, tool)`, onde tarefa é o Work Item
+raiz da linhagem a que a concessão se ligaria. Esse `request_id` é também a
+`idempotency_key` do envelope. O que acontece com o segundo pedido segue
+das regras de dedupe do Core, sem código novo:
+
+| Estado do pedido `hash(B, T)` no log | Run 1 de B chama `request_permission(T)` |
+|---|---|
+| não existe | apenda `permission.requested`; Run fecha em `waiting` sobre ele |
+| aberto (Run 2 já pediu) | o append é redelivery idempotente, nada novo no log; Run 1 fecha em `waiting` sobre o **mesmo** `request_id` |
+| concedido | nenhum pedido: a Run recebe a observação "já concedido para esta tarefa" e expõe a tool na rodada seguinte |
+| negado | nenhum pedido: observação "negado para esta tarefa: motivo". Só um humano reabre, respondendo ao pedido negado pela inbox |
+
+```mermaid
+sequenceDiagram
+    participant R2 as Run 2 de B
+    participant R1 as Run 1 de B
+    participant EC as Event Core
+    participant RT as Runtime
+    actor H as Humano
+
+    R2->>EC: permission.requested {request_id = hash(B, github.api)}
+    R2->>EC: run.completed {outcome=waiting, awaiting=hash(B, github.api)}
+    R1->>EC: permission.requested {request_id = hash(B, github.api)}
+    Note over EC: mesma idempotency_key → redelivery, nada é apendado
+    R1->>EC: run.completed {outcome=waiting, awaiting=hash(B, github.api)}
+    Note over RT: inbox mostra uma linha: github.api · tarefa B · 2 Work Items aguardando
+    H->>EC: permission.granted {request_id = hash(B, github.api), kind=temporary}
+    EC-->>RT: deliver
+    RT->>RT: reabre todo Work Item com awaiting = esse request_id (continuation)
+```
+
+Quando a resposta chega, o Runtime reabre **todos** os Work Items que
+fecharam aguardando aquele `request_id`, cada um por continuação a partir do
+próprio checkpoint. A inbox mostra o pedido uma vez, com quantos Work Items
+esperam por ele.
+
+Uma Run que já estava em andamento quando a concessão chegou não pede: a
+tool não estava na exposição dela, mas se o modelo tentar, o `ToolGate` lê a
+concessão na linhagem e entrega; se o modelo chamar `request_permission`, cai
+na linha "concedido" da tabela. Nos dois casos nenhum pedido novo nasce.
+
 ## Escalada ao humano
 
 Quando o árbitro é humano, o pedido usa o que o TO-BE já reserva para
