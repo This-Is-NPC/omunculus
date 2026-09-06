@@ -14,10 +14,14 @@ defmodule Omunculus.Agent do
     max_turns = Keyword.get(opts, :max_turns, 32)
     extra = Keyword.get(opts, :instructions)
     reporter = Keyword.get(opts, :reporter, fn _event -> :ok end)
+    nudge = Keyword.get(opts, :nudge)
     started_at = now()
 
     messages = [
-      %{"role" => "system", "content" => system_prompt(extra, fs)},
+      %{
+        "role" => "system",
+        "content" => Keyword.get(opts, :system_prompt) || system_prompt(extra, fs)
+      },
       %{"role" => "user", "content" => instruction}
     ]
 
@@ -35,6 +39,7 @@ defmodule Omunculus.Agent do
       reporter: reporter,
       started_at: started_at,
       tool_calls: 0,
+      nudge: nudge,
       counter_target: counter_target(tools, instruction)
     })
   end
@@ -118,9 +123,13 @@ defmodule Omunculus.Agent do
             assistant_text: text(reply.content)
         }
 
-        if continue_counter?(next) do
-          nudge = counter_nudge(next)
+        nudge =
+          cond do
+            continue_counter?(next) -> counter_nudge(next)
+            true -> custom_nudge(next)
+          end
 
+        if nudge do
           loop(%{
             next
             | messages: messages ++ [%{"role" => "user", "content" => nudge}]
@@ -347,6 +356,21 @@ defmodule Omunculus.Agent do
       _ -> 0
     end
   end
+
+  # Optional caller-provided continuation: receives a summary of the run so
+  # far and returns a user message to push the model on, or nil to halt.
+  defp custom_nudge(%{nudge: fun} = state) when is_function(fun, 1) do
+    if state.turn < state.max_turns do
+      fun.(%{
+        turn: state.turn,
+        tool_calls: state.tool_calls,
+        tool_state: state.context.state,
+        assistant_text: state.assistant_text
+      })
+    end
+  end
+
+  defp custom_nudge(_state), do: nil
 
   defp counter_nudge(state) do
     "Counter is #{counter_value(state)}. Target is #{state.counter_target}. Call the counter tool now. Do not write a reply."

@@ -63,6 +63,8 @@ defmodule Omunculus.Runtime.Run do
         tools: agent.tools,
         max_turns: agent[:max_turns] || 32,
         instructions: agent[:instructions],
+        system_prompt: agent[:system_prompt],
+        nudge: agent[:nudge],
         tool_options: agent[:tool_options] || %{},
         tool_state: state.checkpoint,
         tool_executor: &execute_tool(state, &1, &2, &3, &4),
