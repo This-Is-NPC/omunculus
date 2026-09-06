@@ -64,8 +64,10 @@ partida implementado está em [AS-IS requirements](../as-is/requirements.md).
 ## Política de tools e permissões
 
 1. O conjunto de tools de um nó é a interseção, faixa a faixa, de teto por
-   posição, teto por workspace e perfil; é pinado em `run.started` como
-   lista expandida.
+   posição, teto por workspace e perfil, resolvida a partir do config
+   **antes de cada Run**; é pinado em `run.started` como lista expandida e a
+   política vigente fica em `policy.loaded`. Edição do config vale para a
+   próxima Run e nunca altera uma Run em andamento.
 2. Modos `allow` e `deny` decidem apenas o padrão do que não foi escrito;
    após normalização não existem curingas.
 3. A permissão é aplicada em exposição, execução e entrega, de forma

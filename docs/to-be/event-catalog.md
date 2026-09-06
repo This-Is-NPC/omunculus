@@ -77,6 +77,7 @@ quando a proposta correspondente for aceita.
 | `permission.revoked` | command | Run (pai) ou CLI | sim | sim | permission-negotiation |
 | `permission.expired` | event | Runtime | não | não | permission-negotiation |
 | `policy.changed` | event | CLI | não | não | permission-negotiation |
+| `policy.loaded` | event | Runtime | não | não | tool-policy |
 
 Campos de payload que as propostas acrescentam a tipos existentes:
 `task.requested` ganha `profile`, `agent`, `workspace`, `origin` e

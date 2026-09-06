@@ -179,62 +179,81 @@ Se uma versão nova do harness adiciona uma tool ao catálogo, toda entrada em
 ## Quando e onde o conjunto é montado
 
 Hoje a lista de tools nasce dentro do `Agent`, a partir do preset ou da flag,
-no momento em que a Run começa. No alvo ela é resolvida **antes de qualquer
-Run**, uma única vez por processo, a partir do arquivo de configuração, para
-todas as combinações de perfil × depth × workspace. Uma Run em qualquer
-profundidade só consulta a tabela; nunca calcula.
+no momento em que a Run começa. No alvo ela é resolvida pelo Runtime **antes
+de cada Run**, em qualquer profundidade, lendo o arquivo de configuração
+naquele instante. O config é editável a quente: uma edição em perfis, tetos
+ou workspaces vale para a próxima Run que nascer, sem reiniciar nada. Runs
+em andamento não mudam; o que elas podem está pinado no log.
 
 ```mermaid
 flowchart TD
-    subgraph startup["Inicialização (antes do Event Core aceitar comandos)"]
+    subgraph run["Antes de cada Run (qualquer depth)"]
         F1["~/.omunculus/config.toml"] --> M["merge por chave<br/>(o arquivo mais específico substitui a entrada inteira)"]
         F2["omunculus.toml do projeto"] --> M
         F3["--config"] --> M
         M --> N["normalização<br/>modos → faixas explícitas<br/>grupos → tools<br/>tools_catalog pin → tools novas proibidas em allow"]
         C["catálogo de tools<br/>(módulos + grupos)"] --> N
-        N --> V{"config check<br/>nomes existem? perfil cabe em algum teto?"}
-        V -->|erro| X["processo não sobe"]
-        V -->|ok| T["Tabela de política<br/>uma linha por perfil × depth × workspace<br/>granted · negotiable · human · forbidden"]
-        T --> L["policy.loaded no log<br/>(tabela + hash)"]
-    end
-    subgraph run["Cada Run (qualquer depth)"]
-        RT["Runtime: linha(perfil da tarefa, depth do node, workspace do node)"]
-        RT --> PA["∩ autoridade do pai<br/>(só em delegação)"]
-        PA --> RS["run.started.tools (faixas pinadas)"]
+        N --> V{"válido?<br/>nomes existem? perfil cabe no teto?"}
+        V -->|não| X["Run não nasce<br/>run.failed reason=policy_invalid<br/>Work Item fica elegível para retomada"]
+        V -->|sim| L{"hash da política<br/>igual ao último policy.loaded?"}
+        L -->|não| PL["append policy.loaded<br/>(tabela + hash)"]
+        L -->|sim| RT
+        PL --> RT["linha(perfil da tarefa, depth do node, workspace do node)"]
+        RT --> PA["∩ autoridade do pai<br/>(só em delegação, vem de task.delegated)"]
+        PA --> RS["run.started.tools (faixas pinadas) + policy_hash"]
         RS --> AG["Agent recebe granted<br/>+ request_permission se negotiable ∪ human ≠ ∅"]
         AG --> SC["schemas = Tools.schemas(granted ∪ concessões ativas)<br/>recalculado a cada rodada"]
         SC --> PV["POST /chat/completions · \"tools\": [...]"]
     end
-    L --> RT
 ```
 
 Regras:
 
-1. **A tabela é imutável durante o processo.** Mudar o config exige
-   reiniciar; a mudança fica registrada porque o próximo `policy.loaded` tem
-   outro hash. Uma sessão pode ter vários `policy.loaded` ao longo da vida;
-   cada Run referencia o hash vigente quando nasceu.
-2. **Replay não lê arquivo.** `ToolGate`, retomada e reconstrução de
-   projeções leem `policy.loaded` e `run.started` do log. O TOML é a fonte
-   de edição; o log é a fonte de execução.
-3. **Depth não entra na conta do Agent.** O Agent recebe uma lista pronta.
+1. **Resolução por Run, não por processo.** O Runtime lê e normaliza o config
+   a cada `run.started`. Editar o arquivo entre duas Runs muda a segunda.
+   Editar durante uma Run não muda aquela Run: o conjunto dela está em
+   `run.started.tools` e só cresce por concessão ou encolhe por revogação
+   registradas no log.
+2. **`policy.loaded` só quando a política muda.** A tabela normalizada tem
+   um hash; se difere do último `policy.loaded` da sessão, o Runtime apenda
+   uma nova antes de `run.started`. Cada Run referencia o `policy_hash`
+   vigente. Assim o log tem toda política que já valeu, sem repetir a mesma
+   tabela a cada Run.
+3. **Replay não lê arquivo.** `ToolGate`, retomada e reconstrução leem
+   `policy.loaded` e `run.started` do log. O TOML é a fonte de edição; o log
+   é a fonte de execução.
+4. **Config inválido não derruba o harness; impede a Run.** Nome inexistente,
+   perfil fora de todo teto ou TOML malformado viram `run.failed` com
+   `reason = policy_invalid`, o Work Item fica elegível para `task.resumed`,
+   e `config check` mostra o erro. Uma edição errada a quente não mata a
+   sessão nem as Runs que já estão rodando.
+5. **Edição a quente nunca amplia uma árvore em andamento.** Um filho que
+   nasce depois da edição resolve com a política nova, mas continua
+   intersectado com a autoridade do pai que veio em `task.delegated`, que
+   foi pinada com a política antiga. Para ampliar de fato, é uma tarefa nova
+   ou uma concessão explícita.
+6. **Retomada resolve de novo.** `task.resumed` abre uma Run nova, e Run nova
+   lê o config atual. Perfil e workspace são os do Work Item e não mudam;
+   as faixas podem mudar. Concessões com escopo `work_item` ou `session`
+   continuam valendo.
+7. **Depth não entra na conta do Agent.** O Agent recebe uma lista pronta.
    Quem sabe de depth, workspace e perfil é o Runtime, no momento de abrir a
-   Run, e o que ele sabe vem da tabela e do `task.delegated` do pai.
-4. **`--tools` vira estreitamento ad hoc.** A flag antiga continua existindo,
+   Run.
+8. **`--tools` vira estreitamento ad hoc.** A flag antiga continua existindo,
    mas só como perfil anônimo: precisa caber em `granted` da linha
    resolvida, senão é erro de uso. Nunca amplia.
-5. **A configuração Agent não lista tools.** `[agents.concierge]` e
+9. **A configuração Agent não lista tools.** `[agents.concierge]` e
    `[agents.worker]` trazem modelo, prompt e budget; a sessão atribui agente
    por depth (`depth0 = "concierge"`, `depth2 = "worker"`); tools vêm da
    tabela. É o que faz a mesma configuração servir a qualquer posição.
-6. **Schemas são recalculados por rodada.** `Tools.schemas` roda sobre
-   `granted ∪ concessões ativas` antes de cada chamada ao provider, porque
-   uma concessão de [permission-negotiation.md](permission-negotiation.md)
-   pode chegar entre rodadas. É a única parte dinâmica, e ela também vem do
-   log.
+10. **Schemas são recalculados por rodada.** `Tools.schemas` roda sobre
+    `granted ∪ concessões ativas` antes de cada chamada ao provider, porque
+    uma concessão de [permission-negotiation.md](permission-negotiation.md)
+    pode chegar entre rodadas. Essa parte também vem do log.
 
-O que muda no código de hoje: `Config.resolve` passa a produzir a tabela em
-vez de uma lista; `Runtime.start_run` consulta a tabela e pina em
+O que muda no código de hoje: `Config.resolve` passa a produzir a tabela
+normalizada e a ser chamado pelo `Runtime.start_run`, não pela CLI;
+`Runtime` compara o hash, apenda `policy.loaded` quando preciso e pina em
 `run.started`; `SpikeAgents` deixa de decidir tools por depth; o `Agent`
 troca `state.schemas` fixo por um cálculo por rodada sobre `state.tools`.
 
@@ -361,12 +380,14 @@ pedir os perfis e workspaces que a configuração lhe deu.
 |---|---|
 | `task.requested` | `profile`, `agent`, `workspace`, `origin` |
 | `task.delegated` | `workspace`, `tools` (faixas calculadas pelo runtime) |
-| `run.started` | `profile`, `tools` (faixas expandidas), `roots`; `workspace_id` no envelope |
+| `policy.loaded` | tabela normalizada e `policy_hash`; apendado quando a política muda |
+| `run.started` | `profile`, `tools` (faixas expandidas), `roots`, `policy_hash`; `workspace_id` no envelope |
 | `delivery.rejected` | já existe; `interceptor = "tool-gate"` |
 
-Retomada (`task.resumed`) usa o snapshot de `run.started` da tentativa
-anterior mais as concessões ativas. Trocar perfil ou workspace é uma tarefa
-nova, nunca uma retomada.
+Retomada (`task.resumed`) abre uma Run nova e resolve a política de novo
+contra o config atual, mantendo perfil e workspace do Work Item e as
+concessões ativas de escopo `work_item` ou `session`. Trocar perfil ou
+workspace é uma tarefa nova, nunca uma retomada.
 
 ## Casos de uso
 
