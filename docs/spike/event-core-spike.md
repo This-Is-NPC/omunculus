@@ -77,15 +77,61 @@ tabela do documento.
    redelivery; `idempotency_key` igual com payload diferente é conflito
    explícito. Ambos testados.
 
+## Matriz `conte até 10`: profundidade × Interceptor
+
+Seis casos, cada um executado com o modelo scriptado (`--provider fake`) e
+com o `qwen3.5:4b` (`--provider chat`). "Com lane" usa
+`examples/spike-interceptors.toml`: `audit` em `task.requested`,
+`task.delegated`, `tool.call.requested` e `task.completed`, e `depth-gate`
+em `task.delegated` com `max_depth = 2`. Sem lane, a entrega vai direta do
+Event Core (cenários 3 e 4). Com lane, passa pelos interceptores configurados
+para aquele tipo (cenários 1 e 2).
+
+```sh
+./omunculus spike "conte até 10" --depth 2                                       # sem lane
+./omunculus spike "conte até 10" --depth 2 --config examples/spike-interceptors.toml   # com lane
+./omunculus spike "conte até 10" --depth 2 --provider chat --config examples/spike-local-interceptors.toml
+```
+
+| Depth | Lane | Cadeia (tipos, sem `run.*`/`model.call.*`) | Scriptado | qwen3.5:4b | `depth-gate` |
+|---|---|---|---|---|---|
+| 0 | sem | `task.requested → 10×(tool.call.requested → tool.call.completed) → task.completed(0)` | 35 env., `10` | 36 env., `10` | — |
+| 0 | com | idêntica | 35 env., `10` | 35 env., `10` | evaluated=0 |
+| 1 | sem | `task.requested → task.delegated(→1) → 10×(…) → task.completed(1) → task.completed(0)` | 41 env., `10` | 42 env., `10` | — |
+| 1 | com | idêntica | 41 env., `10` | 1ª: timeout HTTP do provider na rodada 9, `run.failed` durável, checkpoint 8; 2ª: 43 env., `10` | evaluated=1 delivered=1 |
+| 2 | sem | `task.requested → task.delegated(→1) → task.delegated(→2) → 10×(…) → task.completed(2) → task.completed(1) → task.completed(0)` | 47 env., `10` | 49 env., `10` | — |
+| 2 | com | idêntica | 47 env., `10` | 58 env., worker passou de 10, chegou a 13 e estourou `max_turns`; resultado vazio subiu a árvore como `""` → `"1"` → `"2"` | evaluated=2 delivered=2 |
+
+Leitura:
+
+- **A lane não altera o log.** Nos seis casos scriptados a cadeia de
+  causação é a mesma com e sem interceptor, e os contadores por interceptor
+  provam que ele foi avaliado. É a garantia de "observar ou vetar, nunca
+  reescrever".
+- **Veto aparece no histórico.** Com `max_depth = 1` e `--depth 2`, o
+  segundo `task.delegated` é barrado: `delivery.rejected` com causação nele,
+  nenhuma Run de depth 2 nasce, e o `task.completed` do nó delegador tem
+  causação na rejeição. Testado em `interceptors_test.exs`.
+- **As falhas reais são do provider, não do contrato.** O timeout HTTP virou
+  `run.failed` com checkpoint 8, exatamente o caso que `task.resumed` cobre.
+  O worker que passou de 10 mostra que `max_turns` é o único freio quando o
+  modelo ignora o alvo; o `counter_target` do `Agent` só empurra para cima,
+  nunca para parar.
+- **Resultado vazio propaga.** Um `result` vazio no worker virou `"1"` e
+  `"2"` inventados pelos concierges. Reforça o achado anterior: `result`
+  precisa de campo estruturado, e um concierge não deveria aceitar resultado
+  vazio como conclusão.
+
 ## Provider real
 
-Qualquer flag de provider (`--config`, `--model`, `--base-url`, `--api-key`)
-troca o `Chat.Fake` por um chat OpenAI-compatível construído pelo mesmo
-caminho de `run`. A configuração Agent continua genérica: só `kind`, tools e
+`--provider chat` troca o `Chat.Fake` por um chat OpenAI-compatível
+construído pelo mesmo caminho de `run`, a partir de `--config` e das flags
+`--model`, `--base-url` e `--api-key`. Sem essa flag, `--config` só fornece
+`[[interceptors]]` e `[[automations]]`. A configuração Agent continua genérica: só `kind`, tools e
 `system_prompt` mudam por depth.
 
 ```sh
-./omunculus spike "conte até 10" --depth 2 --config presets/local.toml
+./omunculus spike "conte até 10" --depth 2 --provider chat --config presets/local.toml
 ```
 
 Resultado com `qwen3.5:4b` servido pelo FastFlowLM em 2026-09-06:
