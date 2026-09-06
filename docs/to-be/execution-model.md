@@ -92,6 +92,18 @@ exatamente o que reativou o trabalho. `awaiting` pode ser uma lista: um
 líder que delegou a três membros é reaberto a cada resposta, e seu
 checkpoint guarda o que ainda falta ([team-model.md](team-model.md)).
 
+A continuação **sempre chama o modelo**, com uma observação que diz o que
+chegou e o que ainda falta ("A completed: …. Still pending: B, C"). Uma
+Run sem chamada de modelo seria um estado morto no log. O fechamento da
+Run de continuação segue três regras:
+
+1. o modelo delega ou pede de novo: fecha em `waiting` com `awaiting` =
+   restantes mais os novos;
+2. o modelo devolve texto e `awaiting` ainda não está vazio: fecha em
+   `waiting` com `awaiting` = restantes, e o texto vai para o checkpoint
+   como `notes`; **não** vira `task.completed`;
+3. `awaiting` vazio e o modelo devolve texto: `task.completed`.
+
 ```mermaid
 stateDiagram-v2
     [*] --> requested: task.requested / task.delegated
