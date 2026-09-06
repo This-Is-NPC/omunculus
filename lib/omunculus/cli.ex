@@ -29,7 +29,7 @@ defmodule Omunculus.CLI do
         run_with_dotenv(argv, parsed, env)
 
       {:ok, %{command: :spike} = parsed} ->
-        Omunculus.CLI.Spike.run(parsed)
+        Omunculus.CLI.Spike.run(parsed, env)
 
       {:error, reason} ->
         IO.puts(:stderr, Help.usage_error(reason))

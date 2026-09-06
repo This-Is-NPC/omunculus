@@ -82,6 +82,10 @@ cmd "spike" {
   flag "--fail-at <n>" help="Kill the counting worker after it reaches n, then resume it as a new attempt"
   flag "--delay <duration>" help="Delay every tool result"
   flag "--json-events" help="Write the ordered EVENTS log as one JSON envelope per line to stderr"
+  flag "--config <file>" help="Config file; any provider flag switches from the scripted model to a real one"
+  flag "--model <model>" help="Model id" env="OMUNCULUS_MODEL"
+  flag "--base-url <url>" help="OpenAI-compatible base URL" env="OMUNCULUS_BASE_URL"
+  flag "--api-key <key>" help="API key" env="OMUNCULUS_API_KEY" hide_env_values=#true
 
   example "omunculus spike \"conte até 10\" --depth 2"
   example "omunculus spike \"conte até 10\" --fail-at 3 --delay 50ms"

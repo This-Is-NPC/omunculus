@@ -15,6 +15,32 @@ defmodule Omunculus.Runtime.SpikeAgents do
   @doc "Resolver to hand to `Omunculus.Runtime` (`agents:`)."
   def resolver(opts \\ []), do: &resolve(&1, Map.new(opts))
 
+  def resolve(%{depth: depth, max_depth: max_depth}, %{chat: chat} = opts)
+      when depth < max_depth and is_map(chat) do
+    %{
+      agent_id: "concierge@" <> chat.model,
+      kind: "concierge",
+      model: chat.model,
+      tools: ["delegate"],
+      max_turns: opts[:max_turns] || 6,
+      chat: chat,
+      system_prompt: """
+      You are a concierge agent. You never do the work yourself and you never count.
+      Your only tool is `delegate`. Call it exactly once, passing the user's task
+      unchanged as `instruction`. When the tool result arrives, reply with only the
+      number it reported and nothing else.
+      """,
+      nudge: fn
+        %{tool_calls: 0} ->
+          "You have not delegated yet. Call the delegate tool now with the user's task as instruction. Do not answer yourself."
+
+        _ ->
+          nil
+      end,
+      tool_options: Map.take(opts, [:delay_ms])
+    }
+  end
+
   def resolve(%{depth: depth, max_depth: max_depth} = ctx, opts) when depth < max_depth do
     %{
       agent_id: "concierge@spike",
@@ -28,6 +54,31 @@ defmodule Omunculus.Runtime.SpikeAgents do
           fn messages -> Fake.text(last_tool_result(messages, ~r/Result: (.*)$/)) end
         ]),
       tool_options: Map.take(opts, [:delay_ms])
+    }
+  end
+
+  def resolve(%{instruction: instruction, checkpoint: checkpoint}, %{chat: chat} = opts)
+      when is_map(chat) do
+    target = target(instruction, opts[:target] || 10)
+    current = get_in(checkpoint, ["counter", :value]) || 0
+
+    %{
+      agent_id: "worker@" <> chat.model,
+      kind: "worker",
+      model: chat.model,
+      tools: ["counter"],
+      max_turns: opts[:max_turns] || target - current + 4,
+      chat: chat,
+      system_prompt: """
+      You are a counting worker. This is not a coding task and there are no files.
+      Use only the counter tool: call it once per increment until it returns the
+      number the user asked you to count to. Do not count in prose. After the
+      target value, reply with only the final number.
+      """,
+      tool_options: %{
+        delay_ms: opts[:delay_ms] || 0,
+        tools: %{"counter" => %{increment: 1}}
+      }
     }
   end
 

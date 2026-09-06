@@ -229,6 +229,25 @@ defmodule Omunculus.CLI.Spec do
           flag("json_events",
             long: "json-events",
             help: "Write the ordered EVENTS log as one JSON envelope per line to stderr"
+          ),
+          flag("config",
+            long: "config",
+            value: "file",
+            help: "Config file; any provider flag switches from the scripted model to a real one"
+          ),
+          flag("model", long: "model", value: "model", env: "OMUNCULUS_MODEL", help: "Model id"),
+          flag("base_url",
+            long: "base-url",
+            value: "url",
+            env: "OMUNCULUS_BASE_URL",
+            help: "OpenAI-compatible base URL"
+          ),
+          flag("api_key",
+            long: "api-key",
+            value: "key",
+            env: "OMUNCULUS_API_KEY",
+            hide_env_values: true,
+            help: "API key"
           )
         ],
         examples: [

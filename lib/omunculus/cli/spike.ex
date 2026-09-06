@@ -10,16 +10,18 @@ defmodule Omunculus.CLI.Spike do
   """
 
   alias Omunculus.CLI.Help
+  alias Omunculus.{Config, Runner}
   alias Omunculus.Event.Envelope
   alias Omunculus.EventCore
   alias Omunculus.EventCore.Projector
   alias Omunculus.Runtime
   alias Omunculus.Runtime.SpikeAgents
 
-  def run(%{args: args, flags: flags}) do
+  def run(%{args: args, flags: flags}, env \\ %{}) do
     with {:ok, depth} <- parse_nonneg(flags["depth"] || "1", :depth),
          {:ok, fail_at} <- parse_optional_positive(flags["fail_at"], :fail_at),
-         {:ok, delay_ms} <- parse_duration(flags["delay"]) do
+         {:ok, delay_ms} <- parse_duration(flags["delay"]),
+         {:ok, chat} <- provider_chat(flags, env) do
       db = flags["db"] || default_db()
       instruction = args.instruction
 
@@ -30,7 +32,8 @@ defmodule Omunculus.CLI.Spike do
         Runtime.start_link(
           core: core,
           max_depth: depth,
-          agents: SpikeAgents.resolver(delay_ms: delay_ms)
+          agents: SpikeAgents.resolver(delay_ms: delay_ms, chat: chat),
+          run_opts: [delegation_timeout: 600_000]
         )
 
       outcome = execute(core, runtime, instruction, depth, fail_at)
@@ -45,6 +48,7 @@ defmodule Omunculus.CLI.Spike do
 
           {:error, reason} ->
             IO.puts(:stderr, "error: spike failed: #{inspect(reason)}")
+            report(core, projector, nil, db, flags["json_events"] || false)
             1
         end
 
@@ -62,7 +66,7 @@ defmodule Omunculus.CLI.Spike do
   # --- execution --------------------------------------------------------------------
 
   defp execute(core, _runtime, instruction, _depth, nil) do
-    Runtime.request(core, instruction, idempotency_key: "spike:" <> instruction)
+    Runtime.request(core, instruction, idempotency_key: "spike:" <> instruction, timeout: 600_000)
   end
 
   defp execute(core, runtime, instruction, depth, fail_at) do
@@ -121,7 +125,10 @@ defmodule Omunculus.CLI.Spike do
   # --- report ---------------------------------------------------------------------------
 
   defp report(core, projector, correlation_id, db, json?) do
-    events = EventCore.stream(core, 0, correlation_id: correlation_id)
+    events =
+      if correlation_id,
+        do: EventCore.stream(core, 0, correlation_id: correlation_id),
+        else: EventCore.stream(core, 0)
 
     if json? do
       Enum.each(events, &IO.puts(:stderr, Jason.encode!(Envelope.to_map(&1))))
@@ -204,6 +211,27 @@ defmodule Omunculus.CLI.Spike do
       String.pad_trailing("#{env.kind}", 8) <>
       String.pad_trailing(env.type, 22) <>
       "#{env.event_id} <- #{env.causation_id || "-"}" <> depth <> detail
+  end
+
+  # --- provider -----------------------------------------------------------------------------
+
+  # Without --config/--model/--base-url the spike is provider-free (scripted
+  # Chat.Fake). With any of them, the same Config/Runner path as `run` builds a
+  # real OpenAI-compatible chat that every node shares; Agent config stays
+  # generic, only kind/tools/instructions differ per depth.
+  defp provider_chat(flags, env) do
+    real? =
+      Enum.any?(["config", "model", "base_url", "api_key"], &(flags[&1] not in [nil, ""]))
+
+    if real? do
+      with {:ok, config} <-
+             Config.load(cwd: File.cwd!(), config_file: flags["config"], env: env),
+           {:ok, session} <- Config.resolve(config, flags) do
+        Runner.build_chat(session.chat, flags, env)
+      end
+    else
+      {:ok, nil}
+    end
   end
 
   # --- parsing ------------------------------------------------------------------------------

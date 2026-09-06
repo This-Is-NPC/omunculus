@@ -56,7 +56,7 @@ defmodule Omunculus.Runner do
     end
   end
 
-  defp build_chat(chat_cfg, flags, env) do
+  def build_chat(chat_cfg, flags, env) do
     api = chat_cfg.api || "openai-completions"
     auth_type = chat_cfg.auth || infer_auth(chat_cfg, flags, env)
 
