@@ -10,7 +10,7 @@ defmodule Omunculus.CLI.Spike do
   """
 
   alias Omunculus.CLI.Help
-  alias Omunculus.{Config, Runner}
+  alias Omunculus.{Automations, Config, Runner}
   alias Omunculus.Event.Envelope
   alias Omunculus.EventCore
   alias Omunculus.EventCore.Projector
@@ -21,12 +21,20 @@ defmodule Omunculus.CLI.Spike do
     with {:ok, depth} <- parse_nonneg(flags["depth"] || "1", :depth),
          {:ok, fail_at} <- parse_optional_positive(flags["fail_at"], :fail_at),
          {:ok, delay_ms} <- parse_duration(flags["delay"]),
-         {:ok, chat} <- provider_chat(flags, env) do
+         {:ok, config} <- Config.load(cwd: File.cwd!(), config_file: flags["config"], env: env),
+         {:ok, checked} <- Config.check(config),
+         {:ok, chat} <- provider_chat(config, flags, env) do
       db = flags["db"] || default_db()
       instruction = args.instruction
 
-      {:ok, core} = EventCore.start_link(path: db)
+      {:ok, core} = EventCore.start_link(path: db, interceptors: checked.interceptors)
       {:ok, projector} = Projector.start_link(core: core)
+
+      automations =
+        if checked.automations != [] do
+          {:ok, pid} = Automations.start_link(core: core, automations: checked.automations)
+          pid
+        end
 
       {:ok, runtime} =
         Runtime.start_link(
@@ -43,15 +51,19 @@ defmodule Omunculus.CLI.Spike do
         case outcome do
           {:ok, %{result: result, requested: requested}} ->
             report(core, projector, requested.correlation_id, db, flags["json_events"] || false)
+            report_lanes(core, automations, checked, flags["json_events"] || false)
             IO.puts(result)
             0
 
           {:error, reason} ->
             IO.puts(:stderr, "error: spike failed: #{inspect(reason)}")
             report(core, projector, nil, db, flags["json_events"] || false)
+            report_lanes(core, automations, checked, flags["json_events"] || false)
             1
         end
 
+      if automations, do: Automations.sync(automations)
+      if automations, do: GenServer.stop(automations)
       GenServer.stop(runtime)
       GenServer.stop(projector)
       GenServer.stop(core)
@@ -60,6 +72,36 @@ defmodule Omunculus.CLI.Spike do
       {:error, reason} ->
         IO.puts(:stderr, Help.usage_error(reason))
         2
+    end
+  end
+
+  defp report_lanes(_core, _automations, _checked, true), do: :ok
+
+  defp report_lanes(core, automations, checked, false) do
+    if checked.interceptors != [] do
+      stats = EventCore.interceptor_stats(core)
+
+      Enum.each(checked.interceptors, fn i ->
+        s = stats[i.name]
+
+        IO.puts(
+          :stderr,
+          "interceptor #{i.name} on #{Enum.join(i.events, ",")}: evaluated=#{s.evaluated} delivered=#{s.delivered} rejected=#{s.rejected}"
+        )
+      end)
+    else
+      IO.puts(
+        :stderr,
+        "interceptor: none configured, deliveries went directly from the Event Core"
+      )
+    end
+
+    if automations do
+      Automations.sync(automations)
+
+      Enum.each(Automations.stats(automations), fn {name, s} ->
+        IO.puts(:stderr, "automation #{name}: delivered=#{s.delivered} failed=#{s.failed}")
+      end)
     end
   end
 
@@ -215,22 +257,23 @@ defmodule Omunculus.CLI.Spike do
 
   # --- provider -----------------------------------------------------------------------------
 
-  # Without --config/--model/--base-url the spike is provider-free (scripted
-  # Chat.Fake). With any of them, the same Config/Runner path as `run` builds a
-  # real OpenAI-compatible chat that every node shares; Agent config stays
-  # generic, only kind/tools/instructions differ per depth.
-  defp provider_chat(flags, env) do
-    real? =
-      Enum.any?(["config", "model", "base_url", "api_key"], &(flags[&1] not in [nil, ""]))
+  # --provider fake keeps the scripted Chat.Fake even when a config file is
+  # given (the file then only supplies interceptors and automations).
+  # --provider chat builds a real OpenAI-compatible chat through the same
+  # Config/Runner path as `run`; every node shares it and Agent config stays
+  # generic, only kind/tools/prompt differ per depth.
+  defp provider_chat(config, flags, env) do
+    case flags["provider"] || "fake" do
+      "fake" ->
+        {:ok, nil}
 
-    if real? do
-      with {:ok, config} <-
-             Config.load(cwd: File.cwd!(), config_file: flags["config"], env: env),
-           {:ok, session} <- Config.resolve(config, flags) do
-        Runner.build_chat(session.chat, flags, env)
-      end
-    else
-      {:ok, nil}
+      "chat" ->
+        with {:ok, session} <- Config.resolve(config, flags) do
+          Runner.build_chat(session.chat, flags, env)
+        end
+
+      other ->
+        {:error, {:invalid_flag_value, "--provider", other}}
     end
   end
 

@@ -82,13 +82,55 @@ cmd "spike" {
   flag "--fail-at <n>" help="Kill the counting worker after it reaches n, then resume it as a new attempt"
   flag "--delay <duration>" help="Delay every tool result"
   flag "--json-events" help="Write the ordered EVENTS log as one JSON envelope per line to stderr"
-  flag "--config <file>" help="Config file; any provider flag switches from the scripted model to a real one"
+  flag "--provider <provider>" help="fake (scripted model, default) or chat (build the chat from config and flags)" default="fake"
+  flag "--config <file>" help="Config file: chat provider, [[interceptors]] and [[automations]]"
   flag "--model <model>" help="Model id" env="OMUNCULUS_MODEL"
   flag "--base-url <url>" help="OpenAI-compatible base URL" env="OMUNCULUS_BASE_URL"
   flag "--api-key <key>" help="API key" env="OMUNCULUS_API_KEY" hide_env_values=#true
 
   example "omunculus spike \"conte até 10\" --depth 2"
   example "omunculus spike \"conte até 10\" --fail-at 3 --delay 50ms"
+}
+
+cmd "events" {
+  about "Read the event catalog or follow the EVENTS log"
+  arg_required_else_help #true
+
+  arg "<action>" help="catalog or follow"
+
+  flag "--db <file>" help="SQLite file with the EVENTS log (follow)"
+  flag "--types <types>" help="Only these event types (follow)" delimiter=","
+  flag "--after <seq>" help="Start after this sequence (follow)" default="0"
+  flag "--once" help="Print what exists and exit instead of following"
+
+  example "omunculus events catalog"
+  example "omunculus events follow --db ./spike.sqlite3 --types task.completed,run.failed"
+}
+
+cmd "emit" {
+  about "Append an injectable command to a durable EVENTS log"
+  arg_required_else_help #true
+
+  arg "<type>" help="Command type from the catalog marked injectable"
+
+  flag "--db <file>" help="SQLite file with the EVENTS log"
+  flag "--payload <json>" help="Payload as a JSON object"
+  flag "--idempotency-key <key>" help="Stable key so retries do not duplicate the command"
+  flag "--correlation-id <id>" help="Join an existing correlation"
+  flag "--work-item-id <id>" help="Target work item (default: new)"
+
+  example "omunculus emit task.requested --db ./spike.sqlite3 --payload '{\"instruction\":\"conte até 3\"}'"
+}
+
+cmd "config" {
+  about "Validate configuration"
+  arg_required_else_help #true
+
+  arg "<action>" help="check"
+
+  flag "--config <file>" help="Config file to validate"
+
+  example "omunculus config check --config ./omunculus.toml"
 }
 
 cmd "benchmark" {

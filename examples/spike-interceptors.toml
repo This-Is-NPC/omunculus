@@ -1,0 +1,14 @@
+# Interceptor lane for `omunculus spike --config examples/spike-interceptors.toml`.
+# Scenarios 1 and 2 of docs/to-be/event-model.md: the same log, delivered
+# through a configured lane instead of directly from the Event Core.
+
+[[interceptors]]
+name = "audit"
+events = ["task.requested", "task.delegated", "tool.call.requested", "task.completed"]
+module = "Omunculus.Interceptors.Audit"
+
+[[interceptors]]
+name = "depth-gate"
+events = ["task.delegated"]
+module = "Omunculus.Interceptors.DepthGate"
+options = { max_depth = 2 }

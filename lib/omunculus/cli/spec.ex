@@ -230,10 +230,16 @@ defmodule Omunculus.CLI.Spec do
             long: "json-events",
             help: "Write the ordered EVENTS log as one JSON envelope per line to stderr"
           ),
+          flag("provider",
+            long: "provider",
+            value: "provider",
+            default: "fake",
+            help: "fake (scripted model, default) or chat (build the chat from config and flags)"
+          ),
           flag("config",
             long: "config",
             value: "file",
-            help: "Config file; any provider flag switches from the scripted model to a real one"
+            help: "Config file: chat provider, [[interceptors]] and [[automations]]"
           ),
           flag("model", long: "model", value: "model", env: "OMUNCULUS_MODEL", help: "Model id"),
           flag("base_url",
@@ -254,6 +260,96 @@ defmodule Omunculus.CLI.Spec do
           {"omunculus spike \"conte até 10\" --depth 2", nil, nil},
           {"omunculus spike \"conte até 10\" --fail-at 3 --delay 50ms", nil, nil}
         ]
+      },
+      "events" => %{
+        name: "events",
+        about: "Read the event catalog or follow the EVENTS log",
+        long_about:
+          "catalog renders the event catalog module as a table. follow reads EVENTS in sequence order as NDJSON, one envelope per line, and keeps polling the file unless --once is given.",
+        arg_required_else_help: true,
+        args: [
+          %{
+            name: :action,
+            metavar: "action",
+            required: true,
+            variadic: false,
+            help: "catalog or follow"
+          }
+        ],
+        flags: [
+          flag("db", long: "db", value: "file", help: "SQLite file with the EVENTS log (follow)"),
+          flag("types",
+            long: "types",
+            value: "types",
+            delimiter: ",",
+            help: "Only these event types (follow)"
+          ),
+          flag("after",
+            long: "after",
+            value: "seq",
+            default: "0",
+            help: "Start after this sequence (follow)"
+          ),
+          flag("once", long: "once", help: "Print what exists and exit instead of following")
+        ],
+        examples: [
+          {"omunculus events catalog", nil, nil},
+          {"omunculus events follow --db ./spike.sqlite3 --types task.completed,run.failed", nil,
+           nil}
+        ]
+      },
+      "emit" => %{
+        name: "emit",
+        about: "Append an injectable command to a durable EVENTS log",
+        long_about:
+          "Only command types marked injectable in the catalog are accepted. The Event Core validates the payload, assigns identity and sequence, and prints the stored envelope as JSON.",
+        arg_required_else_help: true,
+        args: [
+          %{
+            name: :type,
+            metavar: "type",
+            required: true,
+            variadic: false,
+            help: "Command type from the catalog marked injectable"
+          }
+        ],
+        flags: [
+          flag("db", long: "db", value: "file", help: "SQLite file with the EVENTS log"),
+          flag("payload", long: "payload", value: "json", help: "Payload as a JSON object"),
+          flag("idempotency_key",
+            long: "idempotency-key",
+            value: "key",
+            help: "Stable key so retries do not duplicate the command"
+          ),
+          flag("correlation_id",
+            long: "correlation-id",
+            value: "id",
+            help: "Join an existing correlation"
+          ),
+          flag("work_item_id",
+            long: "work-item-id",
+            value: "id",
+            help: "Target work item (default: new)"
+          )
+        ],
+        examples: [
+          {"omunculus emit task.requested --db ./spike.sqlite3 --payload '{\"instruction\":\"conte até 3\"}'",
+           nil, nil}
+        ]
+      },
+      "config" => %{
+        name: "config",
+        about: "Validate configuration",
+        long_about:
+          "check loads the configuration and validates [[interceptors]] and [[automations]] against the event catalog and the loaded modules.",
+        arg_required_else_help: true,
+        args: [
+          %{name: :action, metavar: "action", required: true, variadic: false, help: "check"}
+        ],
+        flags: [
+          flag("config", long: "config", value: "file", help: "Config file to validate")
+        ],
+        examples: [{"omunculus config check --config ./omunculus.toml", nil, nil}]
       },
       "benchmark" => %{
         name: "benchmark",

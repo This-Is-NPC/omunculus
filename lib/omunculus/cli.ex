@@ -31,6 +31,15 @@ defmodule Omunculus.CLI do
       {:ok, %{command: :spike} = parsed} ->
         Omunculus.CLI.Spike.run(parsed, env)
 
+      {:ok, %{command: :events} = parsed} ->
+        Omunculus.CLI.Events.events(parsed)
+
+      {:ok, %{command: :emit} = parsed} ->
+        Omunculus.CLI.Events.emit(parsed, env)
+
+      {:ok, %{command: :config} = parsed} ->
+        Omunculus.CLI.Events.config(parsed, env)
+
       {:error, reason} ->
         IO.puts(:stderr, Help.usage_error(reason))
         2

@@ -201,6 +201,16 @@ defmodule Omunculus.CLI.Help do
   defp describe({:invalid_delay, raw}),
     do: {"error: invalid delay #{inspect(raw)}", "Use a duration such as 500ms, 2s, or 10."}
 
+  defp describe({:unknown_event_type, type}),
+    do:
+      {"error: unknown event type #{inspect(type)}",
+       "Run 'omunculus events catalog' to list the types."}
+
+  defp describe({:not_injectable, type}),
+    do:
+      {"error: #{type} cannot be emitted from outside",
+       "Only commands marked injectable in the catalog are accepted."}
+
   defp describe({:invalid_flag_value, flag, raw}),
     do: {"error: invalid value #{inspect(raw)} for #{flag}", "Use a non-negative integer."}
 
