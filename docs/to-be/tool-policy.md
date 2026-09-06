@@ -176,6 +176,68 @@ Se uma versão nova do harness adiciona uma tool ao catálogo, toda entrada em
   versão do catálogo entram como **proibidas** nas entradas `allow`, e
   `config check` avisa. Subir o pin é a decisão humana de aceitar as novas.
 
+## Quando e onde o conjunto é montado
+
+Hoje a lista de tools nasce dentro do `Agent`, a partir do preset ou da flag,
+no momento em que a Run começa. No alvo ela é resolvida **antes de qualquer
+Run**, uma única vez por processo, a partir do arquivo de configuração, para
+todas as combinações de perfil × depth × workspace. Uma Run em qualquer
+profundidade só consulta a tabela; nunca calcula.
+
+```mermaid
+flowchart TD
+    subgraph startup["Inicialização (antes do Event Core aceitar comandos)"]
+        F1["~/.omunculus/config.toml"] --> M["merge por chave<br/>(o arquivo mais específico substitui a entrada inteira)"]
+        F2["omunculus.toml do projeto"] --> M
+        F3["--config"] --> M
+        M --> N["normalização<br/>modos → faixas explícitas<br/>grupos → tools<br/>tools_catalog pin → tools novas proibidas em allow"]
+        C["catálogo de tools<br/>(módulos + grupos)"] --> N
+        N --> V{"config check<br/>nomes existem? perfil cabe em algum teto?"}
+        V -->|erro| X["processo não sobe"]
+        V -->|ok| T["Tabela de política<br/>uma linha por perfil × depth × workspace<br/>granted · negotiable · human · forbidden"]
+        T --> L["policy.loaded no log<br/>(tabela + hash)"]
+    end
+    subgraph run["Cada Run (qualquer depth)"]
+        RT["Runtime: linha(perfil da tarefa, depth do node, workspace do node)"]
+        RT --> PA["∩ autoridade do pai<br/>(só em delegação)"]
+        PA --> RS["run.started.tools (faixas pinadas)"]
+        RS --> AG["Agent recebe granted<br/>+ request_permission se negotiable ∪ human ≠ ∅"]
+        AG --> SC["schemas = Tools.schemas(granted ∪ concessões ativas)<br/>recalculado a cada rodada"]
+        SC --> PV["POST /chat/completions · \"tools\": [...]"]
+    end
+    L --> RT
+```
+
+Regras:
+
+1. **A tabela é imutável durante o processo.** Mudar o config exige
+   reiniciar; a mudança fica registrada porque o próximo `policy.loaded` tem
+   outro hash. Uma sessão pode ter vários `policy.loaded` ao longo da vida;
+   cada Run referencia o hash vigente quando nasceu.
+2. **Replay não lê arquivo.** `ToolGate`, retomada e reconstrução de
+   projeções leem `policy.loaded` e `run.started` do log. O TOML é a fonte
+   de edição; o log é a fonte de execução.
+3. **Depth não entra na conta do Agent.** O Agent recebe uma lista pronta.
+   Quem sabe de depth, workspace e perfil é o Runtime, no momento de abrir a
+   Run, e o que ele sabe vem da tabela e do `task.delegated` do pai.
+4. **`--tools` vira estreitamento ad hoc.** A flag antiga continua existindo,
+   mas só como perfil anônimo: precisa caber em `granted` da linha
+   resolvida, senão é erro de uso. Nunca amplia.
+5. **A configuração Agent não lista tools.** `[agents.concierge]` e
+   `[agents.worker]` trazem modelo, prompt e budget; a sessão atribui agente
+   por depth (`depth0 = "concierge"`, `depth2 = "worker"`); tools vêm da
+   tabela. É o que faz a mesma configuração servir a qualquer posição.
+6. **Schemas são recalculados por rodada.** `Tools.schemas` roda sobre
+   `granted ∪ concessões ativas` antes de cada chamada ao provider, porque
+   uma concessão de [permission-negotiation.md](permission-negotiation.md)
+   pode chegar entre rodadas. É a única parte dinâmica, e ela também vem do
+   log.
+
+O que muda no código de hoje: `Config.resolve` passa a produzir a tabela em
+vez de uma lista; `Runtime.start_run` consulta a tabela e pina em
+`run.started`; `SpikeAgents` deixa de decidir tools por depth; o `Agent`
+troca `state.schemas` fixo por um cálculo por rodada sobre `state.tools`.
+
 ## Onde a permissão é aplicada
 
 A lista de schemas enviada ao modelo **não é** a barreira. São três
