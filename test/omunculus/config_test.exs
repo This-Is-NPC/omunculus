@@ -14,7 +14,7 @@ defmodule Omunculus.ConfigTest do
 
     assert {:ok, session} = Config.resolve(config, %{})
     assert session.chat.base_url == "http://127.0.0.1:52625/v1"
-    assert session.chat.model == "qwen3.5:9b"
+    assert session.chat.model == "qwen3.5:4b"
     assert session.chat.auth == "none"
     assert session.output.timestamp_format == "%d/%m/%Y %H:%M:%S"
   end
@@ -29,7 +29,7 @@ defmodule Omunculus.ConfigTest do
 
     assert {:ok, session} = Config.resolve(config, %{})
     assert session.chat.base_url == "https://openrouter.ai/api/v1"
-    assert session.chat.model == "z-ai/glm-5.2:free"
+    assert session.chat.model == "google/gemma-4-31b-it:free"
     assert session.chat.auth == "api_key"
     assert session.chat.api_key == "secret-value"
     assert session.output.timestamp_format == "%d/%m/%Y %H:%M:%S"
