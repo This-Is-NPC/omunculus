@@ -1,4 +1,4 @@
-Status: TO-BE — planejado, validado
+Status: TO-BE — faixas, modos, grupos, tabela perfil × depth × workspace, policy.loaded, ToolGate e --profile validados; times, may_request/origin e --workspace ainda proposta
 
 # Política de tools: teto, perfil, workspace e modos
 
