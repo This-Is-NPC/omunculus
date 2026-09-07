@@ -2,7 +2,7 @@
 api = "openai-completions"
 auth = "api_key"
 base_url = "https://openrouter.ai/api/v1"
-model = "google/gemma-4-31b-it:free"
+model = "deepseek/deepseek-v4-flash-0731"
 api_key = "${OPENROUTER_API_KEY}"
 
 [defaults]
