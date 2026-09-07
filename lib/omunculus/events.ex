@@ -89,14 +89,25 @@ defmodule Omunculus.Events do
       injectable: false,
       doc: "Tool result and checkpoint of the Run's tool state."
     },
+    "policy.loaded" => %{
+      kind: :event,
+      versions: ["1"],
+      required: ["hash"],
+      emitted_by: ["Runtime"],
+      interceptable: false,
+      injectable: false,
+      doc:
+        "The active policy table changed; pins tool access for subsequent runs. Payload may also include a table snapshot."
+    },
     "run.started" => %{
       kind: :event,
       versions: ["1"],
-      required: ["attempt", "depth", "agent_id", "agent_kind", "reason"],
+      required: ["attempt", "depth", "agent_id", "agent_kind", "reason", "tools"],
       emitted_by: ["Run"],
       interceptable: false,
       injectable: false,
-      doc: "A durable attempt begins; ARCHIVE_RUNS row is created from it."
+      doc:
+        "A durable attempt begins; ARCHIVE_RUNS row is created from it. The tools field pins granted, negotiable, human, and forbidden bands for the Run."
     },
     "run.completed" => %{
       kind: :event,

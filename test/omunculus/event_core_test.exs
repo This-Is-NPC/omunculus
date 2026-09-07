@@ -5,6 +5,13 @@ defmodule Omunculus.EventCoreTest do
   alias Omunculus.EventCore
   alias Omunculus.EventCore.Projector
 
+  @empty_tools %{
+    "granted" => [],
+    "negotiable" => [],
+    "human" => [],
+    "forbidden" => []
+  }
+
   setup do
     {:ok, core} = EventCore.start_link(path: ":memory:")
     {:ok, projector} = Projector.start_link(core: core)
@@ -106,7 +113,8 @@ defmodule Omunculus.EventCoreTest do
             depth: 0,
             agent_id: "a",
             agent_kind: "worker",
-            reason: "initial"
+            reason: "initial",
+            tools: @empty_tools
           }
         )
       )
@@ -177,7 +185,8 @@ defmodule Omunculus.EventCoreTest do
           depth: 0,
           agent_id: "a",
           agent_kind: "concierge",
-          reason: "initial"
+          reason: "initial",
+          tools: @empty_tools
         }
       )
     )

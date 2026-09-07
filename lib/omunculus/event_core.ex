@@ -290,8 +290,9 @@ defmodule Omunculus.EventCore do
 
   defp run_lane([interceptor | rest], env, state) do
     stats = state.interceptor_stats
+    options = Map.put(interceptor.options || %{}, :conn, state.conn)
 
-    case interceptor.module.intercept(env, interceptor.options) do
+    case interceptor.module.intercept(env, options) do
       :deliver ->
         stats = bump(stats, interceptor.name, :evaluated) |> bump(interceptor.name, :delivered)
         run_lane(rest, env, %{state | interceptor_stats: stats})
