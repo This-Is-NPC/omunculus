@@ -130,6 +130,8 @@ defmodule Omunculus.EventCore.Projector do
   # Every reducer is a pure function of (projection row, envelope). Stale or
   # out-of-order deliveries become no-ops via `last_sequence` / status checks.
 
+  defp apply_event(_conn, %{type: "task.requested", payload: %{"requested_by" => _}}), do: :ok
+
   defp apply_event(conn, %{type: "task.requested"} = env) do
     p = env.payload
     workspace_id = p["workspace"]
@@ -180,6 +182,14 @@ defmodule Omunculus.EventCore.Projector do
       "INSERT OR IGNORE INTO WORK_ITEM_DEPENDENCIES (project_id, work_item_id, depends_on_work_item_id, last_sequence) VALUES (?, ?, ?, ?)",
       [env.project_id, env.work_item_id, child, env.sequence]
     )
+
+    if requester = p["requester_work_item_id"] do
+      Store.query(
+        conn,
+        "INSERT OR IGNORE INTO WORK_ITEM_DEPENDENCIES (project_id, work_item_id, depends_on_work_item_id, last_sequence) VALUES (?, ?, ?, ?)",
+        [env.project_id, requester, child, env.sequence]
+      )
+    end
 
     child_workspace = p["workspace"] || env.workspace_id
 

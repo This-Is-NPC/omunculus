@@ -466,16 +466,20 @@ defmodule Omunculus.Runtime.SpikeAgents do
     case opts[:script] do
       fun when is_function(fun, 5) ->
         turns =
-          if Map.get(ctx, :reason) == "arbitration" do
-            fun.(agent_id, ctx.depth, ctx[:workspace], ctx[:team], "arbitration")
+          if Map.get(ctx, :reason) == "arbitration" and Map.get(ctx, :cross_lineage_arbitration) do
+            fun.(agent_id, ctx.depth, ctx[:workspace], ctx[:team], "cross_lineage")
           else
-            fun.(
-              agent_id,
-              ctx.depth,
-              ctx[:workspace],
-              ctx[:team],
-              Map.get(ctx, :reason, "initial")
-            )
+            if Map.get(ctx, :reason) == "arbitration" do
+              fun.(agent_id, ctx.depth, ctx[:workspace], ctx[:team], "arbitration")
+            else
+              fun.(
+                agent_id,
+                ctx.depth,
+                ctx[:workspace],
+                ctx[:team],
+                Map.get(ctx, :reason, "initial")
+              )
+            end
           end
 
         turns =
@@ -489,29 +493,44 @@ defmodule Omunculus.Runtime.SpikeAgents do
         Fake.new(turns)
 
       fun when is_function(fun, 4) ->
-        if Map.get(ctx, :reason) == "arbitration" do
-          Fake.new([
-            Fake.tool_call("grant", %{"reason" => "allowed"}, "call_grant"),
-            Fake.text("granted")
-          ])
-        else
-          if Map.get(ctx, :reason) in ["continuation", "retry"] and ctx.depth == 0 and
-               checkpoint_has_delegate_observation?(ctx) do
+        cond do
+          Map.get(ctx, :reason) == "arbitration" and Map.get(ctx, :cross_lineage_arbitration) ->
+            Fake.new([
+              Fake.tool_call("forward", %{}, "call_forward"),
+              Fake.text("forwarded")
+            ])
+
+          Map.get(ctx, :reason) == "arbitration" ->
+            Fake.new([
+              Fake.tool_call("grant", %{"reason" => "allowed"}, "call_grant"),
+              Fake.text("granted")
+            ])
+
+          Map.get(ctx, :reason) in ["continuation", "retry"] and ctx.depth == 0 and
+              checkpoint_has_delegate_observation?(ctx) ->
             Fake.new([fn messages -> Fake.text(delegate_result(messages)) end])
-          else
+
+          true ->
             Fake.for_node(fun, agent_id, ctx.depth, ctx[:workspace], ctx[:team])
-          end
         end
 
       _ ->
         turns =
-          if Map.get(ctx, :reason) == "arbitration" do
-            [
-              Fake.tool_call("grant", %{"reason" => "allowed"}, "call_grant"),
-              Fake.text("granted")
-            ]
-          else
-            default_turns
+          cond do
+            Map.get(ctx, :reason) == "arbitration" and Map.get(ctx, :cross_lineage_arbitration) ->
+              [
+                Fake.tool_call("forward", %{}, "call_forward"),
+                Fake.text("forwarded")
+              ]
+
+            Map.get(ctx, :reason) == "arbitration" ->
+              [
+                Fake.tool_call("grant", %{"reason" => "allowed"}, "call_grant"),
+                Fake.text("granted")
+              ]
+
+            true ->
+              default_turns
           end
 
         Fake.new(turns)

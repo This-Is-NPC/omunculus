@@ -181,6 +181,13 @@ defmodule Omunculus.Runtime do
     })
   end
 
+  defp activate(
+         %Envelope{kind: :event, type: "task.requested", payload: %{"requested_by" => _}} = env,
+         state
+       ) do
+    route_request_work(state, env)
+  end
+
   defp activate(%Envelope{kind: :command, type: "task.resumed"} = env, state) do
     case derive_resume(state.core, env.work_item_id) do
       {:ok, spec} ->
@@ -281,6 +288,13 @@ defmodule Omunculus.Runtime do
     end)
   end
 
+  defp activate(
+         %Envelope{type: "run.completed", payload: %{"cross_lineage_denied" => reason}} = env,
+         state
+       ) do
+    maybe_reopen_cross_lineage_denial(state, env, reason)
+  end
+
   defp activate(%Envelope{type: "run.completed", payload: %{"outcome" => "waiting"}} = env, state) do
     awaiting = env.payload["awaiting"] || []
 
@@ -321,7 +335,8 @@ defmodule Omunculus.Runtime do
         policy_hash: policy_hash,
         request_permission: request_permission,
         max_depth: state.max_depth,
-        reason: Map.get(spec, :reason, "initial")
+        reason: Map.get(spec, :reason, "initial"),
+        directory_scope: Map.get(agent, :directory_scope)
       })
       |> Map.merge(Map.new(state.run_opts))
       |> Map.to_list()
@@ -557,7 +572,9 @@ defmodule Omunculus.Runtime do
       workspace: Map.get(spec, :workspace, spec.activation.workspace_id),
       team: Map.get(spec, :team, spec.activation.payload["team"]),
       agent: Map.get(spec, :agent, spec.activation.payload["agent"]),
-      reason: Map.get(spec, :reason, "initial")
+      reason: Map.get(spec, :reason, "initial"),
+      cross_lineage_arbitration: Map.get(spec, :cross_lineage_arbitration),
+      cross_lineage_request: Map.get(spec, :cross_lineage_request)
     }
 
     case loaded do
@@ -608,13 +625,32 @@ defmodule Omunculus.Runtime do
 
     tool_options = Map.merge(Map.get(agent, :tool_options) || %{}, snapshot)
 
-    tool_options =
-      case Map.get(spec, :roots) do
-        roots when is_list(roots) and roots != [] -> Map.put(tool_options, :roots, roots)
-        _ -> tool_options
-      end
+    directory_scope =
+      Map.get(loaded, :policy, %{})
+      |> Map.get(to_string(spec.depth), %{})
+      |> Policy.directory_scope()
 
-    Map.put(agent, :tool_options, tool_options)
+    tool_options =
+      tool_options
+      |> Map.put(:directory_scope, directory_scope)
+      |> Map.put(:team, Map.get(spec, :team))
+      |> then(fn opts ->
+        case Map.get(spec, :roots) do
+          roots when is_list(roots) and roots != [] -> Map.put(opts, :roots, roots)
+          _ -> opts
+        end
+      end)
+
+    agent =
+      agent
+      |> Map.put(:tool_options, tool_options)
+      |> Map.put(:directory_scope, directory_scope)
+
+    if "directory" in (agent.tools || []) do
+      Map.put(agent, :tool_options, Map.put(agent.tool_options, :core, state.core))
+    else
+      agent
+    end
   end
 
   defp bands_from_tools(tools) do
@@ -1684,5 +1720,283 @@ defmodule Omunculus.Runtime do
           _ -> nil
         end
     end
+  end
+
+  defp route_request_work(state, env) do
+    loaded = loaded_config(state)
+    mode = cross_lineage_mode(loaded)
+    requester_wi = env.work_item_id
+    lca_wi = lca_work_item_id(state.core, requester_wi, env.payload)
+
+    case mode do
+      "mediated" -> start_cross_lineage_arbitration(state, env, lca_wi, loaded)
+      _ -> forward_request_work(state, env, lca_wi, env.payload["instruction"])
+    end
+  end
+
+  defp cross_lineage_mode(nil), do: "routed"
+
+  defp cross_lineage_mode(loaded) do
+    loaded.session[:cross_lineage] || loaded.session["cross_lineage"] || "routed"
+  end
+
+  defp forward_request_work(state, env, lca_wi, instruction) do
+    payload = env.payload
+
+    with %Envelope{payload: lca_start, run_id: lca_run_id} <- last_run_started(state.core, lca_wi) do
+      delegated =
+        Envelope.event("task.delegated",
+          correlation_id: env.correlation_id,
+          causation_id: env.event_id,
+          session_id: env.session_id,
+          workspace_id: payload["workspace"] || env.workspace_id,
+          project_id: env.project_id,
+          work_item_id: lca_wi,
+          run_id: lca_run_id,
+          payload: %{
+            "instruction" => instruction,
+            "child_work_item_id" => payload["child_work_item_id"],
+            "to_depth" => target_depth(payload, lca_start["depth"]),
+            "parent_run_id" => lca_start["parent_run_id"],
+            "originating_run_id" => lca_start["originating_run_id"],
+            "team" => payload["team"],
+            "agent" => payload["agent"],
+            "workspace" => payload["workspace"],
+            "requested_by" => payload["requested_by"],
+            "requester_work_item_id" => payload["requester_work_item_id"] || requester_wi(env)
+          }
+        )
+
+      EventCore.append!(state.core, delegated)
+    end
+
+    state
+  end
+
+  defp requester_wi(env), do: env.work_item_id
+
+  defp target_depth(payload, lca_depth) do
+    cond do
+      is_binary(payload["agent"]) and payload["agent"] != "" -> lca_depth + 1
+      true -> max(lca_depth + 1, 1)
+    end
+  end
+
+  defp lca_work_item_id(core, requester_wi, payload) do
+    requester_team = work_item_team(core, requester_wi)
+    requester_ws = work_item_workspace(core, requester_wi)
+    target_ws = payload["workspace"] || requester_ws
+    target_team = payload["team"]
+    target_agent = payload["agent"]
+
+    cond do
+      is_binary(target_ws) and is_binary(requester_ws) and target_ws != requester_ws ->
+        root_work_item_id(core, requester_wi)
+
+      is_binary(target_team) and target_team != "" and target_team != requester_team ->
+        root_work_item_id(core, requester_wi)
+
+      is_binary(target_agent) and target_agent != "" ->
+        parent_work_item_id(core, requester_wi) || root_work_item_id(core, requester_wi)
+
+      true ->
+        root_work_item_id(core, requester_wi)
+    end
+  end
+
+  defp root_work_item_id(core, work_item_id) do
+    case parent_chain(core, work_item_id) do
+      [] -> work_item_id
+      chain -> List.last(chain)
+    end
+  end
+
+  defp parent_chain(core, work_item_id) do
+    Stream.unfold(work_item_id, fn wi ->
+      case parent_work_item_id(core, wi) do
+        nil -> nil
+        parent -> {parent, parent}
+      end
+    end)
+    |> Enum.to_list()
+  end
+
+  defp work_item_team(core, work_item_id) do
+    case last_run_started(core, work_item_id) do
+      %Envelope{payload: %{"team" => team}} when is_binary(team) -> team
+      _ -> nil
+    end
+  end
+
+  defp work_item_workspace(core, work_item_id) do
+    case EventCore.query(core, "SELECT workspace_id FROM WORK_ITEMS WHERE work_item_id = ?", [
+           work_item_id
+         ]) do
+      [[ws]] when is_binary(ws) ->
+        ws
+
+      _ ->
+        case last_run_started(core, work_item_id) do
+          %Envelope{payload: %{"workspace" => ws}} when is_binary(ws) -> ws
+          _ -> nil
+        end
+    end
+  end
+
+  defp last_run_started(core, work_item_id) do
+    EventCore.stream(core, 0, work_item_id: work_item_id, type: "run.started") |> List.last()
+  end
+
+  defp start_cross_lineage_arbitration(state, env, lca_wi, loaded) do
+    with %Envelope{payload: lca_start} <- last_run_started(state.core, lca_wi) do
+      instruction = cross_lineage_arbitration_instruction(env)
+
+      attempt =
+        EventCore.stream(state.core, 0, work_item_id: lca_wi, type: "run.started")
+        |> length()
+        |> Kernel.+(1)
+
+      spec = %{
+        activation: env,
+        work_item_id: lca_wi,
+        correlation_id: env.correlation_id,
+        depth: lca_start["depth"],
+        attempt: attempt,
+        instruction: instruction,
+        parent_run_id: lca_start["parent_run_id"],
+        originating_run_id: lca_start["originating_run_id"],
+        checkpoint: %{},
+        project_id: env.project_id,
+        session_id: env.session_id,
+        workspace: lca_start["workspace"],
+        workspace_id:
+          if(lca_start["depth"] > 0,
+            do: lca_start["workspace"] || env.workspace_id,
+            else: nil
+          ),
+        node_id: lca_start["node_id"],
+        team: lca_start["team"],
+        reason: "arbitration",
+        cross_lineage_arbitration: true,
+        cross_lineage_request: env,
+        cross_lineage_instruction: env.payload["instruction"],
+        request_permission: false
+      }
+
+      ctx = agent_context(state, spec, loaded)
+      agent = state.agents.(ctx)
+      agent = %{agent | tools: ["forward", "rewrite", "deny"]}
+      bands = cross_lineage_arbitration_bands()
+
+      start_run_with_agent(state, spec, agent, bands, nil, false)
+    else
+      _ -> state
+    end
+  end
+
+  defp cross_lineage_arbitration_instruction(env) do
+    payload = env.payload
+
+    """
+    A cross-lineage work request needs mediation.
+    Instruction: #{payload["instruction"]}
+    Target team: #{payload["team"] || "-"}
+    Target agent: #{payload["agent"] || "-"}
+    Use forward, rewrite, or deny.
+    """
+  end
+
+  defp cross_lineage_arbitration_bands do
+    %{
+      "granted" => ["forward", "rewrite", "deny"],
+      "negotiable" => [],
+      "human" => [],
+      "forbidden" => []
+    }
+  end
+
+  defp maybe_reopen_cross_lineage_denial(state, env, reason) do
+    req = find_cross_lineage_request(state.core, env)
+
+    with %Envelope{} = req,
+         requester_wi <- req.payload["requester_work_item_id"] || req.work_item_id,
+         {:ok, _parent_wi, run_completed} <-
+           find_parent_waiter(state.core, req.payload["child_work_item_id"]) do
+      child_id = to_string(req.payload["child_work_item_id"])
+      checkpoint = run_completed.payload["checkpoint"] || %{}
+      awaiting = checkpoint["awaiting"] || []
+
+      if child_id in Enum.map(awaiting, &to_string/1) do
+        observation = %{
+          "role" => "tool",
+          "tool_call_id" => cross_lineage_tool_call_id(checkpoint),
+          "content" => "Cross-lineage request denied: #{reason}"
+        }
+
+        new_checkpoint =
+          checkpoint
+          |> Map.put("messages", (checkpoint["messages"] || []) ++ [observation])
+          |> Map.put("awaiting", Enum.reject(awaiting, &(to_string(&1) == child_id)))
+
+        reopen_requester_after_denial(state, req, requester_wi, new_checkpoint)
+      else
+        state
+      end
+    else
+      _ -> state
+    end
+  end
+
+  defp find_cross_lineage_request(core, arbitration_env) do
+    EventCore.stream(core, 0,
+      correlation_id: arbitration_env.correlation_id,
+      type: "task.requested"
+    )
+    |> Enum.find(fn env -> Map.has_key?(env.payload, "requested_by") end)
+  end
+
+  defp cross_lineage_tool_call_id(checkpoint) do
+    pending = checkpoint["pending"] || %{}
+
+    Map.get(pending, "request_work") ||
+      Map.get(pending, :request_work) ||
+      Map.values(pending) |> List.first() ||
+      "call_request_work"
+  end
+
+  defp reopen_requester_after_denial(state, causation_env, work_item_id, checkpoint) do
+    last_start =
+      EventCore.stream(state.core, 0, work_item_id: work_item_id, type: "run.started")
+      |> List.last()
+
+    attempt =
+      EventCore.stream(state.core, 0, work_item_id: work_item_id, type: "run.started")
+      |> length()
+      |> Kernel.+(1)
+
+    activation = find_activation(state.core, work_item_id)
+
+    start_run(state, %{
+      activation: causation_env,
+      work_item_id: work_item_id,
+      correlation_id: causation_env.correlation_id,
+      depth: last_start.payload["depth"],
+      attempt: attempt,
+      instruction: activation_instruction(activation),
+      parent_run_id: last_start.payload["parent_run_id"],
+      originating_run_id: last_start.payload["originating_run_id"],
+      checkpoint: checkpoint,
+      project_id: causation_env.project_id,
+      session_id: causation_env.session_id,
+      workspace: last_start.payload["workspace"],
+      workspace_id:
+        if(last_start.payload["depth"] > 0,
+          do: last_start.payload["workspace"] || causation_env.workspace_id,
+          else: nil
+        ),
+      node_id: last_start.payload["node_id"],
+      team: last_start.payload["team"],
+      reason: "continuation"
+    })
   end
 end

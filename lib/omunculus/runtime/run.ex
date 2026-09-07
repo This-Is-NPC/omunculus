@@ -103,14 +103,23 @@ defmodule Omunculus.Runtime.Run do
       end
 
     opts =
-      if state[:arbitration] do
-        Keyword.merge(opts,
-          schemas: arbitration_schemas(),
-          tools: ["grant", "deny", "escalate"],
-          request_permission: false
-        )
-      else
-        opts
+      cond do
+        state[:cross_lineage_arbitration] ->
+          Keyword.merge(opts,
+            schemas: cross_lineage_arbitration_schemas(),
+            tools: ["forward", "rewrite", "deny"],
+            request_permission: false
+          )
+
+        state[:arbitration] ->
+          Keyword.merge(opts,
+            schemas: arbitration_schemas(),
+            tools: ["grant", "deny", "escalate"],
+            request_permission: false
+          )
+
+        true ->
+          opts
       end
 
     outcome = Agent.run(opts)
@@ -162,49 +171,71 @@ defmodule Omunculus.Runtime.Run do
   end
 
   defp finish_completed(state, result) do
-    if state[:arbitration] do
-      restore = state[:arbitration_restore] || %{awaiting: [], checkpoint: %{}}
+    if state[:cross_lineage_arbitration] do
+      payload =
+        cond do
+          reason = Process.get(:cross_lineage_denied) ->
+            %{outcome: "completed", cross_lineage_denied: reason}
 
-      append!(
-        state,
-        :event,
-        "run.completed",
-        %{
-          outcome: "waiting",
-          awaiting: restore[:awaiting] || restore["awaiting"] || [],
-          checkpoint: restore[:checkpoint] || restore["checkpoint"] || %{},
+          Process.get(:cross_lineage_forwarded) ->
+            %{outcome: "completed", cross_lineage_forwarded: true}
+
+          true ->
+            %{outcome: "completed"}
+        end
+        |> Map.merge(%{
           rounds: result.turns,
           tool_calls: result.tool_calls,
           usage: result.usage
-        },
-        Process.get(:chain_head)
-      )
-
-      {:stop, :normal, state}
-    else
-      completed =
-        append!(state, :event, "task.completed", %{
-          result: result.assistant_text,
-          depth: state.depth,
-          rounds: result.turns,
-          tool_calls: result.tool_calls
         })
 
-      append!(
-        state,
-        :event,
-        "run.completed",
-        %{
-          outcome: "completed",
-          awaiting: [],
-          rounds: result.turns,
-          tool_calls: result.tool_calls,
-          usage: result.usage
-        },
-        completed.event_id
-      )
-
+      append!(state, :event, "run.completed", payload, Process.get(:chain_head))
       {:stop, :normal, state}
+    else
+      if state[:arbitration] do
+        restore = state[:arbitration_restore] || %{awaiting: [], checkpoint: %{}}
+
+        append!(
+          state,
+          :event,
+          "run.completed",
+          %{
+            outcome: "waiting",
+            awaiting: restore[:awaiting] || restore["awaiting"] || [],
+            checkpoint: restore[:checkpoint] || restore["checkpoint"] || %{},
+            rounds: result.turns,
+            tool_calls: result.tool_calls,
+            usage: result.usage
+          },
+          Process.get(:chain_head)
+        )
+
+        {:stop, :normal, state}
+      else
+        completed =
+          append!(state, :event, "task.completed", %{
+            result: result.assistant_text,
+            depth: state.depth,
+            rounds: result.turns,
+            tool_calls: result.tool_calls
+          })
+
+        append!(
+          state,
+          :event,
+          "run.completed",
+          %{
+            outcome: "completed",
+            awaiting: [],
+            rounds: result.turns,
+            tool_calls: result.tool_calls,
+            usage: result.usage
+          },
+          completed.event_id
+        )
+
+        {:stop, :normal, state}
+      end
     end
   end
 
@@ -217,6 +248,12 @@ defmodule Omunculus.Runtime.Run do
     if "delegate" in active, do: delegate(state, args, context), else: {:error, :denied, context}
   end
 
+  defp execute_tool(state, "request_work", args, context, active) do
+    if "request_work" in active,
+      do: request_work(state, args, context),
+      else: {:error, :denied, context}
+  end
+
   defp execute_tool(state, "request_permission", args, context, _active) do
     request_permission(state, args, context)
   end
@@ -225,6 +262,13 @@ defmodule Omunculus.Runtime.Run do
        when tool in ["grant", "deny", "escalate"] do
     if state[:arbitration],
       do: arbitration_tool(state, tool, args, context),
+      else: {:error, :denied, context}
+  end
+
+  defp execute_tool(state, tool, args, context, _active)
+       when tool in ["forward", "rewrite", "deny"] do
+    if state[:cross_lineage_arbitration],
+      do: cross_lineage_tool(state, tool, args, context),
       else: {:error, :denied, context}
   end
 
@@ -318,6 +362,44 @@ defmodule Omunculus.Runtime.Run do
       {:rejected, rejection} ->
         Process.put(:chain_head, rejection.event_id)
         {:error, {:delegation_rejected, rejection.payload["reason"]}, context}
+    end
+  end
+
+  defp request_work(state, args, context) do
+    child = Envelope.generate_id("wi")
+    instruction = args["instruction"] || args[:instruction]
+
+    payload =
+      %{
+        instruction: instruction,
+        requested_by: "run:" <> state.run_id,
+        child_work_item_id: child,
+        requester_work_item_id: state.work_item_id,
+        workspace: args["workspace"] || args[:workspace],
+        team: args["team"] || args[:team],
+        agent: args["agent"] || args[:agent]
+      }
+      |> drop_nil_fields()
+
+    requested =
+      append!(
+        state,
+        :event,
+        "task.requested",
+        payload,
+        nil,
+        idempotency_key: "request_work:" <> child
+      )
+
+    case await_delivery_or_rejection(requested.event_id) do
+      :ok ->
+        children = Process.get(:awaiting_children, [])
+        Process.put(:awaiting_children, children ++ [child])
+        {:wait, "request_work", context}
+
+      {:rejected, rejection} ->
+        Process.put(:chain_head, rejection.event_id)
+        {:error, {:request_work_rejected, rejection.payload["reason"]}, context}
     end
   end
 
@@ -469,6 +551,59 @@ defmodule Omunculus.Runtime.Run do
     {:ok, "escalated", context}
   end
 
+  defp cross_lineage_tool(state, "forward", _args, context) do
+    instruction = state[:cross_lineage_instruction]
+    cross_lineage_delegate(state, instruction, context)
+  end
+
+  defp cross_lineage_tool(state, "rewrite", args, context) do
+    instruction = args["instruction"] || args[:instruction]
+    cross_lineage_delegate(state, instruction, context)
+  end
+
+  defp cross_lineage_tool(_state, "deny", args, context) do
+    reason = args["reason"] || args[:reason] || "denied"
+    Process.put(:cross_lineage_denied, reason)
+    {:ok, "denied", context}
+  end
+
+  defp cross_lineage_delegate(state, instruction, context) do
+    req = state[:cross_lineage_request]
+    payload = req.payload
+
+    delegated =
+      append!(
+        state,
+        :event,
+        "task.delegated",
+        %{
+          instruction: instruction,
+          child_work_item_id: payload["child_work_item_id"],
+          to_depth: cross_lineage_target_depth(payload, state.depth),
+          parent_run_id: state.parent_run_id,
+          originating_run_id: state.originating_run_id || state.run_id,
+          team: payload["team"],
+          agent: payload["agent"],
+          workspace: payload["workspace"],
+          requested_by: payload["requested_by"],
+          requester_work_item_id: payload["requester_work_item_id"] || req.work_item_id
+        },
+        Process.get(:chain_head),
+        workspace_id: payload["workspace"]
+      )
+
+    await_delivery(delegated.event_id)
+    Process.put(:cross_lineage_forwarded, true)
+    {:ok, "forwarded", context}
+  end
+
+  defp cross_lineage_target_depth(payload, lca_depth) do
+    cond do
+      is_binary(payload["agent"]) and payload["agent"] != "" -> lca_depth + 1
+      true -> max(lca_depth + 1, 1)
+    end
+  end
+
   defp permission_tool_name(args) do
     args["tool"] || args[:tool] || args["name"] || args[:name] ||
       raise(ArgumentError, "request_permission requires tool")
@@ -481,6 +616,42 @@ defmodule Omunculus.Runtime.Run do
 
   defp maybe_put_permission_workspace(payload, workspace),
     do: Map.put(payload, :workspace, workspace)
+
+  defp cross_lineage_arbitration_schemas do
+    [
+      cross_lineage_schema(
+        "forward",
+        "Forward the cross-lineage request unchanged.",
+        []
+      ),
+      cross_lineage_schema(
+        "rewrite",
+        "Forward the request with a rewritten instruction.",
+        ["instruction"]
+      ),
+      cross_lineage_schema("deny", "Deny the cross-lineage request.", ["reason"])
+    ]
+  end
+
+  defp cross_lineage_schema(name, description, required) do
+    properties = %{
+      "reason" => %{"type" => "string", "description" => "Why this decision was made."},
+      "instruction" => %{"type" => "string", "description" => "Rewritten instruction."}
+    }
+
+    %{
+      "type" => "function",
+      "function" => %{
+        "name" => name,
+        "description" => description,
+        "parameters" => %{
+          "type" => "object",
+          "properties" => properties,
+          "required" => required
+        }
+      }
+    }
+  end
 
   defp arbitration_schemas do
     [
@@ -669,12 +840,25 @@ defmodule Omunculus.Runtime.Run do
     Disk.new(Path.expand(root))
   end
 
+  defp drop_nil_fields(map) do
+    Map.reject(map, fn {_k, v} -> is_nil(v) or v == "" end)
+  end
+
   defp tool_options_for(agent, state) do
     base = agent[:tool_options] || %{}
 
-    case state[:roots] do
-      roots when is_list(roots) and roots != [] -> Map.put(base, :roots, roots)
-      _ -> base
-    end
+    base =
+      case state[:roots] do
+        roots when is_list(roots) and roots != [] -> Map.put(base, :roots, roots)
+        _ -> base
+      end
+
+    base
+    |> maybe_put_tool_option(:directory_scope, state[:directory_scope])
+    |> maybe_put_tool_option(:team, state[:team] || state["team"])
+    |> maybe_put_tool_option(:core, state.core)
   end
+
+  defp maybe_put_tool_option(opts, _key, nil), do: opts
+  defp maybe_put_tool_option(opts, key, value), do: Map.put(opts, key, value)
 end
