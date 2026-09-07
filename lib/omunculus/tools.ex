@@ -12,8 +12,37 @@ defmodule Omunculus.Tools do
     "delegate" => Omunculus.Tools.Delegate
   }
 
+  @groups %{
+    "fs.read" => ["read", "grep", "find", "ls"],
+    "fs.write" => ["edit", "write"]
+  }
+
   def catalog, do: @catalog
+  def groups, do: @groups
+  def catalog_version, do: "1"
   def names, do: Map.keys(@catalog)
+
+  def expand(name) when is_binary(name) do
+    cond do
+      Map.has_key?(@groups, name) -> {:ok, Map.fetch!(@groups, name)}
+      Map.has_key?(@catalog, name) -> {:ok, [name]}
+      true -> {:ok, [name]}
+    end
+  end
+
+  def expand_list(names) when is_list(names) do
+    Enum.reduce_while(names, {:ok, []}, fn name, {:ok, acc} ->
+      case expand(name) do
+        {:ok, expanded} -> {:cont, {:ok, acc ++ expanded}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, names} -> {:ok, Enum.uniq(names)}
+      {:error, _} = error -> error
+    end
+  end
+
   def default_names, do: ["read", "edit", "write", "grep", "find", "ls"]
   def get(name), do: Map.get(@catalog, name)
 

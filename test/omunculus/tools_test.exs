@@ -45,6 +45,30 @@ defmodule Omunculus.ToolsTest do
     assert {:error, :overlapping_edits} = Tools.call("edit", args, fs, ["edit"])
   end
 
+  test "expand fs.read group" do
+    assert {:ok, names} = Tools.expand("fs.read")
+    assert Enum.sort(names) == ["find", "grep", "ls", "read"]
+  end
+
+  test "expand fs.write group" do
+    assert {:ok, names} = Tools.expand("fs.write")
+    assert Enum.sort(names) == ["edit", "write"]
+  end
+
+  test "expand single tool" do
+    assert {:ok, ["grep"]} = Tools.expand("grep")
+    assert {:ok, ["nope"]} = Tools.expand("nope")
+  end
+
+  test "expand_list flattens groups uniquely" do
+    assert {:ok, names} = Tools.expand_list(["fs.read", "grep"])
+    assert Enum.sort(names) == ["find", "grep", "ls", "read"]
+  end
+
+  test "catalog_version is pinned" do
+    assert Tools.catalog_version() == "1"
+  end
+
   test "counter persists its value in the tool context" do
     context =
       Omunculus.Tool.Context.new(FS.Memory.new(), %{
