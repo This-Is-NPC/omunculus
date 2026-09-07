@@ -57,7 +57,8 @@ defmodule Omunculus.Policy do
   def table(config) when is_map(config) do
     profiles = Map.keys(config.presets)
     depths = if config.policy == %{}, do: ["0", "1", "2"], else: Map.keys(config.policy)
-    workspaces = if config.workspaces == %{}, do: ["app"], else: Map.keys(config.workspaces)
+    # "default" is a placeholder until phase 4 (workspaces as session members).
+    workspaces = if config.workspaces == %{}, do: ["default"], else: Map.keys(config.workspaces)
     catalog_version = config.session[:tools_catalog]
 
     try do

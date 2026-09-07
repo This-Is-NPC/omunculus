@@ -42,6 +42,13 @@ defmodule Omunculus.PolicyTest do
     assert Policy.intersect(a, b)["granted"] == []
   end
 
+  test "table for empty config uses default synthetic workspace" do
+    table = Policy.table(Config.empty())
+
+    assert {:ok, _bands} = Policy.line(table, "coding", "0", "default")
+    refute Map.has_key?(table, {"coding", "0", "app"})
+  end
+
   test "table for simple.toml count depth 0 app grants counter not write" do
     assert {:ok, config} = Config.load(cwd: Path.dirname(@fixture), config_file: @fixture)
     table = Policy.table(config)
