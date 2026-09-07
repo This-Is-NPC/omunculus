@@ -9,6 +9,7 @@ defmodule Omunculus.CLI.Events do
   """
 
   alias Omunculus.CLI.Help
+  alias Omunculus.CLI.Session
   alias Omunculus.{Config, Events}
   alias Omunculus.Event.Envelope
   alias Omunculus.EventCore
@@ -112,7 +113,7 @@ defmodule Omunculus.CLI.Events do
   # --- follow ---------------------------------------------------------------------
 
   defp follow(flags) do
-    with {:ok, db} <- require_db(flags["db"]),
+    with {:ok, db} <- Session.db_path(flags),
          {:ok, after_seq} <- parse_after(flags["after"]) do
       types = flags["types"]
       {:ok, core} = EventCore.start_link(path: db)

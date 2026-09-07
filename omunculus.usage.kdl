@@ -99,6 +99,7 @@ cmd "events" {
   arg "<action>" help="catalog or follow"
 
   flag "--db <file>" help="SQLite file with the EVENTS log (follow)"
+  flag "--session <file>" help="Session SQLite file (default: ~/.omunculus/session.sqlite3)" env="OMUNCULUS_SESSION"
   flag "--types <types>" help="Only these event types (follow)" delimiter=","
   flag "--after <seq>" help="Start after this sequence (follow)" default="0"
   flag "--once" help="Print what exists and exit instead of following"

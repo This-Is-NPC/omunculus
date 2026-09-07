@@ -210,4 +210,42 @@ defmodule Omunculus.CLI.ParserTest do
     assert parsed.flags["workspace"] == "app"
     assert parsed.flags["detach"] == true
   end
+
+  test "send workspace session and events follow parse --session" do
+    for {command, extra_args} <- [
+          {:send, ["conte até 3"]},
+          {:workspace, ["attach", "app"]},
+          {:session, ["create", "omacon"]},
+          {:events, ["follow"]}
+        ] do
+      args = [Atom.to_string(command) | extra_args] ++ ["--session", "/tmp/session.sqlite3"]
+      assert {:ok, parsed} = Parser.parse(args, %{})
+      assert parsed.command == command
+      assert parsed.flags["session"] == "/tmp/session.sqlite3"
+    end
+  end
+
+  test "OMUNCULUS_SESSION binds send workspace session and events follow" do
+    env = %{"OMUNCULUS_SESSION" => "/tmp/from-env.sqlite3"}
+
+    for {command, extra_args} <- [
+          {:send, ["x"]},
+          {:workspace, ["attach", "app"]},
+          {:session, ["list"]},
+          {:events, ["follow"]}
+        ] do
+      args = [Atom.to_string(command) | extra_args]
+      assert {:ok, parsed} = Parser.parse(args, env)
+      assert parsed.flags["session"] == "/tmp/from-env.sqlite3"
+    end
+  end
+
+  test "argv --session beats OMUNCULUS_SESSION on send" do
+    env = %{"OMUNCULUS_SESSION" => "/tmp/from-env.sqlite3"}
+
+    assert {:ok, parsed} =
+             Parser.parse(["send", "x", "--session", "/tmp/from-argv.sqlite3"], env)
+
+    assert parsed.flags["session"] == "/tmp/from-argv.sqlite3"
+  end
 end

@@ -299,6 +299,12 @@ defmodule Omunculus.CLI.Spec do
         ],
         flags: [
           flag("db", long: "db", value: "file", help: "SQLite file with the EVENTS log (follow)"),
+          flag("session",
+            long: "session",
+            value: "file",
+            env: "OMUNCULUS_SESSION",
+            help: "Session SQLite file (default: ~/.omunculus/session.sqlite3)"
+          ),
           flag("types",
             long: "types",
             value: "types",
@@ -385,6 +391,12 @@ defmodule Omunculus.CLI.Spec do
             long: "db",
             value: "file",
             help: "Session SQLite path (default: ~/.omunculus/session.sqlite3)"
+          ),
+          flag("session",
+            long: "session",
+            value: "file",
+            env: "OMUNCULUS_SESSION",
+            help: "Session SQLite file (default: ~/.omunculus/session.sqlite3)"
           )
         ],
         examples: [
@@ -420,6 +432,12 @@ defmodule Omunculus.CLI.Spec do
             value: "file",
             help: "Session SQLite path (default: ~/.omunculus/session.sqlite3)"
           ),
+          flag("session",
+            long: "session",
+            value: "file",
+            env: "OMUNCULUS_SESSION",
+            help: "Session SQLite file (default: ~/.omunculus/session.sqlite3)"
+          ),
           flag("config", long: "config", value: "file", help: "Config file (attach)")
         ],
         examples: [
@@ -448,6 +466,12 @@ defmodule Omunculus.CLI.Spec do
             long: "db",
             value: "file",
             help: "Session SQLite path (default: ~/.omunculus/session.sqlite3)"
+          ),
+          flag("session",
+            long: "session",
+            value: "file",
+            env: "OMUNCULUS_SESSION",
+            help: "Session SQLite file (default: ~/.omunculus/session.sqlite3)"
           ),
           flag("profile",
             long: "profile",

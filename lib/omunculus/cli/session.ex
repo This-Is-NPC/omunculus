@@ -182,7 +182,7 @@ defmodule Omunculus.CLI.Session do
 
   defp session_list(flags) do
     paths =
-      [flags["db"], default_db()]
+      [flags["db"], flags["session"], default_db()]
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
 
@@ -428,11 +428,8 @@ defmodule Omunculus.CLI.Session do
     end
   end
 
-  defp db_path(flags) do
-    case flags["db"] do
-      nil -> {:ok, default_db()}
-      path -> {:ok, path}
-    end
+  def db_path(flags) do
+    {:ok, flags["db"] || flags["session"] || default_db()}
   end
 
   def default_db do
