@@ -1,5 +1,7 @@
 # Validação de aprovação parental e etapas opcionais
 
+Repetição posterior aos ajustes finais: [validação do gate com modelos reais](post-gate-validation.md).
+
 Correção do contrato em 2026-09-07. Referência:
 [trabalho, execução e aprovação](../to-be/run-report-and-break.md).
 
@@ -63,7 +65,7 @@ aprovações obsoletas e da explicitação no prompt de continuação de que os
 resultados entregues já foram aprovados. Também antecedem a separação explícita
 entre avaliação parental (`assessment`) e papel reviewer na etapa `review`;
 os nomes de eventos no JSON preservam essa versão histórica. Os ajustes finais são cobertos por
-testes controlados; não há nova campanha real após esses ajustes.
+testes controlados. A campanha posterior está no relatório vinculado no início.
 
 [Evidências sanitizadas](workflow-validation.json) incluem os resultados e
 os eventos de avaliação/transição. Não há chaves, cabeçalhos de autenticação
