@@ -62,8 +62,9 @@ defmodule Omunculus.Permission do
   def lineage_granted?(conn, work_item_id, tool) do
     ancestor_chain(conn, work_item_id)
     |> Enum.any?(fn wi ->
-      request_id = Events.request_id(grant_root(conn, wi), tool)
-      active_temporary_grant?(conn, wi, request_id)
+      root = grant_root(conn, wi)
+      request_id = Events.request_id(root, tool)
+      active_temporary_grant?(conn, root, request_id)
     end)
   end
 
