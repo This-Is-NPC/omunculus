@@ -146,6 +146,43 @@ defmodule Omunculus.Events do
       injectable: false,
       doc:
         "An interceptor blocked the delivery of an accepted envelope; the envelope stays in the log."
+    },
+    "session.created" => %{
+      kind: :command,
+      versions: ["1"],
+      required: ["session_id"],
+      emitted_by: ["CLI"],
+      interceptable: false,
+      injectable: true,
+      doc: "A durable session begins; the log is the session record."
+    },
+    "workspace.attached" => %{
+      kind: :command,
+      versions: ["1"],
+      required: ["workspace_id"],
+      emitted_by: ["CLI"],
+      interceptable: true,
+      injectable: true,
+      doc:
+        "A workspace is attached to the session with optional roots, teams, and policy overrides."
+    },
+    "workspace.detached" => %{
+      kind: :command,
+      versions: ["1"],
+      required: ["workspace_id"],
+      emitted_by: ["CLI"],
+      interceptable: true,
+      injectable: true,
+      doc: "A workspace is detached from the session without deleting its history."
+    },
+    "task.commented" => %{
+      kind: :command,
+      versions: ["1"],
+      required: ["body"],
+      emitted_by: ["CLI", "Runtime"],
+      interceptable: true,
+      injectable: true,
+      doc: "A durable comment on a Work Item; kind may be request or response for inbox flows."
     }
   }
 
