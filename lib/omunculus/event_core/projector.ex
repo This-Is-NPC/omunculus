@@ -179,7 +179,7 @@ defmodule Omunculus.EventCore.Projector do
 
     Store.query(
       conn,
-      "INSERT OR IGNORE INTO ARCHIVE_RUNS (run_id, project_id, work_item_id, attempt, depth, parent_run_id, originating_run_id, agent_id, agent_kind, trace_id, status, started_at, last_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)",
+      "INSERT OR IGNORE INTO ARCHIVE_RUNS (run_id, project_id, work_item_id, attempt, depth, parent_run_id, originating_run_id, agent_id, agent_kind, trace_id, status, reason, started_at, last_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?)",
       [
         env.run_id,
         env.project_id,
@@ -191,6 +191,7 @@ defmodule Omunculus.EventCore.Projector do
         p["agent_id"],
         p["agent_kind"],
         env.correlation_id,
+        to_string(p["reason"]),
         env.occurred_at,
         env.sequence
       ]
@@ -282,8 +283,8 @@ defmodule Omunculus.EventCore.Projector do
   defp apply_event(conn, %{type: "run.completed"} = env) do
     Store.query(
       conn,
-      "UPDATE ARCHIVE_RUNS SET status = 'completed', finished_at = ?, last_sequence = ? WHERE run_id = ? AND status = 'running' AND last_sequence < ?",
-      [env.occurred_at, env.sequence, env.run_id, env.sequence]
+      "UPDATE ARCHIVE_RUNS SET status = 'completed', outcome = ?, finished_at = ?, last_sequence = ? WHERE run_id = ? AND status = 'running' AND last_sequence < ?",
+      [to_string(env.payload["outcome"]), env.occurred_at, env.sequence, env.run_id, env.sequence]
     )
   end
 

@@ -71,6 +71,7 @@ defmodule Omunculus.EventCore.Store do
       trace_id TEXT,
       status TEXT NOT NULL,
       reason TEXT,
+      outcome TEXT,
       started_at TEXT,
       finished_at TEXT,
       last_sequence INTEGER NOT NULL DEFAULT 0

@@ -26,7 +26,8 @@ defmodule Omunculus.EventCoreTest do
     evt =
       Envelope.event("run.completed",
         correlation_id: cmd.correlation_id,
-        causation_id: cmd.event_id
+        causation_id: cmd.event_id,
+        payload: %{outcome: "completed"}
       )
 
     {:ok, %{sequence: 2}} = EventCore.append(core, evt)
@@ -71,7 +72,11 @@ defmodule Omunculus.EventCoreTest do
     e1 =
       EventCore.append!(
         core,
-        Envelope.event("run.completed", correlation_id: "c1", causation_id: c1.event_id)
+        Envelope.event("run.completed",
+          correlation_id: "c1",
+          causation_id: c1.event_id,
+          payload: %{outcome: "completed"}
+        )
       )
 
     assert [^c1, ^e1] = EventCore.stream(core, 0, correlation_id: "c1")
@@ -96,7 +101,13 @@ defmodule Omunculus.EventCoreTest do
           causation_id: cmd.event_id,
           work_item_id: "wi-1",
           run_id: "run-1",
-          payload: %{attempt: 1, depth: 0, agent_id: "a", agent_kind: "worker"}
+          payload: %{
+            attempt: 1,
+            depth: 0,
+            agent_id: "a",
+            agent_kind: "worker",
+            reason: "initial"
+          }
         )
       )
 
@@ -119,7 +130,7 @@ defmodule Omunculus.EventCoreTest do
         causation_id: done.event_id,
         work_item_id: "wi-1",
         run_id: "run-1",
-        payload: %{}
+        payload: %{outcome: "completed"}
       )
     )
 

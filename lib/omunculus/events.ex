@@ -92,7 +92,7 @@ defmodule Omunculus.Events do
     "run.started" => %{
       kind: :event,
       versions: ["1"],
-      required: ["attempt", "depth", "agent_id", "agent_kind"],
+      required: ["attempt", "depth", "agent_id", "agent_kind", "reason"],
       emitted_by: ["Run"],
       interceptable: false,
       injectable: false,
@@ -101,7 +101,7 @@ defmodule Omunculus.Events do
     "run.completed" => %{
       kind: :event,
       versions: ["1"],
-      required: [],
+      required: ["outcome"],
       emitted_by: ["Run"],
       interceptable: false,
       injectable: false,
