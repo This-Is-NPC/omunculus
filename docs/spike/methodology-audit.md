@@ -1,5 +1,10 @@
 # Auditoria da metodologia da matriz real
 
+Objetivo esclarecido após esta auditoria: o benchmark é do **harness sob
+respostas imperfeitas**, não um ranking de modelos. O
+[diagnóstico causal de resiliência](harness-resilience.md) reproduz oito
+cenários com respostas controladas e orienta a próxima campanha.
+
 Data: 2026-09-07. Escopo: runner, fixtures, resolver de agentes, loop do
 Agent e registros das 28 execuções. Esta auditoria não fez chamadas aos
 providers reais. O diagnóstico reproduzível está em
