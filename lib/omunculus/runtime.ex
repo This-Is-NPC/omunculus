@@ -18,7 +18,7 @@ defmodule Omunculus.Runtime do
   alias Omunculus.EventCore
   alias Omunculus.Event.Envelope
   alias Omunculus.Runtime.Run
-  alias Omunculus.{Config, Policy, Tools}
+  alias Omunculus.{Config, Policy}
 
   # --- API ------------------------------------------------------------------------
 
@@ -287,24 +287,13 @@ defmodule Omunculus.Runtime do
          {:ok, line_bands} <- Policy.line(table, profile, depth, workspace),
          {:ok, ceiling} <- policy_ceiling(loaded, depth, workspace),
          true <- Policy.fits_ceiling?(line_bands, ceiling),
-         bands = operational_bands(line_bands, ceiling, spec.depth, state.max_depth),
-         {:ok, bands} <- maybe_narrow_tools(config, bands),
-         bands =
-           maybe_intersect_with_parent(bands, parent_tools_pin(spec), spec.depth, state.max_depth) do
+         {:ok, bands} <- maybe_narrow_tools(config, line_bands) do
       agent = state.agents.(agent_context(state, spec))
       agent = %{agent | tools: bands["granted"]}
       {:ok, agent, bands, hash, negotiable_or_human?(bands)}
     else
       false -> {:error, :profile_outside_ceiling}
       {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp operational_bands(line_bands, ceiling_bands, depth, max_depth) do
-    if depth < max_depth do
-      ceiling_bands
-    else
-      Policy.intersect(line_bands, ceiling_bands)
     end
   end
 
@@ -374,29 +363,6 @@ defmodule Omunculus.Runtime do
     |> Enum.sort_by(&{&1["profile"], &1["depth"], &1["workspace"]})
   end
 
-  defp maybe_intersect_with_parent(bands, parent_pin, depth, max_depth) do
-    if depth == max_depth, do: bands, else: intersect_with_parent(bands, parent_pin)
-  end
-
-  defp intersect_with_parent(bands, nil), do: bands
-
-  defp intersect_with_parent(bands, parent_pin) when is_map(parent_pin) do
-    authority =
-      MapSet.new((parent_pin["granted"] || []) ++ (parent_pin["negotiable"] || []))
-
-    parent_ceiling = %{
-      "granted" => Enum.sort(MapSet.to_list(authority)),
-      "negotiable" => [],
-      "human" => [],
-      "forbidden" =>
-        Tools.names()
-        |> Enum.reject(&MapSet.member?(authority, &1))
-        |> Enum.sort()
-    }
-
-    Policy.intersect(bands, parent_ceiling)
-  end
-
   defp maybe_narrow_tools(config, bands) do
     case config[:tools] do
       nil -> {:ok, bands}
@@ -414,14 +380,12 @@ defmodule Omunculus.Runtime do
     (bands["negotiable"] || []) != [] or (bands["human"] || []) != []
   end
 
-  defp parent_tools_pin(spec), do: spec.activation.payload["tools"]
-
   defp resolve_workspace(spec, loaded) do
     Map.get(spec, :workspace) ||
       spec.activation.workspace_id ||
       spec.activation.payload["workspace"] ||
       case Map.keys(loaded.workspaces) do
-        [] -> "app"
+        [] -> "default"
         [only] -> only
         keys -> Enum.at(keys, 0)
       end
