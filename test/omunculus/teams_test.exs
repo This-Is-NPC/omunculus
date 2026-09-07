@@ -18,6 +18,11 @@ defmodule Omunculus.TeamsTest do
   [profiles.full]
   mode = "allow"
 
+  [profiles.ask]
+  mode = "deny"
+  granted = ["fs.read", "delegate"]
+  instructions = "Responda. Não altere arquivos. Não delegue."
+
   [policy.depth.1]
   mode = "allow"
   deny = ["delegate"]
@@ -196,6 +201,9 @@ defmodule Omunculus.TeamsTest do
       assert_agent_id(leaf, "editor")
       assert leaf.payload["team"] == "edit"
 
+      granted = leaf.payload["tools"]["granted"]
+      assert "write" in granted or "edit" in granted
+
       write_requests =
         core
         |> EventCore.stream(0,
@@ -205,6 +213,28 @@ defmodule Omunculus.TeamsTest do
         |> Enum.filter(&(&1.payload["tool"] == "write"))
 
       assert write_requests != []
+    end
+  end
+
+  describe "team profile narrows task profile" do
+    test "ask profile keeps edit team leader read-only" do
+      tmp = tmp_fixture!("medium-teams.toml")
+      core = boot_teams(tmp, profile: "ask", max_depth: 1)
+
+      {:ok, %{requested: requested}} =
+        Runtime.request(core, "escrever um README")
+
+      delegated_event = delegated(core, requested.correlation_id)
+      assert delegated_event.payload["team"] == "edit"
+
+      leaf = run_started_at(core, requested.correlation_id, 1)
+      assert leaf
+
+      granted = leaf.payload["tools"]["granted"]
+
+      assert Enum.any?(granted, &(&1 in ["read", "grep", "find", "ls"]))
+      refute "edit" in granted
+      refute "write" in granted
     end
   end
 

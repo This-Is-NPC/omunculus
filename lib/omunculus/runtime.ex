@@ -289,7 +289,8 @@ defmodule Omunculus.Runtime do
          {:ok, line_bands} <- Policy.line(table, profile, depth, workspace),
          {:ok, ceiling} <- policy_ceiling(loaded, depth, workspace),
          true <- Policy.fits_ceiling?(line_bands, ceiling),
-         {:ok, bands} <- maybe_narrow_tools(config, line_bands) do
+         {:ok, narrow_bands} <- maybe_intersect_team_profile(loaded, spec, line_bands),
+         {:ok, bands} <- maybe_narrow_tools(config, narrow_bands) do
       agent = state.agents.(agent_context(state, spec, loaded))
       agent = %{agent | tools: bands["granted"]}
       agent = merge_config_tool_options(agent, loaded)
@@ -413,21 +414,24 @@ defmodule Omunculus.Runtime do
     end
   end
 
-  defp resolve_profile(spec, loaded, config) do
-    team_name = Map.get(spec, :team)
+  defp resolve_profile(_spec, loaded, config) do
+    config[:profile] || loaded.defaults.preset || "coding"
+  end
 
-    team_profile =
-      case team_name do
-        name when is_binary(name) -> get_in(loaded.teams, [name, :profile])
-        _ -> nil
-      end
+  defp maybe_intersect_team_profile(loaded, spec, line_bands) do
+    team_name = Map.get(spec, :team) || spec.activation.payload["team"]
 
-    default_profile = config[:profile] || loaded.defaults.preset || "coding"
-
-    if is_binary(team_profile) and Map.has_key?(loaded.presets, team_profile) do
-      team_profile
+    with name when is_binary(name) <- team_name,
+         %{profile: team_profile} <- Map.get(loaded.teams, name, %{}),
+         true <- is_binary(team_profile) and Map.has_key?(loaded.presets, team_profile),
+         preset <- Map.get(loaded.presets, team_profile),
+         {:ok, team_bands} <-
+           Policy.normalize(preset[:policy] || %{},
+             catalog_version: loaded.session[:tools_catalog]
+           ) do
+      {:ok, Policy.intersect(line_bands, team_bands)}
     else
-      default_profile
+      _ -> {:ok, line_bands}
     end
   end
 
