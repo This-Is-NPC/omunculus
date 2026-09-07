@@ -272,27 +272,51 @@ defmodule Omunculus.EventCore.Projector do
       ]
     )
 
-    # A parent waiting on this child becomes running again.
-    Store.query(
-      conn,
-      "UPDATE WORK_ITEMS SET status = 'running', version = version + 1, updated_at = ?, last_sequence = ? WHERE status = 'waiting' AND last_sequence < ? AND work_item_id IN (SELECT work_item_id FROM WORK_ITEM_DEPENDENCIES WHERE depends_on_work_item_id = ?)",
-      [env.occurred_at, env.sequence, env.sequence, env.work_item_id]
-    )
+    :ok
   end
 
   defp apply_event(conn, %{type: "run.completed"} = env) do
+    p = env.payload
+    outcome = p["outcome"] || "completed"
+
     Store.query(
       conn,
-      "UPDATE ARCHIVE_RUNS SET status = 'completed', outcome = ?, finished_at = ?, last_sequence = ? WHERE run_id = ? AND status = 'running' AND last_sequence < ?",
-      [to_string(env.payload["outcome"]), env.occurred_at, env.sequence, env.run_id, env.sequence]
+      "UPDATE ARCHIVE_RUNS SET status = ?, outcome = ?, finished_at = ?, last_sequence = ? WHERE run_id = ? AND status = 'running' AND last_sequence < ?",
+      [outcome, outcome, env.occurred_at, env.sequence, env.run_id, env.sequence]
     )
+
+    case outcome do
+      "waiting" ->
+        Store.query(
+          conn,
+          "UPDATE WORK_ITEMS SET status = 'waiting', awaiting = ?, checkpoint = ?, version = version + 1, updated_at = ?, last_sequence = ? WHERE work_item_id = ? AND last_sequence < ?",
+          [
+            Jason.encode!(p["awaiting"] || []),
+            Jason.encode!(p["checkpoint"] || %{}),
+            env.occurred_at,
+            env.sequence,
+            env.work_item_id,
+            env.sequence
+          ]
+        )
+
+      "completed" ->
+        Store.query(
+          conn,
+          "UPDATE WORK_ITEMS SET awaiting = NULL, version = version + 1, updated_at = ?, last_sequence = ? WHERE work_item_id = ? AND last_sequence < ?",
+          [env.occurred_at, env.sequence, env.work_item_id, env.sequence]
+        )
+
+      _ ->
+        :ok
+    end
   end
 
   defp apply_event(conn, %{type: "run.failed"} = env) do
     Store.query(
       conn,
-      "UPDATE ARCHIVE_RUNS SET status = 'failed', reason = ?, finished_at = ?, last_sequence = ? WHERE run_id = ? AND status = 'running' AND last_sequence < ?",
-      [to_string(env.payload["reason"]), env.occurred_at, env.sequence, env.run_id, env.sequence]
+      "UPDATE ARCHIVE_RUNS SET status = 'failed', finished_at = ?, last_sequence = ? WHERE run_id = ? AND status = 'running' AND last_sequence < ?",
+      [env.occurred_at, env.sequence, env.run_id, env.sequence]
     )
 
     transition_work_item(conn, env.work_item_id, ["running", "waiting"], "failed", env)

@@ -31,6 +31,7 @@ defmodule Omunculus.EventCore.Store do
       status TEXT NOT NULL,
       version INTEGER NOT NULL DEFAULT 0,
       checkpoint TEXT,
+      awaiting TEXT,
       result TEXT,
       created_at TEXT,
       updated_at TEXT,

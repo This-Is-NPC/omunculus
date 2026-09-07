@@ -140,12 +140,75 @@ defmodule Omunculus.EventCoreTest do
     assert [["wi-1", "completed", "10"]] =
              EventCore.query(core, "SELECT work_item_id, status, result FROM WORK_ITEMS")
 
-    assert [["run-1", "completed", 1, 0]] =
-             EventCore.query(core, "SELECT run_id, status, attempt, depth FROM ARCHIVE_RUNS")
+    assert [["run-1", "completed", "completed", 1, 0]] =
+             EventCore.query(
+               core,
+               "SELECT run_id, status, outcome, attempt, depth FROM ARCHIVE_RUNS"
+             )
 
     before = Projector.snapshot(core)
     :ok = Projector.rebuild(projector)
     assert Projector.snapshot(core) == before
     assert Projector.cursor(projector) == 4
+  end
+
+  test "run.completed with outcome waiting projects awaiting and archive status", %{
+    core: core,
+    projector: projector
+  } do
+    cmd =
+      EventCore.append!(
+        core,
+        Envelope.command("task.requested",
+          payload: %{instruction: "delegate"},
+          work_item_id: "wi-parent"
+        )
+      )
+
+    EventCore.append!(
+      core,
+      Envelope.event("run.started",
+        correlation_id: cmd.correlation_id,
+        causation_id: cmd.event_id,
+        work_item_id: "wi-parent",
+        run_id: "run-1",
+        payload: %{
+          attempt: 1,
+          depth: 0,
+          agent_id: "a",
+          agent_kind: "concierge",
+          reason: "initial"
+        }
+      )
+    )
+
+    EventCore.append!(
+      core,
+      Envelope.event("run.completed",
+        correlation_id: cmd.correlation_id,
+        causation_id: cmd.event_id,
+        work_item_id: "wi-parent",
+        run_id: "run-1",
+        payload: %{
+          outcome: "waiting",
+          awaiting: ["wi-child"],
+          checkpoint: %{"messages" => []}
+        }
+      )
+    )
+
+    :ok = Projector.sync(projector)
+
+    assert [["waiting", "waiting", "initial"]] =
+             EventCore.query(
+               core,
+               "SELECT status, outcome, reason FROM ARCHIVE_RUNS WHERE run_id = 'run-1'"
+             )
+
+    assert [["waiting", ~s(["wi-child"])]] =
+             EventCore.query(
+               core,
+               "SELECT status, awaiting FROM WORK_ITEMS WHERE work_item_id = 'wi-parent'"
+             )
   end
 end
