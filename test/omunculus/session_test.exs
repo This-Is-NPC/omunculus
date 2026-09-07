@@ -11,8 +11,27 @@ defmodule Omunculus.SessionTest do
 
   @attached ~w(app infra)
 
+  @node_scope_overlay """
+  [profiles.full]
+  mode = "allow"
+
+  [teams.count]
+  lead = "counter"
+  members = []
+  profile = "count"
+  scope = "node"
+
+  [teams.edit]
+  lead = "editor"
+  members = []
+  profile = "coding"
+  scope = "node"
+  """
+
   defp boot_complex(opts \\ []) do
-    tmp = Harness.tmp_fixture("complex.toml", Keyword.get(opts, :overlay, "lane.toml"))
+    base = Keyword.get(opts, :base, "complex.toml")
+    tmp = Harness.tmp_fixture(base, Keyword.get(opts, :overlay, "lane.toml"))
+    tmp = maybe_append_overlay(tmp, Keyword.get(opts, :append_overlay))
     interceptors = interceptors_for(tmp.config, Keyword.get(opts, :extras, false))
 
     {:ok, core} = EventCore.start_link(path: ":memory:", interceptors: interceptors)
@@ -41,7 +60,7 @@ defmodule Omunculus.SessionTest do
         {:ok, pid} =
           Runtime.start_link(
             core: core,
-            max_depth: 2,
+            max_depth: Keyword.get(opts, :max_depth, 2),
             agents: agents,
             config: runtime_config,
             run_opts: [delegation_timeout: 10_000]
@@ -59,6 +78,15 @@ defmodule Omunculus.SessionTest do
       runtime_config: runtime_config,
       agents: agents
     }
+  end
+
+  defp maybe_append_overlay(tmp, nil), do: tmp
+
+  defp maybe_append_overlay(tmp, overlay) when is_binary(overlay) do
+    config_file = tmp.overlay_path || tmp.path
+    File.write!(config_file, File.read!(config_file) <> "\n" <> overlay)
+    {:ok, config} = Omunculus.Config.load(cwd: tmp.dir, config_file: config_file, env: %{})
+    %{tmp | config: config, overlay_path: config_file}
   end
 
   defp interceptors_for(config, extras?) do
@@ -167,6 +195,39 @@ defmodule Omunculus.SessionTest do
     assert node_ids != []
     expected = node_id_depth1(session_id, "app")
     assert Enum.all?(node_ids, &(&1 == expected))
+  end
+
+  test "node-scoped teams get distinct depth-1 node_ids and reuse per team" do
+    %{core: core, session_id: session_id} =
+      boot_complex(
+        base: "complex-teams.toml",
+        extras: true,
+        max_depth: 1,
+        profile: "full",
+        append_overlay: @node_scope_overlay
+      )
+
+    {:ok, _} = Runtime.request(core, "conte até 3", session_id: session_id)
+    {:ok, _} = Runtime.request(core, "conte até 3", session_id: session_id)
+    {:ok, _} = Runtime.request(core, "escrever README", session_id: session_id)
+
+    by_team =
+      EventCore.stream(core, 0, type: "run.started")
+      |> Enum.filter(&(&1.payload["depth"] == 1))
+      |> Enum.group_by(& &1.payload["team"], & &1.payload["node_id"])
+
+    count_ids = by_team["count"] || []
+    edit_ids = by_team["edit"] || []
+
+    assert length(count_ids) >= 2
+    assert edit_ids != []
+
+    expected_count = node_id_depth1(session_id, "app", "count")
+    expected_edit = node_id_depth1(session_id, "app", "edit")
+
+    assert Enum.all?(count_ids, &(&1 == expected_count))
+    assert Enum.all?(edit_ids, &(&1 == expected_edit))
+    refute expected_count == expected_edit
   end
 
   test "workspace.detached fails an open run with reason detached" do
