@@ -69,6 +69,43 @@ defmodule Omunculus.ToolsTest do
     assert Tools.catalog_version() == "1"
   end
 
+  test "workspaces lists attached workspaces and teams" do
+    context =
+      Omunculus.Tool.Context.new(FS.Memory.new(), %{
+        workspaces: %{
+          "app" => %{roots: ["."], teams: ["count", "edit"]}
+        },
+        teams: %{
+          "count" => %{lead: "counter"},
+          "edit" => %{lead: "editor"}
+        }
+      })
+
+    assert {:ok, body, _} = Tools.call_context("workspaces", %{}, context, ["workspaces"])
+    assert body =~ "workspace app roots=. teams=count,edit"
+    assert body =~ "team count lead=counter"
+    assert body =~ "team edit lead=editor"
+    assert body =~ "count"
+    assert body =~ "edit"
+  end
+
+  test "workspaces is denied when not in the active set" do
+    context =
+      Omunculus.Tool.Context.new(FS.Memory.new(), %{
+        workspaces: %{"app" => %{roots: ["."], teams: ["count"]}},
+        teams: %{"count" => %{lead: "counter"}}
+      })
+
+    assert {:error, :denied, _} = Tools.call_context("workspaces", %{}, context, [])
+  end
+
+  test "workspaces without a snapshot reports none attached" do
+    context = Omunculus.Tool.Context.new(FS.Memory.new())
+
+    assert {:ok, "No workspaces attached.", _} =
+             Tools.call_context("workspaces", %{}, context, ["workspaces"])
+  end
+
   test "counter persists its value in the tool context" do
     context =
       Omunculus.Tool.Context.new(FS.Memory.new(), %{

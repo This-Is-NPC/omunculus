@@ -19,7 +19,15 @@ defmodule Omunculus.Tools.Delegate do
       "parameters" => %{
         "type" => "object",
         "properties" => %{
-          "instruction" => %{"type" => "string", "description" => "Task for the sub-agent"}
+          "instruction" => %{"type" => "string", "description" => "Task for the sub-agent"},
+          "team" => %{
+            "type" => "string",
+            "description" => "Named team for depth-0 routing"
+          },
+          "agent" => %{
+            "type" => "string",
+            "description" => "Member name for depth-1 routing"
+          }
         },
         "required" => ["instruction"],
         "additionalProperties" => false

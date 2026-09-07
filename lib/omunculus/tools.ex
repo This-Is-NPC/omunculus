@@ -9,7 +9,8 @@ defmodule Omunculus.Tools do
     "find" => Omunculus.Tools.Find,
     "ls" => Omunculus.Tools.Ls,
     "counter" => Omunculus.Tools.Counter,
-    "delegate" => Omunculus.Tools.Delegate
+    "delegate" => Omunculus.Tools.Delegate,
+    "workspaces" => Omunculus.Tools.Workspaces
   }
 
   @groups %{
