@@ -38,7 +38,7 @@ defmodule Omunculus.Agent do
       context: context,
       tools: tools,
       tool_executor: tool_executor,
-      schemas: schemas_for(tools, request_permission),
+      schemas: Keyword.get(opts, :schemas) || schemas_for(tools, request_permission),
       messages: messages,
       turn: 0,
       max_turns: max_turns,
@@ -464,10 +464,10 @@ defmodule Omunculus.Agent do
         "parameters" => %{
           "type" => "object",
           "properties" => %{
-            "name" => %{"type" => "string", "description" => "Tool name to request."},
+            "tool" => %{"type" => "string", "description" => "Tool name to request."},
             "reason" => %{"type" => "string", "description" => "Why the tool is needed."}
           },
-          "required" => ["name", "reason"]
+          "required" => ["tool", "reason"]
         }
       }
     }

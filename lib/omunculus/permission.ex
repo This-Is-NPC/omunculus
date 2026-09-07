@@ -37,11 +37,16 @@ defmodule Omunculus.Permission do
   end
 
   def denied_for_task?(conn, work_item_id, tool) do
+    match?({:ok, _}, denied_reason(conn, work_item_id, tool))
+  end
+
+  def denied_reason(conn, work_item_id, tool) do
     request_id = request_id(conn, work_item_id, tool)
 
     case latest_resolution(conn, request_id) do
-      {:denied, _} -> true
-      _ -> false
+      {:denied, %{"reason" => reason}} when is_binary(reason) -> {:ok, reason}
+      {:denied, payload} when is_map(payload) -> {:ok, payload["reason"] || "denied"}
+      _ -> :error
     end
   end
 

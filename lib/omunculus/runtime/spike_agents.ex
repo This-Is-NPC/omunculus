@@ -464,12 +464,71 @@ defmodule Omunculus.Runtime.SpikeAgents do
 
   defp fake_chat(opts, agent_id, ctx, default_turns) do
     case opts[:script] do
+      fun when is_function(fun, 5) ->
+        turns =
+          if Map.get(ctx, :reason) == "arbitration" do
+            fun.(agent_id, ctx.depth, ctx[:workspace], ctx[:team], "arbitration")
+          else
+            fun.(
+              agent_id,
+              ctx.depth,
+              ctx[:workspace],
+              ctx[:team],
+              Map.get(ctx, :reason, "initial")
+            )
+          end
+
+        turns =
+          if Map.get(ctx, :reason) in ["continuation", "retry"] and ctx.depth == 0 and
+               checkpoint_has_delegate_observation?(ctx) do
+            [fn messages -> Fake.text(delegate_result(messages)) end]
+          else
+            turns
+          end
+
+        Fake.new(turns)
+
       fun when is_function(fun, 4) ->
-        Fake.for_node(fun, agent_id, ctx.depth, ctx[:workspace], ctx[:team])
+        if Map.get(ctx, :reason) == "arbitration" do
+          Fake.new([
+            Fake.tool_call("grant", %{"reason" => "allowed"}, "call_grant"),
+            Fake.text("granted")
+          ])
+        else
+          if Map.get(ctx, :reason) in ["continuation", "retry"] and ctx.depth == 0 and
+               checkpoint_has_delegate_observation?(ctx) do
+            Fake.new([fn messages -> Fake.text(delegate_result(messages)) end])
+          else
+            Fake.for_node(fun, agent_id, ctx.depth, ctx[:workspace], ctx[:team])
+          end
+        end
 
       _ ->
-        Fake.new(default_turns)
+        turns =
+          if Map.get(ctx, :reason) == "arbitration" do
+            [
+              Fake.tool_call("grant", %{"reason" => "allowed"}, "call_grant"),
+              Fake.text("granted")
+            ]
+          else
+            default_turns
+          end
+
+        Fake.new(turns)
     end
+  end
+
+  defp checkpoint_has_delegate_observation?(ctx) do
+    checkpoint = Map.get(ctx, :checkpoint, %{})
+    messages = Map.get(checkpoint, "messages") || Map.get(checkpoint, :messages) || []
+
+    Enum.any?(messages, fn
+      %{"role" => "tool", "content" => content} when is_binary(content) ->
+        String.contains?(content, "Sub-agent completed")
+
+      _ ->
+        false
+    end)
   end
 
   defp counter_current(checkpoint) when is_map(checkpoint) do

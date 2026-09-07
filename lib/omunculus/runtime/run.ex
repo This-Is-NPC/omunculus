@@ -19,8 +19,9 @@ defmodule Omunculus.Runtime.Run do
 
   use GenServer, restart: :temporary
 
-  alias Omunculus.{Agent, EventCore, FS, Tools}
+  alias Omunculus.{Agent, EventCore, FS, Permission, Tools}
   alias Omunculus.Event.Envelope
+  alias Omunculus.Runtime.Permission, as: RuntimePermission
   alias Omunculus.Tool.Context
 
   @delivery_timeout 5_000
@@ -101,6 +102,17 @@ defmodule Omunculus.Runtime.Run do
         _ -> opts
       end
 
+    opts =
+      if state[:arbitration] do
+        Keyword.merge(opts,
+          schemas: arbitration_schemas(),
+          tools: ["grant", "deny", "escalate"],
+          request_permission: false
+        )
+      else
+        opts
+      end
+
     outcome = Agent.run(opts)
     new_children = Process.get(:awaiting_children, [])
 
@@ -150,29 +162,50 @@ defmodule Omunculus.Runtime.Run do
   end
 
   defp finish_completed(state, result) do
-    completed =
-      append!(state, :event, "task.completed", %{
-        result: result.assistant_text,
-        depth: state.depth,
-        rounds: result.turns,
-        tool_calls: result.tool_calls
-      })
+    if state[:arbitration] do
+      restore = state[:arbitration_restore] || %{awaiting: [], checkpoint: %{}}
 
-    append!(
-      state,
-      :event,
-      "run.completed",
-      %{
-        outcome: "completed",
-        awaiting: [],
-        rounds: result.turns,
-        tool_calls: result.tool_calls,
-        usage: result.usage
-      },
-      completed.event_id
-    )
+      append!(
+        state,
+        :event,
+        "run.completed",
+        %{
+          outcome: "waiting",
+          awaiting: restore[:awaiting] || restore["awaiting"] || [],
+          checkpoint: restore[:checkpoint] || restore["checkpoint"] || %{},
+          rounds: result.turns,
+          tool_calls: result.tool_calls,
+          usage: result.usage
+        },
+        Process.get(:chain_head)
+      )
 
-    {:stop, :normal, state}
+      {:stop, :normal, state}
+    else
+      completed =
+        append!(state, :event, "task.completed", %{
+          result: result.assistant_text,
+          depth: state.depth,
+          rounds: result.turns,
+          tool_calls: result.tool_calls
+        })
+
+      append!(
+        state,
+        :event,
+        "run.completed",
+        %{
+          outcome: "completed",
+          awaiting: [],
+          rounds: result.turns,
+          tool_calls: result.tool_calls,
+          usage: result.usage
+        },
+        completed.event_id
+      )
+
+      {:stop, :normal, state}
+    end
   end
 
   @impl true
@@ -182,6 +215,17 @@ defmodule Omunculus.Runtime.Run do
 
   defp execute_tool(state, "delegate", args, context, active) do
     if "delegate" in active, do: delegate(state, args, context), else: {:error, :denied, context}
+  end
+
+  defp execute_tool(state, "request_permission", args, context, _active) do
+    request_permission(state, args, context)
+  end
+
+  defp execute_tool(state, tool, args, context, _active)
+       when tool in ["grant", "deny", "escalate"] do
+    if state[:arbitration],
+      do: arbitration_tool(state, tool, args, context),
+      else: {:error, :denied, context}
   end
 
   defp execute_tool(state, name, args, context, active) do
@@ -299,6 +343,170 @@ defmodule Omunculus.Runtime.Run do
     end
   end
 
+  defp request_permission(state, args, context) do
+    tool = permission_tool_name(args)
+    reason = args["reason"] || args[:reason] || ""
+    bands = state[:tools] || bands_from_agent(state.agent)
+    policy_granted = bands["granted"] || []
+    continuation? = state[:reason] in ["continuation", "retry"]
+    parent_bands = RuntimePermission.parent_bands_from_log(state.core, state.work_item_id)
+
+    {:ok, decision} =
+      EventCore.transaction(state.core, fn conn ->
+        request_id = Permission.request_id(conn, state.work_item_id, tool)
+
+        cond do
+          Permission.already_granted?(conn, state.work_item_id, tool, policy_granted) and
+              continuation? ->
+            {:already, tool}
+
+          Permission.already_granted?(conn, state.work_item_id, tool, policy_granted) ->
+            {:wait_policy}
+
+          true ->
+            case Permission.denied_reason(conn, state.work_item_id, tool) do
+              {:ok, denial_reason} ->
+                {:denied, denial_reason}
+
+              :error ->
+                arbiter = RuntimePermission.arbiter(tool, bands, parent_bands, state.depth)
+                {:request, request_id, arbiter}
+            end
+        end
+      end)
+
+    case decision do
+      {:already, granted_tool} ->
+        {:ok, "already granted: " <> granted_tool, context}
+
+      {:wait_policy} ->
+        existing = Process.get(:awaiting_children, [])
+        Process.put(:awaiting_children, existing ++ ["policy"])
+        {:wait, "policy", context}
+
+      {:denied, denial_reason} ->
+        {:error, "denied for this task: " <> denial_reason, context}
+
+      {:request, request_id, arbiter} ->
+        workspace = state[:workspace] || state[:workspace_id]
+
+        payload =
+          %{
+            request_id: request_id,
+            tool: tool,
+            reason: reason,
+            arbiter: format_arbiter(arbiter)
+          }
+          |> maybe_put_permission_workspace(workspace)
+
+        append!(
+          state,
+          :event,
+          "permission.requested",
+          payload,
+          Process.get(:chain_head),
+          idempotency_key: request_id
+        )
+
+        existing = Process.get(:awaiting_children, [])
+        Process.put(:awaiting_children, existing ++ [request_id])
+        {:wait, request_id, context}
+    end
+  end
+
+  defp arbitration_tool(state, "grant", args, context) do
+    reason = args["reason"] || args[:reason] || ""
+    request_id = state[:arbitration_request_id]
+    child_wi = state[:arbitration_child_wi] || state.work_item_id
+
+    append!(
+      state,
+      :command,
+      "permission.granted",
+      %{
+        request_id: request_id,
+        kind: "temporary",
+        granter: "run:" <> state.run_id,
+        reason: reason
+      },
+      Process.get(:chain_head),
+      work_item_id: child_wi
+    )
+
+    {:ok, "granted", context}
+  end
+
+  defp arbitration_tool(state, "deny", args, context) do
+    reason = args["reason"] || args[:reason] || "denied"
+    request_id = state[:arbitration_request_id]
+    child_wi = state[:arbitration_child_wi] || state.work_item_id
+
+    append!(
+      state,
+      :command,
+      "permission.denied",
+      %{request_id: request_id, reason: reason},
+      Process.get(:chain_head),
+      work_item_id: child_wi
+    )
+
+    {:ok, "denied", context}
+  end
+
+  defp arbitration_tool(state, "escalate", args, context) do
+    reason = args["reason"] || args[:reason] || "escalated"
+    child_wi = state[:arbitration_child_wi] || state.work_item_id
+
+    append!(
+      state,
+      :command,
+      "task.commented",
+      %{kind: "request", body: reason},
+      Process.get(:chain_head),
+      work_item_id: child_wi
+    )
+
+    {:ok, "escalated", context}
+  end
+
+  defp permission_tool_name(args) do
+    args["tool"] || args[:tool] || args["name"] || args[:name] ||
+      raise(ArgumentError, "request_permission requires tool")
+  end
+
+  defp format_arbiter(:forbidden), do: "forbidden"
+  defp format_arbiter(arbiter) when is_binary(arbiter), do: arbiter
+
+  defp maybe_put_permission_workspace(payload, nil), do: payload
+
+  defp maybe_put_permission_workspace(payload, workspace),
+    do: Map.put(payload, :workspace, workspace)
+
+  defp arbitration_schemas do
+    [
+      arbitration_schema("grant", "Grant a permission request.", ["reason"]),
+      arbitration_schema("deny", "Deny a permission request.", ["reason"]),
+      arbitration_schema("escalate", "Escalate a permission request to a human.", ["reason"])
+    ]
+  end
+
+  defp arbitration_schema(name, description, required) do
+    %{
+      "type" => "function",
+      "function" => %{
+        "name" => name,
+        "description" => description,
+        "parameters" => %{
+          "type" => "object",
+          "properties" => %{
+            "reason" => %{"type" => "string", "description" => "Why this decision was made."}
+          },
+          "required" => required
+        }
+      }
+    }
+  end
+
   # --- side branches --------------------------------------------------------------
 
   defp report(state, %{type: :round_completed} = ev) do
@@ -334,10 +542,11 @@ defmodule Omunculus.Runtime.Run do
       Envelope.new(kind, type,
         correlation_id: state.correlation_id,
         causation_id: causation_id || Process.get(:chain_head),
+        idempotency_key: Keyword.get(opts, :idempotency_key),
         session_id: state[:session_id] || state.activation.session_id,
         workspace_id: workspace_id,
         project_id: state[:project_id],
-        work_item_id: state.work_item_id,
+        work_item_id: Keyword.get(opts, :work_item_id) || state.work_item_id,
         run_id: state.run_id,
         payload: payload
       )

@@ -18,7 +18,8 @@ defmodule Omunculus.Runtime do
   alias Omunculus.EventCore
   alias Omunculus.Event.Envelope
   alias Omunculus.Runtime.Run
-  alias Omunculus.{Config, Policy}
+  alias Omunculus.Runtime.Permission, as: RuntimePermission
+  alias Omunculus.{Config, Permission, Policy}
 
   # --- API ------------------------------------------------------------------------
 
@@ -236,6 +237,64 @@ defmodule Omunculus.Runtime do
     end
   end
 
+  defp activate(%Envelope{type: "permission.requested"} = env, state) do
+    arbiter = env.payload["arbiter"]
+
+    state =
+      if arbiter == "forbidden" do
+        EventCore.append!(
+          state.core,
+          Envelope.command("permission.denied",
+            correlation_id: env.correlation_id,
+            causation_id: env.event_id,
+            work_item_id: env.work_item_id,
+            payload: %{
+              request_id: env.payload["request_id"],
+              reason: "forbidden"
+            }
+          )
+        )
+
+        state
+      else
+        state
+      end
+
+    if arbiter == "parent" do
+      start_arbitration_run(state, env)
+    else
+      state
+    end
+  end
+
+  defp activate(%Envelope{type: type} = env, state)
+       when type in ["permission.granted", "permission.denied"] do
+    request_id = env.payload["request_id"]
+
+    RuntimePermission.waiting_for_request(state.core, request_id)
+    |> Enum.reduce(state, fn {work_item_id, _}, st ->
+      if live_run_for_work_item?(st, work_item_id, env.run_id) do
+        st
+      else
+        reopen_permission_wait(st, env, work_item_id, request_id)
+      end
+    end)
+  end
+
+  defp activate(%Envelope{type: "run.completed", payload: %{"outcome" => "waiting"}} = env, state) do
+    awaiting = env.payload["awaiting"] || []
+
+    if "policy" in Enum.map(awaiting, &to_string/1) do
+      reopen_policy_wait(state, env, env.run_id)
+    else
+      state
+    end
+  end
+
+  defp activate(%Envelope{type: "policy.changed"} = env, state) do
+    grant_open_requests_by_policy(state, env)
+  end
+
   defp activate(_env, state), do: state
 
   defp start_run(state, spec) do
@@ -342,10 +401,21 @@ defmodule Omunculus.Runtime do
         |> Map.put(:session_id, spec.session_id || spec.activation.session_id)
 
       {spec, state} = assign_node_id(state, spec, loaded)
+
+      {:ok, lineage_tools} =
+        EventCore.transaction(state.core, fn conn ->
+          Permission.active_lineage_tools(conn, spec.work_item_id)
+        end)
+
+      granted_tools = Enum.uniq((bands["granted"] || []) ++ lineage_tools)
       agent = state.agents.(agent_context(state, spec, loaded))
-      agent = %{agent | tools: bands["granted"]}
+      agent = %{agent | tools: granted_tools}
       agent = merge_config_tool_options(agent, loaded, spec, state)
-      {:ok, agent, bands, hash, negotiable_or_human?(bands), spec, state}
+
+      request_permission =
+        negotiable_or_human?(bands) or Map.get(spec, :request_permission, false)
+
+      {:ok, agent, bands, hash, request_permission, spec, state}
     else
       false -> {:error, :profile_outside_ceiling}
       {:error, reason} -> {:error, reason}
@@ -844,8 +914,10 @@ defmodule Omunculus.Runtime do
     })
   end
 
-  defp live_run_for_work_item?(state, work_item_id) do
-    Enum.any?(state.runs, fn {_, run} -> run.work_item_id == work_item_id end)
+  defp live_run_for_work_item?(state, work_item_id, except_run_id \\ nil) do
+    Enum.any?(state.runs, fn {run_id, run} ->
+      run.work_item_id == work_item_id and run_id != except_run_id
+    end)
   end
 
   defp queue_continuation(state, parent_wi, env) do
@@ -1304,6 +1376,295 @@ defmodule Omunculus.Runtime do
         end
 
     Enum.filter(List.wrap(teams), &team_scope_node?(loaded, &1))
+  end
+
+  defp waiting_snapshot(core, work_item_id) do
+    case EventCore.query(
+           core,
+           "SELECT awaiting, checkpoint FROM WORK_ITEMS WHERE work_item_id = ?",
+           [work_item_id]
+         ) do
+      [[awaiting_json, checkpoint_json]] ->
+        %{
+          awaiting: decode_awaiting(awaiting_json) || [],
+          checkpoint: decode_checkpoint(checkpoint_json) || %{}
+        }
+
+      _ ->
+        %{awaiting: [], checkpoint: %{}}
+    end
+  end
+
+  defp decode_checkpoint(nil), do: %{}
+  defp decode_checkpoint(""), do: %{}
+
+  defp decode_checkpoint(json) when is_binary(json) do
+    case Jason.decode(json) do
+      {:ok, map} when is_map(map) -> map
+      _ -> %{}
+    end
+  end
+
+  defp decode_checkpoint(map) when is_map(map), do: map
+
+  defp start_arbitration_run(state, perm_env) do
+    child_wi = perm_env.work_item_id
+
+    with parent_wi when is_binary(parent_wi) <- parent_work_item_id(state.core, child_wi),
+         %Envelope{payload: parent_start} <-
+           EventCore.stream(state.core, 0, work_item_id: parent_wi, type: "run.started")
+           |> List.last() do
+      tool = perm_env.payload["tool"]
+      reason = perm_env.payload["reason"]
+      request_id = perm_env.payload["request_id"]
+
+      instruction = """
+      A child work item (#{child_wi}) requests permission to use `#{tool}`.
+      Reason: #{reason}
+      Use grant, deny, or escalate.
+      """
+
+      attempt =
+        EventCore.stream(state.core, 0, work_item_id: parent_wi, type: "run.started")
+        |> length()
+        |> Kernel.+(1)
+
+      loaded = loaded_config(state)
+      restore = waiting_snapshot(state.core, parent_wi)
+
+      spec = %{
+        activation: perm_env,
+        work_item_id: parent_wi,
+        correlation_id: perm_env.correlation_id,
+        depth: parent_start["depth"],
+        attempt: attempt,
+        instruction: instruction,
+        parent_run_id: parent_start["parent_run_id"],
+        originating_run_id: parent_start["originating_run_id"],
+        checkpoint: %{},
+        project_id: perm_env.project_id,
+        session_id: perm_env.session_id,
+        workspace: parent_start["workspace"],
+        workspace_id:
+          if(parent_start["depth"] > 0,
+            do: parent_start["workspace"] || perm_env.workspace_id,
+            else: nil
+          ),
+        node_id: parent_start["node_id"],
+        team: parent_start["team"],
+        reason: "arbitration",
+        arbitration: true,
+        arbitration_request_id: request_id,
+        arbitration_child_wi: child_wi,
+        arbitration_restore: restore,
+        request_permission: false
+      }
+
+      agent = arbitration_agent(state, spec, loaded)
+      bands = arbitration_bands()
+
+      start_run_with_agent(state, spec, agent, bands, nil, false)
+    else
+      _ -> state
+    end
+  end
+
+  defp arbitration_agent(state, spec, loaded) do
+    ctx = agent_context(state, spec, loaded)
+    agent = state.agents.(ctx)
+    %{agent | tools: ["grant", "deny", "escalate"]}
+  end
+
+  defp arbitration_bands do
+    %{
+      "granted" => ["grant", "deny", "escalate"],
+      "negotiable" => [],
+      "human" => [],
+      "forbidden" => []
+    }
+  end
+
+  defp reopen_permission_wait(state, resolution_env, work_item_id, request_id) do
+    run_completed =
+      EventCore.stream(state.core, 0, work_item_id: work_item_id, type: "run.completed")
+      |> Enum.filter(&(Map.get(&1.payload, "outcome") == "waiting"))
+      |> List.last()
+
+    with %Envelope{} <- run_completed,
+         checkpoint when is_map(checkpoint) <- run_completed.payload["checkpoint"] || %{} do
+      observation = RuntimePermission.resolution_observation(state.core, request_id)
+
+      reopen_permission_continuation(
+        state,
+        resolution_env,
+        work_item_id,
+        checkpoint,
+        request_id,
+        observation
+      )
+    else
+      _ -> state
+    end
+  end
+
+  defp reopen_policy_wait(state, env, except_run_id) do
+    work_item_id = env.work_item_id
+
+    if live_run_for_work_item?(state, work_item_id, except_run_id) do
+      state
+    else
+      checkpoint = env.payload["checkpoint"] || %{}
+      reopen_permission_continuation(state, env, work_item_id, checkpoint, "policy", nil)
+    end
+  end
+
+  defp reopen_permission_continuation(
+         state,
+         causation_env,
+         work_item_id,
+         checkpoint,
+         await_key,
+         observation
+       ) do
+    awaiting = checkpoint["awaiting"] || []
+
+    if to_string(await_key) in Enum.map(awaiting, &to_string/1) do
+      new_awaiting = Enum.reject(awaiting, &(to_string(&1) == to_string(await_key)))
+
+      new_checkpoint =
+        checkpoint
+        |> Map.put("awaiting", new_awaiting)
+        |> maybe_append_permission_observation(observation, await_key)
+
+      last_start =
+        EventCore.stream(state.core, 0, work_item_id: work_item_id, type: "run.started")
+        |> List.last()
+
+      attempt =
+        EventCore.stream(state.core, 0, work_item_id: work_item_id, type: "run.started")
+        |> length()
+        |> Kernel.+(1)
+
+      activation = find_activation(state.core, work_item_id)
+
+      start_run(state, %{
+        activation: causation_env,
+        work_item_id: work_item_id,
+        correlation_id: causation_env.correlation_id,
+        depth: last_start.payload["depth"],
+        attempt: attempt,
+        instruction: activation_instruction(activation),
+        parent_run_id: last_start.payload["parent_run_id"],
+        originating_run_id: last_start.payload["originating_run_id"],
+        checkpoint: new_checkpoint,
+        project_id: causation_env.project_id,
+        session_id: causation_env.session_id,
+        workspace: last_start.payload["workspace"],
+        workspace_id:
+          if(last_start.payload["depth"] > 0,
+            do: last_start.payload["workspace"] || causation_env.workspace_id,
+            else: nil
+          ),
+        node_id: last_start.payload["node_id"],
+        team: last_start.payload["team"],
+        reason: "continuation",
+        request_permission: true
+      })
+    else
+      state
+    end
+  end
+
+  defp maybe_append_permission_observation(checkpoint, nil, _await_key), do: checkpoint
+  defp maybe_append_permission_observation(checkpoint, "", _await_key), do: checkpoint
+
+  defp maybe_append_permission_observation(checkpoint, observation, await_key) do
+    tool_call_id = permission_tool_call_id(checkpoint, await_key)
+
+    observation_msg = %{
+      "role" => "tool",
+      "tool_call_id" => tool_call_id,
+      "content" => observation
+    }
+
+    Map.put(checkpoint, "messages", (checkpoint["messages"] || []) ++ [observation_msg])
+  end
+
+  defp permission_tool_call_id(checkpoint, await_key) do
+    pending = checkpoint["pending"] || %{}
+
+    Map.get(pending, to_string(await_key)) ||
+      Map.get(pending, await_key) ||
+      find_request_permission_call_id(checkpoint["messages"] || []) ||
+      "call_request_permission"
+  end
+
+  defp find_request_permission_call_id(messages) do
+    messages
+    |> Enum.reverse()
+    |> Enum.find_value(fn
+      %{"role" => "assistant", "tool_calls" => calls} when is_list(calls) ->
+        Enum.find_value(calls, fn call ->
+          fn_block = call["function"] || call[:function] || %{}
+          name = fn_block["name"] || fn_block[:name] || call["name"]
+
+          if name == "request_permission" do
+            call["id"] || call[:id]
+          end
+        end)
+
+      _ ->
+        nil
+    end)
+  end
+
+  defp grant_open_requests_by_policy(state, env) do
+    case state.config do
+      nil ->
+        state
+
+      config ->
+        RuntimePermission.open_permission_requests(state.core)
+        |> Enum.reduce(state, fn req_env, st ->
+          tool = req_env.payload["tool"]
+          workspace = req_env.payload["workspace"]
+
+          spec = %{
+            depth: work_item_depth(st.core, req_env.work_item_id),
+            workspace: workspace,
+            activation: req_env
+          }
+
+          if RuntimePermission.tool_granted_by_policy?(config, spec, tool) do
+            EventCore.append!(
+              st.core,
+              Envelope.command("permission.granted",
+                correlation_id: req_env.correlation_id,
+                causation_id: env.event_id,
+                work_item_id: req_env.work_item_id,
+                payload: %{
+                  request_id: req_env.payload["request_id"],
+                  kind: "permanent",
+                  granter: "policy"
+                }
+              )
+            )
+
+            st
+          else
+            st
+          end
+        end)
+    end
+  end
+
+  defp work_item_depth(core, work_item_id) do
+    case EventCore.stream(core, 0, work_item_id: work_item_id, type: "run.started")
+         |> List.last() do
+      %Envelope{payload: %{"depth" => depth}} when is_integer(depth) -> depth
+      %Envelope{payload: %{"depth" => depth}} when is_binary(depth) -> String.to_integer(depth)
+      _ -> 0
+    end
   end
 
   defp loaded_config(state) do
