@@ -42,17 +42,29 @@ defmodule Omunculus.Runtime.SpikeAgents do
   end
 
   def resolve(%{depth: depth, max_depth: max_depth} = ctx, opts) when depth < max_depth do
+    reason = Map.get(ctx, :reason, "initial")
+    checkpoint = Map.get(ctx, :checkpoint, %{})
+    messages? = is_list(Map.get(checkpoint, "messages") || Map.get(checkpoint, :messages))
+
+    turns =
+      if reason in ["continuation", "retry"] or messages? do
+        [
+          fn messages -> Fake.text(delegate_result(messages)) end
+        ]
+      else
+        [
+          Fake.tool_call("delegate", %{"instruction" => ctx.instruction}, "call_delegate"),
+          fn messages -> Fake.text(delegate_result(messages)) end
+        ]
+      end
+
     %{
       agent_id: "concierge@spike",
       kind: "concierge",
       model: "fake",
       tools: ["delegate"],
       max_turns: 4,
-      chat:
-        fake_chat(opts, "concierge@spike", ctx, [
-          Fake.tool_call("delegate", %{"instruction" => ctx.instruction}, "call_delegate"),
-          fn messages -> Fake.text(last_tool_result(messages, ~r/Result: (.*)$/)) end
-        ]),
+      chat: fake_chat(opts, "concierge@spike", ctx, turns),
       tool_options: Map.take(opts, [:delay_ms])
     }
   end
@@ -60,7 +72,7 @@ defmodule Omunculus.Runtime.SpikeAgents do
   def resolve(%{instruction: instruction, checkpoint: checkpoint}, %{chat: chat} = opts)
       when is_map(chat) do
     target = target(instruction, opts[:target] || 10)
-    current = get_in(checkpoint, ["counter", :value]) || 0
+    current = counter_current(checkpoint)
 
     %{
       agent_id: "worker@" <> chat.model,
@@ -84,7 +96,7 @@ defmodule Omunculus.Runtime.SpikeAgents do
 
   def resolve(%{instruction: instruction, checkpoint: checkpoint} = ctx, opts) do
     target = target(instruction, opts[:target] || 10)
-    current = get_in(checkpoint, ["counter", :value]) || 0
+    current = counter_current(checkpoint)
     remaining = max(target - current, 0)
 
     calls =
@@ -124,6 +136,25 @@ defmodule Omunculus.Runtime.SpikeAgents do
 
       _ ->
         Fake.new(default_turns)
+    end
+  end
+
+  defp counter_current(checkpoint) when is_map(checkpoint) do
+    get_in(checkpoint, ["counter", :value]) ||
+      get_in(checkpoint, ["counter", "value"]) ||
+      get_in(checkpoint, ["tool_state", "counter", :value]) ||
+      get_in(checkpoint, ["tool_state", "counter", "value"]) ||
+      get_in(checkpoint, [:counter, :value]) ||
+      get_in(checkpoint, [:tool_state, :counter, :value]) ||
+      0
+  end
+
+  defp counter_current(_), do: 0
+
+  defp delegate_result(messages) do
+    case last_tool_result(messages, ~r/Result: (.*?)\. Still pending:/) do
+      "" -> last_tool_result(messages, ~r/^Result: (.+)$/)
+      value -> value
     end
   end
 

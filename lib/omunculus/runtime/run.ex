@@ -11,10 +11,10 @@ defmodule Omunculus.Runtime.Run do
       tool.call.requested -> append+commit -> deliver -> execute
       tool.call.completed -> append+commit -> deliver -> next round
 
-  Delegation appends `task.delegated`, then blocks until the child's
-  `task.completed` is delivered. The causation chain follows the scenario
-  table exactly; `run.*` and `model.call.*` hang off the chain as side
-  branches so the documented chain is preserved.
+  Delegation appends `task.delegated` and returns `{:wait, ...}` so the run
+  can close with `run.completed` outcome `waiting`. A continuation run resumes
+  from the checkpoint when children finish; `run.*` and `model.call.*` hang
+  off the chain as side branches so the documented chain is preserved.
   """
 
   use GenServer, restart: :temporary
@@ -39,6 +39,10 @@ defmodule Omunculus.Runtime.Run do
     activation = state.activation
     Process.put(:chain_head, activation.event_id)
     Process.put(:tool_round, 0)
+    Process.put(:awaiting_children, [])
+
+    checkpoint = state.checkpoint || %{}
+    reason = state[:reason] || state["reason"] || "initial"
 
     started =
       append!(state, :event, "run.started", %{
@@ -48,53 +52,113 @@ defmodule Omunculus.Runtime.Run do
         originating_run_id: state.originating_run_id,
         agent_id: state.agent.agent_id,
         agent_kind: state.agent.kind,
-        checkpoint: state.checkpoint
+        reason: reason,
+        checkpoint: checkpoint
       })
 
     Process.put(:run_started_id, started.event_id)
 
+    run_agent(state, checkpoint)
+  end
+
+  defp run_agent(state, checkpoint) do
+    remaining = checkpoint_awaiting(checkpoint)
+    remaining_pending = fetch_key(checkpoint, "pending") || %{}
     agent = state.agent
 
-    outcome =
-      Agent.run(
-        instruction: state.instruction,
-        chat: agent.chat,
-        fs: state[:fs] || FS.Memory.new(%{}),
-        tools: agent.tools,
-        max_turns: agent[:max_turns] || 32,
-        instructions: agent[:instructions],
-        system_prompt: agent[:system_prompt],
-        nudge: agent[:nudge],
-        tool_options: agent[:tool_options] || %{},
-        tool_state: state.checkpoint,
-        tool_executor: &execute_tool(state, &1, &2, &3, &4),
-        reporter: &report(state, &1)
-      )
+    opts = [
+      instruction: state.instruction,
+      chat: agent.chat,
+      fs: state[:fs] || FS.Memory.new(%{}),
+      tools: agent.tools,
+      max_turns: agent[:max_turns] || 32,
+      instructions: agent[:instructions],
+      system_prompt: agent[:system_prompt],
+      nudge: agent[:nudge],
+      tool_options: agent[:tool_options] || %{},
+      tool_state: tool_state_from(checkpoint),
+      tool_executor: &execute_tool(state, &1, &2, &3, &4),
+      reporter: &report(state, &1)
+    ]
+
+    opts =
+      case checkpoint_messages(checkpoint) do
+        messages when is_list(messages) -> Keyword.put(opts, :messages, messages)
+        _ -> opts
+      end
+
+    outcome = Agent.run(opts)
+    new_children = Process.get(:awaiting_children, [])
 
     case outcome do
-      {:ok, result} ->
-        completed =
-          append!(state, :event, "task.completed", %{
-            result: result.assistant_text,
-            depth: state.depth,
-            rounds: result.turns,
-            tool_calls: result.tool_calls
-          })
+      {:waiting, result} ->
+        pending =
+          Map.merge(remaining_pending, pending_from_messages(result.messages, new_children))
 
-        append!(
-          state,
-          :event,
-          "run.completed",
-          %{rounds: result.turns, tool_calls: result.tool_calls, usage: result.usage},
-          completed.event_id
+        finish_waiting(state, result, remaining ++ new_children, pending: pending)
+
+      {:ok, result} when remaining != [] ->
+        finish_waiting(state, result, remaining,
+          pending: remaining_pending,
+          notes: result.assistant_text
         )
 
-        {:stop, :normal, state}
+      {:ok, result} ->
+        finish_completed(state, result)
 
       {:error, reason} ->
         append!(state, :event, "run.failed", %{reason: inspect(reason)})
         {:stop, :normal, state}
     end
+  end
+
+  defp finish_waiting(state, result, awaiting, opts) do
+    pending = Keyword.fetch!(opts, :pending)
+
+    checkpoint =
+      %{
+        "messages" => result.messages,
+        "tool_state" => result.tool_state,
+        "awaiting" => awaiting,
+        "pending" => pending
+      }
+      |> maybe_put_notes(Keyword.get(opts, :notes))
+
+    append!(
+      state,
+      :event,
+      "run.completed",
+      %{outcome: "waiting", awaiting: awaiting, checkpoint: checkpoint},
+      Process.get(:chain_head)
+    )
+
+    {:stop, :normal, state}
+  end
+
+  defp finish_completed(state, result) do
+    completed =
+      append!(state, :event, "task.completed", %{
+        result: result.assistant_text,
+        depth: state.depth,
+        rounds: result.turns,
+        tool_calls: result.tool_calls
+      })
+
+    append!(
+      state,
+      :event,
+      "run.completed",
+      %{
+        outcome: "completed",
+        awaiting: [],
+        rounds: result.turns,
+        tool_calls: result.tool_calls,
+        usage: result.usage
+      },
+      completed.event_id
+    )
+
+    {:stop, :normal, state}
   end
 
   @impl true
@@ -170,14 +234,9 @@ defmodule Omunculus.Runtime.Run do
 
     case await_delivery_or_rejection(delegated.event_id) do
       :ok ->
-        case await_child(child, state[:delegation_timeout] || 60_000) do
-          {:ok, completed} ->
-            Process.put(:chain_head, completed.event_id)
-            {:ok, "Sub-agent completed. Result: #{completed.payload["result"]}", context}
-
-          {:error, reason} ->
-            {:error, reason, context}
-        end
+        children = Process.get(:awaiting_children, [])
+        Process.put(:awaiting_children, children ++ [child])
+        {:wait, "delegated", context}
 
       {:rejected, rejection} ->
         Process.put(:chain_head, rejection.event_id)
@@ -204,15 +263,6 @@ defmodule Omunculus.Runtime.Run do
       {:event_core, %Envelope{event_id: ^event_id}} -> :ok
     after
       @delivery_timeout -> raise "event #{event_id} was committed but never delivered"
-    end
-  end
-
-  defp await_child(child_work_item_id, timeout) do
-    receive do
-      {:event_core, %Envelope{type: "task.completed", work_item_id: ^child_work_item_id} = env} ->
-        {:ok, env}
-    after
-      timeout -> {:error, {:delegation_timeout, child_work_item_id}}
     end
   end
 
@@ -269,4 +319,68 @@ defmodule Omunculus.Runtime.Run do
   defp counter_value("counter", %{value: value, increment: inc}, :previous), do: value - inc
   defp counter_value("counter", %{value: value}, :new), do: value
   defp counter_value(_name, _state, _which), do: nil
+
+  defp maybe_put_notes(checkpoint, nil), do: checkpoint
+  defp maybe_put_notes(checkpoint, notes), do: Map.put(checkpoint, "notes", notes)
+
+  defp pending_from_messages(messages, child_ids) do
+    tool_call_ids =
+      messages
+      |> Enum.reverse()
+      |> Enum.find_value([], fn
+        %{"role" => "assistant", "tool_calls" => calls} when is_list(calls) ->
+          Enum.map(calls, fn call -> call["id"] || call[:id] end)
+
+        _ ->
+          nil
+      end)
+
+    child_ids
+    |> Enum.zip(tool_call_ids)
+    |> Map.new()
+  end
+
+  defp checkpoint_awaiting(checkpoint) do
+    fetch_key(checkpoint, "awaiting") || []
+  end
+
+  defp checkpoint_messages(checkpoint) do
+    case fetch_key(checkpoint, "messages") do
+      messages when is_list(messages) -> messages
+      _ -> nil
+    end
+  end
+
+  defp tool_state_from(checkpoint) when is_map(checkpoint) do
+    base =
+      case fetch_key(checkpoint, "tool_state") do
+        nil ->
+          checkpoint
+          |> Map.drop(["messages", "awaiting", "pending", "tool_state", "notes"])
+          |> Map.drop([:messages, :awaiting, :pending, :tool_state, :notes])
+
+        tool_state ->
+          tool_state
+      end
+
+    atomize_tool_state(base)
+  end
+
+  defp tool_state_from(_), do: %{}
+
+  defp fetch_key(map, key) when is_map(map) do
+    Map.get(map, key) || Map.get(map, String.to_atom(key))
+  end
+
+  defp fetch_key(_, _), do: nil
+
+  defp atomize_tool_state(map) when is_map(map) do
+    Map.new(map, fn {tool, state} when is_map(state) ->
+      {to_string(tool),
+       Map.new(state, fn
+         {k, v} when is_binary(k) -> {String.to_atom(k), v}
+         {k, v} when is_atom(k) -> {k, v}
+       end)}
+    end)
+  end
 end

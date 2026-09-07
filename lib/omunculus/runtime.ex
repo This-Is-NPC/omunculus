@@ -91,7 +91,8 @@ defmodule Omunculus.Runtime do
        run_opts: Keyword.get(opts, :run_opts, []),
        runs: %{},
        pids: %{},
-       handled: MapSet.new()
+       handled: MapSet.new(),
+       pending_continuations: %{}
      }}
   end
 
@@ -116,7 +117,9 @@ defmodule Omunculus.Runtime do
       {run_id, pids} ->
         {run, runs} = Map.pop(state.runs, run_id)
         if reason != :normal, do: record_crash(state.core, run, reason)
-        {:noreply, %{state | pids: pids, runs: runs}}
+
+        state = %{state | pids: pids, runs: runs}
+        {:noreply, maybe_continue_parent(state, run.work_item_id)}
     end
   end
 
@@ -176,6 +179,24 @@ defmodule Omunculus.Runtime do
     end
   end
 
+  defp activate(%Envelope{type: "task.completed"} = env, state) do
+    case find_parent_waiter(state.core, env.work_item_id) do
+      {:ok, parent_wi, run_completed} ->
+        checkpoint = run_completed.payload["checkpoint"] || %{}
+        awaiting = checkpoint["awaiting"] || []
+        child_id = to_string(env.work_item_id)
+
+        if child_id in Enum.map(awaiting, &to_string/1) do
+          maybe_continue_parent(state, parent_wi, env, run_completed, child_id, awaiting)
+        else
+          state
+        end
+
+      :error ->
+        state
+    end
+  end
+
   defp activate(%Envelope{type: "run.started"} = env, state) do
     case state.runs[env.run_id] do
       nil ->
@@ -201,7 +222,8 @@ defmodule Omunculus.Runtime do
         instruction: spec.instruction,
         checkpoint: spec.checkpoint,
         workspace: workspace,
-        team: team
+        team: team,
+        reason: Map.get(spec, :reason, "initial")
       })
 
     opts =
@@ -210,7 +232,8 @@ defmodule Omunculus.Runtime do
         core: state.core,
         run_id: run_id,
         agent: agent,
-        max_depth: state.max_depth
+        max_depth: state.max_depth,
+        reason: Map.get(spec, :reason, "initial")
       })
       |> Map.merge(Map.new(state.run_opts))
       |> Map.to_list()
@@ -295,7 +318,8 @@ defmodule Omunculus.Runtime do
            originating_run_id: p["originating_run_id"],
            checkpoint: checkpoint,
            project_id: activation.project_id,
-           session_id: activation.session_id
+           session_id: activation.session_id,
+           reason: "retry"
          }}
     end
   end
@@ -313,6 +337,159 @@ defmodule Omunculus.Runtime do
   end
 
   defp activation_instruction(%Envelope{payload: %{"instruction" => i}}), do: i
+
+  defp find_parent_waiter(core, child_work_item_id) do
+    child = to_string(child_work_item_id)
+
+    case Enum.find(EventCore.stream(core, 0, type: "task.delegated"), fn env ->
+           to_string(env.payload["child_work_item_id"]) == child
+         end) do
+      nil ->
+        :error
+
+      delegated ->
+        parent_wi = delegated.work_item_id
+
+        case EventCore.stream(core, 0, work_item_id: parent_wi, type: "run.completed")
+             |> List.last() do
+          %Envelope{payload: %{"outcome" => "waiting"}} = run_completed ->
+            {:ok, parent_wi, run_completed}
+
+          _ ->
+            :error
+        end
+    end
+  end
+
+  defp continue_parent(state, env, parent_wi, checkpoint, child_id, awaiting) do
+    pending = checkpoint["pending"] || %{}
+
+    tool_call_id =
+      pending[child_id] ||
+        pending[env.work_item_id] ||
+        pending |> Map.values() |> List.first() ||
+        "call_delegate"
+
+    new_awaiting = Enum.reject(awaiting, &(to_string(&1) == child_id))
+
+    pending_text =
+      case new_awaiting do
+        [] -> "none"
+        ids -> Enum.map_join(ids, ", ", &to_string/1)
+      end
+
+    observation = %{
+      "role" => "tool",
+      "tool_call_id" => tool_call_id,
+      "content" =>
+        "Sub-agent completed. Result: #{env.payload["result"]}. Still pending: #{pending_text}"
+    }
+
+    new_pending =
+      pending
+      |> Map.delete(child_id)
+      |> Map.delete(env.work_item_id)
+
+    new_checkpoint =
+      checkpoint
+      |> Map.put("messages", (checkpoint["messages"] || []) ++ [observation])
+      |> Map.put("awaiting", new_awaiting)
+      |> Map.put("pending", new_pending)
+
+    last_start =
+      EventCore.stream(state.core, 0, work_item_id: parent_wi, type: "run.started")
+      |> List.last()
+
+    attempt =
+      EventCore.stream(state.core, 0, work_item_id: parent_wi, type: "run.started")
+      |> length()
+      |> Kernel.+(1)
+
+    activation = find_activation(state.core, parent_wi)
+
+    start_run(state, %{
+      activation: env,
+      work_item_id: parent_wi,
+      correlation_id: env.correlation_id,
+      depth: last_start.payload["depth"],
+      attempt: attempt,
+      instruction: activation_instruction(activation),
+      parent_run_id: last_start.payload["parent_run_id"],
+      originating_run_id: last_start.payload["originating_run_id"],
+      checkpoint: new_checkpoint,
+      project_id: env.project_id,
+      session_id: env.session_id,
+      reason: "continuation"
+    })
+  end
+
+  defp live_run_for_work_item?(state, work_item_id) do
+    Enum.any?(state.runs, fn {_, run} -> run.work_item_id == work_item_id end)
+  end
+
+  defp queue_continuation(state, parent_wi, env) do
+    queue = Map.get(state.pending_continuations, parent_wi, [])
+
+    %{
+      state
+      | pending_continuations: Map.put(state.pending_continuations, parent_wi, queue ++ [env])
+    }
+  end
+
+  defp maybe_continue_parent(
+         state,
+         work_item_id,
+         env \\ nil,
+         run_completed \\ nil,
+         child_id \\ nil,
+         awaiting \\ nil
+       ) do
+    cond do
+      env ->
+        if live_run_for_work_item?(state, work_item_id) do
+          queue_continuation(state, work_item_id, env)
+        else
+          continue_parent(
+            state,
+            env,
+            work_item_id,
+            run_completed.payload["checkpoint"] || %{},
+            child_id,
+            awaiting
+          )
+        end
+
+      true ->
+        case Map.get(state.pending_continuations, work_item_id, []) do
+          [] ->
+            state
+
+          [next | rest] ->
+            pending =
+              if rest == [],
+                do: Map.delete(state.pending_continuations, work_item_id),
+                else: Map.put(state.pending_continuations, work_item_id, rest)
+
+            state = %{state | pending_continuations: pending}
+
+            case find_parent_waiter(state.core, next.work_item_id) do
+              {:ok, parent_wi, run_completed} ->
+                checkpoint = run_completed.payload["checkpoint"] || %{}
+                awaiting = checkpoint["awaiting"] || []
+                child_id = to_string(next.work_item_id)
+
+                if child_id in Enum.map(awaiting, &to_string/1) do
+                  maybe_continue_parent(state, parent_wi, next, run_completed, child_id, awaiting)
+                else
+                  state
+                end
+
+              :error ->
+                state
+            end
+        end
+    end
+  end
 
   # Tool state is kept with atom keys in memory (see Tools.Counter); the log
   # stores it as JSON.

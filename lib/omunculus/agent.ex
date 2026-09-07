@@ -17,13 +17,20 @@ defmodule Omunculus.Agent do
     nudge = Keyword.get(opts, :nudge)
     started_at = now()
 
-    messages = [
-      %{
-        "role" => "system",
-        "content" => Keyword.get(opts, :system_prompt) || system_prompt(extra, fs)
-      },
-      %{"role" => "user", "content" => instruction}
-    ]
+    messages =
+      case Keyword.get(opts, :messages) do
+        msgs when is_list(msgs) and msgs != [] ->
+          msgs
+
+        _ ->
+          [
+            %{
+              "role" => "system",
+              "content" => Keyword.get(opts, :system_prompt) || system_prompt(extra, fs)
+            },
+            %{"role" => "user", "content" => instruction}
+          ]
+      end
 
     loop(%{
       chat: chat,
@@ -73,25 +80,58 @@ defmodule Omunculus.Agent do
           duration_ms: elapsed(started_at)
         })
 
-        {messages, context} = dispatch(state, calls, reply, round)
+        case dispatch(state, calls, reply, round) do
+          {:waiting, messages, context} ->
+            turn = state.turn + 1
+            usage = merge_usage(state.usage, reply.usage)
 
-        emit(state, %{
-          type: :round_finished,
-          round: round,
-          outcome: :completed,
-          tool_calls: length(calls),
-          duration_ms: elapsed(started_at)
-        })
+            emit(state, %{
+              type: :round_finished,
+              round: round,
+              outcome: :waiting,
+              tool_calls: length(calls),
+              duration_ms: elapsed(started_at)
+            })
 
-        loop(%{
-          state
-          | messages: messages,
-            context: context,
-            turn: state.turn + 1,
-            usage: merge_usage(state.usage, reply.usage),
-            assistant_text: text(reply.content),
-            tool_calls: state.tool_calls + length(calls)
-        })
+            emit(state, %{
+              type: :run_completed,
+              outcome: :waiting,
+              rounds: turn,
+              tool_calls: state.tool_calls + length(calls),
+              usage: usage,
+              duration_ms: elapsed(state.started_at)
+            })
+
+            {:waiting,
+             result(%{
+               state
+               | messages: messages,
+                 context: context,
+                 turn: turn,
+                 usage: usage,
+                 assistant_text: text(reply.content),
+                 tool_calls: state.tool_calls + length(calls)
+             })}
+
+          {messages, context} ->
+            emit(state, %{
+              type: :round_finished,
+              round: round,
+              outcome: :completed,
+              tool_calls: length(calls),
+              duration_ms: elapsed(started_at)
+            })
+
+            loop(%{
+              state
+              | messages: messages,
+                context: context,
+                turn: state.turn + 1,
+                usage: merge_usage(state.usage, reply.usage),
+                assistant_text: text(reply.content),
+                tool_calls: state.tool_calls + length(calls)
+            })
+        end
 
       {:ok, reply} ->
         messages = state.messages ++ [assistant_message(reply)]
@@ -171,8 +211,8 @@ defmodule Omunculus.Agent do
   defp dispatch(state, calls, reply, round) do
     assistant = assistant_message(reply)
 
-    {tool_messages, context} =
-      Enum.reduce(calls, {[], state.context}, fn call, {acc, context} ->
+    {tool_messages, context, waiting?} =
+      Enum.reduce(calls, {[], state.context, false}, fn call, {acc, context, waiting?} ->
         {name, args, id} = decode_call(call)
         started_at = now()
         metadata = tool_metadata(name, context)
@@ -192,11 +232,12 @@ defmodule Omunculus.Agent do
           case state.tool_executor.(name, args, context, state.tools) do
             {:ok, output, context} -> {output, context, :completed}
             {:error, reason, context} -> {format_tool_error(reason), context, {:error, reason}}
+            {:wait, reason, context} -> {reason, context, :waiting}
           end
 
         delay_ms = state.context.options[:delay_ms] || 0
 
-        if delay_ms > 0 do
+        if delay_ms > 0 and outcome != :waiting do
           emit(state, %{
             type: :tool_result_waiting,
             round: round,
@@ -220,16 +261,30 @@ defmodule Omunculus.Agent do
           })
         )
 
-        message = %{
-          "role" => "tool",
-          "tool_call_id" => id,
-          "content" => body
-        }
+        acc =
+          if outcome == :waiting do
+            acc
+          else
+            acc ++
+              [
+                %{
+                  "role" => "tool",
+                  "tool_call_id" => id,
+                  "content" => body
+                }
+              ]
+          end
 
-        {acc ++ [message], context}
+        {acc, context, waiting? or outcome == :waiting}
       end)
 
-    {state.messages ++ [assistant] ++ tool_messages, context}
+    messages = state.messages ++ [assistant] ++ tool_messages
+
+    if waiting? do
+      {:waiting, messages, context}
+    else
+      {messages, context}
+    end
   end
 
   defp decode_call(call) do

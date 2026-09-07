@@ -160,4 +160,73 @@ defmodule Omunculus.AgentTest do
     assert result.tool_calls == 2
     assert result.assistant_text == "done"
   end
+
+  test "messages opt supplies starting conversation" do
+    starting = [
+      %{"role" => "system", "content" => "custom system"},
+      %{"role" => "user", "content" => "prior user turn"}
+    ]
+
+    chat = Chat.Fake.new([%{content: "done", tool_calls: nil, usage: %{"total_tokens" => 1}}])
+    fs = FS.Memory.new(%{})
+
+    assert {:ok, result} =
+             Agent.run(
+               instruction: "ignored when messages are provided",
+               chat: chat,
+               fs: fs,
+               tools: ["read"],
+               messages: starting,
+               max_turns: 4
+             )
+
+    assert result.messages ==
+             starting ++ [%{"role" => "assistant", "content" => "done"}]
+  end
+
+  test "tool executor wait halts with assistant tool_calls and no tool messages" do
+    tool_call = %{
+      "id" => "call_wait",
+      "function" => %{
+        "name" => "read",
+        "arguments" => Jason.encode!(%{"path" => "lib/a.ex"})
+      }
+    }
+
+    chat =
+      Chat.Fake.new([
+        %{content: nil, tool_calls: [tool_call], usage: %{"total_tokens" => 2}}
+      ])
+
+    starting = [
+      %{"role" => "system", "content" => "sys"},
+      %{"role" => "user", "content" => "read the file"}
+    ]
+
+    executor = fn _name, _args, context, _tools ->
+      {:wait, "paused", context}
+    end
+
+    fs = FS.Memory.new(%{"lib/a.ex" => "hello\n"})
+
+    assert {:waiting, result} =
+             Agent.run(
+               instruction: "read",
+               chat: chat,
+               fs: fs,
+               tools: ["read"],
+               messages: starting,
+               tool_executor: executor,
+               max_turns: 4
+             )
+
+    assistant = List.last(result.messages)
+
+    assert assistant["role"] == "assistant"
+    assert assistant["tool_calls"] == [tool_call]
+    refute Enum.any?(result.messages, &(&1["role"] == "tool"))
+    assert result.messages == starting ++ [assistant]
+    assert result.turns == 1
+    assert result.tool_calls == 1
+  end
 end
