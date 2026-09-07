@@ -157,7 +157,9 @@ defmodule Omunculus.Runtime do
       originating_run_id: p["originating_run_id"],
       checkpoint: %{},
       project_id: env.project_id,
-      session_id: env.session_id
+      session_id: env.session_id,
+      team: p["team"],
+      agent: p["agent"]
     })
   end
 
@@ -281,15 +283,16 @@ defmodule Omunculus.Runtime do
          table when is_map(table) <- Policy.table(loaded),
          hash <- Policy.hash(table),
          :ok <- maybe_emit_policy_loaded(state, spec, hash, table),
-         profile = config[:profile] || loaded.defaults.preset || "coding",
+         profile = resolve_profile(spec, loaded, config),
          workspace = resolve_workspace(spec, loaded),
          depth = to_string(spec.depth),
          {:ok, line_bands} <- Policy.line(table, profile, depth, workspace),
          {:ok, ceiling} <- policy_ceiling(loaded, depth, workspace),
          true <- Policy.fits_ceiling?(line_bands, ceiling),
          {:ok, bands} <- maybe_narrow_tools(config, line_bands) do
-      agent = state.agents.(agent_context(state, spec))
+      agent = state.agents.(agent_context(state, spec, loaded))
       agent = %{agent | tools: bands["granted"]}
+      agent = merge_config_tool_options(agent, loaded)
       {:ok, agent, bands, hash, negotiable_or_human?(bands)}
     else
       false -> {:error, :profile_outside_ceiling}
@@ -391,8 +394,8 @@ defmodule Omunculus.Runtime do
       end
   end
 
-  defp agent_context(state, spec) do
-    %{
+  defp agent_context(state, spec, loaded \\ nil) do
+    base = %{
       depth: spec.depth,
       max_depth: state.max_depth,
       attempt: spec.attempt,
@@ -400,8 +403,42 @@ defmodule Omunculus.Runtime do
       checkpoint: spec.checkpoint,
       workspace: Map.get(spec, :workspace, spec.activation.workspace_id),
       team: Map.get(spec, :team, spec.activation.payload["team"]),
+      agent: Map.get(spec, :agent, spec.activation.payload["agent"]),
       reason: Map.get(spec, :reason, "initial")
     }
+
+    case loaded do
+      nil -> base
+      config -> Map.put(base, :config, config)
+    end
+  end
+
+  defp resolve_profile(spec, loaded, config) do
+    team_name = Map.get(spec, :team)
+
+    team_profile =
+      case team_name do
+        name when is_binary(name) -> get_in(loaded.teams, [name, :profile])
+        _ -> nil
+      end
+
+    default_profile = config[:profile] || loaded.defaults.preset || "coding"
+
+    if is_binary(team_profile) and Map.has_key?(loaded.presets, team_profile) do
+      team_profile
+    else
+      default_profile
+    end
+  end
+
+  defp merge_config_tool_options(agent, loaded) do
+    snapshot = %{
+      workspaces: loaded.workspaces,
+      teams: loaded.teams,
+      agents: loaded.agents
+    }
+
+    %{agent | tool_options: Map.merge(agent.tool_options || %{}, snapshot)}
   end
 
   defp bands_from_tools(tools) do

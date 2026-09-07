@@ -60,7 +60,8 @@ defmodule Omunculus.Runtime.Run do
           agent_kind: state.agent.kind,
           reason: reason,
           checkpoint: checkpoint,
-          tools: tools_bands
+          tools: tools_bands,
+          team: state[:team] || state["team"]
         }
         |> maybe_put_policy_hash(state[:policy_hash])
       )
@@ -245,7 +246,9 @@ defmodule Omunculus.Runtime.Run do
         to_depth: state.depth + 1,
         parent_run_id: state.run_id,
         originating_run_id: state.originating_run_id || state.run_id,
-        tools: tools_pin(state)
+        tools: tools_pin(state),
+        team: args["team"] || args[:team],
+        agent: args["agent"] || args[:agent]
       })
 
     case await_delivery_or_rejection(delegated.event_id) do
