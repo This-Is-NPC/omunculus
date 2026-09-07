@@ -183,6 +183,62 @@ defmodule Omunculus.Events do
       interceptable: true,
       injectable: true,
       doc: "A durable comment on a Work Item; kind may be request or response for inbox flows."
+    },
+    "permission.requested" => %{
+      kind: :event,
+      versions: ["1"],
+      required: ["request_id", "tool"],
+      emitted_by: ["Run"],
+      interceptable: true,
+      injectable: false,
+      doc:
+        "A Run asks for a tool outside its pinned bands; projects to COMMENTS as a human inbox request."
+    },
+    "permission.granted" => %{
+      kind: :command,
+      versions: ["1"],
+      required: ["request_id", "kind", "granter"],
+      emitted_by: ["Run", "CLI"],
+      interceptable: true,
+      injectable: true,
+      doc:
+        "Grants a permission request; kind is temporary or permanent; granter is run:<id>, human:<origin>, or policy."
+    },
+    "permission.denied" => %{
+      kind: :command,
+      versions: ["1"],
+      required: ["request_id", "reason"],
+      emitted_by: ["Run", "CLI", "Runtime"],
+      interceptable: false,
+      injectable: true,
+      doc: "Denies a permission request; reason explains the refusal to the requesting Run."
+    },
+    "permission.revoked" => %{
+      kind: :command,
+      versions: ["1"],
+      required: ["request_id"],
+      emitted_by: ["Run", "CLI"],
+      interceptable: true,
+      injectable: true,
+      doc: "Revokes a previously granted permission for the current task lineage."
+    },
+    "policy.changed" => %{
+      kind: :event,
+      versions: ["1"],
+      required: [],
+      emitted_by: ["CLI"],
+      interceptable: false,
+      injectable: false,
+      doc: "The on-disk policy table changed after a permanent grant or manual edit."
+    },
+    "inbox.read" => %{
+      kind: :command,
+      versions: ["1"],
+      required: ["id"],
+      emitted_by: ["CLI"],
+      interceptable: false,
+      injectable: true,
+      doc: "Marks an inbox comment or task result as read in COMMENTS.read_at."
     }
   }
 

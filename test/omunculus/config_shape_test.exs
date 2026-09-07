@@ -64,15 +64,9 @@ defmodule Omunculus.ConfigShapeTest do
       assert {:ok, _} = Config.check(config), name
     end
 
-    # The complex levels subscribe an automation to permission.requested,
-    # which the catalog module does not declare yet. Remove this expectation
-    # when permission negotiation lands.
     for name <- ~w(complex.toml complex-teams.toml) do
       {:ok, config} = load(name)
-
-      assert {:error, {:unknown_event_type, "record", "permission.requested"}} =
-               Config.check(config),
-             name
+      assert {:ok, _} = Config.check(config), name
     end
 
     {:ok, complex} = load("complex-teams.toml")
