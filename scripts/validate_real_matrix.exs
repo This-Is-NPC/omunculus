@@ -1,7 +1,27 @@
-# Run with: mise exec -- mix run scripts/validate_real_matrix.exs
+# Run with: mise exec -- mix run scripts/validate_real_matrix.exs --preset presets/cloud.toml
+# Optional: --rounds 3 --base complex --task count --timeout 300000
 # Every workspace, database and output is isolated under a new /tmp directory.
-alias Omunculus.{Config, EventCore, SessionExecutor}
+alias Omunculus.{Config, Dotenv, EventCore, SessionExecutor}
 alias Omunculus.EventCore.Projector
+
+{opts, _, invalid} =
+  OptionParser.parse(System.argv(),
+    strict: [preset: :string, rounds: :integer, base: :string, task: :string, timeout: :integer]
+  )
+
+if invalid != [], do: raise("invalid matrix options")
+preset = Path.expand(opts[:preset] || "presets/local.toml")
+rounds = opts[:rounds] || 1
+timeout = opts[:timeout] || 180_000
+bases = if opts[:base], do: [opts[:base]], else: ["simple", "medium", "complex"]
+tasks = if opts[:task], do: [opts[:task]], else: ["count", "write"]
+
+unless rounds > 0 and timeout > 0 and Enum.all?(tasks, &(&1 in ["count", "write"])) and
+         Enum.all?(bases, &(&1 in ["simple", "medium", "complex"])),
+       do: raise("invalid matrix bounds")
+
+{:ok, file_env} = Dotenv.load(File.cwd!())
+env = Map.merge(file_env, System.get_env())
 
 root =
   Path.join(
@@ -13,23 +33,30 @@ File.mkdir_p!(root)
 IO.puts("Real-provider evidence: #{root}")
 
 results =
-  for base <- ["simple", "medium", "complex"],
-      task <- ["count", "write"],
+  for round <- 1..rounds,
+      base <- bases,
+      task <- tasks,
       lane <- [false, true] do
-    dir = Path.join(root, "#{base}-#{task}-#{lane}")
+    dir = Path.join(root, "round-#{round}-#{base}-#{task}-#{lane}")
     File.mkdir_p!(dir)
     config_path = Path.join(dir, "omunculus.toml")
     File.cp!("test/fixtures/config/#{base}.toml", config_path)
     overlay = Path.join(dir, "provider.toml")
-    body = File.read!("presets/local.toml")
+    body = File.read!(preset)
     body = if lane, do: body <> "\n" <> File.read!("test/fixtures/config/lane.toml"), else: body
     File.write!(overlay, body)
-    {:ok, config} = Config.load(cwd: dir, config_file: overlay, env: %{})
+    {:ok, config} = Config.load(cwd: dir, config_file: overlay, env: env)
     for {_, ws} <- config.workspaces, path <- ws.roots, do: File.mkdir_p!(path)
     db = Path.join(dir, "session.sqlite3")
 
     {:ok, owner} =
-      SessionExecutor.ensure_started(db: db, cwd: dir, config_file: overlay, provider: "chat")
+      SessionExecutor.ensure_started(
+        db: db,
+        cwd: dir,
+        config_file: overlay,
+        provider: "chat",
+        env: env
+      )
 
     core = SessionExecutor.core(owner)
 
@@ -57,7 +84,7 @@ results =
       Omunculus.Runtime.request(core, instruction,
         session_id: session,
         workspace: "app",
-        timeout: 180_000,
+        timeout: timeout,
         execution: %{cwd: dir, config_file: overlay, profile: profile, provider: "chat"}
       )
 
@@ -91,15 +118,74 @@ results =
 
     expected = if task == "count", do: 10, else: true
     success = match?({:ok, _}, result) and actual == expected
+    runtime_idle = Omunculus.Runtime.runs(:sys.get_state(owner).runtime) == %{}
     snapshot = Projector.snapshot(core)
     Projector.rebuild(:sys.get_state(owner).projector)
     replay_equal = snapshot == Projector.snapshot(core)
+
+    starts = Enum.filter(events, &(&1.type == "run.started"))
+    depths = Enum.map(starts, & &1.payload["depth"]) |> Enum.uniq() |> Enum.sort()
+
+    required_depth =
+      config.policy |> Map.keys() |> Enum.map(&String.to_integer/1) |> Enum.max(fn -> 0 end)
+
+    full_depth = Enum.all?(0..required_depth, &(&1 in depths))
+
+    model_ids =
+      events
+      |> Enum.filter(&(&1.type == "model.call.completed"))
+      |> Enum.map(& &1.payload["model"])
+      |> Enum.uniq()
+
+    event_ids = MapSet.new(events, & &1.event_id)
+    starts_by_id = Map.new(starts, &{&1.run_id, &1})
+
+    causation_missing =
+      Enum.count(events, &(&1.causation_id && not MapSet.member?(event_ids, &1.causation_id)))
+
+    broken_parent_links =
+      Enum.count(starts, fn start ->
+        depth = start.payload["depth"]
+        parent = starts_by_id[start.payload["parent_run_id"]]
+        depth > 0 and (is_nil(parent) or parent.payload["depth"] != depth - 1)
+      end)
+
+    task_outcome =
+      case result do
+        {:ok, _} -> "completed"
+        {:error, :timeout} -> "timeout"
+        _ -> "error"
+      end
+
+    tool_errors =
+      events
+      |> Enum.filter(&(&1.type == "tool.call.completed" and &1.payload["outcome"] != "completed"))
+      |> Enum.map(& &1.payload["outcome"])
 
     row = %{
       base: base,
       task: task,
       lane: lane,
-      model: "qwen3.5:4b",
+      model: config.chat.model,
+      observed_models: model_ids,
+      preset: Path.basename(preset),
+      round: round,
+      depths: depths,
+      full_depth: full_depth,
+      runtime_idle: runtime_idle,
+      contract_success:
+        success and full_depth and replay_equal and runtime_idle and
+          causation_missing == 0 and broken_parent_links == 0,
+      task_outcome: task_outcome,
+      causation_missing: causation_missing,
+      broken_parent_links: broken_parent_links,
+      tool_errors: tool_errors,
+      run_failure_reasons:
+        events |> Enum.filter(&(&1.type == "run.failed")) |> Enum.map(& &1.payload["reason"]),
+      delegations: Enum.count(events, &(&1.type == "task.delegated")),
+      continuations: Enum.count(starts, &(&1.payload["reason"] == "continuation")),
+      tool_counts: Enum.frequencies_by(tools, & &1.payload["tool"]),
+      run_failures: Enum.count(events, &(&1.type == "run.failed")),
       success: success,
       actual: actual,
       replay_equal: replay_equal,
