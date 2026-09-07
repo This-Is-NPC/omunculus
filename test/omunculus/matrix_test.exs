@@ -4,11 +4,20 @@ defmodule Omunculus.MatrixTest do
   alias Omunculus.Matrix
 
   test "lane overlay skips interceptors that are not implemented yet" do
-    # When ToolGate and TeamGate exist, this test must fail so the matrix starts loading them.
-    assert Matrix.skipped_lane_modules() == [
-             "Omunculus.Interceptors.TeamGate",
-             "Omunculus.Interceptors.ToolGate"
-           ]
+    # ToolGate is loaded; this must fail when TeamGate exists so the matrix starts loading it.
+    assert Matrix.skipped_lane_modules() == ["Omunculus.Interceptors.TeamGate"]
+  end
+
+  test "simple without overlay" do
+    ctx = Matrix.simple()
+    assert ctx.result == "10"
+    Matrix.invariants!(ctx)
+  end
+
+  test "simple with lane.toml overlay" do
+    ctx = Matrix.simple("simple.toml", "lane.toml")
+    assert ctx.result == "10"
+    Matrix.invariants!(ctx)
   end
 
   test "medium without overlay" do
@@ -33,6 +42,12 @@ defmodule Omunculus.MatrixTest do
     ctx = Matrix.complex("complex.toml", "lane.toml")
     assert ctx.result == "10"
     Matrix.invariants!(ctx)
+  end
+
+  test "simple chain types are identical with and without lane overlay" do
+    without = Matrix.simple()
+    with_lane = Matrix.simple("simple.toml", "lane.toml")
+    assert without.types == with_lane.types
   end
 
   test "medium chain types are identical with and without lane overlay" do
