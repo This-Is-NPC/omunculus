@@ -2,79 +2,87 @@ Status: AS-IS — implementado
 
 # Modelo de dados atual
 
-O runtime atual não possui banco de dados nem entidades duráveis. Este modelo é
-intencionalmente limitado ao estado que existe durante uma chamada de
-`Omunculus.Agent.run/1`. A arquitetura e o fluxo estão em
-[architecture.md](architecture.md); o alvo separado está em
+Na branch `spike/event-core` coexistem estado transitório (`run`/`monkey-job`) e
+persistência SQLite/WAL no caminho Event Core (`spike`, `emit`, `events follow`).
+A arquitetura está em [architecture.md](architecture.md); o alvo separado em
 [TO-BE data model](../to-be/data-model.md).
 
-## Estado da execução
+## Envelope
 
-O fluxo abaixo resume as estruturas transitórias descritas nesta seção:
+Cada linha de `EVENTS` e cada notificação `{:event_core, _}` usam
+`Omunculus.Event.Envelope`:
 
-```mermaid
-flowchart LR
-    CFG["Config<br/>defaults · chat · output · presets"] --> RES["configuração resolvida<br/>preset + flags + defaults"]
-    RES --> RUN["estado Agent.run<br/>em memória"]
-    RUN --> MSG["messages<br/>system · user · model · tool observations"]
-    RUN --> DEP["dependências da sessão<br/>chat · context · tools · schemas"]
-    RUN --> META["turn · max_turns · tool_calls · started_at<br/>usage · assistant_text"]
-    RUN --> REP["reporter<br/>callback de observabilidade"]
-    DEP --> CTX["Tool.Context<br/>filesystem · sandbox root"]
-    CTX --> FS["Disk | Memory"]
-    CTX --> TOOLSTATE["counter<br/>somente quando exposto"]
-    DEP --> CHAT["resposta do chat<br/>content · tool calls · usage"]
-    DEP --> TOOLS["tools<br/>argumentos → validação → observação"]
-    CHAT --> MSG
-    TOOLS --> MSG
-    REP --> OBS["mapas transitórios<br/>round_started · round_completed · round_finished<br/>round_failed · run_completed · run_failed · tool transitions"]
-    RUN --> OUT["retorno<br/>texto final · messages · usage · estado das tools"]
-    RUN -.-> NOTE["Sem banco, IDs ou entidades duráveis;<br/>nada é reaberto em nova invocação"]
-```
+- `event_id`, `kind` (`command`|`event`), `type`, `schema_version`, `sequence`
+  (atribuído no append), `occurred_at`
+- `correlation_id`, `causation_id`, `idempotency_key`
+- `session_id`, `workspace_id` (reservados, geralmente nil)
+- `project_id`, `work_item_id`, `run_id`
+- `payload` (mapa JSON)
 
-`Agent.run/1` constrói um mapa em memória contendo:
+`Omunculus.Events` rejeita tipo desconhecido, kind incorreto, versão de schema
+não registrada ou campos obrigatórios ausentes.
 
-- `messages`: mensagem de sistema, instrução do usuário, respostas do modelo e
-  observações das tools;
-- `chat`, `context`, `tools` e `schemas`: dependências resolvidas para a sessão;
-- `turn`, `max_turns` (default 32), contagem de `tool_calls` e `started_at`;
-- `usage` acumulado e `assistant_text` mais recente;
-- `reporter`, callback de eventos de observabilidade.
+## Tabelas SQLite
 
-O retorno bem-sucedido contém o texto final e o estado útil da execução,
-incluindo mensagens, uso e estado das tools. Um erro do chat retorna erro; um
-limite de turnos retorna sucesso com `outcome: max_turns`. Nada desse estado é
-reaberto ou recuperado em uma nova invocação.
+| Tabela | Função |
+|---|---|
+| `EVENTS` | Log append-only; fonte de verdade |
+| `WORK_ITEMS` | Projeção: instrução, status, checkpoint, awaiting, result, version, last_sequence |
+| `WORK_ITEM_DEPENDENCIES` | Projeção: dependência pai→filho criada por `task.delegated` |
+| `ARCHIVE_RUNS` | Projeção: attempt, depth, parent_run_id, originating_run_id, agent_id, agent_kind, status, reason, outcome |
+| `ARCHIVE_MODEL_CALLS` | Projeção: round, model, usage, outcome por `model.call.completed` |
+| `PROJECTION_CURSORS` | Checkpoint por consumidor (`domain`, `automation:<name>`) |
+| `PROJECTS` | Esquema presente; spike não popula |
+| `COMMENTS` | Esquema presente; sem escritores no runtime atual |
 
-## Configuração em memória
+`Projector` aplica eventos após o cursor em transação atômica com avanço do
+cursor. Redelivery do mesmo `event_id` ou `last_sequence` defasado é no-op.
+`rebuild/1` apaga projeções e reexecuta o log inteiro.
 
-`Config` normaliza TOML para mapas de `defaults`, `chat`, `output` e `presets`.
-Os presets embutidos são `coding` (tools padrão) e `plan` (somente leitura,
-com limite menor). Variáveis `${NAME}` ocupando integralmente uma string são
-resolvidas pelo ambiente fornecido; ausência causa erro. A resolução final
-combina preset, flags e defaults antes de criar o Agent.
+## O que cada tipo escreve
 
-## Filesystem e tools
+| Tipo | Efeito principal |
+|---|---|
+| `task.requested` | Novo WI; ativa Run depth 0 |
+| `task.resumed` | Novo Run `reason=retry` se WI failed |
+| `task.delegated` | Filho WI + dependência; ativa Run filho |
+| `task.completed` | WI `completed` + result; pode continuar pai |
+| `task.resume_rejected` | Sem novo Run |
+| `tool.call.requested` | (interceptável; sem projeção de domínio) |
+| `tool.call.completed` | Atualiza checkpoint no Run |
+| `run.started` | Linha `ARCHIVE_RUNS`; fixa tools no payload |
+| `run.completed` | Fecha run; `outcome` inclui `waiting` + awaiting |
+| `run.failed` | WI elegível a resume |
+| `model.call.completed` | Linha `ARCHIVE_MODEL_CALLS` |
+| `policy.loaded` | Hash da policy ativa (snapshot opcional) |
+| `delivery.rejected` | Registro de bloqueio; envelope original permanece |
 
-`Tool.Context` carrega a implementação de filesystem (`Disk` ou memória) e a
-raiz sandbox. As tools não têm tabelas ou IDs duráveis: recebem argumentos,
-validam allowlist e caminho e devolvem uma observação ao próximo turno.
-`counter` mantém seu valor no contexto da execução apenas quando explicitamente
-exposto.
+## Estado transitório (`run`)
 
-## Chat, autenticação e observabilidade
+`Agent.run/1` mantém em memória `messages`, dependências (`chat`, `context`,
+`tools`, `schemas`), `turn`/`max_turns`, `usage`, `reporter`. Nada é reaberto
+entre invocações.
 
-Uma resposta do chat é um mapa transitório com conteúdo, tool calls e usage.
-`Auth.None` e `Auth.ApiKey` apenas montam a requisição. O reporter recebe mapas
-de eventos como `round_started`, `round_completed`, `round_finished`,
-`round_failed`, `run_completed` e `run_failed`, além de transições de tools; a
-CLI os renderiza. Esses eventos são observabilidade transitória, não um
-histórico consultável nem a tabela `EVENTS` planejada.
+`Config` normaliza TOML para `defaults`, `chat`, `output`, `presets`, mais
+`agents`, `teams`, `workspaces`, `policy`, `session`, `interceptors`,
+`automations`.
 
-## O que não é um registro
+## Runtime in-memory
 
-Não há `PROJECTS`, `WORK_ITEMS`, `COMMENTS`, `WORK_ITEM_DEPENDENCIES`,
-`ARCHIVE_RUNS`, `ARCHIVE_MODEL_CALLS`, `EVENTS`, `Run`, `Session` ou `Work Item`
-implementados. Não há chaves, versionamento otimista, estados de workflow,
-leases, deduplicação ou replay durável. A separação planejada desses conceitos
-está em [execution-model.md](../to-be/execution-model.md).
+O processo `Omunculus.Runtime` guarda `runs`, `pids`, `handled` (dedupe de
+entrega) e `pending_continuations` (mapa work_item_id → continuação do pai).
+`pending_continuations` não sobrevive a restart do Runtime.
+
+Cada `Run` é um GenServer temporário com checkpoint
+(`messages`, `tool_state`, `pending`, `notes`, `awaiting`).
+
+## O que não é registro ativo
+
+- Inbox humana em `COMMENTS`
+- Eventos de sessão/workspace (`session.created`, `workspace.attached`)
+- Eventos de permissão (`permission.*`)
+- Grants temporários ou permanentes fora do payload de `run.started.tools`
+- Roteamento por `[teams]` ou pin de team em `run.started`
+
+A separação planejada desses conceitos está em
+[execution-model.md](../to-be/execution-model.md) e documentos TO-BE correlatos.
