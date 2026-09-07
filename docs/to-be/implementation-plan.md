@@ -208,13 +208,16 @@ do solicitante após reinício. `WORK_ITEMS.requested_by` migra no schema 4.
 Saída: TO-BE inteiro com status "planejado, validado"; `recommendations.md`
 vira histórico.
 
-Verificação em 2026-09-07: executor residente, appends externos, follow,
+Verificação inicial em 2026-09-07: executor residente, appends externos, follow,
 recuperação com revalidação e remoção de spike implementados. A matriz real
 completou doze casos: cinco efeitos comprovados e doze replays idênticos.
 Falhas de instrução do modelo estão registradas, conforme o critério
 transversal, em [fase 7](../spike/phase-7-validation.md). Isso não valida
 automaticamente propostas adicionais de CLI nem a confiabilidade do modelo
 na cadeia de três níveis. `recommendations.md` passa a histórico.
+
+A validação ampliada com cloud, Qwen 9B e repetições da cadeia de três níveis
+está em [comparação de providers](../spike/provider-comparison.md).
 
 ## Critérios transversais
 

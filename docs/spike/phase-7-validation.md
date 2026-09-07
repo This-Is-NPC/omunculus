@@ -2,6 +2,9 @@ Status: validado em 2026-09-07 — infraestrutura; resultados do modelo discrimi
 
 # Fase 7: sessão residente e provider real
 
+Rodada original com 4B. A comparação posterior entre cloud e Qwen 9B está
+em [provider-comparison.md](provider-comparison.md).
+
 Execução reproduzível:
 
 ```sh
