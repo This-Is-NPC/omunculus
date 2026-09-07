@@ -308,7 +308,8 @@ defmodule Omunculus.CLI.Spike do
   # --- parsing ------------------------------------------------------------------------------
 
   defp default_db do
-    Path.join(System.tmp_dir!(), "omunculus-spike-#{System.unique_integer([:positive])}.sqlite3")
+    suffix = Base.encode16(:crypto.strong_rand_bytes(8), case: :lower)
+    Path.join(System.tmp_dir!(), "omunculus-spike-#{suffix}.sqlite3")
   end
 
   defp parse_nonneg(raw, flag) do
