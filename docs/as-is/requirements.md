@@ -3,7 +3,7 @@ Status: AS-IS — implementado
 # Requisitos atuais
 
 Requisitos abaixo são observáveis na CLI, na especificação KDL e nos testes da
-branch `spike/event-core` (215 testes). Não são requisitos do alvo em `main`.
+branch `spike/event-core` (254 testes). Não são requisitos do alvo em `main`.
 Consulte [architecture.md](architecture.md) e [data-model.md](data-model.md).
 
 ## Interface CLI
@@ -19,8 +19,14 @@ O binário `omunculus` oferece:
   `workspace.detached` no log da sessão;
 - `send <instruction...>`: abre sessão durável, Runtime + Projector, espera
   `task.completed` (ou só append com `--detach`);
+- `inbox`: lista pedidos de permissão abertos e resultados não lidos;
+- `inbox reply <request_id> --grant|--deny`: responde a um pedido (opcional
+  `--permanent` e `--config` para grant permanente via patch de TOML);
+- `inbox read <id>`: marca comentário ou result como lido (`inbox.read`);
 - `events catalog` e `events follow [--db] [--session] [--types] [--after] [--once]`;
-- `emit <type>`: append de comandos injetáveis ao log;
+- `emit <type>`: append de comandos injetáveis ao log (inclui
+  `permission.granted`, `permission.denied`, `permission.revoked`, `inbox.read`;
+  `--request-id` preenche campos de um `permission.requested` aberto);
 - `config check [--config]`: valida TOML expandido, interceptors e automations;
 - `benchmark`: cenários `actor-density`, `agent-tree`, `http-load`;
 - `help` e `version`.
@@ -30,8 +36,8 @@ Flags globais: `-h/--help`, `-V/--version`, `--verbose`. Códigos de saída: 0
 
 SQLite de sessão: padrão `~/.omunculus/session.sqlite3`; `--db` ou `--session`
 selecionam o arquivo (`--db` vence quando ambos presentes); `OMUNCULUS_SESSION`
-via ambiente. Mesma resolução em `events follow`, `emit`, `session`, `workspace`
-e `send`.
+via ambiente. Mesma resolução em `events follow`, `emit`, `session`, `workspace`,
+`send` e `inbox`.
 
 `spike` aceita `--depth`, `--fail-at`, `--delay`, `--db`, `--provider fake|chat`,
 `--config`, `--profile`, `--model`, `--base-url`, `--api-key`, `--json-events`.
@@ -80,10 +86,10 @@ testes determinísticos.
 9. Ao final: log ordenado, projeções, verificação de replay idêntico.
 
 Policy inválida → `run.failed` `reason=policy_invalid`. `ToolGate` bloqueia tool
-fora do granted fixado em `run.started`. `WorkspaceGate` (quando injetado)
-bloqueia workspace não anexado.
+fora do granted pinado em `run.started` salvo grant temporário ativo na linhagem.
+`WorkspaceGate` (quando injetado) bloqueia workspace não anexado.
 
-## Sessão durável (`session` / `workspace` / `send`)
+## Sessão durável (`session` / `workspace` / `send` / `inbox`)
 
 1. `session create` prepara diretório do db e grava `session.created` (nome
    opcional ou id gerado).
@@ -93,6 +99,10 @@ bloqueia workspace não anexado.
    com workspaces anexados e adiciona `WorkspaceGate` quando aplicável.
 4. `Runtime.request` com `--workspace` ou `--detach` (só append `task.requested`).
 5. `pending_continuations` reconstruído no `init` do Runtime a partir do log.
+6. `inbox` lê projeções e log sem iniciar Runtime; `inbox reply` apenda
+   `permission.granted`/`permission.denied` (permanente opcional via patch de
+   TOML + `policy.changed`) e entrega ao Runtime da sessão; `inbox read` apenda
+   `inbox.read`.
 
 ## Configuração e diagnóstico
 
@@ -105,18 +115,22 @@ arquivo do projeto. Presets `coding` e `plan`; `${VAR}` exato; seções
 interceptor inexistente.
 
 `events catalog` renderiza o catálogo de `Omunculus.Events`. `emit` aceita
-somente tipos `injectable` (`task.requested`, `task.resumed`, `session.created`,
-`workspace.attached`, `workspace.detached`, `task.commented`, …).
+tipos `injectable` (`task.requested`, `task.resumed`, `session.created`,
+`workspace.attached`, `workspace.detached`, `task.commented`,
+`permission.granted`, `permission.denied`, `permission.revoked`, `inbox.read`,
+…).
 
 ## Evidência e limites
 
 Testes cobrem parser, config, Agent, chat, sandbox, tools, Event Core,
-projeções, replay, interceptors (incl. `WorkspaceGate`), automations, policy em
-runtime, spike cenários simple/medium/complex, sessão/workspace/send,
-`--fail-at`/resume e cenários 3/4 (dois Runs por WI concierge).
+projeções, replay, interceptors (incl. `WorkspaceGate` e `ToolGate` com grants
+temporários), automations, policy em runtime, spike cenários simple/medium/complex,
+sessão/workspace/send, `--fail-at`/resume, cenários 3/4 (dois Runs por WI
+concierge) e três blocos de permissões (temporária, permanente, arbitragem do
+pai) mais `complex.toml` com e sem lane (faixa `human`).
 
-Não há requisito implementado para: permissões com efeito e inbox
-request-response, `request_work` / dependências cross-team, runtime residente
-reagindo a `emit` em tempo real, nem tool `directory`. Esses itens estão no
-[alvo TO-BE](../to-be/requirements.md) e não devem ser inferidos como
-disponíveis hoje.
+Não há requisito implementado para: `request_work` / dependências cross-team,
+runtime residente reagindo a `emit` em tempo real, nem tool `directory`. Não
+existe verbo CLI `policy grant` (permanente via `inbox reply --grant
+--permanent`). Esses itens estão no [alvo TO-BE](../to-be/requirements.md) e
+não devem ser inferidos como disponíveis hoje.

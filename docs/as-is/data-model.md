@@ -4,7 +4,7 @@ Status: AS-IS — implementado
 
 Na branch `spike/event-core` coexistem estado transitório (`monkey-job`) e
 persistência SQLite/WAL no caminho Event Core (`spike`, `emit`, `events follow`,
-`session`, `workspace`, `send`, `run` efêmero). A arquitetura está em
+`session`, `workspace`, `send`, `inbox`, `run` efêmero). A arquitetura está em
 [architecture.md](architecture.md); o alvo separado em
 [TO-BE data model](../to-be/data-model.md).
 
@@ -24,12 +24,13 @@ Cada linha de `EVENTS` e cada notificação `{:event_core, _}` usam
 
 `Omunculus.Events` rejeita tipo desconhecido, kind incorreto, versão de schema
 não registrada ou campos obrigatórios ausentes. Catálogo de sessão inclui
-`session.created`, `workspace.attached`, `workspace.detached`, `task.commented`
-(injetáveis onde marcado).
+`session.created`, `workspace.attached`, `workspace.detached`, `task.commented`,
+`permission.requested`, `permission.granted`, `permission.denied`,
+`permission.revoked`, `policy.changed`, `inbox.read` (injetáveis onde marcado).
 
 ## Tabelas SQLite
 
-Store `user_version` 2.
+Store `user_version` 3 (`COMMENTS.read_at`).
 
 | Tabela | Função |
 |---|---|
@@ -41,7 +42,16 @@ Store `user_version` 2.
 | `ARCHIVE_MODEL_CALLS` | Projeção: round, model, usage, outcome por `model.call.completed` |
 | `PROJECTION_CURSORS` | Checkpoint por consumidor (`domain`, `automation:<name>`) |
 | `PROJECTS` | Esquema presente; spike não popula |
-| `COMMENTS` | Projeção: `comment_id`, `session_id`, `work_item_id`, kind, body, `event_id`, last_sequence — escritores: `task.commented`, `task.completed` (kind `result`) |
+| `COMMENTS` | Projeção: `comment_id`, `session_id`, `work_item_id`, kind, body, `read_at`, `event_id`, last_sequence |
+
+`COMMENTS.kind`:
+
+- `request` — de `permission.requested` ou `task.commented`
+- `response` — de `permission.granted`, `permission.denied` ou `task.commented`
+- `result` — de `task.completed`
+
+`inbox.read` preenche `read_at` na linha correspondente (`comment_id` ou
+`event_id`).
 
 `Projector` aplica eventos após o cursor em transação atômica com avanço do
 cursor. Redelivery do mesmo `event_id` ou `last_sequence` defasado é no-op.
@@ -67,6 +77,12 @@ cursor. Redelivery do mesmo `event_id` ou `last_sequence` defasado é no-op.
 | `run.failed` | WI elegível a resume |
 | `model.call.completed` | Linha `ARCHIVE_MODEL_CALLS` |
 | `policy.loaded` | Hash da policy ativa (snapshot opcional) |
+| `policy.changed` | Sem projeção de domínio; Runtime reage concedendo pedidos abertos |
+| `permission.requested` | Linha `COMMENTS` kind=request |
+| `permission.granted` | Linha `COMMENTS` kind=response |
+| `permission.denied` | Linha `COMMENTS` kind=response |
+| `permission.revoked` | Sem linha `COMMENTS`; revoga grant temporário no log |
+| `inbox.read` | `COMMENTS.read_at` na linha alvo |
 | `delivery.rejected` | Registro de bloqueio; envelope original permanece |
 
 ## Estado transitório (`monkey-job`)
@@ -93,12 +109,5 @@ retoma pais pendentes). Não é fonte de verdade — o log e as projeções são
 Cada `Run` é um GenServer temporário com checkpoint
 (`messages`, `tool_state`, `pending`, `notes`, `awaiting`).
 
-## O que não é registro ativo
-
-- Inbox humana request-response em `COMMENTS` (sem CLI `inbox`)
-- Eventos de permissão (`permission.*`)
-- Grants temporários ou permanentes fora do payload de `run.started.tools`
-- `inbox.read` no catálogo
-
-A separação planejada desses conceitos está em
+A separação planejada de conceitos ainda não implementados está em
 [execution-model.md](../to-be/execution-model.md) e documentos TO-BE correlatos.
