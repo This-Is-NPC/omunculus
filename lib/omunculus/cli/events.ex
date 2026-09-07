@@ -9,6 +9,7 @@ defmodule Omunculus.CLI.Events do
   """
 
   alias Omunculus.CLI.Help
+  alias Omunculus.CLI.Inbox
   alias Omunculus.CLI.Session
   alias Omunculus.{Config, Events}
   alias Omunculus.Event.Envelope
@@ -35,15 +36,18 @@ defmodule Omunculus.CLI.Events do
     type = args[:type]
 
     with :ok <- injectable(type),
+         {:ok, db} <- Session.db_path(flags),
          {:ok, payload} <- decode_payload(flags["payload"]),
-         {:ok, db} <- require_db(flags["db"]) do
-      {:ok, core} = EventCore.start_link(path: db)
-
+         {:ok, core} <- open_core(db),
+         {:ok, payload, attrs} <- enrich_emit(type, flags, payload, core) do
       envelope =
         Envelope.command(type,
-          correlation_id: flags["correlation_id"],
+          correlation_id: flags["correlation_id"] || attrs[:correlation_id],
           idempotency_key: flags["idempotency_key"],
-          work_item_id: flags["work_item_id"] || Envelope.generate_id("wi"),
+          work_item_id:
+            flags["work_item_id"] || attrs[:work_item_id] || Envelope.generate_id("wi"),
+          session_id: attrs[:session_id],
+          workspace_id: attrs[:workspace_id],
           payload: payload
         )
 
@@ -167,8 +171,38 @@ defmodule Omunculus.CLI.Events do
     end
   end
 
-  defp require_db(db) when is_binary(db) and db != "", do: {:ok, db}
-  defp require_db(_), do: {:error, {:missing_required_arg, "--db"}}
+  defp open_core(db) do
+    {:ok, core} = EventCore.start_link(path: db)
+    {:ok, core}
+  end
+
+  defp enrich_emit(type, flags, payload, core) do
+    request_id = flags["request_id"]
+
+    if is_binary(request_id) and request_id != "" do
+      case Inbox.lookup_request_for_emit(core, request_id) do
+        nil ->
+          {:error, {:unknown_permission_request, request_id}}
+
+        req ->
+          payload =
+            payload
+            |> Map.put("request_id", payload["request_id"] || request_id)
+            |> Inbox.fill_grant_defaults(type)
+
+          {:ok, payload,
+           %{
+             session_id: req.session_id,
+             work_item_id: req.work_item_id,
+             correlation_id: req.correlation_id,
+             workspace_id: req.workspace_id
+           }}
+      end
+    else
+      {:ok, payload,
+       %{session_id: nil, work_item_id: nil, correlation_id: nil, workspace_id: nil}}
+    end
+  end
 
   defp print_policy_table(table) when is_map(table) do
     table

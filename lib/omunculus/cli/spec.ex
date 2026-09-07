@@ -342,7 +342,18 @@ defmodule Omunculus.CLI.Spec do
         ],
         flags: [
           flag("db", long: "db", value: "file", help: "SQLite file with the EVENTS log"),
+          flag("session",
+            long: "session",
+            value: "file",
+            env: "OMUNCULUS_SESSION",
+            help: "Session SQLite file (default: ~/.omunculus/session.sqlite3)"
+          ),
           flag("payload", long: "payload", value: "json", help: "Payload as a JSON object"),
+          flag("request_id",
+            long: "request-id",
+            value: "id",
+            help: "Fill emit fields from an open permission.requested"
+          ),
           flag("idempotency_key",
             long: "idempotency-key",
             value: "key",
@@ -493,6 +504,59 @@ defmodule Omunculus.CLI.Spec do
         ],
         examples: [
           {"omunculus send \"conte até 3\" --profile count --config ./omunculus.toml", nil, nil}
+        ]
+      },
+      "inbox" => %{
+        name: "inbox",
+        about: "List open permission requests and unread task results",
+        long_about:
+          "Projects open permission.requested envelopes and unread root task.completed results from COMMENTS. reply and read append injectable commands to the session log.",
+        arg_required_else_help: false,
+        args: [
+          %{
+            name: :action,
+            metavar: "action",
+            required: false,
+            variadic: false,
+            help: "reply or read (default: list)"
+          },
+          %{
+            name: :id,
+            metavar: "id",
+            required: false,
+            variadic: false,
+            help: "request_id for reply or comment id for read"
+          },
+          %{
+            name: :message,
+            metavar: "text",
+            required: false,
+            variadic: true,
+            var_min: 0,
+            help: "Response text for reply"
+          }
+        ],
+        flags: [
+          flag("db",
+            long: "db",
+            value: "file",
+            help: "Session SQLite path (default: ~/.omunculus/session.sqlite3)"
+          ),
+          flag("session",
+            long: "session",
+            value: "file",
+            env: "OMUNCULUS_SESSION",
+            help: "Session SQLite file (default: ~/.omunculus/session.sqlite3)"
+          ),
+          flag("config", long: "config", value: "file", help: "Config file for permanent grants"),
+          flag("grant", long: "grant", help: "Grant the permission request"),
+          flag("deny", long: "deny", help: "Deny the permission request"),
+          flag("permanent", long: "permanent", help: "Permanent grant (updates workspace policy)"),
+          flag("reason", long: "reason", value: "text", help: "Denial reason")
+        ],
+        examples: [
+          {"omunculus inbox --session ./session.sqlite3", nil, nil},
+          {"omunculus inbox reply req_abc --grant --db ./session.sqlite3", nil, nil}
         ]
       },
       "config" => %{

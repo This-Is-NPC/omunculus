@@ -49,6 +49,9 @@ defmodule Omunculus.CLI do
       {:ok, %{command: :send} = parsed} ->
         Omunculus.CLI.Session.send(parsed, env)
 
+      {:ok, %{command: :inbox} = parsed} ->
+        Omunculus.CLI.Inbox.inbox(parsed, env)
+
       {:error, reason} ->
         IO.puts(:stderr, Help.usage_error(reason))
         2

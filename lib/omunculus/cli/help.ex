@@ -291,6 +291,31 @@ defmodule Omunculus.CLI.Help do
       {"error: unknown workspace action #{inspect(action)}",
        "Use 'omunculus workspace attach' or 'omunculus workspace detach'."}
 
+  defp describe({:unknown_inbox_action, action}),
+    do:
+      {"error: unknown inbox action #{inspect(action)}",
+       "Use 'omunculus inbox', 'omunculus inbox reply', or 'omunculus inbox read'."}
+
+  defp describe({:unknown_permission_request, request_id}),
+    do:
+      {"error: unknown permission request #{inspect(request_id)}",
+       "Run 'omunculus inbox' to list open requests."}
+
+  defp describe({:permission_request_closed, request_id}),
+    do:
+      {"error: permission request #{inspect(request_id)} is already resolved",
+       "Run 'omunculus inbox' to list open requests."}
+
+  defp describe(:inbox_reply_mode_required),
+    do:
+      {"error: inbox reply requires --grant, --deny, or a message",
+       "Example: omunculus inbox reply <request_id> --grant"}
+
+  defp describe(:inbox_reply_mode_conflict),
+    do:
+      {"error: inbox reply accepts only one of --grant, --deny, or a message",
+       "Choose a single reply mode."}
+
   defp describe(other),
     do: {"error: #{inspect(other)}", "Run '" <> Spec.bin() <> " --help' for usage."}
 end

@@ -115,12 +115,33 @@ cmd "emit" {
   arg "<type>" help="Command type from the catalog marked injectable"
 
   flag "--db <file>" help="SQLite file with the EVENTS log"
+  flag "--session <file>" help="Session SQLite file (default: ~/.omunculus/session.sqlite3)" env="OMUNCULUS_SESSION"
   flag "--payload <json>" help="Payload as a JSON object"
+  flag "--request-id <id>" help="Fill emit fields from an open permission.requested"
   flag "--idempotency-key <key>" help="Stable key so retries do not duplicate the command"
   flag "--correlation-id <id>" help="Join an existing correlation"
   flag "--work-item-id <id>" help="Target work item (default: new)"
 
   example "omunculus emit task.requested --db ./spike.sqlite3 --payload '{\"instruction\":\"conte até 3\"}'"
+}
+
+cmd "inbox" {
+  about "List open permission requests and unread task results"
+
+  arg "[action]" help="reply or read (default: list)"
+  arg "[id]" help="request_id for reply or comment id for read"
+  arg "[text]..." help="Response text for reply"
+
+  flag "--db <file>" help="Session SQLite path (default: ~/.omunculus/session.sqlite3)"
+  flag "--session <file>" help="Session SQLite file (default: ~/.omunculus/session.sqlite3)" env="OMUNCULUS_SESSION"
+  flag "--config <file>" help="Config file for permanent grants"
+  flag "--grant" help="Grant the permission request"
+  flag "--deny" help="Deny the permission request"
+  flag "--permanent" help="Permanent grant (updates workspace policy)"
+  flag "--reason <text>" help="Denial reason"
+
+  example "omunculus inbox --session ./session.sqlite3"
+  example "omunculus inbox reply req_abc --grant --db ./session.sqlite3"
 }
 
 cmd "config" {
