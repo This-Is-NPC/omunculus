@@ -15,13 +15,13 @@ defmodule Omunculus.WorkflowTest do
         "comment" => "Delegated execution; review the returned evidence."
       })
 
-  defp setup_runtime(script, depth \\ 0, retries \\ 1) do
+  defp setup_runtime(script, depth \\ 0, retries \\ 1, config \\ Config.empty()) do
     core = start_supervised!({EventCore, path: ":memory:"})
     projector = start_supervised!({Projector, core: core})
 
     resolver = fn ctx ->
       chat = Fake.new(script.(ctx)) |> Map.put(:model, "workflow-test")
-      agent = Agents.resolve(Map.put(ctx, :config, Config.empty()), %{chat: chat})
+      agent = Agents.resolve(Map.put(ctx, :config, config), %{chat: chat})
 
       %{
         agent
@@ -157,7 +157,7 @@ defmodule Omunculus.WorkflowTest do
       setup_runtime(
         fn ctx ->
           cond do
-            ctx.reason == "break" ->
+            ctx.reason == "assessment" ->
               [report(true, "I verified the existing child effect")]
 
             ctx.reason == "continuation" ->
@@ -182,13 +182,13 @@ defmodule Omunculus.WorkflowTest do
     assert length(EventCore.stream(core, 0, type: "tool.call.completed")) == 1
     assert length(EventCore.stream(core, 0, type: "task.completed")) == 2
     starts = EventCore.stream(core, 0, type: "run.started")
-    review = Enum.find(starts, &(&1.payload["reason"] == "break"))
+    review = Enum.find(starts, &(&1.payload["reason"] == "assessment"))
     assert review.payload["tools"]["granted"] == []
 
     assert Enum.map(starts, & &1.payload["reason"]) == [
              "initial",
              "initial",
-             "break",
+             "assessment",
              "continuation"
            ]
   end
@@ -201,7 +201,7 @@ defmodule Omunculus.WorkflowTest do
             ctx.reason == "break" ->
               [report(false, "Cannot resolve at this level", %{break: true})]
 
-            ctx.reason == "continuation" ->
+            ctx.reason in ["continuation", "assessment"] ->
               [report(true, "Consolidated")]
 
             ctx.depth < 2 ->
@@ -376,7 +376,8 @@ defmodule Omunculus.WorkflowTest do
             agent_id: "worker",
             agent_kind: "worker",
             reason: "initial",
-            workflow: true,
+            flow: %{"steps" => [], "root_approval" => "self"},
+            stage: "to_do",
             max_retries: 1,
             tools: %{granted: ["counter"]},
             checkpoint: %{}
@@ -401,7 +402,6 @@ defmodule Omunculus.WorkflowTest do
           correlation_id: request.correlation_id,
           payload: %{
             outcome: "reported",
-            workflow: true,
             report: %{completed: false, comment: "Continue"},
             max_retries: 1,
             comment: "Continue",
@@ -410,24 +410,14 @@ defmodule Omunculus.WorkflowTest do
         )
       )
 
-    EventCore.append!(
-      core,
-      Envelope.event("task.report_handled",
-        causation_id: closed.event_id,
-        correlation_id: request.correlation_id,
-        work_item_id: "scheduled",
-        payload: %{report_id: closed.event_id}
-      )
-    )
-
     scheduled =
       EventCore.append!(
         core,
-        Envelope.event("task.retry_requested",
+        Envelope.event("task.run_requested",
           causation_id: closed.event_id,
           work_item_id: "scheduled",
           correlation_id: request.correlation_id,
-          payload: %{comment: "Continue", checkpoint: cp}
+          payload: %{comment: "Continue", checkpoint: cp, reason: "retry", stage: "to_do"}
         )
       )
 
@@ -527,7 +517,7 @@ defmodule Omunculus.WorkflowTest do
                causation_id: request.event_id
              )
 
-    await(fn -> EventCore.stream(core, 0, type: "task.break.resolved") != [] end)
+    await(fn -> EventCore.stream(core, 0, type: "task.assessment_resolved") != [] end)
     await(fn -> Runtime.runs(runtime) == %{} end)
     Projector.sync(projector)
 
@@ -541,5 +531,480 @@ defmodule Omunculus.WorkflowTest do
              )
 
     assert length(EventCore.stream(core, 0, type: "tool.call.completed")) == 1
+  end
+
+  defp staged_config do
+    config = Config.empty()
+
+    %{
+      config
+      | workflows: %{
+          "delivery" => %{
+            "steps" => [
+              %{"name" => "to_do", "instructions" => "Plan and record criteria"},
+              %{"name" => "in_progress", "instructions" => "Implement the plan"},
+              %{"name" => "verification", "instructions" => "Verify requested versus implemented"}
+            ]
+          }
+        },
+        agents: %{"worker" => %{workflow: "delivery"}}
+    }
+  end
+
+  test "child report stays pending until the parent approves" do
+    owner = self()
+
+    {core, projector, runtime, _} =
+      setup_runtime(
+        fn ctx ->
+          cond do
+            ctx.reason == "assessment" ->
+              [
+                fn _ ->
+                  send(owner, {:reviewing, self()})
+
+                  receive do
+                    :approve -> report(true, "Parent approved")
+                  end
+                end
+              ]
+
+            ctx.reason == "continuation" ->
+              [report(true, "Root done")]
+
+            ctx.depth == 0 ->
+              [delegate()]
+
+            true ->
+              [report(true, "Child claims done")]
+          end
+        end,
+        1
+      )
+
+    task = Task.async(fn -> Runtime.request(core, "work", timeout: 3000) end)
+    assert_receive {:reviewing, reviewer}, 2000
+    assert EventCore.stream(core, 0, type: "task.completed") == []
+    Projector.sync(projector)
+
+    assert [["to_do", "waiting"]] =
+             EventCore.query(
+               core,
+               "SELECT status, state FROM WORK_ITEMS WHERE parent_work_item_id IS NOT NULL"
+             )
+
+    send(reviewer, :approve)
+    assert {:ok, %{result: "Root done"}} = Task.await(task)
+    await(fn -> Runtime.runs(runtime) == %{} end)
+    [child, _root] = EventCore.stream(core, 0, type: "task.completed")
+    [review] = EventCore.stream(core, 0, type: "task.assessment_requested")
+    assert child.sequence > review.sequence
+    assert child.payload["comment"] == "Parent approved"
+  end
+
+  test "parent approvals advance each child stage once and complete only the last" do
+    {core, projector, runtime, _} =
+      setup_runtime(
+        fn ctx ->
+          cond do
+            ctx.reason == "assessment" ->
+              [report(true, "Approved #{ctx.assessment["stage"]}")]
+
+            ctx.reason == "continuation" ->
+              [report(true, "Delivered")]
+
+            ctx.depth == 0 ->
+              [delegate()]
+
+            true ->
+              [Fake.tool_call("counter", %{}), report(true, "Stage #{ctx.stage} effect recorded")]
+          end
+        end,
+        1,
+        0,
+        staged_config()
+      )
+
+    assert {:ok, %{result: "Delivered"}} = Runtime.request(core, "delivery", timeout: 3000)
+    await(fn -> Runtime.runs(runtime) == %{} end)
+    advances = EventCore.stream(core, 0, type: "task.advanced")
+
+    assert Enum.map(advances, &{&1.payload["from"], &1.payload["to"]}) == [
+             {"to_do", "in_progress"},
+             {"in_progress", "verification"}
+           ]
+
+    assert length(EventCore.stream(core, 0, type: "task.assessment_requested")) == 3
+    assert length(EventCore.stream(core, 0, type: "task.completed")) == 2
+
+    assert Enum.map(EventCore.stream(core, 0, type: "tool.call.completed"), & &1.payload["new"]) ==
+             [1, 2, 3]
+
+    for event <- advances, do: EventCore.redeliver(core, event.event_id)
+    assert Runtime.runs(runtime) == %{}
+    assert length(EventCore.stream(core, 0, type: "task.advanced")) == 2
+    Projector.sync(projector)
+
+    assert [["completed", "idle"], ["completed", "idle"]] =
+             EventCore.query(core, "SELECT status, state FROM WORK_ITEMS")
+
+    before = Projector.snapshot(core)
+    Projector.rebuild(projector)
+    assert Projector.snapshot(core) == before
+  end
+
+  test "root stages have independent retry budgets and fresh step contexts" do
+    owner = self()
+
+    {core, _, runtime, _} =
+      setup_runtime(
+        fn ctx ->
+          if ctx.reason == "retry" do
+            [report(true, "Stage approved after correction")]
+          else
+            [
+              fn messages ->
+                send(owner, {:stage_context, ctx.stage, messages})
+                report(false, "Correct only this stage")
+              end
+            ]
+          end
+        end,
+        0,
+        1,
+        staged_config()
+      )
+
+    assert {:ok, _} = Runtime.request(core, "delivery", timeout: 3000)
+    await(fn -> Runtime.runs(runtime) == %{} end)
+    starts = EventCore.stream(core, 0, type: "run.started")
+
+    assert Enum.map(starts, & &1.payload["reason"]) == [
+             "initial",
+             "retry",
+             "step",
+             "retry",
+             "step",
+             "retry"
+           ]
+
+    assert EventCore.stream(core, 0, type: "task.break") == []
+
+    for stage <- ["to_do", "in_progress", "verification"] do
+      assert_receive {:stage_context, ^stage, messages}
+      assert hd(messages)["content"] =~ "Work stage: #{stage}"
+      refute Enum.any?(messages, &(&1["role"] == "assistant"))
+    end
+  end
+
+  test "failed child retains its logical status while the parent inspects effects" do
+    owner = self()
+
+    {core, projector, runtime, _} =
+      setup_runtime(
+        fn ctx ->
+          cond do
+            ctx.reason == "break" ->
+              [
+                fn _ ->
+                  send(owner, {:failure_review, self()})
+
+                  receive do
+                    :approve -> report(true, "Existing effect verified")
+                  end
+                end
+              ]
+
+            ctx.reason == "continuation" ->
+              [report(true, "Done")]
+
+            ctx.depth == 0 ->
+              [delegate()]
+
+            true ->
+              [Fake.tool_call("counter", %{}), {:error, :timeout}]
+          end
+        end,
+        1
+      )
+
+    task = Task.async(fn -> Runtime.request(core, "work", timeout: 3000) end)
+    assert_receive {:failure_review, reviewer}, 2000
+    Projector.sync(projector)
+
+    assert [["to_do", "failed"]] =
+             EventCore.query(
+               core,
+               "SELECT status, state FROM WORK_ITEMS WHERE parent_work_item_id IS NOT NULL"
+             )
+
+    send(reviewer, :approve)
+    assert {:ok, _} = Task.await(task)
+    await(fn -> Runtime.runs(runtime) == %{} end)
+    assert length(EventCore.stream(core, 0, type: "tool.call.completed")) == 1
+  end
+
+  test "human root approval is configurable and does not rerun the executor" do
+    config = Config.empty()
+    config = %{config | defaults: Map.put(config.defaults, :root_approval, "human")}
+
+    {core, _, runtime, _} =
+      setup_runtime(fn _ -> [report(true, "Ready for user review")] end, 0, 1, config)
+
+    task = Task.async(fn -> Runtime.request(core, "work", timeout: 3000) end)
+    await(fn -> EventCore.stream(core, 0, type: "task.commented") != [] end)
+    await(fn -> Runtime.runs(runtime) == %{} end)
+    assert EventCore.stream(core, 0, type: "task.completed") == []
+    [request] = EventCore.stream(core, 0, type: "task.commented")
+
+    EventCore.append!(
+      core,
+      Envelope.command("task.commented",
+        work_item_id: request.work_item_id,
+        correlation_id: request.correlation_id,
+        payload: %{
+          kind: "response",
+          request_id: request.payload["request_id"],
+          body: Jason.encode!(%{completed: true, comment: "User verified"})
+        }
+      )
+    )
+
+    assert {:ok, %{result: "User verified"}} = Task.await(task)
+    assert length(EventCore.stream(core, 0, type: "run.started")) == 1
+  end
+
+  test "restart after stage approval schedules the next stage without approving it twice" do
+    config = staged_config()
+
+    {core, projector, _, opts} =
+      setup_runtime(
+        fn ctx ->
+          assert ctx.reason == "step"
+          [report(true, "Approved #{ctx.stage}")]
+        end,
+        0,
+        0,
+        config
+      )
+
+    stop_supervised!(Runtime)
+
+    request =
+      EventCore.append!(
+        core,
+        Envelope.command("task.requested",
+          work_item_id: "gap",
+          payload: %{instruction: "delivery"}
+        )
+      )
+
+    flow = Config.workflow(config, config.agents["worker"], %{})
+
+    started =
+      EventCore.append!(
+        core,
+        Envelope.event("run.started",
+          work_item_id: "gap",
+          run_id: "first",
+          correlation_id: request.correlation_id,
+          causation_id: request.event_id,
+          payload: %{
+            attempt: 1,
+            depth: 0,
+            agent_id: "worker",
+            agent_kind: "worker",
+            reason: "initial",
+            flow: flow,
+            stage: "to_do",
+            max_retries: 0,
+            tools: %{granted: []},
+            checkpoint: %{}
+          }
+        )
+      )
+
+    closed =
+      EventCore.append!(
+        core,
+        Envelope.event("run.completed",
+          work_item_id: "gap",
+          run_id: "first",
+          correlation_id: request.correlation_id,
+          causation_id: started.event_id,
+          payload: %{
+            outcome: "reported",
+            report: %{completed: true, comment: "Plan approved"},
+            comment: "Plan approved",
+            checkpoint: %{},
+            max_retries: 0
+          }
+        )
+      )
+
+    EventCore.append!(
+      core,
+      Envelope.event("task.advanced",
+        work_item_id: "gap",
+        correlation_id: request.correlation_id,
+        causation_id: closed.event_id,
+        payload: %{from: "to_do", to: "in_progress", comment: "Plan approved", checkpoint: %{}}
+      )
+    )
+
+    runtime = start_supervised!({Runtime, Keyword.put(opts, :recover, true)})
+    await(fn -> EventCore.stream(core, 0, type: "task.completed") != [] end)
+    await(fn -> Runtime.runs(runtime) == %{} end)
+    assert length(EventCore.stream(core, 0, type: "task.advanced")) == 2
+    assert length(EventCore.stream(core, 0, type: "run.started")) == 3
+    stop_supervised!(Runtime)
+    Projector.sync(projector)
+    before = Projector.snapshot(core)
+    Projector.rebuild(projector)
+    assert Projector.snapshot(core) == before
+    runtime = start_supervised!({Runtime, Keyword.put(opts, :recover, true)})
+    assert Runtime.runs(runtime) == %{}
+    assert length(EventCore.stream(core, 0, type: "run.started")) == 3
+  end
+
+  test "an old review cannot approve a newer execution of the same stage" do
+    owner = self()
+
+    {core, _, runtime, _} =
+      setup_runtime(
+        fn ctx ->
+          cond do
+            ctx.reason == "break" ->
+              [
+                fn _ ->
+                  send(owner, {:old_review, self()})
+
+                  receive do
+                    :approve -> report(true, "Old approval")
+                  end
+                end
+              ]
+
+            ctx.reason == "assessment" ->
+              [report(true, "Current execution approved")]
+
+            ctx.reason == "continuation" ->
+              [report(true, "Done")]
+
+            ctx.depth == 0 ->
+              [delegate()]
+
+            ctx.reason == "retry" ->
+              [
+                fn _ ->
+                  send(owner, {:new_execution, self()})
+
+                  receive do
+                    :finish -> report(true, "New report")
+                  end
+                end
+              ]
+
+            true ->
+              [{:error, :timeout}]
+          end
+        end,
+        1
+      )
+
+    task = Task.async(fn -> Runtime.request(core, "work", timeout: 3000) end)
+    assert_receive {:old_review, reviewer}, 2000
+    [failed] = EventCore.stream(core, 0, type: "run.failed")
+
+    EventCore.append!(
+      core,
+      Envelope.command("task.resumed",
+        work_item_id: failed.work_item_id,
+        correlation_id: failed.correlation_id,
+        causation_id: failed.event_id,
+        payload: %{}
+      )
+    )
+
+    assert_receive {:new_execution, executor}, 2000
+    send(reviewer, :approve)
+    await(fn -> EventCore.stream(core, 0, type: "task.assessment_resolved") != [] end)
+    assert EventCore.stream(core, 0, type: "task.completed") == []
+    send(executor, :finish)
+    assert {:ok, _} = Task.await(task)
+    await(fn -> Runtime.runs(runtime) == %{} end)
+    [child, _root] = EventCore.stream(core, 0, type: "task.completed")
+    assert child.payload["comment"] == "Current execution approved"
+  end
+
+  test "reviewer role starts only at the configured review gate" do
+    owner = self()
+    config = staged_config()
+
+    config = %{
+      config
+      | workflows: %{
+          "delivery" => %{
+            "steps" => [
+              %{"name" => "in_progress", "instructions" => "Implement once"},
+              %{
+                "name" => "review",
+                "agent" => "reviewer",
+                "instructions" => "Review existing effects"
+              }
+            ]
+          }
+        }
+    }
+
+    {core, _, runtime, _} =
+      setup_runtime(
+        fn ctx ->
+          cond do
+            ctx.reason == "assessment" ->
+              [report(true, "Parent approved #{ctx.assessment["stage"]}")]
+
+            ctx.reason == "continuation" ->
+              [report(true, "Delivery complete")]
+
+            ctx.depth == 0 ->
+              [delegate()]
+
+            ctx.reason == "initial" ->
+              [Fake.tool_call("counter", %{}), report(true, "One effect exists")]
+
+            ctx.stage == "review" ->
+              [
+                fn messages ->
+                  send(owner, {:gate_context, messages})
+                  report(true, "Gate verified existing effect")
+                end
+              ]
+          end
+        end,
+        1,
+        0,
+        config
+      )
+
+    assert {:ok, %{result: "Delivery complete"}} =
+             Runtime.request(core, "delivery", timeout: 3000)
+
+    await(fn -> Runtime.runs(runtime) == %{} end)
+    starts = EventCore.stream(core, 0, type: "run.started")
+
+    assert [%{payload: %{"stage" => "review", "reason" => "step", "depth" => 1}}] =
+             Enum.filter(starts, &(&1.payload["agent_kind"] == "reviewer"))
+
+    assert Enum.all?(
+             Enum.filter(starts, &(&1.payload["reason"] == "assessment")),
+             &(&1.payload["agent_kind"] == "concierge" and &1.payload["depth"] == 0)
+           )
+
+    assert length(EventCore.stream(core, 0, type: "tool.call.completed")) == 1
+    assert_receive {:gate_context, messages}
+    assert hd(messages)["content"] =~ "Kind: reviewer"
+    assert hd(messages)["content"] =~ "Work stage: review"
+    refute Enum.any?(messages, &(&1["role"] == "assistant"))
   end
 end

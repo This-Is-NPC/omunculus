@@ -11,8 +11,6 @@ defmodule Omunculus.EventCore.Store do
 
   alias Exqlite.Sqlite3
 
-  @schema_version 4
-
   @schema [
     "PRAGMA journal_mode=WAL",
     "PRAGMA busy_timeout=5000",
@@ -34,6 +32,7 @@ defmodule Omunculus.EventCore.Store do
       requested_by TEXT,
       instruction TEXT NOT NULL,
       status TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'active',
       version INTEGER NOT NULL DEFAULT 0,
       checkpoint TEXT,
       awaiting TEXT,
@@ -147,7 +146,6 @@ defmodule Omunculus.EventCore.Store do
   def open(path) do
     with {:ok, conn} <- Sqlite3.open(path) do
       Enum.each(@schema, fn sql -> :ok = exec!(conn, sql) end)
-      migrate!(conn)
       {:ok, conn}
     end
   end
@@ -203,84 +201,6 @@ defmodule Omunculus.EventCore.Store do
   def last_insert_rowid(conn) do
     {:ok, id} = Sqlite3.last_insert_rowid(conn)
     id
-  end
-
-  @migrations %{
-    1 => [
-      {"ARCHIVE_RUNS", "outcome", "TEXT"},
-      {"ARCHIVE_RUNS", "reason", "TEXT"},
-      {"ARCHIVE_RUNS", "policy_hash", "TEXT"},
-      {"WORK_ITEMS", "awaiting", "TEXT"}
-    ],
-    2 => [
-      {"WORK_ITEMS", "workspace_id", "TEXT"},
-      {"COMMENTS", "session_id", "TEXT"},
-      {"COMMENTS", "event_id", "TEXT"}
-    ],
-    3 => [
-      {"COMMENTS", "read_at", "TEXT"}
-    ],
-    4 => [{"WORK_ITEMS", "requested_by", "TEXT"}]
-  }
-
-  @table_migrations %{
-    2 => [
-      """
-      CREATE TABLE IF NOT EXISTS SESSION_WORKSPACES (
-        workspace_id TEXT PRIMARY KEY,
-        roots TEXT,
-        teams TEXT,
-        attached INTEGER NOT NULL DEFAULT 1,
-        attached_at TEXT,
-        last_sequence INTEGER NOT NULL DEFAULT 0
-      )
-      """
-    ]
-  }
-
-  defp migrate!(conn) do
-    current = user_version(conn)
-
-    if current < @schema_version do
-      for version <- (current + 1)..@schema_version do
-        apply_migrations!(conn, version)
-        :ok = exec!(conn, "PRAGMA user_version = #{version}")
-      end
-    end
-  end
-
-  defp user_version(conn) do
-    case query(conn, "PRAGMA user_version") do
-      [[version]] -> version
-    end
-  end
-
-  defp apply_migrations!(conn, version) do
-    for {table, column, type} <- Map.fetch!(@migrations, version) do
-      ensure_column!(conn, table, column, type)
-    end
-
-    if version == 4 do
-      exec!(
-        conn,
-        "UPDATE WORK_ITEMS SET requested_by = (SELECT json_extract(payload, '$.requested_by') FROM EVENTS WHERE type = 'task.delegated' AND json_extract(payload, '$.child_work_item_id') = WORK_ITEMS.work_item_id ORDER BY sequence LIMIT 1)"
-      )
-    end
-
-    for sql <- Map.get(@table_migrations, version, []) do
-      :ok = exec!(conn, sql)
-    end
-  end
-
-  defp ensure_column!(conn, table, column, type) do
-    unless column?(conn, table, column) do
-      :ok = exec!(conn, "ALTER TABLE #{table} ADD COLUMN #{column} #{type}")
-    end
-  end
-
-  defp column?(conn, table, column) do
-    query(conn, "PRAGMA table_info(#{table})")
-    |> Enum.any?(fn row -> Enum.at(row, 1) == column end)
   end
 
   defp encode_arg(nil), do: nil

@@ -48,7 +48,14 @@ defmodule Omunculus.CLITest do
       body =
         if has_tool_result? do
           %{
-            "choices" => [%{"message" => %{"role" => "assistant", "content" => "wrote README"}}],
+            "choices" => [
+              %{
+                "message" => %{
+                  "role" => "assistant",
+                  "content" => Jason.encode!(%{completed: true, comment: "wrote README"})
+                }
+              }
+            ],
             "usage" => %{"total_tokens" => 2}
           }
         else
@@ -114,7 +121,11 @@ defmodule Omunculus.CLITest do
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(
         200,
-        Jason.encode!(%{"choices" => [%{"message" => %{"content" => "done"}}]})
+        Jason.encode!(%{
+          "choices" => [
+            %{"message" => %{"content" => Jason.encode!(%{completed: true, comment: "done"})}}
+          ]
+        })
       )
     end)
 
@@ -147,7 +158,11 @@ defmodule Omunculus.CLITest do
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(
         200,
-        Jason.encode!(%{"choices" => [%{"message" => %{"content" => "1 2 3"}}]})
+        Jason.encode!(%{
+          "choices" => [
+            %{"message" => %{"content" => Jason.encode!(%{completed: true, comment: "1 2 3"})}}
+          ]
+        })
       )
     end)
 
@@ -160,7 +175,7 @@ defmodule Omunculus.CLITest do
       capture_cli(fn -> Omunculus.CLI.dispatch(["monkey-job", "count to 3"], env) end)
 
     assert code == 0
-    assert String.trim(out) == "1 2 3"
+    assert Jason.decode!(String.trim(out))["comment"] == "1 2 3"
     assert progress =~ "│ Model: fake-model · Tools: 0"
     assert progress =~ "│ Exposed tools     │ none"
   end
@@ -178,7 +193,12 @@ defmodule Omunculus.CLITest do
       body =
         if tool_result do
           send(parent, {:tool_result, tool_result["content"]})
-          %{"choices" => [%{"message" => %{"content" => "done"}}]}
+
+          %{
+            "choices" => [
+              %{"message" => %{"content" => Jason.encode!(%{completed: true, comment: "done"})}}
+            ]
+          }
         else
           assert get_in(payload, ["tools", Access.at(0), "function", "name"]) == "counter"
 
@@ -230,7 +250,7 @@ defmodule Omunculus.CLITest do
       end)
 
     assert code == 0
-    assert String.trim(out) == "done"
+    assert Jason.decode!(String.trim(out))["comment"] == "done"
     assert_receive {:tool_result, "Counter value: 2"}
     assert elapsed_us >= 20_000
     assert progress =~ "Tool · Counter · 0 -> 2"

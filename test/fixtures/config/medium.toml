@@ -16,7 +16,7 @@ human = ["delete"]
 mode = "allow"
 
 [profiles.count]
-instructions = "Use only the counter tool. Call it once per increment until it returns the target. Reply with only the final number."
+instructions = "Use only the counter tool. Call it once per increment until it returns the target. Report the final value and evidence in the completed/comment JSON contract."
 mode = "deny"
 granted = ["counter", "delegate"]
 

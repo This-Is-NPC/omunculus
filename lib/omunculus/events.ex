@@ -5,8 +5,7 @@ defmodule Omunculus.Events do
   against it; `omunculus events catalog` renders it; the config check uses it
   to validate `[[interceptors]]` and `[[automations]]`.
 
-  Evolving a payload means registering a new `schema_version` here and
-  keeping the old one accepted until no consumer declares it.
+  The catalog accepts only the current contract; there are no legacy decoders.
   """
 
   @type spec :: %{
@@ -20,10 +19,10 @@ defmodule Omunculus.Events do
         }
 
   @catalog %{
-    "task.retry_requested" => %{
+    "task.run_requested" => %{
       kind: :event,
       versions: ["1"],
-      required: ["comment", "checkpoint"],
+      required: ["comment", "checkpoint", "reason", "stage"],
       emitted_by: ["Runtime"],
       interceptable: false,
       injectable: false,
@@ -32,20 +31,20 @@ defmodule Omunculus.Events do
     "task.break" => %{
       kind: :event,
       versions: ["1"],
-      required: ["comment", "target", "reviewer"],
+      required: ["comment", "target", "reviewer", "stage", "target_run_id"],
       emitted_by: ["Runtime"],
       interceptable: false,
       injectable: false,
       doc: "Work exhausted its attempts or explicitly paused; review above or by a human."
     },
-    "task.break.resolved" => %{
+    "task.assessment_resolved" => %{
       kind: :event,
       versions: ["1"],
-      required: ["break_id", "comment"],
+      required: ["request_id", "comment"],
       emitted_by: ["Runtime"],
       interceptable: false,
       injectable: false,
-      doc: "A responsible resolved a break."
+      doc: "A responsible resolved a review or break."
     },
     "task.report_handled" => %{
       kind: :event,
@@ -56,14 +55,23 @@ defmodule Omunculus.Events do
       injectable: false,
       doc: "Durable cursor for a completion report."
     },
-    "task.reopened" => %{
+    "task.advanced" => %{
       kind: :event,
       versions: ["1"],
-      required: ["comment"],
+      required: ["from", "to", "checkpoint", "comment"],
       emitted_by: ["Runtime"],
       interceptable: false,
       injectable: false,
-      doc: "A responsible authorizes another attempt of previously reported work."
+      doc: "Responsible approval advances the configured work stage."
+    },
+    "task.assessment_requested" => %{
+      kind: :event,
+      versions: ["1"],
+      required: ["target", "reviewer", "comment", "stage", "target_run_id"],
+      emitted_by: ["Runtime"],
+      interceptable: false,
+      injectable: false,
+      doc: "A closed executor Run awaits its responsible's decision."
     },
     "task.requested" => %{
       kind: :command,
@@ -101,12 +109,12 @@ defmodule Omunculus.Events do
     },
     "task.completed" => %{
       kind: :event,
-      versions: ["1", "2"],
+      versions: ["1"],
       required: ["result", "depth"],
-      emitted_by: ["Run"],
+      emitted_by: ["Runtime"],
       interceptable: true,
       injectable: false,
-      doc: "A Run reports its Work Item done; parents waiting on it continue."
+      doc: "The responsible approved the final stage; the Runtime completes the Work Item."
     },
     "task.resume_rejected" => %{
       kind: :event,
@@ -147,7 +155,7 @@ defmodule Omunculus.Events do
     },
     "run.started" => %{
       kind: :event,
-      versions: ["1", "2"],
+      versions: ["1"],
       required: ["attempt", "depth", "agent_id", "agent_kind", "reason", "tools"],
       emitted_by: ["Run"],
       interceptable: false,
@@ -157,7 +165,7 @@ defmodule Omunculus.Events do
     },
     "run.completed" => %{
       kind: :event,
-      versions: ["1", "2"],
+      versions: ["1"],
       required: ["outcome"],
       emitted_by: ["Run"],
       interceptable: false,
@@ -361,40 +369,12 @@ defmodule Omunculus.Events do
           version not in spec.versions ->
             {:error, {:unsupported_schema_version, type, version}}
 
-          version == "2" and type in ["run.started", "run.completed", "task.completed"] ->
-            validate_workflow(type, payload, spec.required)
-
           true ->
             case Enum.reject(spec.required, &Map.has_key?(payload, &1)) do
               [] -> :ok
               missing -> {:error, {:missing_payload_fields, type, missing}}
             end
         end
-    end
-  end
-
-  defp validate_workflow(type, payload, required) do
-    missing = Enum.reject(required, &Map.has_key?(payload, &1))
-
-    valid =
-      case type do
-        "run.started" ->
-          payload["workflow"] == true and is_integer(payload["max_retries"]) and
-            payload["max_retries"] >= 0
-
-        "run.completed" ->
-          is_binary(payload["comment"]) and String.trim(payload["comment"]) != "" and
-            is_map(payload["checkpoint"])
-
-        "task.completed" ->
-          payload["completed"] == true and is_binary(payload["comment"]) and
-            String.trim(payload["comment"]) != ""
-      end
-
-    cond do
-      missing != [] -> {:error, {:missing_payload_fields, type, missing}}
-      not valid -> {:error, {:invalid_workflow_payload, type}}
-      true -> :ok
     end
   end
 

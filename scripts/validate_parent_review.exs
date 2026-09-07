@@ -1,4 +1,4 @@
-# Protocol v2 diagnostic: the first child requests break with an incomplete report.
+# Current protocol diagnostic: the first child requests break with an incomplete report.
 # All other responses come from the selected real provider. No repository writes.
 # Run: mise exec -- mix run scripts/validate_parent_review.exs presets/local.toml
 alias Omunculus.{Config, Dotenv, EventCore, Runtime}
@@ -99,7 +99,7 @@ corrections =
   Enum.filter(events, fn event ->
     cause = Enum.find(events, &(&1.event_id == event.causation_id))
 
-    event.type == "task.retry_requested" and report != nil and event.sequence > report.sequence and
+    event.type == "task.run_requested" and report != nil and event.sequence > report.sequence and
       cause != nil and cause.type == "run.completed" and depths[cause.run_id] == 0
   end)
 
@@ -115,7 +115,7 @@ sequences =
   |> Enum.sort()
 
 row = %{
-  protocol: 2,
+  protocol: "current",
   retries: Enum.count(starts, &(&1.payload["reason"] == "retry")),
   break_reviews: Enum.count(starts, &(&1.payload["reason"] == "break")),
   breaks: Enum.count(events, &(&1.type == "task.break")),

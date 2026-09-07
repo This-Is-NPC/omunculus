@@ -62,12 +62,11 @@ nem abandona seu papel para executá-las. Seletores `agent`/`team` são opcionai
 omiti-los usa o roteamento configurado. Nomes explícitos devem vir do contexto
 ou da descoberta disponível, não de nomes de ferramentas.
 
-`task.completed` do filho registra sua entrega, não a aprovação pelo pai.
-O pai conclui seu próprio Work Item após avaliar as entregas. A continuação
-preserva as mensagens e recompõe apenas o system prompt para o contexto
-atual (agente, kind, depth e motivo), sem duplicar instruções. No protocolo v2,
-falhas técnicas geram break para inspeção. `task.resumed` permanece disponível
-para a retomada explícita de uma execução que falhou.
+`run.completed` entrega o relato; `task.assessment_requested` solicita a
+avaliação do responsável. Só após aprovação o harness avança a etapa ou
+emite `task.completed`. A continuação do pai preserva suas mensagens e
+recompõe o system prompt. Falhas geram break para inspeção; `task.resumed`
+permite retomada explícita de execução que falhou.
 
 ## Delegação e árvore dinâmica
 
@@ -128,27 +127,26 @@ checkpoint guarda o que ainda falta ([team-model.md](team-model.md)).
 
 A continuação **sempre chama o modelo**, com uma observação que diz o que
 chegou e o que ainda falta ("A completed: …. Still pending: B, C"). Uma
-Run sem chamada de modelo seria um estado morto no log. No protocolo legado v1, o fechamento da
-Run de continuação segue três regras (o protocolo v2 usa a flag explícita
-descrita em [relato, retries e break](run-report-and-break.md)):
+Run sem chamada de modelo seria um estado morto no log. Enquanto há
+outras dependências, o relato da continuação é guardado como nota; a Run
+encerra. Sem dependências, o relato segue ao responsável para aprovação,
+conforme [o contrato atual](run-report-and-break.md).
 
-1. o modelo delega ou pede de novo: fecha em `waiting` com `awaiting` =
-   restantes mais os novos;
-2. o modelo devolve texto e `awaiting` ainda não está vazio: fecha em
-   `waiting` com `awaiting` = restantes, e o texto vai para o checkpoint
-   como `notes`; **não** vira `task.completed`;
-3. `awaiting` vazio e o modelo devolve texto: `task.completed`.
+O andamento e a execução são dimensões separadas. O contrato canônico é
+[trabalho, execução, aprovação e break](run-report-and-break.md). O pai
+aprova o relato; o harness avança a sequência opcional. Sem sequência,
+aprovação conclui o Work Item. Nenhum `run.completed` aprova por si só.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> requested: task.requested / task.delegated
-    requested --> running: run.started (initial)
-    running --> completed: task.completed
+    [*] --> active: tarefa criada
+    active --> running: run.started
+    running --> waiting: pedido ou relato para revisão
     running --> failed: run.failed
-    running --> waiting: run.completed outcome=waiting<br/>awaiting = {type, id}
-    waiting --> running: resposta entregue → run.started (continuation)
-    failed --> running: task.resumed → run.started (retry)
-    completed --> [*]
+    failed --> active: responsável autoriza retry
+    waiting --> active: retry ou próxima etapa autorizada
+    waiting --> idle: aprovação final
+    running --> idle: aprovação final da raiz
 ```
 
 O checkpoint de uma Run em `waiting` precisa bastar para continuar: as

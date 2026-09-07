@@ -240,7 +240,7 @@ defmodule Omunculus.PolicyRuntimeTest do
           script: fn _agent_id, _depth, _, _ ->
             [
               Fake.tool_call("edit", %{"path" => "README.md", "content" => "nope"}, "call_edit"),
-              Fake.text("done")
+              Fake.report("done")
             ]
           end
         )

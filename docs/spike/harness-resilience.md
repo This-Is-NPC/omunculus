@@ -11,7 +11,7 @@ seus percentuais não isolam a causa dos insucessos.
 
 ## Experimento causal offline
 
-O [probe](../../scripts/probe_harness_resilience.exs) usa Runtime,
+O probe histórico (preservado no histórico Git) usa Runtime,
 EventCore, Projector, TeamGate e o resolver de agentes de produção com
 `complex.toml` + `lane.toml`. Substitui apenas as respostas do chat por
 respostas controladas; usa filesystem em memória e bancos isolados.
@@ -126,7 +126,7 @@ O probe preserva explicitamente `workflow: false` para reproduzir a baseline
 v1. O contrato novo é validado por `workflow_test.exs`, não por este probe.
 
 ```sh
-mise exec -- mix run scripts/probe_harness_resilience.exs
+# Probe de protocolo antigo removido; use os testes do contrato atual.
 ```
 
 O script produz observações NDJSON, inclusive comportamentos incorretos da

@@ -216,3 +216,9 @@ A cada Run, o system prompt é recomposto; o restante do checkpoint permanece.
 Perfil fornece instruções da tarefa, contextualizadas para executor ou pai.
 `max_retries` aceita inteiro >= 0, com precedência agente > perfil > defaults.
 Veja [relato, retries e break](run-report-and-break.md).
+
+## Máquina opcional de trabalho
+
+`workflows`, seleção por `workflow` e aprovação da raiz por `root_approval`
+estão definidos em [trabalho e aprovação](run-report-and-break.md). A ausência
+de máquina não desliga aprovação parental, retries ou break.

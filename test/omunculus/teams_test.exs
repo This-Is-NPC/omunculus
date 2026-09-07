@@ -247,11 +247,19 @@ defmodule Omunculus.TeamsTest do
 
         if concierge? do
           [
-            Fake.tool_call("delegate", %{"instruction" => "x", "team" => "ghost"}, "d"),
-            Fake.text("ok")
+            Fake.tool_call(
+              "delegate",
+              %{
+                "comment" => "Preserve this task context and review the result",
+                "instruction" => "x",
+                "team" => "ghost"
+              },
+              "d"
+            ),
+            Fake.report("ok")
           ]
         else
-          [Fake.text("no")]
+          [Fake.report("no")]
         end
       end
 

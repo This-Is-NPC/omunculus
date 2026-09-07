@@ -8,7 +8,7 @@ cenários com respostas controladas e orienta a próxima campanha.
 Data: 2026-09-07. Escopo: runner, fixtures, resolver de agentes, loop do
 Agent e registros das 28 execuções. Esta auditoria não fez chamadas aos
 providers reais. O diagnóstico reproduzível está em
-[scripts/probe_methodology.exs](../../scripts/probe_methodology.exs).
+probe metodológico histórico (preservado no histórico Git).
 
 **Veredito:** a matriz é útil como teste exploratório de integração. Ainda
 não é um benchmark controlado de modelos, nem certificação completa de
@@ -219,7 +219,7 @@ outro orçamento explicitamente definido.
 ## Reprodução da auditoria offline
 
 ```sh
-mise exec -- mix run scripts/probe_methodology.exs
+# Probe metodológico antigo removido; use os testes do contrato atual.
 ```
 
 O script usa o resolver e o Agent reais com chat simulado de resposta

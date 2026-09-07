@@ -149,7 +149,9 @@ defmodule Omunculus.CLI.Inbox do
     end
   end
 
-  defp validate_reply_target({:completion, _}, %{payload: %{"break_id" => id}})
+  defp validate_reply_target({:completion, _}, %{
+         payload: %{"assessment" => true, "request_id" => id}
+       })
        when is_binary(id),
        do: :ok
 

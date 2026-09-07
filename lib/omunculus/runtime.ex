@@ -237,7 +237,7 @@ defmodule Omunculus.Runtime do
         child_id = to_string(env.work_item_id)
 
         if child_id in Enum.map(awaiting, &to_string/1) and
-             Omunculus.Runtime.Workflow.current_completion?(state.core, env) do
+             Omunculus.Runtime.Workflow.completed?(state.core, env.work_item_id) do
           maybe_continue_parent(state, parent_wi, env, run_completed, child_id, awaiting)
         else
           state
@@ -355,7 +355,7 @@ defmodule Omunculus.Runtime do
 
         {:ok, agent, bands, policy_hash, request_permission, spec, state} ->
           {agent, bands, request_permission} =
-            review_policy(agent, bands, request_permission, spec)
+            assessment_policy(agent, bands, request_permission, spec)
 
           spec = maybe_prepend_comments(state, spec, agent)
           start_run_with_agent(state, spec, agent, bands, policy_hash, request_permission)
@@ -364,8 +364,8 @@ defmodule Omunculus.Runtime do
     %{result | config: original_config}
   end
 
-  defp review_policy(agent, bands, permission, spec) do
-    if spec[:review] do
+  defp assessment_policy(agent, bands, permission, spec) do
+    if spec[:assessment] do
       readable =
         Enum.filter(
           agent.tools,
@@ -722,7 +722,9 @@ defmodule Omunculus.Runtime do
       team: Map.get(spec, :team, spec.activation.payload["team"]),
       agent: Map.get(spec, :agent, spec.activation.payload["agent"]),
       reason: Map.get(spec, :reason, "initial"),
-      review: Map.get(spec, :review),
+      assessment: Map.get(spec, :assessment),
+      flow: Omunculus.Runtime.Workflow.flow(state.core, spec.work_item_id),
+      stage: Omunculus.Runtime.Workflow.stage(state.core, spec.work_item_id),
       cross_lineage_arbitration: Map.get(spec, :cross_lineage_arbitration),
       cross_lineage_request: Map.get(spec, :cross_lineage_request),
       execution: task_execution(state.core, spec)
@@ -771,11 +773,7 @@ defmodule Omunculus.Runtime do
     snapshot = %{
       workspaces: workspaces,
       teams: loaded.teams,
-      agents:
-        if(agent[:workflow],
-          do: Map.merge(Omunculus.Runtime.Agents.defaults(), loaded.agents),
-          else: loaded.agents
-        )
+      agents: Map.merge(Omunculus.Runtime.Agents.defaults(), loaded.agents)
     }
 
     tool_options = Map.merge(Map.get(agent, :tool_options) || %{}, snapshot)
@@ -923,14 +921,7 @@ defmodule Omunculus.Runtime do
         {:error, :run_still_open}
 
       true ->
-        checkpoint =
-          history
-          |> Enum.filter(&(&1.type == "tool.call.completed" and is_map(&1.payload["checkpoint"])))
-          |> List.last()
-          |> case do
-            nil -> %{}
-            env -> atomize_checkpoint(env.payload["checkpoint"])
-          end
+        checkpoint = Omunculus.Runtime.Workflow.checkpoint(core, work_item_id)
 
         p = last_start.payload
 
@@ -990,7 +981,9 @@ defmodule Omunculus.Runtime do
     end
   end
 
-  defp waiting_report(%Envelope{payload: %{"outcome" => "reported", "review" => review}} = env)
+  defp waiting_report(
+         %Envelope{payload: %{"outcome" => "reported", "assessment" => review}} = env
+       )
        when is_map(review) do
     checkpoint = review["restore"] || %{}
 
@@ -1020,15 +1013,15 @@ defmodule Omunculus.Runtime do
     waiting_rows =
       EventCore.query(
         core,
-        "SELECT work_item_id, awaiting FROM WORK_ITEMS WHERE status = ?",
+        "SELECT work_item_id, awaiting FROM WORK_ITEMS WHERE state = ?",
         ["waiting"]
       )
 
-    # Continuation runs flip status to running while awaiting stays on WORK_ITEMS.
+    # Continuation runs flip state to running while awaiting stays on WORK_ITEMS.
     running_rows =
       EventCore.query(
         core,
-        "SELECT work_item_id, awaiting FROM WORK_ITEMS WHERE status = ? AND awaiting IS NOT NULL AND awaiting != '' AND awaiting != '[]'",
+        "SELECT work_item_id, awaiting FROM WORK_ITEMS WHERE state = ? AND awaiting IS NOT NULL AND awaiting != '' AND awaiting != '[]'",
         ["running"]
       )
 
@@ -1099,8 +1092,6 @@ defmodule Omunculus.Runtime do
       |> Map.put("messages", (checkpoint["messages"] || []) ++ [observation])
       |> Map.put("awaiting", new_awaiting)
       |> Map.put("pending", new_pending)
-      |> Map.put("review_child", child_id)
-      |> Map.put("review_call_id", tool_call_id)
 
     last_start =
       EventCore.stream(state.core, 0, work_item_id: parent_wi, type: "run.started")
@@ -1206,14 +1197,6 @@ defmodule Omunculus.Runtime do
             end
         end
     end
-  end
-
-  # Tool state is kept with atom keys in memory (see Tools.Counter); the log
-  # stores it as JSON.
-  defp atomize_checkpoint(map) when is_map(map) do
-    Map.new(map, fn {tool, state} ->
-      {tool, Map.new(state, fn {k, v} -> {String.to_atom(k), v} end)}
-    end)
   end
 
   # --- root wait ---------------------------------------------------------------------
@@ -1417,7 +1400,7 @@ defmodule Omunculus.Runtime do
     waiting_rows =
       EventCore.query(
         state.core,
-        "SELECT work_item_id, awaiting FROM WORK_ITEMS WHERE status = ?",
+        "SELECT work_item_id, awaiting FROM WORK_ITEMS WHERE state = ?",
         ["waiting"]
       )
 

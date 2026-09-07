@@ -217,7 +217,7 @@ defmodule Omunculus.EventCoreTest do
     assert [["waiting", ~s(["wi-child"])]] =
              EventCore.query(
                core,
-               "SELECT status, awaiting FROM WORK_ITEMS WHERE work_item_id = 'wi-parent'"
+               "SELECT state, awaiting FROM WORK_ITEMS WHERE work_item_id = 'wi-parent'"
              )
   end
 

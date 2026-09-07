@@ -15,7 +15,6 @@ defmodule Omunculus.Agent do
     max_turns = Keyword.get(opts, :max_turns, 32)
     extra = Keyword.get(opts, :instructions)
     reporter = Keyword.get(opts, :reporter, fn _event -> :ok end)
-    nudge = Keyword.get(opts, :nudge)
     started_at = now()
 
     messages =
@@ -51,10 +50,7 @@ defmodule Omunculus.Agent do
       reporter: reporter,
       started_at: started_at,
       tool_calls: 0,
-      nudge: nudge,
-      workflow: Keyword.get(opts, :workflow, false),
-      counter_target:
-        if(Keyword.get(opts, :workflow, false), do: nil, else: counter_target(tools, instruction))
+      report_required: Keyword.get(opts, :report_required, true)
     })
   end
 
@@ -170,23 +166,16 @@ defmodule Omunculus.Agent do
             assistant_text: text(reply.content)
         }
 
-        nudge =
-          cond do
-            next.workflow and
-                not match?({:ok, _}, Omunculus.Runtime.Report.parse(next.assistant_text)) ->
-              "Invalid completion report. Return JSON with completed:boolean and a nonempty comment summarizing work and next steps. Optional break:boolean. Do not merely describe a tool call."
-
-            continue_counter?(next) ->
-              counter_nudge(next)
-
-            true ->
-              custom_nudge(next)
+        feedback =
+          if next.report_required and
+               not match?({:ok, _}, Omunculus.Runtime.Report.parse(next.assistant_text)) do
+            "Invalid completion report. Return JSON with completed:boolean and a nonempty comment summarizing work and next steps. Optional break:boolean."
           end
 
-        if nudge do
+        if feedback do
           loop(%{
             next
-            | messages: messages ++ [%{"role" => "user", "content" => nudge}]
+            | messages: messages ++ [%{"role" => "user", "content" => feedback}]
           })
         else
           emit(state, %{
@@ -302,7 +291,7 @@ defmodule Omunculus.Agent do
   end
 
   defp execute_with_comment(state, name, args, context) do
-    if state.workflow and name in ["delegate", "request_work", "request_permission"] and
+    if state.report_required and name in ["delegate", "request_work", "request_permission"] and
          not (is_binary(args["comment"]) and String.trim(args["comment"]) != "") do
       {:error, :handoff_comment_required, context}
     else
@@ -409,51 +398,6 @@ defmodule Omunculus.Agent do
   defp now, do: System.monotonic_time(:millisecond)
   defp elapsed(started_at), do: max(now() - started_at, 0)
 
-  defp counter_target(["counter"], instruction) when is_binary(instruction) do
-    case Regex.scan(~r/\d+/, instruction) do
-      [] ->
-        nil
-
-      matches ->
-        {n, _} = matches |> List.last() |> hd() |> Integer.parse()
-        if n > 0, do: n, else: nil
-    end
-  end
-
-  defp counter_target(_tools, _instruction), do: nil
-
-  defp continue_counter?(%{counter_target: target} = state) when is_integer(target) do
-    state.turn < state.max_turns and counter_value(state) < target
-  end
-
-  defp continue_counter?(_state), do: false
-
-  defp counter_value(state) do
-    case Omunculus.Tool.Context.tool_state(state.context, "counter", %{value: 0}) do
-      %{value: n} when is_integer(n) -> n
-      _ -> 0
-    end
-  end
-
-  # Optional caller-provided continuation: receives a summary of the run so
-  # far and returns a user message to push the model on, or nil to halt.
-  defp custom_nudge(%{nudge: fun} = state) when is_function(fun, 1) do
-    if state.turn < state.max_turns do
-      fun.(%{
-        turn: state.turn,
-        tool_calls: state.tool_calls,
-        tool_state: state.context.state,
-        assistant_text: state.assistant_text
-      })
-    end
-  end
-
-  defp custom_nudge(_state), do: nil
-
-  defp counter_nudge(state) do
-    "Counter is #{counter_value(state)}. Target is #{state.counter_target}. Call the counter tool now. Do not write a reply."
-  end
-
   defp result(state) do
     %{
       assistant_text: state.assistant_text || "",
@@ -502,7 +446,7 @@ defmodule Omunculus.Agent do
     You are omunculus, a coding agent. Work only inside #{cwd}.
     Use the provided tools to inspect and edit files. There is no shell.
     Prefer edit over write for existing files. Stop when the task is done.
-    Return a short summary of what changed.
+    #{Omunculus.Runtime.Report.instruction()}
     """
 
     append_instructions(base, extra)

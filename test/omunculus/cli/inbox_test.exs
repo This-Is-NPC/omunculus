@@ -27,7 +27,7 @@ defmodule Omunculus.CLI.InboxTest do
             kind: "request",
             body: "Review existing work",
             request_id: "break-test",
-            break_id: "break-test"
+            assessment: true
           }
         )
       )

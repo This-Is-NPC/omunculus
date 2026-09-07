@@ -8,153 +8,20 @@ defmodule Omunculus.Chat.Scripts do
   def resolver(opts \\ []), do: &resolve(&1, Map.new(opts))
 
   def resolve(ctx, opts) do
-    case Map.get(ctx, :config) do
-      %{agents: agents} when is_map(agents) and map_size(agents) > 0 ->
-        resolve_with_config(ctx, opts, Map.get(ctx, :config))
-
-      _ ->
-        resolve_legacy(ctx, opts)
-    end
-  end
-
-  defp resolve_with_config(ctx, opts, config) do
+    config = ctx[:config] || Omunculus.Config.empty()
+    config = %{config | agents: Map.merge(Omunculus.Runtime.Agents.defaults(), config.agents)}
     name = pick_agent(ctx, config)
-    agent_cfg = Map.get(config.agents, name, %{})
-    agent_id = name
-    kind = agent_kind(name, ctx)
-    defaults = Map.get(config, :defaults, %{})
-
-    max_turns =
-      Map.get(agent_cfg, :max_turns) || opts[:max_turns] || Map.get(defaults, :max_turns) || 4
-
-    if is_map(opts[:chat]) do
-      %{
-        agent_id: agent_id,
-        kind: kind,
-        model: opts[:chat].model,
-        tools: tools_for(name, kind),
-        max_turns: max_turns,
-        chat: opts[:chat],
-        system_prompt: agent_cfg.prompt || legacy_system_prompt(name, ctx, opts),
-        nudge: legacy_nudge(kind),
-        tool_options: Map.take(opts, [:delay_ms])
-      }
-    else
-      %{
-        agent_id: agent_id,
-        kind: kind,
-        model: "fake",
-        tools: tools_for(name, kind),
-        max_turns: max_turns_for_fake(name, ctx, opts, max_turns),
-        chat: fake_chat(opts, agent_id, ctx, fake_turns(name, ctx, opts, config)),
-        tool_options: tool_options_for(name, opts)
-      }
-    end
-  end
-
-  defp resolve_legacy(%{depth: depth, max_depth: max_depth}, %{chat: chat} = opts)
-       when depth < max_depth and is_map(chat) do
-    %{
-      agent_id: "concierge@" <> chat.model,
-      kind: "concierge",
-      model: chat.model,
-      tools: ["delegate"],
-      max_turns: opts[:max_turns] || 6,
-      chat: chat,
-      system_prompt: """
-      You are a concierge agent. You never do the work yourself and you never count.
-      Your only tool is `delegate`. Call it exactly once, passing the user's task
-      unchanged as `instruction`. When the tool result arrives, reply with only the
-      number it reported and nothing else.
-      """,
-      nudge: fn
-        %{tool_calls: 0} ->
-          "You have not delegated yet. Call the delegate tool now with the user's task as instruction. Do not answer yourself."
-
-        _ ->
-          nil
-      end,
-      tool_options: Map.take(opts, [:delay_ms])
-    }
-  end
-
-  defp resolve_legacy(%{depth: depth, max_depth: max_depth} = ctx, opts) when depth < max_depth do
-    reason = Map.get(ctx, :reason, "initial")
-    checkpoint = Map.get(ctx, :checkpoint, %{})
-    messages? = is_list(Map.get(checkpoint, "messages") || Map.get(checkpoint, :messages))
-
-    turns =
-      if reason in ["continuation", "retry"] or messages? do
-        [
-          fn messages -> Fake.text(delegate_result(messages)) end
-        ]
-      else
-        [
-          Fake.tool_call("delegate", legacy_delegate_args(ctx), "call_delegate"),
-          fn messages -> Fake.text(delegate_result(messages)) end
-        ]
-      end
+    entry = config.agents[name] || %{}
+    kind = entry[:kind] || if(ctx.depth < ctx.max_depth, do: "concierge", else: "worker")
 
     %{
-      agent_id: "concierge@spike",
-      kind: "concierge",
+      agent_id: name,
+      kind: kind,
       model: "fake",
-      tools: ["delegate"],
-      max_turns: 4,
-      chat: fake_chat(opts, "concierge@spike", ctx, turns),
-      tool_options: Map.take(opts, [:delay_ms])
-    }
-  end
-
-  defp resolve_legacy(%{instruction: instruction, checkpoint: checkpoint}, %{chat: chat} = opts)
-       when is_map(chat) do
-    target = target(instruction, opts[:target] || 10)
-    current = counter_current(checkpoint)
-
-    %{
-      agent_id: "worker@" <> chat.model,
-      kind: "worker",
-      model: chat.model,
-      tools: ["counter"],
-      max_turns: opts[:max_turns] || target - current + 4,
-      chat: chat,
-      system_prompt: """
-      You are a counting worker. This is not a coding task and there are no files.
-      Use only the counter tool: call it once per increment until it returns the
-      number the user asked you to count to. Do not count in prose. After the
-      target value, reply with only the final number.
-      """,
-      tool_options: %{
-        delay_ms: opts[:delay_ms] || 0,
-        tools: %{"counter" => %{increment: 1}}
-      }
-    }
-  end
-
-  defp resolve_legacy(%{instruction: instruction, checkpoint: checkpoint} = ctx, opts) do
-    target = target(instruction, opts[:target] || 10)
-    current = counter_current(checkpoint)
-    remaining = max(target - current, 0)
-
-    calls =
-      for n <- (current + 1)..target//1,
-          do: Fake.tool_call("counter", %{}, "call_counter_#{n}")
-
-    turns =
-      calls ++
-        [fn messages -> Fake.text(last_tool_result(messages, ~r/Counter value: (\d+)/)) end]
-
-    %{
-      agent_id: "worker@spike",
-      kind: "worker",
-      model: "fake",
-      tools: ["counter"],
-      max_turns: remaining + 2,
-      chat: fake_chat(opts, "worker@spike", ctx, turns),
-      tool_options: %{
-        delay_ms: opts[:delay_ms] || 0,
-        tools: %{"counter" => %{increment: 1}}
-      }
+      tools: tools_for(name, kind),
+      max_turns: max_turns_for_fake(name, ctx, opts, entry[:max_turns] || opts[:max_turns] || 4),
+      chat: fake_chat(opts, name, ctx, fake_turns(name, ctx, opts, config)),
+      tool_options: tool_options_for(name, opts)
     }
   end
 
@@ -196,25 +63,16 @@ defmodule Omunculus.Chat.Scripts do
     end
   end
 
-  defp depth_fallback(depth, max_depth, agents) do
+  defp depth_fallback(depth, max_depth, _agents) do
     if depth < max_depth do
-      if Map.has_key?(agents, "concierge"), do: "concierge", else: "concierge@spike"
+      "concierge"
     else
-      if Map.has_key?(agents, "worker"), do: "worker", else: "worker@spike"
+      "worker"
     end
   end
 
-  defp agent_kind("concierge", _ctx), do: "concierge"
-  defp agent_kind("concierge@spike", _ctx), do: "concierge"
-
-  defp agent_kind(_name, %{depth: depth, max_depth: max_depth}) when depth < max_depth,
-    do: "concierge"
-
-  defp agent_kind(_name, _ctx), do: "worker"
-
   defp tools_for("editor", _), do: ["write"]
   defp tools_for("concierge", _), do: ["delegate"]
-  defp tools_for("concierge@spike", _), do: ["delegate"]
   defp tools_for(_, "concierge"), do: ["delegate"]
   defp tools_for(_, _), do: ["counter"]
 
@@ -231,7 +89,6 @@ defmodule Omunculus.Chat.Scripts do
 
   defp max_turns_for_fake("editor", _ctx, _opts, max_turns), do: max_turns
   defp max_turns_for_fake("concierge", _ctx, _opts, max_turns), do: min(max_turns, 4)
-  defp max_turns_for_fake("concierge@spike", _ctx, _opts, _), do: 4
 
   defp max_turns_for_fake(_name, ctx, opts, _default) do
     target = target(ctx.instruction, opts[:target] || 10)
@@ -241,7 +98,7 @@ defmodule Omunculus.Chat.Scripts do
 
   defp fake_turns(name, ctx, opts, config) do
     cond do
-      name in ["concierge", "concierge@spike"] or ctx.depth < ctx.max_depth ->
+      name == "concierge" or ctx.depth < ctx.max_depth ->
         concierge_fake_turns(ctx, config)
 
       name == "editor" ->
@@ -259,11 +116,11 @@ defmodule Omunculus.Chat.Scripts do
 
     delegate_turns =
       if reason in ["continuation", "retry"] or messages? do
-        [fn messages -> Fake.text(delegate_result(messages)) end]
+        [fn messages -> Fake.report(delegate_result(messages)) end]
       else
         [
           Fake.tool_call("delegate", delegate_args(ctx, config), "call_delegate"),
-          fn messages -> Fake.text(delegate_result(messages)) end
+          fn messages -> Fake.report(delegate_result(messages)) end
         ]
       end
 
@@ -275,7 +132,7 @@ defmodule Omunculus.Chat.Scripts do
   end
 
   defp delegate_args(ctx, config) do
-    args = %{"instruction" => ctx.instruction}
+    args = %{"instruction" => ctx.instruction, "comment" => "Delegated task: " <> ctx.instruction}
     teams = config.teams || %{}
 
     args =
@@ -286,10 +143,6 @@ defmodule Omunculus.Chat.Scripts do
       end
 
     maybe_put_workspace(args, ctx, config)
-  end
-
-  defp legacy_delegate_args(ctx) do
-    maybe_put_workspace(%{"instruction" => ctx.instruction}, ctx, %{workspaces: %{}})
   end
 
   defp infer_team(instruction, teams) do
@@ -409,7 +262,7 @@ defmodule Omunculus.Chat.Scripts do
   defp editor_fake_turns do
     [
       Fake.tool_call("write", %{"path" => "README.md", "content" => "# hi\n"}, "call_write"),
-      Fake.text("wrote README")
+      Fake.report("wrote README")
     ]
   end
 
@@ -421,41 +274,26 @@ defmodule Omunculus.Chat.Scripts do
       for n <- (current + 1)..target//1,
           do: Fake.tool_call("counter", %{}, "call_counter_#{n}")
 
-    calls ++ [fn messages -> Fake.text(last_tool_result(messages, ~r/Counter value: (\d+)/)) end]
+    calls ++
+      [fn messages -> Fake.report(last_tool_result(messages, ~r/Counter value: (\d+)/)) end]
   end
-
-  defp legacy_system_prompt("concierge", _ctx, _opts) do
-    """
-    You are a concierge agent. You never do the work yourself and you never count.
-    Your only tool is `delegate`. Call it exactly once, passing the user's task
-    unchanged as `instruction`. When the tool result arrives, reply with only the
-    number it reported and nothing else.
-    """
-  end
-
-  defp legacy_system_prompt(_name, _ctx, _opts) do
-    """
-    You are a counting worker. This is not a coding task and there are no files.
-    Use only the counter tool: call it once per increment until it returns the
-    number the user asked you to count to. Do not count in prose. After the
-    target value, reply with only the final number.
-    """
-  end
-
-  defp legacy_nudge("concierge") do
-    fn
-      %{tool_calls: 0} ->
-        "You have not delegated yet. Call the delegate tool now with the user's task as instruction. Do not answer yourself."
-
-      _ ->
-        nil
-    end
-  end
-
-  defp legacy_nudge(_), do: nil
 
   defp fake_chat(opts, agent_id, ctx, default_turns) do
     case opts[:script] do
+      _ when ctx.reason == "break" ->
+        Fake.new([
+          Fake.text(
+            Jason.encode!(%{
+              completed: false,
+              break: true,
+              comment: "Technical failure needs operator review"
+            })
+          )
+        ])
+
+      _ when ctx.reason == "assessment" ->
+        Fake.new([Fake.report(ctx.assessment["comment"] || "Reviewed existing work")])
+
       fun when is_function(fun, 5) ->
         turns =
           if Map.get(ctx, :reason) == "arbitration" and Map.get(ctx, :cross_lineage_arbitration) do
@@ -477,7 +315,7 @@ defmodule Omunculus.Chat.Scripts do
         turns =
           if Map.get(ctx, :reason) in ["continuation", "retry"] and ctx.depth == 0 and
                checkpoint_has_delegate_observation?(ctx) do
-            [fn messages -> Fake.text(delegate_result(messages)) end]
+            [fn messages -> Fake.report(delegate_result(messages)) end]
           else
             turns
           end
@@ -489,18 +327,18 @@ defmodule Omunculus.Chat.Scripts do
           Map.get(ctx, :reason) == "arbitration" and Map.get(ctx, :cross_lineage_arbitration) ->
             Fake.new([
               Fake.tool_call("forward", %{}, "call_forward"),
-              Fake.text("forwarded")
+              Fake.report("forwarded")
             ])
 
           Map.get(ctx, :reason) == "arbitration" ->
             Fake.new([
               Fake.tool_call("grant", %{"reason" => "allowed"}, "call_grant"),
-              Fake.text("granted")
+              Fake.report("granted")
             ])
 
           Map.get(ctx, :reason) in ["continuation", "retry"] and ctx.depth == 0 and
               checkpoint_has_delegate_observation?(ctx) ->
-            Fake.new([fn messages -> Fake.text(delegate_result(messages)) end])
+            Fake.new([fn messages -> Fake.report(delegate_result(messages)) end])
 
           true ->
             Fake.for_node(fun, agent_id, ctx.depth, ctx[:workspace], ctx[:team])
@@ -512,13 +350,13 @@ defmodule Omunculus.Chat.Scripts do
             Map.get(ctx, :reason) == "arbitration" and Map.get(ctx, :cross_lineage_arbitration) ->
               [
                 Fake.tool_call("forward", %{}, "call_forward"),
-                Fake.text("forwarded")
+                Fake.report("forwarded")
               ]
 
             Map.get(ctx, :reason) == "arbitration" ->
               [
                 Fake.tool_call("grant", %{"reason" => "allowed"}, "call_grant"),
-                Fake.text("granted")
+                Fake.report("granted")
               ]
 
             true ->
@@ -543,21 +381,22 @@ defmodule Omunculus.Chat.Scripts do
   end
 
   defp counter_current(checkpoint) when is_map(checkpoint) do
-    get_in(checkpoint, ["counter", :value]) ||
-      get_in(checkpoint, ["counter", "value"]) ||
-      get_in(checkpoint, ["tool_state", "counter", :value]) ||
-      get_in(checkpoint, ["tool_state", "counter", "value"]) ||
-      get_in(checkpoint, [:counter, :value]) ||
-      get_in(checkpoint, [:tool_state, :counter, :value]) ||
-      0
+    get_in(checkpoint, ["tool_state", "counter", :value]) ||
+      get_in(checkpoint, ["tool_state", "counter", "value"]) || 0
   end
 
   defp counter_current(_), do: 0
 
   defp delegate_result(messages) do
     case last_tool_result(messages, ~r/Result: (.*?)\. Still pending:/) do
-      "" -> last_tool_result(messages, ~r/^Result: (.+)$/)
-      value -> value
+      "" ->
+        case last_tool_result(messages, ~r/^Result: (.+)$/) do
+          "" -> "Delegation did not produce a result"
+          result -> result
+        end
+
+      value ->
+        value
     end
   end
 

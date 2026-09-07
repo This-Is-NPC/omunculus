@@ -99,10 +99,10 @@ defmodule Omunculus.Matrix do
     :ok
   end
 
-  def assert_chain!(%{events: events, depth: depth}) do
+  def assert_chain!(%{events: events, depth: depth, core: core}) do
     assert Enum.map(events, & &1.type) == expected_types(depth)
     assert hd(events).causation_id == nil
-    assert_linear!(events)
+    assert_causal!(core, events)
   end
 
   def assert_replay!(%{core: core, projector: projector}) do
@@ -180,10 +180,10 @@ defmodule Omunculus.Matrix do
       if depth >= max_depth do
         [
           Fake.tool_call("write", %{"path" => "README.md", "content" => "# hi\n"}, "call_write"),
-          Fake.text("wrote README")
+          Fake.report("wrote README")
         ]
       else
-        [fn _msgs -> Fake.text("") end]
+        [fn _msgs -> Fake.report("") end]
       end
     end
 
@@ -298,14 +298,17 @@ defmodule Omunculus.Matrix do
     |> Enum.filter(&(&1.type in @chain_types))
   end
 
-  defp assert_linear!(events) do
-    events
-    |> Enum.chunk_every(2, 1, :discard)
-    |> Enum.each(fn [prev, next] ->
-      assert next.causation_id == prev.event_id,
-             "#{next.type} (#{next.event_id}) should be caused by #{prev.type} (#{prev.event_id})"
-    end)
+  defp assert_causal!(core, events) do
+    by_id = Map.new(EventCore.stream(core, 0), &{&1.event_id, &1})
+
+    for [prev, next] <- Enum.chunk_every(events, 2, 1, :discard) do
+      assert ancestor?(by_id, next, prev.event_id)
+    end
   end
+
+  defp ancestor?(_events, %{causation_id: nil}, _), do: false
+  defp ancestor?(_events, %{causation_id: id}, id), do: true
+  defp ancestor?(events, env, id), do: ancestor?(events, Map.fetch!(events, env.causation_id), id)
 
   defp expected_types(depth, rounds \\ 10) do
     ["task.requested"] ++

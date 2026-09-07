@@ -55,7 +55,7 @@ defmodule Omunculus.Runtime.Permission do
     rows =
       EventCore.query(
         core,
-        "SELECT work_item_id, awaiting FROM WORK_ITEMS WHERE status IN ('waiting', 'running')",
+        "SELECT work_item_id, awaiting FROM WORK_ITEMS WHERE state IN ('waiting', 'running')",
         []
       )
 
@@ -74,7 +74,7 @@ defmodule Omunculus.Runtime.Permission do
     rows =
       EventCore.query(
         core,
-        "SELECT work_item_id, awaiting FROM WORK_ITEMS WHERE status IN ('waiting', 'running')",
+        "SELECT work_item_id, awaiting FROM WORK_ITEMS WHERE state IN ('waiting', 'running')",
         []
       )
 

@@ -86,10 +86,14 @@ defmodule Omunculus.PermissionRuntimeTest do
           [
             Fake.tool_call(
               "request_permission",
-              %{"tool" => "edit", "reason" => "patch"},
+              %{
+                "comment" => "Preserve this task context and review the result",
+                "tool" => "edit",
+                "reason" => "patch"
+              },
               "call_rp"
             ),
-            Fake.text("done")
+            Fake.report("done")
           ]
         end
       )
@@ -127,15 +131,23 @@ defmodule Omunculus.PermissionRuntimeTest do
           [
             Fake.tool_call(
               "request_permission",
-              %{"tool" => "edit", "reason" => "one"},
+              %{
+                "comment" => "Preserve this task context and review the result",
+                "tool" => "edit",
+                "reason" => "one"
+              },
               "call_rp1"
             ),
             Fake.tool_call(
               "request_permission",
-              %{"tool" => "edit", "reason" => "two"},
+              %{
+                "comment" => "Preserve this task context and review the result",
+                "tool" => "edit",
+                "reason" => "two"
+              },
               "call_rp2"
             ),
-            Fake.text("done")
+            Fake.report("done")
           ]
         end
       )
@@ -177,11 +189,15 @@ defmodule Omunculus.PermissionRuntimeTest do
           [
             Fake.tool_call(
               "request_permission",
-              %{"tool" => "edit", "reason" => "again"},
+              %{
+                "comment" => "Preserve this task context and review the result",
+                "tool" => "edit",
+                "reason" => "again"
+              },
               "call_rp"
             ),
             Fake.tool_call("counter", %{}, "call_counter"),
-            Fake.text("1")
+            Fake.report("1")
           ]
         end
       )
@@ -216,20 +232,28 @@ defmodule Omunculus.PermissionRuntimeTest do
             [
               Fake.tool_call(
                 "delegate",
-                %{"instruction" => "work", "workspace" => "app"},
+                %{
+                  "comment" => "Preserve this task context and review the result",
+                  "instruction" => "work",
+                  "workspace" => "app"
+                },
                 "call_del"
               ),
-              Fake.text("done")
+              Fake.report("done")
             ]
           else
             [
               Fake.tool_call(
                 "request_permission",
-                %{"tool" => "edit", "reason" => "patch"},
+                %{
+                  "comment" => "Preserve this task context and review the result",
+                  "tool" => "edit",
+                  "reason" => "patch"
+                },
                 "call_rp"
               ),
               Fake.tool_call("edit", %{"path" => "a.txt", "content" => "x"}, "call_edit"),
-              Fake.text("ok")
+              Fake.report("ok")
             ]
           end
         end
@@ -275,7 +299,17 @@ defmodule Omunculus.PermissionRuntimeTest do
     agents =
       Agents.resolver(
         script: fn _id, _d, _, _ ->
-          [Fake.tool_call("request_permission", %{"tool" => "edit", "reason" => "x"}, "call_rp")]
+          [
+            Fake.tool_call(
+              "request_permission",
+              %{
+                "comment" => "Preserve this task context and review the result",
+                "tool" => "edit",
+                "reason" => "x"
+              },
+              "call_rp"
+            )
+          ]
         end
       )
 
@@ -320,37 +354,49 @@ defmodule Omunculus.PermissionRuntimeTest do
           if reason == "arbitration" do
             [
               Fake.tool_call("deny", %{"reason" => "not now"}, "call_deny"),
-              Fake.text("denied")
+              Fake.report("denied")
             ]
           else
             if depth == 0 do
               [
                 Fake.tool_call(
                   "delegate",
-                  %{"instruction" => "work", "workspace" => "app"},
+                  %{
+                    "comment" => "Preserve this task context and review the result",
+                    "instruction" => "work",
+                    "workspace" => "app"
+                  },
                   "call_del"
                 ),
-                Fake.text("done")
+                Fake.report("done")
               ]
             else
               if reason == "continuation" do
                 [
                   Fake.tool_call(
                     "request_permission",
-                    %{"tool" => "edit", "reason" => "patch"},
+                    %{
+                      "comment" => "Preserve this task context and review the result",
+                      "tool" => "edit",
+                      "reason" => "patch"
+                    },
                     "call_rp"
                   ),
-                  Fake.text("denied")
+                  Fake.report("denied")
                 ]
               else
                 [
                   Fake.tool_call(
                     "request_permission",
-                    %{"tool" => "edit", "reason" => "patch"},
+                    %{
+                      "comment" => "Preserve this task context and review the result",
+                      "tool" => "edit",
+                      "reason" => "patch"
+                    },
                     "call_rp"
                   ),
                   Fake.tool_call("edit", %{"path" => "a.txt", "content" => "x"}, "call_edit"),
-                  Fake.text("ok")
+                  Fake.report("ok")
                 ]
               end
             end
@@ -407,26 +453,34 @@ defmodule Omunculus.PermissionRuntimeTest do
           if reason == "arbitration" do
             [
               Fake.tool_call("escalate", %{"reason" => "ask human"}, "call_esc"),
-              Fake.text("escalated")
+              Fake.report("escalated")
             ]
           else
             if depth == 0 do
               [
                 Fake.tool_call(
                   "delegate",
-                  %{"instruction" => "work", "workspace" => "app"},
+                  %{
+                    "comment" => "Preserve this task context and review the result",
+                    "instruction" => "work",
+                    "workspace" => "app"
+                  },
                   "call_del"
                 ),
-                Fake.text("done")
+                Fake.report("done")
               ]
             else
               [
                 Fake.tool_call(
                   "request_permission",
-                  %{"tool" => "edit", "reason" => "patch"},
+                  %{
+                    "comment" => "Preserve this task context and review the result",
+                    "tool" => "edit",
+                    "reason" => "patch"
+                  },
                   "call_rp"
                 ),
-                Fake.text("waiting")
+                Fake.report("waiting")
               ]
             end
           end

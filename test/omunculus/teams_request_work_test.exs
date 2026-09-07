@@ -143,135 +143,177 @@ defmodule Omunculus.TeamsRequestWorkTest do
   defp cross_team_script(agent_id, depth, _ws, team, reason) do
     cond do
       reason == "continuation" ->
-        [fn msgs -> Fake.text(tool_result(msgs)) end]
+        [fn msgs -> Fake.report(tool_result(msgs)) end]
 
       depth == 0 and reason != "arbitration" ->
         [
           Fake.tool_call(
             "delegate",
-            %{"instruction" => "review", "workspace" => "app", "team" => "code-review"},
+            %{
+              "comment" => "Preserve this task context and review the result",
+              "instruction" => "review",
+              "workspace" => "app",
+              "team" => "code-review"
+            },
             "d0"
           ),
-          fn msgs -> Fake.text(tool_result(msgs)) end
+          fn msgs -> Fake.report(tool_result(msgs)) end
         ]
 
       team == "code-review" and agent_id == "review-lead" ->
         [
           Fake.tool_call(
             "delegate",
-            %{"instruction" => "scan", "agent" => "security-reviewer"},
+            %{
+              "comment" => "Preserve this task context and review the result",
+              "instruction" => "scan",
+              "agent" => "security-reviewer"
+            },
             "d1"
           ),
-          fn msgs -> Fake.text(tool_result(msgs)) end
+          fn msgs -> Fake.report(tool_result(msgs)) end
         ]
 
       agent_id == "security-reviewer" ->
         [
           Fake.tool_call(
             "request_work",
-            %{"instruction" => "style pass", "team" => "edit", "agent" => "editor"},
+            %{
+              "comment" => "Preserve this task context and review the result",
+              "instruction" => "style pass",
+              "team" => "edit",
+              "agent" => "editor"
+            },
             "rw"
           ),
-          fn msgs -> Fake.text(tool_result(msgs)) end
+          fn msgs -> Fake.report(tool_result(msgs)) end
         ]
 
       agent_id == "editor" ->
-        [Fake.text("edited")]
+        [Fake.report("edited")]
 
       true ->
-        [Fake.text("ok")]
+        [Fake.report("ok")]
     end
   end
 
   defp sibling_script(agent_id, depth, _ws, team, reason) do
     cond do
       reason == "continuation" ->
-        [fn msgs -> Fake.text(tool_result(msgs)) end]
+        [fn msgs -> Fake.report(tool_result(msgs)) end]
 
       depth == 0 and reason != "arbitration" ->
         [
           Fake.tool_call(
             "delegate",
-            %{"instruction" => "review", "workspace" => "app", "team" => "code-review"},
+            %{
+              "comment" => "Preserve this task context and review the result",
+              "instruction" => "review",
+              "workspace" => "app",
+              "team" => "code-review"
+            },
             "d0"
           ),
-          fn msgs -> Fake.text(tool_result(msgs)) end
+          fn msgs -> Fake.report(tool_result(msgs)) end
         ]
 
       team == "code-review" and agent_id == "review-lead" ->
         [
           Fake.tool_call(
             "delegate",
-            %{"instruction" => "scan", "agent" => "security-reviewer"},
+            %{
+              "comment" => "Preserve this task context and review the result",
+              "instruction" => "scan",
+              "agent" => "security-reviewer"
+            },
             "d1"
           ),
-          fn msgs -> Fake.text(tool_result(msgs)) end
+          fn msgs -> Fake.report(tool_result(msgs)) end
         ]
 
       agent_id == "security-reviewer" ->
         [
           Fake.tool_call(
             "request_work",
-            %{"instruction" => "peer", "team" => "code-review", "agent" => "style-reviewer"},
+            %{
+              "comment" => "Preserve this task context and review the result",
+              "instruction" => "peer",
+              "team" => "code-review",
+              "agent" => "style-reviewer"
+            },
             "rw"
           ),
-          fn msgs -> Fake.text(tool_result(msgs)) end
+          fn msgs -> Fake.report(tool_result(msgs)) end
         ]
 
       agent_id == "style-reviewer" ->
-        [Fake.text("styled")]
+        [Fake.report("styled")]
 
       true ->
-        [Fake.text("ok")]
+        [Fake.report("ok")]
     end
   end
 
   defp mediated_script(agent_id, depth, _ws, team, reason) do
     cond do
       reason == "continuation" ->
-        [fn msgs -> Fake.text(tool_result(msgs)) end]
+        [fn msgs -> Fake.report(tool_result(msgs)) end]
 
       reason == "arbitration" ->
         [
           Fake.tool_call("rewrite", %{"instruction" => "mediated style pass"}, "rw"),
-          Fake.text("forwarded")
+          Fake.report("forwarded")
         ]
 
       depth == 0 ->
         [
           Fake.tool_call(
             "delegate",
-            %{"instruction" => "review", "workspace" => "app", "team" => "code-review"},
+            %{
+              "comment" => "Preserve this task context and review the result",
+              "instruction" => "review",
+              "workspace" => "app",
+              "team" => "code-review"
+            },
             "d0"
           ),
-          fn msgs -> Fake.text(tool_result(msgs)) end
+          fn msgs -> Fake.report(tool_result(msgs)) end
         ]
 
       team == "code-review" and agent_id == "review-lead" ->
         [
           Fake.tool_call(
             "delegate",
-            %{"instruction" => "scan", "agent" => "security-reviewer"},
+            %{
+              "comment" => "Preserve this task context and review the result",
+              "instruction" => "scan",
+              "agent" => "security-reviewer"
+            },
             "d1"
           ),
-          fn msgs -> Fake.text(tool_result(msgs)) end
+          fn msgs -> Fake.report(tool_result(msgs)) end
         ]
 
       agent_id == "security-reviewer" ->
         [
           Fake.tool_call(
             "request_work",
-            %{"instruction" => "original", "team" => "edit", "agent" => "editor"},
+            %{
+              "comment" => "Preserve this task context and review the result",
+              "instruction" => "original",
+              "team" => "edit",
+              "agent" => "editor"
+            },
             "rw"
           ),
-          fn msgs -> Fake.text(tool_result(msgs)) end
+          fn msgs -> Fake.report(tool_result(msgs)) end
         ]
 
       agent_id == "editor" ->
-        [Fake.text("edited")]
+        [Fake.report("edited")]
 
       true ->
-        [Fake.text("ok")]
+        [Fake.report("ok")]
     end
   end
 
@@ -381,7 +423,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
       if reason == "arbitration" do
         [
           Fake.tool_call("deny", %{"reason" => "outside current task"}, "deny"),
-          Fake.text("denied")
+          Fake.report("denied")
         ]
       else
         cross_team_script(agent, depth, ws, team, reason)
@@ -415,7 +457,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
             send(parent, {:target_started, self()})
 
             receive do
-              :finish -> Fake.text("styled")
+              :finish -> Fake.report("styled")
             end
           end
         ]
@@ -451,7 +493,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
 
     Harness.await_log(
       core,
-      &(&1.type == "task.completed" and &1.work_item_id == req.payload["child_work_item_id"])
+      &(&1.type == "run.completed" and &1.work_item_id == req.payload["child_work_item_id"])
     )
 
     :sys.terminate(runtime, :normal)
@@ -499,40 +541,54 @@ defmodule Omunculus.TeamsRequestWorkTest do
     veto_script = fn agent_id, depth, _ws, team, reason ->
       cond do
         reason == "continuation" ->
-          [Fake.text("ok")]
+          [Fake.report("ok")]
 
         depth == 0 and reason != "arbitration" ->
           [
             Fake.tool_call(
               "delegate",
-              %{"instruction" => "x", "workspace" => "app", "team" => "code-review"},
+              %{
+                "comment" => "Preserve this task context and review the result",
+                "instruction" => "x",
+                "workspace" => "app",
+                "team" => "code-review"
+              },
               "d0"
             ),
-            Fake.text("ok")
+            Fake.report("ok")
           ]
 
         team == "code-review" and agent_id == "review-lead" ->
           [
             Fake.tool_call(
               "delegate",
-              %{"instruction" => "x", "agent" => "security-reviewer"},
+              %{
+                "comment" => "Preserve this task context and review the result",
+                "instruction" => "x",
+                "agent" => "security-reviewer"
+              },
               "d1"
             ),
-            Fake.text("ok")
+            Fake.report("ok")
           ]
 
         agent_id == "security-reviewer" ->
           [
             Fake.tool_call(
               "request_work",
-              %{"instruction" => "x", "team" => "ghost", "agent" => "nope"},
+              %{
+                "comment" => "Preserve this task context and review the result",
+                "instruction" => "x",
+                "team" => "ghost",
+                "agent" => "nope"
+              },
               "rw"
             ),
-            Fake.text("ok")
+            Fake.report("ok")
           ]
 
         true ->
-          [Fake.text("ok")]
+          [Fake.report("ok")]
       end
     end
 

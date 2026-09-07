@@ -103,8 +103,8 @@ separada da revisão de uma entrega recebida.
 
 ```sh
 mise exec -- mix test
-mise exec -- mix run scripts/probe_methodology.exs
-mise exec -- mix run scripts/probe_harness_resilience.exs
+# Probe metodológico antigo removido; use os testes do contrato atual.
+# Probe de protocolo antigo removido; use os testes do contrato atual.
 mise exec -- mix run scripts/validate_parent_review.exs presets/local.toml
 mise exec -- mix run scripts/validate_parent_review.exs presets/cloud.toml
 ```

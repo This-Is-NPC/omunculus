@@ -242,7 +242,7 @@ defmodule Omunculus.SessionTest do
                 Fake.new([
                   fn _ ->
                     :timer.sleep(30_000)
-                    Fake.text("late")
+                    Fake.report("late")
                   end
                 ])
           }
@@ -254,7 +254,11 @@ defmodule Omunculus.SessionTest do
                 Fake.new([
                   Fake.tool_call(
                     "delegate",
-                    %{"instruction" => "block", "workspace" => "app"},
+                    %{
+                      "comment" => "Preserve this task context and review the result",
+                      "instruction" => "block",
+                      "workspace" => "app"
+                    },
                     "call_delegate"
                   )
                 ])

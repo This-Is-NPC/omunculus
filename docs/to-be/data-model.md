@@ -40,8 +40,7 @@ aconteçam na mesma transação.
 Outro store adicional justificado é `SESSION_WORKSPACES`: projeção
 reconstruível de `workspace.attached` e `workspace.detached`, nunca cópia do
 histórico em `EVENTS`. Colunas: `workspace_id` (PK), `roots`, `teams`,
-`attached`, `attached_at`, `last_sequence`. Introduzido na spike com
-`PRAGMA user_version` 2 (`@schema_version` 2). Atende o requisito de
+`attached`, `attached_at`, `last_sequence`. Atende o requisito de
 WorkspaceGate, membership de attach no Runtime e filtros de workspace nos
 interceptors: membership anexada atual sem varrer todo o log a cada
 verificação.
@@ -136,3 +135,9 @@ resultado, sem tabela paralela de entrega.
 O Event Core, dispatch, replay e dedupe estão detalhados em
 [event-model.md](event-model.md); a relação runtime entre Agent config,
 Execution Node, Run e Work Item está em [execution-model.md](execution-model.md).
+
+## Status e state
+
+`WORK_ITEMS.status` é o andamento lógico/etapa; `WORK_ITEMS.state` é a
+execução. Checkpoint e dependências não substituem esses campos. O contrato
+atual de transições está em [run-report-and-break.md](run-report-and-break.md).

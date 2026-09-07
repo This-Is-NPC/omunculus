@@ -126,7 +126,7 @@ defmodule Omunculus.PermissionsTest do
     agents =
       Agents.resolver(
         script: fn _id, _depth, _, _ ->
-          [Fake.tool_call("counter", %{}, "call_counter"), Fake.text("1")]
+          [Fake.tool_call("counter", %{}, "call_counter"), Fake.report("1")]
         end
       )
 
@@ -206,19 +206,27 @@ defmodule Omunculus.PermissionsTest do
           [
             Fake.tool_call(
               "delegate",
-              %{"instruction" => "work infra edit", "workspace" => "infra"},
+              %{
+                "comment" => "Preserve this task context and review the result",
+                "instruction" => "work infra edit",
+                "workspace" => "infra"
+              },
               "call_del_#{depth}"
             ),
-            Fake.text("done")
+            Fake.report("done")
           ]
         else
           [
             Fake.tool_call(
               "request_permission",
-              %{"tool" => "edit", "reason" => "patch infra"},
+              %{
+                "comment" => "Preserve this task context and review the result",
+                "tool" => "edit",
+                "reason" => "patch infra"
+              },
               "call_rp"
             ),
-            Fake.text("ok")
+            Fake.report("ok")
           ]
         end
       end

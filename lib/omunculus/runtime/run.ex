@@ -61,9 +61,10 @@ defmodule Omunculus.Runtime.Run do
           agent_kind: state.agent.kind,
           reason: reason,
           checkpoint: checkpoint,
-          workflow: state.agent[:workflow] || false,
+          flow: state.agent[:flow] || %{"steps" => [], "root_approval" => "self"},
+          stage: current_stage(state),
           max_retries: state.agent[:max_retries] || 2,
-          review: state[:review],
+          assessment: state[:assessment],
           tools: tools_bands,
           directory_scope: state[:directory_scope] || "subtree",
           discovery: Map.take(state.agent[:tool_options] || %{}, [:workspaces, :teams, :agents]),
@@ -87,7 +88,7 @@ defmodule Omunculus.Runtime.Run do
     active_tools = executable_tools(state)
 
     opts = [
-      workflow: agent[:workflow] || false,
+      report_required: not (state[:arbitration] || state[:cross_lineage_arbitration] || false),
       instruction: state.instruction,
       chat: agent.chat,
       fs: state[:fs] || fs_for_roots(state[:roots]),
@@ -95,7 +96,6 @@ defmodule Omunculus.Runtime.Run do
       max_turns: agent[:max_turns] || 32,
       instructions: agent[:instructions],
       system_prompt: agent[:system_prompt],
-      nudge: agent[:nudge],
       tool_options: tool_options_for(agent, state),
       tool_state: tool_state_from(checkpoint),
       tool_executor: &execute_tool(state, &1, &2, &3, &4),
@@ -130,9 +130,9 @@ defmodule Omunculus.Runtime.Run do
       end
 
     opts =
-      if agent[:workflow] && !(state[:arbitration] || state[:cross_lineage_arbitration]),
+      if !(state[:arbitration] || state[:cross_lineage_arbitration]),
         do: contextual_options(opts, agent, state),
-        else: Keyword.put(opts, :workflow, false)
+        else: Keyword.put(opts, :report_required, false)
 
     outcome = Agent.run(opts)
 
@@ -160,14 +160,22 @@ defmodule Omunculus.Runtime.Run do
         )
 
       {:ok, result} ->
-        if agent[:workflow] && !(state[:arbitration] || state[:cross_lineage_arbitration]),
+        if !(state[:arbitration] || state[:cross_lineage_arbitration]),
           do: finish_report(state, result),
-          else: finish_completed(state, result)
+          else: finish_arbitration(state, result)
 
       {:error, reason} ->
         append!(state, :event, "run.failed", %{reason: inspect(reason)})
         {:stop, :normal, state}
     end
+  end
+
+  defp current_stage(state) do
+    steps = (state.agent[:flow] || %{})["steps"] || []
+
+    if state.attempt == 1 and steps != [],
+      do: hd(steps)["name"],
+      else: Omunculus.Runtime.Workflow.stage(state.core, state.work_item_id)
   end
 
   defp nonempty_comment(text) when is_binary(text) do
@@ -185,7 +193,10 @@ defmodule Omunculus.Runtime.Run do
     opts =
       if is_list(messages) and messages != [] do
         Keyword.put(opts, :messages, [
-          %{"role" => "system", "content" => agent.system_prompt}
+          %{
+            "role" => "system",
+            "content" => agent[:system_prompt] || Omunculus.Runtime.Report.instruction()
+          }
           | Enum.reject(messages, &(&1["role"] == "system"))
         ])
       else
@@ -220,7 +231,7 @@ defmodule Omunculus.Runtime.Run do
         end
       end)
 
-    if state[:review] do
+    if state[:assessment] do
       read_tools =
         Enum.filter(
           Keyword.fetch!(opts, :tools),
@@ -251,7 +262,6 @@ defmodule Omunculus.Runtime.Run do
       end
 
     prior = state.checkpoint || %{}
-    child = prior["review_child"]
 
     checkpoint = %{
       "messages" => result.messages,
@@ -260,23 +270,12 @@ defmodule Omunculus.Runtime.Run do
       "pending" => prior["pending"] || %{}
     }
 
-    checkpoint =
-      if child && not report["completed"] do
-        checkpoint
-        |> Map.put("review_child", child)
-        |> Map.update!("awaiting", &Enum.uniq(&1 ++ [child]))
-        |> Map.update!("pending", &Map.put(&1, child, prior["review_call_id"]))
-      else
-        checkpoint
-      end
-
     append!(state, :event, "run.completed", %{
       outcome: "reported",
-      workflow: true,
       report: report,
       comment: report["comment"],
       checkpoint: checkpoint,
-      review: state[:review],
+      assessment: state[:assessment],
       max_retries: state.agent[:max_retries] || 2,
       rounds: result.turns,
       tool_calls: result.tool_calls,
@@ -306,8 +305,7 @@ defmodule Omunculus.Runtime.Run do
         outcome: "waiting",
         awaiting: awaiting,
         checkpoint: checkpoint,
-        comment: nonempty_comment(Process.get(:handoff_comment) || result.assistant_text),
-        workflow: state.agent[:workflow] || false
+        comment: nonempty_comment(Process.get(:handoff_comment) || result.assistant_text)
       },
       Process.get(:chain_head)
     )
@@ -315,18 +313,18 @@ defmodule Omunculus.Runtime.Run do
     {:stop, :normal, state}
   end
 
-  defp finish_completed(state, result) do
+  defp finish_arbitration(state, result) do
     if state[:cross_lineage_arbitration] do
       payload =
         cond do
           reason = Process.get(:cross_lineage_denied) ->
-            %{outcome: "completed", cross_lineage_denied: reason}
+            %{cross_lineage_denied: reason}
 
           Process.get(:cross_lineage_forwarded) ->
-            %{outcome: "completed", cross_lineage_forwarded: true}
+            %{cross_lineage_forwarded: true}
 
           true ->
-            %{outcome: "completed", cross_lineage_denied: "mediator returned without a decision"}
+            %{cross_lineage_denied: "mediator returned without a decision"}
         end
         |> Map.merge(%{
           outcome: "waiting",
@@ -357,30 +355,6 @@ defmodule Omunculus.Runtime.Run do
             usage: result.usage
           },
           Process.get(:chain_head)
-        )
-
-        {:stop, :normal, state}
-      else
-        completed =
-          append!(state, :event, "task.completed", %{
-            result: result.assistant_text,
-            depth: state.depth,
-            rounds: result.turns,
-            tool_calls: result.tool_calls
-          })
-
-        append!(
-          state,
-          :event,
-          "run.completed",
-          %{
-            outcome: "completed",
-            awaiting: [],
-            rounds: result.turns,
-            tool_calls: result.tool_calls,
-            usage: result.usage
-          },
-          completed.event_id
         )
 
         {:stop, :normal, state}
@@ -879,19 +853,13 @@ defmodule Omunculus.Runtime.Run do
         state.activation.workspace_id
 
     payload =
-      if type == "run.completed" and state.agent[:workflow],
+      if type == "run.completed",
         do: Map.put_new(payload, :comment, nonempty_comment(Process.get(:last_model_comment))),
         else: payload
 
     env =
       Envelope.new(kind, type,
-        schema_version:
-          if(
-            state.agent[:workflow] && !(state[:arbitration] || state[:cross_lineage_arbitration]) &&
-              type in ["run.started", "run.completed"],
-            do: "2",
-            else: "1"
-          ),
+        schema_version: "1",
         correlation_id: state.correlation_id,
         causation_id: causation_id || Process.get(:chain_head),
         idempotency_key: Keyword.get(opts, :idempotency_key),
@@ -952,16 +920,7 @@ defmodule Omunculus.Runtime.Run do
   end
 
   defp tool_state_from(checkpoint) when is_map(checkpoint) do
-    base =
-      case fetch_key(checkpoint, "tool_state") do
-        nil ->
-          checkpoint
-          |> Map.drop(["messages", "awaiting", "pending", "tool_state", "notes"])
-          |> Map.drop([:messages, :awaiting, :pending, :tool_state, :notes])
-
-        tool_state ->
-          tool_state
-      end
+    base = fetch_key(checkpoint, "tool_state") || %{}
 
     atomize_tool_state(base)
   end

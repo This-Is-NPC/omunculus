@@ -41,14 +41,17 @@ defmodule Omunculus.RuntimeTest do
     |> Enum.filter(&(&1.type in @chain_types))
   end
 
-  defp assert_linear!(events) do
-    events
-    |> Enum.chunk_every(2, 1, :discard)
-    |> Enum.each(fn [prev, next] ->
-      assert next.causation_id == prev.event_id,
-             "#{next.type} (#{next.event_id}) should be caused by #{prev.type} (#{prev.event_id})"
-    end)
+  defp assert_causal!(core, events) do
+    by_id = Map.new(EventCore.stream(core, 0), &{&1.event_id, &1})
+
+    for [prev, next] <- Enum.chunk_every(events, 2, 1, :discard) do
+      assert ancestor?(by_id, next, prev.event_id)
+    end
   end
+
+  defp ancestor?(_events, %{causation_id: nil}, _), do: false
+  defp ancestor?(_events, %{causation_id: id}, id), do: true
+  defp ancestor?(events, env, id), do: ancestor?(events, Map.fetch!(events, env.causation_id), id)
 
   defp expected_types(depth, rounds \\ 10) do
     ["task.requested"] ++
@@ -104,7 +107,11 @@ defmodule Omunculus.RuntimeTest do
             "id" => id,
             "function" => %{
               "name" => "delegate",
-              "arguments" => Jason.encode!(%{"instruction" => instruction})
+              "arguments" =>
+                Jason.encode!(%{
+                  "instruction" => instruction,
+                  "comment" => "Review " <> instruction
+                })
             }
           }
         end),
@@ -135,10 +142,14 @@ defmodule Omunculus.RuntimeTest do
 
       if ctx.depth == 0 do
         turns =
-          if reason in ["continuation", "retry"] or messages? do
-            [fn messages -> Fake.text(last_tool_result(messages)) end]
+          if reason == "assessment" do
+            [Fake.report("ok")]
           else
-            [triple_delegate(["A", "B", "C"])]
+            if reason in ["continuation", "retry"] or messages? do
+              [fn messages -> Fake.report(last_tool_result(messages)) end]
+            else
+              [triple_delegate(["A", "B", "C"])]
+            end
           end
 
         %{
@@ -156,7 +167,7 @@ defmodule Omunculus.RuntimeTest do
           model: "fake",
           tools: [],
           max_turns: 2,
-          chat: Fake.new([Fake.text("ok")])
+          chat: Fake.new([Fake.report("ok")])
         }
       end
     end
@@ -170,7 +181,7 @@ defmodule Omunculus.RuntimeTest do
     events = chain(core, requested.correlation_id)
     assert Enum.map(events, & &1.type) == expected_types(1)
     assert hd(events).causation_id == nil
-    assert_linear!(events)
+    assert_causal!(core, events)
 
     completed = Enum.filter(events, &(&1.type == "tool.call.completed"))
 
@@ -187,8 +198,9 @@ defmodule Omunculus.RuntimeTest do
 
     assert [
              {0, "concierge", 1, "initial", "waiting", nil},
-             {0, "concierge", 2, "continuation", "completed", nil},
-             {1, "worker", 1, "initial", "completed", ^root_initial_run}
+             {0, "concierge", 2, "assessment", "reported", nil},
+             {0, "concierge", 3, "continuation", "reported", nil},
+             {1, "worker", 1, "initial", "reported", ^root_initial_run}
            ] = archive_rows(core)
 
     assert [["completed", "10"], ["completed", "10"]] =
@@ -196,7 +208,7 @@ defmodule Omunculus.RuntimeTest do
 
     assert [[1]] = EventCore.query(core, "SELECT count(*) FROM WORK_ITEM_DEPENDENCIES")
     assert [[n]] = EventCore.query(core, "SELECT count(*) FROM ARCHIVE_MODEL_CALLS")
-    assert n == 2 + 11
+    assert n == 3 + 11
   end
 
   test "scenario 4: depth 2 without interceptor, report climbs the dynamic tree" do
@@ -206,7 +218,7 @@ defmodule Omunculus.RuntimeTest do
 
     events = chain(core, requested.correlation_id)
     assert Enum.map(events, & &1.type) == expected_types(2)
-    assert_linear!(events)
+    assert_causal!(core, events)
 
     assert Enum.map(Enum.filter(events, &(&1.type == "task.completed")), & &1.payload["depth"]) ==
              [2, 1, 0]
@@ -215,7 +227,7 @@ defmodule Omunculus.RuntimeTest do
 
     rows = archive_rows(core)
 
-    assert length(rows) == 5
+    assert length(rows) == 7
 
     assert Enum.count(rows, fn {depth, kind, _attempt, _reason, outcome, _parent} ->
              depth == 0 and kind == "concierge" and outcome == "waiting"
@@ -227,12 +239,14 @@ defmodule Omunculus.RuntimeTest do
 
     assert Enum.count(rows, fn {depth, kind, attempt, reason, outcome, _parent} ->
              depth == 2 and kind == "worker" and attempt == 1 and reason == "initial" and
-               outcome == "completed"
+               outcome == "reported"
            end) == 1
 
     completed_rows =
       rows
-      |> Enum.filter(fn {_, _, _, _, outcome, _} -> outcome == "completed" end)
+      |> Enum.filter(fn {_, _, _, reason, outcome, _} ->
+        outcome == "reported" and reason != "assessment"
+      end)
       |> Enum.sort_by(fn {depth, _, attempt, _, _, _} -> {-depth, attempt} end)
 
     [[root_initial_run]] =
@@ -242,16 +256,16 @@ defmodule Omunculus.RuntimeTest do
       EventCore.query(core, "SELECT run_id FROM ARCHIVE_RUNS WHERE depth = 1 AND attempt = 1")
 
     assert [
-             {2, "worker", 1, "initial", "completed", ^depth1_initial_run},
-             {1, "concierge", 2, "continuation", "completed", ^root_initial_run},
-             {0, "concierge", 2, "continuation", "completed", nil}
+             {2, "worker", 1, "initial", "reported", ^depth1_initial_run},
+             {1, "concierge", 3, "continuation", "reported", ^root_initial_run},
+             {0, "concierge", 3, "continuation", "reported", nil}
            ] = completed_rows
 
     [[worker_run_id]] =
       EventCore.query(core, "SELECT run_id FROM ARCHIVE_RUNS WHERE depth = 2 AND attempt = 1")
 
     [[depth1_cont_run_id]] =
-      EventCore.query(core, "SELECT run_id FROM ARCHIVE_RUNS WHERE depth = 1 AND attempt = 2")
+      EventCore.query(core, "SELECT run_id FROM ARCHIVE_RUNS WHERE depth = 1 AND attempt = 3")
 
     worker_start = run_started(core, worker_run_id)
     depth1_cont_start = run_started(core, depth1_cont_run_id)
@@ -272,7 +286,7 @@ defmodule Omunculus.RuntimeTest do
       |> Enum.filter(&(&1.payload["attempt"] == 1))
       |> Enum.map(&{&1.payload["depth"], &1.payload["agent_id"]})
 
-    assert starts == [{0, "concierge@spike"}, {1, "concierge@spike"}, {2, "worker@spike"}]
+    assert starts == [{0, "concierge"}, {1, "concierge"}, {2, "worker"}]
   end
 
   test "a waiting root run is not tracked live; runs drain when the request completes" do
@@ -321,9 +335,11 @@ defmodule Omunculus.RuntimeTest do
   end
 
   test "an idempotent re-submission returns the first result without a new run" do
-    %{core: core} = boot(1)
+    %{core: core, runtime: runtime} = boot(1)
 
     {:ok, first} = Runtime.request(core, "conte até 4", idempotency_key: "cli-1")
+    wait_until(fn -> Runtime.runs(runtime) == %{} end, 2000)
+    :sys.get_state(runtime)
     count = length(EventCore.stream(core, 0))
 
     {:ok, second} = Runtime.request(core, "conte até 4", idempotency_key: "cli-1")
@@ -377,7 +393,7 @@ defmodule Omunculus.RuntimeTest do
     assert {:ok, %{result: "10"}} = Task.await(task, 65_000)
     :ok = Projector.sync(projector)
 
-    assert [[1, "failed"], [2, "completed"]] =
+    assert [[1, "failed"], [2, "reported"]] =
              EventCore.query(
                core,
                "SELECT attempt, status FROM ARCHIVE_RUNS WHERE work_item_id = ? ORDER BY attempt",
@@ -389,7 +405,7 @@ defmodule Omunculus.RuntimeTest do
 
     assert second_start.payload["reason"] == "retry"
 
-    checkpoint = get_in(second_start.payload, ["checkpoint", "counter", "value"])
+    checkpoint = get_in(second_start.payload, ["checkpoint", "tool_state", "counter", "value"])
     assert is_integer(checkpoint) and checkpoint >= 3
 
     attempt2_calls =
@@ -400,8 +416,17 @@ defmodule Omunculus.RuntimeTest do
     [child_done, root_done] =
       EventCore.stream(core, 0, correlation_id: correlation_id, type: "task.completed")
 
-    assert child_done.run_id == second_start.run_id
-    assert root_done.causation_id == child_done.event_id
+    assert child_done.sequence > second_start.sequence
+
+    review_request =
+      Enum.find(
+        EventCore.stream(core, 0, type: "task.assessment_requested"),
+        &(&1.payload["target"] == child)
+      )
+
+    report = Enum.find(EventCore.stream(core, 0), &(&1.event_id == review_request.causation_id))
+    assert report.run_id == second_start.run_id
+    assert_causal!(core, [review_request, child_done, root_done])
 
     assert [["completed", "10"]] =
              EventCore.query(

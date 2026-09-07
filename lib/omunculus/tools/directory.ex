@@ -103,9 +103,9 @@ defmodule Omunculus.Tools.Directory do
         Store.query(
           conn,
           """
-          SELECT work_item_id, workspace_id, instruction, status
+          SELECT work_item_id, workspace_id, instruction, status, state
           FROM WORK_ITEMS
-          WHERE status IN ('requested', 'running', 'waiting')
+          WHERE status != 'completed'
           ORDER BY work_item_id
           """,
           []
@@ -113,12 +113,13 @@ defmodule Omunculus.Tools.Directory do
 
       rows
       |> Enum.map(fn
-        [wi, ws, instruction, status] ->
+        [wi, ws, instruction, status, state] ->
           %{
             "work_item_id" => wi,
             "workspace_id" => ws,
             "instruction" => instruction,
-            "status" => status
+            "status" => status,
+            "state" => state
           }
 
         _ ->

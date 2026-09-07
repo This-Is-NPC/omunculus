@@ -20,7 +20,7 @@ defmodule Omunculus.RuntimePromptTest do
         Chat.Fake.new([
           fn messages ->
             send(owner, {:messages, messages})
-            Chat.Fake.text("report")
+            Chat.Fake.report("report")
           end
         ])
         |> Map.put(:model, "test")
@@ -42,7 +42,7 @@ defmodule Omunculus.RuntimePromptTest do
       assert prompt =~ "convey these instructions to the executor"
       assert prompt =~ "The parent evaluates quality"
 
-      resumed_chat = Chat.Fake.new([Chat.Fake.text("reviewed")])
+      resumed_chat = Chat.Fake.new([Chat.Fake.report("reviewed")])
       observation = %{"role" => "tool", "content" => "Incomplete: missing evidence"}
       checkpoint = result.messages ++ [observation]
 
@@ -58,7 +58,7 @@ defmodule Omunculus.RuntimePromptTest do
     assert {:ok, result} =
              Agent.run(
                instruction: "report",
-               chat: Chat.Fake.new([Chat.Fake.text("done")]),
+               chat: Chat.Fake.new([Chat.Fake.report("done")]),
                fs: FS.Memory.new(),
                tools: [],
                system_prompt: "You review work.",

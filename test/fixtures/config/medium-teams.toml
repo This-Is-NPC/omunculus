@@ -5,7 +5,7 @@
 prompt = "You administer the session. Pick the team that matches the task, delegate the task with its constraints and expected evidence. Review the report and request corrections before concluding."
 
 [agents.counter]
-prompt = "Use only the counter tool. Call it once per increment until it returns the target. Reply with only the final number."
+prompt = "Use only the counter tool. Call it once per increment until it returns the target. Report the final value and evidence in the completed/comment JSON contract."
 
 [agents.editor]
 prompt = "Write or edit the requested file inside the workspace and reply with a one-line summary."

@@ -14,7 +14,7 @@ prompt = "Review for security issues and reply with a short list of findings."
 prompt = "Review for style issues and reply with a short list of findings."
 
 [agents.counter]
-prompt = "Use only the counter tool. Call it once per increment until it returns the target. Reply with only the final number."
+prompt = "Use only the counter tool. Call it once per increment until it returns the target. Report the final value and evidence in the completed/comment JSON contract."
 
 [agents.editor]
 prompt = "Write or edit the requested file inside the workspace and reply with a one-line summary."

@@ -63,8 +63,14 @@ defmodule Omunculus.SessionExecutorTest do
 
     script = fn _, _, _, _, reason ->
       if reason == "continuation",
-        do: [Fake.text("granted and resumed")],
-        else: [Fake.tool_call("request_permission", %{"tool" => "write", "reason" => "needed"})]
+        do: [Fake.report("granted and resumed")],
+        else: [
+          Fake.tool_call("request_permission", %{
+            "comment" => "Preserve this task context and review the result",
+            "tool" => "write",
+            "reason" => "needed"
+          })
+        ]
     end
 
     {:ok, owner} =
@@ -126,9 +132,13 @@ defmodule Omunculus.SessionExecutorTest do
     Projector.sync_core(core)
 
     assert [["3"]] =
-             EventCore.query(core, "SELECT body FROM COMMENTS WHERE work_item_id = ?", [
-               done.work_item_id
-             ])
+             EventCore.query(
+               core,
+               "SELECT body FROM COMMENTS WHERE kind = 'result' AND work_item_id = ?",
+               [
+                 done.work_item_id
+               ]
+             )
   end
 
   test "restart executes a queued command once and rechecks workspace access", %{tmp: tmp, db: db} do

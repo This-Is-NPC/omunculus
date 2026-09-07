@@ -1,4 +1,4 @@
-Status: fases 0–7 implementadas na master; validação e limites registrados abaixo
+Status: ciclo de trabalho corrigido; estados/gates opcionais validados em testes, com limites reais registrados.
 
 # Plano de implementação
 
@@ -6,6 +6,15 @@ Sete fases, cada uma fechando com a suíte verde e uma parte da matriz de
 `test/fixtures/config/README.md` passando. A ordem segue as dependências:
 nada de permissão antes de política, nada de time antes de continuação,
 nada de sessão antes de workspace no envelope.
+
+## Correção do ciclo de trabalho
+
+Implementado [o contrato de trabalho e aprovação](run-report-and-break.md): separar
+status/state, avaliar relatos pelo responsável antes de concluir, aplicar a
+sequência opcional no harness e remover protocolos legados. Validar falhas,
+retries, irmãos concorrentes, reinício e replay no mesmo caminho de execução
+usado por providers reais. Não há migração de bancos antigos. Evidências e limites em
+[workflow-validation.md](../spike/workflow-validation.md).
 
 ## Regras do jogo
 

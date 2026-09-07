@@ -212,7 +212,8 @@ defmodule Omunculus.InterceptorsTest do
 
       # The rejection reaches the delegating Run as a tool error; the model
       # decides what to do with it. The scripted concierge just reports.
-      {:ok, %{result: "", requested: requested}} = Runtime.request(core, "conte até 10")
+      {:ok, %{result: "Delegation did not produce a result", requested: requested}} =
+        Runtime.request(core, "conte até 10")
 
       events = EventCore.stream(core, 0, correlation_id: requested.correlation_id)
       delegated = Enum.filter(events, &(&1.type == "task.delegated"))
@@ -227,12 +228,14 @@ defmodule Omunculus.InterceptorsTest do
       depths =
         events |> Enum.filter(&(&1.type == "run.started")) |> Enum.map(& &1.payload["depth"])
 
-      assert depths == [0, 1, 0]
+      assert depths == [0, 1, 0, 0]
       refute Enum.any?(events, &(&1.type == "run.failed"))
 
       # The depth-1 completion is caused by the rejection: the decision is in the chain.
       [depth1_done, _root_done] = Enum.filter(events, &(&1.type == "task.completed"))
-      assert depth1_done.causation_id == rejected.event_id
+      review = Enum.find(events, &(&1.type == "task.assessment_requested"))
+      assert review.sequence > rejected.sequence
+      assert depth1_done.sequence > review.sequence
 
       assert %{"depth-gate" => %{evaluated: 2, delivered: 1, rejected: 1}} =
                EventCore.interceptor_stats(core)
@@ -395,7 +398,7 @@ defmodule Omunculus.InterceptorsTest do
 
       assert %{
                "log-completed" => %{delivered: 2, failed: 0},
-               "always-fails" => %{delivered: 0, failed: 3}
+               "always-fails" => %{delivered: 0, failed: 4}
              } =
                Automations.stats(pid)
 

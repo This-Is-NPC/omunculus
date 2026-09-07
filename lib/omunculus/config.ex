@@ -36,13 +36,20 @@ defmodule Omunculus.Config do
 
   def empty do
     %{
-      defaults: %{preset: @default_preset, max_turns: @default_max_turns, max_retries: 2},
+      defaults: %{
+        preset: @default_preset,
+        max_turns: @default_max_turns,
+        max_retries: 2,
+        workflow: false,
+        root_approval: "self"
+      },
       chat: %{api: "openai-completions", auth: nil, base_url: nil, model: nil, api_key: nil},
       output: %{timestamp_format: @default_timestamp_format},
       interceptors: [],
       automations: [],
       agents: %{},
       prompts: %{},
+      workflows: %{},
       teams: %{},
       workspaces: %{},
       policy: %{},
@@ -98,13 +105,58 @@ defmodule Omunculus.Config do
   with resolved modules, or the first error.
   """
   def check(config) do
-    with :ok <- check_workflow_config(config),
+    with :ok <- check_workflows(config),
+         :ok <- check_workflow_config(config),
          :ok <- check_references(config),
          {:ok, interceptors} <- check_interceptors(config.interceptors),
          {:ok, automations} <- check_automations(config.automations, config),
          {:ok, policy} <- check_policy_fit(config) do
       {:ok, %{interceptors: interceptors, automations: automations, policy: policy}}
     end
+  end
+
+  def workflow(config, entry, profile) do
+    selected =
+      Enum.find(
+        [entry[:workflow], profile[:workflow], config.defaults[:workflow]],
+        &(not is_nil(&1))
+      )
+
+    %{
+      "steps" => if(selected in [nil, false], do: [], else: config.workflows[selected]["steps"]),
+      "root_approval" =>
+        entry[:root_approval] || profile[:root_approval] || config.defaults[:root_approval] ||
+          "self"
+    }
+  end
+
+  defp check_workflows(config) do
+    entries = [config.defaults | Map.values(config.agents) ++ Map.values(config.presets)]
+
+    valid_entries =
+      Enum.all?(entries, fn entry ->
+        (entry[:workflow] in [nil, false] or Map.has_key?(config.workflows, entry[:workflow])) and
+          entry[:root_approval] in [nil, "self", "human"]
+      end)
+
+    valid_flows =
+      Enum.all?(config.workflows, fn {_name, flow} ->
+        steps = if is_map(flow), do: flow["steps"], else: nil
+
+        is_list(steps) and steps != [] and
+          Enum.all?(steps, fn step ->
+            is_map(step) and is_binary(step["name"]) and String.trim(step["name"]) != "" and
+              step["name"] != "completed" and is_binary(step["instructions"]) and
+              String.trim(step["instructions"]) != "" and
+              (is_nil(step["agent"]) or
+                 Map.has_key?(
+                   Map.merge(Omunculus.Runtime.Agents.defaults(), config.agents),
+                   step["agent"]
+                 ))
+          end) and length(Enum.uniq_by(steps, & &1["name"])) == length(steps)
+      end)
+
+    if valid_entries and valid_flows, do: :ok, else: {:error, :invalid_workflow_config}
   end
 
   defp check_workflow_config(config) do
@@ -395,7 +447,9 @@ defmodule Omunculus.Config do
       defaults: %{
         preset: defaults["preset"],
         max_turns: parse_int(defaults["max_turns"]),
-        max_retries: defaults["max_retries"]
+        max_retries: defaults["max_retries"],
+        workflow: defaults["workflow"],
+        root_approval: defaults["root_approval"]
       },
       chat: %{
         api: chat["api"],
@@ -427,6 +481,7 @@ defmodule Omunculus.Config do
           }
         end),
       prompts: Map.get(map, "prompts", %{}),
+      workflows: Map.get(map, "workflows", %{}),
       agents:
         Map.new(Map.get(map, "agents", %{}), fn {name, body} ->
           {name,
@@ -434,6 +489,8 @@ defmodule Omunculus.Config do
              prompt: body["prompt"],
              kind: body["kind"],
              max_retries: body["max_retries"],
+             workflow: body["workflow"],
+             root_approval: body["root_approval"],
              model: body["model"],
              max_turns: parse_int(body["max_turns"])
            }}
@@ -466,6 +523,8 @@ defmodule Omunculus.Config do
              tools: body["tools"],
              instructions: body["instructions"],
              max_retries: body["max_retries"],
+             workflow: body["workflow"],
+             root_approval: body["root_approval"],
              max_turns: parse_int(body["max_turns"]),
              policy: policy_of(body)
            }}
@@ -495,6 +554,7 @@ defmodule Omunculus.Config do
       interceptors: base.interceptors ++ Map.get(overlay, :interceptors, []),
       automations: base.automations ++ Map.get(overlay, :automations, []),
       agents: Map.merge(base.agents, Map.get(overlay, :agents, %{})),
+      workflows: Map.merge(base.workflows, Map.get(overlay, :workflows, %{})),
       prompts: Map.merge(base[:prompts] || %{}, Map.get(overlay, :prompts, %{})),
       teams: Map.merge(base.teams, Map.get(overlay, :teams, %{})),
       workspaces: Map.merge(base.workspaces, Map.get(overlay, :workspaces, %{})),

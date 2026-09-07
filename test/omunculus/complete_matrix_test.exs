@@ -39,21 +39,26 @@ defmodule Omunculus.CompleteMatrixTest do
     script = fn agent, at, _ws, _team, reason ->
       cond do
         reason == "continuation" ->
-          [Fake.text(if(write?, do: "wrote README", else: "10"))]
+          [Fake.report(if(write?, do: "wrote README", else: "10"))]
 
         at < depth and agent not in ["counter", "editor"] ->
-          args = %{"instruction" => task, "workspace" => "app"}
+          args = %{
+            "comment" => "Delegate and review " <> task,
+            "instruction" => task,
+            "workspace" => "app"
+          }
+
           args = if teams? and at == 0, do: Map.put(args, "team", team), else: args
           [Fake.tool_call("delegate", args, "delegate")]
 
         write? ->
           [
             Fake.tool_call("write", %{"path" => "README.md", "content" => "# hi\n"}, "write"),
-            Fake.text("wrote README")
+            Fake.report("wrote README")
           ]
 
         true ->
-          Enum.map(1..10, &Fake.tool_call("counter", %{}, "count-#{&1}")) ++ [Fake.text("10")]
+          Enum.map(1..10, &Fake.tool_call("counter", %{}, "count-#{&1}")) ++ [Fake.report("10")]
       end
     end
 

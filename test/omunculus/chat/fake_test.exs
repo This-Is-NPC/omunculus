@@ -16,11 +16,11 @@ defmodule Omunculus.Chat.FakeTest do
       [Fake.text("#{agent_id}@#{depth}")]
     end
 
-    concierge = Fake.for_node(script, "concierge@spike", 0, nil, nil)
-    worker = Fake.for_node(script, "worker@spike", 1, nil, nil)
+    concierge = Fake.for_node(script, "concierge", 0, nil, nil)
+    worker = Fake.for_node(script, "worker", 1, nil, nil)
 
-    assert {:ok, %{content: "concierge@spike@0"}} = Fake.complete(concierge, [], [])
-    assert {:ok, %{content: "worker@spike@1"}} = Fake.complete(worker, [], [])
+    assert {:ok, %{content: "concierge@0"}} = Fake.complete(concierge, [], [])
+    assert {:ok, %{content: "worker@1"}} = Fake.complete(worker, [], [])
   end
 
   test "for_node branches turns by team" do
@@ -28,8 +28,8 @@ defmodule Omunculus.Chat.FakeTest do
       [Fake.text(if(team, do: "team:#{team}", else: "solo"))]
     end
 
-    solo = Fake.for_node(script, "worker@spike", 1, nil, nil)
-    teamed = Fake.for_node(script, "worker@spike", 1, nil, "alpha")
+    solo = Fake.for_node(script, "worker", 1, nil, nil)
+    teamed = Fake.for_node(script, "worker", 1, nil, "alpha")
 
     assert {:ok, %{content: "solo"}} = Fake.complete(solo, [], [])
     assert {:ok, %{content: "team:alpha"}} = Fake.complete(teamed, [], [])
@@ -42,13 +42,20 @@ defmodule Omunculus.Chat.FakeTest do
       :ets.insert(seen, {agent_id, depth, workspace, team})
 
       case agent_id do
-        "concierge@spike" ->
+        "concierge" ->
           [
-            Fake.tool_call("delegate", %{"instruction" => "conte até 1"}, "call_delegate"),
+            Fake.tool_call(
+              "delegate",
+              %{
+                "comment" => "Preserve this task context and review the result",
+                "instruction" => "conte até 1"
+              },
+              "call_delegate"
+            ),
             Fake.text("concierge-scripted")
           ]
 
-        "worker@spike" ->
+        "worker" ->
           [
             Fake.tool_call("counter", %{}, "call_counter_1"),
             Fake.text("worker-scripted")
@@ -68,7 +75,7 @@ defmodule Omunculus.Chat.FakeTest do
         team: "team-a"
       })
 
-    assert [{"concierge@spike", 0, "ws-1", "team-a"}] = :ets.tab2list(seen)
+    assert [{"concierge", 0, "ws-1", "team-a"}] = :ets.tab2list(seen)
 
     assert {:ok, %{tool_calls: [_]}} = Fake.complete(concierge.chat, [], [])
     assert {:ok, %{content: "concierge-scripted"}} = Fake.complete(concierge.chat, [], [])
@@ -85,8 +92,8 @@ defmodule Omunculus.Chat.FakeTest do
 
     assert Enum.sort(:ets.tab2list(seen)) ==
              Enum.sort([
-               {"concierge@spike", 0, "ws-1", "team-a"},
-               {"worker@spike", 1, "ws-1", "team-a"}
+               {"concierge", 0, "ws-1", "team-a"},
+               {"worker", 1, "ws-1", "team-a"}
              ])
 
     assert {:ok, %{tool_calls: [_]}} = Fake.complete(worker.chat, [], [])
@@ -110,7 +117,7 @@ defmodule Omunculus.Chat.FakeTest do
     assert {:ok, %{content: content}} =
              Fake.complete(concierge.chat, [%{"role" => "tool", "content" => "Result: 2"}], [])
 
-    assert content == "2"
+    assert Jason.decode!(content)["comment"] == "2"
 
     worker =
       resolver.(%{
@@ -132,12 +139,14 @@ defmodule Omunculus.Chat.FakeTest do
 
     assert call2["id"] == "call_counter_2"
 
-    assert {:ok, %{content: "2"}} =
+    assert {:ok, %{content: content}} =
              Fake.complete(
                worker.chat,
                [%{"role" => "tool", "content" => "Counter value: 2"}],
                []
              )
+
+    assert Jason.decode!(content)["comment"] == "2"
   end
 
   test "default worker script resumes from checkpoint with remaining counter calls" do
@@ -148,7 +157,7 @@ defmodule Omunculus.Chat.FakeTest do
         depth: 1,
         max_depth: 1,
         instruction: "conte até 3",
-        checkpoint: %{"counter" => %{value: 1}}
+        checkpoint: %{"tool_state" => %{"counter" => %{value: 1}}}
       })
 
     assert {:ok, %{tool_calls: [call]}} = Fake.complete(worker.chat, [], [])
@@ -163,11 +172,13 @@ defmodule Omunculus.Chat.FakeTest do
 
     assert call["id"] == "call_counter_3"
 
-    assert {:ok, %{content: "3"}} =
+    assert {:ok, %{content: content}} =
              Fake.complete(
                worker.chat,
                [%{"role" => "tool", "content" => "Counter value: 3"}],
                []
              )
+
+    assert Jason.decode!(content)["comment"] == "3"
   end
 end

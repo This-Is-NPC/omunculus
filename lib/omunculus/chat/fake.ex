@@ -30,6 +30,9 @@ defmodule Omunculus.Chat.Fake do
     }
   end
 
+  def report(comment, completed \\ true),
+    do: text(Jason.encode!(%{completed: completed, comment: comment}))
+
   def text(content), do: %{content: content, tool_calls: nil, usage: nil}
 
   defp normalize(fun, messages) when is_function(fun, 1), do: normalize(fun.(messages), messages)

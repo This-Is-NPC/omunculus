@@ -8,8 +8,10 @@ defmodule Omunculus.Runtime.Workflow do
       when type in [
              "run.completed",
              "run.failed",
-             "task.retry_requested",
+             "task.run_requested",
              "task.break",
+             "task.assessment_requested",
+             "task.advanced",
              "task.commented",
              "task.completed"
            ],
@@ -23,17 +25,17 @@ defmodule Omunculus.Runtime.Workflow do
     state =
       Enum.reduce(events, state, fn env, acc ->
         case env do
-          %{type: "run.completed", payload: %{"workflow" => true, "outcome" => "reported"}} ->
+          %{type: "run.completed", payload: %{"outcome" => "reported"}} ->
             if live?(acc, env.work_item_id) or handled?(acc.core, env),
               do: acc,
               else: handle_report(acc, env)
 
           %{type: "run.failed"} ->
-            start = last_start(acc.core, env.work_item_id)
+            start = Enum.find(events, &(&1.type == "run.started" and &1.run_id == env.run_id))
 
-            if start && start.payload["workflow"] && not live?(acc, env.work_item_id) &&
+            if start && not live?(acc, env.work_item_id) &&
                  not handled?(acc.core, env) do
-              review = start.payload["review"]
+              review = start.payload["assessment"]
 
               comment =
                 "Technical failure; no valid model completion report. Inspect confirmed effects before continuing. " <>
@@ -42,11 +44,9 @@ defmodule Omunculus.Runtime.Workflow do
               if is_map(review) do
                 old =
                   Enum.find(
-                    EventCore.stream(acc.core, 0, type: "task.break"),
-                    &(&1.event_id == review["break_id"])
+                    requests(acc.core),
+                    &(&1.event_id == review["request_id"])
                   )
-
-                resolve_break(acc, old, comment)
 
                 emit_break(
                   acc,
@@ -55,6 +55,8 @@ defmodule Omunculus.Runtime.Workflow do
                   parent(acc.core, env.work_item_id),
                   comment
                 )
+
+                resolve_break(acc, old, comment)
               else
                 emit_break(
                   acc,
@@ -77,57 +79,88 @@ defmodule Omunculus.Runtime.Workflow do
         end
       end)
 
+    for advanced <- EventCore.stream(state.core, 0, type: "task.advanced") do
+      emit(state.core, advanced, "task.run_requested", advanced.work_item_id, %{
+        comment: advanced.payload["comment"],
+        checkpoint: advanced.payload["checkpoint"],
+        reason: "step",
+        stage: advanced.payload["to"]
+      })
+    end
+
     state =
-      EventCore.stream(state.core, 0, type: "task.retry_requested")
+      EventCore.stream(state.core, 0, type: "task.run_requested")
       |> Enum.reduce(state, fn request, acc ->
         target = request.work_item_id
 
-        if activated?(acc, request) or live?(acc, target),
-          do: acc,
-          else:
-            Runtime.start_workflow_run(
-              acc,
-              spec(acc.core, request, target, request.payload["checkpoint"], "retry")
-            )
+        if activated?(acc, request) or live?(acc, target) or completed?(acc.core, target) or
+             request.payload["stage"] != stage(acc.core, target),
+           do: acc,
+           else:
+             Runtime.start_workflow_run(
+               acc,
+               spec(
+                 acc.core,
+                 request,
+                 target,
+                 request.payload["checkpoint"],
+                 request.payload["reason"]
+               )
+             )
       end)
 
-    EventCore.stream(state.core, 0, type: "task.break")
+    requests(state.core)
     |> Enum.reduce(state, &route_break(&2, &1))
   end
 
   defp handle_report(state, env) do
     report = env.payload["report"]
-    review = env.payload["review"]
+    review = env.payload["assessment"]
 
     state =
       cond do
+        Enum.any?(
+          EventCore.stream(state.core, 0),
+          &(&1.causation_id == env.event_id and
+                &1.type in [
+                  "task.run_requested",
+                  "task.advanced",
+                  "task.completed",
+                  "task.break",
+                  "task.assessment_requested"
+                ])
+        ) ->
+          if is_map(review) do
+            request = Enum.find(requests(state.core), &(&1.event_id == review["request_id"]))
+            resolve_break(state, request, report["comment"])
+          end
+
+          state
+
         is_map(review) ->
-          review_report(state, env, report, review)
+          assessment_report(state, env, report, review)
+
+        parent(state.core, env.work_item_id) != nil ->
+          reviewer = parent(state.core, env.work_item_id)
+
+          if report["break"] == true do
+            emit_break(state, env, env.work_item_id, reviewer, report["comment"])
+          else
+            request_assessment(state, env, env.work_item_id, reviewer, report["comment"])
+          end
+
+          state
+
+        report["completed"] and flow(state.core, env.work_item_id)["root_approval"] == "human" ->
+          request_assessment(state, env, env.work_item_id, nil, report["comment"])
+          state
 
         report["completed"] ->
-          complete(state, env, env.work_item_id, report["comment"])
-
-        child = env.payload["checkpoint"]["review_child"] ->
-          emit(state.core, env, "task.reopened", child, %{comment: report["comment"]})
-
-          if retry_count(state.core, child) >= max_retries(state.core, child) or
-               report["break"] == true do
-            emit_break(state, env, child, env.work_item_id, report["comment"])
-            state
-          else
-            retry(state, env, child, report["comment"])
-          end
+          approve(state, env, env.work_item_id, report["comment"])
 
         report["break"] == true or
             retry_count(state.core, env.work_item_id) >= env.payload["max_retries"] ->
-          emit_break(
-            state,
-            env,
-            env.work_item_id,
-            parent(state.core, env.work_item_id),
-            report["comment"]
-          )
-
+          emit_break(state, env, env.work_item_id, nil, report["comment"])
           state
 
         true ->
@@ -138,31 +171,39 @@ defmodule Omunculus.Runtime.Workflow do
     state
   end
 
-  defp review_report(state, env, report, review) do
+  defp assessment_report(state, env, report, review) do
     target = review["target"]
 
     break_env =
       Enum.find(
-        EventCore.stream(state.core, 0, type: "task.break"),
-        &(&1.event_id == review["break_id"])
+        requests(state.core),
+        &(&1.event_id == review["request_id"])
       )
 
     cond do
-      live?(state, target) ->
+      resolved?(state.core, break_env) or stale?(state.core, break_env) or live?(state, target) ->
         state
 
       report["completed"] ->
+        state = approve(state, env, target, report["comment"])
         resolve_break(state, break_env, report["comment"])
-        complete(state, env, target, report["comment"])
+        state
 
       report["break"] == true ->
-        resolve_break(state, break_env, report["comment"])
         emit_break(state, env, target, parent(state.core, env.work_item_id), report["comment"])
+        resolve_break(state, break_env, report["comment"])
+        state
+
+      break_env.type == "task.assessment_requested" and
+          retry_count(state.core, target) >= max_retries(state.core, target) ->
+        emit_break(state, env, target, env.work_item_id, report["comment"])
+        resolve_break(state, break_env, report["comment"])
         state
 
       true ->
+        state = retry(state, env, target, report["comment"])
         resolve_break(state, break_env, report["comment"])
-        retry(state, env, target, report["comment"])
+        state
     end
   end
 
@@ -182,6 +223,10 @@ defmodule Omunculus.Runtime.Workflow do
         resolve_break(state, env, completion.payload["result"])
         state
 
+      stale?(state.core, env) ->
+        resolve_break(state, env, "The reviewed stage already advanced.")
+        state
+
       live?(state, env.payload["target"]) ->
         state
 
@@ -198,10 +243,9 @@ defmodule Omunculus.Runtime.Workflow do
           activated?(state, env) ->
             state
 
-          review_count(state.core, reviewer, env.payload["target"]) >
-              max_retries(state.core, reviewer) ->
-            resolve_break(state, env, env.payload["comment"])
-
+          env.type == "task.break" and
+              assessment_count(state.core, reviewer, env.payload["target"]) >
+                max_retries(state.core, reviewer) ->
             emit_break(
               state,
               env,
@@ -210,55 +254,74 @@ defmodule Omunculus.Runtime.Workflow do
               env.payload["comment"]
             )
 
+            resolve_break(state, env, env.payload["comment"])
             state
 
           true ->
-            start_review(state, env, reviewer)
+            start_assessment(state, env, reviewer)
         end
     end
   end
 
-  defp start_review(state, env, reviewer) do
+  defp start_assessment(state, env, reviewer) do
     restore = checkpoint(state.core, reviewer)
     target = env.payload["target"]
 
     context = """
-    BREAK: evaluate work item #{target} for your responsible role.
+    Parent assessment: evaluate work item #{target} for your responsible role.
     Your original task: #{instruction(state.core, reviewer)}
     Target task: #{instruction(state.core, target)}
+    Target stage: #{env.payload["stage"]}
+    Stage instructions: #{stage_instructions(state.core, target)}
     Execution checkpoint (confirmed tool state): #{Jason.encode!(checkpoint(state.core, target)["tool_state"] || %{})}
     Recent Run comments: #{comments(state.core, target)}
     Previous model comment: #{env.payload["comment"]}
-    Return completed and comment. true recognizes the target as completed; false
+    Return completed and comment. true approves the current target stage; false
     authorizes another attempt using your comment. break=true escalates upward.
     """
 
-    review = %{"break_id" => env.event_id, "target" => target, "restore" => restore}
+    review = %{
+      "request_id" => env.event_id,
+      "target" => target,
+      "stage" => env.payload["stage"],
+      "restore" => restore,
+      "comment" => env.payload["comment"]
+    }
 
     spec =
-      spec(state.core, env, reviewer, %{}, "break")
+      spec(
+        state.core,
+        env,
+        reviewer,
+        %{},
+        if(env.type == "task.break", do: "break", else: "assessment")
+      )
       |> Map.put(:instruction, context)
-      |> Map.put(:review, review)
+      |> Map.put(:assessment, review)
 
     Runtime.start_workflow_run(state, spec)
   end
 
   defp human(state, env) do
     request =
-      emit(
-        state.core,
-        env,
-        "task.commented",
-        env.payload["target"],
-        %{
-          kind: "request",
-          request_id: env.event_id,
-          body:
-            "Break: #{instruction(state.core, env.payload["target"])}\n#{env.payload["comment"]}\nRecent Run comments: #{comments(state.core, env.payload["target"])}",
-          break_id: env.event_id
-        },
-        :command
-      )
+      Enum.find(
+        EventCore.stream(state.core, 0, type: "task.commented"),
+        &(&1.causation_id == env.event_id and &1.payload["kind"] == "request")
+      ) ||
+        emit(
+          state.core,
+          env,
+          "task.commented",
+          env.payload["target"],
+          %{
+            kind: "request",
+            request_id: env.event_id,
+            body:
+              "Review: #{instruction(state.core, env.payload["target"])}\n#{env.payload["comment"]}\nRecent Run comments: #{comments(state.core, env.payload["target"])}",
+            assessment: true
+          },
+          :command
+        )
 
     reply =
       EventCore.stream(state.core, 0, type: "task.commented")
@@ -272,7 +335,7 @@ defmodule Omunculus.Runtime.Workflow do
 
       case Report.parse(reply.payload["body"]) do
         {:ok, %{"completed" => true, "comment" => comment}} ->
-          state = complete(state, reply, env.payload["target"], comment)
+          state = approve(state, reply, env.payload["target"], comment)
           resolve_break(state, env, comment)
           state
 
@@ -303,23 +366,100 @@ defmodule Omunculus.Runtime.Workflow do
           [%{"role" => "user", "content" => "Previous Run / responsible comment:\n" <> comment}]
       )
 
-    emit(state.core, cause, "task.reopened", target, %{comment: comment})
-    emit(state.core, cause, "task.retry_requested", target, %{comment: comment, checkpoint: cp})
+    emit(state.core, cause, "task.run_requested", target, %{
+      comment: comment,
+      checkpoint: cp,
+      reason: "retry",
+      stage: retry_stage(state.core, target)
+    })
+
     state
+  end
+
+  defp retry_stage(core, target) do
+    if (flow(core, target) || %{})["steps"] in [nil, []],
+      do: "in_progress",
+      else: stage(core, target)
   end
 
   def completed?(core, target) do
     case EventCore.stream(core, 0, work_item_id: target, type: "task.completed") |> List.last() do
       nil -> false
-      env -> current_completion?(core, env)
+      _env -> true
     end
   end
 
-  def current_completion?(core, env) do
-    not Enum.any?(
-      EventCore.stream(core, 0, work_item_id: env.work_item_id, type: "task.reopened"),
-      &(&1.sequence > env.sequence)
-    )
+  def flow(core, target) do
+    case EventCore.stream(core, 0, work_item_id: target, type: "run.started") |> List.first() do
+      nil -> nil
+      env -> env.payload["flow"]
+    end
+  end
+
+  def stage(core, target) do
+    case EventCore.query(core, "SELECT status FROM WORK_ITEMS WHERE work_item_id = ?", [target]) do
+      [[status]] -> status
+      _ -> "to_do"
+    end
+  end
+
+  defp stage_instructions(core, target) do
+    Enum.find_value((flow(core, target) || %{})["steps"] || [], "", fn step ->
+      if step["name"] == stage(core, target), do: step["instructions"]
+    end)
+  end
+
+  defp approve(state, cause, target, comment) do
+    steps = (flow(state.core, target) || %{})["steps"] || []
+    current = stage(state.core, target)
+    index = Enum.find_index(steps, &(&1["name"] == current))
+    next = if index != nil, do: Enum.at(steps, index + 1)
+
+    if next do
+      cp = %{
+        "tool_state" => checkpoint(state.core, target)["tool_state"] || %{},
+        "messages" => [
+          %{
+            "role" => "user",
+            "content" =>
+              "Task: #{instruction(state.core, target)}\nPrevious responsible comment: #{comment}"
+          }
+        ],
+        "awaiting" => [],
+        "pending" => %{}
+      }
+
+      emit(state.core, cause, "task.advanced", target, %{
+        from: current,
+        to: next["name"],
+        comment: comment,
+        checkpoint: cp
+      })
+
+      state
+    else
+      complete(state, cause, target, comment)
+    end
+  end
+
+  defp requests(core),
+    do:
+      EventCore.stream(core, 0)
+      |> Enum.filter(&(&1.type in ["task.break", "task.assessment_requested"]))
+
+  defp stale?(core, request) do
+    stage(core, request.payload["target"]) != request.payload["stage"] or
+      last_start(core, request.payload["target"]).run_id != request.payload["target_run_id"]
+  end
+
+  defp request_assessment(state, cause, target, reviewer, comment) do
+    emit(state.core, cause, "task.assessment_requested", target, %{
+      target: target,
+      reviewer: reviewer,
+      comment: comment,
+      stage: stage(state.core, target),
+      target_run_id: last_start(state.core, target).run_id
+    })
   end
 
   defp complete(state, cause, target, comment) do
@@ -357,20 +497,27 @@ defmodule Omunculus.Runtime.Workflow do
       workspace_id: start.workspace_id,
       node_id: p["node_id"],
       team: p["team"],
-      agent: p["agent_id"],
+      agent:
+        (EventCore.stream(core, 0, work_item_id: target, type: "run.started")
+         |> List.first()).payload["agent_id"],
       reason: reason
     }
   end
 
-  defp checkpoint(core, target) do
+  def checkpoint(core, target) do
     events = EventCore.stream(core, 0, work_item_id: target)
     closed = Enum.filter(events, &(&1.type == "run.completed")) |> List.last()
 
     cp =
       cond do
-        closed && is_map(closed.payload["review"]) -> closed.payload["review"]["restore"] || %{}
-        closed -> closed.payload["checkpoint"] || %{}
-        true -> %{}
+        closed && is_map(closed.payload["assessment"]) ->
+          closed.payload["assessment"]["restore"] || %{}
+
+        closed ->
+          closed.payload["checkpoint"] || %{}
+
+        true ->
+          %{}
       end
 
     tool =
@@ -427,12 +574,21 @@ defmodule Omunculus.Runtime.Workflow do
   defp retry_count(core, target),
     do:
       EventCore.stream(core, 0, work_item_id: target, type: "run.started")
-      |> Enum.count(&(&1.payload["reason"] == "retry"))
+      |> Enum.count(
+        &(&1.payload["reason"] == "retry" and same_stage?(core, target, &1.payload["stage"]))
+      )
 
-  defp review_count(core, reviewer, target),
+  defp assessment_count(core, reviewer, target),
     do:
       EventCore.stream(core, 0, work_item_id: reviewer, type: "run.started")
-      |> Enum.count(&(get_in(&1.payload, ["review", "target"]) == target))
+      |> Enum.count(
+        &(&1.payload["reason"] == "break" and
+            get_in(&1.payload, ["assessment", "target"]) == target and
+            same_stage?(core, target, get_in(&1.payload, ["assessment", "stage"])))
+      )
+
+  defp same_stage?(core, target, reported_stage),
+    do: (flow(core, target) || %{})["steps"] in [nil, []] or reported_stage == stage(core, target)
 
   defp max_retries(core, reviewer), do: last_start(core, reviewer).payload["max_retries"] || 2
 
@@ -457,19 +613,19 @@ defmodule Omunculus.Runtime.Workflow do
   defp resolved?(core, env),
     do:
       Enum.any?(
-        EventCore.stream(core, 0, type: "task.break.resolved"),
-        &(&1.payload["break_id"] == env.event_id)
+        EventCore.stream(core, 0, type: "task.assessment_resolved"),
+        &(&1.payload["request_id"] == env.event_id)
       )
 
   defp resolve_break(state, env, comment) do
     resolution =
-      emit(state.core, env, "task.break.resolved", env.work_item_id, %{
-        break_id: env.event_id,
+      emit(state.core, env, "task.assessment_resolved", env.work_item_id, %{
+        request_id: env.event_id,
         comment: comment
       })
 
     for request <- EventCore.stream(state.core, 0, type: "task.commented"),
-        request.payload["kind"] == "request" and request.payload["break_id"] == env.event_id do
+        request.payload["kind"] == "request" and request.payload["request_id"] == env.event_id do
       emit(
         state.core,
         resolution,
@@ -488,6 +644,8 @@ defmodule Omunculus.Runtime.Workflow do
       emit(state.core, cause, "task.break", target, %{
         target: target,
         reviewer: reviewer,
+        stage: stage(state.core, target),
+        target_run_id: last_start(state.core, target).run_id,
         comment: comment
       })
 
@@ -495,7 +653,7 @@ defmodule Omunculus.Runtime.Workflow do
     EventCore.append!(
       core,
       Envelope.new(kind, type,
-        schema_version: if(type == "task.completed", do: "2", else: "1"),
+        schema_version: "1",
         work_item_id: target,
         correlation_id: cause.correlation_id,
         session_id: cause.session_id,

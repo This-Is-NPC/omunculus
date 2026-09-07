@@ -110,7 +110,6 @@ defmodule Omunculus.Permission do
   defp requester_open?(conn, work_item_id) do
     case Store.query(conn, @status_sql, [work_item_id]) |> List.last() do
       ["completed"] -> false
-      ["failed"] -> false
       _ -> true
     end
   end

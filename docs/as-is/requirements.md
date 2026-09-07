@@ -55,7 +55,7 @@ via ambiente. Mesma resolução em `events follow`, `emit`, `session`, `workspac
 Provider opcional (`--provider chat` + credenciais); sem provider usa
 `Runtime.Agents` com scripts fake explícitos. Não persiste log entre invocações.
 
-## Execução `monkey-job` (legado)
+## Execução direta `monkey-job`
 
 1. Resolver config na precedência flags > ambiente > TOML > defaults.
 2. Enviar instrução ao chat com schemas das tools permitidas (`Runner` → `Agent`).
@@ -75,7 +75,8 @@ testes determinísticos.
    `run.started` com tools efetivas da policy.
 5. Concierge delega → `task.delegated` + `run.completed` waiting; worker conta
    com `counter` até N.
-6. `task.completed` do filho reabre Run do pai (`reason=continuation`) com
+6. O relato do filho solicita revisão do pai. Após aprovação final,
+   `task.completed` reabre Run do pai (`reason=continuation`) com
    observação incluindo result e itens ainda em awaiting.
 7. Texto com awaiting não vazio vai para `notes` no checkpoint, não gera
    `task.completed` prematuro.
@@ -137,7 +138,7 @@ não devem ser inferidos como disponíveis hoje.
 `mediated` repassa, reescreve ou nega, preservando o checkpoint do ancestral.
 `directory` e `TeamGate` compartilham escopo por sessão, workspace e time.
 Tools negociáveis exigem concessão; revogação é consultada antes da execução.
-`WORK_ITEMS.requested_by` é reconstruível do log e migra no schema 4.
+`WORK_ITEMS.requested_by` é reconstruível do log.
 A matriz cobre vinte combinações com filesystem isolado; 277 testes passam.
 
 ## Fechamento da fase 7 (2026-09-07)
@@ -147,3 +148,10 @@ comandos pendentes com revalidação e reconciliação de rejeições tardias.
 `events follow` acompanha o log vivo; `send --provider fake` substitui
 `spike`. A matriz real tem resultados e limitações registrados em
 [phase-7-validation.md](../spike/phase-7-validation.md).
+
+## Etapas opcionais e aprovação
+
+`state` da execução é independente do `status` da tarefa. Aprovação pelo
+responsável permite ao harness avançar a sequência configurada; sem máquina,
+conclui o Work Item. Falhas mantêm a etapa e chegam ao pai por break. O
+contrato atual usa completed/comment, sem formatos anteriores ou migração.

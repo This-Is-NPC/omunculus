@@ -166,7 +166,7 @@ defmodule Omunculus.EventCore.Projector do
 
     Store.query(
       conn,
-      "INSERT OR IGNORE INTO WORK_ITEMS (work_item_id, project_id, workspace_id, parent_work_item_id, instruction, status, version, created_at, updated_at, last_sequence) VALUES (?, ?, ?, NULL, ?, 'requested', 0, ?, ?, ?)",
+      "INSERT OR IGNORE INTO WORK_ITEMS (work_item_id, project_id, workspace_id, parent_work_item_id, instruction, status, version, created_at, updated_at, last_sequence) VALUES (?, ?, ?, NULL, ?, 'to_do', 0, ?, ?, ?)",
       [
         env.work_item_id,
         env.project_id,
@@ -193,7 +193,7 @@ defmodule Omunculus.EventCore.Projector do
 
     Store.query(
       conn,
-      "INSERT OR IGNORE INTO WORK_ITEMS (work_item_id, project_id, parent_work_item_id, instruction, status, version, created_at, updated_at, last_sequence) VALUES (?, ?, ?, ?, 'requested', 0, ?, ?, ?)",
+      "INSERT OR IGNORE INTO WORK_ITEMS (work_item_id, project_id, parent_work_item_id, instruction, status, version, created_at, updated_at, last_sequence) VALUES (?, ?, ?, ?, 'to_do', 0, ?, ?, ?)",
       [
         child,
         env.project_id,
@@ -236,7 +236,7 @@ defmodule Omunculus.EventCore.Projector do
       )
     end
 
-    transition_work_item(conn, env.work_item_id, ["running", "requested"], "waiting", env)
+    transition_work_item(conn, env.work_item_id, ["running", "active"], "waiting", env)
   end
 
   defp apply_event(conn, %{type: "run.started"} = env) do
@@ -262,10 +262,18 @@ defmodule Omunculus.EventCore.Projector do
       ]
     )
 
+    if p["attempt"] == 1 and get_in(p, ["flow", "steps"]) not in [nil, []] do
+      Store.query(
+        conn,
+        "UPDATE WORK_ITEMS SET status = ? WHERE work_item_id = ? AND status = 'to_do'",
+        [hd(p["flow"]["steps"])["name"], env.work_item_id]
+      )
+    end
+
     transition_work_item(
       conn,
       env.work_item_id,
-      ["requested", "failed", "waiting"],
+      ["active", "failed", "waiting", "idle"],
       "running",
       env
     )
@@ -318,7 +326,7 @@ defmodule Omunculus.EventCore.Projector do
     changed =
       Store.query(
         conn,
-        "UPDATE WORK_ITEMS SET status = 'completed', result = ?, version = version + 1, updated_at = ?, last_sequence = ? WHERE work_item_id = ? AND status IN ('running', 'waiting') AND last_sequence < ?",
+        "UPDATE WORK_ITEMS SET status = 'completed', state = 'idle', awaiting = NULL, result = ?, version = version + 1, updated_at = ?, last_sequence = ? WHERE work_item_id = ? AND status != 'completed' AND last_sequence < ?",
         [to_string(p["result"]), env.occurred_at, env.sequence, env.work_item_id, env.sequence]
       )
 
@@ -343,7 +351,7 @@ defmodule Omunculus.EventCore.Projector do
 
   defp apply_event(conn, %{type: "run.completed"} = env) do
     p = env.payload
-    outcome = p["outcome"] || "completed"
+    outcome = p["outcome"]
 
     Store.query(
       conn,
@@ -360,7 +368,9 @@ defmodule Omunculus.EventCore.Projector do
     end
 
     p =
-      if is_map(p["review"]), do: Map.put(p, "checkpoint", p["review"]["restore"] || %{}), else: p
+      if is_map(p["assessment"]),
+        do: Map.put(p, "checkpoint", p["assessment"]["restore"] || %{}),
+        else: p
 
     p =
       if outcome == "reported",
@@ -371,7 +381,7 @@ defmodule Omunculus.EventCore.Projector do
       status when status in ["waiting", "reported"] ->
         Store.query(
           conn,
-          "UPDATE WORK_ITEMS SET status = 'waiting', awaiting = ?, checkpoint = ?, version = version + 1, updated_at = ?, last_sequence = ? WHERE work_item_id = ? AND last_sequence < ?",
+          "UPDATE WORK_ITEMS SET state = 'waiting', awaiting = ?, checkpoint = ?, version = version + 1, updated_at = ?, last_sequence = ? WHERE work_item_id = ? AND last_sequence < ?",
           [
             Jason.encode!(p["awaiting"] || []),
             Jason.encode!(p["checkpoint"] || %{}),
@@ -382,33 +392,46 @@ defmodule Omunculus.EventCore.Projector do
           ]
         )
 
-      "completed" ->
-        Store.query(
-          conn,
-          "UPDATE WORK_ITEMS SET awaiting = NULL, version = version + 1, updated_at = ?, last_sequence = ? WHERE work_item_id = ? AND last_sequence < ?",
-          [env.occurred_at, env.sequence, env.work_item_id, env.sequence]
-        )
-
       _ ->
         :ok
     end
   end
 
-  defp apply_event(conn, %{type: "task.break"} = env) do
-    transition_work_item(
+  defp apply_event(conn, %{type: type} = env)
+       when type in ["task.break", "task.assessment_requested"] do
+    transition_work_item(conn, env.work_item_id, ["active", "running", "waiting"], "waiting", env)
+  end
+
+  defp apply_event(conn, %{type: "task.advanced"} = env) do
+    p = env.payload
+
+    Store.query(
       conn,
-      env.work_item_id,
-      ["running", "failed", "requested"],
-      "waiting",
-      env
+      "UPDATE WORK_ITEMS SET status = ?, state = 'active', checkpoint = ?, version = version + 1, updated_at = ?, last_sequence = ? WHERE work_item_id = ? AND status = ? AND last_sequence < ?",
+      [
+        p["to"],
+        Jason.encode!(p["checkpoint"]),
+        env.occurred_at,
+        env.sequence,
+        env.work_item_id,
+        p["from"],
+        env.sequence
+      ]
     )
   end
 
-  defp apply_event(conn, %{type: "task.reopened"} = env) do
+  defp apply_event(conn, %{type: "task.run_requested"} = env) do
     Store.query(
       conn,
-      "UPDATE WORK_ITEMS SET status = 'waiting', result = NULL, version = version + 1, updated_at = ?, last_sequence = ? WHERE work_item_id = ? AND last_sequence < ?",
-      [env.occurred_at, env.sequence, env.work_item_id, env.sequence]
+      "UPDATE WORK_ITEMS SET state = 'active', status = ?, checkpoint = ?, version = version + 1, updated_at = ?, last_sequence = ? WHERE work_item_id = ? AND status != 'completed' AND last_sequence < ?",
+      [
+        env.payload["stage"],
+        Jason.encode!(env.payload["checkpoint"]),
+        env.occurred_at,
+        env.sequence,
+        env.work_item_id,
+        env.sequence
+      ]
     )
   end
 
@@ -562,7 +585,7 @@ defmodule Omunculus.EventCore.Projector do
 
     Store.query(
       conn,
-      "UPDATE WORK_ITEMS SET status = ?, version = version + 1, updated_at = ?, last_sequence = ? WHERE work_item_id = ? AND status IN (#{placeholders}) AND last_sequence < ?",
+      "UPDATE WORK_ITEMS SET state = ?, version = version + 1, updated_at = ?, last_sequence = ? WHERE work_item_id = ? AND state IN (#{placeholders}) AND last_sequence < ?",
       [to, env.occurred_at, env.sequence, work_item_id] ++ from ++ [env.sequence]
     )
   end

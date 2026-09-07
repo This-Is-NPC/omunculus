@@ -30,12 +30,12 @@ não registrada ou campos obrigatórios ausentes. Catálogo de sessão inclui
 
 ## Tabelas SQLite
 
-Store `user_version` 4 (`COMMENTS.read_at`).
+Schema atual único, sem migração ou leitura de contratos anteriores.
 
 | Tabela | Função |
 |---|---|
 | `EVENTS` | Log append-only; fonte de verdade |
-| `WORK_ITEMS` | Projeção: instrução, status, checkpoint, awaiting, result, `workspace_id`, version, last_sequence |
+| `WORK_ITEMS` | Projeção: instrução, status, state, checkpoint, awaiting, result, `workspace_id`, version, last_sequence |
 | `SESSION_WORKSPACES` | Projeção: `workspace_id` PK, roots, teams, attached, attached_at, last_sequence — reduzida de `workspace.attached` / `workspace.detached` |
 | `WORK_ITEM_DEPENDENCIES` | Projeção: dependência pai→filho criada por `task.delegated` |
 | `ARCHIVE_RUNS` | Projeção: attempt, depth, parent_run_id, originating_run_id, agent_id, agent_kind, status, reason, outcome |
@@ -48,7 +48,8 @@ Store `user_version` 4 (`COMMENTS.read_at`).
 
 - `request` — de `permission.requested` ou `task.commented`
 - `response` — de `permission.granted`, `permission.denied` ou `task.commented`
-- `result` — de `task.completed`
+- `result` — de `task.completed` após aprovação final
+- `run` — comentário de encerramento da Run
 
 `inbox.read` preenche `read_at` na linha correspondente (`comment_id` ou
 `event_id`).
@@ -118,5 +119,12 @@ A separação planejada de conceitos ainda não implementados está em
 `mediated` repassa, reescreve ou nega, preservando o checkpoint do ancestral.
 `directory` e `TeamGate` compartilham escopo por sessão, workspace e time.
 Tools negociáveis exigem concessão; revogação é consultada antes da execução.
-`WORK_ITEMS.requested_by` é reconstruível do log e migra no schema 4.
+`WORK_ITEMS.requested_by` é reconstruível do log.
 A matriz cobre vinte combinações com filesystem isolado; 277 testes passam.
+
+## Aprovação e etapas
+
+`status` guarda o andamento/etapa; `state` guarda a execução. O relato do
+executor passa por revisão do pai antes de concluir ou avançar. A sequência
+é opcional; a raiz se autoavalia salvo revisão humana configurada. O contrato
+e os exemplos estão em [trabalho e aprovação](../to-be/run-report-and-break.md).

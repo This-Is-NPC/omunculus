@@ -189,23 +189,20 @@ veto, ou ingestão de eventos vindos de fora. Um runtime residente que reaja a
 `emit` em tempo real fica para depois desta validação.
 
 
-## Controle de relato e break (implementado)
+## Controle de trabalho e aprovação
 
-`run.started`, `run.completed` e `task.completed` aceitam v1 e v2. V2 pina
-workflow/max_retries no início e exige comentário/checkpoint no encerramento;
-a conclusão do trabalho registra `completed=true` e `comment`. `reported`
-é um encerramento de Run, não aprovação automática do Work Item.
+Existe um único contrato atual. `run.started` fixa fluxo e etapa;
+`run.completed` encerra a execução e persiste comentário/checkpoint.
+`task.completed` registra aprovação final do trabalho pelo responsável.
 
-Eventos internos v1 novos, emitidos pelo Runtime e não injetáveis:
+| Evento | Papel |
+| --- | --- |
+| `task.assessment_requested` | Relato do executor aguarda aprovação do responsável |
+| `task.break` | Falha, limite ou pedido explícito exige intervenção |
+| `task.assessment_resolved` | Resolução correlacionada ao pedido de revisão ou break |
+| `task.advanced` | Aprovação avança para a próxima etapa configurada |
+| `task.run_requested` | Agendamento durável de retry ou próxima etapa |
+| `task.report_handled` | Cursor durável de processamento do relato |
 
-| Evento | Payload obrigatório | Papel |
-| --- | --- | --- |
-| `task.retry_requested` | comment, checkpoint | Agendamento durável da próxima tentativa |
-| `task.reopened` | comment | Revisão explícita de conclusão anterior |
-| `task.break` | target, reviewer, comment | Encaminhamento ao responsável; reviewer nulo indica humano |
-| `task.break.resolved` | break_id, comment | Resolução do pedido específico |
-| `task.report_handled` | report_id | Cursor durável de processamento do relato |
-
-O humano responde por `task.commented` com referência ao pedido; a inbox
-oferece `--completed` para reconhecer trabalho concluído. Regras e exemplos
-em [relato, retries e break](run-report-and-break.md).
+Esses eventos são internos, não injetáveis. Campos e regras estão no
+catálogo do código e em [trabalho e aprovação](run-report-and-break.md).

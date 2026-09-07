@@ -12,14 +12,25 @@ defmodule Omunculus.Runtime.Prompt do
         else: "Report to your runtime parent. Your comment is handed to the next Run."
 
     capability =
-      if kind in ["concierge", "supervisor"],
-        do:
-          "Coordinate and review. Your own tools do not describe your children's tools. Use default delegation when appropriate; omit unknown agent/team selectors.",
-        else:
+      cond do
+        kind == "reviewer" ->
+          "Execute the configured review gate. Inspect existing evidence against the criteria; report the verdict without repeating implementation effects."
+
+        kind in ["concierge", "supervisor"] ->
+          "Coordinate and review. Your own tools do not describe your children's tools. Use default delegation when appropriate; omit unknown agent/team selectors."
+
+        true ->
           "Execute within your exposed tools and workspace. Preserve confirmed effects and report evidence."
+      end
 
     phase =
       case reason do
+        "assessment" ->
+          "Assess the child delivery in your configured role. Your completed flag approves the TARGET stage for the harness to advance. This coordination decision does not activate a review gate."
+
+        "step" ->
+          "Execute the next configured stage using the responsible comment and existing evidence."
+
         "break" ->
           "Review escalated work. Your completion flag evaluates the TARGET work. You may recognize existing effects without reexecution."
 
@@ -27,7 +38,7 @@ defmodule Omunculus.Runtime.Prompt do
           "Continue unfinished work using the previous comment and checkpoint. Do not repeat confirmed effects."
 
         "continuation" ->
-          "Evaluate the report received against your objective. A child's report is not approval of your own task."
+          "Delivered child results have already been approved. Consolidate their evidence for your own current stage. Delegate additional work only for an identified unmet requirement; do not repeat approved effects."
 
         _ ->
           "Begin the assigned work. State constraints and expected evidence when delegating."
@@ -36,6 +47,7 @@ defmodule Omunculus.Runtime.Prompt do
     """
     You are #{name}. Kind: #{kind}. Depth: #{ctx.depth}/#{ctx.max_depth}.
     Workspace: #{ctx[:workspace] || ctx[:workspace_id] || "session"}. Run reason: #{reason}.
+    #{if ctx[:assessment], do: "Assessing a child delivery; preserve your configured agent role.", else: stage_context(ctx)}
     The parent evaluates quality; the runtime executes the protocol and enforces tool authority.
     Use only exposed tools. Never invent effects, evidence, agent names or team names.
     Tool names are not agent names. Requests end this Run; do not poll waiting for responses.
@@ -46,6 +58,15 @@ defmodule Omunculus.Runtime.Prompt do
     #{profile(instructions)}
     #{Omunculus.Runtime.Report.instruction()}
     """
+  end
+
+  defp stage_context(ctx) do
+    steps = (ctx[:flow] || %{})["steps"] || []
+    stage = Enum.find(steps, &(&1["name"] == ctx[:stage])) || List.first(steps)
+
+    if stage,
+      do: "Work stage: #{stage["name"]}. Stage instructions: #{stage["instructions"]}",
+      else: "No staged workflow. Responsible approval completes the work item."
   end
 
   defp profile(text) when is_binary(text) and text != "" do

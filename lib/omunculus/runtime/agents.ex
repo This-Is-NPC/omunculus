@@ -20,47 +20,53 @@ defmodule Omunculus.Runtime.Agents do
       |> Map.merge(Map.take(execution, [:provider]))
       |> Map.update(:flags, flags, &Map.merge(&1, flags))
 
-    if opts[:provider] == "chat" or is_map(opts[:chat]) do
-      config = ctx[:config] || Config.empty()
-      config = %{config | agents: Map.merge(defaults(), config.agents)}
-      name = Scripts.pick_agent(ctx, config)
+    config = ctx[:config] || Config.empty()
+    config = %{config | agents: Map.merge(defaults(), config.agents)}
+    assigned_name = Scripts.pick_agent(ctx, config)
+    assigned_entry = configured_agent(config, assigned_name, ctx)
+    profile = Map.get(config.presets, ctx[:profile], %{})
+    flow = ctx[:flow] || Config.workflow(config, assigned_entry, profile)
+    step = Enum.find(flow["steps"], &(&1["name"] == ctx[:stage])) || List.first(flow["steps"])
+    name = if step, do: step["agent"] || assigned_name, else: assigned_name
+    entry = configured_agent(config, name, ctx)
+    kind = entry[:kind]
 
-      entry =
-        Map.merge(default_agent(name, ctx), Map.get(config.agents, name, %{}), fn _,
-                                                                                  default,
-                                                                                  value ->
-          if is_nil(value), do: default, else: value
-        end)
+    agent =
+      if opts[:provider] == "chat" or is_map(opts[:chat]) do
+        chat = resolve_chat(config, entry, opts)
 
-      kind = entry[:kind] || default_agent(name, ctx).kind
-      chat = resolve_chat(config, entry, opts)
-      profile = Map.get(config.presets, ctx[:profile], %{})
+        %{
+          agent_id: name,
+          kind: kind,
+          model: chat.model,
+          chat: chat,
+          tools:
+            if(ctx.depth < ctx.max_depth, do: ["delegate"], else: Omunculus.Tools.default_names()),
+          max_turns:
+            entry[:max_turns] || parse_turns(opts[:flags]["max_turns"]) || opts[:max_turns] ||
+              config.defaults.max_turns,
+          tool_options: Map.take(opts, [:delay_ms])
+        }
+      else
+        Scripts.resolve(ctx |> Map.put(:config, config) |> Map.put(:agent, name), opts)
+      end
 
-      %{
-        agent_id: name,
-        kind: kind,
-        workflow: true,
-        max_retries:
-          entry[:max_retries] || profile[:max_retries] || config.defaults[:max_retries] || 2,
-        model: chat.model,
-        chat: chat,
-        tools:
-          if(ctx.depth < ctx.max_depth, do: ["delegate"], else: Omunculus.Tools.default_names()),
-        system_prompt:
-          Omunculus.Runtime.Prompt.compose(
-            Map.put(ctx, :kind, kind),
-            name,
-            entry[:prompt],
-            profile[:instructions]
-          ),
-        max_turns:
-          entry[:max_turns] || parse_turns(opts[:flags]["max_turns"]) || opts[:max_turns] ||
-            config.defaults.max_turns,
-        tool_options: Map.take(opts, [:delay_ms])
-      }
-    else
-      Scripts.resolve(ctx, opts)
-    end
+    agent
+    |> Map.put(:kind, kind)
+    |> Map.put(:flow, flow)
+    |> Map.put(
+      :max_retries,
+      entry[:max_retries] || profile[:max_retries] || config.defaults[:max_retries] || 2
+    )
+    |> Map.put(
+      :system_prompt,
+      Omunculus.Runtime.Prompt.compose(
+        ctx |> Map.put(:kind, kind) |> Map.put(:flow, flow),
+        name,
+        entry[:prompt],
+        profile[:instructions]
+      )
+    )
   end
 
   def defaults do
@@ -78,12 +84,23 @@ defmodule Omunculus.Runtime.Agents do
         kind: "worker",
         prompt: "Execute the assigned work and report evidence, limitations and remaining work."
       },
+      "reviewer" => %{
+        kind: "reviewer",
+        prompt:
+          "Review the existing work against the requested criteria. Report evidence, defects and the gate verdict. Do not repeat implementation effects."
+      },
       "supervisor" => %{
         kind: "supervisor",
         prompt:
           "Evaluate escalated work. Recognize completed effects, direct correction or escalate."
       }
     }
+  end
+
+  defp configured_agent(config, name, ctx) do
+    Map.merge(default_agent(name, ctx), Map.get(config.agents, name, %{}), fn _, default, value ->
+      if is_nil(value), do: default, else: value
+    end)
   end
 
   defp default_agent(name, ctx) do

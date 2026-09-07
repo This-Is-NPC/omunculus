@@ -6,7 +6,11 @@ defmodule Omunculus.AgentTest do
   test "halts on assistant text with no tool calls" do
     chat =
       Chat.Fake.new([
-        %{content: "done", tool_calls: nil, usage: %{"total_tokens" => 3}}
+        %{
+          content: Jason.encode!(%{completed: true, comment: "done"}),
+          tool_calls: nil,
+          usage: %{"total_tokens" => 3}
+        }
       ])
 
     fs = FS.Memory.new(%{"lib/a.ex" => "defmodule A, do: :ok\n"})
@@ -20,14 +24,18 @@ defmodule Omunculus.AgentTest do
                max_turns: 4
              )
 
-    assert result.assistant_text == "done"
+    assert Jason.decode!(result.assistant_text)["comment"] == "done"
     assert result.turns == 1
   end
 
   test "request_permission adds schema when flag set" do
     chat =
       Chat.Fake.new([
-        %{content: "done", tool_calls: nil, usage: %{"total_tokens" => 3}}
+        %{
+          content: Jason.encode!(%{completed: true, comment: "done"}),
+          tool_calls: nil,
+          usage: %{"total_tokens" => 3}
+        }
       ])
 
     fs = FS.Memory.new(%{})
@@ -66,7 +74,11 @@ defmodule Omunculus.AgentTest do
           ],
           usage: nil
         },
-        %{content: "wrote README", tool_calls: nil, usage: nil}
+        %{
+          content: Jason.encode!(%{completed: true, comment: "wrote README"}),
+          tool_calls: nil,
+          usage: nil
+        }
       ])
 
     fs = FS.Memory.new(%{})
@@ -80,7 +92,7 @@ defmodule Omunculus.AgentTest do
                max_turns: 8
              )
 
-    assert result.assistant_text == "wrote README"
+    assert Jason.decode!(result.assistant_text)["comment"] == "wrote README"
     assert result.fs.files["README.md"] == "hello\n"
     assert result.turns == 2
   end
@@ -101,7 +113,11 @@ defmodule Omunculus.AgentTest do
           ],
           usage: nil
         },
-        %{content: "could not write", tool_calls: nil, usage: nil}
+        %{
+          content: Jason.encode!(%{completed: true, comment: "could not write"}),
+          tool_calls: nil,
+          usage: nil
+        }
       ])
 
     fs = FS.Memory.new(%{})
@@ -116,7 +132,7 @@ defmodule Omunculus.AgentTest do
              )
 
     refute Map.has_key?(result.fs.files, "x")
-    assert result.assistant_text == "could not write"
+    assert Jason.decode!(result.assistant_text)["comment"] == "could not write"
   end
 
   test "edit replaces unique oldText against the original file" do
@@ -139,7 +155,11 @@ defmodule Omunculus.AgentTest do
           ],
           usage: nil
         },
-        %{content: "patched", tool_calls: nil, usage: nil}
+        %{
+          content: Jason.encode!(%{completed: true, comment: "patched"}),
+          tool_calls: nil,
+          usage: nil
+        }
       ])
 
     fs = FS.Memory.new(%{"lib/a.ex" => "defmodule A, do: :ok\n"})
@@ -150,41 +170,19 @@ defmodule Omunculus.AgentTest do
     assert result.fs.files["lib/a.ex"] == "defmodule A, do: :edited\n"
   end
 
-  test "counter-only jobs keep calling until the instruction target" do
-    counter_call = fn id ->
-      %{
-        content: nil,
-        tool_calls: [
-          %{
-            "id" => id,
-            "function" => %{"name" => "counter", "arguments" => "{}"}
-          }
-        ],
-        usage: nil
-      }
-    end
-
-    chat =
-      Chat.Fake.new([
-        %{content: "Olá! Como posso ajudar?", tool_calls: nil, usage: nil},
-        counter_call.("c1"),
-        %{content: "stop here?", tool_calls: nil, usage: nil},
-        counter_call.("c2"),
-        %{content: "done", tool_calls: nil, usage: nil}
-      ])
+  test "counter tools do not impose a semantic success gate" do
+    chat = Chat.Fake.new([Chat.Fake.report("Claimed done without counting")])
 
     assert {:ok, result} =
              Agent.run(
-               instruction: "conte até 2",
+               instruction: "count to 2",
                chat: chat,
-               fs: FS.Memory.new(%{}),
-               tools: ["counter"],
-               max_turns: 8
+               fs: FS.Memory.new(),
+               tools: ["counter"]
              )
 
-    assert result.tool_state["counter"].value == 2
-    assert result.tool_calls == 2
-    assert result.assistant_text == "done"
+    assert result.tool_calls == 0
+    assert result.turns == 1
   end
 
   test "messages opt supplies starting conversation" do
@@ -193,7 +191,15 @@ defmodule Omunculus.AgentTest do
       %{"role" => "user", "content" => "prior user turn"}
     ]
 
-    chat = Chat.Fake.new([%{content: "done", tool_calls: nil, usage: %{"total_tokens" => 1}}])
+    chat =
+      Chat.Fake.new([
+        %{
+          content: Jason.encode!(%{completed: true, comment: "done"}),
+          tool_calls: nil,
+          usage: %{"total_tokens" => 1}
+        }
+      ])
+
     fs = FS.Memory.new(%{})
 
     assert {:ok, result} =
@@ -207,7 +213,13 @@ defmodule Omunculus.AgentTest do
              )
 
     assert result.messages ==
-             starting ++ [%{"role" => "assistant", "content" => "done"}]
+             starting ++
+               [
+                 %{
+                   "role" => "assistant",
+                   "content" => Jason.encode!(%{completed: true, comment: "done"})
+                 }
+               ]
   end
 
   test "tool executor wait halts with assistant tool_calls and no tool messages" do
