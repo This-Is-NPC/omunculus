@@ -1,4 +1,4 @@
-Status: TO-BE — planejado; sete tabelas e `PROJECTION_CURSORS` validadas em spike
+Status: TO-BE — planejado; sete tabelas canônicas, `PROJECTION_CURSORS` e `SESSION_WORKSPACES` validados em spike
 
 # Modelo de dados alvo
 
@@ -37,6 +37,15 @@ automação), a última `sequence` aplicada. É checkpoint reconstruível, nunca
 cópia de histórico, e existe para que aplicar um evento e avançar o cursor
 aconteçam na mesma transação.
 
+Outro store adicional justificado é `SESSION_WORKSPACES`: projeção
+reconstruível de `workspace.attached` e `workspace.detached`, nunca cópia do
+histórico em `EVENTS`. Colunas: `workspace_id` (PK), `roots`, `teams`,
+`attached`, `attached_at`, `last_sequence`. Introduzido na spike com
+`PRAGMA user_version` 2 (`@schema_version` 2). Atende o requisito de
+WorkspaceGate, membership de attach no Runtime e filtros de workspace nos
+interceptors: membership anexada atual sem varrer todo o log a cada
+verificação.
+
 As relações entre as sete tabelas canônicas ficam resumidas no ER abaixo;
 `EVENTS` permanece o log central append-only:
 
@@ -73,6 +82,9 @@ erDiagram
         string run_id
     }
 ```
+
+`PROJECTION_CURSORS` e `SESSION_WORKSPACES` são stores adicionais fora do ER
+das sete tabelas canônicas.
 
 Colunas que as propostas acrescentam às projeções: `WORK_ITEMS` ganha
 `workspace_id`, `requested_by` (Work Item criado entre workspaces) e
