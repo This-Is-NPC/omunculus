@@ -61,7 +61,10 @@ defmodule Omunculus.Runtime.Run do
           reason: reason,
           checkpoint: checkpoint,
           tools: tools_bands,
-          team: state[:team] || state["team"]
+          team: state[:team] || state["team"],
+          node_id: state[:node_id],
+          workspace: state[:workspace],
+          session_id: state[:session_id] || state.activation.session_id
         }
         |> maybe_put_policy_hash(state[:policy_hash])
       )
@@ -79,13 +82,13 @@ defmodule Omunculus.Runtime.Run do
     opts = [
       instruction: state.instruction,
       chat: agent.chat,
-      fs: state[:fs] || FS.Memory.new(%{}),
+      fs: state[:fs] || fs_for_roots(state[:roots]),
       tools: agent.tools,
       max_turns: agent[:max_turns] || 32,
       instructions: agent[:instructions],
       system_prompt: agent[:system_prompt],
       nudge: agent[:nudge],
-      tool_options: agent[:tool_options] || %{},
+      tool_options: tool_options_for(agent, state),
       tool_state: tool_state_from(checkpoint),
       tool_executor: &execute_tool(state, &1, &2, &3, &4),
       reporter: &report(state, &1),
@@ -239,8 +242,8 @@ defmodule Omunculus.Runtime.Run do
     child = Envelope.generate_id("wi")
     instruction = args["instruction"] || args[:instruction] || state.instruction
 
-    delegated =
-      append!(state, :event, "task.delegated", %{
+    payload =
+      %{
         instruction: instruction,
         child_work_item_id: child,
         to_depth: state.depth + 1,
@@ -249,7 +252,18 @@ defmodule Omunculus.Runtime.Run do
         tools: tools_pin(state),
         team: args["team"] || args[:team],
         agent: args["agent"] || args[:agent]
-      })
+      }
+      |> maybe_put_workspace(args)
+
+    delegated =
+      append!(
+        state,
+        :event,
+        "task.delegated",
+        payload,
+        nil,
+        workspace_id: delegated_workspace_id(args)
+      )
 
     case await_delivery_or_rejection(delegated.event_id) do
       :ok ->
@@ -309,13 +323,19 @@ defmodule Omunculus.Runtime.Run do
 
   # --- helpers ---------------------------------------------------------------------
 
-  defp append!(state, kind, type, payload, causation_id \\ nil) do
+  defp append!(state, kind, type, payload, causation_id \\ nil, opts \\ []) do
+    workspace_id =
+      Keyword.get(opts, :workspace_id) ||
+        delegated_child_workspace_id(type, payload) ||
+        state[:workspace_id] ||
+        state.activation.workspace_id
+
     env =
       Envelope.new(kind, type,
         correlation_id: state.correlation_id,
         causation_id: causation_id || Process.get(:chain_head),
-        session_id: state[:session_id],
-        workspace_id: state[:workspace_id],
+        session_id: state[:session_id] || state.activation.session_id,
+        workspace_id: workspace_id,
         project_id: state[:project_id],
         work_item_id: state.work_item_id,
         run_id: state.run_id,
@@ -418,4 +438,34 @@ defmodule Omunculus.Runtime.Run do
 
   defp maybe_put_policy_hash(payload, nil), do: payload
   defp maybe_put_policy_hash(payload, hash), do: Map.put(payload, :policy_hash, hash)
+
+  defp maybe_put_workspace(payload, args) do
+    case args["workspace"] || args[:workspace] do
+      nil -> payload
+      workspace -> Map.put(payload, :workspace, workspace)
+    end
+  end
+
+  defp delegated_child_workspace_id("task.delegated", payload),
+    do: payload["workspace"] || payload[:workspace]
+
+  defp delegated_child_workspace_id(_, _), do: nil
+  defp delegated_workspace_id(args), do: args["workspace"] || args[:workspace]
+
+  defp fs_for_roots(nil), do: FS.Memory.new(%{})
+  defp fs_for_roots([]), do: FS.Memory.new(%{})
+
+  defp fs_for_roots([root | _]) do
+    alias Omunculus.FS.Disk
+    Disk.new(Path.expand(root))
+  end
+
+  defp tool_options_for(agent, state) do
+    base = agent[:tool_options] || %{}
+
+    case state[:roots] do
+      roots when is_list(roots) and roots != [] -> Map.put(base, :roots, roots)
+      _ -> base
+    end
+  end
 end

@@ -13,6 +13,7 @@ defmodule Omunculus.Runtime.SpikeAgents do
   """
 
   alias Omunculus.Chat.Fake
+  alias Omunculus.Policy
 
   @doc "Resolver to hand to `Omunculus.Runtime` (`agents:`)."
   def resolver(opts \\ []), do: &resolve(&1, Map.new(opts))
@@ -97,7 +98,7 @@ defmodule Omunculus.Runtime.SpikeAgents do
         ]
       else
         [
-          Fake.tool_call("delegate", %{"instruction" => ctx.instruction}, "call_delegate"),
+          Fake.tool_call("delegate", legacy_delegate_args(ctx), "call_delegate"),
           fn messages -> Fake.text(delegate_result(messages)) end
         ]
       end
@@ -264,13 +265,20 @@ defmodule Omunculus.Runtime.SpikeAgents do
     checkpoint = Map.get(ctx, :checkpoint, %{})
     messages? = is_list(Map.get(checkpoint, "messages") || Map.get(checkpoint, :messages))
 
-    if reason in ["continuation", "retry"] or messages? do
-      [fn messages -> Fake.text(delegate_result(messages)) end]
+    delegate_turns =
+      if reason in ["continuation", "retry"] or messages? do
+        [fn messages -> Fake.text(delegate_result(messages)) end]
+      else
+        [
+          Fake.tool_call("delegate", delegate_args(ctx, config), "call_delegate"),
+          fn messages -> Fake.text(delegate_result(messages)) end
+        ]
+      end
+
+    if workspaces_granted?(ctx, config) do
+      [Fake.tool_call("workspaces", %{}, "call_workspaces") | delegate_turns]
     else
-      [
-        Fake.tool_call("delegate", delegate_args(ctx, config), "call_delegate"),
-        fn messages -> Fake.text(delegate_result(messages)) end
-      ]
+      delegate_turns
     end
   end
 
@@ -278,11 +286,18 @@ defmodule Omunculus.Runtime.SpikeAgents do
     args = %{"instruction" => ctx.instruction}
     teams = config.teams || %{}
 
-    if map_size(teams) > 0 do
-      Map.put(args, "team", infer_team(ctx.instruction, teams))
-    else
-      args
-    end
+    args =
+      if map_size(teams) > 0 do
+        Map.put(args, "team", infer_team(ctx.instruction, teams))
+      else
+        args
+      end
+
+    maybe_put_workspace(args, ctx, config)
+  end
+
+  defp legacy_delegate_args(ctx) do
+    maybe_put_workspace(%{"instruction" => ctx.instruction}, ctx, %{workspaces: %{}})
   end
 
   defp infer_team(instruction, teams) do
@@ -317,6 +332,86 @@ defmodule Omunculus.Runtime.SpikeAgents do
 
   defp first_team_name(teams) do
     teams |> Map.keys() |> Enum.sort() |> List.first()
+  end
+
+  defp maybe_put_workspace(args, ctx, config) do
+    case resolve_workspace(ctx, config) do
+      workspace when is_binary(workspace) and workspace != "" ->
+        Map.put(args, "workspace", workspace)
+
+      _ ->
+        args
+    end
+  end
+
+  defp resolve_workspace(ctx, config) do
+    workspaces = config.workspaces || %{}
+
+    cond do
+      is_binary(ctx[:workspace]) and ctx[:workspace] != "" ->
+        ctx[:workspace]
+
+      map_size(workspaces) > 1 ->
+        infer_workspace_from_instruction(ctx.instruction, workspaces, ctx[:workspace])
+
+      workspace_slug_in_instruction?(ctx.instruction, workspaces) ->
+        workspace_slug_in_instruction(ctx.instruction, workspaces)
+
+      true ->
+        nil
+    end
+  end
+
+  defp infer_workspace_from_instruction(instruction, workspaces, ctx_workspace) do
+    case workspace_slug_in_instruction(instruction, workspaces) do
+      nil ->
+        ctx_workspace || workspaces |> Map.keys() |> Enum.sort() |> List.first()
+
+      workspace ->
+        workspace
+    end
+  end
+
+  defp workspace_slug_in_instruction?(instruction, workspaces) do
+    is_binary(workspace_slug_in_instruction(instruction, workspaces))
+  end
+
+  defp workspace_slug_in_instruction(instruction, workspaces) do
+    instruction = String.downcase(instruction)
+
+    Enum.find_value(Map.keys(workspaces), fn key ->
+      if String.contains?(instruction, String.downcase(key)), do: key
+    end)
+  end
+
+  defp workspaces_granted?(ctx, config) do
+    ctx.depth == 0 and workspaces_in_bands?(ctx, config)
+  end
+
+  defp workspaces_in_bands?(ctx, config) do
+    with table when is_map(table) <- Policy.table(config),
+         profile <- profile_for_spike(ctx, config),
+         workspace <- spike_workspace(ctx, config),
+         depth <- to_string(ctx.depth || 0),
+         {:ok, bands} <- Policy.line(table, profile, depth, workspace) do
+      "workspaces" in (bands["granted"] || [])
+    else
+      _ -> false
+    end
+  end
+
+  defp profile_for_spike(ctx, config) do
+    ctx[:profile] || config.defaults[:preset] || config.defaults["preset"] || "coding"
+  end
+
+  defp spike_workspace(ctx, config) do
+    workspaces = config.workspaces || %{}
+
+    cond do
+      is_binary(ctx[:workspace]) and ctx[:workspace] != "" -> ctx[:workspace]
+      map_size(workspaces) == 1 -> workspaces |> Map.keys() |> hd()
+      true -> workspaces |> Map.keys() |> Enum.sort() |> List.first() || "app"
+    end
   end
 
   defp editor_fake_turns do

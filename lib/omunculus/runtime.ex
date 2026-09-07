@@ -36,6 +36,10 @@ defmodule Omunculus.Runtime do
     correlation_id = opts[:correlation_id] || Envelope.generate_id("corr")
     timeout = opts[:timeout] || 30_000
 
+    payload =
+      %{instruction: instruction, depth: 0}
+      |> maybe_put_workspace_payload(opts[:workspace])
+
     :ok = EventCore.subscribe(core, correlation_id: correlation_id)
 
     try do
@@ -46,9 +50,10 @@ defmodule Omunculus.Runtime do
             correlation_id: correlation_id,
             idempotency_key: opts[:idempotency_key],
             session_id: opts[:session_id],
+            workspace_id: opts[:workspace_id],
             project_id: opts[:project_id],
             work_item_id: work_item_id,
-            payload: %{instruction: instruction, depth: 0}
+            payload: payload
           )
         )
 
@@ -83,19 +88,25 @@ defmodule Omunculus.Runtime do
     {:ok, sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
     :ok = EventCore.subscribe(core)
 
-    {:ok,
-     %{
-       core: core,
-       sup: sup,
-       agents: Keyword.fetch!(opts, :agents),
-       max_depth: Keyword.get(opts, :max_depth, 1),
-       run_opts: Keyword.get(opts, :run_opts, []),
-       config: normalize_runtime_config(Keyword.get(opts, :config)),
-       runs: %{},
-       pids: %{},
-       handled: MapSet.new(),
-       pending_continuations: %{}
-     }}
+    state =
+      %{
+        core: core,
+        sup: sup,
+        agents: Keyword.fetch!(opts, :agents),
+        max_depth: Keyword.get(opts, :max_depth, 1),
+        run_opts: Keyword.get(opts, :run_opts, []),
+        config: normalize_runtime_config(Keyword.get(opts, :config)),
+        runs: %{},
+        pids: %{},
+        handled: MapSet.new(),
+        pending_continuations: %{},
+        nodes: %{}
+      }
+
+    state = rebuild_pending_continuations(state)
+    state = flush_pending_continuations(state)
+
+    {:ok, state}
   end
 
   @impl true
@@ -139,18 +150,22 @@ defmodule Omunculus.Runtime do
       originating_run_id: nil,
       checkpoint: %{},
       project_id: env.project_id,
-      session_id: env.session_id
+      session_id: env.session_id,
+      workspace_id: nil,
+      workspace: env.payload["workspace"]
     })
   end
 
   defp activate(%Envelope{kind: :event, type: "task.delegated"} = env, state) do
     p = env.payload
+    depth = p["to_depth"]
+    workspace = p["workspace"] || env.workspace_id
 
     start_run(state, %{
       activation: env,
       work_item_id: p["child_work_item_id"],
       correlation_id: env.correlation_id,
-      depth: p["to_depth"],
+      depth: depth,
       attempt: 1,
       instruction: p["instruction"],
       parent_run_id: p["parent_run_id"],
@@ -158,6 +173,8 @@ defmodule Omunculus.Runtime do
       checkpoint: %{},
       project_id: env.project_id,
       session_id: env.session_id,
+      workspace: workspace,
+      workspace_id: if(depth > 0, do: workspace, else: nil),
       team: p["team"],
       agent: p["agent"]
     })
@@ -201,6 +218,14 @@ defmodule Omunculus.Runtime do
     end
   end
 
+  defp activate(%Envelope{type: "workspace.attached"} = env, state) do
+    register_attached_nodes(state, env)
+  end
+
+  defp activate(%Envelope{type: "workspace.detached"} = env, state) do
+    fail_runs_in_workspace(state, env.payload["workspace_id"])
+  end
+
   defp activate(%Envelope{type: "run.started"} = env, state) do
     case state.runs[env.run_id] do
       nil ->
@@ -218,7 +243,8 @@ defmodule Omunculus.Runtime do
       {:error, reason} ->
         policy_invalid(state, spec, reason)
 
-      {:ok, agent, bands, policy_hash, request_permission} ->
+      {:ok, agent, bands, policy_hash, request_permission, spec, state} ->
+        spec = maybe_prepend_comments(state, spec, agent)
         start_run_with_agent(state, spec, agent, bands, policy_hash, request_permission)
     end
   end
@@ -253,7 +279,8 @@ defmodule Omunculus.Runtime do
       activation_id: spec.activation.event_id,
       started_event_id: nil,
       depth: spec.depth,
-      attempt: spec.attempt
+      attempt: spec.attempt,
+      workspace_id: Map.get(spec, :workspace_id) || Map.get(spec, :workspace)
     }
 
     %{state | runs: Map.put(state.runs, run_id, run), pids: Map.put(state.pids, pid, run_id)}
@@ -267,9 +294,23 @@ defmodule Omunculus.Runtime do
   end
 
   defp resolve_policy_without_config(state, spec) do
+    workspace = Map.get(spec, :workspace) || spec.activation.payload["workspace"]
+
+    roots =
+      case attached_workspace_row(state.core, workspace) do
+        {:ok, attached_roots, _} -> attached_roots
+        :error -> Map.get(spec, :roots, [])
+      end
+
+    spec = Map.put(spec, :roots, roots)
+    {spec, state} = assign_node_id(state, spec, nil)
     agent = state.agents.(agent_context(state, spec))
+
+    agent =
+      merge_config_tool_options(agent, %{workspaces: %{}, teams: %{}, agents: %{}}, spec, state)
+
     bands = bands_from_tools(agent.tools)
-    {:ok, agent, bands, nil, false}
+    {:ok, agent, bands, nil, false, spec, state}
   end
 
   defp resolve_policy_with_config(state, spec, config) do
@@ -284,17 +325,27 @@ defmodule Omunculus.Runtime do
          hash <- Policy.hash(table),
          :ok <- maybe_emit_policy_loaded(state, spec, hash, table),
          profile = resolve_profile(spec, loaded, config),
-         workspace = resolve_workspace(spec, loaded),
+         workspace = resolve_workspace(spec, loaded, state),
          depth = to_string(spec.depth),
          {:ok, line_bands} <- Policy.line(table, profile, depth, workspace),
          {:ok, ceiling} <- policy_ceiling(loaded, depth, workspace),
          true <- Policy.fits_ceiling?(line_bands, ceiling),
          {:ok, narrow_bands} <- maybe_intersect_team_profile(loaded, spec, line_bands),
          {:ok, bands} <- maybe_narrow_tools(config, narrow_bands) do
+      roots = workspace_roots(state, workspace, loaded)
+
+      spec =
+        spec
+        |> Map.put(:workspace, workspace)
+        |> Map.put(:workspace_id, envelope_workspace_id(spec, workspace))
+        |> Map.put(:roots, roots)
+        |> Map.put(:session_id, spec.session_id || spec.activation.session_id)
+
+      {spec, state} = assign_node_id(state, spec, loaded)
       agent = state.agents.(agent_context(state, spec, loaded))
       agent = %{agent | tools: bands["granted"]}
-      agent = merge_config_tool_options(agent, loaded)
-      {:ok, agent, bands, hash, negotiable_or_human?(bands)}
+      agent = merge_config_tool_options(agent, loaded, spec, state)
+      {:ok, agent, bands, hash, negotiable_or_human?(bands), spec, state}
     else
       false -> {:error, :profile_outside_ceiling}
       {:error, reason} -> {:error, reason}
@@ -384,15 +435,44 @@ defmodule Omunculus.Runtime do
     (bands["negotiable"] || []) != [] or (bands["human"] || []) != []
   end
 
-  defp resolve_workspace(spec, loaded) do
-    Map.get(spec, :workspace) ||
-      spec.activation.workspace_id ||
-      spec.activation.payload["workspace"] ||
-      case Map.keys(loaded.workspaces) do
-        [] -> "default"
-        [only] -> only
-        keys -> Enum.at(keys, 0)
+  defp resolve_workspace(spec, loaded, state) do
+    explicit =
+      Map.get(spec, :workspace) ||
+        spec.activation.workspace_id ||
+        spec.activation.payload["workspace"]
+
+    if explicit do
+      explicit
+    else
+      attached = session_workspaces(state, spec)
+
+      cond do
+        attached != [] ->
+          Enum.at(attached, 0)
+
+        Map.has_key?(loaded.workspaces, "app") ->
+          "app"
+
+        true ->
+          case Map.keys(loaded.workspaces) do
+            [] -> "default"
+            [only] -> only
+            keys -> Enum.at(keys, 0)
+          end
       end
+    end
+  end
+
+  defp envelope_workspace_id(spec, policy_workspace) do
+    if spec.depth == 0 do
+      nil
+    else
+      Map.get(spec, :workspace_id) ||
+        Map.get(spec, :workspace) ||
+        spec.activation.workspace_id ||
+        spec.activation.payload["workspace"] ||
+        policy_workspace
+    end
   end
 
   defp agent_context(state, spec, loaded \\ nil) do
@@ -402,6 +482,8 @@ defmodule Omunculus.Runtime do
       attempt: spec.attempt,
       instruction: spec.instruction,
       checkpoint: spec.checkpoint,
+      session_id: spec.session_id || spec.activation.session_id,
+      workspace_id: envelope_workspace_id(spec, Map.get(spec, :workspace)),
       workspace: Map.get(spec, :workspace, spec.activation.workspace_id),
       team: Map.get(spec, :team, spec.activation.payload["team"]),
       agent: Map.get(spec, :agent, spec.activation.payload["agent"]),
@@ -409,8 +491,13 @@ defmodule Omunculus.Runtime do
     }
 
     case loaded do
-      nil -> base
-      config -> Map.put(base, :config, config)
+      nil ->
+        base
+
+      config ->
+        base
+        |> Map.put(:config, config)
+        |> Map.put(:profile, resolve_profile(spec, config, state.config))
     end
   end
 
@@ -435,14 +522,29 @@ defmodule Omunculus.Runtime do
     end
   end
 
-  defp merge_config_tool_options(agent, loaded) do
+  defp merge_config_tool_options(agent, loaded, spec, state) do
+    workspaces =
+      if spec.depth == 0 do
+        attached_workspaces_snapshot(state, loaded) || loaded.workspaces
+      else
+        loaded.workspaces
+      end
+
     snapshot = %{
-      workspaces: loaded.workspaces,
+      workspaces: workspaces,
       teams: loaded.teams,
       agents: loaded.agents
     }
 
-    %{agent | tool_options: Map.merge(agent.tool_options || %{}, snapshot)}
+    tool_options = Map.merge(Map.get(agent, :tool_options) || %{}, snapshot)
+
+    tool_options =
+      case Map.get(spec, :roots) do
+        roots when is_list(roots) and roots != [] -> Map.put(tool_options, :roots, roots)
+        _ -> tool_options
+      end
+
+    Map.put(agent, :tool_options, tool_options)
   end
 
   defp bands_from_tools(tools) do
@@ -466,6 +568,55 @@ defmodule Omunculus.Runtime do
   end
 
   defp normalize_runtime_config(_), do: nil
+
+  defp maybe_prepend_comments(state, %{depth: 0} = spec, agent) do
+    session_id = spec.session_id || spec.activation.session_id
+    checkpoint = spec.checkpoint || %{}
+
+    with true <- is_binary(session_id) and session_id != "",
+         true <- checkpoint == %{} or checkpoint_messages_empty?(checkpoint),
+         comments when comments != [] <- session_comments(state.core, session_id) do
+      note = format_session_comments(comments)
+
+      messages = [
+        %{"role" => "system", "content" => agent[:system_prompt] || ""},
+        %{"role" => "user", "content" => note},
+        %{"role" => "user", "content" => spec.instruction}
+      ]
+
+      %{spec | checkpoint: Map.put(checkpoint, "messages", messages)}
+    else
+      _ -> spec
+    end
+  end
+
+  defp maybe_prepend_comments(_state, spec, _agent), do: spec
+
+  defp checkpoint_messages_empty?(checkpoint) do
+    case Map.get(checkpoint, "messages") || Map.get(checkpoint, :messages) do
+      msgs when is_list(msgs) -> msgs == []
+      _ -> true
+    end
+  end
+
+  defp session_comments(core, session_id) do
+    EventCore.query(
+      core,
+      "SELECT kind, body FROM COMMENTS WHERE session_id = ? ORDER BY last_sequence DESC LIMIT 10",
+      [session_id]
+    )
+  rescue
+    _ -> []
+  end
+
+  defp format_session_comments(comments) do
+    lines =
+      Enum.map(comments, fn [kind, body] ->
+        "#{kind}: #{body}"
+      end)
+
+    "Recent session comments:\n" <> Enum.join(lines, "\n")
+  end
 
   defp record_crash(core, run, reason) do
     EventCore.append!(
@@ -530,6 +681,11 @@ defmodule Omunculus.Runtime do
            checkpoint: checkpoint,
            project_id: activation.project_id,
            session_id: activation.session_id,
+           workspace: p["workspace"] || activation.payload["workspace"],
+           workspace_id:
+             if(p["depth"] > 0, do: p["workspace"] || activation.workspace_id, else: nil),
+           node_id: p["node_id"],
+           team: p["team"],
            reason: "retry"
          }}
     end
@@ -549,7 +705,7 @@ defmodule Omunculus.Runtime do
 
   defp activation_instruction(%Envelope{payload: %{"instruction" => i}}), do: i
 
-  # pending_continuations remains an in-memory queue (phase 4 rebuilds from log).
+  # pending_continuations is rebuilt from WORK_ITEMS on init (see rebuild_pending_continuations/1).
   defp find_parent_waiter(core, child_work_item_id) do
     child = to_string(child_work_item_id)
 
@@ -612,7 +768,10 @@ defmodule Omunculus.Runtime do
   defp decode_awaiting(ids) when is_list(ids), do: ids
 
   defp decode_awaiting(json) when is_binary(json) do
-    Jason.decode!(json)
+    case Jason.decode(json) do
+      {:ok, ids} -> ids
+      _ -> nil
+    end
   end
 
   defp continue_parent(state, env, parent_wi, checkpoint, child_id, awaiting) do
@@ -673,6 +832,14 @@ defmodule Omunculus.Runtime do
       checkpoint: new_checkpoint,
       project_id: env.project_id,
       session_id: env.session_id,
+      workspace: last_start.payload["workspace"],
+      workspace_id:
+        if(last_start.payload["depth"] > 0,
+          do: last_start.payload["workspace"] || env.workspace_id,
+          else: nil
+        ),
+      node_id: last_start.payload["node_id"],
+      team: last_start.payload["team"],
       reason: "continuation"
     })
   end
@@ -787,6 +954,374 @@ defmodule Omunculus.Runtime do
 
       {:error, _} = err ->
         err
+    end
+  end
+
+  defp maybe_put_workspace_payload(payload, nil), do: payload
+
+  defp maybe_put_workspace_payload(payload, workspace),
+    do: Map.put(payload, :workspace, workspace)
+
+  defp session_workspaces(state, spec) do
+    session_id = spec.session_id || spec.activation.session_id
+
+    if is_binary(session_id) and match?(%{core: _}, state) do
+      attached_session_workspaces(state.core, session_id)
+    else
+      []
+    end
+  end
+
+  defp attached_session_workspaces(core, session_id) do
+    with true <- projection_table?(core, "SESSION_WORKSPACES"),
+         {:ok, sql, args} <- session_workspaces_query(core, session_id),
+         rows when is_list(rows) <- safe_event_core_query(core, sql, args) do
+      Enum.flat_map(rows, fn
+        [ws] when is_binary(ws) -> [ws]
+        _ -> []
+      end)
+    else
+      _ -> []
+    end
+  end
+
+  defp projection_table?(core, table) do
+    case safe_event_core_query(
+           core,
+           "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+           [table]
+         ) do
+      [[1]] -> true
+      _ -> false
+    end
+  end
+
+  defp session_workspaces_query(core, session_id) do
+    case safe_event_core_query(core, "PRAGMA table_info(SESSION_WORKSPACES)", []) do
+      rows when is_list(rows) ->
+        columns = Enum.map(rows, fn row -> Enum.at(row, 1) end)
+
+        if "session_id" in columns do
+          {:ok,
+           "SELECT workspace_id FROM SESSION_WORKSPACES WHERE session_id = ? AND attached = 1 ORDER BY workspace_id",
+           [session_id]}
+        else
+          {:ok,
+           "SELECT workspace_id FROM SESSION_WORKSPACES WHERE attached = 1 ORDER BY workspace_id",
+           []}
+        end
+
+      _ ->
+        :error
+    end
+  end
+
+  defp safe_event_core_query(core, sql, args) do
+    try do
+      EventCore.query(core, sql, args)
+    rescue
+      _ -> []
+    catch
+      :exit, _ -> []
+    end
+  end
+
+  defp assign_node_id(state, spec, loaded) do
+    node_id =
+      Map.get(spec, :node_id) ||
+        node_id_from_last_start(state, spec) ||
+        compute_node_id(spec, loaded)
+
+    key = node_cache_key(spec, loaded)
+    nodes = if key, do: Map.put(state.nodes, key, node_id), else: state.nodes
+    {Map.put(spec, :node_id, node_id), %{state | nodes: nodes}}
+  end
+
+  defp node_id_from_last_start(state, spec) do
+    case EventCore.stream(state.core, 0, work_item_id: spec.work_item_id, type: "run.started")
+         |> List.last() do
+      %Envelope{payload: %{"node_id" => node_id}} when is_binary(node_id) -> node_id
+      _ -> nil
+    end
+  end
+
+  defp compute_node_id(spec, loaded) do
+    session_id = spec.session_id || spec.activation.session_id
+
+    case spec.depth do
+      0 ->
+        hash_node_id([session_id, 0])
+
+      1 ->
+        workspace = Map.get(spec, :workspace) || spec.activation.workspace_id
+        team = Map.get(spec, :team) || spec.activation.payload["team"]
+
+        if team_scope_node?(loaded, team),
+          do: hash_node_id([session_id, workspace, team, 1]),
+          else: hash_node_id([session_id, workspace, 1])
+
+      _ ->
+        Envelope.generate_id("node")
+    end
+  end
+
+  defp node_cache_key(spec, loaded) do
+    session_id = spec.session_id || spec.activation.session_id
+
+    case spec.depth do
+      0 ->
+        {:depth0, session_id}
+
+      1 ->
+        workspace = Map.get(spec, :workspace) || spec.activation.workspace_id
+        team = Map.get(spec, :team) || spec.activation.payload["team"]
+
+        if team_scope_node?(loaded, team),
+          do: {:depth1, session_id, workspace, team},
+          else: {:depth1, session_id, workspace}
+
+      _ ->
+        {:depthn, spec.work_item_id}
+    end
+  end
+
+  defp team_scope_node?(loaded, team) when is_binary(team) do
+    case loaded do
+      %{teams: teams} ->
+        case Map.get(teams, team, %{}) do
+          %{scope: "node"} -> true
+          %{"scope" => "node"} -> true
+          _ -> false
+        end
+
+      _ ->
+        false
+    end
+  end
+
+  defp team_scope_node?(_, _), do: false
+
+  defp hash_node_id(parts) do
+    parts
+    |> Enum.map(&to_string/1)
+    |> Enum.join("\0")
+    |> then(&:crypto.hash(:sha256, &1))
+    |> Base.encode16(case: :lower)
+    |> then(&("node_" <> String.slice(&1, 0, 16)))
+  end
+
+  defp rebuild_pending_continuations(state) do
+    waiting_rows =
+      EventCore.query(
+        state.core,
+        "SELECT work_item_id, awaiting FROM WORK_ITEMS WHERE status = ?",
+        ["waiting"]
+      )
+
+    pending =
+      Enum.reduce(waiting_rows, %{}, fn [parent_wi, awaiting_json], acc ->
+        with ids when is_list(ids) <- decode_awaiting(awaiting_json),
+             %Envelope{payload: %{"outcome" => "waiting"}} = run_completed <-
+               EventCore.stream(state.core, 0, work_item_id: parent_wi, type: "run.completed")
+               |> List.last(),
+             checkpoint_awaiting <- run_completed.payload["checkpoint"]["awaiting"] || [] do
+          Enum.reduce(ids, acc, fn child_id, inner ->
+            child = to_string(child_id)
+
+            if child in Enum.map(checkpoint_awaiting, &to_string/1) and
+                 task_completed?(state.core, child) do
+              case EventCore.stream(state.core, 0, work_item_id: child, type: "task.completed")
+                   |> List.last() do
+                %Envelope{} = env -> Map.update(inner, parent_wi, [env], &(&1 ++ [env]))
+                _ -> inner
+              end
+            else
+              inner
+            end
+          end)
+        else
+          _ -> acc
+        end
+      end)
+
+    %{state | pending_continuations: pending}
+  end
+
+  defp task_completed?(core, work_item_id) do
+    match?(
+      [%Envelope{}],
+      EventCore.stream(core, 0, work_item_id: work_item_id, type: "task.completed", limit: 1)
+    )
+  end
+
+  defp flush_pending_continuations(state) do
+    Enum.reduce(Map.keys(state.pending_continuations), state, fn parent_wi, acc ->
+      maybe_continue_parent(acc, parent_wi)
+    end)
+  end
+
+  defp register_attached_nodes(state, env) do
+    session_id = env.session_id
+    workspace_id = env.payload["workspace_id"]
+
+    if is_binary(session_id) and is_binary(workspace_id) do
+      loaded = loaded_config(state)
+      key = {:depth1, session_id, workspace_id}
+      nodes = Map.put(state.nodes, key, hash_node_id([session_id, workspace_id, 1]))
+
+      nodes =
+        Enum.reduce(node_scoped_teams(env, loaded, workspace_id), nodes, fn team, acc ->
+          Map.put(
+            acc,
+            {:depth1, session_id, workspace_id, team},
+            hash_node_id([session_id, workspace_id, team, 1])
+          )
+        end)
+
+      %{state | nodes: nodes}
+    else
+      state
+    end
+  end
+
+  defp fail_runs_in_workspace(state, workspace_id) when is_binary(workspace_id) do
+    Enum.reduce(state.runs, state, fn {_run_id, run}, acc ->
+      if run.workspace_id == workspace_id do
+        terminate_and_fail_run(acc, run, "detached")
+      else
+        acc
+      end
+    end)
+  end
+
+  defp fail_runs_in_workspace(state, _workspace_id), do: state
+
+  defp terminate_and_fail_run(state, run, reason) do
+    if Process.alive?(run.pid), do: DynamicSupervisor.terminate_child(state.sup, run.pid)
+
+    record_run_failed(state.core, run, reason)
+
+    runs = Map.delete(state.runs, run.run_id)
+    pids = Map.delete(state.pids, run.pid)
+    %{state | runs: runs, pids: pids}
+  end
+
+  defp record_run_failed(core, run, reason) do
+    EventCore.append!(
+      core,
+      Envelope.event("run.failed",
+        correlation_id: run.correlation_id,
+        causation_id: run.started_event_id || run.activation_id,
+        work_item_id: run.work_item_id,
+        run_id: run.run_id,
+        workspace_id: run.workspace_id,
+        payload: %{reason: reason}
+      )
+    )
+  end
+
+  defp workspace_roots(state, workspace, loaded) do
+    case attached_workspace_row(state.core, workspace) do
+      {:ok, roots, _teams} ->
+        roots
+
+      :error ->
+        entry = Map.get(loaded.workspaces, workspace, %{})
+        entry[:roots] || entry["roots"] || []
+    end
+  end
+
+  defp attached_workspaces_snapshot(state, loaded) do
+    case attached_workspace_rows(state.core) do
+      [] ->
+        nil
+
+      rows ->
+        Map.new(rows, fn {ws_id, roots, teams} ->
+          base = Map.get(loaded.workspaces, ws_id, %{})
+
+          entry =
+            base
+            |> Map.put(:roots, roots)
+            |> Map.put(:teams, teams)
+
+          {ws_id, entry}
+        end)
+    end
+  end
+
+  defp attached_workspace_row(core, workspace_id) do
+    case Enum.find(attached_workspace_rows(core), fn {ws_id, _, _} -> ws_id == workspace_id end) do
+      {_ws_id, roots, teams} -> {:ok, roots, teams}
+      nil -> :error
+    end
+  end
+
+  defp attached_workspace_rows(core) do
+    unless projection_table?(core, "SESSION_WORKSPACES"), do: []
+
+    EventCore.query(
+      core,
+      "SELECT workspace_id, roots, teams FROM SESSION_WORKSPACES WHERE attached = 1 ORDER BY workspace_id",
+      []
+    )
+    |> Enum.flat_map(fn
+      [ws_id, roots_json, teams_json] ->
+        [{ws_id, decode_json_list(roots_json), decode_json_list(teams_json)}]
+
+      _ ->
+        []
+    end)
+  rescue
+    _ -> []
+  end
+
+  defp decode_json_list(nil), do: []
+
+  defp decode_json_list(json) when is_binary(json) do
+    case Jason.decode(json) do
+      {:ok, list} when is_list(list) -> list
+      _ -> []
+    end
+  end
+
+  defp decode_json_list(list) when is_list(list), do: list
+  defp decode_json_list(_), do: []
+
+  defp node_scoped_teams(env, loaded, workspace_id) do
+    teams =
+      env.payload["teams"] ||
+        case loaded do
+          %{workspaces: workspaces} ->
+            case Map.get(workspaces, workspace_id, %{}) do
+              %{teams: teams} -> teams
+              %{"teams" => teams} -> teams
+              _ -> []
+            end
+
+          _ ->
+            []
+        end
+
+    Enum.filter(List.wrap(teams), &team_scope_node?(loaded, &1))
+  end
+
+  defp loaded_config(state) do
+    case state.config do
+      nil ->
+        nil
+
+      config ->
+        load_opts = [
+          cwd: config[:cwd] || File.cwd!(),
+          config_file: config[:config_file],
+          env: config[:env] || %{}
+        ]
+
+        case Config.load(load_opts) do
+          {:ok, loaded} -> loaded
+          _ -> nil
+        end
     end
   end
 end
