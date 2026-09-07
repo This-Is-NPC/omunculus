@@ -2,8 +2,10 @@
 
 Data: 2026-09-07. Baseline de produção: `3bbeeb6`.
 
-**Objetivo corrigido:** medir se o harness conduz e verifica um processo
-apesar de respostas imperfeitas do modelo. Os providers são condições de
+**Objetivo corrigido:** medir se o harness oferece contexto e mecanismos
+para os agentes conduzirem e avaliarem um processo apesar de respostas
+imperfeitas. O pai julga a entrega do filho; o runtime mantém os contratos
+de execução. Os providers são condições de
 execução, não o objeto de um ranking. A matriz anterior é exploratória;
 seus percentuais não isolam a causa dos insucessos.
 
@@ -22,16 +24,17 @@ filho no contexto restaurado. No cenário de falha, não há efeitos antes do
 erro; portanto, a recuperação não demonstra segurança contra efeitos
 duplicados após falhas parciais.
 
-[Resultados completos](harness-resilience-results.ndjson), oito cenários:
+[Resultados completos](harness-resilience-results.ndjson), nove cenários:
 
 | Perturbação | Comportamento observado | Interpretação |
 | --- | --- | --- |
 | Nenhuma: cadeia correta | Contador 1..10 em um Work Item; duas continuações; raiz conclui | Caminho básico e entrega do resultado funcionam |
-| Raiz responde “10” sem tool | Sucesso para o cliente; zero incrementos | Não há verificação do efeito exigido para concluir |
-| Intermediário responde “10” sem tool | Pai continua e conclui; zero incrementos | Uma conclusão sem efeito é propagada |
+| Raiz responde “10” sem tool | Sucesso para o cliente; zero incrementos | O agente declara uma conclusão incorreta; o runtime segue o contrato de texto final |
+| Intermediário responde “10” sem tool | Pai continua e conclui; zero incrementos | O pai simulado aceita o resultado; esse teste não exercita revisão |
 | Intermediário conta diretamente | Dez incrementos; só depths 0 e 1 | A configuração permite esse atalho; teto de depth não obriga delegação |
 | Worker responde “10” por 32 turnos | Cadeia completa e sucesso; zero incrementos | Insistência automática não impede conclusão falsa ao atingir o limite |
 | Raiz pede agent sem team, depois corrige | TeamGate rejeita; erro chega ao chat; cadeia correta termina | O harness fornece feedback, mas a correção ainda depende da próxima resposta |
+| Filho informa entrega incompleta; pai pede correção | Pai delega novamente; nova cadeia conta 1..10; três continuações | O mecanismo de revisão e nova delegação pelo pai funciona |
 | Filho retorna erro simulado | Filho failed; dois pais waiting; cliente expira | Falha não produz recuperação automática nem erro terminal na raiz |
 | Mesmo erro seguido de task.resumed | Uma retry Run e duas continuações; contador 1..10 | O mecanismo de recuperação existe; o comando veio do probe |
 
@@ -48,17 +51,28 @@ segundos é um limite de observação offline, não uma medida de latência real
 
 ## Por que o isolamento das Runs não basta
 
+**Retificação da interpretação inicial:** os pais dos casos de conclusão
+falsa foram programados para devolver “10” quando recebessem “10”. Isso
+mostra a propagação de uma avaliação ruim, não prova que falta ao harness
+um mecanismo para o pai revisar. No novo cenário, o pai identifica a entrega
+incompleta e usa `delegate` outra vez. A revisão é uma resposta controlada,
+não uma demonstração de julgamento de um modelo real.
+
 Encerrar cada Run ao delegar resolve retenção de processos e permite retomar
 o trabalho pelo checkpoint. Não garante que o modelo escolha delegar,
 formule uma subtarefa suficiente, execute uma ferramenta, reconheça o erro
-ou avalie a entrega do filho. Essas decisões continuam dependendo do modelo
-onde não existe um contrato verificável ou uma política do harness.
+ou avalie a entrega do filho. Essas decisões pertencem aos agentes. O harness
+precisa entregar o contexto, os prompts e as ferramentas que lhes permitem
+exercer essa responsabilidade; não substituir julgamento semântico por uma
+regra universal de aceitação.
 
 O plano atual de [execução](../to-be/execution-model.md) considera texto sem
 filhos pendentes uma conclusão e prevê retry via `task.resumed`. Portanto,
-parte do comportamento observado segue o desenho documentado: falta uma
-política de validação e recuperação para sustentar a expectativa de maior
-autonomia com modelos limitados. Nem toda lacuna é desvio de implementação.
+parte do comportamento observado segue o desenho documentado. `task.completed`
+do filho registra a entrega dele, não a aprovação pelo pai. Na continuação,
+o pai pode pedir novamente ou concluir seu próprio Work Item. Não há, no
+catálogo atual, uma tool separada `accept`/`reject` para aprovar entregas.
+O mecanismo documentado é a continuação com nova decisão do agente.
 
 Há também problemas concretos de implementação já identificados na
 [auditoria](methodology-audit.md): instruções do perfil não chegam ao prompt
@@ -67,11 +81,14 @@ Em [Agent](../../lib/omunculus/agent.ex), o limite não assegura que a meta foi
 atingida; em [Runtime.Run](../../lib/omunculus/runtime/run.ex), um resultado
 `ok` sem filhos pendentes vira `task.completed` sem validação independente.
 
-**Conclusão causal:** há limitações comprovadas do harness mesmo sem um
-modelo real. Uma resposta ruim pode iniciar o problema, mas o harness atual
-pode aceitá-la como sucesso ou deixar o fluxo sem resolução. Isso impede
-atribuir os resultados anteriores exclusivamente ao modelo. O controle
-positivo também impede concluir que a orquestração básica está quebrada.
+**Conclusão causal revisada:** o transporte da entrega, a retomada do pai e
+a possibilidade de pedir correção funcionam nos cenários controlados.
+Os prompts das fixtures mandam o concierge repetir o resultado recebido;
+não instruem avaliação nem pedido de correção. Essa lacuna, somada às
+instruções do perfil não propagadas, impede atribuir os resultados anteriores
+exclusivamente ao modelo. Os testes de texto falso não justificam transferir
+a aprovação semântica para o runtime. A falha técnica do filho sem retomada
+permanece uma observação separada; não foi corrigida pelo novo cenário.
 Este experimento não determina quanto o modelo local conseguirá fazer
 depois das correções, nem garante processos arbitrariamente complexos.
 
@@ -82,15 +99,18 @@ depois das correções, nem garante processos arbitrariamente complexos.
    conteúdo especificado; resultado do filho consumido até a raiz.
    Distinguir depth máximo de cadeia obrigatória. Separar concierge somente
    com delegação de intermediário autorizado a executar diretamente.
-2. Corrigir a entrega das instruções por papel e impedir que texto ou
-   esgotamento de turnos seja suficiente para declarar o efeito concluído.
-   Não impor uma instrução “only counter” ao concierge que só pode delegar.
-3. Definir recuperação limitada e observável: erro recuperável permite
-   retry; esgotamento deve encerrar o fluxo com diagnóstico ou solicitar
-   intervenção. Considerar idempotência antes de repetir efeitos parciais.
+2. Corrigir a entrega das instruções por papel. O pai deve definir a tarefa,
+   avaliar a entrega e pedir correção quando necessário; o filho deve relatar
+   resultado, evidências, limitações e pendências. Isso é um contrato de
+   comunicação, não um verificador universal de qualidade. Não impor uma
+   instrução “only counter” ao concierge que só pode delegar.
+3. Distinguir o protocolo de revisão de uma entrega das falhas técnicas sem
+   entrega. Avaliar como expor estas ao decisor conforme o plano, preservando
+   `task.resumed` e a decisão antes de repetir efeitos desconhecidos. Limites
+   de turnos devem permanecer observáveis sem equivaler a qualidade aprovada.
 4. Reaplicar perturbações controladas: omissão de tool, argumentos inválidos,
    conclusão falsa, timeout, duplicação, reinício e perda parcial de progresso.
-   Os oito casos atuais cobrem apenas parte dessa lista, sem escrita real,
+   Os nove casos atuais cobrem apenas parte dessa lista, sem escrita real,
    permissões humanas, concorrência ou recuperação após crash do processo.
 5. Repetir os mesmos workflows e contratos com providers reais. Medir
    conclusão verificada, falso sucesso, trabalho sem resolução, recuperação
@@ -108,3 +128,25 @@ mise exec -- mix run scripts/probe_harness_resilience.exs
 
 O script produz observações NDJSON, inclusive comportamentos incorretos da
 baseline. Não são testes de regressão que exigem preservar essas falhas.
+
+## System prompts e outputs esperados
+
+As fixtures medium e complex dizem ao concierge para delegar e responder
+somente com o resultado devolvido. O worker deve responder somente com o
+resultado. Não há instrução para explicitar evidências, avaliar suficiência,
+pedir retrabalho ou distinguir entrega parcial de conclusão satisfatória.
+O fallback do resolver também é genérico. O checkpoint preserva essas
+mensagens na continuação; o texto de retorno é `Sub-agent completed. Result:
+... Still pending: ...`, sem orientação adicional de revisão.
+
+Uma composição coerente deve explicar o protocolo comum, o papel configurado,
+o contexto da Run e as instruções da tarefa compatíveis com suas tools.
+Critérios semânticos ficam na instrução delegada e no julgamento do pai.
+Um concierge sem filesystem pode pedir evidências ou delegar uma verificação;
+não deve receber uma obrigação de inspecionar usando ferramentas ausentes.
+
+O próximo experimento real deve comparar os mesmos cenários antes/depois
+dessa composição, incluindo filho que entrega algo incompleto e pai que
+pede correção. Os verificadores externos do benchmark medem o resultado;
+eles não se tornam gates de execução. Ainda não está demonstrado que mudar
+os prompts, sozinho, resolve os insucessos do modelo local.

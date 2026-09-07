@@ -2,7 +2,7 @@
 
 Objetivo esclarecido após esta auditoria: o benchmark é do **harness sob
 respostas imperfeitas**, não um ranking de modelos. O
-[diagnóstico causal de resiliência](harness-resilience.md) reproduz oito
+[diagnóstico causal de resiliência](harness-resilience.md) reproduz nove
 cenários com respostas controladas e orienta a próxima campanha.
 
 Data: 2026-09-07. Escopo: runner, fixtures, resolver de agentes, loop do

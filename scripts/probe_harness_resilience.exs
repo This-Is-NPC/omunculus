@@ -155,6 +155,32 @@ defmodule HarnessResilienceProbe do
 
   defp turns(ctx, mode, owner) do
     cond do
+      mode == :parent_requests_correction and ctx.depth == 0 and ctx.reason == "continuation" ->
+        [
+          fn messages ->
+            latest = messages |> Enum.filter(&(&1["role"] == "tool")) |> List.last()
+
+            cond do
+              String.contains?(latest["content"], "Result: Incomplete") ->
+                Fake.tool_call(
+                  "delegate",
+                  %{"instruction" => "Correction: conte até 10 usando counter"},
+                  "correction"
+                )
+
+              String.contains?(latest["content"], "Result: 10.") ->
+                Fake.text("10")
+
+              true ->
+                {:error, :unexpected_review_input}
+            end
+          end
+        ]
+
+      mode == :parent_requests_correction and ctx.depth == 1 and ctx.reason == "initial" and
+          not String.starts_with?(ctx.instruction, "Correction:") ->
+        [Fake.text("Incomplete: no tools executed; please request correction.")]
+
       ctx.reason == "continuation" ->
         [
           fn messages ->
@@ -251,6 +277,7 @@ for mode <- [
       :middle_executes_directly,
       :worker_false_done,
       :invalid_target_then_correct,
+      :parent_requests_correction,
       :child_error,
       :child_error_then_resume
     ] do
