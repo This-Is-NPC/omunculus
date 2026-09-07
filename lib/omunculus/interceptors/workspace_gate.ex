@@ -7,10 +7,6 @@ defmodule Omunculus.Interceptors.WorkspaceGate do
 
   alias Omunculus.EventCore.Store
 
-  @attached_sql """
-  SELECT workspace_id FROM SESSION_WORKSPACES WHERE attached = 1
-  """
-
   @impl true
   def intercept(%{type: "task.requested", payload: payload}, options) do
     attached = attached_list(options)
@@ -40,25 +36,35 @@ defmodule Omunculus.Interceptors.WorkspaceGate do
   def intercept(_envelope, _options), do: :deliver
 
   defp attached_list(options) do
-    from_options = normalize_attached(fetch_opt(options, :attached))
-    from_conn = attached_from_conn(options)
-    Enum.uniq(from_options ++ from_conn)
-  end
-
-  defp attached_from_conn(options) do
-    conn = options[:conn] || options["conn"]
+    conn = fetch_opt(options, :conn)
 
     if conn do
-      try do
-        Store.query(conn, @attached_sql, [])
-        |> Enum.map(fn [ws_id] -> ws_id end)
-      rescue
-        _ -> []
-      catch
-        _, _ -> []
+      rows =
+        Store.query(conn, """
+        SELECT type, payload FROM EVENTS
+        WHERE type IN ('workspace.attached', 'workspace.detached') ORDER BY sequence
+        """)
+
+      if rows == [] do
+        case normalize_attached(fetch_opt(options, :attached)) do
+          [] -> :unrestricted
+          attached -> attached
+        end
+      else
+        Enum.reduce(rows, MapSet.new(), fn [type, payload], attached ->
+          workspace = Jason.decode!(payload)["workspace_id"]
+
+          if type == "workspace.attached",
+            do: MapSet.put(attached, workspace),
+            else: MapSet.delete(attached, workspace)
+        end)
+        |> MapSet.to_list()
       end
     else
-      []
+      case normalize_attached(fetch_opt(options, :attached)) do
+        [] -> :unrestricted
+        attached -> attached
+      end
     end
   end
 
@@ -70,9 +76,11 @@ defmodule Omunculus.Interceptors.WorkspaceGate do
 
   defp check_deny_targets(_workspace, _options), do: :ok
 
+  defp check_attached(_workspace, :unrestricted, _message), do: :ok
+
   defp check_attached(workspace, attached, message)
        when is_binary(workspace) and workspace != "" do
-    if attached != [] and workspace not in attached,
+    if workspace not in attached,
       do: {:error, message},
       else: :ok
   end
