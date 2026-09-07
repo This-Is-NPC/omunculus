@@ -76,13 +76,13 @@ tabela do documento.
 5. A ordem de dedupe importa: `event_id` igual com conteúdo igual é
    redelivery; `idempotency_key` igual com payload diferente é conflito
    explícito. Ambos testados.
-6. **A spike bloqueia; o contrato não.** Aqui a Run do pai fica viva em
-   `receive` esperando o `task.completed` do filho, com timeout de
-   processo. O contrato passou a fechar a Run no pedido com
-   `outcome = waiting` e a reabrir por continuação
-   ([execution-model.md](../to-be/execution-model.md)). É a primeira coisa
-   a mudar se a spike for promovida: `delegate` deixa de esperar e o
-   Runtime ganha a continuação por checkpoint.
+6. **Bloqueio na delegação — divergência resolvida.** Na spike, a Run do
+   pai ficava viva em `receive` esperando o `task.completed` do filho,
+   com timeout de processo; o contrato não previa isso. A produção
+   (fase 1) fecha a Run no pedido com `outcome = waiting` e a reabre por
+   continuação (`reason = continuation`, causação no envelope de
+   resposta), conforme [execution-model.md](../to-be/execution-model.md)
+   (pedir é concluir).
 
 ## Matriz `conte até 10`: profundidade × Interceptor
 

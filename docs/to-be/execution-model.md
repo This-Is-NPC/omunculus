@@ -1,4 +1,4 @@
-Status: TO-BE — planejado; Execution Node, Run, delegação e retomada validados em spike
+Status: TO-BE — planejado, validado; Execution Node, Run, delegação, pedir-é-concluir e retomada validados
 
 # Modelo de execução e delegação
 
