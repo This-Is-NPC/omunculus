@@ -10,6 +10,8 @@ defmodule Omunculus.Tools do
     "ls" => Omunculus.Tools.Ls,
     "counter" => Omunculus.Tools.Counter,
     "delegate" => Omunculus.Tools.Delegate,
+    "request_work" => Omunculus.Tools.RequestWork,
+    "directory" => Omunculus.Tools.Directory,
     "workspaces" => Omunculus.Tools.Workspaces
   }
 

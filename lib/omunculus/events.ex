@@ -24,10 +24,11 @@ defmodule Omunculus.Events do
       kind: :command,
       versions: ["1"],
       required: ["instruction"],
-      emitted_by: ["CLI"],
+      emitted_by: ["CLI", "Run"],
       interceptable: true,
       injectable: true,
-      doc: "A task enters the harness; creates the root Work Item and activates a depth-0 Run."
+      doc:
+        "A task enters the harness (command) or a Run requests cross-lineage work (event with requested_by)."
     },
     "task.resumed" => %{
       kind: :command,
@@ -306,6 +307,9 @@ defmodule Omunculus.Events do
 
       spec ->
         cond do
+          type == "task.requested" and kind == :event ->
+            validate_task_requested_event(version, payload)
+
           spec.kind != kind ->
             {:error, {:kind_mismatch, type, kind}}
 
@@ -317,6 +321,21 @@ defmodule Omunculus.Events do
               [] -> :ok
               missing -> {:error, {:missing_payload_fields, type, missing}}
             end
+        end
+    end
+  end
+
+  defp validate_task_requested_event(version, payload) do
+    required = ["instruction", "requested_by", "child_work_item_id"]
+
+    cond do
+      version != "1" ->
+        {:error, {:unsupported_schema_version, "task.requested", version}}
+
+      true ->
+        case Enum.reject(required, &Map.has_key?(payload, &1)) do
+          [] -> :ok
+          missing -> {:error, {:missing_payload_fields, "task.requested", missing}}
         end
     end
   end

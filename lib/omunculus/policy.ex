@@ -125,6 +125,13 @@ defmodule Omunculus.Policy do
     MapSet.new(Map.get(bands, "granted", []) ++ Map.get(bands, "negotiable", []))
   end
 
+  @doc "Directory discovery scope for a depth policy entry (`subtree` or `session`)."
+  def directory_scope(entry) when is_map(entry) do
+    entry["directory"] || entry[:directory] || "subtree"
+  end
+
+  def directory_scope(_), do: "subtree"
+
   def narrow(bands, tool_names) when is_list(tool_names) do
     granted = Map.get(bands, "granted", [])
 
