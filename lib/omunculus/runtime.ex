@@ -18,6 +18,7 @@ defmodule Omunculus.Runtime do
   alias Omunculus.EventCore
   alias Omunculus.Event.Envelope
   alias Omunculus.Runtime.Run
+  alias Omunculus.{Config, Policy, Tools}
 
   # --- API ------------------------------------------------------------------------
 
@@ -89,6 +90,7 @@ defmodule Omunculus.Runtime do
        agents: Keyword.fetch!(opts, :agents),
        max_depth: Keyword.get(opts, :max_depth, 1),
        run_opts: Keyword.get(opts, :run_opts, []),
+       config: normalize_runtime_config(Keyword.get(opts, :config)),
        runs: %{},
        pids: %{},
        handled: MapSet.new(),
@@ -210,21 +212,17 @@ defmodule Omunculus.Runtime do
   defp activate(_env, state), do: state
 
   defp start_run(state, spec) do
-    run_id = Envelope.generate_id("run")
-    workspace = Map.get(spec, :workspace, spec.activation.workspace_id)
-    team = Map.get(spec, :team, spec.activation.payload["team"])
+    case resolve_policy(state, spec) do
+      {:error, reason} ->
+        policy_invalid(state, spec, reason)
 
-    agent =
-      state.agents.(%{
-        depth: spec.depth,
-        max_depth: state.max_depth,
-        attempt: spec.attempt,
-        instruction: spec.instruction,
-        checkpoint: spec.checkpoint,
-        workspace: workspace,
-        team: team,
-        reason: Map.get(spec, :reason, "initial")
-      })
+      {:ok, agent, bands, policy_hash, request_permission} ->
+        start_run_with_agent(state, spec, agent, bands, policy_hash, request_permission)
+    end
+  end
+
+  defp start_run_with_agent(state, spec, agent, bands, policy_hash, request_permission) do
+    run_id = Envelope.generate_id("run")
 
     opts =
       spec
@@ -232,6 +230,9 @@ defmodule Omunculus.Runtime do
         core: state.core,
         run_id: run_id,
         agent: agent,
+        tools: bands,
+        policy_hash: policy_hash,
+        request_permission: request_permission,
         max_depth: state.max_depth,
         reason: Map.get(spec, :reason, "initial")
       })
@@ -255,6 +256,211 @@ defmodule Omunculus.Runtime do
 
     %{state | runs: Map.put(state.runs, run_id, run), pids: Map.put(state.pids, pid, run_id)}
   end
+
+  defp resolve_policy(state, spec) do
+    case state.config do
+      nil -> resolve_policy_without_config(state, spec)
+      config -> resolve_policy_with_config(state, spec, config)
+    end
+  end
+
+  defp resolve_policy_without_config(state, spec) do
+    agent = state.agents.(agent_context(state, spec))
+    bands = bands_from_tools(agent.tools)
+    {:ok, agent, bands, nil, false}
+  end
+
+  defp resolve_policy_with_config(state, spec, config) do
+    load_opts = [
+      cwd: config[:cwd] || File.cwd!(),
+      config_file: config[:config_file],
+      env: config[:env] || %{}
+    ]
+
+    with {:ok, loaded} <- Config.load(load_opts),
+         table when is_map(table) <- Policy.table(loaded),
+         hash <- Policy.hash(table),
+         :ok <- maybe_emit_policy_loaded(state, spec, hash, table),
+         profile = config[:profile] || loaded.defaults.preset || "coding",
+         workspace = resolve_workspace(spec, loaded),
+         depth = to_string(spec.depth),
+         {:ok, line_bands} <- Policy.line(table, profile, depth, workspace),
+         {:ok, ceiling} <- policy_ceiling(loaded, depth, workspace),
+         true <- Policy.fits_ceiling?(line_bands, ceiling),
+         bands = operational_bands(line_bands, ceiling, spec.depth, state.max_depth),
+         {:ok, bands} <- maybe_narrow_tools(config, bands),
+         bands =
+           maybe_intersect_with_parent(bands, parent_tools_pin(spec), spec.depth, state.max_depth) do
+      agent = state.agents.(agent_context(state, spec))
+      agent = %{agent | tools: bands["granted"]}
+      {:ok, agent, bands, hash, negotiable_or_human?(bands)}
+    else
+      false -> {:error, :profile_outside_ceiling}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp operational_bands(line_bands, ceiling_bands, depth, max_depth) do
+    if depth < max_depth do
+      ceiling_bands
+    else
+      Policy.intersect(line_bands, ceiling_bands)
+    end
+  end
+
+  defp policy_ceiling(loaded, depth, workspace) do
+    catalog_version = loaded.session[:tools_catalog]
+
+    depth_policy = Map.get(loaded.policy, depth, %{})
+    workspace_entry = Map.get(loaded.workspaces, workspace, %{})
+    workspace_policy = Map.get(workspace_entry, :policy, %{})
+
+    with {:ok, depth_bands} <- Policy.normalize(depth_policy, catalog_version: catalog_version),
+         {:ok, workspace_bands} <-
+           Policy.normalize(workspace_policy, catalog_version: catalog_version) do
+      {:ok, Policy.intersect(depth_bands, workspace_bands)}
+    end
+  end
+
+  defp maybe_emit_policy_loaded(state, spec, hash, table) do
+    last =
+      state.core
+      |> EventCore.stream(0, type: "policy.loaded")
+      |> List.last()
+
+    if last && last.payload["hash"] == hash do
+      :ok
+    else
+      EventCore.append!(
+        state.core,
+        Envelope.event("policy.loaded",
+          correlation_id: spec.correlation_id,
+          causation_id: spec.activation.event_id,
+          payload: %{hash: hash, table: encode_policy_table(table)}
+        )
+      )
+
+      :ok
+    end
+  end
+
+  defp policy_invalid(state, spec, reason) do
+    EventCore.append!(
+      state.core,
+      Envelope.event("run.failed",
+        correlation_id: spec.correlation_id,
+        causation_id: spec.activation.event_id,
+        work_item_id: spec.work_item_id,
+        payload: %{reason: "policy_invalid", detail: inspect(reason)}
+      )
+    )
+
+    state
+  end
+
+  defp encode_policy_table(table) do
+    table
+    |> Enum.map(fn {{profile, depth, workspace}, bands} ->
+      %{
+        "profile" => profile,
+        "depth" => depth,
+        "workspace" => workspace,
+        "granted" => bands["granted"],
+        "negotiable" => bands["negotiable"],
+        "human" => bands["human"],
+        "forbidden" => bands["forbidden"]
+      }
+    end)
+    |> Enum.sort_by(&{&1["profile"], &1["depth"], &1["workspace"]})
+  end
+
+  defp maybe_intersect_with_parent(bands, parent_pin, depth, max_depth) do
+    if depth == max_depth, do: bands, else: intersect_with_parent(bands, parent_pin)
+  end
+
+  defp intersect_with_parent(bands, nil), do: bands
+
+  defp intersect_with_parent(bands, parent_pin) when is_map(parent_pin) do
+    authority =
+      MapSet.new((parent_pin["granted"] || []) ++ (parent_pin["negotiable"] || []))
+
+    parent_ceiling = %{
+      "granted" => Enum.sort(MapSet.to_list(authority)),
+      "negotiable" => [],
+      "human" => [],
+      "forbidden" =>
+        Tools.names()
+        |> Enum.reject(&MapSet.member?(authority, &1))
+        |> Enum.sort()
+    }
+
+    Policy.intersect(bands, parent_ceiling)
+  end
+
+  defp maybe_narrow_tools(config, bands) do
+    case config[:tools] do
+      nil -> {:ok, bands}
+      tools -> Policy.narrow(bands, parse_tools_flag(tools))
+    end
+  end
+
+  defp parse_tools_flag(tools) when is_list(tools), do: tools
+
+  defp parse_tools_flag(tools) when is_binary(tools) do
+    String.split(tools, ",", trim: true)
+  end
+
+  defp negotiable_or_human?(bands) do
+    (bands["negotiable"] || []) != [] or (bands["human"] || []) != []
+  end
+
+  defp parent_tools_pin(spec), do: spec.activation.payload["tools"]
+
+  defp resolve_workspace(spec, loaded) do
+    Map.get(spec, :workspace) ||
+      spec.activation.workspace_id ||
+      spec.activation.payload["workspace"] ||
+      case Map.keys(loaded.workspaces) do
+        [] -> "app"
+        [only] -> only
+        keys -> Enum.at(keys, 0)
+      end
+  end
+
+  defp agent_context(state, spec) do
+    %{
+      depth: spec.depth,
+      max_depth: state.max_depth,
+      attempt: spec.attempt,
+      instruction: spec.instruction,
+      checkpoint: spec.checkpoint,
+      workspace: Map.get(spec, :workspace, spec.activation.workspace_id),
+      team: Map.get(spec, :team, spec.activation.payload["team"]),
+      reason: Map.get(spec, :reason, "initial")
+    }
+  end
+
+  defp bands_from_tools(tools) do
+    %{
+      "granted" => tools,
+      "negotiable" => [],
+      "human" => [],
+      "forbidden" => []
+    }
+  end
+
+  defp normalize_runtime_config(nil), do: nil
+  defp normalize_runtime_config([]), do: nil
+
+  defp normalize_runtime_config(config) when is_list(config) do
+    if Keyword.keyword?(config), do: Map.new(config), else: nil
+  end
+
+  defp normalize_runtime_config(config) when is_map(config) do
+    if map_size(config) == 0, do: nil, else: config
+  end
+
+  defp normalize_runtime_config(_), do: nil
 
   defp record_crash(core, run, reason) do
     EventCore.append!(

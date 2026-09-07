@@ -6,6 +6,7 @@ defmodule Omunculus.InterceptorsTest do
   alias Omunculus.Event.Envelope
   alias Omunculus.EventCore
   alias Omunculus.EventCore.Projector
+  alias Omunculus.Interceptor
   alias Omunculus.Runtime
   alias Omunculus.Runtime.SpikeAgents
 
@@ -20,6 +21,13 @@ defmodule Omunculus.InterceptorsTest do
     name: "audit",
     events: ["task.requested", "task.completed"],
     module: Omunculus.Interceptors.Audit,
+    options: %{}
+  }
+
+  @tool_gate %{
+    name: "tool-gate",
+    events: ["tool.call.requested"],
+    module: Omunculus.Interceptors.ToolGate,
     options: %{}
   }
 
@@ -62,11 +70,98 @@ defmodule Omunculus.InterceptorsTest do
 
       assert Events.injectable?("task.requested")
       refute Events.injectable?("task.completed")
+      assert Events.known?("policy.loaded")
+      assert Events.spec("policy.loaded").required == ["hash"]
+
+      assert Events.spec("run.started").required == [
+               "attempt",
+               "depth",
+               "agent_id",
+               "agent_kind",
+               "reason",
+               "tools"
+             ]
+
+      assert {:ok, Omunculus.Interceptors.ToolGate} =
+               Interceptor.resolve("Omunculus.Interceptors.ToolGate")
+
       assert Events.markdown() =~ "| `delivery.rejected` | event |"
+      assert Events.markdown() =~ "| `policy.loaded` | event |"
     end
   end
 
   describe "interceptor lane" do
+    test "ToolGate allows pinned granted tools and rejects others" do
+      {:ok, core} = EventCore.start_link(path: ":memory:", interceptors: [@tool_gate])
+      :ok = EventCore.subscribe(core)
+
+      run_id = "run-1"
+      corr = "corr-tool-gate"
+
+      started =
+        EventCore.append!(
+          core,
+          Envelope.event("run.started",
+            correlation_id: corr,
+            causation_id: "cmd-1",
+            work_item_id: "wi-1",
+            run_id: run_id,
+            payload: %{
+              attempt: 1,
+              depth: 0,
+              agent_id: "a",
+              agent_kind: "worker",
+              reason: "initial",
+              tools: %{
+                "granted" => ["counter"],
+                "negotiable" => [],
+                "human" => [],
+                "forbidden" => []
+              }
+            }
+          )
+        )
+
+      allowed =
+        EventCore.append!(
+          core,
+          Envelope.event("tool.call.requested",
+            correlation_id: corr,
+            causation_id: started.event_id,
+            work_item_id: "wi-1",
+            run_id: run_id,
+            payload: %{tool: "counter", round: 1}
+          )
+        )
+
+      assert_receive {:event_core, %{event_id: id, type: "tool.call.requested"}}
+      assert id == allowed.event_id
+
+      {:ok, rejected_attempt} =
+        EventCore.append(
+          core,
+          Envelope.event("tool.call.requested",
+            correlation_id: corr,
+            causation_id: allowed.event_id,
+            work_item_id: "wi-1",
+            run_id: run_id,
+            payload: %{tool: "edit", round: 2}
+          )
+        )
+
+      rejection =
+        core
+        |> EventCore.stream(0, run_id: run_id)
+        |> Enum.find(&(&1.type == "delivery.rejected"))
+
+      assert rejection.payload["interceptor"] == "tool-gate"
+      assert rejection.payload["rejected_event_id"] == rejected_attempt.event_id
+      assert rejection.payload["reason"] == "tool not in pinned granted"
+
+      assert %{"tool-gate" => %{evaluated: 2, delivered: 1, rejected: 1}} =
+               EventCore.interceptor_stats(core)
+    end
+
     test "an observe-only interceptor changes nothing in the log" do
       %{core: core} = boot(1, [@audit])
       {:ok, %{result: "10", requested: requested}} = Runtime.request(core, "conte até 10")

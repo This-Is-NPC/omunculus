@@ -44,17 +44,26 @@ defmodule Omunculus.Runtime.Run do
     checkpoint = state.checkpoint || %{}
     reason = state[:reason] || state["reason"] || "initial"
 
+    tools_bands = state[:tools] || bands_from_agent(state.agent)
+
     started =
-      append!(state, :event, "run.started", %{
-        attempt: state.attempt,
-        depth: state.depth,
-        parent_run_id: state.parent_run_id,
-        originating_run_id: state.originating_run_id,
-        agent_id: state.agent.agent_id,
-        agent_kind: state.agent.kind,
-        reason: reason,
-        checkpoint: checkpoint
-      })
+      append!(
+        state,
+        :event,
+        "run.started",
+        %{
+          attempt: state.attempt,
+          depth: state.depth,
+          parent_run_id: state.parent_run_id,
+          originating_run_id: state.originating_run_id,
+          agent_id: state.agent.agent_id,
+          agent_kind: state.agent.kind,
+          reason: reason,
+          checkpoint: checkpoint,
+          tools: tools_bands
+        }
+        |> maybe_put_policy_hash(state[:policy_hash])
+      )
 
     Process.put(:run_started_id, started.event_id)
 
@@ -78,7 +87,8 @@ defmodule Omunculus.Runtime.Run do
       tool_options: agent[:tool_options] || %{},
       tool_state: tool_state_from(checkpoint),
       tool_executor: &execute_tool(state, &1, &2, &3, &4),
-      reporter: &report(state, &1)
+      reporter: &report(state, &1),
+      request_permission: state[:request_permission] || agent[:request_permission]
     ]
 
     opts =
@@ -182,37 +192,42 @@ defmodule Omunculus.Runtime.Run do
         counter: counter_payload(name, context)
       })
 
-    await_delivery(requested.event_id)
+    case await_delivery_or_rejection(requested.event_id) do
+      :ok ->
+        {body, context, outcome} =
+          case Tools.call_context(name, args, context, active) do
+            {:ok, output, context} ->
+              {output, context, "completed"}
 
-    {body, context, outcome} =
-      case Tools.call_context(name, args, context, active) do
-        {:ok, output, context} ->
-          {output, context, "completed"}
+            {:error, reason, context} ->
+              {"error: #{inspect(reason)}", context, "error:#{inspect(reason)}"}
+          end
 
-        {:error, reason, context} ->
-          {"error: #{inspect(reason)}", context, "error:#{inspect(reason)}"}
-      end
+        completed =
+          append!(
+            state,
+            :event,
+            "tool.call.completed",
+            %{
+              tool: name,
+              round: round,
+              outcome: outcome,
+              previous: counter_value(name, Context.tool_state(context, name, nil), :previous),
+              new: counter_value(name, Context.tool_state(context, name, nil), :new),
+              checkpoint: checkpoint(context)
+            },
+            requested.event_id
+          )
 
-    completed =
-      append!(
-        state,
-        :event,
-        "tool.call.completed",
-        %{
-          tool: name,
-          round: round,
-          outcome: outcome,
-          previous: counter_value(name, Context.tool_state(context, name, nil), :previous),
-          new: counter_value(name, Context.tool_state(context, name, nil), :new),
-          checkpoint: checkpoint(context)
-        },
-        requested.event_id
-      )
+        await_delivery(completed.event_id)
+        Process.put(:chain_head, completed.event_id)
 
-    await_delivery(completed.event_id)
-    Process.put(:chain_head, completed.event_id)
+        if outcome == "completed", do: {:ok, body, context}, else: {:error, outcome, context}
 
-    if outcome == "completed", do: {:ok, body, context}, else: {:error, outcome, context}
+      {:rejected, rejection} ->
+        Process.put(:chain_head, rejection.event_id)
+        {:error, {:delivery_rejected, rejection.payload["reason"]}, context}
+    end
   end
 
   # Depth policy is not the node's business: a configured DepthGate
@@ -229,7 +244,8 @@ defmodule Omunculus.Runtime.Run do
         child_work_item_id: child,
         to_depth: state.depth + 1,
         parent_run_id: state.run_id,
-        originating_run_id: state.originating_run_id || state.run_id
+        originating_run_id: state.originating_run_id || state.run_id,
+        tools: tools_pin(state)
       })
 
     case await_delivery_or_rejection(delegated.event_id) do
@@ -383,4 +399,20 @@ defmodule Omunculus.Runtime.Run do
        end)}
     end)
   end
+
+  defp bands_from_agent(agent) do
+    %{
+      "granted" => agent.tools,
+      "negotiable" => [],
+      "human" => [],
+      "forbidden" => []
+    }
+  end
+
+  defp tools_pin(state) do
+    state[:tools] || bands_from_agent(state.agent)
+  end
+
+  defp maybe_put_policy_hash(payload, nil), do: payload
+  defp maybe_put_policy_hash(payload, hash), do: Map.put(payload, :policy_hash, hash)
 end

@@ -11,6 +11,7 @@ defmodule Omunculus.Agent do
     context = %{context | state: Keyword.get(opts, :tool_state, %{})}
     tool_executor = Keyword.get(opts, :tool_executor, &Tools.call_context/4)
     tools = Keyword.get(opts, :tools, Tools.default_names())
+    request_permission = request_permission?(opts)
     max_turns = Keyword.get(opts, :max_turns, 32)
     extra = Keyword.get(opts, :instructions)
     reporter = Keyword.get(opts, :reporter, fn _event -> :ok end)
@@ -37,7 +38,7 @@ defmodule Omunculus.Agent do
       context: context,
       tools: tools,
       tool_executor: tool_executor,
-      schemas: Tools.schemas(tools),
+      schemas: schemas_for(tools, request_permission),
       messages: messages,
       turn: 0,
       max_turns: max_turns,
@@ -439,7 +440,36 @@ defmodule Omunculus.Agent do
       tool_calls: state.tool_calls,
       fs: state.context.fs,
       tool_state: state.context.state,
-      messages: state.messages
+      messages: state.messages,
+      schemas: state.schemas
+    }
+  end
+
+  defp request_permission?(opts) do
+    Keyword.get(opts, :request_permission, false) == true
+  end
+
+  defp schemas_for(tools, true) do
+    Tools.schemas(tools) ++ [request_permission_schema()]
+  end
+
+  defp schemas_for(tools, _), do: Tools.schemas(tools)
+
+  defp request_permission_schema do
+    %{
+      "type" => "function",
+      "function" => %{
+        "name" => "request_permission",
+        "description" => "Request permission for an additional tool.",
+        "parameters" => %{
+          "type" => "object",
+          "properties" => %{
+            "name" => %{"type" => "string", "description" => "Tool name to request."},
+            "reason" => %{"type" => "string", "description" => "Why the tool is needed."}
+          },
+          "required" => ["name", "reason"]
+        }
+      }
     }
   end
 

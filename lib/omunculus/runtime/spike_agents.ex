@@ -6,7 +6,9 @@ defmodule Omunculus.Runtime.SpikeAgents do
   says where a node sits in the tree. The runtime asks for a configuration by
   the depth of the node it is about to start: below `max_depth` it gets a
   concierge (only tool: `delegate`), at `max_depth` a worker (only tool:
-  `counter`). The scripted `Chat.Fake` plays the model deterministically and
+  `counter`). When the Runtime is started with `config:`, tool lists here are
+  overwritten by policy resolution before each Run. The scripted `Chat.Fake`
+  plays the model deterministically and
   resumes from a checkpoint when a worker is retried.
   """
 

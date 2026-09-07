@@ -24,6 +24,32 @@ defmodule Omunculus.AgentTest do
     assert result.turns == 1
   end
 
+  test "request_permission adds schema when flag set" do
+    chat =
+      Chat.Fake.new([
+        %{content: "done", tool_calls: nil, usage: %{"total_tokens" => 3}}
+      ])
+
+    fs = FS.Memory.new(%{})
+
+    assert {:ok, result} =
+             Agent.run(
+               instruction: "ask",
+               chat: chat,
+               fs: fs,
+               tools: [],
+               request_permission: true,
+               max_turns: 4
+             )
+
+    names =
+      Enum.map(result.schemas, fn schema ->
+        get_in(schema, ["function", "name"])
+      end)
+
+    assert "request_permission" in names
+  end
+
   test "dispatches a write then halts" do
     chat =
       Chat.Fake.new([
