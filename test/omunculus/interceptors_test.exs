@@ -52,6 +52,13 @@ defmodule Omunculus.InterceptorsTest do
     options: @team_gate_options
   }
 
+  @workspace_gate %{
+    name: "workspace-gate",
+    events: ["task.delegated", "task.requested"],
+    module: Omunculus.Interceptors.WorkspaceGate,
+    options: %{attached: ["app"]}
+  }
+
   defp boot(max_depth, interceptors) do
     {:ok, core} = EventCore.start_link(path: ":memory:", interceptors: interceptors)
     {:ok, projector} = Projector.start_link(core: core)
@@ -411,6 +418,139 @@ defmodule Omunculus.InterceptorsTest do
       assert [%{name: "notify", events: ["task.completed", "run.failed"]}] = config.automations
       assert {:ok, _} = Config.check(config)
       File.rm_rf!(dir)
+    end
+  end
+
+  describe "WorkspaceGate" do
+    test "WorkspaceGate rejects ghost workspaces and allows attached ones" do
+      assert {:ok, Omunculus.Interceptors.WorkspaceGate} =
+               Interceptor.resolve("Omunculus.Interceptors.WorkspaceGate")
+
+      {:ok, core} = EventCore.start_link(path: ":memory:", interceptors: [@workspace_gate])
+      :ok = EventCore.subscribe(core)
+
+      corr = "corr-workspace-gate"
+      run_id = "run-1"
+
+      delegated_payload = %{
+        "instruction" => "conte até 10",
+        "child_work_item_id" => "wi-child",
+        "to_depth" => 1,
+        "parent_run_id" => run_id,
+        "originating_run_id" => run_id
+      }
+
+      {:ok, rejected_attempt} =
+        EventCore.append(
+          core,
+          Envelope.event("task.delegated",
+            correlation_id: corr,
+            causation_id: "evt-parent",
+            work_item_id: "wi-1",
+            run_id: run_id,
+            payload: Map.put(delegated_payload, "workspace", "ghost")
+          )
+        )
+
+      rejection =
+        core
+        |> EventCore.stream(0, run_id: run_id)
+        |> Enum.find(&(&1.type == "delivery.rejected"))
+
+      assert rejection.payload["interceptor"] == "workspace-gate"
+      assert rejection.payload["rejected_event_id"] == rejected_attempt.event_id
+      assert rejection.payload["reason"] == "workspace not in session"
+      rejected_id = rejected_attempt.event_id
+      refute_receive {:event_core, %{event_id: ^rejected_id}}
+
+      allowed =
+        EventCore.append!(
+          core,
+          Envelope.event("task.delegated",
+            correlation_id: corr,
+            causation_id: rejection.event_id,
+            work_item_id: "wi-1",
+            run_id: run_id,
+            payload: Map.put(delegated_payload, "workspace", "app")
+          )
+        )
+
+      assert_receive {:event_core, %{event_id: id, type: "task.delegated"}}
+      assert id == allowed.event_id
+
+      assert %{"workspace-gate" => %{evaluated: 2, delivered: 1, rejected: 1}} =
+               EventCore.interceptor_stats(core)
+    end
+
+    test "WorkspaceGate rejects task.requested for unattached workspaces" do
+      {:ok, core} = EventCore.start_link(path: ":memory:", interceptors: [@workspace_gate])
+      :ok = EventCore.subscribe(core)
+
+      {:ok, rejected_attempt} =
+        EventCore.append(
+          core,
+          Envelope.command("task.requested",
+            correlation_id: "corr-ws-requested",
+            payload: %{instruction: "do work", workspace: "ghost"}
+          )
+        )
+
+      rejection =
+        core
+        |> EventCore.stream(0, correlation_id: "corr-ws-requested")
+        |> Enum.find(&(&1.type == "delivery.rejected"))
+
+      assert rejection.payload["interceptor"] == "workspace-gate"
+      assert rejection.payload["rejected_event_id"] == rejected_attempt.event_id
+      assert rejection.payload["reason"] == "workspace not attached"
+      rejected_id = rejected_attempt.event_id
+      refute_receive {:event_core, %{event_id: ^rejected_id}}
+
+      allowed =
+        EventCore.append!(
+          core,
+          Envelope.command("task.requested",
+            correlation_id: "corr-ws-requested-ok",
+            payload: %{instruction: "do work", workspace: "app"}
+          )
+        )
+
+      assert_receive {:event_core, %{event_id: id, type: "task.requested"}}
+      assert id == allowed.event_id
+    end
+  end
+
+  describe "interceptor workspaces filter" do
+    test "workspace-restricted interceptors only evaluate when workspace_id matches" do
+      audit_infra = Map.put(@audit, :workspaces, ["infra"])
+      {:ok, core} = EventCore.start_link(path: ":memory:", interceptors: [audit_infra])
+
+      base = [
+        correlation_id: "corr-ws",
+        causation_id: "evt-0",
+        payload: %{instruction: "x"}
+      ]
+
+      EventCore.append!(core, Envelope.command("task.requested", base))
+
+      assert %{"audit" => %{evaluated: 0, delivered: 0, rejected: 0}} =
+               EventCore.interceptor_stats(core)
+
+      EventCore.append!(
+        core,
+        Envelope.command("task.requested", Keyword.put(base, :workspace_id, "app"))
+      )
+
+      assert %{"audit" => %{evaluated: 0, delivered: 0, rejected: 0}} =
+               EventCore.interceptor_stats(core)
+
+      EventCore.append!(
+        core,
+        Envelope.command("task.requested", Keyword.put(base, :workspace_id, "infra"))
+      )
+
+      assert %{"audit" => %{evaluated: 1, delivered: 1, rejected: 0}} =
+               EventCore.interceptor_stats(core)
     end
   end
 end

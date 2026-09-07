@@ -289,19 +289,40 @@ defmodule Omunculus.EventCore do
   defp run_lane([], _env, state), do: {:deliver, state}
 
   defp run_lane([interceptor | rest], env, state) do
-    stats = state.interceptor_stats
-    options = Map.put(interceptor.options || %{}, :conn, state.conn)
+    if workspace_matches?(interceptor, env) do
+      stats = state.interceptor_stats
+      options = Map.put(interceptor.options || %{}, :conn, state.conn)
 
-    case interceptor.module.intercept(env, options) do
-      :deliver ->
-        stats = bump(stats, interceptor.name, :evaluated) |> bump(interceptor.name, :delivered)
-        run_lane(rest, env, %{state | interceptor_stats: stats})
+      case interceptor.module.intercept(env, options) do
+        :deliver ->
+          stats = bump(stats, interceptor.name, :evaluated) |> bump(interceptor.name, :delivered)
+          run_lane(rest, env, %{state | interceptor_stats: stats})
 
-      {:reject, reason} ->
-        stats = bump(stats, interceptor.name, :evaluated) |> bump(interceptor.name, :rejected)
-        {:reject, interceptor.name, reason, %{state | interceptor_stats: stats}}
+        {:reject, reason} ->
+          stats = bump(stats, interceptor.name, :evaluated) |> bump(interceptor.name, :rejected)
+          {:reject, interceptor.name, reason, %{state | interceptor_stats: stats}}
+      end
+    else
+      run_lane(rest, env, state)
     end
   end
+
+  defp workspace_matches?(interceptor, env) do
+    workspaces = interceptor_workspaces(interceptor)
+
+    if restricted_workspaces?(workspaces) do
+      is_binary(env.workspace_id) and env.workspace_id in workspaces
+    else
+      true
+    end
+  end
+
+  defp interceptor_workspaces(interceptor) when is_map(interceptor) do
+    Map.get(interceptor, :workspaces) || Map.get(interceptor, "workspaces")
+  end
+
+  defp restricted_workspaces?(workspaces),
+    do: is_list(workspaces) and workspaces != [] and Enum.all?(workspaces, &is_binary/1)
 
   defp bump(stats, name, key), do: update_in(stats[name][key], &(&1 + 1))
 
