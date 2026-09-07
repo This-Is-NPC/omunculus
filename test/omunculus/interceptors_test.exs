@@ -104,7 +104,7 @@ defmodule Omunculus.InterceptorsTest do
       depths =
         events |> Enum.filter(&(&1.type == "run.started")) |> Enum.map(& &1.payload["depth"])
 
-      assert depths == [0, 1]
+      assert depths == [0, 1, 0]
       refute Enum.any?(events, &(&1.type == "run.failed"))
 
       # The depth-1 completion is caused by the rejection: the decision is in the chain.
@@ -155,7 +155,7 @@ defmodule Omunculus.InterceptorsTest do
 
       assert %{
                "log-completed" => %{delivered: 2, failed: 0},
-               "always-fails" => %{delivered: 0, failed: 2}
+               "always-fails" => %{delivered: 0, failed: 3}
              } =
                Automations.stats(pid)
 
