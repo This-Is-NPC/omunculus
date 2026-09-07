@@ -39,6 +39,9 @@ em execuções diferentes.
 
 ## Protocolo de comunicação dos agentes
 
+O contrato de encerramento, correção automática e escalonamento está em
+[relato, retries e break](run-report-and-break.md).
+
 O resolver de chat compõe um system prompt com o protocolo comum, o papel
 configurado em `[agents]`, a posição/workspace da execução e as instruções
 do perfil selecionado. O protocolo explica delegação, retomada, revisão pelo
@@ -46,8 +49,9 @@ pai e entrega pelo executor. A lista de ferramentas exposta continua sendo
 a autoridade efetiva; texto no prompt não concede ferramentas.
 
 O pai delega objetivo, contexto, restrições e evidências esperadas. Ao receber
-o relatório, avalia se ele satisfaz o pedido e pode usar `delegate` novamente
-para pedir correção ou verificação. O filho relata resultado, evidências e
+o relatório, avalia se ele satisfaz o pedido. `completed = false` e seu
+comentário orientam a correção automática; `delegate` continua disponível
+para novos pedidos ou verificações. O filho relata resultado, evidências e
 pendências de forma proporcional à tarefa, respeitando formatos específicos
 quando suficientes. Esses critérios são instruções para os agentes; não são
 um schema universal de aceitação nem um gate semântico no runtime.
@@ -60,10 +64,10 @@ ou da descoberta disponível, não de nomes de ferramentas.
 
 `task.completed` do filho registra sua entrega, não a aprovação pelo pai.
 O pai conclui seu próprio Work Item após avaliar as entregas. A continuação
-preserva as mensagens do checkpoint, inclusive o system prompt, sem duplicar
-instruções. Sessões já iniciadas com prompts antigos mantêm esse contexto;
-validar novos prompts exige Work Items novos. Falhas técnicas sem entrega
-continuam seguindo o mecanismo de `task.resumed` descrito abaixo.
+preserva as mensagens e recompõe apenas o system prompt para o contexto
+atual (agente, kind, depth e motivo), sem duplicar instruções. No protocolo v2,
+falhas técnicas geram break para inspeção. `task.resumed` permanece disponível
+para a retomada explícita de uma execução que falhou.
 
 ## Delegação e árvore dinâmica
 
@@ -124,8 +128,9 @@ checkpoint guarda o que ainda falta ([team-model.md](team-model.md)).
 
 A continuação **sempre chama o modelo**, com uma observação que diz o que
 chegou e o que ainda falta ("A completed: …. Still pending: B, C"). Uma
-Run sem chamada de modelo seria um estado morto no log. O fechamento da
-Run de continuação segue três regras:
+Run sem chamada de modelo seria um estado morto no log. No protocolo legado v1, o fechamento da
+Run de continuação segue três regras (o protocolo v2 usa a flag explícita
+descrita em [relato, retries e break](run-report-and-break.md)):
 
 1. o modelo delega ou pede de novo: fecha em `waiting` com `awaiting` =
    restantes mais os novos;

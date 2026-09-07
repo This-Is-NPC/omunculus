@@ -61,6 +61,9 @@ defmodule Omunculus.Runtime.Run do
           agent_kind: state.agent.kind,
           reason: reason,
           checkpoint: checkpoint,
+          workflow: state.agent[:workflow] || false,
+          max_retries: state.agent[:max_retries] || 2,
+          review: state[:review],
           tools: tools_bands,
           directory_scope: state[:directory_scope] || "subtree",
           discovery: Map.take(state.agent[:tool_options] || %{}, [:workspaces, :teams, :agents]),
@@ -84,6 +87,7 @@ defmodule Omunculus.Runtime.Run do
     active_tools = executable_tools(state)
 
     opts = [
+      workflow: agent[:workflow] || false,
       instruction: state.instruction,
       chat: agent.chat,
       fs: state[:fs] || fs_for_roots(state[:roots]),
@@ -125,7 +129,21 @@ defmodule Omunculus.Runtime.Run do
           opts
       end
 
+    opts =
+      if agent[:workflow] && !(state[:arbitration] || state[:cross_lineage_arbitration]),
+        do: contextual_options(opts, agent, state),
+        else: Keyword.put(opts, :workflow, false)
+
     outcome = Agent.run(opts)
+
+    case outcome do
+      {status, result} when status in [:ok, :waiting] ->
+        Process.put(:last_model_comment, result.assistant_text)
+
+      _ ->
+        :ok
+    end
+
     new_children = Process.get(:awaiting_children, [])
 
     case outcome do
@@ -142,12 +160,130 @@ defmodule Omunculus.Runtime.Run do
         )
 
       {:ok, result} ->
-        finish_completed(state, result)
+        if agent[:workflow] && !(state[:arbitration] || state[:cross_lineage_arbitration]),
+          do: finish_report(state, result),
+          else: finish_completed(state, result)
 
       {:error, reason} ->
         append!(state, :event, "run.failed", %{reason: inspect(reason)})
         {:stop, :normal, state}
     end
+  end
+
+  defp nonempty_comment(text) when is_binary(text) do
+    if String.trim(text) == "",
+      do: "No model comment was produced; completion is unverified.",
+      else: text
+  end
+
+  defp nonempty_comment(_), do: "No model comment was produced; completion is unverified."
+
+  defp contextual_options(opts, agent, state) do
+    # Refresh only the system layer, retaining all conversation and tool-call links.
+    messages = Keyword.get(opts, :messages)
+
+    opts =
+      if is_list(messages) and messages != [] do
+        Keyword.put(opts, :messages, [
+          %{"role" => "system", "content" => agent.system_prompt}
+          | Enum.reject(messages, &(&1["role"] == "system"))
+        ])
+      else
+        opts
+      end
+
+    schemas =
+      Keyword.get(opts, :schemas) ||
+        Agent.schemas_for(Keyword.fetch!(opts, :tools), Keyword.get(opts, :request_permission))
+
+    # Permission schema is assembled by Agent; leave that path intact.
+    schemas =
+      Enum.map(schemas, fn schema ->
+        if get_in(schema, ["function", "name"]) in [
+             "delegate",
+             "request_work",
+             "request_permission"
+           ] do
+          update_in(schema, ["function", "parameters"], fn p ->
+            p
+            |> Map.update!(
+              "properties",
+              &Map.put(&1, "comment", %{
+                "type" => "string",
+                "description" => "Run summary and handoff context"
+              })
+            )
+            |> Map.update("required", ["comment"], &Enum.uniq(&1 ++ ["comment"]))
+          end)
+        else
+          schema
+        end
+      end)
+
+    if state[:review] do
+      read_tools =
+        Enum.filter(
+          Keyword.fetch!(opts, :tools),
+          &(&1 in ["read", "ls", "find", "grep", "directory", "workspaces"])
+        )
+
+      Keyword.merge(opts,
+        tools: read_tools,
+        schemas: Enum.filter(schemas, &(get_in(&1, ["function", "name"]) in read_tools))
+      )
+    else
+      Keyword.put(opts, :schemas, schemas)
+    end
+  end
+
+  defp finish_report(state, result) do
+    report =
+      case Omunculus.Runtime.Report.parse(result.assistant_text) do
+        {:ok, report} when not is_map_key(result, :limit_reached) ->
+          report
+
+        _ ->
+          %{
+            "completed" => false,
+            "comment" => nonempty_comment(result.assistant_text),
+            "break" => true
+          }
+      end
+
+    prior = state.checkpoint || %{}
+    child = prior["review_child"]
+
+    checkpoint = %{
+      "messages" => result.messages,
+      "tool_state" => result.tool_state,
+      "awaiting" => prior["awaiting"] || [],
+      "pending" => prior["pending"] || %{}
+    }
+
+    checkpoint =
+      if child && not report["completed"] do
+        checkpoint
+        |> Map.put("review_child", child)
+        |> Map.update!("awaiting", &Enum.uniq(&1 ++ [child]))
+        |> Map.update!("pending", &Map.put(&1, child, prior["review_call_id"]))
+      else
+        checkpoint
+      end
+
+    append!(state, :event, "run.completed", %{
+      outcome: "reported",
+      workflow: true,
+      report: report,
+      comment: report["comment"],
+      checkpoint: checkpoint,
+      review: state[:review],
+      max_retries: state.agent[:max_retries] || 2,
+      rounds: result.turns,
+      tool_calls: result.tool_calls,
+      report_valid: match?({:ok, _}, Omunculus.Runtime.Report.parse(result.assistant_text))
+    })
+
+    {:stop, :normal, state}
   end
 
   defp finish_waiting(state, result, awaiting, opts) do
@@ -166,7 +302,13 @@ defmodule Omunculus.Runtime.Run do
       state,
       :event,
       "run.completed",
-      %{outcome: "waiting", awaiting: awaiting, checkpoint: checkpoint},
+      %{
+        outcome: "waiting",
+        awaiting: awaiting,
+        checkpoint: checkpoint,
+        comment: nonempty_comment(Process.get(:handoff_comment) || result.assistant_text),
+        workflow: state.agent[:workflow] || false
+      },
       Process.get(:chain_head)
     )
 
@@ -252,16 +394,20 @@ defmodule Omunculus.Runtime.Run do
   # --- tool execution through the core -------------------------------------------
 
   defp execute_tool(state, "delegate", args, context, active) do
+    Process.put(:handoff_comment, args["comment"])
     if "delegate" in active, do: delegate(state, args, context), else: {:error, :denied, context}
   end
 
   defp execute_tool(state, "request_work", args, context, active) do
+    Process.put(:handoff_comment, args["comment"])
+
     if "request_work" in active,
       do: request_work(state, args, context),
       else: {:error, :denied, context}
   end
 
   defp execute_tool(state, "request_permission", args, context, _active) do
+    Process.put(:handoff_comment, args["comment"])
     request_permission(state, args, context)
   end
 
@@ -732,8 +878,20 @@ defmodule Omunculus.Runtime.Run do
         state[:workspace_id] ||
         state.activation.workspace_id
 
+    payload =
+      if type == "run.completed" and state.agent[:workflow],
+        do: Map.put_new(payload, :comment, nonempty_comment(Process.get(:last_model_comment))),
+        else: payload
+
     env =
       Envelope.new(kind, type,
+        schema_version:
+          if(
+            state.agent[:workflow] && !(state[:arbitration] || state[:cross_lineage_arbitration]) &&
+              type in ["run.started", "run.completed"],
+            do: "2",
+            else: "1"
+          ),
         correlation_id: state.correlation_id,
         causation_id: causation_id || Process.get(:chain_head),
         idempotency_key: Keyword.get(opts, :idempotency_key),

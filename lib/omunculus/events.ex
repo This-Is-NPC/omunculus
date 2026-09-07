@@ -20,6 +20,51 @@ defmodule Omunculus.Events do
         }
 
   @catalog %{
+    "task.retry_requested" => %{
+      kind: :event,
+      versions: ["1"],
+      required: ["comment", "checkpoint"],
+      emitted_by: ["Runtime"],
+      interceptable: false,
+      injectable: false,
+      doc: "Durable retry scheduling, replayed if the executor stops before Run activation."
+    },
+    "task.break" => %{
+      kind: :event,
+      versions: ["1"],
+      required: ["comment", "target", "reviewer"],
+      emitted_by: ["Runtime"],
+      interceptable: false,
+      injectable: false,
+      doc: "Work exhausted its attempts or explicitly paused; review above or by a human."
+    },
+    "task.break.resolved" => %{
+      kind: :event,
+      versions: ["1"],
+      required: ["break_id", "comment"],
+      emitted_by: ["Runtime"],
+      interceptable: false,
+      injectable: false,
+      doc: "A responsible resolved a break."
+    },
+    "task.report_handled" => %{
+      kind: :event,
+      versions: ["1"],
+      required: ["report_id"],
+      emitted_by: ["Runtime"],
+      interceptable: false,
+      injectable: false,
+      doc: "Durable cursor for a completion report."
+    },
+    "task.reopened" => %{
+      kind: :event,
+      versions: ["1"],
+      required: ["comment"],
+      emitted_by: ["Runtime"],
+      interceptable: false,
+      injectable: false,
+      doc: "A responsible authorizes another attempt of previously reported work."
+    },
     "task.requested" => %{
       kind: :command,
       versions: ["1"],
@@ -56,7 +101,7 @@ defmodule Omunculus.Events do
     },
     "task.completed" => %{
       kind: :event,
-      versions: ["1"],
+      versions: ["1", "2"],
       required: ["result", "depth"],
       emitted_by: ["Run"],
       interceptable: true,
@@ -102,7 +147,7 @@ defmodule Omunculus.Events do
     },
     "run.started" => %{
       kind: :event,
-      versions: ["1"],
+      versions: ["1", "2"],
       required: ["attempt", "depth", "agent_id", "agent_kind", "reason", "tools"],
       emitted_by: ["Run"],
       interceptable: false,
@@ -112,7 +157,7 @@ defmodule Omunculus.Events do
     },
     "run.completed" => %{
       kind: :event,
-      versions: ["1"],
+      versions: ["1", "2"],
       required: ["outcome"],
       emitted_by: ["Run"],
       interceptable: false,
@@ -316,12 +361,40 @@ defmodule Omunculus.Events do
           version not in spec.versions ->
             {:error, {:unsupported_schema_version, type, version}}
 
+          version == "2" and type in ["run.started", "run.completed", "task.completed"] ->
+            validate_workflow(type, payload, spec.required)
+
           true ->
             case Enum.reject(spec.required, &Map.has_key?(payload, &1)) do
               [] -> :ok
               missing -> {:error, {:missing_payload_fields, type, missing}}
             end
         end
+    end
+  end
+
+  defp validate_workflow(type, payload, required) do
+    missing = Enum.reject(required, &Map.has_key?(payload, &1))
+
+    valid =
+      case type do
+        "run.started" ->
+          payload["workflow"] == true and is_integer(payload["max_retries"]) and
+            payload["max_retries"] >= 0
+
+        "run.completed" ->
+          is_binary(payload["comment"]) and String.trim(payload["comment"]) != "" and
+            is_map(payload["checkpoint"])
+
+        "task.completed" ->
+          payload["completed"] == true and is_binary(payload["comment"]) and
+            String.trim(payload["comment"]) != ""
+      end
+
+    cond do
+      missing != [] -> {:error, {:missing_payload_fields, type, missing}}
+      not valid -> {:error, {:invalid_workflow_payload, type}}
+      true -> :ok
     end
   end
 

@@ -1,5 +1,10 @@
 # Validação do protocolo de revisão pelo pai
 
+Registro histórico anterior ao contrato de `completed/comment`, retries e break.
+O script atual foi migrado para esse contrato; veja
+[relato, retries e break](../to-be/run-report-and-break.md). As revisões v1–v3
+deste relatório são revisões de prompt, não versões do catálogo de eventos.
+
 Data: 2026-09-07. Objetivo: oferecer aos agentes instruções para delegar,
 relatar evidências, avaliar e pedir correção, preservando sua decisão
 semântica. Não foi adicionado gate de qualidade ao runtime.

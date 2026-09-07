@@ -46,7 +46,8 @@ defmodule Omunculus.CLI.Inbox do
          {:ok, req} <- find_request(core0, request_id) do
       GenServer.stop(core0)
 
-      with {:ok, envelope} <- build_reply_envelope(mode, req, args, flags, env) do
+      with :ok <- validate_reply_target(mode, req),
+           {:ok, envelope} <- build_reply_envelope(mode, req, args, flags, env) do
         deliver_reply(db, flags, env, envelope, mode)
       end
     else
@@ -133,13 +134,42 @@ defmodule Omunculus.CLI.Inbox do
     deny? = flags["deny"] == true
     text? = is_binary(args[:message]) and String.trim(args[:message]) != ""
 
-    case {grant?, deny?, text?} do
-      {true, false, false} -> {:ok, :grant}
-      {false, true, false} -> {:ok, :deny}
-      {false, false, true} -> {:ok, {:comment, String.trim(args[:message])}}
-      {false, false, false} -> {:error, :inbox_reply_mode_required}
-      _ -> {:error, :inbox_reply_mode_conflict}
+    if flags["completed"] == true do
+      if text? and not grant? and not deny?,
+        do: {:ok, {:completion, String.trim(args[:message])}},
+        else: {:error, :completion_comment_required}
+    else
+      case {grant?, deny?, text?} do
+        {true, false, false} -> {:ok, :grant}
+        {false, true, false} -> {:ok, :deny}
+        {false, false, true} -> {:ok, {:comment, String.trim(args[:message])}}
+        {false, false, false} -> {:error, :inbox_reply_mode_required}
+        _ -> {:error, :inbox_reply_mode_conflict}
+      end
     end
+  end
+
+  defp validate_reply_target({:completion, _}, %{payload: %{"break_id" => id}})
+       when is_binary(id),
+       do: :ok
+
+  defp validate_reply_target({:completion, _}, _),
+    do: {:error, :completion_requires_break_request}
+
+  defp validate_reply_target(mode, %{type: type})
+       when mode in [:grant, :deny] and type != "permission.requested",
+       do: {:error, :not_a_permission_request}
+
+  defp validate_reply_target(_, _), do: :ok
+
+  defp build_reply_envelope({:completion, comment}, req, args, flags, env) do
+    build_reply_envelope(
+      {:comment, Jason.encode!(%{completed: true, comment: comment})},
+      req,
+      args,
+      flags,
+      env
+    )
   end
 
   defp build_reply_envelope(:grant, req, _args, flags, env) do
@@ -186,8 +216,13 @@ defmodule Omunculus.CLI.Inbox do
        workspace_id: req.workspace_id,
        correlation_id: req.correlation_id,
        work_item_id: req.work_item_id,
-       idempotency_key: "inbox-comment:#{req.payload["request_id"]}",
-       payload: %{body: body, kind: "response"}
+       idempotency_key: "inbox-comment:#{req.payload["request_id"] || req.event_id}",
+       causation_id: req.event_id,
+       payload: %{
+         body: body,
+         kind: "response",
+         request_id: req.payload["request_id"] || req.event_id
+       }
      )}
   end
 
@@ -239,6 +274,31 @@ defmodule Omunculus.CLI.Inbox do
   defp maybe_append_policy_changed(_core, _envelope, _mode), do: :ok
 
   defp find_request(core, request_id) do
+    comments = EventCore.stream(core, 0, type: "task.commented")
+
+    comment =
+      Enum.find(
+        comments,
+        &(&1.payload["kind"] == "request" and
+            (&1.event_id == request_id or &1.payload["request_id"] == request_id))
+      )
+
+    if comment do
+      id = comment.payload["request_id"] || comment.event_id
+
+      if Enum.any?(
+           comments,
+           &(&1.payload["kind"] == "response" and
+               (&1.payload["request_id"] == id or &1.causation_id == comment.event_id))
+         ),
+         do: {:error, {:comment_request_closed, request_id}},
+         else: {:ok, comment}
+    else
+      find_permission_request(core, request_id)
+    end
+  end
+
+  defp find_permission_request(core, request_id) do
     case Enum.find(RuntimePermission.open_permission_requests(core), fn env ->
            env.payload["request_id"] == request_id
          end) do

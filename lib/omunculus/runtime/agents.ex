@@ -22,20 +22,37 @@ defmodule Omunculus.Runtime.Agents do
 
     if opts[:provider] == "chat" or is_map(opts[:chat]) do
       config = ctx[:config] || Config.empty()
+      config = %{config | agents: Map.merge(defaults(), config.agents)}
       name = Scripts.pick_agent(ctx, config)
-      entry = Map.get(config.agents, name, %{})
+
+      entry =
+        Map.merge(default_agent(name, ctx), Map.get(config.agents, name, %{}), fn _,
+                                                                                  default,
+                                                                                  value ->
+          if is_nil(value), do: default, else: value
+        end)
+
+      kind = entry[:kind] || default_agent(name, ctx).kind
       chat = resolve_chat(config, entry, opts)
       profile = Map.get(config.presets, ctx[:profile], %{})
 
       %{
         agent_id: name,
-        kind: if(ctx.depth < ctx.max_depth, do: "concierge", else: "worker"),
+        kind: kind,
+        workflow: true,
+        max_retries:
+          entry[:max_retries] || profile[:max_retries] || config.defaults[:max_retries] || 2,
         model: chat.model,
         chat: chat,
         tools:
           if(ctx.depth < ctx.max_depth, do: ["delegate"], else: Omunculus.Tools.default_names()),
         system_prompt:
-          Omunculus.Runtime.Prompt.compose(ctx, name, entry[:prompt], profile[:instructions]),
+          Omunculus.Runtime.Prompt.compose(
+            Map.put(ctx, :kind, kind),
+            name,
+            entry[:prompt],
+            profile[:instructions]
+          ),
         max_turns:
           entry[:max_turns] || parse_turns(opts[:flags]["max_turns"]) || opts[:max_turns] ||
             config.defaults.max_turns,
@@ -44,6 +61,37 @@ defmodule Omunculus.Runtime.Agents do
     else
       Scripts.resolve(ctx, opts)
     end
+  end
+
+  def defaults do
+    %{
+      "concierge" => %{
+        kind: "concierge",
+        prompt: "Route work to the appropriate workspace. Review reports and intervene on break."
+      },
+      "repo-concierge" => %{
+        kind: "concierge",
+        prompt:
+          "Coordinate repository work. Delegate execution and evaluate the returned evidence."
+      },
+      "worker" => %{
+        kind: "worker",
+        prompt: "Execute the assigned work and report evidence, limitations and remaining work."
+      },
+      "supervisor" => %{
+        kind: "supervisor",
+        prompt:
+          "Evaluate escalated work. Recognize completed effects, direct correction or escalate."
+      }
+    }
+  end
+
+  defp default_agent(name, ctx) do
+    Map.get(
+      defaults(),
+      name,
+      defaults()[if(ctx.depth < ctx.max_depth, do: "concierge", else: "worker")]
+    )
   end
 
   defp parse_turns(nil), do: nil

@@ -187,3 +187,25 @@ Não introduzir um segundo barramento, um registro de tipos em arquivo
 separado do código, interceptor que reescreva envelope, automação com poder de
 veto, ou ingestão de eventos vindos de fora. Um runtime residente que reaja a
 `emit` em tempo real fica para depois desta validação.
+
+
+## Controle de relato e break (implementado)
+
+`run.started`, `run.completed` e `task.completed` aceitam v1 e v2. V2 pina
+workflow/max_retries no início e exige comentário/checkpoint no encerramento;
+a conclusão do trabalho registra `completed=true` e `comment`. `reported`
+é um encerramento de Run, não aprovação automática do Work Item.
+
+Eventos internos v1 novos, emitidos pelo Runtime e não injetáveis:
+
+| Evento | Payload obrigatório | Papel |
+| --- | --- | --- |
+| `task.retry_requested` | comment, checkpoint | Agendamento durável da próxima tentativa |
+| `task.reopened` | comment | Revisão explícita de conclusão anterior |
+| `task.break` | target, reviewer, comment | Encaminhamento ao responsável; reviewer nulo indica humano |
+| `task.break.resolved` | break_id, comment | Resolução do pedido específico |
+| `task.report_handled` | report_id | Cursor durável de processamento do relato |
+
+O humano responde por `task.commented` com referência ao pedido; a inbox
+oferece `--completed` para reconhecer trabalho concluído. Regras e exemplos
+em [relato, retries e break](run-report-and-break.md).

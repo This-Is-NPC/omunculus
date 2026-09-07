@@ -351,8 +351,24 @@ defmodule Omunculus.EventCore.Projector do
       [outcome, outcome, env.occurred_at, env.sequence, env.run_id, env.sequence]
     )
 
+    if is_binary(p["comment"]) and p["comment"] != "" do
+      apply_event(conn, %{
+        env
+        | type: "task.commented",
+          payload: %{"kind" => "run", "body" => p["comment"]}
+      })
+    end
+
+    p =
+      if is_map(p["review"]), do: Map.put(p, "checkpoint", p["review"]["restore"] || %{}), else: p
+
+    p =
+      if outcome == "reported",
+        do: Map.put(p, "awaiting", p["checkpoint"]["awaiting"] || []),
+        else: p
+
     case outcome do
-      "waiting" ->
+      status when status in ["waiting", "reported"] ->
         Store.query(
           conn,
           "UPDATE WORK_ITEMS SET status = 'waiting', awaiting = ?, checkpoint = ?, version = version + 1, updated_at = ?, last_sequence = ? WHERE work_item_id = ? AND last_sequence < ?",
@@ -376,6 +392,24 @@ defmodule Omunculus.EventCore.Projector do
       _ ->
         :ok
     end
+  end
+
+  defp apply_event(conn, %{type: "task.break"} = env) do
+    transition_work_item(
+      conn,
+      env.work_item_id,
+      ["running", "failed", "requested"],
+      "waiting",
+      env
+    )
+  end
+
+  defp apply_event(conn, %{type: "task.reopened"} = env) do
+    Store.query(
+      conn,
+      "UPDATE WORK_ITEMS SET status = 'waiting', result = NULL, version = version + 1, updated_at = ?, last_sequence = ? WHERE work_item_id = ? AND last_sequence < ?",
+      [env.occurred_at, env.sequence, env.work_item_id, env.sequence]
+    )
   end
 
   defp apply_event(conn, %{type: "run.failed"} = env) do

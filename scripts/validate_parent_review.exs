@@ -1,4 +1,4 @@
-# Mixed-provider diagnostic: the first child report is deliberately incomplete.
+# Protocol v2 diagnostic: the first child requests break with an incomplete report.
 # All other responses come from the selected real provider. No repository writes.
 # Run: mise exec -- mix run scripts/validate_parent_review.exs presets/local.toml
 alias Omunculus.{Config, Dotenv, EventCore, Runtime}
@@ -37,7 +37,12 @@ resolver = fn ctx ->
     chat =
       Omunculus.Chat.Fake.new([
         Omunculus.Chat.Fake.text(
-          "Incomplete: I did not call counter. No measured result or evidence is available."
+          Jason.encode!(%{
+            completed: false,
+            break: true,
+            comment:
+              "Incomplete: I did not call counter. No measured result or evidence is available."
+          })
         )
       ])
       |> Map.put(:model, "injected-incomplete-report")
@@ -80,8 +85,8 @@ root_requests = Enum.filter(delegations, &(depths[&1.run_id] == 0))
 report =
   Enum.find(
     events,
-    &(&1.type == "task.completed" and
-        &1.payload["result"] ==
+    &(&1.type == "run.completed" and
+        get_in(&1.payload, ["report", "comment"]) ==
           "Incomplete: I did not call counter. No measured result or evidence is available.")
   )
 
@@ -90,7 +95,13 @@ accepted =
     Enum.any?(starts, &(&1.work_item_id == request.payload["child_work_item_id"]))
   end)
 
-corrections = Enum.filter(accepted, &(report != nil and &1.sequence > report.sequence))
+corrections =
+  Enum.filter(events, fn event ->
+    cause = Enum.find(events, &(&1.event_id == event.causation_id))
+
+    event.type == "task.retry_requested" and report != nil and event.sequence > report.sequence and
+      cause != nil and cause.type == "run.completed" and depths[cause.run_id] == 0
+  end)
 
 sequences =
   events
@@ -104,6 +115,12 @@ sequences =
   |> Enum.sort()
 
 row = %{
+  protocol: 2,
+  retries: Enum.count(starts, &(&1.payload["reason"] == "retry")),
+  break_reviews: Enum.count(starts, &(&1.payload["reason"] == "break")),
+  breaks: Enum.count(events, &(&1.type == "task.break")),
+  human_requests:
+    Enum.count(events, &(&1.type == "task.commented" and &1.payload["kind"] == "request")),
   preset: Path.basename(preset),
   model: config.chat.model,
   incomplete_report_injected: Agent.get(injected, & &1),

@@ -227,3 +227,19 @@ está em [comparação de providers](../spike/provider-comparison.md).
   agentes, ou permissão que não esteja no log.
 - Um cenário real que falhe por modelo (deriva de instrução, resultado
   vazio) vira achado documentado, não teste quebrado.
+
+
+## Correção do contrato de execução: relatos, retries e break
+
+A auditoria posterior às fases 0–7 encontrou o break mencionado no modelo,
+mas sem implementação, além de ausência de max_retries e contexto por tipo
+de Run. Essa lacuna foi corrigida pelo contrato de
+[relato, retries e break](run-report-and-break.md), com configuração de
+agentes padrão e prompts por depth/kind/motivo. Os testes anteriores não
+certificavam esse contrato; o novo conjunto testa explicitamente o ciclo e
+sua recuperação. Qualidade das decisões dos providers continua exigindo
+validação por cenário.
+
+Verificação: **296 testes passaram**. O smoke cloud confirmou break e retry
+a partir do comentário do pai, mas terminou sem conclusão no orçamento de
+180 segundos. Evidências e limites em [validação do break](../spike/break-validation.md).

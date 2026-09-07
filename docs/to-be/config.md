@@ -179,3 +179,40 @@ ou papel sem `[agents.x]`, time referenciado por workspace sem
 `[teams.x]`, interceptor com tipo não interceptável ou módulo ausente,
 automação sem `run`, `may_request` apontando para perfil ou workspace
 inexistente.
+
+
+## Agentes padrão e prompts contextuais
+
+O resolver de chat oferece `concierge`, `repo-concierge`, `worker` e
+`supervisor` como configurações padrão. `[agents.<nome>]` personaliza prompt,
+kind, modelo, max_turns e max_retries. Alterar somente o modelo conserva o
+prompt padrão. A identidade do agente não determina parent/depth: estes
+continuam pertencendo ao node runtime.
+
+```toml
+[defaults]
+max_turns = 32
+max_retries = 2
+
+[agents.worker]
+kind = "worker"
+prompt = "Execute a tarefa e relate evidências e pendências no comentário."
+max_retries = 1
+
+[prompts.depth]
+"0" = "Você coordena a sessão; avalie as entregas dos workspaces."
+
+[prompts.kind]
+worker = "Execute dentro das ferramentas permitidas e preserve efeitos confirmados."
+
+[prompts.reason]
+retry = "Continue pelo comentário anterior; não repita o trabalho confirmado."
+break = "Avalie o alvo do break e registre sua decisão e justificativa."
+```
+
+As camadas configuráveis substituem o texto padrão daquela posição, kind ou
+motivo. O protocolo obrigatório `completed/comment` é composto pelo harness.
+A cada Run, o system prompt é recomposto; o restante do checkpoint permanece.
+Perfil fornece instruções da tarefa, contextualizadas para executor ou pai.
+`max_retries` aceita inteiro >= 0, com precedência agente > perfil > defaults.
+Veja [relato, retries e break](run-report-and-break.md).

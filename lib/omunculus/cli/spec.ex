@@ -485,6 +485,10 @@ defmodule Omunculus.CLI.Spec do
             help: "Session SQLite file (default: ~/.omunculus/session.sqlite3)"
           ),
           flag("config", long: "config", value: "file", help: "Config file for permanent grants"),
+          flag("completed",
+            long: "completed",
+            help: "Confirm broken work is complete; include a comment"
+          ),
           flag("grant", long: "grant", help: "Grant the permission request"),
           flag("deny", long: "deny", help: "Deny the permission request"),
           flag("permanent", long: "permanent", help: "Permanent grant (updates workspace policy)"),

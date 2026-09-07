@@ -15,6 +15,55 @@ defmodule Omunculus.CLI.InboxTest do
     %{db: db}
   end
 
+  test "inbox reply confirms a break with a structured comment", %{db: db} do
+    {:ok, core} = EventCore.start_link(path: db)
+
+    request =
+      EventCore.append!(
+        core,
+        Envelope.command("task.commented",
+          work_item_id: "broken",
+          payload: %{
+            kind: "request",
+            body: "Review existing work",
+            request_id: "break-test",
+            break_id: "break-test"
+          }
+        )
+      )
+
+    GenServer.stop(core)
+
+    assert Omunculus.CLI.dispatch(
+             [
+               "inbox",
+               "reply",
+               "break-test",
+               "Existing work verified",
+               "--completed",
+               "--db",
+               db
+             ],
+             %{}
+           ) == 0
+
+    {:ok, core} = EventCore.start_link(path: db)
+
+    reply =
+      EventCore.stream(core, 0, type: "task.commented")
+      |> Enum.find(&(&1.payload["kind"] == "response"))
+
+    assert reply.causation_id == request.event_id
+    assert reply.payload["request_id"] == "break-test"
+
+    assert Jason.decode!(reply.payload["body"]) == %{
+             "completed" => true,
+             "comment" => "Existing work verified"
+           }
+
+    GenServer.stop(core)
+  end
+
   test "inbox lists an open permission.requested", %{db: db} do
     seed_open_request(db, "req-edit", "patch file")
 

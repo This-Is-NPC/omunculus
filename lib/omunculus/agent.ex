@@ -52,7 +52,9 @@ defmodule Omunculus.Agent do
       started_at: started_at,
       tool_calls: 0,
       nudge: nudge,
-      counter_target: counter_target(tools, instruction)
+      workflow: Keyword.get(opts, :workflow, false),
+      counter_target:
+        if(Keyword.get(opts, :workflow, false), do: nil, else: counter_target(tools, instruction))
     })
   end
 
@@ -66,7 +68,7 @@ defmodule Omunculus.Agent do
       duration_ms: elapsed(state.started_at)
     })
 
-    {:ok, result(state)}
+    {:ok, Map.put(result(state), :limit_reached, true)}
   end
 
   defp loop(state) do
@@ -170,8 +172,15 @@ defmodule Omunculus.Agent do
 
         nudge =
           cond do
-            continue_counter?(next) -> counter_nudge(next)
-            true -> custom_nudge(next)
+            next.workflow and
+                not match?({:ok, _}, Omunculus.Runtime.Report.parse(next.assistant_text)) ->
+              "Invalid completion report. Return JSON with completed:boolean and a nonempty comment summarizing work and next steps. Optional break:boolean. Do not merely describe a tool call."
+
+            continue_counter?(next) ->
+              counter_nudge(next)
+
+            true ->
+              custom_nudge(next)
           end
 
         if nudge do
@@ -234,7 +243,7 @@ defmodule Omunculus.Agent do
         )
 
         {body, context, outcome} =
-          case state.tool_executor.(name, args, context, state.tools) do
+          case execute_with_comment(state, name, args, context) do
             {:ok, output, context} -> {output, context, :completed}
             {:error, reason, context} -> {format_tool_error(reason), context, {:error, reason}}
             {:wait, reason, context} -> {reason, context, :waiting}
@@ -289,6 +298,15 @@ defmodule Omunculus.Agent do
       {:waiting, messages, context}
     else
       {messages, context}
+    end
+  end
+
+  defp execute_with_comment(state, name, args, context) do
+    if state.workflow and name in ["delegate", "request_work", "request_permission"] and
+         not (is_binary(args["comment"]) and String.trim(args["comment"]) != "") do
+      {:error, :handoff_comment_required, context}
+    else
+      state.tool_executor.(name, args, context, state.tools)
     end
   end
 
@@ -453,11 +471,11 @@ defmodule Omunculus.Agent do
     Keyword.get(opts, :request_permission, false) == true
   end
 
-  defp schemas_for(tools, true) do
+  def schemas_for(tools, true) do
     Tools.schemas(tools) ++ [request_permission_schema()]
   end
 
-  defp schemas_for(tools, _), do: Tools.schemas(tools)
+  def schemas_for(tools, _), do: Tools.schemas(tools)
 
   defp request_permission_schema do
     %{

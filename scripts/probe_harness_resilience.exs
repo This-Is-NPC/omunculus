@@ -1,4 +1,5 @@
-# Offline fault injection through the production Runtime and agent resolver.
+# Historical v1 protocol baseline (explicit workflow:false); new protocol coverage is in workflow_test.exs.
+# Offline fault injection through the Runtime and agent resolver.
 # Only the provider responses are replaced; no HTTP requests are made.
 # Run: mise exec -- mix run scripts/probe_harness_resilience.exs
 defmodule HarnessResilienceProbe do
@@ -35,7 +36,7 @@ defmodule HarnessResilienceProbe do
     resolver = fn ctx ->
       turns = turns(ctx, mode, owner)
       chat = Fake.new(turns) |> Map.put(:model, "controlled-boundary")
-      Agents.resolve(ctx, %{chat: chat})
+      Agents.resolve(ctx, %{chat: chat}) |> Map.put(:workflow, false)
     end
 
     {:ok, runtime} =

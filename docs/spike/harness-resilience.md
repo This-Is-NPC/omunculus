@@ -122,6 +122,9 @@ apenas o provider antes disso pode ocultar as lacunas, sem corrigi-las.
 
 ## Reprodução
 
+O probe preserva explicitamente `workflow: false` para reproduzir a baseline
+v1. O contrato novo é validado por `workflow_test.exs`, não por este probe.
+
 ```sh
 mise exec -- mix run scripts/probe_harness_resilience.exs
 ```

@@ -36,12 +36,13 @@ defmodule Omunculus.Config do
 
   def empty do
     %{
-      defaults: %{preset: @default_preset, max_turns: @default_max_turns},
+      defaults: %{preset: @default_preset, max_turns: @default_max_turns, max_retries: 2},
       chat: %{api: "openai-completions", auth: nil, base_url: nil, model: nil, api_key: nil},
       output: %{timestamp_format: @default_timestamp_format},
       interceptors: [],
       automations: [],
       agents: %{},
+      prompts: %{},
       teams: %{},
       workspaces: %{},
       policy: %{},
@@ -97,7 +98,8 @@ defmodule Omunculus.Config do
   with resolved modules, or the first error.
   """
   def check(config) do
-    with :ok <- check_references(config),
+    with :ok <- check_workflow_config(config),
+         :ok <- check_references(config),
          {:ok, interceptors} <- check_interceptors(config.interceptors),
          {:ok, automations} <- check_automations(config.automations, config),
          {:ok, policy} <- check_policy_fit(config) do
@@ -105,11 +107,34 @@ defmodule Omunculus.Config do
     end
   end
 
+  defp check_workflow_config(config) do
+    entries =
+      [{"defaults", config.defaults}] ++
+        Enum.map(config.agents, fn {k, v} -> {"agents.#{k}", v} end) ++
+        Enum.map(config.presets, fn {k, v} -> {"profiles.#{k}", v} end)
+
+    with :ok <-
+           each(entries, fn {where, entry} ->
+             value = entry[:max_retries]
+
+             if is_nil(value) or (is_integer(value) and value >= 0),
+               do: :ok,
+               else: {:error, {:invalid_max_retries, where, value}}
+           end) do
+      each(config[:prompts] || %{}, fn {layer, entries} ->
+        if layer in ["depth", "kind", "reason"] and is_map(entries) and
+             Enum.all?(entries, fn {_, text} -> is_binary(text) end),
+           do: :ok,
+           else: {:error, {:invalid_prompt_layer, layer}}
+      end)
+    end
+  end
+
   # Teams reference agents, workspaces reference teams, roles reference
   # agents; every reference must resolve. Policy bands are only shape-checked
   # here: normalisation against the tool catalog is the next step.
   defp check_references(config) do
-    agents = Map.keys(config.agents)
+    agents = Enum.uniq(Map.keys(config.agents) ++ Map.keys(Omunculus.Runtime.Agents.defaults()))
     teams = Map.keys(config.teams)
 
     with :ok <- each(config.teams, fn {name, team} -> check_team(name, team, agents) end),
@@ -369,7 +394,8 @@ defmodule Omunculus.Config do
     %{
       defaults: %{
         preset: defaults["preset"],
-        max_turns: parse_int(defaults["max_turns"])
+        max_turns: parse_int(defaults["max_turns"]),
+        max_retries: defaults["max_retries"]
       },
       chat: %{
         api: chat["api"],
@@ -400,11 +426,14 @@ defmodule Omunculus.Config do
             may_request: item["may_request"]
           }
         end),
+      prompts: Map.get(map, "prompts", %{}),
       agents:
         Map.new(Map.get(map, "agents", %{}), fn {name, body} ->
           {name,
            %{
              prompt: body["prompt"],
+             kind: body["kind"],
+             max_retries: body["max_retries"],
              model: body["model"],
              max_turns: parse_int(body["max_turns"])
            }}
@@ -436,6 +465,7 @@ defmodule Omunculus.Config do
            %{
              tools: body["tools"],
              instructions: body["instructions"],
+             max_retries: body["max_retries"],
              max_turns: parse_int(body["max_turns"]),
              policy: policy_of(body)
            }}
@@ -465,6 +495,7 @@ defmodule Omunculus.Config do
       interceptors: base.interceptors ++ Map.get(overlay, :interceptors, []),
       automations: base.automations ++ Map.get(overlay, :automations, []),
       agents: Map.merge(base.agents, Map.get(overlay, :agents, %{})),
+      prompts: Map.merge(base[:prompts] || %{}, Map.get(overlay, :prompts, %{})),
       teams: Map.merge(base.teams, Map.get(overlay, :teams, %{})),
       workspaces: Map.merge(base.workspaces, Map.get(overlay, :workspaces, %{})),
       policy: Map.merge(base.policy, Map.get(overlay, :policy, %{})),
