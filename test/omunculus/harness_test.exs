@@ -59,9 +59,13 @@ defmodule Omunculus.HarnessTest do
     refute Map.has_key?(fixture.config.presets, "custom")
   end
 
-  test "tmp_fixture with overlay appends lane interceptors" do
+  test "tmp_fixture with overlay layers lane interceptors from a separate file" do
     fixture = Harness.tmp_fixture("medium.toml", "lane.toml")
     on_exit(fn -> File.rm_rf!(fixture.dir) end)
+
+    assert fixture.overlay_path == Path.join(fixture.dir, "lane.toml")
+    assert File.exists?(fixture.overlay_path)
+    refute String.contains?(File.read!(fixture.path), "[interceptors")
 
     assert fixture.config.interceptors != []
 

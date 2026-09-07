@@ -72,6 +72,33 @@ defmodule Omunculus.ConfigTest do
     File.rm!(path)
   end
 
+  test "config_file overlays project omunculus.toml" do
+    dir = Path.join(System.tmp_dir!(), "omunculus-layer-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+
+    base = Path.join(dir, "omunculus.toml")
+    overlay = Path.join(dir, "overlay.toml")
+
+    File.write!(base, """
+    [profiles.count]
+    mode = "deny"
+    granted = ["counter"]
+    """)
+
+    File.write!(overlay, """
+    [interceptors.audit]
+    events = ["task.requested"]
+    module = "Omunculus.Interceptors.Audit"
+    """)
+
+    assert {:ok, config} = Config.load(cwd: dir, config_file: overlay, env: %{})
+
+    assert %{"count" => %{policy: %{"granted" => ["counter"]}}} = config.presets
+    assert Enum.any?(config.interceptors, &(&1.name == "audit"))
+
+    File.rm_rf!(dir)
+  end
+
   test "rejects a missing environment reference without exposing config values" do
     path =
       Path.join(

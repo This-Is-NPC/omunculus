@@ -34,7 +34,7 @@ defmodule Omunculus.PolicyRuntimeTest do
         agents: Keyword.get(opts, :agents, SpikeAgents.resolver()),
         config: [
           cwd: tmp.dir,
-          config_file: tmp.path,
+          config_file: tmp.overlay_path || tmp.path,
           env: %{},
           profile: Keyword.get(opts, :profile, "count")
         ],

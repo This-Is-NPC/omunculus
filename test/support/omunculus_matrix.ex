@@ -182,7 +182,7 @@ defmodule Omunculus.Matrix do
 
     config = [
       cwd: tmp.dir,
-      config_file: tmp.path,
+      config_file: tmp.overlay_path || tmp.path,
       env: %{},
       profile: profile_for(task)
     ]

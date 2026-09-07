@@ -11,10 +11,19 @@ defmodule Omunculus.Config do
     explicit = Keyword.get(opts, :config_file)
     env = Keyword.get(opts, :env, %{})
 
+    project_path = Path.join(cwd, "omunculus.toml")
+
     sources =
       case explicit do
-        path when is_binary(path) and path != "" -> [path]
-        _ -> [global_path(), Path.join(cwd, "omunculus.toml")]
+        path when is_binary(path) and path != "" ->
+          if Path.expand(path, cwd) == Path.expand(project_path, cwd) do
+            [project_path]
+          else
+            [project_path, path]
+          end
+
+        _ ->
+          [global_path(), project_path]
       end
 
     Enum.reduce_while(sources, {:ok, empty()}, fn path, {:ok, acc} ->

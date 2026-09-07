@@ -37,17 +37,19 @@ defmodule Omunculus.Harness do
     dest = Path.join(dir, "omunculus.toml")
     :ok = File.cp!(src, dest)
 
-    if overlay do
-      overlay_src = Path.join(fixtures_dir(), overlay)
-      # Phase 0/1: appending overlay TOML onto the base copy is acceptable.
-      # Phase 2: compose via Config layering — base as the project's omunculus.toml
-      # and overlay via --config (config_file), not TOML concatenation.
-      :ok = File.write!(dest, "\n" <> File.read!(overlay_src), [:append])
-    end
+    overlay_path =
+      if overlay do
+        overlay_src = Path.join(fixtures_dir(), overlay)
+        overlay_dest = Path.join(dir, Path.basename(overlay))
+        :ok = File.cp!(overlay_src, overlay_dest)
+        overlay_dest
+      end
 
-    {:ok, config} = Config.load(cwd: dir, config_file: dest, env: %{})
+    config_file = overlay_path || dest
 
-    %{dir: dir, path: dest, config: config}
+    {:ok, config} = Config.load(cwd: dir, config_file: config_file, env: %{})
+
+    %{dir: dir, path: dest, config: config, overlay_path: overlay_path}
   end
 
   defp find_match(core, fun) do
