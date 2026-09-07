@@ -116,7 +116,8 @@ reescrito para descrever o que existe.
   depth; `SpikeAgents` morre.
 - `[teams]`: `delegate` ganha `team` no depth 0 e `agent` no depth 1;
   `run.started` pina `team` e `agent_id`; perfil do time entra na tabela.
-- `scope = "node"`: identidade de node por time.
+- O perfil do time **estreita** a linha da tarefa: `Policy.line(perfil
+  da tarefa) ∩ normalize(perfil do time)`, nunca substitui.
 - `TeamGate`: membro fora do time, time fora do workspace.
 - Tool `workspaces` devolvendo times (ainda com um workspace só).
 
@@ -129,8 +130,10 @@ Testes: `medium-teams.toml` com e sem lane; roteamento por tipo de tarefa;
 
 - Sessão padrão por usuário em `~/.omunculus/session.sqlite3`;
   `session.created`, `workspace.attached`, `workspace.detached`.
-- Nodes de depth 0 e 1 com identidade derivada e reutilizados entre Runs;
-  `session_id` e `workspace_id` preenchidos em todo envelope.
+- Nodes de depth 0 e 1 com identidade derivada e reutilizados entre Runs,
+  incluindo `scope = "node"` por time (movido da fase 3: não há node
+  derivado antes daqui); `session_id` e `workspace_id` preenchidos em todo
+  envelope.
 - Sandbox `roots` por node; `WorkspaceGate`.
 - CLI: `send`, `workspace attach|detach`, `session create|list`; `run
   <dir>` como atalho de sessão efêmera.
