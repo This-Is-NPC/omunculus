@@ -2,6 +2,9 @@ Status: validado em 2026-09-07 — 28 casos executados; efeitos e hierarquia dis
 
 # Comparação de providers na fase 7
 
+A [análise por cenário, depth e ferramentas](scenario-performance.md) detalha
+as permissões da raiz, o agente efetivo e a rejeição de delegação observada.
+
 A matriz usa as mesmas fixtures simple, medium e complex, as tarefas
 “conte até 10” e “escrever um README”, com e sem lane. Cada caso tem
 filesystem e SQLite próprios em /tmp. Os presets selecionam

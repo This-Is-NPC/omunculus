@@ -1,0 +1,2276 @@
+[
+  {
+    "round": 1,
+    "events": 29,
+    "success": true,
+    "base": "simple",
+    "task": "count",
+    "actual": 10,
+    "preset": "cloud.toml",
+    "lane": false,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0
+    ],
+    "full_depth": true,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": true,
+    "delegations": 0,
+    "continuations": 0,
+    "tool_counts": {
+      "counter": 10
+    },
+    "run_failures": 0,
+    "elapsed_ms": 17265,
+    "provider": "cloud",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "worker@spike"
+        ],
+        "granted": [
+          "counter"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 2,
+        "model_ms": 17227,
+        "tools": {
+          "counter": 10
+        },
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": false,
+    "root_child_started": false,
+    "delivery_rejections": [],
+    "delegation_targets": [],
+    "total_model_calls": 2,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 30,
+    "success": true,
+    "base": "simple",
+    "task": "count",
+    "actual": 10,
+    "preset": "cloud.toml",
+    "lane": true,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0
+    ],
+    "full_depth": true,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": true,
+    "delegations": 0,
+    "continuations": 0,
+    "tool_counts": {
+      "counter": 10
+    },
+    "run_failures": 0,
+    "elapsed_ms": 12287,
+    "provider": "cloud",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "worker@spike"
+        ],
+        "granted": [
+          "counter"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 3,
+        "model_ms": 12245,
+        "tools": {
+          "counter": 10
+        },
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": false,
+    "root_child_started": false,
+    "delivery_rejections": [],
+    "delegation_targets": [],
+    "total_model_calls": 3,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 39,
+    "success": true,
+    "base": "simple",
+    "task": "write",
+    "actual": true,
+    "preset": "cloud.toml",
+    "lane": false,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0
+    ],
+    "full_depth": true,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": true,
+    "delegations": 0,
+    "continuations": 0,
+    "tool_counts": {
+      "find": 1,
+      "grep": 1,
+      "ls": 2,
+      "read": 3,
+      "workspaces": 1,
+      "write": 1
+    },
+    "run_failures": 0,
+    "elapsed_ms": 59703,
+    "provider": "cloud",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "worker@spike"
+        ],
+        "granted": [
+          "counter",
+          "directory",
+          "edit",
+          "find",
+          "grep",
+          "ls",
+          "read",
+          "workspaces",
+          "write"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 8,
+        "model_ms": 54925,
+        "tools": {
+          "find": 1,
+          "grep": 1,
+          "ls": 2,
+          "read": 3,
+          "workspaces": 1,
+          "write": 1
+        },
+        "tool_errors": 3,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": false,
+    "root_child_started": false,
+    "delivery_rejections": [],
+    "delegation_targets": [],
+    "total_model_calls": 8,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 62,
+    "success": true,
+    "base": "simple",
+    "task": "write",
+    "actual": true,
+    "preset": "cloud.toml",
+    "lane": true,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0
+    ],
+    "full_depth": true,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": true,
+    "delegations": 0,
+    "continuations": 0,
+    "tool_counts": {
+      "directory": 1,
+      "edit": 1,
+      "find": 1,
+      "grep": 3,
+      "ls": 4,
+      "read": 5,
+      "workspaces": 1,
+      "write": 1
+    },
+    "run_failures": 0,
+    "elapsed_ms": 88719,
+    "provider": "cloud",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "worker@spike"
+        ],
+        "granted": [
+          "counter",
+          "directory",
+          "edit",
+          "find",
+          "grep",
+          "ls",
+          "read",
+          "workspaces",
+          "write"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 13,
+        "model_ms": 88470,
+        "tools": {
+          "directory": 1,
+          "edit": 1,
+          "find": 1,
+          "grep": 3,
+          "ls": 4,
+          "read": 5,
+          "workspaces": 1,
+          "write": 1
+        },
+        "tool_errors": 4,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": false,
+    "root_child_started": false,
+    "delivery_rejections": [],
+    "delegation_targets": [],
+    "total_model_calls": 13,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 37,
+    "success": true,
+    "base": "medium",
+    "task": "count",
+    "actual": 10,
+    "preset": "cloud.toml",
+    "lane": false,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0,
+      1
+    ],
+    "full_depth": true,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": true,
+    "delegations": 1,
+    "continuations": 1,
+    "tool_counts": {
+      "counter": 10
+    },
+    "run_failures": 0,
+    "elapsed_ms": 12316,
+    "provider": "cloud",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 2,
+        "model_ms": 4916,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "1": {
+        "agents": [
+          "worker"
+        ],
+        "granted": [
+          "counter"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 2,
+        "model_ms": 7145,
+        "tools": {
+          "counter": 10
+        },
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": true,
+    "root_child_started": true,
+    "delivery_rejections": [],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": null,
+        "team": null,
+        "to_depth": 1
+      }
+    ],
+    "total_model_calls": 4,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 37,
+    "success": true,
+    "base": "medium",
+    "task": "count",
+    "actual": 10,
+    "preset": "cloud.toml",
+    "lane": true,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0,
+      1
+    ],
+    "full_depth": true,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": true,
+    "delegations": 1,
+    "continuations": 1,
+    "tool_counts": {
+      "counter": 10
+    },
+    "run_failures": 0,
+    "elapsed_ms": 19803,
+    "provider": "cloud",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 2,
+        "model_ms": 5377,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "1": {
+        "agents": [
+          "worker"
+        ],
+        "granted": [
+          "counter"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 2,
+        "model_ms": 14211,
+        "tools": {
+          "counter": 10
+        },
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": true,
+    "root_child_started": true,
+    "delivery_rejections": [],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": null,
+        "team": null,
+        "to_depth": 1
+      }
+    ],
+    "total_model_calls": 4,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 89,
+    "success": false,
+    "base": "medium",
+    "task": "write",
+    "actual": true,
+    "preset": "cloud.toml",
+    "lane": false,
+    "runtime_idle": false,
+    "replay_equal": true,
+    "depths": [
+      0,
+      1
+    ],
+    "full_depth": true,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": false,
+    "delegations": 1,
+    "continuations": 1,
+    "tool_counts": {
+      "directory": 3,
+      "find": 4,
+      "grep": 6,
+      "ls": 4,
+      "read": 3,
+      "workspaces": 2,
+      "write": 1
+    },
+    "run_failures": 0,
+    "elapsed_ms": 181122,
+    "provider": "cloud",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate",
+          "directory",
+          "workspaces"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 2,
+        "model_ms": 8410,
+        "tools": {
+          "directory": 2,
+          "workspaces": 1
+        },
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "1": {
+        "agents": [
+          "README"
+        ],
+        "granted": [
+          "counter",
+          "directory",
+          "edit",
+          "find",
+          "grep",
+          "ls",
+          "read",
+          "request_work",
+          "workspaces",
+          "write"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 16,
+        "model_ms": 162632,
+        "tools": {
+          "directory": 1,
+          "find": 4,
+          "grep": 6,
+          "ls": 4,
+          "read": 3,
+          "workspaces": 1,
+          "write": 1
+        },
+        "tool_errors": 7,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "timeout",
+    "root_delegated": true,
+    "root_child_started": true,
+    "delivery_rejections": [],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": "README",
+        "team": null,
+        "to_depth": 1
+      }
+    ],
+    "total_model_calls": 18,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 54,
+    "success": true,
+    "base": "medium",
+    "task": "write",
+    "actual": true,
+    "preset": "cloud.toml",
+    "lane": true,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0,
+      1
+    ],
+    "full_depth": true,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": true,
+    "delegations": 1,
+    "continuations": 1,
+    "tool_counts": {
+      "directory": 2,
+      "find": 1,
+      "grep": 2,
+      "ls": 1,
+      "read": 3,
+      "workspaces": 2,
+      "write": 1
+    },
+    "run_failures": 0,
+    "elapsed_ms": 139188,
+    "provider": "cloud",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate",
+          "directory",
+          "workspaces"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 3,
+        "model_ms": 32937,
+        "tools": {
+          "directory": 1,
+          "workspaces": 1
+        },
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "1": {
+        "agents": [
+          "worker"
+        ],
+        "granted": [
+          "counter",
+          "directory",
+          "edit",
+          "find",
+          "grep",
+          "ls",
+          "read",
+          "request_work",
+          "workspaces",
+          "write"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 8,
+        "model_ms": 105947,
+        "tools": {
+          "directory": 1,
+          "find": 1,
+          "grep": 2,
+          "ls": 1,
+          "read": 3,
+          "workspaces": 1,
+          "write": 1
+        },
+        "tool_errors": 3,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": true,
+    "root_child_started": true,
+    "delivery_rejections": [],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": null,
+        "team": null,
+        "to_depth": 1
+      }
+    ],
+    "total_model_calls": 11,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 38,
+    "success": true,
+    "base": "complex",
+    "task": "count",
+    "actual": 10,
+    "preset": "cloud.toml",
+    "lane": false,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0,
+      1
+    ],
+    "full_depth": false,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": false,
+    "delegations": 1,
+    "continuations": 1,
+    "tool_counts": {
+      "counter": 10
+    },
+    "run_failures": 0,
+    "elapsed_ms": 15346,
+    "provider": "cloud",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 2,
+        "model_ms": 5393,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "1": {
+        "agents": [
+          "repo-concierge"
+        ],
+        "granted": [
+          "counter",
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 2,
+        "model_ms": 9713,
+        "tools": {
+          "counter": 10
+        },
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": true,
+    "root_child_started": true,
+    "delivery_rejections": [],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": null,
+        "team": null,
+        "to_depth": 1
+      }
+    ],
+    "total_model_calls": 4,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 47,
+    "success": true,
+    "base": "complex",
+    "task": "count",
+    "actual": 10,
+    "preset": "cloud.toml",
+    "lane": true,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0,
+      1,
+      2
+    ],
+    "full_depth": true,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": true,
+    "delegations": 2,
+    "continuations": 2,
+    "tool_counts": {
+      "counter": 10
+    },
+    "run_failures": 0,
+    "elapsed_ms": 39490,
+    "provider": "cloud",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 2,
+        "model_ms": 8375,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "1": {
+        "agents": [
+          "repo-concierge"
+        ],
+        "granted": [
+          "counter",
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 2,
+        "model_ms": 2714,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "2": {
+        "agents": [
+          "worker"
+        ],
+        "granted": [
+          "counter"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 3,
+        "model_ms": 27566,
+        "tools": {
+          "counter": 10
+        },
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": true,
+    "root_child_started": true,
+    "delivery_rejections": [],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": null,
+        "team": null,
+        "to_depth": 1
+      },
+      {
+        "from_depth": 1,
+        "agent": null,
+        "team": null,
+        "to_depth": 2
+      }
+    ],
+    "total_model_calls": 7,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 71,
+    "success": true,
+    "base": "complex",
+    "task": "write",
+    "actual": true,
+    "preset": "cloud.toml",
+    "lane": false,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0,
+      1
+    ],
+    "full_depth": false,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": false,
+    "delegations": 1,
+    "continuations": 1,
+    "tool_counts": {
+      "directory": 4,
+      "find": 3,
+      "grep": 2,
+      "ls": 3,
+      "read": 1,
+      "workspaces": 2,
+      "write": 1
+    },
+    "run_failures": 0,
+    "elapsed_ms": 48299,
+    "provider": "cloud",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate",
+          "directory",
+          "workspaces"
+        ],
+        "negotiable": [
+          "request_work"
+        ],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 4,
+        "model_ms": 9275,
+        "tools": {
+          "directory": 3,
+          "workspaces": 1
+        },
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "1": {
+        "agents": [
+          "repo-concierge"
+        ],
+        "granted": [
+          "counter",
+          "delegate",
+          "directory",
+          "edit",
+          "find",
+          "grep",
+          "ls",
+          "read",
+          "workspaces",
+          "write"
+        ],
+        "negotiable": [
+          "request_work"
+        ],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 11,
+        "model_ms": 37782,
+        "tools": {
+          "directory": 1,
+          "find": 3,
+          "grep": 2,
+          "ls": 3,
+          "read": 1,
+          "workspaces": 1,
+          "write": 1
+        },
+        "tool_errors": 5,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": true,
+    "root_child_started": true,
+    "delivery_rejections": [],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": null,
+        "team": null,
+        "to_depth": 1
+      }
+    ],
+    "total_model_calls": 15,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 76,
+    "success": true,
+    "base": "complex",
+    "task": "write",
+    "actual": true,
+    "preset": "cloud.toml",
+    "lane": true,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0,
+      1
+    ],
+    "full_depth": false,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": false,
+    "delegations": 1,
+    "continuations": 1,
+    "tool_counts": {
+      "directory": 3,
+      "find": 5,
+      "grep": 1,
+      "ls": 3,
+      "read": 1,
+      "workspaces": 2,
+      "write": 1
+    },
+    "run_failures": 0,
+    "elapsed_ms": 78902,
+    "provider": "cloud",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate",
+          "directory",
+          "workspaces"
+        ],
+        "negotiable": [
+          "request_work"
+        ],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 3,
+        "model_ms": 7324,
+        "tools": {
+          "directory": 1,
+          "workspaces": 1
+        },
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "1": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "counter",
+          "delegate",
+          "directory",
+          "edit",
+          "find",
+          "grep",
+          "ls",
+          "read",
+          "workspaces",
+          "write"
+        ],
+        "negotiable": [
+          "request_work"
+        ],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 13,
+        "model_ms": 69783,
+        "tools": {
+          "directory": 2,
+          "find": 5,
+          "grep": 1,
+          "ls": 3,
+          "read": 1,
+          "workspaces": 1,
+          "write": 1
+        },
+        "tool_errors": 7,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": true,
+    "root_child_started": true,
+    "delivery_rejections": [],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": null,
+        "team": "app",
+        "to_depth": 1
+      }
+    ],
+    "total_model_calls": 16,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 37,
+    "success": false,
+    "base": "simple",
+    "task": "count",
+    "actual": 9,
+    "preset": "local.toml",
+    "lane": false,
+    "runtime_idle": false,
+    "replay_equal": true,
+    "depths": [
+      0
+    ],
+    "full_depth": true,
+    "model": "qwen3.5:9b",
+    "observed_models": [
+      "qwen3.5:9b"
+    ],
+    "contract_success": false,
+    "delegations": 0,
+    "continuations": 0,
+    "tool_counts": {
+      "counter": 9
+    },
+    "run_failures": 0,
+    "elapsed_ms": 181276,
+    "provider": "local9b",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "worker@spike"
+        ],
+        "granted": [
+          "counter"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 14,
+        "model_ms": 177616,
+        "tools": {
+          "counter": 9
+        },
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "timeout",
+    "root_delegated": false,
+    "root_child_started": false,
+    "delivery_rejections": [],
+    "delegation_targets": [],
+    "total_model_calls": 14,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 42,
+    "success": true,
+    "base": "simple",
+    "task": "count",
+    "actual": 10,
+    "preset": "local.toml",
+    "lane": true,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0
+    ],
+    "full_depth": true,
+    "model": "qwen3.5:9b",
+    "observed_models": [
+      "qwen3.5:9b"
+    ],
+    "contract_success": true,
+    "delegations": 0,
+    "continuations": 0,
+    "tool_counts": {
+      "counter": 10
+    },
+    "run_failures": 0,
+    "elapsed_ms": 96381,
+    "provider": "local9b",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "worker@spike"
+        ],
+        "granted": [
+          "counter"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 15,
+        "model_ms": 96295,
+        "tools": {
+          "counter": 10
+        },
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": false,
+    "root_child_started": false,
+    "delivery_rejections": [],
+    "delegation_targets": [],
+    "total_model_calls": 15,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 8,
+    "success": false,
+    "base": "simple",
+    "task": "write",
+    "actual": false,
+    "preset": "local.toml",
+    "lane": false,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0
+    ],
+    "full_depth": true,
+    "model": "qwen3.5:9b",
+    "observed_models": [
+      "qwen3.5:9b"
+    ],
+    "contract_success": false,
+    "delegations": 0,
+    "continuations": 0,
+    "tool_counts": {},
+    "run_failures": 0,
+    "elapsed_ms": 38423,
+    "provider": "local9b",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "worker@spike"
+        ],
+        "granted": [
+          "counter",
+          "directory",
+          "edit",
+          "find",
+          "grep",
+          "ls",
+          "read",
+          "workspaces",
+          "write"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 1,
+        "model_ms": 38396,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": false,
+    "root_child_started": false,
+    "delivery_rejections": [],
+    "delegation_targets": [],
+    "total_model_calls": 1,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 11,
+    "success": true,
+    "base": "simple",
+    "task": "write",
+    "actual": true,
+    "preset": "local.toml",
+    "lane": true,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0
+    ],
+    "full_depth": true,
+    "model": "qwen3.5:9b",
+    "observed_models": [
+      "qwen3.5:9b"
+    ],
+    "contract_success": true,
+    "delegations": 0,
+    "continuations": 0,
+    "tool_counts": {
+      "write": 1
+    },
+    "run_failures": 0,
+    "elapsed_ms": 54457,
+    "provider": "local9b",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "worker@spike"
+        ],
+        "granted": [
+          "counter",
+          "directory",
+          "edit",
+          "find",
+          "grep",
+          "ls",
+          "read",
+          "workspaces",
+          "write"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 2,
+        "model_ms": 54426,
+        "tools": {
+          "write": 1
+        },
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": false,
+    "root_child_started": false,
+    "delivery_rejections": [],
+    "delegation_targets": [],
+    "total_model_calls": 2,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 48,
+    "success": true,
+    "base": "medium",
+    "task": "count",
+    "actual": 10,
+    "preset": "local.toml",
+    "lane": false,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0,
+      1
+    ],
+    "full_depth": true,
+    "model": "qwen3.5:9b",
+    "observed_models": [
+      "qwen3.5:9b"
+    ],
+    "contract_success": true,
+    "delegations": 1,
+    "continuations": 1,
+    "tool_counts": {
+      "counter": 10
+    },
+    "run_failures": 0,
+    "elapsed_ms": 115011,
+    "provider": "local9b",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 2,
+        "model_ms": 17561,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "1": {
+        "agents": [
+          "contador_numeros"
+        ],
+        "granted": [
+          "counter"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 13,
+        "model_ms": 97316,
+        "tools": {
+          "counter": 10
+        },
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": true,
+    "root_child_started": true,
+    "delivery_rejections": [],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": "contador_numeros",
+        "team": null,
+        "to_depth": 1
+      }
+    ],
+    "total_model_calls": 15,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 8,
+    "success": false,
+    "base": "medium",
+    "task": "count",
+    "actual": 0,
+    "preset": "local.toml",
+    "lane": true,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0
+    ],
+    "full_depth": false,
+    "model": "qwen3.5:9b",
+    "observed_models": [
+      "qwen3.5:9b"
+    ],
+    "contract_success": false,
+    "delegations": 0,
+    "continuations": 0,
+    "tool_counts": {},
+    "run_failures": 0,
+    "elapsed_ms": 12089,
+    "provider": "local9b",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 1,
+        "model_ms": 12035,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": false,
+    "root_child_started": false,
+    "delivery_rejections": [],
+    "delegation_targets": [],
+    "total_model_calls": 1,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 10,
+    "success": false,
+    "base": "medium",
+    "task": "write",
+    "actual": false,
+    "preset": "local.toml",
+    "lane": false,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0,
+      1
+    ],
+    "full_depth": true,
+    "model": "qwen3.5:9b",
+    "observed_models": [
+      "qwen3.5:9b"
+    ],
+    "contract_success": false,
+    "delegations": 1,
+    "continuations": 0,
+    "tool_counts": {},
+    "run_failures": 1,
+    "elapsed_ms": 180010,
+    "provider": "local9b",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate",
+          "directory",
+          "workspaces"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 1,
+        "model_ms": 15178,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "1": {
+        "agents": [
+          "worker"
+        ],
+        "granted": [
+          "counter",
+          "directory",
+          "edit",
+          "find",
+          "grep",
+          "ls",
+          "read",
+          "request_work",
+          "workspaces",
+          "write"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 0,
+        "model_ms": 0,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "timeout",
+    "root_delegated": true,
+    "root_child_started": true,
+    "delivery_rejections": [],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": null,
+        "team": null,
+        "to_depth": 1
+      }
+    ],
+    "total_model_calls": 1,
+    "failure_reasons": [
+      "{:chat, %Req.TransportError{reason: :timeout}}"
+    ]
+  },
+  {
+    "round": 1,
+    "events": 13,
+    "success": false,
+    "base": "medium",
+    "task": "write",
+    "actual": false,
+    "preset": "local.toml",
+    "lane": true,
+    "runtime_idle": false,
+    "replay_equal": true,
+    "depths": [
+      0,
+      1
+    ],
+    "full_depth": true,
+    "model": "qwen3.5:9b",
+    "observed_models": [
+      "qwen3.5:9b"
+    ],
+    "contract_success": false,
+    "delegations": 1,
+    "continuations": 1,
+    "tool_counts": {},
+    "run_failures": 0,
+    "elapsed_ms": 181206,
+    "provider": "local9b",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate",
+          "directory",
+          "workspaces"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 1,
+        "model_ms": 9610,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "1": {
+        "agents": [
+          "worker"
+        ],
+        "granted": [
+          "counter",
+          "directory",
+          "edit",
+          "find",
+          "grep",
+          "ls",
+          "read",
+          "request_work",
+          "workspaces",
+          "write"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 1,
+        "model_ms": 95253,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "timeout",
+    "root_delegated": true,
+    "root_child_started": true,
+    "delivery_rejections": [],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": null,
+        "team": null,
+        "to_depth": 1
+      }
+    ],
+    "total_model_calls": 2,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 9,
+    "success": false,
+    "base": "complex",
+    "task": "count",
+    "actual": 0,
+    "preset": "local.toml",
+    "lane": false,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0
+    ],
+    "full_depth": false,
+    "model": "qwen3.5:9b",
+    "observed_models": [
+      "qwen3.5:9b"
+    ],
+    "contract_success": false,
+    "delegations": 0,
+    "continuations": 0,
+    "tool_counts": {},
+    "run_failures": 0,
+    "elapsed_ms": 8320,
+    "provider": "local9b",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 1,
+        "model_ms": 8237,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": false,
+    "root_child_started": false,
+    "delivery_rejections": [],
+    "delegation_targets": [],
+    "total_model_calls": 1,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 9,
+    "success": false,
+    "base": "complex",
+    "task": "count",
+    "actual": 0,
+    "preset": "local.toml",
+    "lane": true,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0
+    ],
+    "full_depth": false,
+    "model": "qwen3.5:9b",
+    "observed_models": [
+      "qwen3.5:9b"
+    ],
+    "contract_success": false,
+    "delegations": 0,
+    "continuations": 0,
+    "tool_counts": {},
+    "run_failures": 0,
+    "elapsed_ms": 10404,
+    "provider": "local9b",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 1,
+        "model_ms": 10365,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": false,
+    "root_child_started": false,
+    "delivery_rejections": [],
+    "delegation_targets": [],
+    "total_model_calls": 1,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 23,
+    "success": false,
+    "base": "complex",
+    "task": "write",
+    "actual": false,
+    "preset": "local.toml",
+    "lane": false,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0,
+      1
+    ],
+    "full_depth": false,
+    "model": "qwen3.5:9b",
+    "observed_models": [
+      "qwen3.5:9b"
+    ],
+    "contract_success": false,
+    "delegations": 1,
+    "continuations": 0,
+    "tool_counts": {
+      "directory": 1,
+      "find": 1,
+      "ls": 2
+    },
+    "run_failures": 1,
+    "elapsed_ms": 180005,
+    "provider": "local9b",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate",
+          "directory",
+          "workspaces"
+        ],
+        "negotiable": [
+          "request_work"
+        ],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 1,
+        "model_ms": 17040,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "1": {
+        "agents": [
+          "technical_writer"
+        ],
+        "granted": [
+          "counter",
+          "delegate",
+          "directory",
+          "edit",
+          "find",
+          "grep",
+          "ls",
+          "read",
+          "workspaces",
+          "write"
+        ],
+        "negotiable": [
+          "request_work"
+        ],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 4,
+        "model_ms": 37299,
+        "tools": {
+          "directory": 1,
+          "find": 1,
+          "ls": 2
+        },
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "timeout",
+    "root_delegated": true,
+    "root_child_started": true,
+    "delivery_rejections": [],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": "technical_writer",
+        "team": "documentation_team",
+        "to_depth": 1
+      }
+    ],
+    "total_model_calls": 5,
+    "failure_reasons": [
+      "{:chat, %Req.TransportError{reason: :timeout}}"
+    ]
+  },
+  {
+    "round": 1,
+    "events": 12,
+    "success": false,
+    "base": "complex",
+    "task": "write",
+    "actual": false,
+    "preset": "local.toml",
+    "lane": true,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0
+    ],
+    "full_depth": false,
+    "model": "qwen3.5:9b",
+    "observed_models": [
+      "qwen3.5:9b"
+    ],
+    "contract_success": false,
+    "delegations": 1,
+    "continuations": 0,
+    "tool_counts": {},
+    "run_failures": 0,
+    "elapsed_ms": 27228,
+    "provider": "local9b",
+    "campaign": "matrix",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate",
+          "directory",
+          "workspaces"
+        ],
+        "negotiable": [
+          "request_work"
+        ],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 2,
+        "model_ms": 27190,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 1
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": true,
+    "root_child_started": false,
+    "delivery_rejections": [
+      {
+        "interceptor": "team-gate",
+        "reason": "agent without team",
+        "rejected_type": "task.delegated"
+      }
+    ],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": "dev-docs-writer",
+        "team": null,
+        "to_depth": 1
+      }
+    ],
+    "total_model_calls": 2,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 38,
+    "success": true,
+    "base": "complex",
+    "task": "count",
+    "actual": 10,
+    "preset": "cloud.toml",
+    "lane": false,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0,
+      1
+    ],
+    "full_depth": false,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": false,
+    "delegations": 1,
+    "continuations": 1,
+    "tool_counts": {
+      "counter": 10
+    },
+    "run_failures": 0,
+    "elapsed_ms": 26423,
+    "provider": "cloud",
+    "campaign": "repeat-count",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 2,
+        "model_ms": 10919,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "1": {
+        "agents": [
+          "assistant"
+        ],
+        "granted": [
+          "counter",
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 2,
+        "model_ms": 15207,
+        "tools": {
+          "counter": 10
+        },
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": true,
+    "root_child_started": true,
+    "delivery_rejections": [],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": "assistant",
+        "team": "general",
+        "to_depth": 1
+      }
+    ],
+    "total_model_calls": 4,
+    "failure_reasons": []
+  },
+  {
+    "round": 1,
+    "events": 55,
+    "success": true,
+    "base": "complex",
+    "task": "count",
+    "actual": 10,
+    "preset": "cloud.toml",
+    "lane": true,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0,
+      1,
+      2
+    ],
+    "full_depth": true,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": true,
+    "delegations": 2,
+    "continuations": 2,
+    "tool_counts": {
+      "counter": 10
+    },
+    "run_failures": 0,
+    "elapsed_ms": 39208,
+    "provider": "cloud",
+    "campaign": "repeat-count",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 2,
+        "model_ms": 3712,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "1": {
+        "agents": [
+          "repo-concierge"
+        ],
+        "granted": [
+          "counter",
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 2,
+        "model_ms": 1982,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "2": {
+        "agents": [
+          "worker"
+        ],
+        "granted": [
+          "counter"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 11,
+        "model_ms": 33075,
+        "tools": {
+          "counter": 10
+        },
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": true,
+    "root_child_started": true,
+    "delivery_rejections": [],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": null,
+        "team": null,
+        "to_depth": 1
+      },
+      {
+        "from_depth": 1,
+        "agent": null,
+        "team": null,
+        "to_depth": 2
+      }
+    ],
+    "total_model_calls": 15,
+    "failure_reasons": []
+  },
+  {
+    "round": 2,
+    "events": 47,
+    "success": true,
+    "base": "complex",
+    "task": "count",
+    "actual": 10,
+    "preset": "cloud.toml",
+    "lane": false,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0,
+      1,
+      2
+    ],
+    "full_depth": true,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": true,
+    "delegations": 2,
+    "continuations": 2,
+    "tool_counts": {
+      "counter": 10
+    },
+    "run_failures": 0,
+    "elapsed_ms": 18277,
+    "provider": "cloud",
+    "campaign": "repeat-count",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 2,
+        "model_ms": 2509,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "1": {
+        "agents": [
+          "repo-concierge"
+        ],
+        "granted": [
+          "counter",
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 2,
+        "continuations": 1,
+        "model_calls": 2,
+        "model_ms": 3525,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 1
+      },
+      "2": {
+        "agents": [
+          "worker"
+        ],
+        "granted": [
+          "counter"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 3,
+        "model_ms": 11989,
+        "tools": {
+          "counter": 10
+        },
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": true,
+    "root_child_started": true,
+    "delivery_rejections": [],
+    "delegation_targets": [
+      {
+        "from_depth": 0,
+        "agent": null,
+        "team": null,
+        "to_depth": 1
+      },
+      {
+        "from_depth": 1,
+        "agent": null,
+        "team": null,
+        "to_depth": 2
+      }
+    ],
+    "total_model_calls": 7,
+    "failure_reasons": []
+  },
+  {
+    "round": 2,
+    "events": 9,
+    "success": false,
+    "base": "complex",
+    "task": "count",
+    "actual": 0,
+    "preset": "cloud.toml",
+    "lane": true,
+    "runtime_idle": true,
+    "replay_equal": true,
+    "depths": [
+      0
+    ],
+    "full_depth": false,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "observed_models": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "contract_success": false,
+    "delegations": 0,
+    "continuations": 0,
+    "tool_counts": {},
+    "run_failures": 0,
+    "elapsed_ms": 2732,
+    "provider": "cloud",
+    "campaign": "repeat-count",
+    "by_depth": {
+      "0": {
+        "agents": [
+          "concierge"
+        ],
+        "granted": [
+          "delegate"
+        ],
+        "negotiable": [],
+        "human": [],
+        "runs": 1,
+        "continuations": 0,
+        "model_calls": 1,
+        "model_ms": 2672,
+        "tools": {},
+        "tool_errors": 0,
+        "delegations": 0
+      }
+    },
+    "task_outcome": "completed",
+    "root_delegated": false,
+    "root_child_started": false,
+    "delivery_rejections": [],
+    "delegation_targets": [],
+    "total_model_calls": 1,
+    "failure_reasons": []
+  }
+]
