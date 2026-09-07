@@ -35,7 +35,7 @@ Não executa shell, não cria commits e não oferece API pública HTTP, MCP ou T
   faz append+commit em `EVENTS` e só então notifica assinantes
   `{:event_core, envelope}`.
 - **Interceptors**: após commit, antes da entrega. Implementados: `Audit`,
-  `DepthGate`, `ToolGate`. Rejeição gera `delivery.rejected` com `causation_id`
+  `DepthGate`, `TeamGate`, `ToolGate`. Rejeição gera `delivery.rejected` com `causation_id`
   no envelope bloqueado; o envelope permanece no log.
 - **Automations**: consumidores assíncronos após entrega; cursor em
   `PROJECTION_CURSORS` como `automation:<name>`; sem veto.
@@ -55,9 +55,9 @@ Não executa shell, não cria commits e não oferece API pública HTTP, MCP ou T
   depth (sem interseção com o pai). `run.started.tools` fixa o granted; `--tools`
   no spike restringe. `ToolGate` lê `run.started` via conexão do Store.
 - **Agent (legado)**: loop síncrono em memória para `run`/`monkey-job`.
-- **SpikeAgents**: `Chat.Fake.for_node` escolhe concierge (depth &lt; max_depth,
-  tool `delegate`) ou worker (depth = max_depth, tool `counter`) — não usa
-  `[agents]` nem `[session].roles`.
+- **SpikeAgents**: com `[agents]`/`[session].roles` e `[teams]` no TOML, escolhe
+  chat/prompt e roteia `delegate` por time (depth 0) e membro (depth 1); sem essas
+  tabelas mantém o heurístico concierge/worker por profundidade.
 - **Runner/Sandbox, Chat, Tools, Reporter**: inalterados no caminho `run`.
 
 ## Fluxo Event Core (`spike`)
@@ -97,9 +97,6 @@ runtime e não cria persistência durável.
 
 ## Ausências verificadas
 
-- **Times**: `[teams]` é parseado e `config check` valida lead/members, mas o
-  Runtime não roteia por time; `delegate` não recebe team/agent; `SpikeAgents`
-  decide o agente; módulo `TeamGate` não existe; `run.started` não fixa team.
 - **Sessão e workspaces como agregados**: sem `session.created` /
   `workspace.attached` / inbox; `session_id`/`workspace_id` reservados no envelope
   (geralmente nil); sem sqlite de sessão padrão; `run <dir>` continua o loop
@@ -109,7 +106,7 @@ runtime e não cria persistência durável.
   temporários/permanentes.
 - **request_work / interação entre linhagens**: tool inexistente; sem LCA; sem
   `WORK_ITEM_DEPENDENCIES` cross-team (só pai-depende-de-filho via delegate).
-- **WorkspaceGate**; tool `directory`; tool `workspaces` retornando times.
+- **WorkspaceGate**; tool `directory`.
 - **Runtime residente observando `emit` em tempo real**: `events follow` faz poll.
 
 O modelo de dados está em [data-model.md](data-model.md); requisitos observáveis

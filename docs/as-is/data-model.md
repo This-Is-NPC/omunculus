@@ -50,7 +50,7 @@ cursor. Redelivery do mesmo `event_id` ou `last_sequence` defasado é no-op.
 | `task.resume_rejected` | Sem novo Run |
 | `tool.call.requested` | (interceptável; sem projeção de domínio) |
 | `tool.call.completed` | Atualiza checkpoint no Run |
-| `run.started` | Linha `ARCHIVE_RUNS`; fixa tools no payload |
+| `run.started` | Linha `ARCHIVE_RUNS`; fixa tools e team no payload |
 | `run.completed` | Fecha run; `outcome` inclui `waiting` + awaiting |
 | `run.failed` | WI elegível a resume |
 | `model.call.completed` | Linha `ARCHIVE_MODEL_CALLS` |
@@ -82,7 +82,6 @@ Cada `Run` é um GenServer temporário com checkpoint
 - Eventos de sessão/workspace (`session.created`, `workspace.attached`)
 - Eventos de permissão (`permission.*`)
 - Grants temporários ou permanentes fora do payload de `run.started.tools`
-- Roteamento por `[teams]` ou pin de team em `run.started`
 
 A separação planejada desses conceitos está em
 [execution-model.md](../to-be/execution-model.md) e documentos TO-BE correlatos.

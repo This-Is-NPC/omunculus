@@ -3,7 +3,7 @@ Status: AS-IS — implementado
 # Requisitos atuais
 
 Requisitos abaixo são observáveis na CLI, na especificação KDL e nos testes da
-branch `spike/event-core` (170 testes). Não são requisitos do alvo em `main`.
+branch `spike/event-core` (178 testes). Não são requisitos do alvo em `main`.
 Consulte [architecture.md](architecture.md) e [data-model.md](data-model.md).
 
 ## Interface CLI
@@ -77,7 +77,7 @@ projeções, replay, interceptors, automations, policy em runtime, spike cenári
 simple/medium/complex, `--fail-at`/resume e cenários 3/4 (dois Runs por WI
 concierge).
 
-Não há requisito implementado para: roteamento por times, sessão/workspace como
+Não há requisito implementado para: sessão/workspace como
 agregados, permissões com efeito e inbox, `request_work`, `WorkspaceGate`,
 runtime residente reagindo a `emit` em tempo real, nem substituição do `run`
 legado por sessão durável. Esses itens estão no

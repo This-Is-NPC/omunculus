@@ -1,4 +1,4 @@
-Status: TO-BE — proposta, aguardando avaliação
+Status: TO-BE — roteamento, TeamGate e tool `workspaces` validados; `request_work`, `scope=node`, identidade, `directory` e `cross_lineage` permanecem proposta
 
 # Times, interação entre linhagens e descoberta
 
