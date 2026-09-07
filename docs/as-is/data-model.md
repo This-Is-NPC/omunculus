@@ -2,9 +2,10 @@ Status: AS-IS — implementado
 
 # Modelo de dados atual
 
-Na branch `spike/event-core` coexistem estado transitório (`run`/`monkey-job`) e
-persistência SQLite/WAL no caminho Event Core (`spike`, `emit`, `events follow`).
-A arquitetura está em [architecture.md](architecture.md); o alvo separado em
+Na branch `spike/event-core` coexistem estado transitório (`monkey-job`) e
+persistência SQLite/WAL no caminho Event Core (`spike`, `emit`, `events follow`,
+`session`, `workspace`, `send`, `run` efêmero). A arquitetura está em
+[architecture.md](architecture.md); o alvo separado em
 [TO-BE data model](../to-be/data-model.md).
 
 ## Envelope
@@ -15,25 +16,32 @@ Cada linha de `EVENTS` e cada notificação `{:event_core, _}` usam
 - `event_id`, `kind` (`command`|`event`), `type`, `schema_version`, `sequence`
   (atribuído no append), `occurred_at`
 - `correlation_id`, `causation_id`, `idempotency_key`
-- `session_id`, `workspace_id` (reservados, geralmente nil)
+- `session_id`, `workspace_id` — preenchidos em sessões duráveis e no `run`
+  efêmero; depth 0 costuma ter `workspace_id` nil e workspace no payload;
+  depth ≥ 1 replica workspace em `workspace_id`
 - `project_id`, `work_item_id`, `run_id`
 - `payload` (mapa JSON)
 
 `Omunculus.Events` rejeita tipo desconhecido, kind incorreto, versão de schema
-não registrada ou campos obrigatórios ausentes.
+não registrada ou campos obrigatórios ausentes. Catálogo de sessão inclui
+`session.created`, `workspace.attached`, `workspace.detached`, `task.commented`
+(injetáveis onde marcado).
 
 ## Tabelas SQLite
+
+Store `user_version` 2.
 
 | Tabela | Função |
 |---|---|
 | `EVENTS` | Log append-only; fonte de verdade |
-| `WORK_ITEMS` | Projeção: instrução, status, checkpoint, awaiting, result, version, last_sequence |
+| `WORK_ITEMS` | Projeção: instrução, status, checkpoint, awaiting, result, `workspace_id`, version, last_sequence |
+| `SESSION_WORKSPACES` | Projeção: `workspace_id` PK, roots, teams, attached, attached_at, last_sequence — reduzida de `workspace.attached` / `workspace.detached` |
 | `WORK_ITEM_DEPENDENCIES` | Projeção: dependência pai→filho criada por `task.delegated` |
 | `ARCHIVE_RUNS` | Projeção: attempt, depth, parent_run_id, originating_run_id, agent_id, agent_kind, status, reason, outcome |
 | `ARCHIVE_MODEL_CALLS` | Projeção: round, model, usage, outcome por `model.call.completed` |
 | `PROJECTION_CURSORS` | Checkpoint por consumidor (`domain`, `automation:<name>`) |
 | `PROJECTS` | Esquema presente; spike não popula |
-| `COMMENTS` | Esquema presente; sem escritores no runtime atual |
+| `COMMENTS` | Projeção: `comment_id`, `session_id`, `work_item_id`, kind, body, `event_id`, last_sequence — escritores: `task.commented`, `task.completed` (kind `result`) |
 
 `Projector` aplica eventos após o cursor em transação atômica com avanço do
 cursor. Redelivery do mesmo `event_id` ou `last_sequence` defasado é no-op.
@@ -43,10 +51,14 @@ cursor. Redelivery do mesmo `event_id` ou `last_sequence` defasado é no-op.
 
 | Tipo | Efeito principal |
 |---|---|
-| `task.requested` | Novo WI; ativa Run depth 0 |
+| `session.created` | Sem projeção de domínio (sessão identificada no log) |
+| `workspace.attached` | Upsert `SESSION_WORKSPACES` attached=1 com roots/teams |
+| `workspace.detached` | `SESSION_WORKSPACES` attached=0 |
+| `task.requested` | Novo WI com `workspace_id`; ativa Run depth 0 |
 | `task.resumed` | Novo Run `reason=retry` se WI failed |
 | `task.delegated` | Filho WI + dependência; ativa Run filho |
-| `task.completed` | WI `completed` + result; pode continuar pai |
+| `task.completed` | WI `completed` + result; linha `COMMENTS` kind=result; pode continuar pai |
+| `task.commented` | Linha `COMMENTS` com kind/body do payload |
 | `task.resume_rejected` | Sem novo Run |
 | `tool.call.requested` | (interceptável; sem projeção de domínio) |
 | `tool.call.completed` | Atualiza checkpoint no Run |
@@ -57,7 +69,7 @@ cursor. Redelivery do mesmo `event_id` ou `last_sequence` defasado é no-op.
 | `policy.loaded` | Hash da policy ativa (snapshot opcional) |
 | `delivery.rejected` | Registro de bloqueio; envelope original permanece |
 
-## Estado transitório (`run`)
+## Estado transitório (`monkey-job`)
 
 `Agent.run/1` mantém em memória `messages`, dependências (`chat`, `context`,
 `tools`, `schemas`), `turn`/`max_turns`, `usage`, `reporter`. Nada é reaberto
@@ -70,18 +82,23 @@ entre invocações.
 ## Runtime in-memory
 
 O processo `Omunculus.Runtime` guarda `runs`, `pids`, `handled` (dedupe de
-entrega) e `pending_continuations` (mapa work_item_id → continuação do pai).
-`pending_continuations` não sobrevive a restart do Runtime.
+entrega), `pending_continuations` (mapa work_item_id → continuações do pai),
+`nodes` (cache de `node_id` por sessão/workspace/team).
+
+`pending_continuations` é **reconstruído no boot** do Runtime
+(`rebuild_pending_continuations/1` lê `WORK_ITEMS` em `waiting`, confere
+`run.completed` waiting e `task.completed` dos filhos; `flush_pending_continuations/1`
+retoma pais pendentes). Não é fonte de verdade — o log e as projeções são.
 
 Cada `Run` é um GenServer temporário com checkpoint
 (`messages`, `tool_state`, `pending`, `notes`, `awaiting`).
 
 ## O que não é registro ativo
 
-- Inbox humana em `COMMENTS`
-- Eventos de sessão/workspace (`session.created`, `workspace.attached`)
+- Inbox humana request-response em `COMMENTS` (sem CLI `inbox`)
 - Eventos de permissão (`permission.*`)
 - Grants temporários ou permanentes fora do payload de `run.started.tools`
+- `inbox.read` no catálogo
 
 A separação planejada desses conceitos está em
 [execution-model.md](../to-be/execution-model.md) e documentos TO-BE correlatos.

@@ -3,17 +3,23 @@ Status: AS-IS — implementado
 # Requisitos atuais
 
 Requisitos abaixo são observáveis na CLI, na especificação KDL e nos testes da
-branch `spike/event-core` (178 testes). Não são requisitos do alvo em `main`.
+branch `spike/event-core` (215 testes). Não são requisitos do alvo em `main`.
 Consulte [architecture.md](architecture.md) e [data-model.md](data-model.md).
 
 ## Interface CLI
 
 O binário `omunculus` oferece:
 
-- `run <dir> <instruction...>`: loop Agent em memória no diretório;
-- `monkey-job <instruction...>`: mesmo loop com tools/delay/counter explícitos;
+- `run <dir> <instruction...>`: Event Core efêmero (tmp sqlite, `session.created`
+  + `workspace.attached`, `Runtime.request`, arquivo removido ao sair);
+- `monkey-job <instruction...>`: loop Agent em memória com tools/delay/counter;
 - `spike <instruction...>`: Event Core end-to-end (`conte até N`);
-- `events catalog` e `events follow [--db] [--types] [--after] [--once]`;
+- `session create [name]` e `session list`: log durável com `session.created`;
+- `workspace attach <name>` e `workspace detach <name>`: `workspace.attached` /
+  `workspace.detached` no log da sessão;
+- `send <instruction...>`: abre sessão durável, Runtime + Projector, espera
+  `task.completed` (ou só append com `--detach`);
+- `events catalog` e `events follow [--db] [--session] [--types] [--after] [--once]`;
 - `emit <type>`: append de comandos injetáveis ao log;
 - `config check [--config]`: valida TOML expandido, interceptors e automations;
 - `benchmark`: cenários `actor-density`, `agent-tree`, `http-load`;
@@ -22,16 +28,35 @@ O binário `omunculus` oferece:
 Flags globais: `-h/--help`, `-V/--version`, `--verbose`. Códigos de saída: 0
 (sucesso), 1 (erro host/chat/runtime), 2 (uso).
 
+SQLite de sessão: padrão `~/.omunculus/session.sqlite3`; `--db` ou `--session`
+selecionam o arquivo (`--db` vence quando ambos presentes); `OMUNCULUS_SESSION`
+via ambiente. Mesma resolução em `events follow`, `emit`, `session`, `workspace`
+e `send`.
+
 `spike` aceita `--depth`, `--fail-at`, `--delay`, `--db`, `--provider fake|chat`,
 `--config`, `--profile`, `--model`, `--base-url`, `--api-key`, `--json-events`.
 
-## Execução `run` (legado)
+`send` aceita `--workspace`, `--profile`, `--config`, `--detach`, `--tools`.
 
-1. Canonicalizar diretório e impedir escape da raiz sandbox.
-2. Resolver config na precedência flags > ambiente > TOML > defaults.
-3. Enviar instrução ao chat com schemas das tools permitidas.
-4. Repetir até resposta final ou `max_turns`.
-5. Resposta em `stdout`; reporter em `stderr` quando aplicável.
+## Execução `run` (Event Core efêmero)
+
+1. Canonicalizar diretório e carregar config.
+2. Criar SQLite temporário; append `session.created` e `workspace.attached` (roots
+   do cwd; workspace inferido do TOML ou `default`).
+3. Iniciar Event Core, Projector, Runtime; `task.requested` com `session_id` e
+   workspace no payload.
+4. Interceptors (incl. configurados) avaliam entrega; rejeição →
+   `delivery.rejected`.
+5. Esperar `task.completed`; imprimir `result`; remover o arquivo sqlite.
+
+Provider opcional (`--provider chat` + credenciais); sem provider usa
+`SpikeAgents` heurístico. Não persiste log entre invocações.
+
+## Execução `monkey-job` (legado)
+
+1. Resolver config na precedência flags > ambiente > TOML > defaults.
+2. Enviar instrução ao chat com schemas das tools permitidas (`Runner` → `Agent`).
+3. Repetir até resposta final ou `max_turns`.
 
 Sem shell, sem commit Git, chat OpenAI-compatible sem streaming; `fake` para
 testes determinísticos.
@@ -55,7 +80,19 @@ testes determinísticos.
 9. Ao final: log ordenado, projeções, verificação de replay idêntico.
 
 Policy inválida → `run.failed` `reason=policy_invalid`. `ToolGate` bloqueia tool
-fora do granted fixado em `run.started`.
+fora do granted fixado em `run.started`. `WorkspaceGate` (quando injetado)
+bloqueia workspace não anexado.
+
+## Sessão durável (`session` / `workspace` / `send`)
+
+1. `session create` prepara diretório do db e grava `session.created` (nome
+   opcional ou id gerado).
+2. `workspace attach` lê roots/teams de `[workspaces]` no TOML e grava
+   `workspace.attached`; `detach` grava `workspace.detached`.
+3. `send` garante `session.created` se o log estiver vazio; resolve interceptors
+   com workspaces anexados e adiciona `WorkspaceGate` quando aplicável.
+4. `Runtime.request` com `--workspace` ou `--detach` (só append `task.requested`).
+5. `pending_continuations` reconstruído no `init` do Runtime a partir do log.
 
 ## Configuração e diagnóstico
 
@@ -68,18 +105,18 @@ arquivo do projeto. Presets `coding` e `plan`; `${VAR}` exato; seções
 interceptor inexistente.
 
 `events catalog` renderiza o catálogo de `Omunculus.Events`. `emit` aceita
-somente tipos `injectable` (`task.requested`, `task.resumed`).
+somente tipos `injectable` (`task.requested`, `task.resumed`, `session.created`,
+`workspace.attached`, `workspace.detached`, `task.commented`, …).
 
 ## Evidência e limites
 
 Testes cobrem parser, config, Agent, chat, sandbox, tools, Event Core,
-projeções, replay, interceptors, automations, policy em runtime, spike cenários
-simple/medium/complex, `--fail-at`/resume e cenários 3/4 (dois Runs por WI
-concierge).
+projeções, replay, interceptors (incl. `WorkspaceGate`), automations, policy em
+runtime, spike cenários simple/medium/complex, sessão/workspace/send,
+`--fail-at`/resume e cenários 3/4 (dois Runs por WI concierge).
 
-Não há requisito implementado para: sessão/workspace como
-agregados, permissões com efeito e inbox, `request_work`, `WorkspaceGate`,
-runtime residente reagindo a `emit` em tempo real, nem substituição do `run`
-legado por sessão durável. Esses itens estão no
+Não há requisito implementado para: permissões com efeito e inbox
+request-response, `request_work` / dependências cross-team, runtime residente
+reagindo a `emit` em tempo real, nem tool `directory`. Esses itens estão no
 [alvo TO-BE](../to-be/requirements.md) e não devem ser inferidos como
 disponíveis hoje.
