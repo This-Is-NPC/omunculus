@@ -124,7 +124,7 @@ reescrito para descrever o que existe.
 Testes: `medium-teams.toml` com e sem lane; roteamento por tipo de tarefa;
 `TeamGate` vetando.
 
-## Fase 4: sessão e workspaces
+## Fase 4: sessão e workspaces (validada)
 
 [session-model.md](session-model.md).
 
