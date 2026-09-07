@@ -69,7 +69,7 @@ defmodule Omunculus.CLI.ConfigCheckTest do
     File.rm_rf!(dir)
   end
 
-  test "profile outside ceiling is rejected" do
+  test "profile bands intersect with ceiling in the policy table" do
     dir = Path.join(System.tmp_dir!(), "omunculus-ceiling-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
     path = Path.join(dir, "bad.toml")
@@ -95,7 +95,11 @@ defmodule Omunculus.CLI.ConfigCheckTest do
 
     {:ok, config} = Config.load(cwd: dir, config_file: path, env: %{})
 
-    assert {:error, {:profile_outside_ceiling, "writer", _depth, "app"}} = Config.check(config)
+    assert {:ok, %{policy: policy}} = Config.check(config)
+
+    assert {:ok, bands} = Policy.line(policy, "writer", "0", "app")
+    assert bands["granted"] == []
+    assert "edit" in bands["forbidden"]
 
     File.rm_rf!(dir)
   end

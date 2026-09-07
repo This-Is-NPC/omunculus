@@ -37,7 +37,3 @@ granted = ["counter"]
 [policy.depth.0]
 mode = "deny"
 granted = ["delegate", "workspaces", "directory"]
-
-[policy.depth.1]
-mode = "allow"
-deny = ["delegate"]

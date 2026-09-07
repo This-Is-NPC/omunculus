@@ -177,21 +177,7 @@ defmodule Omunculus.Config do
 
     with :ok <- check_tools_catalog(pin, current),
          table when is_map(table) <- policy_table(config) do
-      catalog_opts = [catalog_version: pin]
-
-      case Enum.find_value(profiles_from_table(table), fn profile ->
-             if profile_fits_any?(config, profile, table, catalog_opts) do
-               nil
-             else
-               {{_, depth, workspace}, _} =
-                 Enum.find(table, fn {{p, _, _}, _} -> p == profile end)
-
-               {:error, {:profile_outside_ceiling, profile, depth, workspace}}
-             end
-           end) do
-        nil -> {:ok, table}
-        {:error, reason} -> {:error, reason}
-      end
+      {:ok, table}
     end
   end
 
@@ -203,48 +189,6 @@ defmodule Omunculus.Config do
     case Omunculus.Policy.table(config) do
       {:error, reason} -> {:error, reason}
       table -> table
-    end
-  end
-
-  defp profiles_from_table(table) do
-    table
-    |> Map.keys()
-    |> Enum.map(fn {profile, _, _} -> profile end)
-    |> Enum.uniq()
-  end
-
-  defp profile_fits_any?(config, profile, table, catalog_opts) do
-    Enum.any?(table, fn {{p, depth, workspace}, _bands} ->
-      p == profile and profile_fits_cell?(config, profile, depth, workspace, catalog_opts)
-    end)
-  end
-
-  defp profile_fits_cell?(config, profile, depth, workspace, catalog_opts) do
-    profile_policy = preset_policy(config, profile)
-    depth_policy = Map.get(config.policy, depth, %{})
-    workspace_policy = workspace_policy(config, workspace)
-
-    with {:ok, profile_bands} <- Omunculus.Policy.normalize(profile_policy, catalog_opts),
-         {:ok, depth_bands} <- Omunculus.Policy.normalize(depth_policy, catalog_opts),
-         {:ok, workspace_bands} <- Omunculus.Policy.normalize(workspace_policy, catalog_opts) do
-      ceiling = Omunculus.Policy.intersect(depth_bands, workspace_bands)
-      Omunculus.Policy.fits_ceiling?(profile_bands, ceiling)
-    else
-      _ -> false
-    end
-  end
-
-  defp preset_policy(config, profile) do
-    case Map.fetch(config.presets, profile) do
-      {:ok, preset} -> preset[:policy] || %{}
-      :error -> %{}
-    end
-  end
-
-  defp workspace_policy(config, workspace) do
-    case Map.fetch(config.workspaces, workspace) do
-      {:ok, ws} -> ws.policy || %{}
-      :error -> %{}
     end
   end
 
