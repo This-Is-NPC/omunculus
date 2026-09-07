@@ -93,12 +93,12 @@ defmodule Omunculus.ConfigShapeTest do
     assert [%{name: "record", may_request: %{"profiles" => ["count"]}}] = base.automations
   end
 
-  test "the lane overlay references interceptors the spike does not have yet" do
+  test "the lane overlay resolves every configured interceptor" do
     {:ok, lane} = load("lane.toml")
     assert length(lane.interceptors) == 4
 
-    assert {:error, {:unknown_interceptor_module, "Omunculus.Interceptors.TeamGate"}} =
-             Config.check(lane)
+    assert {:ok, %{interceptors: interceptors}} = Config.check(lane)
+    assert Enum.any?(interceptors, &(&1.module == Omunculus.Interceptors.TeamGate))
   end
 
   test "check rejects dangling references and bad policy values" do

@@ -31,6 +31,27 @@ defmodule Omunculus.InterceptorsTest do
     options: %{}
   }
 
+  @team_gate_options %{
+    teams: %{
+      "count" => %{lead: "counter", members: [], profile: "count", scope: nil},
+      "edit" => %{lead: "editor", members: [], profile: "coding", scope: nil}
+    },
+    workspaces: %{
+      "app" => %{roots: ["."], teams: ["count", "edit"], policy: %{}}
+    },
+    agents: %{
+      "counter" => %{prompt: "count"},
+      "editor" => %{prompt: "edit"}
+    }
+  }
+
+  @team_gate %{
+    name: "team-gate",
+    events: ["task.delegated", "task.requested"],
+    module: Omunculus.Interceptors.TeamGate,
+    options: @team_gate_options
+  }
+
   defp boot(max_depth, interceptors) do
     {:ok, core} = EventCore.start_link(path: ":memory:", interceptors: interceptors)
     {:ok, projector} = Projector.start_link(core: core)
@@ -213,6 +234,63 @@ defmodule Omunculus.InterceptorsTest do
       before = Projector.snapshot(core)
       :ok = Projector.rebuild(projector)
       assert Projector.snapshot(core) == before
+    end
+
+    test "TeamGate rejects unknown teams and allows configured teams" do
+      {:ok, core} = EventCore.start_link(path: ":memory:", interceptors: [@team_gate])
+      :ok = EventCore.subscribe(core)
+
+      corr = "corr-team-gate"
+      run_id = "run-1"
+
+      delegated_payload = %{
+        "instruction" => "conte até 10",
+        "child_work_item_id" => "wi-child",
+        "to_depth" => 1,
+        "parent_run_id" => run_id,
+        "originating_run_id" => run_id
+      }
+
+      {:ok, rejected_attempt} =
+        EventCore.append(
+          core,
+          Envelope.event("task.delegated",
+            correlation_id: corr,
+            causation_id: "evt-parent",
+            work_item_id: "wi-1",
+            run_id: run_id,
+            payload: Map.put(delegated_payload, "team", "ghost")
+          )
+        )
+
+      rejection =
+        core
+        |> EventCore.stream(0, run_id: run_id)
+        |> Enum.find(&(&1.type == "delivery.rejected"))
+
+      assert rejection.payload["interceptor"] == "team-gate"
+      assert rejection.payload["rejected_event_id"] == rejected_attempt.event_id
+      assert rejection.payload["reason"] == "team not in session"
+      rejected_id = rejected_attempt.event_id
+      refute_receive {:event_core, %{event_id: ^rejected_id}}
+
+      allowed =
+        EventCore.append!(
+          core,
+          Envelope.event("task.delegated",
+            correlation_id: corr,
+            causation_id: rejection.event_id,
+            work_item_id: "wi-1",
+            run_id: run_id,
+            payload: Map.put(delegated_payload, "team", "count")
+          )
+        )
+
+      assert_receive {:event_core, %{event_id: id, type: "task.delegated"}}
+      assert id == allowed.event_id
+
+      assert %{"team-gate" => %{evaluated: 2, delivered: 1, rejected: 1}} =
+               EventCore.interceptor_stats(core)
     end
   end
 
