@@ -157,4 +157,57 @@ defmodule Omunculus.CLI.ParserTest do
     assert parsed.flags["tree_shape"] == "1,1,2,4"
     assert parsed.flags["tree_mode"] == "resident"
   end
+
+  test "session create parses optional name and db" do
+    assert {:ok, parsed} =
+             Parser.parse(["session", "create", "omacon", "--db", "/tmp/s.sqlite3"], %{})
+
+    assert parsed.command == :session
+    assert parsed.args.action == "create"
+    assert parsed.args.name == "omacon"
+    assert parsed.flags["db"] == "/tmp/s.sqlite3"
+  end
+
+  test "workspace attach parses action, name, and config" do
+    assert {:ok, parsed} =
+             Parser.parse(
+               [
+                 "workspace",
+                 "attach",
+                 "app",
+                 "--config",
+                 "./omunculus.toml",
+                 "--db",
+                 "/tmp/x.db"
+               ],
+               %{}
+             )
+
+    assert parsed.command == :workspace
+    assert parsed.args.action == "attach"
+    assert parsed.args.name == "app"
+    assert parsed.flags["config"] == "./omunculus.toml"
+  end
+
+  test "send parses instruction profile workspace and detach" do
+    assert {:ok, parsed} =
+             Parser.parse(
+               [
+                 "send",
+                 "conte até 3",
+                 "--profile",
+                 "count",
+                 "--workspace",
+                 "app",
+                 "--detach"
+               ],
+               %{}
+             )
+
+    assert parsed.command == :send
+    assert parsed.args.instruction == "conte até 3"
+    assert parsed.flags["profile"] == "count"
+    assert parsed.flags["workspace"] == "app"
+    assert parsed.flags["detach"] == true
+  end
 end

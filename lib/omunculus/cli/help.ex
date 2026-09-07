@@ -276,6 +276,21 @@ defmodule Omunculus.CLI.Help do
       {"error: provider #{inspect(provider)} is not supported for #{inspect(scenario)}",
        "Use --provider stub for http-load; actor-density never sends requests."}
 
+  defp describe({:unknown_workspace, name}),
+    do:
+      {"error: unknown workspace #{inspect(name)}",
+       "Use a [workspaces.*] id from the config file."}
+
+  defp describe({:unknown_session_action, action}),
+    do:
+      {"error: unknown session action #{inspect(action)}",
+       "Use 'omunculus session create' or 'omunculus session list'."}
+
+  defp describe({:unknown_workspace_action, action}),
+    do:
+      {"error: unknown workspace action #{inspect(action)}",
+       "Use 'omunculus workspace attach' or 'omunculus workspace detach'."}
+
   defp describe(other),
     do: {"error: #{inspect(other)}", "Run '" <> Spec.bin() <> " --help' for usage."}
 end

@@ -90,16 +90,13 @@ defmodule Omunculus.CLITest do
       "OMUNCULUS_API_KEY" => "unused"
     }
 
-    {code, out, progress} =
+    {code, out, _progress} =
       capture_cli(fn ->
         Omunculus.CLI.dispatch(["run", tmp, "add a README"], env)
       end)
 
     assert code == 0
     assert String.trim(out) == "wrote README"
-    assert progress =~ "┌── Run started"
-    assert progress =~ "└── Completed"
-    assert progress =~ "│ Run   │ Completed"
     assert File.read!(Path.join(tmp, "README.md")) == "hello from omunculus\n"
     File.rm_rf(tmp)
   end

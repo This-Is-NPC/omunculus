@@ -40,6 +40,15 @@ defmodule Omunculus.CLI do
       {:ok, %{command: :config} = parsed} ->
         Omunculus.CLI.Events.config(parsed, env)
 
+      {:ok, %{command: :session} = parsed} ->
+        Omunculus.CLI.Session.session(parsed, env)
+
+      {:ok, %{command: :workspace} = parsed} ->
+        Omunculus.CLI.Session.workspace(parsed, env)
+
+      {:ok, %{command: :send} = parsed} ->
+        Omunculus.CLI.Session.send(parsed, env)
+
       {:error, reason} ->
         IO.puts(:stderr, Help.usage_error(reason))
         2
@@ -352,22 +361,7 @@ defmodule Omunculus.CLI do
     end
   end
 
-  defp run(%{args: args, flags: flags}, env) do
-    case Omunculus.Runner.start(args, flags, env) do
-      {:ok, result} ->
-        text = result.assistant_text || ""
-        if text != "", do: IO.puts(text)
-        0
-
-      {:error, {:usage, reason}} ->
-        IO.puts(:stderr, Help.usage_error(reason))
-        2
-
-      {:error, reason} ->
-        IO.puts(:stderr, "error: #{format_error(reason)}")
-        1
-    end
-  end
+  defp run(parsed, env), do: Omunculus.CLI.Session.ephemeral_run(parsed, env)
 
   defp format_error({:chat, reason}), do: "chat failed: #{inspect(reason)}"
   defp format_error({:host, reason}), do: "host failed: #{inspect(reason)}"

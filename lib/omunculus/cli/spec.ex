@@ -358,6 +358,119 @@ defmodule Omunculus.CLI.Spec do
            nil, nil}
         ]
       },
+      "session" => %{
+        name: "session",
+        about: "Create or list durable sessions",
+        long_about:
+          "create opens a session SQLite log and appends session.created. list prints session_id values from existing logs.",
+        arg_required_else_help: true,
+        args: [
+          %{
+            name: :action,
+            metavar: "action",
+            required: true,
+            variadic: false,
+            help: "create or list"
+          },
+          %{
+            name: :name,
+            metavar: "name",
+            required: false,
+            variadic: false,
+            help: "Session id for create (generated when omitted)"
+          }
+        ],
+        flags: [
+          flag("db",
+            long: "db",
+            value: "file",
+            help: "Session SQLite path (default: ~/.omunculus/session.sqlite3)"
+          )
+        ],
+        examples: [
+          {"omunculus session create omacon", nil, nil},
+          {"omunculus session list --db ./session.sqlite3", nil, nil}
+        ]
+      },
+      "workspace" => %{
+        name: "workspace",
+        about: "Attach or detach a configured workspace",
+        long_about:
+          "attach appends workspace.attached with roots and teams from config. detach appends workspace.detached.",
+        arg_required_else_help: true,
+        args: [
+          %{
+            name: :action,
+            metavar: "action",
+            required: true,
+            variadic: false,
+            help: "attach or detach"
+          },
+          %{
+            name: :name,
+            metavar: "name",
+            required: true,
+            variadic: false,
+            help: "Workspace id from [workspaces.*]"
+          }
+        ],
+        flags: [
+          flag("db",
+            long: "db",
+            value: "file",
+            help: "Session SQLite path (default: ~/.omunculus/session.sqlite3)"
+          ),
+          flag("config", long: "config", value: "file", help: "Config file (attach)")
+        ],
+        examples: [
+          {"omunculus workspace attach app --config ./omunculus.toml", nil, nil},
+          {"omunculus workspace detach app", nil, nil}
+        ]
+      },
+      "send" => %{
+        name: "send",
+        about: "Submit an instruction to a session",
+        long_about:
+          "Opens the session log, starts Runtime and Projector, and waits for the root task.completed unless --detach is set.",
+        arg_required_else_help: true,
+        args: [
+          %{
+            name: :instruction,
+            metavar: "instruction",
+            required: true,
+            variadic: true,
+            var_min: 1,
+            help: "Task instruction"
+          }
+        ],
+        flags: [
+          flag("db",
+            long: "db",
+            value: "file",
+            help: "Session SQLite path (default: ~/.omunculus/session.sqlite3)"
+          ),
+          flag("profile",
+            long: "profile",
+            value: "profile",
+            help: "Named profile from config"
+          ),
+          flag("preset",
+            long: "preset",
+            value: "preset",
+            help: "Named preset from config (alias of --profile)"
+          ),
+          flag("workspace",
+            long: "workspace",
+            value: "id",
+            help: "Target workspace id on the request"
+          ),
+          flag("config", long: "config", value: "file", help: "Config file"),
+          flag("detach", long: "detach", help: "Append task.requested and return without waiting")
+        ],
+        examples: [
+          {"omunculus send \"conte até 3\" --profile count --config ./omunculus.toml", nil, nil}
+        ]
+      },
       "config" => %{
         name: "config",
         about: "Validate configuration",
