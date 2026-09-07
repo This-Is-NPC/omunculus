@@ -11,7 +11,7 @@ defmodule Omunculus.EventCore.Store do
 
   alias Exqlite.Sqlite3
 
-  @schema_version 1
+  @schema_version 2
 
   @schema [
     "PRAGMA journal_mode=WAL",
@@ -28,6 +28,7 @@ defmodule Omunculus.EventCore.Store do
     CREATE TABLE IF NOT EXISTS WORK_ITEMS (
       work_item_id TEXT PRIMARY KEY,
       project_id TEXT,
+      workspace_id TEXT,
       parent_work_item_id TEXT,
       instruction TEXT NOT NULL,
       status TEXT NOT NULL,
@@ -43,11 +44,12 @@ defmodule Omunculus.EventCore.Store do
     """
     CREATE TABLE IF NOT EXISTS COMMENTS (
       comment_id TEXT PRIMARY KEY,
-      project_id TEXT,
+      session_id TEXT,
       work_item_id TEXT NOT NULL,
       kind TEXT NOT NULL,
       body TEXT,
       created_at TEXT,
+      event_id TEXT,
       last_sequence INTEGER NOT NULL DEFAULT 0
     )
     """,
@@ -122,10 +124,20 @@ defmodule Omunculus.EventCore.Store do
       projection TEXT PRIMARY KEY,
       last_sequence INTEGER NOT NULL
     )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS SESSION_WORKSPACES (
+      workspace_id TEXT PRIMARY KEY,
+      roots TEXT,
+      teams TEXT,
+      attached INTEGER NOT NULL DEFAULT 1,
+      attached_at TEXT,
+      last_sequence INTEGER NOT NULL DEFAULT 0
+    )
     """
   ]
 
-  @projection_tables ~w(PROJECTS WORK_ITEMS COMMENTS WORK_ITEM_DEPENDENCIES ARCHIVE_RUNS ARCHIVE_MODEL_CALLS)
+  @projection_tables ~w(PROJECTS WORK_ITEMS COMMENTS WORK_ITEM_DEPENDENCIES ARCHIVE_RUNS ARCHIVE_MODEL_CALLS SESSION_WORKSPACES)
 
   def projection_tables, do: @projection_tables
 
@@ -196,6 +208,26 @@ defmodule Omunculus.EventCore.Store do
       {"ARCHIVE_RUNS", "reason", "TEXT"},
       {"ARCHIVE_RUNS", "policy_hash", "TEXT"},
       {"WORK_ITEMS", "awaiting", "TEXT"}
+    ],
+    2 => [
+      {"WORK_ITEMS", "workspace_id", "TEXT"},
+      {"COMMENTS", "session_id", "TEXT"},
+      {"COMMENTS", "event_id", "TEXT"}
+    ]
+  }
+
+  @table_migrations %{
+    2 => [
+      """
+      CREATE TABLE IF NOT EXISTS SESSION_WORKSPACES (
+        workspace_id TEXT PRIMARY KEY,
+        roots TEXT,
+        teams TEXT,
+        attached INTEGER NOT NULL DEFAULT 1,
+        attached_at TEXT,
+        last_sequence INTEGER NOT NULL DEFAULT 0
+      )
+      """
     ]
   }
 
@@ -219,6 +251,10 @@ defmodule Omunculus.EventCore.Store do
   defp apply_migrations!(conn, version) do
     for {table, column, type} <- Map.fetch!(@migrations, version) do
       ensure_column!(conn, table, column, type)
+    end
+
+    for sql <- Map.get(@table_migrations, version, []) do
+      :ok = exec!(conn, sql)
     end
   end
 

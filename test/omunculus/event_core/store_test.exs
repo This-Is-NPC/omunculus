@@ -60,7 +60,7 @@ defmodule Omunculus.EventCore.StoreTest do
     :ok = Sqlite3.close(conn)
 
     assert {:ok, conn} = Store.open(path)
-    assert [[1]] = Store.query(conn, "PRAGMA user_version")
+    assert [[2]] = Store.query(conn, "PRAGMA user_version")
 
     archive_cols = column_names(conn, "ARCHIVE_RUNS")
     assert "outcome" in archive_cols
@@ -69,22 +69,27 @@ defmodule Omunculus.EventCore.StoreTest do
 
     work_item_cols = column_names(conn, "WORK_ITEMS")
     assert "awaiting" in work_item_cols
+    assert "workspace_id" in work_item_cols
+
+    comment_cols = column_names(conn, "COMMENTS")
+    assert "session_id" in comment_cols
+    assert "event_id" in comment_cols
 
     assert Store.query(conn, "SELECT outcome, reason, policy_hash FROM ARCHIVE_RUNS") == []
 
     Store.close(conn)
 
     assert {:ok, conn2} = Store.open(path)
-    assert [[1]] = Store.query(conn2, "PRAGMA user_version")
+    assert [[2]] = Store.query(conn2, "PRAGMA user_version")
     Store.close(conn2)
   end
 
-  test "fresh database gets current schema and user_version 1" do
+  test "fresh database gets current schema and user_version 2" do
     path = tempfile_path()
     on_exit(fn -> File.rm(path) end)
 
     assert {:ok, conn} = Store.open(path)
-    assert [[1]] = Store.query(conn, "PRAGMA user_version")
+    assert [[2]] = Store.query(conn, "PRAGMA user_version")
 
     archive_cols = column_names(conn, "ARCHIVE_RUNS")
     assert "outcome" in archive_cols
@@ -93,13 +98,14 @@ defmodule Omunculus.EventCore.StoreTest do
 
     work_item_cols = column_names(conn, "WORK_ITEMS")
     assert "awaiting" in work_item_cols
+    assert "workspace_id" in work_item_cols
 
     Store.close(conn)
   end
 
-  test ":memory: database gets user_version 1" do
+  test ":memory: database gets user_version 2" do
     assert {:ok, conn} = Store.open(":memory:")
-    assert [[1]] = Store.query(conn, "PRAGMA user_version")
+    assert [[2]] = Store.query(conn, "PRAGMA user_version")
 
     archive_cols = column_names(conn, "ARCHIVE_RUNS")
     assert "outcome" in archive_cols
@@ -107,6 +113,83 @@ defmodule Omunculus.EventCore.StoreTest do
 
     work_item_cols = column_names(conn, "WORK_ITEMS")
     assert "awaiting" in work_item_cols
+    assert "workspace_id" in work_item_cols
+
+    Store.close(conn)
+  end
+
+  test "migrates v1 leftover databases to user_version 2" do
+    path = tempfile_path()
+    on_exit(fn -> File.rm(path) end)
+
+    {:ok, conn} = Sqlite3.open(path)
+
+    :ok =
+      Sqlite3.execute(conn, """
+      CREATE TABLE WORK_ITEMS (
+        work_item_id TEXT PRIMARY KEY,
+        project_id TEXT,
+        parent_work_item_id TEXT,
+        instruction TEXT NOT NULL,
+        status TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 0,
+        checkpoint TEXT,
+        awaiting TEXT,
+        result TEXT,
+        created_at TEXT,
+        updated_at TEXT,
+        last_sequence INTEGER NOT NULL DEFAULT 0
+      )
+      """)
+
+    :ok =
+      Sqlite3.execute(conn, """
+      CREATE TABLE ARCHIVE_RUNS (
+        run_id TEXT PRIMARY KEY,
+        project_id TEXT,
+        work_item_id TEXT NOT NULL,
+        attempt INTEGER NOT NULL,
+        depth INTEGER NOT NULL,
+        parent_run_id TEXT,
+        originating_run_id TEXT,
+        agent_id TEXT,
+        agent_kind TEXT,
+        trace_id TEXT,
+        status TEXT NOT NULL,
+        reason TEXT,
+        outcome TEXT,
+        started_at TEXT,
+        finished_at TEXT,
+        last_sequence INTEGER NOT NULL DEFAULT 0
+      )
+      """)
+
+    :ok =
+      Sqlite3.execute(conn, """
+      CREATE TABLE COMMENTS (
+        comment_id TEXT PRIMARY KEY,
+        work_item_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        body TEXT,
+        created_at TEXT,
+        last_sequence INTEGER NOT NULL DEFAULT 0
+      )
+      """)
+
+    :ok = Sqlite3.execute(conn, "PRAGMA user_version = 1")
+    :ok = Sqlite3.close(conn)
+
+    assert {:ok, conn} = Store.open(path)
+    assert [[2]] = Store.query(conn, "PRAGMA user_version")
+    assert "workspace_id" in column_names(conn, "WORK_ITEMS")
+    assert "session_id" in column_names(conn, "COMMENTS")
+    assert "event_id" in column_names(conn, "COMMENTS")
+
+    assert [["SESSION_WORKSPACES"]] =
+             Store.query(
+               conn,
+               "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'SESSION_WORKSPACES'"
+             )
 
     Store.close(conn)
   end

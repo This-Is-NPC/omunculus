@@ -132,19 +132,29 @@ defmodule Omunculus.EventCore.Projector do
 
   defp apply_event(conn, %{type: "task.requested"} = env) do
     p = env.payload
+    workspace_id = p["workspace"]
 
     Store.query(
       conn,
-      "INSERT OR IGNORE INTO WORK_ITEMS (work_item_id, project_id, parent_work_item_id, instruction, status, version, created_at, updated_at, last_sequence) VALUES (?, ?, NULL, ?, 'requested', 0, ?, ?, ?)",
+      "INSERT OR IGNORE INTO WORK_ITEMS (work_item_id, project_id, workspace_id, parent_work_item_id, instruction, status, version, created_at, updated_at, last_sequence) VALUES (?, ?, ?, NULL, ?, 'requested', 0, ?, ?, ?)",
       [
         env.work_item_id,
         env.project_id,
+        workspace_id,
         p["instruction"],
         env.occurred_at,
         env.occurred_at,
         env.sequence
       ]
     )
+
+    if workspace_id do
+      Store.query(
+        conn,
+        "UPDATE WORK_ITEMS SET workspace_id = ?, last_sequence = ? WHERE work_item_id = ? AND last_sequence < ?",
+        [workspace_id, env.sequence, env.work_item_id, env.sequence]
+      )
+    end
   end
 
   defp apply_event(conn, %{type: "task.delegated"} = env) do
@@ -170,6 +180,16 @@ defmodule Omunculus.EventCore.Projector do
       "INSERT OR IGNORE INTO WORK_ITEM_DEPENDENCIES (project_id, work_item_id, depends_on_work_item_id, last_sequence) VALUES (?, ?, ?, ?)",
       [env.project_id, env.work_item_id, child, env.sequence]
     )
+
+    child_workspace = p["workspace"] || env.workspace_id
+
+    if child_workspace do
+      Store.query(
+        conn,
+        "UPDATE WORK_ITEMS SET workspace_id = ?, last_sequence = ? WHERE work_item_id = ? AND last_sequence < ?",
+        [child_workspace, env.sequence, child, env.sequence]
+      )
+    end
 
     transition_work_item(conn, env.work_item_id, ["running", "requested"], "waiting", env)
   end
@@ -261,13 +281,14 @@ defmodule Omunculus.EventCore.Projector do
 
     Store.query(
       conn,
-      "INSERT OR IGNORE INTO COMMENTS (comment_id, project_id, work_item_id, kind, body, created_at, last_sequence) VALUES (?, ?, ?, 'result', ?, ?, ?)",
+      "INSERT OR IGNORE INTO COMMENTS (comment_id, session_id, work_item_id, kind, body, created_at, event_id, last_sequence) VALUES (?, ?, ?, 'result', ?, ?, ?, ?)",
       [
         env.event_id,
-        env.project_id,
+        env.session_id,
         env.work_item_id,
         to_string(p["result"]),
         env.occurred_at,
+        env.event_id,
         env.sequence
       ]
     )
@@ -320,6 +341,65 @@ defmodule Omunculus.EventCore.Projector do
     )
 
     transition_work_item(conn, env.work_item_id, ["running", "waiting"], "failed", env)
+  end
+
+  defp apply_event(_conn, %{type: "session.created"}), do: :ok
+
+  defp apply_event(conn, %{type: "workspace.attached"} = env) do
+    p = env.payload
+    workspace_id = p["workspace_id"]
+
+    Store.query(
+      conn,
+      """
+      INSERT INTO SESSION_WORKSPACES (workspace_id, roots, teams, attached, attached_at, last_sequence)
+      VALUES (?, ?, ?, 1, ?, ?)
+      ON CONFLICT(workspace_id) DO UPDATE SET
+        roots = excluded.roots,
+        teams = excluded.teams,
+        attached = 1,
+        attached_at = excluded.attached_at,
+        last_sequence = excluded.last_sequence
+      WHERE last_sequence < excluded.last_sequence
+      """,
+      [
+        workspace_id,
+        Jason.encode!(p["roots"] || []),
+        Jason.encode!(p["teams"] || []),
+        env.occurred_at,
+        env.sequence
+      ]
+    )
+  end
+
+  defp apply_event(conn, %{type: "workspace.detached"} = env) do
+    workspace_id = env.payload["workspace_id"]
+
+    Store.query(
+      conn,
+      "UPDATE SESSION_WORKSPACES SET attached = 0, last_sequence = ? WHERE workspace_id = ? AND last_sequence < ?",
+      [env.sequence, workspace_id, env.sequence]
+    )
+  end
+
+  defp apply_event(conn, %{type: "task.commented"} = env) do
+    p = env.payload
+    kind = p["kind"] || "comment"
+
+    Store.query(
+      conn,
+      "INSERT OR IGNORE INTO COMMENTS (comment_id, session_id, work_item_id, kind, body, created_at, event_id, last_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        env.event_id,
+        env.session_id,
+        env.work_item_id,
+        kind,
+        p["body"],
+        env.occurred_at,
+        env.event_id,
+        env.sequence
+      ]
+    )
   end
 
   # Commands and events without a projection effect (tool.call.requested,

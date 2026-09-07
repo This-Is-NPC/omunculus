@@ -220,4 +220,45 @@ defmodule Omunculus.EventCoreTest do
                "SELECT status, awaiting FROM WORK_ITEMS WHERE work_item_id = 'wi-parent'"
              )
   end
+
+  test "workspace.attached projects SESSION_WORKSPACES", %{core: core, projector: projector} do
+    EventCore.append!(
+      core,
+      Envelope.command("workspace.attached",
+        session_id: "sess-1",
+        payload: %{
+          workspace_id: "ws-app",
+          roots: ["/app"],
+          teams: ["app"]
+        }
+      )
+    )
+
+    :ok = Projector.sync(projector)
+
+    assert [["ws-app", ~s(["/app"]), ~s(["app"]), 1]] =
+             EventCore.query(
+               core,
+               "SELECT workspace_id, roots, teams, attached FROM SESSION_WORKSPACES"
+             )
+  end
+
+  test "task.commented projects COMMENTS", %{core: core, projector: projector} do
+    EventCore.append!(
+      core,
+      Envelope.command("task.commented",
+        session_id: "sess-1",
+        work_item_id: "wi-1",
+        payload: %{body: "please review", kind: "request"}
+      )
+    )
+
+    :ok = Projector.sync(projector)
+
+    assert [["wi-1", "request", "please review", "sess-1"]] =
+             EventCore.query(
+               core,
+               "SELECT work_item_id, kind, body, session_id FROM COMMENTS"
+             )
+  end
 end
