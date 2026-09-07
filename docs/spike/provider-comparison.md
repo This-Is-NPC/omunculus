@@ -2,6 +2,11 @@ Status: validado em 2026-09-07 — 28 casos executados; efeitos e hierarquia dis
 
 # Comparação de providers na fase 7
 
+**Classificação: teste exploratório de integração.** A
+[auditoria metodológica](methodology-audit.md) identificou instruções de perfil
+não propagadas, nudges desiguais e limitações nos verificadores e no controle
+do experimento. Os números abaixo não são taxas de confiabilidade dos modelos.
+
 A [análise por cenário, depth e ferramentas](scenario-performance.md) detalha
 as permissões da raiz, o agente efetivo e a rejeição de delegação observada.
 

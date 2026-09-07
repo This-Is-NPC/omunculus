@@ -1,5 +1,10 @@
 # Desempenho por cenário, profundidade e ferramentas
 
+**Classificação: teste exploratório de integração.** A
+[auditoria metodológica](methodology-audit.md) identificou instruções de perfil
+não propagadas, nudges desiguais e limitações nos verificadores e no controle
+do experimento. Os números abaixo não são taxas de confiabilidade dos modelos.
+
 Relatório sobre as 28 execuções de 2026-09-07: 12 cloud, 12 Qwen 9B e quatro
 repetições cloud. Esta análise releu os EVENTS existentes; não fez novas
 chamadas aos modelos nem alterou prompts, políticas ou runtime.
