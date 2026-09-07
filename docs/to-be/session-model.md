@@ -1,4 +1,4 @@
-Status: TO-BE — planejado, validado; sessão, attach/detach, nodes derivados e WorkspaceGate validados; inbox, resume e request_work permanecem proposta
+Status: TO-BE — planejado, validado; sessão, attach/detach, nodes derivados, WorkspaceGate e inbox validados; resume e request_work permanecem proposta
 
 # Sessão e workspaces
 

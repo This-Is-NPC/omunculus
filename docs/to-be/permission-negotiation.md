@@ -1,4 +1,4 @@
-Status: TO-BE — proposta, aguardando avaliação
+Status: TO-BE — request_permission com efeito, tipos permission.*, arbitragem do pai (grant/deny/escalate), Core rejeita permanent de run:*, ToolGate temporária por linhagem (expira com a tarefa, isolamento entre irmãos, herda para baixo), policy.changed fecha pedidos abertos, inbox list/reply/read, emit --request-id e complex.toml (faixa human com/sem lane) validados; verbo CLI `policy grant` e demais itens sem teste permanecem proposta
 
 # Permissões temporárias e negociação
 

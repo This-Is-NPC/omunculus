@@ -147,7 +147,7 @@ Testes: `medium-teams.toml` com e sem lane; roteamento por tipo de tarefa;
 Testes: `complex.toml` sem a parte de permissão: dois workspaces, depth 2,
 `infra` só leitura pelas três barreiras, automação disparando.
 
-## Fase 5: permissões e inbox
+## Fase 5: permissões e inbox (validada)
 
 [permission-negotiation.md](permission-negotiation.md).
 

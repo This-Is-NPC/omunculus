@@ -19,10 +19,10 @@ O que a spike validou e o que ela revelou está em
 | [event-model.md](event-model.md) | envelope, append, dispatch, replay, cenários `conte até 10` | planejado, spike |
 | [event-catalog.md](event-catalog.md) | tipos de envelope, interceptor, automação, portas da CLI | planejado, spike |
 | [execution-model.md](execution-model.md) | Agent config, Execution Node, Run, delegação | planejado, spike |
-| [session-model.md](session-model.md) | Session, workspaces, multi-repo, inbox | proposta |
+| [session-model.md](session-model.md) | Session, workspaces, multi-repo, inbox | validado (sessão, inbox); resume proposta |
 | [team-model.md](team-model.md) | times, interação entre linhagens pelo ancestral comum, descoberta | proposta |
 | [tool-policy.md](tool-policy.md) | teto, perfil, workspace, modos, três barreiras | proposta |
-| [permission-negotiation.md](permission-negotiation.md) | pedido, arbitragem, escopo, validade, revogação | proposta |
+| [permission-negotiation.md](permission-negotiation.md) | pedido, arbitragem, escopo, validade, revogação | validado |
 | [recommendations.md](recommendations.md) | razões de terreno por trás de sessão, workspace e concierge | rationale |
 | [harness-comparison.md](harness-comparison.md) | comparação com Pi, Claude Code e Codex | referência |
 
