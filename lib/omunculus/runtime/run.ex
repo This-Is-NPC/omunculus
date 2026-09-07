@@ -79,12 +79,13 @@ defmodule Omunculus.Runtime.Run do
     remaining = checkpoint_awaiting(checkpoint)
     remaining_pending = fetch_key(checkpoint, "pending") || %{}
     agent = state.agent
+    active_tools = executable_tools(state)
 
     opts = [
       instruction: state.instruction,
       chat: agent.chat,
       fs: state[:fs] || fs_for_roots(state[:roots]),
-      tools: agent.tools,
+      tools: active_tools,
       max_turns: agent[:max_turns] || 32,
       instructions: agent[:instructions],
       system_prompt: agent[:system_prompt],
@@ -810,6 +811,16 @@ defmodule Omunculus.Runtime.Run do
       "human" => [],
       "forbidden" => []
     }
+  end
+
+  defp executable_tools(state) do
+    case state[:tools] do
+      %{} = bands ->
+        Enum.uniq((bands["granted"] || []) ++ (bands["negotiable"] || []))
+
+      _ ->
+        state.agent.tools
+    end
   end
 
   defp tools_pin(state) do

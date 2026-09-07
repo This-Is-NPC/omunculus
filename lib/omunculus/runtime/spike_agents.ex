@@ -33,7 +33,8 @@ defmodule Omunculus.Runtime.SpikeAgents do
     agent_cfg = Map.get(config.agents, name, %{})
     agent_id = name
     kind = agent_kind(name, ctx)
-    max_turns = agent_cfg.max_turns || opts[:max_turns] || config.defaults.max_turns || 4
+    defaults = Map.get(config, :defaults, %{})
+    max_turns = Map.get(agent_cfg, :max_turns) || opts[:max_turns] || Map.get(defaults, :max_turns) || 4
 
     if is_map(opts[:chat]) do
       %{
