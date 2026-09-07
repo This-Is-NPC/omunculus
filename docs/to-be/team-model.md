@@ -1,4 +1,4 @@
-Status: TO-BE — roteamento, TeamGate e tool `workspaces` validados; `request_work`, `scope=node`, identidade, `directory` e `cross_lineage` permanecem proposta
+Status: TO-BE — fase 6 validada com provider fake: roteamento LCA, mediação, descoberta por escopo, dependências, replay e retomada; provider real pendente da fase 7
 
 # Times, interação entre linhagens e descoberta
 

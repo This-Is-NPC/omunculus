@@ -271,6 +271,22 @@ defmodule Omunculus.EventCore do
   defp dispatch(state, env) do
     lane = Enum.filter(state.interceptors, &(env.type in &1.events))
 
+    lane =
+      if env.type == "task.requested" and Map.has_key?(env.payload, "requested_by") and
+           not Enum.any?(lane, &(&1.module == Omunculus.Interceptors.TeamGate)) do
+        lane ++
+          [
+            %{
+              name: "team-gate",
+              events: [env.type],
+              module: Omunculus.Interceptors.TeamGate,
+              options: %{}
+            }
+          ]
+      else
+        lane
+      end
+
     case run_lane(lane, env, state) do
       {:deliver, state} ->
         notify(state.subscribers, env)
@@ -338,7 +354,10 @@ defmodule Omunculus.EventCore do
   defp restricted_workspaces?(workspaces),
     do: is_list(workspaces) and workspaces != [] and Enum.all?(workspaces, &is_binary/1)
 
-  defp bump(stats, name, key), do: update_in(stats[name][key], &(&1 + 1))
+  defp bump(stats, name, key) do
+    stats = Map.put_new(stats, name, %{evaluated: 0, delivered: 0, rejected: 0})
+    update_in(stats[name][key], &(&1 + 1))
+  end
 
   defp notify(subscribers, env) do
     Enum.each(subscribers, fn {pid, {_ref, filter}} ->

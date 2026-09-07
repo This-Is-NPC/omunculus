@@ -21,14 +21,19 @@ defmodule Omunculus.Interceptors.TeamGate do
   end
 
   def intercept(%{type: "task.requested", payload: %{"requested_by" => _}} = env, options) do
+    conn = fetch_opt(options, :conn)
+    source = if conn, do: Omunculus.Discovery.run(conn, env.run_id), else: nil
+    options = Map.merge((source || %{})["discovery"] || %{}, options)
     payload = env.payload
-    team = payload["team"]
+    team = payload["team"] || (source || %{})["team"]
     agent = payload["agent"]
 
     with :ok <- validate_requester_authority(env, options),
          :ok <- validate_team(team, env, payload, options),
          :ok <- validate_agent(agent, team, options),
-         :ok <- validate_target_present(payload) do
+         :ok <- validate_workspace(payload, source, options),
+         :ok <- validate_target_present(payload),
+         :ok <- Omunculus.Discovery.validate_scope(fetch_opt(options, :conn), env) do
       :deliver
     else
       {:error, reason} -> {:reject, reason}
@@ -49,6 +54,15 @@ defmodule Omunculus.Interceptors.TeamGate do
   end
 
   def intercept(_envelope, _options), do: :deliver
+
+  defp validate_workspace(payload, source, options) do
+    workspaces = fetch_opt(options, :workspaces) || %{}
+    workspace = payload["workspace"] || (source || %{})["workspace"]
+
+    if workspaces != %{} and not Map.has_key?(workspaces, workspace),
+      do: {:error, "workspace not in session"},
+      else: :ok
+  end
 
   defp validate_target_present(payload) do
     if target_present?(payload),
@@ -87,8 +101,7 @@ defmodule Omunculus.Interceptors.TeamGate do
            ),
          %{"tools" => tools} <- Jason.decode!(payload_json) do
       granted = Map.get(tools, "granted", [])
-      negotiable = Map.get(tools, "negotiable", [])
-      "request_work" in granted or "request_work" in negotiable
+      Omunculus.Permission.tool_allowed?(conn, env.work_item_id, "request_work", granted)
     else
       _ -> false
     end

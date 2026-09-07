@@ -15,7 +15,7 @@ defmodule Omunculus.CLI.Spike do
   alias Omunculus.EventCore
   alias Omunculus.EventCore.Projector
   alias Omunculus.Runtime
-  alias Omunculus.Runtime.SpikeAgents
+  alias Omunculus.Runtime.Agents
 
   def run(%{args: args, flags: flags}, env \\ %{}) do
     with {:ok, depth} <- parse_nonneg(flags["depth"] || "1", :depth),
@@ -41,7 +41,7 @@ defmodule Omunculus.CLI.Spike do
           [
             core: core,
             max_depth: depth,
-            agents: SpikeAgents.resolver(delay_ms: delay_ms, chat: chat),
+            agents: Agents.resolver(delay_ms: delay_ms, chat: chat),
             run_opts: [delegation_timeout: 600_000]
           ]
           |> maybe_runtime_config(flags, env)

@@ -3,7 +3,7 @@ Status: AS-IS — implementado
 # Arquitetura atual
 
 Este documento descreve somente o que o código, `omunculus.usage.kdl` e os testes
-implementam na branch `spike/event-core`. O índice de decisões planejadas está em
+implementam na branch `master`. O índice de decisões planejadas está em
 [TO-BE](../to-be/architecture.md).
 
 ## Limites
@@ -98,7 +98,7 @@ Não executa shell, não cria commits e não oferece API pública HTTP, MCP ou T
   no spike restringe.
 - **Agent (legado)**: loop síncrono em memória para `monkey-job` (e benchmark
   quando usa chat).
-- **SpikeAgents**: com `[agents]`/`[session].roles` e `[teams]` no TOML, escolhe
+- **Runtime.Agents**: com `[agents]`/`[session].roles` e `[teams]` no TOML, escolhe
   chat/prompt e roteia `delegate` por time (depth 0) e membro (depth 1); sem essas
   tabelas mantém o heurístico concierge/worker por profundidade.
 - **Runner/Sandbox, Chat, Tools, Reporter**: usados no caminho `monkey-job`;
@@ -141,11 +141,17 @@ runtime e não cria persistência durável.
 
 ## Ausências verificadas
 
-- **request_work / interação entre linhagens**: tool inexistente; sem LCA; sem
-  `WORK_ITEM_DEPENDENCIES` cross-team (só pai-depende-de-filho via delegate).
-- **tool `directory`** no catálogo de tools do harness.
 - **Runtime residente observando `emit` em tempo real**: `events follow` faz poll;
   `send` abre Runtime por invocação.
 
 O modelo de dados está em [data-model.md](data-model.md); requisitos observáveis
 em [requirements.md](requirements.md).
+
+## Fechamento da fase 6 (2026-09-07)
+
+`request_work` cria dependências pelo ancestral comum e reabre o solicitante;
+`mediated` repassa, reescreve ou nega, preservando o checkpoint do ancestral.
+`directory` e `TeamGate` compartilham escopo por sessão, workspace e time.
+Tools negociáveis exigem concessão; revogação é consultada antes da execução.
+`WORK_ITEMS.requested_by` é reconstruível do log e migra no schema 4.
+A matriz cobre vinte combinações com filesystem isolado; 277 testes passam.

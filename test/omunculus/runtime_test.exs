@@ -10,7 +10,7 @@ defmodule Omunculus.RuntimeTest do
   alias Omunculus.EventCore
   alias Omunculus.EventCore.Projector
   alias Omunculus.Runtime
-  alias Omunculus.Runtime.SpikeAgents
+  alias Omunculus.Runtime.Agents
 
   @chain_types ~w(task.requested task.delegated tool.call.requested tool.call.completed task.completed)
 
@@ -21,7 +21,7 @@ defmodule Omunculus.RuntimeTest do
     agents =
       case Keyword.get(agent_opts, :agents) do
         fun when is_function(fun, 1) -> fun
-        _ -> SpikeAgents.resolver(agent_opts)
+        _ -> Agents.resolver(agent_opts)
       end
 
     {:ok, runtime} =

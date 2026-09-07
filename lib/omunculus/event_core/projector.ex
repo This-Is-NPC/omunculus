@@ -28,6 +28,8 @@ defmodule Omunculus.EventCore.Projector do
   @doc "Drop projections and replay the log from sequence 0."
   def rebuild(projector), do: GenServer.call(projector, :rebuild, :infinity)
 
+  def sync_core(core), do: catch_up(core)
+
   def cursor(projector), do: GenServer.call(projector, :cursor, :infinity)
 
   @doc "Deterministic snapshot of all projection tables, for replay equality checks."
@@ -182,6 +184,13 @@ defmodule Omunculus.EventCore.Projector do
       "INSERT OR IGNORE INTO WORK_ITEM_DEPENDENCIES (project_id, work_item_id, depends_on_work_item_id, last_sequence) VALUES (?, ?, ?, ?)",
       [env.project_id, env.work_item_id, child, env.sequence]
     )
+
+    if p["requested_by"] do
+      Store.query(conn, "UPDATE WORK_ITEMS SET requested_by = ? WHERE work_item_id = ?", [
+        p["requested_by"],
+        child
+      ])
+    end
 
     if requester = p["requester_work_item_id"] do
       Store.query(

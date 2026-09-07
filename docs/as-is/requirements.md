@@ -3,7 +3,7 @@ Status: AS-IS — implementado
 # Requisitos atuais
 
 Requisitos abaixo são observáveis na CLI, na especificação KDL e nos testes da
-branch `spike/event-core` (254 testes). Não são requisitos do alvo em `main`.
+branch `master` (277 testes). Não são requisitos do alvo TO-BE.
 Consulte [architecture.md](architecture.md) e [data-model.md](data-model.md).
 
 ## Interface CLI
@@ -56,7 +56,7 @@ via ambiente. Mesma resolução em `events follow`, `emit`, `session`, `workspac
 5. Esperar `task.completed`; imprimir `result`; remover o arquivo sqlite.
 
 Provider opcional (`--provider chat` + credenciais); sem provider usa
-`SpikeAgents` heurístico. Não persiste log entre invocações.
+`Runtime.Agents` com scripts fake explícitos. Não persiste log entre invocações.
 
 ## Execução `monkey-job` (legado)
 
@@ -129,8 +129,16 @@ sessão/workspace/send, `--fail-at`/resume, cenários 3/4 (dois Runs por WI
 concierge) e três blocos de permissões (temporária, permanente, arbitragem do
 pai) mais `complex.toml` com e sem lane (faixa `human`).
 
-Não há requisito implementado para: `request_work` / dependências cross-team,
-runtime residente reagindo a `emit` em tempo real, nem tool `directory`. Não
+Não há requisito implementado para runtime residente reagindo a `emit` em tempo real. Não
 existe verbo CLI `policy grant` (permanente via `inbox reply --grant
 --permanent`). Esses itens estão no [alvo TO-BE](../to-be/requirements.md) e
 não devem ser inferidos como disponíveis hoje.
+
+## Fechamento da fase 6 (2026-09-07)
+
+`request_work` cria dependências pelo ancestral comum e reabre o solicitante;
+`mediated` repassa, reescreve ou nega, preservando o checkpoint do ancestral.
+`directory` e `TeamGate` compartilham escopo por sessão, workspace e time.
+Tools negociáveis exigem concessão; revogação é consultada antes da execução.
+`WORK_ITEMS.requested_by` é reconstruível do log e migra no schema 4.
+A matriz cobre vinte combinações com filesystem isolado; 277 testes passam.

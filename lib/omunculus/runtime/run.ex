@@ -62,6 +62,8 @@ defmodule Omunculus.Runtime.Run do
           reason: reason,
           checkpoint: checkpoint,
           tools: tools_bands,
+          directory_scope: state[:directory_scope] || "subtree",
+          discovery: Map.take(state.agent[:tool_options] || %{}, [:workspaces, :teams, :agents]),
           team: state[:team] || state["team"],
           node_id: state[:node_id],
           workspace: state[:workspace],
@@ -182,9 +184,13 @@ defmodule Omunculus.Runtime.Run do
             %{outcome: "completed", cross_lineage_forwarded: true}
 
           true ->
-            %{outcome: "completed"}
+            %{outcome: "completed", cross_lineage_denied: "mediator returned without a decision"}
         end
         |> Map.merge(%{
+          outcome: "waiting",
+          awaiting: (state[:arbitration_restore] || %{})[:awaiting] || [],
+          checkpoint: (state[:arbitration_restore] || %{})[:checkpoint] || %{},
+          request_event_id: state.cross_lineage_request.event_id,
           rounds: result.turns,
           tool_calls: result.tool_calls,
           usage: result.usage
@@ -261,9 +267,16 @@ defmodule Omunculus.Runtime.Run do
 
   defp execute_tool(state, tool, args, context, _active)
        when tool in ["grant", "deny", "escalate"] do
-    if state[:arbitration],
-      do: arbitration_tool(state, tool, args, context),
-      else: {:error, :denied, context}
+    cond do
+      state[:arbitration] ->
+        arbitration_tool(state, tool, args, context)
+
+      state[:cross_lineage_arbitration] and tool == "deny" ->
+        cross_lineage_tool(state, tool, args, context)
+
+      true ->
+        {:error, :denied, context}
+    end
   end
 
   defp execute_tool(state, tool, args, context, _active)
@@ -288,7 +301,7 @@ defmodule Omunculus.Runtime.Run do
     case await_delivery_or_rejection(requested.event_id) do
       :ok ->
         {body, context, outcome} =
-          case Tools.call_context(name, args, context, active) do
+          case authorized_tool_call(state, name, args, context, active) do
             {:ok, output, context} ->
               {output, context, "completed"}
 
@@ -323,6 +336,22 @@ defmodule Omunculus.Runtime.Run do
     end
   end
 
+  defp authorized_tool_call(state, name, args, context, active) do
+    {:ok, allowed?} =
+      EventCore.transaction(state.core, fn conn ->
+        Permission.tool_allowed?(
+          conn,
+          state.work_item_id,
+          name,
+          (state[:tools] || bands_from_agent(state.agent))["granted"] || []
+        )
+      end)
+
+    if allowed?,
+      do: Tools.call_context(name, args, context, active),
+      else: {:error, :denied, context}
+  end
+
   # Depth policy is not the node's business: a configured DepthGate
   # interceptor may reject the delivery of task.delegated, in which case the
   # child never starts and the rejection comes back to the model as a tool
@@ -339,7 +368,7 @@ defmodule Omunculus.Runtime.Run do
         parent_run_id: state.run_id,
         originating_run_id: state.originating_run_id || state.run_id,
         tools: tools_pin(state),
-        team: args["team"] || args[:team],
+        team: args["team"] || args[:team] || state[:team],
         agent: args["agent"] || args[:agent]
       }
       |> maybe_put_workspace(args)
@@ -376,8 +405,8 @@ defmodule Omunculus.Runtime.Run do
         requested_by: "run:" <> state.run_id,
         child_work_item_id: child,
         requester_work_item_id: state.work_item_id,
-        workspace: args["workspace"] || args[:workspace],
-        team: args["team"] || args[:team],
+        workspace: args["workspace"] || args[:workspace] || state[:workspace],
+        team: args["team"] || args[:team] || state[:team] || "default",
         agent: args["agent"] || args[:agent]
       }
       |> drop_nil_fields()
@@ -580,8 +609,8 @@ defmodule Omunculus.Runtime.Run do
         %{
           instruction: instruction,
           child_work_item_id: payload["child_work_item_id"],
-          to_depth: cross_lineage_target_depth(payload, state.depth),
-          parent_run_id: state.parent_run_id,
+          to_depth: state.cross_lineage_target_depth,
+          parent_run_id: state.run_id,
           originating_run_id: state.originating_run_id || state.run_id,
           team: payload["team"],
           agent: payload["agent"],
@@ -596,13 +625,6 @@ defmodule Omunculus.Runtime.Run do
     await_delivery(delegated.event_id)
     Process.put(:cross_lineage_forwarded, true)
     {:ok, "forwarded", context}
-  end
-
-  defp cross_lineage_target_depth(payload, lca_depth) do
-    cond do
-      is_binary(payload["agent"]) and payload["agent"] != "" -> lca_depth + 1
-      true -> max(lca_depth + 1, 1)
-    end
   end
 
   defp permission_tool_name(args) do
@@ -813,15 +835,7 @@ defmodule Omunculus.Runtime.Run do
     }
   end
 
-  defp executable_tools(state) do
-    case state[:tools] do
-      %{} = bands ->
-        Enum.uniq((bands["granted"] || []) ++ (bands["negotiable"] || []))
-
-      _ ->
-        state.agent.tools
-    end
-  end
+  defp executable_tools(state), do: state.agent.tools
 
   defp tools_pin(state) do
     state[:tools] || bands_from_agent(state.agent)

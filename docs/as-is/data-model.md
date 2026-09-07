@@ -2,7 +2,7 @@ Status: AS-IS — implementado
 
 # Modelo de dados atual
 
-Na branch `spike/event-core` coexistem estado transitório (`monkey-job`) e
+Na branch `master` coexistem estado transitório (`monkey-job`) e
 persistência SQLite/WAL no caminho Event Core (`spike`, `emit`, `events follow`,
 `session`, `workspace`, `send`, `inbox`, `run` efêmero). A arquitetura está em
 [architecture.md](architecture.md); o alvo separado em
@@ -111,3 +111,12 @@ Cada `Run` é um GenServer temporário com checkpoint
 
 A separação planejada de conceitos ainda não implementados está em
 [execution-model.md](../to-be/execution-model.md) e documentos TO-BE correlatos.
+
+## Fechamento da fase 6 (2026-09-07)
+
+`request_work` cria dependências pelo ancestral comum e reabre o solicitante;
+`mediated` repassa, reescreve ou nega, preservando o checkpoint do ancestral.
+`directory` e `TeamGate` compartilham escopo por sessão, workspace e time.
+Tools negociáveis exigem concessão; revogação é consultada antes da execução.
+`WORK_ITEMS.requested_by` é reconstruível do log e migra no schema 4.
+A matriz cobre vinte combinações com filesystem isolado; 277 testes passam.

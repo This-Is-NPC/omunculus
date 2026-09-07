@@ -2,7 +2,7 @@ defmodule Omunculus.Chat.FakeTest do
   use ExUnit.Case, async: true
 
   alias Omunculus.Chat.Fake
-  alias Omunculus.Runtime.SpikeAgents
+  alias Omunculus.Runtime.Agents
 
   test "new/1 still builds a scripted chat from a turn list" do
     chat = Fake.new([Fake.text("hello")])
@@ -35,7 +35,7 @@ defmodule Omunculus.Chat.FakeTest do
     assert {:ok, %{content: "team:alpha"}} = Fake.complete(teamed, [], [])
   end
 
-  test "SpikeAgents.resolver uses :script for fake concierge and worker chats" do
+  test "Agents.resolver uses :script for fake concierge and worker chats" do
     seen = :ets.new(:seen, [:set, :private])
 
     script = fn agent_id, depth, workspace, team ->
@@ -56,7 +56,7 @@ defmodule Omunculus.Chat.FakeTest do
       end
     end
 
-    resolver = SpikeAgents.resolver(script: script, target: 1)
+    resolver = Agents.resolver(script: script, target: 1)
 
     concierge =
       resolver.(%{
@@ -94,7 +94,7 @@ defmodule Omunculus.Chat.FakeTest do
   end
 
   test "default spike scripts still delegate then text for concierge and counter then text for worker" do
-    resolver = SpikeAgents.resolver(target: 2)
+    resolver = Agents.resolver(target: 2)
 
     concierge =
       resolver.(%{
@@ -141,7 +141,7 @@ defmodule Omunculus.Chat.FakeTest do
   end
 
   test "default worker script resumes from checkpoint with remaining counter calls" do
-    resolver = SpikeAgents.resolver(target: 3)
+    resolver = Agents.resolver(target: 3)
 
     worker =
       resolver.(%{

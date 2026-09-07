@@ -11,7 +11,7 @@ nada de sessão antes de workspace no envelope.
 
 - Documento antes de código; um commit por intenção; nunca push.
 - A branch `spike/event-core` continua sendo o lugar de trabalho até a fase
-  2; ali ela vira base e vai para `main`. Os documentos `as-is/` são
+  2; ali ela vira base e vai para `master`. Os documentos `as-is/` são
   reescritos nesse momento.
 - **Reutilizado como está**: `Envelope`, `EventCore`, `Store`, `Projector`,
   `Events`, `Interceptor` e `Automations`, `CLI.Events` (`events`, `emit`,
@@ -105,7 +105,7 @@ Testes: `simple.toml` e `medium.toml`, com e sem `lane.toml`, com as duas
 tarefas; edição do TOML entre duas Runs muda a segunda e não a primeira;
 `--profile ask` bloqueia `edit` nas três barreiras.
 
-Saída: metade da matriz verde. A branch vai para `main`; `as-is/` é
+Saída: metade da matriz verde. A branch vai para `master`; `as-is/` é
 reescrito para descrever o que existe.
 
 ## Fase 3: papéis, agentes e times
@@ -172,7 +172,7 @@ de outra tarefa; pai não concede permanente.
 
 Saída: `complex.toml` inteiro, com e sem lane.
 
-## Fase 6: trabalho entre linhagens
+## Fase 6: trabalho entre linhagens (validada)
 
 [team-model.md](team-model.md).
 
@@ -188,6 +188,11 @@ Testes: `complex-teams.toml` com e sem lane; LCA no líder versus no depth
 toda a matriz.
 
 Saída: matriz completa verde, dezoito a vinte casos.
+
+Verificação em 2026-09-07: 277 testes verdes; vinte combinações da matriz,
+autorização e descoberta por identidade real, mediação, replay e retomada
+do solicitante após reinício. `WORK_ITEMS.requested_by` migra no schema 4.
+`Runtime.Agents` substitui `SpikeAgents`; scripts ficam no provider fake.
 
 ## Fase 7: runtime residente e provider real
 

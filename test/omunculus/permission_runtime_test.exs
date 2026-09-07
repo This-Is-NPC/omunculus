@@ -7,7 +7,7 @@ defmodule Omunculus.PermissionRuntimeTest do
   alias Omunculus.Harness
   alias Omunculus.Interceptors.ToolGate
   alias Omunculus.Runtime
-  alias Omunculus.Runtime.SpikeAgents
+  alias Omunculus.Runtime.Agents
   alias Omunculus.Runtime.Permission, as: RuntimePermission
 
   @tool_gate %{
@@ -81,7 +81,7 @@ defmodule Omunculus.PermissionRuntimeTest do
     tmp = perm_overlay()
 
     agents =
-      SpikeAgents.resolver(
+      Agents.resolver(
         script: fn _id, _depth, _, _ ->
           [
             Fake.tool_call(
@@ -122,7 +122,7 @@ defmodule Omunculus.PermissionRuntimeTest do
     tmp = perm_overlay()
 
     agents =
-      SpikeAgents.resolver(
+      Agents.resolver(
         script: fn _id, _depth, _, _ ->
           [
             Fake.tool_call(
@@ -172,7 +172,7 @@ defmodule Omunculus.PermissionRuntimeTest do
       """)
 
     agents =
-      SpikeAgents.resolver(
+      Agents.resolver(
         script: fn _id, _depth, _, _ ->
           [
             Fake.tool_call(
@@ -210,7 +210,7 @@ defmodule Omunculus.PermissionRuntimeTest do
     """)
 
     agents =
-      SpikeAgents.resolver(
+      Agents.resolver(
         script: fn _agent_id, depth, _ws, _team ->
           if depth == 0 do
             [
@@ -247,7 +247,7 @@ defmodule Omunculus.PermissionRuntimeTest do
         run_opts: [delegation_timeout: 10_000]
       )
 
-    task = Task.async(fn -> Runtime.request(core, "delegate work", timeout: 2_000) end)
+    _task = Task.async(fn -> Runtime.request(core, "delegate work", timeout: 2_000) end)
     Process.sleep(500)
 
     requested =
@@ -273,7 +273,7 @@ defmodule Omunculus.PermissionRuntimeTest do
     tmp = perm_overlay()
 
     agents =
-      SpikeAgents.resolver(
+      Agents.resolver(
         script: fn _id, _d, _, _ ->
           [Fake.tool_call("request_permission", %{"tool" => "edit", "reason" => "x"}, "call_rp")]
         end
@@ -315,7 +315,7 @@ defmodule Omunculus.PermissionRuntimeTest do
     """)
 
     agents =
-      SpikeAgents.resolver(
+      Agents.resolver(
         script: fn _agent_id, depth, _ws, _team, reason ->
           if reason == "arbitration" do
             [
@@ -402,7 +402,7 @@ defmodule Omunculus.PermissionRuntimeTest do
     """)
 
     agents =
-      SpikeAgents.resolver(
+      Agents.resolver(
         script: fn _agent_id, depth, _ws, _team, reason ->
           if reason == "arbitration" do
             [

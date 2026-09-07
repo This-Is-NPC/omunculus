@@ -1,16 +1,5 @@
-defmodule Omunculus.Runtime.SpikeAgents do
-  @moduledoc """
-  Agent configurations for the `conte até N` spike, provider-free.
-
-  Agent is only configuration: identity/kind, chat, tools, budget. Nothing here
-  says where a node sits in the tree. The runtime asks for a configuration by
-  the depth of the node it is about to start: below `max_depth` it gets a
-  concierge (only tool: `delegate`), at `max_depth` a worker (only tool:
-  `counter`). When the Runtime is started with `config:`, tool lists here are
-  overwritten by policy resolution before each Run. The scripted `Chat.Fake`
-  plays the model deterministically and
-  resumes from a checkpoint when a worker is retried.
-  """
+defmodule Omunculus.Chat.Scripts do
+  @moduledoc "Deterministic scripts used exclusively by the fake provider and its tests."
 
   alias Omunculus.Chat.Fake
   alias Omunculus.Policy
@@ -34,7 +23,9 @@ defmodule Omunculus.Runtime.SpikeAgents do
     agent_id = name
     kind = agent_kind(name, ctx)
     defaults = Map.get(config, :defaults, %{})
-    max_turns = Map.get(agent_cfg, :max_turns) || opts[:max_turns] || Map.get(defaults, :max_turns) || 4
+
+    max_turns =
+      Map.get(agent_cfg, :max_turns) || opts[:max_turns] || Map.get(defaults, :max_turns) || 4
 
     if is_map(opts[:chat]) do
       %{
@@ -175,7 +166,7 @@ defmodule Omunculus.Runtime.SpikeAgents do
     end
   end
 
-  defp pick_agent(ctx, config) do
+  def pick_agent(ctx, config) do
     agents = config.agents
     teams = config.teams || %{}
     roles = get_in(config, [:session, :roles]) || %{}
@@ -468,7 +459,7 @@ defmodule Omunculus.Runtime.SpikeAgents do
       fun when is_function(fun, 5) ->
         turns =
           if Map.get(ctx, :reason) == "arbitration" and Map.get(ctx, :cross_lineage_arbitration) do
-            fun.(agent_id, ctx.depth, ctx[:workspace], ctx[:team], "cross_lineage")
+            fun.(agent_id, ctx.depth, ctx[:workspace], ctx[:team], "arbitration")
           else
             if Map.get(ctx, :reason) == "arbitration" do
               fun.(agent_id, ctx.depth, ctx[:workspace], ctx[:team], "arbitration")

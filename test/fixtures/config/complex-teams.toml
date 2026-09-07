@@ -54,11 +54,11 @@ granted = ["fs.read", "delegate", "request_work", "directory"]
 
 [profiles.coding]
 mode = "allow"
-deny = ["delegate", "counter"]
+deny = ["counter"]
 
 [profiles.count]
 mode = "deny"
-granted = ["counter"]
+granted = ["counter", "delegate"]
 
 [policy.depth.0]
 mode = "deny"

@@ -104,6 +104,8 @@ defmodule Omunculus.Runtime do
         nodes: %{}
       }
 
+    Omunculus.EventCore.Projector.sync_core(core)
+    state = recover_cross_requests(state)
     state = rebuild_pending_continuations(state)
     state = flush_pending_continuations(state)
 
@@ -115,6 +117,8 @@ defmodule Omunculus.Runtime do
 
   @impl true
   def handle_info({:event_core, env}, state) do
+    Omunculus.EventCore.Projector.sync_core(state.core)
+
     if MapSet.member?(state.handled, env.event_id) do
       {:noreply, state}
     else
@@ -133,8 +137,22 @@ defmodule Omunculus.Runtime do
         if reason != :normal, do: record_crash(state.core, run, reason)
 
         state = %{state | pids: pids, runs: runs}
+        Omunculus.EventCore.Projector.sync_core(state.core)
+
+        state =
+          state
+          |> recover_cross_requests()
+          |> rebuild_pending_continuations()
+          |> flush_pending_continuations()
+
         {:noreply, maybe_continue_parent(state, run.work_item_id)}
     end
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    if Process.alive?(state.sup), do: Supervisor.stop(state.sup)
+    :ok
   end
 
   # --- activation -----------------------------------------------------------------
@@ -634,6 +652,9 @@ defmodule Omunculus.Runtime do
       tool_options
       |> Map.put(:directory_scope, directory_scope)
       |> Map.put(:team, Map.get(spec, :team))
+      |> Map.put(:workspace_id, Map.get(spec, :workspace))
+      |> Map.put(:work_item_id, spec.work_item_id)
+      |> Map.put(:session_id, spec.session_id)
       |> then(fn opts ->
         case Map.get(spec, :roots) do
           roots when is_list(roots) and roots != [] -> Map.put(opts, :roots, roots)
@@ -946,6 +967,7 @@ defmodule Omunculus.Runtime do
         ),
       node_id: last_start.payload["node_id"],
       team: last_start.payload["team"],
+      agent: last_start.payload["agent_id"],
       reason: "continuation"
     })
   end
@@ -1335,7 +1357,11 @@ defmodule Omunculus.Runtime do
 
       :error ->
         entry = Map.get(loaded.workspaces, workspace, %{})
-        entry[:roots] || entry["roots"] || []
+
+        Enum.map(
+          entry[:roots] || entry["roots"] || [],
+          &Path.expand(&1, (state.config || %{})[:cwd] || File.cwd!())
+        )
     end
   end
 
@@ -1603,6 +1629,7 @@ defmodule Omunculus.Runtime do
           ),
         node_id: last_start.payload["node_id"],
         team: last_start.payload["team"],
+        agent: last_start.payload["agent_id"],
         reason: "continuation",
         request_permission: true
       })
@@ -1723,15 +1750,76 @@ defmodule Omunculus.Runtime do
   end
 
   defp route_request_work(state, env) do
+    already_routed? =
+      Enum.any?(
+        EventCore.stream(state.core, 0, type: "task.delegated"),
+        &(&1.payload["child_work_item_id"] == env.payload["child_work_item_id"])
+      )
+
+    if already_routed?, do: state, else: do_route_request_work(state, env)
+  end
+
+  defp do_route_request_work(state, env) do
     loaded = loaded_config(state)
     mode = cross_lineage_mode(loaded)
     requester_wi = env.work_item_id
     lca_wi = lca_work_item_id(state.core, requester_wi, env.payload)
 
     case mode do
-      "mediated" -> start_cross_lineage_arbitration(state, env, lca_wi, loaded)
-      _ -> forward_request_work(state, env, lca_wi, env.payload["instruction"])
+      "mediated" ->
+        if live_run_for_work_item?(state, lca_wi),
+          do: state,
+          else: start_cross_lineage_arbitration(state, env, lca_wi, loaded)
+
+      _ ->
+        forward_request_work(state, env, lca_wi, env.payload["instruction"])
     end
+  end
+
+  defp recover_cross_requests(state) do
+    events = EventCore.stream(state.core, 0)
+
+    Enum.reduce(events, state, fn req, acc ->
+      if req.type == "task.requested" and Map.has_key?(req.payload, "requested_by") do
+        rejected =
+          Enum.any?(events, &(&1.type == "delivery.rejected" and &1.causation_id == req.event_id))
+
+        delegated =
+          Enum.any?(
+            events,
+            &(&1.type == "task.delegated" and
+                &1.payload["child_work_item_id"] == req.payload["child_work_item_id"])
+          )
+
+        decision =
+          Enum.find(
+            events,
+            &(&1.type == "run.completed" and &1.payload["request_event_id"] == req.event_id)
+          )
+
+        active = Enum.any?(acc.runs, fn {_, run} -> run.activation_id == req.event_id end)
+
+        cond do
+          rejected or delegated or active ->
+            acc
+
+          decision && decision.payload["cross_lineage_denied"] ->
+            maybe_reopen_cross_lineage_denial(
+              acc,
+              decision,
+              decision.payload["cross_lineage_denied"]
+            )
+
+          decision ->
+            acc
+
+          true ->
+            route_request_work(acc, req)
+        end
+      else
+        acc
+      end
+    end)
   end
 
   defp cross_lineage_mode(nil), do: "routed"
@@ -1746,6 +1834,7 @@ defmodule Omunculus.Runtime do
     with %Envelope{payload: lca_start, run_id: lca_run_id} <- last_run_started(state.core, lca_wi) do
       delegated =
         Envelope.event("task.delegated",
+          idempotency_key: "route:" <> env.event_id,
           correlation_id: env.correlation_id,
           causation_id: env.event_id,
           session_id: env.session_id,
@@ -1756,8 +1845,8 @@ defmodule Omunculus.Runtime do
           payload: %{
             "instruction" => instruction,
             "child_work_item_id" => payload["child_work_item_id"],
-            "to_depth" => target_depth(payload, lca_start["depth"]),
-            "parent_run_id" => lca_start["parent_run_id"],
+            "to_depth" => target_depth(payload, lca_start["depth"], loaded_config(state)),
+            "parent_run_id" => lca_run_id,
             "originating_run_id" => lca_start["originating_run_id"],
             "team" => payload["team"],
             "agent" => payload["agent"],
@@ -1775,11 +1864,12 @@ defmodule Omunculus.Runtime do
 
   defp requester_wi(env), do: env.work_item_id
 
-  defp target_depth(payload, lca_depth) do
-    cond do
-      is_binary(payload["agent"]) and payload["agent"] != "" -> lca_depth + 1
-      true -> max(lca_depth + 1, 1)
-    end
+  defp target_depth(payload, lca_depth, loaded) do
+    team = if loaded, do: Map.get(loaded.teams, payload["team"], %{}), else: %{}
+
+    if payload["agent"] && payload["agent"] != team[:lead],
+      do: max(lca_depth + 1, 2),
+      else: max(lca_depth + 1, 1)
   end
 
   defp lca_work_item_id(core, requester_wi, payload) do
@@ -1878,8 +1968,10 @@ defmodule Omunculus.Runtime do
         team: lca_start["team"],
         reason: "arbitration",
         cross_lineage_arbitration: true,
+        arbitration_restore: waiting_snapshot(state.core, lca_wi),
         cross_lineage_request: env,
         cross_lineage_instruction: env.payload["instruction"],
+        cross_lineage_target_depth: target_depth(env.payload, lca_start["depth"], loaded),
         request_permission: false
       }
 
@@ -1926,7 +2018,8 @@ defmodule Omunculus.Runtime do
       checkpoint = run_completed.payload["checkpoint"] || %{}
       awaiting = checkpoint["awaiting"] || []
 
-      if child_id in Enum.map(awaiting, &to_string/1) do
+      if child_id in Enum.map(awaiting, &to_string/1) and
+           not live_run_for_work_item?(state, requester_wi) do
         observation = %{
           "role" => "tool",
           "tool_call_id" => cross_lineage_tool_call_id(checkpoint),
@@ -1948,11 +2041,10 @@ defmodule Omunculus.Runtime do
   end
 
   defp find_cross_lineage_request(core, arbitration_env) do
-    EventCore.stream(core, 0,
-      correlation_id: arbitration_env.correlation_id,
-      type: "task.requested"
-    )
-    |> Enum.find(fn env -> Map.has_key?(env.payload, "requested_by") end)
+    case EventCore.fetch(core, arbitration_env.payload["request_event_id"]) do
+      {:ok, req} -> req
+      _ -> nil
+    end
   end
 
   defp cross_lineage_tool_call_id(checkpoint) do
@@ -1996,6 +2088,7 @@ defmodule Omunculus.Runtime do
         ),
       node_id: last_start.payload["node_id"],
       team: last_start.payload["team"],
+      agent: last_start.payload["agent_id"],
       reason: "continuation"
     })
   end

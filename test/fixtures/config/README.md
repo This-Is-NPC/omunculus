@@ -15,3 +15,11 @@ base + `lane.toml` (interceptores) dá a variante "com lane".
 
 Tarefas fixas para todas as combinações: **contar até 10** (tool `counter`)
 e **escrever um README** (`FS.Memory`, tools `fs.write`).
+
+Os perfis `coding` e `count` dos fixtures com times permitem a delegação
+inicial: a política do depth 0 limita o concierge às tools de coordenação.
+`medium-teams` define também o teto do depth 1, sem nova delegação.
+A matriz completa usa essas políticas diretamente, sem sobrepor perfis
+permissivos. Cenários específicos de trabalho entre times usam overlays
+explícitos de concessão e descoberta; testes negativos preservam `subtree`
+e a faixa negociável para provar que não autorizam acesso implícito.

@@ -30,7 +30,12 @@ defmodule Omunculus.Harness do
   end
 
   def tmp_fixture(base, overlay \\ nil) do
-    dir = Path.join(System.tmp_dir!(), "omunculus-harness-#{System.unique_integer([:positive])}")
+    dir =
+      Path.join(
+        System.tmp_dir!(),
+        "omunculus-harness-#{:crypto.strong_rand_bytes(12) |> Base.encode16(case: :lower)}"
+      )
+
     :ok = File.mkdir_p!(dir)
 
     src = Path.join(fixtures_dir(), base)

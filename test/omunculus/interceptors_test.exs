@@ -8,7 +8,7 @@ defmodule Omunculus.InterceptorsTest do
   alias Omunculus.EventCore.Projector
   alias Omunculus.Interceptor
   alias Omunculus.Runtime
-  alias Omunculus.Runtime.SpikeAgents
+  alias Omunculus.Runtime.Agents
 
   @depth_gate %{
     name: "depth-gate",
@@ -67,7 +67,7 @@ defmodule Omunculus.InterceptorsTest do
       Runtime.start_link(
         core: core,
         max_depth: max_depth,
-        agents: SpikeAgents.resolver(),
+        agents: Agents.resolver(),
         run_opts: [delegation_timeout: 2_000]
       )
 

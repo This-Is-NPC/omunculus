@@ -10,7 +10,7 @@ defmodule Omunculus.TeamsTest do
   alias Omunculus.Harness
   alias Omunculus.Matrix
   alias Omunculus.Runtime
-  alias Omunculus.Runtime.SpikeAgents
+  alias Omunculus.Runtime.Agents
 
   @chain_types ~w(task.requested task.delegated tool.call.requested tool.call.completed task.completed)
 
@@ -65,7 +65,7 @@ defmodule Omunculus.TeamsTest do
       Runtime.start_link(
         core: core,
         max_depth: Keyword.get(opts, :max_depth, 1),
-        agents: Keyword.get(opts, :agents, SpikeAgents.resolver()),
+        agents: Keyword.get(opts, :agents, Agents.resolver()),
         config: [
           cwd: tmp.dir,
           config_file: tmp.overlay_path,
@@ -256,7 +256,7 @@ defmodule Omunculus.TeamsTest do
       end
 
       tmp = tmp_fixture!("medium-teams.toml", "lane.toml")
-      core = boot_teams(tmp, agents: SpikeAgents.resolver(script: ghost_script))
+      core = boot_teams(tmp, agents: Agents.resolver(script: ghost_script))
 
       {:ok, %{requested: requested}} = Runtime.request(core, "conte até 10")
 

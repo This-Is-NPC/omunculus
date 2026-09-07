@@ -10,7 +10,7 @@ defmodule Omunculus.PolicyRuntimeTest do
   alias Omunculus.Harness
   alias Omunculus.Matrix
   alias Omunculus.Runtime
-  alias Omunculus.Runtime.SpikeAgents
+  alias Omunculus.Runtime.Agents
 
   defp tmp_fixture!(base, overlay \\ nil) do
     tmp = Harness.tmp_fixture(base, overlay)
@@ -31,7 +31,7 @@ defmodule Omunculus.PolicyRuntimeTest do
       Runtime.start_link(
         core: core,
         max_depth: max_depth,
-        agents: Keyword.get(opts, :agents, SpikeAgents.resolver()),
+        agents: Keyword.get(opts, :agents, Agents.resolver()),
         config: [
           cwd: tmp.dir,
           config_file: tmp.overlay_path || tmp.path,
@@ -236,7 +236,7 @@ defmodule Omunculus.PolicyRuntimeTest do
       )
 
       ask_agents =
-        SpikeAgents.resolver(
+        Agents.resolver(
           script: fn _agent_id, _depth, _, _ ->
             [
               Fake.tool_call("edit", %{"path" => "README.md", "content" => "nope"}, "call_edit"),

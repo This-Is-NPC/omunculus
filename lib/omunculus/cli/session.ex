@@ -8,7 +8,7 @@ defmodule Omunculus.CLI.Session do
   alias Omunculus.EventCore
   alias Omunculus.EventCore.Projector
   alias Omunculus.Runtime
-  alias Omunculus.Runtime.SpikeAgents
+  alias Omunculus.Runtime.Agents
 
   def ephemeral_run(%{args: args, flags: flags}, env) do
     with {:ok, cwd} <- canonicalize_dir(args.dir),
@@ -111,7 +111,7 @@ defmodule Omunculus.CLI.Session do
         [
           core: core,
           max_depth: max_depth(config),
-          agents: SpikeAgents.resolver(),
+          agents: Agents.resolver(),
           run_opts: [delegation_timeout: 600_000]
         ]
         |> maybe_runtime_config(flags, env)
@@ -478,7 +478,7 @@ defmodule Omunculus.CLI.Session do
     end
   end
 
-  defp ephemeral_agents(nil, _cwd), do: SpikeAgents.resolver()
+  defp ephemeral_agents(nil, _cwd), do: Agents.resolver()
 
   defp ephemeral_agents(chat, cwd) when is_map(chat) do
     fn ctx ->

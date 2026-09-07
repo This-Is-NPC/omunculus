@@ -60,7 +60,7 @@ defmodule Omunculus.EventCore.StoreTest do
     :ok = Sqlite3.close(conn)
 
     assert {:ok, conn} = Store.open(path)
-    assert [[3]] = Store.query(conn, "PRAGMA user_version")
+    assert [[4]] = Store.query(conn, "PRAGMA user_version")
 
     archive_cols = column_names(conn, "ARCHIVE_RUNS")
     assert "outcome" in archive_cols
@@ -68,6 +68,7 @@ defmodule Omunculus.EventCore.StoreTest do
     assert "policy_hash" in archive_cols
 
     work_item_cols = column_names(conn, "WORK_ITEMS")
+    assert "requested_by" in work_item_cols
     assert "awaiting" in work_item_cols
     assert "workspace_id" in work_item_cols
 
@@ -81,16 +82,16 @@ defmodule Omunculus.EventCore.StoreTest do
     Store.close(conn)
 
     assert {:ok, conn2} = Store.open(path)
-    assert [[3]] = Store.query(conn2, "PRAGMA user_version")
+    assert [[4]] = Store.query(conn2, "PRAGMA user_version")
     Store.close(conn2)
   end
 
-  test "fresh database gets current schema and user_version 3" do
+  test "fresh database gets current schema and user_version 4" do
     path = tempfile_path()
     on_exit(fn -> File.rm(path) end)
 
     assert {:ok, conn} = Store.open(path)
-    assert [[3]] = Store.query(conn, "PRAGMA user_version")
+    assert [[4]] = Store.query(conn, "PRAGMA user_version")
 
     archive_cols = column_names(conn, "ARCHIVE_RUNS")
     assert "outcome" in archive_cols
@@ -98,6 +99,7 @@ defmodule Omunculus.EventCore.StoreTest do
     assert "policy_hash" in archive_cols
 
     work_item_cols = column_names(conn, "WORK_ITEMS")
+    assert "requested_by" in work_item_cols
     assert "awaiting" in work_item_cols
     assert "workspace_id" in work_item_cols
 
@@ -106,22 +108,23 @@ defmodule Omunculus.EventCore.StoreTest do
     Store.close(conn)
   end
 
-  test ":memory: database gets user_version 3" do
+  test ":memory: database gets user_version 4" do
     assert {:ok, conn} = Store.open(":memory:")
-    assert [[3]] = Store.query(conn, "PRAGMA user_version")
+    assert [[4]] = Store.query(conn, "PRAGMA user_version")
 
     archive_cols = column_names(conn, "ARCHIVE_RUNS")
     assert "outcome" in archive_cols
     assert "policy_hash" in archive_cols
 
     work_item_cols = column_names(conn, "WORK_ITEMS")
+    assert "requested_by" in work_item_cols
     assert "awaiting" in work_item_cols
     assert "workspace_id" in work_item_cols
 
     Store.close(conn)
   end
 
-  test "migrates v1 leftover databases to user_version 3" do
+  test "migrates v1 leftover databases to user_version 4" do
     path = tempfile_path()
     on_exit(fn -> File.rm(path) end)
 
@@ -183,7 +186,7 @@ defmodule Omunculus.EventCore.StoreTest do
     :ok = Sqlite3.close(conn)
 
     assert {:ok, conn} = Store.open(path)
-    assert [[3]] = Store.query(conn, "PRAGMA user_version")
+    assert [[4]] = Store.query(conn, "PRAGMA user_version")
     assert "workspace_id" in column_names(conn, "WORK_ITEMS")
     assert "session_id" in column_names(conn, "COMMENTS")
     assert "event_id" in column_names(conn, "COMMENTS")

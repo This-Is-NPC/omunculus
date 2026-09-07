@@ -11,7 +11,7 @@ defmodule Omunculus.EventCore.Store do
 
   alias Exqlite.Sqlite3
 
-  @schema_version 3
+  @schema_version 4
 
   @schema [
     "PRAGMA journal_mode=WAL",
@@ -30,6 +30,7 @@ defmodule Omunculus.EventCore.Store do
       project_id TEXT,
       workspace_id TEXT,
       parent_work_item_id TEXT,
+      requested_by TEXT,
       instruction TEXT NOT NULL,
       status TEXT NOT NULL,
       version INTEGER NOT NULL DEFAULT 0,
@@ -217,7 +218,8 @@ defmodule Omunculus.EventCore.Store do
     ],
     3 => [
       {"COMMENTS", "read_at", "TEXT"}
-    ]
+    ],
+    4 => [{"WORK_ITEMS", "requested_by", "TEXT"}]
   }
 
   @table_migrations %{
@@ -255,6 +257,13 @@ defmodule Omunculus.EventCore.Store do
   defp apply_migrations!(conn, version) do
     for {table, column, type} <- Map.fetch!(@migrations, version) do
       ensure_column!(conn, table, column, type)
+    end
+
+    if version == 4 do
+      exec!(
+        conn,
+        "UPDATE WORK_ITEMS SET requested_by = (SELECT json_extract(payload, '$.requested_by') FROM EVENTS WHERE type = 'task.delegated' AND json_extract(payload, '$.child_work_item_id') = WORK_ITEMS.work_item_id ORDER BY sequence LIMIT 1)"
+      )
     end
 
     for sql <- Map.get(@table_migrations, version, []) do

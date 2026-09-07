@@ -7,7 +7,7 @@ defmodule Omunculus.CLI.Inbox do
   alias Omunculus.EventCore.Projector
   alias Omunculus.Runtime
   alias Omunculus.Runtime.Permission, as: RuntimePermission
-  alias Omunculus.Runtime.SpikeAgents
+  alias Omunculus.Runtime.Agents
 
   @delivery_ms 100
 
@@ -239,7 +239,7 @@ defmodule Omunculus.CLI.Inbox do
       Runtime.start_link(
         core: core,
         max_depth: max_depth(config),
-        agents: SpikeAgents.resolver(),
+        agents: Agents.resolver(),
         run_opts: [delegation_timeout: 600_000],
         config: runtime_config(flags, env)
       )

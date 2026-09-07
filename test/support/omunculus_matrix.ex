@@ -8,7 +8,7 @@ defmodule Omunculus.Matrix do
   alias Omunculus.EventCore
   alias Omunculus.EventCore.Projector
   alias Omunculus.Runtime
-  alias Omunculus.Runtime.SpikeAgents
+  alias Omunculus.Runtime.Agents
 
   @chain_types ~w(task.requested task.delegated tool.call.requested tool.call.completed task.completed)
 
@@ -44,6 +44,57 @@ defmodule Omunculus.Matrix do
     if ctx.overlay do
       assert_interceptor_stats!(ctx)
     end
+
+    :ok
+  end
+
+  def contract_invariants!(ctx) do
+    assert_replay!(ctx)
+    assert_redelivery!(ctx)
+    events = EventCore.stream(ctx.core, 0, correlation_id: ctx.correlation_id)
+    by_id = Map.new(events, &{&1.event_id, &1})
+    starts = events |> Enum.filter(&(&1.type == "run.started")) |> Map.new(&{&1.run_id, &1})
+
+    for env <- events do
+      if env.causation_id do
+        assert Map.has_key?(by_id, env.causation_id)
+        assert by_id[env.causation_id].sequence < env.sequence
+      end
+
+      if env.type == "tool.call.requested" do
+        start = Map.fetch!(starts, env.run_id)
+        assert env.payload["tool"] in start.payload["tools"]["granted"]
+      end
+
+      if env.type == "task.delegated" and is_nil(env.payload["requested_by"]) do
+        start = Map.fetch!(starts, env.run_id)
+        assert "delegate" in start.payload["tools"]["granted"]
+        assert env.payload["to_depth"] == start.payload["depth"] + 1
+      end
+
+      if env.type == "task.delegated" and not is_nil(env.payload["requested_by"]) do
+        [[parent]] =
+          EventCore.query(
+            ctx.core,
+            "SELECT parent_work_item_id FROM WORK_ITEMS WHERE work_item_id = ?",
+            [env.payload["child_work_item_id"]]
+          )
+
+        assert parent == env.work_item_id
+        requester = env.payload["requester_work_item_id"]
+
+        assert [[env.payload["child_work_item_id"]]] ==
+                 EventCore.query(
+                   ctx.core,
+                   "SELECT depends_on_work_item_id FROM WORK_ITEM_DEPENDENCIES WHERE work_item_id = ? AND depends_on_work_item_id = ?",
+                   [requester, env.payload["child_work_item_id"]]
+                 )
+      end
+    end
+
+    assert Enum.all?(EventCore.interceptor_stats(ctx.core), fn {_, stats} ->
+             stats.evaluated == stats.delivered + stats.rejected
+           end)
 
     :ok
   end
@@ -136,11 +187,11 @@ defmodule Omunculus.Matrix do
       end
     end
 
-    worker_resolver = SpikeAgents.resolver(script: worker_script)
+    worker_resolver = Agents.resolver(script: worker_script)
 
     fn ctx ->
       if ctx.depth < max_depth do
-        SpikeAgents.resolve(ctx, %{})
+        Agents.resolve(ctx, %{})
       else
         worker_resolver.(ctx)
       end
@@ -187,12 +238,12 @@ defmodule Omunculus.Matrix do
       profile: profile_for(task)
     ]
 
-    agents = if write_task?(task), do: write_agents(task, depth), else: SpikeAgents.resolver()
+    agents = if write_task?(task), do: write_agents(task, depth), else: Agents.resolver()
     {interceptors, config, agents}
   end
 
   defp boot_params(_depth, base, overlay, _task, false) do
-    {resolve_interceptors(base, overlay), nil, SpikeAgents.resolver()}
+    {resolve_interceptors(base, overlay), nil, Agents.resolver()}
   end
 
   defp boot(max_depth, interceptors, opts) do
@@ -203,7 +254,7 @@ defmodule Omunculus.Matrix do
       core: core,
       max_depth: max_depth,
       agents: Keyword.fetch!(opts, :agents),
-      run_opts: [delegation_timeout: 10_000]
+      run_opts: [delegation_timeout: 10_000, fs: Omunculus.FS.Memory.new(%{})]
     ]
 
     runtime_opts =

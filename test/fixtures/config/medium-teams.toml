@@ -28,12 +28,16 @@ human = ["delete"]
 
 [profiles.coding]
 mode = "allow"
-deny = ["delegate", "counter"]
+deny = ["counter"]
 
 [profiles.count]
 mode = "deny"
-granted = ["counter"]
+granted = ["counter", "delegate"]
 
 [policy.depth.0]
 mode = "deny"
 granted = ["delegate", "workspaces", "directory"]
+
+[policy.depth.1]
+mode = "allow"
+deny = ["delegate"]

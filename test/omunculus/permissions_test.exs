@@ -10,7 +10,7 @@ defmodule Omunculus.PermissionsTest do
   alias Omunculus.Interceptors.ToolGate
   alias Omunculus.Matrix
   alias Omunculus.Runtime
-  alias Omunculus.Runtime.SpikeAgents
+  alias Omunculus.Runtime.Agents
 
   @tool_gate %{
     name: "tool-gate",
@@ -91,7 +91,7 @@ defmodule Omunculus.PermissionsTest do
       Runtime.start_link(
         core: core,
         max_depth: 0,
-        agents: SpikeAgents.resolver(),
+        agents: Agents.resolver(),
         config: runtime_config(tmp),
         run_opts: [delegation_timeout: 10_000]
       )
@@ -124,7 +124,7 @@ defmodule Omunculus.PermissionsTest do
     {:ok, _projector} = Projector.start_link(core: core)
 
     agents =
-      SpikeAgents.resolver(
+      Agents.resolver(
         script: fn _id, _depth, _, _ ->
           [Fake.tool_call("counter", %{}, "call_counter"), Fake.text("1")]
         end
@@ -200,7 +200,7 @@ defmodule Omunculus.PermissionsTest do
   end
 
   defp complex_permission_agents do
-    SpikeAgents.resolver(
+    Agents.resolver(
       script: fn _agent_id, depth, _workspace, _team ->
         if depth < 2 do
           [

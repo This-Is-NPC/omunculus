@@ -7,7 +7,7 @@ defmodule Omunculus.SessionTest do
   alias Omunculus.EventCore
   alias Omunculus.EventCore.Projector
   alias Omunculus.Runtime
-  alias Omunculus.Runtime.SpikeAgents
+  alias Omunculus.Runtime.Agents
 
   @attached ~w(app infra)
 
@@ -53,7 +53,7 @@ defmodule Omunculus.SessionTest do
       profile: Keyword.get(opts, :profile, "count")
     ]
 
-    agents = Keyword.get(opts, :agents, SpikeAgents.resolver())
+    agents = Keyword.get(opts, :agents, Agents.resolver())
 
     runtime =
       if Keyword.get(opts, :runtime, true) do
@@ -237,7 +237,7 @@ defmodule Omunculus.SessionTest do
       case ctx.depth do
         1 ->
           %{
-            SpikeAgents.resolve(ctx, %{})
+            Agents.resolve(ctx, %{})
             | chat:
                 Fake.new([
                   fn _ ->
@@ -249,7 +249,7 @@ defmodule Omunculus.SessionTest do
 
         _ ->
           %{
-            SpikeAgents.resolve(ctx, %{})
+            Agents.resolve(ctx, %{})
             | chat:
                 Fake.new([
                   Fake.tool_call(

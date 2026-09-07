@@ -34,8 +34,21 @@ defmodule Omunculus.Tools.Directory do
     team = current_team(context)
 
     {workspaces, teams, agents} = snapshot(context, scope, team)
-    work_items = open_work_items(context, scope, team, query)
-    comments = comment_results(context, scope, team, query)
+    core = Map.get(context.options || %{}, :core)
+
+    {work_items, comments} =
+      if core do
+        {:ok, rows} =
+          Omunculus.EventCore.transaction(core, fn conn ->
+            ctx = %{context | options: Map.put(context.options, :conn, conn)}
+            {open_work_items(ctx, scope, team, query), comment_results(ctx, scope, team, query)}
+          end)
+
+        rows
+      else
+        {open_work_items(context, scope, team, query),
+         comment_results(context, scope, team, query)}
+      end
 
     body =
       Jason.encode!(%{
@@ -71,18 +84,13 @@ defmodule Omunculus.Tools.Directory do
           end
 
         ws_names =
-          if team_names == [] do
-            map_keys(workspaces)
-          else
-            Enum.filter(map_keys(workspaces), fn ws ->
-              ws_teams = team_names_for_workspace(workspaces, ws)
-              ws_teams == [] or Enum.any?(team_names, &(&1 in ws_teams))
-            end)
-          end
+          Enum.filter(map_keys(workspaces), fn ws ->
+            ws == opts[:workspace_id]
+          end)
 
         filtered_teams =
           teams
-          |> Enum.filter(fn {name, _} -> name in team_names or team_names == [] end)
+          |> Enum.filter(fn {name, _} -> to_string(name) in team_names end)
           |> Map.new()
 
         {ws_names, map_keys(filtered_teams), agents_snapshot(agents, filtered_teams)}
@@ -117,7 +125,7 @@ defmodule Omunculus.Tools.Directory do
           nil
       end)
       |> Enum.reject(&is_nil/1)
-      |> filter_scope(scope, team)
+      |> filter_scope(context, scope, team)
       |> filter_query(query)
     else
       _ -> []
@@ -143,23 +151,30 @@ defmodule Omunculus.Tools.Directory do
         _ -> nil
       end)
       |> Enum.reject(&is_nil/1)
-      |> filter_scope(scope, team)
+      |> filter_scope(context, scope, team)
       |> filter_query(query)
     else
       _ -> []
     end
   end
 
-  defp filter_scope(items, "session", _team), do: items
+  defp filter_scope(items, context, scope, team) do
+    opts = context.options || %{}
 
-  defp filter_scope(items, _scope, team) when is_binary(team) and team != "" do
+    source = %{
+      "directory_scope" => scope,
+      "team" => team,
+      "workspace" => opts[:workspace_id],
+      "session_id" => opts[:session_id]
+    }
+
     Enum.filter(items, fn item ->
-      wi = item["work_item_id"] || ""
-      String.contains?(wi, team)
+      case Omunculus.Discovery.work_item(conn(context), item["work_item_id"]) do
+        nil -> false
+        target -> Omunculus.Discovery.visible?(source, target)
+      end
     end)
   end
-
-  defp filter_scope(items, _scope, _), do: items
 
   defp filter_query(items, nil), do: items
   defp filter_query(items, ""), do: items
@@ -202,14 +217,6 @@ defmodule Omunculus.Tools.Directory do
 
   defp map_keys(map) when is_map(map), do: Enum.map(map, fn {k, _} -> to_string(k) end)
   defp map_keys(_), do: []
-
-  defp team_names_for_workspace(workspaces, ws) do
-    case Map.get(workspaces, ws) || Map.get(workspaces, String.to_atom(ws)) do
-      %{teams: teams} when is_list(teams) -> Enum.map(teams, &to_string/1)
-      %{"teams" => teams} when is_list(teams) -> Enum.map(teams, &to_string/1)
-      _ -> []
-    end
-  end
 
   defp agents_snapshot(agents, teams) do
     Enum.map(teams, fn {team_name, team_cfg} ->

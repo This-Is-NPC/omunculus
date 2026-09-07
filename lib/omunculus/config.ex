@@ -297,8 +297,8 @@ defmodule Omunculus.Config do
               {:ok, from_toml(expanded)}
             end
 
-          {:error, _} ->
-            {:ok, %{}}
+          {:error, reason} ->
+            {:error, {:invalid_toml, path, reason}}
         end
 
       {:error, _} ->
