@@ -11,6 +11,8 @@ defmodule Omunculus.EventCore.Store do
 
   alias Exqlite.Sqlite3
 
+  @schema_version 1
+
   @schema [
     "PRAGMA journal_mode=WAL",
     "PRAGMA foreign_keys=ON",
@@ -73,6 +75,7 @@ defmodule Omunculus.EventCore.Store do
       status TEXT NOT NULL,
       reason TEXT,
       outcome TEXT,
+      policy_hash TEXT,
       started_at TEXT,
       finished_at TEXT,
       last_sequence INTEGER NOT NULL DEFAULT 0
@@ -129,6 +132,7 @@ defmodule Omunculus.EventCore.Store do
   def open(path) do
     with {:ok, conn} <- Sqlite3.open(path) do
       Enum.each(@schema, fn sql -> :ok = exec!(conn, sql) end)
+      migrate!(conn)
       {:ok, conn}
     end
   end
@@ -184,6 +188,49 @@ defmodule Omunculus.EventCore.Store do
   def last_insert_rowid(conn) do
     {:ok, id} = Sqlite3.last_insert_rowid(conn)
     id
+  end
+
+  @migrations %{
+    1 => [
+      {"ARCHIVE_RUNS", "outcome", "TEXT"},
+      {"ARCHIVE_RUNS", "reason", "TEXT"},
+      {"ARCHIVE_RUNS", "policy_hash", "TEXT"},
+      {"WORK_ITEMS", "awaiting", "TEXT"}
+    ]
+  }
+
+  defp migrate!(conn) do
+    current = user_version(conn)
+
+    if current < @schema_version do
+      for version <- (current + 1)..@schema_version do
+        apply_migrations!(conn, version)
+        :ok = exec!(conn, "PRAGMA user_version = #{version}")
+      end
+    end
+  end
+
+  defp user_version(conn) do
+    case query(conn, "PRAGMA user_version") do
+      [[version]] -> version
+    end
+  end
+
+  defp apply_migrations!(conn, version) do
+    for {table, column, type} <- Map.fetch!(@migrations, version) do
+      ensure_column!(conn, table, column, type)
+    end
+  end
+
+  defp ensure_column!(conn, table, column, type) do
+    unless column?(conn, table, column) do
+      :ok = exec!(conn, "ALTER TABLE #{table} ADD COLUMN #{column} #{type}")
+    end
+  end
+
+  defp column?(conn, table, column) do
+    query(conn, "PRAGMA table_info(#{table})")
+    |> Enum.any?(fn row -> Enum.at(row, 1) == column end)
   end
 
   defp encode_arg(nil), do: nil
