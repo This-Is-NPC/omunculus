@@ -294,7 +294,19 @@ defmodule Omunculus.Config do
         case Toml.decode(body) do
           {:ok, map} ->
             with {:ok, expanded} <- expand_env(map, env) do
-              {:ok, from_toml(expanded)}
+              config = from_toml(expanded)
+
+              workspaces =
+                Map.new(config.workspaces, fn {name, ws} ->
+                  {name,
+                   %{
+                     ws
+                     | roots:
+                         Enum.map(ws.roots, &Path.expand(&1, Path.dirname(Path.expand(path))))
+                   }}
+                end)
+
+              {:ok, %{config | workspaces: workspaces}}
             end
 
           {:error, reason} ->
