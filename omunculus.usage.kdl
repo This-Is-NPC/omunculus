@@ -1,163 +1,31 @@
 min_usage_version "1.0.0"
 
 name "Omunculus"
+
 bin "omunculus"
+
 version "0.1.0"
+
 about "Coding-agent harness: a directory, an instruction, files change."
-long_about """
-Omunculus is a BEAM coding-agent harness. The CLI opens one session against a directory, talks to an OpenAI-compatible chat endpoint, and applies filesystem tools until the model halts. It does not commit, and it does not speak Anthropic Messages.
-"""
 
-unknown_flags "error"
+long_about "Omunculus is a BEAM coding-agent harness. The CLI opens one session against a directory, talks to an OpenAI-compatible chat endpoint, and applies filesystem tools until the model halts. It does not commit, and it does not speak Anthropic Messages."
+
 default_subcommand "run"
-arg_required_else_help #true
 
-flag "-v --verbose" global=#true help="Print every round and tool transition to stderr" env="OMUNCULUS_VERBOSE"
-flag "-h --help" action="help_short" builtin=#true help="Print help"
-flag "--help" action="help_long" builtin=#true help="Print help"
-flag "-V --version" action="version" builtin=#true help="Print version"
+flag "-v --verbose" help="Print every round and tool transition to stderr" env="OMUNCULUS_VERBOSE" global=#true
 
-exit_code 0 "session halted without host or chat error"
-exit_code 1 "host, chat, or runtime error"
-exit_code 2 "usage error (bad argv, missing required arg, unknown command)"
+flag "-h" help="Print help"
 
-example "omunculus run ./fixture \"add a README\"" header="Run the agent" help="Open a session against ./fixture"
-example "omunculus run ./repo --preset plan \"how is auth wired?\"" header="Read-only preset"
-example "omunculus run ./app --tools read,grep,ls \"where is the router?\"" header="Tool allowlist"
+flag "--help" help="Print help"
 
-cmd "run" {
-  about "Run the agent on a directory"
-  long_about """
-  Canonicalize <dir>, load presets from omunculus.toml (project over ~/.omunculus/config.toml), and loop AskModel ↔ tools until halt. Does not commit. Flags override the environment; the environment overrides config; config overrides defaults.
-  """
-  arg_required_else_help #true
+flag "-V --version" help="Print version"
 
-  arg "<dir>" help="Working directory (the worktree)"
-  arg "<instruction>..." help="What the agent should do" var_min=1
 
-  flag "--preset <preset>" help="Named preset from config" env="OMUNCULUS_PRESET"
-  flag "--tools <tools>" help="Allowlist of tool names (comma-separated)" delimiter=","
-  flag "--model <model>" help="Model id" env="OMUNCULUS_MODEL"
-  flag "--max-turns <n>" help="Turn budget" default="32" env="OMUNCULUS_MAX_TURNS"
-  flag "--base-url <url>" help="OpenAI-compatible base URL" env="OMUNCULUS_BASE_URL"
-  flag "--api-key <key>" help="API key" env="OMUNCULUS_API_KEY" hide_env_values=#true
-  flag "--config <file>" help="Config file (overrides <dir>/omunculus.toml)"
-  flag "--json-events" help="Write one JSON event per line to stderr instead of the TTY reporter"
 
-  example "omunculus run . \"list the modules in lib/\""
-  example "omunculus run ./app --preset plan \"summarize the FS tools\""
-}
-
-cmd "monkey-job" {
-  about "Run a diagnostic prompt with an optional tool set"
-  arg_required_else_help #true
-
-  arg "<instruction>..." help="Diagnostic instruction sent to the model unchanged" var_min=1
-
-  flag "--tools <tools>" help="Tool names exposed to the model (default: none)" delimiter=","
-  flag "--delay <duration>" help="Delay every tool result"
-  flag "--increment <number>" help="Counter increment (requires --tools counter)"
-  flag "--model <model>" help="Model id" env="OMUNCULUS_MODEL"
-  flag "--max-turns <n>" help="Round budget" default="32" env="OMUNCULUS_MAX_TURNS"
-  flag "--base-url <url>" help="OpenAI-compatible base URL" env="OMUNCULUS_BASE_URL"
-  flag "--api-key <key>" help="API key" env="OMUNCULUS_API_KEY" hide_env_values=#true
-  flag "--config <file>" help="Config file used for the diagnostic run"
-  flag "--json-events" help="Write one JSON event per line to stderr instead of the TTY reporter"
-
-  example "omunculus monkey-job \"count to 10\""
-  example "omunculus monkey-job \"count to 10\" --tools counter --delay 1s --increment 1"
-}
-
-cmd "spike" {
-  about "Run the planned Event Core end to end with a provider-free counting task"
-  long_about """
-  Exercises docs/to-be: the instruction enters as a task.requested envelope, Runs are activated from delivered events, delegation builds the tree at runtime, every tool call round-trips through the append-only EVENTS log in SQLite, projections are reduced from the log and rebuilt by replay. No model provider is contacted.
-  """
-  arg_required_else_help #true
-
-  arg "<instruction>..." help="Counting task, e.g. \"conte até 10\"" var_min=1
-
-  flag "--depth <n>" help="Delegation depth: 0 counts directly, 1 = scenario 3, 2 = scenario 4" default="1"
-  flag "--db <file>" help="SQLite file for EVENTS and projections (default: temporary file)"
-  flag "--fail-at <n>" help="Kill the counting worker after it reaches n, then resume it as a new attempt"
-  flag "--delay <duration>" help="Delay every tool result"
-  flag "--json-events" help="Write the ordered EVENTS log as one JSON envelope per line to stderr"
-  flag "--provider <provider>" help="fake (scripted model, default) or chat (build the chat from config and flags)" default="fake"
-  flag "--config <file>" help="Config file: chat provider, [[interceptors]] and [[automations]]"
-  flag "--model <model>" help="Model id" env="OMUNCULUS_MODEL"
-  flag "--base-url <url>" help="OpenAI-compatible base URL" env="OMUNCULUS_BASE_URL"
-  flag "--api-key <key>" help="API key" env="OMUNCULUS_API_KEY" hide_env_values=#true
-
-  example "omunculus spike \"conte até 10\" --depth 2"
-  example "omunculus spike \"conte até 10\" --fail-at 3 --delay 50ms"
-}
-
-cmd "events" {
-  about "Read the event catalog or follow the EVENTS log"
-  arg_required_else_help #true
-
-  arg "<action>" help="catalog or follow"
-
-  flag "--db <file>" help="SQLite file with the EVENTS log (follow)"
-  flag "--session <file>" help="Session SQLite file (default: ~/.omunculus/session.sqlite3)" env="OMUNCULUS_SESSION"
-  flag "--types <types>" help="Only these event types (follow)" delimiter=","
-  flag "--after <seq>" help="Start after this sequence (follow)" default="0"
-  flag "--once" help="Print what exists and exit instead of following"
-
-  example "omunculus events catalog"
-  example "omunculus events follow --db ./spike.sqlite3 --types task.completed,run.failed"
-}
-
-cmd "emit" {
-  about "Append an injectable command to a durable EVENTS log"
-  arg_required_else_help #true
-
-  arg "<type>" help="Command type from the catalog marked injectable"
-
-  flag "--db <file>" help="SQLite file with the EVENTS log"
-  flag "--session <file>" help="Session SQLite file (default: ~/.omunculus/session.sqlite3)" env="OMUNCULUS_SESSION"
-  flag "--payload <json>" help="Payload as a JSON object"
-  flag "--request-id <id>" help="Fill emit fields from an open permission.requested"
-  flag "--idempotency-key <key>" help="Stable key so retries do not duplicate the command"
-  flag "--correlation-id <id>" help="Join an existing correlation"
-  flag "--work-item-id <id>" help="Target work item (default: new)"
-
-  example "omunculus emit task.requested --db ./spike.sqlite3 --payload '{\"instruction\":\"conte até 3\"}'"
-}
-
-cmd "inbox" {
-  about "List open permission requests and unread task results"
-
-  arg "[action]" help="reply or read (default: list)"
-  arg "[id]" help="request_id for reply or comment id for read"
-  arg "[text]..." help="Response text for reply"
-
-  flag "--db <file>" help="Session SQLite path (default: ~/.omunculus/session.sqlite3)"
-  flag "--session <file>" help="Session SQLite file (default: ~/.omunculus/session.sqlite3)" env="OMUNCULUS_SESSION"
-  flag "--config <file>" help="Config file for permanent grants"
-  flag "--grant" help="Grant the permission request"
-  flag "--deny" help="Deny the permission request"
-  flag "--permanent" help="Permanent grant (updates workspace policy)"
-  flag "--reason <text>" help="Denial reason"
-
-  example "omunculus inbox --session ./session.sqlite3"
-  example "omunculus inbox reply req_abc --grant --db ./session.sqlite3"
-}
-
-cmd "config" {
-  about "Validate configuration"
-  arg_required_else_help #true
-
-  arg "<action>" help="check"
-
-  flag "--config <file>" help="Config file to validate"
-
-  example "omunculus config check --config ./omunculus.toml"
-}
 
 cmd "benchmark" {
-  about "Measure concurrent actors, resident agent trees, or HTTP load"
-long_about "actor-density measures a provider-free Agent state plateau in the current BEAM runtime. agent-tree is a synthetic provider-free resident tree stress benchmark: nodes are created in waves and ancestors remain blocked at round_started. http-load drives the external Rust stub through a dedicated Finch pool. RSS and CPU scheduler limits are soft benchmark controls; --cpu-limit changes BEAM schedulers_online only and is restored after the run, not a cgroup or physical CPU quota. Durable trees are documented in docs/to-be/execution-model.md and are not implemented."
+  help "Measure concurrent actors, resident agent trees, or HTTP load"
+  long_help "actor-density measures a provider-free Agent state plateau in the current BEAM runtime. agent-tree is a synthetic provider-free resident tree stress benchmark: nodes are created in waves and ancestors remain blocked at round_started. http-load drives the external Rust stub through a dedicated Finch pool. RSS and CPU scheduler limits are soft benchmark controls; --cpu-limit changes BEAM schedulers_online only and is restored after the run, not a cgroup or physical CPU quota. Durable trees are documented in docs/to-be/execution-model.md and are not implemented."
   flag "--scenario <scenario>" help="Scenario: actor-density, agent-tree, or http-load" default="actor-density"
   flag "--max-agents <n>" help="Maximum actor-density level target"
   flag "--max-trees <n>" help="Maximum resident agent-tree count"
@@ -177,14 +45,124 @@ long_about "actor-density measures a provider-free Agent state plateau in the cu
   flag "--live" help="Render live progress when attached to a TTY"
   flag "--no-live" help="Use append-only progress"
   flag "--json <path>" help="Write the final summary as JSON"
+}
 
-  example "omunculus benchmark --max-agents 8"
-  example "omunculus benchmark --scenario agent-tree --max-trees 4 --tree-shape 1,1,2,4"
-  example "omunculus benchmark --scenario http-load --max-agents 32 --http-concurrency 8"
-  example "omunculus benchmark --memory-limit 512M --cpu-limit 2"
+cmd "config" {
+  help "Validate configuration"
+  long_help "check loads the configuration and validates [[interceptors]] and [[automations]] against the event catalog and the loaded modules."
+  arg "<action>" help="check"
+  flag "--config <file>" help="Config file to validate"
+}
+
+cmd "emit" {
+  help "Append an injectable command to a durable EVENTS log"
+  long_help "Only command types marked injectable in the catalog are accepted. The Event Core validates the payload, assigns identity and sequence, and prints the stored envelope as JSON."
+  arg "<type>" help="Command type from the catalog marked injectable"
+  flag "--db <file>" help="SQLite file with the EVENTS log"
+  flag "--session <file>" help="Session SQLite file (default: ~/.omunculus/session.sqlite3)" env="OMUNCULUS_SESSION"
+  flag "--payload <json>" help="Payload as a JSON object"
+  flag "--request-id <id>" help="Fill emit fields from an open permission.requested"
+  flag "--idempotency-key <key>" help="Stable key so retries do not duplicate the command"
+  flag "--correlation-id <id>" help="Join an existing correlation"
+  flag "--work-item-id <id>" help="Target work item (default: new)"
+}
+
+cmd "events" {
+  help "Read the event catalog or follow the EVENTS log"
+  long_help "catalog renders the event catalog module as a table. follow reads EVENTS in sequence order as NDJSON, one envelope per line, and keeps polling the file unless --once is given."
+  arg "<action>" help="catalog or follow"
+  flag "--db <file>" help="SQLite file with the EVENTS log (follow)"
+  flag "--session <file>" help="Session SQLite file (default: ~/.omunculus/session.sqlite3)" env="OMUNCULUS_SESSION"
+  flag "--types <types>" help="Only these event types (follow)"
+  flag "--after <seq>" help="Start after this sequence (follow)" default="0"
+  flag "--once" help="Print what exists and exit instead of following"
 }
 
 cmd "help" {
-  about "Print this message or the help of the given subcommand(s)"
+  help "Print this message or the help of the given subcommand(s)"
   arg "[command]" help="Command to describe"
+}
+
+cmd "inbox" {
+  help "List open permission requests and unread task results"
+  long_help "Projects open permission.requested envelopes and unread root task.completed results from COMMENTS. reply and read append injectable commands to the session log."
+  arg "[action]" help="reply or read (default: list)"
+  arg "[id]" help="request_id for reply or comment id for read"
+  arg "[text]..." help="Response text for reply" var_min=0
+  flag "--db <file>" help="Session SQLite path (default: ~/.omunculus/session.sqlite3)"
+  flag "--session <file>" help="Session SQLite file (default: ~/.omunculus/session.sqlite3)" env="OMUNCULUS_SESSION"
+  flag "--config <file>" help="Config file for permanent grants"
+  flag "--grant" help="Grant the permission request"
+  flag "--deny" help="Deny the permission request"
+  flag "--permanent" help="Permanent grant (updates workspace policy)"
+  flag "--reason <text>" help="Denial reason"
+}
+
+cmd "monkey-job" {
+  help "Run a diagnostic prompt with an optional tool set"
+  long_help "Run the normal agent loop from the current directory while explicitly controlling which tools the model can see and how long tool results remain pending."
+  arg "<instruction>..." help="Diagnostic instruction sent to the model unchanged" var_min=1
+  flag "--tools <tools>" help="Tool names exposed to the model (default: none)"
+  flag "--delay <duration>" help="Delay every tool result"
+  flag "--increment <number>" help="Counter increment (requires --tools counter)"
+  flag "--model <model>" help="Model id" env="OMUNCULUS_MODEL"
+  flag "--max-turns <n>" help="Round budget" env="OMUNCULUS_MAX_TURNS" default="32"
+  flag "--base-url <url>" help="OpenAI-compatible base URL" env="OMUNCULUS_BASE_URL"
+  flag "--api-key <key>" help="API key (also read from OMUNCULUS_API_KEY by the CLI)"
+  flag "--config <file>" help="Config file used for the diagnostic run"
+  flag "--json-events" help="Write one JSON event per line to stderr instead of the TTY reporter"
+}
+
+cmd "run" {
+  help "Run the agent on a directory"
+  long_help "Canonicalize <dir>, load presets from omunculus.toml (project over ~/.omunculus/config.toml), and loop AskModel ↔ tools until halt. Does not commit. Flags override the environment; the environment overrides config; config overrides defaults."
+  arg "<dir>" help="Working directory (the worktree)"
+  arg "<instruction>..." help="What the agent should do" var_min=1
+  flag "--preset <preset>" help="Named preset from config" env="OMUNCULUS_PRESET"
+  flag "--profile <profile>" help="Named profile from config (alias of --preset; wins if both are set)"
+  flag "--tools <tools>" help="Allowlist of tool names (comma-separated)"
+  flag "--model <model>" help="Model id" env="OMUNCULUS_MODEL"
+  flag "--max-turns <n>" help="Turn budget" env="OMUNCULUS_MAX_TURNS" default="32"
+  flag "--base-url <url>" help="OpenAI-compatible base URL" env="OMUNCULUS_BASE_URL"
+  flag "--api-key <key>" help="API key (also read from OMUNCULUS_API_KEY by the CLI)"
+  flag "--config <file>" help="Config file (overrides <dir>/omunculus.toml)"
+  flag "--json-events" help="Write one JSON event per line to stderr instead of the TTY reporter"
+}
+
+cmd "send" {
+  help "Submit an instruction to a session"
+  long_help "Reuses the resident session executor and waits for the root task.completed unless --detach is set. Commands and results are durable in EVENTS."
+  arg "<instruction>..." help="Task instruction" var_min=1
+  flag "--db <file>" help="Session SQLite path (default: ~/.omunculus/session.sqlite3)"
+  flag "--session <file>" help="Session SQLite file (default: ~/.omunculus/session.sqlite3)" env="OMUNCULUS_SESSION"
+  flag "--profile <profile>" help="Named profile from config"
+  flag "--preset <preset>" help="Named preset from config (alias of --profile)"
+  flag "--workspace <id>" help="Target workspace id on the request"
+  flag "--provider <provider>" help="chat uses the configured model; fake uses deterministic scripts"
+  flag "--model <model>" help="Model id" env="OMUNCULUS_MODEL"
+  flag "--base-url <url>" help="OpenAI-compatible endpoint" env="OMUNCULUS_BASE_URL"
+  flag "--api-key <key>" help="API key (also read from OMUNCULUS_API_KEY by the CLI)"
+  flag "--tools <tools>" help="Narrow the profile tool list"
+  flag "--max-turns <n>" help="Maximum model turns per Run"
+  flag "--config <file>" help="Config file"
+  flag "--detach" help="Append task.requested and return without waiting"
+}
+
+cmd "session" {
+  help "Create or list durable sessions"
+  long_help "create opens a session SQLite log and appends session.created. list prints session_id values from existing logs."
+  arg "<action>" help="create, resume or list"
+  arg "[name]" help="Session id for create (generated when omitted)"
+  flag "--db <file>" help="Session SQLite path (default: ~/.omunculus/session.sqlite3)"
+  flag "--session <file>" help="Session SQLite file (default: ~/.omunculus/session.sqlite3)" env="OMUNCULUS_SESSION"
+}
+
+cmd "workspace" {
+  help "Attach or detach a configured workspace"
+  long_help "attach appends workspace.attached with roots and teams from config. detach appends workspace.detached."
+  arg "<action>" help="attach or detach"
+  arg "<name>" help="Workspace id from [workspaces.*]"
+  flag "--db <file>" help="Session SQLite path (default: ~/.omunculus/session.sqlite3)"
+  flag "--session <file>" help="Session SQLite file (default: ~/.omunculus/session.sqlite3)" env="OMUNCULUS_SESSION"
+  flag "--config <file>" help="Config file (attach)"
 }

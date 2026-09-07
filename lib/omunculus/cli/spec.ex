@@ -197,91 +197,6 @@ defmodule Omunculus.CLI.Spec do
            nil}
         ]
       },
-      "spike" => %{
-        name: "spike",
-        about: "Run the planned Event Core end to end with a provider-free counting task",
-        long_about:
-          "Exercises docs/to-be: the instruction enters as a task.requested envelope, Runs are activated from delivered events, delegation builds the tree at runtime, every tool call round-trips through the append-only EVENTS log in SQLite, projections are reduced from the log and rebuilt by replay. No model provider is contacted.",
-        arg_required_else_help: true,
-        args: [
-          %{
-            name: :instruction,
-            metavar: "instruction",
-            required: true,
-            variadic: true,
-            var_min: 1,
-            help: "Counting task, e.g. \"conte até 10\""
-          }
-        ],
-        flags: [
-          flag("depth",
-            long: "depth",
-            value: "n",
-            default: "1",
-            help: "Delegation depth: 0 counts directly, 1 = scenario 3, 2 = scenario 4"
-          ),
-          flag("db",
-            long: "db",
-            value: "file",
-            help: "SQLite file for EVENTS and projections (default: temporary file)"
-          ),
-          flag("fail_at",
-            long: "fail-at",
-            value: "n",
-            help: "Kill the counting worker after it reaches n, then resume it as a new attempt"
-          ),
-          flag("delay", long: "delay", value: "duration", help: "Delay every tool result"),
-          flag("json_events",
-            long: "json-events",
-            help: "Write the ordered EVENTS log as one JSON envelope per line to stderr"
-          ),
-          flag("provider",
-            long: "provider",
-            value: "provider",
-            default: "fake",
-            help: "fake (scripted model, default) or chat (build the chat from config and flags)"
-          ),
-          flag("config",
-            long: "config",
-            value: "file",
-            help: "Config file: chat provider, [[interceptors]] and [[automations]]"
-          ),
-          flag("preset",
-            long: "preset",
-            value: "preset",
-            help: "Named preset from config"
-          ),
-          flag("profile",
-            long: "profile",
-            value: "profile",
-            help: "Named profile from config (alias of --preset; wins if both are set)"
-          ),
-          flag("tools",
-            long: "tools",
-            value: "tools",
-            delimiter: ",",
-            help: "Narrow the resolved profile to these tools (comma-separated)"
-          ),
-          flag("model", long: "model", value: "model", env: "OMUNCULUS_MODEL", help: "Model id"),
-          flag("base_url",
-            long: "base-url",
-            value: "url",
-            env: "OMUNCULUS_BASE_URL",
-            help: "OpenAI-compatible base URL"
-          ),
-          flag("api_key",
-            long: "api-key",
-            value: "key",
-            env: "OMUNCULUS_API_KEY",
-            hide_env_values: true,
-            help: "API key"
-          )
-        ],
-        examples: [
-          {"omunculus spike \"conte até 10\" --depth 2", nil, nil},
-          {"omunculus spike \"conte até 10\" --fail-at 3 --delay 50ms", nil, nil}
-        ]
-      },
       "events" => %{
         name: "events",
         about: "Read the event catalog or follow the EVENTS log",
@@ -387,7 +302,7 @@ defmodule Omunculus.CLI.Spec do
             metavar: "action",
             required: true,
             variadic: false,
-            help: "create or list"
+            help: "create, resume or list"
           },
           %{
             name: :name,
@@ -460,7 +375,7 @@ defmodule Omunculus.CLI.Spec do
         name: "send",
         about: "Submit an instruction to a session",
         long_about:
-          "Opens the session log, starts Runtime and Projector, and waits for the root task.completed unless --detach is set.",
+          "Reuses the resident session executor and waits for the root task.completed unless --detach is set. Commands and results are durable in EVENTS.",
         arg_required_else_help: true,
         args: [
           %{
@@ -499,6 +414,27 @@ defmodule Omunculus.CLI.Spec do
             value: "id",
             help: "Target workspace id on the request"
           ),
+          flag("provider",
+            long: "provider",
+            value: "provider",
+            help: "chat uses the configured model; fake uses deterministic scripts"
+          ),
+          flag("model", long: "model", value: "model", env: "OMUNCULUS_MODEL", help: "Model id"),
+          flag("base_url",
+            long: "base-url",
+            value: "url",
+            env: "OMUNCULUS_BASE_URL",
+            help: "OpenAI-compatible endpoint"
+          ),
+          flag("api_key",
+            long: "api-key",
+            value: "key",
+            env: "OMUNCULUS_API_KEY",
+            hide_env_values: true,
+            help: "API key"
+          ),
+          flag("tools", long: "tools", value: "tools", help: "Narrow the profile tool list"),
+          flag("max_turns", long: "max-turns", value: "n", help: "Maximum model turns per Run"),
           flag("config", long: "config", value: "file", help: "Config file"),
           flag("detach", long: "detach", help: "Append task.requested and return without waiting")
         ],

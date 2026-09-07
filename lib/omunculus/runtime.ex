@@ -38,7 +38,7 @@ defmodule Omunculus.Runtime do
     timeout = opts[:timeout] || 30_000
 
     payload =
-      %{instruction: instruction, depth: 0}
+      %{instruction: instruction, depth: 0, execution: opts[:execution] || %{}}
       |> maybe_put_workspace_payload(opts[:workspace])
 
     :ok = EventCore.subscribe(core, correlation_id: correlation_id)
@@ -105,6 +105,7 @@ defmodule Omunculus.Runtime do
       }
 
     Omunculus.EventCore.Projector.sync_core(core)
+    state = if Keyword.get(opts, :recover, false), do: recover_unfinished(state), else: state
     state = recover_cross_requests(state)
     state = rebuild_pending_continuations(state)
     state = flush_pending_continuations(state)
@@ -119,7 +120,7 @@ defmodule Omunculus.Runtime do
   def handle_info({:event_core, env}, state) do
     Omunculus.EventCore.Projector.sync_core(state.core)
 
-    if MapSet.member?(state.handled, env.event_id) do
+    if MapSet.member?(state.handled, env.event_id) or activated?(state.core, env) do
       {:noreply, state}
     else
       state = %{state | handled: MapSet.put(state.handled, env.event_id)}
@@ -330,14 +331,110 @@ defmodule Omunculus.Runtime do
   defp activate(_env, state), do: state
 
   defp start_run(state, spec) do
-    case resolve_policy(state, spec) do
-      {:error, reason} ->
-        policy_invalid(state, spec, reason)
+    original_config = state.config
+    execution = task_execution(state.core, spec)
 
-      {:ok, agent, bands, policy_hash, request_permission, spec, state} ->
-        spec = maybe_prepend_comments(state, spec, agent)
-        start_run_with_agent(state, spec, agent, bands, policy_hash, request_permission)
+    effective =
+      Map.merge(
+        original_config || %{},
+        Map.take(execution, [:cwd, :config_file, :profile, :tools])
+      )
+
+    state = %{state | config: if(effective == %{}, do: nil, else: effective)}
+
+    result =
+      case resolve_policy(state, spec) do
+        {:error, reason} ->
+          policy_invalid(state, spec, reason)
+
+        {:ok, agent, bands, policy_hash, request_permission, spec, state} ->
+          spec = maybe_prepend_comments(state, spec, agent)
+          start_run_with_agent(state, spec, agent, bands, policy_hash, request_permission)
+      end
+
+    %{result | config: original_config}
+  end
+
+  defp task_execution(core, spec) do
+    root = root_work_item_id(core, spec.work_item_id)
+    activation = find_activation(core, root) || spec.activation
+    payload = activation.payload["execution"] || %{}
+
+    for key <- [:cwd, :config_file, :profile, :tools, :provider, :model, :base_url, :max_turns],
+        value = payload[Atom.to_string(key)] || payload[key],
+        not is_nil(value),
+        into: %{},
+        do: {key, value}
+  end
+
+  defp activated?(core, env) do
+    env.type in ["task.requested", "task.delegated", "task.resumed"] and
+      EventCore.query(
+        core,
+        "SELECT 1 FROM EVENTS WHERE type = 'run.started' AND causation_id = ? LIMIT 1",
+        [env.event_id]
+      ) != []
+  end
+
+  defp recover_unfinished(state) do
+    events = EventCore.stream(state.core, 0)
+    starts = Enum.filter(events, &(&1.type == "run.started"))
+
+    for start <- starts,
+        not Enum.any?(
+          events,
+          &(&1.run_id == start.run_id and &1.type in ["run.completed", "run.failed"])
+        ) do
+      EventCore.append!(
+        state.core,
+        Envelope.event("run.failed",
+          session_id: start.session_id,
+          workspace_id: start.workspace_id,
+          work_item_id: start.work_item_id,
+          run_id: start.run_id,
+          correlation_id: start.correlation_id,
+          causation_id: start.event_id,
+          payload: %{reason: "runtime_restarted", crashed: true}
+        )
+      )
+
+      EventCore.append!(
+        state.core,
+        Envelope.command("task.commented",
+          session_id: start.session_id,
+          workspace_id: start.workspace_id,
+          work_item_id: start.work_item_id,
+          correlation_id: start.correlation_id,
+          causation_id: start.event_id,
+          payload: %{
+            kind: "request",
+            body: "Interrupted run: inspect effects before retrying with task.resumed."
+          }
+        )
+      )
     end
+
+    Enum.reduce(events, state, fn env, acc ->
+      wi =
+        if env.type == "task.delegated",
+          do: env.payload["child_work_item_id"],
+          else: env.work_item_id
+
+      initial? =
+        (env.type == "task.requested" and env.kind == :command) or env.type == "task.delegated"
+
+      rejected? =
+        Enum.any?(events, &(&1.type == "delivery.rejected" and &1.causation_id == env.event_id))
+
+      if not rejected? and
+           ((initial? and not Enum.any?(starts, &(&1.work_item_id == wi))) or
+              (env.type == "task.resumed" and not activated?(state.core, env))) do
+        EventCore.redeliver(acc.core, env.event_id)
+        acc
+      else
+        acc
+      end
+    end)
   end
 
   defp start_run_with_agent(state, spec, agent, bands, policy_hash, request_permission) do
@@ -592,7 +689,8 @@ defmodule Omunculus.Runtime do
       agent: Map.get(spec, :agent, spec.activation.payload["agent"]),
       reason: Map.get(spec, :reason, "initial"),
       cross_lineage_arbitration: Map.get(spec, :cross_lineage_arbitration),
-      cross_lineage_request: Map.get(spec, :cross_lineage_request)
+      cross_lineage_request: Map.get(spec, :cross_lineage_request),
+      execution: task_execution(state.core, spec)
     }
 
     case loaded do
@@ -1069,10 +1167,17 @@ defmodule Omunculus.Runtime do
 
         nil ->
           wid = requested.work_item_id
+          requested_id = requested.event_id
 
           receive do
             {:event_core, %Envelope{type: "task.completed", work_item_id: ^wid} = env} ->
               {:ok, env}
+
+            {:event_core, %Envelope{type: "run.failed", work_item_id: ^wid} = env} ->
+              {:error, {:run_failed, env.payload}}
+
+            {:event_core, %Envelope{type: "delivery.rejected", causation_id: ^requested_id} = env} ->
+              {:error, {:delivery_rejected, env.payload["reason"]}}
           after
             timeout -> {:error, :timeout}
           end

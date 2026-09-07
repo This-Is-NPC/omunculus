@@ -2,14 +2,10 @@ defmodule Omunculus.CLI.Inbox do
   @moduledoc false
 
   alias Omunculus.CLI.{Help, Session}
-  alias Omunculus.{Config, EventCore}
+  alias Omunculus.EventCore
   alias Omunculus.Event.Envelope
   alias Omunculus.EventCore.Projector
-  alias Omunculus.Runtime
   alias Omunculus.Runtime.Permission, as: RuntimePermission
-  alias Omunculus.Runtime.Agents
-
-  @delivery_ms 100
 
   def inbox(%{args: args, flags: flags}, env) do
     case args[:action] do
@@ -25,6 +21,8 @@ defmodule Omunculus.CLI.Inbox do
       {:ok, core} = EventCore.start_link(path: db)
 
       try do
+        Projector.sync_core(core)
+        print_comment_requests(core)
         print_permission_requests(core)
         print_unread_results(core)
         0
@@ -78,6 +76,18 @@ defmodule Omunculus.CLI.Inbox do
   end
 
   defp read(_, _), do: usage({:missing_required_arg, "id"})
+
+  defp print_comment_requests(core) do
+    EventCore.query(core, """
+    SELECT c.comment_id, c.work_item_id, c.body FROM COMMENTS c
+    JOIN EVENTS e ON e.event_id = c.event_id
+    WHERE c.kind = 'request' AND e.type = 'task.commented' AND c.read_at IS NULL
+    ORDER BY c.last_sequence
+    """)
+    |> Enum.each(fn [id, wi, body] ->
+      IO.puts("request id=#{id} work_item_id=#{wi} body=#{inspect(body)}")
+    end)
+  end
 
   defp print_permission_requests(core) do
     RuntimePermission.open_permission_requests(core)
@@ -197,17 +207,11 @@ defmodule Omunculus.CLI.Inbox do
   end
 
   defp deliver_reply(db, flags, env, envelope, mode) do
-    with {:ok, core} <- open_core(db),
-         {:ok, projector} <- Projector.start_link(core: core),
-         {:ok, runtime} <- start_runtime(core, flags, env) do
+    with {:ok, core} <- Omunculus.SessionExecutor.ensure(Session.executor_opts(db, flags, env)) do
       {:ok, stored} = EventCore.append(core, envelope)
       _ = maybe_append_policy_changed(core, stored, mode)
-
-      :ok = Projector.sync(projector)
-      Process.sleep(@delivery_ms)
-      GenServer.stop(runtime)
-      GenServer.stop(projector)
-      GenServer.stop(core)
+      :ok = Projector.sync_core(core)
+      Session.close_client(core)
       0
     else
       {:error, reason} -> usage(reason)
@@ -233,39 +237,6 @@ defmodule Omunculus.CLI.Inbox do
   end
 
   defp maybe_append_policy_changed(_core, _envelope, _mode), do: :ok
-
-  defp start_runtime(core, flags, env) do
-    with {:ok, config} <- Config.load(cwd: File.cwd!(), config_file: flags["config"], env: env) do
-      Runtime.start_link(
-        core: core,
-        max_depth: max_depth(config),
-        agents: Agents.resolver(),
-        run_opts: [delegation_timeout: 600_000],
-        config: runtime_config(flags, env)
-      )
-    end
-  end
-
-  defp runtime_config(flags, env) do
-    [
-      cwd: File.cwd!(),
-      config_file: flags["config"],
-      env: env
-    ]
-  end
-
-  defp max_depth(config) do
-    depths =
-      (config.policy || %{})
-      |> Map.keys()
-      |> Enum.map(&String.to_integer(to_string(&1)))
-      |> Enum.sort(:desc)
-
-    case depths do
-      [] -> 1
-      [max | _] -> max
-    end
-  end
 
   defp find_request(core, request_id) do
     case Enum.find(RuntimePermission.open_permission_requests(core), fn env ->

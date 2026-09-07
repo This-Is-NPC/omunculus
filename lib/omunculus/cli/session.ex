@@ -78,11 +78,26 @@ defmodule Omunculus.CLI.Session do
     end
   end
 
-  def session(%{args: args, flags: flags}, _env) do
+  def session(%{args: args, flags: flags}, env) do
     case args[:action] do
-      "create" -> session_create(args, flags)
-      "list" -> session_list(flags)
-      other -> usage({:unknown_session_action, other})
+      "create" ->
+        session_create(args, flags)
+
+      "list" ->
+        session_list(flags)
+
+      "resume" ->
+        with {:ok, db} <- db_path(flags),
+             {:ok, core} <- Omunculus.SessionExecutor.ensure(executor_opts(db, flags, env)) do
+          IO.puts(ensure_session(core))
+          close_client(core)
+          0
+        else
+          {:error, reason} -> usage(reason)
+        end
+
+      other ->
+        usage({:unknown_session_action, other})
     end
   end
 
@@ -97,42 +112,30 @@ defmodule Omunculus.CLI.Session do
   def send(%{args: args, flags: flags}, env) do
     with {:ok, db} <- db_path(flags),
          {:ok, config} <- Config.load(cwd: File.cwd!(), config_file: flags["config"], env: env),
-         {:ok, checked} <- Config.check(config) do
-      {:ok, core0} = EventCore.start_link(path: db)
-      session_id = ensure_session(core0)
-      attached = attached_workspace_ids(core0)
-      GenServer.stop(core0)
+         {:ok, _checked} <- Config.check(config),
+         :ok <- validate_provider(flags["provider"]),
+         {:ok, core} <- Omunculus.SessionExecutor.ensure(executor_opts(db, flags, env)) do
+      session_id = ensure_session(core)
 
-      interceptors = resolve_interceptors(checked.interceptors, attached, config)
-      {:ok, core} = EventCore.start_link(path: db, interceptors: interceptors)
-      {:ok, projector} = Projector.start_link(core: core)
+      execution =
+        Map.take(flags, ["profile", "tools", "model", "base_url", "max_turns", "provider"])
+        |> Map.put("cwd", File.cwd!())
+        |> Map.put("config_file", flags["config"])
+        |> Map.put("profile", flags["profile"] || flags["preset"] || config.defaults.preset)
 
-      runtime_opts =
-        [
-          core: core,
-          max_depth: max_depth(config),
-          agents: Agents.resolver(),
-          run_opts: [delegation_timeout: 600_000]
-        ]
-        |> maybe_runtime_config(flags, env)
-
-      {:ok, runtime} = Runtime.start_link(runtime_opts)
-
-      instruction = args.instruction
-      workspace = flags["workspace"]
+      opts = [
+        session_id: session_id,
+        workspace: flags["workspace"],
+        execution: execution,
+        timeout: 600_000
+      ]
 
       outcome =
-        if flags["detach"] == true do
-          detach_request(core, instruction, session_id: session_id, workspace: workspace)
-        else
-          Runtime.request(core, instruction,
-            session_id: session_id,
-            workspace: workspace,
-            timeout: 600_000
-          )
-        end
+        if flags["detach"] == true,
+          do: detach_request(core, args.instruction, opts),
+          else: Runtime.request(core, args.instruction, opts)
 
-      :ok = Projector.sync(projector)
+      Projector.sync_core(core)
 
       code =
         case outcome do
@@ -148,14 +151,30 @@ defmodule Omunculus.CLI.Session do
             1
         end
 
-      GenServer.stop(runtime)
-      GenServer.stop(projector)
-      GenServer.stop(core)
+      close_client(core)
       code
     else
       {:error, reason} -> usage(reason)
     end
   end
+
+  def executor_opts(db, flags, env) do
+    env = if flags["api_key"], do: Map.put(env, "OMUNCULUS_API_KEY", flags["api_key"]), else: env
+    opts = [db: db, cwd: File.cwd!(), config_file: flags["config"], env: env]
+    provider = flags["provider"] || if(flags["base_url"] || env["OMUNCULUS_BASE_URL"], do: "chat")
+    if provider, do: Keyword.put(opts, :provider, provider), else: opts
+  end
+
+  defp validate_provider(provider) when provider in [nil, "fake", "chat"], do: :ok
+  defp validate_provider(provider), do: {:error, {:invalid_flag_value, "--provider", provider}}
+
+  def close_client(core) do
+    if Process.get(:omunculus_external_cli), do: GenServer.stop(core)
+    :ok
+  end
+
+  def execution_interceptors(core, checked, config),
+    do: resolve_interceptors(checked.interceptors, attached_workspace_ids(core), config)
 
   defp session_create(args, flags) do
     with {:ok, db} <- db_path(flags) do
@@ -255,13 +274,15 @@ defmodule Omunculus.CLI.Session do
 
   defp detach_request(core, instruction, opts) do
     payload =
-      %{instruction: instruction, depth: 0}
+      %{instruction: instruction, depth: 0, execution: opts[:execution] || %{}}
       |> maybe_put_string(:workspace, opts[:workspace])
 
     {:ok, _} =
       EventCore.append(
         core,
         Envelope.command("task.requested",
+          work_item_id: Envelope.generate_id("wi"),
+          correlation_id: Envelope.generate_id("corr"),
           session_id: opts[:session_id],
           workspace_id: opts[:workspace],
           payload: payload
@@ -362,9 +383,6 @@ defmodule Omunculus.CLI.Session do
 
   defp maybe_add_workspace_gate(interceptors, attached_ids) do
     cond do
-      attached_ids == [] ->
-        interceptors
-
       not Code.ensure_loaded?(Omunculus.Interceptors.WorkspaceGate) ->
         interceptors
 
@@ -389,44 +407,6 @@ defmodule Omunculus.CLI.Session do
   defp resolve_module(name) when is_binary(name), do: Interceptor.resolve(name)
 
   defp resolve_module(_), do: {:error, :invalid_module}
-
-  defp max_depth(config) do
-    depths =
-      (config.policy || %{})
-      |> Map.keys()
-      |> Enum.map(&String.to_integer(to_string(&1)))
-      |> Enum.sort(:desc)
-
-    case depths do
-      [] -> 1
-      [max | _] -> max
-    end
-  end
-
-  defp maybe_runtime_config(opts, flags, env) do
-    case runtime_config(flags, env) do
-      nil -> opts
-      config -> Keyword.put(opts, :config, config)
-    end
-  end
-
-  defp runtime_config(flags, env) do
-    profile = flags["profile"] || flags["preset"]
-    config_file = flags["config"]
-    tools = flags["tools"]
-
-    if config_file || profile || tools do
-      [
-        cwd: File.cwd!(),
-        config_file: config_file,
-        env: env,
-        profile: profile,
-        tools: tools
-      ]
-    else
-      nil
-    end
-  end
 
   def db_path(flags) do
     {:ok, flags["db"] || flags["session"] || default_db()}

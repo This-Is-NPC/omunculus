@@ -39,12 +39,12 @@ defmodule Omunculus.CLI.ParserTest do
     assert b.flags["preset"] == "plan"
   end
 
-  test "run and spike accept --profile" do
+  test "run and send accept --profile" do
     {:ok, run} = Parser.parse(["run", "./app", "x", "--profile", "count"], %{})
     assert run.flags["profile"] == "count"
 
-    {:ok, spike} = Parser.parse(["spike", "conte até 3", "--profile", "count"], %{})
-    assert spike.flags["profile"] == "count"
+    {:ok, sent} = Parser.parse(["send", "conte até 3", "--profile", "count"], %{})
+    assert sent.flags["profile"] == "count"
   end
 
   test "run profile wins over preset when both are set" do

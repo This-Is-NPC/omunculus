@@ -89,7 +89,33 @@ defmodule Omunculus.EventCore.Projector do
       {:ok, _} =
         EventCore.transaction(core, fn conn ->
           if env.sequence > cursor_in(conn) do
-            apply_event(conn, env)
+            rejected? =
+              Store.query(
+                conn,
+                "SELECT 1 FROM EVENTS WHERE type = 'delivery.rejected' AND json_extract(payload, '$.rejected_event_id') = ? LIMIT 1",
+                [env.event_id]
+              ) != []
+
+            unless rejected? do
+              if env.type == "delivery.rejected" do
+                # Another process may have projected the original before the
+                # resident owner rejected delivery. Reconcile atomically.
+                Enum.each(Store.projection_tables(), &Store.exec!(conn, "DELETE FROM #{&1}"))
+                cols = Enum.join(Omunculus.Event.Envelope.columns(), ", ")
+
+                Store.query(
+                  conn,
+                  "SELECT #{cols} FROM EVENTS e WHERE sequence <= ? AND NOT EXISTS (SELECT 1 FROM EVENTS r WHERE r.type = 'delivery.rejected' AND json_extract(r.payload, '$.rejected_event_id') = e.event_id) ORDER BY sequence",
+                  [env.sequence]
+                )
+                |> Enum.each(fn row ->
+                  apply_event(conn, Omunculus.Event.Envelope.from_row(row))
+                end)
+              else
+                apply_event(conn, env)
+              end
+            end
+
             set_cursor(conn, env.sequence)
           end
         end)
@@ -205,7 +231,7 @@ defmodule Omunculus.EventCore.Projector do
     if child_workspace do
       Store.query(
         conn,
-        "UPDATE WORK_ITEMS SET workspace_id = ?, last_sequence = ? WHERE work_item_id = ? AND last_sequence < ?",
+        "UPDATE WORK_ITEMS SET workspace_id = ?, last_sequence = ? WHERE work_item_id = ? AND last_sequence <= ?",
         [child_workspace, env.sequence, child, env.sequence]
       )
     end

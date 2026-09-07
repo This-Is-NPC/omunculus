@@ -73,6 +73,14 @@ defmodule Omunculus.EventCore do
 
   def unsubscribe(core, pid \\ self()), do: GenServer.call(core, {:unsubscribe, pid})
 
+  def configure_interceptors(core, interceptors),
+    do: GenServer.call(core, {:interceptors, interceptors})
+
+  @doc "Revalidate a persisted activation during executor recovery."
+  def redeliver(core, event_id), do: GenServer.call(core, {:redeliver, event_id}, :infinity)
+
+  def poll(core), do: GenServer.call(core, :poll, :infinity)
+
   def path(core), do: GenServer.call(core, :path)
 
   @doc "Per-interceptor counters: evaluated, delivered, rejected."
@@ -88,9 +96,15 @@ defmodule Omunculus.EventCore do
 
     case Store.open(path) do
       {:ok, conn} ->
+        poll_ms = Keyword.get(opts, :poll_ms)
+        if poll_ms, do: Process.send_after(self(), :poll, poll_ms)
+        [[last]] = Store.query(conn, "SELECT COALESCE(MAX(sequence), 0) FROM EVENTS")
+
         {:ok,
          %{
            conn: conn,
+           delivered_sequence: last,
+           poll_ms: poll_ms,
            path: path,
            subscribers: %{},
            interceptors: interceptors,
@@ -109,11 +123,36 @@ defmodule Omunculus.EventCore do
          :ok <- Events.validate(env),
          :ok <- reject_invalid_permission_grant(env),
          {:ok, stored, fresh?} <- persist(state.conn, env) do
-      state = if fresh?, do: dispatch(state, stored), else: state
+      state = if fresh?, do: drain(state), else: state
       {:reply, {:ok, stored}, state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
+  end
+
+  def handle_call({:interceptors, interceptors}, _from, state),
+    do: {:reply, :ok, %{state | interceptors: interceptors}}
+
+  def handle_call(:poll, _from, state), do: {:reply, :ok, drain(state)}
+
+  def handle_call({:redeliver, event_id}, _from, state) do
+    rejected =
+      Store.query(
+        state.conn,
+        "SELECT 1 FROM EVENTS WHERE type = 'delivery.rejected' AND json_extract(payload, '$.rejected_event_id') = ?",
+        [event_id]
+      ) != []
+
+    state =
+      case {rejected,
+            Store.one(state.conn, "SELECT #{@select_cols} FROM EVENTS WHERE event_id = ?", [
+              event_id
+            ])} do
+        {false, row} when is_list(row) -> dispatch(state, Envelope.from_row(row)) |> drain()
+        _ -> state
+      end
+
+    {:reply, :ok, state}
   end
 
   def handle_call(:interceptor_stats, _from, state), do: {:reply, state.interceptor_stats, state}
@@ -169,6 +208,12 @@ defmodule Omunculus.EventCore do
   def handle_call(:path, _from, state), do: {:reply, state.path, state}
 
   @impl true
+  def handle_info(:poll, state) do
+    state = drain(state)
+    if state.poll_ms, do: Process.send_after(self(), :poll, state.poll_ms)
+    {:noreply, state}
+  end
+
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
     {:noreply, %{state | subscribers: Map.delete(state.subscribers, pid)}}
   end
@@ -265,6 +310,32 @@ defmodule Omunculus.EventCore do
      args}
   end
 
+  defp drain(state) do
+    rows =
+      Store.query(
+        state.conn,
+        "SELECT #{@select_cols} FROM EVENTS WHERE sequence > ? ORDER BY sequence LIMIT 500",
+        [state.delivered_sequence]
+      )
+
+    state =
+      Enum.reduce(rows, state, fn row, acc ->
+        env = Envelope.from_row(row)
+        acc = %{acc | delivered_sequence: env.sequence}
+
+        rejected =
+          Store.query(
+            acc.conn,
+            "SELECT 1 FROM EVENTS WHERE type = 'delivery.rejected' AND json_extract(payload, '$.rejected_event_id') = ? LIMIT 1",
+            [env.event_id]
+          ) != []
+
+        if rejected, do: acc, else: dispatch(acc, env)
+      end)
+
+    if rows == [], do: state, else: drain(state)
+  end
+
   # The delivery path: commit happened already. Interceptors configured for
   # this type run in order; the first rejection stops delivery and is recorded
   # as delivery.rejected (itself dispatched, but never interceptable).
@@ -310,8 +381,7 @@ defmodule Omunculus.EventCore do
             }
           )
 
-        {:ok, stored, true} = persist(state.conn, rejection)
-        notify(state.subscribers, stored)
+        {:ok, _stored, _fresh?} = persist(state.conn, rejection)
         state
     end
   end

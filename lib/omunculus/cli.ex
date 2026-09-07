@@ -7,10 +7,15 @@ defmodule Omunculus.CLI do
   def main(argv) do
     :ok = Omunculus.Native.ensure_nif!()
     {:ok, _} = Application.ensure_all_started(:omunculus)
+    Process.put(:omunculus_external_cli, true)
     System.halt(dispatch(argv))
   end
 
-  def dispatch(argv, env \\ System.get_env()) do
+  def dispatch(argv, env \\ System.get_env())
+
+  def dispatch(["__session-worker", encoded], _env), do: Omunculus.SessionExecutor.worker(encoded)
+
+  def dispatch(argv, env) do
     case Parser.parse(argv, env) do
       {:ok, %{command: :version}} ->
         IO.puts(Omunculus.version())
@@ -27,9 +32,6 @@ defmodule Omunculus.CLI do
 
       {:ok, %{command: :"monkey-job"} = parsed} ->
         run_with_dotenv(argv, parsed, env)
-
-      {:ok, %{command: :spike} = parsed} ->
-        Omunculus.CLI.Spike.run(parsed, env)
 
       {:ok, %{command: :events} = parsed} ->
         Omunculus.CLI.Events.events(parsed)
