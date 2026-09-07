@@ -57,23 +57,25 @@ defmodule Omunculus.CompleteMatrixTest do
       end
     end
 
-    start_supervised!(
-      {Runtime,
-       core: core,
-       max_depth: depth,
-       agents: Agents.resolver(script: script),
-       config: [
-         cwd: tmp.dir,
-         config_file: tmp.overlay_path || tmp.path,
-         env: %{},
-         profile: if(write?, do: "coding", else: "count")
-       ],
-       run_opts: [fs: Omunculus.FS.Memory.new(%{})]},
-      id: make_ref()
-    )
+    runtime =
+      start_supervised!(
+        {Runtime,
+         core: core,
+         max_depth: depth,
+         agents: Agents.resolver(script: script),
+         config: [
+           cwd: tmp.dir,
+           config_file: tmp.overlay_path || tmp.path,
+           env: %{},
+           profile: if(write?, do: "coding", else: "count")
+         ],
+         run_opts: [fs: Omunculus.FS.Memory.new(%{})]},
+        id: make_ref()
+      )
 
     {:ok, %{requested: requested, result: result}} = Runtime.request(core, task, timeout: 3_000)
     assert result == if(write?, do: "wrote README", else: "10")
+    await_idle(runtime, System.monotonic_time(:millisecond) + 3_000)
     events = EventCore.stream(core, 0, correlation_id: requested.correlation_id)
 
     completed =
@@ -92,5 +94,13 @@ defmodule Omunculus.CompleteMatrixTest do
     })
 
     Enum.map(events, & &1.type)
+  end
+
+  defp await_idle(runtime, deadline) do
+    unless Runtime.runs(runtime) == %{} do
+      assert System.monotonic_time(:millisecond) < deadline, "runtime did not finish"
+      Process.sleep(5)
+      await_idle(runtime, deadline)
+    end
   end
 end
