@@ -1,7 +1,7 @@
 defmodule Omunculus.Interceptors.ToolGate do
   @moduledoc """
   Rejects `tool.call.requested` deliveries whose tool is not in the Run's
-  pinned granted list from `run.started`.
+  pinned granted list from `run.started` and has no active temporary lineage grant.
 
   Reads `run.started` through the Event Core store connection passed in
   interceptor options (`:conn`), never through `EventCore.stream/3`, so the
@@ -10,6 +10,7 @@ defmodule Omunculus.Interceptors.ToolGate do
   @behaviour Omunculus.Interceptor
 
   alias Omunculus.EventCore.Store
+  alias Omunculus.Permission
 
   @run_started_sql """
   SELECT payload FROM EVENTS
@@ -19,11 +20,12 @@ defmodule Omunculus.Interceptors.ToolGate do
 
   @impl true
   def intercept(
-        %{type: "tool.call.requested", payload: %{"tool" => tool}, run_id: run_id},
+        %{type: "tool.call.requested", payload: %{"tool" => tool}, run_id: run_id} = env,
         options
       )
       when is_binary(run_id) do
     conn = options[:conn] || options["conn"]
+    work_item_id = env.work_item_id
 
     cond do
       is_nil(conn) ->
@@ -33,7 +35,9 @@ defmodule Omunculus.Interceptors.ToolGate do
         {:reject, "no run.started for run"}
 
       {:ok, granted} = pinned_granted(conn, run_id) ->
-        if tool in granted, do: :deliver, else: {:reject, "tool not in pinned granted"}
+        if Permission.tool_allowed?(conn, work_item_id, tool, granted),
+          do: :deliver,
+          else: {:reject, "tool not in pinned granted"}
     end
   end
 

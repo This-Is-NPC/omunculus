@@ -250,6 +250,54 @@ defmodule Omunculus.Events do
   def interceptable?(type), do: match?(%{interceptable: true}, spec(type))
   def injectable?(type), do: match?(%{injectable: true, kind: :command}, spec(type))
 
+  @doc """
+  Stable permission request id for a grant-lineage root work item and tool.
+
+  Hashed like node ids: parts joined with `\\0`, SHA-256, lower hex, `req_` + first 16 chars.
+  """
+  def request_id(grant_root_work_item_id, tool)
+      when is_binary(grant_root_work_item_id) and is_binary(tool) do
+    [grant_root_work_item_id, tool]
+    |> Enum.map(&to_string/1)
+    |> Enum.join(<<0>>)
+    |> then(&:crypto.hash(:sha256, &1))
+    |> Base.encode16(case: :lower)
+    |> then(&("req_" <> String.slice(&1, 0, 16)))
+  end
+
+  @doc """
+  Resolve the grant-lineage root for a work item using `WORK_ITEMS.parent_work_item_id`.
+
+  Depth-0 roots and depth-1 tasks under the session root are their own grant roots;
+  deeper tasks inherit the nearest depth-1 ancestor's lineage.
+  """
+  def grant_root_work_item_id(conn, work_item_id) when is_binary(work_item_id) do
+    parent = parent_work_item_id(conn, work_item_id)
+
+    cond do
+      is_nil(parent) ->
+        work_item_id
+
+      is_nil(parent_work_item_id(conn, parent)) ->
+        work_item_id
+
+      true ->
+        grant_root_work_item_id(conn, parent)
+    end
+  end
+
+  defp parent_work_item_id(conn, work_item_id) do
+    alias Omunculus.EventCore.Store
+
+    case Store.query(conn, "SELECT parent_work_item_id FROM WORK_ITEMS WHERE work_item_id = ?", [
+           work_item_id
+         ])
+         |> List.last() do
+      [parent] when is_binary(parent) -> parent
+      _ -> nil
+    end
+  end
+
   @doc "Validate an envelope against the catalog."
   def validate(%{type: type, kind: kind, schema_version: version, payload: payload}) do
     case spec(type) do

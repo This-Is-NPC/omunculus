@@ -107,6 +107,7 @@ defmodule Omunculus.EventCore do
   def handle_call({:append, env}, _from, state) do
     with :ok <- Envelope.validate(env),
          :ok <- Events.validate(env),
+         :ok <- reject_invalid_permission_grant(env),
          {:ok, stored, fresh?} <- persist(state.conn, env) do
       state = if fresh?, do: dispatch(state, stored), else: state
       {:reply, {:ok, stored}, state}
@@ -176,6 +177,19 @@ defmodule Omunculus.EventCore do
   def terminate(_reason, state), do: Store.close(state.conn)
 
   # --- internals -------------------------------------------------------------
+
+  defp reject_invalid_permission_grant(%{type: "permission.granted", payload: payload}) do
+    kind = payload["kind"] || payload[:kind]
+    granter = payload["granter"] || payload[:granter]
+
+    if kind == "permanent" and is_binary(granter) and String.starts_with?(granter, "run:") do
+      {:error, {:permanent_requires_human, granter}}
+    else
+      :ok
+    end
+  end
+
+  defp reject_invalid_permission_grant(_env), do: :ok
 
   defp persist(conn, env) do
     hash = Envelope.content_hash(env)
