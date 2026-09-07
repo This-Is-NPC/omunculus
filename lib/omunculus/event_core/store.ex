@@ -11,7 +11,7 @@ defmodule Omunculus.EventCore.Store do
 
   alias Exqlite.Sqlite3
 
-  @schema_version 2
+  @schema_version 3
 
   @schema [
     "PRAGMA journal_mode=WAL",
@@ -49,6 +49,7 @@ defmodule Omunculus.EventCore.Store do
       kind TEXT NOT NULL,
       body TEXT,
       created_at TEXT,
+      read_at TEXT,
       event_id TEXT,
       last_sequence INTEGER NOT NULL DEFAULT 0
     )
@@ -213,6 +214,9 @@ defmodule Omunculus.EventCore.Store do
       {"WORK_ITEMS", "workspace_id", "TEXT"},
       {"COMMENTS", "session_id", "TEXT"},
       {"COMMENTS", "event_id", "TEXT"}
+    ],
+    3 => [
+      {"COMMENTS", "read_at", "TEXT"}
     ]
   }
 

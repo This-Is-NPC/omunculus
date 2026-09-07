@@ -402,9 +402,81 @@ defmodule Omunculus.EventCore.Projector do
     )
   end
 
+  defp apply_event(conn, %{type: "permission.requested"} = env) do
+    p = env.payload
+
+    Store.query(
+      conn,
+      "INSERT OR IGNORE INTO COMMENTS (comment_id, session_id, work_item_id, kind, body, created_at, event_id, last_sequence) VALUES (?, ?, ?, 'request', ?, ?, ?, ?)",
+      [
+        env.event_id,
+        env.session_id,
+        env.work_item_id,
+        permission_request_body(p),
+        env.occurred_at,
+        env.event_id,
+        env.sequence
+      ]
+    )
+  end
+
+  defp apply_event(conn, %{type: "permission.granted"} = env) do
+    p = env.payload
+
+    Store.query(
+      conn,
+      "INSERT OR IGNORE INTO COMMENTS (comment_id, session_id, work_item_id, kind, body, created_at, event_id, last_sequence) VALUES (?, ?, ?, 'response', ?, ?, ?, ?)",
+      [
+        env.event_id,
+        env.session_id,
+        env.work_item_id,
+        "#{p["kind"]} by #{p["granter"]}",
+        env.occurred_at,
+        env.event_id,
+        env.sequence
+      ]
+    )
+  end
+
+  defp apply_event(conn, %{type: "permission.denied"} = env) do
+    p = env.payload
+
+    Store.query(
+      conn,
+      "INSERT OR IGNORE INTO COMMENTS (comment_id, session_id, work_item_id, kind, body, created_at, event_id, last_sequence) VALUES (?, ?, ?, 'response', ?, ?, ?, ?)",
+      [
+        env.event_id,
+        env.session_id,
+        env.work_item_id,
+        p["reason"],
+        env.occurred_at,
+        env.event_id,
+        env.sequence
+      ]
+    )
+  end
+
+  defp apply_event(conn, %{type: "inbox.read"} = env) do
+    id = env.payload["id"]
+
+    Store.query(
+      conn,
+      "UPDATE COMMENTS SET read_at = ?, last_sequence = ? WHERE (comment_id = ? OR event_id = ?) AND last_sequence < ?",
+      [env.occurred_at, env.sequence, id, id, env.sequence]
+    )
+  end
+
   # Commands and events without a projection effect (tool.call.requested,
   # task.resumed, ...) are still consumed: the cursor advances past them.
   defp apply_event(_conn, _env), do: :ok
+
+  defp permission_request_body(payload) do
+    case payload do
+      %{"reason" => reason} when is_binary(reason) and reason != "" -> reason
+      %{"tool" => tool} -> tool
+      _ -> ""
+    end
+  end
 
   defp transition_work_item(conn, work_item_id, from, to, env) do
     placeholders = from |> Enum.map(fn _ -> "?" end) |> Enum.join(", ")

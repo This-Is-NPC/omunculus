@@ -261,4 +261,105 @@ defmodule Omunculus.EventCoreTest do
                "SELECT work_item_id, kind, body, session_id FROM COMMENTS"
              )
   end
+
+  test "permission.requested projects COMMENTS as request", %{core: core, projector: projector} do
+    cmd =
+      EventCore.append!(
+        core,
+        Envelope.command("task.requested",
+          session_id: "sess-1",
+          work_item_id: "wi-1",
+          payload: %{instruction: "patch"}
+        )
+      )
+
+    requested =
+      EventCore.append!(
+        core,
+        Envelope.event("permission.requested",
+          correlation_id: cmd.correlation_id,
+          causation_id: cmd.event_id,
+          session_id: "sess-1",
+          work_item_id: "wi-1",
+          run_id: "run-1",
+          payload: %{request_id: "req-edit", tool: "edit", reason: "need to patch"}
+        )
+      )
+
+    :ok = Projector.sync(projector)
+
+    event_id = requested.event_id
+
+    assert [["wi-1", "request", "need to patch", ^event_id]] =
+             EventCore.query(
+               core,
+               "SELECT work_item_id, kind, body, event_id FROM COMMENTS"
+             )
+  end
+
+  test "permission.granted and permission.denied project COMMENTS responses", %{
+    core: core,
+    projector: projector
+  } do
+    EventCore.append!(
+      core,
+      Envelope.command("permission.granted",
+        session_id: "sess-1",
+        work_item_id: "wi-1",
+        payload: %{request_id: "req-edit", kind: "temporary", granter: "human:cli"}
+      )
+    )
+
+    EventCore.append!(
+      core,
+      Envelope.command("permission.denied",
+        session_id: "sess-1",
+        work_item_id: "wi-2",
+        payload: %{request_id: "req-delete", reason: "forbidden"}
+      )
+    )
+
+    :ok = Projector.sync(projector)
+
+    assert [
+             ["wi-1", "response", "temporary by human:cli"],
+             ["wi-2", "response", "forbidden"]
+           ] =
+             EventCore.query(
+               core,
+               "SELECT work_item_id, kind, body FROM COMMENTS ORDER BY work_item_id"
+             )
+  end
+
+  test "inbox.read sets COMMENTS.read_at by comment or event id", %{
+    core: core,
+    projector: projector
+  } do
+    comment =
+      EventCore.append!(
+        core,
+        Envelope.command("task.commented",
+          session_id: "sess-1",
+          work_item_id: "wi-1",
+          payload: %{body: "done", kind: "result"}
+        )
+      )
+
+    EventCore.append!(
+      core,
+      Envelope.command("inbox.read",
+        session_id: "sess-1",
+        payload: %{id: comment.event_id}
+      )
+    )
+
+    :ok = Projector.sync(projector)
+
+    assert [[read_at]] =
+             EventCore.query(core, "SELECT read_at FROM COMMENTS WHERE comment_id = ?", [
+               comment.event_id
+             ])
+
+    refute is_nil(read_at)
+  end
 end
