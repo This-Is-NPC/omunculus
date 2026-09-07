@@ -299,6 +299,66 @@ defmodule Omunculus.InterceptorsTest do
       assert %{"team-gate" => %{evaluated: 2, delivered: 1, rejected: 1}} =
                EventCore.interceptor_stats(core)
     end
+
+    test "TeamGate rejects request_work without authority" do
+      {:ok, core} = EventCore.start_link(path: ":memory:", interceptors: [@team_gate])
+      :ok = EventCore.subscribe(core)
+
+      corr = "corr-request-work"
+      run_id = "run-req"
+
+      EventCore.append!(
+        core,
+        Envelope.event("run.started",
+          correlation_id: corr,
+          causation_id: "evt-root",
+          work_item_id: "wi-req",
+          run_id: run_id,
+          payload: %{
+            "attempt" => 1,
+            "depth" => 2,
+            "agent_id" => "security-reviewer",
+            "agent_kind" => "worker",
+            "reason" => "initial",
+            "tools" => %{
+              "granted" => ["counter"],
+              "negotiable" => [],
+              "human" => [],
+              "forbidden" => []
+            }
+          }
+        )
+      )
+
+      {:ok, rejected} =
+        EventCore.append(
+          core,
+          Envelope.event("task.requested",
+            correlation_id: corr,
+            causation_id: "evt-tool",
+            work_item_id: "wi-req",
+            run_id: run_id,
+            payload: %{
+              "instruction" => "review style",
+              "requested_by" => "run:" <> run_id,
+              "child_work_item_id" => "wi-target",
+              "team" => "edit",
+              "agent" => "editor"
+            }
+          )
+        )
+
+      rejection =
+        core
+        |> EventCore.stream(0, correlation_id: corr)
+        |> Enum.find(&(&1.type == "delivery.rejected"))
+
+      assert rejection.payload["interceptor"] == "team-gate"
+      assert rejection.payload["rejected_event_id"] == rejected.event_id
+      assert rejection.payload["reason"] == "requester lacks request_work authority"
+      rejected_id = rejected.event_id
+      refute_receive {:event_core, %{event_id: ^rejected_id}}
+    end
   end
 
   describe "automations" do
