@@ -1,4 +1,4 @@
-Status: TO-BE — rationale; as identidades abaixo estão especificadas em session-model.md, tool-policy.md e event-catalog.md
+Status: histórico — rationale do plano implementado; disponibilidade atual em ../as-is/architecture.md
 
 # Recomendações de terreno
 

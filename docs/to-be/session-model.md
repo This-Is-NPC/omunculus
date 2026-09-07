@@ -1,4 +1,4 @@
-Status: TO-BE — planejado, validado; sessão, attach/detach, nodes derivados, WorkspaceGate e inbox validados; resume e request_work permanecem proposta
+Status: TO-BE — planejado, validado nas fases 4–7; sessão, attach/detach, nodes, inbox, resume do executor e request_work. Limites do provider em ../spike/phase-7-validation.md
 
 # Sessão e workspaces
 

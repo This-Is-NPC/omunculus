@@ -1,0 +1,12 @@
+{"events": 45, "success": true, "base": "simple", "task": "count", "actual": 10, "lane": false, "replay_equal": true, "model": "qwen3.5:4b", "elapsed_ms": 62977}
+{"events": 40, "success": true, "base": "simple", "task": "count", "actual": 10, "lane": true, "replay_equal": true, "model": "qwen3.5:4b", "elapsed_ms": 48772}
+{"events": 11, "success": true, "base": "simple", "task": "write", "actual": true, "lane": false, "replay_equal": true, "model": "qwen3.5:4b", "elapsed_ms": 51496}
+{"events": 11, "success": true, "base": "simple", "task": "write", "actual": true, "lane": true, "replay_equal": true, "model": "qwen3.5:4b", "elapsed_ms": 65064}
+{"events": 8, "success": false, "base": "medium", "task": "count", "actual": 0, "lane": false, "replay_equal": true, "model": "qwen3.5:4b", "elapsed_ms": 4018}
+{"events": 8, "success": false, "base": "medium", "task": "count", "actual": 0, "lane": true, "replay_equal": true, "model": "qwen3.5:4b", "elapsed_ms": 5567}
+{"events": 19, "success": true, "base": "medium", "task": "write", "actual": true, "lane": false, "replay_equal": true, "model": "qwen3.5:4b", "elapsed_ms": 169317}
+{"events": 8, "success": false, "base": "medium", "task": "write", "actual": false, "lane": true, "replay_equal": true, "model": "qwen3.5:4b", "elapsed_ms": 36169}
+{"events": 9, "success": false, "base": "complex", "task": "count", "actual": 0, "lane": false, "replay_equal": true, "model": "qwen3.5:4b", "elapsed_ms": 7551}
+{"events": 9, "success": false, "base": "complex", "task": "count", "actual": 0, "lane": true, "replay_equal": true, "model": "qwen3.5:4b", "elapsed_ms": 6062}
+{"events": 9, "success": false, "base": "complex", "task": "write", "actual": false, "lane": false, "replay_equal": true, "model": "qwen3.5:4b", "elapsed_ms": 63335}
+{"events": 12, "success": false, "base": "complex", "task": "write", "actual": false, "lane": true, "replay_equal": true, "model": "qwen3.5:4b", "elapsed_ms": 67946}

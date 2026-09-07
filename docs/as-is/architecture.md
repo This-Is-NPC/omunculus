@@ -1,157 +1,73 @@
-Status: AS-IS — implementado
+Status: AS-IS — implementado na master
 
 # Arquitetura atual
 
-Este documento descreve somente o que o código, `omunculus.usage.kdl` e os testes
-implementam na branch `master`. O índice de decisões planejadas está em
-[TO-BE](../to-be/architecture.md).
+Omunculus é um harness em Elixir/BEAM. A CLI oferece execução efêmera com
+`run`, execução durável com `send` e diagnóstico legado com `monkey-job`
+e `benchmark`. Não executa shell por tool nem cria commits.
 
-## Limites
+## Sessão residente
 
-Omunculus é um harness de coding agent em Elixir/BEAM. A superfície pública é a
-CLI. Três caminhos de execução coexistem:
+`SessionExecutor` supervisiona Event Core, Projector, Runtime e Automations.
+Na CLI compilada, um processo independente protegido por `flock` mantém
+um executor por arquivo SQLite. `setsid` permite fechar o cliente sem
+encerrar o trabalho. Nas chamadas embutidas, um DynamicSupervisor mantém
+o executor na VM da aplicação.
 
-- **`run`**: Event Core efêmero (`Omunculus.CLI.Session.ephemeral_run`). Abre
-  SQLite temporário, grava `session.created` + `workspace.attached`, inicia
-  Runtime/Projector, envia `task.requested` e espera `task.completed`. O arquivo
-  é removido ao terminar; não persiste entre invocações.
-- **`send` / `session` / `workspace` / `inbox`**: Event Core durável no SQLite
-  padrão `~/.omunculus/session.sqlite3` (ou `--db` / `--session` /
-  `OMUNCULUS_SESSION`).
-- **`spike`**: caminho Event Core de referência para a tarefa `conte até N`.
-- **`monkey-job`**: loop legado em memória (`Omunculus.Agent` via `Runner`).
+`send`, `session resume` e `inbox reply` garantem o executor. Os clientes
+apendam em `EVENTS`; polling por `sequence` entrega appends externos ao
+executor vivo. `events follow` acompanha o mesmo log com cursor. Não há
+socket de comandos nem mailbox persistente paralela ao log. Arquivos
+`.executor-lock`, `.executor-ready` e `.executor.log` são operacionais;
+readiness verifica PID e instante de criação do processo.
 
-Não executa shell, não cria commits e não oferece API pública HTTP, MCP ou TUI.
+`send --detach` retorna após o append. Resultado posterior aparece no
+`inbox`. Provider, perfil, modelo, limites e caminhos públicos da execução
+ficam no payload da tarefa para continuação. Credenciais vêm do ambiente
+do executor; não são serializadas no comando persistido.
 
-## Componentes
+Ao reiniciar, comandos ainda não iniciados são revalidados e entregues.
+Runs interrompidas geram `run.failed` e pedido no inbox para inspeção dos
+efeitos antes de um `task.resumed` explícito. Não se repete automaticamente
+uma ferramenta cujo efeito após crash seja desconhecido.
 
-- **CLI/parser**: derivado de `omunculus.usage.kdl`. Comandos: `run`,
-  `monkey-job`, `benchmark`, `spike`, `events`, `emit`, `config`, `session`,
-  `workspace`, `send`, `inbox`, `help`, `version`. Flags vencem ambiente, que
-  vence configuração, que vence defaults. `--session` e `OMUNCULUS_SESSION`
-  selecionam o arquivo SQLite da sessão; `--db` é alias explícito com precedência.
-- **Config**: lê `~/.omunculus/config.toml` e `<diretório>/omunculus.toml`.
-  `--config` sobrescreve o arquivo do projeto (não concatena TOML). Parseia
-  `[agents]`, `[teams]`, `[workspaces]`, `[profiles]`/`[presets]`,
-  `[policy.depth]`, `[session]`, `[[interceptors]]`, `[[automations]]`.
-  `config check` expande bandas de policy e valida módulos de interceptor que
-  existem. `--profile` é alias de `--preset`.
-- **Event Core** (`Omunculus.EventCore` + `Store`): autoridade local. Valida no
-  catálogo `Omunculus.Events`, deduplica por `event_id` e `idempotency_key`,
-  faz append+commit em `EVENTS` e só então notifica assinantes
-  `{:event_core, envelope}`. Rejeita `permission.granted` com `kind=permanent`
-  quando `granter` começa com `run:`. Interceptors com `workspaces: [...]` não
-  vazio só avaliam envelopes cujo `workspace_id` está na lista.
-- **Interceptors**: após commit, antes da entrega. Implementados: `Audit`,
-  `DepthGate`, `TeamGate`, `ToolGate`, `WorkspaceGate`. Rejeição gera
-  `delivery.rejected` com `causation_id` no envelope bloqueado; o envelope
-  permanece no log. `ToolGate` permite `tool.call.requested` quando a tool está
-  no `granted` pinado em `run.started` **ou** há grant temporário ativo na
-  linhagem (cadeia de ancestrais, `grant_root` da tarefa ainda aberto, grant
-  não revogado). Permanente entra na policy na próxima Run, não no `ToolGate`.
-  `WorkspaceGate` bloqueia `task.requested` e `task.delegated` quando o
-  workspace do payload não está em `SESSION_WORKSPACES` (attached) ou está em
-  `deny_targets`; lê `SESSION_WORKSPACES` via `options[:conn]` quando
-  disponível. `send` injeta `WorkspaceGate` quando há workspaces anexados.
-- **Automations**: consumidores assíncronos após entrega; cursor em
-  `PROJECTION_CURSORS` como `automation:<name>`; sem veto.
-- **Projector**: reduz `EVENTS` em `WORK_ITEMS`, `SESSION_WORKSPACES`,
-  `ARCHIVE_RUNS`, `ARCHIVE_MODEL_CALLS`, `WORK_ITEM_DEPENDENCIES`,
-  `COMMENTS`, `PROJECTION_CURSORS`. `workspace.attached`/`workspace.detached`
-  atualizam `SESSION_WORKSPACES`; `permission.requested` e respostas
-  (`permission.granted`/`permission.denied`) e `task.commented` escrevem
-  `COMMENTS`; `task.completed` escreve `COMMENTS` kind=result; `inbox.read`
-  preenche `read_at`. Replay reconstrói snapshots idênticos; redelivery do
-  mesmo `event_id` é no-op. Store em `user_version` 3.
-- **Runtime + Run**: `task.requested`/`task.delegated`/`task.resumed` ativam
-  Runs. Pedir é concluir: `delegate` grava `task.delegated`, fecha com
-  `run.completed` `outcome=waiting` (awaiting + checkpoint), o processo morre.
-  `task.completed` do filho abre novo Run `reason=continuation`. Crash →
-  `run.failed`; `task.resumed` → `reason=retry`. `request_permission` fecha a
-  Run em `waiting` com `awaiting` contendo o `request_id` ou `"policy"` quando
-  a política precisa ser relida. Pedido escalado ao pai abre Run de arbitragem
-  (`reason=arbitration`, tools `grant`/`deny`/`escalate`, sem `task.completed`
-  do pai). `permission.granted`/`permission.denied` reabrem Work Items em
-  `waiting` para o `request_id`; `policy.changed` auto-concede pedidos abertos
-  cuja tool a nova linha de policy já cobre (`granter=policy`). `pending_continuations`
-  é reconstruído no `init` do Runtime a partir de `WORK_ITEMS` em `waiting` e
-  `task.completed` dos filhos (`rebuild_pending_continuations/1`), depois
-  `flush_pending_continuations/1`. Envelopes carregam `session_id` e
-  `workspace_id`; depth 0 usa `workspace_id` nil no envelope e workspace no
-  payload; depth ≥ 1 preenche `workspace_id`. `node_id` depth 0 =
-  `hash(session_id, 0)`; depth 1 = `hash(session_id, workspace, 1)` ou com
-  `team` quando `scope=node`. `workspace.attached` registra nós depth 1 sem
-  iniciar Run; `workspace.detached` encerra Runs ativos no workspace com
-  `run.failed` `reason=detached`. Em depth 0, `maybe_prepend_comments/3` injeta
-  comentários recentes de `COMMENTS` no checkpoint quando vazio.
-- **Inbox CLI** (`Omunculus.CLI.Inbox`): `inbox` lista pedidos de permissão
-  abertos e resultados não lidos; `inbox reply <request_id> --grant|--deny`
-  (opcional `--permanent` e `--config` para patch de TOML + `policy.changed`);
-  `inbox read <id>` apenda `inbox.read`. `emit` aceita `--request-id` para
-  preencher campos de um `permission.requested` aberto e `--session`/`--db`
-  para o SQLite da sessão.
-- **Policy** (`Omunculus.Policy`): normaliza allow/deny em
-  granted/negotiable/human/forbidden; agrupa `fs.read`/`fs.write`; tabela
-  profile×depth×workspace; hash. `Runtime.start_run` recarrega config, grava
-  `policy.loaded` quando o hash muda. `Policy.line` é o conjunto efetivo em cada
-  depth (sem interseção com o pai). `run.started.tools` fixa o granted; `--tools`
-  no spike restringe.
-- **Agent (legado)**: loop síncrono em memória para `monkey-job` (e benchmark
-  quando usa chat).
-- **Runtime.Agents**: com `[agents]`/`[session].roles` e `[teams]` no TOML, escolhe
-  chat/prompt e roteia `delegate` por time (depth 0) e membro (depth 1); sem essas
-  tabelas mantém o heurístico concierge/worker por profundidade.
-- **Runner/Sandbox, Chat, Tools, Reporter**: usados no caminho `monkey-job`;
-  `run` usa chat opcional via provider no Runtime efêmero.
+## Event Core e projeções
 
-## Fluxo Event Core (`spike` / `send` / `run` efêmero)
+SQLite/WAL usa schema 4 e busy timeout. O Core valida catálogo, deduplica,
+faz commit antes da entrega e aplica interceptors. Rejeições permanecem
+no log como `delivery.rejected`. O Projector ignora envelopes rejeitados;
+uma rejeição tardia reconcilia atomicamente as projeções já adiantadas por
+outro cliente. Replay reconstrói as mesmas tabelas.
 
-```mermaid
-sequenceDiagram
-    actor U as Usuário
-    participant C as CLI
-    participant EC as Event Core
-    participant I as Interceptors
-    participant RT as Runtime
-    participant R as Run
-    participant P as Projector
+Audit, DepthGate, TeamGate, ToolGate e WorkspaceGate são interceptors.
+TeamGate é obrigatório para pedidos entre linhagens mesmo sem lane.
+WorkspaceGate acompanha attach/detach no log da sessão. Automations são
+consumidores pós-entrega com cursor reconstruível.
 
-    U->>C: spike / send / run
-    C->>EC: append task.requested (+ session/workspace se durável)
-    EC->>EC: validate + dedupe + commit EVENTS
-    EC->>I: interceptar entrega
-    alt rejeitado
-        I-->>EC: delivery.rejected
-    else entregue
-        I->>RT: {:event_core, envelope}
-        RT->>R: start Run
-        loop rounds
-            R->>EC: tool.call.requested / completed
-            EC->>I: interceptar
-            I->>R: entregar
-            R->>EC: task.delegated / run.completed / task.completed
-        end
-        EC->>P: reduzir projeções
-    end
-    C-->>U: resultado / log ordenado
-```
+## Runtime e política
 
-O benchmark (`actor-density`, `agent-tree`, `http-load`) permanece diagnóstico do
-runtime e não cria persistência durável.
+Delegar é concluir a Run com checkpoint e `outcome=waiting`. A resposta
+abre outra Run, incrementa attempt e restaura o estado. Não permanece
+processo bloqueado esperando filho. Pedidos entre linhagens passam pelo
+ancestral comum; mediação preserva o checkpoint e permite encaminhar,
+reescrever ou negar. O filho registra `requested_by` e dependências.
 
-## Ausências verificadas
+Config normaliza bandas granted/negotiable/human/forbidden por perfil,
+depth, workspace e time. A Run pina a autoridade; tools negociáveis só
+executam após concessão. Runtime e ToolGate reconsultam revogações.
+Directory e TeamGate compartilham descoberta por identidade real, sessão,
+workspace, time e escopo. Roots relativos são resolvidos no diretório do TOML.
 
-- **Runtime residente observando `emit` em tempo real**: `events follow` faz poll;
-  `send` abre Runtime por invocação.
+`Runtime.Agents` resolve roles, prompts e modelos configurados.
+`Chat.Scripts` fornece o comportamento determinístico de `--provider fake`.
+`spike` deixou de ser comando público; testes de crash usam o harness.
 
-O modelo de dados está em [data-model.md](data-model.md); requisitos observáveis
-em [requirements.md](requirements.md).
+## Superfície e evidência
 
-## Fechamento da fase 6 (2026-09-07)
+O parser nativo usa `CLI.Spec`; `omunculus.usage.kdl` descreve a superfície
+portável para usage. Comandos de sessão coexistem com run, monkey-job,
+benchmark, events, emit, config, help e version.
 
-`request_work` cria dependências pelo ancestral comum e reabre o solicitante;
-`mediated` repassa, reescreve ou nega, preservando o checkpoint do ancestral.
-`directory` e `TeamGate` compartilham escopo por sessão, workspace e time.
-Tools negociáveis exigem concessão; revogação é consultada antes da execução.
-`WORK_ITEMS.requested_by` é reconstruível do log e migra no schema 4.
-A matriz cobre vinte combinações com filesystem isolado; 277 testes passam.
+A matriz fake cobre vinte combinações. A validação real e seus limites
+estão em [fase 7](../spike/phase-7-validation.md). A execução de ferramentas
+é verificada separadamente do texto produzido pelo modelo.

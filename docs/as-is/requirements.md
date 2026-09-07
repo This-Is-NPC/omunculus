@@ -13,8 +13,7 @@ O binário `omunculus` oferece:
 - `run <dir> <instruction...>`: Event Core efêmero (tmp sqlite, `session.created`
   + `workspace.attached`, `Runtime.request`, arquivo removido ao sair);
 - `monkey-job <instruction...>`: loop Agent em memória com tools/delay/counter;
-- `spike <instruction...>`: Event Core end-to-end (`conte até N`);
-- `session create [name]` e `session list`: log durável com `session.created`;
+- `session create [name]`, `session list` e `session resume`: criação, consulta e executor;
 - `workspace attach <name>` e `workspace detach <name>`: `workspace.attached` /
   `workspace.detached` no log da sessão;
 - `send <instruction...>`: abre sessão durável, Runtime + Projector, espera
@@ -39,10 +38,8 @@ selecionam o arquivo (`--db` vence quando ambos presentes); `OMUNCULUS_SESSION`
 via ambiente. Mesma resolução em `events follow`, `emit`, `session`, `workspace`,
 `send` e `inbox`.
 
-`spike` aceita `--depth`, `--fail-at`, `--delay`, `--db`, `--provider fake|chat`,
-`--config`, `--profile`, `--model`, `--base-url`, `--api-key`, `--json-events`.
-
-`send` aceita `--workspace`, `--profile`, `--config`, `--detach`, `--tools`.
+`send` aceita `--workspace`, `--profile`, `--config`, `--detach`, `--tools`,
+`--provider fake|chat`, `--model`, `--base-url`, `--api-key` e `--max-turns`.
 
 ## Execução `run` (Event Core efêmero)
 
@@ -67,7 +64,7 @@ Provider opcional (`--provider chat` + credenciais); sem provider usa
 Sem shell, sem commit Git, chat OpenAI-compatible sem streaming; `fake` para
 testes determinísticos.
 
-## Execução `spike` (Event Core)
+## Execução `send --provider fake` (Event Core)
 
 1. Abrir SQLite temporário ou `--db`; iniciar Event Core, Projector, Runtime,
    Automations configuradas.
@@ -82,8 +79,8 @@ testes determinísticos.
    observação incluindo result e itens ainda em awaiting.
 7. Texto com awaiting não vazio vai para `notes` no checkpoint, não gera
    `task.completed` prematuro.
-8. `--fail-at n` mata o worker; `task.resumed` inicia nova tentativa.
-9. Ao final: log ordenado, projeções, verificação de replay idêntico.
+8. O harness injeta crash de worker; `task.resumed` inicia nova tentativa.
+9. O harness verifica log ordenado, projeções e replay idêntico.
 
 Policy inválida → `run.failed` `reason=policy_invalid`. `ToolGate` bloqueia tool
 fora do granted pinado em `run.started` salvo grant temporário ativo na linhagem.
@@ -97,7 +94,7 @@ fora do granted pinado em `run.started` salvo grant temporário ativo na linhage
    `workspace.attached`; `detach` grava `workspace.detached`.
 3. `send` garante `session.created` se o log estiver vazio; resolve interceptors
    com workspaces anexados e adiciona `WorkspaceGate` quando aplicável.
-4. `Runtime.request` com `--workspace` ou `--detach` (só append `task.requested`).
+4. `Runtime.request` com `--workspace`; `--detach` apenda e deixa o executor residente continuar.
 5. `pending_continuations` reconstruído no `init` do Runtime a partir do log.
 6. `inbox` lê projeções e log sem iniciar Runtime; `inbox reply` apenda
    `permission.granted`/`permission.denied` (permanente opcional via patch de
@@ -124,13 +121,13 @@ tipos `injectable` (`task.requested`, `task.resumed`, `session.created`,
 
 Testes cobrem parser, config, Agent, chat, sandbox, tools, Event Core,
 projeções, replay, interceptors (incl. `WorkspaceGate` e `ToolGate` com grants
-temporários), automations, policy em runtime, spike cenários simple/medium/complex,
+temporários), automations, policy em runtime, cenários simple/medium/complex,
 sessão/workspace/send, `--fail-at`/resume, cenários 3/4 (dois Runs por WI
 concierge) e três blocos de permissões (temporária, permanente, arbitragem do
 pai) mais `complex.toml` com e sem lane (faixa `human`).
 
-Não há requisito implementado para runtime residente reagindo a `emit` em tempo real. Não
-existe verbo CLI `policy grant` (permanente via `inbox reply --grant
+O executor residente reage a appends externos e mantém trabalho após a saída
+do cliente. Não existe verbo CLI `policy grant` (permanente via `inbox reply --grant
 --permanent`). Esses itens estão no [alvo TO-BE](../to-be/requirements.md) e
 não devem ser inferidos como disponíveis hoje.
 
@@ -142,3 +139,11 @@ não devem ser inferidos como disponíveis hoje.
 Tools negociáveis exigem concessão; revogação é consultada antes da execução.
 `WORK_ITEMS.requested_by` é reconstruível do log e migra no schema 4.
 A matriz cobre vinte combinações com filesystem isolado; 277 testes passam.
+
+## Fechamento da fase 7 (2026-09-07)
+
+Executor residente por sessão, entrega externa por sequence, retomada de
+comandos pendentes com revalidação e reconciliação de rejeições tardias.
+`events follow` acompanha o log vivo; `send --provider fake` substitui
+`spike`. A matriz real tem resultados e limitações registrados em
+[phase-7-validation.md](../spike/phase-7-validation.md).

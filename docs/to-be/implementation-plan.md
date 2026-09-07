@@ -1,4 +1,4 @@
-Status: plano — ordem proposta para sair da spike e chegar ao TO-BE
+Status: fases 0–7 implementadas na master; validação e limites registrados abaixo
 
 # Plano de implementação
 
@@ -207,6 +207,14 @@ do solicitante após reinício. `WORK_ITEMS.requested_by` migra no schema 4.
 
 Saída: TO-BE inteiro com status "planejado, validado"; `recommendations.md`
 vira histórico.
+
+Verificação em 2026-09-07: executor residente, appends externos, follow,
+recuperação com revalidação e remoção de spike implementados. A matriz real
+completou doze casos: cinco efeitos comprovados e doze replays idênticos.
+Falhas de instrução do modelo estão registradas, conforme o critério
+transversal, em [fase 7](../spike/phase-7-validation.md). Isso não valida
+automaticamente propostas adicionais de CLI nem a confiabilidade do modelo
+na cadeia de três níveis. `recommendations.md` passa a histórico.
 
 ## Critérios transversais
 

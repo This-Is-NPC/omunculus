@@ -1,3 +1,6 @@
+> Histórico: o comando `spike` foi substituído por `send --provider fake`.
+> A validação da fase 7 está em [phase-7-validation.md](phase-7-validation.md).
+
 Status: SPIKE — código descartável na branch `spike/event-core`
 
 # Spike do Event Core

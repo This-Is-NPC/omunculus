@@ -1,4 +1,4 @@
-Status: TO-BE — fase 6 validada com provider fake: roteamento LCA, mediação, descoberta por escopo, dependências, replay e retomada; provider real pendente da fase 7
+Status: TO-BE — fase 6 validada com provider fake: roteamento LCA, mediação, descoberta por escopo, dependências, replay e retomada; provider real avaliado na fase 7 com limitações registradas em ../spike/phase-7-validation.md
 
 # Times, interação entre linhagens e descoberta
 

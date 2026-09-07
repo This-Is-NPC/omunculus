@@ -3,7 +3,7 @@ Status: AS-IS — implementado
 # Modelo de dados atual
 
 Na branch `master` coexistem estado transitório (`monkey-job`) e
-persistência SQLite/WAL no caminho Event Core (`spike`, `emit`, `events follow`,
+persistência SQLite/WAL no caminho Event Core (`emit`, `events follow`,
 `session`, `workspace`, `send`, `inbox`, `run` efêmero). A arquitetura está em
 [architecture.md](architecture.md); o alvo separado em
 [TO-BE data model](../to-be/data-model.md).
@@ -30,7 +30,7 @@ não registrada ou campos obrigatórios ausentes. Catálogo de sessão inclui
 
 ## Tabelas SQLite
 
-Store `user_version` 3 (`COMMENTS.read_at`).
+Store `user_version` 4 (`COMMENTS.read_at`).
 
 | Tabela | Função |
 |---|---|
