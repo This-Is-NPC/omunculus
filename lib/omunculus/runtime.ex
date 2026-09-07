@@ -544,27 +544,70 @@ defmodule Omunculus.Runtime do
 
   defp activation_instruction(%Envelope{payload: %{"instruction" => i}}), do: i
 
+  # pending_continuations remains an in-memory queue (phase 4 rebuilds from log).
   defp find_parent_waiter(core, child_work_item_id) do
     child = to_string(child_work_item_id)
 
-    case Enum.find(EventCore.stream(core, 0, type: "task.delegated"), fn env ->
-           to_string(env.payload["child_work_item_id"]) == child
-         end) do
-      nil ->
-        :error
+    parent_wi =
+      case find_parent_in_projection(core, child) do
+        {:ok, parent_wi} -> parent_wi
+        :error -> parent_work_item_id(core, child)
+      end
 
-      delegated ->
-        parent_wi = delegated.work_item_id
-
-        case EventCore.stream(core, 0, work_item_id: parent_wi, type: "run.completed")
-             |> List.last() do
-          %Envelope{payload: %{"outcome" => "waiting"}} = run_completed ->
-            {:ok, parent_wi, run_completed}
-
-          _ ->
-            :error
-        end
+    with parent_wi when is_binary(parent_wi) <- parent_wi,
+         %Envelope{payload: %{"outcome" => "waiting"}} = run_completed <-
+           EventCore.stream(core, 0, work_item_id: parent_wi, type: "run.completed")
+           |> List.last() do
+      {:ok, parent_wi, run_completed}
+    else
+      _ -> :error
     end
+  end
+
+  defp find_parent_in_projection(core, child) do
+    waiting_rows =
+      EventCore.query(
+        core,
+        "SELECT work_item_id, awaiting FROM WORK_ITEMS WHERE status = ?",
+        ["waiting"]
+      )
+
+    # Continuation runs flip status to running while awaiting stays on WORK_ITEMS.
+    running_rows =
+      EventCore.query(
+        core,
+        "SELECT work_item_id, awaiting FROM WORK_ITEMS WHERE status = ? AND awaiting IS NOT NULL AND awaiting != '' AND awaiting != '[]'",
+        ["running"]
+      )
+
+    case Enum.find(waiting_rows ++ running_rows, fn [_parent_wi, awaiting] ->
+           case decode_awaiting(awaiting) do
+             ids when is_list(ids) -> child in Enum.map(ids, &to_string/1)
+             _ -> false
+           end
+         end) do
+      [parent_wi, _] -> {:ok, parent_wi}
+      nil -> :error
+    end
+  end
+
+  defp parent_work_item_id(core, child) do
+    case EventCore.query(
+           core,
+           "SELECT parent_work_item_id FROM WORK_ITEMS WHERE work_item_id = ?",
+           [child]
+         ) do
+      [[parent_wi]] when is_binary(parent_wi) -> parent_wi
+      _ -> nil
+    end
+  end
+
+  defp decode_awaiting(nil), do: nil
+  defp decode_awaiting(""), do: nil
+  defp decode_awaiting(ids) when is_list(ids), do: ids
+
+  defp decode_awaiting(json) when is_binary(json) do
+    Jason.decode!(json)
   end
 
   defp continue_parent(state, env, parent_wi, checkpoint, child_id, awaiting) do
