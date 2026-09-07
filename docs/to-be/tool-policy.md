@@ -198,8 +198,7 @@ flowchart TD
         L -->|não| PL["append policy.loaded<br/>(tabela + hash)"]
         L -->|sim| RT
         PL --> RT["linha(perfil da tarefa, depth do node, workspace do node)"]
-        RT --> PA["∩ autoridade do pai<br/>(só em delegação, vem de task.delegated)"]
-        PA --> RS["run.started.tools (faixas pinadas) + policy_hash"]
+        RT --> RS["run.started.tools (faixas pinadas) + policy_hash"]
         RS --> AG["Agent recebe granted ∪ concessões temporárias da linhagem<br/>+ request_permission se negotiable ∪ human ≠ ∅"]
         AG --> SC["schemas = Tools.schemas(lista) · fixos durante a Run"]
         SC --> PV["POST /chat/completions · \"tools\": [...]"]
@@ -226,11 +225,10 @@ Regras:
    `reason = policy_invalid`, o Work Item fica elegível para `task.resumed`,
    e `config check` mostra o erro. Uma edição errada a quente não mata a
    sessão nem as Runs que já estão rodando.
-5. **Edição a quente nunca amplia uma árvore em andamento.** Um filho que
-   nasce depois da edição resolve com a política nova, mas continua
-   intersectado com a autoridade do pai que veio em `task.delegated`, que
-   foi pinada com a política antiga. Para ampliar de fato, é uma tarefa nova
-   ou uma concessão explícita.
+5. **Edição a quente vale para quem nasce depois.** Um filho que nasce
+   após a edição resolve com a política nova, para mais ou para menos: a
+   edição é de um humano no arquivo, não do modelo. Runs em andamento não
+   mudam.
 6. **Retomada resolve de novo.** `task.resumed` abre uma Run nova, e Run nova
    lê o config atual. Perfil e workspace são os do Work Item e não mudam;
    as faixas podem mudar. Concessões temporárias da tarefa continuam
@@ -307,28 +305,41 @@ sequenceDiagram
 
 ## Delegação nunca amplia
 
-O filho nasce com `teto[posição do filho] ∩ teto[workspace do filho] ∩
-autoridade(pai)`, onde `autoridade(pai) = granted(pai) ∪ negotiable(pai)`: o
-que o pai poderia obter sem humano. O workspace é herdado, salvo se a
-delegação apontar outro workspace anexado à sessão. Não existe caminho em que
-descer na árvore aumente o conjunto.
+O conjunto de um filho é `perfil da tarefa ∩ teto[posição do filho] ∩
+teto[workspace do filho]`, a mesma linha da tabela que qualquer outro nó
+consulta. O pai **não** entra nessa interseção. Três coisas garantem que
+descer na árvore não amplie nada:
+
+- o **perfil é da tarefa**, não do nó: `--profile ask` vale em todo depth,
+  então um concierge em modo pergunta não gera workers que editam;
+- os **tetos são configuração**, por posição e por workspace; o modelo não
+  escolhe a posição nem o workspace do filho fora do que a sessão anexou;
+- o workspace é **herdado**, salvo delegação explícita para outro workspace
+  anexado, cujo teto então se aplica.
+
+A autoridade do pai, `granted ∪ negotiable` da linha dele, não define o que
+o filho recebe ao nascer; ela define o que o pai pode **conceder** depois
+([permission-negotiation.md](permission-negotiation.md)) e o que `--tools`
+pode estreitar. `task.delegated` continua carregando as faixas do pai
+(`tools`) para auditoria.
 
 ```mermaid
 graph TD
-    R0["depth 0 · sem workspace · perfil build<br/>granted = {delegate}<br/>autoridade = {delegate, request_work}"]
-    R1["depth 1 · workspace omunculus<br/>= teto.depth1 ∩ omunculus ∩ autoridade(R0)<br/>granted = {fs.read, delegate} · negotiable = {edit, write}"]
-    R2a["depth 2 · workspace omunculus<br/>granted = {fs.read} · negotiable = {edit, write}"]
-    R2b["depth 2 · workspace infra<br/>granted = {fs.read} · human = {edit, write}"]
-    R0 -->|task.delegated<br/>tools = herdadas| R1
+    R0["depth 0 · sem workspace · perfil build<br/>= build ∩ policy.depth.0<br/>granted = {delegate, workspaces, directory}"]
+    R1["depth 1 · workspace omunculus · perfil build<br/>= build ∩ policy.depth.1 ∩ omunculus<br/>granted = {fs.read, delegate} · negotiable = {edit, write}"]
+    R2a["depth 2 · workspace omunculus · perfil build<br/>= build ∩ policy.depth.2 ∩ omunculus<br/>granted = {fs.read} · negotiable = {edit, write}"]
+    R2b["depth 2 · workspace infra · perfil build<br/>= build ∩ policy.depth.2 ∩ infra<br/>granted = {fs.read} · human = {edit, write}"]
+    R0 -->|task.delegated<br/>workspace herdado| R1
     R1 -->|task.delegated| R2a
     R1 -->|task.delegated<br/>workspace = infra| R2b
 ```
 
-Decisão registrada: o filho herda a **autoridade** do pai, não o efetivo do
-perfil. Um concierge em `--profile build` (efetivo só `delegate`) ainda gera
-workers com `edit` negociável, porque `edit` está na autoridade do depth 1.
-Se a alternativa for preferida, a interseção usa o efetivo do pai e o caso
-"só delega, mas os workers editam" deixa de existir.
+Decisão registrada, corrigindo a versão anterior deste documento: o filho
+**não** herda a autoridade do pai. A versão anterior tornava impossível o
+caso "concierge nunca toca repositório, workers editam", porque a
+autoridade de um depth 0 sem tools de arquivo nunca conteria `edit`. O que
+impede escape por delegação são o perfil da tarefa e os tetos por posição,
+que não estão sob controle do modelo.
 
 ## Automação que dispara um agente
 
@@ -381,7 +392,7 @@ pedir os perfis e workspaces que a configuração lhe deu.
 | Envelope | Campos no payload |
 |---|---|
 | `task.requested` | `profile`, `agent`, `workspace`, `origin` |
-| `task.delegated` | `workspace`, `tools` (faixas calculadas pelo runtime) |
+| `task.delegated` | `workspace`, `tools` (faixas do pai, para auditoria) |
 | `policy.loaded` | tabela normalizada e `policy_hash`; apendado quando a política muda |
 | `run.started` | `profile`, `tools` (faixas expandidas), `roots`, `policy_hash`; `workspace_id` no envelope |
 | `delivery.rejected` | já existe; `interceptor = "tool-gate"` |

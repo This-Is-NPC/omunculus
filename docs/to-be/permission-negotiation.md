@@ -45,9 +45,11 @@ autoridade(pai) = granted(pai) ∪ negotiable(pai)
 pai pode conceder T ao filho  ⇔  T ∈ negotiable(filho) ∧ T ∈ autoridade(pai)
 ```
 
-Isso mantém a regra "delegar nunca amplia": a árvore não consegue, por
-negociações sucessivas, chegar a uma tool que a raiz não poderia ter. O que
-está em `human` em qualquer nível acima do filho continua exigindo humano.
+Isso vale para conceder, não para nascer: o conjunto inicial do filho vem
+da tabela de política ([tool-policy.md](tool-policy.md)), sem interseção
+com o pai. A autoridade limita apenas o que o pai pode liberar depois, e
+um depth 0 sem tools de arquivo não concede `edit`: esse pedido sobe ao
+humano.
 
 ```mermaid
 flowchart TD

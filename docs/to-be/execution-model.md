@@ -45,7 +45,9 @@ o Execution Node e abre uma Run com `originating_run_id`, `parent_run_id` e
 `depth = parent.depth + 1`. Profundidade máxima e workspace de destino são
 política de entrega: interceptores `DepthGate` e `WorkspaceGate` vetam a
 delegação antes de o filho nascer, e o veto volta ao delegador como erro de
-tool. O filho herda a autoridade de tools do pai e nunca a amplia. A relação de reporting é derivada dos vínculos das instâncias criadas;
+tool. O conjunto de tools do filho vem da tabela de política para a
+posição e o workspace dele, com o perfil da tarefa; o pai não o amplia nem
+o estreita ([tool-policy.md](tool-policy.md)). A relação de reporting é derivada dos vínculos das instâncias criadas;
 não há uma árvore declarada no arquivo de Agent. Um node raiz possui depth 0.
 
 ```mermaid
