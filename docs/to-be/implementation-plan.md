@@ -98,6 +98,8 @@ Saída: nenhum processo de Run vivo entre pedido e resposta;
   teto e em `tools_catalog` desatualizado.
 - CLI: `--profile` em `run` e `spike`; `--tools` vira estreitamento.
 - Config inválido a quente vira `run.failed` com `policy_invalid`.
+- `WORK_ITEMS.awaiting` na projeção; o Runtime localiza o pai que espera
+  por consulta à projeção, não varrendo `task.delegated`.
 
 Testes: `simple.toml` e `medium.toml`, com e sem `lane.toml`, com as duas
 tarefas; edição do TOML entre duas Runs muda a segunda e não a primeira;
@@ -135,6 +137,9 @@ Testes: `medium-teams.toml` com e sem lane; roteamento por tipo de tarefa;
 - Concierge de depth 0 roteando por `workspaces`; contexto reconstruído de
   `COMMENTS`.
 - Interceptores com `workspaces = [...]`.
+- Recuperação ao subir: o Runtime reconstrói do log as continuações
+  pendentes (Work Item em `waiting` cujo filho já tem `task.completed`);
+  a fila em memória da fase 1 deixa de ser a única fonte.
 
 Testes: `complex.toml` sem a parte de permissão: dois workspaces, depth 2,
 `infra` só leitura pelas três barreiras, automação disparando.
