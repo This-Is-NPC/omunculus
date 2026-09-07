@@ -37,6 +37,34 @@ ser pinado em um Work Item ou Run. `kind` descreve capability; inclusive
 A mesma configuração Agent pode aparecer em nodes com parents/depth diferentes
 em execuções diferentes.
 
+## Protocolo de comunicação dos agentes
+
+O resolver de chat compõe um system prompt com o protocolo comum, o papel
+configurado em `[agents]`, a posição/workspace da execução e as instruções
+do perfil selecionado. O protocolo explica delegação, retomada, revisão pelo
+pai e entrega pelo executor. A lista de ferramentas exposta continua sendo
+a autoridade efetiva; texto no prompt não concede ferramentas.
+
+O pai delega objetivo, contexto, restrições e evidências esperadas. Ao receber
+o relatório, avalia se ele satisfaz o pedido e pode usar `delegate` novamente
+para pedir correção ou verificação. O filho relata resultado, evidências e
+pendências de forma proporcional à tarefa, respeitando formatos específicos
+quando suficientes. Esses critérios são instruções para os agentes; não são
+um schema universal de aceitação nem um gate semântico no runtime.
+
+Instruções de execução do perfil são aplicadas pelo executor. O coordenador
+as transmite e usa para avaliar a entrega; não assume ferramentas ausentes
+nem abandona seu papel para executá-las. Seletores `agent`/`team` são opcionais:
+omiti-los usa o roteamento configurado. Nomes explícitos devem vir do contexto
+ou da descoberta disponível, não de nomes de ferramentas.
+
+`task.completed` do filho registra sua entrega, não a aprovação pelo pai.
+O pai conclui seu próprio Work Item após avaliar as entregas. A continuação
+preserva as mensagens do checkpoint, inclusive o system prompt, sem duplicar
+instruções. Sessões já iniciadas com prompts antigos mantêm esse contexto;
+validar novos prompts exige Work Items novos. Falhas técnicas sem entrega
+continuam seguindo o mecanismo de `task.resumed` descrito abaixo.
+
 ## Delegação e árvore dinâmica
 
 Quando uma Run delega, ela apenda `task.delegated`; o runtime, ao receber a

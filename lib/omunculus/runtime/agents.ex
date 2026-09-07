@@ -25,6 +25,7 @@ defmodule Omunculus.Runtime.Agents do
       name = Scripts.pick_agent(ctx, config)
       entry = Map.get(config.agents, name, %{})
       chat = resolve_chat(config, entry, opts)
+      profile = Map.get(config.presets, ctx[:profile], %{})
 
       %{
         agent_id: name,
@@ -34,8 +35,7 @@ defmodule Omunculus.Runtime.Agents do
         tools:
           if(ctx.depth < ctx.max_depth, do: ["delegate"], else: Omunculus.Tools.default_names()),
         system_prompt:
-          entry[:prompt] ||
-            "Complete the task using the available tools. Delegate when coordination is required. Report tool results accurately.",
+          Omunculus.Runtime.Prompt.compose(ctx, name, entry[:prompt], profile[:instructions]),
         max_turns:
           entry[:max_turns] || parse_turns(opts[:flags]["max_turns"]) || opts[:max_turns] ||
             config.defaults.max_turns,

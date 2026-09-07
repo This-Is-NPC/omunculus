@@ -36,6 +36,11 @@ não valida todo o TO-BE.
 
 ### A1 — Alto: o prompt entregue não corresponde a todas as instruções da fixture
 
+Atualização: a composição implementada após esta auditoria inclui o perfil
+no system prompt com escopo por papel. A descrição abaixo registra a baseline
+anterior; o teste `runtime_prompt_test.exs` confere agora a mensagem recebida
+pelo chat e sua preservação na continuação.
+
 simple e medium definem profiles.count.instructions. Runtime.Agents recebe
 ctx.profile, mas seu mapa de agente não transporta as instruções desse perfil.
 Runtime.Run repassa agent[:instructions], que fica nil. Além disso, quando

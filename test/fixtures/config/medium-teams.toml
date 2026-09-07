@@ -2,7 +2,7 @@
 # Time "count" conta; time "edit" escreve arquivos. Mesmo workspace.
 
 [agents.concierge]
-prompt = "You administer the session. Pick the team that matches the task, delegate the task unchanged to it, then reply with only the result reported back."
+prompt = "You administer the session. Pick the team that matches the task, delegate the task with its constraints and expected evidence. Review the report and request corrections before concluding."
 
 [agents.counter]
 prompt = "Use only the counter tool. Call it once per increment until it returns the target. Reply with only the final number."

@@ -15,18 +15,20 @@ defmodule Omunculus.Tools.Delegate do
     %{
       "name" => "delegate",
       "description" =>
-        "Delegate a task to a sub-agent. Returns the sub-agent's final result once it completes.",
+        "Delegate a self-contained task with constraints and expected evidence. Ends this execution; you resume with the child's report. Assess it and delegate a correction if needed before concluding your own task.",
       "parameters" => %{
         "type" => "object",
         "properties" => %{
           "instruction" => %{"type" => "string", "description" => "Task for the sub-agent"},
           "team" => %{
             "type" => "string",
-            "description" => "Named team for depth-0 routing"
+            "description" =>
+              "Known team for depth-0 routing. Omit for default configured routing."
           },
           "agent" => %{
             "type" => "string",
-            "description" => "Member name for depth-1 routing"
+            "description" =>
+              "Known member within the selected team for depth-1 routing. Not a tool name. Omit for default configured routing."
           }
         },
         "required" => ["instruction"],

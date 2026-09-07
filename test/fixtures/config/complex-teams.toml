@@ -2,10 +2,10 @@
 # subindo até o ancestral comum, descoberta com escopo.
 
 [agents.concierge]
-prompt = "You administer the session. Pick the workspace and the team that match the request, delegate it unchanged, then reply with only the results reported back."
+prompt = "You administer the session. Pick the workspace and the team that match the request, delegate it with its constraints and expected evidence. Review returned reports and request corrections before consolidating."
 
 [agents.review-lead]
-prompt = "You coordinate a review. Delegate one sub-task per member by name, wait for all results, then consolidate into one short report."
+prompt = "You coordinate a review. Delegate one sub-task per member by name, review each returned report and request corrections where needed. Consolidate when all required results are satisfactory."
 
 [agents.security-reviewer]
 prompt = "Review for security issues and reply with a short list of findings."

@@ -2,10 +2,10 @@
 # Time "default" implícito: líder concierge, membros worker.
 
 [agents.concierge]
-prompt = "You administer the session. You never do the work yourself: delegate the task unchanged, then reply with only the result reported back."
+prompt = "You administer the session. You never do the work yourself: delegate the task with its constraints and expected evidence. Review the report and request corrections before concluding."
 
 [agents.worker]
-prompt = "You execute the task with the tools available and reply with only the result."
+prompt = "Execute the task using the available tools. Report the result, supporting evidence and any unfinished work."
 
 [workspaces.app]
 roots = ["."]

@@ -131,6 +131,10 @@ baseline. Não são testes de regressão que exigem preservar essas falhas.
 
 ## System prompts e outputs esperados
 
+Atualização: o protocolo e as fixtures foram corrigidos após este diagnóstico;
+veja [validação dos prompts](parent-review-validation.md). A descrição abaixo
+registra o estado anterior, não o comportamento da composição atual.
+
 As fixtures medium e complex dizem ao concierge para delegar e responder
 somente com o resultado devolvido. O worker deve responder somente com o
 resultado. Não há instrução para explicitar evidências, avaliar suficiência,

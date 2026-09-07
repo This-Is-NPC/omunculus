@@ -27,7 +27,11 @@ defmodule Omunculus.Agent do
           [
             %{
               "role" => "system",
-              "content" => Keyword.get(opts, :system_prompt) || system_prompt(extra, fs)
+              "content" =>
+                append_instructions(
+                  Keyword.get(opts, :system_prompt) || system_prompt(nil, fs),
+                  extra
+                )
             },
             %{"role" => "user", "content" => instruction}
           ]
@@ -483,6 +487,10 @@ defmodule Omunculus.Agent do
     Return a short summary of what changed.
     """
 
+    append_instructions(base, extra)
+  end
+
+  defp append_instructions(base, extra) do
     case extra do
       text when is_binary(text) and text != "" -> base <> "\n" <> text
       _ -> base
