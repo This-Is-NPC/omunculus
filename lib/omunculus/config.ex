@@ -46,14 +46,18 @@ defmodule Omunculus.Config do
         "plan" => %{
           tools: ["read", "grep", "find", "ls"],
           instructions: "Do not alter files. Explore and return a plan.",
-          max_turns: 16
+          max_turns: 16,
+          policy: %{"mode" => "deny", "granted" => ["read", "grep", "find", "ls"]}
         }
       }
     }
   end
 
   def resolve(config, flags) when is_map(flags) do
-    preset_name = flags["preset"] || flags[:preset] || config.defaults.preset
+    preset_name =
+      flags["profile"] || flags["preset"] || flags[:profile] || flags[:preset] ||
+        config.defaults.preset
+
     tools_flag = flags["tools"] || flags[:tools]
 
     with {:ok, preset} <- fetch_preset(config, preset_name),
@@ -86,8 +90,9 @@ defmodule Omunculus.Config do
   def check(config) do
     with :ok <- check_references(config),
          {:ok, interceptors} <- check_interceptors(config.interceptors),
-         {:ok, automations} <- check_automations(config.automations, config) do
-      {:ok, %{interceptors: interceptors, automations: automations}}
+         {:ok, automations} <- check_automations(config.automations, config),
+         {:ok, policy} <- check_policy_fit(config) do
+      {:ok, %{interceptors: interceptors, automations: automations, policy: policy}}
     end
   end
 
@@ -154,6 +159,83 @@ defmodule Omunculus.Config do
 
       true ->
         :ok
+    end
+  end
+
+  defp check_policy_fit(config) do
+    pin = config.session[:tools_catalog]
+    current = Omunculus.Tools.catalog_version()
+
+    with :ok <- check_tools_catalog(pin, current),
+         table when is_map(table) <- policy_table(config) do
+      catalog_opts = [catalog_version: pin]
+
+      case Enum.find_value(profiles_from_table(table), fn profile ->
+             if profile_fits_any?(config, profile, table, catalog_opts) do
+               nil
+             else
+               {{_, depth, workspace}, _} =
+                 Enum.find(table, fn {{p, _, _}, _} -> p == profile end)
+
+               {:error, {:profile_outside_ceiling, profile, depth, workspace}}
+             end
+           end) do
+        nil -> {:ok, table}
+        {:error, reason} -> {:error, reason}
+      end
+    end
+  end
+
+  defp check_tools_catalog(nil, _current), do: :ok
+  defp check_tools_catalog(pin, current) when pin in [nil, current], do: :ok
+  defp check_tools_catalog(pin, current), do: {:error, {:stale_tools_catalog, pin, current}}
+
+  defp policy_table(config) do
+    case Omunculus.Policy.table(config) do
+      {:error, reason} -> {:error, reason}
+      table -> table
+    end
+  end
+
+  defp profiles_from_table(table) do
+    table
+    |> Map.keys()
+    |> Enum.map(fn {profile, _, _} -> profile end)
+    |> Enum.uniq()
+  end
+
+  defp profile_fits_any?(config, profile, table, catalog_opts) do
+    Enum.any?(table, fn {{p, depth, workspace}, _bands} ->
+      p == profile and profile_fits_cell?(config, profile, depth, workspace, catalog_opts)
+    end)
+  end
+
+  defp profile_fits_cell?(config, profile, depth, workspace, catalog_opts) do
+    profile_policy = preset_policy(config, profile)
+    depth_policy = Map.get(config.policy, depth, %{})
+    workspace_policy = workspace_policy(config, workspace)
+
+    with {:ok, profile_bands} <- Omunculus.Policy.normalize(profile_policy, catalog_opts),
+         {:ok, depth_bands} <- Omunculus.Policy.normalize(depth_policy, catalog_opts),
+         {:ok, workspace_bands} <- Omunculus.Policy.normalize(workspace_policy, catalog_opts) do
+      ceiling = Omunculus.Policy.intersect(depth_bands, workspace_bands)
+      Omunculus.Policy.fits_ceiling?(profile_bands, ceiling)
+    else
+      _ -> false
+    end
+  end
+
+  defp preset_policy(config, profile) do
+    case Map.fetch(config.presets, profile) do
+      {:ok, preset} -> preset[:policy] || %{}
+      :error -> %{}
+    end
+  end
+
+  defp workspace_policy(config, workspace) do
+    case Map.fetch(config.workspaces, workspace) do
+      {:ok, ws} -> ws.policy || %{}
+      :error -> %{}
     end
   end
 

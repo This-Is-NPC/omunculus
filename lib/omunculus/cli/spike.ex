@@ -38,10 +38,13 @@ defmodule Omunculus.CLI.Spike do
 
       {:ok, runtime} =
         Runtime.start_link(
-          core: core,
-          max_depth: depth,
-          agents: SpikeAgents.resolver(delay_ms: delay_ms, chat: chat),
-          run_opts: [delegation_timeout: 600_000]
+          [
+            core: core,
+            max_depth: depth,
+            agents: SpikeAgents.resolver(delay_ms: delay_ms, chat: chat),
+            run_opts: [delegation_timeout: 600_000]
+          ]
+          |> maybe_runtime_config(flags, env)
         )
 
       outcome = execute(core, runtime, instruction, depth, fail_at)
@@ -102,6 +105,31 @@ defmodule Omunculus.CLI.Spike do
       Enum.each(Automations.stats(automations), fn {name, s} ->
         IO.puts(:stderr, "automation #{name}: delivered=#{s.delivered} failed=#{s.failed}")
       end)
+    end
+  end
+
+  defp maybe_runtime_config(opts, flags, env) do
+    case runtime_config(flags, env) do
+      nil -> opts
+      config -> Keyword.put(opts, :config, config)
+    end
+  end
+
+  defp runtime_config(flags, env) do
+    profile = flags["profile"] || flags["preset"]
+    config_file = flags["config"]
+    tools = flags["tools"]
+
+    if config_file || profile || tools do
+      [
+        cwd: File.cwd!(),
+        config_file: config_file,
+        env: env,
+        profile: profile,
+        tools: tools
+      ]
+    else
+      nil
     end
   end
 

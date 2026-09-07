@@ -14,11 +14,12 @@ human = ["delete"]
 
 [profiles.coding]
 mode = "allow"
+deny = ["delegate"]
 
 [profiles.count]
 instructions = "Use only the counter tool. Call it once per increment until it returns the target. Reply with only the final number."
 mode = "deny"
-granted = ["counter", "delegate"]
+granted = ["counter"]
 
 [policy.depth.0]
 mode = "deny"

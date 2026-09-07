@@ -97,8 +97,8 @@ defmodule Omunculus.ConfigShapeTest do
     {:ok, lane} = load("lane.toml")
     assert length(lane.interceptors) == 4
 
-    assert {:error, {:unknown_interceptor_module, module}} = Config.check(lane)
-    assert module in ["Omunculus.Interceptors.ToolGate", "Omunculus.Interceptors.TeamGate"]
+    assert {:error, {:unknown_interceptor_module, "Omunculus.Interceptors.TeamGate"}} =
+             Config.check(lane)
   end
 
   test "check rejects dangling references and bad policy values" do

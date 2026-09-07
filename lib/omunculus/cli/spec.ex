@@ -84,6 +84,11 @@ defmodule Omunculus.CLI.Spec do
             env: "OMUNCULUS_PRESET",
             help: "Named preset from config"
           ),
+          flag("profile",
+            long: "profile",
+            value: "profile",
+            help: "Named profile from config (alias of --preset; wins if both are set)"
+          ),
           flag("tools",
             long: "tools",
             value: "tools",
@@ -240,6 +245,22 @@ defmodule Omunculus.CLI.Spec do
             long: "config",
             value: "file",
             help: "Config file: chat provider, [[interceptors]] and [[automations]]"
+          ),
+          flag("preset",
+            long: "preset",
+            value: "preset",
+            help: "Named preset from config"
+          ),
+          flag("profile",
+            long: "profile",
+            value: "profile",
+            help: "Named profile from config (alias of --preset; wins if both are set)"
+          ),
+          flag("tools",
+            long: "tools",
+            value: "tools",
+            delimiter: ",",
+            help: "Narrow the resolved profile to these tools (comma-separated)"
           ),
           flag("model", long: "model", value: "model", env: "OMUNCULUS_MODEL", help: "Model id"),
           flag("base_url",

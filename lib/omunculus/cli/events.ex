@@ -92,6 +92,10 @@ defmodule Omunculus.CLI.Events do
             IO.puts("  #{a.name} -> #{a.run} on #{Enum.join(a.events, ", ")}")
           end)
 
+          print_policy_table(checked.policy)
+
+          IO.puts("")
+
           0
         else
           {:error, reason} ->
@@ -164,6 +168,28 @@ defmodule Omunculus.CLI.Events do
 
   defp require_db(db) when is_binary(db) and db != "", do: {:ok, db}
   defp require_db(_), do: {:error, {:missing_required_arg, "--db"}}
+
+  defp print_policy_table(table) when is_map(table) do
+    table
+    |> Enum.sort_by(fn {{profile, depth, workspace}, _bands} -> {profile, depth, workspace} end)
+    |> Enum.each(fn {{profile, depth, workspace}, bands} ->
+      IO.puts("profile=#{profile} depth=#{depth} workspace=#{workspace}")
+      print_policy_band("granted", bands["granted"])
+      print_policy_band("negotiable", bands["negotiable"])
+      print_policy_band("human", bands["human"])
+      print_policy_band("forbidden", bands["forbidden"])
+    end)
+  end
+
+  defp print_policy_band(label, names) do
+    values =
+      case names do
+        [] -> "—"
+        list -> Enum.join(list, " ")
+      end
+
+    IO.puts("  #{label} #{values}")
+  end
 
   defp parse_after(nil), do: {:ok, 0}
 
