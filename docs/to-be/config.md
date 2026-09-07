@@ -1,4 +1,4 @@
-Status: TO-BE — proposta, aguardando avaliação
+Status: TO-BE — planejado, validado
 
 # Arquivo de configuração
 

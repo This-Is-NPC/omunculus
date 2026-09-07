@@ -1,4 +1,4 @@
-Status: TO-BE — proposta, aguardando avaliação
+Status: TO-BE — planejado, validado
 
 # Política de tools: teto, perfil, workspace e modos
 

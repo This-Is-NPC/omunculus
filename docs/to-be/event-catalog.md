@@ -1,4 +1,4 @@
-Status: TO-BE — planejado; catálogo, interceptores, automações e portas validados em spike. Tipos propostos ao fim ainda não estão no módulo
+Status: TO-BE — planejado, validado; catálogo, interceptores, automações e portas validados em spike. `policy.loaded` está no módulo; demais tipos propostos ao fim ainda não estão
 
 # Catálogo de eventos, interceptores e automações
 
