@@ -46,3 +46,5 @@ em 10,7 segundos (`mise exec -- mix test`). Formatação dos arquivos alterados
 e links da documentação foram conferidos. Nenhum novo benchmark com providers reais foi executado nesta correção. Portanto,
 não se afirma confiabilidade de ponta a ponta nem conclusão integral de
 todo o TO-BE com base nesses testes.
+
+Reavaliação posterior: [DeepSeek após as correções](deepseek-after-corrections.md).
