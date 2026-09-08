@@ -44,7 +44,7 @@ defmodule Omunculus.CompleteMatrixTest do
         at < depth and agent not in ["counter", "editor"] ->
           args = %{
             "comment" => "Delegate and review " <> task,
-            "instruction" => task,
+            "work_item" => %{"instruction" => task},
             "workspace" => "app"
           }
 

@@ -18,10 +18,7 @@ defmodule Omunculus.Tools.RequestWork do
       "parameters" => %{
         "type" => "object",
         "properties" => %{
-          "instruction" => %{
-            "type" => "string",
-            "description" => "What the target should do"
-          },
+          "work_item" => Omunculus.WorkItem.schema(),
           "workspace" => %{
             "type" => "string",
             "description" => "Target workspace"
@@ -35,7 +32,7 @@ defmodule Omunculus.Tools.RequestWork do
             "description" => "Target agent within a team"
           }
         },
-        "required" => ["instruction"],
+        "required" => ["work_item"],
         "additionalProperties" => false
       }
     }

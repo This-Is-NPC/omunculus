@@ -15,11 +15,11 @@ defmodule Omunculus.Tools.Delegate do
     %{
       "name" => "delegate",
       "description" =>
-        "Delegate a self-contained task with constraints and expected evidence. Ends this execution; you resume with the child's report. Assess it and delegate a correction if needed before concluding your own task.",
+        "Create a child Work Item with constraints and expected evidence; comment carries the handoff context. Ends this execution; you resume with the child's report. Assess it and request a retry with your correction in comment if needed before concluding your own task.",
       "parameters" => %{
         "type" => "object",
         "properties" => %{
-          "instruction" => %{"type" => "string", "description" => "Task for the sub-agent"},
+          "work_item" => Omunculus.WorkItem.schema(),
           "team" => %{
             "type" => "string",
             "description" =>
@@ -31,7 +31,7 @@ defmodule Omunculus.Tools.Delegate do
               "Known member within the selected team for depth-1 routing. Not a tool name. Omit for default configured routing."
           }
         },
-        "required" => ["instruction"],
+        "required" => ["work_item"],
         "additionalProperties" => false
       }
     }

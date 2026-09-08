@@ -53,8 +53,9 @@ reconhecido pelo `kind`, não pelo tempo verbal.
 | Tipo | Kind | Payload obrigatório | Emitido por | Interceptável | Injetável |
 |---|---|---|---|---|---|
 | `task.requested` | command | `instruction` | CLI | sim | sim |
+| `task.recovery_used` | event | `recovery` (Work Item, etapa, max_retries), `reason` | Runtime | não | não |
 | `task.resumed` | command | — | CLI | sim | sim |
-| `task.delegated` | event | `instruction`, `child_work_item_id`, `to_depth`, `parent_run_id`, `originating_run_id` | Run | sim | não |
+| `task.delegated` | event | `work_item`, `comment`, `child_work_item_id`, `to_depth`, `parent_run_id`, `originating_run_id` | Run | sim | não |
 | `task.completed` | event | `result`, `depth` | Run | sim | não |
 | `task.resume_rejected` | event | `reason` | Runtime | não | não |
 | `tool.call.requested` | event | `tool`, `round` | Run | sim | não |
@@ -218,3 +219,10 @@ Existe um único contrato atual. `run.started` fixa fluxo e etapa;
 
 Esses eventos são internos, não injetáveis. Campos e regras estão no
 catálogo do código e em [trabalho e aprovação](run-report-and-break.md).
+
+Delegação e solicitação entre linhagens transportam `work_item` e `comment`;
+o atributo `instruction` pertence à definição dentro do Work Item. Somente o
+comando de entrada humana usa uma instrução para criar a tarefa raiz. IDs,
+parent ID e referência de recuperação são metadados produzidos pelo harness.
+`task.requested` como event exige `work_item`, `comment`, `requested_by` e
+`child_work_item_id`. Não aceita o argumento avulso da implementação antiga.

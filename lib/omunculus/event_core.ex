@@ -256,10 +256,12 @@ defmodule Omunculus.EventCore do
             else: {:error, {:idempotency_conflict, env.idempotency_key}}
 
         true ->
-          args = (env |> Envelope.to_row() |> tl()) ++ [hash]
-          [] = Store.query(conn, @insert_sql, args)
-          sequence = Store.last_insert_rowid(conn)
-          {:ok, %{env | sequence: sequence}, true}
+          with :ok <- Omunculus.Runtime.Recovery.guard(conn, env) do
+            args = (env |> Envelope.to_row() |> tl()) ++ [hash]
+            [] = Store.query(conn, @insert_sql, args)
+            sequence = Store.last_insert_rowid(conn)
+            {:ok, %{env | sequence: sequence}, true}
+          end
       end
     end)
   end

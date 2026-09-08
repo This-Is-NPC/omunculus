@@ -113,7 +113,7 @@ defmodule Omunculus.RuntimeTest do
               "name" => "delegate",
               "arguments" =>
                 Jason.encode!(%{
-                  "instruction" => instruction,
+                  "work_item" => %{"instruction" => instruction},
                   "comment" => "Review " <> instruction
                 })
             }

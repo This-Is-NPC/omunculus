@@ -251,7 +251,7 @@ defmodule Omunculus.TeamsTest do
               "delegate",
               %{
                 "comment" => "Preserve this task context and review the result",
-                "instruction" => "x",
+                "work_item" => %{"instruction" => "x"},
                 "team" => "ghost"
               },
               "d"

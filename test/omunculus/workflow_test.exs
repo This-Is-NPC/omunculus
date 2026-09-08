@@ -11,7 +11,7 @@ defmodule Omunculus.WorkflowTest do
   defp delegate,
     do:
       Fake.tool_call("delegate", %{
-        "instruction" => "produce evidence",
+        "work_item" => %{"instruction" => "produce evidence"},
         "comment" => "Delegated execution; review the returned evidence."
       })
 
@@ -257,7 +257,7 @@ defmodule Omunculus.WorkflowTest do
         fn ctx ->
           if ctx.depth == 0 do
             [
-              Fake.tool_call("delegate", %{"instruction" => "work"}),
+              Fake.tool_call("delegate", %{"work_item" => %{"instruction" => "work"}}),
               report(true, "No delegation occurred")
             ]
           else
@@ -334,8 +334,8 @@ defmodule Omunculus.WorkflowTest do
     await(fn -> EventCore.stream(core, 0, type: "task.commented") != [] end)
     await(fn -> Runtime.runs(runtime) == %{} end)
     starts = EventCore.stream(core, 0, type: "run.started")
-    assert Enum.count(starts, &(&1.payload["reason"] == "break")) == 2
-    assert Enum.count(starts, &(&1.payload["depth"] == 1)) == 4
+    assert Enum.count(starts, &(&1.payload["reason"] == "break")) == 1
+    assert Enum.count(starts, &(&1.payload["depth"] == 1)) == 2
   end
 
   test "technical failure breaks without automatically repeating a confirmed effect" do
@@ -469,7 +469,10 @@ defmodule Omunculus.WorkflowTest do
                   hd(
                     Fake.tool_call(
                       "delegate",
-                      %{"instruction" => id, "comment" => "Delegate #{id} and review its result"},
+                      %{
+                        "work_item" => %{"instruction" => id},
+                        "comment" => "Delegate #{id} and review its result"
+                      },
                       id
                     ).tool_calls
                   )
@@ -1057,10 +1060,10 @@ defmodule Omunculus.WorkflowTest do
             ctx.reason == "continuation" ->
               [report(true, "Root complete")]
 
-            ctx.reason == "assessment" and ctx.instruction =~ "Target task: produce evidence" ->
+            ctx.reason == "assessment" and ctx.comment =~ "Target task: produce evidence" ->
               [
                 Fake.tool_call("delegate", %{
-                  "instruction" => "Check existing evidence",
+                  "work_item" => %{"instruction" => "Check existing evidence"},
                   "comment" => "Obtain independent verification"
                 })
               ]
@@ -1092,12 +1095,12 @@ defmodule Omunculus.WorkflowTest do
             [
               Fake.tool_call("delegate", %{
                 "agent" => "invented",
-                "instruction" => "work",
+                "work_item" => %{"instruction" => "work"},
                 "comment" => "check"
               }),
               Fake.tool_call("delegate", %{
                 "team" => "invented-team",
-                "instruction" => "work",
+                "work_item" => %{"instruction" => "work"},
                 "comment" => "check"
               }),
               report(true, "No child authorized")
@@ -1106,11 +1109,178 @@ defmodule Omunculus.WorkflowTest do
             flunk("unknown selector was executed")
           end
         end,
-        1
+        1,
+        2
       )
 
     assert {:ok, _} = Runtime.request(core, "check selectors", timeout: 3000)
     assert length(EventCore.stream(core, 0, type: "delivery.rejected")) == 2
     assert [[1]] = EventCore.query(core, "SELECT count(*) FROM WORK_ITEMS")
+  end
+
+  test "delegation hands the child's own Work Item and comment to its Run" do
+    owner = self()
+
+    {core, _, _, _} =
+      setup_runtime(
+        fn ctx ->
+          if ctx.depth == 0 do
+            if ctx.reason == "initial", do: [delegate()], else: [report(true, "approved")]
+          else
+            send(owner, {:child_input, ctx.work_item, ctx.comment})
+
+            [
+              fn messages ->
+                send(owner, {:child_messages, messages})
+                report(true, "child evidence")
+              end
+            ]
+          end
+        end,
+        1
+      )
+
+    assert {:ok, _} = Runtime.request(core, "A distinct parent objective", timeout: 3000)
+    assert_receive {:child_input, %{"instruction" => "produce evidence"}, comment}
+    assert comment == "Delegated execution; review the returned evidence."
+    assert_receive {:child_messages, messages}
+    assert Enum.any?(messages, &(&1["role"] == "user" and &1["content"] =~ comment))
+    [delegated] = EventCore.stream(core, 0, type: "task.delegated")
+    refute Map.has_key?(delegated.payload, "instruction")
+
+    [child] =
+      EventCore.stream(core, 0,
+        work_item_id: delegated.payload["child_work_item_id"],
+        type: "run.started"
+      )
+
+    assert child.payload["work_item"] == delegated.payload["work_item"]
+    assert child.payload["comment"] == comment
+  end
+
+  for {label, args} <- [
+        {"missing Work Item", %{"comment" => "handoff"}},
+        {"standalone instruction", %{"instruction" => "wrong channel", "comment" => "handoff"}},
+        {"empty definition", %{"work_item" => %{"instruction" => "  "}, "comment" => "handoff"}},
+        {"model supplied identity",
+         %{"work_item" => %{"instruction" => "task", "id" => "forged"}, "comment" => "handoff"}}
+      ] do
+    test "invalid delegation: #{label} creates no child and breaks at the configured limit" do
+      args = unquote(Macro.escape(args))
+      {core, _, runtime, _} = setup_runtime(fn _ -> [Fake.tool_call("delegate", args)] end, 1, 0)
+
+      EventCore.append!(
+        core,
+        Envelope.command("task.requested",
+          work_item_id: "invalid",
+          payload: %{instruction: "root"}
+        )
+      )
+
+      await(fn -> EventCore.stream(core, 0, type: "task.commented") != [] end)
+      await(fn -> Runtime.runs(runtime) == %{} end)
+      assert EventCore.stream(core, 0, type: "task.delegated") == []
+      assert [[1]] = EventCore.query(core, "SELECT count(*) FROM WORK_ITEMS")
+      assert length(EventCore.stream(core, 0, type: "model.call.completed")) == 1
+    end
+  end
+
+  test "report format corrections share max retries and preserve the invalid report" do
+    {core, _, runtime, _} =
+      setup_runtime(fn _ ->
+        [
+          Fake.text("first invalid report"),
+          Fake.text("last invalid report"),
+          report(true, "must not execute")
+        ]
+      end)
+
+    EventCore.append!(
+      core,
+      Envelope.command("task.requested", work_item_id: "format", payload: %{instruction: "root"})
+    )
+
+    await(fn -> EventCore.stream(core, 0, type: "task.commented") != [] end)
+    await(fn -> Runtime.runs(runtime) == %{} end)
+    assert length(EventCore.stream(core, 0, type: "model.call.completed")) == 2
+    assert length(EventCore.stream(core, 0, type: "task.recovery_used")) == 1
+    [closed] = EventCore.stream(core, 0, type: "run.completed")
+
+    assert closed.payload["report"] == %{
+             "completed" => false,
+             "break" => true,
+             "comment" => "last invalid report"
+           }
+  end
+
+  test "recursive verification delegates consume the original target budget" do
+    {core, _, runtime, _} =
+      setup_runtime(
+        fn ctx ->
+          cond do
+            ctx.depth == 1 -> [report(true, "Existing evidence checked")]
+            ctx.reason in ["initial", "assessment"] -> [delegate()]
+            true -> [report(true, "consolidated")]
+          end
+        end,
+        1,
+        2
+      )
+
+    EventCore.append!(
+      core,
+      Envelope.command("task.requested",
+        work_item_id: "verifications",
+        payload: %{instruction: "root"}
+      )
+    )
+
+    await(fn -> EventCore.stream(core, 0, type: "task.commented") != [] end)
+    await(fn -> Runtime.runs(runtime) == %{} end)
+    [original | checks] = EventCore.stream(core, 0, type: "task.delegated")
+    assert length(checks) == 2
+
+    assert Enum.all?(
+             checks,
+             &(get_in(&1.payload, ["recovery", "work_item_id"]) ==
+                 original.payload["child_work_item_id"])
+           )
+
+    assert length(EventCore.stream(core, 0, type: "task.recovery_used")) == 2
+
+    assert Enum.any?(
+             EventCore.stream(core, 0, type: "task.break"),
+             &is_nil(&1.payload["reviewer"])
+           )
+  end
+
+  test "redelegation after approved work cannot renew the root recovery budget" do
+    {core, _, runtime, _} =
+      setup_runtime(
+        fn ctx ->
+          cond do
+            ctx.depth == 1 -> [report(true, "delivered")]
+            ctx.reason in ["initial", "continuation"] -> [delegate()]
+            true -> [report(true, "approved")]
+          end
+        end,
+        1,
+        2
+      )
+
+    EventCore.append!(
+      core,
+      Envelope.command("task.requested",
+        work_item_id: "redelegation",
+        payload: %{instruction: "root"}
+      )
+    )
+
+    await(fn -> EventCore.stream(core, 0, type: "task.commented") != [] end)
+    await(fn -> Runtime.runs(runtime) == %{} end)
+    assert length(EventCore.stream(core, 0, type: "task.delegated")) == 3
+    reservations = EventCore.stream(core, 0, type: "task.recovery_used")
+    assert length(reservations) == 2
+    assert Enum.all?(reservations, &(&1.work_item_id == "redelegation"))
   end
 end

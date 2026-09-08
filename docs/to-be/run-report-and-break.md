@@ -29,10 +29,13 @@ Toda Run executora termina com o relato do modelo:
 `comment` é resumo e orientação para a próxima Run. Não existe campo
 separado de instrução de correção. `break: true` pede intervenção imediata e
 exige `completed: false`. Handoffs por ferramentas exigem `comment`.
+Delegar produz `work_item` e `comment`, conforme o
+[contrato entre Runs](work-item-handoff.md); a definição da tarefa fica no Work Item.
 O relato é JSON puro. Após um erro estrutural no relato, as respostas
 seguintes nessa Run servem somente para corrigir o formato: novas chamadas
 de ferramentas são rejeitadas antes de executar efeitos. O orçamento de
-turnos continua valendo; esgotá-lo devolve um relato incompleto com break.
+turnos continua valendo; correções estruturais também consomem `max_retries`.
+Esgotar um desses limites devolve um relato incompleto com break.
 Isso não introduz julgamento automático da qualidade da tarefa.
 Arbitragem de permissão e trabalho entre linhagens mantém suas ferramentas
 próprias de decisão; não aprova etapas implicitamente.
@@ -102,13 +105,19 @@ capacidade, independentemente das instruções.
 Reprovação mantém a etapa e agenda retry com o comentário do pai, até
 `max_retries` por etapa. Sem máquina, trabalho reprovado fica `in_progress`.
 O orçamento não zera ao reiniciar; avançar inicia o orçamento da nova etapa.
+`task.recovery_used` reserva cada recuperação atomicamente e sem duplicá-la no
+replay. Também consomem o limite as correções de ferramentas/relatos inválidos,
+as delegações de verificação e novas delegações em continuação de trabalho
+aprovado. Verificadores e descendentes compartilham o orçamento do alvo.
+A primeira execução, delegação inicial com vários filhos e avaliação dos
+resultados não consomem recuperação.
 
 Falha técnica não repete efeitos automaticamente: `task.break` entrega o
 problema ao responsável. Ele pode reconhecer efeitos já realizados,
 autorizar outra tentativa ou escalar. Intervenções também têm limite; o
 break sobe até o humano. Sem responsável acima, a inbox recebe o pedido.
 
-Uma resposta textual na inbox orienta retry; `--completed` aprova o alvo
+Uma resposta textual na inbox solicita retry, sujeito ao orçamento restante; `--completed` aprova o alvo
 com comentário obrigatório. Aprovação humana também respeita o avanço por
 etapas. Pedidos não expiram por timeout.
 

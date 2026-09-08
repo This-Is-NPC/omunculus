@@ -70,7 +70,9 @@ permite retomada explícita de execução que falhou.
 
 ## Delegação e árvore dinâmica
 
-Quando uma Run delega, ela apenda `task.delegated`; o runtime, ao receber a
+Quando uma Run delega, seu output é um Work Item filho acompanhado de comment,
+sem instrução avulsa entre Runs ([contrato](work-item-handoff.md)).
+Ela apenda `task.delegated`; o runtime, ao receber a
 entrega, valida aciclicidade e dependências e cria (ou reutiliza, em depth 1)
 o Execution Node e abre uma Run com `originating_run_id`, `parent_run_id` e
 `depth = parent.depth + 1`. Profundidade máxima e workspace de destino são

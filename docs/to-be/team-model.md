@@ -114,7 +114,7 @@ sequenceDiagram
     participant S as LCA (depth 0)
     participant B as time B
 
-    A1->>EC: task.requested {requested_by=run:A1, target=team:B, instruction}
+    A1->>EC: task.requested {requested_by=run:A1, target=team:B, work_item, comment}
     A1->>EC: run.completed {outcome=waiting, awaiting=…}
     EC-->>RT: deliver
     RT->>RT: LCA(linhagem A1, B) = depth 0; A1 tem request_work? alvo no escopo?

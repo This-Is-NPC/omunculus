@@ -118,7 +118,7 @@ defmodule Omunculus.AgentContractTest do
             [
               Fake.tool_call("counter", %{}),
               Fake.tool_call("delegate", %{
-                "instruction" => "Deliver",
+                "work_item" => %{"instruction" => "Deliver"},
                 "comment" => "Parent recorded one effect"
               })
             ]

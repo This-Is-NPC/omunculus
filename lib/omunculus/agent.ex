@@ -52,6 +52,7 @@ defmodule Omunculus.Agent do
       started_at: started_at,
       tool_calls: 0,
       report_repair: false,
+      on_retry: Keyword.get(opts, :on_retry, fn _reason -> :ok end),
       report_required: Keyword.get(opts, :report_required, true)
     })
   end
@@ -127,7 +128,7 @@ defmodule Omunculus.Agent do
                  tool_calls: state.tool_calls + length(calls)
              })}
 
-          {messages, context} ->
+          {messages, context, failed?} ->
             emit(state, %{
               type: :round_finished,
               round: round,
@@ -136,7 +137,7 @@ defmodule Omunculus.Agent do
               duration_ms: elapsed(started_at)
             })
 
-            loop(%{
+            next = %{
               state
               | messages: messages,
                 context: context,
@@ -144,7 +145,9 @@ defmodule Omunculus.Agent do
                 usage: merge_usage(state.usage, reply.usage),
                 assistant_text: text(reply.content),
                 tool_calls: state.tool_calls + length(calls)
-            })
+            }
+
+            if failed?, do: retry(next, "tool_error"), else: loop(next)
         end
 
       {:ok, reply} ->
@@ -185,11 +188,14 @@ defmodule Omunculus.Agent do
           end
 
         if feedback do
-          loop(%{
-            next
-            | report_repair: true,
-              messages: messages ++ [%{"role" => "user", "content" => feedback}]
-          })
+          retry(
+            %{
+              next
+              | report_repair: true,
+                messages: messages ++ [%{"role" => "user", "content" => feedback}]
+            },
+            "report_format"
+          )
         else
           emit(state, %{
             type: :run_completed,
@@ -227,8 +233,9 @@ defmodule Omunculus.Agent do
   defp dispatch(state, calls, reply, round) do
     assistant = assistant_message(reply)
 
-    {tool_messages, context, waiting?} =
-      Enum.reduce(calls, {[], state.context, false}, fn call, {acc, context, waiting?} ->
+    {tool_messages, context, waiting?, failed?} =
+      Enum.reduce(calls, {[], state.context, false, false}, fn call,
+                                                               {acc, context, waiting?, failed?} ->
         {name, args, id} = decode_call(call)
         started_at = now()
         metadata = tool_metadata(name, context)
@@ -294,7 +301,7 @@ defmodule Omunculus.Agent do
               ]
           end
 
-        {acc, context, waiting? or outcome == :waiting}
+        {acc, context, waiting? or outcome == :waiting, failed? or match?({:error, _}, outcome)}
       end)
 
     messages = state.messages ++ [assistant] ++ tool_messages
@@ -302,7 +309,28 @@ defmodule Omunculus.Agent do
     if waiting? do
       {:waiting, messages, context}
     else
-      {messages, context}
+      {messages, context, failed?}
+    end
+  end
+
+  defp retry(%{turn: turn, max_turns: max} = state, _reason) when turn >= max, do: loop(state)
+
+  defp retry(state, reason) do
+    case state.on_retry.(reason) do
+      :ok ->
+        loop(state)
+
+      {:error, :max_retries_exhausted} ->
+        emit(state, %{
+          type: :run_completed,
+          outcome: :max_retries,
+          rounds: state.turn,
+          tool_calls: state.tool_calls,
+          usage: state.usage,
+          duration_ms: elapsed(state.started_at)
+        })
+
+        {:ok, Map.put(result(state), :limit_reached, true)}
     end
   end
 

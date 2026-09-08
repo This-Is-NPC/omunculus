@@ -151,7 +151,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
             "delegate",
             %{
               "comment" => "Preserve this task context and review the result",
-              "instruction" => "review",
+              "work_item" => %{"instruction" => "review"},
               "workspace" => "app",
               "team" => "code-review"
             },
@@ -166,7 +166,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
             "delegate",
             %{
               "comment" => "Preserve this task context and review the result",
-              "instruction" => "scan",
+              "work_item" => %{"instruction" => "scan"},
               "agent" => "security-reviewer"
             },
             "d1"
@@ -180,7 +180,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
             "request_work",
             %{
               "comment" => "Preserve this task context and review the result",
-              "instruction" => "style pass",
+              "work_item" => %{"instruction" => "style pass"},
               "team" => "edit",
               "agent" => "editor"
             },
@@ -208,7 +208,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
             "delegate",
             %{
               "comment" => "Preserve this task context and review the result",
-              "instruction" => "review",
+              "work_item" => %{"instruction" => "review"},
               "workspace" => "app",
               "team" => "code-review"
             },
@@ -223,7 +223,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
             "delegate",
             %{
               "comment" => "Preserve this task context and review the result",
-              "instruction" => "scan",
+              "work_item" => %{"instruction" => "scan"},
               "agent" => "security-reviewer"
             },
             "d1"
@@ -237,7 +237,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
             "request_work",
             %{
               "comment" => "Preserve this task context and review the result",
-              "instruction" => "peer",
+              "work_item" => %{"instruction" => "peer"},
               "team" => "code-review",
               "agent" => "style-reviewer"
             },
@@ -261,7 +261,14 @@ defmodule Omunculus.TeamsRequestWorkTest do
 
       reason == "arbitration" ->
         [
-          Fake.tool_call("rewrite", %{"instruction" => "mediated style pass"}, "rw"),
+          Fake.tool_call(
+            "rewrite",
+            %{
+              "work_item" => %{"instruction" => "mediated style pass"},
+              "comment" => "Narrowed to the mediated style pass"
+            },
+            "rw"
+          ),
           Fake.report("forwarded")
         ]
 
@@ -271,7 +278,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
             "delegate",
             %{
               "comment" => "Preserve this task context and review the result",
-              "instruction" => "review",
+              "work_item" => %{"instruction" => "review"},
               "workspace" => "app",
               "team" => "code-review"
             },
@@ -286,7 +293,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
             "delegate",
             %{
               "comment" => "Preserve this task context and review the result",
-              "instruction" => "scan",
+              "work_item" => %{"instruction" => "scan"},
               "agent" => "security-reviewer"
             },
             "d1"
@@ -300,7 +307,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
             "request_work",
             %{
               "comment" => "Preserve this task context and review the result",
-              "instruction" => "original",
+              "work_item" => %{"instruction" => "original"},
               "team" => "edit",
               "agent" => "editor"
             },
@@ -411,7 +418,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
     {:ok, %{requested: requested}} = request(core, "mediated review", timeout: 3_000)
     [rw | _] = requested_events(core, requested.correlation_id)
     delegated = delegated_child(core, requested.correlation_id, rw.payload["child_work_item_id"])
-    assert delegated.payload["instruction"] == "mediated style pass"
+    assert delegated.payload["work_item"]["instruction"] == "mediated style pass"
   end
 
   test "mediated denial resumes the correct requester and preserves the leader checkpoint" do
@@ -549,7 +556,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
               "delegate",
               %{
                 "comment" => "Preserve this task context and review the result",
-                "instruction" => "x",
+                "work_item" => %{"instruction" => "x"},
                 "workspace" => "app",
                 "team" => "code-review"
               },
@@ -564,7 +571,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
               "delegate",
               %{
                 "comment" => "Preserve this task context and review the result",
-                "instruction" => "x",
+                "work_item" => %{"instruction" => "x"},
                 "agent" => "security-reviewer"
               },
               "d1"
@@ -578,7 +585,7 @@ defmodule Omunculus.TeamsRequestWorkTest do
               "request_work",
               %{
                 "comment" => "Preserve this task context and review the result",
-                "instruction" => "x",
+                "work_item" => %{"instruction" => "x"},
                 "team" => "ghost",
                 "agent" => "nope"
               },

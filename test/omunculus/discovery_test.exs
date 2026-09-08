@@ -66,7 +66,8 @@ defmodule Omunculus.DiscoveryTest do
         work_item_id: wi,
         run_id: "run-" <> wi,
         payload: %{
-          instruction: "peer work",
+          work_item: %{"instruction" => "peer work"},
+          comment: "Request a peer review",
           requested_by: "run:run-" <> wi,
           child_work_item_id: "new-child",
           team: team

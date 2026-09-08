@@ -253,3 +253,19 @@ validação por cenário.
 Verificação: **296 testes passaram**. O smoke cloud confirmou break e retry
 a partir do comentário do pai, mas terminou sem conclusão no orçamento de
 180 segundos. Evidências e limites em [validação do break](../spike/break-validation.md).
+
+## Revalidação após a UI de Runs
+
+A campanha do harness sobre `e959485` está em
+[validação atual](../spike/current-harness-validation.md). A suíte de 335 testes
+passou, mas o runtime aceitava uma delegação incompleta e copiava a tarefa da
+raiz. A correção é o contrato [Work Item e comment](work-item-handoff.md), não
+um argumento avulso de instrução. O mesmo documento especifica o orçamento
+persistido de recuperação, compartilhado com verificações e suas delegações.
+
+Implementação verificada com **344 testes, zero falhas**: handoff inválido sem
+filhos, comentário efetivo na Run filha, retry/break, verificações recursivas,
+redelegação em continuação, reserva concorrente, restart e avanço de etapa.
+A decisão de conclusão continua pertencendo ao responsável. A campanha antiga
+foi interrompida e seus registros foram preservados; não constitui validação
+integral da versão corrigida.

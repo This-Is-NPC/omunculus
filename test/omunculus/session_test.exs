@@ -256,7 +256,7 @@ defmodule Omunculus.SessionTest do
                     "delegate",
                     %{
                       "comment" => "Preserve this task context and review the result",
-                      "instruction" => "block",
+                      "work_item" => %{"instruction" => "block"},
                       "workspace" => "app"
                     },
                     "call_delegate"
@@ -533,7 +533,8 @@ defmodule Omunculus.SessionTest do
           work_item_id: "wi-parent",
           run_id: "run-parent",
           payload: %{
-            "instruction" => "noop",
+            "work_item" => %{"instruction" => "noop"},
+            "comment" => "Delegated task context",
             "child_work_item_id" => "wi-child",
             "to_depth" => 1,
             "parent_run_id" => "run-parent",
@@ -625,7 +626,8 @@ defmodule Omunculus.SessionTest do
             run_id: run_parent,
             workspace_id: "app",
             payload: %{
-              "instruction" => "conte até 3",
+              "work_item" => %{"instruction" => "conte até 3"},
+              "comment" => "Delegated task context",
               "child_work_item_id" => child_wi,
               "to_depth" => 1,
               "parent_run_id" => run_parent,

@@ -53,7 +53,7 @@ defmodule Omunculus.Chat.Scripts do
   defp max_turns_for_fake("concierge", _ctx, _opts, max_turns), do: min(max_turns, 4)
 
   defp max_turns_for_fake(_name, ctx, opts, _default) do
-    target = target(ctx.instruction, opts[:target] || 10)
+    target = target(ctx.work_item["instruction"], opts[:target] || 10)
     current = counter_current(ctx.checkpoint)
     max(target - current, 0) + 2
   end
@@ -94,12 +94,16 @@ defmodule Omunculus.Chat.Scripts do
   end
 
   defp delegate_args(ctx, config) do
-    args = %{"instruction" => ctx.instruction, "comment" => "Delegated task: " <> ctx.instruction}
+    args = %{
+      "work_item" => ctx.work_item,
+      "comment" => "Delegated task: " <> ctx.work_item["instruction"]
+    }
+
     teams = config.teams || %{}
 
     args =
       if map_size(teams) > 0 do
-        Map.put(args, "team", infer_team(ctx.instruction, teams))
+        Map.put(args, "team", infer_team(ctx.work_item["instruction"], teams))
       else
         args
       end
@@ -159,10 +163,14 @@ defmodule Omunculus.Chat.Scripts do
         ctx[:workspace]
 
       map_size(workspaces) > 1 ->
-        infer_workspace_from_instruction(ctx.instruction, workspaces, ctx[:workspace])
+        infer_workspace_from_instruction(
+          ctx.work_item["instruction"],
+          workspaces,
+          ctx[:workspace]
+        )
 
-      workspace_slug_in_instruction?(ctx.instruction, workspaces) ->
-        workspace_slug_in_instruction(ctx.instruction, workspaces)
+      workspace_slug_in_instruction?(ctx.work_item["instruction"], workspaces) ->
+        workspace_slug_in_instruction(ctx.work_item["instruction"], workspaces)
 
       true ->
         nil
@@ -229,7 +237,7 @@ defmodule Omunculus.Chat.Scripts do
   end
 
   defp counter_fake_turns(ctx, opts) do
-    target = target(ctx.instruction, opts[:target] || 10)
+    target = target(ctx.work_item["instruction"], opts[:target] || 10)
     current = counter_current(ctx.checkpoint)
 
     calls =

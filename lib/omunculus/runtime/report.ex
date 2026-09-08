@@ -36,6 +36,11 @@ defmodule Omunculus.Runtime.Report do
     escalates to the next responsible. Judge evidence yourself.
     When making a request that ends this Run (delegate, request_work, request_permission),
     include a nonempty comment argument summarizing your work and handoff context.
+    delegate and request_work create a new Work Item: provide work_item with its
+    instruction inside that object, plus comment. Never send a standalone instruction.
+    max_retries is durable per Work Item stage. Invalid tool/report corrections,
+    verification delegation and redelegation after approved work consume that budget;
+    creating another verification child does not reset it.
     """
   end
 end

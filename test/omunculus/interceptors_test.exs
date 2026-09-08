@@ -254,7 +254,8 @@ defmodule Omunculus.InterceptorsTest do
       run_id = "run-1"
 
       delegated_payload = %{
-        "instruction" => "conte até 10",
+        "work_item" => %{"instruction" => "conte até 10"},
+        "comment" => "Delegated task context",
         "child_work_item_id" => "wi-child",
         "to_depth" => 1,
         "parent_run_id" => run_id,
@@ -342,7 +343,8 @@ defmodule Omunculus.InterceptorsTest do
             work_item_id: "wi-req",
             run_id: run_id,
             payload: %{
-              "instruction" => "review style",
+              "work_item" => %{"instruction" => "review style"},
+              "comment" => "Delegated task context",
               "requested_by" => "run:" <> run_id,
               "child_work_item_id" => "wi-target",
               "team" => "edit",
@@ -496,7 +498,8 @@ defmodule Omunculus.InterceptorsTest do
       run_id = "run-1"
 
       delegated_payload = %{
-        "instruction" => "conte até 10",
+        "work_item" => %{"instruction" => "conte até 10"},
+        "comment" => "Delegated task context",
         "child_work_item_id" => "wi-child",
         "to_depth" => 1,
         "parent_run_id" => run_id,

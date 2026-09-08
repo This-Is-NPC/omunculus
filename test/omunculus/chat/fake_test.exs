@@ -48,7 +48,7 @@ defmodule Omunculus.Chat.FakeTest do
               "delegate",
               %{
                 "comment" => "Preserve this task context and review the result",
-                "instruction" => "conte até 1"
+                "work_item" => %{"instruction" => "conte até 1"}
               },
               "call_delegate"
             ),
@@ -74,7 +74,7 @@ defmodule Omunculus.Chat.FakeTest do
       resolver.(%{
         depth: 0,
         max_depth: 1,
-        instruction: "conte até 1",
+        work_item: %{"instruction" => "conte até 1"},
         checkpoint: %{},
         workspace: "ws-1",
         config: config,
@@ -91,7 +91,7 @@ defmodule Omunculus.Chat.FakeTest do
         agent: "worker",
         depth: 1,
         max_depth: 1,
-        instruction: "conte até 1",
+        work_item: %{"instruction" => "conte até 1"},
         checkpoint: %{},
         workspace: "ws-1",
         config: config,
@@ -115,7 +115,7 @@ defmodule Omunculus.Chat.FakeTest do
       resolver.(%{
         depth: 0,
         max_depth: 1,
-        instruction: "conte até 2",
+        work_item: %{"instruction" => "conte até 2"},
         checkpoint: %{}
       })
 
@@ -131,7 +131,7 @@ defmodule Omunculus.Chat.FakeTest do
       resolver.(%{
         depth: 1,
         max_depth: 1,
-        instruction: "conte até 2",
+        work_item: %{"instruction" => "conte até 2"},
         checkpoint: %{}
       })
 
@@ -164,7 +164,7 @@ defmodule Omunculus.Chat.FakeTest do
       resolver.(%{
         depth: 1,
         max_depth: 1,
-        instruction: "conte até 3",
+        work_item: %{"instruction" => "conte até 3"},
         checkpoint: %{"tool_state" => %{"counter" => %{value: 1}}}
       })
 

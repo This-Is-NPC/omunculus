@@ -175,7 +175,8 @@ defmodule Omunculus.Runtime do
       correlation_id: env.correlation_id,
       depth: 0,
       attempt: 1,
-      instruction: env.payload["instruction"],
+      work_item: Omunculus.WorkItem.from_activation(env),
+      comment: env.payload["comment"],
       parent_run_id: nil,
       originating_run_id: nil,
       checkpoint: %{},
@@ -197,7 +198,8 @@ defmodule Omunculus.Runtime do
       correlation_id: env.correlation_id,
       depth: depth,
       attempt: 1,
-      instruction: p["instruction"],
+      work_item: p["work_item"],
+      comment: p["comment"],
       parent_run_id: p["parent_run_id"],
       originating_run_id: p["originating_run_id"],
       checkpoint: %{},
@@ -457,6 +459,7 @@ defmodule Omunculus.Runtime do
   end
 
   defp start_run_with_agent(state, spec, agent, bands, policy_hash, request_permission) do
+    spec = Map.put_new(spec, :comment, spec.activation.payload["comment"])
     run_id = Envelope.generate_id("run")
 
     opts =
@@ -707,7 +710,8 @@ defmodule Omunculus.Runtime do
       depth: spec.depth,
       max_depth: state.max_depth,
       attempt: spec.attempt,
-      instruction: spec.instruction,
+      work_item: spec.work_item,
+      comment: spec[:comment] || spec.activation.payload["comment"],
       checkpoint: spec.checkpoint,
       session_id: spec.session_id || spec.activation.session_id,
       workspace_id: envelope_workspace_id(spec, Map.get(spec, :workspace)),
@@ -836,7 +840,10 @@ defmodule Omunculus.Runtime do
       messages = [
         %{"role" => "system", "content" => agent[:system_prompt] || ""},
         %{"role" => "user", "content" => note},
-        %{"role" => "user", "content" => spec.instruction}
+        %{
+          "role" => "user",
+          "content" => Omunculus.WorkItem.render(spec.work_item, spec[:comment])
+        }
       ]
 
       %{spec | checkpoint: Map.put(checkpoint, "messages", messages)}
@@ -924,7 +931,7 @@ defmodule Omunculus.Runtime do
            work_item_id: work_item_id,
            depth: p["depth"],
            attempt: length(starts) + 1,
-           instruction: activation_instruction(activation),
+           work_item: Omunculus.WorkItem.from_activation(activation),
            parent_run_id: p["parent_run_id"],
            originating_run_id: p["originating_run_id"],
            checkpoint: checkpoint,
@@ -951,8 +958,6 @@ defmodule Omunculus.Runtime do
         |> Enum.find(&(&1.payload["child_work_item_id"] == work_item_id))
     end
   end
-
-  defp activation_instruction(%Envelope{payload: %{"instruction" => i}}), do: i
 
   # pending_continuations is rebuilt from WORK_ITEMS on init (see rebuild_pending_continuations/1).
   defp find_parent_waiter(core, child_work_item_id) do
@@ -1104,7 +1109,7 @@ defmodule Omunculus.Runtime do
       correlation_id: env.correlation_id,
       depth: last_start.payload["depth"],
       attempt: attempt,
-      instruction: activation_instruction(activation),
+      work_item: Omunculus.WorkItem.from_activation(activation),
       parent_run_id: last_start.payload["parent_run_id"],
       originating_run_id: last_start.payload["originating_run_id"],
       checkpoint: new_checkpoint,
@@ -1647,7 +1652,8 @@ defmodule Omunculus.Runtime do
         correlation_id: perm_env.correlation_id,
         depth: parent_start["depth"],
         attempt: attempt,
-        instruction: instruction,
+        work_item: Omunculus.WorkItem.load(state.core, parent_wi),
+        comment: instruction,
         parent_run_id: parent_start["parent_run_id"],
         originating_run_id: parent_start["originating_run_id"],
         checkpoint: %{},
@@ -1762,7 +1768,7 @@ defmodule Omunculus.Runtime do
         correlation_id: causation_env.correlation_id,
         depth: last_start.payload["depth"],
         attempt: attempt,
-        instruction: activation_instruction(activation),
+        work_item: Omunculus.WorkItem.from_activation(activation),
         parent_run_id: last_start.payload["parent_run_id"],
         originating_run_id: last_start.payload["originating_run_id"],
         checkpoint: new_checkpoint,
@@ -1921,7 +1927,7 @@ defmodule Omunculus.Runtime do
           else: start_cross_lineage_arbitration(state, env, lca_wi, loaded)
 
       _ ->
-        forward_request_work(state, env, lca_wi, env.payload["instruction"])
+        forward_request_work(state, env, lca_wi, env.payload["work_item"])
     end
   end
 
@@ -1977,7 +1983,7 @@ defmodule Omunculus.Runtime do
     loaded.session[:cross_lineage] || loaded.session["cross_lineage"] || "routed"
   end
 
-  defp forward_request_work(state, env, lca_wi, instruction) do
+  defp forward_request_work(state, env, lca_wi, work_item) do
     payload = env.payload
 
     with %Envelope{payload: lca_start, run_id: lca_run_id} <- last_run_started(state.core, lca_wi) do
@@ -1992,7 +1998,9 @@ defmodule Omunculus.Runtime do
           work_item_id: lca_wi,
           run_id: lca_run_id,
           payload: %{
-            "instruction" => instruction,
+            "recovery" => payload["recovery"],
+            "work_item" => work_item,
+            "comment" => payload["comment"],
             "child_work_item_id" => payload["child_work_item_id"],
             "to_depth" => target_depth(payload, lca_start["depth"], loaded_config(state)),
             "parent_run_id" => lca_run_id,
@@ -2101,7 +2109,8 @@ defmodule Omunculus.Runtime do
         correlation_id: env.correlation_id,
         depth: lca_start["depth"],
         attempt: attempt,
-        instruction: instruction,
+        work_item: Omunculus.WorkItem.load(state.core, lca_wi),
+        comment: instruction,
         parent_run_id: lca_start["parent_run_id"],
         originating_run_id: lca_start["originating_run_id"],
         checkpoint: %{},
@@ -2119,7 +2128,7 @@ defmodule Omunculus.Runtime do
         cross_lineage_arbitration: true,
         arbitration_restore: waiting_snapshot(state.core, lca_wi),
         cross_lineage_request: env,
-        cross_lineage_instruction: env.payload["instruction"],
+        cross_lineage_work_item: env.payload["work_item"],
         cross_lineage_target_depth: target_depth(env.payload, lca_start["depth"], loaded),
         request_permission: false
       }
@@ -2141,7 +2150,8 @@ defmodule Omunculus.Runtime do
 
     """
     A cross-lineage work request needs mediation.
-    Instruction: #{payload["instruction"]}
+    Work Item: #{Jason.encode!(payload["work_item"])}
+    Comment: #{payload["comment"]}
     Target team: #{payload["team"] || "-"}
     Target agent: #{payload["agent"] || "-"}
     Use forward, rewrite, or deny.
@@ -2224,7 +2234,7 @@ defmodule Omunculus.Runtime do
       correlation_id: causation_env.correlation_id,
       depth: last_start.payload["depth"],
       attempt: attempt,
-      instruction: activation_instruction(activation),
+      work_item: Omunculus.WorkItem.from_activation(activation),
       parent_run_id: last_start.payload["parent_run_id"],
       originating_run_id: last_start.payload["originating_run_id"],
       checkpoint: checkpoint,

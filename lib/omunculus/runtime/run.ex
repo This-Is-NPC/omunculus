@@ -37,6 +37,9 @@ defmodule Omunculus.Runtime.Run do
 
   @impl true
   def handle_continue(:execute, state) do
+    state =
+      Map.put(state, :recovery, Omunculus.Runtime.Recovery.for_run(state, current_stage(state)))
+
     activation = state.activation
     Process.put(:chain_head, activation.event_id)
     Process.put(:awaiting_children, [])
@@ -52,6 +55,9 @@ defmodule Omunculus.Runtime.Run do
         :event,
         "run.started",
         %{
+          recovery: state.recovery,
+          work_item: state.work_item,
+          comment: state[:comment],
           attempt: state.attempt,
           depth: state.depth,
           parent_run_id: state.parent_run_id,
@@ -91,8 +97,9 @@ defmodule Omunculus.Runtime.Run do
     active_tools = executable_tools(state)
 
     opts = [
+      on_retry: &reserve_recovery(state, &1),
       report_required: not (state[:arbitration] || state[:cross_lineage_arbitration] || false),
-      instruction: state.instruction,
+      instruction: Omunculus.WorkItem.render(state.work_item, state[:comment]),
       chat: agent.chat,
       fs: state[:fs] || fs_for_roots(state[:roots]),
       tools: active_tools,
@@ -247,7 +254,7 @@ defmodule Omunculus.Runtime.Run do
         _ ->
           %{
             "completed" => false,
-            "comment" => nonempty_comment(result.assistant_text),
+            "comment" => nonempty_comment(result.assistant_text || Process.get(:handoff_comment)),
             "break" => true
           }
       end
@@ -365,15 +372,28 @@ defmodule Omunculus.Runtime.Run do
 
   defp execute_tool(state, "delegate", args, context, active) do
     Process.put(:handoff_comment, args["comment"])
-    if "delegate" in active, do: delegate(state, args, context), else: {:error, :denied, context}
+
+    with true <- "delegate" in active,
+         {:ok, _item} <- Omunculus.WorkItem.handoff(args),
+         :ok <- reserve_delegation(state) do
+      delegate(state, args, context)
+    else
+      false -> {:error, :denied, context}
+      {:error, reason} -> {:error, reason, context}
+    end
   end
 
   defp execute_tool(state, "request_work", args, context, active) do
     Process.put(:handoff_comment, args["comment"])
 
-    if "request_work" in active,
-      do: request_work(state, args, context),
-      else: {:error, :denied, context}
+    with true <- "request_work" in active,
+         {:ok, _item} <- Omunculus.WorkItem.handoff(args),
+         :ok <- reserve_delegation(state) do
+      request_work(state, args, context)
+    else
+      false -> {:error, :denied, context}
+      {:error, reason} -> {:error, reason, context}
+    end
   end
 
   defp execute_tool(state, "request_permission", args, context, _active) do
@@ -430,7 +450,9 @@ defmodule Omunculus.Runtime.Run do
     result =
       case await_delivery_or_rejection(requested.event_id) do
         :ok ->
-          execute.()
+          if Process.get(:recovery_exhausted),
+            do: {:error, :max_retries_exhausted, call.context},
+            else: execute.()
 
         {:rejected, rejection} ->
           {:error, {:delivery_rejected, rejection.payload["reason"]}, call.context}
@@ -493,13 +515,42 @@ defmodule Omunculus.Runtime.Run do
   # interceptor may reject the delivery of task.delegated, in which case the
   # child never starts and the rejection comes back to the model as a tool
   # error, with delivery.rejected as the new head of the causation chain.
+  defp delegated_recovery(state) do
+    if state[:assessment] || state[:reason] == "continuation" ||
+         state.recovery["work_item_id"] != state.work_item_id,
+       do: state.recovery
+  end
+
+  defp reserve_delegation(state) do
+    if delegated_recovery(state), do: reserve_recovery(state, "delegation"), else: :ok
+  end
+
+  defp reserve_recovery(state, reason) do
+    cause_id =
+      if reason == "report_format",
+        do: Process.get(:model_result_id),
+        else: Process.get(:chain_head)
+
+    cause = %{state.activation | event_id: cause_id, run_id: state.run_id}
+
+    case Omunculus.Runtime.Recovery.reserve(state.core, state.recovery, cause, reason) do
+      {:ok, _} ->
+        :ok
+
+      {:error, :max_retries_exhausted} = error ->
+        Process.put(:recovery_exhausted, true)
+        error
+    end
+  end
+
   defp delegate(state, args, context) do
     child = Envelope.generate_id("wi")
-    instruction = args["instruction"] || args[:instruction] || state.instruction
+    work_item = args["work_item"]
 
     payload =
       %{
-        instruction: instruction,
+        recovery: delegated_recovery(state),
+        work_item: work_item,
         comment: args["comment"] || args[:comment],
         child_work_item_id: child,
         to_depth: state.depth + 1,
@@ -535,11 +586,12 @@ defmodule Omunculus.Runtime.Run do
 
   defp request_work(state, args, context) do
     child = Envelope.generate_id("wi")
-    instruction = args["instruction"] || args[:instruction]
+    work_item = args["work_item"]
 
     payload =
       %{
-        instruction: instruction,
+        recovery: delegated_recovery(state),
+        work_item: work_item,
         comment: args["comment"] || args[:comment],
         requested_by: "run:" <> state.run_id,
         child_work_item_id: child,
@@ -721,13 +773,18 @@ defmodule Omunculus.Runtime.Run do
   end
 
   defp cross_lineage_tool(state, "forward", _args, context) do
-    instruction = state[:cross_lineage_instruction]
-    cross_lineage_delegate(state, instruction, context)
+    work_item = state[:cross_lineage_work_item]
+    cross_lineage_delegate(state, work_item, context)
   end
 
   defp cross_lineage_tool(state, "rewrite", args, context) do
-    instruction = args["instruction"] || args[:instruction]
-    cross_lineage_delegate(state, instruction, context)
+    Process.put(:handoff_comment, args["comment"])
+
+    with {:ok, work_item} <- Omunculus.WorkItem.handoff(args) do
+      cross_lineage_delegate(state, work_item, context)
+    else
+      {:error, reason} -> {:error, reason, context}
+    end
   end
 
   defp cross_lineage_tool(_state, "deny", args, context) do
@@ -736,7 +793,7 @@ defmodule Omunculus.Runtime.Run do
     {:ok, "denied", context}
   end
 
-  defp cross_lineage_delegate(state, instruction, context) do
+  defp cross_lineage_delegate(state, work_item, context) do
     req = state[:cross_lineage_request]
     payload = req.payload
 
@@ -746,7 +803,9 @@ defmodule Omunculus.Runtime.Run do
         :event,
         "task.delegated",
         %{
-          instruction: instruction,
+          recovery: payload["recovery"],
+          work_item: work_item,
+          comment: Process.get(:handoff_comment) || payload["comment"],
           child_work_item_id: payload["child_work_item_id"],
           to_depth: state.cross_lineage_target_depth,
           parent_run_id: state.run_id,
@@ -788,8 +847,8 @@ defmodule Omunculus.Runtime.Run do
       ),
       cross_lineage_schema(
         "rewrite",
-        "Forward the request with a rewritten instruction.",
-        ["instruction"]
+        "Forward a revised Work Item with the decision in comment.",
+        ["work_item", "comment"]
       ),
       cross_lineage_schema("deny", "Deny the cross-lineage request.", ["reason"])
     ]
@@ -798,7 +857,8 @@ defmodule Omunculus.Runtime.Run do
   defp cross_lineage_schema(name, description, required) do
     properties = %{
       "reason" => %{"type" => "string", "description" => "Why this decision was made."},
-      "instruction" => %{"type" => "string", "description" => "Rewritten instruction."}
+      "work_item" => Omunculus.WorkItem.schema(),
+      "comment" => %{"type" => "string", "minLength" => 1}
     }
 
     %{
@@ -856,22 +916,24 @@ defmodule Omunculus.Runtime.Run do
   end
 
   defp report(state, %{type: :round_completed} = ev) do
-    append!(
-      state,
-      :event,
-      "model.call.completed",
-      %{
-        call_id: Process.get(:model_request_id),
-        round: ev.round,
-        outcome: ev.outcome,
-        usage: ev.usage,
-        duration_ms: ev.duration_ms,
-        model: state.agent[:model],
-        response: ev.response
-      },
-      Process.get(:model_request_id)
-    )
+    event =
+      append!(
+        state,
+        :event,
+        "model.call.completed",
+        %{
+          call_id: Process.get(:model_request_id),
+          round: ev.round,
+          outcome: ev.outcome,
+          usage: ev.usage,
+          duration_ms: ev.duration_ms,
+          model: state.agent[:model],
+          response: ev.response
+        },
+        Process.get(:model_request_id)
+      )
 
+    Process.put(:model_result_id, event.event_id)
     :ok
   end
 

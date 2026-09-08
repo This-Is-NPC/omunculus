@@ -234,7 +234,7 @@ defmodule Omunculus.PermissionRuntimeTest do
                 "delegate",
                 %{
                   "comment" => "Preserve this task context and review the result",
-                  "instruction" => "work",
+                  "work_item" => %{"instruction" => "work"},
                   "workspace" => "app"
                 },
                 "call_del"
@@ -363,7 +363,7 @@ defmodule Omunculus.PermissionRuntimeTest do
                   "delegate",
                   %{
                     "comment" => "Preserve this task context and review the result",
-                    "instruction" => "work",
+                    "work_item" => %{"instruction" => "work"},
                     "workspace" => "app"
                   },
                   "call_del"
@@ -462,7 +462,7 @@ defmodule Omunculus.PermissionRuntimeTest do
                   "delegate",
                   %{
                     "comment" => "Preserve this task context and review the result",
-                    "instruction" => "work",
+                    "work_item" => %{"instruction" => "work"},
                     "workspace" => "app"
                   },
                   "call_del"

@@ -99,17 +99,26 @@ defmodule Omunculus.CLI.ReplayTest do
     {:ok, reporter} = Reporter.start_link(core: core, io: io, path: db, session_id: "test")
 
     script = [
-      Fake.tool_call("delegate", %{"instruction" => "do work"}, "missing-comment"),
       Fake.tool_call(
         "delegate",
-        %{"agent" => "invented", "comment" => "do work"},
+        %{"work_item" => %{"instruction" => "do work"}},
+        "missing-comment"
+      ),
+      Fake.tool_call(
+        "delegate",
+        %{
+          "agent" => "invented",
+          "work_item" => %{"instruction" => "do work"},
+          "comment" => "do work"
+        },
         "unknown-agent"
       ),
       {:error, :provider_offline}
     ]
 
     resolver = fn ctx ->
-      Agents.resolve(ctx, %{chat: Map.put(Fake.new(script), :model, "fake"), max_retries: 0})
+      Agents.resolve(ctx, %{chat: Map.put(Fake.new(script), :model, "fake")})
+      |> Map.put(:max_retries, 2)
     end
 
     runtime =

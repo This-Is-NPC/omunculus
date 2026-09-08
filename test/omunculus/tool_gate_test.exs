@@ -176,7 +176,8 @@ defmodule Omunculus.ToolGateTest do
           causation_id: "evt-parent",
           work_item_id: parent,
           payload: %{
-            instruction: "task",
+            work_item: %{"instruction" => "task"},
+            comment: "Delegated task context",
             child_work_item_id: child,
             to_depth: 1,
             parent_run_id: "run-root",
@@ -281,7 +282,8 @@ defmodule Omunculus.ToolGateTest do
         causation_id: "evt-parent",
         work_item_id: "wi-root",
         payload: %{
-          instruction: "child",
+          work_item: %{"instruction" => "child"},
+          comment: "Delegated task context",
           child_work_item_id: "wi-child",
           to_depth: 1,
           parent_run_id: "run-root",
@@ -296,7 +298,8 @@ defmodule Omunculus.ToolGateTest do
         causation_id: "evt-parent",
         work_item_id: "wi-child",
         payload: %{
-          instruction: "grandchild",
+          work_item: %{"instruction" => "grandchild"},
+          comment: "Delegated task context",
           child_work_item_id: "wi-grand",
           to_depth: 2,
           parent_run_id: "run-child",
@@ -320,7 +323,8 @@ defmodule Omunculus.ToolGateTest do
         causation_id: "evt-parent",
         work_item_id: "wi-root",
         payload: %{
-          instruction: "child",
+          work_item: %{"instruction" => "child"},
+          comment: "Delegated task context",
           child_work_item_id: "wi-child",
           to_depth: 1,
           parent_run_id: "run-root",
@@ -336,7 +340,8 @@ defmodule Omunculus.ToolGateTest do
           causation_id: "evt-parent",
           work_item_id: "wi-child",
           payload: %{
-            instruction: "grandchild",
+            work_item: %{"instruction" => "grandchild"},
+            comment: "Delegated task context",
             child_work_item_id: "wi-grand",
             to_depth: 2,
             parent_run_id: "run-child",

@@ -19,6 +19,15 @@ defmodule Omunculus.Events do
         }
 
   @catalog %{
+    "task.recovery_used" => %{
+      kind: :event,
+      versions: ["1"],
+      required: ["recovery", "reason"],
+      emitted_by: ["Runtime"],
+      interceptable: false,
+      injectable: false,
+      doc: "Atomic, idempotent reservation from the Work Item stage recovery budget."
+    },
     "task.run_requested" => %{
       kind: :event,
       versions: ["1"],
@@ -96,7 +105,8 @@ defmodule Omunculus.Events do
       kind: :event,
       versions: ["1"],
       required: [
-        "instruction",
+        "work_item",
+        "comment",
         "child_work_item_id",
         "to_depth",
         "parent_run_id",
@@ -390,7 +400,7 @@ defmodule Omunculus.Events do
 
           true ->
             case Enum.reject(spec.required, &Map.has_key?(payload, &1)) do
-              [] -> :ok
+              [] -> if(type == "task.requested", do: :ok, else: validate_handoff(type, payload))
               missing -> {:error, {:missing_payload_fields, type, missing}}
             end
         end
@@ -398,7 +408,7 @@ defmodule Omunculus.Events do
   end
 
   defp validate_task_requested_event(version, payload) do
-    required = ["instruction", "requested_by", "child_work_item_id"]
+    required = ["work_item", "comment", "requested_by", "child_work_item_id"]
 
     cond do
       version != "1" ->
@@ -406,11 +416,20 @@ defmodule Omunculus.Events do
 
       true ->
         case Enum.reject(required, &Map.has_key?(payload, &1)) do
-          [] -> :ok
+          [] -> validate_handoff("task.requested", payload)
           missing -> {:error, {:missing_payload_fields, "task.requested", missing}}
         end
     end
   end
+
+  defp validate_handoff(type, payload) when type in ["task.delegated", "task.requested"] do
+    case Omunculus.WorkItem.handoff(payload) do
+      {:ok, _} -> :ok
+      error -> error
+    end
+  end
+
+  defp validate_handoff(_, _), do: :ok
 
   @doc "Markdown table of the catalog, the source of the table in docs/to-be/event-catalog.md."
   def markdown do

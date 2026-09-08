@@ -198,7 +198,7 @@ defmodule Omunculus.EventCore.Projector do
         child,
         env.project_id,
         env.work_item_id,
-        p["instruction"],
+        p["work_item"]["instruction"],
         env.occurred_at,
         env.occurred_at,
         env.sequence
