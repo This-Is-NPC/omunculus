@@ -60,7 +60,7 @@ defmodule Omunculus.Runtime do
 
       # An idempotent re-submission returns the original command; its work item
       # is the one to wait for (or may already be complete in the log).
-      wait_root(core, requested, timeout)
+      wait_root(core, requested, timeout, opts[:return_on_human] == true)
     after
       EventCore.unsubscribe(core)
     end
@@ -1179,7 +1179,7 @@ defmodule Omunculus.Runtime do
 
   # --- root wait ---------------------------------------------------------------------
 
-  defp wait_root(core, requested, timeout) do
+  defp wait_root(core, requested, timeout, return_on_human) do
     already =
       core
       |> EventCore.stream(0,
@@ -1201,6 +1201,15 @@ defmodule Omunculus.Runtime do
           receive do
             {:event_core, %Envelope{type: "task.completed", work_item_id: ^wid} = env} ->
               {:ok, env}
+
+            {:event_core,
+             %Envelope{
+               type: "task.commented",
+               work_item_id: ^wid,
+               payload: %{"kind" => "request", "assessment" => true}
+             } = env}
+            when return_on_human ->
+              {:error, {:awaiting_human, env.payload["body"]}}
 
             {:event_core, %Envelope{type: "run.failed", work_item_id: ^wid} = env} ->
               {:error, {:run_failed, env.payload}}

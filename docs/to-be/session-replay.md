@@ -1,4 +1,4 @@
-Status: TO-BE — especificação; implementação pendente.
+Status: implementado — validado com 319 testes e smoke com Qwen local; detalhes em [validação](../spike/session-replay-validation.md).
 
 # Histórico de sessão na mesma UI do run
 
@@ -18,9 +18,9 @@ Referências: [sessão](session-model.md), [eventos](event-model.md),
 [catálogo](event-catalog.md), [execução](execution-model.md) e
 [relato e break](run-report-and-break.md).
 
-## Situação verificada
+## Situação anterior à implementação
 
-Base inspecionada: `be17bed`.
+Base inspecionada antes da implementação: `be17bed`.
 
 - `CLI.run` chama `CLI.Session.ephemeral_run`: inicia Event Core e Runtime,
   imprime o resultado final e remove o banco temporário. Não liga a UI detalhada.
@@ -210,3 +210,31 @@ A primeira versão deve resolver leitura integral e revisão da UI sem essas cam
 Testes determinísticos com provider fake e captura de IO verificam equivalência,
 completude e ausência de efeitos. Um smoke test com provider real gera um banco
 novo para revisão manual da UI, sem usar duração como critério de sucesso da tarefa.
+
+## Implementação entregue
+
+`session replay --db` abre SQLite somente leitura, fixa o snapshot e percorre
+o log em lotes de 256 envelopes. Usa `CLI.Reporter`, os mesmos componentes de
+cabeçalho, rodadas, ferramentas e tabela usados pelo `run`. O detalhe completo
+dos envelopes acompanha esses componentes; o estado visual é separado por Run.
+
+O modo ao vivo usa notificações de entrega para ler o prefixo confirmado do log:
+isso inclui solicitações rejeitadas que não são entregues aos executores. O fim
+da apresentação drena o restante desse prefixo. Campos de conteúdo não são
+truncados; a tabela compacta continua sendo um resumo, acompanhado do detalhe.
+
+Os eventos de modelo incluem request, resposta ou falha. O `event_id` do request
+é a identidade da chamada, referenciada por `call_id` e `causation_id` no resultado.
+Tentativas de ferramentas têm `tool_call_id`, argumentos, resultado, duração e
+outcome `completed`, `waiting` ou `error`. A identidade do envelope distingue
+tentativas mesmo quando um provider reutiliza IDs. Falhas não registram novos
+valores de contador. `control_tools` em `run.started` pina as ferramentas de
+permissão/arbitragem para preservar sua autorização ao passarem pelo ToolGate.
+
+`run --db` conserva o banco e recusa arquivo existente. O cliente efêmero retorna
+quando a raiz solicita avaliação humana, preservando o registro nesse modo;
+a API de espera usada por sessões residentes mantém a espera pela resposta humana.
+
+Históricos anteriores mostram somente os dados realmente registrados. Uma resposta
+não capturada aparece como “not recorded”; checkpoints não são convertidos em
+eventos retrospectivos. Não houve migração nem implementação de formatos antigos.

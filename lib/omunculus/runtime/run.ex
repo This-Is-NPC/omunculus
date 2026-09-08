@@ -39,7 +39,6 @@ defmodule Omunculus.Runtime.Run do
   def handle_continue(:execute, state) do
     activation = state.activation
     Process.put(:chain_head, activation.event_id)
-    Process.put(:tool_round, 0)
     Process.put(:awaiting_children, [])
 
     checkpoint = state.checkpoint || %{}
@@ -59,6 +58,8 @@ defmodule Omunculus.Runtime.Run do
           originating_run_id: state.originating_run_id,
           agent_id: state.agent.agent_id,
           agent_kind: state.agent.kind,
+          model: state.agent[:model],
+          max_turns: state.agent[:max_turns] || 32,
           reason: reason,
           checkpoint: checkpoint,
           flow: state.agent[:flow] || %{"steps" => [], "root_approval" => "self"},
@@ -66,6 +67,7 @@ defmodule Omunculus.Runtime.Run do
           max_retries: state.agent[:max_retries] || 2,
           assessment: state[:assessment],
           tools: tools_bands,
+          control_tools: control_tools(state),
           directory_scope: state[:directory_scope] || "subtree",
           discovery: Map.take(state.agent[:tool_options] || %{}, [:workspaces, :teams, :agents]),
           team: state[:team] || state["team"],
@@ -99,6 +101,7 @@ defmodule Omunculus.Runtime.Run do
       tool_options: tool_options_for(agent, state),
       tool_state: tool_state_from(checkpoint),
       tool_executor: &execute_tool(state, &1, &2, &3, &4),
+      tool_wrapper: &record_tool(state, &1, &2),
       reporter: &report(state, &1),
       request_permission: state[:request_permission] || agent[:request_permission]
     ]
@@ -399,53 +402,74 @@ defmodule Omunculus.Runtime.Run do
   end
 
   defp execute_tool(state, name, args, context, active) do
-    round = Process.get(:tool_round) + 1
-    Process.put(:tool_round, round)
+    authorized_tool_call(state, name, args, context, active)
+  end
+
+  defp control_tools(state) do
+    cond do
+      state[:cross_lineage_arbitration] -> ["forward", "rewrite", "deny"]
+      state[:arbitration] -> ["grant", "deny", "escalate"]
+      state[:request_permission] || state.agent[:request_permission] -> ["request_permission"]
+      true -> []
+    end
+  end
+
+  defp record_tool(state, call, execute) do
+    started_at = System.monotonic_time(:millisecond)
 
     requested =
       append!(state, :event, "tool.call.requested", %{
-        tool: name,
-        args: args,
-        round: round,
-        counter: counter_payload(name, context)
+        tool: call.tool,
+        args: call.args,
+        round: call.round,
+        tool_call_id: call.tool_call_id,
+        counter: counter_payload(call.tool, call.context)
       })
 
-    case await_delivery_or_rejection(requested.event_id) do
-      :ok ->
-        {body, context, outcome} =
-          case authorized_tool_call(state, name, args, context, active) do
-            {:ok, output, context} ->
-              {output, context, "completed"}
+    result =
+      case await_delivery_or_rejection(requested.event_id) do
+        :ok ->
+          execute.()
 
-            {:error, reason, context} ->
-              {"error: #{inspect(reason)}", context, "error:#{inspect(reason)}"}
-          end
+        {:rejected, rejection} ->
+          {:error, {:delivery_rejected, rejection.payload["reason"]}, call.context}
+      end
 
-        completed =
-          append!(
-            state,
-            :event,
-            "tool.call.completed",
-            %{
-              tool: name,
-              round: round,
-              outcome: outcome,
-              previous: counter_value(name, Context.tool_state(context, name, nil), :previous),
-              new: counter_value(name, Context.tool_state(context, name, nil), :new),
-              checkpoint: checkpoint(context)
-            },
-            requested.event_id
-          )
+    {outcome, body, context} =
+      case result do
+        {:ok, output, ctx} -> {"completed", output, ctx}
+        {:wait, output, ctx} -> {"waiting", output, ctx}
+        {:error, reason, ctx} -> {"error", Agent.format_tool_error(reason), ctx}
+      end
 
-        await_delivery(completed.event_id)
-        Process.put(:chain_head, completed.event_id)
+    completed =
+      append!(
+        state,
+        :event,
+        "tool.call.completed",
+        %{
+          tool: call.tool,
+          round: call.round,
+          tool_call_id: call.tool_call_id,
+          outcome: outcome,
+          output: body,
+          duration_ms: System.monotonic_time(:millisecond) - started_at,
+          previous:
+            if(outcome == "completed",
+              do: counter_value(call.tool, Context.tool_state(context, call.tool, nil), :previous)
+            ),
+          new:
+            if(outcome == "completed",
+              do: counter_value(call.tool, Context.tool_state(context, call.tool, nil), :new)
+            ),
+          checkpoint: checkpoint(context)
+        },
+        requested.event_id
+      )
 
-        if outcome == "completed", do: {:ok, body, context}, else: {:error, outcome, context}
-
-      {:rejected, rejection} ->
-        Process.put(:chain_head, rejection.event_id)
-        {:error, {:delivery_rejected, rejection.payload["reason"]}, context}
-    end
+    await_delivery(completed.event_id)
+    Process.put(:chain_head, completed.event_id)
+    result
   end
 
   defp authorized_tool_call(state, name, args, context, active) do
@@ -815,19 +839,52 @@ defmodule Omunculus.Runtime.Run do
 
   # --- side branches --------------------------------------------------------------
 
+  defp report(state, %{type: :round_started} = ev) do
+    event =
+      append!(state, :event, "model.call.requested", %{
+        round: ev.round,
+        model: state.agent[:model],
+        messages: ev.messages,
+        schemas: ev.schemas
+      })
+
+    Process.put(:model_request_id, event.event_id)
+    :ok
+  end
+
   defp report(state, %{type: :round_completed} = ev) do
     append!(
       state,
       :event,
       "model.call.completed",
       %{
+        call_id: Process.get(:model_request_id),
         round: ev.round,
         outcome: ev.outcome,
         usage: ev.usage,
         duration_ms: ev.duration_ms,
+        model: state.agent[:model],
+        response: ev.response
+      },
+      Process.get(:model_request_id)
+    )
+
+    :ok
+  end
+
+  defp report(state, %{type: :round_failed} = ev) do
+    append!(
+      state,
+      :event,
+      "model.call.failed",
+      %{
+        call_id: Process.get(:model_request_id),
+        round: ev.round,
+        reason: inspect(ev.reason),
+        duration_ms: ev.duration_ms,
         model: state.agent[:model]
       },
-      Process.get(:run_started_id)
+      Process.get(:model_request_id)
     )
 
     :ok

@@ -41,6 +41,7 @@ defmodule Omunculus.Agent do
       context: context,
       tools: tools,
       tool_executor: tool_executor,
+      tool_wrapper: Keyword.get(opts, :tool_wrapper, fn _call, execute -> execute.() end),
       schemas: Keyword.get(opts, :schemas) || schemas_for(tools, request_permission),
       messages: messages,
       turn: 0,
@@ -71,7 +72,15 @@ defmodule Omunculus.Agent do
   defp loop(state) do
     round = state.turn + 1
     started_at = now()
-    emit(state, %{type: :round_started, round: round, max_rounds: state.max_turns})
+
+    emit(state, %{
+      type: :round_started,
+      round: round,
+      max_rounds: state.max_turns,
+      messages: state.messages,
+      schemas: state.schemas,
+      model: state.chat[:model]
+    })
 
     case Chat.complete(state.chat, state.messages, state.schemas) do
       {:ok, %{tool_calls: calls} = reply} when is_list(calls) and calls != [] ->
@@ -79,6 +88,7 @@ defmodule Omunculus.Agent do
           type: :round_completed,
           round: round,
           outcome: :tool_calls,
+          response: reply,
           tool_calls: length(calls),
           usage: reply.usage,
           duration_ms: elapsed(started_at)
@@ -146,6 +156,7 @@ defmodule Omunculus.Agent do
           type: :round_completed,
           round: round,
           outcome: :final_response,
+          response: reply,
           tool_calls: 0,
           usage: reply.usage,
           duration_ms: elapsed(started_at)
@@ -234,7 +245,10 @@ defmodule Omunculus.Agent do
         )
 
         {body, context, outcome} =
-          case execute_with_comment(state, name, args, context) do
+          case state.tool_wrapper.(
+                 %{tool: name, args: args, tool_call_id: id, round: round, context: context},
+                 fn -> execute_with_comment(state, name, args, context) end
+               ) do
             {:ok, output, context} -> {output, context, :completed}
             {:error, reason, context} -> {format_tool_error(reason), context, {:error, reason}}
             {:wait, reason, context} -> {reason, context, :waiting}
@@ -365,14 +379,14 @@ defmodule Omunculus.Agent do
 
   defp n(map, key), do: map[key] || map[String.to_atom(key)] || 0
 
-  defp format_tool_error(:denied), do: "error: tool not allowed in this session"
-  defp format_tool_error(:path_escape), do: "error: path escapes the worktree"
-  defp format_tool_error(:old_text_not_found), do: "error: oldText not found in file"
-  defp format_tool_error(:old_text_not_unique), do: "error: oldText is not unique in file"
-  defp format_tool_error(:overlapping_edits), do: "error: overlapping edits"
-  defp format_tool_error(:unsupported), do: "error: unsupported file type"
-  defp format_tool_error(:enoent), do: "error: file not found"
-  defp format_tool_error(reason), do: "error: #{inspect(reason)}"
+  def format_tool_error(:denied), do: "error: tool not allowed in this session"
+  def format_tool_error(:path_escape), do: "error: path escapes the worktree"
+  def format_tool_error(:old_text_not_found), do: "error: oldText not found in file"
+  def format_tool_error(:old_text_not_unique), do: "error: oldText is not unique in file"
+  def format_tool_error(:overlapping_edits), do: "error: overlapping edits"
+  def format_tool_error(:unsupported), do: "error: unsupported file type"
+  def format_tool_error(:enoent), do: "error: file not found"
+  def format_tool_error(reason), do: "error: #{inspect(reason)}"
 
   defp tool_detail(name, args) do
     value = args["path"] || args[:path] || args["pattern"] || args[:pattern]

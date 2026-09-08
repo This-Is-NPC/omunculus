@@ -79,3 +79,22 @@ uma string TOML inteira; mantenha segredos fora do versionamento.
 ```sh
 mix test
 ```
+
+### Histórico de sessão
+
+Preserve uma execução e reveja sua UI sem executar modelos ou ferramentas:
+
+```sh
+./omunculus run ./meu-projeto "Crie um README" --db ./execucao.sqlite3
+./omunculus session replay --db ./execucao.sqlite3
+./omunculus session replay --db ./execucao.sqlite3 > historico.txt
+```
+
+O replay imprime o prefixo completo disponível na abertura, incluindo prompts,
+respostas, chamadas de ferramentas, rejeições, avaliações e transições registradas.
+Termina mesmo que a tarefa esteja pendente. O arquivo de `run --db` deve ser novo;
+sem essa flag, `run` continua efêmero. `session replay` sem caminho usa a sessão
+padrão. O replay não retoma trabalho nem marca a inbox como lida.
+
+Veja o [contrato de replay](docs/to-be/session-replay.md) e a
+[validação](docs/spike/session-replay-validation.md).

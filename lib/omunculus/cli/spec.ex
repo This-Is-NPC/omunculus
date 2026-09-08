@@ -78,6 +78,7 @@ defmodule Omunculus.CLI.Spec do
           }
         ],
         flags: [
+          flag("db", long: "db", value: "file", help: "Retain this run in a new SQLite file"),
           flag("preset",
             long: "preset",
             value: "preset",
@@ -292,9 +293,9 @@ defmodule Omunculus.CLI.Spec do
       },
       "session" => %{
         name: "session",
-        about: "Create or list durable sessions",
+        about: "Create, list or replay durable sessions",
         long_about:
-          "create opens a session SQLite log and appends session.created. list prints session_id values from existing logs.",
+          "create opens a session SQLite log and appends session.created. list prints session_id values from existing logs. replay prints a fixed read-only snapshot through the run UI without executing work.",
         arg_required_else_help: true,
         args: [
           %{
@@ -302,7 +303,7 @@ defmodule Omunculus.CLI.Spec do
             metavar: "action",
             required: true,
             variadic: false,
-            help: "create, resume or list"
+            help: "create, resume, list or replay"
           },
           %{
             name: :name,

@@ -296,6 +296,10 @@ defmodule Omunculus.Matrix do
     core
     |> EventCore.stream(0, correlation_id: correlation_id)
     |> Enum.filter(&(&1.type in @chain_types))
+    |> Enum.reject(
+      &(&1.type in ["tool.call.requested", "tool.call.completed"] and
+          &1.payload["tool"] != "counter")
+    )
   end
 
   defp assert_causal!(core, events) do

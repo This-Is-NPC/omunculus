@@ -50,7 +50,10 @@ defmodule Omunculus.Interceptors.ToolGate do
 
       [payload_json] ->
         payload = Jason.decode!(payload_json)
-        granted = get_in(payload, ["tools", "granted"]) || []
+
+        granted =
+          (get_in(payload, ["tools", "granted"]) || []) ++ (payload["control_tools"] || [])
+
         {:ok, granted}
     end
   end

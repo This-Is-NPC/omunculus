@@ -182,6 +182,25 @@ defmodule Omunculus.Events do
       doc:
         "The attempt closed with an error or a crash; the Work Item becomes eligible for resume."
     },
+    "model.call.requested" => %{
+      kind: :event,
+      versions: ["1"],
+      required: ["round", "messages", "schemas"],
+      emitted_by: ["Run"],
+      interceptable: false,
+      injectable: false,
+      doc:
+        "Effective model input, committed before the provider call; event_id identifies the call."
+    },
+    "model.call.failed" => %{
+      kind: :event,
+      versions: ["1"],
+      required: ["call_id", "round", "reason"],
+      emitted_by: ["Run"],
+      interceptable: false,
+      injectable: false,
+      doc: "Provider failure linked to the persisted model request."
+    },
     "model.call.completed" => %{
       kind: :event,
       versions: ["1"],

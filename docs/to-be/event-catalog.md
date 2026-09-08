@@ -8,6 +8,16 @@ um sistema externo observa e age sobre o harness. O envelope e as regras de
 append continuam em [event-model.md](event-model.md); as entidades de runtime
 em [execution-model.md](execution-model.md).
 
+## Captura de histórico implementada
+
+`model.call.requested` persiste mensagens e schemas antes do provider;
+`model.call.completed` inclui a resposta e `model.call.failed` registra falha.
+Resultados referenciam o request por `call_id` e causação.
+`tool.call.requested`/`completed` também cobrem tentativas rejeitadas antes do
+efeito e handoffs; `output` é o retorno ao agente e `outcome` distingue
+`completed`, `waiting` e `error`. A política continua sendo aplicada antes do efeito.
+Detalhes e apresentação: [session-replay.md](session-replay.md).
+
 ## Regra de fronteira
 
 De fora só entram **comandos**; para fora só saem **eventos**. Um sistema
@@ -52,7 +62,9 @@ reconhecido pelo `kind`, não pelo tempo verbal.
 | `run.started` | event | `attempt`, `depth`, `agent_id`, `agent_kind`, `reason` (`initial`, `continuation`, `retry`, `arbitration`) | Run | não | não |
 | `run.completed` | event | `outcome` (`completed` ou `waiting`), `awaiting` e `checkpoint` quando `waiting` | Run | não | não |
 | `run.failed` | event | `reason` | Run, Runtime | não | não |
+| `model.call.requested` | event | `round`, `messages`, `schemas` | Run | não | não |
 | `model.call.completed` | event | `round`, `outcome` | Run | não | não |
+| `model.call.failed` | event | `call_id`, `round`, `reason` | Run | não | não |
 | `delivery.rejected` | event | `rejected_event_id`, `rejected_type`, `interceptor`, `reason` | Core | não | não |
 
 Evoluir um payload é registrar uma `schema_version` nova no catálogo e manter

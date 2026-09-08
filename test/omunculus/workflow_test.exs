@@ -91,7 +91,9 @@ defmodule Omunculus.WorkflowTest do
     assert hd(messages)["content"] =~ "Run reason: retry"
 
     values =
-      EventCore.stream(core, 0, type: "tool.call.completed") |> Enum.map(& &1.payload["new"])
+      EventCore.stream(core, 0, type: "tool.call.completed")
+      |> Enum.filter(&(&1.payload["tool"] == "counter"))
+      |> Enum.map(& &1.payload["new"])
 
     assert values == [1, 2]
     assert length(EventCore.stream(core, 0, type: "run.started")) == 2
@@ -179,7 +181,12 @@ defmodule Omunculus.WorkflowTest do
 
     assert {:ok, %{result: "Root consolidated"}} = Runtime.request(core, "work", timeout: 3000)
     await(fn -> Runtime.runs(runtime) == %{} end)
-    assert length(EventCore.stream(core, 0, type: "tool.call.completed")) == 1
+
+    assert length(
+             EventCore.stream(core, 0, type: "tool.call.completed")
+             |> Enum.filter(&(&1.payload["tool"] == "counter"))
+           ) == 1
+
     assert length(EventCore.stream(core, 0, type: "task.completed")) == 2
     starts = EventCore.stream(core, 0, type: "run.started")
     review = Enum.find(starts, &(&1.payload["reason"] == "assessment"))
@@ -290,7 +297,11 @@ defmodule Omunculus.WorkflowTest do
              Runtime.request(core, "increment twice", timeout: 3000)
 
     await(fn -> Runtime.runs(runtime) == %{} end)
-    calls = EventCore.stream(core, 0, type: "tool.call.completed")
+
+    calls =
+      EventCore.stream(core, 0, type: "tool.call.completed")
+      |> Enum.filter(&(&1.payload["tool"] == "counter"))
+
     assert Enum.map(calls, & &1.payload["new"]) == [1, 2]
     starts = EventCore.stream(core, 0, type: "run.started")
 
@@ -340,7 +351,12 @@ defmodule Omunculus.WorkflowTest do
 
     await(fn -> EventCore.stream(core, 0, type: "task.break") != [] end)
     await(fn -> Runtime.runs(runtime) == %{} end)
-    assert length(EventCore.stream(core, 0, type: "tool.call.completed")) == 1
+
+    assert length(
+             EventCore.stream(core, 0, type: "tool.call.completed")
+             |> Enum.filter(&(&1.payload["tool"] == "counter"))
+           ) == 1
+
     assert length(EventCore.stream(core, 0, type: "run.started")) == 1
   end
 
@@ -483,7 +499,11 @@ defmodule Omunculus.WorkflowTest do
 
     await(fn -> Runtime.runs(runtime) == %{} end)
     assert length(EventCore.stream(core, 0, type: "task.completed")) == 3
-    assert length(EventCore.stream(core, 0, type: "tool.call.completed")) == 2
+
+    assert length(
+             EventCore.stream(core, 0, type: "tool.call.completed")
+             |> Enum.filter(&(&1.payload["tool"] == "counter"))
+           ) == 2
 
     assert Enum.count(
              EventCore.stream(core, 0, type: "run.started"),
@@ -530,7 +550,10 @@ defmodule Omunculus.WorkflowTest do
                "SELECT count(*) FROM COMMENTS WHERE kind = 'request' AND read_at IS NULL"
              )
 
-    assert length(EventCore.stream(core, 0, type: "tool.call.completed")) == 1
+    assert length(
+             EventCore.stream(core, 0, type: "tool.call.completed")
+             |> Enum.filter(&(&1.payload["tool"] == "counter"))
+           ) == 1
   end
 
   defp staged_config do
@@ -637,7 +660,11 @@ defmodule Omunculus.WorkflowTest do
     assert length(EventCore.stream(core, 0, type: "task.assessment_requested")) == 3
     assert length(EventCore.stream(core, 0, type: "task.completed")) == 2
 
-    assert Enum.map(EventCore.stream(core, 0, type: "tool.call.completed"), & &1.payload["new"]) ==
+    assert Enum.map(
+             EventCore.stream(core, 0, type: "tool.call.completed")
+             |> Enum.filter(&(&1.payload["tool"] == "counter")),
+             & &1.payload["new"]
+           ) ==
              [1, 2, 3]
 
     for event <- advances, do: EventCore.redeliver(core, event.event_id)
@@ -741,7 +768,11 @@ defmodule Omunculus.WorkflowTest do
     send(reviewer, :approve)
     assert {:ok, _} = Task.await(task)
     await(fn -> Runtime.runs(runtime) == %{} end)
-    assert length(EventCore.stream(core, 0, type: "tool.call.completed")) == 1
+
+    assert length(
+             EventCore.stream(core, 0, type: "tool.call.completed")
+             |> Enum.filter(&(&1.payload["tool"] == "counter"))
+           ) == 1
   end
 
   test "human root approval is configurable and does not rerun the executor" do
@@ -1001,7 +1032,11 @@ defmodule Omunculus.WorkflowTest do
              &(&1.payload["agent_kind"] == "concierge" and &1.payload["depth"] == 0)
            )
 
-    assert length(EventCore.stream(core, 0, type: "tool.call.completed")) == 1
+    assert length(
+             EventCore.stream(core, 0, type: "tool.call.completed")
+             |> Enum.filter(&(&1.payload["tool"] == "counter"))
+           ) == 1
+
     assert_receive {:gate_context, messages}
     assert hd(messages)["content"] =~ "Kind: reviewer"
     assert hd(messages)["content"] =~ "Work stage: review"

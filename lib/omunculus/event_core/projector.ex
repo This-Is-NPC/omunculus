@@ -299,7 +299,8 @@ defmodule Omunculus.EventCore.Projector do
     end
   end
 
-  defp apply_event(conn, %{type: "model.call.completed"} = env) do
+  defp apply_event(conn, %{type: type} = env)
+       when type in ["model.call.completed", "model.call.failed"] do
     p = env.payload
 
     Store.query(
@@ -312,7 +313,7 @@ defmodule Omunculus.EventCore.Projector do
         p["round"],
         p["model"],
         Jason.encode!(p["usage"] || %{}),
-        p["outcome"],
+        if(type == "model.call.failed", do: "failed", else: p["outcome"]),
         p["duration_ms"],
         env.occurred_at,
         env.sequence

@@ -87,7 +87,10 @@ rows =
 
     values =
       events
-      |> Enum.filter(&(&1.type == "tool.call.completed" and &1.payload["tool"] == "counter"))
+      |> Enum.filter(
+        &(&1.type == "tool.call.completed" and &1.payload["tool"] == "counter" and
+            &1.payload["outcome"] == "completed")
+      )
       |> Enum.map(& &1.payload["new"])
 
     assessments = Enum.filter(events, &(&1.type == "task.assessment_requested"))

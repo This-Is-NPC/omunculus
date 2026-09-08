@@ -20,7 +20,7 @@ O que a spike validou e o que ela revelou está em
 | [event-catalog.md](event-catalog.md) | tipos de envelope, interceptor, automação, portas da CLI | planejado, spike |
 | [execution-model.md](execution-model.md) | Agent config, Execution Node, Run, delegação | planejado, spike |
 | [session-model.md](session-model.md) | Session, workspaces, multi-repo, inbox | validado (sessão, inbox); resume proposta |
-| [session-replay.md](session-replay.md) | histórico completo com a mesma UI do run | especificação; implementação pendente |
+| [session-replay.md](session-replay.md) | histórico completo com a mesma UI do run | implementado; testes e smoke local |
 | [team-model.md](team-model.md) | times, interação entre linhagens pelo ancestral comum, descoberta | proposta |
 | [tool-policy.md](tool-policy.md) | teto, perfil, workspace, modos, três barreiras | proposta |
 | [permission-negotiation.md](permission-negotiation.md) | pedido, arbitragem, escopo, validade, revogação | validado |

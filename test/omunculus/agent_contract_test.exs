@@ -142,6 +142,10 @@ defmodule Omunculus.AgentContractTest do
     assert {:ok, %{result: "Parent complete"}} = Runtime.request(core, "Deliver", timeout: 3000)
 
     assert [1, 2, 3] ==
-             Enum.map(EventCore.stream(core, 0, type: "tool.call.completed"), & &1.payload["new"])
+             Enum.map(
+               EventCore.stream(core, 0, type: "tool.call.completed")
+               |> Enum.filter(&(&1.payload["tool"] == "counter")),
+               & &1.payload["new"]
+             )
   end
 end

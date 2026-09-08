@@ -14,13 +14,23 @@ defmodule Omunculus.CLI.Session do
     with {:ok, cwd} <- canonicalize_dir(args.dir),
          {:ok, config} <- Config.load(cwd: cwd, config_file: flags["config"], env: env),
          {:ok, checked} <- Config.check(config),
-         {:ok, chat} <- provider_chat(config, flags, env) do
-      db = ephemeral_db_path()
+         {:ok, chat} <- provider_chat(config, flags, env),
+         {:ok, db} <- reserve_db(flags) do
+      if flags["db"], do: IO.puts(:stderr, "Session log: #{db}")
       workspace_id = ephemeral_workspace_id(config, cwd)
       session_id = Envelope.generate_id("session")
 
       {:ok, core} = EventCore.start_link(path: db, interceptors: checked.interceptors)
       {:ok, projector} = Projector.start_link(core: core)
+
+      {:ok, reporter} =
+        Omunculus.CLI.Reporter.start_link(
+          core: core,
+          path: db,
+          io: :stderr,
+          json_events?: flags["json_events"],
+          timestamp_format: config.output.timestamp_format
+        )
 
       {:ok, _} =
         EventCore.append(
@@ -51,7 +61,8 @@ defmodule Omunculus.CLI.Session do
         Runtime.request(core, args.instruction,
           session_id: session_id,
           workspace: workspace_id,
-          timeout: 600_000
+          return_on_human: true,
+          timeout: :infinity
         )
 
       :ok = Projector.sync(projector)
@@ -68,9 +79,10 @@ defmodule Omunculus.CLI.Session do
         end
 
       GenServer.stop(runtime)
+      Omunculus.CLI.Reporter.finish(reporter)
       GenServer.stop(projector)
       GenServer.stop(core)
-      File.rm(db)
+      unless flags["db"], do: File.rm(db)
       code
     else
       {:error, {:usage, reason}} -> usage(reason)
@@ -80,6 +92,9 @@ defmodule Omunculus.CLI.Session do
 
   def session(%{args: args, flags: flags}, env) do
     case args[:action] do
+      "replay" ->
+        Omunculus.CLI.Replay.run(flags)
+
       "create" ->
         session_create(args, flags)
 
@@ -434,6 +449,19 @@ defmodule Omunculus.CLI.Session do
       {:ok, path}
     else
       {:error, {:not_a_directory, dir}}
+    end
+  end
+
+  defp reserve_db(flags) do
+    path = flags["db"] || ephemeral_db_path()
+
+    case File.open(path, [:write, :exclusive]) do
+      {:ok, file} ->
+        File.close(file)
+        {:ok, path}
+
+      {:error, reason} ->
+        {:error, {:session_log, path, reason}}
     end
   end
 

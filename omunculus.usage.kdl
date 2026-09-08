@@ -114,6 +114,7 @@ cmd "monkey-job" {
 }
 
 cmd "run" {
+  flag "--db <file>" help="Retain this run in a new SQLite file"
   help "Run the agent on a directory"
   long_help "Canonicalize <dir>, load presets from omunculus.toml (project over ~/.omunculus/config.toml), and loop AskModel ↔ tools until halt. Does not commit. Flags override the environment; the environment overrides config; config overrides defaults."
   arg "<dir>" help="Working directory (the worktree)"
@@ -149,9 +150,9 @@ cmd "send" {
 }
 
 cmd "session" {
-  help "Create or list durable sessions"
-  long_help "create opens a session SQLite log and appends session.created. list prints session_id values from existing logs."
-  arg "<action>" help="create, resume or list"
+  help "Create, list or replay durable sessions"
+  long_help "create opens a session SQLite log and appends session.created. list prints session_id values from existing logs. replay prints a fixed read-only snapshot through the run UI without executing work."
+  arg "<action>" help="create, resume, list or replay"
   arg "[name]" help="Session id for create (generated when omitted)"
   flag "--db <file>" help="Session SQLite path (default: ~/.omunculus/session.sqlite3)"
   flag "--session <file>" help="Session SQLite file (default: ~/.omunculus/session.sqlite3)" env="OMUNCULUS_SESSION"
