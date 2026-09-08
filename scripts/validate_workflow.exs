@@ -6,6 +6,7 @@ alias Omunculus.EventCore.Projector
 alias Omunculus.Runtime.Agents
 alias Omunculus.Event.Envelope
 Code.require_file("support/workflow_observer.exs", __DIR__)
+Code.require_file("support/workflow_audit.exs", __DIR__)
 
 {options, [preset | selected], []} =
   OptionParser.parse(System.argv(), strict: [db: :string, depth: :integer, repeats: :integer])
@@ -189,17 +190,7 @@ rows =
     before = Projector.snapshot(core)
     Projector.rebuild(projector)
 
-    delegations = Enum.filter(events, &(&1.type == "task.delegated"))
-
-    handoffs_valid =
-      Enum.all?(delegations, fn event ->
-        match?({:ok, _}, Omunculus.WorkItem.handoff(event.payload)) and
-          Enum.any?(
-            starts,
-            &(&1.work_item_id == event.payload["child_work_item_id"] and
-                &1.payload["work_item"] == event.payload["work_item"])
-          )
-      end)
+    handoffs = Omunculus.WorkflowAudit.handoffs(events)
 
     recoveries = Enum.filter(events, &(&1.type == "task.recovery_used"))
 
@@ -221,7 +212,10 @@ rows =
       protocol_outcome: outcome,
       root_completed: outcome == :completed,
       task_success: outcome == :completed and values == [1, 2, 3] and topology_valid,
-      handoffs_valid: handoffs_valid,
+      handoffs_valid: handoffs.handoffs_valid,
+      rejected_handoffs_blocked: handoffs.rejected_handoffs_blocked,
+      accepted_delegations: handoffs.accepted_delegations,
+      rejected_delegations: handoffs.rejected_delegations,
       recovery_bounded: recovery_bounded,
       recoveries: length(recoveries),
       lineage_valid: lineage_valid,

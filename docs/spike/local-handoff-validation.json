@@ -1,0 +1,393 @@
+{
+  "harness_commit": "075199c",
+  "model": "qwen3.5:9b",
+  "repetitions_per_scenario": 1,
+  "cases": [
+    {
+      "original_runner": {
+        "task_success": true,
+        "completed_items": 2,
+        "assessments": 1,
+        "staged": false,
+        "replay_equal": true,
+        "required_depth": 1,
+        "result": "Counter task executed successfully. Final value is 3, meeting all criteria. Evidence verified and approved.",
+        "human_request": null,
+        "all_runs_closed": true,
+        "counter_values": [
+          1,
+          2,
+          3
+        ],
+        "topology_valid": true,
+        "database": "/home/howl/Projects/omacon/omunculus/test/sessions.sqlite3",
+        "advances": 0,
+        "schemas_match": true,
+        "approvals_checked": 2,
+        "runs": 5,
+        "failures": 0,
+        "reasons": {
+          "assessment": 1,
+          "continuation": 1,
+          "initial": 2,
+          "retry": 1
+        },
+        "tools_recorded": true,
+        "terminal_event_id": "evt-257e3f585da76cf2",
+        "repetition": 1,
+        "effect_success": true,
+        "protocol_outcome": "completed",
+        "root_completed": true,
+        "model": "qwen3.5:9b",
+        "handoffs_valid": false,
+        "preset": "local.toml",
+        "breaks": 0,
+        "recovery_bounded": true,
+        "lineage_valid": true,
+        "elapsed_ms": 131131,
+        "effect_depths": [
+          1
+        ],
+        "effect_owners": [
+          "wi-5aad4f1b05da8983"
+        ],
+        "session_id": "session-e169ade71f8d0682",
+        "model_calls": 9,
+        "recoveries": 2,
+        "approvals_valid": true
+      },
+      "handoff_audit": {
+        "accepted_delegations": 1,
+        "rejected_delegations": 1,
+        "handoffs_valid": true,
+        "rejected_handoffs_blocked": true
+      },
+      "recovery_budgets": [
+        {
+          "max_retries": 2,
+          "reasons": {
+            "retry": 1,
+            "tool_error": 1
+          },
+          "stage": "work",
+          "used": 2,
+          "work_item_id": "wi-fdee4b156754b3a7"
+        }
+      ],
+      "counter_effects": [
+        {
+          "value": 1,
+          "sequence": 1859,
+          "work_item_id": "wi-5aad4f1b05da8983",
+          "run_id": "run-9ada502e52b025b6"
+        },
+        {
+          "value": 2,
+          "sequence": 1863,
+          "work_item_id": "wi-5aad4f1b05da8983",
+          "run_id": "run-9ada502e52b025b6"
+        },
+        {
+          "value": 3,
+          "sequence": 1867,
+          "work_item_id": "wi-5aad4f1b05da8983",
+          "run_id": "run-9ada502e52b025b6"
+        }
+      ],
+      "tool_errors": [
+        {
+          "output": "error: {:delegation_rejected, \"team not in session\"}",
+          "sequence": 1840,
+          "tool": "delegate"
+        }
+      ]
+    },
+    {
+      "original_runner": {
+        "task_success": true,
+        "completed_items": 2,
+        "assessments": 2,
+        "staged": true,
+        "replay_equal": true,
+        "required_depth": 1,
+        "result": "Counter incremented three times successfully. Final value is 3 as required. Evidence confirmed.",
+        "human_request": null,
+        "all_runs_closed": true,
+        "counter_values": [
+          1,
+          2,
+          3
+        ],
+        "topology_valid": true,
+        "database": "/home/howl/Projects/omacon/omunculus/test/sessions.sqlite3",
+        "advances": 1,
+        "schemas_match": true,
+        "approvals_checked": 3,
+        "runs": 6,
+        "failures": 0,
+        "reasons": {
+          "assessment": 2,
+          "continuation": 1,
+          "initial": 2,
+          "step": 1
+        },
+        "tools_recorded": true,
+        "terminal_event_id": "evt-d00ffe0e813c0715",
+        "repetition": 1,
+        "effect_success": true,
+        "protocol_outcome": "completed",
+        "root_completed": true,
+        "model": "qwen3.5:9b",
+        "handoffs_valid": true,
+        "preset": "local.toml",
+        "breaks": 0,
+        "recovery_bounded": true,
+        "lineage_valid": true,
+        "elapsed_ms": 111613,
+        "effect_depths": [
+          1
+        ],
+        "effect_owners": [
+          "wi-0f47c856ec65da96"
+        ],
+        "session_id": "session-78b9fe71b9fb3c6d",
+        "model_calls": 11,
+        "recoveries": 2,
+        "approvals_valid": true
+      },
+      "handoff_audit": {
+        "accepted_delegations": 1,
+        "rejected_delegations": 0,
+        "handoffs_valid": true,
+        "rejected_handoffs_blocked": true
+      },
+      "recovery_budgets": [
+        {
+          "max_retries": 2,
+          "reasons": {
+            "report_format": 2
+          },
+          "stage": "in_progress",
+          "used": 2,
+          "work_item_id": "wi-0f47c856ec65da96"
+        }
+      ],
+      "counter_effects": [
+        {
+          "value": 1,
+          "sequence": 1900,
+          "work_item_id": "wi-0f47c856ec65da96",
+          "run_id": "run-901141d5f9e62cc6"
+        },
+        {
+          "value": 2,
+          "sequence": 1904,
+          "work_item_id": "wi-0f47c856ec65da96",
+          "run_id": "run-901141d5f9e62cc6"
+        },
+        {
+          "value": 3,
+          "sequence": 1908,
+          "work_item_id": "wi-0f47c856ec65da96",
+          "run_id": "run-901141d5f9e62cc6"
+        }
+      ],
+      "tool_errors": []
+    },
+    {
+      "original_runner": {
+        "task_success": true,
+        "completed_items": 3,
+        "assessments": 5,
+        "staged": false,
+        "replay_equal": true,
+        "required_depth": 2,
+        "result": "The counter has been incremented exactly three times as required. Final value is 3. Evidence verified and approved.",
+        "human_request": null,
+        "all_runs_closed": true,
+        "counter_values": [
+          1,
+          2,
+          3
+        ],
+        "topology_valid": true,
+        "database": "/home/howl/Projects/omacon/omunculus/test/sessions.sqlite3",
+        "advances": 0,
+        "schemas_match": true,
+        "approvals_checked": 3,
+        "runs": 14,
+        "failures": 0,
+        "reasons": {
+          "assessment": 5,
+          "continuation": 2,
+          "initial": 3,
+          "retry": 4
+        },
+        "tools_recorded": true,
+        "terminal_event_id": "evt-5841b364a6871b2e",
+        "rejected_delegations": 0,
+        "rejected_handoffs_blocked": true,
+        "repetition": 1,
+        "effect_success": true,
+        "accepted_delegations": 2,
+        "protocol_outcome": "completed",
+        "root_completed": true,
+        "model": "qwen3.5:9b",
+        "handoffs_valid": true,
+        "preset": "local.toml",
+        "breaks": 0,
+        "recovery_bounded": true,
+        "lineage_valid": true,
+        "elapsed_ms": 167429,
+        "effect_depths": [
+          2
+        ],
+        "effect_owners": [
+          "wi-90af4b3f76e373d5"
+        ],
+        "session_id": "session-8dd8f423a05a1ac0",
+        "model_calls": 17,
+        "recoveries": 4,
+        "approvals_valid": true
+      },
+      "handoff_audit": {
+        "accepted_delegations": 2,
+        "rejected_delegations": 0,
+        "handoffs_valid": true,
+        "rejected_handoffs_blocked": true
+      },
+      "recovery_budgets": [
+        {
+          "max_retries": 2,
+          "reasons": {
+            "retry": 2
+          },
+          "stage": "work",
+          "used": 2,
+          "work_item_id": "wi-90af4b3f76e373d5"
+        },
+        {
+          "max_retries": 2,
+          "reasons": {
+            "retry": 1
+          },
+          "stage": "work",
+          "used": 1,
+          "work_item_id": "wi-ab7d8b712a19e79a"
+        },
+        {
+          "max_retries": 2,
+          "reasons": {
+            "retry": 1
+          },
+          "stage": "work",
+          "used": 1,
+          "work_item_id": "wi-b653727d35498200"
+        }
+      ],
+      "counter_effects": [
+        {
+          "value": 1,
+          "sequence": 1989,
+          "work_item_id": "wi-90af4b3f76e373d5",
+          "run_id": "run-055c837038b464b1"
+        },
+        {
+          "value": 2,
+          "sequence": 2007,
+          "work_item_id": "wi-90af4b3f76e373d5",
+          "run_id": "run-ab5c4d5043c0ac21"
+        },
+        {
+          "value": 3,
+          "sequence": 2025,
+          "work_item_id": "wi-90af4b3f76e373d5",
+          "run_id": "run-f4e480f6cccd140c"
+        }
+      ],
+      "tool_errors": []
+    },
+    {
+      "original_runner": {
+        "task_success": false,
+        "completed_items": 0,
+        "assessments": 3,
+        "staged": true,
+        "replay_equal": true,
+        "required_depth": 2,
+        "result": null,
+        "human_request": "Review: Execute the counter tool exactly three times. Stop after the third increment and report the final value.\n{\"completed\": true, \"comment\": \"Delegated counter execution to Level 2 agent. Instruction: Call the counter tool exactly three times and report final value.\"\nRecent Run comments: Delegating counter execution to Level 2 agent. Instruction: Call the counter tool three times and report final value.\nDelegating to Level 2 agent with required parameters. Instruction: Call the counter tool exactly three times and report final value.\nDelegating counter execution to Level 2 agent. Instruction: Execute the counter tool exactly three times and report the final value.",
+        "all_runs_closed": true,
+        "counter_values": [],
+        "topology_valid": false,
+        "database": "/home/howl/Projects/omacon/omunculus/test/sessions.sqlite3",
+        "advances": 0,
+        "schemas_match": true,
+        "approvals_checked": 0,
+        "runs": 8,
+        "failures": 0,
+        "reasons": {
+          "assessment": 3,
+          "initial": 2,
+          "retry": 3
+        },
+        "tools_recorded": true,
+        "terminal_event_id": "evt-946ee2ee881d5031",
+        "rejected_delegations": 0,
+        "rejected_handoffs_blocked": true,
+        "repetition": 1,
+        "effect_success": false,
+        "accepted_delegations": 1,
+        "protocol_outcome": "awaiting_human",
+        "root_completed": false,
+        "model": "qwen3.5:9b",
+        "handoffs_valid": true,
+        "preset": "local.toml",
+        "breaks": 1,
+        "recovery_bounded": true,
+        "lineage_valid": true,
+        "elapsed_ms": 100716,
+        "effect_depths": [],
+        "effect_owners": [],
+        "session_id": "session-11bc86707117a745",
+        "model_calls": 8,
+        "recoveries": 3,
+        "approvals_valid": true
+      },
+      "handoff_audit": {
+        "accepted_delegations": 1,
+        "rejected_delegations": 0,
+        "handoffs_valid": true,
+        "rejected_handoffs_blocked": true
+      },
+      "recovery_budgets": [
+        {
+          "max_retries": 2,
+          "reasons": {
+            "retry": 2
+          },
+          "stage": "work",
+          "used": 2,
+          "work_item_id": "wi-08d65153ea1930bc"
+        },
+        {
+          "max_retries": 2,
+          "reasons": {
+            "retry": 1
+          },
+          "stage": "work",
+          "used": 1,
+          "work_item_id": "wi-8ae64154f53b28ff"
+        }
+      ],
+      "counter_effects": [],
+      "tool_errors": [
+        {
+          "output": "error: tool not allowed in this session",
+          "sequence": 2074,
+          "tool": ""
+        }
+      ]
+    }
+  ]
+}
