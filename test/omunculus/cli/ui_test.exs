@@ -79,6 +79,23 @@ defmodule Omunculus.CLI.UITest do
     GenServer.stop(runtime)
     history = EventCore.stream(core, 0)
 
+    for delegated <- Enum.filter(history, &(&1.type == "task.delegated")) do
+      assert is_binary(delegated.payload["comment"])
+    end
+
+    for started <- Enum.filter(history, &(&1.type == "run.started")) do
+      assert is_list(started.payload["available_tools"])
+
+      if call =
+           Enum.find(
+             history,
+             &(&1.type == "model.call.requested" and &1.run_id == started.run_id)
+           ) do
+        assert Enum.sort(Enum.map(call.payload["schemas"], &get_in(&1, ["function", "name"]))) ==
+                 Enum.sort(started.payload["available_tools"])
+      end
+    end
+
     for {ui, detail, io, pid} <- reporters do
       Reporter.finish(pid)
       {:ok, replay_io} = StringIO.open("")
@@ -155,16 +172,11 @@ defmodule Omunculus.CLI.UITest do
         assert Enum.all?(
                  tl(lines),
                  &(&1 == "" or String.contains?(&1, "│") or String.starts_with?(&1, "┌──") or
-                     String.starts_with?(&1, "└──"))
+                     String.starts_with?(&1, "└──") or String.starts_with?(&1, "├─"))
                )
 
-        assert Enum.any?(
-                 lines,
-                 &String.contains?(
-                   &1,
-                   "│      nested"
-                 )
-               )
+        if name != "narrative",
+          do: assert(Enum.any?(lines, &String.contains?(&1, "│      nested")))
       end
     end
   end
@@ -259,103 +271,46 @@ defmodule Omunculus.CLI.UITest do
     refute output =~ "Work Item 01 completed"
   end
 
-  test "narrative restores the original run dividers and spacing" do
+  test "approved narrative keeps model and tool indicators inside Run context" do
     events = [
-      event(1, "run.started", "a", %{"agent_id" => "worker"}),
-      event(2, "run.completed", "a", %{"outcome" => "waiting", "comment" => "handoff"}),
-      event(3, "run.started", "b", %{"agent_id" => "worker"}),
-      event(4, "run.failed", "b", %{"reason" => "provider_offline"}),
-      event(5, "run.started", "open", %{})
-    ]
-
-    for detail <- ["normal", "full"] do
-      output = render(events, "narrative", detail)
-
-      markers =
-        output
-        |> String.split("\n")
-        |> Enum.filter(&(String.starts_with?(&1, "┌──") or String.starts_with?(&1, "└──")))
-
-      assert Enum.count(markers, &String.starts_with?(&1, "┌── Run started")) == 3
-
-      assert Enum.count(
-               markers,
-               &(String.starts_with?(&1, "└──") and not String.starts_with?(&1, "└── Summary") and
-                   not String.starts_with?(&1, "└── Awaiting") and
-                   not String.starts_with?(&1, "└── Snapshot"))
-             ) == 2
-
-      assert Enum.all?(markers, &(String.ends_with?(&1, "─────") and String.length(&1) == 100))
-      {comment, _} = :binary.match(output, "handoff")
-      {closing, _} = :binary.match(output, "└── Waiting")
-      assert comment < closing
-      assert output =~ "│\n│ 1 END · Run 01 · waiting\n└── Waiting"
-      assert output =~ "└── Failed ─"
-
-      if detail == "full" do
-        {technical, _} = :binary.match(output, "Technical event #2")
-        assert technical < closing
-      end
-    end
-  end
-
-  test "narrative frames task completion and assessment comments before their footers" do
-    events = [
-      event(1, "task.assessment_requested", nil, %{"reviewer" => "parent"}),
-      event(2, "task.completed", nil, %{"comment" => "completion evidence"}),
-      event(3, "task.assessment_resolved", nil, %{
-        "request_id" => "event-1",
-        "comment" => "assessment evidence"
-      })
-    ]
-
-    for detail <- ["normal", "full"] do
-      output = render(events, "narrative", detail)
-      assert output =~ "┌── Assessment started ─"
-      assert output =~ "┌── Recorded event ─"
-      assert output =~ "└── Recorded ─"
-      assert output =~ "└── Assessment resolved ─"
-      assert output =~ "┌── Session summary ─"
-      assert output =~ "└── Summary end ─"
-      refute output =~ "├─●"
-      {completion, _} = :binary.match(output, "completion evidence")
-      {done, _} = :binary.match(output, "└── Recorded")
-      {assessment, _} = :binary.match(output, "assessment evidence")
-      {resolved, _} = :binary.match(output, "└── Assessment resolved")
-      assert completion < done and done < assessment and assessment < resolved
-    end
-  end
-
-  test "narrative never nests frames or prints orphaned result bodies" do
-    events = [
-      event(1, "run.started", "r", %{}),
+      event(1, "run.started", "r", %{"agent_id" => "worker", "available_tools" => ["counter"]}),
       event(2, "model.call.requested", "r", %{"round" => 1}),
-      %{event(3, "model.call.completed", "r", %{"round" => 1}) | causation_id: "event-2"},
+      %{
+        event(3, "model.call.completed", "r", %{"round" => 1, "response" => %{"tool_calls" => []}})
+        | causation_id: "event-2"
+      },
       event(4, "run.completed", "r", %{"outcome" => "reported", "comment" => "run evidence"}),
-      event(5, "task.completed", nil, %{"comment" => "task evidence"}),
-      event(6, "task.assessment_resolved", nil, %{"comment" => "assessment evidence"})
+      event(5, "task.completed", nil, %{"comment" => "task evidence"})
     ]
 
     for detail <- ["normal", "full"] do
       output = render(events, "narrative", detail)
-      assert output =~ "┌── Run result"
-      assert output =~ "┌── Assessment result"
-      refute output =~ "│\n│\n"
-      refute output =~ "\n\n\n"
+      assert output =~ "┌── Run 01 · STARTED"
+      assert output =~ "└── Run 01 · COMPLETED"
+      refute output =~ "Model started ─"
+      assert output =~ "├─○ Round 1 · STARTED"
+      assert output =~ "├─● Round 1 · COMPLETED"
+      assert output =~ "│ Run summary"
+      assert output =~ "│ Identity"
+      assert output =~ "│ Available tools"
+      assert output =~ "● counter"
+      assert output =~ "Time sum"
+      assert output =~ "run evidence"
+      assert output =~ "task evidence"
 
       open =
         Enum.reduce(String.split(output, "\n"), false, fn line, open ->
           cond do
             String.starts_with?(line, "┌──") ->
-              refute open, "nested frame: #{line}"
+              refute(open)
               true
 
             String.starts_with?(line, "└──") ->
-              assert open, "orphan footer: #{line}"
+              assert(open)
               false
 
-            String.starts_with?(line, "│") ->
-              assert open, "orphan content: #{line}"
+            String.starts_with?(line, ["│", "├─"]) ->
+              assert(open)
               open
 
             true ->
@@ -365,6 +320,54 @@ defmodule Omunculus.CLI.UITest do
 
       refute open
     end
+  end
+
+  test "a round with several tools closes only after every individual result" do
+    events = [
+      event(1, "run.started", "r", %{}),
+      event(2, "model.call.requested", "r", %{"round" => 1}),
+      %{
+        event(3, "model.call.completed", "r", %{
+          "round" => 1,
+          "response" => %{"tool_calls" => [%{"id" => "a"}, %{"id" => "b"}]}
+        })
+        | causation_id: "event-2"
+      },
+      event(4, "tool.call.requested", "r", %{
+        "round" => 1,
+        "tool" => "read",
+        "tool_call_id" => "a"
+      }),
+      event(5, "tool.call.requested", "r", %{
+        "round" => 1,
+        "tool" => "grep",
+        "tool_call_id" => "b"
+      }),
+      %{
+        event(6, "tool.call.completed", "r", %{
+          "round" => 1,
+          "tool" => "grep",
+          "output" => "grep evidence"
+        })
+        | causation_id: "event-5"
+      },
+      %{
+        event(7, "tool.call.completed", "r", %{
+          "round" => 1,
+          "tool" => "read",
+          "output" => "read evidence"
+        })
+        | causation_id: "event-4"
+      }
+    ]
+
+    output = render(events, "narrative", "normal")
+    {grep, _} = :binary.match(output, "grep evidence")
+    {read, _} = :binary.match(output, "read evidence")
+    {round, _} = :binary.match(output, "Round 1 · COMPLETED")
+    assert grep < read and read < round
+    refute output =~ "Run 01 · COMPLETED"
+    assert output =~ "Outcome             OPEN"
   end
 
   defp event(seq, type, run, payload),

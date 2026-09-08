@@ -68,6 +68,7 @@ defmodule Omunculus.Runtime.Run do
           assessment: state[:assessment],
           tools: tools_bands,
           control_tools: control_tools(state),
+          available_tools: available_tools(state),
           directory_scope: state[:directory_scope] || "subtree",
           discovery: Map.take(state.agent[:tool_options] || %{}, [:workspaces, :teams, :agents]),
           team: state[:team] || state["team"],
@@ -499,6 +500,7 @@ defmodule Omunculus.Runtime.Run do
     payload =
       %{
         instruction: instruction,
+        comment: args["comment"] || args[:comment],
         child_work_item_id: child,
         to_depth: state.depth + 1,
         parent_run_id: state.run_id,
@@ -538,6 +540,7 @@ defmodule Omunculus.Runtime.Run do
     payload =
       %{
         instruction: instruction,
+        comment: args["comment"] || args[:comment],
         requested_by: "run:" <> state.run_id,
         child_work_item_id: child,
         requester_work_item_id: state.work_item_id,
@@ -999,6 +1002,23 @@ defmodule Omunculus.Runtime.Run do
       "human" => [],
       "forbidden" => []
     }
+  end
+
+  defp available_tools(state) do
+    cond do
+      state[:cross_lineage_arbitration] ->
+        ["forward", "rewrite", "deny"]
+
+      state[:arbitration] ->
+        ["grant", "deny", "escalate"]
+
+      true ->
+        executable_tools(state) ++
+          if((state[:request_permission] || state.agent[:request_permission]) == true,
+            do: ["request_permission"],
+            else: []
+          )
+    end
   end
 
   defp executable_tools(state), do: state.agent.tools

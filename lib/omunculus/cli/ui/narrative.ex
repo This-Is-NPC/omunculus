@@ -1,330 +1,397 @@
 defmodule Omunculus.CLI.UI.Narrative do
-  @moduledoc "Chronological actions with paired starts/results and short stable identities."
+  @moduledoc "Run-centred chronological UI; recorded identities and individual calls."
   @behaviour Omunculus.CLI.UI
-  alias Omunculus.CLI.UI.Text
+  alias Omunculus.CLI.UI.{Text, RunView}
 
   @impl true
   def init(ctx) do
-    {%{width: ctx.width, next: 0, runs: %{}, work: %{}, pending: %{}},
-     Text.lines("#{ctx.mode} · #{ctx.path} · narrative", ctx.width) ++
-       Text.lines(
-         "Action numbers link START to END; DONE marks an atomic recorded event.",
-         ctx.width
-       )}
+    {%{
+       width: ctx.width,
+       next: 0,
+       ids: %{},
+       runs: %{},
+       starts: %{},
+       sources: %{},
+       pending: %{},
+       active: nil,
+       rounds: %{}
+     }, Text.lines("#{ctx.mode} · #{ctx.path} · narrative", ctx.width)}
   end
 
   @impl true
-  def event(item, state) do
-    e = item.event
+  def event(i, s) do
+    e = i.event
     p = e.payload
-    {state, work} = identity(state, :work, e.work_item_id)
-    {state, child} = identity(state, :work, p["child_work_item_id"])
-    {state, run} = identity(state, :runs, e.run_id)
-    actor = if run, do: "Run #{run}", else: "Harness"
-    {state, lines} = present(e.type, item, state, actor, work, child)
 
-    detail =
-      if item.detail == "full",
-        do:
-          ["│ Technical event ##{e.sequence} · #{e.type}"] ++
-            Enum.map(item.lines, &("│   " <> &1)),
-        else: []
+    source = %{
+      e
+      | payload:
+          Map.take(p, ["comment", "instruction"])
+          |> Map.put("args", Map.take(p["args"] || %{}, ["comment"]))
+    }
 
-    lines =
-      cond do
-        lines == [] and detail != [] ->
-          open_block("Technical event", state.width, detail) ++
-            close_block("Recorded", state.width, [])
+    s = %{s | sources: Map.put(s.sources, e.event_id, source)}
 
-        Enum.any?(lines, &String.starts_with?(&1, "└──")) ->
-          {body, closing} =
-            Enum.split_while(lines, &(not Regex.match?(~r/^│ .* END · Run |^└──/u, &1)))
+    s =
+      if e.run_id && not Map.has_key?(s.ids, e.run_id),
+        do: %{s | ids: Map.put(s.ids, e.run_id, pad(map_size(s.ids) + 1))},
+        else: s
 
-          body ++ detail ++ if(detail == [], do: [], else: ["│"]) ++ closing
+    s =
+      if e.type == "run.started" do
+        start = %{e | payload: Map.drop(p, ["checkpoint", "discovery", "flow"])}
 
-        true ->
-          lines ++ detail
+        %{
+          s
+          | starts: Map.put(s.starts, e.run_id, start),
+            runs: Map.put(s.runs, e.run_id, RunView.new(start))
+        }
+      else
+        s
       end
 
-    title =
-      case e.type do
-        "run.completed" -> "Run result"
-        "run.failed" -> "Run failure"
-        "model.call.completed" -> "Model result"
-        "model.call.failed" -> "Model failure"
-        "tool.call.completed" -> "Tool result"
-        "task.assessment_resolved" -> "Assessment result"
-        _ -> "Recorded event"
-      end
+    s =
+      if s.runs[e.run_id],
+        do: %{s | runs: Map.update!(s.runs, e.run_id, &RunView.update(&1, e))},
+        else: s
 
-    lines = frame_fragment(lines, title, state.width, "Awaiting result")
+    visible =
+      i.detail == "full" or
+        e.type not in [
+          "session.created",
+          "policy.loaded",
+          "task.report_handled",
+          "task.run_requested"
+        ]
 
-    # All strings are wrapped before printing, including identifiers and comments.
-    {state,
-     Enum.flat_map(lines, fn line ->
-       case Regex.run(~r/^(│ *)(.*)$/u, line) do
-         [_, prefix, content] -> Text.lines(clean(content), state.width, prefix)
-         _ -> Text.lines(clean(line), state.width, "", "│  ")
-       end
-     end)}
+    if visible do
+      own =
+        e.run_id && s.runs[e.run_id] &&
+          (String.starts_with?(e.type, "run.") or String.starts_with?(e.type, "model.call.") or
+             String.starts_with?(e.type, "tool.call."))
+
+      {s, head} = if own, do: focus(s, e.run_id, e.type == "run.started"), else: pause(s)
+      {s, body} = present(e, s)
+
+      detail =
+        if i.detail == "full",
+          do:
+            ["│ Technical event ##{e.sequence} · #{e.type}"] ++ Enum.map(i.lines, &("│   " <> &1)),
+          else: []
+
+      {s, tail} =
+        cond do
+          e.type in ["run.completed", "run.failed"] and own ->
+            r = s.runs[e.run_id]
+            label = if e.type == "run.failed", do: "FAILED", else: "COMPLETED"
+
+            tail =
+              RunView.summary(r) ++
+                rule(
+                  s,
+                  "└── Run #{s.ids[e.run_id]} · #{label} · #{RunView.elapsed(r)} · Outcome: #{p["outcome"] || "failed"} "
+                )
+
+            {%{s | active: nil}, tail}
+
+          own ->
+            {s, []}
+
+          true ->
+            {s, rule(s, "└── Recorded ")}
+        end
+
+      lines =
+        if own,
+          do: head ++ body ++ detail ++ tail,
+          else: head ++ rule(s, "┌── Coordination event ") ++ body ++ detail ++ tail
+
+      {s, format(lines, s.width)}
+    else
+      {s, []}
+    end
   end
 
-  defp present("run.started", i, s, actor, work, _child) do
-    p = i.event.payload
+  defp focus(%{active: id} = s, id, _), do: {s, []}
 
-    {s, n} =
-      begin_action(
-        s,
-        {:run, i.event.run_id},
-        "#{actor} · #{p["agent_id"] || "agent not recorded"}"
-      )
+  defp focus(s, id, started) do
+    {s, ending} = pause(s)
+    heading = "┌── Run #{s.ids[id]} · #{if started, do: "STARTED", else: "CONTINUED"} "
+
+    {%{s | active: id},
+     ending ++ rule(s, heading) ++ RunView.header(s.runs[id], s.starts, s.sources) ++ ["│"]}
+  end
+
+  defp pause(%{active: nil} = s), do: {s, []}
+
+  defp pause(s),
+    do:
+      {%{s | active: nil},
+       rule(s, "└── Run #{s.ids[s.active]} · DISPLAY PAUSED (execution unchanged) ")}
+
+  defp present(%{type: "run.started"} = e, s) do
+    {s, n} = begin_action(s, {:run, e.run_id}, "Run #{s.ids[e.run_id]}")
+    {s, ["├─○ #{n} START · Run #{s.ids[e.run_id]}"]}
+  end
+
+  defp present(%{type: type} = e, s) when type in ["run.completed", "run.failed"] do
+    {s, n} = end_action(s, {:run, e.run_id})
+    marker = if type == "run.failed", do: "×", else: "●"
 
     {s,
-     open_block("Run started", s.width, [
-       "│ #{n} START · #{actor}",
-       "│ Agent: #{p["agent_id"] || "not recorded"}",
-       "│ Model: #{p["model"] || "not recorded"} · Tools: #{length(get_in(p, ["tools", "granted"]) || [])} · Max rounds: #{p["max_turns"] || "not recorded"}",
-       "│ Stage: #{p["stage"] || "not recorded"} · Reason: #{p["reason"] || "not recorded"} · Work Item #{work}",
-       "│ Objective: #{i.instruction || "not recorded"}"
-     ])}
+     ["│", "│ Comment · Run #{s.ids[e.run_id]}:"] ++
+       RunView.note(e.payload["comment"] || e.payload["reason"]) ++
+       [
+         "│",
+         "├─#{marker} #{n} END · Run #{s.ids[e.run_id]} · #{e.payload["outcome"] || "failed"}"
+       ]}
   end
 
-  defp present(type, i, s, actor, _work, _) when type in ["run.completed", "run.failed"] do
-    {s, n} = end_action(s, {:run, i.event.run_id})
-    p = i.event.payload
+  defp present(%{type: type} = e, s)
+       when type in ["model.call.requested", "tool.call.requested"] do
+    p = e.payload
+    key = {e.run_id, p["round"]}
+
+    {s, round_lines} =
+      if type == "model.call.requested" and not Map.has_key?(s.rounds, key) do
+        {%{
+           s
+           | rounds:
+               Map.put(s.rounds, key, %{expected: nil, returned: [], closed: false, failed: false})
+         }, ["│", "├─○ Round #{p["round"]} · STARTED"]}
+      else
+        {s, []}
+      end
+
+    {s, tool_lines} =
+      if type == "model.call.requested" and is_list(p["schemas"]) and s.runs[e.run_id] do
+        names =
+          Enum.map(p["schemas"], &get_in(&1, ["function", "name"])) |> Enum.reject(&is_nil/1)
+
+        old = s.runs[e.run_id].tools
+        s = %{s | runs: Map.update!(s.runs, e.run_id, &%{&1 | tools: names})}
+
+        {s,
+         if(old == names,
+           do: [],
+           else: ["│ Tools exposed in this round:"] ++ Enum.map(names, &("│   ● " <> &1))
+         )}
+      else
+        {s, []}
+      end
 
     label =
-      case {type, p["outcome"]} do
-        {"run.failed", _} -> "Failed"
-        {_, "waiting"} -> "Waiting"
-        {_, "reported"} -> "Reported"
-        {_, "max_turns"} -> "Max rounds reached"
-        _ -> "Completed"
-      end
-
-    {s,
-     close_block(
-       label,
-       s.width,
-       if(p["comment"], do: ["│ Comment · #{actor}:"] ++ note(p["comment"]), else: []) ++
-         note(p["reason"]) ++
-         ["│", "│ #{n} END · #{actor} · #{p["outcome"] || "failed"}"]
-     )}
-  end
-
-  defp present(type, i, s, actor, _work, _)
-       when type in ["model.call.requested", "tool.call.requested"] do
-    p = i.event.payload
-
-    action =
       if type == "model.call.requested",
         do: "Model · Round #{p["round"]}",
         else: "Tool #{p["tool"]} · Round #{p["round"]}"
 
-    {s, n} = begin_action(s, i.event.event_id, "#{actor} · #{action}")
-    args = if type == "tool.call.requested", do: arguments(p["args"]), else: []
+    {s, n} = begin_action(s, e.event_id, label)
+    # The event ID, not a provider-reused tool_call_id, identifies an attempt.
+    request = %{number: n, label: label, tool_id: p["tool_call_id"], round: key}
+    s = %{s | pending: Map.put(s.pending, e.event_id, request)}
+    args = if type == "tool.call.requested", do: fields(p["args"] || %{}), else: []
 
     {s,
-     open_block(
-       "#{if type == "model.call.requested", do: "Model", else: "Tool"} started",
-       s.width,
-       ["│ #{n} START · #{actor} · #{action}"] ++ args
-     )}
+     round_lines ++ tool_lines ++ ["├─○ #{n} START · Run #{s.ids[e.run_id]} · #{label}"] ++ args}
   end
 
-  defp present(type, i, s, actor, _work, _)
+  defp present(%{type: type} = e, s)
        when type in ["model.call.completed", "model.call.failed", "tool.call.completed"] do
-    p = i.event.payload
-    {s, n} = end_action(s, i.event.causation_id || p["call_id"])
+    p = e.payload
+    id = e.causation_id || p["call_id"]
+    request = s.pending[id]
+    {s, n} = end_action(s, id)
     failed = type == "model.call.failed" or p["outcome"] == "error"
+    marker = if failed, do: "×", else: "●"
 
-    action =
+    label =
       if type == "tool.call.completed",
         do: "Tool #{p["tool"]}",
         else: "Model · Round #{p["round"]}"
 
-    outcome = if failed, do: "failed", else: p["outcome"] || "response received"
-
     content =
-      cond do
-        type == "tool.call.completed" -> note(p["output"])
-        failed -> note(p["reason"])
-        true -> note(get_in(p, ["response", "content"]))
+      if type == "tool.call.completed",
+        do: p["output"],
+        else: p["reason"] || get_in(p, ["response", "content"])
+
+    key =
+      if request && Map.has_key?(request, :round), do: request.round, else: {e.run_id, p["round"]}
+
+    {s, round_lines} = finish_round(s, key, e, request)
+
+    {s,
+     [
+       "├─#{marker} #{n} END · Run #{s.ids[e.run_id]} · #{label} · #{if failed, do: "failed", else: p["outcome"] || "completed"} · #{p["duration_ms"] || "not recorded"} ms"
+     ] ++
+       if(content, do: RunView.note(content), else: []) ++ round_lines}
+  end
+
+  defp present(%{type: "task.assessment_requested"} = e, s) do
+    {s, n} = begin_action(s, e.event_id, "Assessment of #{e.work_item_id}")
+    {s, ["├─○ #{n} START · Assessment of #{e.work_item_id}"] ++ fields(e.payload)}
+  end
+
+  defp present(%{type: "task.assessment_resolved"} = e, s) do
+    {s, n} = end_action(s, e.payload["request_id"])
+    {s, ["├─● #{n} END · Assessment of #{e.work_item_id}"] ++ RunView.note(e.payload["comment"])}
+  end
+
+  defp present(e, s) do
+    title =
+      case e.type do
+        "task.completed" ->
+          "Work Item #{e.work_item_id} completed"
+
+        "task.advanced" ->
+          "Work Item #{e.work_item_id} · #{e.payload["from"]} → #{e.payload["to"]}"
+
+        "task.delegated" ->
+          "Delegated · #{e.work_item_id} → #{e.payload["child_work_item_id"]}"
+
+        "task.break" ->
+          "Work Item #{e.work_item_id} · BREAK"
+
+        _ ->
+          e.type
       end
 
-    label =
-      if failed,
-        do: "Failed",
-        else: if(p["outcome"] == "waiting", do: "Waiting", else: "Completed")
-
-    {s,
-     close_block(
-       label,
-       s.width,
-       ["│ #{n} END · #{actor} · #{action} · #{outcome} · #{p["duration_ms"] || "?"} ms"] ++
-         content
-     )}
+    {%{s | next: s.next + 1},
+     ["├─● #{s.next + 1} DONE · #{title}"] ++
+       fields(Map.drop(e.payload, ["checkpoint", "messages", "schemas", "result"]))}
   end
 
-  defp present("task.requested", i, s, _actor, work, _) do
-    instant(s, "User requested Work Item #{work}", note(i.event.payload["instruction"]))
-  end
+  defp finish_round(s, key, e, request) do
+    case s.rounds[key] do
+      nil ->
+        {s, []}
 
-  defp present("task.delegated", _i, s, actor, work, child) do
-    instant(
-      s,
-      "#{actor} delegated · Work Item #{work} → #{child}",
-      []
-    )
-  end
+      row ->
+        row =
+          cond do
+            e.type == "model.call.failed" ->
+              %{row | expected: [], failed: true}
 
-  defp present("task.assessment_requested", i, s, _, work, _) do
-    {s, reviewer} = identity(s, :work, i.event.payload["reviewer"])
-    {s, n} = begin_action(s, i.event.event_id, "Assessment of Work Item #{work}")
+            e.type == "model.call.completed" ->
+              %{
+                row
+                | expected:
+                    case get_in(e.payload, ["response", "tool_calls"]) do
+                      calls when is_list(calls) -> Enum.map(calls, & &1["id"])
+                      _ -> nil
+                    end
+              }
 
-    {s,
-     open_block("Assessment started", s.width, [
-       "│ #{n} START · Assessment of Work Item #{work} · Responsible: Work Item #{reviewer}"
-     ])}
-  end
+            request && request[:tool_id] ->
+              %{row | returned: [request.tool_id | row.returned]}
 
-  defp present("task.assessment_resolved", i, s, _, work, _) do
-    {s, n} = end_action(s, i.event.payload["request_id"])
+            true ->
+              row
+          end
 
-    {s,
-     close_block(
-       "Assessment resolved",
-       s.width,
-       ["│ #{n} END · Assessment of Work Item #{work}"] ++ note(i.event.payload["comment"])
-     )}
-  end
+        done = not row.closed and is_list(row.expected) and row.expected -- row.returned == []
+        row = %{row | closed: row.closed || done}
 
-  defp present("task.advanced", i, s, _, work, _) do
-    instant(
-      s,
-      "Harness advanced Work Item #{work} · #{i.event.payload["from"]} → #{i.event.payload["to"]}",
-      []
-    )
-  end
-
-  defp present("task.completed", i, s, _, work, _) do
-    instant(
-      s,
-      "Work Item #{work} completed",
-      note(i.event.payload["comment"] || i.event.payload["result"])
-    )
-  end
-
-  defp present("task.break", i, s, _, work, _) do
-    instant(
-      s,
-      "Work Item #{work} · BREAK · escalation requested",
-      note(i.event.payload["comment"])
-    )
-  end
-
-  defp present(type, _i, s, _, _, _)
-       when type in [
-              "session.created",
-              "policy.loaded",
-              "task.report_handled",
-              "task.run_requested"
-            ],
-       do: {s, []}
-
-  defp present(type, i, s, actor, _, _) do
-    # Unknown events and rejections remain visible; never invent a semantic result.
-    instant(
-      s,
-      "#{actor} · #{type}",
-      if(i.detail == "full", do: [], else: Enum.map(i.lines, &("│  " <> &1)))
-    )
+        {%{s | rounds: Map.put(s.rounds, key, row)},
+         if(done,
+           do: [
+             "├─#{if row.failed, do: "×", else: "●"} Round #{elem(key, 1)} · #{if row.failed, do: "FAILED", else: "COMPLETED"}",
+             "│"
+           ],
+           else: []
+         )}
+    end
   end
 
   @impl true
   def finish(s) do
-    lines =
+    {s, close} = pause(s)
+
+    open =
+      for {_id, r} <- Enum.sort(s.runs),
+          is_nil(r.finish),
+          do:
+            rule(s, "┌── Run summary · OPEN ") ++
+              RunView.summary(r) ++ rule(s, "└── Snapshot end ")
+
+    pending =
       s.pending
       |> Map.values()
-      |> Enum.sort()
-      |> Enum.flat_map(fn {n, label} ->
-        Text.lines("#{n} OPEN · #{label} · no result recorded in this history", s.width, "│  ")
-      end)
+      |> Enum.sort_by(& &1.number)
+      |> Enum.map(&"│ #{&1.number} OPEN · #{&1.label} · no result recorded")
 
-    {s, frame_fragment(lines, "Open actions", s.width, "Snapshot end")}
-  end
+    pending =
+      if pending == [],
+        do: [],
+        else: rule(s, "┌── Open actions ") ++ pending ++ rule(s, "└── Snapshot end ")
 
-  # Each printed fragment is complete. START/END track execution; a frame
-  # ending in "Awaiting result" only ends the presentation of its request.
-  defp frame_fragment([], _title, _width, _ending), do: []
-
-  defp frame_fragment(lines, title, width, ending) do
-    lines =
-      if Enum.any?(lines, &String.starts_with?(&1, "┌──")),
-        do: lines,
-        else: boundary("┌── #{title} ", width) ++ lines
-
-    lines =
-      if Enum.any?(lines, &String.starts_with?(&1, "└──")),
-        do: lines,
-        else: lines ++ boundary("└── #{ending} ", width) ++ [""]
-
-    lines
-    |> Enum.drop_while(&(&1 == ""))
-    |> Enum.chunk_by(& &1)
-    |> Enum.flat_map(fn group -> if hd(group) in ["", "│"], do: [hd(group)], else: group end)
-  end
-
-  defp boundary(prefix, width) do
-    [prefix <> String.duplicate("─", max(width - Text.cells(prefix), 1))]
-  end
-
-  defp identity(s, _, nil), do: {s, nil}
-
-  defp identity(s, field, id) do
-    values = Map.fetch!(s, field)
-    label = Map.get(values, id, map_size(values) + 1) |> to_string() |> String.pad_leading(2, "0")
-    {Map.put(s, field, Map.put(values, id, label)), label}
+    {s, format(close ++ List.flatten(open) ++ pending, s.width)}
   end
 
   defp begin_action(s, key, label) do
     n = s.next + 1
-    label = clean(label)
-    {%{s | next: n, pending: Map.put(s.pending, key, {n, label})}, n}
+    {%{s | next: n, pending: Map.put(s.pending, key, %{number: n, label: label})}, n}
   end
 
   defp end_action(s, key) do
     case Map.pop(s.pending, key) do
       {nil, _} -> {s, "? (start not recorded)"}
-      {{n, _}, pending} -> {%{s | pending: pending}, n}
+      {%{number: n}, pending} -> {%{s | pending: pending}, n}
     end
   end
 
-  defp instant(s, title, content),
+  defp fields(map),
     do:
-      {%{s | next: s.next + 1},
-       open_block("Recorded event", s.width, ["│ #{s.next + 1} DONE · #{title}"] ++ content) ++
-         close_block("Recorded", s.width, [])}
-
-  defp open_block(title, width, content),
-    do: [""] ++ boundary("┌── #{title} ", width) ++ content ++ ["│"]
-
-  defp close_block(title, width, content),
-    do: ["│"] ++ content ++ boundary("└── #{title} ", width) ++ [""]
-
-  defp arguments(args) when is_map(args),
-    do: args |> Enum.sort() |> Enum.flat_map(fn {k, v} -> note("#{k}: #{value(v)}") end)
-
-  defp arguments(_), do: []
-  defp note(nil), do: []
-  defp note(""), do: []
-  defp note(v), do: value(v) |> String.split("\n") |> Enum.map(&("│  " <> &1))
-  defp value(v) when is_binary(v), do: v
-  defp value(v), do: Jason.encode!(v)
-
-  defp clean(text),
-    do:
-      String.replace(text, ~r/[\x00-\x08\x0B-\x1F\x7F]/, fn c ->
-        "\\u" <> (c |> :binary.first() |> Integer.to_string(16) |> String.pad_leading(4, "0"))
+      map
+      |> Enum.sort()
+      |> Enum.flat_map(fn {k, v} ->
+        ["│ #{k}:"] ++ RunView.note(if(is_binary(v), do: v, else: Jason.encode!(v)))
       end)
+
+  defp rule(s, prefix) do
+    # Keep both the indicator and closing rule when long IDs force wrapping.
+    [edge, text] = String.split(prefix, " ", parts: 2)
+
+    chunks = Text.lines(text, max(s.width - 8, 1))
+
+    border = fn line ->
+      edge <> " " <> line <> String.duplicate("─", max(s.width - Text.cells(line) - 4, 1))
+    end
+
+    if edge == "┌──" do
+      [border.(hd(chunks)) | Enum.map(tl(chunks), &("│  " <> &1))]
+    else
+      Enum.map(Enum.drop(chunks, -1), &("│  " <> &1)) ++ [border.(List.last(chunks))]
+    end
+  end
+
+  defp format(lines, width) do
+    lines =
+      lines
+      |> Enum.chunk_by(& &1)
+      |> Enum.flat_map(fn xs -> if hd(xs) == "│", do: ["│"], else: xs end)
+
+    Enum.flat_map(lines, fn line ->
+      line =
+        String.replace(line, ~r/[\x00-\x08\x0B-\x1F\x7F]/, fn c ->
+          "\\u" <> (c |> :binary.first() |> Integer.to_string(16) |> String.pad_leading(4, "0"))
+        end)
+
+      cond do
+        String.starts_with?(line, ["┌──", "└──"]) ->
+          [line]
+
+        String.starts_with?(line, "├─") ->
+          Text.lines(String.slice(line, 3..-1//1), width, String.slice(line, 0, 3), "│  ")
+
+        String.starts_with?(line, "│") ->
+          [_, prefix, content] = Regex.run(~r/^(│ *)(.*)$/u, line)
+          Text.lines(content, width, prefix)
+
+        true ->
+          Text.lines(line, width)
+      end
+    end)
+  end
+
+  defp pad(n), do: n |> to_string() |> String.pad_leading(2, "0")
 end

@@ -312,3 +312,9 @@ curtas e eventos atômicos com DONE. Pares de chamadas usam event_id/causation_i
 avaliações usam request_id. Encerramento da Run, avaliação e avanço da tarefa
 permanecem eventos distintos. A ordem cronológica e os dados registrados nunca
 são reescritos para produzir uma narrativa. Detalhes em [guia das UIs](../cli-ui.md#view-narrative).
+
+
+O formato atual aprovado da narrative, incluindo metadados completos, comentário
+de ativação, ferramentas e analytics individuais, está em
+[narrative-run-view.md](narrative-run-view.md). Ele substitui o experimento de
+caixas independentes por chamada: a Run é o contexto principal da exibição.

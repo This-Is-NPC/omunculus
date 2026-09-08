@@ -59,47 +59,8 @@ Runs encerradas, Runs falhas/abertas e Work Items concluídos têm métricas sep
 
 ## View narrative
 
-`--ui narrative` retoma a hierarquia visual do Reporter original, inspecionado no
-commit `9266877`: cabeçalho de Run, rodada aguardando resposta, ferramenta e fim.
-Funciona tanto no `run` quanto no replay, sem alterar o padrão `blocks`.
-
-Cada ação recebe um número no START e repete esse número no END; eventos atômicos
-recebem DONE. Isso indica o registro do evento, não aprovação automática da tarefa.
-Runs e Work Items têm referências curtas estáveis. As chamadas são associadas por
-identidade/causação registrada, não pelo nome da ferramenta ou por texto semelhante.
-As linhas continuam na ordem do log, mesmo quando duas Runs se intercalam.
-
-O modo normal destaca solicitações, delegações, chamadas, comentários finais,
-avaliações, avanços e conclusões. Respostas brutas do modelo e bookkeeping ficam
-em `full`; eventos desconhecidos e rejeições continuam visíveis no modo normal.
-Uma ação sem resultado registrado fica OPEN no fim do histórico. Uma resposta sem
-início registrado é identificada explicitamente, sem fabricar um início.
-
-O item compartilhado agora também fornece `event` (envelope registrado), `detail`
-e `instruction` (instrução registrada do Work Item). Layouts como narrative podem
-usar os campos estruturados para nomear ações, mantendo toda execução fora da UI.
-O resumo de analytics continua sendo gerado uma única vez pelo componente comum.
-
-Na narrative, cada `run.started` abre `┌── Run started ───`, conforme o Reporter
-original. O fechamento usa `└── Completed/Waiting/Reported/Failed ───`, conforme
-o resultado registrado. O número da ação e a referência da Run ficam dentro
-do bloco, nas linhas START/END. As faixas ocupam a largura disponível. Comentários,
-erros e detalhe técnico aparecem antes da faixa END. EOF sem evento de fechamento
-permanece OPEN: não se inventa um END para uma Run sem encerramento registrado.
-
-O mesmo acabamento vale para todas as ações da narrative: Runs, modelos,
-ferramentas e avaliações abrem com `┌── … ───` e fecham com `└── … ───`.
-Eventos atômicos (incluindo conclusão de Work Item e avanço de etapa) usam um
-bloco `Recorded event`/`Recorded`, contendo o título DONE e o comentário.
-Isso delimita a apresentação do fato registrado, sem criar eventos de execução.
-O detalhe técnico fica dentro do bloco, antes de seu fechamento. A tabela final
-de analytics também recebe uma moldura na narrative; os outros layouts mantêm
-a apresentação existente da tabela.
-
-Cada trecho impresso da narrative tem uma moldura completa, sem caixas abertas
-aninhadas na mesma coluna. O trecho START fecha visualmente com `Awaiting result`;
-isso não encerra a ação. Seu resultado posterior abre um novo cabeçalho (`Run result`,
-`Model result`, `Tool result` ou `Assessment result`) e conserva o número da ação
-na linha END. Eventos continuam em ordem cronológica, inclusive na concorrência.
-Comentários e detalhes ficam dentro da moldura do resultado. Os testes verificam
-estruturalmente ausência de cabeçalhos aninhados, conteúdo órfão e rodapés sem abertura.
+A especificação aprovada está em [Narrative: análise individual de Runs](to-be/narrative-run-view.md).
+Ela substitui os experimentos anteriores de uma caixa por fragmento/chamada.
+A Run passa a conter metadados completos, chamadas com indicadores, resumo e tabela
+por rodada. Intercalações preservam a cronologia com segmentos DISPLAY PAUSED e
+CONTINUED, sem alterar estados de execução.
