@@ -5,7 +5,10 @@ alias Omunculus.{Config, Dotenv, EventCore, Runtime}
 alias Omunculus.EventCore.Projector
 alias Omunculus.Runtime.Agents
 
-[preset] = System.argv()
+{options, [preset], []} = OptionParser.parse(System.argv(), strict: [db: :string])
+db = Path.expand(options[:db] || "test/sessions.sqlite3")
+File.mkdir_p!(Path.dirname(db))
+session_id = Omunculus.Event.Envelope.generate_id("session")
 {:ok, file_env} = Dotenv.load(File.cwd!())
 env = Map.merge(file_env, System.get_env())
 
@@ -21,11 +24,30 @@ File.write!(overlay, File.read!(preset) <> "\n" <> File.read!("test/fixtures/con
 
 {:ok, core} =
   EventCore.start_link(
-    path: Path.join(dir, "session.sqlite3"),
+    path: db,
     interceptors: checked.interceptors
   )
 
 {:ok, projector} = Projector.start_link(core: core)
+
+EventCore.append!(
+  core,
+  Omunculus.Event.Envelope.command("session.created",
+    session_id: session_id,
+    payload: %{session_id: session_id, scenario: "parent_review", model: config.chat.model}
+  )
+)
+
+for {name, ws} <- config.workspaces do
+  EventCore.append!(
+    core,
+    Omunculus.Event.Envelope.command("workspace.attached",
+      session_id: session_id,
+      payload: %{workspace_id: name, roots: ws.roots, teams: ws.teams}
+    )
+  )
+end
+
 {:ok, injected} = Agent.start_link(fn -> false end)
 
 resolver = fn ctx ->
@@ -56,19 +78,21 @@ end
 {:ok, runtime} =
   Runtime.start_link(
     core: core,
+    session_id: session_id,
     max_depth: 2,
     agents: resolver,
     config: [cwd: dir, config_file: overlay, profile: "count", env: env],
     run_opts: [fs: Omunculus.FS.Memory.new()]
   )
 
-IO.puts("Parent review evidence: #{dir}")
+IO.puts("Parent review evidence: #{dir}; session: #{session_id}; database: #{db}")
 started = System.monotonic_time(:millisecond)
 
 result =
   Runtime.request(
     core,
     "Use a ferramenta counter para contar de zero até 3. Informe o valor obtido.",
+    session_id: session_id,
     workspace: "app",
     timeout: 180_000
   )
@@ -76,7 +100,7 @@ result =
 # Stop the sole writer before collecting, including on client timeout.
 GenServer.stop(runtime)
 Projector.sync(projector)
-events = EventCore.stream(core, 0)
+events = EventCore.stream(core, 0, session_id: session_id)
 starts = Enum.filter(events, &(&1.type == "run.started"))
 depths = Map.new(starts, &{&1.run_id, &1.payload["depth"]})
 delegations = Enum.filter(events, &(&1.type == "task.delegated"))
@@ -115,6 +139,8 @@ sequences =
   |> Enum.sort()
 
 row = %{
+  session_id: session_id,
+  database: db,
   protocol: "current",
   retries: Enum.count(starts, &(&1.payload["reason"] == "retry")),
   break_reviews: Enum.count(starts, &(&1.payload["reason"] == "break")),

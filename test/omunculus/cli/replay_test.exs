@@ -16,12 +16,17 @@ defmodule Omunculus.CLI.ReplayTest do
   end
 
   test "live committed stream and passive replay are identical without writes", %{db: db} do
-    core = start_supervised!({EventCore, path: db})
+    core = session_core(db)
     projector = start_supervised!({Projector, core: core})
     {:ok, io} = StringIO.open("")
-    {:ok, reporter} = Reporter.start_link(core: core, io: io, path: db)
-    runtime = start_supervised!({Runtime, core: core, max_depth: 1, agents: Agents.resolver()})
-    assert {:ok, %{result: "3"}} = Runtime.request(core, "conte até 3")
+    {:ok, reporter} = Reporter.start_link(core: core, io: io, path: db, session_id: "test")
+
+    runtime =
+      start_supervised!(
+        {Runtime, core: core, session_id: "test", max_depth: 1, agents: Agents.resolver()}
+      )
+
+    assert {:ok, %{result: "3"}} = Runtime.request(core, "conte até 3", session_id: "test")
     GenServer.stop(runtime)
     Projector.sync(projector)
     Reporter.finish(reporter)
@@ -29,7 +34,9 @@ defmodule Omunculus.CLI.ReplayTest do
     history = EventCore.stream(core, 0)
 
     output =
-      capture_io(fn -> assert CLI.dispatch(["session", "replay", "--db", db], %{}) == 0 end)
+      capture_io(fn ->
+        assert CLI.dispatch(["session", "replay", "test", "--db", db], %{}) == 0
+      end)
 
     assert tl(String.split(output, "\n")) ==
              tl(String.split(elem(StringIO.contents(io), 1), "\n"))
@@ -39,26 +46,28 @@ defmodule Omunculus.CLI.ReplayTest do
     GenServer.stop(projector)
     GenServer.stop(core)
     bytes = File.read!(db)
-    capture_io(fn -> assert CLI.dispatch(["session", "replay", "--db", db], %{}) == 0 end)
+    capture_io(fn -> assert CLI.dispatch(["session", "replay", "test", "--db", db], %{}) == 0 end)
     assert File.read!(db) == bytes
   end
 
   test "fixed read snapshot includes WAL and excludes later appends", %{db: db} do
-    core = start_supervised!({EventCore, path: db})
+    core = session_core(db)
     EventCore.transaction(core, fn conn -> Store.query(conn, "PRAGMA journal_mode") end)
 
-    first =
-      EventCore.append!(core, Envelope.command("session.created", payload: %{session_id: "test"}))
+    [first] = EventCore.stream(core, 0)
 
     owner = self()
 
     assert :ok =
-             Replay.read(db, fn event ->
+             Replay.read(db, "test", fn event ->
                send(owner, {:read, event.event_id})
 
                EventCore.append!(
                  core,
-                 Envelope.command("session.created", payload: %{session_id: "later"})
+                 Envelope.command("session.created",
+                   session_id: "later",
+                   payload: %{session_id: "later"}
+                 )
                )
              end)
 
@@ -70,22 +79,24 @@ defmodule Omunculus.CLI.ReplayTest do
 
   test "absent and invalid files fail without creation or migration", %{db: db} do
     assert capture_io(:stderr, fn ->
-             assert CLI.dispatch(["session", "replay", "--db", db], %{}) == 1
+             assert CLI.dispatch(["session", "replay", "test", "--db", db], %{}) == 1
            end) =~ "replay"
 
     refute File.exists?(db)
     File.write!(db, "not sqlite")
 
-    capture_io(:stderr, fn -> assert CLI.dispatch(["session", "replay", "--db", db], %{}) == 1 end)
+    capture_io(:stderr, fn ->
+      assert CLI.dispatch(["session", "replay", "test", "--db", db], %{}) == 1
+    end)
 
     assert File.read!(db) == "not sqlite"
   end
 
   test "records pre-effect rejections, effective input and provider failure", %{db: db} do
-    core = start_supervised!({EventCore, path: db})
+    core = session_core(db)
     start_supervised!({Projector, core: core})
     {:ok, io} = StringIO.open("")
-    {:ok, reporter} = Reporter.start_link(core: core, io: io, path: db)
+    {:ok, reporter} = Reporter.start_link(core: core, io: io, path: db, session_id: "test")
 
     script = [
       Fake.tool_call("delegate", %{"instruction" => "do work"}, "missing-comment"),
@@ -101,8 +112,11 @@ defmodule Omunculus.CLI.ReplayTest do
       Agents.resolve(ctx, %{chat: Map.put(Fake.new(script), :model, "fake"), max_retries: 0})
     end
 
-    start_supervised!({Runtime, core: core, max_depth: 1, agents: resolver})
-    assert {:error, {:run_failed, _}} = Runtime.request(core, "delegate")
+    runtime =
+      start_supervised!({Runtime, core: core, session_id: "test", max_depth: 1, agents: resolver})
+
+    assert {:error, {:run_failed, _}} = Runtime.request(core, "delegate", session_id: "test")
+    GenServer.stop(runtime)
     requests = EventCore.stream(core, 0, type: "model.call.requested")
     assert length(requests) == 3
     assert hd(requests).payload["messages"] |> hd() |> Map.fetch!("content") =~ "comment"
@@ -128,7 +142,9 @@ defmodule Omunculus.CLI.ReplayTest do
     Reporter.finish(reporter)
 
     output =
-      capture_io(fn -> assert CLI.dispatch(["session", "replay", "--db", db], %{}) == 0 end)
+      capture_io(fn ->
+        assert CLI.dispatch(["session", "replay", "test", "--db", db], %{}) == 0
+      end)
 
     assert tl(String.split(output, "\n")) ==
              tl(String.split(elem(StringIO.contents(io), 1), "\n"))
@@ -137,30 +153,36 @@ defmodule Omunculus.CLI.ReplayTest do
     assert output =~ "delivery.rejected"
   end
 
-  test "run retains its log and refuses an existing destination", %{db: db, dir: dir} do
+  test "run stores distinct sessions in an existing database", %{db: db, dir: dir} do
     config = Path.expand("../../fixtures/config/simple.toml", __DIR__)
 
-    capture_io(:stderr, fn ->
-      capture_io(fn ->
-        assert CLI.dispatch(["run", dir, "conte até 3", "--db", db, "--config", config], %{}) == 0
+    for _ <- 1..2 do
+      capture_io(:stderr, fn ->
+        capture_io(fn ->
+          assert CLI.dispatch(["run", dir, "conte até 3", "--db", db, "--config", config], %{}) ==
+                   0
+        end)
       end)
-    end)
+    end
 
-    assert File.exists?(db)
-    bytes = File.read!(db)
+    ids =
+      capture_io(fn -> assert CLI.dispatch(["session", "list", "--db", db], %{}) == 0 end)
+      |> String.split("\n", trim: true)
 
-    capture_io(:stderr, fn ->
-      assert CLI.dispatch(["run", dir, "conte até 3", "--db", db, "--config", config], %{}) == 2
-    end)
+    assert length(ids) == 2
 
-    assert File.read!(db) == bytes
+    for id <- ids do
+      output =
+        capture_io(fn -> assert CLI.dispatch(["session", "replay", id, "--db", db], %{}) == 0 end)
 
-    assert capture_io(fn -> assert CLI.dispatch(["session", "replay", "--db", db], %{}) == 0 end) =~
-             "task.completed"
+      assert output =~ "task.completed"
+      assert output =~ id
+      refute output =~ Enum.find(ids, &(&1 != id))
+    end
   end
 
   test "interleaved Runs, unknown events and long content survive replay", %{db: db} do
-    core = start_supervised!({EventCore, path: db})
+    core = session_core(db)
     large = String.duplicate("evidence", 2000)
 
     attrs = %{
@@ -196,7 +218,7 @@ defmodule Omunculus.CLI.ReplayTest do
     unknown = %{
       List.last(events)
       | type: "custom.observation",
-        sequence: 4,
+        sequence: 5,
         run_id: nil,
         payload: %{"note" => "visible"}
     }
@@ -213,14 +235,27 @@ defmodule Omunculus.CLI.ReplayTest do
   end
 
   test "unsupported schema is refused without changing the log", %{db: db} do
-    core = start_supervised!({EventCore, path: db})
+    core = session_core(db)
     EventCore.append!(core, Envelope.command("session.created", payload: %{session_id: "s"}))
 
     EventCore.transaction(core, fn conn ->
       Store.exec!(conn, "UPDATE EVENTS SET schema_version = '999'")
     end)
 
-    assert {:error, message} = Replay.read(db, fn _ -> flunk("unsupported event delivered") end)
+    assert {:error, message} =
+             Replay.read(db, "test", fn _ -> flunk("unsupported event delivered") end)
+
     assert message =~ "unsupported event schema"
+  end
+
+  defp session_core(db) do
+    core = start_supervised!({EventCore, path: db})
+
+    EventCore.append!(
+      core,
+      Envelope.command("session.created", session_id: "test", payload: %{session_id: "test"})
+    )
+
+    core
   end
 end

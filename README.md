@@ -86,15 +86,26 @@ Preserve uma execução e reveja sua UI sem executar modelos ou ferramentas:
 
 ```sh
 ./omunculus run ./meu-projeto "Crie um README" --db ./execucao.sqlite3
-./omunculus session replay --db ./execucao.sqlite3
-./omunculus session replay --db ./execucao.sqlite3 > historico.txt
+./omunculus session replay <session_id> --db ./execucao.sqlite3
+./omunculus session replay <session_id> --db ./execucao.sqlite3 > historico.txt
 ```
 
 O replay imprime o prefixo completo disponível na abertura, incluindo prompts,
 respostas, chamadas de ferramentas, rejeições, avaliações e transições registradas.
-Termina mesmo que a tarefa esteja pendente. O arquivo de `run --db` deve ser novo;
-sem essa flag, `run` continua efêmero. `session replay` sem caminho usa a sessão
-padrão. O replay não retoma trabalho nem marca a inbox como lida.
+Termina mesmo que a tarefa esteja pendente. `run --db` imprime um novo `session_id`
+e acrescenta a execução ao banco, mesmo que ele já exista. Sem essa flag, `run`
+continua efêmero. O replay exige o ID; sem caminho de banco, usa o banco padrão.
+Use `./omunculus session list --db ./execucao.sqlite3` para listar os IDs.
+
+Os testes reais compartilham `test/sessions.sqlite3`:
+
+```sh
+mise exec -- mix run scripts/validate_workflow.exs presets/cloud.toml
+./omunculus session list --db test/sessions.sqlite3
+./omunculus session replay <session_id> --db test/sessions.sqlite3
+```
+
+O replay não retoma trabalho nem marca a inbox como lida.
 
 Veja o [contrato de replay](docs/to-be/session-replay.md) e a
-[validação](docs/spike/session-replay-validation.md).
+[validação](docs/spike/shared-session-validation.md).

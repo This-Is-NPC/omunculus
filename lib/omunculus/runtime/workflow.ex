@@ -20,7 +20,7 @@ defmodule Omunculus.Runtime.Workflow do
   def on_event(state, _), do: state
 
   def advance(state) do
-    events = EventCore.stream(state.core, 0)
+    events = Runtime.events(state)
 
     state =
       Enum.reduce(events, state, fn env, acc ->
@@ -44,7 +44,7 @@ defmodule Omunculus.Runtime.Workflow do
               if is_map(review) do
                 old =
                   Enum.find(
-                    requests(acc.core),
+                    requests(acc),
                     &(&1.event_id == review["request_id"])
                   )
 
@@ -79,7 +79,7 @@ defmodule Omunculus.Runtime.Workflow do
         end
       end)
 
-    for advanced <- EventCore.stream(state.core, 0, type: "task.advanced") do
+    for advanced <- Runtime.events(state, type: "task.advanced") do
       emit(state.core, advanced, "task.run_requested", advanced.work_item_id, %{
         comment: advanced.payload["comment"],
         checkpoint: advanced.payload["checkpoint"],
@@ -89,7 +89,7 @@ defmodule Omunculus.Runtime.Workflow do
     end
 
     state =
-      EventCore.stream(state.core, 0, type: "task.run_requested")
+      Runtime.events(state, type: "task.run_requested")
       |> Enum.reduce(state, fn request, acc ->
         target = request.work_item_id
 
@@ -109,7 +109,7 @@ defmodule Omunculus.Runtime.Workflow do
              )
       end)
 
-    requests(state.core)
+    requests(state)
     |> Enum.reduce(state, &route_break(&2, &1))
   end
 
@@ -120,7 +120,7 @@ defmodule Omunculus.Runtime.Workflow do
     state =
       cond do
         Enum.any?(
-          EventCore.stream(state.core, 0),
+          Runtime.events(state),
           &(&1.causation_id == env.event_id and
                 &1.type in [
                   "task.run_requested",
@@ -131,7 +131,7 @@ defmodule Omunculus.Runtime.Workflow do
                 ])
         ) ->
           if is_map(review) do
-            request = Enum.find(requests(state.core), &(&1.event_id == review["request_id"]))
+            request = Enum.find(requests(state), &(&1.event_id == review["request_id"]))
             resolve_break(state, request, report["comment"])
           end
 
@@ -176,7 +176,7 @@ defmodule Omunculus.Runtime.Workflow do
 
     break_env =
       Enum.find(
-        requests(state.core),
+        requests(state),
         &(&1.event_id == review["request_id"])
       )
 
@@ -214,7 +214,7 @@ defmodule Omunculus.Runtime.Workflow do
 
       completed?(state.core, env.payload["target"]) ->
         completion =
-          EventCore.stream(state.core, 0,
+          Runtime.events(state,
             work_item_id: env.payload["target"],
             type: "task.completed"
           )
@@ -305,7 +305,7 @@ defmodule Omunculus.Runtime.Workflow do
   defp human(state, env) do
     request =
       Enum.find(
-        EventCore.stream(state.core, 0, type: "task.commented"),
+        Runtime.events(state, type: "task.commented"),
         &(&1.causation_id == env.event_id and &1.payload["kind"] == "request")
       ) ||
         emit(
@@ -324,7 +324,7 @@ defmodule Omunculus.Runtime.Workflow do
         )
 
     reply =
-      EventCore.stream(state.core, 0, type: "task.commented")
+      Runtime.events(state, type: "task.commented")
       |> Enum.find(
         &(&1.payload["kind"] == "response" and
             (&1.payload["request_id"] == env.event_id or &1.causation_id == request.event_id))
@@ -442,9 +442,9 @@ defmodule Omunculus.Runtime.Workflow do
     end
   end
 
-  defp requests(core),
+  defp requests(state),
     do:
-      EventCore.stream(core, 0)
+      Runtime.events(state)
       |> Enum.filter(&(&1.type in ["task.break", "task.assessment_requested"]))
 
   defp stale?(core, request) do
@@ -599,7 +599,7 @@ defmodule Omunculus.Runtime.Workflow do
     do:
       Enum.any?(state.runs, fn {_, run} -> run.activation_id == env.event_id end) or
         Enum.any?(
-          EventCore.stream(state.core, 0, type: "run.started"),
+          Runtime.events(state, type: "run.started"),
           &(&1.causation_id == env.event_id)
         )
 
@@ -624,7 +624,7 @@ defmodule Omunculus.Runtime.Workflow do
         comment: comment
       })
 
-    for request <- EventCore.stream(state.core, 0, type: "task.commented"),
+    for request <- Runtime.events(state, type: "task.commented"),
         request.payload["kind"] == "request" and request.payload["request_id"] == env.event_id do
       emit(
         state.core,

@@ -14,7 +14,8 @@ descoberta em [team-model.md](team-model.md).
 
 - **Session**: agregado durável identificado por `session_id`. É o que o
   humano nomeia, sobrevive ao TTY e administra trabalho em vários
-  workspaces. Um log `EVENTS` por sessão.
+  workspaces. Um banco SQLite pode conter várias sessões; `EVENTS.session_id`
+  separa seus históricos e `sequence` ordena globalmente o banco.
 - **Workspace**: identidade estável (`workspace_id`, slug) mais sandbox
   (`roots[]`) mais teto de tools. Pertence à configuração; vira membro da
   sessão por `workspace.attached`.
@@ -93,8 +94,8 @@ sequenceDiagram
     Note over RT: cada task.completed dos filhos reabre o depth 0 (continuation)
 ```
 
-1. `session create` apenda `session.created`. Um log SQLite por sessão, uma
-   `sequence` só. A sessão padrão do usuário é criada implicitamente no
+1. `session create` apenda `session.created`. Um banco SQLite compartilhado pode conter várias sessões,
+   cada uma com seu ID e seus eventos; há uma `sequence` global. A sessão padrão do usuário é criada implicitamente no
    primeiro `send`.
 2. `workspace attach` apenda `workspace.attached` e cria o node de depth 1
    daquele workspace, **sem Run**. Anexar é membership, não spawn.
@@ -161,7 +162,7 @@ não o reproduziria.
 ## Interceptores com escopo
 
 O envelope carrega `session_id` e `workspace_id`, então um interceptor pode
-ser restrito por workspace. Há um único Event Core por sessão: o interceptor
+ser restrito por workspace. O Event Core atende o banco compartilhado: o interceptor
 vê todos os workspaces e filtra pelo campo.
 
 ```toml
@@ -275,7 +276,8 @@ Fechar o terminal durante um `send` não perde nada: os Work Items estão em
   texto é obrigatório;
 - `inbox`, `inbox reply`, `inbox read`;
 - `workspace attach|detach <nome> [--session s]`;
-- `session create|resume|list`: administração, não uso diário;
+- `session create|resume|list`: administração; `session replay <session_id>`
+  apresenta somente o histórico da sessão selecionada (ver [replay](session-replay.md));
 - `events follow [--session s]` (viewport, não membership).
 
 Follow é o que o cliente assiste; attach é o que pertence à sessão. Pode-se

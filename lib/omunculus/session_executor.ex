@@ -63,11 +63,14 @@ defmodule Omunculus.SessionExecutor do
       )
 
       if EventCore.stream(core, 0, type: "session.created") == [] do
+        session_id = Envelope.generate_id("session")
+
         EventCore.append!(
           core,
           Envelope.command("session.created",
             idempotency_key: "default-session",
-            payload: %{session_id: Envelope.generate_id("session")}
+            session_id: session_id,
+            payload: %{session_id: session_id}
           )
         )
       end

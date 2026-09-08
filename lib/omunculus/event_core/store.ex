@@ -119,6 +119,7 @@ defmodule Omunculus.EventCore.Store do
       content_hash TEXT NOT NULL
     )
     """,
+    "CREATE INDEX IF NOT EXISTS events_session ON EVENTS (session_id, sequence)",
     "CREATE INDEX IF NOT EXISTS events_correlation ON EVENTS (correlation_id, sequence)",
     "CREATE INDEX IF NOT EXISTS events_work_item ON EVENTS (work_item_id, sequence)",
     """
@@ -129,12 +130,14 @@ defmodule Omunculus.EventCore.Store do
     """,
     """
     CREATE TABLE IF NOT EXISTS SESSION_WORKSPACES (
-      workspace_id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      workspace_id TEXT NOT NULL,
       roots TEXT,
       teams TEXT,
       attached INTEGER NOT NULL DEFAULT 1,
       attached_at TEXT,
-      last_sequence INTEGER NOT NULL DEFAULT 0
+      last_sequence INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (session_id, workspace_id)
     )
     """
   ]

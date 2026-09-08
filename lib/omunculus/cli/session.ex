@@ -16,9 +16,9 @@ defmodule Omunculus.CLI.Session do
          {:ok, checked} <- Config.check(config),
          {:ok, chat} <- provider_chat(config, flags, env),
          {:ok, db} <- reserve_db(flags) do
-      if flags["db"], do: IO.puts(:stderr, "Session log: #{db}")
       workspace_id = ephemeral_workspace_id(config, cwd)
       session_id = Envelope.generate_id("session")
+      if flags["db"], do: IO.puts(:stderr, "Session: #{session_id} · Database: #{db}")
 
       {:ok, core} = EventCore.start_link(path: db, interceptors: checked.interceptors)
       {:ok, projector} = Projector.start_link(core: core)
@@ -27,6 +27,7 @@ defmodule Omunculus.CLI.Session do
         Omunculus.CLI.Reporter.start_link(
           core: core,
           path: db,
+          session_id: session_id,
           io: :stderr,
           json_events?: flags["json_events"],
           timestamp_format: config.output.timestamp_format
@@ -35,7 +36,10 @@ defmodule Omunculus.CLI.Session do
       {:ok, _} =
         EventCore.append(
           core,
-          Envelope.command("session.created", payload: %{session_id: session_id})
+          Envelope.command("session.created",
+            session_id: session_id,
+            payload: %{session_id: session_id}
+          )
         )
 
       {:ok, _} =
@@ -49,6 +53,7 @@ defmodule Omunculus.CLI.Session do
 
       runtime_opts = [
         core: core,
+        session_id: session_id,
         max_depth: 0,
         agents: ephemeral_agents(chat, cwd),
         run_opts: [delegation_timeout: 600_000],
@@ -93,7 +98,9 @@ defmodule Omunculus.CLI.Session do
   def session(%{args: args, flags: flags}, env) do
     case args[:action] do
       "replay" ->
-        Omunculus.CLI.Replay.run(flags)
+        if args[:name],
+          do: Omunculus.CLI.Replay.run(args.name, flags),
+          else: usage({:missing_required_arg, "session_id"})
 
       "create" ->
         session_create(args, flags)
@@ -202,6 +209,7 @@ defmodule Omunculus.CLI.Session do
         EventCore.append(
           core,
           Envelope.command("session.created",
+            session_id: session_id,
             payload: %{session_id: session_id}
           )
         )
@@ -215,21 +223,26 @@ defmodule Omunculus.CLI.Session do
   end
 
   defp session_list(flags) do
-    paths =
-      [flags["db"], flags["session"], default_db()]
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
+    {:ok, db} = db_path(flags)
 
-    Enum.each(paths, fn path ->
-      if File.exists?(path) do
-        case session_id_from_file(path) do
-          {:ok, session_id} -> IO.puts(session_id)
-          :error -> IO.puts(path)
+    case Exqlite.Sqlite3.open(db, mode: :readonly) do
+      {:ok, conn} ->
+        try do
+          for [id] <-
+                Omunculus.EventCore.Store.query(
+                  conn,
+                  "SELECT session_id FROM EVENTS WHERE type = 'session.created' AND session_id IS NOT NULL GROUP BY session_id ORDER BY MIN(sequence)"
+                ),
+              do: IO.puts(id)
+
+          0
+        after
+          Exqlite.Sqlite3.close(conn)
         end
-      end
-    end)
 
-    0
+      {:error, reason} ->
+        usage(reason)
+    end
   end
 
   defp workspace_attach(args, flags, env) do
@@ -318,7 +331,10 @@ defmodule Omunculus.CLI.Session do
         {:ok, _} =
           EventCore.append(
             core,
-            Envelope.command("session.created", payload: %{session_id: session_id})
+            Envelope.command("session.created",
+              session_id: session_id,
+              payload: %{session_id: session_id}
+            )
           )
 
         session_id
@@ -335,19 +351,6 @@ defmodule Omunculus.CLI.Session do
 
       _ ->
         :missing
-    end
-  end
-
-  defp session_id_from_file(path) do
-    {:ok, core} = EventCore.start_link(path: path)
-
-    try do
-      case session_id_from_log(core) do
-        {:ok, session_id} -> {:ok, session_id}
-        :missing -> :error
-      end
-    after
-      GenServer.stop(core)
     end
   end
 
@@ -454,15 +457,7 @@ defmodule Omunculus.CLI.Session do
 
   defp reserve_db(flags) do
     path = flags["db"] || ephemeral_db_path()
-
-    case File.open(path, [:write, :exclusive]) do
-      {:ok, file} ->
-        File.close(file)
-        {:ok, path}
-
-      {:error, reason} ->
-        {:error, {:session_log, path, reason}}
-    end
+    with :ok <- File.mkdir_p(Path.dirname(path)), do: {:ok, path}
   end
 
   defp ephemeral_db_path do

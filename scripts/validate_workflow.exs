@@ -1,12 +1,16 @@
 # Independent real-provider cases; the effect oracle only measures results.
-# Usage: mise exec -- mix run scripts/validate_workflow.exs presets/cloud.toml [plain|staged]
+# Usage: mise exec -- mix run scripts/validate_workflow.exs presets/cloud.toml [plain|staged] [--db test/sessions.sqlite3]
 # Duration is a metric. Human escalation is a pending decision, not task failure.
 alias Omunculus.{Config, Dotenv, EventCore, Runtime}
 alias Omunculus.EventCore.Projector
 alias Omunculus.Runtime.Agents
 alias Omunculus.Event.Envelope
 Code.require_file("support/workflow_observer.exs", __DIR__)
-[preset | selected] = System.argv()
+{options, [preset | selected], []} = OptionParser.parse(System.argv(), strict: [db: :string])
+db = Path.expand(options[:db] || "test/sessions.sqlite3")
+File.mkdir_p!(Path.dirname(db))
+{:ok, core} = EventCore.start_link(path: db)
+{:ok, projector} = Projector.start_link(core: core)
 cases = if selected == [], do: ["plain", "staged"], else: selected
 true = Enum.all?(cases, &(&1 in ["plain", "staged"]))
 {:ok, file_env} = Dotenv.load(File.cwd!())
@@ -16,7 +20,7 @@ root =
   Path.join(System.tmp_dir!(), "omunculus-stages-" <> Base.encode16(:crypto.strong_rand_bytes(5)))
 
 File.mkdir_p!(root)
-IO.puts("Evidence: #{root}")
+IO.puts("Evidence: #{root}; database: #{db}")
 
 rows =
   for scenario <- cases do
@@ -44,12 +48,20 @@ rows =
     File.write!(overlay, File.read!(preset) <> "\n" <> workflow)
     {:ok, config} = Config.load(cwd: dir, config_file: overlay, env: env)
     {:ok, _} = Config.check(config)
-    {:ok, core} = EventCore.start_link(path: Path.join(dir, "session.sqlite3"))
-    {:ok, projector} = Projector.start_link(core: core)
+    session_id = Envelope.generate_id("session")
+
+    EventCore.append!(
+      core,
+      Envelope.command("session.created",
+        session_id: session_id,
+        payload: %{session_id: session_id, scenario: scenario, model: config.chat.model}
+      )
+    )
 
     {:ok, runtime} =
       Runtime.start_link(
         core: core,
+        session_id: session_id,
         max_depth: 1,
         agents: Agents.resolver(provider: "chat", env: env),
         config: [cwd: dir, config_file: overlay, profile: "count", env: env],
@@ -58,12 +70,13 @@ rows =
 
     started = System.monotonic_time(:millisecond)
 
-    :ok = EventCore.subscribe(core)
+    :ok = EventCore.subscribe(core, session_id: session_id)
 
     requested =
       EventCore.append!(
         core,
         Envelope.command("task.requested",
+          session_id: session_id,
           work_item_id: Envelope.generate_id("wi"),
           payload: %{
             instruction:
@@ -75,14 +88,17 @@ rows =
         )
       )
 
-    IO.puts("Started #{scenario}: #{requested.work_item_id}; waiting for protocol outcome")
+    IO.puts(
+      "Started #{scenario}: session=#{session_id}, root=#{requested.work_item_id}; waiting for protocol outcome"
+    )
+
     {outcome, terminal} = Omunculus.WorkflowObserver.await(requested.work_item_id)
     elapsed_ms = System.monotonic_time(:millisecond) - started
     EventCore.unsubscribe(core)
 
     GenServer.stop(runtime)
     Projector.sync(projector)
-    events = EventCore.stream(core, 0)
+    events = EventCore.stream(core, 0, session_id: session_id)
     starts = Enum.filter(events, &(&1.type == "run.started"))
 
     values =
@@ -112,6 +128,8 @@ rows =
     Projector.rebuild(projector)
 
     row = %{
+      session_id: session_id,
+      database: db,
       preset: Path.basename(preset),
       model: config.chat.model,
       staged: staged,
@@ -138,8 +156,9 @@ rows =
 
     File.write!(Path.join(dir, "result.json"), Jason.encode!(row, pretty: true))
     IO.puts(Jason.encode!(row))
-    for pid <- [projector, core], do: GenServer.stop(pid)
     row
   end
 
 File.write!(Path.join(root, "results.json"), Jason.encode!(rows, pretty: true))
+
+for pid <- [projector, core], do: GenServer.stop(pid)

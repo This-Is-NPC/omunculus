@@ -78,7 +78,11 @@ defmodule Omunculus.CLI.Spec do
           }
         ],
         flags: [
-          flag("db", long: "db", value: "file", help: "Retain this run in a new SQLite file"),
+          flag("db",
+            long: "db",
+            value: "file",
+            help: "Store this run as a new session in this SQLite database"
+          ),
           flag("preset",
             long: "preset",
             value: "preset",
@@ -310,7 +314,7 @@ defmodule Omunculus.CLI.Spec do
             metavar: "name",
             required: false,
             variadic: false,
-            help: "Session id for create (generated when omitted)"
+            help: "Session id: optional for create, required for replay"
           }
         ],
         flags: [

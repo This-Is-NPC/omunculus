@@ -87,11 +87,13 @@ defmodule Omunculus.Runtime do
   def init(opts) do
     core = Keyword.fetch!(opts, :core)
     {:ok, sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
-    :ok = EventCore.subscribe(core)
+    session_id = Keyword.get(opts, :session_id)
+    :ok = EventCore.subscribe(core, if(session_id, do: [session_id: session_id], else: []))
 
     state =
       %{
         core: core,
+        session_id: session_id,
         sup: sup,
         agents: Keyword.fetch!(opts, :agents),
         max_depth: Keyword.get(opts, :max_depth, 1),
@@ -111,6 +113,12 @@ defmodule Omunculus.Runtime do
     state = flush_pending_continuations(state)
 
     {:ok, Omunculus.Runtime.Workflow.advance(state)}
+  end
+
+  @doc false
+  def events(state, opts \\ []) do
+    opts = if state[:session_id], do: Keyword.put(opts, :session_id, state.session_id), else: opts
+    EventCore.stream(state.core, 0, opts)
   end
 
   @impl true
@@ -253,7 +261,7 @@ defmodule Omunculus.Runtime do
   end
 
   defp activate(%Envelope{type: "workspace.detached"} = env, state) do
-    fail_runs_in_workspace(state, env.payload["workspace_id"])
+    fail_runs_in_workspace(state, env.payload["workspace_id"], env.session_id)
   end
 
   defp activate(%Envelope{type: "run.started"} = env, state) do
@@ -274,6 +282,7 @@ defmodule Omunculus.Runtime do
         EventCore.append!(
           state.core,
           Envelope.command("permission.denied",
+            session_id: env.session_id,
             correlation_id: env.correlation_id,
             causation_id: env.event_id,
             work_item_id: env.work_item_id,
@@ -336,6 +345,10 @@ defmodule Omunculus.Runtime do
   @doc false
   def start_workflow_run(state, spec), do: start_run(state, spec)
 
+  defp start_run(%{session_id: id} = state, %{session_id: other})
+       when not is_nil(id) and id != other,
+       do: state
+
   defp start_run(state, spec) do
     original_config = state.config
     execution = task_execution(state.core, spec)
@@ -383,7 +396,7 @@ defmodule Omunculus.Runtime do
   end
 
   defp recover_unfinished(state) do
-    events = EventCore.stream(state.core, 0)
+    events = events(state)
     starts = Enum.filter(events, &(&1.type == "run.started"))
 
     for start <- starts,
@@ -469,6 +482,7 @@ defmodule Omunculus.Runtime do
       pid: pid,
       ref: ref,
       run_id: run_id,
+      session_id: spec.session_id,
       work_item_id: spec.work_item_id,
       correlation_id: spec.correlation_id,
       activation_id: spec.activation.event_id,
@@ -492,7 +506,7 @@ defmodule Omunculus.Runtime do
     workspace = Map.get(spec, :workspace) || spec.activation.payload["workspace"]
 
     roots =
-      case attached_workspace_row(state.core, workspace) do
+      case attached_workspace_row(state.core, workspace, spec.session_id) do
         {:ok, attached_roots, _} -> attached_roots
         :error -> Map.get(spec, :roots, [])
       end
@@ -530,7 +544,7 @@ defmodule Omunculus.Runtime do
          true <- Policy.fits_ceiling?(line_bands, ceiling),
          {:ok, narrow_bands} <- maybe_intersect_team_profile(loaded, spec, line_bands),
          {:ok, bands} <- maybe_narrow_tools(config, narrow_bands) do
-      roots = workspace_roots(state, workspace, loaded)
+      roots = workspace_roots(state, workspace, loaded, spec.session_id)
 
       spec =
         spec
@@ -580,7 +594,7 @@ defmodule Omunculus.Runtime do
   defp maybe_emit_policy_loaded(state, spec, hash, table) do
     last =
       state.core
-      |> EventCore.stream(0, type: "policy.loaded")
+      |> EventCore.stream(0, type: "policy.loaded", session_id: spec.session_id)
       |> List.last()
 
     if last && last.payload["hash"] == hash do
@@ -589,6 +603,7 @@ defmodule Omunculus.Runtime do
       EventCore.append!(
         state.core,
         Envelope.event("policy.loaded",
+          session_id: spec.session_id,
           correlation_id: spec.correlation_id,
           causation_id: spec.activation.event_id,
           payload: %{hash: hash, table: encode_policy_table(table)}
@@ -603,6 +618,7 @@ defmodule Omunculus.Runtime do
     EventCore.append!(
       state.core,
       Envelope.event("run.failed",
+        session_id: spec.session_id,
         correlation_id: spec.correlation_id,
         causation_id: spec.activation.event_id,
         work_item_id: spec.work_item_id,
@@ -742,7 +758,7 @@ defmodule Omunculus.Runtime do
   defp merge_config_tool_options(agent, loaded, spec, state) do
     workspaces =
       if spec.depth == 0 do
-        attached_workspaces_snapshot(state, loaded) || loaded.workspaces
+        attached_workspaces_snapshot(state, loaded, spec.session_id) || loaded.workspaces
       else
         loaded.workspaces
       end
@@ -861,6 +877,7 @@ defmodule Omunculus.Runtime do
     EventCore.append!(
       core,
       Envelope.event("run.failed",
+        session_id: run.session_id,
         correlation_id: run.correlation_id,
         causation_id: run.started_event_id || run.activation_id,
         work_item_id: run.work_item_id,
@@ -1071,11 +1088,11 @@ defmodule Omunculus.Runtime do
       |> Map.put("pending", new_pending)
 
     last_start =
-      EventCore.stream(state.core, 0, work_item_id: parent_wi, type: "run.started")
+      events(state, work_item_id: parent_wi, type: "run.started")
       |> List.last()
 
     attempt =
-      EventCore.stream(state.core, 0, work_item_id: parent_wi, type: "run.started")
+      events(state, work_item_id: parent_wi, type: "run.started")
       |> length()
       |> Kernel.+(1)
 
@@ -1269,25 +1286,11 @@ defmodule Omunculus.Runtime do
     end
   end
 
-  defp session_workspaces_query(core, session_id) do
-    case safe_event_core_query(core, "PRAGMA table_info(SESSION_WORKSPACES)", []) do
-      rows when is_list(rows) ->
-        columns = Enum.map(rows, fn row -> Enum.at(row, 1) end)
-
-        if "session_id" in columns do
-          {:ok,
-           "SELECT workspace_id FROM SESSION_WORKSPACES WHERE session_id = ? AND attached = 1 ORDER BY workspace_id",
-           [session_id]}
-        else
-          {:ok,
-           "SELECT workspace_id FROM SESSION_WORKSPACES WHERE attached = 1 ORDER BY workspace_id",
-           []}
-        end
-
-      _ ->
-        :error
-    end
-  end
+  defp session_workspaces_query(_core, session_id),
+    do:
+      {:ok,
+       "SELECT workspace_id FROM SESSION_WORKSPACES WHERE session_id = ? AND attached = 1 ORDER BY workspace_id",
+       [session_id]}
 
   defp safe_event_core_query(core, sql, args) do
     try do
@@ -1311,7 +1314,7 @@ defmodule Omunculus.Runtime do
   end
 
   defp node_id_from_last_start(state, spec) do
-    case EventCore.stream(state.core, 0, work_item_id: spec.work_item_id, type: "run.started")
+    case events(state, work_item_id: spec.work_item_id, type: "run.started")
          |> List.last() do
       %Envelope{payload: %{"node_id" => node_id}} when is_binary(node_id) -> node_id
       _ -> nil
@@ -1395,16 +1398,17 @@ defmodule Omunculus.Runtime do
       Enum.reduce(waiting_rows, %{}, fn [parent_wi, awaiting_json], acc ->
         with ids when is_list(ids) <- decode_awaiting(awaiting_json),
              %Envelope{payload: %{"outcome" => "waiting"}} = run_completed <-
-               EventCore.stream(state.core, 0, work_item_id: parent_wi, type: "run.completed")
+               events(state, work_item_id: parent_wi, type: "run.completed")
                |> List.last()
                |> waiting_report(),
+             true <- is_nil(state[:session_id]) or run_completed.session_id == state.session_id,
              checkpoint_awaiting <- run_completed.payload["checkpoint"]["awaiting"] || [] do
           Enum.reduce(ids, acc, fn child_id, inner ->
             child = to_string(child_id)
 
             if child in Enum.map(checkpoint_awaiting, &to_string/1) and
                  task_completed?(state.core, child) do
-              case EventCore.stream(state.core, 0, work_item_id: child, type: "task.completed")
+              case events(state, work_item_id: child, type: "task.completed")
                    |> List.last() do
                 %Envelope{} = env -> Map.update(inner, parent_wi, [env], &(&1 ++ [env]))
                 _ -> inner
@@ -1454,9 +1458,9 @@ defmodule Omunculus.Runtime do
     end
   end
 
-  defp fail_runs_in_workspace(state, workspace_id) when is_binary(workspace_id) do
+  defp fail_runs_in_workspace(state, workspace_id, session_id) when is_binary(workspace_id) do
     Enum.reduce(state.runs, state, fn {_run_id, run}, acc ->
-      if run.workspace_id == workspace_id do
+      if run.workspace_id == workspace_id and run.session_id == session_id do
         terminate_and_fail_run(acc, run, "detached")
       else
         acc
@@ -1464,7 +1468,7 @@ defmodule Omunculus.Runtime do
     end)
   end
 
-  defp fail_runs_in_workspace(state, _workspace_id), do: state
+  defp fail_runs_in_workspace(state, _workspace_id, _session_id), do: state
 
   defp terminate_and_fail_run(state, run, reason) do
     if Process.alive?(run.pid), do: DynamicSupervisor.terminate_child(state.sup, run.pid)
@@ -1480,6 +1484,7 @@ defmodule Omunculus.Runtime do
     EventCore.append!(
       core,
       Envelope.event("run.failed",
+        session_id: run.session_id,
         correlation_id: run.correlation_id,
         causation_id: run.started_event_id || run.activation_id,
         work_item_id: run.work_item_id,
@@ -1490,8 +1495,8 @@ defmodule Omunculus.Runtime do
     )
   end
 
-  defp workspace_roots(state, workspace, loaded) do
-    case attached_workspace_row(state.core, workspace) do
+  defp workspace_roots(state, workspace, loaded, session_id) do
+    case attached_workspace_row(state.core, workspace, session_id) do
       {:ok, roots, _teams} ->
         roots
 
@@ -1505,8 +1510,8 @@ defmodule Omunculus.Runtime do
     end
   end
 
-  defp attached_workspaces_snapshot(state, loaded) do
-    case attached_workspace_rows(state.core) do
+  defp attached_workspaces_snapshot(state, loaded, session_id) do
+    case attached_workspace_rows(state.core, session_id) do
       [] ->
         nil
 
@@ -1524,20 +1529,22 @@ defmodule Omunculus.Runtime do
     end
   end
 
-  defp attached_workspace_row(core, workspace_id) do
-    case Enum.find(attached_workspace_rows(core), fn {ws_id, _, _} -> ws_id == workspace_id end) do
+  defp attached_workspace_row(core, workspace_id, session_id) do
+    case Enum.find(attached_workspace_rows(core, session_id), fn {ws_id, _, _} ->
+           ws_id == workspace_id
+         end) do
       {_ws_id, roots, teams} -> {:ok, roots, teams}
       nil -> :error
     end
   end
 
-  defp attached_workspace_rows(core) do
+  defp attached_workspace_rows(core, session_id) do
     unless projection_table?(core, "SESSION_WORKSPACES"), do: []
 
     EventCore.query(
       core,
-      "SELECT workspace_id, roots, teams FROM SESSION_WORKSPACES WHERE attached = 1 ORDER BY workspace_id",
-      []
+      "SELECT workspace_id, roots, teams FROM SESSION_WORKSPACES WHERE session_id = ? AND attached = 1 ORDER BY workspace_id",
+      [session_id || ""]
     )
     |> Enum.flat_map(fn
       [ws_id, roots_json, teams_json] ->
@@ -1614,7 +1621,7 @@ defmodule Omunculus.Runtime do
 
     with parent_wi when is_binary(parent_wi) <- parent_work_item_id(state.core, child_wi),
          %Envelope{payload: parent_start} <-
-           EventCore.stream(state.core, 0, work_item_id: parent_wi, type: "run.started")
+           events(state, work_item_id: parent_wi, type: "run.started")
            |> List.last() do
       tool = perm_env.payload["tool"]
       reason = perm_env.payload["reason"]
@@ -1627,7 +1634,7 @@ defmodule Omunculus.Runtime do
       """
 
       attempt =
-        EventCore.stream(state.core, 0, work_item_id: parent_wi, type: "run.started")
+        events(state, work_item_id: parent_wi, type: "run.started")
         |> length()
         |> Kernel.+(1)
 
@@ -1688,7 +1695,7 @@ defmodule Omunculus.Runtime do
 
   defp reopen_permission_wait(state, resolution_env, work_item_id, request_id) do
     run_completed =
-      EventCore.stream(state.core, 0, work_item_id: work_item_id, type: "run.completed")
+      events(state, work_item_id: work_item_id, type: "run.completed")
       |> Enum.filter(&(Map.get(&1.payload, "outcome") == "waiting"))
       |> List.last()
 
@@ -1739,11 +1746,11 @@ defmodule Omunculus.Runtime do
         |> maybe_append_permission_observation(observation, await_key)
 
       last_start =
-        EventCore.stream(state.core, 0, work_item_id: work_item_id, type: "run.started")
+        events(state, work_item_id: work_item_id, type: "run.started")
         |> List.last()
 
       attempt =
-        EventCore.stream(state.core, 0, work_item_id: work_item_id, type: "run.started")
+        events(state, work_item_id: work_item_id, type: "run.started")
         |> length()
         |> Kernel.+(1)
 
@@ -1828,6 +1835,7 @@ defmodule Omunculus.Runtime do
 
       config ->
         RuntimePermission.open_permission_requests(state.core)
+        |> Enum.filter(&(&1.session_id == env.session_id))
         |> Enum.reduce(state, fn req_env, st ->
           tool = req_env.payload["tool"]
           workspace = req_env.payload["workspace"]
@@ -1842,6 +1850,7 @@ defmodule Omunculus.Runtime do
             EventCore.append!(
               st.core,
               Envelope.command("permission.granted",
+                session_id: req_env.session_id,
                 correlation_id: req_env.correlation_id,
                 causation_id: env.event_id,
                 work_item_id: req_env.work_item_id,
@@ -1892,7 +1901,7 @@ defmodule Omunculus.Runtime do
   defp route_request_work(state, env) do
     already_routed? =
       Enum.any?(
-        EventCore.stream(state.core, 0, type: "task.delegated"),
+        events(state, type: "task.delegated"),
         &(&1.payload["child_work_item_id"] == env.payload["child_work_item_id"])
       )
 
@@ -1917,7 +1926,7 @@ defmodule Omunculus.Runtime do
   end
 
   defp recover_cross_requests(state) do
-    events = EventCore.stream(state.core, 0)
+    events = events(state)
 
     Enum.reduce(events, state, fn req, acc ->
       if req.type == "task.requested" and Map.has_key?(req.payload, "requested_by") do
@@ -2082,7 +2091,7 @@ defmodule Omunculus.Runtime do
       instruction = cross_lineage_arbitration_instruction(env)
 
       attempt =
-        EventCore.stream(state.core, 0, work_item_id: lca_wi, type: "run.started")
+        events(state, work_item_id: lca_wi, type: "run.started")
         |> length()
         |> Kernel.+(1)
 
@@ -2199,11 +2208,11 @@ defmodule Omunculus.Runtime do
 
   defp reopen_requester_after_denial(state, causation_env, work_item_id, checkpoint) do
     last_start =
-      EventCore.stream(state.core, 0, work_item_id: work_item_id, type: "run.started")
+      events(state, work_item_id: work_item_id, type: "run.started")
       |> List.last()
 
     attempt =
-      EventCore.stream(state.core, 0, work_item_id: work_item_id, type: "run.started")
+      events(state, work_item_id: work_item_id, type: "run.started")
       |> length()
       |> Kernel.+(1)
 

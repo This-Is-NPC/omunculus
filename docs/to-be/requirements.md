@@ -55,7 +55,8 @@ partida implementado está em [AS-IS requirements](../as-is/requirements.md).
 ## Sessão e workspaces
 
 1. Session é agregado durável com `session_id` próprio, distinto de
-   `correlation_id`; um log por sessão.
+   `correlation_id`; o banco pode conter várias sessões, separadas por
+   `EVENTS.session_id`, com sequência global e replay filtrado pelo ID.
 2. Workspace é membro da sessão por `workspace.attached`/`detached` e
    identidade do Execution Node de depth 1; nodes de depth 0 e 1 têm
    identidade derivada e são reutilizados entre Runs.

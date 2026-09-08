@@ -8,8 +8,8 @@ defmodule Omunculus.Interceptors.WorkspaceGate do
   alias Omunculus.EventCore.Store
 
   @impl true
-  def intercept(%{type: "task.requested", payload: payload}, options) do
-    attached = attached_list(options)
+  def intercept(%{type: "task.requested", payload: payload} = env, options) do
+    attached = attached_list(options, env.session_id)
     workspace = payload["workspace"]
 
     with :ok <- check_deny_targets(workspace, options),
@@ -22,7 +22,7 @@ defmodule Omunculus.Interceptors.WorkspaceGate do
 
   @impl true
   def intercept(%{type: "task.delegated", payload: payload} = env, options) do
-    attached = attached_list(options)
+    attached = attached_list(options, env.session_id)
     workspace = payload["workspace"] || env.workspace_id
 
     with :ok <- check_deny_targets(workspace, options),
@@ -35,19 +35,23 @@ defmodule Omunculus.Interceptors.WorkspaceGate do
 
   def intercept(_envelope, _options), do: :deliver
 
-  defp attached_list(options) do
+  defp attached_list(options, session_id) do
     conn = fetch_opt(options, :conn)
 
     if conn do
       rows =
-        Store.query(conn, """
-        SELECT type, payload FROM EVENTS
-        WHERE type IN ('workspace.attached', 'workspace.detached') ORDER BY sequence
-        """)
+        Store.query(
+          conn,
+          """
+          SELECT type, payload FROM EVENTS
+          WHERE session_id IS ? AND type IN ('workspace.attached', 'workspace.detached') ORDER BY sequence
+          """,
+          [session_id]
+        )
 
       if rows == [] do
-        case normalize_attached(fetch_opt(options, :attached)) do
-          [] -> :unrestricted
+        case if(session_id, do: [], else: normalize_attached(fetch_opt(options, :attached))) do
+          [] -> if(session_id, do: [], else: :unrestricted)
           attached -> attached
         end
       else

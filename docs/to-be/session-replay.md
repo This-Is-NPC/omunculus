@@ -1,4 +1,4 @@
-Status: implementado — validado com 319 testes e smoke com Qwen local; detalhes em [validação](../spike/session-replay-validation.md).
+Status: implementado — banco compartilhado e seleção obrigatória por session_id; detalhes em [validação](../spike/shared-session-validation.md).
 
 # Histórico de sessão na mesma UI do run
 
@@ -43,21 +43,27 @@ Portanto, apenas conectar o banco ao Reporter atual não satisfaz o objetivo.
 ## Comando e comportamento
 
 ```sh
-omunculus session replay --db ./session.sqlite3
-omunculus session replay
-omunculus session replay --db ./session.sqlite3 > historico.txt
+omunculus session replay <session_id> --db ./session.sqlite3
+omunculus session replay <session_id>
+omunculus session replay <session_id> --db ./session.sqlite3 > historico.txt
 ```
 
 Usar a resolução de caminho existente: `--db`, `--session` (caminho),
 `OMUNCULUS_SESSION` e banco padrão `~/.omunculus/session.sqlite3`, respeitando
 as precedências atuais. Não adicionar busca por ID nem catálogo de arquivos.
-O `session_id` é exibido como identidade, não interpretado como caminho.
-Um banco representa uma sessão; logs de testes sem `session.created` são
-identificados pelo caminho e mostram “session_id não registrado”.
+O `session_id` é o argumento obrigatório que seleciona a sessão no banco. Sem ID,
+retornar erro de uso; ID desconhecido retorna erro de leitura, sem imprimir dados
+de outras sessões. `session list --db arquivo.sqlite3` lista todos os IDs registrados,
+em ordem de criação. Não escolher implicitamente a primeira ou a última sessão.
+
+Um banco contém várias sessões. Cada teste cria um evento `session.created` com
+o mesmo ID no envelope e no payload; todos os seus eventos carregam esse ID.
+O replay filtra por `EVENTS.session_id`, preservando a sequência global original.
+Não agrupar por Run nem reconstruir a sessão por semelhança de instruções.
 
 O comando lê todo o prefixo disponível na abertura, em `sequence` crescente,
 imprime imediatamente e termina. Não espera a duração histórica nem acompanha
-novos eventos. O limite superior de sequência é fixado em um snapshot de leitura
+novos eventos. O limite superior de sequência da sessão selecionada é fixado em um snapshot de leitura
 SQLite consistente, inclusive quando outra execução está escrevendo em WAL.
 Não copiar apenas o arquivo principal e perder eventos ainda no WAL.
 
@@ -163,12 +169,12 @@ Para analisar posteriormente uma execução de `run`, oferecer retenção explí
 
 ```sh
 omunculus run ./projeto "instrução" --db ./execucao.sqlite3
-omunculus session replay --db ./execucao.sqlite3
+omunculus session replay <session_id> --db ./execucao.sqlite3
 ```
 
-Nesse modo, criar um banco novo, preservar o log inclusive em falha e informar o
-caminho. Recusar destino existente para não misturar sessões. Sem `--db`, manter
-a sessão efêmera já definida. Sessões duráveis de `send` continuam usando seu banco.
+Nesse modo, acrescentar uma sessão nova ao banco, preservá-la inclusive em falha
+e informar o ID e o caminho. Um arquivo existente é reutilizado sem sobrescrever
+ou misturar sessões. Sem `--db`, manter a sessão efêmera já definida. Sessões duráveis de `send` continuam usando seu banco.
 Não introduzir registry, política de rotação ou serviço de replay.
 
 ## Plano de implementação
@@ -204,7 +210,7 @@ A primeira versão deve resolver leitura integral e revisão da UI sem essas cam
   ferramenta, automação, leitura de inbox com marcação ou rebuild ocorre.
 - Redirecionamento captura prompts, respostas, erros e conteúdo extenso completos,
   sem ANSI ou truncamento silencioso. Timestamps e durações vêm do registro.
-- `run --db` preserva a sessão e a UI; destino existente é recusado. Replay de
+- `run --db` preserva a sessão e a UI; duas execuções no mesmo banco geram IDs distintos. Replay de
   arquivo inexistente não cria banco. Help e exit codes seguem o contrato acima.
 
 Testes determinísticos com provider fake e captura de IO verificam equivalência,
@@ -213,7 +219,7 @@ novo para revisão manual da UI, sem usar duração como critério de sucesso da
 
 ## Implementação entregue
 
-`session replay --db` abre SQLite somente leitura, fixa o snapshot e percorre
+`session replay <session_id> --db` abre SQLite somente leitura, fixa o snapshot da sessão e percorre
 o log em lotes de 256 envelopes. Usa `CLI.Reporter`, os mesmos componentes de
 cabeçalho, rodadas, ferramentas e tabela usados pelo `run`. O detalhe completo
 dos envelopes acompanha esses componentes; o estado visual é separado por Run.
@@ -231,10 +237,35 @@ tentativas mesmo quando um provider reutiliza IDs. Falhas não registram novos
 valores de contador. `control_tools` em `run.started` pina as ferramentas de
 permissão/arbitragem para preservar sua autorização ao passarem pelo ToolGate.
 
-`run --db` conserva o banco e recusa arquivo existente. O cliente efêmero retorna
+`run --db` conserva o banco e cria uma sessão nova mesmo quando o arquivo já existe. O cliente efêmero retorna
 quando a raiz solicita avaliação humana, preservando o registro nesse modo;
 a API de espera usada por sessões residentes mantém a espera pela resposta humana.
 
-Históricos anteriores mostram somente os dados realmente registrados. Uma resposta
-não capturada aparece como “not recorded”; checkpoints não são convertidos em
-eventos retrospectivos. Não houve migração nem implementação de formatos antigos.
+Sessões são selecionadas por identidade registrada. Não atribuir IDs retroativos
+a logs sem `session.created`/`session_id`, nem copiar automaticamente bancos antigos.
+Não há migração ou leitor de formatos antigos nesta entrega.
+
+## Isolamento entre sessões no banco
+
+O banco é a unidade de armazenamento; a sessão é a unidade de execução/contexto.
+`EVENTS` tem índice `(session_id, sequence)`. `Runtime` aceita `session_id` para
+restringir assinatura, recuperação, avaliações pendentes e continuações. Os testes
+reais usam esse escopo explicitamente para cada cenário. Um runtime administrativo
+sem esse escopo continua podendo atender várias sessões do mesmo banco.
+
+Workspaces são projetados por `(session_id, workspace_id)`: attach/detach em uma
+sessão não altera o workspace homônimo de outra. Descoberta, roots e consulta de
+policy.loaded respeitam a sessão. Decisões e falhas preservam a identidade no envelope.
+
+Os scripts `validate_workflow.exs`, `validate_real_matrix.exs` e
+`validate_parent_review.exs` gravam campanhas em `test/sessions.sqlite3`
+por padrão; `--db` seleciona outro banco. Cada cenário gera um ID e o imprime junto
+do Work Item raiz. Resultados JSON incluem `session_id` e `database`; métricas e
+observação são restritas à sessão. Os diretórios temporários guardam configurações
+e relatórios, não um banco separado por cenário.
+
+```sh
+mise exec -- mix run scripts/validate_workflow.exs presets/cloud.toml --db test/sessions.sqlite3
+omunculus session list --db test/sessions.sqlite3
+omunculus session replay <session_id> --db test/sessions.sqlite3
+```

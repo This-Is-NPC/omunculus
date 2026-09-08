@@ -5,13 +5,20 @@ defmodule Omunculus.CLI.Replay do
   alias Omunculus.Event.Envelope
   alias Omunculus.CLI.{Reporter, Session}
 
-  def run(flags) do
+  def run(session_id, flags) do
     {:ok, path} = Session.db_path(flags)
 
-    case read(path, fn event -> Reporter.event(Process.get(:replay_reporter), event) end, fn ->
-           {:ok, pid} = Reporter.start_link(io: :stdio, mode: "Replay", path: path)
-           Process.put(:replay_reporter, pid)
-         end) do
+    case read(
+           path,
+           session_id,
+           fn event -> Reporter.event(Process.get(:replay_reporter), event) end,
+           fn ->
+             {:ok, pid} =
+               Reporter.start_link(io: :stdio, mode: "Replay", path: path, session_id: session_id)
+
+             Process.put(:replay_reporter, pid)
+           end
+         ) do
       :ok ->
         0
 
@@ -23,13 +30,27 @@ defmodule Omunculus.CLI.Replay do
     if pid = Process.delete(:replay_reporter), do: Reporter.finish(pid)
   end
 
-  def read(path, consume, on_open \\ fn -> :ok end) do
+  def read(path, session_id, consume, on_open \\ fn -> :ok end) do
     with {:ok, conn} <- Sqlite3.open(path, mode: :readonly) do
       try do
         Store.exec!(conn, "BEGIN")
-        [[limit]] = Store.query(conn, "SELECT COALESCE(MAX(sequence), 0) FROM EVENTS")
+
+        unless Store.one(
+                 conn,
+                 "SELECT 1 FROM EVENTS WHERE session_id = ? AND type = 'session.created' LIMIT 1",
+                 [session_id]
+               ),
+               do: raise("unknown session: #{session_id}")
+
+        [[limit]] =
+          Store.query(
+            conn,
+            "SELECT COALESCE(MAX(sequence), 0) FROM EVENTS WHERE session_id = ?",
+            [session_id]
+          )
+
         on_open.()
-        stream(conn, 0, limit, consume)
+        stream(conn, session_id, 0, limit, consume)
       rescue
         error -> {:error, Exception.message(error)}
       after
@@ -38,14 +59,14 @@ defmodule Omunculus.CLI.Replay do
     end
   end
 
-  defp stream(conn, cursor, limit, consume) do
+  defp stream(conn, session_id, cursor, limit, consume) do
     columns = Enum.join(Envelope.columns(), ",")
 
     rows =
       Store.query(
         conn,
-        "SELECT #{columns} FROM EVENTS WHERE sequence > ? AND sequence <= ? ORDER BY sequence LIMIT 256",
-        [cursor, limit]
+        "SELECT #{columns} FROM EVENTS WHERE session_id = ? AND sequence > ? AND sequence <= ? ORDER BY sequence LIMIT 256",
+        [session_id, cursor, limit]
       )
 
     events = Enum.map(rows, &Envelope.from_row/1)
@@ -59,7 +80,7 @@ defmodule Omunculus.CLI.Replay do
 
     case List.last(events) do
       nil -> :ok
-      event -> stream(conn, event.sequence, limit, consume)
+      event -> stream(conn, session_id, event.sequence, limit, consume)
     end
   end
 end

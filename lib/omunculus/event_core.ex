@@ -297,6 +297,7 @@ defmodule Omunculus.EventCore do
   defp stream_query(after_seq, opts) do
     {where, args} =
       Enum.reduce(opts, {["sequence > ?"], [after_seq]}, fn
+        {:session_id, id}, {w, a} -> {w ++ ["session_id IS ?"], a ++ [id]}
         {:correlation_id, id}, {w, a} -> {w ++ ["correlation_id = ?"], a ++ [id]}
         {:work_item_id, id}, {w, a} -> {w ++ ["work_item_id = ?"], a ++ [id]}
         {:run_id, id}, {w, a} -> {w ++ ["run_id = ?"], a ++ [id]}
@@ -438,6 +439,7 @@ defmodule Omunculus.EventCore do
 
   defp matches?(filter, env) do
     Enum.all?(filter, fn
+      {:session_id, id} -> env.session_id == id
       {:correlation_id, id} -> env.correlation_id == id
       {:work_item_id, id} -> env.work_item_id == id
       _ -> true

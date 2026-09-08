@@ -44,6 +44,15 @@ defmodule Omunculus.CLI.SendTest do
         File.rm_rf!(tmp.dir)
       end)
 
+      capture_io(fn ->
+        assert Omunculus.CLI.dispatch(["session", "create", "send-test", "--db", db], %{}) == 0
+
+        assert Omunculus.CLI.dispatch(
+                 ["workspace", "attach", "app", "--db", db, "--config", tmp.path],
+                 %{}
+               ) == 0
+      end)
+
       output =
         capture_io(fn ->
           assert Omunculus.CLI.dispatch(

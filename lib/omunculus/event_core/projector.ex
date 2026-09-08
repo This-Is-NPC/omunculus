@@ -455,9 +455,9 @@ defmodule Omunculus.EventCore.Projector do
     Store.query(
       conn,
       """
-      INSERT INTO SESSION_WORKSPACES (workspace_id, roots, teams, attached, attached_at, last_sequence)
-      VALUES (?, ?, ?, 1, ?, ?)
-      ON CONFLICT(workspace_id) DO UPDATE SET
+      INSERT INTO SESSION_WORKSPACES (session_id, workspace_id, roots, teams, attached, attached_at, last_sequence)
+      VALUES (?, ?, ?, ?, 1, ?, ?)
+      ON CONFLICT(session_id, workspace_id) DO UPDATE SET
         roots = excluded.roots,
         teams = excluded.teams,
         attached = 1,
@@ -466,6 +466,7 @@ defmodule Omunculus.EventCore.Projector do
       WHERE last_sequence < excluded.last_sequence
       """,
       [
+        env.session_id || "",
         workspace_id,
         Jason.encode!(p["roots"] || []),
         Jason.encode!(p["teams"] || []),
@@ -480,8 +481,8 @@ defmodule Omunculus.EventCore.Projector do
 
     Store.query(
       conn,
-      "UPDATE SESSION_WORKSPACES SET attached = 0, last_sequence = ? WHERE workspace_id = ? AND last_sequence < ?",
-      [env.sequence, workspace_id, env.sequence]
+      "UPDATE SESSION_WORKSPACES SET attached = 0, last_sequence = ? WHERE session_id = ? AND workspace_id = ? AND last_sequence < ?",
+      [env.sequence, env.session_id || "", workspace_id, env.sequence]
     )
   end
 

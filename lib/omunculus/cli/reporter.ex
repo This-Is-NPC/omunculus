@@ -65,6 +65,7 @@ defmodule Omunculus.CLI.Reporter do
   defp session_init(opts) do
     state = %{
       session?: true,
+      session_id: opts[:session_id],
       io: opts[:io] || :stderr,
       json_events?: opts[:json_events?] || false,
       core: opts[:core],
@@ -73,7 +74,7 @@ defmodule Omunculus.CLI.Reporter do
       timestamp_format: opts[:timestamp_format] || "%Y-%m-%dT%H:%M:%S.%fZ"
     }
 
-    if state.core, do: Omunculus.EventCore.subscribe(state.core)
+    if state.core, do: Omunculus.EventCore.subscribe(state.core, session_filter(state))
 
     unless state.json_events?,
       do: line(state, divider("┌── #{opts[:mode] || "Live"} · #{opts[:path] || "session"} "))
@@ -88,7 +89,7 @@ defmodule Omunculus.CLI.Reporter do
     state =
       if envelope.sequence > state.sequence do
         Enum.reduce(
-          Omunculus.EventCore.stream(state.core, state.sequence),
+          Omunculus.EventCore.stream(state.core, state.sequence, session_filter(state)),
           state,
           &session_event(&2, &1)
         )
@@ -118,7 +119,7 @@ defmodule Omunculus.CLI.Reporter do
         Omunculus.EventCore.unsubscribe(state.core)
 
         Enum.reduce(
-          Omunculus.EventCore.stream(state.core, state.sequence),
+          Omunculus.EventCore.stream(state.core, state.sequence, session_filter(state)),
           state,
           &session_event(&2, &1)
         )
@@ -316,6 +317,9 @@ defmodule Omunculus.CLI.Reporter do
     table(state, Map.put(event, :outcome, :failed))
     {:stop, :normal, :ok, state}
   end
+
+  defp session_filter(%{session_id: nil}), do: []
+  defp session_filter(%{session_id: id}), do: [session_id: id]
 
   defp session_event(state, %{sequence: seq}) when seq <= state.sequence, do: state
 

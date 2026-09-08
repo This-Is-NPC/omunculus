@@ -1,16 +1,27 @@
 # Run with: mise exec -- mix run scripts/validate_real_matrix.exs --preset presets/cloud.toml
 # Optional: --rounds 3 --base complex --task count --timeout 300000
-# Every workspace, database and output is isolated under a new /tmp directory.
-alias Omunculus.{Config, Dotenv, EventCore, SessionExecutor}
+# Workspaces and reports are isolated; sessions share test/sessions.sqlite3 (override with --db).
+alias Omunculus.{Config, Dotenv, EventCore, Runtime}
+alias Omunculus.Runtime.Agents
+alias Omunculus.Event.Envelope
 alias Omunculus.EventCore.Projector
 
 {opts, _, invalid} =
   OptionParser.parse(System.argv(),
-    strict: [preset: :string, rounds: :integer, base: :string, task: :string, timeout: :integer]
+    strict: [
+      db: :string,
+      preset: :string,
+      rounds: :integer,
+      base: :string,
+      task: :string,
+      timeout: :integer
+    ]
   )
 
 if invalid != [], do: raise("invalid matrix options")
 preset = Path.expand(opts[:preset] || "presets/local.toml")
+db = Path.expand(opts[:db] || "test/sessions.sqlite3")
+File.mkdir_p!(Path.dirname(db))
 rounds = opts[:rounds] || 1
 timeout = opts[:timeout] || 180_000
 bases = if opts[:base], do: [opts[:base]], else: ["simple", "medium", "complex"]
@@ -47,24 +58,39 @@ results =
     File.write!(overlay, body)
     {:ok, config} = Config.load(cwd: dir, config_file: overlay, env: env)
     for {_, ws} <- config.workspaces, path <- ws.roots, do: File.mkdir_p!(path)
-    db = Path.join(dir, "session.sqlite3")
+    {:ok, checked} = Config.check(config)
+    {:ok, core} = EventCore.start_link(path: db, interceptors: checked.interceptors)
+    {:ok, projector} = Projector.start_link(core: core)
+    session = Envelope.generate_id("session")
 
-    {:ok, owner} =
-      SessionExecutor.ensure_started(
-        db: db,
-        cwd: dir,
-        config_file: overlay,
-        provider: "chat",
-        env: env
+    EventCore.append!(
+      core,
+      Envelope.command("session.created",
+        session_id: session,
+        payload: %{
+          session_id: session,
+          scenario: "matrix",
+          base: base,
+          task: task,
+          lane: lane,
+          round: round,
+          model: config.chat.model
+        }
+      )
+    )
+
+    depth = config.policy |> Map.keys() |> Enum.map(&String.to_integer/1) |> Enum.max(fn -> 0 end)
+
+    {:ok, runtime} =
+      Runtime.start_link(
+        core: core,
+        session_id: session,
+        max_depth: depth,
+        agents: Agents.resolver(provider: "chat", env: env),
+        config: [cwd: dir, config_file: overlay, env: env]
       )
 
-    core = SessionExecutor.core(owner)
-
-    session =
-      EventCore.stream(core, 0, type: "session.created")
-      |> hd()
-      |> Map.get(:payload)
-      |> Map.fetch!("session_id")
+    IO.puts("Session: #{session}; database: #{db}")
 
     for {name, ws} <- config.workspaces do
       EventCore.append!(
@@ -75,6 +101,14 @@ results =
         )
       )
     end
+
+    EventCore.configure_interceptors(
+      core,
+      Omunculus.CLI.Session.execution_interceptors(core, checked, config)
+    )
+
+    {:ok, automations} =
+      Omunculus.Automations.start_link(core: core, automations: checked.automations)
 
     instruction = if task == "count", do: "conte até 10", else: "escrever um README"
     profile = if task == "count", do: "count", else: "coding"
@@ -89,8 +123,6 @@ results =
       )
 
     settle = fn recur, remaining ->
-      runtime = :sys.get_state(owner).runtime
-
       if is_pid(runtime) do
         if Omunculus.Runtime.runs(runtime) != %{} and remaining > 0 do
           Process.sleep(10)
@@ -101,7 +133,7 @@ results =
 
     settle.(settle, 100)
     Projector.sync_core(core)
-    events = EventCore.stream(core, 0)
+    events = EventCore.stream(core, 0, session_id: session)
 
     tools =
       Enum.filter(
@@ -118,9 +150,9 @@ results =
 
     expected = if task == "count", do: 10, else: true
     success = match?({:ok, _}, result) and actual == expected
-    runtime_idle = Omunculus.Runtime.runs(:sys.get_state(owner).runtime) == %{}
+    runtime_idle = Omunculus.Runtime.runs(runtime) == %{}
     snapshot = Projector.snapshot(core)
-    Projector.rebuild(:sys.get_state(owner).projector)
+    Projector.rebuild(projector)
     replay_equal = snapshot == Projector.snapshot(core)
 
     starts = Enum.filter(events, &(&1.type == "run.started"))
@@ -163,6 +195,7 @@ results =
       |> Enum.map(& &1.payload["outcome"])
 
     row = %{
+      session_id: session,
       base: base,
       task: task,
       lane: lane,
@@ -197,7 +230,7 @@ results =
 
     File.write!(Path.join(root, "results.ndjson"), Jason.encode!(row) <> "\n", [:append])
     IO.puts(Jason.encode!(row))
-    SessionExecutor.stop(owner)
+    for pid <- [runtime, automations, projector, core], do: GenServer.stop(pid)
     row
   end
 
