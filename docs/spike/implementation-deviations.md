@@ -48,3 +48,5 @@ não se afirma confiabilidade de ponta a ponta nem conclusão integral de
 todo o TO-BE com base nesses testes.
 
 Reavaliação posterior: [DeepSeek após as correções](deepseek-after-corrections.md).
+
+Reavaliação local: [Qwen após as correções](local-after-corrections.md).
