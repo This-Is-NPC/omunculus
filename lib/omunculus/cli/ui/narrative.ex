@@ -31,13 +31,19 @@ defmodule Omunculus.CLI.UI.Narrative do
         else: []
 
     lines =
-      if e.type in ["run.completed", "run.failed"] do
-        {body, closing} =
-          Enum.split_while(lines, &(not Regex.match?(~r/^│ .* END · Run |^└──/u, &1)))
+      cond do
+        lines == [] and detail != [] ->
+          open_block("Technical event", state.width, detail) ++
+            close_block("Recorded", state.width, [])
 
-        body ++ detail ++ if(detail == [], do: [], else: ["│"]) ++ closing
-      else
-        lines ++ detail
+        Enum.any?(lines, &String.starts_with?(&1, "└──")) ->
+          {body, closing} =
+            Enum.split_while(lines, &(not Regex.match?(~r/^│ .* END · Run |^└──/u, &1)))
+
+          body ++ detail ++ if(detail == [], do: [], else: ["│"]) ++ closing
+
+        true ->
+          lines ++ detail
       end
 
     # All strings are wrapped before printing, including identifiers and comments.
@@ -61,16 +67,13 @@ defmodule Omunculus.CLI.UI.Narrative do
       )
 
     {s,
-     [""] ++
-       boundary("┌── Run started ", s.width) ++
-       [
-         "│ #{n} START · #{actor}",
-         "│ Agent: #{p["agent_id"] || "not recorded"}",
-         "│ Model: #{p["model"] || "not recorded"} · Tools: #{length(get_in(p, ["tools", "granted"]) || [])} · Max rounds: #{p["max_turns"] || "not recorded"}",
-         "│ Stage: #{p["stage"] || "not recorded"} · Reason: #{p["reason"] || "not recorded"} · Work Item #{work}",
-         "│ Objective: #{i.instruction || "not recorded"}",
-         "│"
-       ]}
+     open_block("Run started", s.width, [
+       "│ #{n} START · #{actor}",
+       "│ Agent: #{p["agent_id"] || "not recorded"}",
+       "│ Model: #{p["model"] || "not recorded"} · Tools: #{length(get_in(p, ["tools", "granted"]) || [])} · Max rounds: #{p["max_turns"] || "not recorded"}",
+       "│ Stage: #{p["stage"] || "not recorded"} · Reason: #{p["reason"] || "not recorded"} · Work Item #{work}",
+       "│ Objective: #{i.instruction || "not recorded"}"
+     ])}
   end
 
   defp present(type, i, s, actor, _work, _) when type in ["run.completed", "run.failed"] do
@@ -87,11 +90,13 @@ defmodule Omunculus.CLI.UI.Narrative do
       end
 
     {s,
-     ["│"] ++
+     close_block(
+       label,
+       s.width,
        if(p["comment"], do: ["│ Comment · #{actor}:"] ++ note(p["comment"]), else: []) ++
-       note(p["reason"]) ++
-       ["│", "│ #{n} END · #{actor} · #{p["outcome"] || "failed"}"] ++
-       boundary("└── #{label} ", s.width) ++ [""]}
+         note(p["reason"]) ++
+         ["│", "│ #{n} END · #{actor} · #{p["outcome"] || "failed"}"]
+     )}
   end
 
   defp present(type, i, s, actor, _work, _)
@@ -105,7 +110,13 @@ defmodule Omunculus.CLI.UI.Narrative do
 
     {s, n} = begin_action(s, i.event.event_id, "#{actor} · #{action}")
     args = if type == "tool.call.requested", do: arguments(p["args"]), else: []
-    {s, ["├─○ #{n} START · #{actor} · #{action}"] ++ args}
+
+    {s,
+     open_block(
+       "#{if type == "model.call.requested", do: "Model", else: "Tool"} started",
+       s.width,
+       ["│ #{n} START · #{actor} · #{action}"] ++ args
+     )}
   end
 
   defp present(type, i, s, actor, _work, _)
@@ -113,7 +124,6 @@ defmodule Omunculus.CLI.UI.Narrative do
     p = i.event.payload
     {s, n} = end_action(s, i.event.causation_id || p["call_id"])
     failed = type == "model.call.failed" or p["outcome"] == "error"
-    marker = if failed, do: "×", else: "●"
 
     action =
       if type == "tool.call.completed",
@@ -129,9 +139,18 @@ defmodule Omunculus.CLI.UI.Narrative do
         true -> note(get_in(p, ["response", "content"]))
       end
 
+    label =
+      if failed,
+        do: "Failed",
+        else: if(p["outcome"] == "waiting", do: "Waiting", else: "Completed")
+
     {s,
-     ["├─#{marker} #{n} END · #{actor} · #{action} · #{outcome} · #{p["duration_ms"] || "?"} ms"] ++
-       content}
+     close_block(
+       label,
+       s.width,
+       ["│ #{n} END · #{actor} · #{action} · #{outcome} · #{p["duration_ms"] || "?"} ms"] ++
+         content
+     )}
   end
 
   defp present("task.requested", i, s, _actor, work, _) do
@@ -149,12 +168,22 @@ defmodule Omunculus.CLI.UI.Narrative do
   defp present("task.assessment_requested", i, s, _, work, _) do
     {s, reviewer} = identity(s, :work, i.event.payload["reviewer"])
     {s, n} = begin_action(s, i.event.event_id, "Assessment of Work Item #{work}")
-    {s, ["├─○ #{n} START · Assessment of Work Item #{work} · Responsible: Work Item #{reviewer}"]}
+
+    {s,
+     open_block("Assessment started", s.width, [
+       "│ #{n} START · Assessment of Work Item #{work} · Responsible: Work Item #{reviewer}"
+     ])}
   end
 
   defp present("task.assessment_resolved", i, s, _, work, _) do
     {s, n} = end_action(s, i.event.payload["request_id"])
-    {s, ["├─● #{n} END · Assessment of Work Item #{work}"] ++ note(i.event.payload["comment"])}
+
+    {s,
+     close_block(
+       "Assessment resolved",
+       s.width,
+       ["│ #{n} END · Assessment of Work Item #{work}"] ++ note(i.event.payload["comment"])
+     )}
   end
 
   defp present("task.advanced", i, s, _, work, _) do
@@ -238,7 +267,16 @@ defmodule Omunculus.CLI.UI.Narrative do
   end
 
   defp instant(s, title, content),
-    do: {%{s | next: s.next + 1}, ["├─● #{s.next + 1} DONE · #{title}"] ++ content}
+    do:
+      {%{s | next: s.next + 1},
+       open_block("Recorded event", s.width, ["│ #{s.next + 1} DONE · #{title}"] ++ content) ++
+         close_block("Recorded", s.width, [])}
+
+  defp open_block(title, width, content),
+    do: [""] ++ boundary("┌── #{title} ", width) ++ content ++ ["│"]
+
+  defp close_block(title, width, content),
+    do: ["│"] ++ content ++ boundary("└── #{title} ", width) ++ [""]
 
   defp arguments(args) when is_map(args),
     do: args |> Enum.sort() |> Enum.flat_map(fn {k, v} -> note("#{k}: #{value(v)}") end)

@@ -101,7 +101,24 @@ defmodule Omunculus.CLI.UI.Summary do
     ]
   end
 
-  def render(s, runs, width) do
+  def render(s, runs, width, framed \\ false)
+
+  def render(s, runs, width, true) do
+    body = render(s, runs, width - 2, false) |> Enum.drop(2)
+
+    [
+      "",
+      "┌── Session summary " <>
+        String.duplicate("─", max(width - Text.cells("┌── Session summary "), 1))
+    ] ++
+      Enum.map(body, &("│ " <> &1)) ++
+      [
+        "└── Summary end " <>
+          String.duplicate("─", max(width - Text.cells("└── Summary end "), 1))
+      ]
+  end
+
+  def render(s, runs, width, false) do
     # An open table uses horizontal rules only, including in blocks.
     left = min(34, max(div(width - 3, 2), 1))
     right = max(width - left - 3, 1)

@@ -144,7 +144,12 @@ defmodule Omunculus.CLI.UI do
     {%{state | layout: layout},
      lines ++
        Enum.flat_map(open, &__MODULE__.Text.lines(&1, state.width)) ++
-       __MODULE__.Summary.render(state.summary, state.runs, state.width)}
+       __MODULE__.Summary.render(
+         state.summary,
+         state.runs,
+         state.width,
+         state.module == __MODULE__.Narrative
+       )}
   end
 
   defp normal(%{type: "run.started"} = e) do

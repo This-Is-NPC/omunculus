@@ -151,7 +151,12 @@ defmodule Omunculus.CLI.UITest do
         assert Enum.any?(lines, &String.starts_with?(&1, "      nested"))
       else
         assert Enum.all?(lines, &String.starts_with?(&1, if(name == "tree", do: "│  ", else: "")))
-        assert Enum.all?(tl(lines), &String.contains?(&1, "│"))
+
+        assert Enum.all?(
+                 tl(lines),
+                 &(&1 == "" or String.contains?(&1, "│") or String.starts_with?(&1, "┌──") or
+                     String.starts_with?(&1, "└──"))
+               )
 
         assert Enum.any?(
                  lines,
@@ -201,10 +206,11 @@ defmodule Omunculus.CLI.UITest do
       for ui <- Map.keys(UI.layouts()), detail <- ["normal", "full"] do
         output = render(events, ui, detail)
         assert length(String.split(output, "Session summary")) == 2
-        List.last(String.split(output, "Session summary"))
+        {ui, List.last(String.split(output, "Session summary"))}
       end
 
-    assert length(Enum.uniq(outputs)) == 1
+    for {_ui, variants} <- Enum.group_by(outputs, &elem(&1, 0), &elem(&1, 1)),
+        do: assert(length(Enum.uniq(variants)) == 1)
   end
 
   test "narrative pairs concurrent actions by recorded causation, preserving order" do
@@ -271,7 +277,12 @@ defmodule Omunculus.CLI.UITest do
         |> Enum.filter(&(String.starts_with?(&1, "┌──") or String.starts_with?(&1, "└──")))
 
       assert Enum.count(markers, &String.starts_with?(&1, "┌── Run started")) == 3
-      assert Enum.count(markers, &String.starts_with?(&1, "└──")) == 2
+
+      assert Enum.count(
+               markers,
+               &(String.starts_with?(&1, "└──") and not String.starts_with?(&1, "└── Summary"))
+             ) == 2
+
       assert Enum.all?(markers, &(String.ends_with?(&1, "─────") and String.length(&1) == 100))
       {comment, _} = :binary.match(output, "handoff")
       {closing, _} = :binary.match(output, "└── Waiting")
@@ -283,6 +294,33 @@ defmodule Omunculus.CLI.UITest do
         {technical, _} = :binary.match(output, "Technical event #2")
         assert technical < closing
       end
+    end
+  end
+
+  test "narrative frames task completion and assessment comments before their footers" do
+    events = [
+      event(1, "task.assessment_requested", nil, %{"reviewer" => "parent"}),
+      event(2, "task.completed", nil, %{"comment" => "completion evidence"}),
+      event(3, "task.assessment_resolved", nil, %{
+        "request_id" => "event-1",
+        "comment" => "assessment evidence"
+      })
+    ]
+
+    for detail <- ["normal", "full"] do
+      output = render(events, "narrative", detail)
+      assert output =~ "┌── Assessment started ─"
+      assert output =~ "┌── Recorded event ─"
+      assert output =~ "└── Recorded ─"
+      assert output =~ "└── Assessment resolved ─"
+      assert output =~ "┌── Session summary ─"
+      assert output =~ "└── Summary end ─"
+      refute output =~ "├─●"
+      {completion, _} = :binary.match(output, "completion evidence")
+      {done, _} = :binary.match(output, "└── Recorded")
+      {assessment, _} = :binary.match(output, "assessment evidence")
+      {resolved, _} = :binary.match(output, "└── Assessment resolved")
+      assert completion < done and done < assessment and assessment < resolved
     end
   end
 

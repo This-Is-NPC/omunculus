@@ -86,3 +86,12 @@ o resultado registrado. O número da ação e a referência da Run ficam dentro
 do bloco, nas linhas START/END. As faixas ocupam a largura disponível. Comentários,
 erros e detalhe técnico aparecem antes da faixa END. EOF sem evento de fechamento
 permanece OPEN: não se inventa um END para uma Run sem encerramento registrado.
+
+O mesmo acabamento vale para todas as ações da narrative: Runs, modelos,
+ferramentas e avaliações abrem com `┌── … ───` e fecham com `└── … ───`.
+Eventos atômicos (incluindo conclusão de Work Item e avanço de etapa) usam um
+bloco `Recorded event`/`Recorded`, contendo o título DONE e o comentário.
+Isso delimita a apresentação do fato registrado, sem criar eventos de execução.
+O detalhe técnico fica dentro do bloco, antes de seu fechamento. A tabela final
+de analytics também recebe uma moldura na narrative; os outros layouts mantêm
+a apresentação existente da tabela.
