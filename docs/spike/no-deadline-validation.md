@@ -48,11 +48,7 @@ Evidências locais:
 - Cloud: `/tmp/omunculus-stages-4C326589F6`
 - Local: `/tmp/omunculus-stages-CF84CDE8E3`
 
-Este registro documenta o início da campanha, não seus resultados finais.
-Na última inspeção feita ao redigir este documento, ambos os casos `plain`
-continuavam abertos. O cloud tinha repetido delegações após aprovar filhos;
-o local estava avaliando uma entrega após retry. Os processos não foram
-interrompidos para produzir este registro. Cada caso escreve `result.json`
-ao observar conclusão ou intervenção humana; o banco preserva os eventos
-durante a execução. Ausência desse resultado não deve ser convertida em
-falha por duração.
+Os quatro casos encerraram a observação pelo protocolo. O cloud sem fluxo
+concluiu a raiz com efeitos incorretos; os outros três chegaram à intervenção
+humana. Não houve corte por duração. Resultados e análise em
+[causas observadas](no-deadline-causes.md) e [dados](no-deadline-results.json).
