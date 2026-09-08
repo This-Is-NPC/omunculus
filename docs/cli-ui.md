@@ -16,9 +16,10 @@ comum, edite `CLI.UI`. Para adicionar uma opção:
 ```elixir
 defmodule Omunculus.CLI.UI.Compact do
   @behaviour Omunculus.CLI.UI
-  def init(ctx), do: {nil, ["#{ctx.mode} · #{ctx.path}"]}
-  def event(item, state) do
-    {state, [item.title] ++ item.lines}
+  alias Omunculus.CLI.UI.Text
+  def init(ctx), do: {ctx.width, Text.lines("#{ctx.mode} · #{ctx.path}", ctx.width)}
+  def event(item, width) do
+    {width, Enum.flat_map([item.title | item.lines], &Text.lines(&1, width))}
   end
   def finish(state), do: {state, []}
 end
@@ -27,12 +28,15 @@ end
 `item` contém `kind` (`:start`, `:event`, `:end`), `title`, `lines`, `run_id`,
 `work_item_id`, `depth`, `sequence` e `timestamp`. As linhas de conteúdo já
 respeitam `--detail` e escapam caracteres de controle. O estado do layout pode
-ser `nil`, como em timeline/tree, ou um mapa, como em blocks. Não é necessário
+guardar a largura recebida em `ctx.width`, como em timeline/tree, ou um mapa,
+como em blocks. Use `UI.Text.lines(texto, largura, prefixo, prefixo_de_continuação)`
+para quebrar texto preservando o recuo e as linhas verticais. A largura vem do
+terminal; saídas redirecionadas usam 100 colunas. Não é necessário
 alterar Reporter, leitor de replay ou Runtime para adicionar uma UI.
 
 Os layouts são progressivos e cronológicos. `tree` indenta pelo depth registrado
 e mostra os vínculos explícitos, sem reordenar Runs concorrentes. `blocks`
-marca a retomada da exibição; isso não significa retomar a execução de uma Run.
+usa apenas separadores horizontais e marca a retomada da exibição; isso não significa retomar a execução de uma Run.
 `run.completed` fecha visualmente uma Run, nunca aprova implicitamente uma tarefa.
 
 Teste com `mise exec -- mix test test/omunculus/cli/ui_test.exs`. Os testes percorrem

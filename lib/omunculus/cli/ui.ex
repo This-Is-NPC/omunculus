@@ -31,9 +31,13 @@ defmodule Omunculus.CLI.UI do
 
   def init(opts) do
     module = Map.fetch!(layouts(), opts[:ui] || "blocks")
-    {layout, lines} = module.init(%{mode: opts[:mode] || "Live", path: opts[:path] || "session"})
+    width = opts[:width] || __MODULE__.Text.columns(opts[:io] || :stderr)
+
+    {layout, lines} =
+      module.init(%{mode: opts[:mode] || "Live", path: opts[:path] || "session", width: width})
 
     {%{
+       width: width,
        module: module,
        layout: layout,
        runs: %{},
@@ -129,9 +133,10 @@ defmodule Omunculus.CLI.UI do
     open =
       for {id, run} <- Enum.sort(state.runs),
           not run.closed?,
-          do: "└── Run #{safe(id)}: no closure recorded in this history"
+          do: "Run #{safe(id)}: no closure recorded in this history"
 
-    {%{state | layout: layout}, lines ++ open}
+    {%{state | layout: layout},
+     lines ++ Enum.flat_map(open, &__MODULE__.Text.lines(&1, state.width))}
   end
 
   defp normal(%{type: "run.started"} = e) do
@@ -152,7 +157,7 @@ defmodule Omunculus.CLI.UI do
       case response do
         %{} ->
           text =
-            if response["content"], do: ["Response: " <> encode(response["content"])], else: []
+            if response["content"], do: fields("Response", response["content"]), else: []
 
           calls =
             for call <- response["tool_calls"] || [],
@@ -197,7 +202,10 @@ defmodule Omunculus.CLI.UI do
        |> Enum.map(&("  " <> &1)))
   end
 
-  defp fields(key, value), do: ["#{key}: #{encode(value)}"]
+  defp fields(key, value) do
+    [first | rest] = String.split(encode(value), "\n")
+    ["#{key}: #{first}" | Enum.map(rest, &(String.duplicate(" ", String.length(key) + 2) <> &1))]
+  end
 
   defp encode(v) when is_binary(v), do: v
   defp encode(v), do: Jason.encode!(v)

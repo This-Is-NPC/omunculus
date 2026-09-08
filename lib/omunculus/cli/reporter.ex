@@ -132,7 +132,7 @@ defmodule Omunculus.CLI.Reporter do
       {_ui, lines} = Omunculus.CLI.UI.finish(state.ui)
       Enum.each(lines, &line(state, &1))
 
-      line(state, "└── End of history · sequence #{state.sequence}")
+      line(state, "End of history · sequence #{state.sequence}")
     end
 
     {:stop, :normal, :ok, state}

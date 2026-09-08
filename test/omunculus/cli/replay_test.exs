@@ -226,8 +226,9 @@ defmodule Omunculus.CLI.ReplayTest do
     Reporter.event(reporter, unknown)
     Reporter.finish(reporter)
     output = elem(StringIO.contents(io), 1)
-    assert output =~ large
-    assert length(String.split(output, large)) == 2
+    unwrapped = output |> String.split("\n") |> Enum.map(&String.trim_leading/1) |> Enum.join()
+    assert unwrapped =~ large
+    assert length(String.split(unwrapped, large)) == 2
     assert output =~ "Run parent: no closure recorded"
     refute output =~ "Run child: no closure recorded"
     assert output =~ "custom.observation"

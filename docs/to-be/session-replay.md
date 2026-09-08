@@ -279,7 +279,8 @@ omunculus session replay <session_id> --db test/sessions.sqlite3
 2 antes de abrir o banco ou iniciar execução. `run --json-events` conserva NDJSON
 como saída de máquina e tem precedência sobre a apresentação visual.
 
-- `blocks`: abertura e fechamento explícitos, conteúdo dentro do bloco e marcador
+- `blocks`: abertura e fechamento explícitos, separadores horizontais sem borda
+  vertical, conteúdo indentado e marcador
   de retomada visual quando eventos de outra Run intercalam a exibição.
 - `timeline`: timestamp e sequência originais, com Run identificada em cada evento.
 - `tree`: fluxo cronológico indentado pelo depth registrado; cabeçalhos mostram
@@ -292,3 +293,7 @@ Um fim `reported` ou `waiting` descreve a Run; aprovação e avanço de tarefa
 continuam sendo eventos próprios. EOF sem fechamento não implica processo vivo.
 
 Para adicionar uma UI, ver [guia de layouts](../cli-ui.md).
+
+As UIs quebram texto na largura do terminal antes da impressão, repetindo o
+recuo e, em timeline/tree, a borda esquerda nas continuações. Saída redirecionada
+usa 100 colunas. As quebras não descartam conteúdo, inclusive em `full`.

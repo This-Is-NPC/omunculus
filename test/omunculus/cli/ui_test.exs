@@ -102,6 +102,49 @@ defmodule Omunculus.CLI.UITest do
     end
   end
 
+  test "wrapped text preserves content and indentation including wide characters" do
+    alias Omunculus.CLI.UI.Text
+    content = "ação " <> String.duplicate("界🙂é", 20) <> " final"
+    lines = Text.lines("    " <> content, 32, "│  ")
+    assert Enum.all?(lines, &(Text.cells(&1) <= 32))
+    assert Enum.all?(lines, &String.starts_with?(&1, "│      "))
+    assert Enum.map_join(lines, &String.replace_prefix(&1, "│      ", "")) == content
+
+    assert Text.lines("  first\n    second\n", 32, "│  ") == [
+             "│    first",
+             "│      second",
+             "│  "
+           ]
+  end
+
+  test "narrow layouts retain their left edge and blocks have only horizontal separators" do
+    item = %{
+      kind: :event,
+      title: String.duplicate("long title ", 12),
+      run_id: "child",
+      depth: 1,
+      timestamp: "2026-09-08T12:00:00Z",
+      sequence: 1,
+      lines: ["    " <> String.duplicate("nested content ", 20), "    second line"]
+    }
+
+    for {name, module} <- UI.layouts() do
+      {state, _} = module.init(%{mode: "Replay", path: "session", width: 40})
+      {_, lines} = module.event(item, state)
+      assert Enum.all?(lines, &(Omunculus.CLI.UI.Text.cells(&1) <= 40))
+
+      if name == "blocks" do
+        refute Enum.join(lines) =~ ~r/[│├└┌]/u
+        assert String.duplicate("─", 40) in lines
+        assert Enum.any?(lines, &String.starts_with?(&1, "      nested"))
+      else
+        assert Enum.all?(lines, &String.starts_with?(&1, if(name == "tree", do: "│  ", else: "")))
+        assert Enum.all?(tl(lines), &String.contains?(&1, "│"))
+        assert Enum.any?(lines, &String.contains?(&1, "│      nested"))
+      end
+    end
+  end
+
   defp event(seq, type, run, payload),
     do: %Envelope{
       event_id: "event-#{seq}",

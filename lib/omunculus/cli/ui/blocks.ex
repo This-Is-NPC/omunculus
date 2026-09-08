@@ -1,27 +1,27 @@
 defmodule Omunculus.CLI.UI.Blocks do
   @behaviour Omunculus.CLI.UI
+  alias Omunculus.CLI.UI.Text
   @impl true
-  def init(ctx), do: {%{current: nil}, ["┌── #{ctx.mode} · #{ctx.path} · blocks"]}
+  def init(ctx),
+    do:
+      {%{current: nil, width: ctx.width},
+       Text.lines("#{ctx.mode} · #{ctx.path} · blocks", ctx.width)}
+
   @impl true
   def event(item, state) do
     resume =
       if item.run_id && state.current != item.run_id && item.kind != :start,
-        do: ["", "↳ RUN #{item.run_id} · continuing display"],
+        do: Text.lines("↳ RUN #{item.run_id} · continuing display", state.width),
         else: []
 
-    prefix =
-      case item.kind do
-        :start -> "┌── "
-        :end -> "└── "
-        _ -> "├── "
-      end
-
-    lines = resume ++ [prefix <> item.title] ++ Enum.map(item.lines, &("│   " <> &1))
+    title = Text.lines(item.title, state.width)
+    content = Enum.flat_map(item.lines, &Text.lines(&1, state.width, "  "))
+    separator = String.duplicate("─", state.width)
 
     lines =
       if item.kind == :end,
-        do: resume ++ Enum.map(item.lines, &("│   " <> &1)) ++ [prefix <> item.title, ""],
-        else: lines
+        do: resume ++ content ++ [separator] ++ title ++ [""],
+        else: [separator] ++ resume ++ title ++ content
 
     {%{state | current: item.run_id}, lines}
   end
