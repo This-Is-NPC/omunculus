@@ -43,3 +43,16 @@ Teste com `mise exec -- mix test test/omunculus/cli/ui_test.exs`. Os testes perc
 os layouts registrados e comparam live/replay usando os mesmos eventos.
 Para revisar o resultado manualmente, reconstrua com `mise exec -- mix escript.build`
 e compare uma sessão gravada usando `session replay ID --db ARQUIVO --ui NOME`.
+
+## Resumo da sessão
+
+`UI.Summary` acumula analytics dos envelopes e desenha uma única tabela ao final,
+independente do layout e de `--detail`. Novas UIs recebem esse resumo automaticamente.
+A tabela usa apenas regras horizontais e quebra as células na largura disponível.
+
+Tokens, custo e tempo de modelo são somados somente nos resultados das chamadas,
+nunca em checkpoints ou totais de Run. Valores ausentes não viram zero; cobertura
+incompleta é marcada como parcial. O intervalo registrado vai do primeiro ao último
+evento do histórico lido: não é o tempo de replay nem um critério de sucesso.
+Tempos de chamadas são somas e podem sobrepor-se quando há concorrência.
+Runs encerradas, Runs falhas/abertas e Work Items concluídos têm métricas separadas.

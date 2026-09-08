@@ -145,6 +145,49 @@ defmodule Omunculus.CLI.UITest do
     end
   end
 
+  test "session analytics count recorded effects once and flag incomplete usage" do
+    alias Omunculus.CLI.UI.Summary
+
+    events = [
+      event(1, "run.started", "r", %{"depth" => 2, "model" => "test-model"}),
+      event(2, "model.call.requested", "r", %{}),
+      event(3, "model.call.completed", "r", %{
+        "usage" => %{"prompt_tokens" => 7, "completion_tokens" => 3, "total_tokens" => 10},
+        "duration_ms" => 50
+      }),
+      event(4, "model.call.requested", "r", %{}),
+      event(5, "model.call.failed", "r", %{"duration_ms" => 20}),
+      event(6, "tool.call.requested", "r", %{}),
+      event(7, "tool.call.completed", "r", %{"outcome" => "waiting", "duration_ms" => 4}),
+      event(8, "run.completed", "r", %{
+        "outcome" => "waiting",
+        "usage" => %{"total_tokens" => 999},
+        "checkpoint" => %{"usage" => %{"total_tokens" => 999}}
+      })
+    ]
+
+    summary = Enum.reduce(events, Summary.new(), fn e, s -> Summary.event(s, e) end)
+    rows = Map.new(Summary.rows(summary, %{"r" => %{closed?: true}}))
+    assert rows["Total tokens"] == "10 (partial: 1/2)"
+    assert rows["Model time sum (ms)"] == "70"
+    assert rows["Reported cost (provider units)"] == "not recorded"
+    assert rows["Work Items created / completed"] == "0 / 0"
+    assert rows["Tools completed / waiting / error"] == "0 / 1 / 0"
+    assert rows["Model calls completed / failed"] == "1 / 1"
+    assert rows["Maximum depth"] == 2
+    assert rows["Events"] == 8
+    assert Enum.all?(Summary.render(summary, %{}, 40), &(Omunculus.CLI.UI.Text.cells(&1) <= 40))
+
+    outputs =
+      for ui <- Map.keys(UI.layouts()), detail <- ["normal", "full"] do
+        output = render(events, ui, detail)
+        assert length(String.split(output, "Session summary")) == 2
+        List.last(String.split(output, "Session summary"))
+      end
+
+    assert length(Enum.uniq(outputs)) == 1
+  end
+
   defp event(seq, type, run, payload),
     do: %Envelope{
       event_id: "event-#{seq}",

@@ -297,3 +297,9 @@ Para adicionar uma UI, ver [guia de layouts](../cli-ui.md).
 As UIs quebram texto na largura do terminal antes da impressão, repetindo o
 recuo e, em timeline/tree, a borda esquerda nas continuações. Saída redirecionada
 usa 100 colunas. As quebras não descartam conteúdo, inclusive em `full`.
+
+Todas as UIs terminam com a mesma tabela de analytics da sessão: intervalo
+registrado, Runs, profundidade, Work Items, delegações, avaliações, avanços/breaks,
+chamadas de modelo/ferramentas, tokens, custo registrado e tempos acumulados.
+A tabela é calculada apenas do prefixo lido, com valores ausentes/parciais explícitos,
+e segue as regras de [agregação compartilhada](../cli-ui.md#resumo-da-sessão).

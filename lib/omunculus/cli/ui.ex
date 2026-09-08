@@ -37,6 +37,7 @@ defmodule Omunculus.CLI.UI do
       module.init(%{mode: opts[:mode] || "Live", path: opts[:path] || "session", width: width})
 
     {%{
+       summary: __MODULE__.Summary.new(),
        width: width,
        module: module,
        layout: layout,
@@ -47,6 +48,7 @@ defmodule Omunculus.CLI.UI do
   end
 
   def event(env, state) do
+    state = %{state | summary: __MODULE__.Summary.event(state.summary, env)}
     p = env.payload
 
     work_items =
@@ -136,7 +138,9 @@ defmodule Omunculus.CLI.UI do
           do: "Run #{safe(id)}: no closure recorded in this history"
 
     {%{state | layout: layout},
-     lines ++ Enum.flat_map(open, &__MODULE__.Text.lines(&1, state.width))}
+     lines ++
+       Enum.flat_map(open, &__MODULE__.Text.lines(&1, state.width)) ++
+       __MODULE__.Summary.render(state.summary, state.runs, state.width)}
   end
 
   defp normal(%{type: "run.started"} = e) do
