@@ -1,12 +1,18 @@
 # Independent real-provider cases; the effect oracle only measures results.
-# Usage: mise exec -- mix run scripts/validate_workflow.exs presets/cloud.toml [plain|staged] [--db test/sessions.sqlite3]
+# Usage: mise exec -- mix run scripts/validate_workflow.exs presets/cloud.toml [plain|staged] [--db test/sessions.sqlite3] [--depth 1|2] [--repeats 1]
 # Duration is a metric. Human escalation is a pending decision, not task failure.
 alias Omunculus.{Config, Dotenv, EventCore, Runtime}
 alias Omunculus.EventCore.Projector
 alias Omunculus.Runtime.Agents
 alias Omunculus.Event.Envelope
 Code.require_file("support/workflow_observer.exs", __DIR__)
-{options, [preset | selected], []} = OptionParser.parse(System.argv(), strict: [db: :string])
+
+{options, [preset | selected], []} =
+  OptionParser.parse(System.argv(), strict: [db: :string, depth: :integer, repeats: :integer])
+
+depth = options[:depth] || 1
+repeats = options[:repeats] || 1
+true = depth in [1, 2] and repeats > 0
 db = Path.expand(options[:db] || "test/sessions.sqlite3")
 File.mkdir_p!(Path.dirname(db))
 {:ok, core} = EventCore.start_link(path: db)
@@ -23,11 +29,24 @@ File.mkdir_p!(root)
 IO.puts("Evidence: #{root}; database: #{db}")
 
 rows =
-  for scenario <- cases do
+  for repetition <- 1..repeats, scenario <- cases do
     staged = scenario == "staged"
-    dir = Path.join(root, if(staged, do: "staged", else: "plain"))
+    dir = Path.join(root, "#{repetition}-#{scenario}")
     File.mkdir_p!(dir)
-    File.cp!("test/fixtures/config/medium.toml", Path.join(dir, "omunculus.toml"))
+    base = File.read!("test/fixtures/config/medium.toml")
+
+    base =
+      if depth == 2 do
+        String.replace(
+          base,
+          "[policy.depth.1]\nmode = \"allow\"\ndeny = [\"delegate\"]",
+          "[policy.depth.1]\nmode = \"deny\"\ngranted = [\"delegate\"]\n\n[policy.depth.2]\nmode = \"allow\"\ndeny = [\"delegate\"]"
+        )
+      else
+        base
+      end
+
+    File.write!(Path.join(dir, "omunculus.toml"), base)
     overlay = Path.join(dir, "provider.toml")
 
     workflow =
@@ -54,7 +73,13 @@ rows =
       core,
       Envelope.command("session.created",
         session_id: session_id,
-        payload: %{session_id: session_id, scenario: scenario, model: config.chat.model}
+        payload: %{
+          session_id: session_id,
+          scenario: scenario,
+          repetition: repetition,
+          required_depth: depth,
+          model: config.chat.model
+        }
       )
     )
 
@@ -62,7 +87,7 @@ rows =
       Runtime.start_link(
         core: core,
         session_id: session_id,
-        max_depth: 1,
+        max_depth: depth,
         agents: Agents.resolver(provider: "chat", env: env),
         config: [cwd: dir, config_file: overlay, profile: "count", env: env],
         run_opts: [fs: Omunculus.FS.Memory.new()]
@@ -80,7 +105,7 @@ rows =
           work_item_id: Envelope.generate_id("wi"),
           payload: %{
             instruction:
-              "Delegate to a worker: increment counter exactly three times, reaching 3. Review actual returned values before approving. Report the final value and evidence.",
+              "Delegate through #{depth} level(s), with only the final worker executing counter: increment counter exactly three times, reaching 3. Every parent must review actual returned values before approving. Report the final value and evidence.",
             depth: 0,
             execution: %{},
             workspace: "app"
@@ -124,8 +149,66 @@ rows =
              get_in(cause.payload, ["assessment", "target"]) == event.work_item_id)
       end)
 
+    starts_by_id = Map.new(starts, &{&1.run_id, &1})
+    finishes = Enum.filter(events, &(&1.type in ["run.completed", "run.failed"]))
+    closed_runs = MapSet.new(finishes, & &1.run_id)
+
+    productive =
+      Enum.filter(
+        events,
+        &(&1.type == "tool.call.completed" and &1.payload["tool"] == "counter" and
+            &1.payload["outcome"] == "completed")
+      )
+
+    effect_owners = Enum.uniq(Enum.map(productive, & &1.work_item_id))
+
+    effect_depths =
+      Enum.uniq(Enum.map(productive, fn e -> starts_by_id[e.run_id].payload["depth"] end))
+
+    lineage_valid =
+      Enum.all?(starts, fn e ->
+        parent = starts_by_id[e.payload["parent_run_id"]]
+
+        e.payload["depth"] == 0 or
+          (parent != nil and parent.payload["depth"] == e.payload["depth"] - 1)
+      end)
+
+    tools_recorded = Enum.all?(starts, &is_list(&1.payload["available_tools"]))
+
+    schemas_match =
+      Enum.all?(starts, fn e ->
+        call = Enum.find(events, &(&1.type == "model.call.requested" and &1.run_id == e.run_id))
+
+        is_nil(call) or
+          Enum.sort(e.payload["available_tools"]) ==
+            Enum.sort(Enum.map(call.payload["schemas"], &get_in(&1, ["function", "name"])))
+      end)
+
+    all_runs_closed = Enum.all?(starts, &MapSet.member?(closed_runs, &1.run_id))
+    topology_valid = length(effect_owners) == 1 and effect_depths == [depth] and lineage_valid
     before = Projector.snapshot(core)
     Projector.rebuild(projector)
+
+    delegations = Enum.filter(events, &(&1.type == "task.delegated"))
+
+    handoffs_valid =
+      Enum.all?(delegations, fn event ->
+        match?({:ok, _}, Omunculus.WorkItem.handoff(event.payload)) and
+          Enum.any?(
+            starts,
+            &(&1.work_item_id == event.payload["child_work_item_id"] and
+                &1.payload["work_item"] == event.payload["work_item"])
+          )
+      end)
+
+    recoveries = Enum.filter(events, &(&1.type == "task.recovery_used"))
+
+    recovery_bounded =
+      recoveries
+      |> Enum.group_by(&{&1.work_item_id, get_in(&1.payload, ["recovery", "stage"])})
+      |> Enum.all?(fn {_, reservations} ->
+        length(reservations) <= hd(reservations).payload["recovery"]["max_retries"]
+      end)
 
     row = %{
       session_id: session_id,
@@ -133,9 +216,22 @@ rows =
       preset: Path.basename(preset),
       model: config.chat.model,
       staged: staged,
+      repetition: repetition,
+      required_depth: depth,
       protocol_outcome: outcome,
       root_completed: outcome == :completed,
-      task_success: outcome == :completed and values == [1, 2, 3],
+      task_success: outcome == :completed and values == [1, 2, 3] and topology_valid,
+      handoffs_valid: handoffs_valid,
+      recovery_bounded: recovery_bounded,
+      recoveries: length(recoveries),
+      lineage_valid: lineage_valid,
+      topology_valid: topology_valid,
+      effect_owners: effect_owners,
+      effect_depths: effect_depths,
+      tools_recorded: tools_recorded,
+      schemas_match: schemas_match,
+      all_runs_closed: all_runs_closed,
+      model_calls: Enum.count(events, &(&1.type == "model.call.completed")),
       effect_success: values == [1, 2, 3],
       result: terminal.payload["result"],
       terminal_event_id: terminal.event_id,

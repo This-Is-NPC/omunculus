@@ -1,0 +1,86 @@
+{
+  "controlled_tests": {
+    "tests": 344,
+    "failures": 0
+  },
+  "real_smoke": {
+    "protocol_outcome": "completed",
+    "effect_owners": [
+      "wi-8cd1a6bf4e326e75"
+    ],
+    "staged": false,
+    "task_success": true,
+    "breaks": 0,
+    "root_completed": true,
+    "advances": 0,
+    "reasons": {
+      "assessment": 1,
+      "continuation": 1,
+      "initial": 2
+    },
+    "approvals_checked": 2,
+    "model_calls": 7,
+    "result": "Delegation through 1 level completed and verified. The final executing worker used only the counter tool, making exactly three calls, one per increment with no skips or duplicates. Actual returned values: call 1 -> 1, call 2 -> 2, call 3 -> 3, final value reaching the target of 3. Evidence confirms counter state calls=3, value=3 and no other tools were used. All criteria met; approving this stage.",
+    "runs": 4,
+    "elapsed_ms": 25159,
+    "required_depth": 1,
+    "repetition": 1,
+    "preset": "cloud.toml",
+    "terminal_event_id": "evt-9faba656a5f2d28c",
+    "recoveries": 0,
+    "schemas_match": true,
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "lineage_valid": true,
+    "handoffs_valid": true,
+    "effect_depths": [
+      1
+    ],
+    "database": "/home/howl/Projects/omacon/omunculus/test/sessions.sqlite3",
+    "session_id": "session-b7541452ffee3a9b",
+    "completed_items": 2,
+    "recovery_bounded": true,
+    "effect_success": true,
+    "tools_recorded": true,
+    "counter_values": [
+      1,
+      2,
+      3
+    ],
+    "topology_valid": true,
+    "replay_equal": false,
+    "failures": 0,
+    "all_runs_closed": true,
+    "approvals_valid": true,
+    "assessments": 1,
+    "human_request": null
+  },
+  "replay_after_archiving_incompatible_sessions": {
+    "archived_sessions": [
+      "session-04392407956921d2",
+      "session-0541a05861863d24",
+      "session-0e35e4b1a1697bfd",
+      "session-1c4f5f71b342db46",
+      "session-1d23c769287d793f",
+      "session-3941d2d2a5c90894",
+      "session-3971ac59ae1ab2b4",
+      "session-41ac4c54b3a743f7",
+      "session-43586d8c7100cb93",
+      "session-45b6e1cbd0276396",
+      "session-5cfa7bd752f32733",
+      "session-69057a732b7f07c2",
+      "session-8e07ddd8c7e164e6",
+      "session-a124de550c7edceb",
+      "session-d4fe8c6f17ed7969",
+      "session-eb78345f1f7039b2",
+      "session-f8599e04da2f288d",
+      "session-fc4ad42d8dc88c9b"
+    ],
+    "active_session": "session-b7541452ffee3a9b",
+    "active_events": 41,
+    "replay_equal": true,
+    "events_preserved": true
+  },
+  "historical_archive": "test/archive/pre-work-item-handoff.sqlite3",
+  "archive_sha256": "fea67a88ad400a21ddeb1f6153c6b01ee2dc996e11c54dd2cf693fa42ed77a03",
+  "limitation": "One DeepSeek plain depth-1 smoke; Qwen and the full scenario matrix have not been rerun after this fix."
+}
