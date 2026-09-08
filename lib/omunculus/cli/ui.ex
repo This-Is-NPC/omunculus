@@ -13,13 +13,14 @@ defmodule Omunculus.CLI.UI do
     do: %{
       "blocks" => __MODULE__.Blocks,
       "timeline" => __MODULE__.Timeline,
-      "tree" => __MODULE__.Tree
+      "tree" => __MODULE__.Tree,
+      "narrative" => __MODULE__.Narrative
     }
 
   def validate(flags) do
     cond do
       not Map.has_key?(layouts(), flags["ui"] || "blocks") ->
-        {:error, "--ui must be blocks, timeline or tree"}
+        {:error, "--ui must be blocks, timeline, tree or narrative"}
 
       (flags["detail"] || "normal") not in ["normal", "full"] ->
         {:error, "--detail must be normal or full"}
@@ -115,6 +116,9 @@ defmodule Omunculus.CLI.UI do
       end
 
     item = %{
+      event: env,
+      detail: state.detail,
+      instruction: work.instruction,
       kind: kind,
       title: title,
       run_id: if(env.run_id, do: safe(env.run_id)),

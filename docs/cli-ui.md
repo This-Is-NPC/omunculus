@@ -56,3 +56,26 @@ incompleta é marcada como parcial. O intervalo registrado vai do primeiro ao ú
 evento do histórico lido: não é o tempo de replay nem um critério de sucesso.
 Tempos de chamadas são somas e podem sobrepor-se quando há concorrência.
 Runs encerradas, Runs falhas/abertas e Work Items concluídos têm métricas separadas.
+
+## View narrative
+
+`--ui narrative` retoma a hierarquia visual do Reporter original, inspecionado no
+commit `9266877`: cabeçalho de Run, rodada aguardando resposta, ferramenta e fim.
+Funciona tanto no `run` quanto no replay, sem alterar o padrão `blocks`.
+
+Cada ação recebe um número no START e repete esse número no END; eventos atômicos
+recebem DONE. Isso indica o registro do evento, não aprovação automática da tarefa.
+Runs e Work Items têm referências curtas estáveis. As chamadas são associadas por
+identidade/causação registrada, não pelo nome da ferramenta ou por texto semelhante.
+As linhas continuam na ordem do log, mesmo quando duas Runs se intercalam.
+
+O modo normal destaca solicitações, delegações, chamadas, comentários finais,
+avaliações, avanços e conclusões. Respostas brutas do modelo e bookkeeping ficam
+em `full`; eventos desconhecidos e rejeições continuam visíveis no modo normal.
+Uma ação sem resultado registrado fica OPEN no fim do histórico. Uma resposta sem
+início registrado é identificada explicitamente, sem fabricar um início.
+
+O item compartilhado agora também fornece `event` (envelope registrado), `detail`
+e `instruction` (instrução registrada do Work Item). Layouts como narrative podem
+usar os campos estruturados para nomear ações, mantendo toda execução fora da UI.
+O resumo de analytics continua sendo gerado uma única vez pelo componente comum.

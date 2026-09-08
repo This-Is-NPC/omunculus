@@ -81,7 +81,7 @@ defmodule Omunculus.CLI.Spec do
           flag("ui",
             long: "ui",
             value: "layout",
-            help: "Presentation: blocks (default), timeline or tree"
+            help: "Presentation: blocks (default), timeline, tree or narrative"
           ),
           flag("detail",
             long: "detail",
@@ -331,7 +331,7 @@ defmodule Omunculus.CLI.Spec do
           flag("ui",
             long: "ui",
             value: "layout",
-            help: "Presentation: blocks (default), timeline or tree"
+            help: "Presentation: blocks (default), timeline, tree or narrative"
           ),
           flag("detail",
             long: "detail",

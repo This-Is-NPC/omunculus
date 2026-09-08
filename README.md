@@ -122,3 +122,13 @@ Veja o [contrato de replay](docs/to-be/session-replay.md) e a
 `blocks` é o padrão. `--detail normal` mantém o foco nas Runs, respostas e ferramentas;
 `--detail full` mostra todos os envelopes, incluindo prompts e checkpoints.
 Os mesmos layouts atendem execução e replay. [Como criar uma UI](docs/cli-ui.md).
+
+Para acompanhar início e fim de cada ação com referências curtas:
+
+```sh
+./omunculus session replay <session_id> --db test/sessions.sqlite3 --ui narrative
+```
+
+O mesmo número liga START a END. DONE marca um evento atômico registrado.
+A tabela compartilhada de analytics permanece no fim. `--detail full` revela
+os envelopes e respostas brutas junto da narrativa.

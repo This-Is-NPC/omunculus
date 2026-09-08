@@ -274,7 +274,7 @@ omunculus session replay <session_id> --db test/sessions.sqlite3
 
 ## Protótipos de apresentação
 
-`run` e `session replay` aceitam `--ui blocks|timeline|tree` e
+`run` e `session replay` aceitam `--ui blocks|timeline|tree|narrative` e
 `--detail normal|full`. Padrões: `blocks`, `normal`. Valores inválidos retornam
 2 antes de abrir o banco ou iniciar execução. `run --json-events` conserva NDJSON
 como saída de máquina e tem precedência sobre a apresentação visual.
@@ -303,3 +303,12 @@ registrado, Runs, profundidade, Work Items, delegações, avaliações, avanços
 chamadas de modelo/ferramentas, tokens, custo registrado e tempos acumulados.
 A tabela é calculada apenas do prefixo lido, com valores ausentes/parciais explícitos,
 e segue as regras de [agregação compartilhada](../cli-ui.md#resumo-da-sessão).
+
+### Narrative
+
+`--ui narrative` é uma quarta apresentação, inspirada na primeira UI do CLI
+(`9266877`). Exibe ações numeradas com START/END, Runs e Work Items com referências
+curtas e eventos atômicos com DONE. Pares de chamadas usam event_id/causation_id;
+avaliações usam request_id. Encerramento da Run, avaliação e avanço da tarefa
+permanecem eventos distintos. A ordem cronológica e os dados registrados nunca
+são reescritos para produzir uma narrativa. Detalhes em [guia das UIs](../cli-ui.md#view-narrative).

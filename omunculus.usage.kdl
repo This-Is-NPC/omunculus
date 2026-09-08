@@ -114,7 +114,7 @@ cmd "monkey-job" {
 }
 
 cmd "run" {
-  flag "--ui <layout>" help="Presentation: blocks (default), timeline or tree"
+  flag "--ui <layout>" help="Presentation: blocks (default), timeline, tree or narrative"
   flag "--detail <level>" help="Detail: normal (default) or full envelopes"
   flag "--db <file>" help="Store this run as a new session in this SQLite database"
   help "Run the agent on a directory"
@@ -152,7 +152,7 @@ cmd "send" {
 }
 
 cmd "session" {
-  flag "--ui <layout>" help="Presentation: blocks (default), timeline or tree"
+  flag "--ui <layout>" help="Presentation: blocks (default), timeline, tree or narrative"
   flag "--detail <level>" help="Detail: normal (default) or full envelopes"
   help "Create, list or replay durable sessions"
   long_help "create opens a session SQLite log and appends session.created. list prints session_id values from existing logs. replay prints a fixed read-only snapshot through the run UI without executing work."

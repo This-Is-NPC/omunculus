@@ -22,9 +22,17 @@ defmodule Omunculus.CLI.UITest do
 
     for ui <- Map.keys(UI.layouts()), detail <- ["normal", "full"] do
       output = render(events, ui, detail)
-      assert output =~ "RUN parent START"
-      assert output =~ "RUN child END · reported"
-      assert output =~ "RUN parent END · failed"
+
+      if ui == "narrative" do
+        assert output =~ "1 START · Run 01"
+        assert output =~ "2 END · Run 02 · reported"
+        assert output =~ "1 END · Run 01 · failed"
+      else
+        assert output =~ "RUN parent START"
+        assert output =~ "RUN child END · reported"
+        assert output =~ "RUN parent END · failed"
+      end
+
       assert output =~ "child evidence"
       assert output =~ "provider_offline"
       assert output =~ "unrecognized-event-evidence"
@@ -32,7 +40,8 @@ defmodule Omunculus.CLI.UITest do
       refute output =~ "Run child: no closure recorded"
       refute output =~ "\e"
       assert output =~ "secret-prompt-evidence" == (detail == "full")
-      assert length(Regex.scan(~r/RUN child END/, output)) == 1
+      pattern = if ui == "narrative", do: ~r/2 END · Run 02/, else: ~r/RUN child END/
+      assert length(Regex.scan(pattern, output)) == 1
     end
 
     assert render(events, "blocks", "normal") =~ "↳ RUN parent · continuing display"
@@ -119,6 +128,9 @@ defmodule Omunculus.CLI.UITest do
 
   test "narrow layouts retain their left edge and blocks have only horizontal separators" do
     item = %{
+      event: event(1, "custom.observation", "child", %{}),
+      detail: "normal",
+      instruction: nil,
       kind: :event,
       title: String.duplicate("long title ", 12),
       run_id: "child",
@@ -140,7 +152,14 @@ defmodule Omunculus.CLI.UITest do
       else
         assert Enum.all?(lines, &String.starts_with?(&1, if(name == "tree", do: "│  ", else: "")))
         assert Enum.all?(tl(lines), &String.contains?(&1, "│"))
-        assert Enum.any?(lines, &String.contains?(&1, "│      nested"))
+
+        assert Enum.any?(
+                 lines,
+                 &String.contains?(
+                   &1,
+                   "│      nested"
+                 )
+               )
       end
     end
   end
@@ -186,6 +205,52 @@ defmodule Omunculus.CLI.UITest do
       end
 
     assert length(Enum.uniq(outputs)) == 1
+  end
+
+  test "narrative pairs concurrent actions by recorded causation, preserving order" do
+    events = [
+      event(1, "run.started", "a", %{"agent_id" => "concierge"}),
+      event(2, "tool.call.requested", "a", %{
+        "tool" => "counter",
+        "tool_call_id" => "reused",
+        "round" => 1
+      }),
+      event(3, "run.started", "b", %{"agent_id" => "worker"}),
+      event(4, "tool.call.requested", "b", %{
+        "tool" => "counter",
+        "tool_call_id" => "reused",
+        "round" => 1
+      }),
+      %{
+        event(5, "tool.call.completed", "b", %{
+          "tool" => "counter",
+          "outcome" => "error",
+          "output" => "denied"
+        })
+        | causation_id: "event-4"
+      },
+      %{
+        event(6, "tool.call.completed", "a", %{
+          "tool" => "counter",
+          "outcome" => "completed",
+          "output" => "value: 1"
+        })
+        | causation_id: "event-2"
+      },
+      event(7, "run.completed", "a", %{"outcome" => "waiting", "comment" => "delegated work"})
+    ]
+
+    output = render(events, "narrative", "normal")
+    assert output =~ "2 START · Run 01 · Tool counter"
+    assert output =~ "4 END · Run 02 · Tool counter · failed"
+    assert output =~ "2 END · Run 01 · Tool counter · completed"
+    assert output =~ "1 END · Run 01 · waiting"
+    assert output =~ "3 OPEN · Run 02"
+    refute output =~ "start not recorded"
+    {b, _} = :binary.match(output, "4 END")
+    {a, _} = :binary.match(output, "2 END")
+    assert b < a
+    refute output =~ "Work Item 01 completed"
   end
 
   defp event(seq, type, run, payload),
