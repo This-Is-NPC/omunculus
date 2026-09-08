@@ -14,7 +14,14 @@ defmodule Omunculus.CLI.Replay do
            fn event -> Reporter.event(Process.get(:replay_reporter), event) end,
            fn ->
              {:ok, pid} =
-               Reporter.start_link(io: :stdio, mode: "Replay", path: path, session_id: session_id)
+               Reporter.start_link(
+                 io: :stdio,
+                 mode: "Replay",
+                 path: path,
+                 session_id: session_id,
+                 ui: flags["ui"],
+                 detail: flags["detail"]
+               )
 
              Process.put(:replay_reporter, pid)
            end

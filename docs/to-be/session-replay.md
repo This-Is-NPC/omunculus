@@ -1,4 +1,4 @@
-Status: implementado — banco compartilhado e seleção obrigatória por session_id; detalhes em [validação](../spike/shared-session-validation.md).
+Status: implementado — UIs selecionáveis, banco compartilhado e seleção obrigatória por session_id; detalhes em [validação](../spike/shared-session-validation.md).
 
 # Histórico de sessão na mesma UI do run
 
@@ -78,8 +78,9 @@ failed, pendente ou escalada não muda o exit code de uma leitura bem-sucedida.
 
 ## Conteúdo obrigatório
 
-A apresentação padrão do replay inclui o conteúdo registrado completo, sem
-truncar silenciosamente prompts, argumentos, respostas ou comentários:
+O modo `--detail full` inclui o conteúdo registrado completo, sem truncamento.
+O padrão `--detail normal` mostra início/fim das Runs, rodadas, respostas,
+ferramentas e coordenação; omite prompts, schemas e checkpoints repetidos:
 
 | Informação | Apresentação |
 | --- | --- |
@@ -99,13 +100,14 @@ rótulos distintos. Uma solicitação de delegação rejeitada não cria visualm
 um filho; um comentário dizendo “stage advanced” não substitui `task.advanced`.
 Nenhum efeito, aprovação ou conclusão é inferido do texto do modelo.
 
-Cada bloco identifica `sequence`, Run e Work Item quando presentes. Runs
+`timeline` identifica timestamp, `sequence` e Run em cada evento. Os cabeçalhos
+das três UIs identificam Work Item e relações registradas; `full` inclui todas as identidades. Runs
 concorrentes permanecem intercaladas na ordem do log; cabeçalhos/contexto de
 identidade impedem misturar suas rodadas. O estado do renderer é separado por
 `run_id`, e o fim de um filho não encerra o renderer da sessão.
 
-Eventos de controle sem componente específico são apresentados pelo mesmo
-componente genérico de envelope, com tipo, identidade e payload. Não descartá-los
+Eventos sem componente específico são apresentados com seu tipo e payload
+no modo normal; `full` apresenta o envelope inteiro. Não descartá-los
 silenciosamente. Esse componente também pertence à UI compartilhada.
 
 “Completo” significa todo conteúdo disponível ao harness e persistido: não inclui
@@ -155,9 +157,9 @@ criadas com a instrumentação implementada.
 ## Integração e retenção
 
 Evoluir `CLI.Reporter` para consumir a apresentação derivada de envelopes do Event
-Core e manter o estado de múltiplas Runs. Reutilizar seus componentes visuais;
-adaptar os consumidores existentes para o contrato único, removendo o caminho de
-formatação substituído. Não manter dois renderers equivalentes.
+Core e manter o estado de múltiplas Runs. Separar a preparação comum dos eventos dos módulos de layout; remover a
+formatação de envelopes substituída. Os três layouts não duplicam leitura,
+interpretação de eventos ou execução.
 
 Ligar o `run` a esse caminho comum. O leitor do replay apenas consulta o banco,
 sem Runtime, SessionExecutor, interceptores, automações, append, migração ou rebuild
@@ -208,7 +210,7 @@ A primeira versão deve resolver leitura integral e revisão da UI sem essas cam
 - Replay funciona sem API key, rede, workspace original ou executor ativo.
   O banco e suas projeções permanecem intactos; nenhuma chamada de modelo,
   ferramenta, automação, leitura de inbox com marcação ou rebuild ocorre.
-- Redirecionamento captura prompts, respostas, erros e conteúdo extenso completos,
+- Redirecionamento com `--detail full` captura prompts, respostas, erros e conteúdo extenso completos,
   sem ANSI ou truncamento silencioso. Timestamps e durações vêm do registro.
 - `run --db` preserva a sessão e a UI; duas execuções no mesmo banco geram IDs distintos. Replay de
   arquivo inexistente não cria banco. Help e exit codes seguem o contrato acima.
@@ -220,14 +222,14 @@ novo para revisão manual da UI, sem usar duração como critério de sucesso da
 ## Implementação entregue
 
 `session replay <session_id> --db` abre SQLite somente leitura, fixa o snapshot da sessão e percorre
-o log em lotes de 256 envelopes. Usa `CLI.Reporter`, os mesmos componentes de
-cabeçalho, rodadas, ferramentas e tabela usados pelo `run`. O detalhe completo
-dos envelopes acompanha esses componentes; o estado visual é separado por Run.
+o log em lotes de 256 envelopes. Usa `CLI.Reporter` e `CLI.UI`, a mesma
+apresentação selecionável usada pelo `run`. O estado visual é separado por Run.
+O antigo dump seguido de uma segunda apresentação da mesma Run foi removido.
 
 O modo ao vivo usa notificações de entrega para ler o prefixo confirmado do log:
 isso inclui solicitações rejeitadas que não são entregues aos executores. O fim
 da apresentação drena o restante desse prefixo. Campos de conteúdo não são
-truncados; a tabela compacta continua sendo um resumo, acompanhado do detalhe.
+truncados. `normal` seleciona conteúdo; `full` inclui o envelope completo.
 
 Os eventos de modelo incluem request, resposta ou falha. O `event_id` do request
 é a identidade da chamada, referenciada por `call_id` e `causation_id` no resultado.
@@ -269,3 +271,24 @@ mise exec -- mix run scripts/validate_workflow.exs presets/cloud.toml --db test/
 omunculus session list --db test/sessions.sqlite3
 omunculus session replay <session_id> --db test/sessions.sqlite3
 ```
+
+## Protótipos de apresentação
+
+`run` e `session replay` aceitam `--ui blocks|timeline|tree` e
+`--detail normal|full`. Padrões: `blocks`, `normal`. Valores inválidos retornam
+2 antes de abrir o banco ou iniciar execução. `run --json-events` conserva NDJSON
+como saída de máquina e tem precedência sobre a apresentação visual.
+
+- `blocks`: abertura e fechamento explícitos, conteúdo dentro do bloco e marcador
+  de retomada visual quando eventos de outra Run intercalam a exibição.
+- `timeline`: timestamp e sequência originais, com Run identificada em cada evento.
+- `tree`: fluxo cronológico indentado pelo depth registrado; cabeçalhos mostram
+  Work Item, Parent Work Item, Parent Run e Originating Run. Delegações e avaliações
+  aparecem na ordem real. Não reorganiza eventos em subárvores contíguas.
+
+Todos imprimem progressivamente e preservam a ordem do log, inclusive no replay.
+Não há buffering de uma Run inteira: uma execução aberta permanece observável.
+Um fim `reported` ou `waiting` descreve a Run; aprovação e avanço de tarefa
+continuam sendo eventos próprios. EOF sem fechamento não implica processo vivo.
+
+Para adicionar uma UI, ver [guia de layouts](../cli-ui.md).

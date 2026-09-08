@@ -90,7 +90,7 @@ Preserve uma execução e reveja sua UI sem executar modelos ou ferramentas:
 ./omunculus session replay <session_id> --db ./execucao.sqlite3 > historico.txt
 ```
 
-O replay imprime o prefixo completo disponível na abertura, incluindo prompts,
+O replay lê o prefixo disponível na abertura. Use `--detail full` para incluir prompts,
 respostas, chamadas de ferramentas, rejeições, avaliações e transições registradas.
 Termina mesmo que a tarefa esteja pendente. `run --db` imprime um novo `session_id`
 e acrescenta a execução ao banco, mesmo que ele já exista. Sem essa flag, `run`
@@ -109,3 +109,16 @@ O replay não retoma trabalho nem marca a inbox como lida.
 
 Veja o [contrato de replay](docs/to-be/session-replay.md) e a
 [validação](docs/spike/shared-session-validation.md).
+
+### Comparar apresentações no terminal
+
+```sh
+./omunculus session replay <session_id> --db test/sessions.sqlite3 --ui blocks
+./omunculus session replay <session_id> --db test/sessions.sqlite3 --ui timeline
+./omunculus session replay <session_id> --db test/sessions.sqlite3 --ui tree
+./omunculus run . "sua instrução" --db test/sessions.sqlite3 --ui blocks
+```
+
+`blocks` é o padrão. `--detail normal` mantém o foco nas Runs, respostas e ferramentas;
+`--detail full` mostra todos os envelopes, incluindo prompts e checkpoints.
+Os mesmos layouts atendem execução e replay. [Como criar uma UI](docs/cli-ui.md).

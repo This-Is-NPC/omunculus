@@ -11,7 +11,8 @@ defmodule Omunculus.CLI.Session do
   alias Omunculus.Runtime.Agents
 
   def ephemeral_run(%{args: args, flags: flags}, env) do
-    with {:ok, cwd} <- canonicalize_dir(args.dir),
+    with :ok <- Omunculus.CLI.UI.validate(flags),
+         {:ok, cwd} <- canonicalize_dir(args.dir),
          {:ok, config} <- Config.load(cwd: cwd, config_file: flags["config"], env: env),
          {:ok, checked} <- Config.check(config),
          {:ok, chat} <- provider_chat(config, flags, env),
@@ -26,6 +27,8 @@ defmodule Omunculus.CLI.Session do
       {:ok, reporter} =
         Omunculus.CLI.Reporter.start_link(
           core: core,
+          ui: flags["ui"],
+          detail: flags["detail"],
           path: db,
           session_id: session_id,
           io: :stderr,
@@ -98,9 +101,13 @@ defmodule Omunculus.CLI.Session do
   def session(%{args: args, flags: flags}, env) do
     case args[:action] do
       "replay" ->
-        if args[:name],
-          do: Omunculus.CLI.Replay.run(args.name, flags),
-          else: usage({:missing_required_arg, "session_id"})
+        with :ok <- Omunculus.CLI.UI.validate(flags) do
+          if args[:name],
+            do: Omunculus.CLI.Replay.run(args.name, flags),
+            else: usage({:missing_required_arg, "session_id"})
+        else
+          {:error, reason} -> usage(reason)
+        end
 
       "create" ->
         session_create(args, flags)

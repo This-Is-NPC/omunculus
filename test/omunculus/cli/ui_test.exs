@@ -1,0 +1,127 @@
+defmodule Omunculus.CLI.UITest do
+  use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
+  alias Omunculus.CLI
+  alias Omunculus.CLI.{Reporter, Replay, UI}
+  alias Omunculus.Event.Envelope
+  alias Omunculus.{EventCore, Runtime}
+
+  test "all layouts preserve interleaved boundaries, failures and full evidence" do
+    events = [
+      event(1, "run.started", "parent", %{"depth" => 0}),
+      event(2, "run.started", "child", %{"depth" => 1, "parent_run_id" => "parent"}),
+      event(3, "model.call.requested", "parent", %{
+        "round" => 1,
+        "messages" => [%{"content" => "secret-prompt-evidence"}]
+      }),
+      event(4, "run.completed", "child", %{"outcome" => "reported", "comment" => "child evidence"}),
+      event(5, "run.failed", "parent", %{"reason" => "provider_offline"}),
+      event(6, "run.started", "open", %{}),
+      event(7, "unknown.observation", nil, %{"note" => "unrecognized-event-evidence\e[2J"})
+    ]
+
+    for ui <- Map.keys(UI.layouts()), detail <- ["normal", "full"] do
+      output = render(events, ui, detail)
+      assert output =~ "RUN parent START"
+      assert output =~ "RUN child END · reported"
+      assert output =~ "RUN parent END · failed"
+      assert output =~ "child evidence"
+      assert output =~ "provider_offline"
+      assert output =~ "unrecognized-event-evidence"
+      assert output =~ "Run open: no closure recorded"
+      refute output =~ "Run child: no closure recorded"
+      refute output =~ "\e"
+      assert output =~ "secret-prompt-evidence" == (detail == "full")
+      assert length(Regex.scan(~r/RUN child END/, output)) == 1
+    end
+
+    assert render(events, "blocks", "normal") =~ "↳ RUN parent · continuing display"
+    assert render(events, "tree", "normal") =~ "│  ├─ RUN child START"
+    assert render(events, "timeline", "normal") =~ "#3 [parent] model.call.requested"
+  end
+
+  test "all layouts match live and read-only replay for the same recorded execution" do
+    db = Path.join(System.tmp_dir!(), "ui-#{System.unique_integer([:positive])}.sqlite3")
+    on_exit(fn -> File.rm(db) end)
+    core = start_supervised!({EventCore, path: db})
+
+    EventCore.append!(
+      core,
+      Envelope.command("session.created", session_id: "ui", payload: %{session_id: "ui"})
+    )
+
+    reporters =
+      for ui <- Map.keys(UI.layouts()), detail <- ["normal", "full"] do
+        {:ok, io} = StringIO.open("")
+
+        {:ok, pid} =
+          Reporter.start_link(core: core, session_id: "ui", io: io, ui: ui, detail: detail)
+
+        {ui, detail, io, pid}
+      end
+
+    runtime =
+      start_supervised!(
+        {Runtime,
+         core: core, session_id: "ui", max_depth: 1, agents: Omunculus.Runtime.Agents.resolver()}
+      )
+
+    assert {:ok, %{result: "3"}} = Runtime.request(core, "count to 3", session_id: "ui")
+    GenServer.stop(runtime)
+    history = EventCore.stream(core, 0)
+
+    for {ui, detail, io, pid} <- reporters do
+      Reporter.finish(pid)
+      {:ok, replay_io} = StringIO.open("")
+      {:ok, replay} = Reporter.start_link(io: replay_io, mode: "Replay", ui: ui, detail: detail)
+      assert :ok = Replay.read(db, "ui", &Reporter.event(replay, &1))
+      Reporter.finish(replay)
+
+      assert tl(String.split(elem(StringIO.contents(io), 1), "\n")) ==
+               tl(String.split(elem(StringIO.contents(replay_io), 1), "\n"))
+
+      StringIO.close(io)
+      StringIO.close(replay_io)
+    end
+
+    assert EventCore.stream(core, 0) == history
+  end
+
+  test "invalid layout and detail fail before creating a run database" do
+    db = Path.join(System.tmp_dir!(), "invalid-ui-#{System.unique_integer([:positive])}.sqlite3")
+
+    for {flag, value} <- [{"--ui", "invented"}, {"--detail", "invented"}],
+        args <- [["run", ".", "do work"], ["session", "replay", "id"]] do
+      output =
+        capture_io(:stderr, fn ->
+          assert CLI.dispatch(args ++ ["--db", db, flag, value], %{}) == 2
+        end)
+
+      assert output =~ flag
+      refute File.exists?(db)
+    end
+  end
+
+  defp event(seq, type, run, payload),
+    do: %Envelope{
+      event_id: "event-#{seq}",
+      kind: :event,
+      schema_version: "1",
+      correlation_id: "correlation",
+      sequence: seq,
+      type: type,
+      run_id: run,
+      occurred_at: "2026-09-08T12:00:00Z",
+      payload: payload
+    }
+
+  defp render(events, ui, detail) do
+    {:ok, io} = StringIO.open("")
+    {:ok, pid} = Reporter.start_link(io: io, mode: "Replay", ui: ui, detail: detail)
+    for event <- events ++ [List.last(events)], do: Reporter.event(pid, event)
+    Reporter.finish(pid)
+    output = elem(StringIO.contents(io), 1)
+    StringIO.close(io)
+    output
+  end
+end

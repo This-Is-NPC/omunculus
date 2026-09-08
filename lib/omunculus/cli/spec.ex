@@ -78,6 +78,16 @@ defmodule Omunculus.CLI.Spec do
           }
         ],
         flags: [
+          flag("ui",
+            long: "ui",
+            value: "layout",
+            help: "Presentation: blocks (default), timeline or tree"
+          ),
+          flag("detail",
+            long: "detail",
+            value: "level",
+            help: "Detail: normal (default) or full envelopes"
+          ),
           flag("db",
             long: "db",
             value: "file",
@@ -318,6 +328,16 @@ defmodule Omunculus.CLI.Spec do
           }
         ],
         flags: [
+          flag("ui",
+            long: "ui",
+            value: "layout",
+            help: "Presentation: blocks (default), timeline or tree"
+          ),
+          flag("detail",
+            long: "detail",
+            value: "level",
+            help: "Detail: normal (default) or full envelopes"
+          ),
           flag("db",
             long: "db",
             value: "file",

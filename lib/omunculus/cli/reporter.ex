@@ -63,21 +63,22 @@ defmodule Omunculus.CLI.Reporter do
   end
 
   defp session_init(opts) do
+    {ui, header} = Omunculus.CLI.UI.init(opts)
+
     state = %{
+      ui: ui,
       session?: true,
       session_id: opts[:session_id],
       io: opts[:io] || :stderr,
       json_events?: opts[:json_events?] || false,
       core: opts[:core],
       sequence: 0,
-      runs: %{},
       timestamp_format: opts[:timestamp_format] || "%Y-%m-%dT%H:%M:%S.%fZ"
     }
 
     if state.core, do: Omunculus.EventCore.subscribe(state.core, session_filter(state))
 
-    unless state.json_events?,
-      do: line(state, divider("┌── #{opts[:mode] || "Live"} · #{opts[:path] || "session"} "))
+    unless state.json_events?, do: Enum.each(header, &line(state, &1))
 
     {:ok, state}
   end
@@ -128,9 +129,8 @@ defmodule Omunculus.CLI.Reporter do
       end
 
     unless state.json_events? do
-      for {id, run} <- Enum.sort(state.runs),
-          not run.closed?,
-          do: line(state, "└── Run #{id}: no closure recorded in this history")
+      {_ui, lines} = Omunculus.CLI.UI.finish(state.ui)
+      Enum.each(lines, &line(state, &1))
 
       line(state, "└── End of history · sequence #{state.sequence}")
     end
@@ -328,171 +328,10 @@ defmodule Omunculus.CLI.Reporter do
       line(state, Jason.encode!(Omunculus.Event.Envelope.to_map(env)))
       %{state | sequence: env.sequence}
     else
-      line(state, "├── #{env.type} · ##{env.sequence} · #{env.occurred_at}")
-
-      line(
-        state,
-        "│ Run: #{env.run_id || "not recorded"} · Work Item: #{env.work_item_id || "not recorded"} · Session: #{env.session_id || "not recorded"}"
-      )
-
-      for {key, value} <-
-            env
-            |> Omunculus.Event.Envelope.to_map()
-            |> Map.drop([
-              :payload,
-              :type,
-              :occurred_at,
-              :sequence,
-              :run_id,
-              :work_item_id,
-              :session_id
-            ])
-            |> Enum.sort(),
-          not is_nil(value),
-          do: full_field(state, to_string(key), value)
-
-      for {key, value} <- Enum.sort(env.payload), do: full_field(state, key, value)
-
-      if env.type == "model.call.completed" and not Map.has_key?(env.payload, "response"),
-        do: full_field(state, "response", "not recorded")
-
-      state = present_run_event(state, env)
-      %{state | sequence: env.sequence}
+      {ui, lines} = Omunculus.CLI.UI.event(env, state.ui)
+      Enum.each(lines, &line(state, &1))
+      %{state | sequence: env.sequence, ui: ui}
     end
-  end
-
-  defp full_field(state, key, value) when is_map(value) do
-    line(state, "│ #{key}:#{if map_size(value) == 0, do: " {}", else: ""}")
-    for {k, v} <- Enum.sort(value), do: full_field(state, key <> "." <> to_string(k), v)
-  end
-
-  defp full_field(state, key, value) when is_list(value) do
-    line(state, "│ #{key}:#{if value == [], do: " []", else: ""}")
-    for {v, index} <- Enum.with_index(value), do: full_field(state, key <> "[#{index}]", v)
-  end
-
-  defp full_field(state, key, value) do
-    text = if is_binary(value), do: value, else: Jason.encode!(value)
-    line(state, "│ #{key}:")
-
-    for part <- String.split(text, "\n"),
-        do: line(state, "│   " <> String.replace(part, "\e", "\\u001b"))
-  end
-
-  defp present_run_event(state, %{run_id: nil}), do: state
-
-  defp present_run_event(state, env) do
-    p = env.payload
-    run = Map.get(state.runs, env.run_id)
-
-    run =
-      if env.type == "run.started" do
-        {:ok, view} =
-          run_init(
-            io: state.io,
-            terminal?: false,
-            model: p["model"] || "not recorded",
-            tools: get_in(p, ["tools", "granted"]) || [],
-            max_rounds: p["max_turns"] || "not recorded"
-          )
-
-        %{view: view, closed?: false, started: env.occurred_at, tools: 0}
-      else
-        run
-      end
-
-    if run do
-      event =
-        case env.type do
-          "model.call.completed" ->
-            %{
-              type: :round_completed,
-              round: p["round"],
-              outcome: if(p["outcome"] == "tool_calls", do: :tool_calls, else: :final_response),
-              tool_calls: length(get_in(p, ["response", "tool_calls"]) || []),
-              usage: p["usage"] || %{"total_tokens" => "not recorded"},
-              duration_ms: p["duration_ms"]
-            }
-
-          "model.call.failed" ->
-            %{
-              type: :round_failed,
-              round: p["round"],
-              reason: p["reason"],
-              duration_ms: p["duration_ms"]
-            }
-
-          "tool.call.completed" ->
-            tool_event = %{
-              type: :tool_completed,
-              name: p["tool"],
-              path: nil,
-              outcome:
-                case p["outcome"] do
-                  "completed" -> :completed
-                  "waiting" -> :waiting
-                  _ -> {:error, p["output"] || "not recorded"}
-                end,
-              duration_ms: p["duration_ms"]
-            }
-
-            if is_number(p["previous"]) and is_number(p["new"]),
-              do: Map.merge(tool_event, %{from: p["previous"], to: p["new"]}),
-              else: tool_event
-
-          type when type in ["run.completed", "run.failed"] ->
-            %{
-              type: if(type == "run.failed", do: :run_failed, else: :run_completed),
-              outcome: p["outcome"] || "failed",
-              reason: p["reason"],
-              rounds: length(run.view.rounds),
-              tool_calls: run.tools,
-              usage: recorded_usage(run.view.rounds),
-              duration_ms: recorded_duration(run.started, env.occurred_at)
-            }
-
-          _ ->
-            nil
-        end
-
-      view =
-        case event do
-          nil ->
-            run.view
-
-          event ->
-            case handle_call({:event, event}, nil, run.view) do
-              {:reply, :ok, view} -> view
-              {:stop, :normal, :ok, view} -> view
-            end
-        end
-
-      run = %{
-        run
-        | view: view,
-          closed?: run.closed? || env.type in ["run.completed", "run.failed"],
-          tools: run.tools + if(env.type == "tool.call.completed", do: 1, else: 0)
-      }
-
-      %{state | runs: Map.put(state.runs, env.run_id, run)}
-    else
-      state
-    end
-  end
-
-  defp recorded_usage(rounds) do
-    values = Enum.map(rounds, &tokens(&1[:usage]))
-
-    if values != [] and Enum.all?(values, &is_number/1),
-      do: %{"total_tokens" => Enum.sum(values)},
-      else: %{"total_tokens" => "not recorded"}
-  end
-
-  defp recorded_duration(start, finish) do
-    with {:ok, a, _} <- DateTime.from_iso8601(start),
-         {:ok, b, _} <- DateTime.from_iso8601(finish),
-         do: DateTime.diff(b, a, :millisecond),
-         else: (_ -> nil)
   end
 
   defp pending(state, text) do
