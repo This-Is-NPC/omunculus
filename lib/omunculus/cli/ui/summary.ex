@@ -107,7 +107,6 @@ defmodule Omunculus.CLI.UI.Summary do
     body = render(s, runs, width - 2, false) |> Enum.drop(2)
 
     [
-      "",
       "┌── Session summary " <>
         String.duplicate("─", max(width - Text.cells("┌── Session summary "), 1))
     ] ++

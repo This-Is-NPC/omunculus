@@ -95,3 +95,11 @@ Isso delimita a apresentação do fato registrado, sem criar eventos de execuç�
 O detalhe técnico fica dentro do bloco, antes de seu fechamento. A tabela final
 de analytics também recebe uma moldura na narrative; os outros layouts mantêm
 a apresentação existente da tabela.
+
+Cada trecho impresso da narrative tem uma moldura completa, sem caixas abertas
+aninhadas na mesma coluna. O trecho START fecha visualmente com `Awaiting result`;
+isso não encerra a ação. Seu resultado posterior abre um novo cabeçalho (`Run result`,
+`Model result`, `Tool result` ou `Assessment result`) e conserva o número da ação
+na linha END. Eventos continuam em ordem cronológica, inclusive na concorrência.
+Comentários e detalhes ficam dentro da moldura do resultado. Os testes verificam
+estruturalmente ausência de cabeçalhos aninhados, conteúdo órfão e rodapés sem abertura.

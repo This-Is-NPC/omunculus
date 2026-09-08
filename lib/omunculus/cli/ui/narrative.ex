@@ -46,6 +46,19 @@ defmodule Omunculus.CLI.UI.Narrative do
           lines ++ detail
       end
 
+    title =
+      case e.type do
+        "run.completed" -> "Run result"
+        "run.failed" -> "Run failure"
+        "model.call.completed" -> "Model result"
+        "model.call.failed" -> "Model failure"
+        "tool.call.completed" -> "Tool result"
+        "task.assessment_resolved" -> "Assessment result"
+        _ -> "Recorded event"
+      end
+
+    lines = frame_fragment(lines, title, state.width, "Awaiting result")
+
     # All strings are wrapped before printing, including identifiers and comments.
     {state,
      Enum.flat_map(lines, fn line ->
@@ -238,7 +251,28 @@ defmodule Omunculus.CLI.UI.Narrative do
         Text.lines("#{n} OPEN · #{label} · no result recorded in this history", s.width, "│  ")
       end)
 
-    {s, lines}
+    {s, frame_fragment(lines, "Open actions", s.width, "Snapshot end")}
+  end
+
+  # Each printed fragment is complete. START/END track execution; a frame
+  # ending in "Awaiting result" only ends the presentation of its request.
+  defp frame_fragment([], _title, _width, _ending), do: []
+
+  defp frame_fragment(lines, title, width, ending) do
+    lines =
+      if Enum.any?(lines, &String.starts_with?(&1, "┌──")),
+        do: lines,
+        else: boundary("┌── #{title} ", width) ++ lines
+
+    lines =
+      if Enum.any?(lines, &String.starts_with?(&1, "└──")),
+        do: lines,
+        else: lines ++ boundary("└── #{ending} ", width) ++ [""]
+
+    lines
+    |> Enum.drop_while(&(&1 == ""))
+    |> Enum.chunk_by(& &1)
+    |> Enum.flat_map(fn group -> if hd(group) in ["", "│"], do: [hd(group)], else: group end)
   end
 
   defp boundary(prefix, width) do

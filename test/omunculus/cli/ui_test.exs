@@ -280,7 +280,9 @@ defmodule Omunculus.CLI.UITest do
 
       assert Enum.count(
                markers,
-               &(String.starts_with?(&1, "└──") and not String.starts_with?(&1, "└── Summary"))
+               &(String.starts_with?(&1, "└──") and not String.starts_with?(&1, "└── Summary") and
+                   not String.starts_with?(&1, "└── Awaiting") and
+                   not String.starts_with?(&1, "└── Snapshot"))
              ) == 2
 
       assert Enum.all?(markers, &(String.ends_with?(&1, "─────") and String.length(&1) == 100))
@@ -321,6 +323,47 @@ defmodule Omunculus.CLI.UITest do
       {assessment, _} = :binary.match(output, "assessment evidence")
       {resolved, _} = :binary.match(output, "└── Assessment resolved")
       assert completion < done and done < assessment and assessment < resolved
+    end
+  end
+
+  test "narrative never nests frames or prints orphaned result bodies" do
+    events = [
+      event(1, "run.started", "r", %{}),
+      event(2, "model.call.requested", "r", %{"round" => 1}),
+      %{event(3, "model.call.completed", "r", %{"round" => 1}) | causation_id: "event-2"},
+      event(4, "run.completed", "r", %{"outcome" => "reported", "comment" => "run evidence"}),
+      event(5, "task.completed", nil, %{"comment" => "task evidence"}),
+      event(6, "task.assessment_resolved", nil, %{"comment" => "assessment evidence"})
+    ]
+
+    for detail <- ["normal", "full"] do
+      output = render(events, "narrative", detail)
+      assert output =~ "┌── Run result"
+      assert output =~ "┌── Assessment result"
+      refute output =~ "│\n│\n"
+      refute output =~ "\n\n\n"
+
+      open =
+        Enum.reduce(String.split(output, "\n"), false, fn line, open ->
+          cond do
+            String.starts_with?(line, "┌──") ->
+              refute open, "nested frame: #{line}"
+              true
+
+            String.starts_with?(line, "└──") ->
+              assert open, "orphan footer: #{line}"
+              false
+
+            String.starts_with?(line, "│") ->
+              assert open, "orphan content: #{line}"
+              open
+
+            true ->
+              open
+          end
+        end)
+
+      refute open
     end
   end
 
