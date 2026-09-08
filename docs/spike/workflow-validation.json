@@ -969,5 +969,11 @@
         "stage": "verification"
       }
     }
-  ]
+  ],
+  "methodology_correction": {
+    "date": "2026-09-08",
+    "classification": "interrupted_by_experiment",
+    "root_completion": "inconclusive",
+    "note": "The historical 180-second cutoff is not a pass/fail criterion. client_success records only whether the old wait returned completion. Effects and approvals remain observations; no natural terminal outcome was observed."
+  }
 }

@@ -1,5 +1,14 @@
 # Validação real após a separação do gate de review
 
+Critério corrigido e nova execução: [observação sem prazo artificial](no-deadline-validation.md).
+
+Correção metodológica em 2026-09-08: os quatro casos abaixo são
+**interrompidos pelo experimento, com conclusão inconclusiva**. O corte de
+180 segundos foi uma decisão indevida do teste, não um critério do plano.
+Os efeitos incorretos e as aprovações registradas continuam sendo achados
+independentes desse corte. Os comandos abaixo usam hoje o observador
+corrigido e não reproduzem o corte histórico.
+
 Executada em 2026-09-07 sobre o commit `56e9640`, sem alterações no runtime,
 nos presets ou nos prompts durante a campanha. **Nenhuma das quatro raízes
 concluiu dentro de 180 segundos.** O gate iniciou no papel correto nos dois
@@ -24,7 +33,7 @@ continuação. O contador é mantido por Work Item: `[1,2,3,1,2,3]` significa
 trabalho repetido em dois filhos. Sucesso completo exige também conclusão
 da raiz. O oracle não decide a aprovação no harness.
 
-O script encerra o runtime ao terminar a espera de 180 segundos. Assim,
+A versão histórica do script encerrava o runtime ao terminar a espera de 180 segundos. Assim,
 `timeout` é um corte do experimento, não evidência de deadlock, de falha
 registrada ou de que a tarefa jamais concluiria com mais tempo. As quatro
 últimas Runs ficaram sem evento terminal nesse corte. Não foram retomadas.
@@ -134,7 +143,11 @@ Depois, repetir com a restrição de ferramentas definida na configuração
 da etapa, mantendo a aprovação semântica com o pai. Separar o orçamento de
 encerramento das métricas de efeitos permitirá observar a conclusão natural
 sem confundir latência com repetição ou aprovação incorreta. Essas mudanças
-não foram implementadas nesta campanha.
+não foram implementadas nesta campanha histórica. O observador foi corrigido
+posteriormente: aguarda `task.completed` da raiz ou pedido de avaliação
+humana na inbox, sem prazo para classificar a tarefa. Falhas de tentativas
+e breaks parentais não encerram a observação. Intervenção humana significa
+resultado pendente; duração é apenas uma métrica.
 
 [Evidências sanitizadas](post-gate-validation.json) incluem resultados,
 sequências de eventos, estados no corte e checkpoints selecionados com os

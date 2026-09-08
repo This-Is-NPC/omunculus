@@ -1,5 +1,7 @@
 # Validação de aprovação parental e etapas opcionais
 
+Critério corrigido e nova execução: [observação sem prazo artificial](no-deadline-validation.md).
+
 Repetição posterior aos ajustes finais: [validação do gate com modelos reais](post-gate-validation.md).
 
 Correção do contrato em 2026-09-07. Referência:
@@ -35,6 +37,11 @@ preservação do papel do pai nas avaliações e seleção configurável de
 modelo, kind e prompt do agente da etapa.
 
 ## Amostras reais
+
+Correção metodológica de 2026-09-08: os quatro cortes históricos por tempo
+são **interrupções do experimento**, com conclusão da raiz inconclusiva.
+Não constituem falha do harness por duração. As observações de efeitos
+e decisões são independentes dessa classificação.
 
 Uma execução por cenário e provider, cada qual com banco novo, workspace
 em memória, depth máximo 1 e timeout de cliente de 180 segundos. A raiz tem

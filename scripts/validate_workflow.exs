@@ -1,9 +1,14 @@
 # Independent real-provider cases; the effect oracle only measures results.
-# Usage: mise exec -- mix run scripts/validate_workflow.exs presets/cloud.toml
+# Usage: mise exec -- mix run scripts/validate_workflow.exs presets/cloud.toml [plain|staged]
+# Duration is a metric. Human escalation is a pending decision, not task failure.
 alias Omunculus.{Config, Dotenv, EventCore, Runtime}
 alias Omunculus.EventCore.Projector
 alias Omunculus.Runtime.Agents
-[preset] = System.argv()
+alias Omunculus.Event.Envelope
+Code.require_file("support/workflow_observer.exs", __DIR__)
+[preset | selected] = System.argv()
+cases = if selected == [], do: ["plain", "staged"], else: selected
+true = Enum.all?(cases, &(&1 in ["plain", "staged"]))
 {:ok, file_env} = Dotenv.load(File.cwd!())
 env = Map.merge(file_env, System.get_env())
 
@@ -14,7 +19,8 @@ File.mkdir_p!(root)
 IO.puts("Evidence: #{root}")
 
 rows =
-  for staged <- [false, true] do
+  for scenario <- cases do
+    staged = scenario == "staged"
     dir = Path.join(root, if(staged, do: "staged", else: "plain"))
     File.mkdir_p!(dir)
     File.cp!("test/fixtures/config/medium.toml", Path.join(dir, "omunculus.toml"))
@@ -52,13 +58,27 @@ rows =
 
     started = System.monotonic_time(:millisecond)
 
-    result =
-      Runtime.request(
+    :ok = EventCore.subscribe(core)
+
+    requested =
+      EventCore.append!(
         core,
-        "Delegate to a worker: increment counter exactly three times, reaching 3. Review actual returned values before approving. Report the final value and evidence.",
-        workspace: "app",
-        timeout: 180_000
+        Envelope.command("task.requested",
+          work_item_id: Envelope.generate_id("wi"),
+          payload: %{
+            instruction:
+              "Delegate to a worker: increment counter exactly three times, reaching 3. Review actual returned values before approving. Report the final value and evidence.",
+            depth: 0,
+            execution: %{},
+            workspace: "app"
+          }
+        )
       )
+
+    IO.puts("Started #{scenario}: #{requested.work_item_id}; waiting for protocol outcome")
+    {outcome, terminal} = Omunculus.WorkflowObserver.await(requested.work_item_id)
+    elapsed_ms = System.monotonic_time(:millisecond) - started
+    EventCore.unsubscribe(core)
 
     GenServer.stop(runtime)
     Projector.sync(projector)
@@ -92,13 +112,14 @@ rows =
       preset: Path.basename(preset),
       model: config.chat.model,
       staged: staged,
-      client_success: match?({:ok, _}, result),
+      protocol_outcome: outcome,
+      root_completed: outcome == :completed,
+      task_success: outcome == :completed and values == [1, 2, 3],
       effect_success: values == [1, 2, 3],
-      outcome:
-        case result do
-          {:ok, value} -> value.result
-          {:error, reason} -> inspect(reason)
-        end,
+      result: terminal.payload["result"],
+      terminal_event_id: terminal.event_id,
+      human_request: if(outcome == :awaiting_human, do: terminal.payload["body"]),
+      approvals_checked: length(done ++ advances),
       approvals_valid: approvals_valid,
       replay_equal: before == Projector.snapshot(core),
       counter_values: values,
@@ -109,7 +130,7 @@ rows =
       reasons: Enum.frequencies_by(starts, & &1.payload["reason"]),
       failures: Enum.count(events, &(&1.type == "run.failed")),
       breaks: Enum.count(events, &(&1.type == "task.break")),
-      elapsed_ms: System.monotonic_time(:millisecond) - started
+      elapsed_ms: elapsed_ms
     }
 
     File.write!(Path.join(dir, "result.json"), Jason.encode!(row, pretty: true))
