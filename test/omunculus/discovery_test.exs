@@ -41,6 +41,12 @@ defmodule Omunculus.DiscoveryTest do
           team: team,
           workspace: workspace,
           directory_scope: scope,
+          discovery: %{
+            teams: %{
+              review: %{lead: "worker", members: ["worker"]},
+              edit: %{lead: "worker", members: ["worker"]}
+            }
+          },
           tools: bands
         }
       )

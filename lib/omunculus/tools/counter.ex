@@ -12,7 +12,7 @@ defmodule Omunculus.Tools.Counter do
     %{
       "name" => "counter",
       "description" =>
-        "Increment a harness-managed counter by the configured amount. The counter starts at zero and persists across calls in the same run. Each call returns the new value. Use this tool when the user asks you to count incrementally.",
+        "Increment a harness-managed counter by the configured amount. A new work item starts at zero. Checkpoints preserve the current value across retries and stages of that work item. Every call mutates the counter; this is not a read or verification tool. Each call returns the new value. Use this tool when the user asks you to count incrementally.",
       "parameters" => %{
         "type" => "object",
         "properties" => %{},

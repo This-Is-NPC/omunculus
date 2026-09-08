@@ -22,7 +22,8 @@ defmodule Omunculus.Runtime.Report do
 
   def instruction do
     """
-    End with a JSON object containing completed (boolean) and comment (nonempty string).
+    Return only a JSON object containing completed (boolean) and comment (nonempty string).
+    No Markdown fences or text outside the object.
     The comment is your execution summary AND instructions for the next Run when work
     remains. Do not put instructions in a separate field. completed refers to the work,
     not whether this Run is ending. Use completed=false for unfinished work; the harness

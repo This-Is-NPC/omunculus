@@ -354,38 +354,11 @@ defmodule Omunculus.Runtime do
           policy_invalid(state, spec, reason)
 
         {:ok, agent, bands, policy_hash, request_permission, spec, state} ->
-          {agent, bands, request_permission} =
-            assessment_policy(agent, bands, request_permission, spec)
-
           spec = maybe_prepend_comments(state, spec, agent)
           start_run_with_agent(state, spec, agent, bands, policy_hash, request_permission)
       end
 
     %{result | config: original_config}
-  end
-
-  defp assessment_policy(agent, bands, permission, spec) do
-    if spec[:assessment] do
-      readable =
-        Enum.filter(
-          agent.tools,
-          &(&1 in ["read", "ls", "find", "grep", "directory", "workspaces"])
-        )
-
-      removed = (bands["granted"] || []) ++ (bands["negotiable"] || []) ++ (bands["human"] || [])
-
-      bands = %{
-        bands
-        | "granted" => readable,
-          "negotiable" => [],
-          "human" => [],
-          "forbidden" => Enum.uniq((bands["forbidden"] || []) ++ (removed -- readable))
-      }
-
-      {%{agent | tools: readable}, bands, false}
-    else
-      {agent, bands, permission}
-    end
   end
 
   defp task_execution(core, spec) do
@@ -532,6 +505,8 @@ defmodule Omunculus.Runtime do
       merge_config_tool_options(agent, %{workspaces: %{}, teams: %{}, agents: %{}}, spec, state)
 
     bands = bands_from_tools(agent.tools)
+    bands = if agent[:tool_policy], do: Policy.intersect(bands, agent.tool_policy), else: bands
+    agent = %{agent | tools: bands["granted"]}
     {:ok, agent, bands, nil, false, spec, state}
   end
 
@@ -573,7 +548,9 @@ defmodule Omunculus.Runtime do
 
       granted_tools = Enum.uniq((bands["granted"] || []) ++ lineage_tools)
       agent = state.agents.(agent_context(state, spec, loaded))
-      agent = %{agent | tools: granted_tools}
+      bands = Map.put(bands, "granted", granted_tools)
+      bands = if agent[:tool_policy], do: Policy.intersect(bands, agent.tool_policy), else: bands
+      agent = %{agent | tools: bands["granted"]}
       agent = merge_config_tool_options(agent, loaded, spec, state)
 
       request_permission =
@@ -1125,7 +1102,8 @@ defmodule Omunculus.Runtime do
       node_id: last_start.payload["node_id"],
       team: last_start.payload["team"],
       agent: last_start.payload["agent_id"],
-      reason: "continuation"
+      reason: if(new_checkpoint["assessment"], do: "assessment", else: "continuation"),
+      assessment: new_checkpoint["assessment"]
     })
   end
 
@@ -2130,6 +2108,7 @@ defmodule Omunculus.Runtime do
 
       ctx = agent_context(state, spec, loaded)
       agent = state.agents.(ctx)
+      agent = merge_config_tool_options(agent, loaded, spec, state)
       agent = %{agent | tools: ["forward", "rewrite", "deny"]}
       bands = cross_lineage_arbitration_bands()
 

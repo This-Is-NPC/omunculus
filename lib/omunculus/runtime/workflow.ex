@@ -293,7 +293,7 @@ defmodule Omunculus.Runtime.Workflow do
         state.core,
         env,
         reviewer,
-        %{},
+        %{"tool_state" => restore["tool_state"] || %{}},
         if(env.type == "task.break", do: "break", else: "assessment")
       )
       |> Map.put(:instruction, context)
@@ -422,7 +422,7 @@ defmodule Omunculus.Runtime.Workflow do
           %{
             "role" => "user",
             "content" =>
-              "Task: #{instruction(state.core, target)}\nPrevious responsible comment: #{comment}"
+              "Original task (reference criteria): #{instruction(state.core, target)}\nCurrent stage: #{next["name"]}. #{next["instructions"]}\nConfirmed tool state: #{Jason.encode!(checkpoint(state.core, target)["tool_state"] || %{})}\nPrevious responsible comment: #{comment}"
           }
         ],
         "awaiting" => [],
@@ -510,7 +510,7 @@ defmodule Omunculus.Runtime.Workflow do
 
     cp =
       cond do
-        closed && is_map(closed.payload["assessment"]) ->
+        closed && closed.payload["outcome"] == "reported" && is_map(closed.payload["assessment"]) ->
           closed.payload["assessment"]["restore"] || %{}
 
         closed ->

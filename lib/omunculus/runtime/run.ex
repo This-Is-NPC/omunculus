@@ -131,7 +131,7 @@ defmodule Omunculus.Runtime.Run do
 
     opts =
       if !(state[:arbitration] || state[:cross_lineage_arbitration]),
-        do: contextual_options(opts, agent, state),
+        do: contextual_options(opts, agent),
         else: Keyword.put(opts, :report_required, false)
 
     outcome = Agent.run(opts)
@@ -186,7 +186,7 @@ defmodule Omunculus.Runtime.Run do
 
   defp nonempty_comment(_), do: "No model comment was produced; completion is unverified."
 
-  defp contextual_options(opts, agent, state) do
+  defp contextual_options(opts, agent) do
     # Refresh only the system layer, retaining all conversation and tool-call links.
     messages = Keyword.get(opts, :messages)
 
@@ -231,20 +231,7 @@ defmodule Omunculus.Runtime.Run do
         end
       end)
 
-    if state[:assessment] do
-      read_tools =
-        Enum.filter(
-          Keyword.fetch!(opts, :tools),
-          &(&1 in ["read", "ls", "find", "grep", "directory", "workspaces"])
-        )
-
-      Keyword.merge(opts,
-        tools: read_tools,
-        schemas: Enum.filter(schemas, &(get_in(&1, ["function", "name"]) in read_tools))
-      )
-    else
-      Keyword.put(opts, :schemas, schemas)
-    end
+    Keyword.put(opts, :schemas, schemas)
   end
 
   defp finish_report(state, result) do
@@ -275,7 +262,10 @@ defmodule Omunculus.Runtime.Run do
       report: report,
       comment: report["comment"],
       checkpoint: checkpoint,
-      assessment: state[:assessment],
+      assessment:
+        if(state[:assessment],
+          do: put_in(state.assessment, ["restore", "tool_state"], result.tool_state)
+        ),
       max_retries: state.agent[:max_retries] || 2,
       rounds: result.turns,
       tool_calls: result.tool_calls,
@@ -295,6 +285,7 @@ defmodule Omunculus.Runtime.Run do
         "awaiting" => awaiting,
         "pending" => pending
       }
+      |> Map.put("assessment", state[:assessment])
       |> maybe_put_notes(Keyword.get(opts, :notes))
 
     append!(
@@ -305,6 +296,7 @@ defmodule Omunculus.Runtime.Run do
         outcome: "waiting",
         awaiting: awaiting,
         checkpoint: checkpoint,
+        assessment: state[:assessment],
         comment: nonempty_comment(Process.get(:handoff_comment) || result.assistant_text)
       },
       Process.get(:chain_head)

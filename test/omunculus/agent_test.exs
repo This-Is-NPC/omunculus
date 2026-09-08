@@ -267,4 +267,30 @@ defmodule Omunculus.AgentTest do
     assert result.turns == 1
     assert result.tool_calls == 1
   end
+
+  test "format repair cannot execute tools after reporting existing effects" do
+    chat =
+      Chat.Fake.new([
+        Chat.Fake.tool_call("counter", %{}),
+        Chat.Fake.text("The effect is complete"),
+        Chat.Fake.tool_call("counter", %{}),
+        Chat.Fake.report("One confirmed increment")
+      ])
+
+    assert {:ok, result} =
+             Agent.run(
+               instruction: "Increment once",
+               chat: chat,
+               fs: FS.Memory.new(),
+               tools: ["counter"],
+               max_turns: 5
+             )
+
+    assert result.tool_state["counter"].value == 1
+
+    assert Enum.any?(
+             result.messages,
+             &String.contains?(&1["content"] || "", "report_format_only")
+           )
+  end
 end

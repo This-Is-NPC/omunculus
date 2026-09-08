@@ -1,4 +1,5 @@
-Status: ciclo de trabalho corrigido; estados/gates opcionais validados em testes, com limites reais registrados.
+Status: há verificações por contrato; a suíte verde não certifica aderência integral nem confiabilidade real.
+Desvios e correções rastreados em [aderência da implementação](../spike/implementation-deviations.md).
 
 # Plano de implementação
 

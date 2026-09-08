@@ -183,7 +183,7 @@ defmodule Omunculus.WorkflowTest do
     assert length(EventCore.stream(core, 0, type: "task.completed")) == 2
     starts = EventCore.stream(core, 0, type: "run.started")
     review = Enum.find(starts, &(&1.payload["reason"] == "assessment"))
-    assert review.payload["tools"]["granted"] == []
+    assert review.payload["tools"]["granted"] == ["delegate"]
 
     assert Enum.map(starts, & &1.payload["reason"]) == [
              "initial",
@@ -1006,5 +1006,76 @@ defmodule Omunculus.WorkflowTest do
     assert hd(messages)["content"] =~ "Kind: reviewer"
     assert hd(messages)["content"] =~ "Work stage: review"
     refute Enum.any?(messages, &(&1["role"] == "assistant"))
+  end
+
+  test "parent can delegate during assessment and resume its original target" do
+    {core, _, runtime, _} =
+      setup_runtime(
+        fn ctx ->
+          cond do
+            ctx.depth == 1 ->
+              [report(true, "Evidence checked")]
+
+            ctx.reason == "initial" ->
+              [delegate()]
+
+            ctx.reason == "continuation" ->
+              [report(true, "Root complete")]
+
+            ctx.reason == "assessment" and ctx.instruction =~ "Target task: produce evidence" ->
+              [
+                Fake.tool_call("delegate", %{
+                  "instruction" => "Check existing evidence",
+                  "comment" => "Obtain independent verification"
+                })
+              ]
+
+            ctx.reason == "assessment" ->
+              [report(true, "Approved after verification")]
+          end
+        end,
+        1
+      )
+
+    result = Runtime.request(core, "deliver", timeout: 3000)
+    assert {:ok, %{result: "Root complete"}} = result
+    await(fn -> Runtime.runs(runtime) == %{} end)
+    assert length(EventCore.stream(core, 0, type: "task.delegated")) == 2
+    assert length(EventCore.stream(core, 0, type: "task.completed")) == 3
+
+    assert Enum.all?(
+             EventCore.query(core, "SELECT status FROM WORK_ITEMS"),
+             &(&1 == ["completed"])
+           )
+  end
+
+  test "unknown selectors are rejected before creating a child" do
+    {core, _, _, _} =
+      setup_runtime(
+        fn ctx ->
+          if ctx.depth == 0 do
+            [
+              Fake.tool_call("delegate", %{
+                "agent" => "invented",
+                "instruction" => "work",
+                "comment" => "check"
+              }),
+              Fake.tool_call("delegate", %{
+                "team" => "invented-team",
+                "instruction" => "work",
+                "comment" => "check"
+              }),
+              report(true, "No child authorized")
+            ]
+          else
+            flunk("unknown selector was executed")
+          end
+        end,
+        1
+      )
+
+    assert {:ok, _} = Runtime.request(core, "check selectors", timeout: 3000)
+    assert length(EventCore.stream(core, 0, type: "delivery.rejected")) == 2
+    assert [[1]] = EventCore.query(core, "SELECT count(*) FROM WORK_ITEMS")
   end
 end

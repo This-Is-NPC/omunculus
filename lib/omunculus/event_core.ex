@@ -343,7 +343,8 @@ defmodule Omunculus.EventCore do
     lane = Enum.filter(state.interceptors, &(env.type in &1.events))
 
     lane =
-      if env.type == "task.requested" and Map.has_key?(env.payload, "requested_by") and
+      if (env.type == "task.delegated" or
+            (env.type == "task.requested" and Map.has_key?(env.payload, "requested_by"))) and
            not Enum.any?(lane, &(&1.module == Omunculus.Interceptors.TeamGate)) do
         lane ++
           [

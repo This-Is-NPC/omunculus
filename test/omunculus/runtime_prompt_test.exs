@@ -39,7 +39,13 @@ defmodule Omunculus.RuntimePromptTest do
       assert_receive {:messages, [%{"role" => "system", "content" => prompt} | _]}
       assert prompt =~ config.presets["count"].instructions
       assert prompt =~ config.agents[agent.agent_id].prompt
-      assert prompt =~ "convey these instructions to the executor"
+
+      assert prompt =~
+               if(ctx.depth == 0,
+                 do: "Reference criteria for the original task",
+                 else: "Task profile:"
+               )
+
       assert prompt =~ "The parent evaluates quality"
 
       resumed_chat = Chat.Fake.new([Chat.Fake.report("reviewed")])

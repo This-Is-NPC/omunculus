@@ -368,7 +368,7 @@ defmodule Omunculus.EventCore.Projector do
     end
 
     p =
-      if is_map(p["assessment"]),
+      if outcome == "reported" and is_map(p["assessment"]),
         do: Map.put(p, "checkpoint", p["assessment"]["restore"] || %{}),
         else: p
 

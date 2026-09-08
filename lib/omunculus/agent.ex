@@ -50,6 +50,7 @@ defmodule Omunculus.Agent do
       reporter: reporter,
       started_at: started_at,
       tool_calls: 0,
+      report_repair: false,
       report_required: Keyword.get(opts, :report_required, true)
     })
   end
@@ -169,13 +170,14 @@ defmodule Omunculus.Agent do
         feedback =
           if next.report_required and
                not match?({:ok, _}, Omunculus.Runtime.Report.parse(next.assistant_text)) do
-            "Invalid completion report. Return JSON with completed:boolean and a nonempty comment summarizing work and next steps. Optional break:boolean."
+            "Invalid completion report. Return only a JSON object with completed:boolean and a nonempty comment. Optional break:boolean. Do not call tools or repeat work; only correct the report format."
           end
 
         if feedback do
           loop(%{
             next
-            | messages: messages ++ [%{"role" => "user", "content" => feedback}]
+            | report_repair: true,
+              messages: messages ++ [%{"role" => "user", "content" => feedback}]
           })
         else
           emit(state, %{
@@ -289,6 +291,9 @@ defmodule Omunculus.Agent do
       {messages, context}
     end
   end
+
+  defp execute_with_comment(%{report_repair: true}, _name, _args, context),
+    do: {:error, :report_format_only, context}
 
   defp execute_with_comment(state, name, args, context) do
     if state.report_required and name in ["delegate", "request_work", "request_permission"] and

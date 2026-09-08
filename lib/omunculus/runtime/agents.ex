@@ -22,14 +22,18 @@ defmodule Omunculus.Runtime.Agents do
 
     config = ctx[:config] || Config.empty()
     config = %{config | agents: Map.merge(defaults(), config.agents)}
-    assigned_name = Scripts.pick_agent(ctx, config)
-    assigned_entry = configured_agent(config, assigned_name, ctx)
+    assigned_name = pick_agent(ctx, config)
+    assigned_entry = configured_agent(config, assigned_name)
     profile = Map.get(config.presets, ctx[:profile], %{})
     flow = ctx[:flow] || Config.workflow(config, assigned_entry, profile)
     step = Enum.find(flow["steps"], &(&1["name"] == ctx[:stage])) || List.first(flow["steps"])
     name = if step, do: step["agent"] || assigned_name, else: assigned_name
-    entry = configured_agent(config, name, ctx)
-    kind = entry[:kind]
+    entry = configured_agent(config, name)
+    kind = entry[:kind] || if(ctx.depth < ctx.max_depth, do: "concierge", else: "worker")
+
+    tool_policy =
+      if entry[:tools],
+        do: elem(Omunculus.Policy.normalize(%{"mode" => "deny", "granted" => entry[:tools]}), 1)
 
     agent =
       if opts[:provider] == "chat" or is_map(opts[:chat]) do
@@ -52,6 +56,8 @@ defmodule Omunculus.Runtime.Agents do
       end
 
     agent
+    |> Map.put(:tools, if(tool_policy, do: tool_policy["granted"], else: agent.tools))
+    |> Map.put(:tool_policy, tool_policy)
     |> Map.put(:kind, kind)
     |> Map.put(:flow, flow)
     |> Map.put(
@@ -67,6 +73,41 @@ defmodule Omunculus.Runtime.Agents do
         profile[:instructions]
       )
     )
+  end
+
+  def pick_agent(ctx, config) do
+    agents = config.agents
+    teams = config.teams || %{}
+    roles = get_in(config, [:session, :roles]) || %{}
+    agent = ctx[:agent]
+    team = ctx[:team]
+
+    cond do
+      is_binary(agent) and agent != "" ->
+        agent
+
+      is_binary(team) and team not in ["", "default"] ->
+        Map.fetch!(teams, team).lead
+
+      true ->
+        role =
+          Map.get(roles, "depth#{ctx.depth}") ||
+            Map.get(roles, to_string(ctx.depth))
+
+        if is_binary(role) and role != "" do
+          role
+        else
+          depth_fallback(ctx.depth, ctx.max_depth, agents)
+        end
+    end
+  end
+
+  defp depth_fallback(depth, max_depth, _agents) do
+    if depth < max_depth do
+      "concierge"
+    else
+      "worker"
+    end
   end
 
   def defaults do
@@ -85,6 +126,7 @@ defmodule Omunculus.Runtime.Agents do
         prompt: "Execute the assigned work and report evidence, limitations and remaining work."
       },
       "reviewer" => %{
+        tools: ["fs.read", "directory", "workspaces", "delegate"],
         kind: "reviewer",
         prompt:
           "Review the existing work against the requested criteria. Report evidence, defects and the gate verdict. Do not repeat implementation effects."
@@ -97,18 +139,12 @@ defmodule Omunculus.Runtime.Agents do
     }
   end
 
-  defp configured_agent(config, name, ctx) do
-    Map.merge(default_agent(name, ctx), Map.get(config.agents, name, %{}), fn _, default, value ->
+  defp configured_agent(config, name) do
+    entry = Map.fetch!(config.agents, name)
+
+    Map.merge(Map.get(defaults(), name, %{}), entry, fn _, default, value ->
       if is_nil(value), do: default, else: value
     end)
-  end
-
-  defp default_agent(name, ctx) do
-    Map.get(
-      defaults(),
-      name,
-      defaults()[if(ctx.depth < ctx.max_depth, do: "concierge", else: "worker")]
-    )
   end
 
   defp parse_turns(nil), do: nil

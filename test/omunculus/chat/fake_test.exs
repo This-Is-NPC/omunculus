@@ -65,6 +65,11 @@ defmodule Omunculus.Chat.FakeTest do
 
     resolver = Agents.resolver(script: script, target: 1)
 
+    config = %{
+      Omunculus.Config.empty()
+      | teams: %{"team-a" => %{lead: "concierge", members: ["worker"]}}
+    }
+
     concierge =
       resolver.(%{
         depth: 0,
@@ -72,6 +77,7 @@ defmodule Omunculus.Chat.FakeTest do
         instruction: "conte até 1",
         checkpoint: %{},
         workspace: "ws-1",
+        config: config,
         team: "team-a"
       })
 
@@ -82,11 +88,13 @@ defmodule Omunculus.Chat.FakeTest do
 
     worker =
       resolver.(%{
+        agent: "worker",
         depth: 1,
         max_depth: 1,
         instruction: "conte até 1",
         checkpoint: %{},
         workspace: "ws-1",
+        config: config,
         team: "team-a"
       })
 

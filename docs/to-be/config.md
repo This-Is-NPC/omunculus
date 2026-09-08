@@ -184,8 +184,8 @@ inexistente.
 ## Agentes padrão e prompts contextuais
 
 O resolver de chat oferece `concierge`, `repo-concierge`, `worker` e
-`supervisor` como configurações padrão. `[agents.<nome>]` personaliza prompt,
-kind, modelo, max_turns e max_retries. Alterar somente o modelo conserva o
+`supervisor` e `reviewer` como configurações padrão. `[agents.<nome>]` personaliza prompt,
+kind, modelo, tools, max_turns e max_retries. Alterar somente o modelo conserva o
 prompt padrão. A identidade do agente não determina parent/depth: estes
 continuam pertencendo ao node runtime.
 
@@ -222,3 +222,27 @@ Veja [relato, retries e break](run-report-and-break.md).
 `workflows`, seleção por `workflow` e aprovação da raiz por `root_approval`
 estão definidos em [trabalho e aprovação](run-report-and-break.md). A ausência
 de máquina não desliga aprovação parental, retries ou break.
+
+## Capacidades do agente
+
+`[agents.<nome>].tools` é uma lista de nomes ou grupos do catálogo, como
+`["fs.read", "delegate"]`. A lista restringe a política de perfil/depth/workspace
+e as permissões de linhagem; não concede ferramentas acima desse teto.
+Ausência conserva a política aplicável; `[]` não permite executar ferramentas.
+Nomes desconhecidos ou valores malformados são rejeitados por `config check`.
+
+O reviewer padrão permite `fs.read`, `directory`, `workspaces` e `delegate`,
+ainda sujeitos à política. Essa lista é configurável pelo mesmo mecanismo
+usado por qualquer agente. A etapa seleciona a configuração por `agent`.
+Não há lista especial de ferramentas imposta à avaliação parental.
+
+Em etapas configuradas, as instruções da etapa definem a ação atual; a tarefa
+original e seu perfil entram como critérios de referência. Para coordenadores
+e avaliações, as instruções do executor também são referências, não ordens
+para repetir trabalho. O contexto da nova etapa inclui o estado confirmado
+das ferramentas e o comentário do responsável.
+
+Seletores explícitos precisam existir no registro de agentes/times. A
+omissão usa os padrões documentados; um nome inventado não seleciona um
+worker por fallback. A validação de delegação é aplicada pelo Core mesmo
+sem lane configurada e usa a descoberta pinada na Run.

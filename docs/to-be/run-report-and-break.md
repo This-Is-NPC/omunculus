@@ -1,6 +1,7 @@
 # Trabalho, execução, aprovação e break
 
-Contrato implementado; validação e limites em
+Contrato de referência; desvios corrigidos e verificações específicas em
+[aderência da implementação](../spike/implementation-deviations.md). Validação histórica e limites em
 [workflow-validation.md](../spike/workflow-validation.md). A aprovação pertence ao agente responsável; o
 harness registra e aplica a decisão. Os testes devem verificar este contrato,
 não apenas se uma Run devolveu texto.
@@ -28,6 +29,11 @@ Toda Run executora termina com o relato do modelo:
 `comment` é resumo e orientação para a próxima Run. Não existe campo
 separado de instrução de correção. `break: true` pede intervenção imediata e
 exige `completed: false`. Handoffs por ferramentas exigem `comment`.
+O relato é JSON puro. Após um erro estrutural no relato, as respostas
+seguintes nessa Run servem somente para corrigir o formato: novas chamadas
+de ferramentas são rejeitadas antes de executar efeitos. O orçamento de
+turnos continua valendo; esgotá-lo devolve um relato incompleto com break.
+Isso não introduz julgamento automático da qualidade da tarefa.
 Arbitragem de permissão e trabalho entre linhagens mantém suas ferramentas
 próprias de decisão; não aprova etapas implicitamente.
 
@@ -36,6 +42,9 @@ antecipada. Uma Run de avaliação da entrega pelo pai recebe o alvo, etapa, tar
 comentários e evidências confirmadas. Usa o mesmo relato para aprovar,
 pedir correção ou escalar. Seu checkpoint próprio e dependências são
 restaurados ao encerrar a avaliação. A aprovação do filho não conclui o pai.
+O pai conserva suas capacidades configuradas e pode delegar uma verificação.
+Nesse caso, a avaliação suspensa guarda seu alvo e checkpoint; a aprovação
+do verificador permite retomá-la, sem aprovar implicitamente o alvo original.
 
 Sem máquina, aprovação emite `task.completed`. Com máquina, aprovação emite
 `task.advanced` e agenda nova Run do mesmo Work Item; a aprovação da última

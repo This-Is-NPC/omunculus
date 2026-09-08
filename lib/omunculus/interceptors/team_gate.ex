@@ -9,6 +9,9 @@ defmodule Omunculus.Interceptors.TeamGate do
 
   @impl true
   def intercept(%{type: "task.delegated", payload: payload} = env, options) do
+    conn = fetch_opt(options, :conn)
+    source = if conn, do: Omunculus.Discovery.run(conn, env.run_id), else: nil
+    options = Map.merge((source || %{})["discovery"] || %{}, options)
     team = payload["team"]
     agent = payload["agent"]
 
@@ -116,7 +119,7 @@ defmodule Omunculus.Interceptors.TeamGate do
     workspaces_map = fetch_opt(options, :workspaces) || %{}
 
     cond do
-      teams_map != %{} and not team_known?(teams_map, team) and team != "default" ->
+      not team_known?(teams_map, team) and team != "default" ->
         {:error, "team not in session"}
 
       workspaces_map != %{} and not team_in_workspace?(team, env, payload, workspaces_map) ->
@@ -130,28 +133,26 @@ defmodule Omunculus.Interceptors.TeamGate do
   defp validate_team(_team, _env, _payload, _options), do: :ok
 
   defp validate_agent(agent, team, options) when is_binary(agent) and agent != "" do
-    if is_binary(team) and team != "" do
-      case lookup_team(fetch_opt(options, :teams) || %{}, team) do
-        nil ->
-          :ok
+    agents = Map.merge(Omunculus.Runtime.Agents.defaults(), fetch_opt(options, :agents) || %{})
+    teams = fetch_opt(options, :teams) || %{}
 
-        team_spec ->
-          members = fetch_field(team_spec, :members) || []
-          lead = fetch_field(team_spec, :lead)
+    cond do
+      not Map.has_key?(agents, agent) ->
+        {:error, "agent not in session"}
 
-          cond do
-            members != [] and agent not in members ->
-              {:error, "agent not in team"}
+      team in [nil, "", "default"] and teams == %{} ->
+        :ok
 
-            members == [] and agent != lead ->
-              {:error, "agent not in team"}
+      true ->
+        case lookup_team(teams, team) do
+          nil ->
+            {:error, "agent without team"}
 
-            true ->
-              :ok
-          end
-      end
-    else
-      {:error, "agent without team"}
+          spec ->
+            members = fetch_field(spec, :members) || []
+            allowed = if members == [], do: [fetch_field(spec, :lead)], else: members
+            if agent in allowed, do: :ok, else: {:error, "agent not in team"}
+        end
     end
   end
 

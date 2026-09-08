@@ -105,7 +105,8 @@ defmodule Omunculus.Config do
   with resolved modules, or the first error.
   """
   def check(config) do
-    with :ok <- check_workflows(config),
+    with :ok <- check_agent_tools(config),
+         :ok <- check_workflows(config),
          :ok <- check_workflow_config(config),
          :ok <- check_references(config),
          {:ok, interceptors} <- check_interceptors(config.interceptors),
@@ -113,6 +114,27 @@ defmodule Omunculus.Config do
          {:ok, policy} <- check_policy_fit(config) do
       {:ok, %{interceptors: interceptors, automations: automations, policy: policy}}
     end
+  end
+
+  defp check_agent_tools(config) do
+    Enum.reduce_while(config.agents, :ok, fn {name, entry}, :ok ->
+      case entry[:tools] do
+        nil ->
+          {:cont, :ok}
+
+        names when is_list(names) ->
+          with true <- Enum.all?(names, &is_binary/1),
+               {:ok, expanded} <- Omunculus.Tools.expand_list(names),
+               :ok <- Omunculus.Tools.validate_names(expanded) do
+            {:cont, :ok}
+          else
+            reason -> {:halt, {:error, {:invalid_agent_tools, name, reason}}}
+          end
+
+        value ->
+          {:halt, {:error, {:invalid_agent_tools, name, value}}}
+      end
+    end)
   end
 
   def workflow(config, entry, profile) do
@@ -199,7 +221,7 @@ defmodule Omunculus.Config do
            end),
          :ok <-
            each(config.session[:roles] || %{}, fn {depth, agent} ->
-             if agent in agents or config.agents == %{},
+             if agent in agents,
                do: :ok,
                else: {:error, {:unknown_agent, "session.roles.#{depth}", agent}}
            end) do
@@ -486,6 +508,7 @@ defmodule Omunculus.Config do
         Map.new(Map.get(map, "agents", %{}), fn {name, body} ->
           {name,
            %{
+             tools: body["tools"],
              prompt: body["prompt"],
              kind: body["kind"],
              max_retries: body["max_retries"],

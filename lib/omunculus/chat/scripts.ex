@@ -10,7 +10,7 @@ defmodule Omunculus.Chat.Scripts do
   def resolve(ctx, opts) do
     config = ctx[:config] || Omunculus.Config.empty()
     config = %{config | agents: Map.merge(Omunculus.Runtime.Agents.defaults(), config.agents)}
-    name = pick_agent(ctx, config)
+    name = Omunculus.Runtime.Agents.pick_agent(ctx, config)
     entry = config.agents[name] || %{}
     kind = entry[:kind] || if(ctx.depth < ctx.max_depth, do: "concierge", else: "worker")
 
@@ -30,44 +30,6 @@ defmodule Omunculus.Chat.Scripts do
     case Regex.scan(~r/\d+/, instruction) do
       [] -> default
       matches -> matches |> List.last() |> hd() |> String.to_integer()
-    end
-  end
-
-  def pick_agent(ctx, config) do
-    agents = config.agents
-    teams = config.teams || %{}
-    roles = get_in(config, [:session, :roles]) || %{}
-    agent = ctx[:agent]
-    team = ctx[:team]
-
-    cond do
-      is_binary(agent) and agent != "" ->
-        agent
-
-      is_binary(team) and team != "" ->
-        case Map.get(teams, team) do
-          %{lead: lead} when is_binary(lead) -> lead
-          _ -> depth_fallback(ctx.depth, ctx.max_depth, agents)
-        end
-
-      true ->
-        role =
-          Map.get(roles, "depth#{ctx.depth}") ||
-            Map.get(roles, to_string(ctx.depth))
-
-        if is_binary(role) and role != "" do
-          role
-        else
-          depth_fallback(ctx.depth, ctx.max_depth, agents)
-        end
-    end
-  end
-
-  defp depth_fallback(depth, max_depth, _agents) do
-    if depth < max_depth do
-      "concierge"
-    else
-      "worker"
     end
   end
 
