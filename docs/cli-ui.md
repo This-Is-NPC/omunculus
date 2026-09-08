@@ -79,3 +79,10 @@ O item compartilhado agora também fornece `event` (envelope registrado), `detai
 e `instruction` (instrução registrada do Work Item). Layouts como narrative podem
 usar os campos estruturados para nomear ações, mantendo toda execução fora da UI.
 O resumo de analytics continua sendo gerado uma única vez pelo componente comum.
+
+Na narrative, cada `run.started` abre `┌── Run started ───`, conforme o Reporter
+original. O fechamento usa `└── Completed/Waiting/Reported/Failed ───`, conforme
+o resultado registrado. O número da ação e a referência da Run ficam dentro
+do bloco, nas linhas START/END. As faixas ocupam a largura disponível. Comentários,
+erros e detalhe técnico aparecem antes da faixa END. EOF sem evento de fechamento
+permanece OPEN: não se inventa um END para uma Run sem encerramento registrado.

@@ -30,9 +30,19 @@ defmodule Omunculus.CLI.UI.Narrative do
             Enum.map(item.lines, &("│   " <> &1)),
         else: []
 
+    lines =
+      if e.type in ["run.completed", "run.failed"] do
+        {body, closing} =
+          Enum.split_while(lines, &(not Regex.match?(~r/^│ .* END · Run |^└──/u, &1)))
+
+        body ++ detail ++ if(detail == [], do: [], else: ["│"]) ++ closing
+      else
+        lines ++ detail
+      end
+
     # All strings are wrapped before printing, including identifiers and comments.
     {state,
-     Enum.flat_map(lines ++ detail, fn line ->
+     Enum.flat_map(lines, fn line ->
        case Regex.run(~r/^(│ *)(.*)$/u, line) do
          [_, prefix, content] -> Text.lines(clean(content), state.width, prefix)
          _ -> Text.lines(clean(line), state.width, "", "│  ")
@@ -51,22 +61,37 @@ defmodule Omunculus.CLI.UI.Narrative do
       )
 
     {s,
-     [
-       "",
-       "┌── #{n} START · #{actor} · #{p["agent_id"] || "agent not recorded"}",
-       "│ Stage: #{p["stage"] || "not recorded"} · Reason: #{p["reason"] || "not recorded"} · Work Item #{work}",
-       "│ Objective: #{i.instruction || "not recorded"}"
-     ]}
+     [""] ++
+       boundary("┌── Run started ", s.width) ++
+       [
+         "│ #{n} START · #{actor}",
+         "│ Agent: #{p["agent_id"] || "not recorded"}",
+         "│ Model: #{p["model"] || "not recorded"} · Tools: #{length(get_in(p, ["tools", "granted"]) || [])} · Max rounds: #{p["max_turns"] || "not recorded"}",
+         "│ Stage: #{p["stage"] || "not recorded"} · Reason: #{p["reason"] || "not recorded"} · Work Item #{work}",
+         "│ Objective: #{i.instruction || "not recorded"}",
+         "│"
+       ]}
   end
 
   defp present(type, i, s, actor, _work, _) when type in ["run.completed", "run.failed"] do
     {s, n} = end_action(s, {:run, i.event.run_id})
     p = i.event.payload
 
+    label =
+      case {type, p["outcome"]} do
+        {"run.failed", _} -> "Failed"
+        {_, "waiting"} -> "Waiting"
+        {_, "reported"} -> "Reported"
+        {_, "max_turns"} -> "Max rounds reached"
+        _ -> "Completed"
+      end
+
     {s,
-     if(p["comment"], do: ["│ Comment · #{actor}:"] ++ note(p["comment"]), else: []) ++
+     ["│"] ++
+       if(p["comment"], do: ["│ Comment · #{actor}:"] ++ note(p["comment"]), else: []) ++
        note(p["reason"]) ++
-       ["└── #{n} END · #{actor} · #{p["outcome"] || "failed"}"]}
+       ["│", "│ #{n} END · #{actor} · #{p["outcome"] || "failed"}"] ++
+       boundary("└── #{label} ", s.width) ++ [""]}
   end
 
   defp present(type, i, s, actor, _work, _)
@@ -113,7 +138,7 @@ defmodule Omunculus.CLI.UI.Narrative do
     instant(s, "User requested Work Item #{work}", note(i.event.payload["instruction"]))
   end
 
-  defp present("task.delegated", i, s, actor, work, child) do
+  defp present("task.delegated", _i, s, actor, work, child) do
     instant(
       s,
       "#{actor} delegated · Work Item #{work} → #{child}",
@@ -185,6 +210,10 @@ defmodule Omunculus.CLI.UI.Narrative do
       end)
 
     {s, lines}
+  end
+
+  defp boundary(prefix, width) do
+    [prefix <> String.duplicate("─", max(width - Text.cells(prefix), 1))]
   end
 
   defp identity(s, _, nil), do: {s, nil}

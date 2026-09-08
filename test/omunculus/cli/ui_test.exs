@@ -253,6 +253,39 @@ defmodule Omunculus.CLI.UITest do
     refute output =~ "Work Item 01 completed"
   end
 
+  test "narrative restores the original run dividers and spacing" do
+    events = [
+      event(1, "run.started", "a", %{"agent_id" => "worker"}),
+      event(2, "run.completed", "a", %{"outcome" => "waiting", "comment" => "handoff"}),
+      event(3, "run.started", "b", %{"agent_id" => "worker"}),
+      event(4, "run.failed", "b", %{"reason" => "provider_offline"}),
+      event(5, "run.started", "open", %{})
+    ]
+
+    for detail <- ["normal", "full"] do
+      output = render(events, "narrative", detail)
+
+      markers =
+        output
+        |> String.split("\n")
+        |> Enum.filter(&(String.starts_with?(&1, "┌──") or String.starts_with?(&1, "└──")))
+
+      assert Enum.count(markers, &String.starts_with?(&1, "┌── Run started")) == 3
+      assert Enum.count(markers, &String.starts_with?(&1, "└──")) == 2
+      assert Enum.all?(markers, &(String.ends_with?(&1, "─────") and String.length(&1) == 100))
+      {comment, _} = :binary.match(output, "handoff")
+      {closing, _} = :binary.match(output, "└── Waiting")
+      assert comment < closing
+      assert output =~ "│\n│ 1 END · Run 01 · waiting\n└── Waiting"
+      assert output =~ "└── Failed ─"
+
+      if detail == "full" do
+        {technical, _} = :binary.match(output, "Technical event #2")
+        assert technical < closing
+      end
+    end
+  end
+
   defp event(seq, type, run, payload),
     do: %Envelope{
       event_id: "event-#{seq}",
