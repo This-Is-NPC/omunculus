@@ -1,8 +1,8 @@
 [chat]
 api = "openai-completions"
 auth = "none"
-base_url = "http://127.0.0.1:52625/v1"
-model = "qwen3.5:9b"
+base_url = "http://192.168.0.200:1234/v1"
+model = "qwen/qwen3.5-9b"
 
 [defaults]
 preset = "coding"
