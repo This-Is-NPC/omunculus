@@ -43,7 +43,14 @@ defmodule Omunculus.Config do
         workflow: false,
         root_approval: "self"
       },
-      chat: %{api: "openai-completions", auth: nil, base_url: nil, model: nil, api_key: nil},
+      chat: %{
+        api: "openai-completions",
+        auth: nil,
+        base_url: nil,
+        model: nil,
+        api_key: nil,
+        timeout_ms: 120_000
+      },
       output: %{timestamp_format: @default_timestamp_format},
       interceptors: [],
       automations: [],
@@ -79,7 +86,8 @@ defmodule Omunculus.Config do
     with {:ok, preset} <- fetch_preset(config, preset_name),
          {:ok, tools} <- resolve_tools(preset, tools_flag),
          :ok <- Omunculus.Tools.validate_names(tools),
-         :ok <- validate_timestamp_format(config.output.timestamp_format) do
+         :ok <- validate_timestamp_format(config.output.timestamp_format),
+         :ok <- check_chat_timeout(config.chat[:timeout_ms]) do
       max_turns =
         parse_int(flags["max_turns"] || flags[:max_turns]) ||
           preset.max_turns ||
@@ -104,7 +112,8 @@ defmodule Omunculus.Config do
   with resolved modules, or the first error.
   """
   def check(config) do
-    with :ok <- check_agent_tools(config),
+    with :ok <- check_chat_timeout(config.chat[:timeout_ms]),
+         :ok <- check_agent_tools(config),
          :ok <- check_workflows(config),
          :ok <- check_workflow_config(config),
          :ok <- check_references(config),
@@ -114,6 +123,10 @@ defmodule Omunculus.Config do
       {:ok, %{interceptors: interceptors, automations: automations, policy: policy}}
     end
   end
+
+  defp check_chat_timeout(value) when is_integer(value) and value > 0, do: :ok
+  defp check_chat_timeout("infinity"), do: :ok
+  defp check_chat_timeout(value), do: {:error, {:invalid_chat_timeout, value}}
 
   defp check_agent_tools(config) do
     Enum.reduce_while(config.agents, :ok, fn {name, entry}, :ok ->
@@ -551,7 +564,8 @@ defmodule Omunculus.Config do
         auth: chat["auth"],
         base_url: chat["base_url"],
         model: chat["model"],
-        api_key: chat["api_key"]
+        api_key: chat["api_key"],
+        timeout_ms: chat["timeout_ms"]
       },
       output: %{
         timestamp_format: output["timestamp_format"]

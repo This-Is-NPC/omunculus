@@ -13,10 +13,20 @@ defmodule Omunculus.ConfigTest do
              )
 
     assert {:ok, session} = Config.resolve(config, %{})
-    assert session.chat.base_url == "http://127.0.0.1:52625/v1"
-    assert session.chat.model == "qwen3.5:9b"
+    assert session.chat.base_url == "http://192.168.0.200:1234/v1"
+    assert session.chat.model == "qwen/qwen3.5-9b"
     assert session.chat.auth == "none"
+    assert session.chat.timeout_ms == "infinity"
     assert session.output.timestamp_format == "%d/%m/%Y %H:%M:%S"
+  end
+
+  test "chat timeout is a positive transport deadline or infinity" do
+    for value <- [0, -1, "120000", false] do
+      config = put_in(Config.empty(), [:chat, :timeout_ms], value)
+      assert {:error, {:invalid_chat_timeout, ^value}} = Config.check(config)
+    end
+
+    assert {:ok, _} = Config.check(put_in(Config.empty(), [:chat, :timeout_ms], 250))
   end
 
   test "explicit config selects the cloud chat provider" do

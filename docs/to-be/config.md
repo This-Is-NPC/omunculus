@@ -307,3 +307,20 @@ sem lane configurada e usa a descoberta pinada na Run.
 contrato da resposta e dependência da continuação. `enabled=false` preserva a
 emissão/entrega normal dos novos eventos. Veja o
 [contrato e exemplo completos](actor-interception.md).
+
+## Prazo HTTP do modelo
+
+`[chat].timeout_ms` configura a espera pela resposta HTTP de geração. Aceita
+inteiro positivo em milissegundos (padrão 120000) ou `"infinity"`. O preset local
+usa `"infinity"`: uma geração lenta permanece em execução até resposta ou erro
+de transporte, sem prazo arbitrário para conclusão da tarefa. Os limites de
+rounds/retries e as decisões do pai continuam independentes. Não há mais ajuste
+global `chat_timeout_ms`; o valor pertence à configuração do provider.
+
+```toml
+[chat]
+timeout_ms = "infinity"
+```
+
+Sem prazo de geração, um servidor que mantém a conexão aberta sem responder
+pode manter a Run pendente; isso não prova falha nem sucesso da tarefa.

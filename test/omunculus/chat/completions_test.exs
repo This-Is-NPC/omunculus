@@ -55,6 +55,31 @@ defmodule Omunculus.Chat.CompletionsTest do
     assert reply.usage["total_tokens"] == 2
   end
 
+  test "configured transport timeout and unbounded generation", %{bypass: bypass} do
+    Bypass.expect(bypass, "POST", "/v1/chat/completions", fn conn ->
+      Process.sleep(80)
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(%{choices: [%{message: %{content: "done"}}]}))
+    end)
+
+    config = %{
+      api: "openai-completions",
+      auth: "none",
+      base_url: "http://127.0.0.1:#{bypass.port}/v1",
+      model: "test",
+      api_key: nil,
+      timeout_ms: 1
+    }
+
+    {:ok, limited} = Omunculus.Runner.build_chat(config, %{}, %{})
+    assert {:error, %Req.TransportError{reason: :timeout}} = Completions.complete(limited, [], [])
+    {:ok, unbounded} = Omunculus.Runner.build_chat(%{config | timeout_ms: "infinity"}, %{}, %{})
+    assert unbounded.timeout_ms == :infinity
+    assert {:ok, %{content: "done"}} = Completions.complete(unbounded, [], [])
+  end
+
   test "unknown api types are refused by Chat.resolve" do
     assert {:error, {:unsupported_api, "openai-codex-responses"}} =
              Omunculus.Chat.resolve("openai-codex-responses")

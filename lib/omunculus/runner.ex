@@ -79,7 +79,14 @@ defmodule Omunculus.Runner do
         with {:ok, chat_mod} <- Chat.resolve(api),
              {:ok, {auth_mod, cred}} <- Auth.resolve(auth_type) do
           cred = Map.put(cred, :key, api_key)
-          {:ok, chat_mod.new(base_url: base_url, model: model, auth: {auth_mod, cred})}
+
+          {:ok,
+           chat_mod.new(
+             base_url: base_url,
+             model: model,
+             auth: {auth_mod, cred},
+             timeout_ms: chat_cfg[:timeout_ms] || 120_000
+           )}
         end
     end
   end

@@ -5,7 +5,7 @@ defmodule Omunculus.Chat.Completions do
   @impl true
   def complete(chat, messages, tools) do
     url = upstream(chat.base_url) <> "/chat/completions"
-    timeout = Application.get_env(:omunculus, :chat_timeout_ms, 120_000)
+    timeout = chat.timeout_ms
 
     body =
       %{
@@ -34,7 +34,12 @@ defmodule Omunculus.Chat.Completions do
       mod: __MODULE__,
       base_url: Keyword.fetch!(opts, :base_url),
       model: Keyword.fetch!(opts, :model),
-      auth: Keyword.fetch!(opts, :auth)
+      auth: Keyword.fetch!(opts, :auth),
+      timeout_ms:
+        case Keyword.get(opts, :timeout_ms, 120_000) do
+          "infinity" -> :infinity
+          value when is_integer(value) and value > 0 -> value
+        end
     }
   end
 
