@@ -26,9 +26,34 @@ defmodule Omunculus.CLI.Events do
       "follow" ->
         follow(flags)
 
+      "show" ->
+        show(flags)
+
       other ->
         IO.puts(:stderr, Help.usage_error({:invalid_flag_value, "events", other || ""}))
         2
+    end
+  end
+
+  defp show(flags) do
+    with {:ok, db} <- Session.db_path(flags),
+         {:ok, core} <- open_core(db) do
+      result = Omunculus.Interception.Delivery.for_request(core, flags["request_id"])
+      GenServer.stop(core)
+
+      case result do
+        {:ok, event} ->
+          IO.puts(Jason.encode!(event))
+          0
+
+        {:error, reason} ->
+          IO.puts(:stderr, "error: #{inspect(reason)}")
+          1
+      end
+    else
+      {:error, reason} ->
+        IO.puts(:stderr, "error: #{inspect(reason)}")
+        1
     end
   end
 

@@ -529,9 +529,10 @@ defmodule Omunculus.InterceptionTest do
     end
   end
 
-  for failure? <- [false, true] do
-    test "configured agent produces context with initial failure=#{failure?}" do
+  for failure? <- [false, true], filtered? <- [false, true] do
+    test "configured agent produces context with initial failure=#{failure?}, filtered=#{filtered?}" do
       failure? = unquote(failure?)
+      filtered? = unquote(filtered?)
       {:ok, calls} = Agent.start_link(fn -> 0 end)
 
       dir =
@@ -552,6 +553,7 @@ defmodule Omunculus.InterceptionTest do
       work_item = {instruction = "Produce the handoff context"}
       response = {comment = "string"}
       bindings = {"report.comment" = "comment"}
+      #{if filtered?, do: ~s(exclude = ["payload.comment", "payload.report"]\nexclude_items = [{path = "payload.checkpoint.messages", match = {role = "assistant"}, missing = ["tool_calls"]}]), else: ""}
       """)
 
       {:ok, config} = Config.load(cwd: dir, env: %{})
@@ -617,7 +619,11 @@ defmodule Omunculus.InterceptionTest do
 
       assert_receive {:actor_input, messages}
       assert hd(messages)["content"] =~ "Summarize the supplied event"
-      assert Enum.any?(messages, &String.contains?(&1["content"] || "", "executor raw"))
+
+      assert Enum.any?(messages, &String.contains?(&1["content"] || "", "executor raw")) ==
+               not filtered?
+
+      assert Enum.any?(messages, &String.contains?(&1["content"] || "", "Counter value: 1"))
       assert_receive {:parent_input, parent_messages}
       refute Enum.any?(parent_messages, &String.contains?(&1["content"] || "", "executor raw"))
 

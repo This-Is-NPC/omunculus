@@ -83,7 +83,7 @@ defmodule Omunculus.Interception.Agents do
           instruction: rule["work_item"]["instruction"],
           agent: rule["agent"],
           interception_request_id: request.event_id,
-          comment: Jason.encode!(Envelope.to_map(source)),
+          comment: Jason.encode!(Omunculus.Interception.Delivery.event(source, rule)),
           execution: execution(core, source.work_item_id) |> Map.put("profile", "coding")
         }
       )

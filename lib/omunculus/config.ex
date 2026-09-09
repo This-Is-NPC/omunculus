@@ -320,6 +320,10 @@ defmodule Omunculus.Config do
         (is_nil(item[:actor]) or (is_binary(item.actor) and String.trim(item.actor) != "")) and
           is_nil(item[:module]) and not (is_binary(item[:agent]) and is_binary(item[:actor])) and
           (is_nil(item[:agent]) or Map.has_key?(agents, item.agent)) and
+          Omunculus.Interception.Delivery.valid?(%{
+            "exclude" => Map.get(item, :exclude, []),
+            "exclude_items" => Map.get(item, :exclude_items, [])
+          }) and
           is_boolean(item.enabled) and is_boolean(item.wait) and
           is_integer(item.max_retries) and item.max_retries >= 0 and
           (is_nil(item[:timeout_ms]) or (is_integer(item.timeout_ms) and item.timeout_ms > 0)) and
@@ -573,7 +577,9 @@ defmodule Omunculus.Config do
             match: item["match"] || %{},
             work_item: item["work_item"],
             response: item["response"] || %{},
-            bindings: item["bindings"] || %{}
+            bindings: item["bindings"] || %{},
+            exclude: Map.get(item, "exclude", []),
+            exclude_items: Map.get(item, "exclude_items", [])
           }
         end),
       automations:

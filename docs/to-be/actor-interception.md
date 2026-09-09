@@ -151,3 +151,53 @@ O cenário real executa um incremento, processa seu evento com o agente
 `handoff-editor` e executa uma Run de review. Mede efeitos, fechamento das Runs,
 resoluções e se o reviewer recebeu o comment depois da resolução, sem prazo de
 sucesso/fracasso da tarefa.
+
+## Exclusões na entrega do evento
+
+A regra do interceptor pode excluir campos da representação do evento entregue
+ao ator. O `run.completed` original permanece íntegro no banco para replay e
+outros consumidores. Não há campo `input` no pedido nem uma cópia adicional do
+evento persistida nele. `source_event_id` identifica a fonte; a regra persistida
+no pedido determina as exclusões, inclusive nas novas tentativas.
+
+```toml
+[interceptors.handoff-context]
+events = ["run.completed"]
+agent = "summarizer"
+work_item = {instruction = "Summarize the recorded execution evidence."}
+response = {comment = "string"}
+bindings = {"comment" = "comment", "report.comment" = "comment"}
+exclude = ["payload.comment", "payload.report"]
+exclude_items = [
+  {path = "payload.checkpoint.messages", match = {role = "assistant"}, missing = ["tool_calls"]}
+]
+```
+
+`exclude` remove caminhos com pontos em objetos do envelope. `exclude_items`
+remove itens da lista em `path` quando todos os pares de `match` correspondem às
+propriedades diretas do item e todos os campos de `missing` estão ausentes/nulos.
+Pelo menos um critério é necessário. Caminhos ausentes não provocam erro. Não há
+wildcard, índices de array nem avaliação de expressões.
+
+Esse exemplo retira comentário, relatório e respostas do assistant sem tool calls,
+inclusive respostas anteriores à correção de formato. Preserva solicitações de
+tools, retornos e estado confirmado. Comentários históricos dentro das mensagens
+de contexto permanecem. A fonte continua sendo o evento de conclusão e seu
+checkpoint; não é uma coleta de todos os eventos da sessão.
+
+Agentes locais recebem diretamente esse evento filtrado no comentário inicial.
+Atores externos usam a mesma entrega pelo pedido correlacionado:
+
+```sh
+omunculus events show --request-id INTERCEPTION_REQUEST_ID --db test/sessions.sqlite3
+```
+
+A saída é o próprio envelope `run.completed`, com as exclusões aplicadas. O log
+bruto em `events follow` permanece íntegro. A seleção é de contexto, não de acesso.
+
+Comparação com Qwen:
+
+```sh
+mise exec -- mix run scripts/validate_workflow.exs presets/local.toml plain --depth 1 --interceptor on --interceptor-input full
+mise exec -- mix run scripts/validate_workflow.exs presets/local.toml plain --depth 1 --interceptor on --interceptor-input without-report
+```

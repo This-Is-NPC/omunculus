@@ -1,5 +1,5 @@
 # Independent real-provider cases; the effect oracle only measures results.
-# Usage: mise exec -- mix run scripts/validate_workflow.exs presets/cloud.toml [plain|staged] [--db test/sessions.sqlite3] [--depth 0|1|2] [--interceptor off|on] [--repeats 1]
+# Usage: mise exec -- mix run scripts/validate_workflow.exs presets/cloud.toml [plain|staged] [--db test/sessions.sqlite3] [--depth 0|1|2] [--interceptor off|on] [--interceptor-input full|without-report] [--repeats 1]
 # Duration is a metric. Human escalation is a pending decision, not task failure.
 alias Omunculus.{Config, Dotenv, EventCore, Runtime}
 alias Omunculus.EventCore.Projector
@@ -10,7 +10,13 @@ Code.require_file("support/workflow_audit.exs", __DIR__)
 
 {options, [preset | selected], []} =
   OptionParser.parse(System.argv(),
-    strict: [db: :string, depth: :integer, repeats: :integer, interceptor: :string]
+    strict: [
+      db: :string,
+      depth: :integer,
+      repeats: :integer,
+      interceptor: :string,
+      interceptor_input: :string
+    ]
   )
 
 depth = options[:depth] || 1
@@ -18,6 +24,8 @@ repeats = options[:repeats] || 1
 true = depth in [0, 1, 2] and repeats > 0
 interceptor = options[:interceptor] || "off"
 true = interceptor in ["off", "on"]
+interceptor_input = options[:interceptor_input] || "full"
+true = interceptor_input in ["full", "without-report"]
 db = Path.expand(options[:db] || "test/sessions.sqlite3")
 File.mkdir_p!(Path.dirname(db))
 {:ok, core} = EventCore.start_link(path: db)
@@ -82,6 +90,20 @@ rows =
       File.read!("examples/interception-agent.toml")
       |> String.replace("enabled = true", "enabled = #{interceptor == "on"}")
 
+    summary_config =
+      if interceptor_input == "without-report" do
+        summary_config <>
+          """
+
+          exclude = ["payload.comment", "payload.report"]
+          exclude_items = [
+            {path = "payload.checkpoint.messages", match = {role = "assistant"}, missing = ["tool_calls"]}
+          ]
+          """
+      else
+        summary_config
+      end
+
     roles = """
     [agents.concierge]
     path = "#{Path.expand("priv/agents/concierge.md")}"
@@ -108,6 +130,7 @@ rows =
           session_id: session_id,
           scenario: scenario,
           interceptor: interceptor,
+          interceptor_input: interceptor_input,
           repetition: repetition,
           required_depth: depth,
           model: config.chat.model
@@ -260,6 +283,7 @@ rows =
         |> then(&:crypto.hash(:sha256, &1))
         |> Base.encode16(case: :lower),
       interceptor: interceptor,
+      interceptor_input: interceptor_input,
       actor_runs: actor_runs,
       task_runs: length(starts) - actor_runs,
       actor_requests: Enum.count(events, &(&1.type == "interception.requested")),

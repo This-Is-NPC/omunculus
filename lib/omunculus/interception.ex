@@ -127,8 +127,26 @@ defmodule Omunculus.Interception do
 
   def resolve(conn, %{type: type} = reply, append)
       when type in ["interception.responded", "interception.expired"] do
+    handled =
+      Store.query(
+        conn,
+        "SELECT 1 FROM EVENTS WHERE causation_id = ? AND type IN ('interception.requested', 'interception.resolved') LIMIT 1",
+        [reply.event_id]
+      )
+
+    if handled == [] do
+      resolve_pending(conn, reply, append)
+    else
+      req = fetch(conn, reply.payload["request_id"])
+      fetch(conn, req.payload["source_event_id"])
+    end
+  end
+
+  def resolve(_conn, _env, _append), do: nil
+
+  defp resolve_pending(conn, reply, append) do
     req = fetch(conn, reply.payload["request_id"])
-    # Reprocessing after a crash is idempotent by the triggering response.
+    # Only recover replies whose resulting interaction event was not committed.
     source = fetch(conn, req.payload["source_event_id"])
     rule = req.payload["rule"]
     attempt = req.payload["attempt"]
@@ -170,8 +188,6 @@ defmodule Omunculus.Interception do
 
     source
   end
-
-  def resolve(_conn, _env, _append), do: nil
 
   def view(conn, env) do
     if Omunculus.Events.actor_boundary?(env.type),

@@ -214,9 +214,9 @@ defmodule Omunculus.CLI.Spec do
       },
       "events" => %{
         name: "events",
-        about: "Read the event catalog or follow the EVENTS log",
+        about: "Read the event catalog, follow the log or show an interceptor delivery",
         long_about:
-          "catalog renders the event catalog module as a table. follow reads EVENTS in sequence order as NDJSON, one envelope per line, and keeps polling the file unless --once is given.",
+          "catalog renders the event catalog module as a table. follow reads EVENTS in sequence order as NDJSON, one envelope per line, and keeps polling the file unless --once is given. show --request-id prints the source event with the interception request exclusion policy applied.",
         arg_required_else_help: true,
         args: [
           %{
@@ -224,10 +224,16 @@ defmodule Omunculus.CLI.Spec do
             metavar: "action",
             required: true,
             variadic: false,
-            help: "catalog or follow"
+            help: "catalog, follow or show"
           }
         ],
         flags: [
+          flag("request_id",
+            long: "request-id",
+            value: "id",
+            help:
+              "Interception request whose source event is shown with its exclusion policy (show)"
+          ),
           flag("db", long: "db", value: "file", help: "SQLite file with the EVENTS log (follow)"),
           flag("session",
             long: "session",
