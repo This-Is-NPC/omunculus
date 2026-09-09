@@ -294,7 +294,7 @@ defmodule Omunculus.SessionTest do
     :ok = Projector.sync(projector)
   end
 
-  test "task.commented is visible on the next depth-0 request" do
+  test "unrelated session comments do not leak into a new Work Item" do
     comment = "remember the infra boundary"
 
     %{
@@ -335,9 +335,12 @@ defmodule Omunculus.SessionTest do
       EventCore.stream(core, 0, correlation_id: requested.correlation_id, type: "run.started")
       |> Enum.find(&(&1.payload["depth"] == 0))
 
-    messages = get_in(started.payload, ["checkpoint", "messages"]) || []
+    requests = EventCore.stream(core, 0, type: "model.call.requested")
+    request = Enum.find(requests, &(&1.run_id == started.run_id))
+    messages = request.payload["messages"]
+    assert is_list(messages) and messages != []
 
-    assert Enum.any?(messages, fn
+    refute Enum.any?(messages, fn
              %{"role" => "user", "content" => content} when is_binary(content) ->
                String.contains?(content, comment)
 

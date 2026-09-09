@@ -181,39 +181,40 @@ automação sem `run`, `may_request` apontando para perfil ou workspace
 inexistente.
 
 
-## Agentes padrão e prompts contextuais
+## Agentes configuráveis e contexto da Run
 
-O resolver de chat oferece `concierge`, `repo-concierge`, `worker` e
-`supervisor` e `reviewer` como configurações padrão. `[agents.<nome>]` personaliza prompt,
-kind, modelo, tools, max_turns e max_retries. Alterar somente o modelo conserva o
-prompt padrão. A identidade do agente não determina parent/depth: estes
-continuam pertencendo ao node runtime.
+`concierge`, `repo-concierge`, `worker`, `supervisor` e `reviewer` são agentes
+padrão substituíveis por `[agents.<nome>]`. O campo `prompt` define sua identidade,
+papel e responsabilidades; alterá-lo substitui integralmente o prompt de papel
+padrão. O harness não acrescenta ordens de gerente por nome ou `kind`.
+Alterar somente o modelo conserva o prompt padrão.
 
 ```toml
-[defaults]
-max_turns = 32
-max_retries = 2
+[agents.concierge]
+prompt = "Você é um gerente. Delegue o trabalho e avalie as evidências recebidas."
+tools = ["delegate"]
 
 [agents.worker]
-kind = "worker"
 prompt = "Execute a tarefa e relate evidências e pendências no comentário."
+tools = ["read", "write"]
 max_retries = 1
-
-[prompts.depth]
-"0" = "Você coordena a sessão; avalie as entregas dos workspaces."
-
-[prompts.kind]
-worker = "Execute dentro das ferramentas permitidas e preserve efeitos confirmados."
-
-[prompts.reason]
-retry = "Continue pelo comentário anterior; não repita o trabalho confirmado."
-break = "Avalie o alvo do break e registre sua decisão e justificativa."
 ```
 
-As camadas configuráveis substituem o texto padrão daquela posição, kind ou
-motivo. O protocolo obrigatório `completed/comment` é composto pelo harness.
-A cada Run, o system prompt é recomposto; o restante do checkpoint permanece.
-Perfil fornece instruções da tarefa, contextualizadas para executor ou pai.
+O system prompt contém a identidade configurada e o contrato comum de resposta.
+As ferramentas efetivamente autorizadas são expostas pelas suas schemas.
+Depth, kind, roteamento, retries e transições são controles internos; não geram
+camadas adicionais de prompt. As antigas seções `prompts.depth`, `prompts.kind`
+e `prompts.reason` foram removidas.
+
+O contexto de trabalho chega pelo Work Item e pelo comment que inicia a Run.
+Instruções do perfil entram no comment inicial da raiz; o agente transmite os
+critérios necessários ao delegar. Instruções da etapa ficam no contexto, não no
+system prompt. Comentários globais de outros Work Items não são injetados.
+Checkpoints preservam a conversa e os vínculos de chamadas de ferramentas.
+
+O contrato `completed/comment` vale para o relatório final e permite chamadas
+reais de ferramentas antes dele. `break=true` solicita intervenção. Quem julga
+conclusão continua sendo o agente responsável; o harness aplica a decisão.
 `max_retries` aceita inteiro >= 0, com precedência agente > perfil > defaults.
 Veja [relato, retries e break](run-report-and-break.md).
 

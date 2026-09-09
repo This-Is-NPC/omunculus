@@ -48,7 +48,6 @@ defmodule Omunculus.Config do
       interceptors: [],
       automations: [],
       agents: %{},
-      prompts: %{},
       workflows: %{},
       teams: %{},
       workspaces: %{},
@@ -187,21 +186,13 @@ defmodule Omunculus.Config do
         Enum.map(config.agents, fn {k, v} -> {"agents.#{k}", v} end) ++
         Enum.map(config.presets, fn {k, v} -> {"profiles.#{k}", v} end)
 
-    with :ok <-
-           each(entries, fn {where, entry} ->
-             value = entry[:max_retries]
+    each(entries, fn {where, entry} ->
+      value = entry[:max_retries]
 
-             if is_nil(value) or (is_integer(value) and value >= 0),
-               do: :ok,
-               else: {:error, {:invalid_max_retries, where, value}}
-           end) do
-      each(config[:prompts] || %{}, fn {layer, entries} ->
-        if layer in ["depth", "kind", "reason"] and is_map(entries) and
-             Enum.all?(entries, fn {_, text} -> is_binary(text) end),
-           do: :ok,
-           else: {:error, {:invalid_prompt_layer, layer}}
-      end)
-    end
+      if is_nil(value) or (is_integer(value) and value >= 0),
+        do: :ok,
+        else: {:error, {:invalid_max_retries, where, value}}
+    end)
   end
 
   # Teams reference agents, workspaces reference teams, roles reference
@@ -502,7 +493,6 @@ defmodule Omunculus.Config do
             may_request: item["may_request"]
           }
         end),
-      prompts: Map.get(map, "prompts", %{}),
       workflows: Map.get(map, "workflows", %{}),
       agents:
         Map.new(Map.get(map, "agents", %{}), fn {name, body} ->
@@ -578,7 +568,6 @@ defmodule Omunculus.Config do
       automations: base.automations ++ Map.get(overlay, :automations, []),
       agents: Map.merge(base.agents, Map.get(overlay, :agents, %{})),
       workflows: Map.merge(base.workflows, Map.get(overlay, :workflows, %{})),
-      prompts: Map.merge(base[:prompts] || %{}, Map.get(overlay, :prompts, %{})),
       teams: Map.merge(base.teams, Map.get(overlay, :teams, %{})),
       workspaces: Map.merge(base.workspaces, Map.get(overlay, :workspaces, %{})),
       policy: Map.merge(base.policy, Map.get(overlay, :policy, %{})),

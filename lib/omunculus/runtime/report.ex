@@ -22,25 +22,14 @@ defmodule Omunculus.Runtime.Report do
 
   def instruction do
     """
-    Return only a JSON object containing completed (boolean) and comment (nonempty string).
-    No Markdown fences or text outside the object.
-    The comment is your execution summary AND instructions for the next Run when work
-    remains. Do not put instructions in a separate field. completed refers to the work,
-    not whether this Run is ending. Use completed=false for unfinished work; the harness
-    sends the report to your parent for review. Rejection retries with the responsible's
-    comment, up to max_retries, then emits break. At the root, follow configured approval.
-    Optional break=true requests immediate escalation (completed must be false).
-    In a responsible review, completed=true approves the target stage without
-    executing it again; the harness advances the configured flow or completes the work.
-    false authorizes correction with your comment; break=true
-    escalates to the next responsible. Judge evidence yourself.
-    When making a request that ends this Run (delegate, request_work, request_permission),
-    include a nonempty comment argument summarizing your work and handoff context.
-    delegate and request_work create a new Work Item: provide work_item with its
-    instruction inside that object, plus comment. Never send a standalone instruction.
-    max_retries is durable per Work Item stage. Invalid tool/report corrections,
-    verification delegation and redelegation after approved work consume that budget;
-    creating another verification child does not reset it.
+    Use the exposed tools when an action is needed. Describing an action does not execute it.
+    When returning your final report, return only a JSON object containing completed (boolean)
+    and comment (nonempty string), without Markdown fences or text outside the object.
+    completed describes whether the assigned work is complete, not whether you are ending a response.
+    The comment summarizes the work, evidence and limitations. If work remains, include
+    the correction or next instructions in comment, never in a separate field.
+    Optional break=true requests intervention and requires completed=false.
+    Follow each tool's schema. A tool request and a final report are separate response types.
     """
   end
 end

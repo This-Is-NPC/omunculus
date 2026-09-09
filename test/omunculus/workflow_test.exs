@@ -88,7 +88,7 @@ defmodule Omunculus.WorkflowTest do
            )
 
     assert Enum.count(messages, &(&1["role"] == "system")) == 1
-    assert hd(messages)["content"] =~ "Run reason: retry"
+    refute hd(messages)["content"] =~ "Run reason:"
 
     values =
       EventCore.stream(core, 0, type: "tool.call.completed")
@@ -722,7 +722,7 @@ defmodule Omunculus.WorkflowTest do
 
     for stage <- ["to_do", "in_progress", "verification"] do
       assert_receive {:stage_context, ^stage, messages}
-      assert hd(messages)["content"] =~ "Work stage: #{stage}"
+      assert Enum.any?(messages, &((&1["content"] || "") =~ "Current stage: #{stage}"))
       refute Enum.any?(messages, &(&1["role"] == "assistant"))
     end
   end
@@ -1041,8 +1041,8 @@ defmodule Omunculus.WorkflowTest do
            ) == 1
 
     assert_receive {:gate_context, messages}
-    assert hd(messages)["content"] =~ "Kind: reviewer"
-    assert hd(messages)["content"] =~ "Work stage: review"
+    assert hd(messages)["content"] =~ "You are reviewer."
+    assert Enum.any?(messages, &((&1["content"] || "") =~ "Current stage: review"))
     refute Enum.any?(messages, &(&1["role"] == "assistant"))
   end
 

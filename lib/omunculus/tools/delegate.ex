@@ -23,12 +23,12 @@ defmodule Omunculus.Tools.Delegate do
           "team" => %{
             "type" => "string",
             "description" =>
-              "Known team for depth-0 routing. Omit for default configured routing."
+              "Known team to receive the work. Omit for default configured routing."
           },
           "agent" => %{
             "type" => "string",
             "description" =>
-              "Known member within the selected team for depth-1 routing. Not a tool name. Omit for default configured routing."
+              "Known agent within the selected team. Not a tool name. Omit for default configured routing."
           }
         },
         "required" => ["work_item"],

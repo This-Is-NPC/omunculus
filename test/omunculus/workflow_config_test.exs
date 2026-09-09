@@ -3,7 +3,7 @@ defmodule Omunculus.WorkflowConfigTest do
   alias Omunculus.{Config, Chat.Fake}
   alias Omunculus.Runtime.{Agents, Report}
 
-  test "config selects contextual layers, explicit kind and retry precedence" do
+  test "config selects agent prompt, explicit kind and retry precedence" do
     dir = Path.join(System.tmp_dir!(), "workflow-config-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
     on_exit(fn -> File.rm_rf!(dir) end)
@@ -19,12 +19,6 @@ defmodule Omunculus.WorkflowConfigTest do
     [profiles.count]
     instructions = "Configured task constraints"
     max_retries = 1
-    [prompts.depth]
-    "0" = "Configured position"
-    [prompts.kind]
-    auditor = "Configured capability"
-    [prompts.reason]
-    retry = "Configured retry instructions"
     """)
 
     assert {:ok, config} = Config.load(cwd: dir, config_file: file, env: %{})
@@ -35,15 +29,10 @@ defmodule Omunculus.WorkflowConfigTest do
     assert agent.max_retries == 3
     assert config.defaults.max_retries == 0
 
-    for text <- [
-          "Configured agent identity",
-          "Configured position",
-          "Configured capability",
-          "Configured retry instructions",
-          "Configured task constraints"
-        ] do
-      assert agent.system_prompt =~ text
-    end
+    assert agent.system_prompt =~ "Configured agent identity"
+    refute agent.system_prompt =~ "Configured task constraints"
+    refute agent.system_prompt =~ "retry"
+    assert agent.task_instructions == "Configured task constraints"
 
     assert agent.system_prompt =~ "completed (boolean)"
     config = %{config | agents: %{}}
@@ -61,6 +50,34 @@ defmodule Omunculus.WorkflowConfigTest do
       })
 
     assert agent.max_retries == 0
+  end
+
+  test "concierge prompt replaces its default and is independent of runtime topology" do
+    config = %{
+      Config.empty()
+      | agents: %{
+          "concierge" => %{prompt: "You are a research manager. Verify sources.", tools: ["read"]}
+        }
+    }
+
+    chat = Fake.new([]) |> Map.put(:model, "test")
+
+    prompts =
+      for depth <- [0, 1, 2], reason <- ["initial", "assessment", "retry", "break"] do
+        agent =
+          Agents.resolve(
+            %{config: config, agent: "concierge", depth: depth, max_depth: 2, reason: reason},
+            %{chat: chat}
+          )
+
+        assert agent.tools == ["read"]
+        assert agent.system_prompt =~ "You are a research manager. Verify sources."
+        refute agent.system_prompt =~ "Route work to the appropriate workspace"
+        refute agent.system_prompt =~ "Coordinate and review"
+        agent.system_prompt
+      end
+
+    assert length(Enum.uniq(prompts)) == 1
   end
 
   test "invalid retry configuration and malformed reports are rejected structurally" do
@@ -138,7 +155,7 @@ defmodule Omunculus.WorkflowConfigTest do
     assert agent.model == "review-model"
     assert agent.system_prompt =~ "Configured review gate"
     assert agent.flow == selected
-    assert agent.system_prompt =~ "Verify the effects"
+    refute agent.system_prompt =~ "Verify the effects"
   end
 
   test "invalid workflow references and stages are rejected" do

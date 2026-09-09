@@ -4,7 +4,7 @@ defmodule Omunculus.RuntimePromptTest do
   alias Omunculus.{Agent, Chat, Config, FS}
   alias Omunculus.Runtime.Agents
 
-  test "configured role and profile reach the chat and survive continuation without duplication" do
+  test "configured role reaches the chat and survive continuation without duplication" do
     {:ok, config} =
       Config.load(
         cwd: System.tmp_dir!(),
@@ -37,16 +37,12 @@ defmodule Omunculus.RuntimePromptTest do
 
       assert {:ok, result} = Agent.run(opts)
       assert_receive {:messages, [%{"role" => "system", "content" => prompt} | _]}
-      assert prompt =~ config.presets["count"].instructions
       assert prompt =~ config.agents[agent.agent_id].prompt
-
-      assert prompt =~
-               if(ctx.depth == 0,
-                 do: "Reference criteria for the original task",
-                 else: "Task profile:"
-               )
-
-      assert prompt =~ "The parent evaluates quality"
+      refute prompt =~ config.presets["count"].instructions
+      refute prompt =~ "Depth:"
+      refute prompt =~ "Kind:"
+      refute prompt =~ "Run reason:"
+      assert prompt =~ "When returning your final report"
 
       resumed_chat = Chat.Fake.new([Chat.Fake.report("reviewed")])
       observation = %{"role" => "tool", "content" => "Incomplete: missing evidence"}

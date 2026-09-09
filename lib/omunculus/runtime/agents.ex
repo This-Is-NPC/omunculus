@@ -60,6 +60,7 @@ defmodule Omunculus.Runtime.Agents do
     |> Map.put(:tool_policy, tool_policy)
     |> Map.put(:kind, kind)
     |> Map.put(:flow, flow)
+    |> Map.put(:task_instructions, profile[:instructions])
     |> Map.put(
       :max_retries,
       entry[:max_retries] || profile[:max_retries] || config.defaults[:max_retries] || 2
@@ -67,10 +68,8 @@ defmodule Omunculus.Runtime.Agents do
     |> Map.put(
       :system_prompt,
       Omunculus.Runtime.Prompt.compose(
-        ctx |> Map.put(:kind, kind) |> Map.put(:flow, flow),
         name,
-        entry[:prompt],
-        profile[:instructions]
+        entry[:prompt]
       )
     )
   end

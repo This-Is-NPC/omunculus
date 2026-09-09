@@ -369,7 +369,7 @@ defmodule Omunculus.Runtime do
           policy_invalid(state, spec, reason)
 
         {:ok, agent, bands, policy_hash, request_permission, spec, state} ->
-          spec = maybe_prepend_comments(state, spec, agent)
+          spec = initial_comment(spec, agent)
           start_run_with_agent(state, spec, agent, bands, policy_hash, request_permission)
       end
 
@@ -828,56 +828,25 @@ defmodule Omunculus.Runtime do
 
   defp normalize_runtime_config(_), do: nil
 
-  defp maybe_prepend_comments(state, %{depth: 0} = spec, agent) do
-    session_id = spec.session_id || spec.activation.session_id
-    checkpoint = spec.checkpoint || %{}
+  defp initial_comment(spec, agent) do
+    if spec[:reason] in [nil, "initial"] do
+      step = List.first((agent[:flow] || %{})["steps"] || [])
 
-    with true <- is_binary(session_id) and session_id != "",
-         true <- checkpoint == %{} or checkpoint_messages_empty?(checkpoint),
-         comments when comments != [] <- session_comments(state.core, session_id) do
-      note = format_session_comments(comments)
+      comment =
+        [
+          spec[:comment],
+          if(spec.depth == 0 && agent[:task_instructions],
+            do: "Task criteria: " <> agent.task_instructions
+          ),
+          if(step, do: "Current stage: #{step["name"]}. #{step["instructions"]}")
+        ]
+        |> Enum.reject(&(&1 in [nil, ""]))
+        |> Enum.join("\n")
 
-      messages = [
-        %{"role" => "system", "content" => agent[:system_prompt] || ""},
-        %{"role" => "user", "content" => note},
-        %{
-          "role" => "user",
-          "content" => Omunculus.WorkItem.render(spec.work_item, spec[:comment])
-        }
-      ]
-
-      %{spec | checkpoint: Map.put(checkpoint, "messages", messages)}
+      Map.put(spec, :comment, comment)
     else
-      _ -> spec
+      spec
     end
-  end
-
-  defp maybe_prepend_comments(_state, spec, _agent), do: spec
-
-  defp checkpoint_messages_empty?(checkpoint) do
-    case Map.get(checkpoint, "messages") || Map.get(checkpoint, :messages) do
-      msgs when is_list(msgs) -> msgs == []
-      _ -> true
-    end
-  end
-
-  defp session_comments(core, session_id) do
-    EventCore.query(
-      core,
-      "SELECT kind, body FROM COMMENTS WHERE session_id = ? ORDER BY last_sequence DESC LIMIT 10",
-      [session_id]
-    )
-  rescue
-    _ -> []
-  end
-
-  defp format_session_comments(comments) do
-    lines =
-      Enum.map(comments, fn [kind, body] ->
-        "#{kind}: #{body}"
-      end)
-
-    "Recent session comments:\n" <> Enum.join(lines, "\n")
   end
 
   defp record_crash(core, run, reason) do

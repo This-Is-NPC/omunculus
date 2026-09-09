@@ -34,7 +34,13 @@ defmodule Omunculus.AgentContractTest do
     resolver = fn ctx ->
       script =
         if ctx.reason == "initial" do
-          [Fake.tool_call("counter", %{}), Fake.report("One increment")]
+          [
+            fn messages ->
+              send(owner, {:initial_messages, messages})
+              Fake.tool_call("counter", %{})
+            end,
+            Fake.report("One increment")
+          ]
         else
           [
             fn messages ->
@@ -65,6 +71,17 @@ defmodule Omunculus.AgentContractTest do
     GenServer.stop(runtime)
     Projector.sync(projector)
     [worker, reviewer] = EventCore.stream(core, 0, type: "run.started")
+    assert_receive {:initial_messages, [system, context | _]}
+    refute system["content"] =~ "Increment once"
+
+    assert context["content"] ==
+             Omunculus.WorkItem.render(
+               worker.payload["work_item"],
+               worker.payload["comment"]
+             )
+
+    assert worker.payload["comment"] =~ "Task criteria: Increment once"
+    assert worker.payload["comment"] =~ "Current stage: implement. Produce one effect"
     assert worker.payload["tools"]["granted"] == ["counter"]
     assert reviewer.payload["tools"]["granted"] == ["read"]
     effects = EventCore.stream(core, 0, type: "tool.call.completed")
@@ -80,7 +97,8 @@ defmodule Omunculus.AgentContractTest do
            )
 
     assert_receive {:review_messages, messages}
-    assert hd(messages)["content"] =~ "Reference criteria"
+    refute hd(messages)["content"] =~ "reference criteria"
+    assert Enum.any?(messages, &((&1["content"] || "") =~ "Original task (reference criteria):"))
     assert Enum.any?(messages, &((&1["content"] || "") =~ "Confirmed tool state:"))
     before = Projector.snapshot(core)
     Projector.rebuild(projector)
