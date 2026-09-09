@@ -4,6 +4,53 @@ defmodule Omunculus.WorkflowObserverTest do
   use ExUnit.Case, async: true
   alias Omunculus.WorkflowObserver
 
+  test "request waits for its session protocol outcome after a failed attempt" do
+    alias Omunculus.{EventCore, Event.Envelope}
+    core = start_supervised!({EventCore, path: ":memory:"})
+    :ok = EventCore.subscribe(core, session_id: "observed")
+
+    task =
+      Task.async(fn ->
+        WorkflowObserver.request(core, "Count", session_id: "observed", workspace: "app")
+      end)
+
+    assert_receive {:event_core, %{type: "task.requested"} = requested}
+
+    EventCore.append!(
+      core,
+      Envelope.event("run.failed",
+        causation_id: requested.event_id,
+        session_id: "observed",
+        work_item_id: requested.work_item_id,
+        payload: %{reason: "transport"}
+      )
+    )
+
+    EventCore.append!(
+      core,
+      Envelope.event("task.completed",
+        causation_id: requested.event_id,
+        session_id: "another",
+        work_item_id: requested.work_item_id,
+        payload: %{result: "unrelated", depth: 0}
+      )
+    )
+
+    assert Task.yield(task, 20) == nil
+
+    EventCore.append!(
+      core,
+      Envelope.event("task.completed",
+        causation_id: requested.event_id,
+        session_id: "observed",
+        work_item_id: requested.work_item_id,
+        payload: %{result: "done", depth: 0}
+      )
+    )
+
+    assert {:ok, %{result: "done"}} = Task.await(task)
+  end
+
   test "child completion, failed attempts and parental breaks are not terminal outcomes" do
     task = Task.async(fn -> WorkflowObserver.await("root") end)
 

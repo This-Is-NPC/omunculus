@@ -1,10 +1,12 @@
 # Run with: mise exec -- mix run scripts/validate_real_matrix.exs --preset presets/cloud.toml
-# Optional: --rounds 3 --base complex --task count --timeout 300000
+# Optional: --rounds 3 --base complex --task count
+# Duration is a metric; wait for root completion or human intervention.
 # Workspaces and reports are isolated; sessions share test/sessions.sqlite3 (override with --db).
 alias Omunculus.{Config, Dotenv, EventCore, Runtime}
 alias Omunculus.Runtime.Agents
 alias Omunculus.Event.Envelope
 alias Omunculus.EventCore.Projector
+Code.require_file("support/workflow_observer.exs", __DIR__)
 
 {opts, _, invalid} =
   OptionParser.parse(System.argv(),
@@ -13,8 +15,7 @@ alias Omunculus.EventCore.Projector
       preset: :string,
       rounds: :integer,
       base: :string,
-      task: :string,
-      timeout: :integer
+      task: :string
     ]
   )
 
@@ -23,11 +24,10 @@ preset = Path.expand(opts[:preset] || "presets/local.toml")
 db = Path.expand(opts[:db] || "test/sessions.sqlite3")
 File.mkdir_p!(Path.dirname(db))
 rounds = opts[:rounds] || 1
-timeout = opts[:timeout] || 180_000
 bases = if opts[:base], do: [opts[:base]], else: ["simple", "medium", "complex"]
 tasks = if opts[:task], do: [opts[:task]], else: ["count", "write"]
 
-unless rounds > 0 and timeout > 0 and Enum.all?(tasks, &(&1 in ["count", "write"])) and
+unless rounds > 0 and Enum.all?(tasks, &(&1 in ["count", "write"])) and
          Enum.all?(bases, &(&1 in ["simple", "medium", "complex"])),
        do: raise("invalid matrix bounds")
 
@@ -115,23 +115,15 @@ results =
     started = System.monotonic_time(:millisecond)
 
     result =
-      Omunculus.Runtime.request(core, instruction,
+      Omunculus.WorkflowObserver.request(core, instruction,
         session_id: session,
         workspace: "app",
-        timeout: timeout,
         execution: %{cwd: dir, config_file: overlay, profile: profile, provider: "chat"}
       )
 
-    settle = fn recur, remaining ->
-      if is_pid(runtime) do
-        if Omunculus.Runtime.runs(runtime) != %{} and remaining > 0 do
-          Process.sleep(10)
-          recur.(recur, remaining - 1)
-        end
-      end
-    end
-
-    settle.(settle, 100)
+    # Close the writer only after the protocol outcome, before rebuilding projections.
+    runtime_idle = Omunculus.Runtime.runs(runtime) == %{}
+    GenServer.stop(runtime)
     Projector.sync_core(core)
     events = EventCore.stream(core, 0, session_id: session)
 
@@ -150,7 +142,6 @@ results =
 
     expected = if task == "count", do: 10, else: true
     success = match?({:ok, _}, result) and actual == expected
-    runtime_idle = Omunculus.Runtime.runs(runtime) == %{}
     snapshot = Projector.snapshot(core)
     Projector.rebuild(projector)
     replay_equal = snapshot == Projector.snapshot(core)
@@ -185,7 +176,7 @@ results =
     task_outcome =
       case result do
         {:ok, _} -> "completed"
-        {:error, :timeout} -> "timeout"
+        {:error, {:awaiting_human, _}} -> "awaiting_human"
         _ -> "error"
       end
 
@@ -230,7 +221,7 @@ results =
 
     File.write!(Path.join(root, "results.ndjson"), Jason.encode!(row) <> "\n", [:append])
     IO.puts(Jason.encode!(row))
-    for pid <- [runtime, automations, projector, core], do: GenServer.stop(pid)
+    for pid <- [automations, projector, core], do: GenServer.stop(pid)
     row
   end
 

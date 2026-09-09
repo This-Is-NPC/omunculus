@@ -4,6 +4,7 @@
 alias Omunculus.{Config, Dotenv, EventCore, Runtime}
 alias Omunculus.EventCore.Projector
 alias Omunculus.Runtime.Agents
+Code.require_file("support/workflow_observer.exs", __DIR__)
 
 {options, [preset], []} = OptionParser.parse(System.argv(), strict: [db: :string])
 db = Path.expand(options[:db] || "test/sessions.sqlite3")
@@ -89,15 +90,14 @@ IO.puts("Parent review evidence: #{dir}; session: #{session_id}; database: #{db}
 started = System.monotonic_time(:millisecond)
 
 result =
-  Runtime.request(
+  Omunculus.WorkflowObserver.request(
     core,
     "Use a ferramenta counter para contar de zero até 3. Informe o valor obtido.",
     session_id: session_id,
-    workspace: "app",
-    timeout: 180_000
+    workspace: "app"
   )
 
-# Stop the sole writer before collecting, including on client timeout.
+# Stop the sole writer after the protocol outcome before collecting.
 GenServer.stop(runtime)
 Projector.sync(projector)
 events = EventCore.stream(core, 0, session_id: session_id)
