@@ -73,8 +73,6 @@ rows =
           {name = "in_progress", instructions = "Increment counter exactly three times, reaching 3. Record each returned value as evidence."},
           {name = "review", agent = "reviewer", instructions = "Verify the recorded evidence against the task. Do not increment counter again. Report whether the confirmed final value is 3."}
         ]
-        [agents.worker]
-        workflow = "delivery"
         """
       else
         ""
@@ -84,7 +82,19 @@ rows =
       File.read!("examples/interception-agent.toml")
       |> String.replace("enabled = true", "enabled = #{interceptor == "on"}")
 
-    File.write!(overlay, File.read!(preset) <> "\n" <> workflow <> "\n" <> summary_config)
+    roles = """
+    [agents.concierge]
+    path = "#{Path.expand("priv/agents/concierge.md")}"
+    [agents.worker]
+    path = "#{Path.expand("priv/agents/worker.md")}"
+    workflow = #{if staged, do: ~s("delivery"), else: "false"}
+    """
+
+    File.write!(
+      overlay,
+      File.read!(preset) <> "\n" <> roles <> "\n" <> workflow <> "\n" <> summary_config
+    )
+
     {:ok, config} = Config.load(cwd: dir, config_file: overlay, env: env)
     {:ok, checked} = Config.check(config)
     :ok = EventCore.configure_interceptors(core, checked.interceptors)
