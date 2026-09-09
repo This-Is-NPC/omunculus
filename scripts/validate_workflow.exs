@@ -1,5 +1,5 @@
 # Independent real-provider cases; the effect oracle only measures results.
-# Usage: mise exec -- mix run scripts/validate_workflow.exs presets/cloud.toml [plain|staged] [--db test/sessions.sqlite3] [--depth 0|1|2] [--interceptor off|on] [--interceptor-input full|without-report] [--repeats 1]
+# Usage: mise exec -- mix run scripts/validate_workflow.exs presets/cloud.toml [plain|staged] [--db test/sessions.sqlite3] [--depth 0|1|2] [--interceptor off|on] [--interceptor-input full|without-report] [--repeats 1] [--recovery none|repair|escalate]
 # Duration is a metric. Human escalation is a pending decision, not task failure.
 alias Omunculus.{Config, Dotenv, EventCore, Runtime}
 alias Omunculus.EventCore.Projector
@@ -15,10 +15,13 @@ Code.require_file("support/workflow_audit.exs", __DIR__)
       depth: :integer,
       repeats: :integer,
       interceptor: :string,
-      interceptor_input: :string
+      interceptor_input: :string,
+      recovery: :string
     ]
   )
 
+recovery = options[:recovery] || "none"
+true = recovery in ["none", "repair", "escalate"]
 depth = options[:depth] || 1
 repeats = options[:repeats] || 1
 true = depth in [0, 1, 2] and repeats > 0
@@ -69,6 +72,38 @@ rows =
       else
         base
       end
+
+    if recovery != "none" and staged, do: raise("recovery scenarios use plain workflow")
+
+    base =
+      if recovery == "repair",
+        do:
+          String.replace(
+            base,
+            ~s(granted = ["counter", "delegate"]),
+            ~s(granted = ["counter", "counter_decrement", "delegate"])
+          ),
+        else: base
+
+    base =
+      if recovery == "repair" and depth == 0,
+        do:
+          String.replace(
+            base,
+            ~s(granted = ["counter"]),
+            ~s(granted = ["counter", "counter_decrement"])
+          ),
+        else: base
+
+    base =
+      if recovery != "none",
+        do:
+          String.replace(
+            base,
+            "Use only the counter tool. Call it once per increment until it returns the target.",
+            "Use the available counter operations only for remaining changes to the shared resource. Preserve existing effects."
+          ),
+        else: base
 
     File.write!(Path.join(dir, "omunculus.toml"), base)
     overlay = Path.join(dir, "provider.toml")
@@ -121,6 +156,14 @@ rows =
     {:ok, checked} = Config.check(config)
     :ok = EventCore.configure_interceptors(core, checked.interceptors)
     session_id = Envelope.generate_id("session")
+    initial_value = if recovery == "none", do: 0, else: 4
+    {:ok, resource} = Agent.start_link(fn -> %{value: initial_value, calls: 0} end)
+    resolver = Agents.resolver(provider: "chat", env: env)
+
+    shared_resolver = fn ctx ->
+      agent = resolver.(ctx)
+      update_in(agent.tool_options, &Map.put(&1, :tools, %{"counter" => %{resource: resource}}))
+    end
 
     EventCore.append!(
       core,
@@ -129,6 +172,8 @@ rows =
         payload: %{
           session_id: session_id,
           scenario: scenario,
+          recovery: recovery,
+          counter_initial: initial_value,
           interceptor: interceptor,
           interceptor_input: interceptor_input,
           repetition: repetition,
@@ -143,7 +188,7 @@ rows =
         core: core,
         session_id: session_id,
         max_depth: depth,
-        agents: Agents.resolver(provider: "chat", env: env),
+        agents: shared_resolver,
         config: [cwd: dir, config_file: overlay, profile: "count", env: env],
         run_opts: [fs: Omunculus.FS.Memory.new()]
       )
@@ -159,13 +204,19 @@ rows =
           session_id: session_id,
           work_item_id: Envelope.generate_id("wi"),
           payload: %{
+            comment:
+              "Fixture observation: the shared session counter starts at #{initial_value}. A new Work Item does not reset it.",
             instruction:
-              if(depth == 0,
-                do:
-                  "Increment counter exactly three times, reaching 3. Report the final value and each returned value as evidence.",
-                else:
-                  "Delegate through #{depth} level(s), with only the final worker executing counter: increment counter exactly three times, reaching 3. Every parent must review actual returned values before approving. Report the final value and evidence."
-              ),
+              if recovery != "none" do
+                "#{if depth > 0, do: "Delegate through #{depth} level(s) to the final worker. ", else: ""}The shared counter is currently 4 after a previous overshoot. The objective is a final value of 3, preserving all existing effects. #{if recovery == "repair", do: "Increment and decrement operations are available.", else: "Only increment is available; reset and decrement do not exist."} Evaluate whether the objective is reachable. Perform only necessary corrective changes when possible; otherwise request human intervention with the reason. Every parent must assess actual evidence before approving; do not create a replacement counter."
+              else
+                if(depth == 0,
+                  do:
+                    "Increment counter exactly three times, reaching 3. Report the final value and each returned value as evidence.",
+                  else:
+                    "Delegate through #{depth} level(s), with only the final worker executing counter: increment counter exactly three times, reaching 3. Every parent must review actual returned values before approving. Report the final value and evidence."
+                )
+              end,
             depth: 0,
             execution: %{},
             workspace: "app"
@@ -189,7 +240,8 @@ rows =
     values =
       events
       |> Enum.filter(
-        &(&1.type == "tool.call.completed" and &1.payload["tool"] == "counter" and
+        &(&1.type == "tool.call.completed" and
+            &1.payload["tool"] in ["counter", "counter_decrement"] and
             &1.payload["outcome"] == "completed")
       )
       |> Enum.map(& &1.payload["new"])
@@ -202,7 +254,13 @@ rows =
       |> MapSet.new(& &1.work_item_id)
 
     assessments = Enum.filter(events, &(&1.type == "task.assessment_requested"))
-    done = Enum.filter(events, &(&1.type == "task.completed" and not MapSet.member?(actor_items, &1.work_item_id)))
+
+    done =
+      Enum.filter(
+        events,
+        &(&1.type == "task.completed" and not MapSet.member?(actor_items, &1.work_item_id))
+      )
+
     advances = Enum.filter(events, &(&1.type == "task.advanced"))
     by_id = Map.new(events, &{&1.event_id, &1})
 
@@ -223,7 +281,8 @@ rows =
     productive =
       Enum.filter(
         events,
-        &(&1.type == "tool.call.completed" and &1.payload["tool"] == "counter" and
+        &(&1.type == "tool.call.completed" and
+            &1.payload["tool"] in ["counter", "counter_decrement"] and
             &1.payload["outcome"] == "completed")
       )
 
@@ -268,9 +327,36 @@ rows =
       end)
 
     actor_runs = Enum.count(starts, &MapSet.member?(actor_items, &1.work_item_id))
+    final_resource = Agent.get(resource, & &1)
+    Agent.stop(resource)
+
+    effect_success =
+      if recovery == "none",
+        do: values == [1, 2, 3],
+        else: values == [3] and final_resource.value == 3
+
+    expected_outcome = if recovery == "escalate", do: :awaiting_human, else: :completed
+
+    explicit_break =
+      Enum.any?(events, fn event ->
+        event.type == "run.completed" and event.payload["report_valid"] == true and
+          get_in(event.payload, ["report", "break"]) == true and
+          not MapSet.member?(actor_items, event.work_item_id)
+      end)
+
+    scenario_success =
+      if recovery == "escalate",
+        do:
+          outcome == expected_outcome and values == [] and final_resource.value == 4 and
+            explicit_break and terminal.type == "task.commented",
+        else: outcome == expected_outcome and effect_success and topology_valid
 
     counter_requests =
-      Enum.filter(events, &(&1.type == "tool.call.requested" and &1.payload["tool"] == "counter"))
+      Enum.filter(
+        events,
+        &(&1.type == "tool.call.requested" and
+            &1.payload["tool"] in ["counter", "counter_decrement"])
+      )
 
     counter_schema_conformant = Enum.all?(counter_requests, &(&1.payload["args"] == %{}))
 
@@ -282,6 +368,12 @@ rows =
         |> IO.iodata_to_binary()
         |> then(&:crypto.hash(:sha256, &1))
         |> Base.encode16(case: :lower),
+      recovery: recovery,
+      counter_initial: initial_value,
+      counter_final: final_resource.value,
+      expected_outcome: expected_outcome,
+      explicit_break: explicit_break,
+      scenario_success: scenario_success and counter_schema_conformant,
       interceptor: interceptor,
       interceptor_input: interceptor_input,
       actor_runs: actor_runs,
@@ -300,7 +392,7 @@ rows =
       protocol_outcome: outcome,
       root_completed: outcome == :completed,
       task_success:
-        outcome == :completed and values == [1, 2, 3] and topology_valid and
+        outcome == :completed and effect_success and topology_valid and
           counter_schema_conformant,
       handoffs_valid: handoffs.handoffs_valid,
       rejected_handoffs_blocked: handoffs.rejected_handoffs_blocked,
@@ -316,7 +408,7 @@ rows =
       schemas_match: schemas_match,
       all_runs_closed: all_runs_closed,
       model_calls: Enum.count(events, &(&1.type == "model.call.completed")),
-      effect_success: values == [1, 2, 3],
+      effect_success: effect_success,
       result: terminal.payload["result"],
       terminal_event_id: terminal.event_id,
       terminal_event_type: terminal.type,

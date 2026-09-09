@@ -9,6 +9,7 @@ defmodule Omunculus.Tools do
     "find" => Omunculus.Tools.Find,
     "ls" => Omunculus.Tools.Ls,
     "counter" => Omunculus.Tools.Counter,
+    "counter_decrement" => Omunculus.Tools.CounterDecrement,
     "delegate" => Omunculus.Tools.Delegate,
     "request_work" => Omunculus.Tools.RequestWork,
     "directory" => Omunculus.Tools.Directory,

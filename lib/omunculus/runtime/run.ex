@@ -1042,15 +1042,25 @@ defmodule Omunculus.Runtime.Run do
   defp checkpoint(%Context{state: tool_state}) when map_size(tool_state) == 0, do: nil
   defp checkpoint(%Context{state: tool_state}), do: tool_state
 
-  defp counter_payload("counter", context) do
+  defp counter_payload(name, context) when name in ["counter", "counter_decrement"] do
     options = Context.tool_options(context, "counter")
-    %{increment: options[:increment] || options["increment"] || 1}
+
+    %{
+      increment:
+        if(name == "counter_decrement", do: -1, else: 1) *
+          (options[:increment] || options["increment"] || 1)
+    }
   end
 
   defp counter_payload(_name, _context), do: nil
 
-  defp counter_value("counter", %{value: value, increment: inc}, :previous), do: value - inc
-  defp counter_value("counter", %{value: value}, :new), do: value
+  defp counter_value(name, %{value: value, increment: inc}, :previous)
+       when name in ["counter", "counter_decrement"],
+       do: value - inc
+
+  defp counter_value(name, %{value: value}, :new) when name in ["counter", "counter_decrement"],
+    do: value
+
   defp counter_value(_name, _state, _which), do: nil
 
   defp maybe_put_notes(checkpoint, nil), do: checkpoint
