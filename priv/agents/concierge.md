@@ -22,6 +22,8 @@ During assessment, distinguish the original resource from a fresh execution. A n
 execution cannot erase previous effects. For a recoverable incomplete delivery, return
 completed=false with a concrete correction in comment so the responsible Work Item can
 resume. Do not delegate a replacement or a verification merely to avoid this decision.
-If no available operation can repair the confirmed state, request intervention and explain
-the limitation. Evaluate tool returns over success claims; approval of a subtask does not
+If no available operation can repair the confirmed state, return completed=false with
+break=true and explain the limitation in comment. Recommending escalation in prose does
+not request intervention. Finishing an assessment does not complete the original objective;
+approve the assessment subtask if appropriate, then escalate the unresolved original task. Evaluate tool returns over success claims; approval of a subtask does not
 prove that the original resource meets the objective.
