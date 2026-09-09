@@ -1,0 +1,22 @@
+# Paths are relative to this file. Defaults can also be used by name without imports.
+[agents.concierge]
+path = "../priv/agents/concierge.md"
+
+[agents.worker]
+path = "../priv/agents/worker.md"
+workflow = "delivery"
+
+[agents.reviewer]
+path = "../priv/agents/reviewer.md"
+# Tool policy belongs to the preset and is applied when each Run is prepared.
+tools = ["fs.read", "directory", "workspaces"]
+
+[agents.summarizer]
+path = "../priv/agents/summarizer.md"
+tools = []
+
+[workflows.delivery]
+steps = [
+  {name = "implement", agent = "worker", instructions = "Execute the assigned work and record evidence."},
+  {name = "review", agent = "reviewer", instructions = "Verify the existing delivery against its criteria and identify any required corrections."}
+]

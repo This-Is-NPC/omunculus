@@ -183,7 +183,7 @@ inexistente.
 
 ## Agentes configuráveis e contexto da Run
 
-`concierge`, `repo-concierge`, `worker`, `supervisor` e `reviewer` são agentes
+`concierge`, `worker`, `reviewer` e `summarizer` são agentes
 padrão substituíveis por `[agents.<nome>]`. O campo `prompt` define sua identidade,
 papel e responsabilidades; alterá-lo substitui integralmente o prompt de papel
 padrão. O harness não acrescenta ordens de gerente por nome ou `kind`.
@@ -217,6 +217,58 @@ reais de ferramentas antes dele. `break=true` solicita intervenção. Quem julga
 conclusão continua sendo o agente responsável; o harness aplica a decisão.
 `max_retries` aceita inteiro >= 0, com precedência agente > perfil > defaults.
 Veja [relato, retries e break](run-report-and-break.md).
+
+## Agentes Markdown
+
+Os quatro defaults são definidos em [`priv/agents`](../../priv/agents) e
+embutidos no CLI na compilação. Nenhum arquivo externo é necessário para usá-los
+pelo nome. Agentes especializados podem ser importados por `path`:
+
+```toml
+[agents.editor]
+path = "./agents/editor.md"
+model = "modelo-do-preset"
+max_retries = 2
+```
+
+O caminho é relativo ao TOML que declara o agente, não ao diretório de execução.
+O nome é a chave `editor` da seção. Campos explícitos no TOML sobrescrevem os
+importados, inclusive `prompt`. As tools são configuradas no TOML e montadas
+antes de cada Run pelas políticas existentes; não fazem parte do frontmatter. O arquivo precisa
+existir e ser válido; não há fallback silencioso. Não há imports encadeados.
+
+O frontmatter usa **TOML entre `+++`**, seguido pelo Markdown do prompt de papel:
+
+```markdown
++++
+kind = "worker"
+max_turns = 16
++++
+Você edita o documento solicitado e relata as alterações e evidências.
+```
+
+Campos opcionais do frontmatter: `kind`, `model`, `max_turns`,
+`max_retries`, `workflow` e `root_approval`, com os tipos da configuração de
+agente. O prompt vem exclusivamente do corpo Markdown não vazio; campos
+desconhecidos e `tools` são rejeitados. Não é YAML e não requer um parser adicional.
+
+O preset pode usar os defaults diretamente ou importar um arquivo sob qualquer
+nome. A seleção por etapa já existe:
+
+```toml
+[agents.worker]
+workflow = "delivery"
+
+[workflows.delivery]
+steps = [
+  {name = "implement", agent = "worker", instructions = "Execute o trabalho solicitado e registre evidências."},
+  {name = "review", agent = "reviewer", instructions = "Verifique se a entrega satisfaz os critérios; relate correções necessárias."}
+]
+```
+
+`agent` seleciona o papel da etapa do workflow. Não seleciona por estado técnico
+(`running`/`failed`) e não troca o pai pelo reviewer nas avaliações parentais.
+Veja um [preset de exemplo](../../examples/agents.toml).
 
 ## Máquina opcional de trabalho
 

@@ -109,41 +109,19 @@ defmodule Omunculus.Runtime.Agents do
     end
   end
 
-  def defaults do
-    %{
-      "concierge" => %{
-        kind: "concierge",
-        prompt: "Route work to the appropriate workspace. Review reports and intervene on break."
-      },
-      "repo-concierge" => %{
-        kind: "concierge",
-        prompt:
-          "Coordinate repository work. Delegate execution and evaluate the returned evidence."
-      },
-      "worker" => %{
-        kind: "worker",
-        prompt: "Execute the assigned work and report evidence, limitations and remaining work."
-      },
-      "reviewer" => %{
-        tools: ["fs.read", "directory", "workspaces", "delegate"],
-        kind: "reviewer",
-        prompt:
-          "Review the existing work against the requested criteria. Report evidence, defects and the gate verdict. Do not repeat implementation effects."
-      },
-      "supervisor" => %{
-        kind: "supervisor",
-        prompt:
-          "Evaluate escalated work. Recognize completed effects, direct correction or escalate."
-      }
-    }
-  end
+  @default_agents Map.new(~w(concierge worker reviewer summarizer), fn name ->
+                    path = Path.expand("../../../priv/agents/#{name}.md", __DIR__)
+                    @external_resource path
+                    {:ok, agent} = Omunculus.AgentFile.read(path)
+                    {name, Omunculus.AgentFile.normalize(agent)}
+                  end)
+
+  def defaults, do: @default_agents
 
   defp configured_agent(config, name) do
     entry = Map.fetch!(config.agents, name)
 
-    Map.merge(Map.get(defaults(), name, %{}), entry, fn _, default, value ->
-      if is_nil(value), do: default, else: value
-    end)
+    Omunculus.AgentFile.merge(Map.get(defaults(), name, %{}), entry)
   end
 
   defp parse_turns(nil), do: nil

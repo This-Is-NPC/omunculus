@@ -27,7 +27,7 @@ defmodule Omunculus.Config do
       end
 
     Enum.reduce_while(sources, {:ok, empty()}, fn path, {:ok, acc} ->
-      case read_file(path, env) do
+      case read_file(Path.expand(path, cwd), env) do
         {:ok, overlay} -> {:cont, {:ok, merge(acc, overlay)}}
         {:error, _} = error -> {:halt, error}
       end
@@ -435,7 +435,9 @@ defmodule Omunculus.Config do
       {:ok, body} ->
         case Toml.decode(body) do
           {:ok, map} ->
-            with {:ok, expanded} <- expand_env(map, env) do
+            with {:ok, expanded} <- expand_env(map, env),
+                 {:ok, imported} <- import_agents(expanded, path),
+                 {:ok, expanded} <- expand_env(imported, env) do
               config = from_toml(expanded)
 
               workspaces =
@@ -457,6 +459,34 @@ defmodule Omunculus.Config do
 
       {:error, _} ->
         {:ok, %{}}
+    end
+  end
+
+  defp import_agents(map, source) do
+    Enum.reduce_while(Map.get(map, "agents", %{}), {:ok, %{}}, fn {name, body}, {:ok, acc} ->
+      result =
+        case body["path"] do
+          nil ->
+            {:ok, body}
+
+          path when is_binary(path) and path != "" ->
+            with {:ok, imported} <-
+                   Omunculus.AgentFile.read(Path.expand(path, Path.dirname(source))) do
+              {:ok, Map.merge(imported, Map.delete(body, "path"))}
+            end
+
+          _ ->
+            {:error, {:invalid_agent_path, name}}
+        end
+
+      case result do
+        {:ok, entry} -> {:cont, {:ok, Map.put(acc, name, entry)}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, agents} -> {:ok, Map.put(map, "agents", agents)}
+      {:error, _} = error -> error
     end
   end
 
@@ -558,17 +588,7 @@ defmodule Omunculus.Config do
       workflows: Map.get(map, "workflows", %{}),
       agents:
         Map.new(Map.get(map, "agents", %{}), fn {name, body} ->
-          {name,
-           %{
-             tools: body["tools"],
-             prompt: body["prompt"],
-             kind: body["kind"],
-             max_retries: body["max_retries"],
-             workflow: body["workflow"],
-             root_approval: body["root_approval"],
-             model: body["model"],
-             max_turns: parse_int(body["max_turns"])
-           }}
+          {name, Omunculus.AgentFile.normalize(body) |> Map.update!(:max_turns, &parse_int/1)}
         end),
       teams:
         Map.new(Map.get(map, "teams", %{}), fn {name, body} ->
@@ -628,7 +648,10 @@ defmodule Omunculus.Config do
       output: deep_keep(base.output, Map.get(overlay, :output, %{})),
       interceptors: base.interceptors ++ Map.get(overlay, :interceptors, []),
       automations: base.automations ++ Map.get(overlay, :automations, []),
-      agents: Map.merge(base.agents, Map.get(overlay, :agents, %{})),
+      agents:
+        Map.merge(base.agents, Map.get(overlay, :agents, %{}), fn _, base, overlay ->
+          Omunculus.AgentFile.merge(base, overlay)
+        end),
       workflows: Map.merge(base.workflows, Map.get(overlay, :workflows, %{})),
       teams: Map.merge(base.teams, Map.get(overlay, :teams, %{})),
       workspaces: Map.merge(base.workspaces, Map.get(overlay, :workspaces, %{})),
