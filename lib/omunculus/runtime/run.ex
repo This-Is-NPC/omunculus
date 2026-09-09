@@ -97,8 +97,14 @@ defmodule Omunculus.Runtime.Run do
     active_tools = executable_tools(state)
 
     opts = [
-      on_retry: &reserve_recovery(state, &1),
-      report_required: not (state[:arbitration] || state[:cross_lineage_arbitration] || false),
+      on_retry:
+        if(agent[:response_contract],
+          do: fn _ -> {:error, :max_retries_exhausted} end,
+          else: &reserve_recovery(state, &1)
+        ),
+      report_required:
+        !(agent[:response_contract] || state[:arbitration] || state[:cross_lineage_arbitration] ||
+            false),
       instruction: Omunculus.WorkItem.render(state.work_item, state[:comment]),
       chat: agent.chat,
       fs: state[:fs] || fs_for_roots(state[:roots]),
@@ -171,9 +177,16 @@ defmodule Omunculus.Runtime.Run do
         )
 
       {:ok, result} ->
-        if !(state[:arbitration] || state[:cross_lineage_arbitration]),
-          do: finish_report(state, result),
-          else: finish_arbitration(state, result)
+        cond do
+          agent[:response_contract] ->
+            finish_response(state, result)
+
+          state[:arbitration] || state[:cross_lineage_arbitration] ->
+            finish_arbitration(state, result)
+
+          true ->
+            finish_report(state, result)
+        end
 
       {:error, reason} ->
         append!(state, :event, "run.failed", %{reason: inspect(reason)})
@@ -243,6 +256,39 @@ defmodule Omunculus.Runtime.Run do
       end)
 
     Keyword.put(opts, :schemas, schemas)
+  end
+
+  defp finish_response(state, result) do
+    schema = state.agent.response_contract
+
+    checkpoint = %{
+      "messages" => result.messages,
+      "tool_state" => result.tool_state,
+      "awaiting" => [],
+      "pending" => %{}
+    }
+
+    with {:ok, output} <- Jason.decode(result.assistant_text || ""),
+         true <- not Map.has_key?(result, :limit_reached),
+         true <- Omunculus.Interception.valid_output?(schema, output),
+         true <- Enum.sort(Map.keys(output)) == Enum.sort(Map.keys(schema)) do
+      append!(state, :event, "run.completed", %{
+        outcome: "responded",
+        output: output,
+        comment: Jason.encode!(output),
+        checkpoint: checkpoint,
+        rounds: result.turns,
+        tool_calls: result.tool_calls
+      })
+    else
+      _ ->
+        append!(state, :event, "run.failed", %{
+          reason: "invalid_interception_response",
+          checkpoint: checkpoint
+        })
+    end
+
+    {:stop, :normal, state}
   end
 
   defp finish_report(state, result) do

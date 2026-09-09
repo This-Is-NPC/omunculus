@@ -1,7 +1,18 @@
 defmodule Omunculus.Interception.Agents do
-  @moduledoc "Adapter from actor requests to ordinary configured agent Work Items and Runs."
+  @moduledoc "Configured agent Runs answer interception contracts without task assessment or retries."
   alias Omunculus.{EventCore, Interception}
   alias Omunculus.Event.Envelope
+
+  def contract(core, work_item_id) do
+    activation =
+      EventCore.stream(core, 0, work_item_id: work_item_id, type: "task.requested")
+      |> List.first()
+
+    if activation && activation.payload["interception_request_id"] do
+      {:ok, request} = EventCore.fetch(core, activation.payload["interception_request_id"])
+      request.payload["rule"]["response"]
+    end
+  end
 
   def advance(state) do
     opts = if state[:session_id], do: [session_id: state.session_id], else: []
@@ -21,20 +32,33 @@ defmodule Omunculus.Interception.Agents do
       terminal =
         Enum.find(
           events,
-          &(&1.work_item_id == wi and &1.type in ["task.completed", "task.break"])
+          &(&1.work_item_id == wi and
+              (&1.type == "run.failed" or
+                 (&1.type == "run.completed" and &1.payload["outcome"] == "responded")))
         )
 
       activation = Enum.find(events, &(&1.type == "task.requested" and &1.work_item_id == wi))
 
       cond do
         response ->
-          close_break(state.core, terminal, response)
+          :ok
 
         terminal ->
-          case reply(state.core, request, terminal) do
-            {:ok, response} -> close_break(state.core, terminal, response)
-            {:error, _} -> :ok
+          if terminal.type == "run.completed" do
+            EventCore.append!(
+              state.core,
+              Envelope.event("task.completed",
+                idempotency_key: "actor-finished:" <> request.event_id,
+                correlation_id: terminal.correlation_id,
+                causation_id: terminal.event_id,
+                session_id: terminal.session_id,
+                work_item_id: wi,
+                payload: %{result: Jason.encode!(terminal.payload["output"]), depth: 0}
+              )
+            )
           end
+
+          reply(state.core, request, terminal)
 
         is_nil(activation) ->
           start(state.core, request)
@@ -49,22 +73,6 @@ defmodule Omunculus.Interception.Agents do
 
     state
   end
-
-  defp close_break(core, %{type: "task.break"} = terminal, response) do
-    EventCore.append!(
-      core,
-      Envelope.event("task.assessment_resolved",
-        idempotency_key: "actor-break:" <> terminal.event_id,
-        correlation_id: terminal.correlation_id,
-        causation_id: response.event_id,
-        session_id: terminal.session_id,
-        work_item_id: terminal.work_item_id,
-        payload: %{request_id: terminal.event_id, comment: terminal.payload["comment"]}
-      )
-    )
-  end
-
-  defp close_break(_core, _terminal, _response), do: :ok
 
   defp start(core, request) do
     {:ok, source} = EventCore.fetch(core, request.payload["source_event_id"])
@@ -110,18 +118,18 @@ defmodule Omunculus.Interception.Agents do
 
   defp reply(core, request, terminal) do
     payload =
-      if terminal.type == "task.completed",
+      if terminal.type == "run.completed",
         do: %{
           request_id: request.event_id,
           actor: request.payload["actor"],
           outcome: "completed",
-          output: %{comment: terminal.payload["result"], completed: true}
+          output: terminal.payload["output"]
         },
         else: %{
           request_id: request.event_id,
           actor: request.payload["actor"],
           outcome: "failed",
-          error: terminal.payload["comment"]
+          error: terminal.payload["reason"]
         }
 
     EventCore.append(

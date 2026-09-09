@@ -194,8 +194,15 @@ rows =
       )
       |> Enum.map(& &1.payload["new"])
 
+    actor_items =
+      events
+      |> Enum.filter(
+        &(&1.type == "task.requested" and &1.payload["interception_request_id"] != nil)
+      )
+      |> MapSet.new(& &1.work_item_id)
+
     assessments = Enum.filter(events, &(&1.type == "task.assessment_requested"))
-    done = Enum.filter(events, &(&1.type == "task.completed"))
+    done = Enum.filter(events, &(&1.type == "task.completed" and not MapSet.member?(actor_items, &1.work_item_id)))
     advances = Enum.filter(events, &(&1.type == "task.advanced"))
     by_id = Map.new(events, &{&1.event_id, &1})
 
@@ -259,13 +266,6 @@ rows =
       |> Enum.all?(fn {_, reservations} ->
         length(reservations) <= hd(reservations).payload["recovery"]["max_retries"]
       end)
-
-    actor_items =
-      events
-      |> Enum.filter(
-        &(&1.type == "task.requested" and &1.payload["interception_request_id"] != nil)
-      )
-      |> MapSet.new(& &1.work_item_id)
 
     actor_runs = Enum.count(starts, &MapSet.member?(actor_items, &1.work_item_id))
 

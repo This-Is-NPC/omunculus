@@ -22,8 +22,17 @@ defmodule Omunculus.Runtime.Workflow do
   def advance(state) do
     events = Runtime.events(state)
 
+    actors =
+      events
+      |> Enum.filter(
+        &(&1.type == "task.requested" and &1.payload["interception_request_id"] != nil)
+      )
+      |> MapSet.new(& &1.work_item_id)
+
+    task_events = Enum.reject(events, &MapSet.member?(actors, &1.work_item_id))
+
     state =
-      Enum.reduce(events, state, fn env, acc ->
+      Enum.reduce(task_events, state, fn env, acc ->
         case env do
           %{type: "run.completed", payload: %{"outcome" => "reported"}} ->
             if live?(acc, env.work_item_id) or handled?(acc.core, env),

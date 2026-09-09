@@ -130,7 +130,7 @@ defmodule Omunculus.Runtime do
     Omunculus.EventCore.Projector.sync_core(state.core)
 
     state =
-      if env.type in ["interception.requested", "task.completed", "task.break"],
+      if env.type in ["interception.requested", "run.completed", "run.failed"],
         do: Omunculus.Interception.Agents.advance(state),
         else: state
 
@@ -768,7 +768,8 @@ defmodule Omunculus.Runtime do
       stage: Omunculus.Runtime.Workflow.stage(state.core, spec.work_item_id),
       cross_lineage_arbitration: Map.get(spec, :cross_lineage_arbitration),
       cross_lineage_request: Map.get(spec, :cross_lineage_request),
-      execution: task_execution(state.core, spec)
+      execution: task_execution(state.core, spec),
+      response_contract: Omunculus.Interception.Agents.contract(state.core, spec.work_item_id)
     }
 
     case loaded do

@@ -15,7 +15,6 @@ O shape de agente continua sendo `[agents.<nome>]`. Exemplo completo em
 prompt = "Produza contexto a partir do evento recebido, preservando evidências e pendências. Não execute nem aprove a tarefa original."
 tools = []
 workflow = false
-max_retries = 1
 
 [interceptors.handoff-context]
 events = ["run.completed"]
@@ -54,9 +53,10 @@ As bindings são declarativas: destino à esquerda e campo da resposta à direit
 Os destinos atuais são `comment`, `report.comment` (em `run.completed`) e `result` (em `task.completed`), todos textuais.
 Não podem alterar IDs, estado, ferramentas ou `completed` da tarefa original.
 Isso delimita o contrato de contexto sem ensinar ao harness o que um resumo deve
-conter. Para agentes, a resposta reutiliza `completed/comment`; para atores
-externos, o objeto `output` obedece ao contrato configurado. Campos obrigatórios
-são validados; campos adicionais não são usados pelas bindings.
+conter. Agentes e atores externos respondem pelo `response` configurado. O agente recebe
+esse contrato no system prompt e retorna apenas seus campos; aqui, `{"comment":"..."}`.
+Não recebe o contrato de execução `completed/comment/break`. O Core valida os tipos
+do output, sem julgar a tarefa descrita no evento.
 
 Com `wait=false`, bindings devem ser vazias: uma observação assíncrona não altera
 retroativamente uma entrega realizada. Várias regras recebem o evento original;
@@ -92,19 +92,21 @@ interrompidos: aguardar interceptação não transforma uma Run encerrada em cra
 Uma delegação pendente encerra a Run solicitante normalmente como `waiting`.
 Ela não mantém um processo esperando pelo ator. A futura Run filha nasce quando
 a entrega é liberada. Atores agentes têm Work Items e Runs próprios, com uma
-correlação própria e `causation_id` vinculado à solicitação. Seu `completed`
-conclui apenas o trabalho de processamento. Eventos dessa linhagem não voltam
+correlação própria e `causation_id` vinculado à solicitação. Uma resposta válida encerra a Run com `outcome=responded` e `output`; o adaptador
+registra a conclusão do Work Item de processamento e publica a resposta da interação.
+Isso não aprova a tarefa original. Eventos dessa linhagem não voltam
 à interceptação por atores, evitando recursão acidental; gates de política
 continuam valendo.
 
 ## Falhas, prazos e reinício
 
-O orçamento da interação é persistido por evento de origem/regra. Cada agente
-continua tendo seu próprio orçamento de execução configurado no shape existente;
-nenhum deles é renovado por reiniciar o Core. O break do agente de processamento
-é reconhecido pela interação proprietária antes de acionar o roteamento humano;
-quem escala a interação é seu orçamento persistido. Falhas de processamento podem
-portanto incluir as tentativas internas do agente antes de uma resposta de falha.
+O orçamento da interação é persistido por evento de origem/regra. Cada tentativa
+executa uma Run do ator, sem workflow de aprovação ou retries internos do Work Item.
+Falha técnica, limite de execução ou resposta inválida produz falha da interação;
+seu `max_retries` é o único orçamento de repetição. Esgotamento escala para `human`.
+Uma descrição válida de uma tarefa que falhou resolve a interação normalmente.
+O agente de processamento não decide conclusão ou correção da tarefa original;
+o pai continua responsável por avaliá-la. Reiniciar o Core não renova o orçamento.
 
 Se configurado, o vencimento gera `interception.expired`, identificado como ação
 do Core, não uma resposta fictícia do ator. Usa o mesmo caminho de recuperação.

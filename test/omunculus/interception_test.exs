@@ -529,8 +529,52 @@ defmodule Omunculus.InterceptionTest do
     end
   end
 
-  for failure? <- [false, true], filtered? <- [false, true] do
-    test "configured agent produces context with initial failure=#{failure?}, filtered=#{filtered?}" do
+  test "agent response schema accepts boolean data without task completion semantics" do
+    dir =
+      Path.join(System.tmp_dir!(), "interception-schema-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf!(dir) end)
+
+    File.write!(Path.join(dir, "omunculus.toml"), """
+    [interceptors.context]
+    events = ["run.completed"]
+    agent = "summarizer"
+    work_item = {instruction = "Describe the evidence"}
+    response = {comment = "string", observed = "boolean"}
+    bindings = {"comment" = "comment"}
+    """)
+
+    {:ok, config} = Config.load(cwd: dir, env: %{})
+    assert {:ok, checked} = Config.check(config)
+    core = start_supervised!({EventCore, path: ":memory:", interceptors: checked.interceptors})
+    start_supervised!({Projector, core: core})
+    EventCore.subscribe(core)
+
+    resolver = fn ctx ->
+      Omunculus.Runtime.Agents.resolve(ctx, %{
+        chat:
+          Chat.Fake.new([
+            Chat.Fake.text(Jason.encode!(%{comment: "The source task failed", observed: false}))
+          ])
+          |> Map.put(:model, "test")
+      })
+    end
+
+    start_supervised!({Runtime, core: core, agents: resolver, config: [cwd: dir]})
+    original = source(core)
+    assert_receive {:event_core, %{type: "interception.resolved"}}, 2000
+    assert {:ready, delivered} = EventCore.delivery(core, original)
+    assert delivered.payload["comment"] == "The source task failed"
+    assert delivered.payload["report"]["completed"] == false
+    [response] = EventCore.stream(core, 0, type: "interception.responded")
+    assert response.payload["output"]["observed"] == false
+    assert response.payload["outcome"] == "completed"
+  end
+
+  for failure? <- [false, true], filtered? <- [false, true], source_completed? <- [false, true] do
+    test "configured agent produces context with initial failure=#{failure?}, filtered=#{filtered?}, source_completed=#{source_completed?}" do
+      source_completed? = unquote(source_completed?)
       failure? = unquote(failure?)
       filtered? = unquote(filtered?)
       {:ok, calls} = Agent.start_link(fn -> 0 end)
@@ -580,12 +624,18 @@ defmodule Omunculus.InterceptionTest do
                           comment: "Processing failed"
                         })
                       ),
-                    else: Chat.Fake.report("compact evidence: counter returned 1")
+                    else:
+                      Chat.Fake.text(
+                        Jason.encode!(%{comment: "compact evidence: counter returned 1"})
+                      )
                 end
               ]
 
             ctx.depth == 1 ->
-              [Chat.Fake.tool_call("counter", %{}), Chat.Fake.report("executor raw")]
+              [
+                Chat.Fake.tool_call("counter", %{}),
+                Chat.Fake.report("executor raw", source_completed?)
+              ]
 
             ctx.reason == "initial" ->
               [
@@ -619,6 +669,7 @@ defmodule Omunculus.InterceptionTest do
 
       assert_receive {:actor_input, messages}
       assert hd(messages)["content"] =~ "Summarize the supplied event"
+      refute hd(messages)["content"] =~ "When returning your final report"
 
       assert Enum.any?(messages, &String.contains?(&1["content"] || "", "executor raw")) ==
                not filtered?
@@ -640,6 +691,14 @@ defmodule Omunculus.InterceptionTest do
                &(&1.payload["assessment"] == true)
              )
 
+      actor_ids = Enum.map(requests, & &1.payload["actor_work_item_id"])
+
+      refute Enum.any?(EventCore.stream(core, 0), fn e ->
+               e.work_item_id in actor_ids and
+                 e.type in ["task.break", "task.recovery_used", "task.assessment_requested"]
+             end)
+
+      assert Agent.get(calls, & &1) == length(requests)
       request = List.last(requests)
       actor_wi = request.payload["actor_work_item_id"]
 
@@ -647,6 +706,17 @@ defmodule Omunculus.InterceptionTest do
                EventCore.stream(core, 0, type: "run.started", work_item_id: actor_wi)
 
       assert [_] = EventCore.stream(core, 0, type: "interception.resolved")
+
+      [response] =
+        Enum.filter(
+          EventCore.stream(core, 0, type: "interception.responded"),
+          &(&1.payload["outcome"] == "completed")
+        )
+
+      assert response.payload["output"] == %{"comment" => "compact evidence: counter returned 1"}
+      {:ok, original} = EventCore.fetch(core, request.payload["source_event_id"])
+      assert original.payload["report"]["completed"] == source_completed?
+
       GenServer.stop(runtime)
       Projector.sync(projector)
       before = Projector.snapshot(core)

@@ -25,7 +25,12 @@ defmodule Omunculus.Runtime.Agents do
     assigned_name = pick_agent(ctx, config)
     assigned_entry = configured_agent(config, assigned_name)
     profile = Map.get(config.presets, ctx[:profile], %{})
-    flow = ctx[:flow] || Config.workflow(config, assigned_entry, profile)
+
+    flow =
+      if ctx[:response_contract],
+        do: %{"steps" => [], "root_approval" => "self"},
+        else: ctx[:flow] || Config.workflow(config, assigned_entry, profile)
+
     step = Enum.find(flow["steps"], &(&1["name"] == ctx[:stage])) || List.first(flow["steps"])
     name = if step, do: step["agent"] || assigned_name, else: assigned_name
     entry = configured_agent(config, name)
@@ -59,6 +64,7 @@ defmodule Omunculus.Runtime.Agents do
     |> Map.put(:tools, if(tool_policy, do: tool_policy["granted"], else: agent.tools))
     |> Map.put(:tool_policy, tool_policy)
     |> Map.put(:kind, kind)
+    |> Map.put(:response_contract, ctx[:response_contract])
     |> Map.put(:flow, flow)
     |> Map.put(:task_instructions, profile[:instructions])
     |> Map.put(
@@ -69,7 +75,8 @@ defmodule Omunculus.Runtime.Agents do
       :system_prompt,
       Omunculus.Runtime.Prompt.compose(
         name,
-        entry[:prompt]
+        entry[:prompt],
+        ctx[:response_contract]
       )
     )
   end

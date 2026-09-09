@@ -262,7 +262,7 @@ defmodule Omunculus.Interception do
 
   defp expired?(_), do: false
 
-  defp valid_output?(schema, output) when is_map(schema) and is_map(output) do
+  def valid_output?(schema, output) when is_map(schema) and is_map(output) do
     Enum.all?(schema, fn {key, type} ->
       value = Map.get(output, key)
 
@@ -277,7 +277,7 @@ defmodule Omunculus.Interception do
     end)
   end
 
-  defp valid_output?(_, _), do: false
+  def valid_output?(_, _), do: false
   defp nonempty?(v), do: is_binary(v) and String.trim(v) != ""
 
   def get_path(map, path),

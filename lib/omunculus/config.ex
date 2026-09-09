@@ -332,10 +332,6 @@ defmodule Omunculus.Config do
             Omunculus.WorkItem.handoff(%{"work_item" => item.work_item, "comment" => "context"})
           ) and
           is_map(response) and map_size(response) > 0 and
-          (is_nil(item[:agent]) or
-             Enum.all?(response, fn {key, type} ->
-               {key, type} in [{"comment", "string"}, {"completed", "boolean"}]
-             end)) and
           Enum.all?(response, fn {_, type} ->
             type in ["string", "boolean", "number", "object", "array"]
           end) and
