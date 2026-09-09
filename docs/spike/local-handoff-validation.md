@@ -99,3 +99,13 @@ Comandos da campanha:
 mise exec -- mix run scripts/validate_workflow.exs presets/local.toml --depth 1 --repeats 1
 mise exec -- mix run scripts/validate_workflow.exs presets/local.toml --depth 2 --repeats 1
 ```
+
+## Limite identificado na investigação posterior
+
+A [investigação causal](local-handoff-cause.md) encontrou uma lacuna adicional:
+no depth 2 que produziu os efeitos corretos, a última avaliação do avô recebeu
+comentários e checkpoint vazio do intermediário, sem resultados estruturados do
+executor final. `task_success` no runner mede os efeitos, topologia e conclusão;
+`approvals_valid` mede causalidade. Esses indicadores não certificam que todos
+os pais receberam os valores reais para avaliar. Os resultados brutos foram
+preservados; não representam aderência integral ao TO-BE.
