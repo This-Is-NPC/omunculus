@@ -1,0 +1,1429 @@
+[
+  {
+    "accepted_delegations": 1,
+    "staged": false,
+    "failures": 0,
+    "counter_schema_conformant": true,
+    "database": "/home/howl/Projects/omacon/omunculus/test/sessions.sqlite3",
+    "tools_recorded": true,
+    "approvals_valid": true,
+    "terminal_event_id": "evt-9412a6f9cb4a368a",
+    "recovery": "repair",
+    "preset": "local.toml",
+    "schemas_match": true,
+    "result": "Objective achieved: counter decremented from 4 to 3 via exactly one decrement operation. Evidence confirms the tool return shows final value 3, only 1 call recorded, and all existing effects preserved (no reset/overwrite). The single corrective change required was executed successfully. No further intervention needed.",
+    "all_runs_closed": true,
+    "counter_initial": 4,
+    "effect_success": true,
+    "reasons": {
+      "assessment": 1,
+      "continuation": 1,
+      "initial": 2
+    },
+    "advances": 0,
+    "effect_owners": [
+      "wi-d721538e0e0a0096"
+    ],
+    "protocol_outcome": "completed",
+    "model": "qwen/qwen3.5-9b",
+    "scenario_success": true,
+    "root_completed": true,
+    "topology_valid": true,
+    "required_depth": 1,
+    "terminal_event_type": "task.completed",
+    "runs": 4,
+    "effect_depths": [
+      1
+    ],
+    "runtime_fingerprint": "28de27fbdd87f215a4ac057578cdca0b9b874d039a8b4aa936e11f2ed1aee9ec",
+    "breaks": 0,
+    "approvals_checked": 2,
+    "assessments": 1,
+    "interceptor_input": "full",
+    "session_id": "session-b3995bf7920776b0",
+    "elapsed_ms": 153325,
+    "counter_values": [
+      3
+    ],
+    "recoveries": 0,
+    "actor_resolutions": 0,
+    "actor_runs": 0,
+    "counter_final": 3,
+    "repetition": 1,
+    "human_request": null,
+    "task_runs": 4,
+    "counter_arguments": [
+      {}
+    ],
+    "completed_items": 2,
+    "handoffs_valid": true,
+    "expected_outcome": "completed",
+    "rejected_handoffs_blocked": true,
+    "model_calls": 5,
+    "interceptor": "off",
+    "replay_equal": true,
+    "task_success": true,
+    "rejected_delegations": 0,
+    "recovery_bounded": true,
+    "actor_requests": 0,
+    "lineage_valid": true,
+    "trial": "repair-off",
+    "model_instance": {
+      "type": "llm",
+      "publisher": "qwen",
+      "key": "qwen/qwen3.5-9b",
+      "display_name": "Qwen3.5 9B",
+      "architecture": "qwen35",
+      "quantization": {
+        "name": "Q8_0",
+        "bits_per_weight": 8
+      },
+      "size_bytes": 10449384671,
+      "params_string": "9B",
+      "loaded_instances": [
+        {
+          "id": "qwen/qwen3.5-9b",
+          "config": {
+            "context_length": 8192,
+            "eval_batch_size": 2048,
+            "physical_batch_size": 512,
+            "parallel": 4,
+            "flash_attention": true,
+            "offload_kv_cache_to_gpu": true
+          }
+        }
+      ],
+      "max_context_length": 262144,
+      "format": "gguf",
+      "capabilities": {
+        "vision": true,
+        "trained_for_tool_use": true,
+        "reasoning": {
+          "allowed_options": [
+            "off",
+            "on"
+          ],
+          "default": "on"
+        }
+      },
+      "description": null,
+      "variants": [
+        "qwen/qwen3.5-9b@q8_0"
+      ],
+      "selected_variant": "qwen/qwen3.5-9b@q8_0"
+    },
+    "system_prompt_hashes": {
+      "concierge": [
+        "627aac140a47b424df031237a26cebd3a04e2b4e30cd27015adb98cc69d462f5"
+      ],
+      "worker": [
+        "2d10a38d84bd291630608630228c1e805763af3a427c3a6abec496fc164d87e9"
+      ]
+    },
+    "actor_model_ms": 0,
+    "actor_reasoning_tokens": 0,
+    "actor_recoveries": 0,
+    "model_durations": [
+      {
+        "sequence": 3257,
+        "duration_ms": 74296,
+        "usage": {
+          "completion_tokens": 716,
+          "completion_tokens_details": {
+            "reasoning_tokens": 545
+          },
+          "prompt_tokens": 1039,
+          "total_tokens": 1755
+        }
+      },
+      {
+        "sequence": 3264,
+        "duration_ms": 17257,
+        "usage": {
+          "completion_tokens": 120,
+          "completion_tokens_details": {
+            "reasoning_tokens": 102
+          },
+          "prompt_tokens": 889,
+          "total_tokens": 1009
+        }
+      },
+      {
+        "sequence": 3268,
+        "duration_ms": 6491,
+        "usage": {
+          "completion_tokens": 67,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 927,
+          "total_tokens": 994
+        }
+      },
+      {
+        "sequence": 3274,
+        "duration_ms": 44262,
+        "usage": {
+          "completion_tokens": 412,
+          "completion_tokens_details": {
+            "reasoning_tokens": 327
+          },
+          "prompt_tokens": 1354,
+          "total_tokens": 1766
+        }
+      },
+      {
+        "sequence": 3281,
+        "duration_ms": 10725,
+        "usage": {
+          "completion_tokens": 79,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 1303,
+          "total_tokens": 1382
+        }
+      }
+    ],
+    "actor_responses": [],
+    "model_breaks": [],
+    "unseen_identifiers": []
+  },
+  {
+    "approvals_checked": 1,
+    "model": "qwen/qwen3.5-9b",
+    "handoffs_valid": true,
+    "assessments": 1,
+    "human_request": {
+      "actor": "human",
+      "actor_work_item_id": "wi-6097231bff73aa3a6641727a",
+      "attempt": 2,
+      "deadline_at": null,
+      "name": "handoff-context",
+      "rule": {
+        "actor": "human",
+        "agent": null,
+        "bindings": {
+          "comment": "comment",
+          "report.comment": "comment"
+        },
+        "enabled": true,
+        "events": [
+          "run.completed"
+        ],
+        "exclude": [
+          "payload.comment",
+          "payload.report"
+        ],
+        "exclude_items": [
+          {
+            "match": {
+              "role": "assistant"
+            },
+            "missing": [
+              "tool_calls"
+            ],
+            "path": "payload.checkpoint.messages"
+          }
+        ],
+        "match": {
+          "outcome": "reported"
+        },
+        "max_retries": 1,
+        "name": "handoff-context",
+        "options": {},
+        "response": {
+          "comment": "string"
+        },
+        "timeout_ms": null,
+        "wait": true,
+        "work_item": {
+          "instruction": "Produce a concise evidence-based comment for the next Run from this event."
+        },
+        "workspaces": null
+      },
+      "source_event_id": "evt-d7569d8736f362d8"
+    },
+    "lineage_valid": true,
+    "scenario_success": false,
+    "tools_recorded": true,
+    "repetition": 1,
+    "elapsed_ms": 553325,
+    "recovery": "repair",
+    "all_runs_closed": true,
+    "runtime_fingerprint": "28de27fbdd87f215a4ac057578cdca0b9b874d039a8b4aa936e11f2ed1aee9ec",
+    "interceptor": "on",
+    "counter_arguments": [
+      {}
+    ],
+    "topology_valid": true,
+    "recovery_bounded": true,
+    "protocol_outcome": "awaiting_human",
+    "result": null,
+    "replay_equal": true,
+    "terminal_event_type": "interception.requested",
+    "root_completed": false,
+    "rejected_delegations": 0,
+    "approvals_valid": true,
+    "task_runs": 4,
+    "expected_outcome": "completed",
+    "counter_schema_conformant": true,
+    "counter_values": [
+      3
+    ],
+    "model_calls": 7,
+    "counter_initial": 4,
+    "interceptor_input": "without-report",
+    "advances": 0,
+    "database": "/home/howl/Projects/omacon/omunculus/test/sessions.sqlite3",
+    "schemas_match": true,
+    "actor_runs": 4,
+    "recoveries": 0,
+    "session_id": "session-1d9d71908d98e316",
+    "effect_depths": [
+      1
+    ],
+    "actor_resolutions": 2,
+    "effect_success": true,
+    "completed_items": 1,
+    "runs": 8,
+    "failures": 2,
+    "task_success": false,
+    "rejected_handoffs_blocked": true,
+    "effect_owners": [
+      "wi-350052c481f17d95"
+    ],
+    "staged": false,
+    "preset": "local.toml",
+    "required_depth": 1,
+    "accepted_delegations": 1,
+    "counter_final": 3,
+    "actor_requests": 5,
+    "breaks": 0,
+    "reasons": {
+      "assessment": 1,
+      "continuation": 1,
+      "initial": 6
+    },
+    "terminal_event_id": "int-792bd6968331ae780028e341",
+    "trial": "repair-on-timeout",
+    "model_instance": {
+      "type": "llm",
+      "publisher": "qwen",
+      "key": "qwen/qwen3.5-9b",
+      "display_name": "Qwen3.5 9B",
+      "architecture": "qwen35",
+      "quantization": {
+        "name": "Q8_0",
+        "bits_per_weight": 8
+      },
+      "size_bytes": 10449384671,
+      "params_string": "9B",
+      "loaded_instances": [
+        {
+          "id": "qwen/qwen3.5-9b",
+          "config": {
+            "context_length": 8192,
+            "eval_batch_size": 2048,
+            "physical_batch_size": 512,
+            "parallel": 4,
+            "flash_attention": true,
+            "offload_kv_cache_to_gpu": true
+          }
+        }
+      ],
+      "max_context_length": 262144,
+      "format": "gguf",
+      "capabilities": {
+        "vision": true,
+        "trained_for_tool_use": true,
+        "reasoning": {
+          "allowed_options": [
+            "off",
+            "on"
+          ],
+          "default": "on"
+        }
+      },
+      "description": null,
+      "variants": [
+        "qwen/qwen3.5-9b@q8_0"
+      ],
+      "selected_variant": "qwen/qwen3.5-9b@q8_0"
+    },
+    "system_prompt_hashes": {
+      "concierge": [
+        "627aac140a47b424df031237a26cebd3a04e2b4e30cd27015adb98cc69d462f5"
+      ],
+      "worker": [
+        "2d10a38d84bd291630608630228c1e805763af3a427c3a6abec496fc164d87e9"
+      ],
+      "summarizer": [
+        "1b68b38c627ba2f5c45b2675cda4d5d1eb951eaf08b754006525ad94f463508c"
+      ]
+    },
+    "actor_model_ms": 376081,
+    "actor_reasoning_tokens": 819,
+    "actor_recoveries": 0,
+    "model_durations": [
+      {
+        "sequence": 3290,
+        "duration_ms": 64964,
+        "usage": {
+          "completion_tokens": 686,
+          "completion_tokens_details": {
+            "reasoning_tokens": 527
+          },
+          "prompt_tokens": 1039,
+          "total_tokens": 1725
+        }
+      },
+      {
+        "sequence": 3297,
+        "duration_ms": 17329,
+        "usage": {
+          "completion_tokens": 147,
+          "completion_tokens_details": {
+            "reasoning_tokens": 129
+          },
+          "prompt_tokens": 877,
+          "total_tokens": 1024
+        }
+      },
+      {
+        "sequence": 3301,
+        "duration_ms": 11580,
+        "usage": {
+          "completion_tokens": 122,
+          "completion_tokens_details": {
+            "reasoning_tokens": 69
+          },
+          "prompt_tokens": 915,
+          "total_tokens": 1037
+        }
+      },
+      {
+        "sequence": 3307,
+        "duration_ms": 49805,
+        "usage": {
+          "completion_tokens": 442,
+          "completion_tokens_details": {
+            "reasoning_tokens": 294
+          },
+          "prompt_tokens": 1237,
+          "total_tokens": 1679
+        }
+      },
+      {
+        "sequence": 3316,
+        "duration_ms": 59647,
+        "usage": {
+          "completion_tokens": 580,
+          "completion_tokens_details": {
+            "reasoning_tokens": 477
+          },
+          "prompt_tokens": 1524,
+          "total_tokens": 2104
+        }
+      },
+      {
+        "sequence": 3322,
+        "duration_ms": 86257,
+        "usage": {
+          "completion_tokens": 680,
+          "completion_tokens_details": {
+            "reasoning_tokens": 525
+          },
+          "prompt_tokens": 2814,
+          "total_tokens": 3494
+        }
+      },
+      {
+        "sequence": 3332,
+        "duration_ms": 22871,
+        "usage": {
+          "completion_tokens": 180,
+          "completion_tokens_details": {
+            "reasoning_tokens": 94
+          },
+          "prompt_tokens": 1371,
+          "total_tokens": 1551
+        }
+      }
+    ],
+    "actor_responses": [
+      {
+        "sequence": 3310,
+        "actor": "agent:summarizer",
+        "outcome": "completed",
+        "output": {
+          "comment": "Work Item wi-350052c481f17d95 was executed in Run run-c3e4e02f1b0f9077. Tool counter_decrement (id: 229117273) was invoked once with argument {}. Tool returned Counter value: 3, confirming the counter was successfully decremented from 4 to target value 3. Run outcome reported as completed with report_valid=true. All tool state preserved in run-c3e4e02f1b0f9077 shows one decrement call applied to counter resource. No failures or remaining work observed - objective achieved."
+        },
+        "request_id": "int-0598f9b8fe62e76da3c7c3db"
+      },
+      {
+        "sequence": 3325,
+        "actor": "agent:summarizer",
+        "outcome": "completed",
+        "output": {
+          "comment": "Work Item wi-350052c481f17d95 executed in Run run-c3e4e02f1b0f9077: tool counter_decrement (id: 229117273) invoked once, tool returned Counter value: 3. Checkpoint confirms counter state with one decrement call resulting in value 3. Original agent reported completed=true with report_valid=true and stated objective achieved (decremented from 4 to target 3). No failures or remaining work observed according to recorded run outcome. Current assessment (run-83661e0e7b45d3ea) consolidates this evidence."
+        },
+        "request_id": "int-6f2bc1bb85ef1a2b33af1d02"
+      },
+      {
+        "sequence": 3340,
+        "actor": "agent:summarizer",
+        "error": "{:chat, %Req.TransportError{reason: :timeout}}",
+        "outcome": "failed",
+        "request_id": "int-1119725de63e32191ea5f730"
+      },
+      {
+        "sequence": 3347,
+        "actor": "agent:summarizer",
+        "error": "{:chat, %Req.TransportError{reason: :timeout}}",
+        "outcome": "failed",
+        "request_id": "int-40d4fb0d19927388dd6992ff"
+      }
+    ],
+    "model_breaks": [],
+    "unseen_identifiers": []
+  },
+  {
+    "required_depth": 1,
+    "counter_arguments": [
+      {}
+    ],
+    "recovery_bounded": true,
+    "handoffs_valid": true,
+    "assessments": 1,
+    "rejected_handoffs_blocked": true,
+    "approvals_valid": true,
+    "runtime_fingerprint": "3373fdcbd0be36e936b550d134357b24822164f04910c0f9b806528f292edf87",
+    "actor_runs": 3,
+    "terminal_event_id": "evt-0af7e5092195699f",
+    "database": "/home/howl/Projects/omacon/omunculus/test/sessions.sqlite3",
+    "human_request": null,
+    "counter_final": 3,
+    "counter_initial": 4,
+    "approvals_checked": 2,
+    "replay_equal": true,
+    "accepted_delegations": 1,
+    "result": "Work Item wi-ec9b4f1412196f18 completed in Run run-c55795a5dc6fccd2 via delegation to decrement shared session counter from 4 to 3. Sub-agent reported success per event evt-4e7ea51843963ad9 using counter_decrement (id: 345806965), confirming final value 3 with no remaining work.",
+    "staged": false,
+    "recoveries": 0,
+    "reasons": {
+      "assessment": 1,
+      "continuation": 1,
+      "initial": 5
+    },
+    "actor_resolutions": 3,
+    "tools_recorded": true,
+    "expected_outcome": "completed",
+    "preset": "local.toml",
+    "effect_owners": [
+      "wi-57f4f669ec65aab1"
+    ],
+    "root_completed": true,
+    "completed_items": 2,
+    "repetition": 1,
+    "task_success": true,
+    "counter_values": [
+      3
+    ],
+    "all_runs_closed": true,
+    "interceptor_input": "without-report",
+    "model": "qwen/qwen3.5-9b",
+    "actor_requests": 3,
+    "lineage_valid": true,
+    "session_id": "session-ae40b0377df21f0e",
+    "runs": 7,
+    "scenario_success": true,
+    "model_calls": 8,
+    "recovery": "repair",
+    "elapsed_ms": 948773,
+    "advances": 0,
+    "schemas_match": true,
+    "task_runs": 4,
+    "explicit_break": false,
+    "effect_success": true,
+    "failures": 0,
+    "rejected_delegations": 0,
+    "topology_valid": true,
+    "interceptor": "on",
+    "effect_depths": [
+      1
+    ],
+    "breaks": 0,
+    "protocol_outcome": "completed",
+    "counter_schema_conformant": true,
+    "terminal_event_type": "task.completed",
+    "trial": "repair-on",
+    "model_instance": {
+      "type": "llm",
+      "publisher": "qwen",
+      "key": "qwen/qwen3.5-9b",
+      "display_name": "Qwen3.5 9B",
+      "architecture": "qwen35",
+      "quantization": {
+        "name": "Q8_0",
+        "bits_per_weight": 8
+      },
+      "size_bytes": 10449384671,
+      "params_string": "9B",
+      "loaded_instances": [
+        {
+          "id": "qwen/qwen3.5-9b",
+          "config": {
+            "context_length": 8192,
+            "eval_batch_size": 2048,
+            "physical_batch_size": 512,
+            "parallel": 4,
+            "flash_attention": true,
+            "offload_kv_cache_to_gpu": true
+          }
+        }
+      ],
+      "max_context_length": 262144,
+      "format": "gguf",
+      "capabilities": {
+        "vision": true,
+        "trained_for_tool_use": true,
+        "reasoning": {
+          "allowed_options": [
+            "off",
+            "on"
+          ],
+          "default": "on"
+        }
+      },
+      "description": null,
+      "variants": [
+        "qwen/qwen3.5-9b@q8_0"
+      ],
+      "selected_variant": "qwen/qwen3.5-9b@q8_0"
+    },
+    "system_prompt_hashes": {
+      "concierge": [
+        "627aac140a47b424df031237a26cebd3a04e2b4e30cd27015adb98cc69d462f5"
+      ],
+      "worker": [
+        "2d10a38d84bd291630608630228c1e805763af3a427c3a6abec496fc164d87e9"
+      ],
+      "summarizer": [
+        "1b68b38c627ba2f5c45b2675cda4d5d1eb951eaf08b754006525ad94f463508c"
+      ]
+    },
+    "actor_model_ms": 794024,
+    "actor_reasoning_tokens": 7377,
+    "actor_recoveries": 0,
+    "model_durations": [
+      {
+        "sequence": 3354,
+        "duration_ms": 55625,
+        "usage": {
+          "completion_tokens": 587,
+          "completion_tokens_details": {
+            "reasoning_tokens": 420
+          },
+          "prompt_tokens": 1039,
+          "total_tokens": 1626
+        }
+      },
+      {
+        "sequence": 3361,
+        "duration_ms": 13444,
+        "usage": {
+          "completion_tokens": 104,
+          "completion_tokens_details": {
+            "reasoning_tokens": 86
+          },
+          "prompt_tokens": 885,
+          "total_tokens": 989
+        }
+      },
+      {
+        "sequence": 3365,
+        "duration_ms": 9702,
+        "usage": {
+          "completion_tokens": 102,
+          "completion_tokens_details": {
+            "reasoning_tokens": 54
+          },
+          "prompt_tokens": 923,
+          "total_tokens": 1025
+        }
+      },
+      {
+        "sequence": 3371,
+        "duration_ms": 34702,
+        "usage": {
+          "completion_tokens": 281,
+          "completion_tokens_details": {
+            "reasoning_tokens": 212
+          },
+          "prompt_tokens": 1240,
+          "total_tokens": 1521
+        }
+      },
+      {
+        "sequence": 3380,
+        "duration_ms": 50542,
+        "usage": {
+          "completion_tokens": 499,
+          "completion_tokens_details": {
+            "reasoning_tokens": 388
+          },
+          "prompt_tokens": 1356,
+          "total_tokens": 1855
+        }
+      },
+      {
+        "sequence": 3386,
+        "duration_ms": 379182,
+        "usage": {
+          "completion_tokens": 3597,
+          "completion_tokens_details": {
+            "reasoning_tokens": 3506
+          },
+          "prompt_tokens": 2565,
+          "total_tokens": 6162
+        }
+      },
+      {
+        "sequence": 3396,
+        "duration_ms": 24786,
+        "usage": {
+          "completion_tokens": 230,
+          "completion_tokens_details": {
+            "reasoning_tokens": 159
+          },
+          "prompt_tokens": 1315,
+          "total_tokens": 1545
+        }
+      },
+      {
+        "sequence": 3402,
+        "duration_ms": 380140,
+        "usage": {
+          "completion_tokens": 3767,
+          "completion_tokens_details": {
+            "reasoning_tokens": 3659
+          },
+          "prompt_tokens": 1563,
+          "total_tokens": 5330
+        }
+      }
+    ],
+    "actor_responses": [
+      {
+        "sequence": 3374,
+        "actor": "agent:summarizer",
+        "outcome": "completed",
+        "output": {
+          "comment": "Work completed successfully. One decrement operation was executed on counter_decrement tool (id: 345806965). Counter value changed from 4 to 3 as target. Evidence shows counter state recorded at value 3 with increment=-1 across one call. Work item objective met."
+        },
+        "request_id": "int-95e097a93fb908f43f911ee8"
+      },
+      {
+        "sequence": 3389,
+        "actor": "agent:summarizer",
+        "outcome": "completed",
+        "output": {
+          "comment": "Work completed successfully on work item wi-ec9b4f1412196f18 per event evt-4e7ea51843963ad9. Counter decremented from 4 to 3 via tool counter_decrement (id: 345806965). Evidence confirms final value 3 with increment=-1 across one call."
+        },
+        "request_id": "int-9e303f5cc922abc1534ae09b"
+      },
+      {
+        "sequence": 3405,
+        "actor": "agent:summarizer",
+        "outcome": "completed",
+        "output": {
+          "comment": "Work Item wi-ec9b4f1412196f18 completed in Run run-c55795a5dc6fccd2 via delegation to decrement shared session counter from 4 to 3. Sub-agent reported success per event evt-4e7ea51843963ad9 using counter_decrement (id: 345806965), confirming final value 3 with no remaining work."
+        },
+        "request_id": "int-c71077839436f8c39c10e0cc"
+      }
+    ],
+    "model_breaks": [],
+    "unseen_identifiers": []
+  },
+  {
+    "human_request": null,
+    "model": "qwen/qwen3.5-9b",
+    "task_success": false,
+    "assessments": 1,
+    "terminal_event_type": "task.completed",
+    "lineage_valid": true,
+    "explicit_break": false,
+    "tools_recorded": true,
+    "repetition": 1,
+    "elapsed_ms": 162395,
+    "recovery": "escalate",
+    "all_runs_closed": true,
+    "interceptor": "off",
+    "actor_resolutions": 0,
+    "topology_valid": false,
+    "recovery_bounded": true,
+    "database": "/home/howl/Projects/omacon/omunculus/test/sessions.sqlite3",
+    "result": "Assessment complete: Counter objective (4→3) is unreachable with available operations. Only increment exists; any execution would increase value to 5+. This is a design limitation requiring human intervention to add decrement/reset capabilities or adjust target value. No corrective action possible within current operation set. Escalation recommended to engineering/design team for capability expansion.",
+    "approvals_checked": 2,
+    "terminal_event_id": "evt-7bf9872a38b1ffcd",
+    "protocol_outcome": "completed",
+    "accepted_delegations": 1,
+    "approvals_valid": true,
+    "counter_final": 4,
+    "expected_outcome": "awaiting_human",
+    "replay_equal": true,
+    "rejected_delegations": 0,
+    "counter_initial": 4,
+    "interceptor_input": "full",
+    "advances": 0,
+    "counter_arguments": [],
+    "schemas_match": true,
+    "actor_runs": 0,
+    "recoveries": 0,
+    "session_id": "session-7e572ca9e09633bf",
+    "effect_depths": [],
+    "actor_requests": 0,
+    "effect_success": false,
+    "counter_values": [],
+    "completed_items": 2,
+    "reasons": {
+      "assessment": 1,
+      "continuation": 1,
+      "initial": 2
+    },
+    "root_completed": true,
+    "breaks": 0,
+    "handoffs_valid": true,
+    "counter_schema_conformant": true,
+    "effect_owners": [],
+    "staged": false,
+    "preset": "local.toml",
+    "required_depth": 1,
+    "rejected_handoffs_blocked": true,
+    "runtime_fingerprint": "3373fdcbd0be36e936b550d134357b24822164f04910c0f9b806528f292edf87",
+    "scenario_success": false,
+    "task_runs": 4,
+    "failures": 0,
+    "runs": 4,
+    "model_calls": 4,
+    "trial": "escalate-off-prose",
+    "model_instance": {
+      "type": "llm",
+      "publisher": "qwen",
+      "key": "qwen/qwen3.5-9b",
+      "display_name": "Qwen3.5 9B",
+      "architecture": "qwen35",
+      "quantization": {
+        "name": "Q8_0",
+        "bits_per_weight": 8
+      },
+      "size_bytes": 10449384671,
+      "params_string": "9B",
+      "loaded_instances": [
+        {
+          "id": "qwen/qwen3.5-9b",
+          "config": {
+            "context_length": 8192,
+            "eval_batch_size": 2048,
+            "physical_batch_size": 512,
+            "parallel": 4,
+            "flash_attention": true,
+            "offload_kv_cache_to_gpu": true
+          }
+        }
+      ],
+      "max_context_length": 262144,
+      "format": "gguf",
+      "capabilities": {
+        "vision": true,
+        "trained_for_tool_use": true,
+        "reasoning": {
+          "allowed_options": [
+            "off",
+            "on"
+          ],
+          "default": "on"
+        }
+      },
+      "description": null,
+      "variants": [
+        "qwen/qwen3.5-9b@q8_0"
+      ],
+      "selected_variant": "qwen/qwen3.5-9b@q8_0"
+    },
+    "system_prompt_hashes": {
+      "concierge": [
+        "627aac140a47b424df031237a26cebd3a04e2b4e30cd27015adb98cc69d462f5"
+      ],
+      "worker": [
+        "2d10a38d84bd291630608630228c1e805763af3a427c3a6abec496fc164d87e9"
+      ]
+    },
+    "actor_model_ms": 0,
+    "actor_reasoning_tokens": 0,
+    "actor_recoveries": 0,
+    "model_durations": [
+      {
+        "sequence": 3414,
+        "duration_ms": 49537,
+        "usage": {
+          "completion_tokens": 522,
+          "completion_tokens_details": {
+            "reasoning_tokens": 325
+          },
+          "prompt_tokens": 1044,
+          "total_tokens": 1566
+        }
+      },
+      {
+        "sequence": 3421,
+        "duration_ms": 37572,
+        "usage": {
+          "completion_tokens": 344,
+          "completion_tokens_details": {
+            "reasoning_tokens": 265
+          },
+          "prompt_tokens": 839,
+          "total_tokens": 1183
+        }
+      },
+      {
+        "sequence": 3427,
+        "duration_ms": 56283,
+        "usage": {
+          "completion_tokens": 562,
+          "completion_tokens_details": {
+            "reasoning_tokens": 473
+          },
+          "prompt_tokens": 1358,
+          "total_tokens": 1920
+        }
+      },
+      {
+        "sequence": 3434,
+        "duration_ms": 18689,
+        "usage": {
+          "completion_tokens": 163,
+          "completion_tokens_details": {
+            "reasoning_tokens": 81
+          },
+          "prompt_tokens": 1335,
+          "total_tokens": 1498
+        }
+      }
+    ],
+    "actor_responses": [],
+    "model_breaks": [],
+    "unseen_identifiers": []
+  },
+  {
+    "failures": 0,
+    "assessments": 2,
+    "topology_valid": true,
+    "rejected_delegations": 0,
+    "actor_resolutions": 0,
+    "runs": 5,
+    "terminal_event_type": "task.commented",
+    "recovery": "escalate",
+    "human_request": {
+      "assessment": true,
+      "body": "Review: Assess counter feasibility: current value 4, only increment available (no decrement/reset), target 3. Document whether objective is reachable.\nObjective unreachable: counter at 4 with only increment operations (confirmed via execution checkpoint showing 4→5) cannot reach target 3. Evidence confirms mathematical impossibility. Required escalation: human must either add decrement/reset operations to counter tool or revise objective to target >=4 before delegation can proceed.\nRecent Run comments: Feasibility assessment completed: Target 3 cannot be reached from current value 4 using only the increment operation. The counter tool schema confirms only increment functionality exists - no decrement or reset operations available. Mathematical analysis: starting at 4 with increments only yields values >=4 (4→5→6...). Target of 3 requires a decrease operation which is unavailable in this harness configuration. Required correction: either (1) add decrement/reset capabilities to the counter, or (2) revise objective to target value >=4. Human intervention needed to resolve this constraint design issue before proceeding.\nFeasibility assessment complete. Confirmed: Starting from counter value 4 with only increment operations available, target value 3 is mathematically unreachable. Evidence: Test increment call moved counter to 5 (from 4), demonstrating the single available operation increases values. Constraint analysis: Increments only yield values >= current value (4→5→6...); target 3 requires a decrease of 1, which no existing operation can provide. Resolution required: Human intervention must either add decrement/reset operations to the counter or revise objective to target value >=4.",
+      "kind": "request",
+      "request_id": "evt-7e34ba29504450e2"
+    },
+    "accepted_delegations": 1,
+    "preset": "local.toml",
+    "rejected_handoffs_blocked": true,
+    "actor_requests": 0,
+    "completed_items": 0,
+    "effect_owners": [
+      "wi-629dde3671b3a0a4"
+    ],
+    "effect_success": false,
+    "counter_initial": 4,
+    "result": null,
+    "counter_arguments": [
+      {}
+    ],
+    "model_calls": 6,
+    "approvals_valid": true,
+    "model": "qwen/qwen3.5-9b",
+    "interceptor_input": "full",
+    "root_completed": false,
+    "lineage_valid": true,
+    "task_runs": 5,
+    "approvals_checked": 0,
+    "terminal_event_id": "evt-e0839177d82fac50",
+    "counter_schema_conformant": true,
+    "database": "/home/howl/Projects/omacon/omunculus/test/sessions.sqlite3",
+    "protocol_outcome": "awaiting_human",
+    "explicit_break": true,
+    "counter_final": 5,
+    "breaks": 1,
+    "advances": 0,
+    "actor_runs": 0,
+    "session_id": "session-eec9693bf49d630a",
+    "recovery_bounded": true,
+    "replay_equal": true,
+    "handoffs_valid": true,
+    "all_runs_closed": true,
+    "counter_values": [
+      5
+    ],
+    "elapsed_ms": 269664,
+    "reasons": {
+      "assessment": 2,
+      "initial": 2,
+      "retry": 1
+    },
+    "required_depth": 1,
+    "effect_depths": [
+      1
+    ],
+    "tools_recorded": true,
+    "runtime_fingerprint": "3373fdcbd0be36e936b550d134357b24822164f04910c0f9b806528f292edf87",
+    "task_success": false,
+    "repetition": 1,
+    "scenario_success": false,
+    "schemas_match": true,
+    "interceptor": "off",
+    "expected_outcome": "awaiting_human",
+    "recoveries": 1,
+    "staged": false,
+    "trial": "escalate-off",
+    "model_instance": {
+      "type": "llm",
+      "publisher": "qwen",
+      "key": "qwen/qwen3.5-9b",
+      "display_name": "Qwen3.5 9B",
+      "architecture": "qwen35",
+      "quantization": {
+        "name": "Q8_0",
+        "bits_per_weight": 8
+      },
+      "size_bytes": 10449384671,
+      "params_string": "9B",
+      "loaded_instances": [
+        {
+          "id": "qwen/qwen3.5-9b",
+          "config": {
+            "context_length": 8192,
+            "eval_batch_size": 2048,
+            "physical_batch_size": 512,
+            "parallel": 4,
+            "flash_attention": true,
+            "offload_kv_cache_to_gpu": true
+          }
+        }
+      ],
+      "max_context_length": 262144,
+      "format": "gguf",
+      "capabilities": {
+        "vision": true,
+        "trained_for_tool_use": true,
+        "reasoning": {
+          "allowed_options": [
+            "off",
+            "on"
+          ],
+          "default": "on"
+        }
+      },
+      "description": null,
+      "variants": [
+        "qwen/qwen3.5-9b@q8_0"
+      ],
+      "selected_variant": "qwen/qwen3.5-9b@q8_0"
+    },
+    "system_prompt_hashes": {
+      "concierge": [
+        "88783ddf802a5dcc376094273f732fd85da1cfb1181138de98d27d280671c97b"
+      ],
+      "worker": [
+        "2d10a38d84bd291630608630228c1e805763af3a427c3a6abec496fc164d87e9"
+      ]
+    },
+    "actor_model_ms": 0,
+    "actor_reasoning_tokens": 0,
+    "actor_recoveries": 0,
+    "model_durations": [
+      {
+        "sequence": 3443,
+        "duration_ms": 63818,
+        "usage": {
+          "completion_tokens": 641,
+          "completion_tokens_details": {
+            "reasoning_tokens": 486
+          },
+          "prompt_tokens": 1088,
+          "total_tokens": 1729
+        }
+      },
+      {
+        "sequence": 3450,
+        "duration_ms": 44630,
+        "usage": {
+          "completion_tokens": 448,
+          "completion_tokens_details": {
+            "reasoning_tokens": 313
+          },
+          "prompt_tokens": 777,
+          "total_tokens": 1225
+        }
+      },
+      {
+        "sequence": 3456,
+        "duration_ms": 57746,
+        "usage": {
+          "completion_tokens": 545,
+          "completion_tokens_details": {
+            "reasoning_tokens": 412
+          },
+          "prompt_tokens": 1476,
+          "total_tokens": 2021
+        }
+      },
+      {
+        "sequence": 3464,
+        "duration_ms": 25405,
+        "usage": {
+          "completion_tokens": 257,
+          "completion_tokens_details": {
+            "reasoning_tokens": 241
+          },
+          "prompt_tokens": 1040,
+          "total_tokens": 1297
+        }
+      },
+      {
+        "sequence": 3468,
+        "duration_ms": 24701,
+        "usage": {
+          "completion_tokens": 263,
+          "completion_tokens_details": {
+            "reasoning_tokens": 131
+          },
+          "prompt_tokens": 1076,
+          "total_tokens": 1339
+        }
+      },
+      {
+        "sequence": 3474,
+        "duration_ms": 53153,
+        "usage": {
+          "completion_tokens": 514,
+          "completion_tokens_details": {
+            "reasoning_tokens": 430
+          },
+          "prompt_tokens": 1601,
+          "total_tokens": 2115
+        }
+      }
+    ],
+    "actor_responses": [],
+    "model_breaks": [
+      {
+        "sequence": 3475,
+        "work_item_id": "wi-a50c87cb459d4de0",
+        "report": {
+          "break": true,
+          "comment": "Objective unreachable: counter at 4 with only increment operations (confirmed via execution checkpoint showing 4→5) cannot reach target 3. Evidence confirms mathematical impossibility. Required escalation: human must either add decrement/reset operations to counter tool or revise objective to target >=4 before delegation can proceed.",
+          "completed": false
+        }
+      }
+    ],
+    "unseen_identifiers": []
+  },
+  {
+    "human_request": null,
+    "model": "qwen/qwen3.5-9b",
+    "task_success": false,
+    "assessments": 1,
+    "terminal_event_type": "task.completed",
+    "lineage_valid": true,
+    "explicit_break": false,
+    "tools_recorded": true,
+    "repetition": 1,
+    "elapsed_ms": 1994193,
+    "recovery": "escalate",
+    "all_runs_closed": true,
+    "interceptor": "on",
+    "actor_resolutions": 4,
+    "topology_valid": false,
+    "recovery_bounded": true,
+    "database": "/home/howl/Projects/omacon/omunculus/test/sessions.sqlite3",
+    "result": "Sub-agent completion (tool id 853403028) documented counter reachability assessment for work item wi-d5cbab9ed7554089: starting shared session counter at 4, target value 3, only increment operation available; decrement and reset operations confirmed non-existent per original instruction constraints. Mathematical reduction from 4 to 3 impossible within existing system limitations. Recommendation for human intervention to modify constraints or expand operations was recorded in sub-agent result. Run completed with outcome reported=true and report_valid=true. Remaining work: objective unmet due to confirmed system limitation; pending resolution of constraint modification.",
+    "approvals_checked": 2,
+    "terminal_event_id": "evt-a528bf377eafe642",
+    "protocol_outcome": "completed",
+    "accepted_delegations": 1,
+    "approvals_valid": true,
+    "counter_final": 4,
+    "expected_outcome": "awaiting_human",
+    "replay_equal": true,
+    "rejected_delegations": 0,
+    "counter_initial": 4,
+    "interceptor_input": "without-report",
+    "advances": 0,
+    "counter_arguments": [],
+    "schemas_match": true,
+    "actor_runs": 5,
+    "recoveries": 1,
+    "session_id": "session-216202d928b1a076",
+    "effect_depths": [],
+    "actor_requests": 5,
+    "effect_success": false,
+    "counter_values": [],
+    "completed_items": 2,
+    "reasons": {
+      "assessment": 1,
+      "continuation": 1,
+      "initial": 7,
+      "retry": 1
+    },
+    "root_completed": true,
+    "breaks": 0,
+    "handoffs_valid": true,
+    "counter_schema_conformant": true,
+    "effect_owners": [],
+    "staged": false,
+    "preset": "local.toml",
+    "required_depth": 1,
+    "rejected_handoffs_blocked": true,
+    "runtime_fingerprint": "3373fdcbd0be36e936b550d134357b24822164f04910c0f9b806528f292edf87",
+    "scenario_success": false,
+    "task_runs": 5,
+    "failures": 1,
+    "runs": 10,
+    "model_calls": 10,
+    "trial": "escalate-on",
+    "model_instance": {
+      "type": "llm",
+      "publisher": "qwen",
+      "key": "qwen/qwen3.5-9b",
+      "display_name": "Qwen3.5 9B",
+      "architecture": "qwen35",
+      "quantization": {
+        "name": "Q8_0",
+        "bits_per_weight": 8
+      },
+      "size_bytes": 10449384671,
+      "params_string": "9B",
+      "loaded_instances": [
+        {
+          "id": "qwen/qwen3.5-9b",
+          "config": {
+            "context_length": 8192,
+            "eval_batch_size": 2048,
+            "physical_batch_size": 512,
+            "parallel": 4,
+            "flash_attention": true,
+            "offload_kv_cache_to_gpu": true
+          }
+        }
+      ],
+      "max_context_length": 262144,
+      "format": "gguf",
+      "capabilities": {
+        "vision": true,
+        "trained_for_tool_use": true,
+        "reasoning": {
+          "allowed_options": [
+            "off",
+            "on"
+          ],
+          "default": "on"
+        }
+      },
+      "description": null,
+      "variants": [
+        "qwen/qwen3.5-9b@q8_0"
+      ],
+      "selected_variant": "qwen/qwen3.5-9b@q8_0"
+    },
+    "system_prompt_hashes": {
+      "concierge": [
+        "88783ddf802a5dcc376094273f732fd85da1cfb1181138de98d27d280671c97b"
+      ],
+      "worker": [
+        "2d10a38d84bd291630608630228c1e805763af3a427c3a6abec496fc164d87e9"
+      ],
+      "summarizer": [
+        "1b68b38c627ba2f5c45b2675cda4d5d1eb951eaf08b754006525ad94f463508c"
+      ]
+    },
+    "actor_model_ms": 1734810,
+    "actor_reasoning_tokens": 16599,
+    "actor_recoveries": 0,
+    "model_durations": [
+      {
+        "sequence": 3485,
+        "duration_ms": 58729,
+        "usage": {
+          "completion_tokens": 583,
+          "completion_tokens_details": {
+            "reasoning_tokens": 405
+          },
+          "prompt_tokens": 1088,
+          "total_tokens": 1671
+        }
+      },
+      {
+        "sequence": 3492,
+        "duration_ms": 51385,
+        "usage": {
+          "completion_tokens": 517,
+          "completion_tokens_details": {
+            "reasoning_tokens": 390
+          },
+          "prompt_tokens": 820,
+          "total_tokens": 1337
+        }
+      },
+      {
+        "sequence": 3498,
+        "duration_ms": 718068,
+        "usage": {
+          "completion_tokens": 7034,
+          "completion_tokens_details": {
+            "reasoning_tokens": 7033
+          },
+          "prompt_tokens": 1158,
+          "total_tokens": 8192
+        }
+      },
+      {
+        "sequence": 3505,
+        "duration_ms": 405567,
+        "usage": {
+          "completion_tokens": 4153,
+          "completion_tokens_details": {
+            "reasoning_tokens": 4095
+          },
+          "prompt_tokens": 1158,
+          "total_tokens": 5311
+        }
+      },
+      {
+        "sequence": 3514,
+        "duration_ms": 76477,
+        "usage": {
+          "completion_tokens": 752,
+          "completion_tokens_details": {
+            "reasoning_tokens": 662
+          },
+          "prompt_tokens": 1358,
+          "total_tokens": 2110
+        }
+      },
+      {
+        "sequence": 3520,
+        "duration_ms": 330429,
+        "usage": {
+          "completion_tokens": 3123,
+          "completion_tokens_details": {
+            "reasoning_tokens": 3019
+          },
+          "prompt_tokens": 2612,
+          "total_tokens": 5735
+        }
+      },
+      {
+        "sequence": 3530,
+        "duration_ms": 12772,
+        "usage": {
+          "completion_tokens": 117,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 1382,
+          "total_tokens": 1499
+        }
+      },
+      {
+        "sequence": 3536,
+        "duration_ms": 218660,
+        "usage": {
+          "completion_tokens": 2154,
+          "completion_tokens_details": {
+            "reasoning_tokens": 2066
+          },
+          "prompt_tokens": 1630,
+          "total_tokens": 3784
+        }
+      },
+      {
+        "sequence": 3546,
+        "duration_ms": 59013,
+        "usage": {
+          "completion_tokens": 586,
+          "completion_tokens_details": {
+            "reasoning_tokens": 501
+          },
+          "prompt_tokens": 1590,
+          "total_tokens": 2176
+        }
+      },
+      {
+        "sequence": 3552,
+        "duration_ms": 62086,
+        "usage": {
+          "completion_tokens": 527,
+          "completion_tokens_details": {
+            "reasoning_tokens": 386
+          },
+          "prompt_tokens": 1726,
+          "total_tokens": 2253
+        }
+      }
+    ],
+    "actor_responses": [
+      {
+        "sequence": 3500,
+        "actor": "agent:summarizer",
+        "error": "invalid_interception_response",
+        "outcome": "failed",
+        "request_id": "int-f911426cdf28381e8b478faa"
+      },
+      {
+        "sequence": 3508,
+        "actor": "agent:summarizer",
+        "outcome": "completed",
+        "output": {
+          "comment": "Assessment determined counter reachability impossibility: start 4 to target 3 via increments only without decrement/reset operations. Recommendation for human intervention to modify constraints or expand operations. Run completed with outcome reported, report_valid true, and 0 tool calls."
+        },
+        "request_id": "int-b68f3acd51be4b65e6a7d790"
+      },
+      {
+        "sequence": 3523,
+        "actor": "agent:summarizer",
+        "outcome": "completed",
+        "output": {
+          "comment": "Assessment determined counter reachability impossibility for wi-4a7648a95486d204: start 4 to target 3 via increments only without decrement/reset operations available. Recommendation for human intervention to modify constraints or expand operations reported. Run completed with outcome reported, report_valid true, and 0 tool calls executed during this assessment. Objective remains unmet due to confirmed limitation that reset and decrement do not exist."
+        },
+        "request_id": "int-81c9f2de078331a1dca855f9"
+      },
+      {
+        "sequence": 3539,
+        "actor": "agent:summarizer",
+        "outcome": "completed",
+        "output": {
+          "comment": "Sub-agent completed reachability assessment via delegation (tool id: 853403028). Starting counter value 4, target 3, only increment operation available; decrement/reset operations confirmed non-existent per instruction. Mathematical reduction to target impossible within existing constraints. Recommendation for human intervention to modify constraints or expand operations recorded in sub-agent result. Objective remains unmet due to system limitation."
+        },
+        "request_id": "int-a86221c16301ef8087e008ff"
+      },
+      {
+        "sequence": 3555,
+        "actor": "agent:summarizer",
+        "outcome": "completed",
+        "output": {
+          "comment": "Sub-agent completion (tool id 853403028) documented counter reachability assessment for work item wi-d5cbab9ed7554089: starting shared session counter at 4, target value 3, only increment operation available; decrement and reset operations confirmed non-existent per original instruction constraints. Mathematical reduction from 4 to 3 impossible within existing system limitations. Recommendation for human intervention to modify constraints or expand operations was recorded in sub-agent result. Run completed with outcome reported=true and report_valid=true. Remaining work: objective unmet due to confirmed system limitation; pending resolution of constraint modification."
+        },
+        "request_id": "int-da1b3e7a89ba760e54b35a29"
+      }
+    ],
+    "model_breaks": [],
+    "unseen_identifiers": []
+  }
+]
