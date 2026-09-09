@@ -61,7 +61,7 @@ cmd "emit" {
   flag "--db <file>" help="SQLite file with the EVENTS log"
   flag "--session <file>" help="Session SQLite file (default: ~/.omunculus/session.sqlite3)" env="OMUNCULUS_SESSION"
   flag "--payload <json>" help="Payload as a JSON object"
-  flag "--request-id <id>" help="Fill emit fields from an open permission.requested"
+  flag "--request-id <id>" help="Fill emit fields from a permission or interception request"
   flag "--idempotency-key <key>" help="Stable key so retries do not duplicate the command"
   flag "--correlation-id <id>" help="Join an existing correlation"
   flag "--work-item-id <id>" help="Target work item (default: new)"

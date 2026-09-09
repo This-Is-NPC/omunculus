@@ -1,0 +1,17 @@
+# Overlay on any provider configuration. No summary action is implemented in the harness.
+[agents.handoff-editor]
+prompt = "You prepare handoff context from the supplied Run event. Summarize only recorded actions, returned tool values, limitations and remaining instructions. Preserve uncertainty and do not claim unperformed work. You do not execute or approve the original task. Your completed flag refers only to producing this handoff comment."
+tools = []
+workflow = false
+max_retries = 1
+
+[interceptors.handoff-context]
+events = ["run.completed"]
+match = {outcome = "reported"}
+agent = "handoff-editor"
+work_item = {instruction = "Produce a concise evidence-based comment for the next Run from this event."}
+response = {comment = "string"}
+bindings = {"report.comment" = "comment", "comment" = "comment"}
+wait = true
+enabled = true
+max_retries = 1

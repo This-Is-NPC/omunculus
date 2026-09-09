@@ -88,7 +88,9 @@ defmodule Omunculus.CLI.Events do
           IO.puts("interceptors: #{length(checked.interceptors)}")
 
           Enum.each(checked.interceptors, fn i ->
-            IO.puts("  #{i.name} -> #{inspect(i.module)} on #{Enum.join(i.events, ", ")}")
+            IO.puts(
+              "  #{i.name} -> #{inspect(i[:agent] || i[:actor] || i.module)} on #{Enum.join(i.events, ", ")}"
+            )
           end)
 
           IO.puts("automations: #{length(checked.automations)}")
@@ -174,6 +176,24 @@ defmodule Omunculus.CLI.Events do
   defp open_core(db) do
     {:ok, core} = EventCore.start_link(path: db)
     {:ok, core}
+  end
+
+  defp enrich_emit("interception.responded", flags, payload, core) do
+    id = flags["request_id"] || payload["request_id"]
+
+    case EventCore.fetch(core, id) do
+      {:ok, %{type: "interception.requested"} = req} ->
+        {:ok, Map.put(payload, "request_id", id),
+         %{
+           session_id: req.session_id,
+           work_item_id: req.work_item_id,
+           correlation_id: req.correlation_id,
+           workspace_id: req.workspace_id
+         }}
+
+      _ ->
+        {:error, {:unknown_interception_request, id}}
+    end
   end
 
   defp enrich_emit(type, flags, payload, core) do

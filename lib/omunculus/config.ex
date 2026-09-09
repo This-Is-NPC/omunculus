@@ -108,7 +108,7 @@ defmodule Omunculus.Config do
          :ok <- check_workflows(config),
          :ok <- check_workflow_config(config),
          :ok <- check_references(config),
-         {:ok, interceptors} <- check_interceptors(config.interceptors),
+         {:ok, interceptors} <- check_interceptors(config.interceptors, config),
          {:ok, automations} <- check_automations(config.automations, config),
          {:ok, policy} <- check_policy_fit(config) do
       {:ok, %{interceptors: interceptors, automations: automations, policy: policy}}
@@ -291,16 +291,68 @@ defmodule Omunculus.Config do
     end)
   end
 
-  defp check_interceptors(list) do
+  defp check_interceptors(list, config) do
     Enum.reduce_while(list, {:ok, []}, fn item, {:ok, acc} ->
+      actor? = Omunculus.Interception.actor?(item)
+
+      predicate =
+        if actor?, do: &Omunculus.Events.known?/1, else: &Omunculus.Events.interceptable?/1
+
       with :ok <- require_name(item, :interceptor),
-           :ok <- check_events(item, &Omunculus.Events.interceptable?/1, :not_interceptable),
-           {:ok, module} <- Omunculus.Interceptor.resolve(item.module || "") do
-        {:cont, {:ok, acc ++ [%{item | module: module}]}}
+           :ok <- check_events(item, predicate, :not_interceptable),
+           {:ok, checked} <- check_interceptor(item, config) do
+        if Enum.any?(acc, &(&1.name == item.name)),
+          do: {:halt, {:error, {:duplicate_interceptor, item.name}}},
+          else: {:cont, {:ok, acc ++ [checked]}}
       else
         {:error, _} = error -> {:halt, error}
       end
     end)
+  end
+
+  defp check_interceptor(item, config) do
+    if Omunculus.Interception.actor?(item) do
+      agents = Map.merge(Omunculus.Runtime.Agents.defaults(), config.agents)
+      response = item[:response] || %{}
+      bindings = item[:bindings] || %{}
+
+      valid =
+        (is_nil(item[:actor]) or (is_binary(item.actor) and String.trim(item.actor) != "")) and
+          is_nil(item[:module]) and not (is_binary(item[:agent]) and is_binary(item[:actor])) and
+          (is_nil(item[:agent]) or Map.has_key?(agents, item.agent)) and
+          is_boolean(item.enabled) and is_boolean(item.wait) and
+          is_integer(item.max_retries) and item.max_retries >= 0 and
+          (is_nil(item[:timeout_ms]) or (is_integer(item.timeout_ms) and item.timeout_ms > 0)) and
+          match?(
+            {:ok, _},
+            Omunculus.WorkItem.handoff(%{"work_item" => item.work_item, "comment" => "context"})
+          ) and
+          is_map(response) and map_size(response) > 0 and
+          (is_nil(item[:agent]) or
+             Enum.all?(response, fn {key, type} ->
+               {key, type} in [{"comment", "string"}, {"completed", "boolean"}]
+             end)) and
+          Enum.all?(response, fn {_, type} ->
+            type in ["string", "boolean", "number", "object", "array"]
+          end) and
+          is_map(bindings) and (item.wait or map_size(bindings) == 0) and
+          (not item.wait or Enum.all?(item.events, &Omunculus.Events.actor_boundary?/1)) and
+          Enum.all?(bindings, fn {target, from} ->
+            response[from] == "string" and
+              case target do
+                "comment" -> true
+                "report.comment" -> item.events == ["run.completed"]
+                "result" -> item.events == ["task.completed"]
+                _ -> false
+              end
+          end) and is_map(item.match) and
+          Enum.all?(item.events, &(not String.starts_with?(&1, "interception.")))
+
+      if valid, do: {:ok, item}, else: {:error, {:invalid_interceptor_actor, item.name}}
+    else
+      with {:ok, module} <- Omunculus.Interceptor.resolve(item.module || ""),
+           do: {:ok, %{item | module: module}}
+    end
   end
 
   defp check_automations(list, config) do
@@ -481,7 +533,17 @@ defmodule Omunculus.Config do
             events: item["events"],
             module: item["module"],
             options: item["options"] || %{},
-            workspaces: item["workspaces"]
+            workspaces: item["workspaces"],
+            enabled: Map.get(item, "enabled", true),
+            agent: item["agent"],
+            actor: item["actor"],
+            wait: Map.get(item, "wait", true),
+            max_retries: Map.get(item, "max_retries", 2),
+            timeout_ms: item["timeout_ms"],
+            match: item["match"] || %{},
+            work_item: item["work_item"],
+            response: item["response"] || %{},
+            bindings: item["bindings"] || %{}
           }
         end),
       automations:

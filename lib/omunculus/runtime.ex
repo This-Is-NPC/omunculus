@@ -112,13 +112,14 @@ defmodule Omunculus.Runtime do
     state = rebuild_pending_continuations(state)
     state = flush_pending_continuations(state)
 
+    state = Omunculus.Interception.Agents.advance(state)
     {:ok, Omunculus.Runtime.Workflow.advance(state)}
   end
 
   @doc false
   def events(state, opts \\ []) do
     opts = if state[:session_id], do: Keyword.put(opts, :session_id, state.session_id), else: opts
-    EventCore.stream(state.core, 0, opts)
+    EventCore.delivered_stream(state.core, 0, opts)
   end
 
   @impl true
@@ -128,11 +129,29 @@ defmodule Omunculus.Runtime do
   def handle_info({:event_core, env}, state) do
     Omunculus.EventCore.Projector.sync_core(state.core)
 
-    if MapSet.member?(state.handled, env.event_id) or activated?(state.core, env) do
-      {:noreply, state}
-    else
-      state = %{state | handled: MapSet.put(state.handled, env.event_id)}
-      {:noreply, activate(env, state) |> Omunculus.Runtime.Workflow.on_event(env)}
+    state =
+      if env.type in ["interception.requested", "task.completed", "task.break"],
+        do: Omunculus.Interception.Agents.advance(state),
+        else: state
+
+    case EventCore.delivery(state.core, env) do
+      :pending ->
+        {:noreply, state}
+
+      {:ready, effective} ->
+        if MapSet.member?(state.handled, env.event_id) or activated?(state.core, effective) do
+          {:noreply, state}
+        else
+          state = %{state | handled: MapSet.put(state.handled, env.event_id)}
+          state = activate(effective, state) |> Omunculus.Runtime.Workflow.on_event(effective)
+
+          state =
+            if effective.type == "run.completed",
+              do: state |> rebuild_pending_continuations() |> flush_pending_continuations(),
+              else: state
+
+          {:noreply, state}
+        end
     end
   end
 
@@ -370,6 +389,27 @@ defmodule Omunculus.Runtime do
 
         {:ok, agent, bands, policy_hash, request_permission, spec, state} ->
           spec = initial_comment(spec, agent)
+
+          spec =
+            case Omunculus.Interception.changed_comment(state.core, spec.activation) do
+              nil ->
+                spec
+
+              comment ->
+                comment = spec[:comment] || comment
+
+                spec
+                |> Map.put(:comment, comment)
+                |> Map.put(
+                  :checkpoint,
+                  Omunculus.Interception.context_checkpoint(
+                    spec.checkpoint,
+                    spec.work_item,
+                    comment
+                  )
+                )
+            end
+
           start_run_with_agent(state, spec, agent, bands, policy_hash, request_permission)
       end
 
@@ -400,11 +440,15 @@ defmodule Omunculus.Runtime do
   defp recover_unfinished(state) do
     events = events(state)
     starts = Enum.filter(events, &(&1.type == "run.started"))
+    # A closed Run can be awaiting interception; it is not a crashed process.
+    closed =
+      EventCore.stream(state.core, 0)
+      |> Enum.filter(&(&1.type in ["run.completed", "run.failed"]))
 
     for start <- starts,
         not Enum.any?(
-          events,
-          &(&1.run_id == start.run_id and &1.type in ["run.completed", "run.failed"])
+          closed,
+          &(&1.run_id == start.run_id)
         ) do
       EventCore.append!(
         state.core,
@@ -597,7 +641,7 @@ defmodule Omunculus.Runtime do
   defp maybe_emit_policy_loaded(state, spec, hash, table) do
     last =
       state.core
-      |> EventCore.stream(0, type: "policy.loaded", session_id: spec.session_id)
+      |> EventCore.delivered_stream(0, type: "policy.loaded", session_id: spec.session_id)
       |> List.last()
 
     if last && last.payload["hash"] == hash do
@@ -866,7 +910,7 @@ defmodule Omunculus.Runtime do
   # --- resume derived from the log -------------------------------------------------
 
   defp derive_resume(core, work_item_id) do
-    history = EventCore.stream(core, 0, work_item_id: work_item_id)
+    history = EventCore.delivered_stream(core, 0, work_item_id: work_item_id)
     activation = find_activation(core, work_item_id)
     starts = Enum.filter(history, &(&1.type == "run.started"))
     last_start = List.last(starts)
@@ -917,13 +961,17 @@ defmodule Omunculus.Runtime do
   end
 
   defp find_activation(core, work_item_id) do
-    case EventCore.stream(core, 0, work_item_id: work_item_id, type: "task.requested", limit: 1) do
+    case EventCore.delivered_stream(core, 0,
+           work_item_id: work_item_id,
+           type: "task.requested",
+           limit: 1
+         ) do
       [env] ->
         env
 
       [] ->
         core
-        |> EventCore.stream(0, type: "task.delegated")
+        |> EventCore.delivered_stream(0, type: "task.delegated")
         |> Enum.find(&(&1.payload["child_work_item_id"] == work_item_id))
     end
   end
@@ -940,7 +988,7 @@ defmodule Omunculus.Runtime do
 
     with parent_wi when is_binary(parent_wi) <- parent_wi,
          %Envelope{payload: %{"outcome" => "waiting"}} = run_completed <-
-           EventCore.stream(core, 0, work_item_id: parent_wi, type: "run.completed")
+           EventCore.delivered_stream(core, 0, work_item_id: parent_wi, type: "run.completed")
            |> List.last()
            |> waiting_report() do
       {:ok, parent_wi, run_completed}
@@ -1173,7 +1221,7 @@ defmodule Omunculus.Runtime do
   defp wait_root(core, requested, timeout, return_on_human) do
     already =
       core
-      |> EventCore.stream(0,
+      |> EventCore.delivered_stream(0,
         work_item_id: requested.work_item_id,
         type: "task.completed",
         limit: 1
@@ -1202,6 +1250,11 @@ defmodule Omunculus.Runtime do
             when return_on_human ->
               {:error, {:awaiting_human, env.payload["body"]}}
 
+            {:event_core,
+             %Envelope{type: "interception.requested", payload: %{"actor" => "human"}} = env}
+            when return_on_human ->
+              {:error, {:awaiting_human, "Interceptor #{env.payload["name"]}: #{env.event_id}"}}
+
             {:event_core, %Envelope{type: "run.failed", work_item_id: ^wid} = env} ->
               {:error, {:run_failed, env.payload}}
 
@@ -1214,7 +1267,8 @@ defmodule Omunculus.Runtime do
 
     case completed do
       {:ok, env} ->
-        {:ok, %{result: env.payload["result"], requested: requested, completed: env}}
+        {:ready, delivered} = EventCore.delivery(core, env)
+        {:ok, %{result: delivered.payload["result"], requested: requested, completed: delivered}}
 
       {:error, _} = err ->
         err
@@ -1846,7 +1900,7 @@ defmodule Omunculus.Runtime do
   end
 
   defp work_item_depth(core, work_item_id) do
-    case EventCore.stream(core, 0, work_item_id: work_item_id, type: "run.started")
+    case EventCore.delivered_stream(core, 0, work_item_id: work_item_id, type: "run.started")
          |> List.last() do
       %Envelope{payload: %{"depth" => depth}} when is_integer(depth) -> depth
       %Envelope{payload: %{"depth" => depth}} when is_binary(depth) -> String.to_integer(depth)
@@ -2060,7 +2114,8 @@ defmodule Omunculus.Runtime do
   end
 
   defp last_run_started(core, work_item_id) do
-    EventCore.stream(core, 0, work_item_id: work_item_id, type: "run.started") |> List.last()
+    EventCore.delivered_stream(core, 0, work_item_id: work_item_id, type: "run.started")
+    |> List.last()
   end
 
   defp start_cross_lineage_arbitration(state, env, lca_wi, loaded) do

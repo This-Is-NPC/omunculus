@@ -53,6 +53,12 @@ defmodule Omunculus.EventCore do
     GenServer.call(core, {:stream, after_sequence, opts}, :infinity)
   end
 
+  @doc "Delivery view for executable consumers; excludes unresolved actor dependencies."
+  def delivered_stream(core, after_sequence \\ 0, opts \\ []),
+    do: GenServer.call(core, {:delivered_stream, after_sequence, opts}, :infinity)
+
+  def delivery(core, env), do: GenServer.call(core, {:delivery, env}, :infinity)
+
   def fetch(core, event_id), do: GenServer.call(core, {:fetch, event_id}, :infinity)
 
   @doc "Run `fun.(conn)` inside a single transaction on the core connection."
@@ -99,22 +105,46 @@ defmodule Omunculus.EventCore do
         poll_ms = Keyword.get(opts, :poll_ms)
         if poll_ms, do: Process.send_after(self(), :poll, poll_ms)
         [[last]] = Store.query(conn, "SELECT COALESCE(MAX(sequence), 0) FROM EVENTS")
+        actor_delivery? = Enum.any?(interceptors, &Omunculus.Interception.actor?/1)
+        last = if actor_delivery?, do: delivery_cursor(conn, last), else: last
 
         {:ok,
          %{
            conn: conn,
            delivered_sequence: last,
+           actor_delivery?: actor_delivery?,
            poll_ms: poll_ms,
            path: path,
            subscribers: %{},
            interceptors: interceptors,
            interceptor_stats:
              Map.new(interceptors, &{&1.name, %{evaluated: 0, delivered: 0, rejected: 0}})
-         }}
+         }, {:continue, :recover_interceptions}}
 
       {:error, reason} ->
         {:stop, {:sqlite_open, reason}}
     end
+  end
+
+  @impl true
+  def handle_continue(:recover_interceptions, state) do
+    # Recover replies committed before their resolution could be recorded.
+    replies =
+      Store.query(
+        state.conn,
+        "SELECT #{@select_cols} FROM EVENTS WHERE type IN ('interception.responded', 'interception.expired') ORDER BY sequence"
+      )
+
+    Enum.each(replies, fn row ->
+      Omunculus.Interception.resolve(
+        state.conn,
+        Envelope.from_row(row),
+        &persist_generated(state.conn, &1)
+      )
+    end)
+
+    if state.actor_delivery?, do: Process.send_after(self(), :interception_tick, 1000)
+    {:noreply, drain(state)}
   end
 
   @impl true
@@ -130,8 +160,17 @@ defmodule Omunculus.EventCore do
     end
   end
 
-  def handle_call({:interceptors, interceptors}, _from, state),
-    do: {:reply, :ok, %{state | interceptors: interceptors}}
+  def handle_call({:interceptors, interceptors}, _from, state) do
+    actor_delivery? =
+      state.actor_delivery? or Enum.any?(interceptors, &Omunculus.Interception.actor?/1)
+
+    if actor_delivery? and not state.actor_delivery? do
+      delivery_cursor(state.conn, state.delivered_sequence)
+      Process.send_after(self(), :interception_tick, 1000)
+    end
+
+    {:reply, :ok, %{state | interceptors: interceptors, actor_delivery?: actor_delivery?}}
+  end
 
   def handle_call(:poll, _from, state), do: {:reply, :ok, drain(state)}
 
@@ -161,6 +200,25 @@ defmodule Omunculus.EventCore do
     {sql, args} = stream_query(after_seq, opts)
     rows = Store.query(state.conn, sql, args)
     {:reply, Enum.map(rows, &Envelope.from_row/1), state}
+  end
+
+  def handle_call({:delivery, env}, _from, state),
+    do: {:reply, Omunculus.Interception.view(state.conn, env), state}
+
+  def handle_call({:delivered_stream, after_seq, opts}, _from, state) do
+    {sql, args} = stream_query(after_seq, opts)
+
+    events =
+      Store.query(state.conn, sql, args)
+      |> Enum.map(&Envelope.from_row/1)
+      |> Enum.flat_map(fn env ->
+        case Omunculus.Interception.view(state.conn, env) do
+          {:ready, effective} -> [effective]
+          :pending -> []
+        end
+      end)
+
+    {:reply, events, state}
   end
 
   def handle_call({:fetch, event_id}, _from, state) do
@@ -206,6 +264,13 @@ defmodule Omunculus.EventCore do
   end
 
   def handle_call(:path, _from, state), do: {:reply, state.path, state}
+
+  @impl true
+  def handle_info(:interception_tick, state) do
+    Omunculus.Interception.expire(state.conn, &persist_generated(state.conn, &1))
+    Process.send_after(self(), :interception_tick, 1000)
+    {:noreply, drain(state)}
+  end
 
   @impl true
   def handle_info(:poll, state) do
@@ -256,7 +321,8 @@ defmodule Omunculus.EventCore do
             else: {:error, {:idempotency_conflict, env.idempotency_key}}
 
         true ->
-          with :ok <- Omunculus.Runtime.Recovery.guard(conn, env) do
+          with :ok <- Omunculus.Runtime.Recovery.guard(conn, env),
+               :ok <- Omunculus.Interception.guard(conn, env) do
             args = (env |> Envelope.to_row() |> tl()) ++ [hash]
             [] = Store.query(conn, @insert_sql, args)
             sequence = Store.last_insert_rowid(conn)
@@ -313,6 +379,22 @@ defmodule Omunculus.EventCore do
      args}
   end
 
+  defp delivery_cursor(conn, initial) do
+    Store.query(
+      conn,
+      "INSERT OR IGNORE INTO PROJECTION_CURSORS (projection, last_sequence) VALUES ('actor-delivery', ?)",
+      [initial]
+    )
+
+    [[sequence]] =
+      Store.query(
+        conn,
+        "SELECT last_sequence FROM PROJECTION_CURSORS WHERE projection = 'actor-delivery'"
+      )
+
+    sequence
+  end
+
   defp drain(state) do
     rows =
       Store.query(
@@ -336,6 +418,14 @@ defmodule Omunculus.EventCore do
         if rejected, do: acc, else: dispatch(acc, env)
       end)
 
+    if state.actor_delivery? do
+      Store.query(
+        state.conn,
+        "UPDATE PROJECTION_CURSORS SET last_sequence = ? WHERE projection = 'actor-delivery'",
+        [state.delivered_sequence]
+      )
+    end
+
     if rows == [], do: state, else: drain(state)
   end
 
@@ -343,7 +433,22 @@ defmodule Omunculus.EventCore do
   # this type run in order; the first rejection stops delivery and is recorded
   # as delivery.rejected (itself dispatched, but never interceptable).
   defp dispatch(state, env) do
-    lane = Enum.filter(state.interceptors, &(env.type in &1.events))
+    source = Omunculus.Interception.resolve(state.conn, env, &persist_generated(state.conn, &1))
+    state = if source, do: dispatch(state, source), else: state
+
+    Omunculus.Interception.plan(
+      state.conn,
+      env,
+      state.interceptors,
+      &persist_generated(state.conn, &1)
+    )
+
+    lane =
+      Enum.filter(
+        state.interceptors,
+        &(not Omunculus.Interception.actor?(&1) and &1[:enabled] != false and
+            env.type in &1.events)
+      )
 
     lane =
       if (env.type == "task.delegated" or
@@ -364,7 +469,16 @@ defmodule Omunculus.EventCore do
 
     case run_lane(lane, env, state) do
       {:deliver, state} ->
-        notify(state.subscribers, env)
+        Omunculus.Interception.plan(
+          state.conn,
+          env,
+          state.interceptors,
+          &persist_generated(state.conn, &1)
+        )
+
+        if match?({:ready, _}, Omunculus.Interception.view(state.conn, env)),
+          do: notify(state.subscribers, env)
+
         state
 
       {:reject, name, reason, state} ->
@@ -388,6 +502,13 @@ defmodule Omunculus.EventCore do
         {:ok, _stored, _fresh?} = persist(state.conn, rejection)
         state
     end
+  end
+
+  defp persist_generated(conn, env) do
+    :ok = Envelope.validate(env)
+    :ok = Events.validate(env)
+    {:ok, stored, _} = persist(conn, env)
+    stored
   end
 
   defp run_lane([], _env, state), do: {:deliver, state}

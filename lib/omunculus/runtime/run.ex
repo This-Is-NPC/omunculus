@@ -572,7 +572,7 @@ defmodule Omunculus.Runtime.Run do
         workspace_id: delegated_workspace_id(args)
       )
 
-    case await_delivery_or_rejection(delegated.event_id) do
+    case await_delivery_or_rejection(delegated.event_id, true) do
       :ok ->
         children = Process.get(:awaiting_children, [])
         Process.put(:awaiting_children, children ++ [child])
@@ -612,7 +612,7 @@ defmodule Omunculus.Runtime.Run do
         idempotency_key: "request_work:" <> child
       )
 
-    case await_delivery_or_rejection(requested.event_id) do
+    case await_delivery_or_rejection(requested.event_id, true) do
       :ok ->
         children = Process.get(:awaiting_children, [])
         Process.put(:awaiting_children, children ++ [child])
@@ -626,9 +626,14 @@ defmodule Omunculus.Runtime.Run do
 
   # A delegation is either delivered back to us or rejected by the lane; the
   # rejection carries causation to the envelope we appended.
-  defp await_delivery_or_rejection(event_id) do
+  defp await_delivery_or_rejection(event_id, handoff? \\ false) do
     receive do
       {:event_core, %Envelope{event_id: ^event_id}} ->
+        :ok
+
+      {:event_core,
+       %Envelope{type: "interception.requested", payload: %{"source_event_id" => ^event_id}}}
+      when handoff? ->
         :ok
 
       {:event_core, %Envelope{type: "delivery.rejected", causation_id: ^event_id} = env} ->
@@ -820,7 +825,7 @@ defmodule Omunculus.Runtime.Run do
         workspace_id: payload["workspace"]
       )
 
-    await_delivery(delegated.event_id)
+    :ok = await_delivery_or_rejection(delegated.event_id, true)
     Process.put(:cross_lineage_forwarded, true)
     {:ok, "forwarded", context}
   end

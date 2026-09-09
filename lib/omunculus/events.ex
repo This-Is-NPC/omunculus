@@ -19,6 +19,42 @@ defmodule Omunculus.Events do
         }
 
   @catalog %{
+    "interception.requested" => %{
+      kind: :event,
+      versions: ["1"],
+      required: ["source_event_id", "name", "actor", "attempt", "rule", "actor_work_item_id"],
+      emitted_by: ["Core"],
+      interceptable: false,
+      injectable: false,
+      doc: "Durable actor request. An actor named human denotes escalation."
+    },
+    "interception.responded" => %{
+      kind: :command,
+      versions: ["1"],
+      required: ["request_id", "actor", "outcome"],
+      emitted_by: ["Actor"],
+      interceptable: false,
+      injectable: true,
+      doc: "Correlated actor result or failure; duplicate and invalid replies are rejected."
+    },
+    "interception.expired" => %{
+      kind: :event,
+      versions: ["1"],
+      required: ["request_id", "actor", "outcome", "error"],
+      emitted_by: ["Core"],
+      interceptable: false,
+      injectable: false,
+      doc: "Configured actor response deadline elapsed; it does not judge task completion."
+    },
+    "interception.resolved" => %{
+      kind: :event,
+      versions: ["1"],
+      required: ["request_id", "source_event_id", "name", "bindings", "output"],
+      emitted_by: ["Core"],
+      interceptable: false,
+      injectable: false,
+      doc: "Persisted actor output for delivery context; the source envelope remains immutable."
+    },
     "task.recovery_used" => %{
       kind: :event,
       versions: ["1"],
@@ -329,6 +365,22 @@ defmodule Omunculus.Events do
   def types, do: @catalog |> Map.keys() |> Enum.sort()
   def spec(type), do: Map.get(@catalog, type)
   def known?(type), do: Map.has_key?(@catalog, type)
+
+  @doc "Events whose consumers can durably defer Run activation or handoff."
+  def actor_boundary?(type),
+    do:
+      type in [
+        "task.requested",
+        "task.delegated",
+        "task.resumed",
+        "run.completed",
+        "run.failed",
+        "task.run_requested",
+        "task.advanced",
+        "task.assessment_requested",
+        "task.break",
+        "task.completed"
+      ]
 
   def interceptable?(type), do: match?(%{interceptable: true}, spec(type))
   def injectable?(type), do: match?(%{injectable: true, kind: :command}, spec(type))

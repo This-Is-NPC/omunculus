@@ -41,7 +41,7 @@ Cada tipo declara:
 - `schema_version` corrente e versões ainda aceitas;
 - campos obrigatórios do payload;
 - `emitted_by`: CLI, Run, Runtime ou Core;
-- `interceptable`: se um interceptor configurado pode entrar na entrega;
+- `interceptable`: se um gate local (`module`) pode entrar na entrega;
 - `injectable`: se pode ser emitido de fora pela CLI (`omunculus emit`).
   Só comandos podem ser injetáveis.
 
@@ -107,6 +107,14 @@ Campos de payload que as propostas acrescentam a tipos existentes:
 
 ## Interceptor
 
+A interceptação por **atores**, internos ou externos, usa solicitações e respostas
+persistidas, conforme [actor-interception.md](actor-interception.md). O contrato
+`module` abaixo descreve os gates locais de política, não restringe atores a
+`deliver/reject`. Atores não rodam dentro do Event Core e não alteram o envelope
+original. Seus resultados podem fornecer o contexto da entrega seguinte.
+
+### Gates locais de política
+
 Interceptor é a raia entre o Event Core e o consumidor desenhada nos cenários
 1 e 2 de [event-model.md](event-model.md). Ele **não é global**: entra na
 entrega somente dos tipos que declara, e só se estiver configurado. Sem
@@ -140,7 +148,7 @@ Contrato (`Omunculus.Interceptor`):
   precisa produzir efeito, ele rejeita ou deixa passar; efeito é papel de
   consumidor.
 
-Só tipos marcados `interceptable` no catálogo aceitam interceptor. Referenciar
+Só tipos marcados `interceptable` no catálogo aceitam gates locais (`module`). Atores usam as fronteiras de ativação/continuação descritas em [actor-interception.md](actor-interception.md), ou observam os demais tipos com `wait=false`. Referenciar
 outro tipo, ou um tipo inexistente, é erro de configuração na inicialização.
 
 Um interceptor pode ser restrito por workspace com `workspaces = [...]`: ele

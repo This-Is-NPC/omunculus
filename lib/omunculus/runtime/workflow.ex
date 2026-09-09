@@ -38,8 +38,9 @@ defmodule Omunculus.Runtime.Workflow do
               review = start.payload["assessment"]
 
               comment =
-                "Technical failure; no valid model completion report. Inspect confirmed effects before continuing. " <>
-                  (env.payload["reason"] || "unknown")
+                env.payload["comment"] ||
+                  "Technical failure; no valid model completion report. Inspect confirmed effects before continuing. " <>
+                    (env.payload["reason"] || "unknown")
 
               if is_map(review) do
                 old =
@@ -80,9 +81,22 @@ defmodule Omunculus.Runtime.Workflow do
       end)
 
     for advanced <- Runtime.events(state, type: "task.advanced") do
+      checkpoint =
+        case Omunculus.Interception.changed_comment(state.core, advanced) do
+          nil ->
+            advanced.payload["checkpoint"]
+
+          comment ->
+            Omunculus.Interception.context_checkpoint(
+              advanced.payload["checkpoint"],
+              Omunculus.WorkItem.load(state.core, advanced.work_item_id),
+              comment
+            )
+        end
+
       emit(state.core, advanced, "task.run_requested", advanced.work_item_id, %{
         comment: advanced.payload["comment"],
-        checkpoint: advanced.payload["checkpoint"],
+        checkpoint: checkpoint,
         reason: "step",
         stage: advanced.payload["to"]
       })
@@ -108,6 +122,10 @@ defmodule Omunculus.Runtime.Workflow do
                )
              )
       end)
+
+    # An actor's processing failure returns to its owning interaction before
+    # generic root-break routing can ask a human prematurely.
+    state = Omunculus.Interception.Agents.advance(state)
 
     requests(state)
     |> Enum.reduce(state, &route_break(&2, &1))
@@ -385,14 +403,16 @@ defmodule Omunculus.Runtime.Workflow do
   end
 
   def completed?(core, target) do
-    case EventCore.stream(core, 0, work_item_id: target, type: "task.completed") |> List.last() do
+    case EventCore.delivered_stream(core, 0, work_item_id: target, type: "task.completed")
+         |> List.last() do
       nil -> false
       _env -> true
     end
   end
 
   def flow(core, target) do
-    case EventCore.stream(core, 0, work_item_id: target, type: "run.started") |> List.first() do
+    case EventCore.delivered_stream(core, 0, work_item_id: target, type: "run.started")
+         |> List.first() do
       nil -> nil
       env -> env.payload["flow"]
     end
@@ -488,7 +508,8 @@ defmodule Omunculus.Runtime.Workflow do
       work_item_id: target,
       correlation_id: cause.correlation_id,
       depth: p["depth"],
-      attempt: length(EventCore.stream(core, 0, work_item_id: target, type: "run.started")) + 1,
+      attempt:
+        length(EventCore.delivered_stream(core, 0, work_item_id: target, type: "run.started")) + 1,
       work_item: Omunculus.WorkItem.load(core, target),
       comment: cause.payload["comment"],
       parent_run_id: p["parent_run_id"],
@@ -501,14 +522,14 @@ defmodule Omunculus.Runtime.Workflow do
       node_id: p["node_id"],
       team: p["team"],
       agent:
-        (EventCore.stream(core, 0, work_item_id: target, type: "run.started")
+        (EventCore.delivered_stream(core, 0, work_item_id: target, type: "run.started")
          |> List.first()).payload["agent_id"],
       reason: reason
     }
   end
 
   def checkpoint(core, target) do
-    events = EventCore.stream(core, 0, work_item_id: target)
+    events = EventCore.delivered_stream(core, 0, work_item_id: target)
     closed = Enum.filter(events, &(&1.type == "run.completed")) |> List.last()
 
     cp =
@@ -536,13 +557,21 @@ defmodule Omunculus.Runtime.Workflow do
   end
 
   defp comments(core, target) do
-    EventCore.query(
-      core,
-      "SELECT body FROM COMMENTS WHERE work_item_id = ? AND kind = 'run' ORDER BY last_sequence DESC LIMIT 8",
-      [target]
-    )
-    |> Enum.reverse()
-    |> List.flatten()
+    EventCore.delivered_stream(core, 0, work_item_id: target)
+    |> Enum.flat_map(fn env ->
+      case env do
+        %{type: "run.completed", payload: p} ->
+          comment = get_in(p, ["report", "comment"]) || p["comment"]
+          if is_binary(comment) and comment != "", do: [comment], else: []
+
+        %{type: "task.commented", payload: %{"kind" => "run", "body" => body}} ->
+          [body]
+
+        _ ->
+          []
+      end
+    end)
+    |> Enum.take(-8)
     |> Enum.join("\n")
   end
 
@@ -560,7 +589,9 @@ defmodule Omunculus.Runtime.Workflow do
   end
 
   defp last_start(core, target),
-    do: EventCore.stream(core, 0, work_item_id: target, type: "run.started") |> List.last()
+    do:
+      EventCore.delivered_stream(core, 0, work_item_id: target, type: "run.started")
+      |> List.last()
 
   defp recovery_exhausted?(core, target) do
     ref = Recovery.reference(core, target)
@@ -581,14 +612,14 @@ defmodule Omunculus.Runtime.Workflow do
   defp handled?(core, env),
     do:
       Enum.any?(
-        EventCore.stream(core, 0, type: "task.report_handled"),
+        EventCore.delivered_stream(core, 0, type: "task.report_handled"),
         &(&1.payload["report_id"] == env.event_id)
       )
 
   defp resolved?(core, env),
     do:
       Enum.any?(
-        EventCore.stream(core, 0, type: "task.assessment_resolved"),
+        EventCore.delivered_stream(core, 0, type: "task.assessment_resolved"),
         &(&1.payload["request_id"] == env.event_id)
       )
 

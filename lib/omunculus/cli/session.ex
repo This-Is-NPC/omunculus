@@ -380,6 +380,12 @@ defmodule Omunculus.CLI.Session do
     maybe_add_workspace_gate(resolved, attached_ids)
   end
 
+  defp resolve_interceptor(%{agent: agent} = item, _attached_ids, _config) when is_binary(agent),
+    do: item
+
+  defp resolve_interceptor(%{actor: actor} = item, _attached_ids, _config) when is_binary(actor),
+    do: item
+
   defp resolve_interceptor(item, attached_ids, config) do
     case resolve_module(item.module) do
       {:ok, module} ->
@@ -492,15 +498,12 @@ defmodule Omunculus.CLI.Session do
 
   defp ephemeral_agents(chat, cwd) when is_map(chat) do
     fn ctx ->
-      %{
-        agent_id: "ephemeral@chat",
-        kind: "worker",
-        model: chat.model,
-        tools: ["write", "read", "edit", "ls", "find", "grep"],
-        max_turns: 8,
-        chat: chat,
-        tool_options: %{roots: ctx[:roots] || [cwd]}
-      }
+      Agents.resolve(ctx, %{chat: chat})
+      |> Map.update(
+        :tool_options,
+        %{roots: ctx[:roots] || [cwd]},
+        &Map.put(&1, :roots, ctx[:roots] || [cwd])
+      )
     end
   end
 

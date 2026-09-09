@@ -247,3 +247,11 @@ Seletores explícitos precisam existir no registro de agentes/times. A
 omissão usa os padrões documentados; um nome inventado não seleciona um
 worker por fallback. A validação de delegação é aplicada pelo Core mesmo
 sem lane configurada e usa a descoberta pinada na Run.
+
+## Interceptação por agente ou ator externo
+
+`[interceptors.<nome>]` pode apontar para `agent = "<nome>"`, reutilizando
+`[agents.<nome>]`, ou para `actor = "external:<nome>"`. A regra configura eventos,
+contrato da resposta e dependência da continuação. `enabled=false` preserva a
+emissão/entrega normal dos novos eventos. Veja o
+[contrato e exemplo completos](actor-interception.md).
