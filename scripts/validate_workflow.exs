@@ -1,5 +1,5 @@
 # Independent real-provider cases; the effect oracle only measures results.
-# Usage: mise exec -- mix run scripts/validate_workflow.exs presets/cloud.toml [plain|staged] [--db test/sessions.sqlite3] [--depth 1|2] [--repeats 1]
+# Usage: mise exec -- mix run scripts/validate_workflow.exs presets/cloud.toml [plain|staged] [--db test/sessions.sqlite3] [--depth 0|1|2] [--interceptor off|on] [--repeats 1]
 # Duration is a metric. Human escalation is a pending decision, not task failure.
 alias Omunculus.{Config, Dotenv, EventCore, Runtime}
 alias Omunculus.EventCore.Projector
@@ -9,11 +9,15 @@ Code.require_file("support/workflow_observer.exs", __DIR__)
 Code.require_file("support/workflow_audit.exs", __DIR__)
 
 {options, [preset | selected], []} =
-  OptionParser.parse(System.argv(), strict: [db: :string, depth: :integer, repeats: :integer])
+  OptionParser.parse(System.argv(),
+    strict: [db: :string, depth: :integer, repeats: :integer, interceptor: :string]
+  )
 
 depth = options[:depth] || 1
 repeats = options[:repeats] || 1
-true = depth in [1, 2] and repeats > 0
+true = depth in [0, 1, 2] and repeats > 0
+interceptor = options[:interceptor] || "off"
+true = interceptor in ["off", "on"]
 db = Path.expand(options[:db] || "test/sessions.sqlite3")
 File.mkdir_p!(Path.dirname(db))
 {:ok, core} = EventCore.start_link(path: db)
@@ -47,6 +51,17 @@ rows =
         base
       end
 
+    base =
+      if depth == 0 do
+        String.replace(
+          base,
+          "granted = [\"delegate\", \"workspaces\", \"directory\"]",
+          "granted = [\"counter\"]"
+        )
+      else
+        base
+      end
+
     File.write!(Path.join(dir, "omunculus.toml"), base)
     overlay = Path.join(dir, "provider.toml")
 
@@ -65,9 +80,14 @@ rows =
         ""
       end
 
-    File.write!(overlay, File.read!(preset) <> "\n" <> workflow)
+    summary_config =
+      File.read!("examples/interception-agent.toml")
+      |> String.replace("enabled = true", "enabled = #{interceptor == "on"}")
+
+    File.write!(overlay, File.read!(preset) <> "\n" <> workflow <> "\n" <> summary_config)
     {:ok, config} = Config.load(cwd: dir, config_file: overlay, env: env)
-    {:ok, _} = Config.check(config)
+    {:ok, checked} = Config.check(config)
+    :ok = EventCore.configure_interceptors(core, checked.interceptors)
     session_id = Envelope.generate_id("session")
 
     EventCore.append!(
@@ -77,6 +97,7 @@ rows =
         payload: %{
           session_id: session_id,
           scenario: scenario,
+          interceptor: interceptor,
           repetition: repetition,
           required_depth: depth,
           model: config.chat.model
@@ -106,7 +127,12 @@ rows =
           work_item_id: Envelope.generate_id("wi"),
           payload: %{
             instruction:
-              "Delegate through #{depth} level(s), with only the final worker executing counter: increment counter exactly three times, reaching 3. Every parent must review actual returned values before approving. Report the final value and evidence.",
+              if(depth == 0,
+                do:
+                  "Increment counter exactly three times, reaching 3. Report the final value and each returned value as evidence.",
+                else:
+                  "Delegate through #{depth} level(s), with only the final worker executing counter: increment counter exactly three times, reaching 3. Every parent must review actual returned values before approving. Report the final value and evidence."
+              ),
             depth: 0,
             execution: %{},
             workspace: "app"
@@ -201,7 +227,35 @@ rows =
         length(reservations) <= hd(reservations).payload["recovery"]["max_retries"]
       end)
 
+    actor_items =
+      events
+      |> Enum.filter(
+        &(&1.type == "task.requested" and &1.payload["interception_request_id"] != nil)
+      )
+      |> MapSet.new(& &1.work_item_id)
+
+    actor_runs = Enum.count(starts, &MapSet.member?(actor_items, &1.work_item_id))
+
+    counter_requests =
+      Enum.filter(events, &(&1.type == "tool.call.requested" and &1.payload["tool"] == "counter"))
+
+    counter_schema_conformant = Enum.all?(counter_requests, &(&1.payload["args"] == %{}))
+
     row = %{
+      runtime_fingerprint:
+        Path.wildcard("lib/**/*.ex")
+        |> Enum.sort()
+        |> Enum.map(fn path -> [path, File.read!(path)] end)
+        |> IO.iodata_to_binary()
+        |> then(&:crypto.hash(:sha256, &1))
+        |> Base.encode16(case: :lower),
+      interceptor: interceptor,
+      actor_runs: actor_runs,
+      task_runs: length(starts) - actor_runs,
+      actor_requests: Enum.count(events, &(&1.type == "interception.requested")),
+      actor_resolutions: Enum.count(events, &(&1.type == "interception.resolved")),
+      counter_schema_conformant: counter_schema_conformant,
+      counter_arguments: Enum.map(counter_requests, & &1.payload["args"]),
       session_id: session_id,
       database: db,
       preset: Path.basename(preset),
@@ -211,7 +265,9 @@ rows =
       required_depth: depth,
       protocol_outcome: outcome,
       root_completed: outcome == :completed,
-      task_success: outcome == :completed and values == [1, 2, 3] and topology_valid,
+      task_success:
+        outcome == :completed and values == [1, 2, 3] and topology_valid and
+          counter_schema_conformant,
       handoffs_valid: handoffs.handoffs_valid,
       rejected_handoffs_blocked: handoffs.rejected_handoffs_blocked,
       accepted_delegations: handoffs.accepted_delegations,
@@ -229,7 +285,8 @@ rows =
       effect_success: values == [1, 2, 3],
       result: terminal.payload["result"],
       terminal_event_id: terminal.event_id,
-      human_request: if(outcome == :awaiting_human, do: terminal.payload["body"]),
+      terminal_event_type: terminal.type,
+      human_request: if(outcome == :awaiting_human, do: terminal.payload),
       approvals_checked: length(done ++ advances),
       approvals_valid: approvals_valid,
       replay_equal: before == Projector.snapshot(core),
@@ -243,6 +300,11 @@ rows =
       breaks: Enum.count(events, &(&1.type == "task.break")),
       elapsed_ms: elapsed_ms
     }
+
+    File.write!(
+      Path.join(dir, "events.json"),
+      Jason.encode!(Enum.map(events, &Map.from_struct/1), pretty: true)
+    )
 
     File.write!(Path.join(dir, "result.json"), Jason.encode!(row, pretty: true))
     IO.puts(Jason.encode!(row))

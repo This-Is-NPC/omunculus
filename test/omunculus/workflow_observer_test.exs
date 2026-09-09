@@ -32,4 +32,24 @@ defmodule Omunculus.WorkflowObserverTest do
     send(self(), {:event_core, terminal})
     assert WorkflowObserver.await("root") == {:awaiting_human, terminal}
   end
+
+  test "actor retries remain running until the interaction escalates to a human" do
+    task = Task.async(fn -> WorkflowObserver.await("root") end)
+
+    send(
+      task.pid,
+      {:event_core, %{type: "interception.requested", payload: %{"actor" => "agent:editor"}}}
+    )
+
+    send(
+      task.pid,
+      {:event_core, %{type: "interception.responded", payload: %{"outcome" => "failed"}}}
+    )
+
+    assert Task.yield(task, 20) == nil
+
+    terminal = %{type: "interception.requested", payload: %{"actor" => "human"}}
+    send(task.pid, {:event_core, terminal})
+    assert Task.await(task) == {:awaiting_human, terminal}
+  end
 end

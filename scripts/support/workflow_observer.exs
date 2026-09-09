@@ -11,6 +11,9 @@ defmodule Omunculus.WorkflowObserver do
            event} ->
         {:awaiting_human, event}
 
+      {:event_core, %{type: "interception.requested", payload: %{"actor" => "human"}} = event} ->
+        {:awaiting_human, event}
+
       {:event_core, _event} ->
         await(root_id)
     end
