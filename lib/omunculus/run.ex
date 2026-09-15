@@ -2,7 +2,9 @@ defmodule Omunculus.Run do
   @moduledoc """
   Opens and drives one run, start to end (spec §3.2, §3.3, §3.4, §3.5).
   Resolves who runs it: depth 0 with no work; the workflow step at the
-  work's stage when one applies; otherwise the plain depth agent.
+  work's stage when one applies; otherwise the plain depth agent — unless
+  the opening names an `agent` (a hook reacting with a run, spec §9.6),
+  in which case that named agent runs regardless of work or stage.
   Remounts the ceiling from the project config and the work's own and
   ancestors' grants on every opening — it never reuses a previous run's
   ceiling. Assembles the prompt from the agent text, the message of this
@@ -27,18 +29,25 @@ defmodule Omunculus.Run do
             prompt_id: String.t() | nil,
             work_id: String.t() | nil,
             request_id: String.t() | nil,
-            via: String.t() | nil
+            via: String.t() | nil,
+            agent: String.t() | nil
           },
           (String.t(), fun -> {:ok, String.t()} | {:error, term})
         ) :: {:ok, map} | {:error, term}
   def open(
         project,
-        %{prompt_id: message_prompt_id, work_id: work_id, request_id: request_id, via: via},
+        %{
+          prompt_id: message_prompt_id,
+          work_id: work_id,
+          request_id: request_id,
+          via: via,
+          agent: agent
+        },
         model
       ) do
     with {:ok, config} <- Config.load(project.dir),
          {:ok, work} <- fetch_work(project.conn, work_id),
-         {:ok, {name, text, depth, stage}} <- resolve_agent(config, project.conn, work),
+         {:ok, {name, text, depth, stage}} <- resolve_agent(config, project.conn, work, agent),
          {:ok, message} <- fetch_prompt(project.conn, message_prompt_id),
          {:ok, comment} <- fetch_last_comment(project.conn, work_id),
          {:ok, grants} <- Store.grants(project.conn, work),
@@ -68,13 +77,20 @@ defmodule Omunculus.Run do
     end
   end
 
-  defp resolve_agent(config, _conn, nil) do
+  defp resolve_agent(config, _conn, _work, agent) when not is_nil(agent) do
+    case Map.fetch(config.agents, agent) do
+      {:ok, agent_config} -> {:ok, {agent, agent_config.text, agent_config.depth, nil}}
+      :error -> {:error, {:no_agent, agent}}
+    end
+  end
+
+  defp resolve_agent(config, _conn, nil, nil) do
     with {:ok, {name, agent}} <- Config.agent_at_depth(config, 0) do
       {:ok, {name, agent.text, 0, nil}}
     end
   end
 
-  defp resolve_agent(config, conn, work) do
+  defp resolve_agent(config, conn, work, nil) do
     depth = Store.work_depth(conn, work)
 
     with {:ok, steps} <- workflow_steps(config, depth),

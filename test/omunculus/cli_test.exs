@@ -55,6 +55,21 @@ defmodule Omunculus.CLITest do
     File.chmod!(run_path, 0o755)
   end
 
+  defp write_hook(dir, name, toml, script) do
+    hook_dir = Path.join([dir, "tools", name])
+    File.mkdir_p!(hook_dir)
+    File.write!(Path.join(hook_dir, "hook.toml"), toml)
+    run_path = Path.join(hook_dir, "run")
+    File.write!(run_path, script)
+    File.chmod!(run_path, 0o755)
+  end
+
+  defp tool_event_names(events) do
+    events
+    |> Enum.filter(&(&1.type == "tool"))
+    |> Enum.map(&Jason.decode!(&1.body)["name"])
+  end
+
   test "send delivers a message, opens a run and the run reaches done", %{dir: dir} do
     assert {:ok, ""} = CLI.run(["send", "conte até 5"], dir)
 
@@ -513,6 +528,47 @@ defmodule Omunculus.CLITest do
                  dir
                )
     end
+
+    test "a project on-request hook that emits notify does not trigger on-notify: hooks don't react to hooks",
+         %{dir: dir} do
+      write_hook(
+        dir,
+        "on-request",
+        """
+        name = "on-request"
+        kind = "hook"
+        events = ["request"]
+        command = ["./run"]
+        """,
+        """
+        #!/bin/sh
+        echo '{"ok": true, "output": "", "emit": [{"type": "notify", "body": {"body": "pedido aberto"}}]}'
+        """
+      )
+
+      project = open(dir)
+      work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
+      Project.close(project)
+
+      request_id = open_write_request(dir, work_id)
+
+      project = open(dir)
+
+      assert {:ok, request} =
+               Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
+
+      assert request.status == "waiting_human"
+
+      assert {:ok, [_inbox_row]} = Query.all(project.conn, "SELECT * FROM inbox")
+
+      assert {:ok, events} = Store.replay(project.conn, :project)
+      tool_names = tool_event_names(events)
+
+      assert "on-request" in tool_names
+      refute "on-notify" in tool_names
+
+      Project.close(project)
+    end
   end
 
   describe "sequence and child" do
@@ -577,7 +633,8 @@ defmodule Omunculus.CLITest do
       assert {:ok, events1} = Store.replay(project.conn, {:run, run1.id})
       refute "model" in Enum.map(events1, & &1.type)
       assert List.last(events1).type == "end-run"
-      assert Enum.at(events1, -2).type == "continue"
+      assert Enum.at(events1, -2).type == "tool"
+      assert Enum.at(events1, -3).type == "continue"
 
       assert {:ok, assembled2} =
                Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [run2.prompt_id])
@@ -998,6 +1055,304 @@ defmodule Omunculus.CLITest do
       assert granted_worker_run
 
       assert List.last(runs).agent == "concierge"
+    end
+  end
+
+  describe "inbox" do
+    setup do
+      on_exit(fn -> Application.delete_env(:omunculus, :model) end)
+      :ok
+    end
+
+    test "notify mid-run leaves an unread inbox row, the run keeps going and closes done, the work stays open, and CLI reads it",
+         %{dir: dir} do
+      Application.put_env(:omunculus, :model, fn _assembled, call ->
+        assert {:ok, ""} = call.("work", %{"title" => "Ajuda"})
+        assert {:ok, ""} = call.("notify", %{"body" => "preciso de ajuda"})
+        {:ok, "ok"}
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "oi"], dir)
+
+      project = open(dir)
+
+      assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
+      assert work.state == "open"
+
+      assert {:ok, [inbox_row]} = Query.all(project.conn, "SELECT * FROM inbox")
+      assert inbox_row.agent == "concierge"
+
+      assert {:ok, [comment]} =
+               Query.all(project.conn, "SELECT * FROM comments WHERE inbox_id = ?", [
+                 inbox_row.id
+               ])
+
+      assert comment.body == "preciso de ajuda"
+
+      assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
+      assert run.status == "done"
+
+      assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+      assert "model" in Enum.map(events, & &1.type)
+
+      Project.close(project)
+
+      expected_line = "#{inbox_row.id} concierge: preciso de ajuda"
+      assert {:ok, ^expected_line} = CLI.run(["inbox"], dir)
+      assert {:ok, ""} = CLI.run(["inbox_read", inbox_row.id], dir)
+
+      project = open(dir)
+
+      assert {:ok, read} =
+               Query.one(project.conn, "SELECT * FROM inbox WHERE id = ?", [inbox_row.id])
+
+      assert read.read_at != nil
+
+      assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
+
+      Project.close(project)
+
+      assert {:ok, "inbox vazio"} = CLI.run(["inbox"], dir)
+    end
+  end
+
+  describe "D0-H1-W0: builtin no-op hooks" do
+    setup %{dir: dir} do
+      write_tool(dir, "write")
+      on_exit(fn -> Application.delete_env(:omunculus, :model) end)
+      :ok
+    end
+
+    test "a request emits a tool event named on-request right after it, carrying the call's run and work ids",
+         %{dir: dir} do
+      project = open(dir)
+      work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
+      Project.close(project)
+
+      request_id = open_write_request(dir, work_id)
+
+      project = open(dir)
+      assert {:ok, events} = Store.replay(project.conn, :project)
+      types = Enum.map(events, & &1.type)
+
+      request_index = Enum.find_index(types, &(&1 == "request"))
+      assert Enum.at(types, request_index + 1) == "tool"
+
+      request_event = Enum.at(events, request_index)
+      hook_event = Enum.at(events, request_index + 1)
+
+      assert Jason.decode!(hook_event.body)["name"] == "on-request"
+      assert hook_event.run_id == request_event.run_id
+      assert hook_event.work_id == request_event.work_id
+
+      assert {:ok, request} =
+               Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
+
+      assert request.status == "waiting_human"
+
+      Project.close(project)
+    end
+
+    test "a notify emits a tool event named on-notify right after it, carrying the call's run and work ids",
+         %{dir: dir} do
+      Application.put_env(:omunculus, :model, fn _assembled, call ->
+        assert {:ok, ""} = call.("notify", %{"body" => "aviso"})
+        {:ok, "ok"}
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "oi"], dir)
+
+      project = open(dir)
+      assert {:ok, events} = Store.replay(project.conn, :project)
+      types = Enum.map(events, & &1.type)
+
+      notify_index = Enum.find_index(types, &(&1 == "notify"))
+      assert Enum.at(types, notify_index + 1) == "tool"
+
+      notify_event = Enum.at(events, notify_index)
+      hook_event = Enum.at(events, notify_index + 1)
+
+      assert Jason.decode!(hook_event.body)["name"] == "on-notify"
+      assert hook_event.run_id == notify_event.run_id
+      assert hook_event.work_id == notify_event.work_id
+
+      Project.close(project)
+    end
+
+    test "a continue with a workflow on emits a tool event named on-continue right after it",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "concierge"
+      tools = ["work", "continue"]
+
+      [workflows.solo]
+      steps = [{ name = "to_do", agent = "concierge" }]
+
+      [policy]
+      workflow = "solo"
+      """)
+
+      Application.put_env(:omunculus, :model, fn _assembled, call ->
+        assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
+        call.("continue", %{})
+        {:ok, "unused"}
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "oi"], dir)
+
+      project = open(dir)
+      assert {:ok, events} = Store.replay(project.conn, :project)
+      types = Enum.map(events, & &1.type)
+
+      continue_index = Enum.find_index(types, &(&1 == "continue"))
+      assert Enum.at(types, continue_index + 1) == "tool"
+
+      continue_event = Enum.at(events, continue_index)
+      hook_event = Enum.at(events, continue_index + 1)
+
+      assert Jason.decode!(hook_event.body)["name"] == "on-continue"
+      assert hook_event.run_id == continue_event.run_id
+
+      Project.close(project)
+    end
+
+    test "a break emits a tool event named on-break right after it", %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "concierge"
+      tools = ["work", "break", "comment"]
+
+      [workflows.solo]
+      steps = [{ name = "to_do", agent = "concierge" }]
+
+      [policy]
+      workflow = "solo"
+      """)
+
+      Application.put_env(:omunculus, :model, fn _assembled, call ->
+        assert {:ok, ""} = call.("work", %{"title" => "Precisa de ajuda"})
+        call.("break", %{"body" => "preciso pausar"})
+        {:ok, "unused"}
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "cuide disso"], dir)
+
+      project = open(dir)
+      assert {:ok, events} = Store.replay(project.conn, :project)
+      types = Enum.map(events, & &1.type)
+
+      break_index = Enum.find_index(types, &(&1 == "break"))
+      assert Enum.at(types, break_index + 1) == "tool"
+
+      break_event = Enum.at(events, break_index)
+      hook_event = Enum.at(events, break_index + 1)
+
+      assert Jason.decode!(hook_event.body)["name"] == "on-break"
+      assert hook_event.run_id == break_event.run_id
+
+      Project.close(project)
+    end
+  end
+
+  describe "hook calling an agent" do
+    setup do
+      on_exit(fn -> Application.delete_env(:omunculus, :model) end)
+      :ok
+    end
+
+    test "a hook declaring an agent opens a reaction run via the hook's name after the triggering run closes",
+         %{dir: dir} do
+      write_hook(
+        dir,
+        "on-notify",
+        """
+        name = "on-notify"
+        kind = "hook"
+        events = ["notify"]
+        agent = "concierge"
+        command = ["./run"]
+        """,
+        """
+        #!/bin/sh
+        echo '{"ok": true, "output": "", "emit": []}'
+        """
+      )
+
+      project = open(dir)
+      work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
+      Project.close(project)
+
+      Application.put_env(:omunculus, :model, fn assembled, call ->
+        if assembled =~ "## Message" do
+          assert {:ok, ""} = call.("notify", %{"body" => "aviso"})
+          {:ok, "ok"}
+        else
+          {:ok, "reagido"}
+        end
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "cuide"], dir)
+
+      project = open(dir)
+
+      assert {:ok, runs} =
+               Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
+
+      assert length(runs) == 2
+
+      reaction = Enum.find(runs, &(&1.via == "on-notify"))
+      assert reaction
+      assert reaction.agent == "concierge"
+
+      assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
+      assert work.stage == nil
+
+      assert {:ok, events} = Store.replay(project.conn, :project)
+      refute "continue" in Enum.map(events, & &1.type)
+
+      Project.close(project)
+    end
+
+    test "a hook that emits continue on a work with workflow off fails the same as any tool and persists nothing from that call",
+         %{dir: dir} do
+      write_hook(
+        dir,
+        "on-notify",
+        """
+        name = "on-notify"
+        kind = "hook"
+        events = ["notify"]
+        command = ["./run"]
+        """,
+        """
+        #!/bin/sh
+        echo '{"ok": true, "output": "", "emit": [{"type": "continue", "body": {}}]}'
+        """
+      )
+
+      test_pid = self()
+
+      Application.put_env(:omunculus, :model, fn _assembled, call ->
+        assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
+        send(test_pid, {:notify_result, call.("notify", %{"body" => "aviso"})})
+        {:ok, "seguindo"}
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "oi"], dir)
+
+      assert_received {:notify_result, {:error, {:continue, :workflow_off}}}
+
+      project = open(dir)
+
+      assert {:ok, [_inbox_row]} = Query.all(project.conn, "SELECT * FROM inbox")
+
+      assert {:ok, events} = Store.replay(project.conn, :project)
+      refute "on-notify" in tool_event_names(events)
+
+      Project.close(project)
     end
   end
 end

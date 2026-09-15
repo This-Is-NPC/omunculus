@@ -1,13 +1,17 @@
 defmodule Omunculus.Harness do
   @moduledoc """
   Dispatches a tool `name` to its manifest per spec §7, §8.7 and §5:
-  resolves the catalog (rescanned on every call), checks the trigger,
-  derives the run's `work_id` from the store so a work created mid-run is
-  visible to the next call without the model passing ids around, hydrates
-  the views the manifest declared, loads the project's config for the
-  action layer, invokes the contract, and records the call and its emits
-  as one transaction. Augments the output with "already granted: <name>"
-  when a `request_access` call asked for a name the run already has.
+  discovers the catalog once (rescanned on every call, then reused for the
+  whole dispatch), checks the trigger, derives the run's `work_id` from
+  the store so a work created mid-run is visible to the next call without
+  the model passing ids around, hydrates the views the manifest declared,
+  loads the project's config for the action layer, invokes the contract,
+  and records the call and its emits as one transaction. After that,
+  every emit event runs the hooks `Catalog.hooks_for/2` finds for its
+  `type` through the same contract, each recorded as its own call; a hook
+  never reacts to another hook's emits. Augments the output with "already
+  granted: <name>" when a `request_access` call asked for a name the run
+  already has, based on the original call's own events only.
 
   `dispatch/4` never opens a run itself. `follow_up/3` walks a list of
   events in order — the run's own replay, or the events a single
@@ -17,8 +21,11 @@ defmodule Omunculus.Harness do
   change when scoped and reopens a run on its work, a `continue` reopens a
   run on the same work when it moved to a next stage or on the parent when
   it closed one waiting on it, a `delegate` opens a run on the child, a
-  `request` with an agent arbiter opens a run on the arbiter's work, and a
-  `work` closed by `finish_work` reopens a run on its parent.
+  `request` with an agent arbiter opens a run on the arbiter's work, a
+  `work` closed by `finish_work` reopens a run on its parent, and a `tool`
+  event whose name resolves to a hook declaring an `agent` opens that
+  agent's run as a reaction, `via` the hook's name — the hook never
+  sequences the protocol itself.
   """
 
   alias Omunculus.{Config, Project, Run, Store}
@@ -27,51 +34,31 @@ defmodule Omunculus.Harness do
   @spec manifest(Project.t(), String.t()) ::
           {:ok, Manifest.t()} | {:error, {:unknown_tool, String.t()}}
   def manifest(%Project{dir: dir}, name) do
-    catalog = Catalog.discover(Catalog.roots(dir))
-
-    case Map.fetch(catalog, name) do
-      {:ok, manifest} -> {:ok, manifest}
-      :error -> {:error, {:unknown_tool, name}}
-    end
+    dir |> Catalog.roots() |> Catalog.discover() |> fetch_manifest(name)
   end
 
   @spec dispatch(Project.t(), String.t(), map, map) :: {:ok, map, [map]} | {:error, term}
   def dispatch(project, name, args, ctx) do
-    with {:ok, manifest} <- manifest(project, name),
+    catalog = project.dir |> Catalog.roots() |> Catalog.discover()
+
+    with {:ok, manifest} <- fetch_manifest(catalog, name),
          :ok <- check_trigger(manifest, name, ctx.trigger),
          {:ok, work_id} <- resolve_work_id(project, ctx.run_id),
-         {:ok, view} <- hydrate_views(project, manifest.views, ctx.run_id, work_id),
          {:ok, config} <- Config.load(project.dir),
-         input = %{
-           name: name,
-           args: args,
-           view: view,
-           run_id: ctx.run_id,
-           work_id: work_id,
-           workspace: nil,
-           roots: [project.dir]
-         },
-         {:ok, out} <- Invoke.call(manifest, input),
-         emits = if(out.ok, do: out.emit, else: []),
-         call = %{name: name, args: args, ok: out.ok, output: out.output},
-         {:ok, events} <-
-           Store.record_tool(project.conn, ctx.run_id, call, emits, %{
-             run_id: ctx.run_id,
-             work_id: work_id,
-             author: ctx.author,
-             agent: ctx.agent,
-             config: config
-           }) do
-      {:ok, augment(out, emits, events), events}
+         {:ok, out, events} <- call(project, manifest, args, work_id, ctx, config),
+         {:ok, hook_events} <- run_hooks(project, catalog, events, work_id, ctx, config) do
+      {:ok, augment(out, events), events ++ hook_events}
     end
   end
 
   @spec follow_up(Project.t(), [map], (String.t(), fun -> {:ok, String.t()} | {:error, term})) ::
           :ok | {:error, term}
   def follow_up(project, events, model) do
+    catalog = project.dir |> Catalog.roots() |> Catalog.discover()
+
     events
     |> Enum.reduce_while({:ok, nil}, fn event, {:ok, via} ->
-      case advance(project, event, via, model) do
+      case advance(project, catalog, event, via, model) do
         {:ok, _via} = ok -> {:cont, ok}
         {:error, _reason} = error -> {:halt, error}
       end
@@ -79,6 +66,13 @@ defmodule Omunculus.Harness do
     |> case do
       {:ok, _via} -> :ok
       {:error, _reason} = error -> error
+    end
+  end
+
+  defp fetch_manifest(catalog, name) do
+    case Map.fetch(catalog, name) do
+      {:ok, manifest} -> {:ok, manifest}
+      :error -> {:error, {:unknown_tool, name}}
     end
   end
 
@@ -98,11 +92,20 @@ defmodule Omunculus.Harness do
     end
   end
 
+  defp store_ctx(ctx, work_id, config),
+    do: %{
+      run_id: ctx.run_id,
+      work_id: work_id,
+      author: ctx.author,
+      agent: ctx.agent,
+      config: config
+    }
+
   defp hydrate_views(project, names, run_id, work_id) do
     Enum.reduce_while(names, {:ok, %{}}, fn name, {:ok, acc} ->
       case resolve_view_id(name, run_id, work_id) do
         {:error, _reason} = error -> {:halt, error}
-        {:ok, nil} -> {:cont, {:ok, acc}}
+        :skip -> {:cont, {:ok, acc}}
         {:ok, id} -> fetch_view(project, name, id, acc)
       end
     end)
@@ -115,13 +118,73 @@ defmodule Omunculus.Harness do
     end
   end
 
-  defp resolve_view_id(name, _run_id, work_id) when name in ["work", "comments.work"],
-    do: {:ok, work_id}
+  defp resolve_view_id(name, _run_id, work_id) when name in ["work", "comments.work"] do
+    if work_id, do: {:ok, work_id}, else: :skip
+  end
 
-  defp resolve_view_id("events.run", run_id, _work_id), do: {:ok, run_id}
+  defp resolve_view_id("events.run", run_id, _work_id) do
+    if run_id, do: {:ok, run_id}, else: :skip
+  end
+
+  defp resolve_view_id("inbox", _run_id, _work_id), do: {:ok, nil}
   defp resolve_view_id(name, _run_id, _work_id), do: {:error, {:unknown_view, name}}
 
-  defp augment(out, emits, events) do
+  defp run_hooks(project, catalog, [_tool_event | emit_events], work_id, ctx, config) do
+    Enum.reduce_while(emit_events, {:ok, []}, fn event, {:ok, acc} ->
+      case run_hooks_for(project, catalog, event, work_id, ctx, config) do
+        {:ok, hook_events} -> {:cont, {:ok, acc ++ hook_events}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp run_hooks_for(project, catalog, event, work_id, ctx, config) do
+    catalog
+    |> Catalog.hooks_for(event.type)
+    |> Enum.reduce_while({:ok, []}, fn hook, {:ok, acc} ->
+      case invoke_hook(project, hook, event, work_id, ctx, config) do
+        {:ok, hook_events} -> {:cont, {:ok, acc ++ hook_events}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp invoke_hook(project, hook, event, work_id, ctx, config) do
+    with {:ok, _out, events} <-
+           call(project, hook, %{"event" => stringify(event)}, work_id, ctx, config) do
+      {:ok, events}
+    end
+  end
+
+  defp call(project, manifest, args, work_id, ctx, config) do
+    with {:ok, view} <- hydrate_views(project, manifest.views, ctx.run_id, work_id),
+         input = %{
+           name: manifest.name,
+           args: args,
+           view: view,
+           run_id: ctx.run_id,
+           work_id: work_id,
+           workspace: nil,
+           roots: [project.dir]
+         },
+         {:ok, out} <- Invoke.call(manifest, input),
+         emits = if(out.ok, do: out.emit, else: []),
+         record = %{name: manifest.name, args: args, ok: out.ok, output: out.output},
+         {:ok, events} <-
+           Store.record_tool(
+             project.conn,
+             ctx.run_id,
+             record,
+             emits,
+             store_ctx(ctx, work_id, config)
+           ) do
+      {:ok, out, events}
+    end
+  end
+
+  defp stringify(event), do: Map.new(event, fn {key, value} -> {to_string(key), value} end)
+
+  defp augment(%{ok: true, emit: emits} = out, events) do
     case request_emit_name(emits) do
       nil ->
         out
@@ -135,6 +198,8 @@ defmodule Omunculus.Harness do
     end
   end
 
+  defp augment(out, _events), do: out
+
   defp request_emit_name(emits) do
     Enum.find_value(emits, fn
       %{"type" => "request", "body" => %{"name" => name}} -> name
@@ -142,49 +207,71 @@ defmodule Omunculus.Harness do
     end)
   end
 
-  defp advance(_project, %{type: "tool", body: body}, _via, _model),
-    do: {:ok, Jason.decode!(body)["name"]}
+  defp advance(project, catalog, %{type: "tool", body: body} = event, _via, model) do
+    name = Jason.decode!(body)["name"]
 
-  defp advance(project, %{type: "prompt"} = event, via, model) do
+    case Map.get(catalog, name) do
+      %Manifest{kind: "hook", agent: agent} when not is_nil(agent) ->
+        with :ok <- open_reaction_run(project, event, name, agent, model), do: {:ok, name}
+
+      _not_a_calling_hook ->
+        {:ok, name}
+    end
+  end
+
+  defp advance(project, _catalog, %{type: "prompt"} = event, via, model) do
     with :ok <-
            open_run(
              project,
-             %{prompt_id: event.prompt_id, work_id: event.work_id, request_id: nil, via: via},
+             open_params(prompt_id: event.prompt_id, work_id: event.work_id, via: via),
              model
            ),
          do: {:ok, via}
   end
 
-  defp advance(project, %{type: "grant"} = event, via, model) do
+  defp advance(project, _catalog, %{type: "grant"} = event, via, model) do
     with :ok <- apply_grant(project, event),
          :ok <- open_grant_run(project, event, via, model) do
       {:ok, via}
     end
   end
 
-  defp advance(project, %{type: "continue"} = event, via, model) do
+  defp advance(project, _catalog, %{type: "continue"} = event, via, model) do
     with :ok <- open_continue_run(project, event, via, model), do: {:ok, via}
   end
 
-  defp advance(project, %{type: "delegate"} = event, via, model) do
+  defp advance(project, _catalog, %{type: "delegate"} = event, via, model) do
     with :ok <-
-           open_run(
-             project,
-             %{prompt_id: nil, work_id: event.work_id, request_id: nil, via: via},
-             model
-           ),
+           open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via), model),
          do: {:ok, via}
   end
 
-  defp advance(project, %{type: "request"} = event, via, model) do
+  defp advance(project, _catalog, %{type: "request"} = event, via, model) do
     with :ok <- open_request_run(project, event, via, model), do: {:ok, via}
   end
 
-  defp advance(project, %{type: "work"} = event, via, model) do
+  defp advance(project, _catalog, %{type: "work"} = event, via, model) do
     with :ok <- open_finished_work_run(project, event, model), do: {:ok, via}
   end
 
-  defp advance(_project, _event, via, _model), do: {:ok, via}
+  defp advance(_project, _catalog, _event, via, _model), do: {:ok, via}
+
+  defp open_params(prompt_id: prompt_id, work_id: work_id, via: via),
+    do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: via, agent: nil}
+
+  defp open_reaction_run(project, event, hook_name, agent, model) do
+    open_run(
+      project,
+      %{
+        prompt_id: nil,
+        work_id: event.work_id,
+        request_id: event.request_id,
+        via: hook_name,
+        agent: agent
+      },
+      model
+    )
+  end
 
   defp apply_grant(project, event) do
     body = Jason.decode!(event.body)
@@ -199,19 +286,15 @@ defmodule Omunculus.Harness do
   defp open_grant_run(_project, %{work_id: nil}, _via, _model), do: :ok
 
   defp open_grant_run(project, %{work_id: work_id}, via, model),
-    do: open_run(project, %{prompt_id: nil, work_id: work_id, request_id: nil, via: via}, model)
+    do: open_run(project, open_params(prompt_id: nil, work_id: work_id, via: via), model)
 
   defp open_continue_run(project, event, via, model) do
     case Jason.decode!(event.body) do
       %{"to" => to} when not is_nil(to) ->
-        open_run(
-          project,
-          %{prompt_id: nil, work_id: event.work_id, request_id: nil, via: via},
-          model
-        )
+        open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via), model)
 
       %{"parent_id" => parent_id} when not is_nil(parent_id) ->
-        open_run(project, %{prompt_id: nil, work_id: parent_id, request_id: nil, via: via}, model)
+        open_run(project, open_params(prompt_id: nil, work_id: parent_id, via: via), model)
 
       _no_next_run ->
         :ok
@@ -221,11 +304,19 @@ defmodule Omunculus.Harness do
   defp open_request_run(project, event, via, model) do
     case Jason.decode!(event.body) do
       %{"arbiter" => _arbiter, "arbiter_work_id" => work_id} ->
-        open_run(
-          project,
-          %{prompt_id: nil, work_id: work_id, request_id: event.request_id, via: via},
-          model
-        )
+        with :ok <-
+               open_run(
+                 project,
+                 %{
+                   prompt_id: nil,
+                   work_id: work_id,
+                   request_id: event.request_id,
+                   via: via,
+                   agent: nil
+                 },
+                 model
+               ),
+             do: :ok
 
       _no_agent_arbiter ->
         :ok
@@ -235,7 +326,11 @@ defmodule Omunculus.Harness do
   defp open_finished_work_run(project, event, model) do
     case Jason.decode!(event.body) do
       %{"state" => "done", "parent_id" => parent_id} when not is_nil(parent_id) ->
-        open_run(project, %{prompt_id: nil, work_id: parent_id, request_id: nil, via: nil}, model)
+        open_run(
+          project,
+          %{prompt_id: nil, work_id: parent_id, request_id: nil, via: nil, agent: nil},
+          model
+        )
 
       _no_parent_to_wake ->
         :ok

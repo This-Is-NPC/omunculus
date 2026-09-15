@@ -20,6 +20,15 @@ defmodule Omunculus.HarnessTest do
     File.chmod!(run_path, 0o755)
   end
 
+  defp write_hook(dir, name, toml, script) do
+    hook_dir = Path.join([dir, "tools", name])
+    File.mkdir_p!(hook_dir)
+    File.write!(Path.join(hook_dir, "hook.toml"), toml)
+    run_path = Path.join(hook_dir, "run")
+    File.write!(run_path, script)
+    File.chmod!(run_path, 0o755)
+  end
+
   defp open_project(dir) do
     {:ok, project} = Project.open(dir)
     project
@@ -28,7 +37,7 @@ defmodule Omunculus.HarnessTest do
   defp write_config(dir, contents), do: File.write!(Path.join(dir, "omunculus.toml"), contents)
 
   defp open(prompt_id, work_id \\ nil),
-    do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: nil}
+    do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: nil, agent: nil}
 
   test "a project tool named send replaces the builtin without touching the core", %{dir: dir} do
     write_tool(
@@ -278,6 +287,69 @@ defmodule Omunculus.HarnessTest do
              Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [message_id])
 
     assert message.run_id == run.id
+
+    Project.close(project)
+  end
+
+  test "a tool declaring views = [\"inbox\"] receives the unread list outside any run", %{
+    dir: dir
+  } do
+    write_tool(
+      dir,
+      "peek",
+      """
+      name = "peek"
+      kind = "tool"
+      triggers = ["cli"]
+      views = ["inbox"]
+      command = ["./run"]
+      """,
+      """
+      #!/bin/sh
+      data=$(cat)
+      case "$data" in
+        *concierge*) echo '{"ok": true, "output": "yes", "emit": []}' ;;
+        *) echo '{"ok": true, "output": "no", "emit": []}' ;;
+      esac
+      """
+    )
+
+    project = open_project(dir)
+    Fixtures.insert(project.conn, :inbox, %{agent: "concierge"})
+
+    ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil}
+
+    assert {:ok, %{ok: true, output: "yes"}, _events} =
+             Harness.dispatch(project, "peek", %{}, ctx)
+
+    Project.close(project)
+  end
+
+  test "a broken hook fails the dispatch but the triggering call's own store write already committed",
+       %{dir: dir} do
+    write_hook(
+      dir,
+      "on-notify",
+      """
+      name = "on-notify"
+      kind = "hook"
+      events = ["notify"]
+      command = ["./run"]
+      """,
+      """
+      #!/bin/sh
+      exit 1
+      """
+    )
+
+    project = open_project(dir)
+    run_id = Fixtures.insert(project.conn, :runs, %{})
+    ctx = %{trigger: "model", run_id: run_id, author: "agent", agent: "concierge"}
+
+    assert {:error, {:exit, 1, _output}} =
+             Harness.dispatch(project, "notify", %{"body" => "oi"}, ctx)
+
+    assert {:ok, [_inbox_row]} = Query.all(project.conn, "SELECT * FROM inbox")
 
     Project.close(project)
   end

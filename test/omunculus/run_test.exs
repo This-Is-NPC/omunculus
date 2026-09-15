@@ -45,7 +45,7 @@ defmodule Omunculus.RunTest do
     do: Fixtures.insert(conn, :prompts, %{kind: "message", body: body})
 
   defp open(prompt_id, work_id \\ nil),
-    do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: nil}
+    do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: nil, agent: nil}
 
   test "a model calling a project tool leaves a start-run, tool, model, end-run replay", %{
     dir: dir
@@ -319,10 +319,60 @@ defmodule Omunculus.RunTest do
     refute_received :reached_second_call
 
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
-    assert Enum.map(events, & &1.type) == ["start-run", "tool", "request", "end-run"]
+    assert Enum.map(events, & &1.type) == ["start-run", "tool", "request", "tool", "end-run"]
 
     assert {:ok, stored} = Query.one(project.conn, "SELECT * FROM runs WHERE id = ?", [run.id])
     assert stored.status == "done"
+
+    Project.close(project)
+  end
+
+  test "opening with an agent runs that named agent regardless of work or stage, and an unknown agent fails",
+       %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+
+    [agents.reactor]
+    depth = 2
+    text = "reacting"
+    """)
+
+    project = open_project(dir)
+    test_pid = self()
+
+    model = fn assembled, _call ->
+      send(test_pid, {:assembled, assembled})
+      {:ok, "done"}
+    end
+
+    assert {:ok, run} =
+             Run.open(
+               project,
+               %{
+                 prompt_id: nil,
+                 work_id: nil,
+                 request_id: nil,
+                 via: "on-notify",
+                 agent: "reactor"
+               },
+               model
+             )
+
+    assert run.agent == "reactor"
+    assert run.depth == "2"
+    assert run.via == "on-notify"
+
+    assert_received {:assembled, assembled}
+    assert assembled =~ "reacting"
+
+    assert {:error, {:no_agent, "nope"}} =
+             Run.open(
+               project,
+               %{prompt_id: nil, work_id: nil, request_id: nil, via: nil, agent: "nope"},
+               fn _assembled, _call -> raise "must never be called" end
+             )
 
     Project.close(project)
   end
