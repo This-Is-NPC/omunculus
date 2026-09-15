@@ -21,8 +21,28 @@ defmodule Omunculus.ConfigTest do
 
     assert %{"concierge" => %{depth: 0, text: text, ceiling: ceiling}} = agents
     assert text != ""
-    assert ceiling.granted == ["comment", "request_access", "work"]
+
+    assert ceiling.granted == [
+             "break",
+             "comment",
+             "continue",
+             "delegate",
+             "reply",
+             "request_access",
+             "work"
+           ]
+
     assert policy.mode == "auto"
+  end
+
+  test "the default file has worker at depth 1 and a delivery workflow with two steps", %{
+    dir: dir
+  } do
+    assert {:ok, %Config{agents: agents, workflows: workflows} = config} = Config.load(dir)
+
+    assert %{"worker" => %{depth: 1}} = agents
+    assert %{"delivery" => [%{name: "to_do"}, %{name: "review"}]} = workflows
+    assert Config.workflow_for(config, 0) == :off
   end
 
   test "a project file replaces the default whole", %{dir: dir} do
@@ -332,17 +352,17 @@ defmodule Omunculus.ConfigTest do
     assert {:error, {:policy, {:depth, 2, {:invalid, :mode}}}} = Config.load(dir)
   end
 
-  test "unknown key under policy besides layer keys and depth", %{dir: dir} do
+  test "unknown key under policy besides layer keys, depth, and workflow", %{dir: dir} do
     write_toml(dir, """
     [policy]
-    workflow = "x"
+    priority = "x"
 
     [agents.concierge]
     depth = 0
     text = "hi"
     """)
 
-    assert {:error, {:policy, {:unknown_key, "workflow"}}} = Config.load(dir)
+    assert {:error, {:policy, {:unknown_key, "priority"}}} = Config.load(dir)
   end
 
   test "invalid mode inside policy itself", %{dir: dir} do
@@ -468,5 +488,349 @@ defmodule Omunculus.ConfigTest do
     """)
 
     assert {:error, {:agent, "ghost", :unknown}} = Config.grant(dir, {:agent, "ghost"}, "counter")
+  end
+
+  describe "workflows" do
+    defp workers_toml do
+      """
+      [agents.worker]
+      depth = 1
+      text = "work"
+
+      [agents.reviewer]
+      depth = 1
+      text = "review"
+      """
+    end
+
+    test "steps parse name, agent, ceiling, and preserve order", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [
+            { name = "to_do", agent = "worker", granted = ["counter"], negotiable = ["write"] },
+            { name = "review", agent = "reviewer", deny = ["counter", "write"] },
+          ]
+          """
+      )
+
+      assert {:ok, %Config{workflows: workflows}} = Config.load(dir)
+
+      assert %{
+               "delivery" => [
+                 %{name: "to_do", agent: "worker", ceiling: to_do_ceiling},
+                 %{name: "review", agent: "reviewer", ceiling: review_ceiling}
+               ]
+             } = workflows
+
+      assert to_do_ceiling == %Layer{granted: ["counter"], negotiable: ["write"]}
+      assert review_ceiling == %Layer{deny: ["counter", "write"]}
+    end
+
+    test "missing steps is :no_steps", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          """
+      )
+
+      assert {:error, {:workflow, "delivery", :no_steps}} = Config.load(dir)
+    end
+
+    test "empty steps list is :no_steps", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = []
+          """
+      )
+
+      assert {:error, {:workflow, "delivery", :no_steps}} = Config.load(dir)
+    end
+
+    test "step missing a name is invalid", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [{ agent = "worker" }]
+          """
+      )
+
+      assert {:error, {:workflow, "delivery", {:invalid, :name}}} = Config.load(dir)
+    end
+
+    test "step missing an agent is invalid", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [{ name = "to_do" }]
+          """
+      )
+
+      assert {:error, {:workflow, "delivery", {:invalid, :agent}}} = Config.load(dir)
+    end
+
+    test "step agent must be defined among agents", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [{ name = "to_do", agent = "ghost" }]
+          """
+      )
+
+      assert {:error, {:workflow, "delivery", {:unknown_agent, "ghost"}}} = Config.load(dir)
+    end
+
+    test "duplicate step names are rejected", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [
+            { name = "to_do", agent = "worker" },
+            { name = "to_do", agent = "reviewer" },
+          ]
+          """
+      )
+
+      assert {:error, {:workflow, "delivery", {:duplicate_step, "to_do"}}} = Config.load(dir)
+    end
+
+    test "invalid ceiling content inside a step is tagged with the workflow", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [{ name = "to_do", agent = "worker", mode = "sometimes" }]
+          """
+      )
+
+      assert {:error, {:workflow, "delivery", {:invalid, :mode}}} = Config.load(dir)
+    end
+
+    test "unknown key inside a step", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [{ name = "to_do", agent = "worker", stage = "x" }]
+          """
+      )
+
+      assert {:error, {:workflow, "delivery", {:unknown_key, "stage"}}} = Config.load(dir)
+    end
+
+    test "unknown key inside the workflow table", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [{ name = "to_do", agent = "worker" }]
+          note = "x"
+          """
+      )
+
+      assert {:error, {:workflow, "delivery", {:unknown_key, "note"}}} = Config.load(dir)
+    end
+
+    test "policy workflow must be a defined workflow", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [policy]
+          workflow = "ghost"
+          """
+      )
+
+      assert {:error, {:policy, {:unknown_workflow, "ghost"}}} = Config.load(dir)
+    end
+
+    test "policy depth workflow must be a defined workflow", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [policy.depth.1]
+          workflow = "ghost"
+          """
+      )
+
+      assert {:error, {:policy, {:depth, 1, {:unknown_workflow, "ghost"}}}} = Config.load(dir)
+    end
+
+    test "policy workflow names the default workflow", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [
+            { name = "to_do", agent = "worker" },
+            { name = "review", agent = "reviewer" },
+          ]
+
+          [policy]
+          workflow = "delivery"
+          """
+      )
+
+      assert {:ok, config} = Config.load(dir)
+      assert {:ok, [%{name: "to_do"}, %{name: "review"}]} = Config.workflow_for(config, 0)
+      assert {:ok, [%{name: "to_do"}, %{name: "review"}]} = Config.workflow_for(config, 1)
+    end
+
+    test "a depth workflow overrides the policy workflow at that depth", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [{ name = "to_do", agent = "worker" }]
+
+          [workflows.solo]
+          steps = [{ name = "only", agent = "reviewer" }]
+
+          [policy]
+          workflow = "delivery"
+
+          [policy.depth.1]
+          workflow = "solo"
+          """
+      )
+
+      assert {:ok, config} = Config.load(dir)
+      assert {:ok, [%{name: "to_do"}]} = Config.workflow_for(config, 0)
+      assert {:ok, [%{name: "only"}]} = Config.workflow_for(config, 1)
+    end
+
+    test "no policy workflow and no depth workflow is off", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [{ name = "to_do", agent = "worker" }]
+          """
+      )
+
+      assert {:ok, config} = Config.load(dir)
+      assert Config.workflow_for(config, 0) == :off
+    end
+
+    test "step_at finds a step by stage name", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [
+            { name = "to_do", agent = "worker" },
+            { name = "review", agent = "reviewer" },
+          ]
+
+          [policy]
+          workflow = "delivery"
+          """
+      )
+
+      assert {:ok, config} = Config.load(dir)
+      assert {:ok, steps} = Config.workflow_for(config, 0)
+      assert {:ok, %{name: "review", agent: "reviewer"}} = Config.step_at(steps, "review")
+    end
+
+    test "step_at returns off_sequence for an unknown stage", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [{ name = "to_do", agent = "worker" }]
+
+          [policy]
+          workflow = "delivery"
+          """
+      )
+
+      assert {:ok, config} = Config.load(dir)
+      assert {:ok, steps} = Config.workflow_for(config, 0)
+      assert {:error, :off_sequence} = Config.step_at(steps, "ghost")
+    end
+
+    test "next_step returns the following step", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [
+            { name = "to_do", agent = "worker" },
+            { name = "review", agent = "reviewer" },
+          ]
+
+          [policy]
+          workflow = "delivery"
+          """
+      )
+
+      assert {:ok, config} = Config.load(dir)
+      assert {:ok, steps} = Config.workflow_for(config, 0)
+      assert {:ok, %{name: "review"}} = Config.next_step(steps, "to_do")
+    end
+
+    test "next_step returns nil after the last step", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [
+            { name = "to_do", agent = "worker" },
+            { name = "review", agent = "reviewer" },
+          ]
+
+          [policy]
+          workflow = "delivery"
+          """
+      )
+
+      assert {:ok, config} = Config.load(dir)
+      assert {:ok, steps} = Config.workflow_for(config, 0)
+      assert {:ok, nil} = Config.next_step(steps, "review")
+    end
+
+    test "next_step returns off_sequence for an unknown stage", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          steps = [{ name = "to_do", agent = "worker" }]
+
+          [policy]
+          workflow = "delivery"
+          """
+      )
+
+      assert {:ok, config} = Config.load(dir)
+      assert {:ok, steps} = Config.workflow_for(config, 0)
+      assert {:error, :off_sequence} = Config.next_step(steps, "ghost")
+    end
   end
 end

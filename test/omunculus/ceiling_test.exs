@@ -9,7 +9,8 @@ defmodule Omunculus.CeilingTest do
   defp config(attrs),
     do: Map.merge(%{policy: policy(mode: "auto"), depths: %{}, agents: %{}}, attrs)
 
-  defp request(attrs), do: Map.merge(%{agent: "worker", depth: 1, grants: []}, attrs)
+  defp request(attrs),
+    do: Map.merge(%{agent: "worker", depth: 1, grants: [], stage: nil}, attrs)
 
   describe "mount/3" do
     test "policy auto alone leaves everything askable" do
@@ -125,6 +126,67 @@ defmodule Omunculus.CeilingTest do
       assert snapshot.askable == ["counter"]
       assert snapshot.blocked == ["delete"]
       assert snapshot.sealed == ["deploy"]
+    end
+
+    test "stage: nil behaves exactly as before" do
+      config =
+        config(%{
+          agents: %{"worker" => %{depth: 1, text: "", ceiling: policy(granted: ["counter"])}}
+        })
+
+      snapshot = Ceiling.mount(config, request(%{stage: nil}), ["counter"])
+
+      assert snapshot.have == ["counter"]
+      assert snapshot.uncited == "askable"
+    end
+
+    test "spec §5 table: a stage deny cuts an agent grant made in the same work" do
+      config =
+        config(%{
+          agents: %{"worker" => %{depth: 1, text: "", ceiling: policy(granted: ["counter"])}}
+        })
+
+      to_do = Ceiling.mount(config, request(%{stage: policy(granted: ["counter"])}), ["counter"])
+      assert to_do.have == ["counter"]
+
+      review = Ceiling.mount(config, request(%{stage: policy(deny: ["counter"])}), ["counter"])
+      assert review.blocked == ["counter"]
+      assert review.have == []
+    end
+
+    test "a stage deny cuts a work grant of the same name" do
+      config = config(%{})
+
+      snapshot =
+        Ceiling.mount(config, request(%{grants: ["counter"], stage: policy(deny: ["counter"])}), [
+          "counter"
+        ])
+
+      assert snapshot.blocked == ["counter"]
+      assert snapshot.have == []
+    end
+
+    test "a layer without a mode contributes its lists only: an empty stage restricts nothing" do
+      config = config(%{agents: %{"worker" => %{ceiling: policy(granted: ["comment"])}}})
+
+      snapshot =
+        Ceiling.mount(
+          config,
+          request(%{agent: "worker", stage: policy([])}),
+          ["comment", "write"]
+        )
+
+      assert snapshot.have == ["comment"]
+      assert snapshot.askable == ["write"]
+      assert snapshot.uncited == "askable"
+    end
+
+    test "a stage granted list lists a name the agent does not have in its own ceiling" do
+      config = config(%{})
+
+      snapshot = Ceiling.mount(config, request(%{stage: policy(granted: ["write"])}), ["write"])
+
+      assert snapshot.have == ["write"]
     end
   end
 

@@ -1,24 +1,29 @@
 defmodule Omunculus.Ceiling do
   @moduledoc """
-  Mounts the effective ceiling of a run from the policy, depth, and agent
-  layers of spec §5, and classifies a name against a mounted snapshot.
+  Mounts the effective ceiling of a run from the policy, depth, agent and
+  workflow-step layers of spec §5, and classifies a name against a mounted
+  snapshot. A layer's lists always apply; its mode, when it has one,
+  classifies what the lists do not cite; the policy mode is the fallback
+  for a name no layer classified. The most restrictive class wins.
   """
 
   alias Omunculus.Config.Layer
 
   @classes ~w(have askable sealed blocked)
 
-  @spec mount(map(), %{agent: String.t(), depth: integer(), grants: [String.t()]}, [
-          String.t()
-        ]) :: %{
+  @spec mount(
+          map(),
+          %{agent: String.t(), depth: integer(), grants: [String.t()], stage: Layer.t() | nil},
+          [String.t()]
+        ) :: %{
           have: [String.t()],
           askable: [String.t()],
           sealed: [String.t()],
           blocked: [String.t()],
           uncited: String.t()
         }
-  def mount(config, %{agent: agent_name, depth: depth, grants: grants}, names) do
-    layers = applying_layers(config, agent_name, depth)
+  def mount(config, %{agent: agent_name, depth: depth, grants: grants, stage: stage}, names) do
+    layers = applying_layers(config, agent_name, depth, stage)
     policy_mode = config.policy.mode
 
     cited = layers |> Enum.map(fn {_role, layer} -> layer end) |> Enum.flat_map(&layer_names/1)
@@ -42,13 +47,13 @@ defmodule Omunculus.Ceiling do
     end)
   end
 
-  defp applying_layers(config, agent_name, depth) do
+  defp applying_layers(config, agent_name, depth, stage) do
     depth_layer = config |> Map.get(:depths, %{}) |> Map.get(depth)
 
     agent_layer =
       config |> Map.get(:agents, %{}) |> Map.get(agent_name, %{}) |> Map.get(:ceiling)
 
-    [policy: config.policy, depth: depth_layer, agent: agent_layer]
+    [policy: config.policy, depth: depth_layer, agent: agent_layer, stage: stage]
     |> Enum.reject(fn {_role, layer} -> is_nil(layer) end)
   end
 
@@ -56,27 +61,17 @@ defmodule Omunculus.Ceiling do
     layer.granted ++ layer.negotiable ++ layer.human ++ layer.deny
   end
 
-  # The policy layer contributes only what its own lists cite: an uncited
-  # name never falls back to the policy mode by itself, only via a depth or
-  # agent layer whose own mode is nil (see `effective_mode/2`). This keeps a
-  # bare `[policy] mode = "auto"` from overriding an explicit grant made at
-  # a more specific layer (spec §5, "Stage e grant no mesmo work" example).
   defp classify_name(layers, policy_mode, name) do
-    contributions =
-      layers
-      |> Enum.map(fn {role, layer} -> layer_contribution(role, layer, policy_mode, name) end)
-      |> Enum.reject(&is_nil/1)
-
-    case contributions do
+    case Enum.reject(Enum.map(layers, &layer_contribution(&1, name)), &is_nil/1) do
       [] -> mode_default(policy_mode)
       classes -> most_restrictive(classes)
     end
   end
 
-  defp layer_contribution(:policy, layer, _policy_mode, name), do: list_class(layer, name)
+  defp layer_contribution({:policy, layer}, name), do: list_class(layer, name)
 
-  defp layer_contribution(_role, layer, policy_mode, name) do
-    list_class(layer, name) || mode_default(effective_mode(layer, policy_mode))
+  defp layer_contribution({_role, %Layer{mode: mode} = layer}, name) do
+    list_class(layer, name) || (mode && mode_default(mode))
   end
 
   defp list_class(%Layer{} = layer, name) do
@@ -90,19 +85,14 @@ defmodule Omunculus.Ceiling do
   end
 
   defp uncited(layers, policy_mode) do
-    non_policy_defaults =
-      layers
-      |> Enum.reject(fn {role, _layer} -> role == :policy end)
-      |> Enum.map(fn {_role, layer} -> mode_default(effective_mode(layer, policy_mode)) end)
-
-    case non_policy_defaults do
+    layers
+    |> Enum.reject(fn {role, %Layer{mode: mode}} -> role == :policy or is_nil(mode) end)
+    |> Enum.map(fn {_role, %Layer{mode: mode}} -> mode_default(mode) end)
+    |> case do
       [] -> mode_default(policy_mode)
       defaults -> most_restrictive(defaults)
     end
   end
-
-  defp effective_mode(%Layer{mode: nil}, policy_mode), do: policy_mode
-  defp effective_mode(%Layer{mode: mode}, _policy_mode), do: mode
 
   defp mode_default("allowlist"), do: "blocked"
   defp mode_default("blocklist"), do: "have"

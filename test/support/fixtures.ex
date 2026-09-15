@@ -4,6 +4,7 @@ defmodule Omunculus.Fixtures do
   actions of the current stage cannot create yet.
   """
 
+  alias Omunculus.Config
   alias Omunculus.Id
   alias Omunculus.Store.Query
 
@@ -35,5 +36,14 @@ defmodule Omunculus.Fixtures do
 
     :ok = Query.insert(conn, table, row)
     row.id
+  end
+
+  @spec config(String.t() | nil) :: Config.t()
+  def config(toml \\ nil) do
+    dir = Path.join(System.tmp_dir!(), Id.new())
+    File.mkdir_p!(dir)
+    if toml, do: File.write!(Path.join(dir, "omunculus.toml"), toml)
+    {:ok, config} = Config.load(dir)
+    config
   end
 end

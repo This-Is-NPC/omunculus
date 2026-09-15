@@ -1,9 +1,10 @@
 defmodule Omunculus.Store.View do
   @moduledoc """
   Read side of the store: the five functions of spec §8.3, the `runs` and
-  `prompts` rows the harness needs to assemble or continue a run, plus
-  replay of `events` for a project, run, work, request, or inbox scope
-  (spec §4). Never executes anything against the store.
+  `prompts` rows the harness needs to assemble or continue a run, the
+  depth of a work by walking `parent_id`, plus replay of `events` for a
+  project, run, work, request, or inbox scope (spec §4). Never executes
+  anything against the store.
   """
 
   alias Omunculus.Store.Query
@@ -49,6 +50,14 @@ defmodule Omunculus.Store.View do
   end
 
   def view(_conn, name, _id), do: {:error, {:unknown_view, name}}
+
+  @spec work_depth(Exqlite.Sqlite3.db(), map) :: non_neg_integer
+  def work_depth(_conn, %{parent_id: nil}), do: 0
+
+  def work_depth(conn, %{parent_id: parent_id}) do
+    {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+    1 + work_depth(conn, parent)
+  end
 
   @spec replay(Exqlite.Sqlite3.db(), :project | {:run | :work | :request | :inbox, String.t()}) ::
           {:ok, [map]}

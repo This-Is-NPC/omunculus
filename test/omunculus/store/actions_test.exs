@@ -5,7 +5,13 @@ defmodule Omunculus.Store.ActionsTest do
   alias Omunculus.Store.Query
   alias Omunculus.Store
 
-  @ctx %{run_id: nil, author: "agent", work_id: nil, agent: "concierge"}
+  @ctx %{
+    run_id: nil,
+    author: "agent",
+    work_id: nil,
+    agent: "concierge",
+    config: Fixtures.config()
+  }
   @call %{name: "t", args: %{}, ok: true, output: ""}
 
   @ceiling %{
@@ -39,8 +45,8 @@ defmodule Omunculus.Store.ActionsTest do
     run
   end
 
-  defp request_ctx(run, work_id \\ nil) do
-    %{run_id: run.id, author: "agent", work_id: work_id, agent: run.agent}
+  defp request_ctx(run, work_id \\ nil, config \\ @ctx.config) do
+    %{run_id: run.id, author: "agent", work_id: work_id, agent: run.agent, config: config}
   end
 
   defp request_emit(kind, name, reason) do
@@ -58,6 +64,81 @@ defmodule Omunculus.Store.ActionsTest do
       )
 
     {run, event.request_id}
+  end
+
+  defp delivery_toml do
+    """
+    [agents.concierge]
+    depth = 0
+    text = "concierge"
+
+    [agents.worker]
+    depth = 1
+    text = "worker"
+
+    [workflows.delivery]
+    steps = [
+      { name = "to_do", agent = "concierge" },
+      { name = "review", agent = "worker" },
+    ]
+
+    [policy]
+    workflow = "delivery"
+    """
+  end
+
+  defp depth1_workflow_toml do
+    """
+    [agents.concierge]
+    depth = 0
+    text = "concierge"
+
+    [agents.worker]
+    depth = 1
+    text = "worker"
+
+    [workflows.delivery]
+    steps = [
+      { name = "to_do", agent = "worker" },
+    ]
+
+    [policy.depth.1]
+    workflow = "delivery"
+    """
+  end
+
+  defp no_worker_toml do
+    """
+    [agents.concierge]
+    depth = 0
+    text = "concierge"
+    """
+  end
+
+  defp grant_write_toml do
+    """
+    [agents.concierge]
+    depth = 0
+    text = "concierge"
+    granted = ["write"]
+
+    [agents.worker]
+    depth = 1
+    text = "worker"
+    """
+  end
+
+  defp deny_write_toml do
+    """
+    [agents.concierge]
+    depth = 0
+    text = "concierge"
+    deny = ["write"]
+
+    [agents.worker]
+    depth = 1
+    text = "worker"
+    """
   end
 
   test "comment on an existing work appends event and comment row", %{conn: conn} do
@@ -389,6 +470,360 @@ defmodule Omunculus.Store.ActionsTest do
     assert run.work_id == first_event.work_id
   end
 
+  test "work is rejected when the body carries stage, agent or model", %{conn: conn} do
+    assert {:error, {:work, {:forbidden, "stage"}}} =
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "x", "stage" => "review"}}],
+               @ctx
+             )
+
+    assert {:error, {:work, {:forbidden, "agent"}}} =
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "x", "agent" => "worker"}}],
+               @ctx
+             )
+
+    assert count(conn, "works") == 0
+  end
+
+  test "work with workflow on sets the first stage and its agent", %{conn: conn} do
+    ctx = %{@ctx | config: Fixtures.config(delivery_toml())}
+
+    assert {:ok, [_tool_event, event]} =
+             record_tool(conn, [%{"type" => "work", "body" => %{"title" => "Ship it"}}], ctx)
+
+    assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
+    assert work.stage == "to_do"
+    assert work.assignee == "concierge"
+  end
+
+  test "a child work picks up a workflow set only at its depth", %{conn: conn} do
+    ctx = %{@ctx | config: Fixtures.config(depth1_workflow_toml())}
+    parent_id = Fixtures.insert(conn, :works)
+
+    assert {:ok, [_tool_event, event]} =
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "child", "parent_id" => parent_id}}],
+               ctx
+             )
+
+    assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
+    assert work.stage == "to_do"
+    assert work.assignee == "worker"
+  end
+
+  describe "continue action" do
+    test "workflow off is rejected", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works, %{stage: nil})
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: work_id}
+
+      assert {:error, {:continue, :workflow_off}} =
+               record_tool(conn, [%{"type" => "continue", "body" => %{}}], ctx)
+    end
+
+    test "moves to the next stage and updates the assignee", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works, %{stage: "to_do", assignee: "concierge"})
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(conn, [%{"type" => "continue", "body" => %{}}], ctx)
+
+      assert event.type == "continue"
+      assert Jason.decode!(event.body) == %{"from" => "to_do", "to" => "review"}
+
+      assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+      assert work.stage == "review"
+      assert work.assignee == "worker"
+      assert work.state == "open"
+    end
+
+    test "the last stage closes the work without a parent to reopen", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works, %{stage: "review"})
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(conn, [%{"type" => "continue", "body" => %{}}], ctx)
+
+      assert Jason.decode!(event.body) == %{"from" => "review", "to" => nil, "parent_id" => nil}
+
+      assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+      assert work.state == "done"
+    end
+
+    test "the last stage reopens a parent waiting on this child", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
+      child_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, stage: "review"})
+
+      :ok =
+        Query.exec(conn, "UPDATE works SET waiting_for = ? WHERE id = ?", [child_id, parent_id])
+
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: child_id, config: Fixtures.config(delivery_toml())}
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(conn, [%{"type" => "continue", "body" => %{}}], ctx)
+
+      assert Jason.decode!(event.body)["parent_id"] == parent_id
+
+      assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+      assert parent.state == "open"
+      assert parent.waiting == nil
+    end
+
+    test "an unknown stage is off_sequence", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works, %{stage: "ghost"})
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
+
+      assert {:error, {:continue, :off_sequence}} =
+               record_tool(conn, [%{"type" => "continue", "body" => %{}}], ctx)
+    end
+
+    test "no work is rejected", %{conn: conn} do
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: nil, config: Fixtures.config(delivery_toml())}
+
+      assert {:error, {:continue, :no_work}} =
+               record_tool(conn, [%{"type" => "continue", "body" => %{}}], ctx)
+    end
+
+    test "a body naming the stage is forbidden", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works, %{stage: "to_do"})
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
+
+      assert {:error, {:continue, {:forbidden, "stage"}}} =
+               record_tool(
+                 conn,
+                 [%{"type" => "continue", "body" => %{"stage" => "review"}}],
+                 ctx
+               )
+    end
+  end
+
+  describe "break action" do
+    test "workflow off is rejected", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works, %{stage: nil})
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: work_id}
+
+      assert {:error, {:break, :workflow_off}} =
+               record_tool(
+                 conn,
+                 [%{"type" => "break", "body" => %{"body" => "preciso pausar"}}],
+                 ctx
+               )
+    end
+
+    test "parks the work with a comment and leaves the stage untouched", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works, %{stage: "to_do", state: "open"})
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [%{"type" => "break", "body" => %{"body" => "preciso pausar"}}],
+                 ctx
+               )
+
+      assert event.type == "break"
+      assert event.work_id == work_id
+      assert event.comment_id != nil
+
+      assert {:ok, comment} =
+               Query.one(conn, "SELECT * FROM comments WHERE work_id = ?", [work_id])
+
+      assert comment.body == "preciso pausar"
+
+      assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+      assert work.state == "waiting"
+      assert work.stage == "to_do"
+      assert work.waiting == nil
+      assert work.waiting_from == "concierge"
+    end
+
+    test "no body is rejected", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works, %{stage: "to_do"})
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
+
+      assert {:error, {:break, :no_body}} =
+               record_tool(conn, [%{"type" => "break", "body" => %{}}], ctx)
+    end
+
+    test "no work is rejected", %{conn: conn} do
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: nil, config: Fixtures.config(delivery_toml())}
+
+      assert {:error, {:break, :no_work}} =
+               record_tool(
+                 conn,
+                 [%{"type" => "break", "body" => %{"body" => "x"}}],
+                 ctx
+               )
+    end
+  end
+
+  describe "delegate action" do
+    test "creates a child work, comments it, and parks the parent", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works)
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: parent_id}
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "delegate",
+                     "body" => %{"title" => "Sub task", "body" => "faça isso"}
+                   }
+                 ],
+                 ctx
+               )
+
+      assert event.type == "delegate"
+      assert event.work_id != nil
+      assert event.comment_id != nil
+
+      child_id = event.work_id
+
+      assert {:ok, child} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
+      assert child.parent_id == parent_id
+      assert child.title == "Sub task"
+      assert child.state == "open"
+      assert child.assignee == "worker"
+
+      assert {:ok, comment} =
+               Query.one(conn, "SELECT * FROM comments WHERE work_id = ?", [child_id])
+
+      assert comment.body == "faça isso"
+
+      assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+      assert parent.state == "waiting"
+      assert parent.waiting == "child"
+      assert parent.waiting_for == child_id
+      assert parent.waiting_from == "concierge"
+
+      assert Jason.decode!(event.body) == %{
+               "title" => "Sub task",
+               "body" => "faça isso",
+               "parent_id" => parent_id
+             }
+    end
+
+    test "the child's assignee comes from the workflow's first step when it is on", %{
+      conn: conn
+    } do
+      parent_id = Fixtures.insert(conn, :works)
+      run_id = Fixtures.insert(conn, :runs)
+
+      ctx = %{
+        @ctx
+        | run_id: run_id,
+          work_id: parent_id,
+          config: Fixtures.config(delivery_toml())
+      }
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [%{"type" => "delegate", "body" => %{"title" => "t", "body" => "b"}}],
+                 ctx
+               )
+
+      assert {:ok, child} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
+      assert child.stage == "to_do"
+      assert child.assignee == "concierge"
+    end
+
+    test "no work is rejected", %{conn: conn} do
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: nil}
+
+      assert {:error, {:delegate, :no_work}} =
+               record_tool(
+                 conn,
+                 [%{"type" => "delegate", "body" => %{"title" => "t", "body" => "b"}}],
+                 ctx
+               )
+    end
+
+    test "no agent at the child's depth is an error", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works)
+      run_id = Fixtures.insert(conn, :runs)
+
+      ctx = %{
+        @ctx
+        | run_id: run_id,
+          work_id: parent_id,
+          config: Fixtures.config(no_worker_toml())
+      }
+
+      assert {:error, {:delegate, {:no_agent_at_depth, 1}}} =
+               record_tool(
+                 conn,
+                 [%{"type" => "delegate", "body" => %{"title" => "t", "body" => "b"}}],
+                 ctx
+               )
+    end
+
+    test "no title is rejected", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works)
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: parent_id}
+
+      assert {:error, {:delegate, :no_title}} =
+               record_tool(conn, [%{"type" => "delegate", "body" => %{"body" => "b"}}], ctx)
+    end
+
+    test "no body is rejected", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works)
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: parent_id}
+
+      assert {:error, {:delegate, :no_body}} =
+               record_tool(conn, [%{"type" => "delegate", "body" => %{"title" => "t"}}], ctx)
+    end
+  end
+
+  describe "finish_work" do
+    test "marks the work done and reopens a parent waiting on it", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
+      child_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, state: "open"})
+
+      :ok =
+        Query.exec(conn, "UPDATE works SET waiting_for = ? WHERE id = ?", [child_id, parent_id])
+
+      assert {:ok, event} = Store.finish_work(conn, child_id, nil)
+
+      assert event.type == "work"
+      assert event.work_id == child_id
+      assert Jason.decode!(event.body) == %{"state" => "done", "parent_id" => parent_id}
+
+      assert {:ok, child} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
+      assert child.state == "done"
+
+      assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+      assert parent.state == "open"
+      assert parent.waiting == nil
+    end
+
+    test "a root work with no parent finishes with a nil parent_id", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+
+      assert {:ok, event} = Store.finish_work(conn, work_id, nil)
+      assert Jason.decode!(event.body) == %{"state" => "done", "parent_id" => nil}
+    end
+  end
+
   describe "request action" do
     test "have does not open a request, emits only the tool event", %{conn: conn} do
       run = open_run(conn, @ceiling)
@@ -538,6 +973,47 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert request.work_id == nil
       assert count(conn, "works") == 0
+    end
+
+    test "askable from a child whose parent's agent has authority routes to that agent", %{
+      conn: conn
+    } do
+      parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
+      run = open_run(conn, @ceiling)
+      ctx = request_ctx(run, work_id, Fixtures.config(grant_write_toml()))
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(conn, [request_emit("tool", "write", "preciso gravar")], ctx)
+
+      assert {:ok, request} =
+               Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
+
+      assert request.arbiter == "concierge"
+      assert request.status == "waiting_agent"
+
+      body = Jason.decode!(event.body)
+      assert body["arbiter"] == "concierge"
+      assert body["arbiter_work_id"] == parent_id
+    end
+
+    test "askable from a child whose parent's agent lacks authority falls back to human", %{
+      conn: conn
+    } do
+      parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
+      run = open_run(conn, @ceiling)
+      ctx = request_ctx(run, work_id, Fixtures.config(deny_write_toml()))
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(conn, [request_emit("tool", "write", "preciso gravar")], ctx)
+
+      assert {:ok, request} =
+               Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
+
+      assert request.arbiter == "human"
+      assert request.status == "waiting_human"
+      refute Map.has_key?(Jason.decode!(event.body), "arbiter")
     end
   end
 

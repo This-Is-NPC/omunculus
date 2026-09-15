@@ -80,6 +80,32 @@ defmodule Omunculus.Store.ViewTest do
     end
   end
 
+  describe "work_depth" do
+    test "is 0 for a root work", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      {:ok, work} = View.view(conn, "work", work_id)
+
+      assert View.work_depth(conn, work) == 0
+    end
+
+    test "is 1 for a child of a root work", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works)
+      child_id = Fixtures.insert(conn, :works, %{parent_id: parent_id})
+      {:ok, child} = View.view(conn, "work", child_id)
+
+      assert View.work_depth(conn, child) == 1
+    end
+
+    test "is 2 for a grandchild", %{conn: conn} do
+      grandparent_id = Fixtures.insert(conn, :works)
+      parent_id = Fixtures.insert(conn, :works, %{parent_id: grandparent_id})
+      child_id = Fixtures.insert(conn, :works, %{parent_id: parent_id})
+      {:ok, child} = View.view(conn, "work", child_id)
+
+      assert View.work_depth(conn, child) == 2
+    end
+  end
+
   describe "run" do
     test "returns the run row", %{conn: conn} do
       run_id = Fixtures.insert(conn, :runs)

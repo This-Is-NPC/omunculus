@@ -4,12 +4,21 @@ defmodule Omunculus.Harness do
   resolves the catalog (rescanned on every call), checks the trigger,
   derives the run's `work_id` from the store so a work created mid-run is
   visible to the next call without the model passing ids around, hydrates
-  the views the manifest declared, invokes the contract, records the call
-  and its emits as one transaction, opens a run for every `prompt` emit
-  that follows, and for every `grant` emit applies the ceiling change and
-  reopens a run on the same stage. Augments the output with "already
-  granted: <name>" when a `request_access` call asked for a name the run
-  already has.
+  the views the manifest declared, loads the project's config for the
+  action layer, invokes the contract, and records the call and its emits
+  as one transaction. Augments the output with "already granted: <name>"
+  when a `request_access` call asked for a name the run already has.
+
+  `dispatch/4` never opens a run itself. `follow_up/3` walks a list of
+  events in order — the run's own replay, or the events a single
+  `dispatch/4` call produced — remembering the last `tool` event's name as
+  `via`, and opens the run each event asks for per spec §3.2 and §3.4: a
+  `prompt` opens a run on its work, a `grant` applies a permanent ceiling
+  change when scoped and reopens a run on its work, a `continue` reopens a
+  run on the same work when it moved to a next stage or on the parent when
+  it closed one waiting on it, a `delegate` opens a run on the child, a
+  `request` with an agent arbiter opens a run on the arbiter's work, and a
+  `work` closed by `finish_work` reopens a run on its parent.
   """
 
   alias Omunculus.{Config, Project, Run, Store}
@@ -32,6 +41,7 @@ defmodule Omunculus.Harness do
          :ok <- check_trigger(manifest, name, ctx.trigger),
          {:ok, work_id} <- resolve_work_id(project, ctx.run_id),
          {:ok, view} <- hydrate_views(project, manifest.views, ctx.run_id, work_id),
+         {:ok, config} <- Config.load(project.dir),
          input = %{
            name: name,
            args: args,
@@ -49,10 +59,26 @@ defmodule Omunculus.Harness do
              run_id: ctx.run_id,
              work_id: work_id,
              author: ctx.author,
-             agent: ctx.agent
-           }),
-         :ok <- open_follow_ups(project, events, ctx) do
+             agent: ctx.agent,
+             config: config
+           }) do
       {:ok, augment(out, emits, events), events}
+    end
+  end
+
+  @spec follow_up(Project.t(), [map], (String.t(), fun -> {:ok, String.t()} | {:error, term})) ::
+          :ok | {:error, term}
+  def follow_up(project, events, model) do
+    events
+    |> Enum.reduce_while({:ok, nil}, fn event, {:ok, via} ->
+      case advance(project, event, via, model) do
+        {:ok, _via} = ok -> {:cont, ok}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, _via} -> :ok
+      {:error, _reason} = error -> error
     end
   end
 
@@ -116,29 +142,49 @@ defmodule Omunculus.Harness do
     end)
   end
 
-  defp open_follow_ups(project, events, ctx) do
-    Enum.reduce_while(events, :ok, fn event, :ok ->
-      case follow_up(project, event, ctx) do
-        :ok -> {:cont, :ok}
-        {:error, _reason} = error -> {:halt, error}
-      end
-    end)
+  defp advance(_project, %{type: "tool", body: body}, _via, _model),
+    do: {:ok, Jason.decode!(body)["name"]}
+
+  defp advance(project, %{type: "prompt"} = event, via, model) do
+    with :ok <-
+           open_run(
+             project,
+             %{prompt_id: event.prompt_id, work_id: event.work_id, request_id: nil, via: via},
+             model
+           ),
+         do: {:ok, via}
   end
 
-  defp follow_up(project, %{type: "prompt"} = event, ctx) do
-    open_run(project, %{prompt_id: event.prompt_id, work_id: event.work_id}, ctx.model)
-  end
-
-  defp follow_up(project, %{type: "grant", work_id: work_id} = event, ctx)
-       when not is_nil(work_id) do
-    with :ok <- apply_grant(project, event) do
-      open_run(project, %{prompt_id: nil, work_id: work_id}, ctx.model)
+  defp advance(project, %{type: "grant"} = event, via, model) do
+    with :ok <- apply_grant(project, event),
+         :ok <- open_grant_run(project, event, via, model) do
+      {:ok, via}
     end
   end
 
-  defp follow_up(project, %{type: "grant"} = event, _ctx), do: apply_grant(project, event)
+  defp advance(project, %{type: "continue"} = event, via, model) do
+    with :ok <- open_continue_run(project, event, via, model), do: {:ok, via}
+  end
 
-  defp follow_up(_project, _event, _ctx), do: :ok
+  defp advance(project, %{type: "delegate"} = event, via, model) do
+    with :ok <-
+           open_run(
+             project,
+             %{prompt_id: nil, work_id: event.work_id, request_id: nil, via: via},
+             model
+           ),
+         do: {:ok, via}
+  end
+
+  defp advance(project, %{type: "request"} = event, via, model) do
+    with :ok <- open_request_run(project, event, via, model), do: {:ok, via}
+  end
+
+  defp advance(project, %{type: "work"} = event, via, model) do
+    with :ok <- open_finished_work_run(project, event, model), do: {:ok, via}
+  end
+
+  defp advance(_project, _event, via, _model), do: {:ok, via}
 
   defp apply_grant(project, event) do
     body = Jason.decode!(event.body)
@@ -147,6 +193,52 @@ defmodule Omunculus.Harness do
       "agent" -> Config.grant(project.dir, {:agent, body["agent"]}, body["name"])
       "depth" -> Config.grant(project.dir, {:depth, body["depth"]}, body["name"])
       _ -> :ok
+    end
+  end
+
+  defp open_grant_run(_project, %{work_id: nil}, _via, _model), do: :ok
+
+  defp open_grant_run(project, %{work_id: work_id}, via, model),
+    do: open_run(project, %{prompt_id: nil, work_id: work_id, request_id: nil, via: via}, model)
+
+  defp open_continue_run(project, event, via, model) do
+    case Jason.decode!(event.body) do
+      %{"to" => to} when not is_nil(to) ->
+        open_run(
+          project,
+          %{prompt_id: nil, work_id: event.work_id, request_id: nil, via: via},
+          model
+        )
+
+      %{"parent_id" => parent_id} when not is_nil(parent_id) ->
+        open_run(project, %{prompt_id: nil, work_id: parent_id, request_id: nil, via: via}, model)
+
+      _no_next_run ->
+        :ok
+    end
+  end
+
+  defp open_request_run(project, event, via, model) do
+    case Jason.decode!(event.body) do
+      %{"arbiter" => _arbiter, "arbiter_work_id" => work_id} ->
+        open_run(
+          project,
+          %{prompt_id: nil, work_id: work_id, request_id: event.request_id, via: via},
+          model
+        )
+
+      _no_agent_arbiter ->
+        :ok
+    end
+  end
+
+  defp open_finished_work_run(project, event, model) do
+    case Jason.decode!(event.body) do
+      %{"state" => "done", "parent_id" => parent_id} when not is_nil(parent_id) ->
+        open_run(project, %{prompt_id: nil, work_id: parent_id, request_id: nil, via: nil}, model)
+
+      _no_parent_to_wake ->
+        :ok
     end
   end
 

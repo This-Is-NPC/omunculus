@@ -39,6 +39,22 @@ defmodule Omunculus.CLITest do
     File.chmod!(run_path, 0o755)
   end
 
+  defp write_emit_tool(dir, name, emit_json) do
+    tool_dir = Path.join([dir, "tools", name])
+    File.mkdir_p!(tool_dir)
+
+    File.write!(Path.join(tool_dir, "tool.toml"), """
+    name = "#{name}"
+    kind = "tool"
+    triggers = ["model"]
+    command = ["./run"]
+    """)
+
+    run_path = Path.join(tool_dir, "run")
+    File.write!(run_path, "#!/bin/sh\necho '#{emit_json}'\n")
+    File.chmod!(run_path, 0o755)
+  end
+
   test "send delivers a message, opens a run and the run reaches done", %{dir: dir} do
     assert {:ok, ""} = CLI.run(["send", "conte até 5"], dir)
 
@@ -496,6 +512,492 @@ defmodule Omunculus.CLITest do
                  ["reply", "--request_id", request_id, "--decision", "grant", "de novo"],
                  dir
                )
+    end
+  end
+
+  describe "sequence and child" do
+    setup do
+      on_exit(fn -> Application.delete_env(:omunculus, :model) end)
+      :ok
+    end
+
+    test "D0-H0-W1: continue moves a work through the workflow's steps and the last stage closes it",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "Sou o concierge."
+      tools = ["work", "continue", "comment"]
+
+      [agents.reviewer]
+      depth = 0
+      text = "Sou o reviewer."
+      tools = ["work", "continue", "comment"]
+
+      [workflows.delivery]
+      steps = [
+        { name = "to_do", agent = "concierge" },
+        { name = "review", agent = "reviewer", deny = ["work"] },
+      ]
+
+      [policy]
+      workflow = "delivery"
+      """)
+
+      Application.put_env(:omunculus, :model, fn assembled, call ->
+        cond do
+          assembled =~ "Sou o concierge." ->
+            assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
+            call.("continue", %{})
+            {:ok, "unused"}
+
+          assembled =~ "Sou o reviewer." ->
+            call.("continue", %{})
+            {:ok, "unused"}
+        end
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "Ship it please"], dir)
+
+      project = open(dir)
+
+      assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
+      assert work.state == "done"
+      assert work.stage == "review"
+
+      assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+      assert length(runs) == 2
+      [run1, run2] = runs
+
+      assert run1.agent == "concierge"
+      assert run2.agent == "reviewer"
+      assert run2.depth == "0"
+      assert run2.via == "continue"
+
+      assert {:ok, events1} = Store.replay(project.conn, {:run, run1.id})
+      refute "model" in Enum.map(events1, & &1.type)
+      assert List.last(events1).type == "end-run"
+      assert Enum.at(events1, -2).type == "continue"
+
+      assert {:ok, assembled2} =
+               Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [run2.prompt_id])
+
+      assert assembled2.body =~ "## Work"
+      refute assembled2.body =~ "- work:"
+
+      Project.close(project)
+    end
+
+    test "continue is refused while the workflow is off and the run keeps going", %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "concierge"
+      tools = ["work", "continue"]
+      """)
+
+      Application.put_env(:omunculus, :model, fn _assembled, call ->
+        assert {:ok, ""} = call.("work", %{"title" => "No sequence"})
+        assert {:error, {:continue, :workflow_off}} = call.("continue", %{})
+        {:ok, "seguindo mesmo assim"}
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "oi"], dir)
+
+      project = open(dir)
+
+      assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
+      assert run.status == "done"
+
+      assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+      assert "model" in Enum.map(events, & &1.type)
+
+      Project.close(project)
+    end
+
+    test "a continue emit naming a stage is refused by the store", %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "concierge"
+      tools = ["work", "bad_continue"]
+
+      [workflows.delivery]
+      steps = [
+        { name = "to_do", agent = "concierge" },
+        { name = "review", agent = "concierge" },
+      ]
+
+      [policy]
+      workflow = "delivery"
+      """)
+
+      write_emit_tool(
+        dir,
+        "bad_continue",
+        ~s({"ok": true, "output": "", "emit": [{"type": "continue", "body": {"stage": "review"}}]})
+      )
+
+      Application.put_env(:omunculus, :model, fn _assembled, call ->
+        assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
+
+        assert {:error, {:continue, {:forbidden, "stage"}}} = call.("bad_continue", %{})
+
+        {:ok, "seguindo"}
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "oi"], dir)
+
+      project = open(dir)
+      assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
+      assert work.stage == "to_do"
+      Project.close(project)
+    end
+
+    test "a grant on the work survives a stage deny: the effective set loses it but works.grants keeps it",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "concierge"
+      tools = ["counter", "continue"]
+
+      [workflows.delivery]
+      steps = [
+        { name = "to_do", agent = "concierge" },
+        { name = "review", agent = "concierge", deny = ["counter"] },
+      ]
+
+      [policy]
+      workflow = "delivery"
+      """)
+
+      write_tool(dir, "counter")
+
+      project = open(dir)
+
+      work_id =
+        Fixtures.insert(project.conn, :works, %{
+          stage: "to_do",
+          assignee: "concierge",
+          grants: ~s(["counter"])
+        })
+
+      Project.close(project)
+
+      Application.put_env(:omunculus, :model, fn assembled, call ->
+        if assembled =~ "- counter:" do
+          call.("continue", %{})
+          {:ok, "unused"}
+        else
+          {:ok, "done"}
+        end
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "segue"], dir)
+
+      project = open(dir)
+
+      assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+      assert length(runs) == 2
+      review_run = List.last(runs)
+      refute "counter" in Jason.decode!(review_run.tools)
+
+      assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
+      assert Jason.decode!(work.grants) == ["counter"]
+
+      Project.close(project)
+    end
+
+    test "break parks the work with a comment without moving the stage, and a later send reopens a run on it",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "concierge"
+      tools = ["work", "break", "comment"]
+
+      [workflows.solo]
+      steps = [{ name = "to_do", agent = "concierge" }]
+
+      [policy]
+      workflow = "solo"
+      """)
+
+      Application.put_env(:omunculus, :model, fn _assembled, call ->
+        assert {:ok, ""} = call.("work", %{"title" => "Precisa de ajuda"})
+        call.("break", %{"body" => "preciso pausar"})
+        {:ok, "unused"}
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "cuide disso"], dir)
+
+      project = open(dir)
+      assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
+      assert work.state == "waiting"
+      assert work.stage == "to_do"
+      assert work.waiting_from == "concierge"
+
+      assert {:ok, [comment]} = Query.all(project.conn, "SELECT * FROM comments")
+      assert comment.body == "preciso pausar"
+
+      assert {:ok, [run1]} = Query.all(project.conn, "SELECT * FROM runs")
+      Project.close(project)
+
+      Application.put_env(:omunculus, :model, fn _assembled, _call -> {:ok, "voltei"} end)
+
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "volta"], dir)
+
+      project = open(dir)
+
+      assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs")
+      assert length(runs) == 2
+      run2 = Enum.find(runs, &(&1.id != run1.id))
+      assert run2.agent == "concierge"
+
+      assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work.id])
+      assert work.stage == "to_do"
+
+      Project.close(project)
+    end
+
+    test "D1-H0-W0: delegate opens a child run, the child finishing wakes the parent, and the parent's end-run precedes the child's start-run",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "Sou o concierge."
+      tools = ["work", "delegate", "comment"]
+
+      [agents.worker]
+      depth = 1
+      text = "Sou o worker."
+      tools = ["comment"]
+      """)
+
+      Application.put_env(:omunculus, :model, fn assembled, call ->
+        cond do
+          assembled =~ "Sou o worker." ->
+            {:ok, "feito"}
+
+          assembled =~ "## Work" ->
+            {:ok, "acompanhando"}
+
+          true ->
+            assert {:ok, ""} = call.("work", %{"title" => "Big task"})
+
+            assert {:ok, ""} =
+                     call.("delegate", %{"title" => "Sub task", "body" => "faça isso"})
+
+            {:ok, "unused"}
+        end
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "Big task please"], dir)
+
+      project = open(dir)
+
+      assert {:ok, works} = Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
+      [parent, child] = works
+      assert parent.state == "open"
+      assert child.state == "done"
+      assert child.assignee == "worker"
+      assert child.parent_id == parent.id
+
+      assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+      assert length(runs) == 3
+      [run1, run2, run3] = runs
+
+      assert run1.agent == "concierge"
+      assert run2.agent == "worker"
+      assert run2.depth == "1"
+      assert run2.via == "delegate"
+      assert run3.agent == "concierge"
+      assert run3.depth == "0"
+
+      assert {:ok, assembled2} =
+               Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [run2.prompt_id])
+
+      assert assembled2.body =~ "Sub task"
+      assert assembled2.body =~ "## Last comment\nfaça isso"
+
+      assert {:ok, project_events} = Store.replay(project.conn, :project)
+
+      end_run1 = Enum.find(project_events, &(&1.type == "end-run" and &1.run_id == run1.id))
+      start_run2 = Enum.find(project_events, &(&1.type == "start-run" and &1.run_id == run2.id))
+      assert end_run1.sequence < start_run2.sequence
+
+      Project.close(project)
+    end
+
+    test "D1-H0-W1: the child follows its own depth-scoped workflow through the parent's agents",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "Sou o concierge."
+      tools = ["work", "delegate", "comment", "continue"]
+
+      [agents.worker]
+      depth = 1
+      text = "Sou o worker."
+      tools = ["comment", "continue"]
+
+      [workflows.delivery]
+      steps = [
+        { name = "to_do", agent = "worker" },
+        { name = "review", agent = "concierge" },
+      ]
+
+      [policy.depth.1]
+      workflow = "delivery"
+      """)
+
+      Application.put_env(:omunculus, :model, fn assembled, call ->
+        cond do
+          assembled =~ "Sou o worker." ->
+            call.("continue", %{})
+            {:ok, "unused"}
+
+          assembled =~ "Sub task2" ->
+            call.("continue", %{})
+            {:ok, "unused"}
+
+          assembled =~ "## Work" ->
+            {:ok, "acompanhando"}
+
+          true ->
+            assert {:ok, ""} = call.("work", %{"title" => "Big task2"})
+
+            assert {:ok, ""} =
+                     call.("delegate", %{"title" => "Sub task2", "body" => "faça isso2"})
+
+            {:ok, "unused"}
+        end
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "Big task2 please"], dir)
+
+      project = open(dir)
+
+      assert {:ok, works} = Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
+      [parent, child] = works
+      assert parent.state == "open"
+      assert child.state == "done"
+      assert child.stage == "review"
+
+      assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+      assert length(runs) == 4
+      [run1, run2, run3, run4] = runs
+
+      assert run1.agent == "concierge" and run1.depth == "0"
+      assert run2.agent == "worker" and run2.depth == "1"
+      assert run3.agent == "concierge" and run3.depth == "1"
+      assert run4.agent == "concierge" and run4.depth == "0"
+
+      Project.close(project)
+    end
+
+    test "an askable request with an agent arbiter opens a run on the parent, and granting it wakes the child with the new tool",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "Sou o concierge."
+      tools = ["work", "delegate", "comment", "reply", "write"]
+
+      [agents.worker]
+      depth = 1
+      text = "Sou o worker."
+      tools = ["comment", "request_access"]
+      """)
+
+      reader = open(dir)
+      {:ok, counter} = Agent.start_link(fn -> 0 end)
+      on_exit(fn -> Project.close(reader) end)
+
+      Application.put_env(:omunculus, :model, fn assembled, call ->
+        cond do
+          assembled =~ "Sou o worker." ->
+            case Agent.get_and_update(counter, fn n -> {n, n + 1} end) do
+              0 ->
+                call.("request_access", %{
+                  "kind" => "tool",
+                  "name" => "write",
+                  "reason" => "preciso escrever"
+                })
+
+                {:ok, "unused"}
+
+              _already_granted ->
+                {:ok, "concluido"}
+            end
+
+          assembled =~ "## Request" ->
+            assert {:ok, [request]} =
+                     Query.all(
+                       reader.conn,
+                       "SELECT * FROM requests WHERE status = 'waiting_agent'"
+                     )
+
+            assert {:ok, ""} =
+                     call.("reply", %{
+                       "request_id" => request.id,
+                       "decision" => "grant",
+                       "body" => "pode escrever"
+                     })
+
+            {:ok, "concedido"}
+
+          assembled =~ "## Work" ->
+            {:ok, "acompanhando"}
+
+          true ->
+            assert {:ok, ""} = call.("work", %{"title" => "Big task3"})
+
+            assert {:ok, ""} =
+                     call.("delegate", %{"title" => "Sub task3", "body" => "escreva isso"})
+
+            {:ok, "unused"}
+        end
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "Big task3 please"], dir)
+
+      assert {:ok, [request]} = Query.all(reader.conn, "SELECT * FROM requests")
+      assert request.status == "closed"
+      assert request.arbiter == "concierge"
+
+      assert {:ok, request_run} =
+               Query.one(reader.conn, "SELECT * FROM runs WHERE request_id IS NOT NULL")
+
+      assert request_run.agent == "concierge"
+
+      assert {:ok, request_assembled} =
+               Query.one(reader.conn, "SELECT * FROM prompts WHERE id = ?", [
+                 request_run.prompt_id
+               ])
+
+      assert request_assembled.body =~ "## Request"
+      assert request_assembled.body =~ "preciso escrever"
+
+      assert {:ok, works} = Query.all(reader.conn, "SELECT * FROM works ORDER BY created_at")
+      [parent, child] = works
+      assert Jason.decode!(child.grants) == ["write"]
+      assert child.state == "done"
+      assert parent.state == "open"
+
+      assert {:ok, runs} = Query.all(reader.conn, "SELECT * FROM runs ORDER BY started_at")
+
+      granted_worker_run =
+        Enum.find(runs, fn run ->
+          run.work_id == child.id and run.agent == "worker" and
+            "write" in Jason.decode!(run.tools)
+        end)
+
+      assert granted_worker_run
+
+      assert List.last(runs).agent == "concierge"
     end
   end
 end

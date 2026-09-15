@@ -5,7 +5,16 @@ defmodule Omunculus.Store.RunsTest do
   alias Omunculus.Store.{Query, Runs}
 
   defp ctx(run_id, overrides \\ %{}) do
-    Map.merge(%{run_id: run_id, author: "agent", work_id: nil, agent: "concierge"}, overrides)
+    Map.merge(
+      %{
+        run_id: run_id,
+        author: "agent",
+        work_id: nil,
+        agent: "concierge",
+        config: Fixtures.config()
+      },
+      overrides
+    )
   end
 
   defp open_params(prompt_id) do

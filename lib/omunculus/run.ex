@@ -1,51 +1,115 @@
 defmodule Omunculus.Run do
   @moduledoc """
-  Opens and drives one run of the depth-0 agent, start to end (spec §3.2,
-  §3.3, §3.5, §5). Remounts the ceiling from the project config and the
-  work's own and ancestors' grants on every opening — it never reuses a
-  previous run's ceiling. Assembles the prompt from the agent text, the
-  message of this opening (when there is one), the work's title and last
-  comment when the run is on a work, and the have tools' cards, lets the
-  model call tools through the harness, and closes the run when the model
-  is done or a call it made ended the run with a decision. Nobody waits
-  afterwards.
+  Opens and drives one run, start to end (spec §3.2, §3.3, §3.4, §3.5).
+  Resolves who runs it: depth 0 with no work; the workflow step at the
+  work's stage when one applies; otherwise the plain depth agent.
+  Remounts the ceiling from the project config and the work's own and
+  ancestors' grants on every opening — it never reuses a previous run's
+  ceiling. Assembles the prompt from the agent text, the message of this
+  opening (when there is one), the work's title and last comment when the
+  run is on a work, the request and its comments when the run answers one,
+  and the have tools' cards, lets the model call tools through the
+  harness, and closes the run when the model is done or a call it made
+  ended the run with a decision. Once closed, a work whose sequence is off
+  and that has a parent is finished, and the replay of this run is handed
+  to `Omunculus.Harness.follow_up/3` so the next run, if any, opens
+  before this one returns. Nobody waits.
   """
 
   alias Omunculus.{Ceiling, Config, Harness, Project, Store}
   alias Omunculus.Tool.{Catalog, Manifest}
 
+  @ending_events ~w(request deny continue break delegate)
+
   @spec open(
           Project.t(),
-          %{prompt_id: String.t() | nil, work_id: String.t() | nil},
+          %{
+            prompt_id: String.t() | nil,
+            work_id: String.t() | nil,
+            request_id: String.t() | nil,
+            via: String.t() | nil
+          },
           (String.t(), fun -> {:ok, String.t()} | {:error, term})
         ) :: {:ok, map} | {:error, term}
-  def open(project, %{prompt_id: message_prompt_id, work_id: work_id}, model) do
+  def open(
+        project,
+        %{prompt_id: message_prompt_id, work_id: work_id, request_id: request_id, via: via},
+        model
+      ) do
     with {:ok, config} <- Config.load(project.dir),
-         {:ok, {name, agent}} <- Config.agent_at_depth(config, 0),
-         {:ok, message} <- fetch_prompt(project.conn, message_prompt_id),
          {:ok, work} <- fetch_work(project.conn, work_id),
+         {:ok, {name, text, depth, stage}} <- resolve_agent(config, project.conn, work),
+         {:ok, message} <- fetch_prompt(project.conn, message_prompt_id),
          {:ok, comment} <- fetch_last_comment(project.conn, work_id),
-         {:ok, grants} <- collect_grants(project.conn, work),
+         {:ok, grants} <- Store.grants(project.conn, work),
+         {:ok, request_section} <- fetch_request_section(project.conn, request_id),
          catalog = discover_catalog(project.dir),
          snapshot =
-           Ceiling.mount(config, %{agent: name, depth: 0, grants: grants}, Map.keys(catalog)),
+           Ceiling.mount(
+             config,
+             %{agent: name, depth: depth, grants: grants, stage: stage},
+             Map.keys(catalog)
+           ),
          names = effective_names(snapshot, catalog),
-         assembled = assemble(agent, message, work, comment, names, catalog),
+         assembled = assemble(text, message, work, comment, request_section, names, catalog),
          {:ok, run} <-
            Store.open_run(project.conn, %{
              prompt_id: message_prompt_id,
              agent: name,
-             depth: 0,
+             depth: depth,
              ceiling: snapshot,
              assembled: assembled,
              work_id: work_id,
-             via: nil,
-             request_id: nil
+             via: via,
+             request_id: request_id
            }),
-         call = build_call(project, run, names, model) do
-      run_model(project, run, assembled, call, model)
+         call = build_call(project, run, names) do
+      run_model(project, run, config, work, assembled, call, model)
     end
   end
+
+  defp resolve_agent(config, _conn, nil) do
+    with {:ok, {name, agent}} <- Config.agent_at_depth(config, 0) do
+      {:ok, {name, agent.text, 0, nil}}
+    end
+  end
+
+  defp resolve_agent(config, conn, work) do
+    depth = Store.work_depth(conn, work)
+
+    with {:ok, steps} <- workflow_steps(config, depth),
+         {:ok, step} <- step_for(steps, work.stage) do
+      case step do
+        nil -> agent_at_depth(config, depth)
+        step -> {:ok, {step.agent, agent_text(config, step.agent), depth, step.ceiling}}
+      end
+    end
+  end
+
+  defp workflow_steps(config, depth) do
+    case Config.workflow_for(config, depth) do
+      {:ok, steps} -> {:ok, steps}
+      :off -> {:ok, nil}
+    end
+  end
+
+  defp step_for(nil, _stage), do: {:ok, nil}
+  defp step_for(_steps, nil), do: {:ok, nil}
+
+  defp step_for(steps, stage) do
+    case Config.step_at(steps, stage) do
+      {:ok, step} -> {:ok, step}
+      {:error, :off_sequence} -> {:error, {:off_sequence, stage}}
+    end
+  end
+
+  defp agent_at_depth(config, depth) do
+    with {:ok, {name, agent}} <- Config.agent_at_depth(config, depth) do
+      {:ok, {name, agent.text, depth, nil}}
+    end
+  end
+
+  defp agent_text(config, name), do: config.agents |> Map.fetch!(name) |> Map.fetch!(:text)
 
   defp fetch_prompt(_conn, nil), do: {:ok, nil}
 
@@ -76,17 +140,28 @@ defmodule Omunculus.Run do
     end
   end
 
-  defp collect_grants(_conn, nil), do: {:ok, []}
+  defp fetch_request_section(_conn, nil), do: {:ok, []}
 
-  defp collect_grants(conn, work) do
-    with {:ok, parent} <- fetch_work(conn, work.parent_id),
-         {:ok, above} <- collect_grants(conn, parent) do
-      {:ok, Enum.uniq(work_grants(work) ++ above)}
+  defp fetch_request_section(conn, request_id) do
+    with {:ok, request} <- fetch_request(conn, request_id),
+         {:ok, comments} <- Store.view(conn, "comments.request", request_id) do
+      {:ok, request_section(request, comments)}
     end
   end
 
-  defp work_grants(%{grants: nil}), do: []
-  defp work_grants(%{grants: json}), do: Jason.decode!(json)
+  defp fetch_request(conn, id) do
+    case Store.view(conn, "request", id) do
+      {:ok, nil} -> {:error, {:no_request, id}}
+      {:ok, request} -> {:ok, request}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp request_section(request, comments) do
+    ask = Jason.decode!(request.ask)
+    header = "#{ask["kind"]} #{ask["name"]} pedido por #{request.agent}"
+    ["## Request\n" <> Enum.join([header | Enum.map(comments, & &1.body)], "\n")]
+  end
 
   defp discover_catalog(dir) do
     dir |> Catalog.roots() |> Catalog.discover() |> Catalog.with_trigger("model")
@@ -96,14 +171,15 @@ defmodule Omunculus.Run do
     snapshot.have |> Enum.filter(&Map.has_key?(catalog, &1)) |> Enum.sort()
   end
 
-  defp assemble(agent, message, work, comment, names, catalog) do
+  defp assemble(text, message, work, comment, request_section, names, catalog) do
     cards = Enum.map(names, &Manifest.card(Map.fetch!(catalog, &1)))
 
     sections =
-      [String.trim(agent.text)] ++
+      [String.trim(text)] ++
         message_section(message) ++
         work_section(work) ++
         comment_section(comment) ++
+        request_section ++
         ["## Tools\nAs tools estão em `tools.*`.\n" <> Enum.join(cards, "\n")]
 
     Enum.join(sections, "\n\n")
@@ -118,16 +194,16 @@ defmodule Omunculus.Run do
   defp comment_section(nil), do: []
   defp comment_section(comment), do: ["## Last comment\n#{comment.body}"]
 
-  defp build_call(project, run, names, model) do
+  defp build_call(project, run, names) do
     allowed = MapSet.new(names)
 
     fn name, args ->
       if MapSet.member?(allowed, name) do
-        ctx = %{trigger: "model", run_id: run.id, author: "agent", agent: run.agent, model: model}
+        ctx = %{trigger: "model", run_id: run.id, author: "agent", agent: run.agent}
 
         case Harness.dispatch(project, name, args, ctx) do
           {:ok, out, events} ->
-            if Enum.any?(events, &(&1.type in ["request", "deny"])) do
+            if Enum.any?(events, &(&1.type in @ending_events)) do
               throw({:run_ended, run.id})
             end
 
@@ -142,7 +218,7 @@ defmodule Omunculus.Run do
     end
   end
 
-  defp run_model(project, run, assembled, call, model) do
+  defp run_model(project, run, config, work, assembled, call, model) do
     run_id = run.id
 
     result =
@@ -156,16 +232,36 @@ defmodule Omunculus.Run do
       {:ok, text} ->
         with {:ok, _event} <- Store.record_model(project.conn, run.id, text),
              {:ok, _event} <- Store.close_run(project.conn, run.id) do
-          {:ok, run}
+          finish_and_follow_up(project, run, config, work, model, true)
         end
 
       :ended ->
         with {:ok, _event} <- Store.close_run(project.conn, run.id) do
-          {:ok, run}
+          finish_and_follow_up(project, run, config, work, model, false)
         end
 
       {:error, _reason} = error ->
         error
+    end
+  end
+
+  defp finish_and_follow_up(project, run, config, work, model, ended_normally?) do
+    with :ok <- maybe_finish_work(project.conn, config, work, run.id, ended_normally?),
+         {:ok, events} <- Store.replay(project.conn, {:run, run.id}),
+         :ok <- Harness.follow_up(project, events, model) do
+      {:ok, run}
+    end
+  end
+
+  defp maybe_finish_work(_conn, _config, nil, _run_id, _ended_normally?), do: :ok
+  defp maybe_finish_work(_conn, _config, %{parent_id: nil}, _run_id, _ended_normally?), do: :ok
+  defp maybe_finish_work(_conn, _config, _work, _run_id, false), do: :ok
+
+  defp maybe_finish_work(conn, config, work, run_id, true) do
+    if Config.workflow_for(config, Store.work_depth(conn, work)) == :off do
+      with {:ok, _event} <- Store.finish_work(conn, work.id, run_id), do: :ok
+    else
+      :ok
     end
   end
 end

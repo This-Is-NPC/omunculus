@@ -44,7 +44,8 @@ defmodule Omunculus.RunTest do
   defp message(conn, body \\ "hi"),
     do: Fixtures.insert(conn, :prompts, %{kind: "message", body: body})
 
-  defp open(prompt_id, work_id \\ nil), do: %{prompt_id: prompt_id, work_id: work_id}
+  defp open(prompt_id, work_id \\ nil),
+    do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: nil}
 
   test "a model calling a project tool leaves a start-run, tool, model, end-run replay", %{
     dir: dir

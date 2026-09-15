@@ -2,7 +2,8 @@ defmodule Omunculus.Config.Toml do
   @moduledoc """
   Encodes a nested map of string keys into TOML text: the writer
   `Omunculus.Config.grant/3` needs to persist a permanent grant back to
-  `omunculus.toml`, nothing more.
+  `omunculus.toml`, nothing more. A list whose entries are all maps (a
+  workflow's `steps`) renders as a list of inline tables.
   """
 
   @spec encode(map) :: String.t()
@@ -44,6 +45,20 @@ defmodule Omunculus.Config.Toml do
   defp format_value(value) when is_boolean(value), do: to_string(value)
   defp format_value(value) when is_integer(value), do: Integer.to_string(value)
 
-  defp format_value(value) when is_list(value),
-    do: "[" <> Enum.map_join(value, ", ", &format_value/1) <> "]"
+  defp format_value(value) when is_list(value) do
+    if Enum.all?(value, &is_map/1) do
+      "[ " <> Enum.map_join(value, ", ", &format_inline_table/1) <> " ]"
+    else
+      "[" <> Enum.map_join(value, ", ", &format_value/1) <> "]"
+    end
+  end
+
+  defp format_inline_table(map) do
+    fields =
+      map
+      |> Enum.sort_by(fn {key, _value} -> key end)
+      |> Enum.map_join(", ", fn {key, value} -> "#{format_key(key)} = #{format_value(value)}" end)
+
+    "{ " <> fields <> " }"
+  end
 end

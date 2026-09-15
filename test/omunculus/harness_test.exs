@@ -27,9 +27,8 @@ defmodule Omunculus.HarnessTest do
 
   defp write_config(dir, contents), do: File.write!(Path.join(dir, "omunculus.toml"), contents)
 
-  defp never_call, do: fn _assembled, _call -> raise "model must never be called" end
-
-  defp open(prompt_id, work_id \\ nil), do: %{prompt_id: prompt_id, work_id: work_id}
+  defp open(prompt_id, work_id \\ nil),
+    do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: nil}
 
   test "a project tool named send replaces the builtin without touching the core", %{dir: dir} do
     write_tool(
@@ -50,14 +49,17 @@ defmodule Omunculus.HarnessTest do
     project = open_project(dir)
     model = fn _assembled, _call -> {:ok, "done"} end
 
-    ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil, model: model}
+    ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil}
 
-    assert {:ok, %{ok: true}, _events} = Harness.dispatch(project, "send", %{}, ctx)
+    assert {:ok, %{ok: true}, events} = Harness.dispatch(project, "send", %{}, ctx)
 
     assert {:ok, [message]} =
              Query.all(project.conn, "SELECT * FROM prompts WHERE kind = 'message'")
 
     assert message.body == "override"
+    assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
+
+    assert :ok = Harness.follow_up(project, events, model)
 
     assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
     assert run.status == "done"
@@ -82,7 +84,7 @@ defmodule Omunculus.HarnessTest do
     )
 
     project = open_project(dir)
-    ctx = %{trigger: "model", run_id: nil, author: "agent", agent: nil, model: never_call()}
+    ctx = %{trigger: "model", run_id: nil, author: "agent", agent: nil}
 
     assert {:error, {:unknown_action, "nope"}} = Harness.dispatch(project, "boom", %{}, ctx)
     assert {:ok, []} = Query.all(project.conn, "SELECT * FROM events")
@@ -107,7 +109,7 @@ defmodule Omunculus.HarnessTest do
     )
 
     project = open_project(dir)
-    ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil, model: never_call()}
+    ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil}
 
     assert {:error, {:not_triggered, "modelonly", "cli"}} =
              Harness.dispatch(project, "modelonly", %{}, ctx)
@@ -229,15 +231,53 @@ defmodule Omunculus.HarnessTest do
 
     project = open_project(dir)
 
-    ctx = %{
-      trigger: "model",
-      run_id: "nope",
-      author: "agent",
-      agent: "concierge",
-      model: never_call()
-    }
+    ctx = %{trigger: "model", run_id: "nope", author: "agent", agent: "concierge"}
 
     assert {:error, {:no_run, "nope"}} = Harness.dispatch(project, "noop", %{}, ctx)
+
+    Project.close(project)
+  end
+
+  test "dispatch alone opens no run even when the emit is a prompt", %{dir: dir} do
+    write_tool(
+      dir,
+      "send",
+      """
+      name = "send"
+      kind = "tool"
+      triggers = ["cli"]
+      command = ["./run"]
+      """,
+      """
+      #!/bin/sh
+      echo '{"ok": true, "output": "", "emit": [{"type": "prompt", "body": {"message": "hi"}}]}'
+      """
+    )
+
+    project = open_project(dir)
+    ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil}
+
+    assert {:ok, %{ok: true}, events} = Harness.dispatch(project, "send", %{}, ctx)
+    assert Enum.any?(events, &(&1.type == "prompt"))
+    assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
+
+    Project.close(project)
+  end
+
+  test "follow_up opens a run for a prompt event and drives the model", %{dir: dir} do
+    project = open_project(dir)
+    message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
+    event = %{type: "prompt", prompt_id: message_id, work_id: nil}
+
+    assert :ok = Harness.follow_up(project, [event], fn _assembled, _call -> {:ok, "done"} end)
+
+    assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
+    assert run.status == "done"
+
+    assert {:ok, message} =
+             Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [message_id])
+
+    assert message.run_id == run.id
 
     Project.close(project)
   end

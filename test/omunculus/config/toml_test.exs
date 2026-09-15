@@ -44,4 +44,21 @@ defmodule Omunculus.Config.TomlTest do
     encoded = ConfigToml.encode(%{"on" => true, "count" => 3})
     assert Toml.decode!(encoded) == %{"on" => true, "count" => 3}
   end
+
+  test "a list of maps round-trips as a list of inline tables" do
+    map = %{
+      "workflows" => %{
+        "delivery" => %{
+          "steps" => [
+            %{"name" => "to_do", "agent" => "worker"},
+            %{"name" => "review", "agent" => "concierge", "deny" => ["counter"]}
+          ]
+        }
+      }
+    }
+
+    encoded = ConfigToml.encode(map)
+    assert encoded =~ ~s({ agent = "worker", name = "to_do" })
+    assert Toml.decode!(encoded) == map
+  end
 end

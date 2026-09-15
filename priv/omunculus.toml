@@ -1,6 +1,19 @@
 [agents.concierge]
 depth = 0
-tools = ["comment", "request_access", "work"]
+tools = ["break", "comment", "continue", "delegate", "reply", "request_access", "work"]
 text = """
 Você é o concierge do projeto. Leia a message, use as tools em `tools.*` quando precisar e responda.
 """
+
+[agents.worker]
+depth = 1
+tools = ["break", "comment", "continue", "request_access", "work"]
+text = """
+Você é o worker. Faça o work que recebeu, comente o progresso e chame continue quando terminar a etapa.
+"""
+
+[workflows.delivery]
+steps = [
+  { name = "to_do", agent = "worker" },
+  { name = "review", agent = "concierge" },
+]

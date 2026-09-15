@@ -2,17 +2,17 @@ defmodule Omunculus.Store.Actions do
   @moduledoc """
   Write side of the store: `run/3` applies the emits from a tool's
   `out.emit` in order, inside whatever transaction the caller holds — the
-  whole batch commits or nothing does (spec §8.3).
+  whole batch commits or nothing does (spec §8.3). `continue`, `break`
+  and `delegate` are dispatched to `Actions.Sequence`.
   """
 
   alias Omunculus.Ceiling
+  alias Omunculus.Config
   alias Omunculus.Id
-  alias Omunculus.Store.{Events, Query}
+  alias Omunculus.Store.Actions.{Helpers, Sequence}
+  alias Omunculus.Store.{Events, Query, View}
 
-  @catalogue ~w(
-    comment notify inbox.read delegate continue
-    break compact comment.delete
-  )
+  @catalogue ~w(comment notify inbox.read compact comment.delete)
 
   @comment_targets %{"work_id" => :works, "request_id" => :requests, "inbox_id" => :inbox}
   @request_kinds ~w(tool path directory)
@@ -49,6 +49,15 @@ defmodule Omunculus.Store.Actions do
   defp dispatch(conn, %{"type" => "reply"} = emit, ctx),
     do: reply(conn, Map.get(emit, "body", %{}), ctx)
 
+  defp dispatch(conn, %{"type" => "continue"} = emit, ctx),
+    do: Sequence.continue(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "break"} = emit, ctx),
+    do: Sequence.break(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "delegate"} = emit, ctx),
+    do: Sequence.delegate(conn, Map.get(emit, "body", %{}), ctx)
+
   defp dispatch(_conn, %{"type" => type}, _ctx) when type in @catalogue,
     do: {:error, {:not_yet, type}}
 
@@ -60,7 +69,7 @@ defmodule Omunculus.Store.Actions do
 
     with :ok <- ensure_text(body),
          :ok <- ensure_target(targets),
-         :ok <- tag_error(:comment, ensure_exist(conn, Map.to_list(targets))) do
+         :ok <- Helpers.tag_error(:comment, Helpers.ensure_exist(conn, Map.to_list(targets))) do
       write_comment(conn, body, targets, ctx)
     end
   end
@@ -76,21 +85,6 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
-  defp ensure_exist(conn, targets) do
-    targets
-    |> Enum.reject(fn {_table, id} -> is_nil(id) end)
-    |> Enum.reduce_while(:ok, fn {table, id}, :ok ->
-      case Query.one(conn, "SELECT id FROM #{table} WHERE id = ?", [id]) do
-        {:ok, nil} -> {:halt, {:error, {:missing, table, id}}}
-        {:ok, _row} -> {:cont, :ok}
-        {:error, _reason} = error -> {:halt, error}
-      end
-    end)
-  end
-
-  defp tag_error(tag, {:error, {:missing, _table, _id} = reason}), do: {:error, {tag, reason}}
-  defp tag_error(_tag, other), do: other
-
   defp write_comment(conn, body, targets, ctx) do
     comment_id = Id.new()
 
@@ -104,28 +98,14 @@ defmodule Omunculus.Store.Actions do
              inbox_id: targets.inbox,
              body: Jason.encode!(body)
            }),
-         :ok <- insert_comment(conn, comment_id, targets, body["body"], event, ctx) do
+         :ok <- Helpers.insert_comment(conn, comment_id, targets, body["body"], event, ctx) do
       {:ok, event}
     end
   end
 
-  defp insert_comment(conn, id, targets, text, event, ctx) do
-    Query.insert(conn, :comments, %{
-      id: id,
-      work_id: targets[:works],
-      request_id: targets[:requests],
-      inbox_id: targets[:inbox],
-      run_id: ctx.run_id,
-      event_id: event.id,
-      author: ctx.author,
-      kind: "note",
-      body: text,
-      created_at: event.at
-    })
-  end
-
   defp prompt(conn, %{"message" => text} = body) when is_binary(text) and text != "" do
-    with :ok <- tag_error(:prompt, ensure_exist(conn, [{:works, body["work_id"]}])) do
+    with :ok <-
+           Helpers.tag_error(:prompt, Helpers.ensure_exist(conn, [{:works, body["work_id"]}])) do
       write_prompt(conn, body, text)
     end
   end
@@ -153,16 +133,18 @@ defmodule Omunculus.Store.Actions do
   end
 
   defp work(conn, %{"title" => title} = body, ctx) when is_binary(title) and title != "" do
-    case body["work_id"] do
-      nil -> create_work(conn, body, ctx)
-      work_id -> update_work(conn, work_id, body, ctx)
+    with :ok <- Helpers.ensure_no_forbidden(:work, body) do
+      case body["work_id"] do
+        nil -> create_work(conn, body, ctx)
+        work_id -> update_work(conn, work_id, body, ctx)
+      end
     end
   end
 
   defp work(_conn, _body, _ctx), do: {:error, {:work, :no_title}}
 
   defp update_work(conn, work_id, body, ctx) do
-    with :ok <- tag_error(:work, ensure_exist(conn, [{:works, work_id}])),
+    with :ok <- Helpers.tag_error(:work, Helpers.ensure_exist(conn, [{:works, work_id}])),
          :ok <-
            Query.exec(conn, "UPDATE works SET title = ?, updated_at = ? WHERE id = ?", [
              body["title"],
@@ -179,9 +161,10 @@ defmodule Omunculus.Store.Actions do
   end
 
   defp create_work(conn, body, ctx) do
-    with :ok <- tag_error(:work, ensure_exist(conn, [{:works, body["parent_id"]}])) do
+    with {:ok, depth} <- Helpers.tag_error(:work, Helpers.depth_at(conn, body["parent_id"])),
+         {:ok, {stage, assignee}} <-
+           Helpers.stage_and_assignee(ctx.config, depth, fn -> {:ok, ctx.agent} end) do
       work_id = Id.new()
-      now = Events.now()
 
       with {:ok, event} <-
              Events.append(conn, %{
@@ -191,15 +174,14 @@ defmodule Omunculus.Store.Actions do
                body: Jason.encode!(body)
              }),
            :ok <-
-             Query.insert(conn, :works, %{
+             Helpers.insert_work(conn, %{
                id: work_id,
                parent_id: body["parent_id"],
-               event_id: event.id,
-               assignee: ctx.agent,
+               assignee: assignee,
+               stage: stage,
                title: body["title"],
-               state: "open",
-               created_at: now,
-               updated_at: now
+               event_id: event.id,
+               at: event.at
              }),
            :ok <- link_run(conn, ctx.run_id, work_id) do
         {:ok, event}
@@ -272,35 +254,90 @@ defmodule Omunculus.Store.Actions do
   end
 
   defp open_request(conn, ctx, run, kind, name, reason) do
-    request_id = Id.new()
-    comment_id = Id.new()
+    with {:ok, arbiter} <- resolve_arbiter(conn, ctx, name) do
+      request_id = Id.new()
+      comment_id = Id.new()
+      body = Map.merge(%{kind: kind, name: name, reason: reason}, arbiter.body_extra)
 
-    with {:ok, event} <-
-           Events.append(conn, %{
-             type: "request",
-             run_id: ctx.run_id,
-             work_id: ctx.work_id,
-             request_id: request_id,
-             comment_id: comment_id,
-             body: Jason.encode!(%{kind: kind, name: name, reason: reason})
-           }),
-         :ok <-
-           Query.insert(conn, :requests, %{
-             id: request_id,
-             run_id: ctx.run_id,
-             agent: run.agent,
-             work_id: ctx.work_id,
-             ask: Jason.encode!(%{kind: kind, name: name}),
-             arbiter: "human",
-             status: "waiting_human",
-             event_id: event.id,
-             created_at: Events.now()
-           }),
-         :ok <- insert_comment(conn, comment_id, %{requests: request_id}, reason, event, ctx),
-         :ok <- mark_waiting_for_access(conn, ctx.work_id, name, run.agent) do
-      {:ok, event}
+      with {:ok, event} <-
+             Events.append(conn, %{
+               type: "request",
+               run_id: ctx.run_id,
+               work_id: ctx.work_id,
+               request_id: request_id,
+               comment_id: comment_id,
+               body: Jason.encode!(body)
+             }),
+           :ok <-
+             Query.insert(conn, :requests, %{
+               id: request_id,
+               run_id: ctx.run_id,
+               agent: run.agent,
+               work_id: ctx.work_id,
+               ask: Jason.encode!(%{kind: kind, name: name}),
+               arbiter: arbiter.arbiter,
+               status: arbiter.status,
+               event_id: event.id,
+               created_at: Events.now()
+             }),
+           :ok <-
+             Helpers.insert_comment(conn, comment_id, %{requests: request_id}, reason, event, ctx),
+           :ok <- mark_waiting_for_access(conn, ctx.work_id, name, run.agent) do
+        {:ok, event}
+      end
     end
   end
+
+  defp resolve_arbiter(conn, ctx, name) do
+    with {:ok, work} <- Helpers.fetch_work(conn, ctx.work_id),
+         {:ok, parent} <- Helpers.fetch_work(conn, work && work.parent_id),
+         {:ok, decision} <- agent_arbiter(conn, ctx, parent, name) do
+      {:ok, arbiter_info(decision)}
+    end
+  end
+
+  defp agent_arbiter(_conn, _ctx, nil, _name), do: {:ok, :human}
+  defp agent_arbiter(_conn, _ctx, %{assignee: nil}, _name), do: {:ok, :human}
+
+  defp agent_arbiter(conn, ctx, parent, name) do
+    depth = View.work_depth(conn, parent)
+
+    with {:ok, grants} <- Helpers.grants(conn, parent) do
+      stage = stage_layer(ctx.config, depth, parent.stage)
+
+      snapshot =
+        Ceiling.mount(
+          ctx.config,
+          %{agent: parent.assignee, depth: depth, grants: grants, stage: stage},
+          [name]
+        )
+
+      case Ceiling.classify(snapshot, name) do
+        class when class in ["have", "askable"] -> {:ok, {:agent, parent.assignee, parent.id}}
+        _class -> {:ok, :human}
+      end
+    end
+  end
+
+  defp stage_layer(_config, _depth, nil), do: nil
+
+  defp stage_layer(config, depth, stage) do
+    with {:ok, steps} <- Config.workflow_for(config, depth),
+         {:ok, step} <- Config.step_at(steps, stage) do
+      step.ceiling
+    else
+      _off_or_off_sequence -> nil
+    end
+  end
+
+  defp arbiter_info(:human), do: %{arbiter: "human", status: "waiting_human", body_extra: %{}}
+
+  defp arbiter_info({:agent, arbiter, arbiter_work_id}),
+    do: %{
+      arbiter: arbiter,
+      status: "waiting_agent",
+      body_extra: %{arbiter: arbiter, arbiter_work_id: arbiter_work_id}
+    }
 
   defp mark_waiting_for_access(_conn, nil, _name, _agent), do: :ok
 
@@ -318,7 +355,7 @@ defmodule Omunculus.Store.Actions do
     text = body["body"]
     scope = body["scope"]
 
-    with :ok <- tag_error(:reply, ensure_exist(conn, [{:requests, request_id}])),
+    with :ok <- Helpers.tag_error(:reply, Helpers.ensure_exist(conn, [{:requests, request_id}])),
          {:ok, request} <- Query.one(conn, "SELECT * FROM requests WHERE id = ?", [request_id]),
          :ok <- ensure_open(request),
          :ok <- ensure_decision(decision),
@@ -353,23 +390,32 @@ defmodule Omunculus.Store.Actions do
              comment_id: comment_id,
              body: Jason.encode!(body)
            }),
-         :ok <- insert_comment(conn, comment_id, %{requests: request.id}, text, reply_event, ctx),
+         :ok <-
+           Helpers.insert_comment(
+             conn,
+             comment_id,
+             %{requests: request.id},
+             text,
+             reply_event,
+             ctx
+           ),
          :ok <-
            Query.exec(conn, "UPDATE requests SET status = 'closed' WHERE id = ?", [
              request.id
            ]),
-         {:ok, effect_event} <- apply_decision(conn, decision, request, scope) do
+         {:ok, effect_event} <- apply_decision(conn, ctx, decision, request, scope) do
       {:ok, [reply_event, effect_event]}
     end
   end
 
-  defp apply_decision(conn, "grant", request, scope) do
+  defp apply_decision(conn, ctx, "grant", request, scope) do
     ask = Jason.decode!(request.ask)
 
     with {:ok, depth} <- run_depth(conn, request.run_id),
          :ok <- grant_work(conn, request.work_id, ask["name"], scope) do
       Events.append(conn, %{
         type: "grant",
+        run_id: ctx.run_id,
         request_id: request.id,
         work_id: request.work_id,
         body:
@@ -384,12 +430,13 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
-  defp apply_decision(conn, "deny", request, _scope) do
+  defp apply_decision(conn, ctx, "deny", request, _scope) do
     ask = Jason.decode!(request.ask)
 
-    with :ok <- reopen_work(conn, request.work_id) do
+    with :ok <- Helpers.reopen_work(conn, request.work_id) do
       Events.append(conn, %{
         type: "deny",
+        run_id: ctx.run_id,
         request_id: request.id,
         work_id: request.work_id,
         body: Jason.encode!(%{name: ask["name"], kind: ask["kind"]})
@@ -406,10 +453,10 @@ defmodule Omunculus.Store.Actions do
   defp grant_work(_conn, nil, _name, _scope), do: :ok
 
   defp grant_work(conn, work_id, name, nil) do
-    with :ok <- append_grant(conn, work_id, name), do: reopen_work(conn, work_id)
+    with :ok <- append_grant(conn, work_id, name), do: Helpers.reopen_work(conn, work_id)
   end
 
-  defp grant_work(conn, work_id, _name, _scope), do: reopen_work(conn, work_id)
+  defp grant_work(conn, work_id, _name, _scope), do: Helpers.reopen_work(conn, work_id)
 
   defp append_grant(conn, work_id, name) do
     with {:ok, work} <- Query.one(conn, "SELECT grants FROM works WHERE id = ?", [work_id]) do
@@ -421,15 +468,5 @@ defmodule Omunculus.Store.Actions do
         work_id
       ])
     end
-  end
-
-  defp reopen_work(_conn, nil), do: :ok
-
-  defp reopen_work(conn, work_id) do
-    Query.exec(
-      conn,
-      "UPDATE works SET state = 'open', waiting = NULL, waiting_for = NULL, waiting_from = NULL, updated_at = ? WHERE id = ?",
-      [Events.now(), work_id]
-    )
   end
 end

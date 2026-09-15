@@ -2,7 +2,9 @@ defmodule Omunculus.CLI do
   @moduledoc """
   The binary's dispatch, per spec §7: `omunculus <name> [args]` opens the
   project at a directory, resolves `args` from the remaining argv and
-  calls the same contract the model uses, with `trigger: "cli"`.
+  calls the same contract the model uses, with `trigger: "cli"`. Once the
+  call is recorded, hands its events to `Harness.follow_up/3` so any run
+  the call's action asks for opens before the CLI returns.
   """
 
   alias Omunculus.{Harness, Project}
@@ -38,8 +40,9 @@ defmodule Omunculus.CLI do
 
     with {:ok, manifest} <- Harness.manifest(project, name),
          {:ok, args} <- build_args(rest, manifest),
-         ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil, model: model},
-         {:ok, out, _events} <- Harness.dispatch(project, name, args, ctx) do
+         ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil},
+         {:ok, out, events} <- Harness.dispatch(project, name, args, ctx),
+         :ok <- Harness.follow_up(project, events, model) do
       if out.ok, do: {:ok, out.output}, else: {:error, {:tool_failed, out.output}}
     end
   end
