@@ -2,7 +2,6 @@
 elixir = "1.17.3-otp-27"
 erlang = "27.3.4.17"
 rebar = "3.27.0"
-rust = "stable"
 
 [env]
 MIX_REBAR3 = "rebar3"
@@ -10,7 +9,3 @@ MIX_REBAR3 = "rebar3"
 [tasks.test]
 description = "Run the Mix test suite"
 run = "mix test"
-
-[tasks.build]
-description = "Build the omunculus escript"
-run = "mix escript.build"
