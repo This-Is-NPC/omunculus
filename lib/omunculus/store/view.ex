@@ -30,6 +30,10 @@ defmodule Omunculus.Store.View do
     Query.one(conn, "SELECT * FROM runs WHERE id = ?", [id])
   end
 
+  def view(conn, "request", id) do
+    Query.one(conn, "SELECT * FROM requests WHERE id = ?", [id])
+  end
+
   def view(conn, "prompt", id) do
     Query.one(conn, "SELECT * FROM prompts WHERE id = ?", [id])
   end

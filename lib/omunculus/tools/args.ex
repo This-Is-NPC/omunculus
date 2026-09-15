@@ -19,4 +19,11 @@ defmodule Omunculus.Tools.Args do
       value -> Map.put(body, key, value)
     end
   end
+
+  @spec missing(map, [String.t()]) :: String.t() | nil
+  def missing(args, keys) do
+    Enum.find_value(keys, fn key ->
+      if present(args, key), do: nil, else: "#{key} required"
+    end)
+  end
 end

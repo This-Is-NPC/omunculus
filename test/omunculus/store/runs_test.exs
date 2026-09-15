@@ -13,7 +13,7 @@ defmodule Omunculus.Store.RunsTest do
       prompt_id: prompt_id,
       agent: "concierge",
       depth: 0,
-      tools: ["send"],
+      ceiling: %{have: ["send"], askable: [], sealed: [], blocked: [], uncited: "askable"},
       assembled: "agent text + message",
       work_id: nil,
       via: nil,
@@ -41,6 +41,7 @@ defmodule Omunculus.Store.RunsTest do
     assert event.type == "start-run"
     assert event.run_id == run.id
     assert event.prompt_id == message_id
+    assert Jason.decode!(event.body)["ceiling"]["uncited"] == "askable"
 
     assert {:ok, message} = Query.one(conn, "SELECT * FROM prompts WHERE id = ?", [message_id])
     assert message.run_id == run.id

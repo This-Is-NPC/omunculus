@@ -53,7 +53,12 @@ defmodule Omunculus.Store.Runs do
              type: "start-run",
              run_id: run_id,
              prompt_id: params.prompt_id,
-             body: Jason.encode!(%{agent: params.agent, depth: params.depth, tools: params.tools})
+             body:
+               Jason.encode!(%{
+                 agent: params.agent,
+                 depth: params.depth,
+                 ceiling: params.ceiling
+               })
            }),
          :ok <-
            Query.insert(conn, :prompts, %{
@@ -73,7 +78,7 @@ defmodule Omunculus.Store.Runs do
              depth: to_string(params.depth),
              via: params.via,
              request_id: params.request_id,
-             tools: Jason.encode!(params.tools),
+             tools: Jason.encode!(params.ceiling.have),
              status: "open",
              started_at: event.at
            }),

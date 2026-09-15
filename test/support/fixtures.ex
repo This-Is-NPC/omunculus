@@ -15,7 +15,13 @@ defmodule Omunculus.Fixtures do
     runs: %{agent: "concierge", depth: "0", status: "open"},
     comments: %{author: "agent", kind: "note", body: "note", created_at: @now},
     works: %{title: "a work", state: "open", created_at: @now},
-    requests: %{agent: "concierge", status: "waiting_human", created_at: @now},
+    requests: %{
+      agent: "concierge",
+      ask: ~s({"kind":"tool","name":"write"}),
+      arbiter: "human",
+      status: "waiting_human",
+      created_at: @now
+    },
     inbox: %{agent: "concierge", created_at: @now}
   }
 

@@ -52,7 +52,7 @@ defmodule Omunculus.HarnessTest do
 
     ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil, model: model}
 
-    assert {:ok, %{ok: true}} = Harness.dispatch(project, "send", %{}, ctx)
+    assert {:ok, %{ok: true}, _events} = Harness.dispatch(project, "send", %{}, ctx)
 
     assert {:ok, [message]} =
              Query.all(project.conn, "SELECT * FROM prompts WHERE kind = 'message'")
@@ -122,6 +122,7 @@ defmodule Omunculus.HarnessTest do
     [agents.concierge]
     depth = 0
     text = "hi"
+    tools = ["counter"]
     """)
 
     write_tool(
@@ -167,6 +168,7 @@ defmodule Omunculus.HarnessTest do
     [agents.concierge]
     depth = 0
     text = "hi"
+    tools = ["work", "viewer"]
     """)
 
     write_tool(

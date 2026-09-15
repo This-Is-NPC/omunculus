@@ -39,7 +39,7 @@ defmodule Omunculus.CLI do
     with {:ok, manifest} <- Harness.manifest(project, name),
          {:ok, args} <- build_args(rest, manifest),
          ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil, model: model},
-         {:ok, out} <- Harness.dispatch(project, name, args, ctx) do
+         {:ok, out, _events} <- Harness.dispatch(project, name, args, ctx) do
       if out.ok, do: {:ok, out.output}, else: {:error, {:tool_failed, out.output}}
     end
   end

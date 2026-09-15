@@ -1,15 +1,18 @@
 defmodule Omunculus.Harness do
   @moduledoc """
-  Dispatches a tool `name` to its manifest per spec §7 and §8.7: resolves
-  the catalog (rescanned on every call), checks the trigger, derives the
-  run's `work_id` from the store so a work created mid-run is visible to
-  the next call without the model passing ids around, hydrates the views
-  the manifest declared, invokes the contract, records the call and its
-  emits as one transaction, and opens a run for every `prompt` emit that
-  follows.
+  Dispatches a tool `name` to its manifest per spec §7, §8.7 and §5:
+  resolves the catalog (rescanned on every call), checks the trigger,
+  derives the run's `work_id` from the store so a work created mid-run is
+  visible to the next call without the model passing ids around, hydrates
+  the views the manifest declared, invokes the contract, records the call
+  and its emits as one transaction, opens a run for every `prompt` emit
+  that follows, and for every `grant` emit applies the ceiling change and
+  reopens a run on the same stage. Augments the output with "already
+  granted: <name>" when a `request_access` call asked for a name the run
+  already has.
   """
 
-  alias Omunculus.{Project, Run, Store}
+  alias Omunculus.{Config, Project, Run, Store}
   alias Omunculus.Tool.{Catalog, Invoke, Manifest}
 
   @spec manifest(Project.t(), String.t()) ::
@@ -23,7 +26,7 @@ defmodule Omunculus.Harness do
     end
   end
 
-  @spec dispatch(Project.t(), String.t(), map, map) :: {:ok, map} | {:error, term}
+  @spec dispatch(Project.t(), String.t(), map, map) :: {:ok, map, [map]} | {:error, term}
   def dispatch(project, name, args, ctx) do
     with {:ok, manifest} <- manifest(project, name),
          :ok <- check_trigger(manifest, name, ctx.trigger),
@@ -49,7 +52,7 @@ defmodule Omunculus.Harness do
              agent: ctx.agent
            }),
          :ok <- open_follow_ups(project, events, ctx) do
-      {:ok, out}
+      {:ok, augment(out, emits, events), events}
     end
   end
 
@@ -92,16 +95,65 @@ defmodule Omunculus.Harness do
   defp resolve_view_id("events.run", run_id, _work_id), do: {:ok, run_id}
   defp resolve_view_id(name, _run_id, _work_id), do: {:error, {:unknown_view, name}}
 
-  defp open_follow_ups(project, events, ctx) do
-    events
-    |> Enum.filter(&(&1.type == "prompt"))
-    |> Enum.reduce_while(:ok, fn event, :ok ->
-      params = %{prompt_id: event.prompt_id, work_id: event.work_id}
+  defp augment(out, emits, events) do
+    case request_emit_name(emits) do
+      nil ->
+        out
 
-      case Run.open(project, params, ctx.model) do
-        {:ok, _run} -> {:cont, :ok}
+      name ->
+        if Enum.any?(events, &(&1.type in ["request", "deny"])) do
+          out
+        else
+          %{out | output: out.output <> "\nalready granted: #{name}"}
+        end
+    end
+  end
+
+  defp request_emit_name(emits) do
+    Enum.find_value(emits, fn
+      %{"type" => "request", "body" => %{"name" => name}} -> name
+      _ -> nil
+    end)
+  end
+
+  defp open_follow_ups(project, events, ctx) do
+    Enum.reduce_while(events, :ok, fn event, :ok ->
+      case follow_up(project, event, ctx) do
+        :ok -> {:cont, :ok}
         {:error, _reason} = error -> {:halt, error}
       end
     end)
+  end
+
+  defp follow_up(project, %{type: "prompt"} = event, ctx) do
+    open_run(project, %{prompt_id: event.prompt_id, work_id: event.work_id}, ctx.model)
+  end
+
+  defp follow_up(project, %{type: "grant", work_id: work_id} = event, ctx)
+       when not is_nil(work_id) do
+    with :ok <- apply_grant(project, event) do
+      open_run(project, %{prompt_id: nil, work_id: work_id}, ctx.model)
+    end
+  end
+
+  defp follow_up(project, %{type: "grant"} = event, _ctx), do: apply_grant(project, event)
+
+  defp follow_up(_project, _event, _ctx), do: :ok
+
+  defp apply_grant(project, event) do
+    body = Jason.decode!(event.body)
+
+    case body["scope"] do
+      "agent" -> Config.grant(project.dir, {:agent, body["agent"]}, body["name"])
+      "depth" -> Config.grant(project.dir, {:depth, body["depth"]}, body["name"])
+      _ -> :ok
+    end
+  end
+
+  defp open_run(project, params, model) do
+    case Run.open(project, params, model) do
+      {:ok, _run} -> :ok
+      {:error, _reason} = error -> error
+    end
   end
 end

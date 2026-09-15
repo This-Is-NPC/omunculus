@@ -1,0 +1,25 @@
+name = "reply"
+kind = "tool"
+shape = "simple"
+triggers = ["cli", "model"]
+description = "Responde um request: grant ou deny, com um comment."
+tags = ["store", "request"]
+module = "Omunculus.Tools.Reply"
+
+[parameters]
+type = "object"
+required = ["body", "request_id", "decision"]
+
+[parameters.properties.body]
+type = "string"
+
+[parameters.properties.request_id]
+type = "string"
+
+[parameters.properties.decision]
+type = "string"
+enum = ["grant", "deny"]
+
+[parameters.properties.scope]
+type = "string"
+enum = ["agent", "depth"]
