@@ -1,0 +1,14 @@
+name = "break"
+kind = "tool"
+shape = "simple"
+triggers = ["model"]
+description = "Estaciona o work com um comment. A sequência não anda."
+tags = ["sequence", "work"]
+module = "Omunculus.Tools.Break"
+
+[parameters]
+type = "object"
+required = ["body"]
+
+[parameters.properties.body]
+type = "string"

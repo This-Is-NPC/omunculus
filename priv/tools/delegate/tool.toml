@@ -1,0 +1,17 @@
+name = "delegate"
+kind = "tool"
+shape = "simple"
+triggers = ["model"]
+description = "Cria um work filho e entrega a quem está abaixo. O pai espera."
+tags = ["sequence", "work"]
+module = "Omunculus.Tools.Delegate"
+
+[parameters]
+type = "object"
+required = ["title", "body"]
+
+[parameters.properties.title]
+type = "string"
+
+[parameters.properties.body]
+type = "string"
