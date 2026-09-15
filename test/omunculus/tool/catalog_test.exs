@@ -157,4 +157,33 @@ defmodule Omunculus.Tool.CatalogTest do
     assert %{"send" => manifest} = catalog
     assert manifest.triggers == ["cli"]
   end
+
+  test "hooks_for/2 returns the hooks whose events include the type, sorted by name" do
+    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+
+    assert Enum.map(Catalog.hooks_for(catalog, "request"), & &1.name) == ["on-request"]
+    assert Catalog.hooks_for(catalog, "prompt") == []
+  end
+
+  test "a hook never appears in with_trigger/2, neither for \"model\" nor \"cli\"" do
+    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+
+    refute Map.has_key?(Catalog.with_trigger(catalog, "model"), "on-request")
+    refute Map.has_key?(Catalog.with_trigger(catalog, "cli"), "on-request")
+  end
+
+  test "a project hook overrides the builtin hook of the same name", %{project_dir: project_dir} do
+    [builtin_root | _] = Catalog.roots(".")
+
+    write_tool(project_dir, "on-request", "hook.toml", """
+    name = "on-request"
+    kind = "hook"
+    events = ["request"]
+    description = "do projeto"
+    command = ["./run"]
+    """)
+
+    catalog = Catalog.discover([builtin_root, project_dir])
+    assert catalog["on-request"].description == "do projeto"
+  end
 end

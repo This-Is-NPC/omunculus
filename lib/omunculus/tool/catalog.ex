@@ -35,6 +35,14 @@ defmodule Omunculus.Tool.Catalog do
     |> Map.new()
   end
 
+  @spec hooks_for(%{String.t() => Manifest.t()}, String.t()) :: [Manifest.t()]
+  def hooks_for(catalog, event_type) do
+    catalog
+    |> Map.values()
+    |> Enum.filter(&(event_type in &1.events))
+    |> Enum.sort_by(& &1.name)
+  end
+
   defp subfolders(root) do
     root
     |> File.ls!()

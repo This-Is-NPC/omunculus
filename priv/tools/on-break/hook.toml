@@ -1,0 +1,5 @@
+name = "on-break"
+kind = "hook"
+events = ["break"]
+description = "Reage a um break. Default: no-op."
+module = "Omunculus.Hooks.Noop"

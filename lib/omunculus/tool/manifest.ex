@@ -16,6 +16,7 @@ defmodule Omunculus.Tool.Manifest do
             parameters: %{},
             views: [],
             events: [],
+            agent: nil,
             dir: nil
 
   @type t :: %__MODULE__{
@@ -31,10 +32,11 @@ defmodule Omunculus.Tool.Manifest do
           parameters: map,
           views: [String.t()],
           events: [String.t()],
+          agent: String.t() | nil,
           dir: String.t()
         }
 
-  @known_keys ~w(name kind shape triggers description tags groups command module parameters views events)
+  @known_keys ~w(name kind shape triggers description tags groups command module parameters views events agent)
 
   @spec load(String.t()) :: {:ok, t} | {:error, term}
   def load(path) do
@@ -69,13 +71,12 @@ defmodule Omunculus.Tool.Manifest do
          {:ok, kind} <- required_enum(raw, "kind", ["tool", "hook"]),
          {:ok, {command, module}} <- required_command_or_module(raw),
          {:ok, shape} <- optional_string(raw, "shape", "simple"),
-         {:ok, triggers} <- optional_enum_list(raw, "triggers", ["model"], ["model", "cli"]),
          {:ok, description} <- optional_string(raw, "description", ""),
          {:ok, tags} <- optional_string_list(raw, "tags", []),
          {:ok, groups} <- optional_string_list(raw, "groups", []),
          {:ok, parameters} <- optional_map(raw, "parameters", %{}),
          {:ok, views} <- optional_string_list(raw, "views", []),
-         {:ok, events} <- optional_string_list(raw, "events", []) do
+         {:ok, {triggers, events, agent}} <- kind_fields(raw, kind) do
       {:ok,
        %__MODULE__{
          name: name,
@@ -90,8 +91,37 @@ defmodule Omunculus.Tool.Manifest do
          parameters: parameters,
          views: views,
          events: events,
+         agent: agent,
          dir: dir
        }}
+    end
+  end
+
+  defp kind_fields(raw, "tool") do
+    with :ok <- forbidden(raw, "events"),
+         :ok <- forbidden(raw, "agent"),
+         {:ok, triggers} <- optional_enum_list(raw, "triggers", ["model"], ["model", "cli"]) do
+      {:ok, {triggers, [], nil}}
+    end
+  end
+
+  defp kind_fields(raw, "hook") do
+    with :ok <- forbidden(raw, "triggers"),
+         {:ok, events} <- required_string_list(raw, "events"),
+         {:ok, agent} <- optional_agent(raw) do
+      {:ok, {[], events, agent}}
+    end
+  end
+
+  defp forbidden(raw, key) do
+    if Map.has_key?(raw, key), do: {:error, {:invalid, String.to_atom(key)}}, else: :ok
+  end
+
+  defp optional_agent(raw) do
+    case Map.fetch(raw, "agent") do
+      :error -> {:ok, nil}
+      {:ok, value} when is_binary(value) and value != "" -> {:ok, value}
+      _ -> {:error, {:invalid, :agent}}
     end
   end
 

@@ -207,4 +207,108 @@ defmodule Omunculus.Tool.ManifestTest do
     assert Manifest.triggered_by?(manifest, "cli")
     refute Manifest.triggered_by?(manifest, "model")
   end
+
+  test "a hook with events and without triggers loads with triggers == []", %{dir: dir} do
+    path =
+      write_toml(dir, "hook.toml", """
+      name = "on-request"
+      kind = "hook"
+      events = ["request"]
+      command = ["./run"]
+      """)
+
+    assert {:ok, manifest} = Manifest.load(path)
+    assert manifest.kind == "hook"
+    assert manifest.events == ["request"]
+    assert manifest.triggers == []
+    refute Manifest.triggered_by?(manifest, "model")
+    refute Manifest.triggered_by?(manifest, "cli")
+  end
+
+  test "a hook without events is invalid", %{dir: dir} do
+    path =
+      write_toml(dir, "hook.toml", """
+      name = "on-request"
+      kind = "hook"
+      command = ["./run"]
+      """)
+
+    assert Manifest.load(path) == {:error, {:invalid, :events}}
+  end
+
+  test "a hook with an empty events list is invalid", %{dir: dir} do
+    path =
+      write_toml(dir, "hook.toml", """
+      name = "on-request"
+      kind = "hook"
+      events = []
+      command = ["./run"]
+      """)
+
+    assert Manifest.load(path) == {:error, {:invalid, :events}}
+  end
+
+  test "a hook with triggers is invalid", %{dir: dir} do
+    path =
+      write_toml(dir, "hook.toml", """
+      name = "on-request"
+      kind = "hook"
+      events = ["request"]
+      triggers = ["model"]
+      command = ["./run"]
+      """)
+
+    assert Manifest.load(path) == {:error, {:invalid, :triggers}}
+  end
+
+  test "a tool with events is invalid", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "read"
+      kind = "tool"
+      events = ["request"]
+      command = ["./run"]
+      """)
+
+    assert Manifest.load(path) == {:error, {:invalid, :events}}
+  end
+
+  test "a tool with an agent is invalid", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "read"
+      kind = "tool"
+      agent = "worker"
+      command = ["./run"]
+      """)
+
+    assert Manifest.load(path) == {:error, {:invalid, :agent}}
+  end
+
+  test "a hook with an agent is parsed", %{dir: dir} do
+    path =
+      write_toml(dir, "hook.toml", """
+      name = "on-request"
+      kind = "hook"
+      events = ["request"]
+      agent = "worker"
+      command = ["./run"]
+      """)
+
+    assert {:ok, manifest} = Manifest.load(path)
+    assert manifest.agent == "worker"
+  end
+
+  test "a hook without an agent defaults it to nil", %{dir: dir} do
+    path =
+      write_toml(dir, "hook.toml", """
+      name = "on-request"
+      kind = "hook"
+      events = ["request"]
+      command = ["./run"]
+      """)
+
+    assert {:ok, manifest} = Manifest.load(path)
+    assert manifest.agent == nil
+  end
 end
