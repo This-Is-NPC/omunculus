@@ -17,7 +17,7 @@ defmodule Omunculus.ConfigTest do
 
   test "no project file yields the builtin concierge at depth 0", %{dir: dir} do
     assert {:ok, %Config{agents: agents}} = Config.load(dir)
-    assert %{"concierge" => %{depth: 0, text: text, tools: nil}} = agents
+    assert %{"concierge" => %{depth: 0, text: text, tools: ["comment", "work"]}} = agents
     assert text != ""
   end
 

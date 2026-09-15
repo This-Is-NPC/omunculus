@@ -38,29 +38,33 @@ defmodule Omunculus.CLI do
 
     with {:ok, manifest} <- Harness.manifest(project, name),
          {:ok, args} <- build_args(rest, manifest),
-         ctx = %{trigger: "cli", run_id: nil, work_id: nil, author: "human", model: model},
+         ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil, model: model},
          {:ok, out} <- Harness.dispatch(project, name, args, ctx) do
       if out.ok, do: {:ok, out.output}, else: {:error, {:tool_failed, out.output}}
     end
   end
 
-  defp build_args([], _manifest), do: {:ok, %{}}
-  defp build_args(["--" <> _ | _] = rest, _manifest), do: parse_flags(rest, %{})
+  defp build_args(rest, manifest) do
+    positional_key =
+      case Map.get(manifest.parameters, "required") do
+        [key | _] -> key
+        _ -> nil
+      end
 
-  defp build_args([value], manifest) do
-    case Map.get(manifest.parameters, "required") do
-      [key | _] -> {:ok, %{key => value}}
-      _ -> {:error, {:positional, value}}
-    end
+    parse_args(rest, %{}, positional_key, false)
   end
 
-  defp build_args([value | _rest], _manifest), do: {:error, {:positional, value}}
+  defp parse_args([], acc, _positional_key, _used), do: {:ok, acc}
 
-  defp parse_flags([], acc), do: {:ok, acc}
+  defp parse_args(["--" <> key, value | rest], acc, positional_key, used),
+    do: parse_args(rest, Map.put(acc, key, value), positional_key, used)
 
-  defp parse_flags(["--" <> key, value | rest], acc),
-    do: parse_flags(rest, Map.put(acc, key, value))
+  defp parse_args(["--" <> key], _acc, _positional_key, _used),
+    do: {:error, {:missing_value, key}}
 
-  defp parse_flags(["--" <> key], _acc), do: {:error, {:missing_value, key}}
-  defp parse_flags([value | _rest], _acc), do: {:error, {:positional, value}}
+  defp parse_args([value | rest], acc, positional_key, false) when not is_nil(positional_key),
+    do: parse_args(rest, Map.put(acc, positional_key, value), positional_key, true)
+
+  defp parse_args([value | _rest], _acc, _positional_key, _used),
+    do: {:error, {:positional, value}}
 end

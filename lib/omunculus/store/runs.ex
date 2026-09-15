@@ -27,7 +27,12 @@ defmodule Omunculus.Store.Runs do
   def record_tool(conn, run_id, call, emits, ctx) do
     Query.transaction(conn, fn ->
       with {:ok, tool_event} <-
-             Events.append(conn, %{type: "tool", run_id: run_id, body: Jason.encode!(call)}),
+             Events.append(conn, %{
+               type: "tool",
+               run_id: run_id,
+               work_id: ctx.work_id,
+               body: Jason.encode!(call)
+             }),
            {:ok, emit_events} <- Actions.run(conn, emits, ctx) do
         {:ok, [tool_event | emit_events]}
       end

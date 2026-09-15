@@ -9,7 +9,7 @@ defmodule Omunculus.Store.Actions do
   alias Omunculus.Store.{Events, Query}
 
   @catalogue ~w(
-    comment request notify inbox.read reply work delegate continue
+    comment request notify inbox.read reply delegate continue
     break compact comment.delete
   )
 
@@ -36,6 +36,9 @@ defmodule Omunculus.Store.Actions do
   defp dispatch(conn, %{"type" => "prompt"} = emit, _ctx),
     do: prompt(conn, Map.get(emit, "body", %{}))
 
+  defp dispatch(conn, %{"type" => "work"} = emit, ctx),
+    do: work(conn, Map.get(emit, "body", %{}), ctx)
+
   defp dispatch(_conn, %{"type" => type}, _ctx) when type in @catalogue,
     do: {:error, {:not_yet, type}}
 
@@ -47,7 +50,7 @@ defmodule Omunculus.Store.Actions do
 
     with :ok <- ensure_text(body),
          :ok <- ensure_target(targets),
-         :ok <- ensure_targets_exist(conn, targets) do
+         :ok <- tag_error(:comment, ensure_exist(conn, Map.to_list(targets))) do
       write_comment(conn, body, targets, ctx)
     end
   end
@@ -63,17 +66,20 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
-  defp ensure_targets_exist(conn, targets) do
+  defp ensure_exist(conn, targets) do
     targets
     |> Enum.reject(fn {_table, id} -> is_nil(id) end)
     |> Enum.reduce_while(:ok, fn {table, id}, :ok ->
       case Query.one(conn, "SELECT id FROM #{table} WHERE id = ?", [id]) do
-        {:ok, nil} -> {:halt, {:error, {:comment, {:missing, table, id}}}}
+        {:ok, nil} -> {:halt, {:error, {:missing, table, id}}}
         {:ok, _row} -> {:cont, :ok}
         {:error, _reason} = error -> {:halt, error}
       end
     end)
   end
+
+  defp tag_error(tag, {:error, {:missing, _table, _id} = reason}), do: {:error, {tag, reason}}
+  defp tag_error(_tag, other), do: other
 
   defp write_comment(conn, body, targets, ctx) do
     comment_id = Id.new()
@@ -106,6 +112,14 @@ defmodule Omunculus.Store.Actions do
   end
 
   defp prompt(conn, %{"message" => text} = body) when is_binary(text) and text != "" do
+    with :ok <- tag_error(:prompt, ensure_exist(conn, [{:works, body["work_id"]}])) do
+      write_prompt(conn, body, text)
+    end
+  end
+
+  defp prompt(_conn, _body), do: {:error, {:prompt, :no_message}}
+
+  defp write_prompt(conn, body, text) do
     prompt_id = Id.new()
 
     with :ok <-
@@ -119,10 +133,79 @@ defmodule Omunculus.Store.Actions do
       Events.append(conn, %{
         type: "prompt",
         prompt_id: prompt_id,
+        work_id: body["work_id"],
         body: Jason.encode!(body)
       })
     end
   end
 
-  defp prompt(_conn, _body), do: {:error, {:prompt, :no_message}}
+  defp work(conn, %{"title" => title} = body, ctx) when is_binary(title) and title != "" do
+    case body["work_id"] do
+      nil -> create_work(conn, body, ctx)
+      work_id -> update_work(conn, work_id, body, ctx)
+    end
+  end
+
+  defp work(_conn, _body, _ctx), do: {:error, {:work, :no_title}}
+
+  defp update_work(conn, work_id, body, ctx) do
+    with :ok <- tag_error(:work, ensure_exist(conn, [{:works, work_id}])),
+         :ok <-
+           Query.exec(conn, "UPDATE works SET title = ?, updated_at = ? WHERE id = ?", [
+             body["title"],
+             Events.now(),
+             work_id
+           ]) do
+      Events.append(conn, %{
+        type: "work",
+        work_id: work_id,
+        run_id: ctx.run_id,
+        body: Jason.encode!(body)
+      })
+    end
+  end
+
+  defp create_work(conn, body, ctx) do
+    with :ok <- tag_error(:work, ensure_exist(conn, [{:works, body["parent_id"]}])) do
+      work_id = Id.new()
+      now = Events.now()
+
+      with {:ok, event} <-
+             Events.append(conn, %{
+               type: "work",
+               work_id: work_id,
+               run_id: ctx.run_id,
+               body: Jason.encode!(body)
+             }),
+           :ok <-
+             Query.insert(conn, :works, %{
+               id: work_id,
+               parent_id: body["parent_id"],
+               event_id: event.id,
+               assignee: ctx.agent,
+               title: body["title"],
+               state: "open",
+               created_at: now,
+               updated_at: now
+             }),
+           :ok <- link_run(conn, ctx.run_id, work_id) do
+        {:ok, event}
+      end
+    end
+  end
+
+  defp link_run(_conn, nil, _work_id), do: :ok
+
+  defp link_run(conn, run_id, work_id) do
+    case Query.one(conn, "SELECT work_id FROM runs WHERE id = ?", [run_id]) do
+      {:ok, %{work_id: nil}} ->
+        Query.exec(conn, "UPDATE runs SET work_id = ? WHERE id = ?", [work_id, run_id])
+
+      {:ok, _row} ->
+        :ok
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
 end

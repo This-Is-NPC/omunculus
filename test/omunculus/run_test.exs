@@ -44,9 +44,17 @@ defmodule Omunculus.RunTest do
   defp message(conn, body \\ "hi"),
     do: Fixtures.insert(conn, :prompts, %{kind: "message", body: body})
 
+  defp open(prompt_id, work_id \\ nil), do: %{prompt_id: prompt_id, work_id: work_id}
+
   test "a model calling a project tool leaves a start-run, tool, model, end-run replay", %{
     dir: dir
   } do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
     write_tool(dir, "echo", model_tool_toml("echo"), fixed_output_script("echoed"))
     project = open_project(dir)
     message_id = message(project.conn)
@@ -56,7 +64,7 @@ defmodule Omunculus.RunTest do
       {:ok, "done"}
     end
 
-    assert {:ok, run} = Run.open(project, message_id, model)
+    assert {:ok, run} = Run.open(project, open(message_id), model)
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
     assert Enum.map(events, & &1.type) == ["start-run", "tool", "model", "end-run"]
 
@@ -71,7 +79,7 @@ defmodule Omunculus.RunTest do
 
     model = fn _assembled, call -> call.("nonexistent", %{}) end
 
-    assert {:error, {:not_allowed, "nonexistent"}} = Run.open(project, message_id, model)
+    assert {:error, {:not_allowed, "nonexistent"}} = Run.open(project, open(message_id), model)
 
     assert {:ok, []} = Query.all(project.conn, "SELECT * FROM events WHERE type = 'tool'")
 
@@ -90,7 +98,7 @@ defmodule Omunculus.RunTest do
 
     model = fn _assembled, _call -> raise "must never be called" end
 
-    assert {:error, {:no_agent_at_depth, 0}} = Run.open(project, message_id, model)
+    assert {:error, {:no_agent_at_depth, 0}} = Run.open(project, open(message_id), model)
     assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
 
     Project.close(project)
@@ -118,13 +126,56 @@ defmodule Omunculus.RunTest do
       {:ok, "one-out"}
     end
 
-    assert {:ok, _run} = Run.open(project, message_id, model)
+    assert {:ok, _run} = Run.open(project, open(message_id), model)
 
     assert_received {:assembled, assembled}
     assert assembled =~ "- one:"
     refute assembled =~ "- two:"
 
     assert_received {:two, {:error, {:not_allowed, "two"}}}
+
+    Project.close(project)
+  end
+
+  test "a message-only run has no ## Work section", %{dir: dir} do
+    project = open_project(dir)
+    message_id = message(project.conn)
+
+    model = fn assembled, _call -> {:ok, assembled} end
+
+    assert {:ok, run} = Run.open(project, open(message_id), model)
+    refute run.work_id
+    Project.close(project)
+  end
+
+  test "opening on a work_id sets runs.work_id and assembles the title", %{dir: dir} do
+    project = open_project(dir)
+    message_id = message(project.conn)
+    work_id = Fixtures.insert(project.conn, :works, %{title: "Fix the parser"})
+    test_pid = self()
+
+    model = fn assembled, _call ->
+      send(test_pid, {:assembled, assembled})
+      {:ok, "done"}
+    end
+
+    assert {:ok, run} = Run.open(project, open(message_id, work_id), model)
+    assert run.work_id == work_id
+
+    assert_received {:assembled, assembled}
+    assert assembled =~ "## Work\nFix the parser"
+
+    Project.close(project)
+  end
+
+  test "opening on an unknown work fails and writes nothing", %{dir: dir} do
+    project = open_project(dir)
+    message_id = message(project.conn)
+
+    model = fn _assembled, _call -> raise "must never be called" end
+
+    assert {:error, {:no_work, "nope"}} = Run.open(project, open(message_id, "nope"), model)
+    assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
 
     Project.close(project)
   end

@@ -1,10 +1,12 @@
 defmodule Omunculus.Harness do
   @moduledoc """
   Dispatches a tool `name` to its manifest per spec §7 and §8.7: resolves
-  the catalog (rescanned on every call), checks the trigger, hydrates the
-  views the manifest declared, invokes the contract, records the call and
-  its emits as one transaction, and opens a run for every `prompt` emit
-  that follows.
+  the catalog (rescanned on every call), checks the trigger, derives the
+  run's `work_id` from the store so a work created mid-run is visible to
+  the next call without the model passing ids around, hydrates the views
+  the manifest declared, invokes the contract, records the call and its
+  emits as one transaction, and opens a run for every `prompt` emit that
+  follows.
   """
 
   alias Omunculus.{Project, Run, Store}
@@ -25,13 +27,14 @@ defmodule Omunculus.Harness do
   def dispatch(project, name, args, ctx) do
     with {:ok, manifest} <- manifest(project, name),
          :ok <- check_trigger(manifest, name, ctx.trigger),
-         {:ok, view} <- hydrate_views(project, manifest.views, ctx),
+         {:ok, work_id} <- resolve_work_id(project, ctx.run_id),
+         {:ok, view} <- hydrate_views(project, manifest.views, ctx.run_id, work_id),
          input = %{
            name: name,
            args: args,
            view: view,
            run_id: ctx.run_id,
-           work_id: ctx.work_id,
+           work_id: work_id,
            workspace: nil,
            roots: [project.dir]
          },
@@ -41,7 +44,9 @@ defmodule Omunculus.Harness do
          {:ok, events} <-
            Store.record_tool(project.conn, ctx.run_id, call, emits, %{
              run_id: ctx.run_id,
-             author: ctx.author
+             work_id: work_id,
+             author: ctx.author,
+             agent: ctx.agent
            }),
          :ok <- open_follow_ups(project, events, ctx) do
       {:ok, out}
@@ -54,9 +59,19 @@ defmodule Omunculus.Harness do
       else: {:error, {:not_triggered, name, trigger}}
   end
 
-  defp hydrate_views(project, names, ctx) do
+  defp resolve_work_id(_project, nil), do: {:ok, nil}
+
+  defp resolve_work_id(project, run_id) do
+    case Store.view(project.conn, "run", run_id) do
+      {:ok, nil} -> {:error, {:no_run, run_id}}
+      {:ok, run} -> {:ok, run.work_id}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp hydrate_views(project, names, run_id, work_id) do
     Enum.reduce_while(names, {:ok, %{}}, fn name, {:ok, acc} ->
-      case resolve_view_id(name, ctx) do
+      case resolve_view_id(name, run_id, work_id) do
         {:error, _reason} = error -> {:halt, error}
         {:ok, nil} -> {:cont, {:ok, acc}}
         {:ok, id} -> fetch_view(project, name, id, acc)
@@ -71,15 +86,19 @@ defmodule Omunculus.Harness do
     end
   end
 
-  defp resolve_view_id(name, ctx) when name in ["work", "comments.work"], do: {:ok, ctx.work_id}
-  defp resolve_view_id("events.run", ctx), do: {:ok, ctx.run_id}
-  defp resolve_view_id(name, _ctx), do: {:error, {:unknown_view, name}}
+  defp resolve_view_id(name, _run_id, work_id) when name in ["work", "comments.work"],
+    do: {:ok, work_id}
+
+  defp resolve_view_id("events.run", run_id, _work_id), do: {:ok, run_id}
+  defp resolve_view_id(name, _run_id, _work_id), do: {:error, {:unknown_view, name}}
 
   defp open_follow_ups(project, events, ctx) do
     events
     |> Enum.filter(&(&1.type == "prompt"))
     |> Enum.reduce_while(:ok, fn event, :ok ->
-      case Run.open(project, event.prompt_id, ctx.model) do
+      params = %{prompt_id: event.prompt_id, work_id: event.work_id}
+
+      case Run.open(project, params, ctx.model) do
         {:ok, _run} -> {:cont, :ok}
         {:error, _reason} = error -> {:halt, error}
       end

@@ -4,6 +4,10 @@ defmodule Omunculus.Store.RunsTest do
   alias Omunculus.Fixtures
   alias Omunculus.Store.{Query, Runs}
 
+  defp ctx(run_id, overrides \\ %{}) do
+    Map.merge(%{run_id: run_id, author: "agent", work_id: nil, agent: "concierge"}, overrides)
+  end
+
   defp open_params(prompt_id) do
     %{
       prompt_id: prompt_id,
@@ -64,11 +68,23 @@ defmodule Omunculus.Store.RunsTest do
     {:ok, run} = Runs.open(conn, open_params(nil))
     call = %{name: "send", args: %{"message" => "hi"}, ok: true, output: "done"}
 
-    assert {:ok, [event]} = Runs.record_tool(conn, run.id, call, [], %{run_id: run.id})
+    assert {:ok, [event]} = Runs.record_tool(conn, run.id, call, [], ctx(run.id))
 
     assert event.type == "tool"
     assert event.run_id == run.id
     assert event.body == Jason.encode!(call)
+  end
+
+  test "record_tool stamps the tool event with ctx.work_id", %{conn: conn} do
+    {:ok, run} = Runs.open(conn, open_params(nil))
+    work_id = Fixtures.insert(conn, :works)
+    call = %{name: "send", args: %{}, ok: true, output: "done"}
+
+    assert {:ok, [event]} =
+             Runs.record_tool(conn, run.id, call, [], ctx(run.id, %{work_id: work_id}))
+
+    assert event.type == "tool"
+    assert event.work_id == work_id
   end
 
   test "record_tool applies the call's emits in the same transaction", %{conn: conn} do
@@ -81,7 +97,7 @@ defmodule Omunculus.Store.RunsTest do
     ]
 
     assert {:ok, [tool_event, comment_event]} =
-             Runs.record_tool(conn, run.id, call, emits, %{run_id: run.id, author: "agent"})
+             Runs.record_tool(conn, run.id, call, emits, ctx(run.id))
 
     assert tool_event.type == "tool"
     assert comment_event.type == "comment"
@@ -94,7 +110,7 @@ defmodule Omunculus.Store.RunsTest do
     emits = [%{"type" => "comment", "body" => %{"work_id" => "nope", "body" => "hi"}}]
 
     assert {:error, {:comment, {:missing, :works, "nope"}}} =
-             Runs.record_tool(conn, run.id, call, emits, %{run_id: run.id, author: "agent"})
+             Runs.record_tool(conn, run.id, call, emits, ctx(run.id))
 
     assert {:ok, events} = Query.all(conn, "SELECT * FROM events WHERE type = 'tool'")
     assert events == []
@@ -132,9 +148,13 @@ defmodule Omunculus.Store.RunsTest do
     {:ok, _} = Runs.record_model(conn, run.id, "thinking...")
 
     {:ok, _} =
-      Runs.record_tool(conn, run.id, %{name: "send", args: %{}, ok: true, output: "ok"}, [], %{
-        run_id: run.id
-      })
+      Runs.record_tool(
+        conn,
+        run.id,
+        %{name: "send", args: %{}, ok: true, output: "ok"},
+        [],
+        ctx(run.id)
+      )
 
     {:ok, _} = Runs.close(conn, run.id)
 

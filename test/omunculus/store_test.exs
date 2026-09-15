@@ -4,7 +4,7 @@ defmodule Omunculus.StoreTest do
   alias Omunculus.Fixtures
   alias Omunculus.Store
 
-  @ctx %{run_id: nil, author: "human"}
+  @ctx %{run_id: nil, author: "human", work_id: nil, agent: nil}
 
   setup do
     path = Path.join(System.tmp_dir!(), "omunculus-#{Omunculus.Id.new()}.sqlite3")

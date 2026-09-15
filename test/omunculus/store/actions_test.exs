@@ -5,7 +5,7 @@ defmodule Omunculus.Store.ActionsTest do
   alias Omunculus.Store.Query
   alias Omunculus.Store
 
-  @ctx %{run_id: nil, author: "agent"}
+  @ctx %{run_id: nil, author: "agent", work_id: nil, agent: "concierge"}
   @call %{name: "t", args: %{}, ok: true, output: ""}
 
   defp count(conn, table) do
@@ -18,7 +18,7 @@ defmodule Omunculus.Store.ActionsTest do
   test "comment on an existing work appends event and comment row", %{conn: conn} do
     work_id = Fixtures.insert(conn, :works)
     run_id = Fixtures.insert(conn, :runs)
-    ctx = %{run_id: run_id, author: "human"}
+    ctx = %{run_id: run_id, author: "human", work_id: nil, agent: nil}
 
     assert {:ok, [_tool_event, event]} =
              record_tool(
@@ -164,8 +164,8 @@ defmodule Omunculus.Store.ActionsTest do
   test "a catalogue action not implemented yet is refused and rolls back the tool event", %{
     conn: conn
   } do
-    assert {:error, {:not_yet, "work"}} =
-             record_tool(conn, [%{"type" => "work", "body" => %{}}], @ctx)
+    assert {:error, {:not_yet, "request"}} =
+             record_tool(conn, [%{"type" => "request", "body" => %{}}], @ctx)
 
     assert count(conn, "events") == 0
   end
@@ -197,6 +197,32 @@ defmodule Omunculus.Store.ActionsTest do
     assert count(conn, "events") == 0
   end
 
+  test "prompt with a work_id puts it on the event", %{conn: conn} do
+    work_id = Fixtures.insert(conn, :works)
+
+    assert {:ok, [_tool_event, event]} =
+             record_tool(
+               conn,
+               [%{"type" => "prompt", "body" => %{"message" => "hi", "work_id" => work_id}}],
+               @ctx
+             )
+
+    assert event.type == "prompt"
+    assert event.work_id == work_id
+  end
+
+  test "prompt with a non-existent work_id is rejected and writes nothing", %{conn: conn} do
+    assert {:error, {:prompt, {:missing, :works, "nope"}}} =
+             record_tool(
+               conn,
+               [%{"type" => "prompt", "body" => %{"message" => "hi", "work_id" => "nope"}}],
+               @ctx
+             )
+
+    assert count(conn, "prompts") == 0
+    assert count(conn, "events") == 0
+  end
+
   test "an action outside the catalogue is unknown and rolls back the tool event", %{
     conn: conn
   } do
@@ -204,5 +230,117 @@ defmodule Omunculus.Store.ActionsTest do
              record_tool(conn, [%{"type" => "nope", "body" => %{}}], @ctx)
 
     assert count(conn, "events") == 0
+  end
+
+  test "work creates a row, its event, and links them", %{conn: conn} do
+    ctx = %{@ctx | agent: "concierge"}
+
+    assert {:ok, [_tool_event, event]} =
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "Ship the store"}}],
+               ctx
+             )
+
+    assert event.type == "work"
+    assert event.work_id != nil
+
+    assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
+    assert work.title == "Ship the store"
+    assert work.assignee == "concierge"
+    assert work.state == "open"
+    assert work.parent_id == nil
+    assert work.event_id == event.id
+  end
+
+  test "work creates a child of an existing parent", %{conn: conn} do
+    parent_id = Fixtures.insert(conn, :works)
+
+    assert {:ok, [_tool_event, event]} =
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "child", "parent_id" => parent_id}}],
+               @ctx
+             )
+
+    assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
+    assert work.parent_id == parent_id
+  end
+
+  test "work with a non-existent parent is rejected and writes nothing", %{conn: conn} do
+    assert {:error, {:work, {:missing, :works, "nope"}}} =
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "child", "parent_id" => "nope"}}],
+               @ctx
+             )
+
+    assert count(conn, "works") == 0
+    assert count(conn, "events") == 0
+  end
+
+  test "work without a title is rejected", %{conn: conn} do
+    assert {:error, {:work, :no_title}} =
+             record_tool(conn, [%{"type" => "work", "body" => %{}}], @ctx)
+
+    assert count(conn, "works") == 0
+    assert count(conn, "events") == 0
+  end
+
+  test "work update changes the title and appends a second work event", %{conn: conn} do
+    work_id = Fixtures.insert(conn, :works, %{title: "old"})
+
+    assert {:ok, [_tool_event, event]} =
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "new", "work_id" => work_id}}],
+               @ctx
+             )
+
+    assert event.type == "work"
+    assert event.work_id == work_id
+
+    assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+    assert work.title == "new"
+    assert work.updated_at != nil
+
+    assert {:ok, events} = Query.all(conn, "SELECT * FROM events WHERE type = 'work'")
+    assert length(events) == 1
+  end
+
+  test "work update of a missing work is rejected", %{conn: conn} do
+    assert {:error, {:work, {:missing, :works, "nope"}}} =
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "new", "work_id" => "nope"}}],
+               @ctx
+             )
+
+    assert count(conn, "events") == 0
+  end
+
+  test "creating a work inside a run without one sets runs.work_id", %{conn: conn} do
+    run_id = Fixtures.insert(conn, :runs, %{work_id: nil})
+    ctx = %{@ctx | run_id: run_id}
+
+    assert {:ok, [_tool_event, event]} =
+             record_tool(conn, [%{"type" => "work", "body" => %{"title" => "first"}}], ctx)
+
+    assert {:ok, run} = Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id])
+    assert run.work_id == event.work_id
+  end
+
+  test "a second work in the same run does not overwrite runs.work_id", %{conn: conn} do
+    run_id = Fixtures.insert(conn, :runs, %{work_id: nil})
+    ctx = %{@ctx | run_id: run_id}
+
+    assert {:ok, [_tool_event, first_event]} =
+             record_tool(conn, [%{"type" => "work", "body" => %{"title" => "first"}}], ctx)
+
+    assert {:ok, [_tool_event, _second_event]} =
+             record_tool(conn, [%{"type" => "work", "body" => %{"title" => "second"}}], ctx)
+
+    assert {:ok, run} = Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id])
+    assert run.work_id == first_event.work_id
   end
 end
