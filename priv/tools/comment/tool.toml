@@ -1,0 +1,17 @@
+name = "comment"
+kind = "tool"
+shape = "simple"
+triggers = ["model"]
+description = "Escreve um comment no work."
+tags = ["comment", "work", "store"]
+module = "Omunculus.Tools.Comment"
+
+[parameters]
+type = "object"
+required = ["body"]
+
+[parameters.properties.body]
+type = "string"
+
+[parameters.properties.work_id]
+type = "string"

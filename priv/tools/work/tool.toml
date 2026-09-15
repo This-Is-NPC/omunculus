@@ -1,0 +1,20 @@
+name = "work"
+kind = "tool"
+shape = "simple"
+triggers = ["model"]
+description = "Cria ou atualiza o work e escreve o title."
+tags = ["work", "store"]
+module = "Omunculus.Tools.Work"
+
+[parameters]
+type = "object"
+required = ["title"]
+
+[parameters.properties.title]
+type = "string"
+
+[parameters.properties.work_id]
+type = "string"
+
+[parameters.properties.parent_id]
+type = "string"
