@@ -1,2 +1,0 @@
-defmodule Omunculus do
-end
