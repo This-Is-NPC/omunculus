@@ -3,16 +3,17 @@ defmodule Omunculus.Store.Actions do
   Write side of the store: `run/3` applies the emits from a tool's
   `out.emit` in order, inside whatever transaction the caller holds — the
   whole batch commits or nothing does (spec §8.3). `continue`, `break`
-  and `delegate` are dispatched to `Actions.Sequence`.
+  and `delegate` are dispatched to `Actions.Sequence`; `notify` and
+  `inbox.read` to `Actions.Inbox`.
   """
 
   alias Omunculus.Ceiling
   alias Omunculus.Config
   alias Omunculus.Id
-  alias Omunculus.Store.Actions.{Helpers, Sequence}
+  alias Omunculus.Store.Actions.{Helpers, Inbox, Sequence}
   alias Omunculus.Store.{Events, Query, View}
 
-  @catalogue ~w(comment notify inbox.read compact comment.delete)
+  @catalogue ~w(comment compact comment.delete)
 
   @comment_targets %{"work_id" => :works, "request_id" => :requests, "inbox_id" => :inbox}
   @request_kinds ~w(tool path directory)
@@ -57,6 +58,12 @@ defmodule Omunculus.Store.Actions do
 
   defp dispatch(conn, %{"type" => "delegate"} = emit, ctx),
     do: Sequence.delegate(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "notify"} = emit, ctx),
+    do: Inbox.notify(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "inbox.read"} = emit, ctx),
+    do: Inbox.read(conn, Map.get(emit, "body", %{}), ctx)
 
   defp dispatch(_conn, %{"type" => type}, _ctx) when type in @catalogue,
     do: {:error, {:not_yet, type}}

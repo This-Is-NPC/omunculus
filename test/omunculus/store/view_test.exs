@@ -133,6 +133,48 @@ defmodule Omunculus.Store.ViewTest do
     end
   end
 
+  describe "inbox" do
+    test "lists unread entries in order, each with its earliest comment body", %{conn: conn} do
+      first_id =
+        Fixtures.insert(conn, :inbox, %{agent: "concierge", created_at: "2026-01-01T00:00:00Z"})
+
+      second_id =
+        Fixtures.insert(conn, :inbox, %{agent: "worker", created_at: "2026-01-02T00:00:00Z"})
+
+      read_id =
+        Fixtures.insert(conn, :inbox, %{
+          created_at: "2026-01-03T00:00:00Z",
+          read_at: "2026-01-03T01:00:00Z"
+        })
+
+      Fixtures.insert(conn, :comments, %{
+        inbox_id: first_id,
+        body: "later",
+        created_at: "2026-01-01T01:00:00Z"
+      })
+
+      Fixtures.insert(conn, :comments, %{
+        inbox_id: first_id,
+        body: "earlier",
+        created_at: "2026-01-01T00:30:00Z"
+      })
+
+      Fixtures.insert(conn, :comments, %{inbox_id: read_id, body: "ignored"})
+
+      assert {:ok, [first, second]} = View.view(conn, "inbox", nil)
+
+      assert first.id == first_id
+      assert first.agent == "concierge"
+      assert first.body == "earlier"
+
+      assert second.id == second_id
+      assert second.agent == "worker"
+      assert second.body == nil
+
+      refute Enum.any?([first, second], &(&1.id == read_id))
+    end
+  end
+
   test "unknown view name is rejected", %{conn: conn} do
     assert {:error, {:unknown_view, "nope"}} = View.view(conn, "nope", "id")
   end

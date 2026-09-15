@@ -185,7 +185,7 @@ defmodule Omunculus.Store.ActionsTest do
     assert comment.event_id == event.id
   end
 
-  test "comment on an existing inbox entry", %{conn: conn} do
+  test "comment on an existing inbox entry writes no request", %{conn: conn} do
     inbox_id = Fixtures.insert(conn, :inbox)
 
     assert {:ok, [_tool_event, event]} =
@@ -202,6 +202,7 @@ defmodule Omunculus.Store.ActionsTest do
              Query.one(conn, "SELECT * FROM comments WHERE inbox_id = ?", [inbox_id])
 
     assert comment.event_id == event.id
+    assert count(conn, "requests") == 0
   end
 
   test "comment without text is rejected and writes nothing, including the tool event", %{
@@ -290,8 +291,8 @@ defmodule Omunculus.Store.ActionsTest do
   test "a catalogue action not implemented yet is refused and rolls back the tool event", %{
     conn: conn
   } do
-    assert {:error, {:not_yet, "notify"}} =
-             record_tool(conn, [%{"type" => "notify", "body" => %{}}], @ctx)
+    assert {:error, {:not_yet, "compact"}} =
+             record_tool(conn, [%{"type" => "compact", "body" => %{}}], @ctx)
 
     assert count(conn, "events") == 0
   end
@@ -1243,6 +1244,150 @@ defmodule Omunculus.Store.ActionsTest do
                  ],
                  ctx
                )
+    end
+  end
+
+  describe "notify action" do
+    test "inside a run on a work appends inbox, comment, and event; run and work are untouched",
+         %{conn: conn} do
+      run = open_run(conn, @ceiling)
+      work_id = Fixtures.insert(conn, :works, %{state: "open"})
+      ctx = request_ctx(run, work_id)
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [%{"type" => "notify", "body" => %{"body" => "preciso avisar"}}],
+                 ctx
+               )
+
+      assert event.type == "notify"
+      assert event.work_id == work_id
+      assert event.inbox_id != nil
+      assert event.comment_id != nil
+
+      assert {:ok, inbox} = Query.one(conn, "SELECT * FROM inbox WHERE id = ?", [event.inbox_id])
+      assert inbox.agent == run.agent
+      assert inbox.work_id == work_id
+      assert inbox.read_at == nil
+      assert inbox.event_id == event.id
+
+      assert {:ok, comment} =
+               Query.one(conn, "SELECT * FROM comments WHERE inbox_id = ?", [event.inbox_id])
+
+      assert comment.body == "preciso avisar"
+      assert comment.event_id == event.id
+
+      assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+      assert work.state == "open"
+      assert work.waiting == nil
+
+      assert {:ok, run_row} = Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run.id])
+      assert run_row.status == "open"
+    end
+
+    test "without a work leaves inbox.work_id nil", %{conn: conn} do
+      run = open_run(conn, @ceiling)
+      ctx = request_ctx(run)
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [%{"type" => "notify", "body" => %{"body" => "aviso solto"}}],
+                 ctx
+               )
+
+      assert {:ok, inbox} = Query.one(conn, "SELECT * FROM inbox WHERE id = ?", [event.inbox_id])
+      assert inbox.work_id == nil
+    end
+
+    test "an explicit unknown work_id is rejected and writes nothing", %{conn: conn} do
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id}
+
+      assert {:error, {:notify, {:missing, :works, "nope"}}} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "notify",
+                     "body" => %{"body" => "aviso", "work_id" => "nope"}
+                   }
+                 ],
+                 ctx
+               )
+
+      assert count(conn, "inbox") == 0
+      assert count(conn, "events") == 0
+    end
+
+    test "no body is rejected", %{conn: conn} do
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id}
+
+      assert {:error, {:notify, :no_body}} =
+               record_tool(conn, [%{"type" => "notify", "body" => %{}}], ctx)
+
+      assert count(conn, "inbox") == 0
+      assert count(conn, "events") == 0
+    end
+
+    test "no run is rejected", %{conn: conn} do
+      assert {:error, {:notify, :no_run}} =
+               record_tool(
+                 conn,
+                 [%{"type" => "notify", "body" => %{"body" => "aviso"}}],
+                 @ctx
+               )
+
+      assert count(conn, "inbox") == 0
+      assert count(conn, "events") == 0
+    end
+  end
+
+  describe "inbox.read action" do
+    test "marks read_at and appends an event", %{conn: conn} do
+      inbox_id = Fixtures.insert(conn, :inbox)
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id}
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [%{"type" => "inbox.read", "body" => %{"inbox_id" => inbox_id}}],
+                 ctx
+               )
+
+      assert event.type == "inbox.read"
+      assert event.inbox_id == inbox_id
+      assert event.run_id == run_id
+
+      assert {:ok, inbox} = Query.one(conn, "SELECT * FROM inbox WHERE id = ?", [inbox_id])
+      assert inbox.read_at != nil
+    end
+
+    test "reading twice keeps the first read_at", %{conn: conn} do
+      inbox_id = Fixtures.insert(conn, :inbox)
+      emit = [%{"type" => "inbox.read", "body" => %{"inbox_id" => inbox_id}}]
+
+      assert {:ok, _} = record_tool(conn, emit, @ctx)
+      assert {:ok, first} = Query.one(conn, "SELECT * FROM inbox WHERE id = ?", [inbox_id])
+
+      assert {:ok, _} = record_tool(conn, emit, @ctx)
+      assert {:ok, second} = Query.one(conn, "SELECT * FROM inbox WHERE id = ?", [inbox_id])
+
+      assert first.read_at == second.read_at
+    end
+
+    test "an unknown inbox id is rejected", %{conn: conn} do
+      assert {:error, {:inbox_read, {:missing, :inbox, "nope"}}} =
+               record_tool(
+                 conn,
+                 [%{"type" => "inbox.read", "body" => %{"inbox_id" => "nope"}}],
+                 @ctx
+               )
+
+      assert count(conn, "events") == 0
     end
   end
 end
