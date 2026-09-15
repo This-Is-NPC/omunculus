@@ -27,6 +27,7 @@ defmodule Omunculus.ConfigTest do
              "comment",
              "continue",
              "delegate",
+             "notify",
              "reply",
              "request_access",
              "work"

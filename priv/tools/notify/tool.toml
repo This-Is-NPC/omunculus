@@ -1,0 +1,17 @@
+name = "notify"
+kind = "tool"
+shape = "simple"
+triggers = ["model"]
+description = "Avisa a pessoa pelo inbox. A run segue."
+tags = ["store", "inbox"]
+module = "Omunculus.Tools.Notify"
+
+[parameters]
+type = "object"
+required = ["body"]
+
+[parameters.properties.body]
+type = "string"
+
+[parameters.properties.work_id]
+type = "string"

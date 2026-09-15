@@ -1,0 +1,11 @@
+name = "inbox"
+kind = "tool"
+shape = "simple"
+triggers = ["cli"]
+description = "Lista os avisos não lidos."
+tags = ["cli", "inbox"]
+views = ["inbox"]
+module = "Omunculus.Tools.Inbox"
+
+[parameters]
+type = "object"

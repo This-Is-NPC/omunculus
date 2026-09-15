@@ -1,0 +1,14 @@
+name = "inbox_read"
+kind = "tool"
+shape = "simple"
+triggers = ["cli"]
+description = "Marca um aviso como lido."
+tags = ["cli", "inbox"]
+module = "Omunculus.Tools.InboxRead"
+
+[parameters]
+type = "object"
+required = ["inbox_id"]
+
+[parameters.properties.inbox_id]
+type = "string"
