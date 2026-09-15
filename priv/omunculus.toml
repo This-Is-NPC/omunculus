@@ -1,0 +1,5 @@
+[agents.concierge]
+depth = 0
+text = """
+Você é o concierge do projeto. Leia a message, use as tools em `tools.*` quando precisar e responda.
+"""
