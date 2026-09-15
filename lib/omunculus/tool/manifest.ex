@@ -1,0 +1,174 @@
+defmodule Omunculus.Tool.Manifest do
+  @moduledoc """
+  Struct parsed from a `tool.toml` or `hook.toml`, per spec §8.5.
+  """
+
+  @enforce_keys [:name, :kind, :dir]
+  defstruct name: nil,
+            kind: nil,
+            shape: "simple",
+            triggers: ["model"],
+            description: "",
+            tags: [],
+            groups: [],
+            command: nil,
+            module: nil,
+            parameters: %{},
+            views: [],
+            events: [],
+            dir: nil
+
+  @type t :: %__MODULE__{
+          name: String.t(),
+          kind: String.t(),
+          shape: String.t(),
+          triggers: [String.t()],
+          description: String.t(),
+          tags: [String.t()],
+          groups: [String.t()],
+          command: [String.t()] | nil,
+          module: String.t() | nil,
+          parameters: map,
+          views: [String.t()],
+          events: [String.t()],
+          dir: String.t()
+        }
+
+  @known_keys ~w(name kind shape triggers description tags groups command module parameters views events)
+
+  @spec load(String.t()) :: {:ok, t} | {:error, term}
+  def load(path) do
+    with {:ok, raw} <- Toml.decode_file(path) do
+      build(raw, Path.dirname(path))
+    end
+  end
+
+  @spec card(t) :: String.t()
+  def card(%__MODULE__{name: name, description: description}) do
+    lines =
+      description
+      |> String.split("\n")
+      |> Enum.take(3)
+      |> Enum.join("\n")
+
+    "- #{name}: #{lines}"
+  end
+
+  @spec triggered_by?(t, String.t()) :: boolean
+  def triggered_by?(%__MODULE__{triggers: triggers}, trigger), do: trigger in triggers
+
+  defp build(raw, dir) do
+    case Enum.find(Map.keys(raw), &(&1 not in @known_keys)) do
+      nil -> validate(raw, dir)
+      unknown -> {:error, {:unknown_key, unknown}}
+    end
+  end
+
+  defp validate(raw, dir) do
+    with {:ok, name} <- required_string(raw, "name"),
+         {:ok, kind} <- required_enum(raw, "kind", ["tool", "hook"]),
+         {:ok, {command, module}} <- required_command_or_module(raw),
+         {:ok, shape} <- optional_string(raw, "shape", "simple"),
+         {:ok, triggers} <- optional_enum_list(raw, "triggers", ["model"], ["model", "cli"]),
+         {:ok, description} <- optional_string(raw, "description", ""),
+         {:ok, tags} <- optional_string_list(raw, "tags", []),
+         {:ok, groups} <- optional_string_list(raw, "groups", []),
+         {:ok, parameters} <- optional_map(raw, "parameters", %{}),
+         {:ok, views} <- optional_string_list(raw, "views", []),
+         {:ok, events} <- optional_string_list(raw, "events", []) do
+      {:ok,
+       %__MODULE__{
+         name: name,
+         kind: kind,
+         shape: shape,
+         triggers: triggers,
+         description: description,
+         tags: tags,
+         groups: groups,
+         command: command,
+         module: module,
+         parameters: parameters,
+         views: views,
+         events: events,
+         dir: dir
+       }}
+    end
+  end
+
+  defp required_command_or_module(raw) do
+    case {Map.fetch(raw, "command"), Map.fetch(raw, "module")} do
+      {{:ok, _}, :error} ->
+        with {:ok, command} <- required_string_list(raw, "command"), do: {:ok, {command, nil}}
+
+      {:error, {:ok, _}} ->
+        with {:ok, module} <- required_string(raw, "module"), do: {:ok, {nil, module}}
+
+      _ ->
+        {:error, {:invalid, :command}}
+    end
+  end
+
+  defp required_string(raw, key) do
+    case Map.fetch(raw, key) do
+      {:ok, value} when is_binary(value) and value != "" -> {:ok, value}
+      _ -> {:error, {:invalid, String.to_atom(key)}}
+    end
+  end
+
+  defp required_enum(raw, key, allowed) do
+    with {:ok, value} <- required_string(raw, key) do
+      if value in allowed, do: {:ok, value}, else: {:error, {:invalid, String.to_atom(key)}}
+    end
+  end
+
+  defp required_string_list(raw, key) do
+    case Map.fetch(raw, key) do
+      {:ok, [_ | _] = value} ->
+        if Enum.all?(value, &is_binary/1),
+          do: {:ok, value},
+          else: {:error, {:invalid, String.to_atom(key)}}
+
+      _ ->
+        {:error, {:invalid, String.to_atom(key)}}
+    end
+  end
+
+  defp optional_string(raw, key, default) do
+    case Map.fetch(raw, key) do
+      :error -> {:ok, default}
+      {:ok, value} when is_binary(value) -> {:ok, value}
+      _ -> {:error, {:invalid, String.to_atom(key)}}
+    end
+  end
+
+  defp optional_string_list(raw, key, default) do
+    case Map.fetch(raw, key) do
+      :error ->
+        {:ok, default}
+
+      {:ok, value} when is_list(value) ->
+        if Enum.all?(value, &is_binary/1),
+          do: {:ok, value},
+          else: {:error, {:invalid, String.to_atom(key)}}
+
+      _ ->
+        {:error, {:invalid, String.to_atom(key)}}
+    end
+  end
+
+  defp optional_enum_list(raw, key, default, allowed) do
+    with {:ok, value} <- optional_string_list(raw, key, default) do
+      if Enum.all?(value, &(&1 in allowed)),
+        do: {:ok, value},
+        else: {:error, {:invalid, String.to_atom(key)}}
+    end
+  end
+
+  defp optional_map(raw, key, default) do
+    case Map.fetch(raw, key) do
+      :error -> {:ok, default}
+      {:ok, value} when is_map(value) -> {:ok, value}
+      _ -> {:error, {:invalid, String.to_atom(key)}}
+    end
+  end
+end
