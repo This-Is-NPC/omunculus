@@ -80,6 +80,20 @@ defmodule Omunculus.Store.ViewTest do
     end
   end
 
+  describe "prompt" do
+    test "returns the prompt row", %{conn: conn} do
+      prompt_id = Fixtures.insert(conn, :prompts, %{body: "conte até 5"})
+
+      assert {:ok, prompt} = View.view(conn, "prompt", prompt_id)
+      assert prompt.id == prompt_id
+      assert prompt.body == "conte até 5"
+    end
+
+    test "returns nil for an unknown id", %{conn: conn} do
+      assert {:ok, nil} = View.view(conn, "prompt", "missing")
+    end
+  end
+
   test "unknown view name is rejected", %{conn: conn} do
     assert {:error, {:unknown_view, "nope"}} = View.view(conn, "nope", "id")
   end

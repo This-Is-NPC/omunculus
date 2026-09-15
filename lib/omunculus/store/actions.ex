@@ -1,38 +1,40 @@
 defmodule Omunculus.Store.Actions do
   @moduledoc """
-  Write side of the store: `apply/3` runs the emits from a tool's `out.emit`
-  as one transaction — the whole batch commits or nothing does (spec §8.3).
+  Write side of the store: `run/3` applies the emits from a tool's
+  `out.emit` in order, inside whatever transaction the caller holds — the
+  whole batch commits or nothing does (spec §8.3).
   """
 
   alias Omunculus.Id
-  alias Omunculus.Store.Query
+  alias Omunculus.Store.{Events, Query}
 
   @catalogue ~w(
-    comment request notify prompt inbox.read reply work delegate continue
+    comment request notify inbox.read reply work delegate continue
     break compact comment.delete
   )
 
   @comment_targets %{"work_id" => :works, "request_id" => :requests, "inbox_id" => :inbox}
 
-  @spec apply(Exqlite.Sqlite3.db(), [map], map) :: {:ok, [map]} | {:error, term}
-  def apply(conn, emits, ctx) do
-    Query.transaction(conn, fn ->
-      emits
-      |> Enum.reduce_while({:ok, []}, fn emit, {:ok, events} ->
-        case dispatch(conn, emit, ctx) do
-          {:ok, event} -> {:cont, {:ok, [event | events]}}
-          {:error, _reason} = error -> {:halt, error}
-        end
-      end)
-      |> case do
-        {:ok, events} -> {:ok, Enum.reverse(events)}
-        error -> error
+  @spec run(Exqlite.Sqlite3.db(), [map], map) :: {:ok, [map]} | {:error, term}
+  def run(conn, emits, ctx) do
+    emits
+    |> Enum.reduce_while({:ok, []}, fn emit, {:ok, events} ->
+      case dispatch(conn, emit, ctx) do
+        {:ok, event} -> {:cont, {:ok, [event | events]}}
+        {:error, _reason} = error -> {:halt, error}
       end
     end)
+    |> case do
+      {:ok, events} -> {:ok, Enum.reverse(events)}
+      error -> error
+    end
   end
 
   defp dispatch(conn, %{"type" => "comment"} = emit, ctx),
     do: comment(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "prompt"} = emit, _ctx),
+    do: prompt(conn, Map.get(emit, "body", %{}))
 
   defp dispatch(_conn, %{"type" => type}, _ctx) when type in @catalogue,
     do: {:error, {:not_yet, type}}
@@ -77,7 +79,7 @@ defmodule Omunculus.Store.Actions do
     comment_id = Id.new()
 
     with {:ok, event} <-
-           append_event(conn, %{
+           Events.append(conn, %{
              type: "comment",
              comment_id: comment_id,
              run_id: ctx.run_id,
@@ -97,22 +99,30 @@ defmodule Omunculus.Store.Actions do
              author: ctx.author,
              kind: "note",
              body: body["body"],
-             created_at: now()
+             created_at: Events.now()
            }) do
       {:ok, event}
     end
   end
 
-  defp append_event(conn, fields) do
-    id = Id.new()
+  defp prompt(conn, %{"message" => text} = body) when is_binary(text) and text != "" do
+    prompt_id = Id.new()
 
-    with {:ok, %{max: max}} <-
-           Query.one(conn, "SELECT COALESCE(MAX(sequence), 0) AS max FROM events"),
-         :ok <-
-           Query.insert(conn, :events, Map.merge(fields, %{id: id, sequence: max + 1, at: now()})) do
-      Query.one(conn, "SELECT * FROM events WHERE id = ?", [id])
+    with :ok <-
+           Query.insert(conn, :prompts, %{
+             id: prompt_id,
+             kind: "message",
+             body: text,
+             run_id: nil,
+             created_at: Events.now()
+           }) do
+      Events.append(conn, %{
+        type: "prompt",
+        prompt_id: prompt_id,
+        body: Jason.encode!(body)
+      })
     end
   end
 
-  defp now, do: DateTime.utc_now() |> DateTime.to_iso8601()
+  defp prompt(_conn, _body), do: {:error, {:prompt, :no_message}}
 end

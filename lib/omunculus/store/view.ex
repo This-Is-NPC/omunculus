@@ -1,8 +1,9 @@
 defmodule Omunculus.Store.View do
   @moduledoc """
-  Read side of the store: the five functions of spec §8.3, plus replay of
-  `events` for a project, run, work, request, or inbox scope (spec §4).
-  Never executes anything against the store.
+  Read side of the store: the five functions of spec §8.3, the `prompts`
+  row the harness needs to assemble a run, plus replay of `events` for a
+  project, run, work, request, or inbox scope (spec §4). Never executes
+  anything against the store.
   """
 
   alias Omunculus.Store.Query
@@ -23,6 +24,10 @@ defmodule Omunculus.Store.View do
 
   def view(conn, "work", id) do
     Query.one(conn, "SELECT * FROM works WHERE id = ?", [id])
+  end
+
+  def view(conn, "prompt", id) do
+    Query.one(conn, "SELECT * FROM prompts WHERE id = ?", [id])
   end
 
   def view(conn, name, id) when is_map_key(@comment_views, name) do
