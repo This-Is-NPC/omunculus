@@ -16,7 +16,7 @@ defmodule Omunculus.Store.Actions do
 
   @comment_targets %{"work_id" => :works, "request_id" => :requests, "inbox_id" => :inbox}
   @reply_decisions ~w(grant deny)
-  @reply_scopes ~w(agent depth)
+  @reply_scopes ~w(agent depth stage workspace)
 
   @spec run(Exqlite.Sqlite3.db(), [map], map) :: {:ok, [map]} | {:error, term}
   def run(conn, emits, ctx) do
@@ -171,7 +171,13 @@ defmodule Omunculus.Store.Actions do
   defp create_work(conn, body, ctx) do
     with {:ok, depth} <- Helpers.tag_error(:work, Helpers.depth_at(conn, body["parent_id"])),
          {:ok, {stage, assignee}} <-
-           Helpers.stage_and_assignee(ctx.config, depth, fn -> {:ok, ctx.agent} end) do
+           Helpers.stage_and_assignee(ctx.config, depth, fn -> {:ok, ctx.agent} end),
+         {:ok, parent} <- Helpers.fetch_work(conn, body["parent_id"]),
+         {:ok, workspace} <-
+           Helpers.tag_error(
+             :work,
+             Helpers.resolve_workspace(ctx.config, body["workspace"], parent)
+           ) do
       work_id = Id.new()
 
       with {:ok, event} <-
@@ -185,6 +191,7 @@ defmodule Omunculus.Store.Actions do
              Helpers.insert_work(conn, %{
                id: work_id,
                parent_id: body["parent_id"],
+               workspace: workspace,
                assignee: assignee,
                stage: stage,
                title: body["title"],
@@ -312,6 +319,8 @@ defmodule Omunculus.Store.Actions do
 
     with {:ok, grants} <- Helpers.grants(conn, parent) do
       stage = stage_layer(ctx.config, depth, parent.stage)
+      workspace_name = Config.effective_workspace(ctx.config, parent)
+      workspace = Config.workspace_ceiling(ctx.config, workspace_name)
 
       snapshot =
         Ceiling.mount(
@@ -321,6 +330,7 @@ defmodule Omunculus.Store.Actions do
             depth: depth,
             grants: grants,
             stage: stage,
+            workspace: workspace,
             groups: ctx.groups
           },
           [name]
@@ -426,6 +436,7 @@ defmodule Omunculus.Store.Actions do
     ask = Jason.decode!(request.ask)
 
     with {:ok, depth} <- run_depth(conn, request.run_id),
+         {:ok, work} <- Helpers.fetch_work(conn, request.work_id),
          :ok <- grant_work(conn, request.work_id, ask["name"], scope) do
       Events.append(conn, %{
         type: "grant",
@@ -438,7 +449,10 @@ defmodule Omunculus.Store.Actions do
             kind: ask["kind"],
             agent: request.agent,
             depth: depth,
-            scope: scope
+            scope: scope,
+            workflow: work && Config.workflow_name_for(ctx.config, View.work_depth(conn, work)),
+            stage: work && work.stage,
+            workspace: work && work.workspace
           })
       })
     end

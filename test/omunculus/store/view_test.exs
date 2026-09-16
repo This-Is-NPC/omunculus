@@ -48,21 +48,74 @@ defmodule Omunculus.Store.ViewTest do
   end
 
   describe "comments.inbox" do
-    test "returns only comments of that inbox entry", %{conn: conn} do
-      inbox_id = Fixtures.insert(conn, :inbox)
-      other_inbox_id = Fixtures.insert(conn, :inbox)
+    test "flattens comments of every inbox entry of the work, oldest first", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      other_work_id = Fixtures.insert(conn, :works)
 
-      comment_id = Fixtures.insert(conn, :comments, %{inbox_id: inbox_id})
+      first_inbox_id = Fixtures.insert(conn, :inbox, %{work_id: work_id})
+      second_inbox_id = Fixtures.insert(conn, :inbox, %{work_id: work_id})
+      other_inbox_id = Fixtures.insert(conn, :inbox, %{work_id: other_work_id})
+
+      first_id =
+        Fixtures.insert(conn, :comments, %{
+          inbox_id: first_inbox_id,
+          created_at: "2026-01-01T00:00:00Z"
+        })
+
+      second_id =
+        Fixtures.insert(conn, :comments, %{
+          inbox_id: second_inbox_id,
+          created_at: "2026-01-02T00:00:00Z"
+        })
+
       Fixtures.insert(conn, :comments, %{inbox_id: other_inbox_id})
 
-      assert {:ok, [comment]} = View.view(conn, "comments.inbox", inbox_id)
-      assert comment.id == comment_id
+      assert {:ok, [first, second]} = View.view(conn, "comments.inbox", work_id)
+      assert [first.id, second.id] == [first_id, second_id]
     end
 
-    test "returns an empty list for an inbox entry with no comments", %{conn: conn} do
-      inbox_id = Fixtures.insert(conn, :inbox)
+    test "returns an empty list for a work with no inbox comments", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
 
-      assert {:ok, []} = View.view(conn, "comments.inbox", inbox_id)
+      assert {:ok, []} = View.view(conn, "comments.inbox", work_id)
+    end
+  end
+
+  describe "inbox.work" do
+    test "lists unread entries of that work only, each with its earliest comment body", %{
+      conn: conn
+    } do
+      work_id = Fixtures.insert(conn, :works)
+      other_work_id = Fixtures.insert(conn, :works)
+
+      first_id =
+        Fixtures.insert(conn, :inbox, %{
+          agent: "concierge",
+          work_id: work_id,
+          created_at: "2026-01-01T00:00:00Z"
+        })
+
+      read_id =
+        Fixtures.insert(conn, :inbox, %{
+          work_id: work_id,
+          created_at: "2026-01-02T00:00:00Z",
+          read_at: "2026-01-02T01:00:00Z"
+        })
+
+      Fixtures.insert(conn, :inbox, %{work_id: other_work_id})
+
+      Fixtures.insert(conn, :comments, %{inbox_id: first_id, body: "preciso disso"})
+      Fixtures.insert(conn, :comments, %{inbox_id: read_id, body: "ignored"})
+
+      assert {:ok, [entry]} = View.view(conn, "inbox.work", work_id)
+      assert entry.id == first_id
+      assert entry.body == "preciso disso"
+    end
+
+    test "returns an empty list for a work with no notifications", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+
+      assert {:ok, []} = View.view(conn, "inbox.work", work_id)
     end
   end
 

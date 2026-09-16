@@ -471,25 +471,67 @@ defmodule Omunculus.ConfigTest do
     assert {:error, {:policy, {:invalid, :mode}}} = Config.load(dir)
   end
 
-  test "workspaces are parsed into layers", %{dir: dir} do
+  test "workspaces are parsed into a root plus a ceiling layer", %{dir: dir} do
     write_toml(dir, """
     [workspaces.app]
+    root = "app"
     deny = ["delete"]
     human = ["deploy"]
+
+    [policy]
+    workspace = "app"
 
     [agents.concierge]
     depth = 0
     text = "hi"
     """)
 
-    assert {:ok, %Config{workspaces: workspaces}} = Config.load(dir)
-    assert %{"app" => %Layer{deny: ["delete"], human: ["deploy"]}} = workspaces
+    assert {:ok, %Config{workspaces: workspaces, policy_workspace: "app"}} = Config.load(dir)
+
+    assert %{"app" => %{root: root, ceiling: %Layer{deny: ["delete"], human: ["deploy"]}}} =
+             workspaces
+
+    assert root == Path.join(dir, "app")
+  end
+
+  test "a relative workspace root resolves against the project dir", %{dir: dir} do
+    write_toml(dir, """
+    [workspaces.app]
+    root = "./sub/dir"
+
+    [policy]
+    workspace = "app"
+
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    assert {:ok, %Config{workspaces: %{"app" => %{root: root}}}} = Config.load(dir)
+    assert root == Path.join(dir, "sub/dir")
+  end
+
+  test "a workspace without a root is rejected", %{dir: dir} do
+    write_toml(dir, """
+    [workspaces.app]
+    deny = ["delete"]
+
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    assert {:error, {:workspace, "app", {:invalid, :root}}} = Config.load(dir)
   end
 
   test "invalid workspace content", %{dir: dir} do
     write_toml(dir, """
     [workspaces.app]
+    root = "app"
     mode = "sometimes"
+
+    [policy]
+    workspace = "app"
 
     [agents.concierge]
     depth = 0
@@ -502,7 +544,11 @@ defmodule Omunculus.ConfigTest do
   test "unknown key inside a workspace", %{dir: dir} do
     write_toml(dir, """
     [workspaces.app]
+    root = "app"
     fs = ["read"]
+
+    [policy]
+    workspace = "app"
 
     [agents.concierge]
     depth = 0
@@ -510,6 +556,35 @@ defmodule Omunculus.ConfigTest do
     """)
 
     assert {:error, {:workspace, "app", {:unknown_key, "fs"}}} = Config.load(dir)
+  end
+
+  test "policy workspace names an undefined workspace", %{dir: dir} do
+    write_toml(dir, """
+    [workspaces.app]
+    root = "app"
+
+    [policy]
+    workspace = "ghost"
+
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    assert {:error, {:policy, {:unknown_workspace, "ghost"}}} = Config.load(dir)
+  end
+
+  test "a workspace defined with no policy default is rejected", %{dir: dir} do
+    write_toml(dir, """
+    [workspaces.app]
+    root = "app"
+
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    assert {:error, {:policy, :no_default_workspace}} = Config.load(dir)
   end
 
   test "agent_at_depth found", %{dir: dir} do
@@ -581,6 +656,75 @@ defmodule Omunculus.ConfigTest do
     """)
 
     assert {:error, {:agent, "ghost", :unknown}} = Config.grant(dir, {:agent, "ghost"}, "counter")
+  end
+
+  test "grant creates the workspace layer when absent", %{dir: dir} do
+    write_toml(dir, """
+    [workspaces.app]
+    root = "app"
+
+    [policy]
+    workspace = "app"
+
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    assert :ok = Config.grant(dir, {:workspace, "app"}, "write")
+
+    assert {:ok, %Config{workspaces: workspaces}} = Config.load(dir)
+    assert workspaces["app"].ceiling.granted == ["write"]
+    assert workspaces["app"].root == Path.join(dir, "app")
+  end
+
+  test "grant to a workflow step adds to that step's granted list", %{dir: dir} do
+    write_toml(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+
+    [agents.worker]
+    depth = 1
+    text = "work"
+
+    [workflows.delivery]
+    steps = [
+      { name = "to_do", agent = "worker" },
+      { name = "review", agent = "concierge" },
+    ]
+    """)
+
+    assert :ok = Config.grant(dir, {:stage, "delivery", "to_do"}, "write")
+
+    assert {:ok, %Config{workflows: %{"delivery" => [to_do, review]}}} = Config.load(dir)
+    assert to_do.ceiling.granted == ["write"]
+    assert review.ceiling.granted == []
+  end
+
+  test "grant to an unknown workflow is an error", %{dir: dir} do
+    write_toml(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    assert {:error, {:workflow, "ghost", :unknown}} =
+             Config.grant(dir, {:stage, "ghost", "to_do"}, "counter")
+  end
+
+  test "grant to an unknown step is an error", %{dir: dir} do
+    write_toml(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+
+    [workflows.delivery]
+    steps = [{ name = "to_do", agent = "concierge" }]
+    """)
+
+    assert {:error, {:workflow, "delivery", {:unknown_step, "ghost"}}} =
+             Config.grant(dir, {:stage, "delivery", "ghost"}, "counter")
   end
 
   describe "workflows" do

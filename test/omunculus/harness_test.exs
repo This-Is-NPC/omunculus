@@ -222,6 +222,106 @@ defmodule Omunculus.HarnessTest do
     Project.close(project)
   end
 
+  test "a tool declaring views = [\"comments.request\"] receives the run's request comments", %{
+    dir: dir
+  } do
+    write_tool(
+      dir,
+      "viewer",
+      """
+      name = "viewer"
+      kind = "tool"
+      triggers = ["model"]
+      views = ["comments.request"]
+      command = ["./run"]
+      """,
+      """
+      #!/bin/sh
+      data=$(cat)
+      case "$data" in
+        *"preciso disso"*) echo '{"ok": true, "output": "yes", "emit": []}' ;;
+        *) echo '{"ok": true, "output": "no", "emit": []}' ;;
+      esac
+      """
+    )
+
+    project = open_project(dir)
+    request_id = Fixtures.insert(project.conn, :requests)
+    Fixtures.insert(project.conn, :comments, %{request_id: request_id, body: "preciso disso"})
+    run_id = Fixtures.insert(project.conn, :runs, %{request_id: request_id})
+    ctx = %{trigger: "model", run_id: run_id, author: "agent", agent: "concierge"}
+
+    assert {:ok, out, _events} = Harness.dispatch(project, "viewer", %{}, ctx)
+    assert out.output == "yes"
+
+    Project.close(project)
+  end
+
+  test "a tool declaring views = [\"comments.inbox\", \"inbox.work\"] receives the work's inbox comments and notifications",
+       %{dir: dir} do
+    write_tool(
+      dir,
+      "viewer",
+      """
+      name = "viewer"
+      kind = "tool"
+      triggers = ["model"]
+      views = ["comments.inbox", "inbox.work"]
+      command = ["./run"]
+      """,
+      """
+      #!/bin/sh
+      data=$(cat)
+      case "$data" in
+        *"preciso avisar"*) echo '{"ok": true, "output": "yes", "emit": []}' ;;
+        *) echo '{"ok": true, "output": "no", "emit": []}' ;;
+      esac
+      """
+    )
+
+    project = open_project(dir)
+    work_id = Fixtures.insert(project.conn, :works)
+    inbox_id = Fixtures.insert(project.conn, :inbox, %{work_id: work_id})
+    Fixtures.insert(project.conn, :comments, %{inbox_id: inbox_id, body: "preciso avisar"})
+    run_id = Fixtures.insert(project.conn, :runs, %{work_id: work_id})
+    ctx = %{trigger: "model", run_id: run_id, author: "agent", agent: "concierge"}
+
+    assert {:ok, out, _events} = Harness.dispatch(project, "viewer", %{}, ctx)
+    assert out.output == "yes"
+
+    Project.close(project)
+  end
+
+  test "the builtin workspaces tool receives every workspace, marking the run's own", %{
+    dir: dir
+  } do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["workspaces"]
+
+    [workspaces.one]
+    root = "one"
+
+    [workspaces.two]
+    root = "two"
+
+    [policy]
+    workspace = "two"
+    """)
+
+    project = open_project(dir)
+    ctx = %{trigger: "model", run_id: nil, author: "agent", agent: "concierge"}
+
+    assert {:ok, out, _events} = Harness.dispatch(project, "workspaces", %{}, ctx)
+
+    assert out.output ==
+             "one #{Path.join(dir, "one")}\ntwo #{Path.join(dir, "two")} *"
+
+    Project.close(project)
+  end
+
   test "a dispatch with a run_id that does not exist fails", %{dir: dir} do
     write_tool(
       dir,

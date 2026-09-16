@@ -52,6 +52,32 @@ defmodule Omunculus.Tools.DelegateTest do
            }
   end
 
+  test "emits an explicit workspace" do
+    input = %{
+      @input
+      | args: %{
+          "title" => "review the design",
+          "body" => "please take a look",
+          "workspace" => "app"
+        }
+    }
+
+    assert Delegate.run(input) == %{
+             "ok" => true,
+             "output" => "",
+             "emit" => [
+               %{
+                 "type" => "delegate",
+                 "body" => %{
+                   "title" => "review the design",
+                   "body" => "please take a look",
+                   "workspace" => "app"
+                 }
+               }
+             ]
+           }
+  end
+
   test "refuses without a title" do
     assert Delegate.run(%{@input | args: %{"body" => "please take a look"}}) == %{
              "ok" => false,

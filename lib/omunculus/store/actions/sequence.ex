@@ -49,8 +49,13 @@ defmodule Omunculus.Store.Actions.Sequence do
              Helpers.stage_and_assignee(ctx.config, child_depth, fn ->
                depth_agent(ctx.config, child_depth)
              end)
+           ),
+         {:ok, workspace} <-
+           Helpers.tag_error(
+             :delegate,
+             Helpers.resolve_workspace(ctx.config, body["workspace"], parent)
            ) do
-      apply_delegate(conn, ctx, body, parent, stage, assignee)
+      apply_delegate(conn, ctx, body, parent, stage, assignee, workspace)
     end
   end
 
@@ -185,7 +190,7 @@ defmodule Omunculus.Store.Actions.Sequence do
     end
   end
 
-  defp apply_delegate(conn, ctx, body, parent, stage, assignee) do
+  defp apply_delegate(conn, ctx, body, parent, stage, assignee, workspace) do
     child_id = Id.new()
     comment_id = Id.new()
 
@@ -202,6 +207,7 @@ defmodule Omunculus.Store.Actions.Sequence do
            Helpers.insert_work(conn, %{
              id: child_id,
              parent_id: parent.id,
+             workspace: workspace,
              assignee: assignee,
              stage: stage,
              title: body["title"],

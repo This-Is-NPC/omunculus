@@ -3,18 +3,26 @@ defmodule Omunculus.Store.View do
   Read side of the store: the five functions of spec §8.3, the `runs` and
   `prompts` rows the harness needs to assemble or continue a run, the
   unread `inbox` list with each row's earliest comment (spec §3.6), the
-  depth of a work by walking `parent_id`, plus replay of `events` for a
-  project, run, work, request, or inbox scope (spec §4). Never executes
-  anything against the store.
+  unread notifications of one work (`"inbox.work"`), the comments of
+  every inbox entry of one work flattened oldest first
+  (`"comments.inbox"`), the depth of a work by walking `parent_id`, plus
+  replay of `events` for a project, run, work, request, or inbox scope
+  (spec §4). Never executes anything against the store.
   """
 
   alias Omunculus.Store.Query
 
   @comment_views %{
     "comments.work" => :work_id,
-    "comments.request" => :request_id,
-    "comments.inbox" => :inbox_id
+    "comments.request" => :request_id
   }
+
+  @inbox_columns """
+  id, agent, work_id, created_at,
+  (SELECT body FROM comments
+    WHERE comments.inbox_id = inbox.id
+    ORDER BY created_at, id LIMIT 1) AS body
+  """
 
   @replay_columns %{run: :run_id, work: :work_id, request: :request_id, inbox: :inbox_id}
 
@@ -42,14 +50,37 @@ defmodule Omunculus.Store.View do
 
   def view(conn, "inbox", _id) do
     Query.all(conn, """
-    SELECT id, agent, work_id, created_at,
-      (SELECT body FROM comments
-        WHERE comments.inbox_id = inbox.id
-        ORDER BY created_at, id LIMIT 1) AS body
+    SELECT #{@inbox_columns}
     FROM inbox
     WHERE read_at IS NULL
     ORDER BY created_at, id
     """)
+  end
+
+  def view(conn, "inbox.work", work_id) do
+    Query.all(
+      conn,
+      """
+      SELECT #{@inbox_columns}
+      FROM inbox
+      WHERE read_at IS NULL AND work_id = ?
+      ORDER BY created_at, id
+      """,
+      [work_id]
+    )
+  end
+
+  def view(conn, "comments.inbox", work_id) do
+    Query.all(
+      conn,
+      """
+      SELECT comments.* FROM comments
+      JOIN inbox ON inbox.id = comments.inbox_id
+      WHERE inbox.work_id = ?
+      ORDER BY comments.created_at, comments.id
+      """,
+      [work_id]
+    )
   end
 
   def view(conn, name, id) when is_map_key(@comment_views, name) do

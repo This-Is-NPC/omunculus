@@ -3,8 +3,10 @@ defmodule Omunculus.Store.Actions.Helpers do
   Shared machinery between `Actions` and `Actions.Sequence`: existence
   checks and error tagging (spec §8.3), the `COMMENTS` insert every
   action that writes one reuses, reopening a waiting work, a new work's
-  depth and its stage/assignee from the workflow, inserting the `WORKS`
-  row itself, and the ancestor grants walk of spec §5.
+  depth and its stage/assignee from the workflow, resolving its
+  `workspace` from a given name, its parent, or the project's default
+  (spec §9.1), inserting the `WORKS` row itself, and the ancestor grants
+  walk of spec §5.
   """
 
   alias Omunculus.Config
@@ -94,6 +96,7 @@ defmodule Omunculus.Store.Actions.Helpers do
       id: work.id,
       parent_id: work.parent_id,
       event_id: work.event_id,
+      workspace: work.workspace,
       assignee: work.assignee,
       title: work.title,
       stage: work.stage,
@@ -101,6 +104,19 @@ defmodule Omunculus.Store.Actions.Helpers do
       created_at: work.at,
       updated_at: work.at
     })
+  end
+
+  @spec resolve_workspace(Config.t(), String.t() | nil, map | nil) ::
+          {:ok, String.t() | nil} | {:error, {:unknown_workspace, String.t()}}
+  def resolve_workspace(config, nil, nil), do: {:ok, config.policy_workspace}
+  def resolve_workspace(_config, nil, parent), do: {:ok, parent.workspace}
+
+  def resolve_workspace(config, name, _parent) do
+    if Map.has_key?(config.workspaces, name) do
+      {:ok, name}
+    else
+      {:error, {:unknown_workspace, name}}
+    end
   end
 
   @spec fetch_work(Exqlite.Sqlite3.db(), String.t() | nil) :: {:ok, map | nil} | {:error, term}

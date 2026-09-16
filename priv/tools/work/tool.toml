@@ -19,3 +19,6 @@ type = "string"
 
 [parameters.properties.parent_id]
 type = "string"
+
+[parameters.properties.workspace]
+type = "string"

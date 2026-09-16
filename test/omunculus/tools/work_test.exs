@@ -58,6 +58,28 @@ defmodule Omunculus.Tools.WorkTest do
            }
   end
 
+  test "creates a work with an explicit workspace" do
+    input = %{@input | args: %{"title" => "Task", "workspace" => "app"}}
+
+    assert Work.run(input) == %{
+             "ok" => true,
+             "output" => "",
+             "emit" => [
+               %{"type" => "work", "body" => %{"title" => "Task", "workspace" => "app"}}
+             ]
+           }
+  end
+
+  test "ignores a blank workspace" do
+    input = %{@input | args: %{"title" => "Task", "workspace" => ""}}
+
+    assert Work.run(input) == %{
+             "ok" => true,
+             "output" => "",
+             "emit" => [%{"type" => "work", "body" => %{"title" => "Task"}}]
+           }
+  end
+
   test "refuses without a title" do
     assert Work.run(%{@input | args: %{}}) == %{
              "ok" => false,

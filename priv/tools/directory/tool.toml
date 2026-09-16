@@ -1,0 +1,11 @@
+name = "directory"
+kind = "tool"
+shape = "simple"
+triggers = ["model"]
+description = "Lista os roots do run e as entradas de topo de cada um."
+tags = ["fs"]
+groups = ["fs.read"]
+module = "Omunculus.Tools.Directory"
+
+[parameters]
+type = "object"

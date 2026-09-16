@@ -10,7 +10,11 @@ defmodule Omunculus.CeilingTest do
     do: Map.merge(%{policy: policy(mode: "auto"), depths: %{}, agents: %{}}, attrs)
 
   defp request(attrs),
-    do: Map.merge(%{agent: "worker", depth: 1, grants: [], stage: nil, groups: %{}}, attrs)
+    do:
+      Map.merge(
+        %{agent: "worker", depth: 1, grants: [], stage: nil, workspace: nil, groups: %{}},
+        attrs
+      )
 
   describe "mount/3" do
     test "policy auto alone leaves everything askable" do
@@ -185,6 +189,28 @@ defmodule Omunculus.CeilingTest do
       config = config(%{})
 
       snapshot = Ceiling.mount(config, request(%{stage: policy(granted: ["write"])}), ["write"])
+
+      assert snapshot.have == ["write"]
+    end
+
+    test "a workspace deny cuts an agent grant made in the same work" do
+      config =
+        config(%{
+          agents: %{"worker" => %{depth: 1, text: "", ceiling: policy(granted: ["write"])}}
+        })
+
+      snapshot =
+        Ceiling.mount(config, request(%{workspace: policy(deny: ["write"])}), ["write"])
+
+      assert snapshot.blocked == ["write"]
+      assert snapshot.have == []
+    end
+
+    test "a workspace grants a name the agent does not have in its own ceiling" do
+      config = config(%{})
+
+      snapshot =
+        Ceiling.mount(config, request(%{workspace: policy(granted: ["write"])}), ["write"])
 
       assert snapshot.have == ["write"]
     end

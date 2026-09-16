@@ -60,6 +60,36 @@ defmodule Omunculus.Tools.ReplyTest do
            }
   end
 
+  test "scope stage and scope workspace are forwarded" do
+    for scope <- ["stage", "workspace"] do
+      input = %{
+        @input
+        | args: %{
+            "request_id" => "req_1",
+            "decision" => "grant",
+            "body" => "pode",
+            "scope" => scope
+          }
+      }
+
+      assert Reply.run(input) == %{
+               "ok" => true,
+               "output" => "",
+               "emit" => [
+                 %{
+                   "type" => "reply",
+                   "body" => %{
+                     "request_id" => "req_1",
+                     "decision" => "grant",
+                     "body" => "pode",
+                     "scope" => scope
+                   }
+                 }
+               ]
+             }
+    end
+  end
+
   test "ignores a blank scope" do
     input = %{
       @input

@@ -87,6 +87,27 @@ defmodule Omunculus.Store.ActionsTest do
     {run, event.request_id}
   end
 
+  defp workspaces_toml do
+    """
+    [agents.concierge]
+    depth = 0
+    text = "concierge"
+
+    [agents.worker]
+    depth = 1
+    text = "worker"
+
+    [workspaces.app]
+    root = "app"
+
+    [workspaces.other]
+    root = "other"
+
+    [policy]
+    workspace = "app"
+    """
+  end
+
   defp delivery_toml do
     """
     [agents.concierge]
@@ -528,6 +549,71 @@ defmodule Omunculus.Store.ActionsTest do
     assert work.assignee == "worker"
   end
 
+  test "work with an explicit workspace stores it", %{conn: conn} do
+    ctx = %{@ctx | config: Fixtures.config(workspaces_toml())}
+
+    assert {:ok, [_tool_event, event]} =
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "x", "workspace" => "other"}}],
+               ctx
+             )
+
+    assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
+    assert work.workspace == "other"
+  end
+
+  test "work with no workspace given falls back to the policy default", %{conn: conn} do
+    ctx = %{@ctx | config: Fixtures.config(workspaces_toml())}
+
+    assert {:ok, [_tool_event, event]} =
+             record_tool(conn, [%{"type" => "work", "body" => %{"title" => "x"}}], ctx)
+
+    assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
+    assert work.workspace == "app"
+  end
+
+  test "a child work with no workspace given inherits the parent's", %{conn: conn} do
+    ctx = %{@ctx | config: Fixtures.config(workspaces_toml())}
+
+    assert {:ok, [_tool_event, parent_event]} =
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "parent", "workspace" => "other"}}],
+               ctx
+             )
+
+    assert {:ok, [_tool_event, child_event]} =
+             record_tool(
+               conn,
+               [
+                 %{
+                   "type" => "work",
+                   "body" => %{"title" => "child", "parent_id" => parent_event.work_id}
+                 }
+               ],
+               ctx
+             )
+
+    assert {:ok, child} =
+             Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_event.work_id])
+
+    assert child.workspace == "other"
+  end
+
+  test "work with an unknown workspace is rejected and writes nothing", %{conn: conn} do
+    ctx = %{@ctx | config: Fixtures.config(workspaces_toml())}
+
+    assert {:error, {:work, {:unknown_workspace, "ghost"}}} =
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "x", "workspace" => "ghost"}}],
+               ctx
+             )
+
+    assert count(conn, "works") == 0
+  end
+
   describe "continue action" do
     test "workflow off is rejected", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works, %{stage: nil})
@@ -755,6 +841,81 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, child} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
       assert child.stage == "to_do"
       assert child.assignee == "concierge"
+    end
+
+    test "an explicit workspace is stored on the child", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works)
+      run_id = Fixtures.insert(conn, :runs)
+
+      ctx = %{
+        @ctx
+        | run_id: run_id,
+          work_id: parent_id,
+          config: Fixtures.config(workspaces_toml())
+      }
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "delegate",
+                     "body" => %{"title" => "t", "body" => "b", "workspace" => "other"}
+                   }
+                 ],
+                 ctx
+               )
+
+      assert {:ok, child} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
+      assert child.workspace == "other"
+    end
+
+    test "with no workspace given the child inherits the parent's", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works, %{workspace: "other"})
+      run_id = Fixtures.insert(conn, :runs)
+
+      ctx = %{
+        @ctx
+        | run_id: run_id,
+          work_id: parent_id,
+          config: Fixtures.config(workspaces_toml())
+      }
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [%{"type" => "delegate", "body" => %{"title" => "t", "body" => "b"}}],
+                 ctx
+               )
+
+      assert {:ok, child} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
+      assert child.workspace == "other"
+    end
+
+    test "an unknown workspace is rejected and writes nothing", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works)
+      run_id = Fixtures.insert(conn, :runs)
+
+      ctx = %{
+        @ctx
+        | run_id: run_id,
+          work_id: parent_id,
+          config: Fixtures.config(workspaces_toml())
+      }
+
+      assert {:error, {:delegate, {:unknown_workspace, "ghost"}}} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "delegate",
+                     "body" => %{"title" => "t", "body" => "b", "workspace" => "ghost"}
+                   }
+                 ],
+                 ctx
+               )
+
+      assert count(conn, "works") == 1
     end
 
     test "no work is rejected", %{conn: conn} do
@@ -1269,7 +1430,7 @@ defmodule Omunculus.Store.ActionsTest do
                        "request_id" => request_id,
                        "decision" => "grant",
                        "body" => "ok",
-                       "scope" => "workspace"
+                       "scope" => "project"
                      }
                    }
                  ],
@@ -1609,7 +1770,8 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "works the same on an inbox target", %{conn: conn} do
-      inbox_id = Fixtures.insert(conn, :inbox)
+      work_id = Fixtures.insert(conn, :works)
+      inbox_id = Fixtures.insert(conn, :inbox, %{work_id: work_id})
       Fixtures.insert(conn, :comments, %{inbox_id: inbox_id})
 
       assert {:ok, [_tool_event, event]} =
@@ -1625,7 +1787,7 @@ defmodule Omunculus.Store.ActionsTest do
                )
 
       assert event.inbox_id == inbox_id
-      assert {:ok, [only]} = Store.view(conn, "comments.inbox", inbox_id)
+      assert {:ok, [only]} = Store.view(conn, "comments.inbox", work_id)
       assert only.body == "resumo"
     end
   end

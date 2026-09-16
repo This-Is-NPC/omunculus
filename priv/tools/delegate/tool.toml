@@ -16,3 +16,6 @@ type = "string"
 
 [parameters.properties.body]
 type = "string"
+
+[parameters.properties.workspace]
+type = "string"

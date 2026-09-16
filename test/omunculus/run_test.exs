@@ -170,6 +170,62 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
+  test "a work with unread notifications assembles an ## Inbox section oldest first", %{
+    dir: dir
+  } do
+    project = open_project(dir)
+    message_id = message(project.conn)
+    work_id = Fixtures.insert(project.conn, :works, %{title: "Fix the parser"})
+
+    first_id =
+      Fixtures.insert(project.conn, :inbox, %{
+        work_id: work_id,
+        created_at: "2026-01-01T00:00:00Z"
+      })
+
+    second_id =
+      Fixtures.insert(project.conn, :inbox, %{
+        work_id: work_id,
+        created_at: "2026-01-02T00:00:00Z"
+      })
+
+    Fixtures.insert(project.conn, :comments, %{inbox_id: first_id, body: "primeiro"})
+    Fixtures.insert(project.conn, :comments, %{inbox_id: second_id, body: "segundo"})
+
+    test_pid = self()
+
+    model = fn assembled, _call ->
+      send(test_pid, {:assembled, assembled})
+      {:ok, "done"}
+    end
+
+    assert {:ok, _run} = Run.open(project, open(message_id, work_id), model)
+
+    assert_received {:assembled, assembled}
+    assert assembled =~ "## Inbox\nprimeiro\nsegundo"
+
+    Project.close(project)
+  end
+
+  test "a work with no notifications has no ## Inbox section", %{dir: dir} do
+    project = open_project(dir)
+    message_id = message(project.conn)
+    work_id = Fixtures.insert(project.conn, :works, %{title: "Fix the parser"})
+    test_pid = self()
+
+    model = fn assembled, _call ->
+      send(test_pid, {:assembled, assembled})
+      {:ok, "done"}
+    end
+
+    assert {:ok, _run} = Run.open(project, open(message_id, work_id), model)
+
+    assert_received {:assembled, assembled}
+    refute assembled =~ "## Inbox"
+
+    Project.close(project)
+  end
+
   test "opening on an unknown work fails and writes nothing", %{dir: dir} do
     project = open_project(dir)
     message_id = message(project.conn)
@@ -276,17 +332,19 @@ defmodule Omunculus.RunTest do
     end
 
     assert {:ok, run} = Run.open(project, open(message(project.conn)), model)
-    assert length(Jason.decode!(run.tools)) == 13
+    assert length(Jason.decode!(run.tools)) == 15
 
     assert_received {:assembled, assembled}
     assert assembled =~ "- tool_search:"
     assert assembled =~ "- break:"
     assert assembled =~ "- comment:"
-    assert assembled =~ "Mais 4 tools: procure com tool_search."
+    assert assembled =~ "Mais 6 tools: procure com tool_search."
     refute assembled =~ "- read:"
     refute assembled =~ "- ls:"
     refute assembled =~ "- grep:"
     refute assembled =~ "- find:"
+    refute assembled =~ "- directory:"
+    refute assembled =~ "- workspaces:"
 
     Project.close(project)
   end

@@ -3,10 +3,13 @@ defmodule Omunculus.Config do
   Loads and validates `omunculus.toml`: a project file replaces the
   package default whole, never merges with it (spec §5). Parses the
   policy layer, the per-depth layers under `[policy.depth.N]`, the
-  workspace layers, each agent's ceiling layer, the named
+  workspaces under `[workspaces.<name>]` — each a directory `root`
+  (resolved against the project dir) plus a ceiling layer — and the
+  `[policy] workspace` default, each agent's ceiling layer, the named
   workflows under `[workflows.<name>]` (spec §3.4), and the MCP
-  servers under `[[mcp.servers]]` (spec §8.7), and grants a
-  permanent ceiling addition by rewriting the TOML file.
+  servers under `[[mcp.servers]]` (spec §8.7), and grants a permanent
+  ceiling addition — to an agent, a depth, a workflow step, or a
+  workspace — by rewriting the TOML file.
   """
 
   alias Omunculus.Config.Layer
@@ -18,6 +21,7 @@ defmodule Omunculus.Config do
     :agents,
     :workflows,
     :policy_workflow,
+    :policy_workspace,
     :depth_workflows,
     :mcp
   ]
@@ -30,14 +34,16 @@ defmodule Omunculus.Config do
           ceiling: Layer.t()
         }
   @type step :: %{name: String.t(), agent: String.t(), ceiling: Layer.t()}
+  @type workspace :: %{root: String.t(), ceiling: Layer.t()}
   @type mcp_server :: %{name: String.t(), command: [String.t()]}
   @type t :: %__MODULE__{
           policy: Layer.t(),
           depths: %{non_neg_integer => Layer.t()},
-          workspaces: %{String.t() => Layer.t()},
+          workspaces: %{String.t() => workspace},
           agents: %{String.t() => agent},
           workflows: %{String.t() => [step]},
           policy_workflow: String.t() | nil,
+          policy_workspace: String.t() | nil,
           depth_workflows: %{non_neg_integer => String.t()},
           mcp: [mcp_server]
         }
@@ -49,9 +55,25 @@ defmodule Omunculus.Config do
   @spec load(String.t()) :: {:ok, t} | {:error, term}
   def load(project_dir) do
     with {:ok, data} <- Toml.decode_file(config_path(project_dir)) do
-      parse(data)
+      parse(data, project_dir)
     end
   end
+
+  @spec effective_workspace(t, map | nil) :: String.t() | nil
+  def effective_workspace(%__MODULE__{policy_workspace: policy_workspace}, work),
+    do: (work && Map.get(work, :workspace)) || policy_workspace
+
+  @spec workspace_ceiling(t, String.t() | nil) :: Layer.t() | nil
+  def workspace_ceiling(_config, nil), do: nil
+
+  def workspace_ceiling(config, name),
+    do: config.workspaces |> Map.get(name) |> then(&(&1 && &1.ceiling))
+
+  @spec workspace_root(t, String.t() | nil) :: String.t() | nil
+  def workspace_root(_config, nil), do: nil
+
+  def workspace_root(config, name),
+    do: config.workspaces |> Map.get(name) |> then(&(&1 && &1.root))
 
   @spec agent_at_depth(t, non_neg_integer) ::
           {:ok, {String.t(), agent}} | {:error, {:no_agent_at_depth, non_neg_integer}}
@@ -67,12 +89,17 @@ defmodule Omunculus.Config do
 
   @spec workflow_for(t, non_neg_integer) :: {:ok, [step]} | :off
   def workflow_for(%__MODULE__{} = config, depth) do
-    with name when is_binary(name) <-
-           Map.get(config.depth_workflows, depth) || config.policy_workflow,
-         {:ok, steps} <- Map.fetch(config.workflows, name) do
-      {:ok, steps}
-    else
-      _ -> :off
+    case workflow_name_for(config, depth) do
+      nil -> :off
+      name -> Map.fetch(config.workflows, name)
+    end
+  end
+
+  @spec workflow_name_for(t, non_neg_integer) :: String.t() | nil
+  def workflow_name_for(%__MODULE__{} = config, depth) do
+    case Map.get(config.depth_workflows, depth) || config.policy_workflow do
+      name when is_binary(name) -> name
+      _ -> nil
     end
   end
 
@@ -92,8 +119,13 @@ defmodule Omunculus.Config do
     end
   end
 
-  @spec grant(String.t(), {:agent, String.t()} | {:depth, non_neg_integer}, String.t()) ::
-          :ok | {:error, term}
+  @type grant_layer ::
+          {:agent, String.t()}
+          | {:depth, non_neg_integer}
+          | {:stage, String.t(), String.t()}
+          | {:workspace, String.t()}
+
+  @spec grant(String.t(), grant_layer, String.t()) :: :ok | {:error, term}
   def grant(project_dir, layer, name) do
     with {:ok, data} <- Toml.decode_file(config_path(project_dir)),
          {:ok, data} <- add_grant(data, layer, name) do
@@ -125,6 +157,42 @@ defmodule Omunculus.Config do
     {:ok, put_in(data, path, add_name(get_in(data, path), name))}
   end
 
+  defp add_grant(data, {:workspace, workspace_name}, name) do
+    path = keys(["workspaces", workspace_name])
+    {:ok, put_in(data, path, add_name(get_in(data, path), name))}
+  end
+
+  defp add_grant(data, {:stage, workflow_name, stage}, name) do
+    workflows = Map.get(data, "workflows", %{})
+
+    case Map.fetch(workflows, workflow_name) do
+      :error ->
+        {:error, {:workflow, workflow_name, :unknown}}
+
+      {:ok, workflow} ->
+        case update_step(Map.get(workflow, "steps", []), stage, name) do
+          {:ok, steps} ->
+            {:ok,
+             put_in(data, keys(["workflows", workflow_name]), Map.put(workflow, "steps", steps))}
+
+          :error ->
+            {:error, {:workflow, workflow_name, {:unknown_step, stage}}}
+        end
+    end
+  end
+
+  defp update_step(steps, stage, name) do
+    if Enum.any?(steps, &(&1["name"] == stage)) do
+      {:ok,
+       Enum.map(steps, fn
+         %{"name" => ^stage} = step -> add_name(step, name)
+         step -> step
+       end)}
+    else
+      :error
+    end
+  end
+
   defp keys(path), do: Enum.map(path, &Access.key(&1, %{}))
 
   defp add_name(layer, name) do
@@ -139,17 +207,17 @@ defmodule Omunculus.Config do
     if name in list, do: list, else: list ++ [name]
   end
 
-  defp parse(data) do
+  defp parse(data, project_dir) do
     case Map.keys(data) -- ["policy", "workspaces", "agents", "workflows", "mcp"] do
       [key | _] ->
         {:error, {:unknown_key, key}}
 
       [] ->
-        with {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{})),
+        with {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), project_dir),
              {:ok, agents} <- parse_agents(Map.get(data, "agents", %{})),
              {:ok, workflows} <- parse_workflows(Map.get(data, "workflows", %{}), agents),
-             {:ok, policy, depths, policy_workflow, depth_workflows} <-
-               parse_policy(Map.get(data, "policy", %{}), workflows),
+             {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows} <-
+               parse_policy(Map.get(data, "policy", %{}), workflows, workspaces),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{})) do
           if map_size(agents) == 0 do
             {:error, :no_agents}
@@ -162,6 +230,7 @@ defmodule Omunculus.Config do
                agents: agents,
                workflows: workflows,
                policy_workflow: policy_workflow,
+               policy_workspace: policy_workspace,
                depth_workflows: depth_workflows,
                mcp: mcp
              }}
@@ -225,10 +294,11 @@ defmodule Omunculus.Config do
     end
   end
 
-  defp parse_policy(data, workflows) when is_map(data) do
+  defp parse_policy(data, workflows, workspaces) when is_map(data) do
     depth_data = Map.get(data, "depth", %{})
     workflow_data = Map.get(data, "workflow")
-    layer_data = data |> Map.delete("depth") |> Map.delete("workflow")
+    workspace_data = Map.get(data, "workspace")
+    layer_data = data |> Map.delete("depth") |> Map.delete("workflow") |> Map.delete("workspace")
 
     case Map.keys(layer_data) -- @layer_keys do
       [key | _] ->
@@ -238,8 +308,11 @@ defmodule Omunculus.Config do
         with {:ok, policy} <- tag_error(parse_layer(layer_data, "auto"), :policy),
              {:ok, policy_workflow} <-
                tag_error(fetch_workflow(workflow_data, workflows), :policy),
+             {:ok, policy_workspace} <-
+               tag_error(fetch_workspace(workspace_data, workspaces), :policy),
+             :ok <- ensure_default_workspace(policy_workspace, workspaces),
              {:ok, depths, depth_workflows} <- parse_depths(depth_data, workflows) do
-          {:ok, policy, depths, policy_workflow, depth_workflows}
+          {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows}
         end
     end
   end
@@ -258,6 +331,23 @@ defmodule Omunculus.Config do
   end
 
   defp fetch_workflow(_invalid, _workflows), do: {:error, {:invalid, :workflow}}
+
+  defp fetch_workspace(nil, _workspaces), do: {:ok, nil}
+
+  defp fetch_workspace(name, workspaces) when is_binary(name) do
+    if Map.has_key?(workspaces, name) do
+      {:ok, name}
+    else
+      {:error, {:unknown_workspace, name}}
+    end
+  end
+
+  defp fetch_workspace(_invalid, _workspaces), do: {:error, {:invalid, :workspace}}
+
+  defp ensure_default_workspace(nil, workspaces) when map_size(workspaces) > 0,
+    do: {:error, {:policy, :no_default_workspace}}
+
+  defp ensure_default_workspace(_policy_workspace, _workspaces), do: :ok
 
   defp parse_depths(data, workflows) when is_map(data) do
     Enum.reduce_while(data, {:ok, %{}, %{}}, fn {key, value}, {:ok, layers, depth_workflows} ->
@@ -294,13 +384,35 @@ defmodule Omunculus.Config do
     end
   end
 
-  defp parse_workspaces(data) when is_map(data) do
+  defp parse_workspaces(data, project_dir) when is_map(data) do
     Enum.reduce_while(data, {:ok, %{}}, fn {name, value}, {:ok, acc} ->
-      case parse_layer(value, nil) do
-        {:ok, layer} -> {:cont, {:ok, Map.put(acc, name, layer)}}
+      case parse_workspace(value, project_dir) do
+        {:ok, workspace} -> {:cont, {:ok, Map.put(acc, name, workspace)}}
         {:error, reason} -> {:halt, {:error, {:workspace, name, reason}}}
       end
     end)
+  end
+
+  @workspace_keys ["root" | @layer_keys]
+
+  defp parse_workspace(data, project_dir) when is_map(data) do
+    case Map.keys(data) -- @workspace_keys do
+      [key | _] ->
+        {:error, {:unknown_key, key}}
+
+      [] ->
+        with {:ok, root} <- fetch_root(data, project_dir),
+             {:ok, ceiling} <- parse_layer(Map.delete(data, "root"), nil) do
+          {:ok, %{root: root, ceiling: ceiling}}
+        end
+    end
+  end
+
+  defp fetch_root(data, project_dir) do
+    case Map.fetch(data, "root") do
+      {:ok, root} when is_binary(root) and root != "" -> {:ok, Path.expand(root, project_dir)}
+      _ -> {:error, {:invalid, :root}}
+    end
   end
 
   defp parse_agents(agents) when is_map(agents) do

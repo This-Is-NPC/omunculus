@@ -23,4 +23,4 @@ enum = ["grant", "deny"]
 
 [parameters.properties.scope]
 type = "string"
-enum = ["agent", "depth"]
+enum = ["agent", "depth", "stage", "workspace"]

@@ -1,0 +1,12 @@
+name = "workspaces"
+kind = "tool"
+shape = "simple"
+triggers = ["model"]
+description = "Lista os workspaces configurados, com * no do run."
+tags = ["fs"]
+groups = ["fs.read"]
+module = "Omunculus.Tools.Workspaces"
+views = ["workspaces"]
+
+[parameters]
+type = "object"

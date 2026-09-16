@@ -320,6 +320,7 @@ defmodule Omunculus.CLITest do
       new_run = Enum.find(runs, &(&1.id != old_run.id))
       assert "write" in Jason.decode!(new_run.tools)
       refute "write" in Jason.decode!(old_run.tools)
+      assert new_run.request_id == request_id
 
       assert {:ok, new_assembled} =
                Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [new_run.prompt_id])

@@ -1,11 +1,11 @@
 defmodule Omunculus.Ceiling do
   @moduledoc """
-  Mounts the effective ceiling of a run from the policy, depth, agent and
-  workflow-step layers of spec §5, and classifies a name against a mounted
-  snapshot. Before classifying, every list of every applying layer is
-  expanded against the `groups` map of spec §9.5: an entry that names a
-  group becomes its member names, any other entry stays as it is. A
-  layer's lists always apply; its mode, when it has one, classifies what
+  Mounts the effective ceiling of a run from the policy, workspace, depth,
+  agent and workflow-step layers of spec §5, and classifies a name against
+  a mounted snapshot. Before classifying, every list of every applying
+  layer is expanded against the `groups` map of spec §9.5: an entry that
+  names a group becomes its member names, any other entry stays as it is.
+  A layer's lists always apply; its mode, when it has one, classifies what
   the lists do not cite; the policy mode is the fallback for a name no
   layer classified. The most restrictive class wins.
   """
@@ -21,6 +21,7 @@ defmodule Omunculus.Ceiling do
             depth: integer(),
             grants: [String.t()],
             stage: Layer.t() | nil,
+            workspace: Layer.t() | nil,
             groups: %{String.t() => [String.t()]}
           },
           [String.t()]
@@ -33,12 +34,19 @@ defmodule Omunculus.Ceiling do
         }
   def mount(
         config,
-        %{agent: agent_name, depth: depth, grants: grants, stage: stage, groups: groups},
+        %{
+          agent: agent_name,
+          depth: depth,
+          grants: grants,
+          stage: stage,
+          groups: groups,
+          workspace: workspace
+        },
         names
       ) do
     layers =
       config
-      |> applying_layers(agent_name, depth, stage)
+      |> applying_layers(agent_name, depth, stage, workspace)
       |> Enum.map(fn {role, layer} -> {role, expand_layer(layer, groups)} end)
 
     policy_mode = config.policy.mode
@@ -64,13 +72,19 @@ defmodule Omunculus.Ceiling do
     end)
   end
 
-  defp applying_layers(config, agent_name, depth, stage) do
+  defp applying_layers(config, agent_name, depth, stage, workspace) do
     depth_layer = config |> Map.get(:depths, %{}) |> Map.get(depth)
 
     agent_layer =
       config |> Map.get(:agents, %{}) |> Map.get(agent_name, %{}) |> Map.get(:ceiling)
 
-    [policy: config.policy, depth: depth_layer, agent: agent_layer, stage: stage]
+    [
+      policy: config.policy,
+      workspace: workspace,
+      depth: depth_layer,
+      agent: agent_layer,
+      stage: stage
+    ]
     |> Enum.reject(fn {_role, layer} -> is_nil(layer) end)
   end
 

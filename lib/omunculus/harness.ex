@@ -5,11 +5,17 @@ defmodule Omunculus.Harness do
   the config's MCP servers, rescanned on every call, then reused for the
   whole dispatch), checks the trigger, reads the run row once when
   `ctx.run_id` is set so both the run's `work_id` and its own `tools` are
-  visible to the next call without the model passing ids around, hydrates
-  the views the manifest declared — `"catalog"` from the run's own
-  `tools` filtered to the model-triggered names still on disk, sorted by
-  name, `[]` outside a run — invokes the contract, and records the
-  call and its emits as one transaction. After that,
+  visible to the next call without the model passing ids around, resolves
+  the run's workspace via `workspace_context/2` — the run's work's
+  `workspace`, or the project's default without one — so `in.workspace`
+  and `in.roots` reflect it, hydrates the views the manifest declared —
+  `"catalog"` from the run's own `tools` filtered to the model-triggered
+  names still on disk, sorted by name, `[]` outside a run; `"workspaces"`
+  every configured workspace, the run's own marked; `"comments.request"`
+  the run's `request_id`; `"comments.inbox"` and `"inbox.work"` the run's
+  `work_id`, all three skipped when their id is nil — invokes the
+  contract, and records the call and its emits as one transaction. After
+  that,
   every emit event runs the hooks `Catalog.hooks_for/2` finds for its
   `type` through the same contract, each recorded as its own call; a hook
   never reacts to another hook's emits. Augments the output with "already
@@ -45,6 +51,21 @@ defmodule Omunculus.Harness do
     end
   end
 
+  @spec workspace_context(Config.t(), map | nil) :: %{
+          name: String.t() | nil,
+          root: String.t() | nil,
+          layer: Omunculus.Config.Layer.t() | nil
+        }
+  def workspace_context(config, work) do
+    name = Config.effective_workspace(config, work)
+
+    %{
+      name: name,
+      root: Config.workspace_root(config, name),
+      layer: Config.workspace_ceiling(config, name)
+    }
+  end
+
   @spec dispatch(Project.t(), String.t(), map, map) :: {:ok, map, [map]} | {:error, term}
   def dispatch(project, name, args, ctx) do
     with {:ok, config} <- Config.load(project.dir),
@@ -53,11 +74,17 @@ defmodule Omunculus.Harness do
          :ok <- check_trigger(manifest, name, ctx.trigger),
          {:ok, run} <- resolve_run(project, ctx.run_id),
          work_id = run_work_id(run),
-         catalog_view = catalog_view(run, catalog),
+         {:ok, work} <- fetch_work(project, work_id),
+         workspace = workspace_context(config, work),
+         views = %{
+           catalog: catalog_view(run, catalog),
+           workspaces: workspaces_view(config, workspace.name),
+           request_id: run && run.request_id
+         },
          {:ok, out, events} <-
-           call(project, manifest, args, work_id, ctx, config, catalog, catalog_view),
+           call(project, manifest, args, work_id, ctx, config, catalog, views, workspace),
          {:ok, hook_events} <-
-           run_hooks(project, catalog, events, work_id, ctx, config, catalog_view) do
+           run_hooks(project, catalog, events, work_id, ctx, config, views, workspace) do
       {:ok, augment(out, events), events ++ hook_events}
     end
   end
@@ -108,6 +135,20 @@ defmodule Omunculus.Harness do
   defp run_work_id(nil), do: nil
   defp run_work_id(run), do: run.work_id
 
+  defp fetch_work(_project, nil), do: {:ok, nil}
+
+  defp fetch_work(project, work_id) do
+    Store.view(project.conn, "work", work_id)
+  end
+
+  defp workspaces_view(config, current) do
+    config.workspaces
+    |> Enum.sort_by(fn {name, _workspace} -> name end)
+    |> Enum.map(fn {name, workspace} ->
+      %{name: name, root: workspace.root, current: name == current}
+    end)
+  end
+
   defp catalog_view(nil, _catalog), do: []
 
   defp catalog_view(%{tools: tools}, catalog) do
@@ -133,12 +174,13 @@ defmodule Omunculus.Harness do
       groups: Catalog.groups(catalog)
     }
 
-  defp hydrate_views(project, names, run_id, work_id, catalog_view) do
+  defp hydrate_views(project, names, run_id, work_id, views) do
     Enum.reduce_while(names, {:ok, %{}}, fn name, {:ok, acc} ->
-      case resolve_view_id(name, run_id, work_id) do
+      case resolve_view_id(name, run_id, work_id, views.request_id) do
         {:error, _reason} = error -> {:halt, error}
         :skip -> {:cont, {:ok, acc}}
-        :catalog -> {:cont, {:ok, Map.put(acc, "catalog", catalog_view)}}
+        :catalog -> {:cont, {:ok, Map.put(acc, "catalog", views.catalog)}}
+        :workspaces -> {:cont, {:ok, Map.put(acc, "workspaces", views.workspaces)}}
         {:ok, id} -> fetch_view(project, name, id, acc)
       end
     end)
@@ -151,17 +193,24 @@ defmodule Omunculus.Harness do
     end
   end
 
-  defp resolve_view_id(name, _run_id, work_id) when name in ["work", "comments.work"] do
+  @work_scoped_views ~w(work comments.work comments.inbox inbox.work)
+
+  defp resolve_view_id(name, _run_id, work_id, _request_id) when name in @work_scoped_views do
     if work_id, do: {:ok, work_id}, else: :skip
   end
 
-  defp resolve_view_id("events.run", run_id, _work_id) do
+  defp resolve_view_id("events.run", run_id, _work_id, _request_id) do
     if run_id, do: {:ok, run_id}, else: :skip
   end
 
-  defp resolve_view_id("inbox", _run_id, _work_id), do: {:ok, nil}
-  defp resolve_view_id("catalog", _run_id, _work_id), do: :catalog
-  defp resolve_view_id(name, _run_id, _work_id), do: {:error, {:unknown_view, name}}
+  defp resolve_view_id("comments.request", _run_id, _work_id, request_id) do
+    if request_id, do: {:ok, request_id}, else: :skip
+  end
+
+  defp resolve_view_id("inbox", _run_id, _work_id, _request_id), do: {:ok, nil}
+  defp resolve_view_id("catalog", _run_id, _work_id, _request_id), do: :catalog
+  defp resolve_view_id("workspaces", _run_id, _work_id, _request_id), do: :workspaces
+  defp resolve_view_id(name, _run_id, _work_id, _request_id), do: {:error, {:unknown_view, name}}
 
   defp run_hooks(
          project,
@@ -170,28 +219,29 @@ defmodule Omunculus.Harness do
          work_id,
          ctx,
          config,
-         catalog_view
+         views,
+         workspace
        ) do
     Enum.reduce_while(emit_events, {:ok, []}, fn event, {:ok, acc} ->
-      case run_hooks_for(project, catalog, event, work_id, ctx, config, catalog_view) do
+      case run_hooks_for(project, catalog, event, work_id, ctx, config, views, workspace) do
         {:ok, hook_events} -> {:cont, {:ok, acc ++ hook_events}}
         {:error, _reason} = error -> {:halt, error}
       end
     end)
   end
 
-  defp run_hooks_for(project, catalog, event, work_id, ctx, config, catalog_view) do
+  defp run_hooks_for(project, catalog, event, work_id, ctx, config, views, workspace) do
     catalog
     |> Catalog.hooks_for(event.type)
     |> Enum.reduce_while({:ok, []}, fn hook, {:ok, acc} ->
-      case invoke_hook(project, hook, event, work_id, ctx, config, catalog, catalog_view) do
+      case invoke_hook(project, hook, event, work_id, ctx, config, catalog, views, workspace) do
         {:ok, hook_events} -> {:cont, {:ok, acc ++ hook_events}}
         {:error, _reason} = error -> {:halt, error}
       end
     end)
   end
 
-  defp invoke_hook(project, hook, event, work_id, ctx, config, catalog, catalog_view) do
+  defp invoke_hook(project, hook, event, work_id, ctx, config, catalog, views, workspace) do
     with {:ok, _out, events} <-
            call(
              project,
@@ -201,22 +251,23 @@ defmodule Omunculus.Harness do
              ctx,
              config,
              catalog,
-             catalog_view
+             views,
+             workspace
            ) do
       {:ok, events}
     end
   end
 
-  defp call(project, manifest, args, work_id, ctx, config, catalog, catalog_view) do
-    with {:ok, view} <- hydrate_views(project, manifest.views, ctx.run_id, work_id, catalog_view),
+  defp call(project, manifest, args, work_id, ctx, config, catalog, views, workspace) do
+    with {:ok, view} <- hydrate_views(project, manifest.views, ctx.run_id, work_id, views),
          input = %{
            name: manifest.name,
            args: args,
            view: view,
            run_id: ctx.run_id,
            work_id: work_id,
-           workspace: nil,
-           roots: [project.dir]
+           workspace: workspace.name,
+           roots: if(workspace.root, do: [workspace.root], else: [project.dir])
          },
          {:ok, out} <- Invoke.call(manifest, input),
          emits = if(out.ok, do: out.emit, else: []),
@@ -331,16 +382,32 @@ defmodule Omunculus.Harness do
     body = Jason.decode!(event.body)
 
     case body["scope"] do
-      "agent" -> Config.grant(project.dir, {:agent, body["agent"]}, body["name"])
-      "depth" -> Config.grant(project.dir, {:depth, body["depth"]}, body["name"])
-      _ -> :ok
+      "agent" ->
+        Config.grant(project.dir, {:agent, body["agent"]}, body["name"])
+
+      "depth" ->
+        Config.grant(project.dir, {:depth, body["depth"]}, body["name"])
+
+      "stage" ->
+        Config.grant(project.dir, {:stage, body["workflow"], body["stage"]}, body["name"])
+
+      "workspace" ->
+        Config.grant(project.dir, {:workspace, body["workspace"]}, body["name"])
+
+      _ ->
+        :ok
     end
   end
 
   defp open_grant_run(_project, %{work_id: nil}, _via, _model), do: :ok
 
-  defp open_grant_run(project, %{work_id: work_id}, via, model),
-    do: open_run(project, open_params(prompt_id: nil, work_id: work_id, via: via), model)
+  defp open_grant_run(project, %{work_id: work_id, request_id: request_id}, via, model) do
+    open_run(
+      project,
+      %{prompt_id: nil, work_id: work_id, request_id: request_id, via: via, agent: nil},
+      model
+    )
+  end
 
   defp open_continue_run(project, event, via, model) do
     case Jason.decode!(event.body) do
