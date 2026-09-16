@@ -1,0 +1,14 @@
+name = "bash"
+kind = "tool"
+shape = "simple"
+triggers = ["model"]
+description = "Roda um comando no shell, na raiz do projeto."
+tags = ["shell"]
+module = "Omunculus.Tools.Bash"
+
+[parameters]
+type = "object"
+required = ["command"]
+
+[parameters.properties.command]
+type = "string"

@@ -1,0 +1,156 @@
+defmodule Omunculus.PresetTest do
+  use ExUnit.Case, async: true
+
+  alias Omunculus.{CLI, Fixtures, Id, Project}
+  alias Omunculus.Model.Fake
+  alias Omunculus.Store.Query
+
+  setup do
+    dir = Path.join(System.tmp_dir!(), Id.new())
+    File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf!(dir) end)
+    %{dir: dir}
+  end
+
+  defp open(dir) do
+    {:ok, project} = Project.open(dir)
+    project
+  end
+
+  defp fake, do: &Fake.complete/2
+
+  defp write_config(dir, contents), do: File.write!(Path.join(dir, "omunculus.toml"), contents)
+
+  defp write_emit_tool(dir, name, emit_json) do
+    tool_dir = Path.join([dir, "tools", name])
+    File.mkdir_p!(tool_dir)
+
+    File.write!(Path.join(tool_dir, "tool.toml"), """
+    name = "#{name}"
+    kind = "tool"
+    triggers = ["model"]
+    command = ["./run"]
+    """)
+
+    run_path = Path.join(tool_dir, "run")
+    File.write!(run_path, "#!/bin/sh\necho '#{emit_json}'\n")
+    File.chmod!(run_path, 0o755)
+  end
+
+  describe "codex-like" do
+    test "applying the preset switches the run to the codex agent, with bash, read and write, and bash runs",
+         %{dir: dir} do
+      assert {:ok, "preset codex-like aplicado"} =
+               CLI.run(["preset", "codex-like"], dir, fake())
+
+      model = fn assembled, call ->
+        assert assembled =~ "Você é um agente de código"
+        assert {:ok, "hi\n"} = call.("bash", %{"command" => "echo hi"})
+        {:ok, "feito"}
+      end
+
+      assert {:ok, ""} = CLI.run(["send", "roda um comando"], dir, model)
+
+      project = open(dir)
+      assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
+      assert run.agent == "codex"
+
+      tools = Jason.decode!(run.tools)
+      assert "bash" in tools
+      assert "read" in tools
+      assert "write" in tools
+
+      Project.close(project)
+    end
+  end
+
+  describe "pi-like" do
+    test "applying the preset switches the run to the pi agent, with no bash", %{dir: dir} do
+      assert {:ok, "preset pi-like aplicado"} = CLI.run(["preset", "pi-like"], dir, fake())
+
+      model = fn assembled, _call ->
+        assert assembled =~ "estilo Pi"
+        {:ok, "feito"}
+      end
+
+      assert {:ok, ""} = CLI.run(["send", "oi"], dir, model)
+
+      project = open(dir)
+      assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
+      assert run.agent == "pi"
+      refute "bash" in Jason.decode!(run.tools)
+
+      Project.close(project)
+    end
+  end
+
+  describe "default package" do
+    test "no run ever has bash, and calling it is refused", %{dir: dir} do
+      model = fn _assembled, call ->
+        assert {:error, {:not_allowed, "bash"}} = call.("bash", %{"command" => "echo hi"})
+        {:ok, "ok"}
+      end
+
+      assert {:ok, ""} = CLI.run(["send", "oi"], dir, model)
+
+      project = open(dir)
+      assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
+      refute "bash" in Jason.decode!(run.tools)
+
+      Project.close(project)
+    end
+  end
+
+  describe "custom permission kind" do
+    setup %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "concierge"
+      tools = ["comment", "reply", "request_secret", "work"]
+      """)
+
+      write_emit_tool(
+        dir,
+        "request_secret",
+        ~s({"ok": true, "output": "", "emit": [{"type": "request", "body": {"kind": "secret", "name": "vault", "reason": "preciso"}}]})
+      )
+
+      :ok
+    end
+
+    test "a custom-kind request opens REQUESTS waiting_human and a grant lands in works.grants",
+         %{dir: dir} do
+      project = open(dir)
+      work_id = Fixtures.insert(project.conn, :works, %{title: "Guardar o segredo"})
+      Project.close(project)
+
+      model = fn _assembled, call ->
+        assert {:ok, ""} = call.("request_secret", %{})
+        {:ok, "unused"}
+      end
+
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "preciso do vault"], dir, model)
+
+      project = open(dir)
+      assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
+      assert request.status == "waiting_human"
+      assert Jason.decode!(request.ask) == %{"kind" => "secret", "name" => "vault"}
+      Project.close(project)
+
+      reply_model = fn _assembled, _call -> {:ok, "obrigado"} end
+
+      assert {:ok, ""} =
+               CLI.run(
+                 ["reply", "--request_id", request.id, "--decision", "grant", "pode"],
+                 dir,
+                 reply_model
+               )
+
+      project = open(dir)
+      assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
+      assert Jason.decode!(work.grants) == ["vault"]
+      Project.close(project)
+    end
+  end
+end

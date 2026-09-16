@@ -1,0 +1,15 @@
+name = "preset"
+kind = "tool"
+shape = "simple"
+triggers = ["cli"]
+description = "Aplica um preset: TOML e pastas de tools no projeto."
+tags = ["cli", "preset"]
+groups = ["cli"]
+module = "Omunculus.Tools.Preset"
+
+[parameters]
+type = "object"
+required = ["name"]
+
+[parameters.properties.name]
+type = "string"

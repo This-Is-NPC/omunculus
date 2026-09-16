@@ -1,0 +1,7 @@
+[agents.codex]
+depth = 0
+tools = ["bash", "catalog", "fs.read", "fs.write", "store"]
+human = ["delete"]
+text = """
+Você é um agente de código no estilo Codex. Trabalhe no repositório com bash e as tools de arquivo, comente o progresso no work e termine quando a tarefa estiver feita.
+"""
