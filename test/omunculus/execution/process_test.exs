@@ -49,7 +49,15 @@ defmodule Omunculus.Execution.ProcessTest do
     {:ok, command} = Command.new("/usr/bin/true")
 
     {:ok, pid} =
-      Process.start(command, policy(), self(), ref, Omunculus.Execution.ProcessTest.FakeBackend)
+      Process.start(
+        command,
+        policy(),
+        self(),
+        ref,
+        Omunculus.Execution.ProcessTest.FakeBackend,
+        make_ref(),
+        :tool
+      )
 
     assert :ok = Process.write(pid, "output")
     assert :ok = Process.close_input(pid)
@@ -68,7 +76,9 @@ defmodule Omunculus.Execution.ProcessTest do
         policy(max_output_bytes: 3),
         self(),
         ref,
-        Omunculus.Execution.ProcessTest.FakeBackend
+        Omunculus.Execution.ProcessTest.FakeBackend,
+        make_ref(),
+        :tool
       )
 
     assert :ok = Process.write(pid, "toolong")
@@ -77,28 +87,43 @@ defmodule Omunculus.Execution.ProcessTest do
 
   test "limits concurrent executions and rejects a full queue" do
     limits = %{max_concurrent: 1, max_queue: 1, queue_timeout_ms: 100}
-    assert :ok = Limiter.acquire(limits)
+    assert {:ok, first} = Limiter.acquire(limits, self(), :tool)
 
-    waiting = Task.async(fn -> Limiter.acquire(limits) end)
+    waiting = Task.async(fn -> Limiter.acquire(limits, self(), :tool) end)
     :timer.sleep(10)
-    rejected = Task.async(fn -> Limiter.acquire(limits) end)
+    rejected = Task.async(fn -> Limiter.acquire(limits, self(), :tool) end)
 
     assert {:ok, {:error, :queue_full}} = Task.yield(rejected, 100)
-    assert :ok = Limiter.release(limits)
-    assert {:ok, :ok} = Task.yield(waiting, 100)
+    assert :ok = Limiter.release(limits, first, :tool)
+    assert {:ok, {:ok, lease}} = Task.yield(waiting, 100)
+    assert :ok = Limiter.release(limits, lease, :tool)
   end
 
   test "removes a timed-out queue entry before admitting another execution" do
     limits = %{max_concurrent: 1, max_queue: 2, queue_timeout_ms: 20}
-    assert :ok = Limiter.acquire(limits)
+    assert {:ok, first} = Limiter.acquire(limits, self(), :tool)
 
-    timed_out = Task.async(fn -> Limiter.acquire(limits) end)
+    timed_out = Task.async(fn -> Limiter.acquire(limits, self(), :tool) end)
     assert {:ok, {:error, :queue_timeout}} = Task.yield(timed_out, 100)
 
     :timer.sleep(20)
-    assert :ok = Limiter.release(limits)
-    assert :ok = Limiter.acquire(limits)
-    assert :ok = Limiter.release(limits)
+    assert :ok = Limiter.release(limits, first, :tool)
+    assert {:ok, second} = Limiter.acquire(limits, self(), :tool)
+    assert :ok = Limiter.release(limits, second, :tool)
+  end
+
+  test "reserves a coordinator lane for a nested tool call" do
+    limits = %{max_concurrent: 1, max_queue: 1, queue_timeout_ms: 100}
+    assert {:ok, tool} = Limiter.acquire(limits, self(), :tool)
+    assert {:ok, coordinator} = Limiter.acquire(limits, self(), :coordinator)
+
+    waiting = Task.async(fn -> Limiter.acquire(limits, self(), :coordinator) end)
+    :timer.sleep(10)
+    assert :ok = Limiter.release(limits, coordinator, :coordinator)
+    assert {:ok, {:ok, next}} = Task.yield(waiting, 100)
+
+    assert :ok = Limiter.release(limits, next, :coordinator)
+    assert :ok = Limiter.release(limits, tool, :tool)
   end
 
   defp policy(overrides \\ []) do

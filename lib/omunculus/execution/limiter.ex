@@ -1,43 +1,63 @@
 defmodule Omunculus.Execution.Limiter do
   @moduledoc false
 
-  @spec acquire(%{
-          max_concurrent: pos_integer,
-          max_queue: non_neg_integer,
-          queue_timeout_ms: pos_integer
-        }) ::
-          :ok | {:error, :queue_full | :queue_timeout}
-  def acquire(limits) do
-    with {:ok, server} <- server(limits) do
-      request = make_ref()
+  @type class :: :tool | :coordinator
+
+  @spec acquire(
+          %{
+            max_concurrent: pos_integer,
+            max_queue: non_neg_integer,
+            queue_timeout_ms: pos_integer
+          },
+          pid,
+          class
+        ) :: {:ok, reference} | {:error, :queue_full | :queue_timeout | term}
+  def acquire(limits, owner, class) when class in [:tool, :coordinator] do
+    with {:ok, server} <- server(limits, class) do
+      lease = make_ref()
 
       try do
-        GenServer.call(server, {:acquire, self(), request}, limits.queue_timeout_ms)
+        GenServer.call(server, {:acquire, owner, lease}, limits.queue_timeout_ms)
       catch
         :exit, {:timeout, _} ->
-          GenServer.cast(server, {:cancel, self(), request})
+          GenServer.cast(server, {:cancel, lease})
           {:error, :queue_timeout}
       end
     end
   end
 
-  @spec release(%{max_concurrent: pos_integer, max_queue: non_neg_integer}, pid) :: :ok
-  def release(limits, pid \\ self()) do
-    case Registry.lookup(Omunculus.Execution.Registry, key(limits)) do
-      [{server, _}] -> GenServer.cast(server, {:release, pid})
+  @spec release(%{max_concurrent: pos_integer, max_queue: non_neg_integer}, reference, class) ::
+          :ok
+  def release(limits, lease, class) when class in [:tool, :coordinator] do
+    case Registry.lookup(Omunculus.Execution.Registry, key(limits, class)) do
+      [{server, _}] -> GenServer.cast(server, {:release, lease})
       [] -> :ok
     end
 
     :ok
   end
 
-  defp server(limits) do
-    case Registry.lookup(Omunculus.Execution.Registry, key(limits)) do
+  @spec transfer(
+          %{max_concurrent: pos_integer, max_queue: non_neg_integer},
+          reference,
+          pid,
+          class
+        ) ::
+          :ok | {:error, :lease_missing}
+  def transfer(limits, lease, owner, class) when class in [:tool, :coordinator] do
+    case Registry.lookup(Omunculus.Execution.Registry, key(limits, class)) do
+      [{server, _}] -> GenServer.call(server, {:transfer, lease, owner})
+      [] -> {:error, :lease_missing}
+    end
+  end
+
+  defp server(limits, class) do
+    case Registry.lookup(Omunculus.Execution.Registry, key(limits, class)) do
       [{server, _}] ->
         {:ok, server}
 
       [] ->
-        child = {__MODULE__.Server, limits}
+        child = {__MODULE__.Server, {limits, class}}
 
         case DynamicSupervisor.start_child(Omunculus.Execution.Limiter.Supervisor, child) do
           {:ok, server} -> {:ok, server}
@@ -47,26 +67,26 @@ defmodule Omunculus.Execution.Limiter do
     end
   end
 
-  defp key(limits), do: {limits.max_concurrent, limits.max_queue}
+  defp key(limits, class), do: {class, limits.max_concurrent, limits.max_queue}
 
   defmodule Server do
     @moduledoc false
 
     use GenServer
 
-    def start_link(limits) do
-      GenServer.start_link(__MODULE__, limits,
+    def start_link({limits, class}) do
+      GenServer.start_link(__MODULE__, {limits, class},
         name:
           {:via, Registry,
-           {Omunculus.Execution.Registry, {limits.max_concurrent, limits.max_queue}}}
+           {Omunculus.Execution.Registry, {class, limits.max_concurrent, limits.max_queue}}}
       )
     end
 
     @impl true
-    def init(limits) do
+    def init({limits, class}) do
       {:ok,
        %{
-         max_concurrent: limits.max_concurrent,
+         max_concurrent: capacity(limits, class),
          max_queue: limits.max_queue,
          running: %{},
          waiting: :queue.new()
@@ -74,52 +94,67 @@ defmodule Omunculus.Execution.Limiter do
     end
 
     @impl true
-    def handle_call({:acquire, pid, request}, from, state) do
+    def handle_call({:acquire, owner, lease}, from, state) do
       cond do
         map_size(state.running) < state.max_concurrent ->
-          {:reply, :ok, admit(state, pid, request)}
+          {:reply, {:ok, lease}, admit(state, owner, lease)}
 
         :queue.len(state.waiting) >= state.max_queue ->
           {:reply, {:error, :queue_full}, state}
 
         true ->
-          waiting = %{pid: pid, from: from, request: request, monitor: Process.monitor(pid)}
+          waiting = %{owner: owner, from: from, lease: lease, monitor: Process.monitor(owner)}
           {:noreply, %{state | waiting: :queue.in(waiting, state.waiting)}}
       end
     end
 
-    @impl true
-    def handle_cast({:release, pid}, state),
-      do: {:noreply, state |> release(pid) |> admit_waiting()}
+    def handle_call({:transfer, lease, owner}, _from, state) do
+      case Map.fetch(state.running, lease) do
+        {:ok, %{monitor: monitor} = running} ->
+          Process.demonitor(monitor, [:flush])
+          running = %{running | owner: owner, monitor: Process.monitor(owner)}
+          {:reply, :ok, %{state | running: Map.put(state.running, lease, running)}}
 
-    def handle_cast({:cancel, pid, request}, state) do
+        :error ->
+          {:reply, {:error, :lease_missing}, state}
+      end
+    end
+
+    @impl true
+    def handle_cast({:release, lease}, state),
+      do: {:noreply, state |> release(lease) |> admit_waiting()}
+
+    def handle_cast({:cancel, lease}, state) do
       state =
-        case Map.fetch(state.running, pid) do
-          {:ok, %{request: ^request}} -> state |> release(pid) |> admit_waiting()
-          _ -> %{state | waiting: remove_waiting(state.waiting, pid, request)}
+        case Map.fetch(state.running, lease) do
+          {:ok, _running} -> state |> release(lease) |> admit_waiting()
+          :error -> %{state | waiting: remove_waiting(state.waiting, lease)}
         end
 
       {:noreply, state}
     end
 
     @impl true
-    def handle_info({:DOWN, monitor, :process, pid, _reason}, state) do
+    def handle_info({:DOWN, monitor, :process, _owner, _reason}, state) do
       state =
-        case Map.fetch(state.running, pid) do
-          {:ok, %{monitor: ^monitor}} -> state |> release(pid, false) |> admit_waiting()
-          _ -> %{state | waiting: remove_waiting(state.waiting, pid, monitor)}
+        case Enum.find(state.running, fn {_lease, running} -> running.monitor == monitor end) do
+          {lease, _running} -> state |> release(lease, false) |> admit_waiting()
+          nil -> %{state | waiting: remove_waiting(state.waiting, monitor)}
         end
 
       {:noreply, state}
     end
 
-    defp admit(state, pid, request) do
-      running = %{monitor: Process.monitor(pid), request: request}
-      %{state | running: Map.put(state.running, pid, running)}
+    defp capacity(limits, :tool), do: limits.max_concurrent
+    defp capacity(limits, :coordinator), do: min(limits.max_concurrent, 1)
+
+    defp admit(state, owner, lease) do
+      running = %{owner: owner, monitor: Process.monitor(owner)}
+      %{state | running: Map.put(state.running, lease, running)}
     end
 
-    defp release(state, pid, demonitor \\ true) do
-      case Map.pop(state.running, pid) do
+    defp release(state, lease, demonitor \\ true) do
+      case Map.pop(state.running, lease) do
         {nil, _running} ->
           state
 
@@ -132,10 +167,10 @@ defmodule Omunculus.Execution.Limiter do
     defp admit_waiting(state) do
       if map_size(state.running) < state.max_concurrent do
         case :queue.out(state.waiting) do
-          {{:value, %{pid: pid, from: from, request: request, monitor: monitor}}, waiting} ->
-            if Process.alive?(pid) do
-              GenServer.reply(from, :ok)
-              %{state | waiting: waiting} |> admit(pid, request) |> admit_waiting()
+          {{:value, %{owner: owner, from: from, lease: lease, monitor: monitor}}, waiting} ->
+            if Process.alive?(owner) do
+              GenServer.reply(from, {:ok, lease})
+              %{state | waiting: waiting} |> admit(owner, lease) |> admit_waiting()
             else
               Process.demonitor(monitor, [:flush])
               %{state | waiting: waiting} |> admit_waiting()
@@ -149,11 +184,13 @@ defmodule Omunculus.Execution.Limiter do
       end
     end
 
-    defp remove_waiting(waiting, pid, marker) do
+    defp remove_waiting(waiting, marker) do
       waiting
       |> :queue.to_list()
       |> Enum.reject(fn request ->
-        request.pid == pid and (request.monitor == marker or request.request == marker)
+        remove? = request.lease == marker or request.monitor == marker
+        if remove?, do: Process.demonitor(request.monitor, [:flush])
+        remove?
       end)
       |> :queue.from_list()
     end

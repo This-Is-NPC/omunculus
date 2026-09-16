@@ -37,7 +37,7 @@ defmodule Omunculus.Sandbox do
     with {:ok, policy} <- Policy.coordinator(execution, Path.dirname(script)),
          {:ok, deno} <- deno(policy),
          {:ok, command} <- Command.new(deno, @flags ++ [script], cwd: Path.dirname(script)),
-         {:ok, handle} <- Execution.start(command, policy) do
+         {:ok, handle} <- Execution.start(command, policy, self(), make_ref(), :coordinator) do
       try do
         :ok =
           Execution.write(

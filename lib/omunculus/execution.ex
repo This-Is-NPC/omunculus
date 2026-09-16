@@ -3,7 +3,7 @@ defmodule Omunculus.Execution do
   Starts commands through the backend fixed by an execution policy.
   """
 
-  alias Omunculus.Execution.{Bubblewrap, Command, Policy, Process}
+  alias Omunculus.Execution.{Bubblewrap, Command, Limiter, Policy, Process}
 
   defmodule Handle do
     @moduledoc false
@@ -13,11 +13,26 @@ defmodule Omunculus.Execution do
 
   @type result :: %{stdout: binary, stderr: binary, status: non_neg_integer}
 
-  @spec start(Command.t(), Policy.t(), pid, reference) :: {:ok, Handle.t()} | {:error, term}
-  def start(command, policy, owner \\ self(), ref \\ make_ref()) do
+  @spec start(Command.t(), Policy.t(), pid, reference, Limiter.class()) ::
+          {:ok, Handle.t()} | {:error, term}
+  def start(command, policy, owner \\ self(), ref \\ make_ref(), class \\ :tool) do
     with {:ok, backend} <- backend(policy.backend),
-         {:ok, pid} <- Process.start(command, policy, owner, ref, backend) do
-      {:ok, %Handle{pid: pid, ref: ref}}
+         {:ok, lease} <- Limiter.acquire(policy.limits, owner, class) do
+      case Process.start(command, policy, owner, ref, backend, lease, class) do
+        {:ok, pid} ->
+          case Limiter.transfer(policy.limits, lease, pid, class) do
+            :ok ->
+              {:ok, %Handle{pid: pid, ref: ref}}
+
+            {:error, reason} ->
+              GenServer.stop(pid)
+              {:error, reason}
+          end
+
+        {:error, reason} ->
+          :ok = Limiter.release(policy.limits, lease, class)
+          {:error, reason}
+      end
     end
   end
 

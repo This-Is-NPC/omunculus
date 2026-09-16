@@ -5,9 +5,23 @@ defmodule Omunculus.Execution.Process do
 
   alias Omunculus.Execution.{Command, Limiter, Policy}
 
-  @spec start(Command.t(), Policy.t(), pid, reference, module) :: {:ok, pid} | {:error, term}
-  def start(command, policy, owner, ref, backend) do
-    GenServer.start(__MODULE__, {command, policy, owner, ref, backend})
+  @spec start(Command.t(), Policy.t(), pid, reference, module, reference, Limiter.class()) ::
+          {:ok, pid} | {:error, term}
+  def start(command, policy, owner, ref, backend, lease, class) do
+    DynamicSupervisor.start_child(
+      Omunculus.Execution.ProcessSupervisor,
+      {__MODULE__, {command, policy, owner, ref, backend, lease, class}}
+    )
+  end
+
+  def start_link(args), do: GenServer.start_link(__MODULE__, args)
+
+  def child_spec(args) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [args]},
+      restart: :temporary
+    }
   end
 
   @spec write(pid, iodata) :: :ok | {:error, term}
@@ -20,16 +34,17 @@ defmodule Omunculus.Execution.Process do
   def stop(pid, reason), do: GenServer.call(pid, {:stop, reason})
 
   @impl true
-  def init({command, policy, owner, ref, backend}) do
+  def init({command, policy, owner, ref, backend, lease, class}) do
     Process.flag(:trap_exit, true)
 
-    with :ok <- Limiter.acquire(policy.limits),
-         {:ok, handle} <- backend.start(command, policy, self(), ref) do
+    with {:ok, handle} <- backend.start(command, policy, self(), ref) do
       {:ok,
        %{
          backend: backend,
          handle: handle,
          limits: policy.limits,
+         lease: lease,
+         class: class,
          owner: owner,
          owner_monitor: Process.monitor(owner),
          ref: ref,
@@ -41,7 +56,6 @@ defmodule Omunculus.Execution.Process do
        }}
     else
       {:error, reason} ->
-        Limiter.release(policy.limits)
         {:stop, reason}
     end
   end
@@ -114,7 +128,7 @@ defmodule Omunculus.Execution.Process do
     if is_map(state) and not state.released do
       state.backend.stop(state.handle, :owner_stopped)
       state.backend.cleanup(state.handle)
-      Limiter.release(state.limits)
+      Limiter.release(state.limits, state.lease, state.class)
     end
 
     :ok
@@ -150,7 +164,7 @@ defmodule Omunculus.Execution.Process do
     end
 
     state.backend.cleanup(state.handle)
-    Limiter.release(state.limits)
+    Limiter.release(state.limits, state.lease, state.class)
     {:stop, :normal, %{state | released: true}}
   end
 
