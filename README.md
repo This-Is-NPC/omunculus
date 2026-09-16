@@ -61,18 +61,22 @@ and disk quotas are not configured.
 
 ## Verification
 
-Run the regular suite with:
+Verification is implemented as executable scripts in `mise-tasks/`. Run the
+regular suite with:
 
 ```sh
-mise exec -- mix test --exclude cargo --exclude sandbox
+mise run validate:regular
 ```
 
 The `sandbox` tests require a Linux environment where Bubblewrap can create a
 network namespace. Run them in that environment with:
 
 ```sh
-mise exec -- mix test --include sandbox --exclude cargo
+mise run validate:sandbox
 ```
+
+`mise run pre-commit` checks formatting and `mise run pre-push` runs the
+regular suite. Those task scripts can also be invoked by Git hooks.
 
 The live OpenAI-compatible model test additionally requires `--include
 local_model`, `OMUNCULUS_OPENAI_URL`, and `OMUNCULUS_OPENAI_MODEL`.

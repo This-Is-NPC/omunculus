@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Run regular validation before a push"
+set -euo pipefail
+
+project_root="${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+
+exec "$project_root/mise-tasks/validate/regular"

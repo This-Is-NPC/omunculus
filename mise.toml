@@ -6,7 +6,3 @@ rebar = "3.27.0"
 
 [env]
 MIX_REBAR3 = "rebar3"
-
-[tasks.test]
-description = "Run the Mix test suite"
-run = "mix test"

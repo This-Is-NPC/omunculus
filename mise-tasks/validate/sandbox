@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#MISE description="Run Bubblewrap integration tests on a supported Linux host"
+set -euo pipefail
+
+project_root="${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+cd "$project_root"
+
+if ! command -v bwrap >/dev/null; then
+  printf '%s\n' 'Bubblewrap is required to run sandbox validation.' >&2
+  exit 1
+fi
+
+if ! bwrap \
+  --unshare-all \
+  --unshare-user \
+  --die-with-parent \
+  --new-session \
+  --clearenv \
+  --tmpfs / \
+  --proc /proc \
+  --dev /dev \
+  --ro-bind /usr /usr \
+  --symlink usr/bin /bin \
+  --symlink usr/lib /lib \
+  --symlink usr/lib /lib64 \
+  --symlink usr/sbin /sbin \
+  -- /usr/bin/true; then
+  printf '%s\n' 'Bubblewrap cannot create the required namespaces on this host.' >&2
+  exit 1
+fi
+
+exec mix test --include sandbox --exclude cargo

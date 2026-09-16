@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#MISE description="Check formatting before a commit"
+set -euo pipefail
+
+project_root="${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+cd "$project_root"
+
+exec mix format --check-formatted
