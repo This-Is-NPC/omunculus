@@ -15,10 +15,10 @@ defmodule Omunculus.Run do
   `tool_search` is among them and there are more than 12, only the cards
   of the `store`, `sequence` or `catalog` groups, plus a count of the
   rest, since the model can search for the others — lets the model call
-  tools through the harness, and closes the run when the model is done or
-  a call it made ended the run with a decision. Once closed, a work whose
-  sequence is off
-  and that has a parent is finished, and the replay of this run is handed
+  tools through the harness, and closes the run when the model is done,
+  when a call it made ended the run with a decision, or when the model
+  fails. Once closed, a work whose sequence is off and that has a parent
+  is finished, and the replay of this run is handed
   to `Omunculus.Harness.follow_up/3` so the next run, if any, opens
   before this one returns. Nobody waits.
   """
@@ -302,6 +302,8 @@ defmodule Omunculus.Run do
     result =
       try do
         model.(assembled, call)
+      rescue
+        exception -> {:error, {:model_crashed, exception}}
       catch
         :throw, {:run_ended, ^run_id} -> :ended
       end
@@ -319,7 +321,7 @@ defmodule Omunculus.Run do
         end
 
       {:error, _reason} = error ->
-        error
+        with {:ok, _event} <- Store.close_run(project.conn, run.id), do: error
     end
   end
 

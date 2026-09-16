@@ -9,7 +9,7 @@ defmodule Mix.Tasks.Omunculus do
 
   @impl Mix.Task
   def run(argv) do
-    Mix.Task.run("app.config")
+    Mix.Task.run("app.start")
     Omunculus.CLI.main(argv)
   end
 end

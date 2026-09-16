@@ -47,6 +47,42 @@ defmodule Omunculus.RunTest do
   defp open(prompt_id, work_id \\ nil),
     do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: nil, agent: nil}
 
+  test "a model that raises leaves the run done and returns the crash", %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    project = open_project(dir)
+    prompt_id = message(project.conn)
+
+    assert {:error, {:model_crashed, %RuntimeError{message: "boom"}}} =
+             Run.open(project, open(prompt_id), fn _assembled, _call -> raise "boom" end)
+
+    assert {:ok, [run]} = Store.Query.all(project.conn, "SELECT status FROM runs")
+    assert run.status == "done"
+  end
+
+  test "a model that fails leaves the run done and returns its error", %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    project = open_project(dir)
+    prompt_id = message(project.conn)
+
+    assert {:error, {:openai, :down}} =
+             Run.open(project, open(prompt_id), fn _assembled, _call ->
+               {:error, {:openai, :down}}
+             end)
+
+    assert {:ok, [run]} = Store.Query.all(project.conn, "SELECT status FROM runs")
+    assert run.status == "done"
+  end
+
   test "a model calling a project tool leaves a start-run, tool, model, end-run replay", %{
     dir: dir
   } do
