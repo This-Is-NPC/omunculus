@@ -1,7 +1,7 @@
 defmodule Omunculus.PresetTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Fixtures, Id, Project}
+  alias Omunculus.{CLI, Config, Fixtures, Id, Project}
   alias Omunculus.Model.Fake
   alias Omunculus.Store.Query
 
@@ -38,10 +38,12 @@ defmodule Omunculus.PresetTest do
   end
 
   describe "codex-like" do
-    test "applying the preset switches the run to the codex agent, with bash, read and write, and bash runs",
+    test "a codex run with network access executes bash through its policy",
          %{dir: dir} do
       assert {:ok, "preset codex-like aplicado"} =
                CLI.run(["preset", "codex-like"], dir, fake())
+
+      assert :ok = Config.grant(dir, {:agent, "codex"}, "sandbox.network")
 
       model = fn assembled, _tools, call ->
         assert assembled =~ "You are a Codex-style coding agent"

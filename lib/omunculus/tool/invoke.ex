@@ -26,7 +26,10 @@ defmodule Omunculus.Tool.Invoke do
 
   def call(%Manifest{module: module}, input, execution) when is_binary(module) do
     with {:ok, mod} <- resolve_module(module) do
-      mod |> run_module(input, execution) |> validate()
+      case run_module(mod, input, execution) do
+        {:error, _reason} = error -> error
+        decoded -> validate(decoded)
+      end
     end
   end
 
@@ -52,12 +55,17 @@ defmodule Omunculus.Tool.Invoke do
       else: module.run(input)
   end
 
-  defp run_module(module, input, nil), do: module.run(input)
+  defp run_module(module, input, nil) do
+    if function_exported?(module, :run, 1),
+      do: module.run(input),
+      else: {:error, :execution_context_required}
+  end
 
   defp resolve_module(module) do
     atom = String.to_existing_atom("Elixir." <> module)
 
-    if Code.ensure_loaded?(atom) and function_exported?(atom, :run, 1) do
+    if Code.ensure_loaded?(atom) and
+         (function_exported?(atom, :run, 1) or function_exported?(atom, :run, 2)) do
       {:ok, atom}
     else
       {:error, {:no_module, module}}

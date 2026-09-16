@@ -2,7 +2,7 @@ name = "bash"
 kind = "tool"
 shape = "simple"
 triggers = ["model"]
-description = "Roda um comando no shell, na raiz do projeto."
+description = "Runs a shell command in the workspace."
 tags = ["shell"]
 module = "Omunculus.Tools.Bash"
 
