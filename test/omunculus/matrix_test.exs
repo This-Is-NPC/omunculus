@@ -1,7 +1,7 @@
 defmodule Omunculus.MatrixTest do
   @moduledoc """
-  Walks the eight D0/D1 × H0/H1 × W0/W1 cells of spec §6 through the same
-  "conte até 5" task, driven by `Omunculus.Model.Battery`.
+  Walks the twelve D0/D1/D2 × H0/H1 × W0/W1 cells of spec §6 through the
+  same "conte até 5" task, driven by `Omunculus.Model.Battery`.
   """
 
   use ExUnit.Case, async: true
@@ -12,10 +12,14 @@ defmodule Omunculus.MatrixTest do
 
   @concierge_d0_tools ~w(bench break continue fs.read store)
   @concierge_d1_tools ~w(break catalog continue delegate fs.read store)
+  @concierge_d2_tools ~w(catalog delegate fs.read sequence store)
   @worker_tools ~w(bench break comment continue fs.read notify request_access)
+  @worker_d2_tools ~w(bench comment continue fs.read notify request_access)
+  @manager_tools ~w(delegate fs.read sequence store)
 
   @concierge_text "Você é o concierge do projeto. Leia a message, use as tools em `tools.*` quando precisar e responda."
   @worker_text "Você é o worker. Faça o work que recebeu, comente o progresso e chame continue quando terminar a etapa."
+  @manager_text "Você é o manager. Delegue para quem está abaixo e revise quando o work voltar."
   @observer_text "Você é o observer. Registre o aviso."
 
   setup do
@@ -39,15 +43,20 @@ defmodule Omunculus.MatrixTest do
     """
   end
 
-  defp worker_section do
+  defp agent_section(name, depth, tools, text) do
     """
 
-    [agents.worker]
-    depth = 1
-    tools = #{inspect(@worker_tools)}
-    text = "#{@worker_text}"
+    [agents.#{name}]
+    depth = #{depth}
+    tools = #{inspect(tools)}
+    text = "#{text}"
     """
   end
+
+  defp worker_section(tools \\ @worker_tools, depth \\ 1),
+    do: agent_section("worker", depth, tools, @worker_text)
+
+  defp manager_section, do: agent_section("manager", 1, @manager_tools, @manager_text)
 
   defp config_toml(0, false), do: concierge_section(@concierge_d0_tools)
 
@@ -80,6 +89,29 @@ defmodule Omunculus.MatrixTest do
       ]
 
       [policy.depth.1]
+      workflow = "delivery"
+      """
+  end
+
+  defp config_toml(2, false) do
+    concierge_section(@concierge_d2_tools) <>
+      manager_section() <>
+      worker_section(@worker_d2_tools, 2)
+  end
+
+  defp config_toml(2, true) do
+    concierge_section(@concierge_d2_tools) <>
+      manager_section() <>
+      worker_section(@worker_d2_tools, 2) <>
+      """
+
+      [workflows.delivery]
+      steps = [
+        { name = "to_do", agent = "worker" },
+        { name = "review", agent = "manager", deny = ["bench"] },
+      ]
+
+      [policy.depth.2]
       workflow = "delivery"
       """
   end
@@ -182,6 +214,24 @@ defmodule Omunculus.MatrixTest do
     assert length(parent_runs) >= 2
   end
 
+  defp assert_worker_ran_at_depth_two(conn) do
+    assert {:ok, [_worker_run]} =
+             Query.all(conn, "SELECT * FROM runs WHERE agent = 'worker' AND depth = '2'")
+  end
+
+  defp assert_reopened_to_root(conn, work) do
+    assert {:ok, manager_work} =
+             Query.one(conn, "SELECT * FROM works WHERE id = ?", [work.parent_id])
+
+    assert manager_work.state == "done"
+
+    assert {:ok, root} =
+             Query.one(conn, "SELECT * FROM works WHERE id = ?", [manager_work.parent_id])
+
+    assert root.parent_id == nil
+    assert root.state == "open"
+  end
+
   test "D0-H0-W0", %{dir: dir} do
     run_cell(dir, 0, false, false)
     project = open(dir)
@@ -279,6 +329,64 @@ defmodule Omunculus.MatrixTest do
     work = assert_counted_to_five(dir, project.conn)
     assert_workflow_on(project.conn, work)
     assert_child_delegated(project.conn)
+    assert_observer_reacted(project.conn)
+
+    Project.close(project)
+  end
+
+  test "D2-H0-W0", %{dir: dir} do
+    run_cell(dir, 2, false, false)
+    project = open(dir)
+
+    work = assert_counted_to_five(dir, project.conn)
+    assert work.state == "done"
+    assert_worker_ran_at_depth_two(project.conn)
+    assert_reopened_to_root(project.conn, work)
+
+    assert_workflow_off(project.conn)
+    refute_observer_reacted(project.conn)
+
+    Project.close(project)
+  end
+
+  test "D2-H1-W0", %{dir: dir} do
+    run_cell(dir, 2, true, false)
+    project = open(dir)
+
+    work = assert_counted_to_five(dir, project.conn)
+    assert work.state == "done"
+    assert_worker_ran_at_depth_two(project.conn)
+    assert_reopened_to_root(project.conn, work)
+
+    assert_workflow_off(project.conn)
+    assert_observer_reacted(project.conn)
+
+    Project.close(project)
+  end
+
+  test "D2-H0-W1", %{dir: dir} do
+    run_cell(dir, 2, false, true)
+    project = open(dir)
+
+    work = assert_counted_to_five(dir, project.conn)
+    assert_worker_ran_at_depth_two(project.conn)
+    assert_workflow_on(project.conn, work)
+    assert_reopened_to_root(project.conn, work)
+
+    refute_observer_reacted(project.conn)
+
+    Project.close(project)
+  end
+
+  test "D2-H1-W1", %{dir: dir} do
+    run_cell(dir, 2, true, true)
+    project = open(dir)
+
+    work = assert_counted_to_five(dir, project.conn)
+    assert_worker_ran_at_depth_two(project.conn)
+    assert_workflow_on(project.conn, work)
+    assert_reopened_to_root(project.conn, work)
+
     assert_observer_reacted(project.conn)
 
     Project.close(project)
