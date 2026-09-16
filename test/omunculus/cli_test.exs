@@ -1348,4 +1348,257 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
   end
+
+  describe "v1.1: compact and reviewer" do
+    test "compact through the run cycle", %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "concierge"
+      tools = ["comment", "compact_comments", "work"]
+      """)
+
+      model1 = fn _assembled, call ->
+        assert {:ok, ""} = call.("work", %{"title" => "Contagem"})
+        assert {:ok, ""} = call.("comment", %{"body" => "um"})
+        assert {:ok, ""} = call.("comment", %{"body" => "dois"})
+        assert {:ok, ""} = call.("comment", %{"body" => "três"})
+        {:ok, "ok"}
+      end
+
+      assert {:ok, ""} = CLI.run(["send", "conta os passos"], dir, model1)
+
+      project = open(dir)
+      assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
+      assert {:ok, comments} = Store.view(project.conn, "comments.work", work.id)
+      assert Enum.map(comments, & &1.body) == ["um", "dois", "três"]
+      Project.close(project)
+
+      test_pid = self()
+
+      model2 = fn _assembled, call ->
+        assert {:ok, load_output} = call.("compact_comments", %{"op" => "load"})
+        send(test_pid, {:load_output, load_output})
+
+        assert {:ok, ""} =
+                 call.("compact_comments", %{"op" => "commit", "summary" => "resumo: 1 2 3"})
+
+        {:ok, "compactado"}
+      end
+
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "compacta"], dir, model2)
+
+      assert_received {:load_output, load_output}
+      expected = comments |> Enum.map(&"#{&1.id} #{&1.author}: #{&1.body}") |> Enum.join("\n")
+      assert load_output == expected
+
+      project = open(dir)
+
+      assert {:ok, [summary]} = Store.view(project.conn, "comments.work", work.id)
+      assert summary.body == "resumo: 1 2 3"
+
+      assert {:ok, work_events} = Store.replay(project.conn, {:work, work.id})
+      comment_events = Enum.filter(work_events, &(&1.type == "comment"))
+      assert Enum.map(comment_events, & &1.comment_id) == Enum.map(comments, & &1.id)
+
+      compact_event = Enum.find(work_events, &(&1.type == "compact"))
+      assert compact_event
+      assert Jason.decode!(compact_event.body)["deleted"] == Enum.map(comments, & &1.id)
+
+      assert {:ok, [_run1, run2]} =
+               Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+
+      assert {:ok, run2_events} = Store.replay(project.conn, {:run, run2.id})
+      assert tool_event_names(run2_events) |> Enum.count(&(&1 == "compact_comments")) == 2
+
+      Project.close(project)
+
+      model3 = fn assembled, _call ->
+        send(test_pid, {:third_assembled, assembled})
+        {:ok, "visto"}
+      end
+
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "mais"], dir, model3)
+
+      assert_received {:third_assembled, third_assembled}
+      assert third_assembled =~ "## Last comment\nresumo: 1 2 3"
+      refute third_assembled =~ ~r/^um$/m
+      refute third_assembled =~ ~r/^dois$/m
+      refute third_assembled =~ ~r/^três$/m
+    end
+
+    test "compact refuses another work", %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "concierge"
+      tools = ["comment", "compact_comments", "foreign_compact", "work"]
+      """)
+
+      project = open(dir)
+      my_work_id = Fixtures.insert(project.conn, :works, %{title: "Meu work"})
+      other_work_id = Fixtures.insert(project.conn, :works, %{title: "Outro work"})
+
+      other_comment_id =
+        Fixtures.insert(project.conn, :comments, %{work_id: other_work_id, body: "não toque"})
+
+      Project.close(project)
+
+      write_emit_tool(
+        dir,
+        "foreign_compact",
+        ~s({"ok": true, "output": "", "emit": [{"type": "compact", "body": {"work_id": "#{other_work_id}", "summary": "roubado"}}]})
+      )
+
+      model = fn _assembled, call ->
+        assert {:error, {:compact, :foreign_work}} = call.("foreign_compact", %{})
+        {:ok, "ok"}
+      end
+
+      assert {:ok, ""} = CLI.run(["send", "--work_id", my_work_id, "compacta"], dir, model)
+
+      project = open(dir)
+
+      assert {:ok, [comment]} = Store.view(project.conn, "comments.work", other_work_id)
+      assert comment.id == other_comment_id
+      assert comment.body == "não toque"
+
+      Project.close(project)
+    end
+
+    test "reviewer runs the review stage without fs.write", %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "Sou o concierge."
+      tools = ["catalog", "delegate", "fs.read", "sequence", "store"]
+
+      [agents.worker]
+      depth = 1
+      text = "Sou o worker."
+      tools = ["comment", "continue", "fs.read", "fs.write"]
+
+      [agents.reviewer]
+      depth = 1
+      workflow_only = true
+      text = "Você é o reviewer."
+      tools = ["comment", "continue", "fs.read", "notify"]
+
+      [workflows.delivery]
+      steps = [
+        { name = "to_do", agent = "worker" },
+        { name = "review", agent = "reviewer", deny = ["fs.write"] },
+      ]
+
+      [policy.depth.1]
+      workflow = "delivery"
+      """)
+
+      model = fn assembled, call ->
+        cond do
+          assembled =~ "Você é o reviewer." ->
+            call.("continue", %{})
+            {:ok, "revisado"}
+
+          assembled =~ "Sou o worker." ->
+            assert {:ok, ""} = call.("comment", %{"body" => "feito"})
+            call.("continue", %{})
+            {:ok, "unused"}
+
+          assembled =~ "## Work" ->
+            {:ok, "acompanhando"}
+
+          true ->
+            assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
+
+            assert {:ok, ""} =
+                     call.("delegate", %{"title" => "Sub task", "body" => "faça isso"})
+
+            {:ok, "unused"}
+        end
+      end
+
+      assert {:ok, ""} = CLI.run(["send", "Ship it please"], dir, model)
+
+      project = open(dir)
+
+      assert {:ok, [reviewer_run]} =
+               Query.all(project.conn, "SELECT * FROM runs WHERE agent = 'reviewer'")
+
+      assert reviewer_run.depth == "1"
+      assert reviewer_run.via == "continue"
+
+      tools = Jason.decode!(reviewer_run.tools)
+      assert "read" in tools
+      assert "comment" in tools
+      refute "write" in tools
+      refute "edit" in tools
+
+      assert {:ok, assembled} =
+               Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [
+                 reviewer_run.prompt_id
+               ])
+
+      assert assembled.body =~ "## Last comment\nfeito"
+      refute assembled.body =~ "- write:"
+
+      assert {:ok, works} = Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
+      [parent, child] = works
+      assert child.state == "done"
+      assert parent.state == "open"
+
+      Project.close(project)
+    end
+
+    test "workflow off: reviewer is absent", %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "Sou o concierge."
+      tools = ["work", "delegate", "comment"]
+
+      [agents.worker]
+      depth = 1
+      text = "Sou o worker."
+      tools = ["comment"]
+
+      [agents.reviewer]
+      depth = 1
+      workflow_only = true
+      text = "Você é o reviewer."
+      tools = ["comment"]
+      """)
+
+      model = fn assembled, call ->
+        cond do
+          assembled =~ "Sou o worker." ->
+            {:ok, "feito"}
+
+          assembled =~ "## Work" ->
+            {:ok, "acompanhando"}
+
+          true ->
+            assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
+
+            assert {:ok, ""} =
+                     call.("delegate", %{"title" => "Sub task", "body" => "faça isso"})
+
+            {:ok, "unused"}
+        end
+      end
+
+      assert {:ok, ""} = CLI.run(["send", "Ship it please"], dir, model)
+
+      project = open(dir)
+
+      assert {:ok, [child_run]} =
+               Query.all(project.conn, "SELECT * FROM runs WHERE agent = 'worker'")
+
+      assert child_run.depth == "1"
+
+      assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs WHERE agent = 'reviewer'")
+
+      Project.close(project)
+    end
+  end
 end

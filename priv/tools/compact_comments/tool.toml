@@ -1,0 +1,25 @@
+name = "compact_comments"
+kind = "tool"
+shape = "composite"
+triggers = ["model"]
+description = "Resume comments do work e regrava a linha: load lê, commit grava o resumo."
+tags = ["comments", "compact", "work"]
+views = ["comments.work"]
+module = "Omunculus.Tools.CompactComments"
+
+[parameters]
+type = "object"
+required = ["op"]
+
+[parameters.properties.op]
+type = "string"
+enum = ["load", "commit"]
+
+[parameters.properties.summary]
+type = "string"
+
+[parameters.properties.ids]
+type = "array"
+
+[parameters.properties.ids.items]
+type = "string"
