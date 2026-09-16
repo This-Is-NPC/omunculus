@@ -931,13 +931,32 @@ defmodule Omunculus.Store.ActionsTest do
       assert event.type == "request"
     end
 
-    test "an invalid kind is rejected and writes nothing", %{conn: conn} do
+    test "an empty kind is rejected and writes nothing", %{conn: conn} do
       run = open_run(conn, @ceiling)
 
       assert {:error, {:request, {:invalid, :kind}}} =
-               record_tool(conn, [request_emit("mcp", "write", "why")], request_ctx(run))
+               record_tool(conn, [request_emit("", "write", "why")], request_ctx(run))
 
       assert count(conn, "events") == 1
+    end
+
+    test "a custom kind opens a request classified by name, not kind", %{conn: conn} do
+      run = open_run(conn, @ceiling)
+      work_id = Fixtures.insert(conn, :works)
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [request_emit("secret", "vault", "preciso do segredo")],
+                 request_ctx(run, work_id)
+               )
+
+      assert event.type == "request"
+
+      assert {:ok, request} =
+               Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
+
+      assert Jason.decode!(request.ask) == %{"kind" => "secret", "name" => "vault"}
     end
 
     test "a missing name is rejected and writes nothing", %{conn: conn} do

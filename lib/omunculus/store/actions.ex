@@ -15,7 +15,6 @@ defmodule Omunculus.Store.Actions do
   alias Omunculus.Store.{Events, Query, View}
 
   @comment_targets %{"work_id" => :works, "request_id" => :requests, "inbox_id" => :inbox}
-  @request_kinds ~w(tool path directory)
   @reply_decisions ~w(grant deny)
   @reply_scopes ~w(agent depth)
 
@@ -228,7 +227,7 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
-  defp ensure_kind(kind) when kind in @request_kinds, do: :ok
+  defp ensure_kind(kind) when is_binary(kind) and kind != "", do: :ok
   defp ensure_kind(_kind), do: {:error, {:request, {:invalid, :kind}}}
 
   defp ensure_name(name) when is_binary(name) and name != "", do: :ok
