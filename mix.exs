@@ -25,7 +25,8 @@ defmodule Omunculus.MixProject do
     [
       {:jason, "~> 1.4"},
       {:toml, "~> 0.7"},
-      {:exqlite, "~> 0.40"}
+      {:exqlite, "~> 0.40"},
+      {:req, "~> 0.5"}
     ]
   end
 end

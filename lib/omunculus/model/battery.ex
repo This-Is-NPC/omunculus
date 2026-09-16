@@ -5,9 +5,14 @@ defmodule Omunculus.Model.Battery do
   `## Tools`, the presence of `## Work`, the text under `## Last
   comment` and the agent's own first line — opening the work when there
   is none, delegating when it can, counting to 5 with `counter`
-  otherwise, reviewing a finished count on the next opening, and reacting
-  as an observer when addressed as one.
+  otherwise, delegating one more floor down when it still cannot count
+  and has not already (marked by its own "delegado" comment, so a later
+  reopening of the same work does not delegate again), reviewing a
+  finished count on the next opening, and reacting as an observer when
+  addressed as one.
   """
+
+  alias Omunculus.Model.Cards
 
   @spec complete(String.t(), (String.t(), map -> {:ok, String.t()} | {:error, term})) ::
           {:ok, String.t()}
@@ -25,8 +30,7 @@ defmodule Omunculus.Model.Battery do
     call.("work", %{"title" => "Contar até 5"})
 
     if MapSet.member?(cards, "delegate") do
-      call.("delegate", %{"title" => "Conte até 5", "body" => "conte com counter até 5"})
-      {:ok, "delegado"}
+      delegate_down(cards, call)
     else
       count(%{parsed | work: true}, call)
     end
@@ -44,6 +48,12 @@ defmodule Omunculus.Model.Battery do
     end
   end
 
+  defp delegate_down(cards, call) do
+    if MapSet.member?(cards, "comment"), do: call.("comment", %{"body" => "delegado"})
+    call.("delegate", %{"title" => "Conte até 5", "body" => "conte com counter até 5"})
+    {:ok, "delegado"}
+  end
+
   defp count_to_five(_call, 0), do: :ok
 
   defp count_to_five(call, remaining) do
@@ -54,11 +64,16 @@ defmodule Omunculus.Model.Battery do
   end
 
   defp review(%{last_comment: comment, cards: cards} = parsed, call) do
-    if reviewable?(comment, cards) do
-      call.("continue", %{})
-      {:ok, "revisado"}
-    else
-      observe(parsed, call)
+    cond do
+      reviewable?(comment, cards) ->
+        call.("continue", %{})
+        {:ok, "revisado"}
+
+      MapSet.member?(cards, "delegate") and not delegated?(comment) ->
+        delegate_down(cards, call)
+
+      true ->
+        observe(parsed, call)
     end
   end
 
@@ -66,6 +81,8 @@ defmodule Omunculus.Model.Battery do
     do:
       is_binary(comment) and String.contains?(comment, "contei até 5") and
         MapSet.member?(cards, "continue")
+
+  defp delegated?(comment), do: is_binary(comment) and String.contains?(comment, "delegado")
 
   defp observe(%{agent_line: line, cards: cards, work: work?}, call) do
     if String.contains?(line, "observer") and MapSet.member?(cards, "comment") and work? do
@@ -78,17 +95,11 @@ defmodule Omunculus.Model.Battery do
 
   defp parse(assembled) do
     %{
-      cards: card_names(assembled),
+      cards: Cards.names(assembled),
       work: String.contains?(assembled, "## Work"),
       last_comment: last_comment(assembled),
       agent_line: assembled |> String.split("\n", parts: 2) |> List.first() || ""
     }
-  end
-
-  defp card_names(assembled) do
-    ~r/^- ([^\s:]+):/m
-    |> Regex.scan(assembled)
-    |> MapSet.new(fn [_line, name] -> name end)
   end
 
   defp last_comment(assembled) do
