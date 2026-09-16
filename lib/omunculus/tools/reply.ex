@@ -5,7 +5,7 @@ defmodule Omunculus.Tools.Reply do
   for a permanent ceiling grant. Triggered from both the CLI and a model.
   """
 
-  alias Omunculus.Tools.Args
+  alias Omunculus.Tools.{Args, Out}
 
   @required ~w(request_id decision body)
 
@@ -21,10 +21,10 @@ defmodule Omunculus.Tools.Reply do
           }
           |> Args.put_present("scope", args)
 
-        %{"ok" => true, "output" => "", "emit" => [%{"type" => "reply", "body" => body}]}
+        Out.ok("", [%{"type" => "reply", "body" => body}])
 
       message ->
-        %{"ok" => false, "output" => message, "emit" => []}
+        Out.fail(message)
     end
   end
 end

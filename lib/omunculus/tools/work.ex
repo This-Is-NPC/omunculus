@@ -4,7 +4,7 @@ defmodule Omunculus.Tools.Work do
   its `title` as a `work` emit. It does not name stage, agent or model.
   """
 
-  alias Omunculus.Tools.Args
+  alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
   def run(%{args: %{"title" => title} = args}) when is_binary(title) and title != "" do
@@ -13,10 +13,10 @@ defmodule Omunculus.Tools.Work do
       |> Args.put_present("work_id", args)
       |> Args.put_present("parent_id", args)
 
-    %{"ok" => true, "output" => "", "emit" => [%{"type" => "work", "body" => body}]}
+    Out.ok("", [%{"type" => "work", "body" => body}])
   end
 
   def run(_input) do
-    %{"ok" => false, "output" => "title required", "emit" => []}
+    Out.fail("title required")
   end
 end

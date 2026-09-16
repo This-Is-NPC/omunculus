@@ -5,7 +5,7 @@ defmodule Omunculus.Tools.RequestAccess do
   run's ceiling and decides whether it opens a `REQUESTS` row.
   """
 
-  alias Omunculus.Tools.Args
+  alias Omunculus.Tools.{Args, Out}
 
   @required ~w(kind name reason)
 
@@ -14,10 +14,10 @@ defmodule Omunculus.Tools.RequestAccess do
     case Args.missing(args, @required) do
       nil ->
         body = %{"kind" => args["kind"], "name" => args["name"], "reason" => args["reason"]}
-        %{"ok" => true, "output" => "", "emit" => [%{"type" => "request", "body" => body}]}
+        Out.ok("", [%{"type" => "request", "body" => body}])
 
       message ->
-        %{"ok" => false, "output" => message, "emit" => []}
+        Out.fail(message)
     end
   end
 end

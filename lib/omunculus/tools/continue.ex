@@ -4,8 +4,10 @@ defmodule Omunculus.Tools.Continue do
   agent or model — the workflow TOML decides the next step.
   """
 
+  alias Omunculus.Tools.Out
+
   @spec run(map) :: map
   def run(_input) do
-    %{"ok" => true, "output" => "", "emit" => [%{"type" => "continue", "body" => %{}}]}
+    Out.ok("", [%{"type" => "continue", "body" => %{}}])
   end
 end

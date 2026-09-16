@@ -4,7 +4,7 @@ defmodule Omunculus.Tools.Break do
   sequence does not advance.
   """
 
-  alias Omunculus.Tools.Args
+  alias Omunculus.Tools.{Args, Out}
 
   @required ~w(body)
 
@@ -13,10 +13,10 @@ defmodule Omunculus.Tools.Break do
     case Args.missing(args, @required) do
       nil ->
         body = %{"body" => args["body"]}
-        %{"ok" => true, "output" => "", "emit" => [%{"type" => "break", "body" => body}]}
+        Out.ok("", [%{"type" => "break", "body" => body}])
 
       message ->
-        %{"ok" => false, "output" => message, "emit" => []}
+        Out.fail(message)
     end
   end
 end

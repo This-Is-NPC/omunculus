@@ -4,21 +4,21 @@ defmodule Omunculus.Tools.Comment do
   named in `args["work_id"]` or falling back to the run's own `work_id`.
   """
 
-  alias Omunculus.Tools.Args
+  alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
   def run(%{args: %{"body" => text} = args} = input) when is_binary(text) and text != "" do
     case Args.present(args, "work_id") || input.work_id do
       nil ->
-        %{"ok" => false, "output" => "no work to comment on", "emit" => []}
+        Out.fail("no work to comment on")
 
       work_id ->
         body = %{"work_id" => work_id, "body" => text}
-        %{"ok" => true, "output" => "", "emit" => [%{"type" => "comment", "body" => body}]}
+        Out.ok("", [%{"type" => "comment", "body" => body}])
     end
   end
 
   def run(_input) do
-    %{"ok" => false, "output" => "body required", "emit" => []}
+    Out.fail("body required")
   end
 end

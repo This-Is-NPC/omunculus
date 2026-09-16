@@ -4,7 +4,7 @@ defmodule Omunculus.Tools.Delegate do
   to whoever is below. The parent waits.
   """
 
-  alias Omunculus.Tools.Args
+  alias Omunculus.Tools.{Args, Out}
 
   @required ~w(title body)
 
@@ -13,10 +13,10 @@ defmodule Omunculus.Tools.Delegate do
     case Args.missing(args, @required) do
       nil ->
         body = %{"title" => args["title"], "body" => args["body"]}
-        %{"ok" => true, "output" => "", "emit" => [%{"type" => "delegate", "body" => body}]}
+        Out.ok("", [%{"type" => "delegate", "body" => body}])
 
       message ->
-        %{"ok" => false, "output" => message, "emit" => []}
+        Out.fail(message)
     end
   end
 end

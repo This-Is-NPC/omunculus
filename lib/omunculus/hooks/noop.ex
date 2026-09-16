@@ -4,6 +4,8 @@ defmodule Omunculus.Hooks.Noop do
   `on-notify`, `on-continue` and `on-break` until a project overrides them.
   """
 
+  alias Omunculus.Tools.Out
+
   @spec run(map) :: map
-  def run(_input), do: %{"ok" => true, "output" => "", "emit" => []}
+  def run(_input), do: Out.ok()
 end

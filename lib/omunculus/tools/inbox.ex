@@ -4,6 +4,8 @@ defmodule Omunculus.Tools.Inbox do
   the `inbox` view.
   """
 
+  alias Omunculus.Tools.Out
+
   @spec run(map) :: map
   def run(%{view: view}) do
     output =
@@ -12,7 +14,7 @@ defmodule Omunculus.Tools.Inbox do
         items -> items |> Enum.map(&line/1) |> Enum.join("\n")
       end
 
-    %{"ok" => true, "output" => output, "emit" => []}
+    Out.ok(output)
   end
 
   defp line(%{id: id, agent: agent, body: nil}), do: "#{id} #{agent}: (sem texto)"

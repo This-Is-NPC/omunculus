@@ -4,16 +4,16 @@ defmodule Omunculus.Tools.Send do
   existing work when `work_id` is given, as a `prompt` emit.
   """
 
-  alias Omunculus.Tools.Args
+  alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
   def run(%{args: %{"message" => message} = args}) when is_binary(message) and message != "" do
     body = Args.put_present(%{"message" => message}, "work_id", args)
 
-    %{"ok" => true, "output" => "", "emit" => [%{"type" => "prompt", "body" => body}]}
+    Out.ok("", [%{"type" => "prompt", "body" => body}])
   end
 
   def run(_input) do
-    %{"ok" => false, "output" => "message required", "emit" => []}
+    Out.fail("message required")
   end
 end
