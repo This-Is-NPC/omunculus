@@ -62,7 +62,8 @@ defmodule Omunculus.Store.Runs do
                Jason.encode!(%{
                  agent: params.agent,
                  depth: params.depth,
-                 ceiling: params.ceiling
+                 ceiling: params.ceiling,
+                 execution: params.execution
                })
            }),
          :ok <-

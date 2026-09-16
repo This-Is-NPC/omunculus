@@ -311,7 +311,7 @@ defmodule Omunculus.Harness do
            workspace: workspace.name,
            roots: if(workspace.root, do: [workspace.root], else: [project.dir])
          },
-         {:ok, out} <- Invoke.call(manifest, input),
+         {:ok, out} <- Invoke.call(manifest, input, Map.get(ctx, :execution)),
          emits = if(out.ok, do: out.emit, else: []),
          record = %{name: manifest.name, args: args, ok: out.ok, output: out.output},
          :ok <- check_hook_emits(manifest, emits),

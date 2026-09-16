@@ -6,6 +6,7 @@ defmodule Omunculus.Tool.Invoke do
   the same `validate/1`.
   """
 
+  alias Omunculus.Execution.Policy
   alias Omunculus.Mcp
   alias Omunculus.Tool.Manifest
 
@@ -13,19 +14,23 @@ defmodule Omunculus.Tool.Invoke do
 
   @spec call(Manifest.t(), map) ::
           {:ok, %{ok: boolean, output: String.t(), emit: [map]}} | {:error, term}
-  def call(%Manifest{mcp: mcp} = manifest, input) when not is_nil(mcp) do
+  def call(manifest, input), do: call(manifest, input, nil)
+
+  @spec call(Manifest.t(), map, Policy.t() | nil) ::
+          {:ok, %{ok: boolean, output: String.t(), emit: [map]}} | {:error, term}
+  def call(%Manifest{mcp: mcp} = manifest, input, _execution) when not is_nil(mcp) do
     with {:ok, result} <- Mcp.call(mcp, manifest.name, input.args) do
       validate(%{"ok" => result.ok, "output" => result.output, "emit" => result.emit})
     end
   end
 
-  def call(%Manifest{module: module}, input) when is_binary(module) do
+  def call(%Manifest{module: module}, input, execution) when is_binary(module) do
     with {:ok, mod} <- resolve_module(module) do
-      input |> mod.run() |> validate()
+      mod |> run_module(input, execution) |> validate()
     end
   end
 
-  def call(%Manifest{command: command} = manifest, input) when is_list(command) do
+  def call(%Manifest{command: command} = manifest, input, _execution) when is_list(command) do
     tmp_path = Path.join(System.tmp_dir!(), Omunculus.Id.new())
 
     try do
@@ -40,6 +45,14 @@ defmodule Omunculus.Tool.Invoke do
       File.rm(tmp_path)
     end
   end
+
+  defp run_module(module, input, %Policy{} = execution) do
+    if function_exported?(module, :run, 2),
+      do: module.run(input, execution),
+      else: module.run(input)
+  end
+
+  defp run_module(module, input, nil), do: module.run(input)
 
   defp resolve_module(module) do
     atom = String.to_existing_atom("Elixir." <> module)

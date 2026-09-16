@@ -49,6 +49,7 @@ defmodule Omunculus.Store.ActionsTest do
       agent: "concierge",
       depth: 0,
       ceiling: ceiling,
+      execution: %{"id" => "execution-policy"},
       assembled: "assembled",
       work_id: nil,
       via: nil,

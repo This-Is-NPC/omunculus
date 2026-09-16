@@ -8,6 +8,7 @@ defmodule Omunculus.Run do
   """
 
   alias Omunculus.{Ceiling, Config, Harness, Project, Store}
+  alias Omunculus.Execution.Policy
   alias Omunculus.Tool.{Catalog, Manifest}
 
   @ending_events ~w(request deny grant continue break delegate)
@@ -60,6 +61,7 @@ defmodule Omunculus.Run do
            ),
          names = effective_names(snapshot, catalog),
          tools = effective_tools(names, catalog),
+         {:ok, execution} <- Policy.build(config, snapshot, workspace, project.dir, names),
          assembled =
            assemble(
              text,
@@ -77,6 +79,7 @@ defmodule Omunculus.Run do
              agent: name,
              depth: depth,
              ceiling: snapshot,
+             execution: Policy.serializable(execution),
              assembled: assembled,
              work_id: work_id,
              via: via,
@@ -84,7 +87,7 @@ defmodule Omunculus.Run do
              inbox_id: Map.get(opening, :inbox_id),
              tools: names
            }),
-         call = build_call(project, run, names) do
+         call = build_call(project, run, names, execution) do
       run_model(
         project,
         run,
@@ -295,12 +298,18 @@ defmodule Omunculus.Run do
   defp inbox_section(notifications),
     do: ["## Inbox\n" <> Enum.map_join(notifications, "\n", & &1.body)]
 
-  defp build_call(project, run, names) do
+  defp build_call(project, run, names, execution) do
     allowed = MapSet.new(names)
 
     fn name, args ->
       if MapSet.member?(allowed, name) do
-        ctx = %{trigger: "model", run_id: run.id, author: "agent", agent: run.agent}
+        ctx = %{
+          trigger: "model",
+          run_id: run.id,
+          author: "agent",
+          agent: run.agent,
+          execution: execution
+        }
 
         case Harness.dispatch(project, name, args, ctx) do
           {:ok, out, events} ->

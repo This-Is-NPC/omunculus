@@ -1,7 +1,7 @@
 defmodule Omunculus.Project do
   @moduledoc """
-  A project's store connection: `open/1` opens `omunculus.sqlite3` inside
-  the project directory (spec §4), `close/1` closes it.
+  A project's store connection: `open/1` creates private state under
+  `.omunculus` and opens its SQLite database, `close/1` closes it.
   """
 
   alias Omunculus.Store
@@ -11,9 +11,13 @@ defmodule Omunculus.Project do
 
   @type t :: %__MODULE__{dir: String.t(), conn: Exqlite.Sqlite3.db()}
 
+  @spec state_dir(String.t()) :: String.t()
+  def state_dir(dir), do: Path.join(dir, ".omunculus")
+
   @spec open(String.t()) :: {:ok, t} | {:error, term}
   def open(dir) do
-    with {:ok, conn} <- Store.open(Path.join(dir, "omunculus.sqlite3")) do
+    with :ok <- File.mkdir_p(state_dir(dir)),
+         {:ok, conn} <- Store.open(Path.join(state_dir(dir), "store.sqlite3")) do
       {:ok, %__MODULE__{dir: dir, conn: conn}}
     end
   end

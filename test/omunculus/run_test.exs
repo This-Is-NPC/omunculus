@@ -336,6 +336,9 @@ defmodule Omunculus.RunTest do
 
     assert {:ok, run1} = Run.open(project, open(message(project.conn)), model)
     assert Jason.decode!(run1.tools) == ["a"]
+    assert {:ok, [start1 | _]} = Store.replay(project.conn, {:run, run1.id})
+    policy1 = Jason.decode!(start1.body)["execution"]
+    assert policy1["tools"] == ["a"]
 
     write_config(dir, """
     [agents.concierge]
@@ -346,6 +349,10 @@ defmodule Omunculus.RunTest do
 
     assert {:ok, run2} = Run.open(project, open(message(project.conn)), model)
     assert Jason.decode!(run2.tools) == ["a", "b"]
+    assert {:ok, [start2 | _]} = Store.replay(project.conn, {:run, run2.id})
+    policy2 = Jason.decode!(start2.body)["execution"]
+    assert policy2["tools"] == ["a", "b"]
+    refute policy1["id"] == policy2["id"]
 
     Project.close(project)
   end

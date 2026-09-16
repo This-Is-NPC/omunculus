@@ -5,6 +5,7 @@ defmodule Omunculus.Tools.Bash do
   captured stdout/stderr.
   """
 
+  alias Omunculus.Execution.Policy
   alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
@@ -14,6 +15,9 @@ defmodule Omunculus.Tools.Bash do
       message -> Out.fail(message)
     end
   end
+
+  @spec run(map, Policy.t()) :: map
+  def run(input, %Policy{}), do: run(input)
 
   defp exec([], _command), do: Out.fail("no root")
 
