@@ -8,8 +8,13 @@ defmodule Omunculus.Tools.Directory do
   alias Omunculus.Tools.Out
 
   @spec run(map) :: map
-  def run(%{roots: roots}) do
-    Out.ok(Enum.map_join(roots, "\n\n", &root_block/1))
+  def run(%{roots: roots} = input) do
+    permissions = Omunculus.Tools.Path.permissions(input)
+
+    allowed =
+      Enum.filter(roots, &match?({:ok, _}, Omunculus.Tools.Path.resolve(roots, &1, permissions)))
+
+    Out.ok(Enum.map_join(allowed, "\n\n", &root_block/1))
   end
 
   defp root_block(root) do

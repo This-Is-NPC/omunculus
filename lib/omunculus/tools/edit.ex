@@ -7,15 +7,17 @@ defmodule Omunculus.Tools.Edit do
   alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
-  def run(%{args: args, roots: roots}) do
+  def run(%{args: args, roots: roots} = input) do
+    permissions = Omunculus.Tools.Path.permissions(input)
+
     case Args.missing(args, ~w(path old new)) do
-      nil -> edit(roots, args["path"], args["old"], args["new"])
+      nil -> edit(roots, args["path"], args["old"], args["new"], permissions)
       message -> Out.fail(message)
     end
   end
 
-  defp edit(roots, path, old, new) do
-    with {:ok, absolute} <- Omunculus.Tools.Path.resolve(roots, path),
+  defp edit(roots, path, old, new, permissions) do
+    with {:ok, absolute} <- Omunculus.Tools.Path.resolve(roots, path, permissions),
          {:ok, content} <- File.read(absolute) do
       apply_edit(absolute, content, old, new)
     else

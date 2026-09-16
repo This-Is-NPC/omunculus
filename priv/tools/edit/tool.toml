@@ -1,6 +1,7 @@
 name = "edit"
 kind = "tool"
 shape = "simple"
+views = ["paths"]
 triggers = ["model"]
 description = "Substitui um trecho exato de um arquivo."
 tags = ["fs"]

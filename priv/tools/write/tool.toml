@@ -1,6 +1,7 @@
 name = "write"
 kind = "tool"
 shape = "simple"
+views = ["paths"]
 triggers = ["model"]
 description = "Cria ou sobrescreve um arquivo."
 tags = ["fs"]

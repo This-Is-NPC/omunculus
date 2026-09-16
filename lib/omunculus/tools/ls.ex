@@ -7,13 +7,14 @@ defmodule Omunculus.Tools.Ls do
   alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
-  def run(%{args: args, roots: roots}) do
+  def run(%{args: args, roots: roots} = input) do
+    permissions = Omunculus.Tools.Path.permissions(input)
     path = Args.present(args, "path") || "."
-    list(roots, path)
+    list(roots, path, permissions)
   end
 
-  defp list(roots, path) do
-    with {:ok, absolute} <- Omunculus.Tools.Path.resolve(roots, path),
+  defp list(roots, path, permissions) do
+    with {:ok, absolute} <- Omunculus.Tools.Path.resolve(roots, path, permissions),
          {:ok, entries} <- File.ls(absolute) do
       output = entries |> Enum.sort() |> Enum.map(&entry(absolute, &1)) |> Enum.join("\n")
       Out.ok(output)

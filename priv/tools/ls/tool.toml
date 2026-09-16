@@ -1,6 +1,7 @@
 name = "ls"
 kind = "tool"
 shape = "simple"
+views = ["paths"]
 triggers = ["model"]
 description = "Lista um diretório."
 tags = ["fs"]

@@ -1,6 +1,7 @@
 name = "read"
 kind = "tool"
 shape = "simple"
+views = ["paths"]
 triggers = ["model"]
 description = "Lê um arquivo."
 tags = ["fs"]

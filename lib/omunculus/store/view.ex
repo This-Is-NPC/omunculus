@@ -30,6 +30,8 @@ defmodule Omunculus.Store.View do
           {:ok, [map] | map | nil} | {:error, {:unknown_view, String.t()}}
   def view(conn, name, id)
 
+  def view(conn, "event", id), do: Query.one(conn, "SELECT * FROM events WHERE id = ?", [id])
+
   def view(conn, "events.run", id), do: replay(conn, {:run, id})
 
   def view(conn, "work", id) do

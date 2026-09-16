@@ -1,6 +1,7 @@
 name = "directory"
 kind = "tool"
 shape = "simple"
+views = ["paths"]
 triggers = ["model"]
 description = "Lista os roots do run e as entradas de topo de cada um."
 tags = ["fs"]

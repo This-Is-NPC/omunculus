@@ -8,19 +8,22 @@ defmodule Omunculus.Tools.Grep do
   alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
-  def run(%{args: args, roots: roots}) do
+  def run(%{args: args, roots: roots} = input) do
+    permissions = Omunculus.Tools.Path.permissions(input)
+
     case Args.missing(args, ~w(pattern)) do
-      nil -> search(roots, args["pattern"], Args.present(args, "path") || ".")
+      nil -> search(roots, args["pattern"], Args.present(args, "path") || ".", permissions)
       message -> Out.fail(message)
     end
   end
 
-  defp search(roots, pattern, path) do
+  defp search(roots, pattern, path, permissions) do
     with {:ok, regex} <- compile(pattern),
-         {:ok, absolute} <- Omunculus.Tools.Path.resolve(roots, path) do
+         {:ok, absolute} <- Omunculus.Tools.Path.resolve(roots, path, permissions) do
       output =
         absolute
         |> files()
+        |> Enum.filter(&match?({:ok, _}, Omunculus.Tools.Path.resolve(roots, &1, permissions)))
         |> Enum.sort()
         |> Enum.flat_map(&matches(&1, absolute, regex))
         |> Enum.join("\n")

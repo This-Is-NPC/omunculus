@@ -1,6 +1,7 @@
 name = "grep"
 kind = "tool"
 shape = "simple"
+views = ["paths"]
 triggers = ["model"]
 description = "Busca texto nos arquivos."
 tags = ["fs"]

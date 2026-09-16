@@ -79,13 +79,34 @@ defmodule Omunculus.Harness do
          views = %{
            catalog: catalog_view(run, catalog),
            workspaces: workspaces_view(config, workspace.name),
-           request_id: run && run.request_id
+           request_id: run && run.request_id,
+           paths: path_permissions(project, run, workspace)
          },
          {:ok, out, events} <-
            call(project, manifest, args, work_id, ctx, config, catalog, views, workspace),
          {:ok, hook_events} <-
            run_hooks(project, catalog, events, work_id, ctx, config, views, workspace) do
       {:ok, augment(out, events), events ++ hook_events}
+    end
+  end
+
+  defp start_event(_project, nil), do: nil
+
+  defp start_event(project, run) do
+    {:ok, event} = Store.view(project.conn, "event", run.event_id)
+    event
+  end
+
+  defp path_permissions(project, run, workspace) do
+    case start_event(project, run) do
+      nil ->
+        %{}
+
+      event ->
+        Omunculus.Ceiling.paths(
+          Jason.decode!(event.body)["ceiling"],
+          workspace.root || project.dir
+        )
     end
   end
 
@@ -176,11 +197,12 @@ defmodule Omunculus.Harness do
 
   defp hydrate_views(project, names, run_id, work_id, views) do
     Enum.reduce_while(names, {:ok, %{}}, fn name, {:ok, acc} ->
-      case resolve_view_id(name, run_id, work_id, views.request_id) do
+      case resolve_view_id(name, run_id, work_id, views) do
         {:error, _reason} = error -> {:halt, error}
         :skip -> {:cont, {:ok, acc}}
         :catalog -> {:cont, {:ok, Map.put(acc, "catalog", views.catalog)}}
         :workspaces -> {:cont, {:ok, Map.put(acc, "workspaces", views.workspaces)}}
+        :paths -> {:cont, {:ok, Map.put(acc, "paths", views.paths)}}
         {:ok, id} -> fetch_view(project, name, id, acc)
       end
     end)
@@ -203,10 +225,11 @@ defmodule Omunculus.Harness do
     if run_id, do: {:ok, run_id}, else: :skip
   end
 
-  defp resolve_view_id("comments.request", _run_id, _work_id, request_id) do
+  defp resolve_view_id("comments.request", _run_id, _work_id, %{request_id: request_id}) do
     if request_id, do: {:ok, request_id}, else: :skip
   end
 
+  defp resolve_view_id("paths", _run_id, _work_id, _views), do: :paths
   defp resolve_view_id("inbox", _run_id, _work_id, _request_id), do: {:ok, nil}
   defp resolve_view_id("catalog", _run_id, _work_id, _request_id), do: :catalog
   defp resolve_view_id("workspaces", _run_id, _work_id, _request_id), do: :workspaces
