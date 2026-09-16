@@ -38,6 +38,7 @@ defmodule Omunculus.OpenAIStub do
     payload =
       %{}
       |> put_option(opts, "tool_rounds", :tool_rounds)
+      |> put_option(opts, "javascript", :javascript)
       |> put_option(opts, "delay_ms", :delay_ms)
 
     case Req.post(base_url <> "/control",

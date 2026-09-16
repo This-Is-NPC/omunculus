@@ -43,8 +43,9 @@ defmodule Omunculus.Model.OpenAITest do
     assert {:ok, "benchmark complete"} = model.(@assembled, @tools, call, fn _message -> :ok end)
     assert calls(agent) == [{"counter", %{}}]
 
-    assert {:ok, %{"last_tools" => [tool]}} = OpenAIStub.stats(stub)
+    assert {:ok, %{"last_tools" => [tool, executor]}} = OpenAIStub.stats(stub)
     assert tool["name"] == "counter"
+    assert executor["name"] == "__omunculus_execute"
     assert tool["parameters"]["type"] == "object"
   end
 
@@ -64,7 +65,7 @@ defmodule Omunculus.Model.OpenAITest do
     assert {:error, {:openai, _reason}} = model.(@assembled, @tools, call, fn _message -> :ok end)
   end
 
-  for javascript <- [false] do
+  for javascript <- [false, true] do
     test "records all model turns and executes tools (JavaScript: #{javascript})", %{
       stub: stub,
       base_url: base_url

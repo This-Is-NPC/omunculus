@@ -28,6 +28,7 @@ use tokio::{
 struct Config {
     delay_ms: u64,
     tool_rounds: u64,
+    javascript: bool,
     payload_bytes: usize,
     expected_in_flight: usize,
     barrier_timeout_ms: u64,
@@ -38,6 +39,7 @@ impl Default for Config {
         Self {
             delay_ms: 0,
             tool_rounds: 1,
+            javascript: false,
             payload_bytes: 0,
             expected_in_flight: 0,
             barrier_timeout_ms: 5_000,
@@ -215,6 +217,9 @@ impl AppState {
         if let Some(value) = input.delay_ms {
             config.delay_ms = value;
         }
+        if let Some(value) = input.javascript {
+            config.javascript = value;
+        }
         if let Some(value) = input.tool_rounds {
             config.tool_rounds = value;
         }
@@ -315,6 +320,7 @@ struct ControlRequest {
     delay_ms: Option<u64>,
     #[serde(alias = "rounds")]
     tool_rounds: Option<u64>,
+    javascript: Option<bool>,
     payload_bytes: Option<usize>,
     expected_in_flight: Option<usize>,
     barrier_timeout_ms: Option<u64>,
@@ -431,7 +437,11 @@ async fn completions(State(state): State<Arc<AppState>>, body: Bytes) -> Respons
             "tool_calls": [{
                 "id": format!("benchmark-counter-{}", tool_messages + 1),
                 "type": "function",
-                "function": {"name": "counter", "arguments": "{}"}
+                "function": if config.javascript {
+                    json!({"name": "__omunculus_execute", "arguments": "{\"code\":\"return await tools.counter({})\"}"})
+                } else {
+                    json!({"name": "counter", "arguments": "{}"})
+                }
             }]
         })
     } else {
