@@ -196,6 +196,11 @@ defmodule Omunculus.Config do
   defp keys(path), do: Enum.map(path, &Access.key(&1, %{}))
 
   defp add_name(layer, name) do
+    layer =
+      Enum.reduce(["human", "negotiable"], layer, fn key, acc ->
+        if Map.has_key?(acc, key), do: Map.update!(acc, key, &List.delete(&1, name)), else: acc
+      end)
+
     if is_list(layer["tools"]) do
       Map.put(layer, "tools", add_unique(layer["tools"], name))
     else

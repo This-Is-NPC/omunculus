@@ -58,9 +58,11 @@ defmodule Omunculus.Ceiling do
       for name <- all_names, into: %{} do
         {name, classify_name(layers, policy_mode, name)}
       end
-      |> apply_grants(grants)
+      |> apply_grants(grants, Enum.flat_map(layers, fn {_, layer} -> layer.deny end))
 
     group(classes, uncited(layers, policy_mode))
+    |> Map.put(:catalog, names)
+    |> Map.put(:deny, Enum.flat_map(layers, fn {_, layer} -> layer.deny end) |> Enum.uniq())
   end
 
   @spec classify(map(), String.t()) :: String.t()
@@ -70,6 +72,30 @@ defmodule Omunculus.Ceiling do
     Enum.find(@classes, snapshot.uncited, fn class ->
       name in Map.fetch!(snapshot, String.to_existing_atom(class))
     end)
+  end
+
+  def classify(snapshot, name, "tool") do
+    catalog = Map.get(snapshot, :catalog, Map.get(snapshot, "catalog"))
+    if is_list(catalog) and name not in catalog, do: "blocked", else: classify(snapshot, name)
+  end
+
+  def classify(snapshot, name, _kind), do: classify(snapshot, name)
+
+  @doc "Resolved path permissions; unmentioned paths remain bounded by roots."
+  def paths(snapshot, root) do
+    values = fn key -> Map.get(snapshot, key, Map.get(snapshot, Atom.to_string(key), [])) end
+
+    expand = fn names ->
+      names
+      |> Enum.filter(&(String.starts_with?(&1, "/") or String.starts_with?(&1, ".")))
+      |> Enum.map(&Path.expand(&1, root))
+    end
+
+    %{
+      "allowed" => expand.(values.(:have)),
+      "denied" => expand.(values.(:deny)),
+      "restricted" => expand.(values.(:askable) ++ values.(:sealed) ++ values.(:blocked))
+    }
   end
 
   defp applying_layers(config, agent_name, depth, stage, workspace) do
@@ -143,9 +169,9 @@ defmodule Omunculus.Ceiling do
   defp mode_default("blocklist"), do: "have"
   defp mode_default("auto"), do: "askable"
 
-  defp apply_grants(classes, grants) do
+  defp apply_grants(classes, grants, denied) do
     Enum.reduce(grants, classes, fn name, acc ->
-      if Map.get(acc, name) == "blocked" do
+      if name in denied do
         acc
       else
         Map.put(acc, name, "have")

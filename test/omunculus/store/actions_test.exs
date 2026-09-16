@@ -1215,7 +1215,7 @@ defmodule Omunculus.Store.ActionsTest do
          %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
       {run, request_id} = open_request(conn, @ceiling, work_id)
-      ctx = request_ctx(run)
+      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
 
       assert {:ok, [_tool_event, reply_event, grant_event]} =
                record_tool(
@@ -1265,7 +1265,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "granting a closed request is rejected", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
       {run, request_id} = open_request(conn, @ceiling, work_id)
-      ctx = request_ctx(run)
+      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
 
       reply_emit = %{
         "type" => "reply",
@@ -1281,7 +1281,7 @@ defmodule Omunculus.Store.ActionsTest do
     } do
       work_id = Fixtures.insert(conn, :works)
       {run, request_id} = open_request(conn, @ceiling, work_id)
-      ctx = request_ctx(run)
+      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
 
       assert {:ok, [_tool_event, _reply_event, grant_event]} =
                record_tool(
@@ -1309,7 +1309,7 @@ defmodule Omunculus.Store.ActionsTest do
 
     test "granting a request with no linked work only writes the grant event", %{conn: conn} do
       {run, request_id} = open_request(conn, @ceiling, nil)
-      ctx = request_ctx(run)
+      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
 
       assert {:ok, [_tool_event, _reply_event, grant_event]} =
                record_tool(
@@ -1334,7 +1334,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "deny reopens the linked work and writes a deny event", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
       {run, request_id} = open_request(conn, @ceiling, work_id)
-      ctx = request_ctx(run)
+      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
 
       assert {:ok, [_tool_event, _reply_event, deny_event]} =
                record_tool(
@@ -1378,7 +1378,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "an invalid decision is rejected", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
       {run, request_id} = open_request(conn, @ceiling, work_id)
-      ctx = request_ctx(run)
+      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
 
       assert {:error, {:reply, {:invalid, :decision}}} =
                record_tool(
@@ -1400,7 +1400,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "an empty reply body is rejected", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
       {run, request_id} = open_request(conn, @ceiling, work_id)
-      ctx = request_ctx(run)
+      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
 
       assert {:error, {:reply, :no_body}} =
                record_tool(
@@ -1418,7 +1418,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "an invalid scope is rejected", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
       {run, request_id} = open_request(conn, @ceiling, work_id)
-      ctx = request_ctx(run)
+      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
 
       assert {:error, {:reply, {:invalid, :scope}}} =
                record_tool(

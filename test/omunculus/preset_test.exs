@@ -68,6 +68,8 @@ defmodule Omunculus.PresetTest do
       assert {:ok, "preset codex-like aplicado"} =
                CLI.run(["preset", "codex-like"], dir, fake())
 
+      write_emit_tool(dir, "delete", ~s({"ok": true, "output": "", "emit": []}))
+
       model = fn _assembled, _tools, call ->
         assert {:ok, _output} =
                  call.("request_access", %{

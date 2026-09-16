@@ -254,6 +254,7 @@ defmodule Omunculus.WorkspaceTest do
   test "a permanent grant with scope workspace on a request from two writes workspaces.two.granted",
        %{dir: dir, one: one, two: two, three: three} do
     write_config(dir, base_toml(one, two, three))
+    write_check_tool(dir, "delete", "delete")
     project = open(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
@@ -332,6 +333,7 @@ defmodule Omunculus.WorkspaceTest do
   } do
     write_config(dir, stage_scope_toml(one, two, three))
 
+    write_check_tool(dir, "delete", "delete")
     project = open(dir)
 
     work_id =

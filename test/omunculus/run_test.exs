@@ -462,7 +462,7 @@ defmodule Omunculus.RunTest do
     test_pid = self()
 
     model = fn _assembled, _tools, call ->
-      call.("request_access", %{"kind" => "tool", "name" => "secret", "reason" => "preciso"})
+      call.("request_access", %{"kind" => "path", "name" => "./secret", "reason" => "preciso"})
       send(test_pid, :reached_second_call)
       call.("request_access", %{"kind" => "tool", "name" => "outro", "reason" => "x"})
       {:ok, "unused"}

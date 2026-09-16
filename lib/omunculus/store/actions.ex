@@ -230,7 +230,7 @@ defmodule Omunculus.Store.Actions do
          {:ok, run} <- fetch_run(conn, ctx.run_id),
          {:ok, event} <- Query.one(conn, "SELECT * FROM events WHERE id = ?", [run.event_id]) do
       snapshot = event.body |> Jason.decode!() |> Map.fetch!("ceiling")
-      classify_request(conn, ctx, run, Ceiling.classify(snapshot, name), kind, name, reason)
+      classify_request(conn, ctx, run, Ceiling.classify(snapshot, name, kind), kind, name, reason)
     end
   end
 
@@ -265,11 +265,11 @@ defmodule Omunculus.Store.Actions do
 
   defp classify_request(conn, ctx, run, class, kind, name, reason)
        when class in ["askable", "sealed"] do
-    open_request(conn, ctx, run, kind, name, reason)
+    open_request(conn, ctx, run, class, kind, name, reason)
   end
 
-  defp open_request(conn, ctx, run, kind, name, reason) do
-    with {:ok, arbiter} <- resolve_arbiter(conn, ctx, name) do
+  defp open_request(conn, ctx, run, class, kind, name, reason) do
+    with {:ok, arbiter} <- resolve_arbiter(conn, ctx, name, class) do
       request_id = Id.new()
       comment_id = Id.new()
       body = Map.merge(%{kind: kind, name: name, reason: reason}, arbiter.body_extra)
@@ -303,7 +303,9 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
-  defp resolve_arbiter(conn, ctx, name) do
+  defp resolve_arbiter(_conn, _ctx, _name, "sealed"), do: {:ok, arbiter_info(:human)}
+
+  defp resolve_arbiter(conn, ctx, name, _class) do
     with {:ok, work} <- Helpers.fetch_work(conn, ctx.work_id),
          {:ok, parent} <- Helpers.fetch_work(conn, work && work.parent_id),
          {:ok, decision} <- agent_arbiter(conn, ctx, parent, name) do
@@ -384,10 +386,18 @@ defmodule Omunculus.Store.Actions do
          :ok <- ensure_open(request),
          :ok <- ensure_decision(decision),
          :ok <- ensure_reply_text(text),
-         :ok <- ensure_scope(scope) do
+         :ok <- ensure_scope(scope),
+         :ok <- authorize_reply(request, ctx, scope) do
       apply_reply(conn, ctx, request, decision, text, scope, body)
     end
   end
+
+  defp authorize_reply(_request, %{author: "human"}, _scope), do: :ok
+
+  defp authorize_reply(%{status: "waiting_agent", arbiter: arbiter}, %{agent: arbiter}, nil),
+    do: :ok
+
+  defp authorize_reply(_request, _ctx, _scope), do: {:error, {:reply, :not_arbiter}}
 
   defp ensure_open(%{status: status}) when status in ["waiting_human", "waiting_agent"], do: :ok
   defp ensure_open(_request), do: {:error, {:reply, :closed}}
