@@ -10,7 +10,14 @@ defmodule Omunculus.StoreTest do
 
     %{
       path: path,
-      ctx: %{run_id: nil, author: "human", work_id: nil, agent: nil, config: Fixtures.config()}
+      ctx: %{
+        run_id: nil,
+        author: "human",
+        work_id: nil,
+        agent: nil,
+        config: Fixtures.config(),
+        groups: %{}
+      }
     }
   end
 

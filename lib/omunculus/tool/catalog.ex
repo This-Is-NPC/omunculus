@@ -1,7 +1,8 @@
 defmodule Omunculus.Tool.Catalog do
   @moduledoc """
   Discovers tool/hook folders on disk, per spec §8.4: builtin, user, then
-  project root, the most specific winning on a shared `name`.
+  project root, the most specific winning on a shared `name`. Also derives
+  the group map of spec §9.5 from the manifests' own `groups` field.
   """
 
   require Logger
@@ -41,6 +42,15 @@ defmodule Omunculus.Tool.Catalog do
     |> Map.values()
     |> Enum.filter(&(event_type in &1.events))
     |> Enum.sort_by(& &1.name)
+  end
+
+  @spec groups(%{String.t() => Manifest.t()}) :: %{String.t() => [String.t()]}
+  def groups(catalog) do
+    catalog
+    |> Map.values()
+    |> Enum.flat_map(fn manifest -> Enum.map(manifest.groups, &{&1, manifest.name}) end)
+    |> Enum.group_by(fn {group, _name} -> group end, fn {_group, name} -> name end)
+    |> Map.new(fn {group, names} -> {group, Enum.sort(names)} end)
   end
 
   defp subfolders(root) do

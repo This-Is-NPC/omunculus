@@ -4,6 +4,7 @@ shape = "simple"
 triggers = ["model"]
 description = "Cria um work filho e entrega a quem está abaixo. O pai espera."
 tags = ["sequence", "work"]
+groups = ["sequence"]
 module = "Omunculus.Tools.Delegate"
 
 [parameters]

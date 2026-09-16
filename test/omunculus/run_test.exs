@@ -258,6 +258,65 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
+  test "the default concierge ceiling has more than 12 effective tools and tool_search among them, so ## Tools shows only the store/sequence/catalog cards plus a count of the rest",
+       %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store"]
+    """)
+
+    project = open_project(dir)
+    test_pid = self()
+
+    model = fn assembled, _call ->
+      send(test_pid, {:assembled, assembled})
+      {:ok, "done"}
+    end
+
+    assert {:ok, run} = Run.open(project, open(message(project.conn)), model)
+    assert length(Jason.decode!(run.tools)) == 13
+
+    assert_received {:assembled, assembled}
+    assert assembled =~ "- tool_search:"
+    assert assembled =~ "- break:"
+    assert assembled =~ "- comment:"
+    assert assembled =~ "Mais 4 tools: procure com tool_search."
+    refute assembled =~ "- read:"
+    refute assembled =~ "- ls:"
+    refute assembled =~ "- grep:"
+    refute assembled =~ "- find:"
+
+    Project.close(project)
+  end
+
+  test "a small ceiling with tool_search but 12 or fewer effective tools still lists every card",
+       %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["catalog"]
+    """)
+
+    project = open_project(dir)
+    test_pid = self()
+
+    model = fn assembled, _call ->
+      send(test_pid, {:assembled, assembled})
+      {:ok, "done"}
+    end
+
+    assert {:ok, _run} = Run.open(project, open(message(project.conn)), model)
+
+    assert_received {:assembled, assembled}
+    assert assembled =~ "- tool_search:"
+    refute assembled =~ "Mais "
+
+    Project.close(project)
+  end
+
   test "a child work sees its parent's grants but an unrelated work does not", %{dir: dir} do
     write_tool(dir, "extra", model_tool_toml("extra"), fixed_output_script("ok"))
 

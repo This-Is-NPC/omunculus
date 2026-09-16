@@ -4,6 +4,7 @@ shape = "simple"
 triggers = ["model"]
 description = "Pede acesso a uma tool, path ou directory. Abre um request se for preciso decidir."
 tags = ["store", "request"]
+groups = ["store"]
 module = "Omunculus.Tools.RequestAccess"
 
 [parameters]

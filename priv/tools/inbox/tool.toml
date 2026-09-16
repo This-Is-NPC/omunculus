@@ -4,6 +4,7 @@ shape = "simple"
 triggers = ["cli"]
 description = "Lista os avisos não lidos."
 tags = ["cli", "inbox"]
+groups = ["cli"]
 views = ["inbox"]
 module = "Omunculus.Tools.Inbox"
 

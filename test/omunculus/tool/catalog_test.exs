@@ -172,6 +172,49 @@ defmodule Omunculus.Tool.CatalogTest do
     refute Map.has_key?(Catalog.with_trigger(catalog, "cli"), "on-request")
   end
 
+  test "groups/1 maps a group name to the sorted names of the manifests that list it", %{
+    project_dir: project_dir
+  } do
+    write_tool(project_dir, "read", """
+    name = "read"
+    kind = "tool"
+    groups = ["fs.read"]
+    command = ["./run"]
+    """)
+
+    write_tool(project_dir, "ls", """
+    name = "ls"
+    kind = "tool"
+    groups = ["fs.read"]
+    command = ["./run"]
+    """)
+
+    write_tool(project_dir, "write", """
+    name = "write"
+    kind = "tool"
+    groups = ["fs.write"]
+    command = ["./run"]
+    """)
+
+    catalog = Catalog.discover([project_dir])
+
+    assert Catalog.groups(catalog) == %{
+             "fs.read" => ["ls", "read"],
+             "fs.write" => ["write"]
+           }
+  end
+
+  test "groups/1 ignores a manifest without groups", %{project_dir: project_dir} do
+    write_tool(project_dir, "counter", """
+    name = "counter"
+    kind = "tool"
+    command = ["./run"]
+    """)
+
+    catalog = Catalog.discover([project_dir])
+    assert Catalog.groups(catalog) == %{}
+  end
+
   test "a project hook overrides the builtin hook of the same name", %{project_dir: project_dir} do
     [builtin_root | _] = Catalog.roots(".")
 

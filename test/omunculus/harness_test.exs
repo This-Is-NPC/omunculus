@@ -325,6 +325,63 @@ defmodule Omunculus.HarnessTest do
     Project.close(project)
   end
 
+  test "tool_search inside a run lists exactly the run's own tools, never a name only on disk",
+       %{dir: dir} do
+    write_tool(
+      dir,
+      "granted",
+      """
+      name = "granted"
+      kind = "tool"
+      triggers = ["model"]
+      description = "Uma tool concedida."
+      command = ["./run"]
+      """,
+      """
+      #!/bin/sh
+      echo '{"ok": true, "output": "", "emit": []}'
+      """
+    )
+
+    write_tool(
+      dir,
+      "blocked",
+      """
+      name = "blocked"
+      kind = "tool"
+      triggers = ["model"]
+      description = "Uma tool bloqueada."
+      command = ["./run"]
+      """,
+      """
+      #!/bin/sh
+      echo '{"ok": true, "output": "", "emit": []}'
+      """
+    )
+
+    project = open_project(dir)
+    run_id = Fixtures.insert(project.conn, :runs, %{tools: Jason.encode!(["granted"])})
+    ctx = %{trigger: "model", run_id: run_id, author: "agent", agent: "concierge"}
+
+    assert {:ok, %{ok: true, output: output}, _events} =
+             Harness.dispatch(project, "tool_search", %{}, ctx)
+
+    assert output =~ "- granted:"
+    refute output =~ "blocked"
+
+    Project.close(project)
+  end
+
+  test "tool_search outside any run sees an empty catalog view", %{dir: dir} do
+    project = open_project(dir)
+    ctx = %{trigger: "model", run_id: nil, author: "agent", agent: "concierge"}
+
+    assert {:ok, %{ok: true, output: "nenhuma tool encontrada"}, _events} =
+             Harness.dispatch(project, "tool_search", %{}, ctx)
+
+    Project.close(project)
+  end
+
   test "a broken hook fails the dispatch but the triggering call's own store write already committed",
        %{dir: dir} do
     write_hook(

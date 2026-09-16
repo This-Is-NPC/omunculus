@@ -10,9 +10,12 @@ defmodule Omunculus.Run do
   ceiling. Assembles the prompt from the agent text, the message of this
   opening (when there is one), the work's title and last comment when the
   run is on a work, the request and its comments when the run answers one,
-  and the have tools' cards, lets the model call tools through the
-  harness, and closes the run when the model is done or a call it made
-  ended the run with a decision. Once closed, a work whose sequence is off
+  and the have tools' cards — when `tool_search` is among them and there
+  are more than 12, only the cards of the `store`, `sequence` or `catalog`
+  groups, plus a count of the rest, since the model can search for the
+  others — lets the model call tools through the harness, and closes the
+  run when the model is done or a call it made ended the run with a
+  decision. Once closed, a work whose sequence is off
   and that has a parent is finished, and the replay of this run is handed
   to `Omunculus.Harness.follow_up/3` so the next run, if any, opens
   before this one returns. Nobody waits.
@@ -56,7 +59,13 @@ defmodule Omunculus.Run do
          snapshot =
            Ceiling.mount(
              config,
-             %{agent: name, depth: depth, grants: grants, stage: stage},
+             %{
+               agent: name,
+               depth: depth,
+               grants: grants,
+               stage: stage,
+               groups: Catalog.groups(catalog)
+             },
              Map.keys(catalog)
            ),
          names = effective_names(snapshot, catalog),
@@ -187,19 +196,38 @@ defmodule Omunculus.Run do
     snapshot.have |> Enum.filter(&Map.has_key?(catalog, &1)) |> Enum.sort()
   end
 
-  defp assemble(text, message, work, comment, request_section, names, catalog) do
-    cards = Enum.map(names, &Manifest.card(Map.fetch!(catalog, &1)))
+  @searchable_groups ~w(store sequence catalog)
 
+  defp assemble(text, message, work, comment, request_section, names, catalog) do
     sections =
       [String.trim(text)] ++
         message_section(message) ++
         work_section(work) ++
         comment_section(comment) ++
         request_section ++
-        ["## Tools\nAs tools estão em `tools.*`.\n" <> Enum.join(cards, "\n")]
+        [tools_section(names, catalog)]
 
     Enum.join(sections, "\n\n")
   end
+
+  defp tools_section(names, catalog) do
+    lines =
+      if "tool_search" in names and length(names) > 12 do
+        subset_lines(names, catalog)
+      else
+        Enum.map(names, &Manifest.card(Map.fetch!(catalog, &1)))
+      end
+
+    "## Tools\nAs tools estão em `tools.*`.\n" <> Enum.join(lines, "\n")
+  end
+
+  defp subset_lines(names, catalog) do
+    {shown, omitted} = Enum.split_with(names, &searchable?(Map.fetch!(catalog, &1)))
+    cards = Enum.map(shown, &Manifest.card(Map.fetch!(catalog, &1)))
+    cards ++ ["Mais #{length(omitted)} tools: procure com tool_search."]
+  end
+
+  defp searchable?(%Manifest{groups: groups}), do: Enum.any?(@searchable_groups, &(&1 in groups))
 
   defp message_section(nil), do: []
   defp message_section(message), do: ["## Message\n#{message.body}"]

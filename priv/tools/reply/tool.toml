@@ -4,6 +4,7 @@ shape = "simple"
 triggers = ["cli", "model"]
 description = "Responde um request: grant ou deny, com um comment."
 tags = ["store", "request"]
+groups = ["store"]
 module = "Omunculus.Tools.Reply"
 
 [parameters]

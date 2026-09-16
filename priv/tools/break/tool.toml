@@ -4,6 +4,7 @@ shape = "simple"
 triggers = ["model"]
 description = "Estaciona o work com um comment. A sequência não anda."
 tags = ["sequence", "work"]
+groups = ["sequence"]
 module = "Omunculus.Tools.Break"
 
 [parameters]

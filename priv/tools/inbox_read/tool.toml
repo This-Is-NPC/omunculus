@@ -4,6 +4,7 @@ shape = "simple"
 triggers = ["cli"]
 description = "Marca um aviso como lido."
 tags = ["cli", "inbox"]
+groups = ["cli"]
 module = "Omunculus.Tools.InboxRead"
 
 [parameters]

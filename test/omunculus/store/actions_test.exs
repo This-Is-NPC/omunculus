@@ -10,7 +10,8 @@ defmodule Omunculus.Store.ActionsTest do
     author: "agent",
     work_id: nil,
     agent: "concierge",
-    config: Fixtures.config()
+    config: Fixtures.config(),
+    groups: %{}
   }
   @call %{name: "t", args: %{}, ok: true, output: ""}
 
@@ -46,7 +47,14 @@ defmodule Omunculus.Store.ActionsTest do
   end
 
   defp request_ctx(run, work_id \\ nil, config \\ @ctx.config) do
-    %{run_id: run.id, author: "agent", work_id: work_id, agent: run.agent, config: config}
+    %{
+      run_id: run.id,
+      author: "agent",
+      work_id: work_id,
+      agent: run.agent,
+      config: config,
+      groups: %{}
+    }
   end
 
   defp request_emit(kind, name, reason) do

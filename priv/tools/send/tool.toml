@@ -3,6 +3,7 @@ kind = "tool"
 shape = "simple"
 triggers = ["cli"]
 description = "Entrega a message e abre a primeira run."
+groups = ["cli"]
 module = "Omunculus.Tools.Send"
 
 [parameters]

@@ -7,6 +7,7 @@ erl_crash.dump
 *.ez
 /tmp
 /omunculus
+/.omunculus/
 .env
 .env.local
 .env.*.local

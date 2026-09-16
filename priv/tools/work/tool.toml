@@ -4,6 +4,7 @@ shape = "simple"
 triggers = ["model"]
 description = "Cria ou atualiza o work e escreve o title."
 tags = ["work", "store"]
+groups = ["store"]
 module = "Omunculus.Tools.Work"
 
 [parameters]

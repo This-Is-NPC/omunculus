@@ -4,6 +4,7 @@ shape = "simple"
 triggers = ["model"]
 description = "Escreve um comment no work."
 tags = ["comment", "work", "store"]
+groups = ["store"]
 module = "Omunculus.Tools.Comment"
 
 [parameters]

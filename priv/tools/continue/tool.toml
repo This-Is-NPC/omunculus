@@ -4,6 +4,7 @@ shape = "simple"
 triggers = ["model"]
 description = "Pede a próxima etapa do workflow. O TOML decide qual."
 tags = ["sequence", "work"]
+groups = ["sequence"]
 module = "Omunculus.Tools.Continue"
 
 [parameters]

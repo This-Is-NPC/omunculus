@@ -4,6 +4,7 @@ shape = "simple"
 triggers = ["model"]
 description = "Avisa a pessoa pelo inbox. A run segue."
 tags = ["store", "inbox"]
+groups = ["store"]
 module = "Omunculus.Tools.Notify"
 
 [parameters]

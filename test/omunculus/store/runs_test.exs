@@ -11,7 +11,8 @@ defmodule Omunculus.Store.RunsTest do
         author: "agent",
         work_id: nil,
         agent: "concierge",
-        config: Fixtures.config()
+        config: Fixtures.config(),
+        groups: %{}
       },
       overrides
     )

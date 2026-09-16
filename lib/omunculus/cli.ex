@@ -3,19 +3,22 @@ defmodule Omunculus.CLI do
   The binary's dispatch, per spec §7: `omunculus <name> [args]` opens the
   project at a directory, resolves `args` from the remaining argv and
   calls the same contract the model uses, with `trigger: "cli"`. Once the
-  call is recorded, hands its events to `Harness.follow_up/3` so any run
-  the call's action asks for opens before the CLI returns.
+  call is recorded, hands its events to `Harness.follow_up/3`, driven by
+  the given `model`, so any run the call's action asks for opens before
+  the CLI returns. `main/1` is the only caller that reads the configured
+  model out of application env; `run/3` never touches global state.
   """
 
   alias Omunculus.{Harness, Project}
 
-  @spec run([String.t()], String.t()) :: {:ok, String.t()} | {:error, term}
-  def run([], _dir), do: {:error, :no_tool}
+  @spec run([String.t()], String.t(), (String.t(), fun -> {:ok, String.t()} | {:error, term})) ::
+          {:ok, String.t()} | {:error, term}
+  def run([], _dir, _model), do: {:error, :no_tool}
 
-  def run([name | rest], dir) do
+  def run([name | rest], dir, model) do
     with {:ok, project} <- Project.open(dir) do
       try do
-        dispatch(project, name, rest)
+        dispatch(project, name, rest, model)
       after
         Project.close(project)
       end
@@ -24,7 +27,9 @@ defmodule Omunculus.CLI do
 
   @spec main([String.t()]) :: :ok
   def main(argv) do
-    case run(argv, File.cwd!()) do
+    model = Application.get_env(:omunculus, :model, &Omunculus.Model.Fake.complete/2)
+
+    case run(argv, File.cwd!(), model) do
       {:ok, output} ->
         if output != "", do: IO.puts(output)
         :ok
@@ -35,9 +40,7 @@ defmodule Omunculus.CLI do
     end
   end
 
-  defp dispatch(project, name, rest) do
-    model = Application.get_env(:omunculus, :model, &Omunculus.Model.Fake.complete/2)
-
+  defp dispatch(project, name, rest, model) do
     with {:ok, manifest} <- Harness.manifest(project, name),
          {:ok, args} <- build_args(rest, manifest),
          ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil},

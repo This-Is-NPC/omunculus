@@ -2,9 +2,12 @@ defmodule Omunculus.Ceiling do
   @moduledoc """
   Mounts the effective ceiling of a run from the policy, depth, agent and
   workflow-step layers of spec §5, and classifies a name against a mounted
-  snapshot. A layer's lists always apply; its mode, when it has one,
-  classifies what the lists do not cite; the policy mode is the fallback
-  for a name no layer classified. The most restrictive class wins.
+  snapshot. Before classifying, every list of every applying layer is
+  expanded against the `groups` map of spec §9.5: an entry that names a
+  group becomes its member names, any other entry stays as it is. A
+  layer's lists always apply; its mode, when it has one, classifies what
+  the lists do not cite; the policy mode is the fallback for a name no
+  layer classified. The most restrictive class wins.
   """
 
   alias Omunculus.Config.Layer
@@ -13,7 +16,13 @@ defmodule Omunculus.Ceiling do
 
   @spec mount(
           map(),
-          %{agent: String.t(), depth: integer(), grants: [String.t()], stage: Layer.t() | nil},
+          %{
+            agent: String.t(),
+            depth: integer(),
+            grants: [String.t()],
+            stage: Layer.t() | nil,
+            groups: %{String.t() => [String.t()]}
+          },
           [String.t()]
         ) :: %{
           have: [String.t()],
@@ -22,8 +31,16 @@ defmodule Omunculus.Ceiling do
           blocked: [String.t()],
           uncited: String.t()
         }
-  def mount(config, %{agent: agent_name, depth: depth, grants: grants, stage: stage}, names) do
-    layers = applying_layers(config, agent_name, depth, stage)
+  def mount(
+        config,
+        %{agent: agent_name, depth: depth, grants: grants, stage: stage, groups: groups},
+        names
+      ) do
+    layers =
+      config
+      |> applying_layers(agent_name, depth, stage)
+      |> Enum.map(fn {role, layer} -> {role, expand_layer(layer, groups)} end)
+
     policy_mode = config.policy.mode
 
     cited = layers |> Enum.map(fn {_role, layer} -> layer end) |> Enum.flat_map(&layer_names/1)
@@ -59,6 +76,20 @@ defmodule Omunculus.Ceiling do
 
   defp layer_names(%Layer{} = layer) do
     layer.granted ++ layer.negotiable ++ layer.human ++ layer.deny
+  end
+
+  defp expand_layer(%Layer{} = layer, groups) do
+    %Layer{
+      layer
+      | granted: expand_list(layer.granted, groups),
+        negotiable: expand_list(layer.negotiable, groups),
+        human: expand_list(layer.human, groups),
+        deny: expand_list(layer.deny, groups)
+    }
+  end
+
+  defp expand_list(list, groups) do
+    list |> Enum.flat_map(&Map.get(groups, &1, [&1])) |> Enum.uniq()
   end
 
   defp classify_name(layers, policy_mode, name) do

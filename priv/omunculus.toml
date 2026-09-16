@@ -1,13 +1,13 @@
 [agents.concierge]
 depth = 0
-tools = ["break", "comment", "continue", "delegate", "notify", "reply", "request_access", "work"]
+tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store"]
 text = """
 Você é o concierge do projeto. Leia a message, use as tools em `tools.*` quando precisar e responda.
 """
 
 [agents.worker]
 depth = 1
-tools = ["break", "comment", "continue", "notify", "request_access", "work"]
+tools = ["break", "comment", "continue", "fs.read", "fs.write", "notify", "request_access"]
 text = """
 Você é o worker. Faça o work que recebeu, comente o progresso e chame continue quando terminar a etapa.
 """

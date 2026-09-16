@@ -10,7 +10,7 @@ defmodule Omunculus.CeilingTest do
     do: Map.merge(%{policy: policy(mode: "auto"), depths: %{}, agents: %{}}, attrs)
 
   defp request(attrs),
-    do: Map.merge(%{agent: "worker", depth: 1, grants: [], stage: nil}, attrs)
+    do: Map.merge(%{agent: "worker", depth: 1, grants: [], stage: nil, groups: %{}}, attrs)
 
   describe "mount/3" do
     test "policy auto alone leaves everything askable" do
@@ -187,6 +187,64 @@ defmodule Omunculus.CeilingTest do
       snapshot = Ceiling.mount(config, request(%{stage: policy(granted: ["write"])}), ["write"])
 
       assert snapshot.have == ["write"]
+    end
+  end
+
+  describe "mount/3 group expansion" do
+    test "a granted group name expands to its member names" do
+      config =
+        config(%{
+          agents: %{"worker" => %{depth: 1, text: "", ceiling: policy(granted: ["fs.read"])}}
+        })
+
+      snapshot =
+        Ceiling.mount(
+          config,
+          request(%{groups: %{"fs.read" => ["ls", "read"]}}),
+          ["read", "ls"]
+        )
+
+      assert snapshot.have == ["ls", "read"]
+    end
+
+    test "a denied group name blocks its members and cuts a grant of one member" do
+      config =
+        config(%{
+          depths: %{1 => policy(mode: "auto", deny: ["fs.read"])}
+        })
+
+      snapshot =
+        Ceiling.mount(
+          config,
+          request(%{grants: ["read"], groups: %{"fs.read" => ["ls", "read"]}}),
+          ["read", "ls"]
+        )
+
+      assert snapshot.blocked == ["ls", "read"]
+      assert snapshot.have == []
+    end
+
+    test "a name that matches no group stays a plain name" do
+      config =
+        config(%{
+          agents: %{"worker" => %{depth: 1, text: "", ceiling: policy(granted: ["counter"])}}
+        })
+
+      snapshot =
+        Ceiling.mount(config, request(%{groups: %{"fs.read" => ["ls", "read"]}}), ["counter"])
+
+      assert snapshot.have == ["counter"]
+    end
+
+    test "groups: %{} behaves exactly as before" do
+      config =
+        config(%{
+          agents: %{"worker" => %{depth: 1, text: "", ceiling: policy(granted: ["counter"])}}
+        })
+
+      snapshot = Ceiling.mount(config, request(%{groups: %{}}), ["counter"])
+
+      assert snapshot.have == ["counter"]
     end
   end
 

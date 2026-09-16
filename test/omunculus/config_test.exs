@@ -24,13 +24,12 @@ defmodule Omunculus.ConfigTest do
 
     assert ceiling.granted == [
              "break",
-             "comment",
+             "catalog",
              "continue",
              "delegate",
-             "notify",
+             "fs.read",
              "reply",
-             "request_access",
-             "work"
+             "store"
            ]
 
     assert policy.mode == "auto"
@@ -436,7 +435,7 @@ defmodule Omunculus.ConfigTest do
     assert {:ok, %Config{agents: %{"concierge" => agent}}} = Config.load(dir)
     assert "delete" in agent.ceiling.granted
     assert agent.depth == 0
-    assert "comment" in agent.ceiling.granted
+    assert "store" in agent.ceiling.granted
   end
 
   test "grant appends to an existing tools alias list", %{dir: dir} do

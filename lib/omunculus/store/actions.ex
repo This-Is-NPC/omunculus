@@ -315,7 +315,13 @@ defmodule Omunculus.Store.Actions do
       snapshot =
         Ceiling.mount(
           ctx.config,
-          %{agent: parent.assignee, depth: depth, grants: grants, stage: stage},
+          %{
+            agent: parent.assignee,
+            depth: depth,
+            grants: grants,
+            stage: stage,
+            groups: ctx.groups
+          },
           [name]
         )
 
