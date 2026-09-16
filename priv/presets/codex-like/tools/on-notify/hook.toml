@@ -1,0 +1,5 @@
+name = "on-notify"
+kind = "hook"
+events = ["notify"]
+description = "Encaminha o notify para .omunculus/hooks.log."
+command = ["./run"]

@@ -1,0 +1,5 @@
+name = "on-request"
+kind = "hook"
+events = ["request"]
+description = "Encaminha o request para .omunculus/hooks.log."
+command = ["./run"]
