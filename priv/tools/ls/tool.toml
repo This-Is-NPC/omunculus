@@ -1,0 +1,14 @@
+name = "ls"
+kind = "tool"
+shape = "simple"
+triggers = ["model"]
+description = "Lista um diretório."
+tags = ["fs"]
+groups = ["fs.read"]
+module = "Omunculus.Tools.Ls"
+
+[parameters]
+type = "object"
+
+[parameters.properties.path]
+type = "string"

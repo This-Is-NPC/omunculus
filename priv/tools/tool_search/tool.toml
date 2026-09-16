@@ -1,0 +1,21 @@
+name = "tool_search"
+kind = "tool"
+shape = "simple"
+triggers = ["model"]
+description = "Procura tools no catálogo desta run por nome, descrição ou tag."
+tags = ["catalog"]
+groups = ["catalog"]
+views = ["catalog"]
+module = "Omunculus.Tools.ToolSearch"
+
+[parameters]
+type = "object"
+
+[parameters.properties.q]
+type = "string"
+
+[parameters.properties.tags]
+type = "array"
+
+[parameters.properties.tags.items]
+type = "string"

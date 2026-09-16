@@ -1,0 +1,15 @@
+name = "read"
+kind = "tool"
+shape = "simple"
+triggers = ["model"]
+description = "Lê um arquivo."
+tags = ["fs"]
+groups = ["fs.read"]
+module = "Omunculus.Tools.Read"
+
+[parameters]
+type = "object"
+required = ["path"]
+
+[parameters.properties.path]
+type = "string"

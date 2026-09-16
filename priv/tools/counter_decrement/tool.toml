@@ -1,0 +1,11 @@
+name = "counter_decrement"
+kind = "tool"
+shape = "simple"
+triggers = ["model"]
+description = "Decrementa o contador e devolve o valor."
+tags = ["bench"]
+groups = ["bench"]
+module = "Omunculus.Tools.CounterDecrement"
+
+[parameters]
+type = "object"

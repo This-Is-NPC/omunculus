@@ -1,0 +1,11 @@
+name = "counter"
+kind = "tool"
+shape = "simple"
+triggers = ["model"]
+description = "Incrementa o contador e devolve o valor."
+tags = ["bench"]
+groups = ["bench"]
+module = "Omunculus.Tools.Counter"
+
+[parameters]
+type = "object"
