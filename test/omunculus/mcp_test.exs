@@ -1,7 +1,7 @@
 defmodule Omunculus.McpTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Config, Id, Mcp, Project}
+  alias Omunculus.{CLI, Config, Fixtures, Id, Mcp, Project}
   alias Omunculus.Tool.Catalog
 
   @server %{name: "fake", command: [Path.expand("test/support/mcp_server")]}
@@ -58,7 +58,7 @@ defmodule Omunculus.McpTest do
       %{dir: dir}
     end
 
-    defp write_config(dir, contents), do: File.write!(Path.join(dir, "omunculus.toml"), contents)
+    defp write_config(dir, contents), do: Fixtures.write_config(dir, contents)
 
     defp open(dir) do
       {:ok, project} = Project.open(dir)

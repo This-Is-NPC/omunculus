@@ -19,7 +19,7 @@ defmodule Omunculus.PresetTest do
 
   defp fake, do: &Fake.complete/3
 
-  defp write_config(dir, contents), do: File.write!(Path.join(dir, "omunculus.toml"), contents)
+  defp write_config(dir, contents), do: Fixtures.write_config(dir, contents)
 
   defp write_emit_tool(dir, name, emit_json) do
     tool_dir = Path.join([dir, "tools", name])
@@ -44,7 +44,7 @@ defmodule Omunculus.PresetTest do
                CLI.run(["preset", "codex-like"], dir, fake())
 
       model = fn assembled, _tools, call ->
-        assert assembled =~ "Você é um agente de código"
+        assert assembled =~ "You are a Codex-style coding agent"
         assert {:ok, "hi\n"} = call.("bash", %{"command" => "echo hi"})
         {:ok, "feito"}
       end
@@ -93,7 +93,7 @@ defmodule Omunculus.PresetTest do
       assert {:ok, "preset pi-like aplicado"} = CLI.run(["preset", "pi-like"], dir, fake())
 
       model = fn assembled, _tools, _call ->
-        assert assembled =~ "estilo Pi"
+        assert assembled =~ "You are a Pi-style agent"
         {:ok, "feito"}
       end
 

@@ -9,6 +9,17 @@ defmodule Omunculus.Fixtures do
   alias Omunculus.Store.Query
 
   @now "2026-01-01T00:00:00Z"
+  @execution """
+  [execution]
+  backend = "bubblewrap"
+  runtimes = ["/usr"]
+  environment = ["LANG", "LC_ALL", "TERM"]
+  timeout_ms = 30000
+  max_output_bytes = 1048576
+  max_concurrent = 4
+  max_queue = 64
+  queue_timeout_ms = 30000
+  """
 
   @defaults %{
     prompts: %{kind: "message", body: "hi", created_at: @now},
@@ -42,8 +53,13 @@ defmodule Omunculus.Fixtures do
   def config(toml \\ nil) do
     dir = Path.join(System.tmp_dir!(), Id.new())
     File.mkdir_p!(dir)
-    if toml, do: File.write!(Path.join(dir, "omunculus.toml"), toml)
+    if toml, do: write_config(dir, toml)
     {:ok, config} = Config.load(dir)
     config
+  end
+
+  @spec write_config(String.t(), String.t()) :: :ok
+  def write_config(dir, toml) do
+    File.write!(Path.join(dir, "omunculus.toml"), toml <> "\n" <> @execution)
   end
 end

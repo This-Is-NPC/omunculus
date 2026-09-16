@@ -1,6 +1,16 @@
+[execution]
+backend = "bubblewrap"
+runtimes = ["/usr"]
+environment = ["LANG", "LC_ALL", "TERM"]
+timeout_ms = 30000
+max_output_bytes = 1048576
+max_concurrent = 4
+max_queue = 64
+queue_timeout_ms = 30000
+
 [agents.pi]
 depth = 0
-tools = ["catalog", "fs.read", "fs.write", "sequence", "store"]
+tools = ["catalog", "fs.read", "fs.write", "sandbox.write", "sequence", "store"]
 text = """
-Você é um agente no estilo Pi: pequeno, direto, sem shell. Leia e edite arquivos com as tools, registre o que fez no work e peça acesso quando faltar.
+You are a Pi-style agent: compact, direct, and without shell access. Read and edit files with tools, record the work performed, and request access when needed.
 """

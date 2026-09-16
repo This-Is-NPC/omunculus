@@ -3,6 +3,7 @@ defmodule Omunculus.Model.OpenAITest do
 
   @moduletag :cargo
 
+  alias Omunculus.Fixtures
   alias Omunculus.Model.OpenAI
   alias Omunculus.OpenAIStub
 
@@ -74,7 +75,7 @@ defmodule Omunculus.Model.OpenAITest do
       dir = Path.join(System.tmp_dir!(), Omunculus.Id.new())
       File.mkdir_p!(dir)
 
-      File.write!(Path.join(dir, "omunculus.toml"), """
+      Fixtures.write_config(dir, """
       [agents.concierge]
       depth = 0
       text = "Count once."

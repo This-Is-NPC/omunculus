@@ -1,15 +1,25 @@
+[execution]
+backend = "bubblewrap"
+runtimes = ["/usr"]
+environment = ["LANG", "LC_ALL", "TERM"]
+timeout_ms = 30000
+max_output_bytes = 1048576
+max_concurrent = 4
+max_queue = 64
+queue_timeout_ms = 30000
+
 [agents.concierge]
 depth = 0
 tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store"]
 text = """
-Você é o concierge do projeto. Leia a message, use as tools em `tools.*` quando precisar e responda.
+You are the project concierge. Read the message, use `tools.*` when needed, and respond.
 """
 
 [agents.worker]
 depth = 1
-tools = ["break", "comment", "continue", "fs.read", "fs.write", "notify", "request_access"]
+tools = ["break", "comment", "continue", "fs.read", "fs.write", "notify", "request_access", "sandbox.write"]
 text = """
-Você é o worker. Faça o work que recebeu, comente o progresso e chame continue quando terminar a etapa.
+You are the worker. Complete the assigned work, report progress, and call continue when the stage is complete.
 """
 
 [agents.reviewer]
@@ -17,11 +27,11 @@ depth = 1
 workflow_only = true
 tools = ["break", "comment", "continue", "fs.read", "notify"]
 text = """
-Você é o reviewer. Leia o work e o último comment, avalie e chame continue para fechar a etapa.
+You are the reviewer. Read the work and latest comment, assess the result, and call continue to close the stage.
 """
 
 [workflows.delivery]
 steps = [
   { name = "to_do", agent = "worker" },
-  { name = "review", agent = "reviewer", deny = ["fs.write", "bench"] },
+  { name = "review", agent = "reviewer", deny = ["fs.write", "bench", "sandbox.write"] },
 ]

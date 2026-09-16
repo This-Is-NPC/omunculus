@@ -6,7 +6,7 @@ defmodule Omunculus.MatrixTest do
 
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Id, Project, Store}
+  alias Omunculus.{CLI, Fixtures, Id, Project, Store}
   alias Omunculus.Model.Battery
   alias Omunculus.Store.Query
 
@@ -117,7 +117,7 @@ defmodule Omunculus.MatrixTest do
   end
 
   defp write_config(dir, depth, workflow?),
-    do: File.write!(Path.join(dir, "omunculus.toml"), config_toml(depth, workflow?))
+    do: Fixtures.write_config(dir, config_toml(depth, workflow?))
 
   defp add_observer_hook(dir) do
     config = File.read!(Path.join(dir, "omunculus.toml"))

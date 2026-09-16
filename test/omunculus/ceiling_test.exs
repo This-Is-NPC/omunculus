@@ -17,6 +17,25 @@ defmodule Omunculus.CeilingTest do
       )
 
   describe "mount/3" do
+    test "sandbox resources use the same ceiling classes as tools" do
+      config =
+        config(%{
+          agents: %{
+            "worker" => %{
+              depth: 1,
+              text: "",
+              ceiling: policy(granted: ["sandbox.write"], human: ["sandbox.network"])
+            }
+          }
+        })
+
+      snapshot = Ceiling.mount(config, request(%{}), ["bash", "sandbox.write", "sandbox.network"])
+
+      assert Ceiling.classify(snapshot, "sandbox.write", "resource") == "have"
+      assert Ceiling.classify(snapshot, "sandbox.network", "resource") == "sealed"
+      assert Ceiling.classify(snapshot, "bash", "tool") == "askable"
+    end
+
     test "policy auto alone leaves everything askable" do
       config = config(%{policy: policy(mode: "auto")})
 

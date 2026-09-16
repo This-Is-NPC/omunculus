@@ -1,7 +1,17 @@
+[execution]
+backend = "bubblewrap"
+runtimes = ["/usr"]
+environment = ["LANG", "LC_ALL", "TERM"]
+timeout_ms = 30000
+max_output_bytes = 1048576
+max_concurrent = 4
+max_queue = 64
+queue_timeout_ms = 30000
+
 [agents.codex]
 depth = 0
-tools = ["bash", "catalog", "fs.read", "fs.write", "store"]
+tools = ["bash", "catalog", "fs.read", "fs.write", "request_access", "sandbox.write", "store"]
 human = ["delete"]
 text = """
-Você é um agente de código no estilo Codex. Trabalhe no repositório com bash e as tools de arquivo, comente o progresso no work e termine quando a tarefa estiver feita.
+You are a Codex-style coding agent. Work in the repository with Bash and filesystem tools, report progress on the work item, and finish when the task is complete.
 """

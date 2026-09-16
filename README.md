@@ -1,15 +1,14 @@
 # Omunculus
 
-Restart greenfield. Os documentos de planejamento em `.temp/` são locais
-e não fazem parte do repositório.
+Omunculus is a local workflow harness for tool-using agents. The project
+targets Elixir 1.17, OTP 27, Deno 2.9, and Bubblewrap on Linux.
 
-Elixir 1.17, OTP 27 e Deno 2.9 (sandbox JavaScript), definidos em `mise.toml`.
+Run the test suite with `mix test`. The live model test requires
+`--include local_model`, `OMUNCULUS_OPENAI_URL`, and `OMUNCULUS_OPENAI_MODEL`.
 
-Execute `mix test`. O teste com modelo real requer `--include local_model`,
-`OMUNCULUS_OPENAI_URL` e `OMUNCULUS_OPENAI_MODEL`.
+The JavaScript adapter exposes native tool calls and `__omunculus_execute` for
+`await tools.name(args)`.
 
-O adaptador oferece chamadas nativas e `__omunculus_execute` para código
-JavaScript com `await tools.nome(args)`. O sandbox não tem acesso direto
-a arquivos, rede, ambiente ou subprocessos; as tools passam pelo harness.
-
-O harness antigo ficou em `master`.
+Each project configuration must contain an `[execution]` table. It declares
+the Bubblewrap backend, runtime roots, permitted environment names, and
+execution limits.

@@ -3,7 +3,7 @@ defmodule Omunculus.ConfigTest do
 
   alias Omunculus.Config
   alias Omunculus.Config.Layer
-  alias Omunculus.Id
+  alias Omunculus.{Fixtures, Id}
 
   setup do
     dir = Path.join(System.tmp_dir!(), Id.new())
@@ -13,11 +13,11 @@ defmodule Omunculus.ConfigTest do
   end
 
   defp write_toml(dir, contents) do
-    File.write!(Path.join(dir, "omunculus.toml"), contents)
+    Fixtures.write_config(dir, contents)
   end
 
   test "no project file yields the builtin concierge at depth 0", %{dir: dir} do
-    assert {:ok, %Config{agents: agents, policy: policy}} = Config.load(dir)
+    assert {:ok, %Config{agents: agents, policy: policy, execution: execution}} = Config.load(dir)
 
     assert %{"concierge" => %{depth: 0, text: text, ceiling: ceiling}} = agents
     assert text != ""
@@ -33,6 +33,17 @@ defmodule Omunculus.ConfigTest do
            ]
 
     assert policy.mode == "auto"
+
+    assert execution == %{
+             backend: "bubblewrap",
+             runtimes: ["/usr"],
+             environment: ["LANG", "LC_ALL", "TERM"],
+             timeout_ms: 30_000,
+             max_output_bytes: 1_048_576,
+             max_concurrent: 4,
+             max_queue: 64,
+             queue_timeout_ms: 30_000
+           }
   end
 
   test "the default file has worker at depth 1 and a delivery workflow with two steps", %{
@@ -52,14 +63,55 @@ defmodule Omunculus.ConfigTest do
     assert ceiling.granted == ["break", "comment", "continue", "fs.read", "notify"]
   end
 
-  test "the default delivery workflow's review step names reviewer and denies fs.write and bench",
+  test "the default delivery workflow's review step denies filesystem writes",
        %{dir: dir} do
     assert {:ok, %Config{workflows: workflows}} = Config.load(dir)
 
     assert %{"delivery" => [_to_do, review]} = workflows
     assert review.name == "review"
     assert review.agent == "reviewer"
-    assert review.ceiling.deny == ["fs.write", "bench"]
+    assert review.ceiling.deny == ["fs.write", "bench", "sandbox.write"]
+  end
+
+  test "execution configuration is required", %{dir: dir} do
+    File.write!(Path.join(dir, "omunculus.toml"), """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    assert {:error, {:execution, :missing}} = Config.load(dir)
+  end
+
+  test "execution configuration rejects unsupported and malformed values", %{dir: dir} do
+    File.write!(Path.join(dir, "omunculus.toml"), """
+    [execution]
+    backend = "host"
+
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    assert {:error, {:execution, {:invalid, :backend}}} = Config.load(dir)
+
+    File.write!(Path.join(dir, "omunculus.toml"), """
+    [execution]
+    backend = "bubblewrap"
+    runtimes = ["relative"]
+    environment = ["BAD-NAME"]
+    timeout_ms = 0
+    max_output_bytes = 1
+    max_concurrent = 1
+    max_queue = 1
+    queue_timeout_ms = 1
+
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    assert {:error, {:execution, {:invalid, :runtimes}}} = Config.load(dir)
   end
 
   test "agent_at_depth prefers a non-workflow_only agent at the same depth on the default file",

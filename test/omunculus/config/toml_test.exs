@@ -9,6 +9,16 @@ defmodule Omunculus.Config.TomlTest do
 
   test "round-trips a config-shaped map" do
     map = %{
+      "execution" => %{
+        "backend" => "bubblewrap",
+        "runtimes" => ["/usr"],
+        "environment" => ["LANG"],
+        "timeout_ms" => 30_000,
+        "max_output_bytes" => 1_048_576,
+        "max_concurrent" => 4,
+        "max_queue" => 64,
+        "queue_timeout_ms" => 30_000
+      },
       "policy" => %{
         "mode" => "auto",
         "depth" => %{

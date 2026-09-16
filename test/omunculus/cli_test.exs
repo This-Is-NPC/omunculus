@@ -17,7 +17,7 @@ defmodule Omunculus.CLITest do
     project
   end
 
-  defp write_config(dir, contents), do: File.write!(Path.join(dir, "omunculus.toml"), contents)
+  defp write_config(dir, contents), do: Fixtures.write_config(dir, contents)
 
   defp fake, do: &Fake.complete/3
 

@@ -5,6 +5,16 @@ defmodule Omunculus.SpecRegressionTest do
   alias Omunculus.Store.Query
 
   @config """
+  [execution]
+  backend = "bubblewrap"
+  runtimes = ["/usr"]
+  environment = ["LANG", "LC_ALL", "TERM"]
+  timeout_ms = 30000
+  max_output_bytes = 1048576
+  max_concurrent = 4
+  max_queue = 64
+  queue_timeout_ms = 30000
+
   [agents.concierge]
   depth = 0
   text = "concierge"

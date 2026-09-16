@@ -2,7 +2,7 @@ name = "request_access"
 kind = "tool"
 shape = "simple"
 triggers = ["model"]
-description = "Pede acesso a uma tool, path ou directory. Abre um request se for preciso decidir."
+description = "Requests access to a tool, path, directory, or sandbox resource."
 tags = ["store", "request"]
 groups = ["store"]
 module = "Omunculus.Tools.RequestAccess"
@@ -13,7 +13,7 @@ required = ["kind", "name", "reason"]
 
 [parameters.properties.kind]
 type = "string"
-enum = ["tool", "path", "directory"]
+enum = ["tool", "path", "directory", "resource"]
 
 [parameters.properties.name]
 type = "string"

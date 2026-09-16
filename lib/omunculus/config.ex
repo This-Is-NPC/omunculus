@@ -7,7 +7,8 @@ defmodule Omunculus.Config do
   (resolved against the project dir) plus a ceiling layer — and the
   `[policy] workspace` default, each agent's ceiling layer, the named
   workflows under `[workflows.<name>]` (spec §3.4), and the MCP
-  servers under `[[mcp.servers]]` (spec §8.7), and grants a permanent
+  servers under `[[mcp.servers]]` (spec §8.7), the required `[execution]`
+  table, and grants a permanent
   ceiling addition — to an agent, a depth, a workflow step, or a
   workspace — by rewriting the TOML file.
   """
@@ -23,7 +24,8 @@ defmodule Omunculus.Config do
     :policy_workflow,
     :policy_workspace,
     :depth_workflows,
-    :mcp
+    :mcp,
+    :execution
   ]
   defstruct @enforce_keys
 
@@ -36,6 +38,17 @@ defmodule Omunculus.Config do
   @type step :: %{name: String.t(), agent: String.t(), ceiling: Layer.t()}
   @type workspace :: %{root: String.t(), ceiling: Layer.t()}
   @type mcp_server :: %{name: String.t(), command: [String.t()]}
+  @type execution :: %{
+          backend: String.t(),
+          runtimes: [String.t()],
+          environment: [String.t()],
+          timeout_ms: pos_integer,
+          max_output_bytes: pos_integer,
+          max_concurrent: pos_integer,
+          max_queue: pos_integer,
+          queue_timeout_ms: pos_integer
+        }
+
   @type t :: %__MODULE__{
           policy: Layer.t(),
           depths: %{non_neg_integer => Layer.t()},
@@ -45,10 +58,21 @@ defmodule Omunculus.Config do
           policy_workflow: String.t() | nil,
           policy_workspace: String.t() | nil,
           depth_workflows: %{non_neg_integer => String.t()},
-          mcp: [mcp_server]
+          mcp: [mcp_server],
+          execution: execution
         }
 
   @layer_keys ~w(mode granted tools negotiable human deny)
+  @execution_keys ~w(
+    backend
+    runtimes
+    environment
+    timeout_ms
+    max_output_bytes
+    max_concurrent
+    max_queue
+    queue_timeout_ms
+  )
   @agent_extra_keys ~w(depth text workflow_only)
   @step_extra_keys ~w(name agent)
 
@@ -213,12 +237,13 @@ defmodule Omunculus.Config do
   end
 
   defp parse(data, project_dir) do
-    case Map.keys(data) -- ["policy", "workspaces", "agents", "workflows", "mcp"] do
+    case Map.keys(data) -- ["policy", "workspaces", "agents", "workflows", "mcp", "execution"] do
       [key | _] ->
         {:error, {:unknown_key, key}}
 
       [] ->
-        with {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), project_dir),
+        with {:ok, execution} <- parse_execution(Map.get(data, "execution")),
+             {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), project_dir),
              {:ok, agents} <- parse_agents(Map.get(data, "agents", %{})),
              {:ok, workflows} <- parse_workflows(Map.get(data, "workflows", %{}), agents),
              {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows} <-
@@ -237,10 +262,79 @@ defmodule Omunculus.Config do
                policy_workflow: policy_workflow,
                policy_workspace: policy_workspace,
                depth_workflows: depth_workflows,
-               mcp: mcp
+               mcp: mcp,
+               execution: execution
              }}
           end
         end
+    end
+  end
+
+  defp parse_execution(nil), do: {:error, {:execution, :missing}}
+
+  defp parse_execution(data) when is_map(data) do
+    case Map.keys(data) -- @execution_keys do
+      [key | _] ->
+        {:error, {:execution, {:unknown_key, key}}}
+
+      [] ->
+        with {:ok, backend} <- execution_backend(data),
+             {:ok, runtimes} <- execution_runtimes(data),
+             {:ok, environment} <- execution_environment(data),
+             {:ok, timeout_ms} <- execution_positive_integer(data, "timeout_ms"),
+             {:ok, max_output_bytes} <- execution_positive_integer(data, "max_output_bytes"),
+             {:ok, max_concurrent} <- execution_positive_integer(data, "max_concurrent"),
+             {:ok, max_queue} <- execution_positive_integer(data, "max_queue"),
+             {:ok, queue_timeout_ms} <- execution_positive_integer(data, "queue_timeout_ms") do
+          {:ok,
+           %{
+             backend: backend,
+             runtimes: runtimes,
+             environment: environment,
+             timeout_ms: timeout_ms,
+             max_output_bytes: max_output_bytes,
+             max_concurrent: max_concurrent,
+             max_queue: max_queue,
+             queue_timeout_ms: queue_timeout_ms
+           }}
+        end
+    end
+  end
+
+  defp parse_execution(_data), do: {:error, {:execution, {:invalid, :table}}}
+
+  defp execution_backend(%{"backend" => "bubblewrap"}), do: {:ok, "bubblewrap"}
+  defp execution_backend(_data), do: {:error, {:execution, {:invalid, :backend}}}
+
+  defp execution_runtimes(%{"runtimes" => [_ | _] = runtimes}) do
+    if Enum.all?(runtimes, &runtime_path?/1) and Enum.uniq(runtimes) == runtimes do
+      {:ok, runtimes}
+    else
+      {:error, {:execution, {:invalid, :runtimes}}}
+    end
+  end
+
+  defp execution_runtimes(_data), do: {:error, {:execution, {:invalid, :runtimes}}}
+
+  defp runtime_path?(path), do: is_binary(path) and path != "" and Path.type(path) == :absolute
+
+  defp execution_environment(%{"environment" => environment}) when is_list(environment) do
+    if Enum.all?(environment, &environment_name?/1) and Enum.uniq(environment) == environment do
+      {:ok, environment}
+    else
+      {:error, {:execution, {:invalid, :environment}}}
+    end
+  end
+
+  defp execution_environment(_data), do: {:error, {:execution, {:invalid, :environment}}}
+
+  defp environment_name?(name) when is_binary(name), do: name =~ ~r/^[A-Za-z_][A-Za-z0-9_]*$/
+  defp environment_name?(_name), do: false
+
+  defp execution_positive_integer(data, key) do
+    case Map.fetch(data, key) do
+      {:ok, value} when is_integer(value) and value > 0 -> {:ok, value}
+      _ -> {:error, {:execution, {:invalid, String.to_existing_atom(key)}}}
     end
   end
 

@@ -11,7 +11,7 @@ defmodule Omunculus.RunTest do
     %{dir: dir}
   end
 
-  defp write_config(dir, contents), do: File.write!(Path.join(dir, "omunculus.toml"), contents)
+  defp write_config(dir, contents), do: Fixtures.write_config(dir, contents)
 
   defp write_tool(dir, name, toml, script) do
     tool_dir = Path.join([dir, "tools", name])

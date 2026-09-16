@@ -34,7 +34,7 @@ defmodule Omunculus.HarnessTest do
     project
   end
 
-  defp write_config(dir, contents), do: File.write!(Path.join(dir, "omunculus.toml"), contents)
+  defp write_config(dir, contents), do: Fixtures.write_config(dir, contents)
 
   defp open(prompt_id, work_id \\ nil),
     do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: nil, agent: nil}
