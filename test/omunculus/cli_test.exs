@@ -19,7 +19,7 @@ defmodule Omunculus.CLITest do
 
   defp write_config(dir, contents), do: File.write!(Path.join(dir, "omunculus.toml"), contents)
 
-  defp fake, do: &Fake.complete/2
+  defp fake, do: &Fake.complete/3
 
   defp write_tool(dir, name) do
     tool_dir = Path.join([dir, "tools", name])
@@ -143,7 +143,7 @@ defmodule Omunculus.CLITest do
   describe "work + comment" do
     test "the concierge creates the work, a follow-up comments on it, and a third opening sees the last comment",
          %{dir: dir} do
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("work", %{"title" => "Contar até cinco"})
         {:ok, "ok"}
       end
@@ -172,7 +172,7 @@ defmodule Omunculus.CLITest do
 
       test_pid = self()
 
-      model = fn assembled, call ->
+      model = fn assembled, _tools, call ->
         send(test_pid, {:second_assembled, assembled})
         assert {:ok, ""} = call.("comment", %{"body" => "primeiro comment"})
         {:ok, "done"}
@@ -195,7 +195,7 @@ defmodule Omunculus.CLITest do
 
       Project.close(project)
 
-      model = fn assembled, _call ->
+      model = fn assembled, _tools, _call ->
         send(test_pid, {:third_assembled, assembled})
         {:ok, "seen"}
       end
@@ -225,7 +225,7 @@ defmodule Omunculus.CLITest do
     end
 
     defp open_write_request(dir, work_id \\ nil) do
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         call.("request_access", %{
           "kind" => "tool",
           "name" => "write",
@@ -293,7 +293,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, [old_run]} = Query.all(project.conn, "SELECT * FROM runs")
       Project.close(project)
 
-      model = fn _assembled, _call -> {:ok, "obrigado"} end
+      model = fn _assembled, _tools, _call -> {:ok, "obrigado"} end
 
       assert {:ok, ""} =
                CLI.run(
@@ -339,7 +339,7 @@ defmodule Omunculus.CLITest do
 
       request_id = open_write_request(dir, work_id)
 
-      model = fn _assembled, _call -> {:ok, "obrigado"} end
+      model = fn _assembled, _tools, _call -> {:ok, "obrigado"} end
 
       assert {:ok, ""} =
                CLI.run(
@@ -369,7 +369,7 @@ defmodule Omunculus.CLITest do
       other_work_id = Fixtures.insert(project.conn, :works, %{title: "Another one"})
       Project.close(project)
 
-      model = fn _assembled, _call -> {:ok, "ok"} end
+      model = fn _assembled, _tools, _call -> {:ok, "ok"} end
       assert {:ok, ""} = CLI.run(["send", "--work_id", other_work_id, "novo pedido"], dir, model)
 
       project = open(dir)
@@ -391,7 +391,7 @@ defmodule Omunculus.CLITest do
       deny = ["write"]
       """)
 
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         call.("request_access", %{"kind" => "tool", "name" => "write", "reason" => "preciso"})
         {:ok, "unused"}
       end
@@ -415,7 +415,7 @@ defmodule Omunculus.CLITest do
          %{dir: dir} do
       test_pid = self()
 
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         assert {:ok, output} =
                  call.("request_access", %{
                    "kind" => "tool",
@@ -455,7 +455,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, [old_run]} = Query.all(project.conn, "SELECT * FROM runs")
       Project.close(project)
 
-      model = fn _assembled, _call -> {:ok, "obrigado"} end
+      model = fn _assembled, _tools, _call -> {:ok, "obrigado"} end
 
       assert {:ok, ""} =
                CLI.run(
@@ -499,7 +499,7 @@ defmodule Omunculus.CLITest do
       assert request.work_id == nil
       Project.close(project)
 
-      model = fn _assembled, _call -> raise "must never be called" end
+      model = fn _assembled, _tools, _call -> raise "must never be called" end
 
       assert {:ok, ""} =
                CLI.run(
@@ -522,7 +522,7 @@ defmodule Omunculus.CLITest do
 
     test "replying twice to the same request fails the second time", %{dir: dir} do
       request_id = open_write_request(dir)
-      model = fn _assembled, _call -> {:ok, "obrigado"} end
+      model = fn _assembled, _tools, _call -> {:ok, "obrigado"} end
 
       assert {:ok, ""} =
                CLI.run(
@@ -605,7 +605,7 @@ defmodule Omunculus.CLITest do
       workflow = "delivery"
       """)
 
-      model = fn assembled, call ->
+      model = fn assembled, _tools, call ->
         cond do
           assembled =~ "Sou o concierge." ->
             assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
@@ -658,7 +658,7 @@ defmodule Omunculus.CLITest do
       tools = ["work", "continue"]
       """)
 
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("work", %{"title" => "No sequence"})
         assert {:error, {:continue, :workflow_off}} = call.("continue", %{})
         {:ok, "seguindo mesmo assim"}
@@ -700,7 +700,7 @@ defmodule Omunculus.CLITest do
         ~s({"ok": true, "output": "", "emit": [{"type": "continue", "body": {"stage": "review"}}]})
       )
 
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
 
         assert {:error, {:continue, {:forbidden, "stage"}}} = call.("bad_continue", %{})
@@ -747,7 +747,7 @@ defmodule Omunculus.CLITest do
 
       Project.close(project)
 
-      model = fn assembled, call ->
+      model = fn assembled, _tools, call ->
         if assembled =~ "- counter:" do
           call.("continue", %{})
           {:ok, "unused"}
@@ -786,7 +786,7 @@ defmodule Omunculus.CLITest do
       workflow = "solo"
       """)
 
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("work", %{"title" => "Precisa de ajuda"})
         call.("break", %{"body" => "preciso pausar"})
         {:ok, "unused"}
@@ -806,7 +806,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, [run1]} = Query.all(project.conn, "SELECT * FROM runs")
       Project.close(project)
 
-      model = fn _assembled, _call -> {:ok, "voltei"} end
+      model = fn _assembled, _tools, _call -> {:ok, "voltei"} end
 
       assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "volta"], dir, model)
 
@@ -837,7 +837,7 @@ defmodule Omunculus.CLITest do
       tools = ["comment"]
       """)
 
-      model = fn assembled, call ->
+      model = fn assembled, _tools, call ->
         cond do
           assembled =~ "Sou o worker." ->
             {:ok, "feito"}
@@ -915,7 +915,7 @@ defmodule Omunculus.CLITest do
       workflow = "delivery"
       """)
 
-      model = fn assembled, call ->
+      model = fn assembled, _tools, call ->
         cond do
           assembled =~ "Sou o worker." ->
             call.("continue", %{})
@@ -978,7 +978,7 @@ defmodule Omunculus.CLITest do
       {:ok, counter} = Agent.start_link(fn -> 0 end)
       on_exit(fn -> Project.close(reader) end)
 
-      model = fn assembled, call ->
+      model = fn assembled, _tools, call ->
         cond do
           assembled =~ "Sou o worker." ->
             case Agent.get_and_update(counter, fn n -> {n, n + 1} end) do
@@ -1066,7 +1066,7 @@ defmodule Omunculus.CLITest do
   describe "inbox" do
     test "notify mid-run leaves an unread inbox row, the run keeps going and closes done, the work stays open, and CLI reads it",
          %{dir: dir} do
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("work", %{"title" => "Ajuda"})
         assert {:ok, ""} = call.("notify", %{"body" => "preciso de ajuda"})
         {:ok, "ok"}
@@ -1154,7 +1154,7 @@ defmodule Omunculus.CLITest do
 
     test "a notify emits a tool event named on-notify right after it, carrying the call's run and work ids",
          %{dir: dir} do
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("notify", %{"body" => "aviso"})
         {:ok, "ok"}
       end
@@ -1193,7 +1193,7 @@ defmodule Omunculus.CLITest do
       workflow = "solo"
       """)
 
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
         call.("continue", %{})
         {:ok, "unused"}
@@ -1231,7 +1231,7 @@ defmodule Omunculus.CLITest do
       workflow = "solo"
       """)
 
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("work", %{"title" => "Precisa de ajuda"})
         call.("break", %{"body" => "preciso pausar"})
         {:ok, "unused"}
@@ -1279,7 +1279,7 @@ defmodule Omunculus.CLITest do
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
-      model = fn assembled, call ->
+      model = fn assembled, _tools, call ->
         if assembled =~ "## Message" do
           assert {:ok, ""} = call.("notify", %{"body" => "aviso"})
           {:ok, "ok"}
@@ -1329,7 +1329,7 @@ defmodule Omunculus.CLITest do
 
       test_pid = self()
 
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
         send(test_pid, {:notify_result, call.("notify", %{"body" => "aviso"})})
         {:ok, "seguindo"}
@@ -1359,7 +1359,7 @@ defmodule Omunculus.CLITest do
       tools = ["comment", "compact_comments", "work"]
       """)
 
-      model1 = fn _assembled, call ->
+      model1 = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("work", %{"title" => "Contagem"})
         assert {:ok, ""} = call.("comment", %{"body" => "um"})
         assert {:ok, ""} = call.("comment", %{"body" => "dois"})
@@ -1377,7 +1377,7 @@ defmodule Omunculus.CLITest do
 
       test_pid = self()
 
-      model2 = fn _assembled, call ->
+      model2 = fn _assembled, _tools, call ->
         assert {:ok, load_output} = call.("compact_comments", %{"op" => "load"})
         send(test_pid, {:load_output, load_output})
 
@@ -1414,7 +1414,7 @@ defmodule Omunculus.CLITest do
 
       Project.close(project)
 
-      model3 = fn assembled, _call ->
+      model3 = fn assembled, _tools, _call ->
         send(test_pid, {:third_assembled, assembled})
         {:ok, "visto"}
       end
@@ -1451,7 +1451,7 @@ defmodule Omunculus.CLITest do
         ~s({"ok": true, "output": "", "emit": [{"type": "compact", "body": {"work_id": "#{other_work_id}", "summary": "roubado"}}]})
       )
 
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         assert {:error, {:compact, :foreign_work}} = call.("foreign_compact", %{})
         {:ok, "ok"}
       end
@@ -1495,7 +1495,7 @@ defmodule Omunculus.CLITest do
       workflow = "delivery"
       """)
 
-      model = fn assembled, call ->
+      model = fn assembled, _tools, call ->
         cond do
           assembled =~ "Você é o reviewer." ->
             call.("continue", %{})
@@ -1570,7 +1570,7 @@ defmodule Omunculus.CLITest do
       tools = ["comment"]
       """)
 
-      model = fn assembled, call ->
+      model = fn assembled, _tools, call ->
         cond do
           assembled =~ "Sou o worker." ->
             {:ok, "feito"}

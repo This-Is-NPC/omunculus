@@ -84,7 +84,7 @@ defmodule Omunculus.McpTest do
       write_config(dir, mcp_config(@server.command |> hd()))
       test_pid = self()
 
-      model = fn assembled, call ->
+      model = fn assembled, _tools, call ->
         send(test_pid, {:assembled, assembled})
         assert {:ok, "oi"} = call.("echo", %{"text" => "oi"})
         assert {:error, {:not_allowed, "shout"}} = call.("shout", %{"text" => "oi"})

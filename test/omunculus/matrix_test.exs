@@ -159,7 +159,7 @@ defmodule Omunculus.MatrixTest do
     write_config(dir, depth, workflow?)
     if hook?, do: add_observer_hook(dir)
 
-    assert {:ok, ""} = CLI.run(["send", "conte até 5"], dir, &Battery.complete/2)
+    assert {:ok, ""} = CLI.run(["send", "conte até 5"], dir, &Battery.complete/3)
   end
 
   defp counter_value(dir),

@@ -88,7 +88,7 @@ defmodule Omunculus.WorkspaceTest do
     write_config(dir, base_toml(one, two, three))
     write_check_tool(dir, "peek", ~s("roots":["#{one}"]))
 
-    model = fn _assembled, call ->
+    model = fn _assembled, _tools, call ->
       assert {:ok, "match"} = call.("peek", %{})
       {:ok, "done"}
     end
@@ -104,7 +104,7 @@ defmodule Omunculus.WorkspaceTest do
   } do
     write_config(dir, base_toml(one, two, three))
 
-    model = fn _assembled, call ->
+    model = fn _assembled, _tools, call ->
       assert {:ok, ""} = call.("write", %{"path" => "note.txt", "content" => "hi"})
       {:ok, "done"}
     end
@@ -126,7 +126,7 @@ defmodule Omunculus.WorkspaceTest do
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
-    model = fn _assembled, _call -> {:ok, "done"} end
+    model = fn _assembled, _tools, _call -> {:ok, "done"} end
 
     assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "oi"], dir, model)
 
@@ -155,7 +155,7 @@ defmodule Omunculus.WorkspaceTest do
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
-    model = fn _assembled, call ->
+    model = fn _assembled, _tools, call ->
       assert {:ok, "segredo"} = call.("read", %{"path" => "secret.txt"})
 
       assert {:ok, message} = call.("read", %{"path" => Path.join(one, "other.txt")})
@@ -179,7 +179,7 @@ defmodule Omunculus.WorkspaceTest do
 
     {:ok, counter} = Agent.start_link(fn -> 0 end)
 
-    model = fn _assembled, call ->
+    model = fn _assembled, _tools, call ->
       case Agent.get_and_update(counter, fn n -> {n, n + 1} end) do
         0 -> call.("delegate", %{"title" => "child", "body" => "faça isso"})
         _already_delegated -> :ok
@@ -212,7 +212,7 @@ defmodule Omunculus.WorkspaceTest do
 
     test_pid = self()
 
-    model = fn _assembled, call ->
+    model = fn _assembled, _tools, call ->
       {:ok, output} = call.("workspaces", %{})
       send(test_pid, {:output, output})
       {:ok, "done"}
@@ -239,7 +239,7 @@ defmodule Omunculus.WorkspaceTest do
 
     test_pid = self()
 
-    model = fn _assembled, call ->
+    model = fn _assembled, _tools, call ->
       {:ok, output} = call.("directory", %{})
       send(test_pid, {:output, output})
       {:ok, "done"}
@@ -258,7 +258,7 @@ defmodule Omunculus.WorkspaceTest do
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
-    request_model = fn _assembled, call ->
+    request_model = fn _assembled, _tools, call ->
       call.("request_access", %{
         "kind" => "tool",
         "name" => "delete",
@@ -274,7 +274,7 @@ defmodule Omunculus.WorkspaceTest do
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
     Project.close(project)
 
-    reply_model = fn _assembled, _call -> {:ok, "obrigado"} end
+    reply_model = fn _assembled, _tools, _call -> {:ok, "obrigado"} end
 
     assert {:ok, ""} =
              CLI.run(
@@ -343,7 +343,7 @@ defmodule Omunculus.WorkspaceTest do
 
     Project.close(project)
 
-    request_model = fn _assembled, call ->
+    request_model = fn _assembled, _tools, call ->
       call.("request_access", %{
         "kind" => "tool",
         "name" => "delete",
@@ -359,7 +359,7 @@ defmodule Omunculus.WorkspaceTest do
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
     Project.close(project)
 
-    reply_model = fn _assembled, _call -> {:ok, "obrigado"} end
+    reply_model = fn _assembled, _tools, _call -> {:ok, "obrigado"} end
 
     assert {:ok, ""} =
              CLI.run(

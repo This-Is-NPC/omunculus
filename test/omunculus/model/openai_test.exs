@@ -14,6 +14,10 @@ defmodule Omunculus.Model.OpenAITest do
   - counter: incrementa e devolve o total
   """
 
+  @tools [
+    %{name: "counter", description: "incrementa e devolve o total", parameters: %{}}
+  ]
+
   defp recorder do
     {:ok, agent} = Agent.start_link(fn -> [] end)
     call = fn name, args -> Agent.get_and_update(agent, &{{:ok, ""}, &1 ++ [{name, args}]}) end
@@ -25,18 +29,23 @@ defmodule Omunculus.Model.OpenAITest do
   setup do
     {:ok, stub} = OpenAIStub.start()
     on_exit(fn -> OpenAIStub.stop(stub) end)
-    %{base_url: stub.base_url <> "/v1"}
+    %{stub: stub, base_url: stub.base_url <> "/v1"}
   end
 
   test "tool_rounds: 1 calls the tool exactly once and returns the final content", %{
+    stub: stub,
     base_url: base_url
   } do
     :ok = OpenAIStub.configure(%{base_url: String.trim_trailing(base_url, "/v1")}, tool_rounds: 1)
     model = OpenAI.new(base_url, "stub")
     {agent, call} = recorder()
 
-    assert {:ok, "benchmark complete"} = model.(@assembled, call)
+    assert {:ok, "benchmark complete"} = model.(@assembled, @tools, call)
     assert calls(agent) == [{"counter", %{}}]
+
+    assert {:ok, %{"last_tools" => [tool]}} = OpenAIStub.stats(stub)
+    assert tool["name"] == "counter"
+    assert tool["parameters"]["type"] == "object"
   end
 
   test "tool_rounds: 0 never calls the tool", %{base_url: base_url} do
@@ -44,7 +53,7 @@ defmodule Omunculus.Model.OpenAITest do
     model = OpenAI.new(base_url, "stub")
     {agent, call} = recorder()
 
-    assert {:ok, "benchmark complete"} = model.(@assembled, call)
+    assert {:ok, "benchmark complete"} = model.(@assembled, @tools, call)
     assert calls(agent) == []
   end
 
@@ -52,7 +61,7 @@ defmodule Omunculus.Model.OpenAITest do
     model = OpenAI.new("http://127.0.0.1:1", "stub")
     {_agent, call} = recorder()
 
-    assert {:error, {:openai, _reason}} = model.(@assembled, call)
+    assert {:error, {:openai, _reason}} = model.(@assembled, @tools, call)
   end
 
   @tag :local_model
@@ -62,7 +71,7 @@ defmodule Omunculus.Model.OpenAITest do
     model = OpenAI.new(base_url, model_name)
     {_agent, call} = recorder()
 
-    assert {:ok, text} = model.("Responda apenas: pong", call)
+    assert {:ok, text} = model.("Responda apenas: pong", [], call)
     assert text =~ "pong"
   end
 end

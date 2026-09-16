@@ -16,7 +16,8 @@ defmodule Omunculus.CLI do
   alias Omunculus.{Harness, Project}
   alias Omunculus.Model.{Battery, Fake, OpenAI}
 
-  @spec run([String.t()], String.t(), (String.t(), fun -> {:ok, String.t()} | {:error, term})) ::
+  @spec run([String.t()], String.t(), (String.t(), [map], fun ->
+                                         {:ok, String.t()} | {:error, term})) ::
           {:ok, String.t()} | {:error, term}
   def run([], _dir, _model), do: {:error, :no_tool}
 
@@ -47,9 +48,9 @@ defmodule Omunculus.CLI do
 
   defp model_from_env do
     case System.get_env("OMUNCULUS_MODEL", "fake") do
-      "battery" -> &Battery.complete/2
+      "battery" -> &Battery.complete/3
       "openai" -> openai_model_from_env()
-      _fake -> &Fake.complete/2
+      _fake -> &Fake.complete/3
     end
   end
 

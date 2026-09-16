@@ -14,7 +14,11 @@ defmodule Omunculus.Run do
   comments when the run answers one, and the have tools' cards — when
   `tool_search` is among them and there are more than 12, only the cards
   of the `store`, `sequence` or `catalog` groups, plus a count of the
-  rest, since the model can search for the others — lets the model call
+  rest, since the model can search for the others. Also builds the
+  `tools` list — `%{name, description, parameters}` for the run's
+  effective tools, sorted by name — and calls the model with the
+  assembled prompt, that list and the call fun, so a tool_calls API can
+  declare each tool's real schema. Lets the model call
   tools through the harness, and closes the run when the model is done,
   when a call it made ended the run with a decision, or when the model
   fails. Once closed, a work whose sequence is off and that has a parent
@@ -37,7 +41,7 @@ defmodule Omunculus.Run do
             via: String.t() | nil,
             agent: String.t() | nil
           },
-          (String.t(), fun -> {:ok, String.t()} | {:error, term})
+          (String.t(), [map], fun -> {:ok, String.t()} | {:error, term})
         ) :: {:ok, map} | {:error, term}
   def open(
         project,
@@ -74,6 +78,7 @@ defmodule Omunculus.Run do
              Map.keys(catalog)
            ),
          names = effective_names(snapshot, catalog),
+         tools = effective_tools(names, catalog),
          assembled =
            assemble(
              text,
@@ -97,7 +102,7 @@ defmodule Omunculus.Run do
              request_id: request_id
            }),
          call = build_call(project, run, names) do
-      run_model(project, run, config, work, assembled, call, model)
+      run_model(project, run, config, work, assembled, tools, call, model)
     end
   end
 
@@ -215,6 +220,13 @@ defmodule Omunculus.Run do
     snapshot.have |> Enum.filter(&Map.has_key?(catalog, &1)) |> Enum.sort()
   end
 
+  defp effective_tools(names, catalog) do
+    Enum.map(names, fn name ->
+      manifest = Map.fetch!(catalog, name)
+      %{name: manifest.name, description: manifest.description, parameters: manifest.parameters}
+    end)
+  end
+
   @searchable_groups ~w(store sequence catalog)
 
   defp assemble(
@@ -296,12 +308,12 @@ defmodule Omunculus.Run do
     end
   end
 
-  defp run_model(project, run, config, work, assembled, call, model) do
+  defp run_model(project, run, config, work, assembled, tools, call, model) do
     run_id = run.id
 
     result =
       try do
-        model.(assembled, call)
+        model.(assembled, tools, call)
       rescue
         exception -> {:error, {:model_crashed, exception}}
       catch

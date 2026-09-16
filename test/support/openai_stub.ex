@@ -5,7 +5,9 @@ defmodule Omunculus.OpenAIStub do
   `/v1/chat/completions` server that, while a request carries a
   `counter` tool and fewer `tool` messages than its configured
   `tool_rounds`, replies with a `counter` tool call; otherwise it replies
-  with the content `"benchmark complete"`.
+  with the content `"benchmark complete"`. `GET /stats` reports counters
+  plus `last_tools`, the `name`/`parameters` of the functions declared on
+  the most recently received request.
   """
 
   @default_timeout 10_000
@@ -45,6 +47,17 @@ defmodule Omunculus.OpenAIStub do
       {:ok, %{status: status}} when status in 200..299 -> :ok
       {:ok, %{status: status, body: body}} -> {:error, {:stub_control, status, body}}
       {:error, reason} -> {:error, {:stub_control, reason}}
+    end
+  end
+
+  @spec stats(map) :: {:ok, map} | {:error, term}
+  def stats(%{base_url: base_url} = stub) do
+    case Req.get(base_url <> "/stats",
+           receive_timeout: Map.get(stub, :timeout, @default_timeout)
+         ) do
+      {:ok, %{status: status, body: body}} when status in 200..299 -> {:ok, body}
+      {:ok, %{status: status, body: body}} -> {:error, {:stub_stats, status, body}}
+      {:error, reason} -> {:error, {:stub_stats, reason}}
     end
   end
 

@@ -193,6 +193,7 @@ struct AppState {
     config: RwLock<Config>,
     counters: Counters,
     barrier: RequestBarrier,
+    last_tools: RwLock<Value>,
 }
 
 impl AppState {
@@ -201,7 +202,12 @@ impl AppState {
             config: RwLock::new(Config::default()),
             counters: Counters::new(),
             barrier: RequestBarrier::new(),
+            last_tools: RwLock::new(json!([])),
         })
+    }
+
+    async fn set_last_tools(&self, tools: Value) {
+        *self.last_tools.write().await = tools;
     }
 
     async fn configure(&self, input: ControlRequest) {
@@ -255,7 +261,7 @@ impl AppState {
         }
     }
 
-    fn stats(&self) -> Value {
+    async fn stats(&self) -> Value {
         json!({
             "requests": self.counters.requests.load(Ordering::Relaxed),
             "tool_requests": self.counters.tool_requests.load(Ordering::Relaxed),
@@ -265,6 +271,7 @@ impl AppState {
             "completed": self.counters.completed.load(Ordering::Relaxed),
             "failed": self.counters.failed.load(Ordering::Relaxed),
             "barrier_timeouts": self.counters.barrier_timeouts.load(Ordering::Relaxed),
+            "last_tools": self.last_tools.read().await.clone(),
         })
     }
 }
@@ -337,6 +344,8 @@ struct Tool {
 struct Function {
     #[serde(default)]
     name: String,
+    #[serde(default)]
+    parameters: Value,
 }
 
 async fn health() -> impl IntoResponse {
@@ -344,7 +353,7 @@ async fn health() -> impl IntoResponse {
 }
 
 async fn stats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    Json(state.stats())
+    Json(state.stats().await)
 }
 
 async fn control(
@@ -364,6 +373,14 @@ async fn completions(State(state): State<Arc<AppState>>, body: Bytes) -> Respons
             return error_response(StatusCode::BAD_REQUEST, "invalid json");
         }
     };
+    let last_tools: Value = request
+        .tools
+        .iter()
+        .filter_map(|tool| tool.function.as_ref())
+        .map(|function| json!({"name": function.name, "parameters": function.parameters}))
+        .collect();
+    state.set_last_tools(last_tools).await;
+
     let config = state.config().await;
     match state
         .barrier

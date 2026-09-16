@@ -4,9 +4,9 @@ defmodule Omunculus.Model.Fake do
   non-empty line of the assembled prompt it was given.
   """
 
-  @spec complete(String.t(), (String.t(), map -> {:ok, String.t()} | {:error, term})) ::
+  @spec complete(String.t(), [map], (String.t(), map -> {:ok, String.t()} | {:error, term})) ::
           {:ok, String.t()}
-  def complete(assembled, _call) do
+  def complete(assembled, _tools, _call) do
     first_line =
       assembled
       |> String.split("\n")

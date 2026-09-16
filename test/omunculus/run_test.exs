@@ -58,7 +58,7 @@ defmodule Omunculus.RunTest do
     prompt_id = message(project.conn)
 
     assert {:error, {:model_crashed, %RuntimeError{message: "boom"}}} =
-             Run.open(project, open(prompt_id), fn _assembled, _call -> raise "boom" end)
+             Run.open(project, open(prompt_id), fn _assembled, _tools, _call -> raise "boom" end)
 
     assert {:ok, [run]} = Store.Query.all(project.conn, "SELECT status FROM runs")
     assert run.status == "done"
@@ -75,7 +75,7 @@ defmodule Omunculus.RunTest do
     prompt_id = message(project.conn)
 
     assert {:error, {:openai, :down}} =
-             Run.open(project, open(prompt_id), fn _assembled, _call ->
+             Run.open(project, open(prompt_id), fn _assembled, _tools, _call ->
                {:error, {:openai, :down}}
              end)
 
@@ -97,7 +97,7 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
     message_id = message(project.conn)
 
-    model = fn _assembled, call ->
+    model = fn _assembled, _tools, call ->
       assert {:ok, "echoed"} = call.("echo", %{})
       {:ok, "done"}
     end
@@ -115,7 +115,7 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
     message_id = message(project.conn)
 
-    model = fn _assembled, call -> call.("nonexistent", %{}) end
+    model = fn _assembled, _tools, call -> call.("nonexistent", %{}) end
 
     assert {:error, {:not_allowed, "nonexistent"}} = Run.open(project, open(message_id), model)
 
@@ -134,7 +134,7 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
     message_id = message(project.conn)
 
-    model = fn _assembled, _call -> raise "must never be called" end
+    model = fn _assembled, _tools, _call -> raise "must never be called" end
 
     assert {:error, {:no_agent_at_depth, 0}} = Run.open(project, open(message_id), model)
     assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
@@ -157,7 +157,7 @@ defmodule Omunculus.RunTest do
     message_id = message(project.conn)
     test_pid = self()
 
-    model = fn assembled, call ->
+    model = fn assembled, _tools, call ->
       send(test_pid, {:assembled, assembled})
       send(test_pid, {:two, call.("two", %{})})
       assert {:ok, "one-out"} = call.("one", %{})
@@ -179,7 +179,7 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
     message_id = message(project.conn)
 
-    model = fn assembled, _call -> {:ok, assembled} end
+    model = fn assembled, _tools, _call -> {:ok, assembled} end
 
     assert {:ok, run} = Run.open(project, open(message_id), model)
     refute run.work_id
@@ -192,7 +192,7 @@ defmodule Omunculus.RunTest do
     work_id = Fixtures.insert(project.conn, :works, %{title: "Fix the parser"})
     test_pid = self()
 
-    model = fn assembled, _call ->
+    model = fn assembled, _tools, _call ->
       send(test_pid, {:assembled, assembled})
       {:ok, "done"}
     end
@@ -230,7 +230,7 @@ defmodule Omunculus.RunTest do
 
     test_pid = self()
 
-    model = fn assembled, _call ->
+    model = fn assembled, _tools, _call ->
       send(test_pid, {:assembled, assembled})
       {:ok, "done"}
     end
@@ -249,7 +249,7 @@ defmodule Omunculus.RunTest do
     work_id = Fixtures.insert(project.conn, :works, %{title: "Fix the parser"})
     test_pid = self()
 
-    model = fn assembled, _call ->
+    model = fn assembled, _tools, _call ->
       send(test_pid, {:assembled, assembled})
       {:ok, "done"}
     end
@@ -266,7 +266,7 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
     message_id = message(project.conn)
 
-    model = fn _assembled, _call -> raise "must never be called" end
+    model = fn _assembled, _tools, _call -> raise "must never be called" end
 
     assert {:error, {:no_work, "nope"}} = Run.open(project, open(message_id, "nope"), model)
     assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
@@ -301,7 +301,7 @@ defmodule Omunculus.RunTest do
     message_id = message(project.conn)
     test_pid = self()
 
-    model = fn assembled, _call ->
+    model = fn assembled, _tools, _call ->
       send(test_pid, {:assembled, assembled})
       {:ok, "done"}
     end
@@ -332,7 +332,7 @@ defmodule Omunculus.RunTest do
     write_tool(dir, "b", model_tool_toml("b"), fixed_output_script("ok"))
 
     project = open_project(dir)
-    model = fn _assembled, _call -> {:ok, "done"} end
+    model = fn _assembled, _tools, _call -> {:ok, "done"} end
 
     assert {:ok, run1} = Run.open(project, open(message(project.conn)), model)
     assert Jason.decode!(run1.tools) == ["a"]
@@ -362,7 +362,7 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
     test_pid = self()
 
-    model = fn assembled, _call ->
+    model = fn assembled, _tools, _call ->
       send(test_pid, {:assembled, assembled})
       {:ok, "done"}
     end
@@ -397,7 +397,7 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
     test_pid = self()
 
-    model = fn assembled, _call ->
+    model = fn assembled, _tools, _call ->
       send(test_pid, {:assembled, assembled})
       {:ok, "done"}
     end
@@ -415,7 +415,7 @@ defmodule Omunculus.RunTest do
     write_tool(dir, "extra", model_tool_toml("extra"), fixed_output_script("ok"))
 
     project = open_project(dir)
-    model = fn _assembled, _call -> {:ok, "done"} end
+    model = fn _assembled, _tools, _call -> {:ok, "done"} end
 
     parent_id = Fixtures.insert(project.conn, :works, %{grants: ~s(["extra"])})
     child_id = Fixtures.insert(project.conn, :works, %{parent_id: parent_id})
@@ -445,7 +445,7 @@ defmodule Omunculus.RunTest do
     write_tool(dir, "write", model_tool_toml("write"), fixed_output_script("ok"))
 
     project = open_project(dir)
-    model = fn _assembled, _call -> {:ok, "done"} end
+    model = fn _assembled, _tools, _call -> {:ok, "done"} end
 
     work_id = Fixtures.insert(project.conn, :works, %{grants: ~s(["write"])})
 
@@ -461,7 +461,7 @@ defmodule Omunculus.RunTest do
     message_id = message(project.conn)
     test_pid = self()
 
-    model = fn _assembled, call ->
+    model = fn _assembled, _tools, call ->
       call.("request_access", %{"kind" => "tool", "name" => "secret", "reason" => "preciso"})
       send(test_pid, :reached_second_call)
       call.("request_access", %{"kind" => "tool", "name" => "outro", "reason" => "x"})
@@ -495,7 +495,7 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
     test_pid = self()
 
-    model = fn assembled, _call ->
+    model = fn assembled, _tools, _call ->
       send(test_pid, {:assembled, assembled})
       {:ok, "done"}
     end
@@ -524,7 +524,7 @@ defmodule Omunculus.RunTest do
              Run.open(
                project,
                %{prompt_id: nil, work_id: nil, request_id: nil, via: nil, agent: "nope"},
-               fn _assembled, _call -> raise "must never be called" end
+               fn _assembled, _tools, _call -> raise "must never be called" end
              )
 
     Project.close(project)

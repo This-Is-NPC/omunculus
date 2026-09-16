@@ -1,21 +1,20 @@
 defmodule Omunculus.Model.OpenAI do
   @moduledoc """
   Factory for an OpenAI-compatible model of the contract of spec §8.6:
-  `new/3` returns a `(assembled, call) :: {:ok, text} | {:error, term}`
-  fun. Declares the cards the assembled prompt's `## Tools` section names
-  (`Omunculus.Model.Cards`) as functions with a permissive
-  `%{type: "object", additionalProperties: true}` schema, posts
-  `<base_url>/chat/completions`, and for every `tool_calls` entry in the
-  reply runs `call.(name, args)` and feeds the output back as a `tool`
-  message, looping until a reply carries no tool call.
+  `new/3` returns a `(assembled, tools, call) :: {:ok, text} | {:error,
+  term}` fun. Declares each of `tools` (the run's effective tools, as
+  `%{name, description, parameters}`) as a function with its real
+  `parameters` schema — an empty schema becomes `%{type: "object",
+  properties: %{}}` so servers accept it — posts the assembled as the
+  user turn to `<base_url>/chat/completions`, and for every `tool_calls`
+  entry in the reply runs `call.(name, args)` and feeds the output back
+  as a `tool` message, looping until a reply carries no tool call.
   """
-
-  alias Omunculus.Model.Cards
 
   @default_timeout 120_000
 
   @spec new(String.t(), String.t(), keyword) ::
-          (String.t(), (String.t(), map -> {:ok, String.t()} | {:error, term}) ->
+          (String.t(), [map], (String.t(), map -> {:ok, String.t()} | {:error, term}) ->
              {:ok, String.t()} | {:error, term})
   def new(base_url, model_name, opts \\ []) do
     client = %{
@@ -26,18 +25,23 @@ defmodule Omunculus.Model.OpenAI do
       temperature: Keyword.get(opts, :temperature)
     }
 
-    fn assembled, call ->
-      tools = assembled |> Cards.names() |> Enum.sort() |> Enum.map(&function_tool/1)
-      loop(client, tools, [%{role: "system", content: assembled}], call)
+    fn assembled, tools, call ->
+      function_tools = Enum.map(tools, &function_tool/1)
+      loop(client, function_tools, [%{role: "user", content: assembled}], call)
     end
   end
 
-  defp function_tool(name) do
+  defp function_tool(%{name: name, description: description, parameters: parameters}) do
     %{
       type: "function",
-      function: %{name: name, parameters: %{type: "object", additionalProperties: true}}
+      function: %{name: name, description: description, parameters: schema(parameters)}
     }
   end
+
+  defp schema(parameters) when map_size(parameters) == 0,
+    do: %{type: "object", properties: %{}}
+
+  defp schema(parameters), do: parameters
 
   defp loop(client, tools, messages, call) do
     with {:ok, message} <- post(client, request_body(client, tools, messages)) do

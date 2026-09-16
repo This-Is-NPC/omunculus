@@ -17,7 +17,7 @@ defmodule Omunculus.PresetTest do
     project
   end
 
-  defp fake, do: &Fake.complete/2
+  defp fake, do: &Fake.complete/3
 
   defp write_config(dir, contents), do: File.write!(Path.join(dir, "omunculus.toml"), contents)
 
@@ -43,7 +43,7 @@ defmodule Omunculus.PresetTest do
       assert {:ok, "preset codex-like aplicado"} =
                CLI.run(["preset", "codex-like"], dir, fake())
 
-      model = fn assembled, call ->
+      model = fn assembled, _tools, call ->
         assert assembled =~ "Você é um agente de código"
         assert {:ok, "hi\n"} = call.("bash", %{"command" => "echo hi"})
         {:ok, "feito"}
@@ -68,7 +68,7 @@ defmodule Omunculus.PresetTest do
       assert {:ok, "preset codex-like aplicado"} =
                CLI.run(["preset", "codex-like"], dir, fake())
 
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         assert {:ok, _output} =
                  call.("request_access", %{
                    "kind" => "tool",
@@ -90,7 +90,7 @@ defmodule Omunculus.PresetTest do
     test "applying the preset switches the run to the pi agent, with no bash", %{dir: dir} do
       assert {:ok, "preset pi-like aplicado"} = CLI.run(["preset", "pi-like"], dir, fake())
 
-      model = fn assembled, _call ->
+      model = fn assembled, _tools, _call ->
         assert assembled =~ "estilo Pi"
         {:ok, "feito"}
       end
@@ -108,7 +108,7 @@ defmodule Omunculus.PresetTest do
 
   describe "default package" do
     test "no run ever has bash, and calling it is refused", %{dir: dir} do
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         assert {:error, {:not_allowed, "bash"}} = call.("bash", %{"command" => "echo hi"})
         {:ok, "ok"}
       end
@@ -147,7 +147,7 @@ defmodule Omunculus.PresetTest do
       work_id = Fixtures.insert(project.conn, :works, %{title: "Guardar o segredo"})
       Project.close(project)
 
-      model = fn _assembled, call ->
+      model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("request_secret", %{})
         {:ok, "unused"}
       end
@@ -160,7 +160,7 @@ defmodule Omunculus.PresetTest do
       assert Jason.decode!(request.ask) == %{"kind" => "secret", "name" => "vault"}
       Project.close(project)
 
-      reply_model = fn _assembled, _call -> {:ok, "obrigado"} end
+      reply_model = fn _assembled, _tools, _call -> {:ok, "obrigado"} end
 
       assert {:ok, ""} =
                CLI.run(

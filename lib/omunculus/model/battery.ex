@@ -12,12 +12,10 @@ defmodule Omunculus.Model.Battery do
   addressed as one.
   """
 
-  alias Omunculus.Model.Cards
-
-  @spec complete(String.t(), (String.t(), map -> {:ok, String.t()} | {:error, term})) ::
+  @spec complete(String.t(), [map], (String.t(), map -> {:ok, String.t()} | {:error, term})) ::
           {:ok, String.t()}
-  def complete(assembled, call) do
-    assembled |> parse() |> decide(call)
+  def complete(assembled, tools, call) do
+    assembled |> parse(tools) |> decide(call)
   end
 
   defp decide(%{work: false, cards: cards} = parsed, call) do
@@ -93,9 +91,9 @@ defmodule Omunculus.Model.Battery do
     end
   end
 
-  defp parse(assembled) do
+  defp parse(assembled, tools) do
     %{
-      cards: Cards.names(assembled),
+      cards: MapSet.new(tools, & &1.name),
       work: String.contains?(assembled, "## Work"),
       last_comment: last_comment(assembled),
       agent_line: assembled |> String.split("\n", parts: 2) |> List.first() || ""

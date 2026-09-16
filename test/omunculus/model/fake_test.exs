@@ -7,14 +7,14 @@ defmodule Omunculus.Model.FakeTest do
 
   test "returns the first non-empty line" do
     assembled = "\n\nagent text\nmessage body\n"
-    assert {:ok, "fake model: agent text"} = Fake.complete(assembled, never_call())
+    assert {:ok, "fake model: agent text"} = Fake.complete(assembled, [], never_call())
   end
 
   test "empty assembled" do
-    assert {:ok, "fake model: "} = Fake.complete("", never_call())
+    assert {:ok, "fake model: "} = Fake.complete("", [], never_call())
   end
 
   test "call is never invoked" do
-    assert {:ok, _} = Fake.complete("hello", never_call())
+    assert {:ok, _} = Fake.complete("hello", [], never_call())
   end
 end

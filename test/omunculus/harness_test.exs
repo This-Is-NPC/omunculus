@@ -56,7 +56,7 @@ defmodule Omunculus.HarnessTest do
     )
 
     project = open_project(dir)
-    model = fn _assembled, _call -> {:ok, "done"} end
+    model = fn _assembled, _tools, _call -> {:ok, "done"} end
 
     ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil}
 
@@ -156,7 +156,7 @@ defmodule Omunculus.HarnessTest do
     project = open_project(dir)
     message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
 
-    model = fn _assembled, call ->
+    model = fn _assembled, _tools, call ->
       {:ok, output} = call.("counter", %{})
       {:ok, output}
     end
@@ -205,7 +205,7 @@ defmodule Omunculus.HarnessTest do
     project = open_project(dir)
     message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
 
-    model = fn _assembled, call ->
+    model = fn _assembled, _tools, call ->
       assert {:ok, ""} = call.("work", %{"title" => "Fix the parser"})
       call.("viewer", %{})
     end
@@ -378,7 +378,8 @@ defmodule Omunculus.HarnessTest do
     message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
     event = %{type: "prompt", prompt_id: message_id, work_id: nil}
 
-    assert :ok = Harness.follow_up(project, [event], fn _assembled, _call -> {:ok, "done"} end)
+    assert :ok =
+             Harness.follow_up(project, [event], fn _assembled, _tools, _call -> {:ok, "done"} end)
 
     assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
     assert run.status == "done"
