@@ -21,7 +21,12 @@ defmodule Omunculus.Config do
   ]
   defstruct @enforce_keys
 
-  @type agent :: %{depth: non_neg_integer, text: String.t(), ceiling: Layer.t()}
+  @type agent :: %{
+          depth: non_neg_integer,
+          text: String.t(),
+          workflow_only: boolean,
+          ceiling: Layer.t()
+        }
   @type step :: %{name: String.t(), agent: String.t(), ceiling: Layer.t()}
   @type t :: %__MODULE__{
           policy: Layer.t(),
@@ -34,7 +39,7 @@ defmodule Omunculus.Config do
         }
 
   @layer_keys ~w(mode granted tools negotiable human deny)
-  @agent_extra_keys ~w(depth text)
+  @agent_extra_keys ~w(depth text workflow_only)
   @step_extra_keys ~w(name agent)
 
   @spec load(String.t()) :: {:ok, t} | {:error, term}
@@ -49,7 +54,7 @@ defmodule Omunculus.Config do
   def agent_at_depth(%__MODULE__{agents: agents}, depth) do
     agents
     |> Enum.sort_by(fn {name, _agent} -> name end)
-    |> Enum.find(fn {_name, agent} -> agent.depth == depth end)
+    |> Enum.find(fn {_name, agent} -> agent.depth == depth and not agent.workflow_only end)
     |> case do
       nil -> {:error, {:no_agent_at_depth, depth}}
       {name, agent} -> {:ok, {name, agent}}
@@ -254,8 +259,9 @@ defmodule Omunculus.Config do
       [] ->
         with {:ok, depth} <- fetch_depth(data),
              {:ok, text} <- fetch_text(data),
+             {:ok, workflow_only} <- fetch_workflow_only(data),
              {:ok, ceiling} <- parse_layer(Map.drop(data, @agent_extra_keys), nil) do
-          {:ok, %{depth: depth, text: text, ceiling: ceiling}}
+          {:ok, %{depth: depth, text: text, workflow_only: workflow_only, ceiling: ceiling}}
         else
           {:error, reason} -> {:error, {:agent, name, reason}}
         end
@@ -275,6 +281,14 @@ defmodule Omunculus.Config do
     case Map.fetch(data, "text") do
       {:ok, text} when is_binary(text) -> {:ok, text}
       _ -> {:error, {:invalid, :text}}
+    end
+  end
+
+  defp fetch_workflow_only(data) do
+    case Map.fetch(data, "workflow_only") do
+      :error -> {:ok, false}
+      {:ok, value} when is_boolean(value) -> {:ok, value}
+      _ -> {:error, {:invalid, :workflow_only}}
     end
   end
 

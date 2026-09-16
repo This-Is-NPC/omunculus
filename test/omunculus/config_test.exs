@@ -45,6 +45,29 @@ defmodule Omunculus.ConfigTest do
     assert Config.workflow_for(config, 0) == :off
   end
 
+  test "the default file's reviewer is workflow_only with the §9.1 ceiling", %{dir: dir} do
+    assert {:ok, %Config{agents: agents}} = Config.load(dir)
+
+    assert %{"reviewer" => %{depth: 1, workflow_only: true, ceiling: ceiling}} = agents
+    assert ceiling.granted == ["break", "comment", "continue", "fs.read", "notify"]
+  end
+
+  test "the default delivery workflow's review step names reviewer and denies fs.write and bench",
+       %{dir: dir} do
+    assert {:ok, %Config{workflows: workflows}} = Config.load(dir)
+
+    assert %{"delivery" => [_to_do, review]} = workflows
+    assert review.name == "review"
+    assert review.agent == "reviewer"
+    assert review.ceiling.deny == ["fs.write", "bench"]
+  end
+
+  test "agent_at_depth prefers a non-workflow_only agent at the same depth on the default file",
+       %{dir: dir} do
+    {:ok, config} = Config.load(dir)
+    assert {:ok, {"worker", %{depth: 1}}} = Config.agent_at_depth(config, 1)
+  end
+
   test "a project file replaces the default whole", %{dir: dir} do
     write_toml(dir, """
     [agents.watcher]
@@ -164,6 +187,76 @@ defmodule Omunculus.ConfigTest do
     """)
 
     assert {:ok, %Config{agents: %{"concierge" => %{text: ""}}}} = Config.load(dir)
+  end
+
+  test "workflow_only defaults to false", %{dir: dir} do
+    write_toml(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    assert {:ok, %Config{agents: %{"concierge" => agent}}} = Config.load(dir)
+    assert agent.workflow_only == false
+  end
+
+  test "workflow_only true is parsed", %{dir: dir} do
+    write_toml(dir, """
+    [agents.reviewer]
+    depth = 1
+    text = "review"
+    workflow_only = true
+    """)
+
+    assert {:ok, %Config{agents: %{"reviewer" => agent}}} = Config.load(dir)
+    assert agent.workflow_only == true
+  end
+
+  test "workflow_only must be a boolean", %{dir: dir} do
+    write_toml(dir, """
+    [agents.reviewer]
+    depth = 1
+    text = "review"
+    workflow_only = "yes"
+    """)
+
+    assert {:error, {:agent, "reviewer", {:invalid, :workflow_only}}} = Config.load(dir)
+  end
+
+  test "agent_at_depth skips a workflow_only agent at that depth when it is the only one", %{
+    dir: dir
+  } do
+    write_toml(dir, """
+    [agents.reviewer]
+    depth = 1
+    text = "review"
+    workflow_only = true
+    """)
+
+    {:ok, config} = Config.load(dir)
+    assert {:error, {:no_agent_at_depth, 1}} = Config.agent_at_depth(config, 1)
+  end
+
+  test "a workflow step can still name a workflow_only agent", %{dir: dir} do
+    write_toml(dir, """
+    [agents.worker]
+    depth = 1
+    text = "work"
+
+    [agents.reviewer]
+    depth = 1
+    text = "review"
+    workflow_only = true
+
+    [workflows.delivery]
+    steps = [
+      { name = "to_do", agent = "worker" },
+      { name = "review", agent = "reviewer" },
+    ]
+    """)
+
+    assert {:ok, %Config{workflows: workflows}} = Config.load(dir)
+    assert %{"delivery" => [_to_do, %{agent: "reviewer"}]} = workflows
   end
 
   test "invalid granted type", %{dir: dir} do

@@ -12,8 +12,16 @@ text = """
 Você é o worker. Faça o work que recebeu, comente o progresso e chame continue quando terminar a etapa.
 """
 
+[agents.reviewer]
+depth = 1
+workflow_only = true
+tools = ["break", "comment", "continue", "fs.read", "notify"]
+text = """
+Você é o reviewer. Leia o work e o último comment, avalie e chame continue para fechar a etapa.
+"""
+
 [workflows.delivery]
 steps = [
   { name = "to_do", agent = "worker" },
-  { name = "review", agent = "concierge" },
+  { name = "review", agent = "reviewer", deny = ["fs.write", "bench"] },
 ]
