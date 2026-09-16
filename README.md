@@ -1,11 +1,8 @@
 # Omunculus
 
-Restart greenfield. O contrato é `.temp/`.
+Restart greenfield. Os documentos de planejamento em `.temp/` são locais
+e não fazem parte do repositório.
 
-- [Spec](.temp/spec.md)
-- [Roadmap](.temp/roadmap.md)
-- [Etapas](.temp/steps/)
-
-Elixir 1.17, OTP 27. Primeira entrega: [etapa 0](.temp/steps/0-nucleo.md).
+Elixir 1.17, OTP 27.
 
 O harness antigo ficou em `master`.
