@@ -11,7 +11,7 @@ defmodule Omunculus.Store.Actions do
   alias Omunculus.Ceiling
   alias Omunculus.Config
   alias Omunculus.Id
-  alias Omunculus.Store.Actions.{Comments, Helpers, Inbox, Sequence}
+  alias Omunculus.Store.Actions.{Comments, Contract, Helpers, Inbox, Sequence}
   alias Omunculus.Store.{Events, Query, View}
 
   @comment_targets %{"work_id" => :works, "request_id" => :requests, "inbox_id" => :inbox}
@@ -22,7 +22,7 @@ defmodule Omunculus.Store.Actions do
   def run(conn, emits, ctx) do
     emits
     |> Enum.reduce_while({:ok, []}, fn emit, {:ok, events} ->
-      case dispatch(conn, emit, ctx) do
+      case with(:ok <- Contract.validate(emit), do: dispatch(conn, emit, ctx)) do
         {:ok, result} -> {:cont, {:ok, [result | events]}}
         {:error, _reason} = error -> {:halt, error}
       end
