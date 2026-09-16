@@ -1,6 +1,7 @@
 defmodule Omunculus.Tool.InvokeTest do
   use ExUnit.Case, async: true
 
+  alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Tool.{Catalog, Invoke, Manifest}
 
   @input %{
@@ -46,7 +47,7 @@ defmodule Omunculus.Tool.InvokeTest do
     JSON
     """)
 
-    assert {:ok, result} = Invoke.call(manifest(dir), @input)
+    assert {:ok, result} = Invoke.call(manifest(dir), @input, policy(dir))
 
     assert result == %{
              ok: true,
@@ -57,21 +58,13 @@ defmodule Omunculus.Tool.InvokeTest do
 
   test "input reaches stdin", %{dir: dir} do
     write_run!(dir, """
-    #!/usr/bin/env -S LC_ALL=C LANG=C ELIXIR_ERL_OPTIONS=+fnu elixir
-    input = IO.binread(:stdio, :eof)
-    decoded = :json.decode(input)
-    args = Map.get(decoded, "args", %{})
-    result = %{ok: true, output: "", emit: [%{type: "echo", body: args}]}
-
-    result
-    |> :json.encode()
-    |> IO.iodata_to_binary()
-    |> :binary.bin_to_list()
-    |> IO.write()
+    #!/bin/sh
+    message=$(cat | sed -n 's/.*"message":"\\([^"]*\\)".*/\\1/p')
+    printf '{"ok": true, "output": "", "emit": [{"type": "echo", "body": {"message": "%s"}}]}' "$message"
     """)
 
     input = %{@input | args: %{"message" => "conte até 5"}}
-    assert {:ok, result} = Invoke.call(manifest(dir), input)
+    assert {:ok, result} = Invoke.call(manifest(dir), input, policy(dir))
     assert result.emit == [%{"type" => "echo", "body" => %{"message" => "conte até 5"}}]
   end
 
@@ -81,17 +74,18 @@ defmodule Omunculus.Tool.InvokeTest do
     echo '{"ok": true}'
     """)
 
-    assert {:ok, %{ok: true, output: "", emit: []}} = Invoke.call(manifest(dir), @input)
+    assert {:ok, %{ok: true, output: "", emit: []}} =
+             Invoke.call(manifest(dir), @input, policy(dir))
   end
 
   test "non-zero exit returns the exit error", %{dir: dir} do
     write_run!(dir, """
     #!/bin/sh
-    echo 'boom' >&1
+    echo 'boom' >&2
     exit 3
     """)
 
-    assert {:error, {:exit, 3, "boom\n"}} = Invoke.call(manifest(dir), @input)
+    assert {:error, {:exit, 3, "boom\n"}} = Invoke.call(manifest(dir), @input, policy(dir))
   end
 
   test "non-JSON stdout is rejected", %{dir: dir} do
@@ -100,7 +94,8 @@ defmodule Omunculus.Tool.InvokeTest do
     echo 'not json'
     """)
 
-    assert {:error, {:invalid_output, "not json\n"}} = Invoke.call(manifest(dir), @input)
+    assert {:error, {:invalid_output, "not json\n"}} =
+             Invoke.call(manifest(dir), @input, policy(dir))
   end
 
   test "bad shape: emit entry without body is rejected", %{dir: dir} do
@@ -109,7 +104,7 @@ defmodule Omunculus.Tool.InvokeTest do
     echo '{"ok": true, "output": "", "emit": [{"type": "prompt"}]}'
     """)
 
-    assert {:error, {:invalid_output, decoded}} = Invoke.call(manifest(dir), @input)
+    assert {:error, {:invalid_output, decoded}} = Invoke.call(manifest(dir), @input, policy(dir))
     assert decoded["emit"] == [%{"type" => "prompt"}]
   end
 
@@ -119,7 +114,32 @@ defmodule Omunculus.Tool.InvokeTest do
     echo '{"ok": "yes", "output": "", "emit": []}'
     """)
 
-    assert {:error, {:invalid_output, _decoded}} = Invoke.call(manifest(dir), @input)
+    assert {:error, {:invalid_output, _decoded}} = Invoke.call(manifest(dir), @input, policy(dir))
+  end
+
+  test "external commands require an execution policy", %{dir: dir} do
+    assert {:error, :execution_context_required} = Invoke.call(manifest(dir), @input)
+  end
+
+  test "an external tool cannot modify its implementation directory", %{dir: dir} do
+    workspace = Path.join(dir, "workspace")
+    tool_dir = Path.join([workspace, "tools", "fixture"])
+    File.mkdir_p!(tool_dir)
+
+    write_run!(tool_dir, """
+    #!/bin/sh
+    touch "$PWD/changed" 2>/dev/null || true
+    echo '{"ok": true, "output": "done", "emit": []}'
+    """)
+
+    policy =
+      ExecutionPolicyFixtures.policy(workspace,
+        writable: true,
+        read_only: [tool_dir]
+      )
+
+    assert {:ok, %{output: "done"}} = Invoke.call(manifest(tool_dir), @input, policy)
+    refute File.exists?(Path.join(tool_dir, "changed"))
   end
 
   describe "module path" do
@@ -173,4 +193,6 @@ defmodule Omunculus.Tool.InvokeTest do
       assert {:ok, %{ok: false}} = Invoke.call(manifest, input)
     end
   end
+
+  defp policy(dir), do: ExecutionPolicyFixtures.policy(dir)
 end

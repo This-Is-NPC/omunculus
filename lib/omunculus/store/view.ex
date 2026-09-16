@@ -32,6 +32,13 @@ defmodule Omunculus.Store.View do
 
   def view(conn, "event", id), do: Query.one(conn, "SELECT * FROM events WHERE id = ?", [id])
 
+  def view(conn, "counter", _id) do
+    with {:ok, events} <-
+           Query.all(conn, "SELECT body FROM events WHERE type = 'tool' ORDER BY sequence") do
+      {:ok, counter_value(events)}
+    end
+  end
+
   def view(conn, "events.run", id), do: replay(conn, {:run, id})
 
   def view(conn, "work", id) do
@@ -109,5 +116,15 @@ defmodule Omunculus.Store.View do
   defp replay_filter({scope, id}) do
     column = Map.fetch!(@replay_columns, scope)
     {" WHERE #{column} = ?", [id]}
+  end
+
+  defp counter_value(events) do
+    Enum.reduce(events, 0, fn %{body: body}, value ->
+      case Jason.decode(body) do
+        {:ok, %{"name" => "counter"}} -> value + 1
+        {:ok, %{"name" => "counter_decrement"}} -> value - 1
+        _ -> value
+      end
+    end)
   end
 end

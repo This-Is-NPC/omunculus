@@ -1,6 +1,7 @@
 defmodule Omunculus.Tools.EditTest do
   use ExUnit.Case, async: true
 
+  alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Tool.{Catalog, Invoke}
   alias Omunculus.Tools.Edit
 
@@ -30,7 +31,7 @@ defmodule Omunculus.Tools.EditTest do
         roots: [root]
     }
 
-    assert Edit.run(input) == %{"ok" => true, "output" => "", "emit" => []}
+    assert Edit.run(input, policy(input)) == %{"ok" => true, "output" => "", "emit" => []}
     assert File.read!(Path.join(root, "file.txt")) == "hello there\n"
   end
 
@@ -41,7 +42,11 @@ defmodule Omunculus.Tools.EditTest do
         roots: [root]
     }
 
-    assert Edit.run(input) == %{"ok" => false, "output" => "old text not found", "emit" => []}
+    assert Edit.run(input, policy(input)) == %{
+             "ok" => false,
+             "output" => "old text not found",
+             "emit" => []
+           }
   end
 
   test "refuses when the old text is ambiguous", %{root: root} do
@@ -51,7 +56,7 @@ defmodule Omunculus.Tools.EditTest do
         roots: [root]
     }
 
-    assert Edit.run(input) == %{
+    assert Edit.run(input, policy(input)) == %{
              "ok" => false,
              "output" => "old text is ambiguous: 2 matches",
              "emit" => []
@@ -65,7 +70,7 @@ defmodule Omunculus.Tools.EditTest do
         roots: [root]
     }
 
-    assert Edit.run(input) == %{
+    assert Edit.run(input, policy(input)) == %{
              "ok" => false,
              "output" => "path outside roots: ../escape.txt",
              "emit" => []
@@ -75,7 +80,11 @@ defmodule Omunculus.Tools.EditTest do
   test "refuses without old", %{root: root} do
     input = %{@input | args: %{"path" => "file.txt", "new" => "b"}, roots: [root]}
 
-    assert Edit.run(input) == %{"ok" => false, "output" => "old required", "emit" => []}
+    assert Edit.run(input, policy(input)) == %{
+             "ok" => false,
+             "output" => "old required",
+             "emit" => []
+           }
   end
 
   test "reports a missing file", %{root: root} do
@@ -85,7 +94,7 @@ defmodule Omunculus.Tools.EditTest do
         roots: [root]
     }
 
-    assert Edit.run(input) == %{
+    assert Edit.run(input, policy(input)) == %{
              "ok" => false,
              "output" => "no such file: missing.txt",
              "emit" => []
@@ -113,9 +122,12 @@ defmodule Omunculus.Tools.EditTest do
         roots: [root]
     }
 
-    direct = Edit.run(%{input | args: %{input.args | "path" => "file.txt"}})
-    assert {:ok, result} = Invoke.call(manifest, input)
+    direct_input = %{input | args: %{input.args | "path" => "file.txt"}}
+    direct = Edit.run(direct_input, policy(direct_input))
+    assert {:ok, result} = Invoke.call(manifest, input, policy(input))
     assert result.output == direct["output"]
     assert File.read!(Path.join(root, "wired.txt")) == "hi world\n"
   end
+
+  defp policy(input), do: ExecutionPolicyFixtures.policy(input.roots, writable: true)
 end

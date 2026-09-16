@@ -6,11 +6,13 @@ defmodule Omunculus.Tool.Invoke do
   the same `validate/1`.
   """
 
-  alias Omunculus.Execution.Policy
+  alias Omunculus.Execution
+  alias Omunculus.Execution.{Command, Policy}
   alias Omunculus.Mcp
+  alias Omunculus.Path, as: FilesystemPath
   alias Omunculus.Tool.Manifest
 
-  @stdin_script ~s(exec "$@" < "$0")
+  @runner ~s(exec "$@")
 
   @spec call(Manifest.t(), map) ::
           {:ok, %{ok: boolean, output: String.t(), emit: [map]}} | {:error, term}
@@ -33,21 +35,19 @@ defmodule Omunculus.Tool.Invoke do
     end
   end
 
-  def call(%Manifest{command: command} = manifest, input, _execution) when is_list(command) do
-    tmp_path = Path.join(System.tmp_dir!(), Omunculus.Id.new())
-
-    try do
-      File.write!(tmp_path, Jason.encode!(input))
-
-      System.cmd("sh", ["-c", @stdin_script, tmp_path | manifest.command],
-        cd: manifest.dir,
-        stderr_to_stdout: false
-      )
-      |> handle_result()
-    after
-      File.rm(tmp_path)
+  def call(%Manifest{command: command} = manifest, input, %Policy{} = execution)
+      when is_list(command) do
+    with {:ok, command} <- external_command(manifest, command, execution) do
+      case Execution.run(command, execution, Jason.encode!(input)) do
+        {:ok, %{stdout: stdout}} -> decode(stdout)
+        {:error, {:exit, status, _stdout, stderr}} -> {:error, {:exit, status, stderr}}
+        {:error, _reason} = error -> error
+      end
     end
   end
+
+  def call(%Manifest{command: command}, _input, nil) when is_list(command),
+    do: {:error, :execution_context_required}
 
   defp run_module(module, input, %Policy{} = execution) do
     if function_exported?(module, :run, 2),
@@ -74,8 +74,67 @@ defmodule Omunculus.Tool.Invoke do
     ArgumentError -> {:error, {:no_module, module}}
   end
 
-  defp handle_result({output, 0}), do: decode(output)
-  defp handle_result({output, status}), do: {:error, {:exit, status, output}}
+  defp external_command(%Manifest{dir: dir}, [program | args], policy) do
+    with {:ok, executable} <- executable(dir, program, policy),
+         {:ok, command} <-
+           Command.new(
+             "/usr/bin/sh",
+             ["-c", @runner, "omunculus-tool", executable | args],
+             cwd: dir
+           ) do
+      {:ok, command}
+    end
+  end
+
+  defp executable(dir, program, policy) do
+    if Path.type(program) == :absolute or String.contains?(program, "/") do
+      tool_executable(dir, Path.expand(program, dir))
+    else
+      runtime_executable(program, policy)
+    end
+  end
+
+  defp tool_executable(dir, path) do
+    with {:ok, root} <- canonical_directory(dir),
+         {:ok, executable} <- canonical_file(path),
+         true <- FilesystemPath.within?(root, executable) do
+      {:ok, executable}
+    else
+      false -> {:error, :command_outside_policy}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp runtime_executable(program, policy) do
+    policy.runtimes
+    |> Enum.map(&Path.join([&1, "bin", program]))
+    |> Enum.find_value({:error, :command_not_found}, fn path ->
+      case canonical_file(path) do
+        {:ok, executable} -> {:ok, executable}
+        {:error, _reason} -> false
+      end
+    end)
+  end
+
+  defp canonical_directory(path) do
+    with {:ok, canonical} <- FilesystemPath.canonical(path),
+         true <- File.dir?(canonical) do
+      {:ok, canonical}
+    else
+      false -> {:error, :command_directory}
+      {:error, reason} -> {:error, {:command_directory, reason}}
+    end
+  end
+
+  defp canonical_file(path) do
+    with {:ok, canonical} <- FilesystemPath.canonical(path),
+         true <- File.regular?(canonical) do
+      {:ok, canonical}
+    else
+      false -> {:error, :command_not_found}
+      {:error, reason} -> {:error, {:command, reason}}
+    end
+  end
 
   defp decode(raw) do
     case Jason.decode(raw) do

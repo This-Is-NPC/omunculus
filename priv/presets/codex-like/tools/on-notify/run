@@ -1,6 +1,0 @@
-#!/bin/sh
-cd "$(dirname "$0")/../.."
-mkdir -p .omunculus
-cat >> .omunculus/hooks.log
-echo >> .omunculus/hooks.log
-echo '{"ok": true, "output": "", "emit": []}'

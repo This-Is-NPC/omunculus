@@ -96,6 +96,18 @@ defmodule Omunculus.Tool.Catalog do
     |> Map.new(fn {group, names} -> {group, Enum.sort(names)} end)
   end
 
+  @spec implementation_roots(%{String.t() => Manifest.t()}) :: [Path.t()]
+  def implementation_roots(catalog) do
+    catalog
+    |> Map.values()
+    |> Enum.flat_map(fn
+      %Manifest{dir: dir} when is_binary(dir) -> [dir]
+      _ -> []
+    end)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
   defp subfolders(root) do
     root
     |> File.ls!()

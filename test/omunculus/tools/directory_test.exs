@@ -1,6 +1,7 @@
 defmodule Omunculus.Tools.DirectoryTest do
   use ExUnit.Case, async: true
 
+  alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Tool.{Catalog, Invoke}
   alias Omunculus.Tools.Directory
 
@@ -28,7 +29,7 @@ defmodule Omunculus.Tools.DirectoryTest do
   } do
     input = %{@input | roots: [root]}
 
-    assert Directory.run(input) == %{
+    assert Directory.run(input, policy(input)) == %{
              "ok" => true,
              "output" => "#{root}\n  a.txt\n  b.txt\n  sub/",
              "emit" => []
@@ -43,7 +44,7 @@ defmodule Omunculus.Tools.DirectoryTest do
 
     input = %{@input | roots: [root, other]}
 
-    assert Directory.run(input) == %{
+    assert Directory.run(input, policy(input)) == %{
              "ok" => true,
              "output" => "#{root}\n  a.txt\n  b.txt\n  sub/\n\n#{other}\n  c.txt",
              "emit" => []
@@ -51,7 +52,7 @@ defmodule Omunculus.Tools.DirectoryTest do
   end
 
   test "no roots yields an empty output" do
-    assert Directory.run(@input) == %{"ok" => true, "output" => "", "emit" => []}
+    assert Directory.run(@input, policy(@input)) == %{"ok" => true, "output" => "", "emit" => []}
   end
 
   test "the builtin catalog discovers directory with triggers == [\"model\"]" do
@@ -69,7 +70,9 @@ defmodule Omunculus.Tools.DirectoryTest do
     manifest = Map.fetch!(catalog, "directory")
     input = %{@input | roots: [root]}
 
-    assert {:ok, result} = Invoke.call(manifest, input)
-    assert result.output == Directory.run(input)["output"]
+    assert {:ok, result} = Invoke.call(manifest, input, policy(input))
+    assert result.output == Directory.run(input, policy(input))["output"]
   end
+
+  defp policy(input), do: ExecutionPolicyFixtures.policy(input.roots)
 end

@@ -5,25 +5,31 @@ defmodule Omunculus.Tools.Grep do
   UTF-8.
   """
 
+  alias Omunculus.Execution.Policy
   alias Omunculus.Tools.{Args, Out}
 
-  @spec run(map) :: map
-  def run(%{args: args, roots: roots} = input) do
+  @spec run(map, Policy.t()) :: map
+  def run(%{args: args, roots: roots} = input, %Policy{} = policy) do
     permissions = Omunculus.Tools.Path.permissions(input)
 
     case Args.missing(args, ~w(pattern)) do
-      nil -> search(roots, args["pattern"], Args.present(args, "path") || ".", permissions)
-      message -> Out.fail(message)
+      nil ->
+        search(roots, args["pattern"], Args.present(args, "path") || ".", permissions, policy)
+
+      message ->
+        Out.fail(message)
     end
   end
 
-  defp search(roots, pattern, path, permissions) do
+  defp search(roots, pattern, path, permissions, policy) do
     with {:ok, regex} <- compile(pattern),
-         {:ok, absolute} <- Omunculus.Tools.Path.resolve(roots, path, permissions) do
+         {:ok, absolute} <- Omunculus.Tools.Path.resolve(roots, path, permissions, policy) do
       output =
         absolute
         |> files()
-        |> Enum.filter(&match?({:ok, _}, Omunculus.Tools.Path.resolve(roots, &1, permissions)))
+        |> Enum.filter(
+          &match?({:ok, _}, Omunculus.Tools.Path.resolve(roots, &1, permissions, policy))
+        )
         |> Enum.sort()
         |> Enum.flat_map(&matches(&1, absolute, regex))
         |> Enum.join("\n")

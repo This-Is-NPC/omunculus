@@ -11,6 +11,7 @@ defmodule Omunculus.Harness do
   """
 
   alias Omunculus.{Config, Project, Run, Store}
+  alias Omunculus.Execution.Policy
   alias Omunculus.Tool.{Catalog, Invoke, Manifest}
 
   @spec manifest(Project.t(), String.t()) ::
@@ -56,13 +57,13 @@ defmodule Omunculus.Harness do
          {:ok, out, events} <-
            call(project, manifest, args, work_id, ctx, config, catalog, views, workspace),
          {:ok, hook_events} <-
-           react(project, events) do
+           react(project, events, [], Map.get(ctx, :execution)) do
       {:ok, augment(out, events), events ++ hook_events}
     end
   end
 
   @doc "Dispatches reactions to committed events, including the run lifecycle."
-  def react(project, events, active \\ []) do
+  def react(project, events, active \\ [], execution \\ nil) do
     with {:ok, config} <- Config.load(project.dir) do
       catalog = project.dir |> Catalog.roots() |> Catalog.discover(config.mcp)
 
@@ -77,7 +78,8 @@ defmodule Omunculus.Harness do
             agent: run && run.agent,
             request_id: event.request_id,
             inbox_id: event.inbox_id,
-            via: run && run.via
+            via: run && run.via,
+            execution: execution
           }
 
           views = %{
@@ -260,6 +262,7 @@ defmodule Omunculus.Harness do
   end
 
   defp resolve_view_id("paths", _run_id, _work_id, _views), do: :paths
+  defp resolve_view_id("counter", _run_id, _work_id, _views), do: {:ok, nil}
   defp resolve_view_id("inbox", _run_id, _work_id, _request_id), do: {:ok, nil}
   defp resolve_view_id("catalog", _run_id, _work_id, _request_id), do: :catalog
   defp resolve_view_id("workspaces", _run_id, _work_id, _request_id), do: :workspaces
@@ -272,7 +275,7 @@ defmodule Omunculus.Harness do
     |> Enum.reduce_while({:ok, []}, fn hook, {:ok, acc} ->
       case invoke_hook(project, hook, event, work_id, ctx, config, catalog, views, workspace) do
         {:ok, hook_events} ->
-          case react(project, hook_events, [hook.name | active]) do
+          case react(project, hook_events, [hook.name | active], ctx.execution) do
             {:ok, reactions} -> {:cont, {:ok, acc ++ hook_events ++ reactions}}
             error -> {:halt, error}
           end
@@ -301,7 +304,9 @@ defmodule Omunculus.Harness do
   end
 
   defp call(project, manifest, args, work_id, ctx, config, catalog, views, workspace) do
-    with {:ok, view} <- hydrate_views(project, manifest.views, ctx.run_id, work_id, views),
+    with {:ok, execution} <-
+           execution_context(manifest, ctx, config, workspace, project.dir, catalog),
+         {:ok, view} <- hydrate_views(project, manifest.views, ctx.run_id, work_id, views),
          input = %{
            name: manifest.name,
            args: args,
@@ -311,7 +316,7 @@ defmodule Omunculus.Harness do
            workspace: workspace.name,
            roots: if(workspace.root, do: [workspace.root], else: [project.dir])
          },
-         {:ok, out} <- Invoke.call(manifest, input, Map.get(ctx, :execution)),
+         {:ok, out} <- Invoke.call(manifest, input, execution),
          emits = if(out.ok, do: out.emit, else: []),
          record = %{name: manifest.name, args: args, ok: out.ok, output: out.output},
          :ok <- check_hook_emits(manifest, emits),
@@ -335,6 +340,50 @@ defmodule Omunculus.Harness do
   end
 
   defp check_hook_emits(_manifest, _emits), do: :ok
+
+  defp execution_context(
+         _manifest,
+         %{execution: %Policy{} = execution},
+         _config,
+         _workspace,
+         _project_dir,
+         _catalog
+       ),
+       do: {:ok, execution}
+
+  defp execution_context(
+         %Manifest{command: command},
+         _ctx,
+         config,
+         workspace,
+         project_dir,
+         catalog
+       )
+       when is_list(command),
+       do:
+         Policy.restricted(config, workspace, project_dir, Catalog.implementation_roots(catalog))
+
+  defp execution_context(%Manifest{module: module}, _ctx, config, workspace, project_dir, catalog)
+       when is_binary(module) do
+    with {:ok, mod} <- module(module) do
+      if function_exported?(mod, :run, 2) do
+        Policy.restricted(config, workspace, project_dir, Catalog.implementation_roots(catalog))
+      else
+        {:ok, nil}
+      end
+    end
+  end
+
+  defp execution_context(_manifest, _ctx, _config, _workspace, _project_dir, _catalog),
+    do: {:ok, nil}
+
+  defp module(name) do
+    atom = String.to_existing_atom("Elixir." <> name)
+
+    if Code.ensure_loaded?(atom), do: {:ok, atom}, else: {:error, {:no_module, name}}
+  rescue
+    ArgumentError -> {:error, {:no_module, name}}
+  end
 
   defp stringify(event), do: Map.new(event, fn {key, value} -> {to_string(key), value} end)
 

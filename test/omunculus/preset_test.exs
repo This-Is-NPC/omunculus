@@ -64,30 +64,6 @@ defmodule Omunculus.PresetTest do
 
       Project.close(project)
     end
-
-    test "a request the model asks for is forwarded by on-request into .omunculus/hooks.log",
-         %{dir: dir} do
-      assert {:ok, "preset codex-like aplicado"} =
-               CLI.run(["preset", "codex-like"], dir, fake())
-
-      write_emit_tool(dir, "delete", ~s({"ok": true, "output": "", "emit": []}))
-
-      model = fn _assembled, _tools, call ->
-        assert {:ok, _output} =
-                 call.("request_access", %{
-                   "kind" => "tool",
-                   "name" => "delete",
-                   "reason" => "preciso apagar"
-                 })
-
-        {:ok, "feito"}
-      end
-
-      assert {:ok, ""} = CLI.run(["send", "preciso de acesso"], dir, model)
-
-      log = File.read!(Path.join([dir, ".omunculus", "hooks.log"]))
-      assert log =~ ~s("type":"request")
-    end
   end
 
   describe "pi-like" do

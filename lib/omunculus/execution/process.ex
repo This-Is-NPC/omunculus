@@ -75,7 +75,7 @@ defmodule Omunculus.Execution.Process do
   end
 
   def handle_info({port, {:exit_status, status}}, %{handle: %{port: port}} = state) do
-    finish(%{state | exit_status: status})
+    finish(%{state | exit_status: state.backend.exit_status(state.handle, status)})
   end
 
   def handle_info({port, {:exit_status, _status}}, %{handle: %{stderr_reader: port}} = state) do
@@ -100,7 +100,8 @@ defmodule Omunculus.Execution.Process do
   end
 
   def handle_info({:EXIT, port, reason}, %{handle: %{port: port}} = state) do
-    finish(%{state | exit_status: exit_status(reason)})
+    status = state.backend.exit_status(state.handle, exit_status(reason))
+    finish(%{state | exit_status: status})
   end
 
   def handle_info(_message, state), do: {:noreply, state}

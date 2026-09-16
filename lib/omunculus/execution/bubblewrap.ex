@@ -10,7 +10,7 @@ defmodule Omunculus.Execution.Bubblewrap do
   alias Omunculus.Execution.{Command, Policy}
 
   @minimum_version {0, 8, 0}
-  @runner "input=$1; errors=$2; shift 2; exec \"$@\" < \"$input\" 2> \"$errors\""
+  @runner "input=$1; errors=$2; status=$3; shift 3; \"$@\" < \"$input\" 2> \"$errors\"; result=$?; printf %s \"$result\" > \"$status\"; exit \"$result\""
 
   defmodule Handle do
     @moduledoc false
@@ -95,6 +95,14 @@ defmodule Omunculus.Execution.Bubblewrap do
     :ok
   end
 
+  @impl true
+  def exit_status(%Handle{temp_dir: temp_dir}, fallback) do
+    case File.read(Path.join(temp_dir, "status")) do
+      {:ok, value} -> parse_exit_status(value, fallback)
+      {:error, _reason} -> fallback
+    end
+  end
+
   @spec arguments(Command.t(), Policy.t(), String.t()) :: [String.t()]
   def arguments(command, policy, temp_dir) do
     mounts = mounts(policy, temp_dir)
@@ -110,6 +118,7 @@ defmodule Omunculus.Execution.Bubblewrap do
       [
         Path.join(temp_dir, "input"),
         Path.join(temp_dir, "stderr"),
+        Path.join(temp_dir, "status"),
         command.program | command.args
       ]
   end
@@ -152,7 +161,7 @@ defmodule Omunculus.Execution.Bubblewrap do
          true <- Enum.any?(policy.runtimes, &FilesystemPath.within?(&1, program)),
          cwd = command.cwd || policy.workspace.root,
          {:ok, cwd} <- canonical_directory(cwd),
-         true <- FilesystemPath.within?(policy.workspace.root, cwd) do
+         true <- Policy.readable?(policy, cwd) do
       {:ok, %{command | program: program, cwd: cwd}}
     else
       false -> {:error, :command_outside_policy}
@@ -189,6 +198,7 @@ defmodule Omunculus.Execution.Bubblewrap do
          :ok <- File.chmod(path, 0o700),
          :ok <- make_fifo(Path.join(path, "input")),
          :ok <- make_fifo(Path.join(path, "stderr")),
+         :ok <- File.write(Path.join(path, "status"), ""),
          :ok <- File.write(Path.join(path, "empty"), ""),
          :ok <- File.chmod(Path.join(path, "empty"), 0o444) do
       {:ok, path}
@@ -460,5 +470,12 @@ defmodule Omunculus.Execution.Bubblewrap do
     end
   rescue
     ArgumentError -> :ok
+  end
+
+  defp parse_exit_status(value, fallback) do
+    case Integer.parse(String.trim(value)) do
+      {status, ""} when status >= 0 -> status
+      _ -> fallback
+    end
   end
 end

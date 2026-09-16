@@ -1,6 +1,7 @@
 defmodule Omunculus.Tools.FindTest do
   use ExUnit.Case, async: true
 
+  alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Tool.{Catalog, Invoke}
   alias Omunculus.Tools.Find
 
@@ -28,7 +29,7 @@ defmodule Omunculus.Tools.FindTest do
   test "matches a wildcard pattern under the default path", %{root: root} do
     input = %{@input | args: %{"pattern" => "**/*.txt"}, roots: [root]}
 
-    assert Find.run(input) == %{
+    assert Find.run(input, policy(input)) == %{
              "ok" => true,
              "output" => "a.txt\nsub/b.txt",
              "emit" => []
@@ -38,13 +39,13 @@ defmodule Omunculus.Tools.FindTest do
   test "drops results that escape the roots via ..", %{root: root} do
     input = %{@input | args: %{"pattern" => "../*.txt"}, roots: [root]}
 
-    assert Find.run(input) == %{"ok" => true, "output" => "", "emit" => []}
+    assert Find.run(input, policy(input)) == %{"ok" => true, "output" => "", "emit" => []}
   end
 
   test "refuses a path outside the root", %{root: root} do
     input = %{@input | args: %{"pattern" => "*.txt", "path" => "../escape"}, roots: [root]}
 
-    assert Find.run(input) == %{
+    assert Find.run(input, policy(input)) == %{
              "ok" => false,
              "output" => "path outside roots: ../escape",
              "emit" => []
@@ -54,7 +55,11 @@ defmodule Omunculus.Tools.FindTest do
   test "refuses without a pattern", %{root: root} do
     input = %{@input | args: %{}, roots: [root]}
 
-    assert Find.run(input) == %{"ok" => false, "output" => "pattern required", "emit" => []}
+    assert Find.run(input, policy(input)) == %{
+             "ok" => false,
+             "output" => "pattern required",
+             "emit" => []
+           }
   end
 
   test "the builtin catalog discovers find with triggers == [\"model\"]" do
@@ -72,7 +77,9 @@ defmodule Omunculus.Tools.FindTest do
     manifest = Map.fetch!(catalog, "find")
     input = %{@input | args: %{"pattern" => "*.txt"}, roots: [root]}
 
-    assert {:ok, result} = Invoke.call(manifest, input)
-    assert result.output == Find.run(input)["output"]
+    assert {:ok, result} = Invoke.call(manifest, input, policy(input))
+    assert result.output == Find.run(input, policy(input))["output"]
   end
+
+  defp policy(input), do: ExecutionPolicyFixtures.policy(input.roots)
 end

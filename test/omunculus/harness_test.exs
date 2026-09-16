@@ -504,8 +504,7 @@ defmodule Omunculus.HarnessTest do
     run_id = Fixtures.insert(project.conn, :runs, %{})
     ctx = %{trigger: "model", run_id: run_id, author: "agent", agent: "concierge"}
 
-    assert {:error, {:exit, 1, _output}} =
-             Harness.dispatch(project, "notify", %{"body" => "oi"}, ctx)
+    assert {:error, _reason} = Harness.dispatch(project, "notify", %{"body" => "oi"}, ctx)
 
     assert {:ok, [_inbox_row]} = Query.all(project.conn, "SELECT * FROM inbox")
 

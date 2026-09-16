@@ -26,6 +26,9 @@ defmodule Omunculus.Execution.ProcessTest.FakeBackend do
 
   @impl true
   def cleanup(_handle), do: :ok
+
+  @impl true
+  def exit_status(_handle, fallback), do: fallback
 end
 
 defmodule Omunculus.Execution.ProcessTest do

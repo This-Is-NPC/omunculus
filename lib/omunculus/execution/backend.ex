@@ -10,4 +10,5 @@ defmodule Omunculus.Execution.Backend do
   @callback close_input(term) :: :ok | {:error, term}
   @callback stop(term, term) :: :ok | {:error, term}
   @callback cleanup(term) :: :ok
+  @callback exit_status(term, non_neg_integer) :: non_neg_integer
 end

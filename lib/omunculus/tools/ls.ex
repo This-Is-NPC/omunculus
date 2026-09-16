@@ -4,17 +4,18 @@ defmodule Omunculus.Tools.Ls do
   roots, one entry per line, sorted, directories suffixed with `/`.
   """
 
+  alias Omunculus.Execution.Policy
   alias Omunculus.Tools.{Args, Out}
 
-  @spec run(map) :: map
-  def run(%{args: args, roots: roots} = input) do
+  @spec run(map, Policy.t()) :: map
+  def run(%{args: args, roots: roots} = input, %Policy{} = policy) do
     permissions = Omunculus.Tools.Path.permissions(input)
     path = Args.present(args, "path") || "."
-    list(roots, path, permissions)
+    list(roots, path, permissions, policy)
   end
 
-  defp list(roots, path, permissions) do
-    with {:ok, absolute} <- Omunculus.Tools.Path.resolve(roots, path, permissions),
+  defp list(roots, path, permissions, policy) do
+    with {:ok, absolute} <- Omunculus.Tools.Path.resolve(roots, path, permissions, policy),
          {:ok, entries} <- File.ls(absolute) do
       output = entries |> Enum.sort() |> Enum.map(&entry(absolute, &1)) |> Enum.join("\n")
       Out.ok(output)

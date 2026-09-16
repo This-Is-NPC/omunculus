@@ -162,8 +162,10 @@ defmodule Omunculus.MatrixTest do
     assert {:ok, ""} = CLI.run(["send", "conte até 5"], dir, &Battery.complete/3)
   end
 
-  defp counter_value(dir),
-    do: dir |> Path.join(".omunculus/counter") |> File.read!() |> String.trim()
+  defp counter_value(conn) do
+    assert {:ok, value} = Store.view(conn, "counter", nil)
+    Integer.to_string(value)
+  end
 
   defp counted_work(conn) do
     assert {:ok, [comment]} =
@@ -178,8 +180,8 @@ defmodule Omunculus.MatrixTest do
     events |> Enum.filter(&(&1.type == "continue")) |> Enum.map(&Jason.decode!(&1.body))
   end
 
-  defp assert_counted_to_five(dir, conn) do
-    assert counter_value(dir) == "5"
+  defp assert_counted_to_five(_dir, conn) do
+    assert counter_value(conn) == "5"
     counted_work(conn)
   end
 

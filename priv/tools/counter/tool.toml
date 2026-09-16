@@ -2,9 +2,10 @@ name = "counter"
 kind = "tool"
 shape = "simple"
 triggers = ["model"]
-description = "Incrementa o contador e devolve o valor."
+description = "Increments the benchmark counter and returns its value."
 tags = ["bench"]
 groups = ["bench"]
+views = ["counter"]
 module = "Omunculus.Tools.Counter"
 
 [parameters]

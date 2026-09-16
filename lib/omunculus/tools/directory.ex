@@ -5,14 +5,18 @@ defmodule Omunculus.Tools.Directory do
   with `/`.
   """
 
+  alias Omunculus.Execution.Policy
   alias Omunculus.Tools.Out
 
-  @spec run(map) :: map
-  def run(%{roots: roots} = input) do
+  @spec run(map, Policy.t()) :: map
+  def run(%{roots: roots} = input, %Policy{} = policy) do
     permissions = Omunculus.Tools.Path.permissions(input)
 
     allowed =
-      Enum.filter(roots, &match?({:ok, _}, Omunculus.Tools.Path.resolve(roots, &1, permissions)))
+      Enum.filter(
+        roots,
+        &match?({:ok, _}, Omunculus.Tools.Path.resolve(roots, &1, permissions, policy))
+      )
 
     Out.ok(Enum.map_join(allowed, "\n\n", &root_block/1))
   end

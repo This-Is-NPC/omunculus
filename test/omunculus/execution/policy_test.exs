@@ -39,7 +39,8 @@ defmodule Omunculus.Execution.PolicyTest do
       snapshot(config, agent, names, grants),
       %{name: nil, root: nil},
       dir,
-      names
+      names,
+      []
     )
   end
 
@@ -88,6 +89,27 @@ defmodule Omunculus.Execution.PolicyTest do
 
     assert policy.read_write == [dir]
     assert private in policy.hidden
+  end
+
+  test "keeps implementation directories read-only below a writable workspace", %{dir: dir} do
+    tool_dir = Path.join([dir, "tools", "fixture"])
+    File.mkdir_p!(tool_dir)
+    {:ok, config} = Config.load(dir)
+    names = ["sandbox.write", "sandbox.network"]
+
+    assert {:ok, policy} =
+             Policy.build(
+               config,
+               snapshot(config, "worker", names, []),
+               %{name: nil, root: nil},
+               dir,
+               names,
+               [tool_dir]
+             )
+
+    assert tool_dir in policy.read_only
+    refute Policy.writable?(policy, Path.join(tool_dir, "run"))
+    assert Policy.writable?(policy, Path.join(dir, "result.txt"))
   end
 
   test "mounts granted external paths read-only", %{dir: dir} do

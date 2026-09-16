@@ -2,9 +2,10 @@ name = "counter_decrement"
 kind = "tool"
 shape = "simple"
 triggers = ["model"]
-description = "Decrementa o contador e devolve o valor."
+description = "Decrements the benchmark counter and returns its value."
 tags = ["bench"]
 groups = ["bench"]
+views = ["counter"]
 module = "Omunculus.Tools.CounterDecrement"
 
 [parameters]

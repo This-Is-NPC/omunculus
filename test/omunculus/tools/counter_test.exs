@@ -14,27 +14,26 @@ defmodule Omunculus.Tools.CounterTest do
     roots: []
   }
 
-  setup do
-    root = Path.join(System.tmp_dir!(), Omunculus.Id.new())
-    File.mkdir_p!(root)
-    on_exit(fn -> File.rm_rf!(root) end)
-    %{input: %{@input | roots: [root]}, root: root}
+  test "returns the next value from the counter view" do
+    assert Counter.run(%{@input | view: %{"counter" => 0}}) == %{
+             "ok" => true,
+             "output" => "1",
+             "emit" => []
+           }
+
+    assert Counter.run(%{@input | view: %{"counter" => 1}}) == %{
+             "ok" => true,
+             "output" => "2",
+             "emit" => []
+           }
   end
 
-  test "the first call yields 1 and the second yields 2", %{input: input} do
-    assert Counter.run(input) == %{"ok" => true, "output" => "1", "emit" => []}
-    assert Counter.run(input) == %{"ok" => true, "output" => "2", "emit" => []}
-  end
-
-  test "the counter file holds the returned value", %{input: input, root: root} do
-    Counter.run(input)
-    Counter.run(input)
-
-    assert File.read!(Path.join([root, ".omunculus", "counter"])) == "2"
-  end
-
-  test "no roots fails" do
-    assert Counter.run(@input) == %{"ok" => false, "output" => "no root", "emit" => []}
+  test "requires the counter view" do
+    assert Counter.run(@input) == %{
+             "ok" => false,
+             "output" => "counter view required",
+             "emit" => []
+           }
   end
 
   test "the builtin catalog discovers counter in the bench group" do
@@ -43,13 +42,13 @@ defmodule Omunculus.Tools.CounterTest do
     assert %{"counter" => manifest} = catalog
     assert manifest.triggers == ["model"]
     assert manifest.groups == ["bench"]
+    assert manifest.views == ["counter"]
   end
 
-  test "the manifest wiring yields the same output as calling the module directly", %{
-    input: input
-  } do
+  test "the manifest wiring yields the same output as calling the module directly" do
     catalog = Catalog.discover(Catalog.roots("/nonexistent"))
     manifest = Map.fetch!(catalog, "counter")
+    input = %{@input | view: %{"counter" => 0}}
 
     assert {:ok, result} = Invoke.call(manifest, input)
     assert result.output == "1"

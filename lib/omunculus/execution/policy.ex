@@ -42,13 +42,15 @@ defmodule Omunculus.Execution.Policy do
           tools: [String.t()]
         }
 
-  @spec build(Config.t(), map, map, String.t(), [String.t()]) :: {:ok, t} | {:error, term}
-  def build(config, snapshot, workspace, project_dir, tools) do
+  @spec build(Config.t(), map, map, String.t(), [String.t()], [String.t()]) ::
+          {:ok, t} | {:error, term}
+  def build(config, snapshot, workspace, project_dir, tools, implementation_roots) do
     with {:ok, project_root} <- canonical_directory(project_dir, :project),
          {:ok, workspace_root} <- canonical_directory(workspace.root || project_root, :workspace),
          :ok <- validate_workspace_boundary(config, workspace.name, workspace_root),
          {:ok, paths} <- resolve_ceiling_paths(snapshot, workspace_root),
          {:ok, runtimes} <- resolve_runtimes(config.execution.runtimes, workspace_root),
+         {:ok, implementation_roots} <- resolve_implementation_roots(implementation_roots),
          hidden <- unique(paths.denied ++ paths.restricted ++ protected_paths(project_root)),
          policy <-
            build_policy(
@@ -59,9 +61,35 @@ defmodule Omunculus.Execution.Policy do
              paths.allowed,
              hidden,
              runtimes,
-             tools
+             tools,
+             implementation_roots
            ) do
       {:ok, policy}
+    end
+  end
+
+  @spec restricted(Config.t(), map, String.t(), [String.t()]) :: {:ok, t} | {:error, term}
+  def restricted(config, workspace, project_dir, implementation_roots) do
+    with {:ok, project_root} <- canonical_directory(project_dir, :project),
+         {:ok, workspace_root} <- canonical_directory(workspace.root || project_root, :workspace),
+         :ok <- validate_workspace_boundary(config, workspace.name, workspace_root),
+         {:ok, runtimes} <- resolve_runtimes(config.execution.runtimes, workspace_root),
+         {:ok, implementation_roots} <- resolve_implementation_roots(implementation_roots) do
+      policy = %__MODULE__{
+        id: "",
+        workspace: %{name: workspace.name, root: workspace_root},
+        read_only: implementation_roots,
+        read_write: [],
+        hidden: protected_paths(project_root),
+        runtimes: runtimes,
+        backend: config.execution.backend,
+        environment: environment(config.execution.environment),
+        network: "none",
+        limits: limits(config),
+        tools: []
+      }
+
+      {:ok, %{policy | id: policy_id(policy)}}
     end
   end
 
@@ -82,7 +110,38 @@ defmodule Omunculus.Execution.Policy do
     }
   end
 
-  defp build_policy(config, snapshot, workspace, workspace_root, allowed, hidden, runtimes, tools) do
+  @spec readable?(t, String.t()) :: boolean
+  def readable?(%__MODULE__{} = policy, path) when is_binary(path) do
+    with {:ok, canonical} <- FilesystemPath.canonical(path) do
+      not protected?(policy, canonical) and
+        Enum.any?(policy.read_only ++ policy.read_write, &FilesystemPath.within?(&1, canonical))
+    else
+      _ -> false
+    end
+  end
+
+  @spec writable?(t, String.t()) :: boolean
+  def writable?(%__MODULE__{} = policy, path) when is_binary(path) do
+    with {:ok, canonical} <- FilesystemPath.canonical(path) do
+      not protected?(policy, canonical) and
+        Enum.any?(policy.read_write, &FilesystemPath.within?(&1, canonical)) and
+        not Enum.any?(policy.read_only, &FilesystemPath.within?(&1, canonical))
+    else
+      _ -> false
+    end
+  end
+
+  defp build_policy(
+         config,
+         snapshot,
+         workspace,
+         workspace_root,
+         allowed,
+         hidden,
+         runtimes,
+         tools,
+         implementation_roots
+       ) do
     write? = Ceiling.classify(snapshot, "sandbox.write", "resource") == "have"
 
     network =
@@ -98,17 +157,10 @@ defmodule Omunculus.Execution.Policy do
       else
         [workspace_root | external_allowed]
       end
+      |> Kernel.++(implementation_roots)
       |> unique()
 
     read_write = if write?, do: [workspace_root], else: []
-
-    limits = %{
-      timeout_ms: config.execution.timeout_ms,
-      max_output_bytes: config.execution.max_output_bytes,
-      max_concurrent: config.execution.max_concurrent,
-      max_queue: config.execution.max_queue,
-      queue_timeout_ms: config.execution.queue_timeout_ms
-    }
 
     policy = %__MODULE__{
       id: "",
@@ -120,7 +172,7 @@ defmodule Omunculus.Execution.Policy do
       backend: config.execution.backend,
       environment: environment(config.execution.environment),
       network: network,
-      limits: limits,
+      limits: limits(config),
       tools: Enum.sort(tools)
     }
 
@@ -177,6 +229,19 @@ defmodule Omunculus.Execution.Policy do
     end
   end
 
+  defp resolve_implementation_roots(roots) do
+    Enum.reduce_while(roots, {:ok, []}, fn root, {:ok, acc} ->
+      case canonical_directory(root, :implementation) do
+        {:ok, canonical} -> {:cont, {:ok, [canonical | acc]}}
+        {:error, reason} -> {:halt, {:error, {:implementation, root, reason}}}
+      end
+    end)
+    |> case do
+      {:ok, resolved} -> {:ok, unique(resolved)}
+      error -> error
+    end
+  end
+
   defp validate_workspace_boundary(config, current_name, workspace_root) do
     Enum.reduce_while(config.workspaces, :ok, fn {name, %{root: root}}, :ok ->
       if name == current_name do
@@ -210,6 +275,19 @@ defmodule Omunculus.Execution.Policy do
   defp protected_paths(project_root) do
     [Project.state_dir(project_root), Path.join(project_root, "omunculus.toml")]
     |> Enum.map(&Path.expand/1)
+  end
+
+  defp protected?(policy, path),
+    do: Enum.any?(policy.hidden, &FilesystemPath.within?(&1, path))
+
+  defp limits(config) do
+    %{
+      timeout_ms: config.execution.timeout_ms,
+      max_output_bytes: config.execution.max_output_bytes,
+      max_concurrent: config.execution.max_concurrent,
+      max_queue: config.execution.max_queue,
+      queue_timeout_ms: config.execution.queue_timeout_ms
+    }
   end
 
   defp environment(names) do

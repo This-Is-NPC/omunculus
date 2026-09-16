@@ -1,6 +1,7 @@
 defmodule Omunculus.Tools.ReadTest do
   use ExUnit.Case, async: true
 
+  alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Tool.{Catalog, Invoke}
   alias Omunculus.Tools.Read
 
@@ -25,13 +26,13 @@ defmodule Omunculus.Tools.ReadTest do
   test "reads a file inside the root", %{root: root} do
     input = %{@input | args: %{"path" => "file.txt"}, roots: [root]}
 
-    assert Read.run(input) == %{"ok" => true, "output" => "hello\n", "emit" => []}
+    assert Read.run(input, policy(input)) == %{"ok" => true, "output" => "hello\n", "emit" => []}
   end
 
   test "refuses a path outside the root", %{root: root} do
     input = %{@input | args: %{"path" => "../escape.txt"}, roots: [root]}
 
-    assert Read.run(input) == %{
+    assert Read.run(input, policy(input)) == %{
              "ok" => false,
              "output" => "path outside roots: ../escape.txt",
              "emit" => []
@@ -41,13 +42,17 @@ defmodule Omunculus.Tools.ReadTest do
   test "refuses without a path", %{root: root} do
     input = %{@input | args: %{}, roots: [root]}
 
-    assert Read.run(input) == %{"ok" => false, "output" => "path required", "emit" => []}
+    assert Read.run(input, policy(input)) == %{
+             "ok" => false,
+             "output" => "path required",
+             "emit" => []
+           }
   end
 
   test "reports a missing file", %{root: root} do
     input = %{@input | args: %{"path" => "missing.txt"}, roots: [root]}
 
-    assert Read.run(input) == %{
+    assert Read.run(input, policy(input)) == %{
              "ok" => false,
              "output" => "no such file: missing.txt",
              "emit" => []
@@ -69,7 +74,9 @@ defmodule Omunculus.Tools.ReadTest do
     manifest = Map.fetch!(catalog, "read")
     input = %{@input | args: %{"path" => "file.txt"}, roots: [root]}
 
-    assert {:ok, result} = Invoke.call(manifest, input)
-    assert result.output == Read.run(input)["output"]
+    assert {:ok, result} = Invoke.call(manifest, input, policy(input))
+    assert result.output == Read.run(input, policy(input))["output"]
   end
+
+  defp policy(input), do: ExecutionPolicyFixtures.policy(input.roots)
 end

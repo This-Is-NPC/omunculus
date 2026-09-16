@@ -1,6 +1,7 @@
 defmodule Omunculus.Tools.GrepTest do
   use ExUnit.Case, async: true
 
+  alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Tool.{Catalog, Invoke}
   alias Omunculus.Tools.Grep
 
@@ -27,7 +28,7 @@ defmodule Omunculus.Tools.GrepTest do
   test "finds matches recursively under the default path", %{root: root} do
     input = %{@input | args: %{"pattern" => "hello"}, roots: [root]}
 
-    assert Grep.run(input) == %{
+    assert Grep.run(input, policy(input)) == %{
              "ok" => true,
              "output" => "a.txt:1:hello world\nsub/b.txt:1:hello again",
              "emit" => []
@@ -37,20 +38,20 @@ defmodule Omunculus.Tools.GrepTest do
   test "skips files that are not valid UTF-8", %{root: root} do
     input = %{@input | args: %{"pattern" => "."}, roots: [root]}
 
-    result = Grep.run(input)
+    result = Grep.run(input, policy(input))
     refute result["output"] =~ "bin.dat"
   end
 
   test "no matches returns an empty string", %{root: root} do
     input = %{@input | args: %{"pattern" => "nope"}, roots: [root]}
 
-    assert Grep.run(input) == %{"ok" => true, "output" => "", "emit" => []}
+    assert Grep.run(input, policy(input)) == %{"ok" => true, "output" => "", "emit" => []}
   end
 
   test "refuses a path outside the root", %{root: root} do
     input = %{@input | args: %{"pattern" => "hello", "path" => "../escape"}, roots: [root]}
 
-    assert Grep.run(input) == %{
+    assert Grep.run(input, policy(input)) == %{
              "ok" => false,
              "output" => "path outside roots: ../escape",
              "emit" => []
@@ -60,13 +61,17 @@ defmodule Omunculus.Tools.GrepTest do
   test "refuses without a pattern", %{root: root} do
     input = %{@input | args: %{}, roots: [root]}
 
-    assert Grep.run(input) == %{"ok" => false, "output" => "pattern required", "emit" => []}
+    assert Grep.run(input, policy(input)) == %{
+             "ok" => false,
+             "output" => "pattern required",
+             "emit" => []
+           }
   end
 
   test "refuses an invalid regex", %{root: root} do
     input = %{@input | args: %{"pattern" => "("}, roots: [root]}
 
-    assert %{"ok" => false, "output" => output, "emit" => []} = Grep.run(input)
+    assert %{"ok" => false, "output" => output, "emit" => []} = Grep.run(input, policy(input))
     assert output =~ "invalid pattern"
   end
 
@@ -85,7 +90,9 @@ defmodule Omunculus.Tools.GrepTest do
     manifest = Map.fetch!(catalog, "grep")
     input = %{@input | args: %{"pattern" => "hello"}, roots: [root]}
 
-    assert {:ok, result} = Invoke.call(manifest, input)
-    assert result.output == Grep.run(input)["output"]
+    assert {:ok, result} = Invoke.call(manifest, input, policy(input))
+    assert result.output == Grep.run(input, policy(input))["output"]
   end
+
+  defp policy(input), do: ExecutionPolicyFixtures.policy(input.roots)
 end

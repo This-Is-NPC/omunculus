@@ -45,6 +45,7 @@ defmodule Omunculus.Run do
          {:ok, grants} <- Store.grants(project.conn, work),
          {:ok, request_section} <- fetch_request_section(project.conn, request_id),
          catalog = discover_catalog(project.dir, config.mcp),
+         model_catalog = Catalog.with_trigger(catalog, "model"),
          workspace = Harness.workspace_context(config, work),
          snapshot =
            Ceiling.mount(
@@ -59,9 +60,17 @@ defmodule Omunculus.Run do
              },
              Map.keys(catalog)
            ),
-         names = effective_names(snapshot, catalog),
-         tools = effective_tools(names, catalog),
-         {:ok, execution} <- Policy.build(config, snapshot, workspace, project.dir, names),
+         names = effective_names(snapshot, model_catalog),
+         tools = effective_tools(names, model_catalog),
+         {:ok, execution} <-
+           Policy.build(
+             config,
+             snapshot,
+             workspace,
+             project.dir,
+             names,
+             Catalog.implementation_roots(catalog)
+           ),
          assembled =
            assemble(
              text,
@@ -71,7 +80,7 @@ defmodule Omunculus.Run do
              inbox_notifications,
              request_section,
              names,
-             catalog
+             model_catalog
            ),
          {:ok, run} <-
            Store.open_run(project.conn, %{
@@ -96,7 +105,8 @@ defmodule Omunculus.Run do
         assembled,
         tools,
         call,
-        model
+        model,
+        execution
       )
     end
   end
@@ -223,9 +233,7 @@ defmodule Omunculus.Run do
     ["## Request\n" <> Enum.join([header | Enum.map(comments, & &1.body)], "\n")]
   end
 
-  defp discover_catalog(dir, servers) do
-    dir |> Catalog.roots() |> Catalog.discover(servers) |> Catalog.with_trigger("model")
-  end
+  defp discover_catalog(dir, servers), do: dir |> Catalog.roots() |> Catalog.discover(servers)
 
   defp effective_names(snapshot, catalog) do
     snapshot.have |> Enum.filter(&Map.has_key?(catalog, &1)) |> Enum.sort()
@@ -334,33 +342,33 @@ defmodule Omunculus.Run do
   defp ending_event?(%{type: "work", body: body}), do: Jason.decode!(body)["start"] == true
   defp ending_event?(event), do: event.type in @ending_events
 
-  defp record_model(project, run, text) do
+  defp record_model(project, run, execution, text) do
     body = if is_binary(text), do: text, else: Jason.encode!(text)
 
     with {:ok, event} <- Store.record_model(project.conn, run.id, body),
-         {:ok, _hooks} <- Harness.react(project, [event]),
+         {:ok, _hooks} <- Harness.react(project, [event], [], execution),
          do: :ok
   end
 
-  defp close_run(project, run) do
+  defp close_run(project, run, execution) do
     with {:ok, event} <- Store.close_run(project.conn, run.id),
-         {:ok, _hooks} <- Harness.react(project, [event]),
+         {:ok, _hooks} <- Harness.react(project, [event], [], execution),
          do: :ok
   end
 
-  defp run_model(project, run, config, work, assembled, tools, call, model) do
+  defp run_model(project, run, config, work, assembled, tools, call, model, execution) do
     run_id = run.id
 
     result =
       try do
         {:ok, events} = Store.replay(project.conn, {:run, run.id})
 
-        with {:ok, _hooks} <- Harness.react(project, events) do
+        with {:ok, _hooks} <- Harness.react(project, events, [], execution) do
           if is_function(model, 4) do
-            model.(assembled, tools, call, &record_model(project, run, &1))
+            model.(assembled, tools, call, &record_model(project, run, execution, &1))
           else
             with {:ok, text} <- model.(assembled, tools, call),
-                 :ok <- record_model(project, run, text),
+                 :ok <- record_model(project, run, execution, text),
                  do: {:ok, text}
           end
         end
@@ -371,37 +379,48 @@ defmodule Omunculus.Run do
         kind, reason -> {:error, {:model_crashed, {kind, reason}}}
       end
 
-    with :ok <- close_run(project, run) do
+    with :ok <- close_run(project, run, execution) do
       case result do
         {:ok, _text} ->
-          finish_and_follow_up(project, run, config, work, model, true)
+          finish_and_follow_up(project, run, config, work, model, execution, true)
 
         :ended ->
-          finish_and_follow_up(project, run, config, work, model, false)
+          finish_and_follow_up(project, run, config, work, model, execution, false)
 
         {:error, _reason} = error ->
-          with {:ok, _} <- finish_and_follow_up(project, run, config, work, model, false),
+          with {:ok, _} <-
+                 finish_and_follow_up(project, run, config, work, model, execution, false),
                do: error
       end
     end
   end
 
-  defp finish_and_follow_up(project, run, config, work, model, ended_normally?) do
-    with :ok <- maybe_finish_work(project, config, work, run.id, ended_normally?),
+  defp finish_and_follow_up(project, run, config, work, model, execution, ended_normally?) do
+    with :ok <- maybe_finish_work(project, config, work, run.id, execution, ended_normally?),
          {:ok, events} <- Store.replay(project.conn, {:run, run.id}),
          :ok <- Harness.follow_up(project, events, model) do
       {:ok, run}
     end
   end
 
-  defp maybe_finish_work(_conn, _config, nil, _run_id, _ended_normally?), do: :ok
-  defp maybe_finish_work(_conn, _config, %{parent_id: nil}, _run_id, _ended_normally?), do: :ok
-  defp maybe_finish_work(_conn, _config, _work, _run_id, false), do: :ok
+  defp maybe_finish_work(_conn, _config, nil, _run_id, _execution, _ended_normally?), do: :ok
 
-  defp maybe_finish_work(project, config, work, run_id, true) do
+  defp maybe_finish_work(
+         _conn,
+         _config,
+         %{parent_id: nil},
+         _run_id,
+         _execution,
+         _ended_normally?
+       ),
+       do: :ok
+
+  defp maybe_finish_work(_conn, _config, _work, _run_id, _execution, false), do: :ok
+
+  defp maybe_finish_work(project, config, work, run_id, execution, true) do
     if Config.workflow_for(config, Store.work_depth(project.conn, work)) == :off do
       with {:ok, event} <- Store.finish_work(project.conn, work.id, run_id),
-           {:ok, _hooks} <- Harness.react(project, [event]),
+           {:ok, _hooks} <- Harness.react(project, [event], [], execution),
            do: :ok
     else
       :ok

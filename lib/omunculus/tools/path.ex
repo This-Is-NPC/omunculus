@@ -1,6 +1,7 @@
 defmodule Omunculus.Tools.Path do
   @moduledoc "Checks lexical and symlink-resolved paths against roots and the store's path permissions."
 
+  alias Omunculus.Execution.Policy
   alias Omunculus.Path, as: FilesystemPath
 
   def permissions(input), do: input |> Map.get(:view, %{}) |> Map.get("paths", %{})
@@ -14,6 +15,17 @@ defmodule Omunculus.Tools.Path do
     with {:ok, real} <- FilesystemPath.canonical(absolute),
          true <- permitted?(absolute, roots, permissions),
          true <- permitted?(real, canonical_paths(roots), canonical_permissions(permissions)) do
+      {:ok, real}
+    else
+      _ -> {:error, "path outside roots: #{path}"}
+    end
+  end
+
+  @spec resolve([String.t()], String.t(), map, Policy.t()) ::
+          {:ok, String.t()} | {:error, String.t()}
+  def resolve(roots, path, permissions, %Policy{} = policy) do
+    with {:ok, real} <- resolve(roots, path, permissions),
+         true <- Policy.readable?(policy, real) do
       {:ok, real}
     else
       _ -> {:error, "path outside roots: #{path}"}

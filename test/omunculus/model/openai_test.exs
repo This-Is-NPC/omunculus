@@ -91,7 +91,7 @@ defmodule Omunculus.Model.OpenAITest do
 
       opening = %{prompt_id: nil, work_id: nil, request_id: nil, agent: nil, via: nil}
       assert {:ok, run} = Omunculus.Run.open(project, opening, OpenAI.new(base_url, "stub"))
-      assert File.read!(Path.join(dir, ".omunculus/counter")) |> String.trim() == "1"
+      assert {:ok, 1} = Omunculus.Store.view(project.conn, "counter", nil)
       assert {:ok, events} = Omunculus.Store.replay(project.conn, {:run, run.id})
       assert Enum.map(events, & &1.type) == ~w(start-run model tool model end-run)
       [first, last] = Enum.filter(events, &(&1.type == "model"))

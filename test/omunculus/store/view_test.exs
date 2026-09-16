@@ -134,6 +134,30 @@ defmodule Omunculus.Store.ViewTest do
     end
   end
 
+  test "counter derives its value from committed tool calls", %{conn: conn} do
+    context = %{run_id: nil, work_id: nil, author: "human", agent: nil, config: nil, groups: %{}}
+
+    assert {:ok, _events} =
+             Omunculus.Store.record_tool(
+               conn,
+               nil,
+               %{name: "counter", args: %{}, ok: true, output: "1"},
+               [],
+               context
+             )
+
+    assert {:ok, _events} =
+             Omunculus.Store.record_tool(
+               conn,
+               nil,
+               %{name: "counter_decrement", args: %{}, ok: true, output: "0"},
+               [],
+               context
+             )
+
+    assert {:ok, 0} = View.view(conn, "counter", nil)
+  end
+
   describe "work_depth" do
     test "is 0 for a root work", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)

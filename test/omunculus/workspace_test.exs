@@ -45,7 +45,7 @@ defmodule Omunculus.WorkspaceTest do
     [agents.concierge]
     depth = 0
     text = "concierge"
-    tools = ["work", "delegate", "directory", "workspaces", "read", "write", "request_access", "reply", "comment", "peek"]
+    tools = ["work", "delegate", "directory", "workspaces", "read", "write", "request_access", "reply", "comment", "peek", "sandbox.write"]
 
     [agents.worker]
     depth = 1

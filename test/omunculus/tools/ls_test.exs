@@ -1,6 +1,7 @@
 defmodule Omunculus.Tools.LsTest do
   use ExUnit.Case, async: true
 
+  alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Tool.{Catalog, Invoke}
   alias Omunculus.Tools.Ls
 
@@ -26,7 +27,7 @@ defmodule Omunculus.Tools.LsTest do
   test "lists the default path sorted, directories suffixed with /", %{root: root} do
     input = %{@input | args: %{}, roots: [root]}
 
-    assert Ls.run(input) == %{
+    assert Ls.run(input, policy(input)) == %{
              "ok" => true,
              "output" => "a.txt\nb.txt\nsub/",
              "emit" => []
@@ -36,13 +37,13 @@ defmodule Omunculus.Tools.LsTest do
   test "lists a given path", %{root: root} do
     input = %{@input | args: %{"path" => "sub"}, roots: [root]}
 
-    assert Ls.run(input) == %{"ok" => true, "output" => "", "emit" => []}
+    assert Ls.run(input, policy(input)) == %{"ok" => true, "output" => "", "emit" => []}
   end
 
   test "refuses a path outside the root", %{root: root} do
     input = %{@input | args: %{"path" => "../escape"}, roots: [root]}
 
-    assert Ls.run(input) == %{
+    assert Ls.run(input, policy(input)) == %{
              "ok" => false,
              "output" => "path outside roots: ../escape",
              "emit" => []
@@ -52,13 +53,13 @@ defmodule Omunculus.Tools.LsTest do
   test "no path is required, defaults to \".\"", %{root: root} do
     input = %{@input | args: %{}, roots: [root]}
 
-    assert %{"ok" => true} = Ls.run(input)
+    assert %{"ok" => true} = Ls.run(input, policy(input))
   end
 
   test "reports a missing directory", %{root: root} do
     input = %{@input | args: %{"path" => "missing"}, roots: [root]}
 
-    assert Ls.run(input) == %{
+    assert Ls.run(input, policy(input)) == %{
              "ok" => false,
              "output" => "no such directory: missing",
              "emit" => []
@@ -80,7 +81,9 @@ defmodule Omunculus.Tools.LsTest do
     manifest = Map.fetch!(catalog, "ls")
     input = %{@input | args: %{}, roots: [root]}
 
-    assert {:ok, result} = Invoke.call(manifest, input)
-    assert result.output == Ls.run(input)["output"]
+    assert {:ok, result} = Invoke.call(manifest, input, policy(input))
+    assert result.output == Ls.run(input, policy(input))["output"]
   end
+
+  defp policy(input), do: ExecutionPolicyFixtures.policy(input.roots)
 end

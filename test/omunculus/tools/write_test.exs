@@ -1,6 +1,7 @@
 defmodule Omunculus.Tools.WriteTest do
   use ExUnit.Case, async: true
 
+  alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Tool.{Catalog, Invoke}
   alias Omunculus.Tools.Write
 
@@ -28,7 +29,7 @@ defmodule Omunculus.Tools.WriteTest do
         roots: [root]
     }
 
-    assert Write.run(input) == %{"ok" => true, "output" => "", "emit" => []}
+    assert Write.run(input, policy(input)) == %{"ok" => true, "output" => "", "emit" => []}
     assert File.read!(Path.join(root, "nested/dir/file.txt")) == "hi"
   end
 
@@ -36,30 +37,54 @@ defmodule Omunculus.Tools.WriteTest do
     File.write!(Path.join(root, "file.txt"), "old")
     input = %{@input | args: %{"path" => "file.txt", "content" => "new"}, roots: [root]}
 
-    assert Write.run(input) == %{"ok" => true, "output" => "", "emit" => []}
+    assert Write.run(input, policy(input)) == %{"ok" => true, "output" => "", "emit" => []}
     assert File.read!(Path.join(root, "file.txt")) == "new"
   end
 
   test "refuses a path outside the root", %{root: root} do
     input = %{@input | args: %{"path" => "../escape.txt", "content" => "hi"}, roots: [root]}
 
-    assert Write.run(input) == %{
+    assert Write.run(input, policy(input)) == %{
              "ok" => false,
              "output" => "path outside roots: ../escape.txt",
              "emit" => []
            }
   end
 
+  test "rejects roots supplied outside the execution policy", %{root: root} do
+    outside = Path.join(System.tmp_dir!(), Omunculus.Id.new())
+    File.mkdir_p!(outside)
+    on_exit(fn -> File.rm_rf!(outside) end)
+
+    input = %{@input | args: %{"path" => "file.txt", "content" => "hi"}, roots: [outside]}
+
+    assert Write.run(input, policy(%{input | roots: [root]})) == %{
+             "ok" => false,
+             "output" => "path outside roots: file.txt",
+             "emit" => []
+           }
+
+    refute File.exists?(Path.join(outside, "file.txt"))
+  end
+
   test "refuses without content", %{root: root} do
     input = %{@input | args: %{"path" => "file.txt"}, roots: [root]}
 
-    assert Write.run(input) == %{"ok" => false, "output" => "content required", "emit" => []}
+    assert Write.run(input, policy(input)) == %{
+             "ok" => false,
+             "output" => "content required",
+             "emit" => []
+           }
   end
 
   test "refuses without a path", %{root: root} do
     input = %{@input | args: %{"content" => "hi"}, roots: [root]}
 
-    assert Write.run(input) == %{"ok" => false, "output" => "path required", "emit" => []}
+    assert Write.run(input, policy(input)) == %{
+             "ok" => false,
+             "output" => "path required",
+             "emit" => []
+           }
   end
 
   test "the builtin catalog discovers write with triggers == [\"model\"]" do
@@ -77,7 +102,9 @@ defmodule Omunculus.Tools.WriteTest do
     manifest = Map.fetch!(catalog, "write")
     input = %{@input | args: %{"path" => "wired.txt", "content" => "hi"}, roots: [root]}
 
-    assert {:ok, result} = Invoke.call(manifest, input)
-    assert result.output == Write.run(input)["output"]
+    assert {:ok, result} = Invoke.call(manifest, input, policy(input))
+    assert result.output == Write.run(input, policy(input))["output"]
   end
+
+  defp policy(input), do: ExecutionPolicyFixtures.policy(input.roots, writable: true)
 end
