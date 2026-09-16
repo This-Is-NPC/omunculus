@@ -20,3 +20,5 @@ erl_crash.dump
 *.sqlite3-shm
 /.scratch/
 /test/support/openai_stub/target/
+/bench/results/
+/bench/*/target/

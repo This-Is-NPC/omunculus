@@ -80,3 +80,22 @@ regular suite. Those task scripts can also be invoked by Git hooks.
 
 The live OpenAI-compatible model test additionally requires `--include
 local_model`, `OMUNCULUS_OPENAI_URL`, and `OMUNCULUS_OPENAI_MODEL`.
+
+## Local capacity benchmark
+
+The [benchmark guide](bench/README.md) measures resident capacity by adding
+one real run at a time, keeping earlier runs alive until the workload fails.
+It uses the Rust model stub from `master` and a Rust cgroup launcher/collector,
+with aggregate budgets of 1 CPU/512 MiB and 2 CPUs/1 GiB. CPU pinning is
+optional (`--pin-cpus`); quotas remain mandatory.
+
+```sh
+mise run benchmark:build
+mise run benchmark:check
+mise run benchmark:preflight
+mise run benchmark:run
+```
+
+Results are local, ignored artifacts under `bench/results/`, replaced on each run.
+Build artifacts stay under `_build/bench/`. Results record
+confirmed resident runs and the failure that ended each hardware profile.

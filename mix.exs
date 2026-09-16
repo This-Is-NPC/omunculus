@@ -8,7 +8,8 @@ defmodule Omunculus.MixProject do
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      elixirc_paths: elixirc_paths(Mix.env())
+      elixirc_paths: elixirc_paths(Mix.env()),
+      releases: releases(Mix.env())
     ]
   end
 
@@ -20,7 +21,11 @@ defmodule Omunculus.MixProject do
   end
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(:bench), do: ["lib", "bench/lib"]
   defp elixirc_paths(_), do: ["lib"]
+
+  defp releases(:bench), do: [benchmark: [include_executables_for: [:unix]]]
+  defp releases(_), do: []
 
   defp deps do
     [

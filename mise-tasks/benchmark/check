@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#MISE description="Test the Rust benchmark controller and compile the BEAM driver"
+#MISE depends=["benchmark:build"]
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+cargo test --locked --manifest-path bench/runner/Cargo.toml --target-dir _build/bench/native/runner
+cargo test --locked --manifest-path bench/stub/Cargo.toml --target-dir _build/bench/native/stub
+MIX_ENV=bench mix compile --warnings-as-errors

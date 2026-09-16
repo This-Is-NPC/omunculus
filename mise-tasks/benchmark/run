@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Linear resident benchmark: run"
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+exec _build/bench/native/runner/release/capacity_benchmark run "$@"
