@@ -41,6 +41,14 @@ defmodule Omunculus.Store.SchemaTest do
     assert :ok = Query.exec(conn, "UPDATE requests SET status = ? WHERE id = ?", ["closed", id])
   end
 
+  test "a comment referenced by an event can be deleted", %{conn: conn} do
+    work_id = Fixtures.insert(conn, :works)
+    comment_id = Fixtures.insert(conn, :comments, %{work_id: work_id})
+    Fixtures.insert(conn, :events, %{sequence: 1, comment_id: comment_id})
+
+    assert :ok = Query.exec(conn, "DELETE FROM comments WHERE id = ?", [comment_id])
+  end
+
   test "comments with no target are rejected", %{conn: conn} do
     assert {:error, _reason} =
              Query.exec(

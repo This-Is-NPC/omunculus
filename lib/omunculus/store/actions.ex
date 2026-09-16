@@ -4,16 +4,15 @@ defmodule Omunculus.Store.Actions do
   `out.emit` in order, inside whatever transaction the caller holds — the
   whole batch commits or nothing does (spec §8.3). `continue`, `break`
   and `delegate` are dispatched to `Actions.Sequence`; `notify` and
-  `inbox.read` to `Actions.Inbox`.
+  `inbox.read` to `Actions.Inbox`; `compact` and `comment.delete` to
+  `Actions.Comments`.
   """
 
   alias Omunculus.Ceiling
   alias Omunculus.Config
   alias Omunculus.Id
-  alias Omunculus.Store.Actions.{Helpers, Inbox, Sequence}
+  alias Omunculus.Store.Actions.{Comments, Helpers, Inbox, Sequence}
   alias Omunculus.Store.{Events, Query, View}
-
-  @catalogue ~w(comment compact comment.delete)
 
   @comment_targets %{"work_id" => :works, "request_id" => :requests, "inbox_id" => :inbox}
   @request_kinds ~w(tool path directory)
@@ -65,8 +64,11 @@ defmodule Omunculus.Store.Actions do
   defp dispatch(conn, %{"type" => "inbox.read"} = emit, ctx),
     do: Inbox.read(conn, Map.get(emit, "body", %{}), ctx)
 
-  defp dispatch(_conn, %{"type" => type}, _ctx) when type in @catalogue,
-    do: {:error, {:not_yet, type}}
+  defp dispatch(conn, %{"type" => "compact"} = emit, ctx),
+    do: Comments.compact(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "comment.delete"} = emit, ctx),
+    do: Comments.delete(conn, Map.get(emit, "body", %{}), ctx)
 
   defp dispatch(_conn, %{"type" => type}, _ctx), do: {:error, {:unknown_action, type}}
 

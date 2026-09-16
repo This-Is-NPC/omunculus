@@ -30,6 +30,19 @@ defmodule Omunculus.Store.ActionsTest do
 
   defp record_tool(conn, emits, ctx), do: Store.record_tool(conn, nil, @call, emits, ctx)
 
+  defp seed_comment(conn, target, sequence, at, body \\ "note") do
+    comment_id =
+      Fixtures.insert(conn, :comments, Map.merge(target, %{body: body, created_at: at}))
+
+    Fixtures.insert(
+      conn,
+      :events,
+      Map.merge(target, %{type: "comment", comment_id: comment_id, sequence: sequence, at: at})
+    )
+
+    comment_id
+  end
+
   defp open_run(conn, ceiling) do
     params = %{
       prompt_id: nil,
@@ -293,15 +306,6 @@ defmodule Omunculus.Store.ActionsTest do
     assert {:error, {:comment, {:missing, :works, "nope"}}} = record_tool(conn, emits, @ctx)
 
     assert count(conn, "comments") == 0
-    assert count(conn, "events") == 0
-  end
-
-  test "a catalogue action not implemented yet is refused and rolls back the tool event", %{
-    conn: conn
-  } do
-    assert {:error, {:not_yet, "compact"}} =
-             record_tool(conn, [%{"type" => "compact", "body" => %{}}], @ctx)
-
     assert count(conn, "events") == 0
   end
 
@@ -1396,6 +1400,308 @@ defmodule Omunculus.Store.ActionsTest do
                )
 
       assert count(conn, "events") == 0
+    end
+  end
+
+  describe "compact action" do
+    test "replaces a work's comments with one summary and keeps EVENTS", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      target = %{work_id: work_id}
+
+      first = seed_comment(conn, target, 1, "2026-01-01T00:00:00Z")
+      second = seed_comment(conn, target, 2, "2026-01-01T00:01:00Z")
+      third = seed_comment(conn, target, 3, "2026-01-01T00:02:00Z")
+
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: work_id}
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "compact",
+                     "body" => %{"work_id" => work_id, "summary" => "resumo"}
+                   }
+                 ],
+                 ctx
+               )
+
+      assert event.type == "compact"
+      assert event.work_id == work_id
+
+      assert Jason.decode!(event.body) == %{
+               "summary" => "resumo",
+               "deleted" => [first, second, third]
+             }
+
+      assert {:ok, summary} =
+               Query.one(conn, "SELECT * FROM comments WHERE work_id = ?", [work_id])
+
+      assert summary.body == "resumo"
+      assert summary.author == ctx.author
+      assert event.comment_id == summary.id
+      assert count(conn, "comments") == 1
+
+      assert {:ok, events} = Store.replay(conn, {:work, work_id})
+      assert Enum.map(events, & &1.type) == ["comment", "comment", "comment", "tool", "compact"]
+      assert Enum.map(Enum.take(events, 3), & &1.comment_id) == [first, second, third]
+
+      assert {:ok, [only]} = Store.view(conn, "comments.work", work_id)
+      assert only.id == summary.id
+    end
+
+    test "with ids deletes only the named comments", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      target = %{work_id: work_id}
+
+      first = seed_comment(conn, target, 1, "2026-01-01T00:00:00Z")
+      second = seed_comment(conn, target, 2, "2026-01-01T00:01:00Z")
+      Fixtures.insert(conn, :comments, %{work_id: work_id, created_at: "2026-01-01T00:02:00Z"})
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "compact",
+                     "body" => %{
+                       "work_id" => work_id,
+                       "summary" => "resumo",
+                       "ids" => [second, first]
+                     }
+                   }
+                 ],
+                 @ctx
+               )
+
+      assert Jason.decode!(event.body)["deleted"] == [first, second]
+      assert count(conn, "comments") == 2
+    end
+
+    test "an id belonging to another target is refused and writes nothing", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      other_id = Fixtures.insert(conn, :works)
+      comment_id = Fixtures.insert(conn, :comments, %{work_id: work_id})
+      foreign_id = Fixtures.insert(conn, :comments, %{work_id: other_id})
+
+      assert {:error, {:compact, {:foreign, ^foreign_id}}} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "compact",
+                     "body" => %{
+                       "work_id" => work_id,
+                       "summary" => "resumo",
+                       "ids" => [comment_id, foreign_id]
+                     }
+                   }
+                 ],
+                 @ctx
+               )
+
+      assert count(conn, "comments") == 2
+      assert count(conn, "events") == 0
+    end
+
+    test "inside a run on a different work than the target is refused", %{conn: conn} do
+      work_a = Fixtures.insert(conn, :works)
+      work_b = Fixtures.insert(conn, :works)
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: work_a}
+
+      assert {:error, {:compact, :foreign_work}} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "compact",
+                     "body" => %{"work_id" => work_b, "summary" => "resumo"}
+                   }
+                 ],
+                 ctx
+               )
+
+      assert count(conn, "comments") == 0
+      assert count(conn, "events") == 0
+    end
+
+    test "no summary is rejected", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+
+      assert {:error, {:compact, :no_summary}} =
+               record_tool(
+                 conn,
+                 [%{"type" => "compact", "body" => %{"work_id" => work_id}}],
+                 @ctx
+               )
+    end
+
+    test "no target is rejected", %{conn: conn} do
+      assert {:error, {:compact, :no_target}} =
+               record_tool(
+                 conn,
+                 [%{"type" => "compact", "body" => %{"summary" => "resumo"}}],
+                 @ctx
+               )
+    end
+
+    test "two targets is rejected", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      request_id = Fixtures.insert(conn, :requests)
+
+      assert {:error, {:compact, :many_targets}} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "compact",
+                     "body" => %{
+                       "work_id" => work_id,
+                       "request_id" => request_id,
+                       "summary" => "resumo"
+                     }
+                   }
+                 ],
+                 @ctx
+               )
+    end
+
+    test "works the same on a request target", %{conn: conn} do
+      request_id = Fixtures.insert(conn, :requests)
+      Fixtures.insert(conn, :comments, %{request_id: request_id})
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "compact",
+                     "body" => %{"request_id" => request_id, "summary" => "resumo"}
+                   }
+                 ],
+                 @ctx
+               )
+
+      assert event.request_id == request_id
+      assert {:ok, [only]} = Store.view(conn, "comments.request", request_id)
+      assert only.body == "resumo"
+    end
+
+    test "works the same on an inbox target", %{conn: conn} do
+      inbox_id = Fixtures.insert(conn, :inbox)
+      Fixtures.insert(conn, :comments, %{inbox_id: inbox_id})
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "compact",
+                     "body" => %{"inbox_id" => inbox_id, "summary" => "resumo"}
+                   }
+                 ],
+                 @ctx
+               )
+
+      assert event.inbox_id == inbox_id
+      assert {:ok, [only]} = Store.view(conn, "comments.inbox", inbox_id)
+      assert only.body == "resumo"
+    end
+  end
+
+  describe "comment.delete action" do
+    test "deletes the listed comments and appends an event", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      keep = Fixtures.insert(conn, :comments, %{work_id: work_id})
+      first = Fixtures.insert(conn, :comments, %{work_id: work_id})
+      second = Fixtures.insert(conn, :comments, %{work_id: work_id})
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "comment.delete",
+                     "body" => %{"work_id" => work_id, "ids" => [first, second]}
+                   }
+                 ],
+                 @ctx
+               )
+
+      assert event.type == "comment.delete"
+      assert event.work_id == work_id
+      assert Jason.decode!(event.body) == %{"work_id" => work_id, "ids" => [first, second]}
+
+      assert {:ok, remaining} =
+               Query.all(conn, "SELECT id FROM comments WHERE work_id = ?", [work_id])
+
+      assert Enum.map(remaining, & &1.id) == [keep]
+    end
+
+    test "an id from another target is refused and writes nothing", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      other_id = Fixtures.insert(conn, :works)
+      comment_id = Fixtures.insert(conn, :comments, %{work_id: work_id})
+      foreign_id = Fixtures.insert(conn, :comments, %{work_id: other_id})
+
+      assert {:error, {:comment_delete, {:foreign, ^foreign_id}}} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "comment.delete",
+                     "body" => %{"work_id" => work_id, "ids" => [comment_id, foreign_id]}
+                   }
+                 ],
+                 @ctx
+               )
+
+      assert count(conn, "comments") == 2
+      assert count(conn, "events") == 0
+    end
+
+    test "no ids is rejected", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+
+      assert {:error, {:comment_delete, :no_ids}} =
+               record_tool(
+                 conn,
+                 [%{"type" => "comment.delete", "body" => %{"work_id" => work_id}}],
+                 @ctx
+               )
+    end
+
+    test "replay keeps the comment events for the deleted rows", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: work_id}
+
+      assert {:ok, [_tool_event, comment_event]} =
+               record_tool(
+                 conn,
+                 [%{"type" => "comment", "body" => %{"work_id" => work_id, "body" => "hi"}}],
+                 ctx
+               )
+
+      assert {:ok, [_tool_event2, delete_event]} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "comment.delete",
+                     "body" => %{"work_id" => work_id, "ids" => [comment_event.comment_id]}
+                   }
+                 ],
+                 ctx
+               )
+
+      assert delete_event.type == "comment.delete"
+
+      assert {:ok, events} = Store.replay(conn, {:work, work_id})
+      assert Enum.map(events, & &1.type) == ["tool", "comment", "tool", "comment.delete"]
+      assert Enum.at(events, 1).comment_id == comment_event.comment_id
     end
   end
 end

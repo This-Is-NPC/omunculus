@@ -25,7 +25,7 @@ defmodule Omunculus.Store.Schema do
       prompt_id TEXT REFERENCES prompts (id) DEFERRABLE INITIALLY DEFERRED,
       run_id TEXT REFERENCES runs (id) DEFERRABLE INITIALLY DEFERRED,
       work_id TEXT REFERENCES works (id) DEFERRABLE INITIALLY DEFERRED,
-      comment_id TEXT REFERENCES comments (id) DEFERRABLE INITIALLY DEFERRED,
+      comment_id TEXT,
       request_id TEXT REFERENCES requests (id) DEFERRABLE INITIALLY DEFERRED,
       inbox_id TEXT REFERENCES inbox (id) DEFERRABLE INITIALLY DEFERRED,
       body TEXT NOT NULL,
