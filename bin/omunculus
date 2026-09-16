@@ -1,0 +1,4 @@
+#!/bin/sh
+export OMUNCULUS_PROJECT="${OMUNCULUS_PROJECT:-$PWD}"
+cd "$(dirname "$0")/.." || exit 1
+exec mise exec -- mix omunculus "$@"

@@ -5,11 +5,16 @@ defmodule Omunculus.CLI do
   calls the same contract the model uses, with `trigger: "cli"`. Once the
   call is recorded, hands its events to `Harness.follow_up/3`, driven by
   the given `model`, so any run the call's action asks for opens before
-  the CLI returns. `main/1` is the only caller that reads the configured
-  model out of application env; `run/3` never touches global state.
+  the CLI returns. `main/1` is the only caller that reads the process
+  environment: `OMUNCULUS_PROJECT` for the project directory (default
+  `File.cwd!()`) and `OMUNCULUS_MODEL` — `fake` (default), `battery` or
+  `openai`, the last built from `OMUNCULUS_OPENAI_URL`,
+  `OMUNCULUS_OPENAI_MODEL` and an optional `OMUNCULUS_OPENAI_KEY` sent as
+  a bearer header — for the model; `run/3` never touches global state.
   """
 
   alias Omunculus.{Harness, Project}
+  alias Omunculus.Model.{Battery, Fake, OpenAI}
 
   @spec run([String.t()], String.t(), (String.t(), fun -> {:ok, String.t()} | {:error, term})) ::
           {:ok, String.t()} | {:error, term}
@@ -27,9 +32,9 @@ defmodule Omunculus.CLI do
 
   @spec main([String.t()]) :: :ok
   def main(argv) do
-    model = Application.get_env(:omunculus, :model, &Omunculus.Model.Fake.complete/2)
+    dir = System.get_env("OMUNCULUS_PROJECT", File.cwd!())
 
-    case run(argv, File.cwd!(), model) do
+    case run(argv, dir, model_from_env()) do
       {:ok, output} ->
         if output != "", do: IO.puts(output)
         :ok
@@ -37,6 +42,27 @@ defmodule Omunculus.CLI do
       {:error, reason} ->
         IO.puts(:stderr, inspect(reason))
         System.halt(1)
+    end
+  end
+
+  defp model_from_env do
+    case System.get_env("OMUNCULUS_MODEL", "fake") do
+      "battery" -> &Battery.complete/2
+      "openai" -> openai_model_from_env()
+      _fake -> &Fake.complete/2
+    end
+  end
+
+  defp openai_model_from_env do
+    url = System.fetch_env!("OMUNCULUS_OPENAI_URL")
+    model_name = System.fetch_env!("OMUNCULUS_OPENAI_MODEL")
+    OpenAI.new(url, model_name, headers: bearer_header())
+  end
+
+  defp bearer_header do
+    case System.get_env("OMUNCULUS_OPENAI_KEY") do
+      nil -> []
+      key -> [{"authorization", "Bearer " <> key}]
     end
   end
 
