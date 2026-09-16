@@ -926,4 +926,131 @@ defmodule Omunculus.ConfigTest do
       assert {:error, :off_sequence} = Config.next_step(steps, "ghost")
     end
   end
+
+  describe "mcp" do
+    test "the default file has no MCP servers", %{dir: dir} do
+      assert {:ok, %Config{mcp: []}} = Config.load(dir)
+    end
+
+    test "[[mcp.servers]] is parsed into name and command", %{dir: dir} do
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [[mcp.servers]]
+      name = "github"
+      command = ["npx", "-y", "@modelcontextprotocol/server-github"]
+      """)
+
+      assert {:ok, %Config{mcp: mcp}} = Config.load(dir)
+
+      assert mcp == [
+               %{name: "github", command: ["npx", "-y", "@modelcontextprotocol/server-github"]}
+             ]
+    end
+
+    test "several servers are parsed in order", %{dir: dir} do
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [[mcp.servers]]
+      name = "github"
+      command = ["gh-mcp"]
+
+      [[mcp.servers]]
+      name = "fs"
+      command = ["fs-mcp"]
+      """)
+
+      assert {:ok, %Config{mcp: mcp}} = Config.load(dir)
+      assert Enum.map(mcp, & &1.name) == ["github", "fs"]
+    end
+
+    test "a server missing a name is invalid", %{dir: dir} do
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [[mcp.servers]]
+      command = ["gh-mcp"]
+      """)
+
+      assert {:error, {:mcp, {:invalid, :name}}} = Config.load(dir)
+    end
+
+    test "a server missing a command is invalid", %{dir: dir} do
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [[mcp.servers]]
+      name = "github"
+      """)
+
+      assert {:error, {:mcp, {:invalid, :command}}} = Config.load(dir)
+    end
+
+    test "a server with a non-list command is invalid", %{dir: dir} do
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [[mcp.servers]]
+      name = "github"
+      command = "gh-mcp"
+      """)
+
+      assert {:error, {:mcp, {:invalid, :command}}} = Config.load(dir)
+    end
+
+    test "mcp.servers must be a list", %{dir: dir} do
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [mcp]
+      servers = "github"
+      """)
+
+      assert {:error, {:mcp, {:invalid, :servers}}} = Config.load(dir)
+    end
+
+    test "duplicate server names are rejected", %{dir: dir} do
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [[mcp.servers]]
+      name = "github"
+      command = ["gh-mcp"]
+
+      [[mcp.servers]]
+      name = "github"
+      command = ["gh-mcp-2"]
+      """)
+
+      assert {:error, {:mcp, {:duplicate, "github"}}} = Config.load(dir)
+    end
+
+    test "an unknown key under mcp besides servers is rejected", %{dir: dir} do
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [mcp]
+      timeout = 5
+      """)
+
+      assert {:error, {:mcp, {:unknown_key, "timeout"}}} = Config.load(dir)
+    end
+  end
 end

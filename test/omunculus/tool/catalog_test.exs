@@ -229,4 +229,67 @@ defmodule Omunculus.Tool.CatalogTest do
     catalog = Catalog.discover([builtin_root, project_dir])
     assert catalog["on-request"].description == "do projeto"
   end
+
+  describe "MCP servers" do
+    @mcp_server %{name: "fake", command: [Path.expand("test/support/mcp_server")]}
+
+    test "a server's tools/list becomes names in the catalog, tagged and carrying the server", %{
+      project_dir: project_dir
+    } do
+      catalog = Catalog.discover([project_dir], [@mcp_server])
+
+      assert %{"echo" => echo, "shout" => shout} = catalog
+      assert echo.description == "Echoes text"
+      assert echo.tags == ["mcp", "fake"]
+      assert echo.mcp == @mcp_server
+      assert echo.dir == nil
+      assert shout.description == "Upper-cases text"
+    end
+
+    test "a project folder tool wins over an MCP tool of the same name", %{
+      project_dir: project_dir
+    } do
+      write_tool(project_dir, "echo", """
+      name = "echo"
+      kind = "tool"
+      description = "do projeto"
+      command = ["./run"]
+      """)
+
+      catalog = Catalog.discover([project_dir], [@mcp_server])
+      assert catalog["echo"].description == "do projeto"
+      assert catalog["echo"].mcp == nil
+    end
+
+    test "an MCP tool wins over an earlier root's tool of the same name", %{
+      project_dir: project_dir
+    } do
+      home_root = Path.join(project_dir, "home")
+      project_root = Path.join(project_dir, "project")
+
+      write_tool(home_root, "echo", """
+      name = "echo"
+      kind = "tool"
+      description = "da pessoa"
+      command = ["./run"]
+      """)
+
+      catalog = Catalog.discover([home_root, project_root], [@mcp_server])
+      assert catalog["echo"].mcp == @mcp_server
+      assert catalog["echo"].description == "Echoes text"
+    end
+
+    test "a server that fails to list is skipped, not raised", %{project_dir: project_dir} do
+      broken = %{name: "broken", command: ["definitely-not-a-real-binary-xyz"]}
+
+      write_tool(project_dir, "read", """
+      name = "read"
+      kind = "tool"
+      command = ["./run"]
+      """)
+
+      catalog = Catalog.discover([project_dir], [broken])
+      assert Map.keys(catalog) == ["read"]
+    end
+  end
 end

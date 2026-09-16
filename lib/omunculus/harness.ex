@@ -1,14 +1,14 @@
 defmodule Omunculus.Harness do
   @moduledoc """
-  Dispatches a tool `name` to its manifest per spec §7, §8.7 and §5:
-  discovers the catalog once (rescanned on every call, then reused for the
+  Dispatches a tool `name` to its manifest per spec §7, §8.7 and §5: loads
+  the project's config and discovers the catalog once from it (folders and
+  the config's MCP servers, rescanned on every call, then reused for the
   whole dispatch), checks the trigger, reads the run row once when
   `ctx.run_id` is set so both the run's `work_id` and its own `tools` are
   visible to the next call without the model passing ids around, hydrates
   the views the manifest declared — `"catalog"` from the run's own
   `tools` filtered to the model-triggered names still on disk, sorted by
-  name, `[]` outside a run — loads the project's config and the catalog's
-  group map for the action layer, invokes the contract, and records the
+  name, `[]` outside a run — invokes the contract, and records the
   call and its emits as one transaction. After that,
   every emit event runs the hooks `Catalog.hooks_for/2` finds for its
   `type` through the same contract, each recorded as its own call; a hook
@@ -40,19 +40,20 @@ defmodule Omunculus.Harness do
   @spec manifest(Project.t(), String.t()) ::
           {:ok, Manifest.t()} | {:error, {:unknown_tool, String.t()}}
   def manifest(%Project{dir: dir}, name) do
-    dir |> Catalog.roots() |> Catalog.discover() |> fetch_manifest(name)
+    with {:ok, config} <- Config.load(dir) do
+      dir |> Catalog.roots() |> Catalog.discover(config.mcp) |> fetch_manifest(name)
+    end
   end
 
   @spec dispatch(Project.t(), String.t(), map, map) :: {:ok, map, [map]} | {:error, term}
   def dispatch(project, name, args, ctx) do
-    catalog = project.dir |> Catalog.roots() |> Catalog.discover()
-
-    with {:ok, manifest} <- fetch_manifest(catalog, name),
+    with {:ok, config} <- Config.load(project.dir),
+         catalog = project.dir |> Catalog.roots() |> Catalog.discover(config.mcp),
+         {:ok, manifest} <- fetch_manifest(catalog, name),
          :ok <- check_trigger(manifest, name, ctx.trigger),
          {:ok, run} <- resolve_run(project, ctx.run_id),
          work_id = run_work_id(run),
          catalog_view = catalog_view(run, catalog),
-         {:ok, config} <- Config.load(project.dir),
          {:ok, out, events} <-
            call(project, manifest, args, work_id, ctx, config, catalog, catalog_view),
          {:ok, hook_events} <-
@@ -64,9 +65,9 @@ defmodule Omunculus.Harness do
   @spec follow_up(Project.t(), [map], (String.t(), fun -> {:ok, String.t()} | {:error, term})) ::
           :ok | {:error, term}
   def follow_up(project, events, model) do
-    catalog = project.dir |> Catalog.roots() |> Catalog.discover()
-
-    with {:ok, _via} <- walk(project, catalog, events, model, :actions),
+    with {:ok, config} <- Config.load(project.dir),
+         catalog = project.dir |> Catalog.roots() |> Catalog.discover(config.mcp),
+         {:ok, _via} <- walk(project, catalog, events, model, :actions),
          {:ok, _via} <- walk(project, catalog, events, model, :hooks) do
       :ok
     end

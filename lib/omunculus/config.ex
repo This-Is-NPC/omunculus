@@ -3,8 +3,9 @@ defmodule Omunculus.Config do
   Loads and validates `omunculus.toml`: a project file replaces the
   package default whole, never merges with it (spec §5). Parses the
   policy layer, the per-depth layers under `[policy.depth.N]`, the
-  workspace layers, each agent's ceiling layer, and the named
-  workflows under `[workflows.<name>]` (spec §3.4), and grants a
+  workspace layers, each agent's ceiling layer, the named
+  workflows under `[workflows.<name>]` (spec §3.4), and the MCP
+  servers under `[[mcp.servers]]` (spec §8.7), and grants a
   permanent ceiling addition by rewriting the TOML file.
   """
 
@@ -17,7 +18,8 @@ defmodule Omunculus.Config do
     :agents,
     :workflows,
     :policy_workflow,
-    :depth_workflows
+    :depth_workflows,
+    :mcp
   ]
   defstruct @enforce_keys
 
@@ -28,6 +30,7 @@ defmodule Omunculus.Config do
           ceiling: Layer.t()
         }
   @type step :: %{name: String.t(), agent: String.t(), ceiling: Layer.t()}
+  @type mcp_server :: %{name: String.t(), command: [String.t()]}
   @type t :: %__MODULE__{
           policy: Layer.t(),
           depths: %{non_neg_integer => Layer.t()},
@@ -35,7 +38,8 @@ defmodule Omunculus.Config do
           agents: %{String.t() => agent},
           workflows: %{String.t() => [step]},
           policy_workflow: String.t() | nil,
-          depth_workflows: %{non_neg_integer => String.t()}
+          depth_workflows: %{non_neg_integer => String.t()},
+          mcp: [mcp_server]
         }
 
   @layer_keys ~w(mode granted tools negotiable human deny)
@@ -136,7 +140,7 @@ defmodule Omunculus.Config do
   end
 
   defp parse(data) do
-    case Map.keys(data) -- ["policy", "workspaces", "agents", "workflows"] do
+    case Map.keys(data) -- ["policy", "workspaces", "agents", "workflows", "mcp"] do
       [key | _] ->
         {:error, {:unknown_key, key}}
 
@@ -145,7 +149,8 @@ defmodule Omunculus.Config do
              {:ok, agents} <- parse_agents(Map.get(data, "agents", %{})),
              {:ok, workflows} <- parse_workflows(Map.get(data, "workflows", %{}), agents),
              {:ok, policy, depths, policy_workflow, depth_workflows} <-
-               parse_policy(Map.get(data, "policy", %{}), workflows) do
+               parse_policy(Map.get(data, "policy", %{}), workflows),
+             {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{})) do
           if map_size(agents) == 0 do
             {:error, :no_agents}
           else
@@ -157,10 +162,66 @@ defmodule Omunculus.Config do
                agents: agents,
                workflows: workflows,
                policy_workflow: policy_workflow,
-               depth_workflows: depth_workflows
+               depth_workflows: depth_workflows,
+               mcp: mcp
              }}
           end
         end
+    end
+  end
+
+  defp parse_mcp(data) when is_map(data) do
+    case Map.keys(data) -- ["servers"] do
+      [key | _] -> {:error, {:mcp, {:unknown_key, key}}}
+      [] -> parse_mcp_servers(Map.get(data, "servers", []))
+    end
+  end
+
+  defp parse_mcp(_data), do: {:error, {:mcp, {:invalid, :servers}}}
+
+  defp parse_mcp_servers(servers) when is_list(servers) do
+    Enum.reduce_while(servers, {:ok, []}, fn server, {:ok, acc} ->
+      case parse_mcp_server(server, acc) do
+        {:ok, server} -> {:cont, {:ok, acc ++ [server]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp parse_mcp_servers(_servers), do: {:error, {:mcp, {:invalid, :servers}}}
+
+  defp parse_mcp_server(data, acc) when is_map(data) do
+    with {:ok, name} <- mcp_string(data, "name"),
+         :ok <- check_unique_mcp_name(acc, name),
+         {:ok, command} <- mcp_command(data) do
+      {:ok, %{name: name, command: command}}
+    end
+  end
+
+  defp parse_mcp_server(_data, _acc), do: {:error, {:mcp, {:invalid, :servers}}}
+
+  defp check_unique_mcp_name(acc, name) do
+    if Enum.any?(acc, &(&1.name == name)),
+      do: {:error, {:mcp, {:duplicate, name}}},
+      else: :ok
+  end
+
+  defp mcp_string(data, key) do
+    case Map.fetch(data, key) do
+      {:ok, value} when is_binary(value) and value != "" -> {:ok, value}
+      _ -> {:error, {:mcp, {:invalid, String.to_atom(key)}}}
+    end
+  end
+
+  defp mcp_command(data) do
+    case Map.fetch(data, "command") do
+      {:ok, [_ | _] = list} ->
+        if Enum.all?(list, &is_binary/1),
+          do: {:ok, list},
+          else: {:error, {:mcp, {:invalid, :command}}}
+
+      _ ->
+        {:error, {:mcp, {:invalid, :command}}}
     end
   end
 

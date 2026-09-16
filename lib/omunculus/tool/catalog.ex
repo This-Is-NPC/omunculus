@@ -1,12 +1,17 @@
 defmodule Omunculus.Tool.Catalog do
   @moduledoc """
-  Discovers tool/hook folders on disk, per spec §8.4: builtin, user, then
-  project root, the most specific winning on a shared `name`. Also derives
-  the group map of spec §9.5 from the manifests' own `groups` field.
+  Discovers tool/hook folders on disk and MCP servers' tools, per spec
+  §8.4 and §8.7. Folder roots are merged builtin, user, then project root;
+  MCP servers are merged between the user root and the project root, so a
+  project folder wins over an MCP name and an MCP name wins over the
+  builtin, the most specific always winning on a shared `name`. Also
+  derives the group map of spec §9.5 from the manifests' own `groups`
+  field.
   """
 
   require Logger
 
+  alias Omunculus.Mcp
   alias Omunculus.Tool.Manifest
 
   @spec roots(String.t()) :: [Path.t()]
@@ -18,15 +23,53 @@ defmodule Omunculus.Tool.Catalog do
     ]
   end
 
-  @spec discover([Path.t()]) :: %{String.t() => Manifest.t()}
-  def discover(roots) do
-    Enum.reduce(roots, %{}, fn root, acc ->
+  @spec discover([Path.t()], [Omunculus.Config.mcp_server()]) :: %{String.t() => Manifest.t()}
+  def discover(roots, servers \\ [])
+
+  def discover(roots, servers) do
+    [project_root | earlier_roots] = Enum.reverse(roots)
+
+    earlier_roots
+    |> Enum.reverse()
+    |> discover_folders()
+    |> discover_mcp(servers)
+    |> discover_folders([project_root])
+  end
+
+  defp discover_folders(acc \\ %{}, roots) do
+    Enum.reduce(roots, acc, fn root, acc ->
       if File.dir?(root) do
         root |> subfolders() |> Enum.reduce(acc, &load_into(&2, &1))
       else
         acc
       end
     end)
+  end
+
+  defp discover_mcp(acc, servers) do
+    Enum.reduce(servers, acc, fn server, acc ->
+      case Mcp.list_tools(server) do
+        {:ok, tools} -> Enum.reduce(tools, acc, &Map.put(&2, &1.name, to_manifest(&1, server)))
+        {:error, reason} -> log_skip_mcp(server.name, reason) && acc
+      end
+    end)
+  end
+
+  defp to_manifest(tool, server) do
+    %Manifest{
+      name: tool.name,
+      kind: "tool",
+      shape: "simple",
+      triggers: ["model"],
+      description: tool.description,
+      parameters: tool.parameters,
+      tags: ["mcp", server.name],
+      groups: [],
+      command: nil,
+      module: nil,
+      dir: nil,
+      mcp: server
+    }
   end
 
   @spec with_trigger(%{String.t() => Manifest.t()}, String.t()) :: %{String.t() => Manifest.t()}
@@ -86,6 +129,11 @@ defmodule Omunculus.Tool.Catalog do
       {false, true} -> {:ok, hook}
       {false, false} -> :skip
     end
+  end
+
+  defp log_skip_mcp(name, reason) do
+    Logger.warning("skipping MCP server #{name}: #{inspect(reason)}")
+    true
   end
 
   defp log_skip(path, reason) do

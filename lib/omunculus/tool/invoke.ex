@@ -1,15 +1,24 @@
 defmodule Omunculus.Tool.Invoke do
   @moduledoc """
-  Runs a tool or hook's `command` per spec §8.1: JSON `in` on stdin, JSON
-  `out` on stdout.
+  Runs a tool or hook's contract per spec §8.1 and §8.7: JSON `in` on
+  stdin, JSON `out` on stdout for a `command`; a `tools/call` to the MCP
+  server for a manifest with `mcp` set. Either way the result goes through
+  the same `validate/1`.
   """
 
+  alias Omunculus.Mcp
   alias Omunculus.Tool.Manifest
 
   @stdin_script ~s(exec "$@" < "$0")
 
   @spec call(Manifest.t(), map) ::
           {:ok, %{ok: boolean, output: String.t(), emit: [map]}} | {:error, term}
+  def call(%Manifest{mcp: mcp} = manifest, input) when not is_nil(mcp) do
+    with {:ok, result} <- Mcp.call(mcp, manifest.name, input.args) do
+      validate(%{"ok" => result.ok, "output" => result.output, "emit" => result.emit})
+    end
+  end
+
   def call(%Manifest{module: module}, input) when is_binary(module) do
     with {:ok, mod} <- resolve_module(module) do
       input |> mod.run() |> validate()

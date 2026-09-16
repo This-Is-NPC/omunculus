@@ -1,0 +1,63 @@
+#!/usr/bin/env elixir
+
+defmodule McpServer do
+  def loop do
+    case IO.gets("") do
+      :eof -> :ok
+      {:error, _reason} -> :ok
+      line -> line |> String.trim() |> handle() |> continue()
+    end
+  end
+
+  defp continue(:halt), do: :ok
+  defp continue(_), do: loop()
+
+  defp handle(""), do: :ok
+  defp handle(line), do: line |> :json.decode() |> respond()
+
+  defp respond(%{"method" => "initialize", "id" => id}) do
+    reply(id, %{
+      protocolVersion: "2025-03-26",
+      capabilities: %{tools: %{}},
+      serverInfo: %{name: "fake", version: "0"}
+    })
+  end
+
+  defp respond(%{"method" => "notifications/initialized"}), do: :ok
+
+  defp respond(%{"method" => "tools/list", "id" => id}) do
+    reply(id, %{
+      tools: [
+        %{
+          name: "echo",
+          description: "Echoes text",
+          inputSchema: %{type: "object", properties: %{text: %{type: "string"}}}
+        },
+        %{
+          name: "shout",
+          description: "Upper-cases text",
+          inputSchema: %{type: "object", properties: %{text: %{type: "string"}}}
+        }
+      ]
+    })
+  end
+
+  defp respond(%{"method" => "tools/call", "id" => id, "params" => params}) do
+    text = get_in(params, ["arguments", "text"]) || ""
+    reply(id, call_result(params["name"], text))
+  end
+
+  defp respond(_message), do: :ok
+
+  defp call_result("echo", text), do: %{content: [%{type: "text", text: text}]}
+  defp call_result("shout", text), do: %{content: [%{type: "text", text: String.upcase(text)}]}
+
+  defp call_result(_name, _text),
+    do: %{content: [%{type: "text", text: "unknown tool"}], isError: true}
+
+  defp reply(id, result) do
+    %{jsonrpc: "2.0", id: id, result: result} |> :json.encode() |> IO.puts()
+  end
+end
+
+McpServer.loop()

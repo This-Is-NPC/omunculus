@@ -55,7 +55,7 @@ defmodule Omunculus.Run do
          {:ok, comment} <- fetch_last_comment(project.conn, work_id),
          {:ok, grants} <- Store.grants(project.conn, work),
          {:ok, request_section} <- fetch_request_section(project.conn, request_id),
-         catalog = discover_catalog(project.dir),
+         catalog = discover_catalog(project.dir, config.mcp),
          snapshot =
            Ceiling.mount(
              config,
@@ -188,8 +188,8 @@ defmodule Omunculus.Run do
     ["## Request\n" <> Enum.join([header | Enum.map(comments, & &1.body)], "\n")]
   end
 
-  defp discover_catalog(dir) do
-    dir |> Catalog.roots() |> Catalog.discover() |> Catalog.with_trigger("model")
+  defp discover_catalog(dir, servers) do
+    dir |> Catalog.roots() |> Catalog.discover(servers) |> Catalog.with_trigger("model")
   end
 
   defp effective_names(snapshot, catalog) do

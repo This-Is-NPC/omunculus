@@ -1,6 +1,8 @@
 defmodule Omunculus.Tool.Manifest do
   @moduledoc """
-  Struct parsed from a `tool.toml` or `hook.toml`, per spec §8.5.
+  Struct parsed from a `tool.toml` or `hook.toml`, per spec §8.5. An entry
+  built from an MCP server's `tools/list` (spec §8.7) sets `mcp` instead of
+  going through `load/1`.
   """
 
   @enforce_keys [:name, :kind, :dir]
@@ -17,7 +19,8 @@ defmodule Omunculus.Tool.Manifest do
             views: [],
             events: [],
             agent: nil,
-            dir: nil
+            dir: nil,
+            mcp: nil
 
   @type t :: %__MODULE__{
           name: String.t(),
@@ -33,7 +36,8 @@ defmodule Omunculus.Tool.Manifest do
           views: [String.t()],
           events: [String.t()],
           agent: String.t() | nil,
-          dir: String.t()
+          dir: String.t() | nil,
+          mcp: Omunculus.Config.mcp_server() | nil
         }
 
   @known_keys ~w(name kind shape triggers description tags groups command module parameters views events agent)
