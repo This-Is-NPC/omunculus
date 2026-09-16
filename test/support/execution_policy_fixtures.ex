@@ -20,13 +20,17 @@ defmodule Omunculus.ExecutionPolicyFixtures do
       backend: "bubblewrap",
       environment: %{"LANG" => "C"},
       network: Keyword.get(options, :network, "host"),
-      limits: %{
-        timeout_ms: 2_000,
-        max_output_bytes: 1_024,
-        max_concurrent: 64,
-        max_queue: 1,
-        queue_timeout_ms: 100
-      },
+      limits:
+        Map.merge(
+          %{
+            timeout_ms: 2_000,
+            max_output_bytes: 1_024,
+            max_concurrent: 64,
+            max_queue: 1,
+            queue_timeout_ms: 100
+          },
+          Keyword.get(options, :limits, %{})
+        ),
       tools: []
     }
   end

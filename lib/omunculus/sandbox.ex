@@ -1,83 +1,145 @@
 defmodule Omunculus.Sandbox do
-  @moduledoc "JavaScript tools.* bridge. Deno has no file, network, environment or process permissions."
+  @moduledoc """
+  Runs the JavaScript `tools.*` bridge through a coordinator policy with no
+  workspace, network, environment, or process capabilities.
+  """
 
-  def run(code, tools, call, opts \\ []) when is_binary(code) do
-    case System.find_executable("deno") do
-      nil -> {:error, :deno_not_found}
-      executable -> execute(executable, code, tools, call, Keyword.get(opts, :timeout, 10_000))
-    end
-  end
+  alias Omunculus.Execution
+  alias Omunculus.Execution.{Command, Policy}
+  alias Omunculus.Path, as: FilesystemPath
 
-  defp execute(executable, code, tools, call, timeout) do
+  @flags ~w(
+    run
+    --no-config
+    --no-lock
+    --no-prompt
+    --cached-only
+    --deny-read
+    --deny-write
+    --deny-net
+    --deny-env
+    --deny-run
+    --deny-ffi
+    --deny-sys
+    --deny-import
+  )
+
+  @spec run(
+          String.t(),
+          [map],
+          (String.t(), map -> {:ok, String.t()} | {:error, term}),
+          Policy.t()
+        ) ::
+          {:ok, String.t()} | {:error, term}
+  def run(code, tools, call, %Policy{} = execution) when is_binary(code) do
     script = Application.app_dir(:omunculus, "priv/sandbox.js")
 
-    args =
-      ~w(run --no-config --no-lock --no-prompt --cached-only --deny-read --deny-write --deny-net --deny-env --deny-run --deny-ffi --deny-sys --deny-import) ++
-        [script]
+    with {:ok, policy} <- Policy.coordinator(execution, Path.dirname(script)),
+         {:ok, deno} <- deno(policy),
+         {:ok, command} <- Command.new(deno, @flags ++ [script], cwd: Path.dirname(script)),
+         {:ok, handle} <- Execution.start(command, policy) do
+      try do
+        :ok =
+          Execution.write(
+            handle,
+            Jason.encode!(%{code: code, names: Enum.map(tools, & &1.name)}) <> "\n"
+          )
 
-    port = Port.open({:spawn_executable, executable}, [:binary, :exit_status, args: args])
-
-    try do
-      send_json(port, %{code: code, names: Enum.map(tools, & &1.name)})
-      allowed = MapSet.new(tools, & &1.name)
-
-      authorized_call = fn name, args ->
-        if MapSet.member?(allowed, name),
-          do: call.(name, args),
-          else: {:error, {:not_allowed, name}}
+        receive_output(handle, "", MapSet.new(tools, & &1.name), call, deadline(policy))
+      after
+        stop(handle)
       end
-
-      receive_output(port, "", authorized_call, System.monotonic_time(:millisecond) + timeout)
-    after
-      stop(port)
     end
   end
 
-  defp receive_output(port, buffer, call, deadline) do
+  defp receive_output(handle, buffer, allowed, call, deadline) do
     case String.split(buffer, "\n", parts: 2) do
       [line, rest] ->
-        case Jason.decode(line) do
-          {:ok, %{"type" => "call", "id" => id, "name" => name, "args" => args}}
-          when is_binary(name) and is_map(args) ->
-            response =
-              case call.(name, args) do
-                {:ok, output} -> %{id: id, ok: true, output: output}
-                {:error, reason} -> %{id: id, ok: false, output: inspect(reason)}
-              end
-
-            send_json(port, response)
-            receive_output(port, rest, call, deadline)
-
-          {:ok, %{"type" => "result", "output" => output}} ->
-            {:ok, output}
-
-          {:ok, %{"type" => "error", "output" => output}} ->
-            {:error, {:javascript, output}}
-
-          _ ->
-            {:error, :invalid_sandbox_output}
-        end
+        handle_message(handle, rest, allowed, call, deadline, Jason.decode(line))
 
       [_partial] ->
         receive do
-          {^port, {:data, data}} -> receive_output(port, buffer <> data, call, deadline)
-          {^port, {:exit_status, status}} -> {:error, {:sandbox_exit, status}}
+          {:execution, ref, {:stdout, bytes}} when ref == handle.ref ->
+            receive_output(handle, buffer <> bytes, allowed, call, deadline)
+
+          {:execution, ref, {:stderr, _bytes}} when ref == handle.ref ->
+            receive_output(handle, buffer, allowed, call, deadline)
+
+          {:execution, ref, {:exit, status}} when ref == handle.ref ->
+            {:error, {:sandbox_exit, status}}
+
+          {:execution, ref, {:error, reason}} when ref == handle.ref ->
+            {:error, reason}
         after
-          max(deadline - System.monotonic_time(:millisecond), 0) -> {:error, :sandbox_timeout}
+          max(deadline - System.monotonic_time(:millisecond), 0) ->
+            {:error, :sandbox_timeout}
         end
     end
   end
 
-  defp send_json(port, value), do: Port.command(port, Jason.encode!(value) <> "\n")
+  defp handle_message(handle, rest, allowed, call, deadline, {
+         :ok,
+         %{"type" => "call", "id" => id, "name" => name, "args" => args}
+       })
+       when is_binary(name) and is_map(args) do
+    response =
+      if MapSet.member?(allowed, name) do
+        case call.(name, args) do
+          {:ok, output} -> %{id: id, ok: true, output: output}
+          {:error, reason} -> %{id: id, ok: false, output: inspect(reason)}
+        end
+      else
+        %{id: id, ok: false, output: inspect({:not_allowed, name})}
+      end
 
-  defp stop(port) do
-    case Port.info(port, :os_pid) do
-      {:os_pid, pid} -> System.cmd("kill", ["-KILL", to_string(pid)], stderr_to_stdout: true)
-      nil -> :ok
+    with :ok <- Execution.write(handle, Jason.encode!(response) <> "\n") do
+      receive_output(handle, rest, allowed, call, deadline)
     end
+  end
 
-    Port.close(port)
-  rescue
-    ArgumentError -> :ok
+  defp handle_message(
+         _handle,
+         _rest,
+         _allowed,
+         _call,
+         _deadline,
+         {:ok, %{"type" => "result", "output" => output}}
+       )
+       when is_binary(output),
+       do: {:ok, output}
+
+  defp handle_message(
+         _handle,
+         _rest,
+         _allowed,
+         _call,
+         _deadline,
+         {:ok, %{"type" => "error", "output" => output}}
+       )
+       when is_binary(output),
+       do: {:error, {:javascript, output}}
+
+  defp handle_message(_handle, _rest, _allowed, _call, _deadline, _message),
+    do: {:error, :invalid_sandbox_output}
+
+  defp deno(policy) do
+    policy.runtimes
+    |> Enum.map(&Path.join([&1, "bin", "deno"]))
+    |> Enum.find_value({:error, :deno_not_found}, fn path ->
+      with {:ok, canonical} <- FilesystemPath.canonical(path),
+           true <- File.regular?(canonical) do
+        {:ok, canonical}
+      else
+        _ -> false
+      end
+    end)
+  end
+
+  defp deadline(policy), do: System.monotonic_time(:millisecond) + policy.limits.timeout_ms
+
+  defp stop(handle) do
+    Execution.stop(handle, :completed)
+  catch
+    :exit, _reason -> :ok
   end
 end

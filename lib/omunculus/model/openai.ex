@@ -19,7 +19,8 @@ defmodule Omunculus.Model.OpenAI do
           (String.t(),
            [map],
            (String.t(), map -> {:ok, String.t()} | {:error, term}),
-           (map -> :ok | {:error, term}) ->
+           (map -> :ok | {:error, term}),
+           Omunculus.Execution.Policy.t() ->
              {:ok, String.t()} | {:error, term})
   def new(base_url, model_name, opts \\ []) do
     client = %{
@@ -30,9 +31,18 @@ defmodule Omunculus.Model.OpenAI do
       temperature: Keyword.get(opts, :temperature)
     }
 
-    fn assembled, tools, call, record ->
+    fn assembled, tools, call, record, execution ->
       function_tools = Enum.map(tools, &function_tool/1) ++ [executor_tool()]
-      loop(client, function_tools, [%{role: "user", content: assembled}], call, record, tools)
+
+      loop(
+        client,
+        function_tools,
+        [%{role: "user", content: assembled}],
+        call,
+        record,
+        tools,
+        execution
+      )
     end
   end
 
@@ -62,19 +72,20 @@ defmodule Omunculus.Model.OpenAI do
 
   defp schema(parameters), do: parameters
 
-  defp loop(client, tools, messages, call, record, catalog) do
+  defp loop(client, tools, messages, call, record, catalog, execution) do
     with {:ok, message} <- post(client, request_body(client, tools, messages)),
          :ok <- record.(strip_message(message)) do
       case message do
         %{"tool_calls" => [_ | _] = tool_calls} ->
-          with {:ok, tool_messages} <- run_tool_calls(tool_calls, call, catalog) do
+          with {:ok, tool_messages} <- run_tool_calls(tool_calls, call, catalog, execution) do
             loop(
               client,
               tools,
               messages ++ [strip_message(message) | tool_messages],
               call,
               record,
-              catalog
+              catalog,
+              execution
             )
           end
 
@@ -112,9 +123,9 @@ defmodule Omunculus.Model.OpenAI do
   defp extract_message(%{"choices" => [%{"message" => message} | _]}), do: {:ok, message}
   defp extract_message(body), do: {:error, {:openai, {:invalid_response, body}}}
 
-  defp run_tool_calls(tool_calls, call, catalog) do
+  defp run_tool_calls(tool_calls, call, catalog, execution) do
     Enum.reduce_while(tool_calls, {:ok, []}, fn tool_call, {:ok, acc} ->
-      case run_tool_call(tool_call, call, catalog) do
+      case run_tool_call(tool_call, call, catalog, execution) do
         {:ok, tool_message} -> {:cont, {:ok, acc ++ [tool_message]}}
         {:error, reason} -> {:halt, {:error, {:openai, reason}}}
       end
@@ -124,17 +135,19 @@ defmodule Omunculus.Model.OpenAI do
   defp run_tool_call(
          %{"id" => id, "function" => %{"name" => name, "arguments" => arguments}},
          call,
-         catalog
+         catalog,
+         execution
        ) do
     with {:ok, args} <- decode_arguments(arguments) do
-      {:ok, tool_result_message(id, invoke(name, args, call, catalog))}
+      {:ok, tool_result_message(id, invoke(name, args, call, catalog, execution))}
     end
   end
 
-  defp invoke("__omunculus_execute", %{"code" => code}, call, catalog) when is_binary(code),
-    do: Omunculus.Sandbox.run(code, catalog, call)
+  defp invoke("__omunculus_execute", %{"code" => code}, call, catalog, execution)
+       when is_binary(code),
+       do: Omunculus.Sandbox.run(code, catalog, call, execution)
 
-  defp invoke(name, args, call, _catalog), do: call.(name, args)
+  defp invoke(name, args, call, _catalog, _execution), do: call.(name, args)
 
   defp decode_arguments(""), do: {:ok, %{}}
 

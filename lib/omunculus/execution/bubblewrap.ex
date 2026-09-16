@@ -19,12 +19,12 @@ defmodule Omunculus.Execution.Bubblewrap do
   end
 
   @impl true
-  def start(command, policy, owner, ref) do
+  def start(command, policy, _owner, _ref) do
     with {:ok, bwrap} <- executable(),
          :ok <- verify_version(bwrap),
          {:ok, command} <- validate_command(command, policy),
          {:ok, temp_dir} <- temporary_dir() do
-      case start_in_temp(bwrap, command, policy, owner, ref, temp_dir) do
+      case start_in_temp(bwrap, command, policy, temp_dir) do
         {:ok, _handle} = result ->
           result
 
@@ -35,9 +35,9 @@ defmodule Omunculus.Execution.Bubblewrap do
     end
   end
 
-  defp start_in_temp(bwrap, command, policy, owner, ref, temp_dir) do
+  defp start_in_temp(bwrap, command, policy, temp_dir) do
     with {:ok, created_hidden} <- prepare_hidden(policy, temp_dir) do
-      case start_process(bwrap, command, policy, owner, ref, temp_dir, created_hidden) do
+      case start_process(bwrap, command, policy, temp_dir, created_hidden) do
         {:ok, _handle} = result ->
           result
 
@@ -48,12 +48,10 @@ defmodule Omunculus.Execution.Bubblewrap do
     end
   end
 
-  defp start_process(bwrap, command, policy, owner, ref, temp_dir, created_hidden) do
-    with {:ok, input_guard} <- open_fifo(temp_dir, "input"),
-         {:ok, stderr_reader} <- start_stderr_reader(temp_dir),
+  defp start_process(bwrap, command, policy, temp_dir, created_hidden) do
+    with {:ok, stderr_reader} <- start_stderr_reader(temp_dir),
          {:ok, port} <- open_port(bwrap, command, policy, temp_dir),
-         :ok <- close_file(input_guard),
-         {:ok, input} <- start_input_writer(temp_dir, owner, ref) do
+         {:ok, input} <- start_input_writer(temp_dir) do
       {:ok,
        %Handle{
          port: port,
@@ -67,19 +65,23 @@ defmodule Omunculus.Execution.Bubblewrap do
 
   @impl true
   def write(%Handle{input: input}, data) do
-    send(input, {:execution_input, :write, IO.iodata_to_binary(data)})
+    Port.command(input, data)
     :ok
+  rescue
+    ArgumentError -> {:error, :input_closed}
   end
 
   @impl true
   def close_input(%Handle{input: input}) do
-    send(input, {:execution_input, :close})
+    Port.close(input)
     :ok
+  rescue
+    ArgumentError -> {:error, :input_closed}
   end
 
   @impl true
   def stop(%Handle{} = handle, _reason) do
-    stop_input(handle.input)
+    kill_port(handle.input)
     kill_port(handle.port)
     kill_port(handle.stderr_reader)
     cleanup_hidden(handle.created_hidden)
@@ -88,7 +90,7 @@ defmodule Omunculus.Execution.Bubblewrap do
 
   @impl true
   def cleanup(%Handle{} = handle) do
-    stop_input(handle.input)
+    kill_port(handle.input)
     kill_port(handle.stderr_reader)
     cleanup_hidden(handle.created_hidden)
     File.rm_rf(handle.temp_dir)
@@ -96,10 +98,10 @@ defmodule Omunculus.Execution.Bubblewrap do
   end
 
   @impl true
-  def exit_status(%Handle{temp_dir: temp_dir}, fallback) do
+  def exit_status(%Handle{temp_dir: temp_dir}, _fallback) do
     case File.read(Path.join(temp_dir, "status")) do
-      {:ok, value} -> parse_exit_status(value, fallback)
-      {:error, _reason} -> fallback
+      {:ok, value} -> parse_exit_status(value)
+      {:error, _reason} -> {:error, {:bubblewrap, :setup_failed}}
     end
   end
 
@@ -161,7 +163,7 @@ defmodule Omunculus.Execution.Bubblewrap do
          true <- Enum.any?(policy.runtimes, &FilesystemPath.within?(&1, program)),
          cwd = command.cwd || policy.workspace.root,
          {:ok, cwd} <- canonical_directory(cwd),
-         true <- Policy.readable?(policy, cwd) do
+         true <- readable_directory?(policy, cwd) do
       {:ok, %{command | program: program, cwd: cwd}}
     else
       false -> {:error, :command_outside_policy}
@@ -170,6 +172,11 @@ defmodule Omunculus.Execution.Bubblewrap do
   end
 
   defp validate_command(_command, _policy), do: {:error, :invalid_command}
+
+  defp readable_directory?(policy, path) do
+    Policy.readable?(policy, path) or
+      Enum.any?(policy.runtimes, &FilesystemPath.within?(&1, path))
+  end
 
   defp canonical_file(path) do
     with {:ok, canonical} <- FilesystemPath.canonical(path),
@@ -224,43 +231,21 @@ defmodule Omunculus.Execution.Bubblewrap do
     ErlangError -> {:error, :mkfifo_unavailable}
   end
 
-  defp open_fifo(temp_dir, name) do
-    case File.open(Path.join(temp_dir, name), [:read, :write, :binary]) do
-      {:ok, device} -> {:ok, device}
-      {:error, reason} -> {:error, {:fifo, reason}}
-    end
-  end
-
-  defp start_input_writer(temp_dir, owner, ref) do
+  defp start_input_writer(temp_dir) do
     path = Path.join(temp_dir, "input")
 
-    Task.start(fn ->
-      case File.open(path, [:write, :binary]) do
-        {:ok, device} -> input_loop(device, owner, ref)
-        {:error, reason} -> send(owner, {:execution, ref, {:error, {:input, reason}}})
-      end
-    end)
-  end
+    case System.find_executable("sh") do
+      nil ->
+        {:error, :sh_unavailable}
 
-  defp input_loop(device, owner, ref) do
-    receive do
-      {:execution_input, :write, data} ->
-        case IO.binwrite(device, data) do
-          :ok ->
-            input_loop(device, owner, ref)
-
-          {:error, reason} ->
-            File.close(device)
-            send(owner, {:execution, ref, {:error, {:input, reason}}})
-        end
-
-      {:execution_input, :close} ->
-        File.close(device)
+      executable ->
+        {:ok,
+         Port.open({:spawn_executable, executable}, [
+           :binary,
+           :exit_status,
+           args: ["-c", ~s(exec /usr/bin/cat > "$1" 2>/dev/null), "omunculus-input", path]
+         ])}
     end
-  rescue
-    exception ->
-      File.close(device)
-      send(owner, {:execution, ref, {:error, {:input, Exception.message(exception)}}})
   end
 
   defp start_stderr_reader(temp_dir) do
@@ -443,18 +428,6 @@ defmodule Omunculus.Execution.Bubblewrap do
 
   defp path_depth(path), do: path |> Path.split() |> length()
 
-  defp close_file(device) do
-    File.close(device)
-    :ok
-  rescue
-    ArgumentError -> :ok
-  end
-
-  defp stop_input(pid) do
-    if Process.alive?(pid), do: Process.exit(pid, :kill)
-    :ok
-  end
-
   defp cleanup_hidden(paths) do
     Enum.each(paths, &File.rm/1)
   end
@@ -472,10 +445,10 @@ defmodule Omunculus.Execution.Bubblewrap do
     ArgumentError -> :ok
   end
 
-  defp parse_exit_status(value, fallback) do
+  defp parse_exit_status(value) do
     case Integer.parse(String.trim(value)) do
       {status, ""} when status >= 0 -> status
-      _ -> fallback
+      _ -> {:error, {:bubblewrap, :setup_failed}}
     end
   end
 end

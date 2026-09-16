@@ -7,11 +7,12 @@ defmodule Omunculus.Run do
   Terminal actions close the run before its action or hook continuations.
   """
 
-  alias Omunculus.{Ceiling, Config, Harness, Project, Store}
+  alias Omunculus.{Ceiling, Config, Harness, Mcp, Project, Store}
   alias Omunculus.Execution.Policy
   alias Omunculus.Tool.{Catalog, Manifest}
 
   @ending_events ~w(request deny grant continue break delegate)
+  @resources ~w(sandbox.write sandbox.network)
 
   @spec open(
           Project.t(),
@@ -44,20 +45,30 @@ defmodule Omunculus.Run do
            fetch_inbox(project.conn, work_id, Map.get(opening, :inbox_id)),
          {:ok, grants} <- Store.grants(project.conn, work),
          {:ok, request_section} <- fetch_request_section(project.conn, request_id),
-         catalog = discover_catalog(project.dir, config.mcp),
-         model_catalog = Catalog.with_trigger(catalog, "model"),
          workspace = Harness.workspace_context(config, work),
+         context = %{
+           agent: name,
+           depth: depth,
+           grants: grants,
+           stage: stage,
+           workspace: workspace.layer
+         },
+         local_catalog = discover_catalog(project.dir),
+         discovery_snapshot =
+           Ceiling.mount(
+             config,
+             Map.put(context, :groups, Catalog.groups(local_catalog)),
+             Map.keys(local_catalog) ++ @resources
+           ),
+         mcp_roots = Mcp.implementation_roots(config.mcp),
+         {:ok, discovery} <-
+           Policy.discovery(config, discovery_snapshot, workspace, project.dir, mcp_roots),
+         catalog = discover_catalog(project.dir, config.mcp, discovery),
+         model_catalog = Catalog.with_trigger(catalog, "model"),
          snapshot =
            Ceiling.mount(
              config,
-             %{
-               agent: name,
-               depth: depth,
-               grants: grants,
-               stage: stage,
-               workspace: workspace.layer,
-               groups: Catalog.groups(catalog)
-             },
+             Map.put(context, :groups, Catalog.groups(catalog)),
              Map.keys(catalog)
            ),
          names = effective_names(snapshot, model_catalog),
@@ -69,7 +80,7 @@ defmodule Omunculus.Run do
              workspace,
              project.dir,
              names,
-             Catalog.implementation_roots(catalog)
+             Catalog.implementation_roots(catalog) ++ mcp_roots
            ),
          assembled =
            assemble(
@@ -233,7 +244,8 @@ defmodule Omunculus.Run do
     ["## Request\n" <> Enum.join([header | Enum.map(comments, & &1.body)], "\n")]
   end
 
-  defp discover_catalog(dir, servers), do: dir |> Catalog.roots() |> Catalog.discover(servers)
+  defp discover_catalog(dir, servers \\ [], policy \\ nil),
+    do: dir |> Catalog.roots() |> Catalog.discover(servers, policy)
 
   defp effective_names(snapshot, catalog) do
     snapshot.have |> Enum.filter(&Map.has_key?(catalog, &1)) |> Enum.sort()
@@ -364,12 +376,23 @@ defmodule Omunculus.Run do
         {:ok, events} = Store.replay(project.conn, {:run, run.id})
 
         with {:ok, _hooks} <- Harness.react(project, events, [], execution) do
-          if is_function(model, 4) do
-            model.(assembled, tools, call, &record_model(project, run, execution, &1))
-          else
-            with {:ok, text} <- model.(assembled, tools, call),
-                 :ok <- record_model(project, run, execution, text),
-                 do: {:ok, text}
+          cond do
+            is_function(model, 5) ->
+              model.(
+                assembled,
+                tools,
+                call,
+                &record_model(project, run, execution, &1),
+                execution
+              )
+
+            is_function(model, 4) ->
+              model.(assembled, tools, call, &record_model(project, run, execution, &1))
+
+            true ->
+              with {:ok, text} <- model.(assembled, tools, call),
+                   :ok <- record_model(project, run, execution, text),
+                   do: {:ok, text}
           end
         end
       rescue

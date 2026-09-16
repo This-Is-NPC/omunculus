@@ -20,11 +20,14 @@ defmodule Omunculus.Tool.Invoke do
 
   @spec call(Manifest.t(), map, Policy.t() | nil) ::
           {:ok, %{ok: boolean, output: String.t(), emit: [map]}} | {:error, term}
-  def call(%Manifest{mcp: mcp} = manifest, input, _execution) when not is_nil(mcp) do
-    with {:ok, result} <- Mcp.call(mcp, manifest.name, input.args) do
+  def call(%Manifest{mcp: mcp} = manifest, input, %Policy{} = execution) when not is_nil(mcp) do
+    with {:ok, result} <- Mcp.call(mcp, manifest.name, input.args, execution) do
       validate(%{"ok" => result.ok, "output" => result.output, "emit" => result.emit})
     end
   end
+
+  def call(%Manifest{mcp: mcp}, _input, nil) when not is_nil(mcp),
+    do: {:error, :execution_context_required}
 
   def call(%Manifest{module: module}, input, execution) when is_binary(module) do
     with {:ok, mod} <- resolve_module(module) do

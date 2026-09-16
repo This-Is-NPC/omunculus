@@ -10,12 +10,12 @@ defmodule Omunculus.MatrixTest do
   alias Omunculus.Model.Battery
   alias Omunculus.Store.Query
 
-  @concierge_d0_tools ~w(bench break continue fs.read store)
-  @concierge_d1_tools ~w(break catalog continue delegate fs.read store)
-  @concierge_d2_tools ~w(catalog delegate fs.read sequence store)
-  @worker_tools ~w(bench break comment continue fs.read notify request_access)
-  @worker_d2_tools ~w(bench comment continue fs.read notify request_access)
-  @manager_tools ~w(delegate fs.read sequence store)
+  @concierge_d0_tools ~w(bench break continue fs.read sandbox.network store)
+  @concierge_d1_tools ~w(break catalog continue delegate fs.read sandbox.network store)
+  @concierge_d2_tools ~w(catalog delegate fs.read sandbox.network sequence store)
+  @worker_tools ~w(bench break comment continue fs.read notify request_access sandbox.network)
+  @worker_d2_tools ~w(bench comment continue fs.read notify request_access sandbox.network)
+  @manager_tools ~w(delegate fs.read sandbox.network sequence store)
 
   @concierge_text "Você é o concierge do projeto. Leia a message, use as tools em `tools.*` quando precisar e responda."
   @worker_text "Você é o worker. Faça o work que recebeu, comente o progresso e chame continue quando terminar a etapa."

@@ -18,7 +18,7 @@ defmodule Omunculus.SpecRegressionTest do
   [agents.concierge]
   depth = 0
   text = "concierge"
-  tools = ["work", "comment", "reply", "request_access", "notify", "read", "write"]
+  tools = ["work", "comment", "reply", "request_access", "notify", "read", "write", "sandbox.network"]
   [agents.worker]
   depth = 1
   text = "worker"

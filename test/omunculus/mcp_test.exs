@@ -1,16 +1,25 @@
 defmodule Omunculus.McpTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Config, Fixtures, Id, Mcp, Project}
+  alias Omunculus.{CLI, Config, ExecutionPolicyFixtures, Fixtures, Id, Mcp, Project}
   alias Omunculus.Tool.Catalog
 
   @server %{name: "fake", command: [Path.expand("test/support/mcp_server")]}
 
   defp server(overrides), do: Map.merge(@server, overrides)
 
-  describe "list_tools/1" do
+  defp policy do
+    implementation_root = @server.command |> hd() |> Path.dirname()
+
+    ExecutionPolicyFixtures.policy(implementation_root,
+      read_only: [implementation_root],
+      network: "host"
+    )
+  end
+
+  describe "list_tools/2" do
     test "returns the fixture's two tools with description and parameters" do
-      assert {:ok, tools} = Mcp.list_tools(@server)
+      assert {:ok, tools} = Mcp.list_tools(@server, policy())
       assert Enum.map(tools, & &1.name) |> Enum.sort() == ["echo", "shout"]
 
       echo = Enum.find(tools, &(&1.name == "echo"))
@@ -19,33 +28,39 @@ defmodule Omunculus.McpTest do
     end
 
     test "an executable that does not exist is :not_found" do
-      assert Mcp.list_tools(server(%{command: ["definitely-not-a-real-binary-xyz"]})) ==
+      assert Mcp.list_tools(server(%{command: ["definitely-not-a-real-binary-xyz"]}), policy()) ==
                {:error, {:mcp, "fake", :not_found}}
     end
 
     test "a server that exits before answering reports its exit status" do
-      assert Mcp.list_tools(server(%{command: ["sh", "-c", "exit 3"]})) ==
+      assert Mcp.list_tools(server(%{command: ["sh", "-c", "exit 3"]}), policy()) ==
                {:error, {:mcp, "fake", {:exit, 3}}}
     end
   end
 
-  describe "call/3" do
+  describe "call/4" do
     test "echo returns the given text" do
       assert {:ok, %{ok: true, output: "hi", emit: []}} =
-               Mcp.call(@server, "echo", %{"text" => "hi"})
+               Mcp.call(@server, "echo", %{"text" => "hi"}, policy())
     end
 
     test "shout upper-cases the given text" do
       assert {:ok, %{ok: true, output: "HI", emit: []}} =
-               Mcp.call(@server, "shout", %{"text" => "hi"})
+               Mcp.call(@server, "shout", %{"text" => "hi"}, policy())
     end
 
     test "an unknown tool answers ok: false" do
-      assert {:ok, %{ok: false, output: "unknown tool"}} = Mcp.call(@server, "nope", %{})
+      assert {:ok, %{ok: false, output: "unknown tool"}} =
+               Mcp.call(@server, "nope", %{}, policy())
     end
 
     test "an executable that does not exist is :not_found" do
-      assert Mcp.call(server(%{command: ["definitely-not-a-real-binary-xyz"]}), "echo", %{}) ==
+      assert Mcp.call(
+               server(%{command: ["definitely-not-a-real-binary-xyz"]}),
+               "echo",
+               %{},
+               policy()
+             ) ==
                {:error, {:mcp, "fake", :not_found}}
     end
   end
@@ -70,7 +85,7 @@ defmodule Omunculus.McpTest do
       [agents.concierge]
       depth = 0
       text = "hi"
-      tools = ["echo", "whisper"]
+      tools = ["echo", "whisper", "sandbox.network"]
       deny = ["shout"]
 
       [[mcp.servers]]
@@ -115,7 +130,7 @@ defmodule Omunculus.McpTest do
       write_config(dir, mcp_config(@server.command |> hd()))
 
       {:ok, config} = Config.load(dir)
-      catalog = Catalog.discover(Catalog.roots(dir), config.mcp)
+      catalog = Catalog.discover(Catalog.roots(dir), config.mcp, policy())
 
       refute Map.has_key?(catalog, "mcp")
       assert Map.has_key?(catalog, "echo")

@@ -75,7 +75,7 @@ defmodule Omunculus.Execution.Process do
   end
 
   def handle_info({port, {:exit_status, status}}, %{handle: %{port: port}} = state) do
-    finish(%{state | exit_status: state.backend.exit_status(state.handle, status)})
+    await_exit_status(state, state.backend.exit_status(state.handle, status))
   end
 
   def handle_info({port, {:exit_status, _status}}, %{handle: %{stderr_reader: port}} = state) do
@@ -100,8 +100,11 @@ defmodule Omunculus.Execution.Process do
   end
 
   def handle_info({:EXIT, port, reason}, %{handle: %{port: port}} = state) do
-    status = state.backend.exit_status(state.handle, exit_status(reason))
-    finish(%{state | exit_status: status})
+    await_exit_status(state, state.backend.exit_status(state.handle, exit_status(reason)))
+  end
+
+  def handle_info({:execution_stderr_timeout, ref}, %{ref: ref} = state) do
+    finish(%{state | stderr_closed: true})
   end
 
   def handle_info(_message, state), do: {:noreply, state}
@@ -150,6 +153,22 @@ defmodule Omunculus.Execution.Process do
     Limiter.release(state.limits)
     {:stop, :normal, %{state | released: true}}
   end
+
+  defp await_stderr(%{stderr_closed: true} = state), do: finish(state)
+
+  defp await_stderr(state) do
+    Process.send_after(self(), {:execution_stderr_timeout, state.ref}, 100)
+    {:noreply, state}
+  end
+
+  defp await_exit_status(state, {:error, reason}) do
+    state
+    |> stop_execution(reason)
+    |> Map.merge(%{exit_status: 1, stderr_closed: true})
+    |> finish()
+  end
+
+  defp await_exit_status(state, status), do: await_stderr(%{state | exit_status: status})
 
   defp exit_status(:normal), do: 0
   defp exit_status({:exit_status, status}) when is_integer(status), do: status

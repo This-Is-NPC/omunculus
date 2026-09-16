@@ -539,6 +539,7 @@ defmodule Omunculus.CLITest do
                )
     end
 
+    @tag :sandbox
     test "a project on-request hook emitting notify triggers on-notify without sequencing",
          %{dir: dir} do
       write_hook(
@@ -684,7 +685,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["work", "bad_continue"]
+      tools = ["work", "bad_continue", "sandbox.network"]
 
       [workflows.delivery]
       steps = [
@@ -1262,6 +1263,13 @@ defmodule Omunculus.CLITest do
   describe "hook calling an agent" do
     test "a hook declaring an agent opens a reaction run via the hook's name after the triggering run closes",
          %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "concierge"
+      tools = ["notify", "sandbox.network"]
+      """)
+
       write_hook(
         dir,
         "on-notify",
@@ -1315,6 +1323,13 @@ defmodule Omunculus.CLITest do
 
     test "a hook that emits continue on a work with workflow off fails the same as any tool and persists nothing from that call",
          %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "concierge"
+      tools = ["work", "notify", "sandbox.network"]
+      """)
+
       write_hook(
         dir,
         "on-notify",
@@ -1436,7 +1451,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["comment", "compact_comments", "foreign_compact", "work"]
+      tools = ["comment", "compact_comments", "foreign_compact", "work", "sandbox.network"]
       """)
 
       project = open(dir)

@@ -1,6 +1,9 @@
 defmodule Omunculus.SandboxTest do
   use ExUnit.Case, async: true
-  alias Omunculus.Sandbox
+
+  @moduletag :sandbox
+
+  alias Omunculus.{ExecutionPolicyFixtures, Sandbox}
 
   test "JavaScript calls simple and composite tools through the same bridge" do
     call = fn
@@ -15,7 +18,8 @@ defmodule Omunculus.SandboxTest do
     return file + ':' + saved;
     """
 
-    assert {:ok, "file:saved"} = Sandbox.run(code, [%{name: "read"}, %{name: "compact"}], call)
+    assert {:ok, "file:saved"} =
+             Sandbox.run(code, [%{name: "read"}, %{name: "compact"}], call, policy())
   end
 
   test "missing names cannot bypass the bridge's authorized catalog" do
@@ -23,8 +27,11 @@ defmodule Omunculus.SandboxTest do
       ~S|Deno.stdout.writeSync(new TextEncoder().encode(JSON.stringify({type:'call',id:1,name:'forbidden',args:{}})+'\n')); await new Promise(() => {});|
 
     assert {:error, _} =
-             Sandbox.run(code, [], fn _, _ -> flunk("must not call forbidden tool") end,
-               timeout: 200
+             Sandbox.run(
+               code,
+               [],
+               fn _, _ -> flunk("must not call forbidden tool") end,
+               policy(timeout: 200)
              )
   end
 
@@ -37,7 +44,7 @@ defmodule Omunculus.SandboxTest do
       ] do
     test "denies direct #{capability} access" do
       assert {:error, {:javascript, error}} =
-               Sandbox.run(unquote(code), [], fn _, _ -> flunk("no tools") end)
+               Sandbox.run(unquote(code), [], fn _, _ -> flunk("no tools") end, policy())
 
       assert error =~ "NotCapable"
     end
@@ -45,14 +52,26 @@ defmodule Omunculus.SandboxTest do
 
   test "a non-terminating program is stopped" do
     assert {:error, :sandbox_timeout} =
-             Sandbox.run("while (true) {}", [], fn _, _ -> :unused end, timeout: 200)
+             Sandbox.run("while (true) {}", [], fn _, _ -> :unused end, policy(timeout: 200))
   end
 
   test "terminal tool actions propagate out and stop the sandbox" do
     assert catch_throw(
-             Sandbox.run("await tools.continue({});", [%{name: "continue"}], fn _, _ ->
-               throw(:run_ended)
-             end)
+             Sandbox.run(
+               "await tools.continue({});",
+               [%{name: "continue"}],
+               fn _, _ ->
+                 throw(:run_ended)
+               end,
+               policy()
+             )
            ) == :run_ended
+  end
+
+  defp policy(options \\ []) do
+    ExecutionPolicyFixtures.policy(Application.app_dir(:omunculus, "priv"),
+      network: "none",
+      limits: %{timeout_ms: Keyword.get(options, :timeout, 2_000)}
+    )
   end
 end

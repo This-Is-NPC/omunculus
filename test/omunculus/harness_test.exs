@@ -1,7 +1,7 @@
 defmodule Omunculus.HarnessTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{Fixtures, Harness, Id, Project, Run}
+  alias Omunculus.{ExecutionPolicyFixtures, Fixtures, Harness, Id, Project, Run}
   alias Omunculus.Store.Query
 
   setup do
@@ -39,6 +39,8 @@ defmodule Omunculus.HarnessTest do
   defp open(prompt_id, work_id \\ nil),
     do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: nil, agent: nil}
 
+  defp execution(dir), do: ExecutionPolicyFixtures.policy(dir, network: "host")
+
   test "a project tool named send replaces the builtin without touching the core", %{dir: dir} do
     write_tool(
       dir,
@@ -58,7 +60,7 @@ defmodule Omunculus.HarnessTest do
     project = open_project(dir)
     model = fn _assembled, _tools, _call -> {:ok, "done"} end
 
-    ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil}
+    ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil, execution: execution(dir)}
 
     assert {:ok, %{ok: true}, events} = Harness.dispatch(project, "send", %{}, ctx)
 
@@ -93,7 +95,7 @@ defmodule Omunculus.HarnessTest do
     )
 
     project = open_project(dir)
-    ctx = %{trigger: "model", run_id: nil, author: "agent", agent: nil}
+    ctx = %{trigger: "model", run_id: nil, author: "agent", agent: nil, execution: execution(dir)}
 
     assert {:error, {:unknown_action, "nope"}} = Harness.dispatch(project, "boom", %{}, ctx)
     assert {:ok, []} = Query.all(project.conn, "SELECT * FROM events")
@@ -133,7 +135,7 @@ defmodule Omunculus.HarnessTest do
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["counter"]
+    tools = ["counter", "sandbox.network"]
     """)
 
     write_tool(
@@ -179,7 +181,7 @@ defmodule Omunculus.HarnessTest do
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["work", "viewer"]
+    tools = ["work", "viewer", "sandbox.network"]
     """)
 
     write_tool(
@@ -249,7 +251,14 @@ defmodule Omunculus.HarnessTest do
     request_id = Fixtures.insert(project.conn, :requests)
     Fixtures.insert(project.conn, :comments, %{request_id: request_id, body: "preciso disso"})
     run_id = Fixtures.insert(project.conn, :runs, %{request_id: request_id})
-    ctx = %{trigger: "model", run_id: run_id, author: "agent", agent: "concierge"}
+
+    ctx = %{
+      trigger: "model",
+      run_id: run_id,
+      author: "agent",
+      agent: "concierge",
+      execution: execution(dir)
+    }
 
     assert {:ok, out, _events} = Harness.dispatch(project, "viewer", %{}, ctx)
     assert out.output == "yes"
@@ -284,7 +293,14 @@ defmodule Omunculus.HarnessTest do
     inbox_id = Fixtures.insert(project.conn, :inbox, %{work_id: work_id})
     Fixtures.insert(project.conn, :comments, %{inbox_id: inbox_id, body: "preciso avisar"})
     run_id = Fixtures.insert(project.conn, :runs, %{work_id: work_id})
-    ctx = %{trigger: "model", run_id: run_id, author: "agent", agent: "concierge"}
+
+    ctx = %{
+      trigger: "model",
+      run_id: run_id,
+      author: "agent",
+      agent: "concierge",
+      execution: execution(dir)
+    }
 
     assert {:ok, out, _events} = Harness.dispatch(project, "viewer", %{}, ctx)
     assert out.output == "yes"
@@ -364,7 +380,7 @@ defmodule Omunculus.HarnessTest do
     )
 
     project = open_project(dir)
-    ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil}
+    ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil, execution: execution(dir)}
 
     assert {:ok, %{ok: true}, events} = Harness.dispatch(project, "send", %{}, ctx)
     assert Enum.any?(events, &(&1.type == "prompt"))
@@ -418,7 +434,7 @@ defmodule Omunculus.HarnessTest do
     project = open_project(dir)
     Fixtures.insert(project.conn, :inbox, %{agent: "concierge"})
 
-    ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil}
+    ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil, execution: execution(dir)}
 
     assert {:ok, %{ok: true, output: "yes"}, _events} =
              Harness.dispatch(project, "peek", %{}, ctx)

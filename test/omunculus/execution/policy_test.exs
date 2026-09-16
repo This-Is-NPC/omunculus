@@ -112,6 +112,41 @@ defmodule Omunculus.Execution.PolicyTest do
     assert Policy.writable?(policy, Path.join(dir, "result.txt"))
   end
 
+  test "builds MCP discovery policy without mounting the workspace", %{dir: dir} do
+    implementation_root = Path.join(dir, "mcp")
+    File.mkdir_p!(implementation_root)
+    {:ok, config} = Config.load(dir)
+    names = ["sandbox.network"]
+    snapshot = snapshot(config, "worker", names, ["sandbox.network"])
+
+    assert {:ok, policy} =
+             Policy.discovery(
+               config,
+               snapshot,
+               %{name: nil, root: nil},
+               dir,
+               [implementation_root]
+             )
+
+    assert policy.read_only == [implementation_root]
+    assert policy.read_write == []
+    assert policy.network == "host"
+    refute Policy.readable?(policy, Path.join(dir, "omunculus.toml"))
+  end
+
+  test "narrows the JavaScript coordinator to its implementation directory", %{dir: dir} do
+    coordinator_root = Path.join(dir, "coordinator")
+    File.mkdir_p!(coordinator_root)
+    {:ok, config} = Config.load(dir)
+    {:ok, execution} = policy(config, "worker", dir)
+
+    assert {:ok, coordinator} = Policy.coordinator(execution, coordinator_root)
+
+    assert coordinator.read_only == [coordinator_root]
+    assert coordinator.read_write == []
+    assert coordinator.network == "none"
+  end
+
   test "mounts granted external paths read-only", %{dir: dir} do
     external = Path.join(System.tmp_dir!(), Id.new())
     File.write!(external, "external")

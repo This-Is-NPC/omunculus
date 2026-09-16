@@ -93,6 +93,34 @@ defmodule Omunculus.Execution.Policy do
     end
   end
 
+  @spec discovery(Config.t(), map, map, String.t(), [String.t()]) :: {:ok, t} | {:error, term}
+  def discovery(config, snapshot, workspace, project_dir, implementation_roots) do
+    with {:ok, policy} <- restricted(config, workspace, project_dir, implementation_roots) do
+      network =
+        if Ceiling.classify(snapshot, "sandbox.network", "resource") == "have",
+          do: "host",
+          else: "none"
+
+      policy = %{policy | network: network}
+      {:ok, %{policy | id: policy_id(policy)}}
+    end
+  end
+
+  @spec coordinator(t, String.t()) :: {:ok, t} | {:error, term}
+  def coordinator(%__MODULE__{} = policy, implementation_root) do
+    with {:ok, implementation_root} <- canonical_directory(implementation_root, :implementation) do
+      policy = %{
+        policy
+        | id: "",
+          read_only: [implementation_root],
+          read_write: [],
+          network: "none"
+      }
+
+      {:ok, %{policy | id: policy_id(policy)}}
+    end
+  end
+
   @spec serializable(t) :: map
   def serializable(%__MODULE__{} = policy) do
     %{

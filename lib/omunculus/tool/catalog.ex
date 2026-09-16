@@ -23,16 +23,19 @@ defmodule Omunculus.Tool.Catalog do
     ]
   end
 
-  @spec discover([Path.t()], [Omunculus.Config.mcp_server()]) :: %{String.t() => Manifest.t()}
-  def discover(roots, servers \\ [])
+  alias Omunculus.Execution.Policy
 
-  def discover(roots, servers) do
+  @spec discover([Path.t()], [Omunculus.Config.mcp_server()], Policy.t() | nil) ::
+          %{String.t() => Manifest.t()}
+  def discover(roots, servers \\ [], policy \\ nil)
+
+  def discover(roots, servers, policy) do
     [project_root | earlier_roots] = Enum.reverse(roots)
 
     earlier_roots
     |> Enum.reverse()
     |> discover_folders()
-    |> discover_mcp(servers)
+    |> discover_mcp(servers, policy)
     |> discover_folders([project_root])
   end
 
@@ -46,13 +49,20 @@ defmodule Omunculus.Tool.Catalog do
     end)
   end
 
-  defp discover_mcp(acc, servers) do
+  defp discover_mcp(acc, [], _policy), do: acc
+
+  defp discover_mcp(acc, servers, %Policy{} = policy) do
     Enum.reduce(servers, acc, fn server, acc ->
-      case Mcp.list_tools(server) do
+      case Mcp.list_tools(server, policy) do
         {:ok, tools} -> Enum.reduce(tools, acc, &Map.put(&2, &1.name, to_manifest(&1, server)))
         {:error, reason} -> log_skip_mcp(server.name, reason) && acc
       end
     end)
+  end
+
+  defp discover_mcp(acc, servers, nil) do
+    Enum.each(servers, &log_skip_mcp(&1.name, :execution_context_required))
+    acc
   end
 
   defp to_manifest(tool, server) do

@@ -109,7 +109,7 @@ defmodule Omunculus.PresetTest do
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["comment", "reply", "request_secret", "work"]
+      tools = ["comment", "reply", "request_secret", "work", "sandbox.network"]
       """)
 
       write_emit_tool(

@@ -1,63 +1,52 @@
-#!/usr/bin/env elixir
+#!/usr/bin/env -S deno run --no-config --no-lock --no-prompt
 
-defmodule McpServer do
-  def loop do
-    case IO.gets("") do
-      :eof -> :ok
-      {:error, _reason} -> :ok
-      line -> line |> String.trim() |> handle() |> continue()
-    end
-  end
+function reply(id, result) {
+  console.log(JSON.stringify({jsonrpc: "2.0", id, result}));
+}
 
-  defp continue(:halt), do: :ok
-  defp continue(_), do: loop()
+function callResult(name, text) {
+  if (name === "echo") return {content: [{type: "text", text}]};
+  if (name === "shout") return {content: [{type: "text", text: text.toUpperCase()}]};
 
-  defp handle(""), do: :ok
-  defp handle(line), do: line |> :json.decode() |> respond()
+  return {content: [{type: "text", text: "unknown tool"}], isError: true};
+}
 
-  defp respond(%{"method" => "initialize", "id" => id}) do
-    reply(id, %{
-      protocolVersion: "2025-03-26",
-      capabilities: %{tools: %{}},
-      serverInfo: %{name: "fake", version: "0"}
-    })
-  end
+let buffer = "";
 
-  defp respond(%{"method" => "notifications/initialized"}), do: :ok
+for await (const chunk of Deno.stdin.readable) {
+  buffer += new TextDecoder().decode(chunk, {stream: true});
+  const lines = buffer.split("\n");
+  buffer = lines.pop();
 
-  defp respond(%{"method" => "tools/list", "id" => id}) do
-    reply(id, %{
-      tools: [
-        %{
-          name: "echo",
-          description: "Echoes text",
-          inputSchema: %{type: "object", properties: %{text: %{type: "string"}}}
-        },
-        %{
-          name: "shout",
-          description: "Upper-cases text",
-          inputSchema: %{type: "object", properties: %{text: %{type: "string"}}}
-        }
-      ]
-    })
-  end
+  for (const line of lines) {
+    if (!line) continue;
 
-  defp respond(%{"method" => "tools/call", "id" => id, "params" => params}) do
-    text = get_in(params, ["arguments", "text"]) || ""
-    reply(id, call_result(params["name"], text))
-  end
+    const message = JSON.parse(line);
 
-  defp respond(_message), do: :ok
-
-  defp call_result("echo", text), do: %{content: [%{type: "text", text: text}]}
-  defp call_result("shout", text), do: %{content: [%{type: "text", text: String.upcase(text)}]}
-
-  defp call_result(_name, _text),
-    do: %{content: [%{type: "text", text: "unknown tool"}], isError: true}
-
-  defp reply(id, result) do
-    %{jsonrpc: "2.0", id: id, result: result} |> :json.encode() |> IO.puts()
-  end
-end
-
-McpServer.loop()
+    if (message.method === "initialize") {
+      reply(message.id, {
+        protocolVersion: "2025-03-26",
+        capabilities: {tools: {}},
+        serverInfo: {name: "fake", version: "0"}
+      });
+    } else if (message.method === "tools/list") {
+      reply(message.id, {
+        tools: [
+          {
+            name: "echo",
+            description: "Echoes text",
+            inputSchema: {type: "object", properties: {text: {type: "string"}}}
+          },
+          {
+            name: "shout",
+            description: "Upper-cases text",
+            inputSchema: {type: "object", properties: {text: {type: "string"}}}
+          }
+        ]
+      });
+    } else if (message.method === "tools/call") {
+      const {name, arguments: args} = message.params;
+      reply(message.id, callResult(name, args.text || ""));
+    }
+  }
+}

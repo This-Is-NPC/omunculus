@@ -18,7 +18,7 @@ defmodule Omunculus.Harness do
           {:ok, Manifest.t()} | {:error, {:unknown_tool, String.t()}}
   def manifest(%Project{dir: dir}, name) do
     with {:ok, config} <- Config.load(dir) do
-      dir |> Catalog.roots() |> Catalog.discover(config.mcp) |> fetch_manifest(name)
+      dir |> Catalog.roots() |> Catalog.discover(config.mcp, nil) |> fetch_manifest(name)
     end
   end
 
@@ -40,7 +40,10 @@ defmodule Omunculus.Harness do
   @spec dispatch(Project.t(), String.t(), map, map) :: {:ok, map, [map]} | {:error, term}
   def dispatch(project, name, args, ctx) do
     with {:ok, config} <- Config.load(project.dir),
-         catalog = project.dir |> Catalog.roots() |> Catalog.discover(config.mcp),
+         catalog =
+           project.dir
+           |> Catalog.roots()
+           |> Catalog.discover(config.mcp, Map.get(ctx, :execution)),
          {:ok, manifest} <- fetch_manifest(catalog, name),
          :ok <- check_trigger(manifest, name, ctx.trigger),
          {:ok, run} <- resolve_run(project, ctx.run_id),
@@ -65,7 +68,7 @@ defmodule Omunculus.Harness do
   @doc "Dispatches reactions to committed events, including the run lifecycle."
   def react(project, events, active \\ [], execution \\ nil) do
     with {:ok, config} <- Config.load(project.dir) do
-      catalog = project.dir |> Catalog.roots() |> Catalog.discover(config.mcp)
+      catalog = project.dir |> Catalog.roots() |> Catalog.discover(config.mcp, execution)
 
       Enum.reduce_while(events, {:ok, []}, fn event, {:ok, acc} ->
         with {:ok, run} <- resolve_run(project, event.run_id),
@@ -140,7 +143,7 @@ defmodule Omunculus.Harness do
           :ok | {:error, term}
   def follow_up(project, events, model) do
     with {:ok, config} <- Config.load(project.dir),
-         catalog = project.dir |> Catalog.roots() |> Catalog.discover(config.mcp),
+         catalog = project.dir |> Catalog.roots() |> Catalog.discover(config.mcp, nil),
          {:ok, _via} <- walk(project, catalog, events, model, :actions),
          {:ok, _via} <- walk(project, catalog, events, model, :hooks) do
       :ok

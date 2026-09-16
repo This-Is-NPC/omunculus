@@ -1,6 +1,7 @@
 defmodule Omunculus.Tool.CatalogTest do
   use ExUnit.Case, async: true
 
+  alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Tool.Catalog
 
   setup do
@@ -15,6 +16,15 @@ defmodule Omunculus.Tool.CatalogTest do
     File.mkdir_p!(dir)
     File.write!(Path.join(dir, filename), content)
     dir
+  end
+
+  defp mcp_policy do
+    implementation_root = Path.expand("test/support")
+
+    ExecutionPolicyFixtures.policy(implementation_root,
+      read_only: [implementation_root],
+      network: "host"
+    )
   end
 
   test "roots/1 orders builtin, user, then project, least to most specific", %{
@@ -236,7 +246,7 @@ defmodule Omunculus.Tool.CatalogTest do
     test "a server's tools/list becomes names in the catalog, tagged and carrying the server", %{
       project_dir: project_dir
     } do
-      catalog = Catalog.discover([project_dir], [@mcp_server])
+      catalog = Catalog.discover([project_dir], [@mcp_server], mcp_policy())
 
       assert %{"echo" => echo, "shout" => shout} = catalog
       assert echo.description == "Echoes text"
@@ -256,7 +266,7 @@ defmodule Omunculus.Tool.CatalogTest do
       command = ["./run"]
       """)
 
-      catalog = Catalog.discover([project_dir], [@mcp_server])
+      catalog = Catalog.discover([project_dir], [@mcp_server], mcp_policy())
       assert catalog["echo"].description == "do projeto"
       assert catalog["echo"].mcp == nil
     end
@@ -274,7 +284,7 @@ defmodule Omunculus.Tool.CatalogTest do
       command = ["./run"]
       """)
 
-      catalog = Catalog.discover([home_root, project_root], [@mcp_server])
+      catalog = Catalog.discover([home_root, project_root], [@mcp_server], mcp_policy())
       assert catalog["echo"].mcp == @mcp_server
       assert catalog["echo"].description == "Echoes text"
     end
@@ -288,7 +298,7 @@ defmodule Omunculus.Tool.CatalogTest do
       command = ["./run"]
       """)
 
-      catalog = Catalog.discover([project_dir], [broken])
+      catalog = Catalog.discover([project_dir], [broken], mcp_policy())
       assert Map.keys(catalog) == ["read"]
     end
   end

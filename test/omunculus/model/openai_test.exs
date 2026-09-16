@@ -3,7 +3,7 @@ defmodule Omunculus.Model.OpenAITest do
 
   @moduletag :cargo
 
-  alias Omunculus.Fixtures
+  alias Omunculus.{ExecutionPolicyFixtures, Fixtures}
   alias Omunculus.Model.OpenAI
   alias Omunculus.OpenAIStub
 
@@ -41,7 +41,9 @@ defmodule Omunculus.Model.OpenAITest do
     model = OpenAI.new(base_url, "stub")
     {agent, call} = recorder()
 
-    assert {:ok, "benchmark complete"} = model.(@assembled, @tools, call, fn _message -> :ok end)
+    assert {:ok, "benchmark complete"} =
+             model.(@assembled, @tools, call, fn _message -> :ok end, policy())
+
     assert calls(agent) == [{"counter", %{}}]
 
     assert {:ok, %{"last_tools" => [tool, executor]}} = OpenAIStub.stats(stub)
@@ -55,7 +57,9 @@ defmodule Omunculus.Model.OpenAITest do
     model = OpenAI.new(base_url, "stub")
     {agent, call} = recorder()
 
-    assert {:ok, "benchmark complete"} = model.(@assembled, @tools, call, fn _message -> :ok end)
+    assert {:ok, "benchmark complete"} =
+             model.(@assembled, @tools, call, fn _message -> :ok end, policy())
+
     assert calls(agent) == []
   end
 
@@ -63,7 +67,8 @@ defmodule Omunculus.Model.OpenAITest do
     model = OpenAI.new("http://127.0.0.1:1", "stub")
     {_agent, call} = recorder()
 
-    assert {:error, {:openai, _reason}} = model.(@assembled, @tools, call, fn _message -> :ok end)
+    assert {:error, {:openai, _reason}} =
+             model.(@assembled, @tools, call, fn _message -> :ok end, policy())
   end
 
   for javascript <- [false, true] do
@@ -107,7 +112,13 @@ defmodule Omunculus.Model.OpenAITest do
     model = OpenAI.new(base_url, model_name)
     {_agent, call} = recorder()
 
-    assert {:ok, text} = model.("Responda apenas: pong", [], call, fn _message -> :ok end)
+    assert {:ok, text} =
+             model.("Responda apenas: pong", [], call, fn _message -> :ok end, policy())
+
     assert text =~ "pong"
+  end
+
+  defp policy do
+    ExecutionPolicyFixtures.policy(Application.app_dir(:omunculus, "priv"), network: "none")
   end
 end

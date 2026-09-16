@@ -107,6 +107,24 @@ defmodule Omunculus.Execution.BubblewrapTest do
            |> Enum.any?(&(&1 == ["--ro-bind", "/", "/"]))
   end
 
+  test "reports a setup failure when the runner did not write an exit status", %{
+    workspace: workspace
+  } do
+    temp_dir = Path.join(workspace, "temporary")
+    File.mkdir_p!(temp_dir)
+    File.write!(Path.join(temp_dir, "status"), "")
+
+    handle = %Bubblewrap.Handle{
+      port: nil,
+      input: nil,
+      stderr_reader: nil,
+      temp_dir: temp_dir,
+      created_hidden: []
+    }
+
+    assert {:error, {:bubblewrap, :setup_failed}} = Bubblewrap.exit_status(handle, 0)
+  end
+
   defp policy(workspace, overrides \\ []) do
     %Policy{
       id: "test-policy",

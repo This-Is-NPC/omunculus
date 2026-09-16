@@ -90,7 +90,7 @@ defmodule Omunculus.RunTest do
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["echo"]
+    tools = ["echo", "sandbox.network"]
     """)
 
     write_tool(dir, "echo", model_tool_toml("echo"), fixed_output_script("echoed"))
@@ -147,7 +147,7 @@ defmodule Omunculus.RunTest do
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["one"]
+    tools = ["one", "sandbox.network"]
     """)
 
     write_tool(dir, "one", model_tool_toml("one"), fixed_output_script("one-out"))
