@@ -2,7 +2,10 @@ defmodule Omunculus.Store.Schema do
   @moduledoc """
   DDL for the seven tables of spec §4 — prompts, events, runs, comments,
   works, requests, inbox — plus the store rules enforced at the database
-  level: events are append only, requests.ask is immutable.
+  level: events are append only, requests.ask is immutable, and the
+  system columns of spec §8.3 — `runs.tools`, `runs.prompt_id`,
+  `runs.started_at`, and `created_at` on prompts, comments, works,
+  requests and inbox — refuse UPDATE.
   """
 
   alias Omunculus.Store.Query
@@ -128,13 +131,36 @@ defmodule Omunculus.Store.Schema do
     """
   ]
 
+  @system_columns [
+    {"runs", "tools"},
+    {"runs", "prompt_id"},
+    {"runs", "started_at"},
+    {"prompts", "created_at"},
+    {"comments", "created_at"},
+    {"works", "created_at"},
+    {"requests", "created_at"},
+    {"inbox", "created_at"}
+  ]
+
   @spec create(Exqlite.Sqlite3.db()) :: :ok | {:error, term}
   def create(conn) do
-    Enum.reduce_while(@statements, :ok, fn statement, :ok ->
+    statements = @statements ++ Enum.map(@system_columns, &system_column_trigger/1)
+
+    Enum.reduce_while(statements, :ok, fn statement, :ok ->
       case Query.exec(conn, statement) do
         :ok -> {:cont, :ok}
         {:error, _reason} = error -> {:halt, error}
       end
     end)
+  end
+
+  defp system_column_trigger({table, column}) do
+    """
+    CREATE TRIGGER IF NOT EXISTS #{table}_#{column}_system
+    BEFORE UPDATE OF #{column} ON #{table}
+    BEGIN
+      SELECT RAISE(ABORT, '#{table}.#{column}: system column');
+    END
+    """
   end
 end

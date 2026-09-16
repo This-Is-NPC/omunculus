@@ -41,6 +41,51 @@ defmodule Omunculus.Store.SchemaTest do
     assert :ok = Query.exec(conn, "UPDATE requests SET status = ? WHERE id = ?", ["closed", id])
   end
 
+  test "runs.tools, runs.prompt_id and runs.started_at refuse UPDATE", %{conn: conn} do
+    id = Fixtures.insert(conn, :runs)
+
+    assert {:error, message} =
+             Query.exec(conn, "UPDATE runs SET tools = ? WHERE id = ?", ["[]", id])
+
+    assert message =~ "runs.tools: system column"
+
+    assert {:error, message} =
+             Query.exec(conn, "UPDATE runs SET prompt_id = ? WHERE id = ?", ["p1", id])
+
+    assert message =~ "runs.prompt_id: system column"
+
+    assert {:error, message} =
+             Query.exec(conn, "UPDATE runs SET started_at = ? WHERE id = ?", ["2026-01-01", id])
+
+    assert message =~ "runs.started_at: system column"
+
+    assert :ok = Query.exec(conn, "UPDATE runs SET status = 'done' WHERE id = ?", [id])
+  end
+
+  test "created_at refuses UPDATE on prompts, comments, works, requests and inbox", %{
+    conn: conn
+  } do
+    work_id = Fixtures.insert(conn, :works)
+
+    for {table, attrs} <- [
+          prompts: %{},
+          comments: %{work_id: work_id},
+          works: %{},
+          requests: %{},
+          inbox: %{}
+        ] do
+      id = Fixtures.insert(conn, table, attrs)
+
+      assert {:error, message} =
+               Query.exec(conn, "UPDATE #{table} SET created_at = ? WHERE id = ?", [
+                 "2026-01-01",
+                 id
+               ])
+
+      assert message =~ "#{table}.created_at: system column"
+    end
+  end
+
   test "a comment referenced by an event can be deleted", %{conn: conn} do
     work_id = Fixtures.insert(conn, :works)
     comment_id = Fixtures.insert(conn, :comments, %{work_id: work_id})
