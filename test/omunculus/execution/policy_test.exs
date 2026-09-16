@@ -55,6 +55,7 @@ defmodule Omunculus.Execution.PolicyTest do
     assert policy.hidden == [Path.join(dir, ".omunculus"), Path.join(dir, "omunculus.toml")]
 
     serializable = Policy.serializable(policy)
+    assert serializable["backend"] == "bubblewrap"
     assert serializable["environment"] == ["LANG", "LC_ALL", "TERM"]
     refute Map.has_key?(serializable, "environment_values")
     assert String.length(serializable["id"]) == 64
