@@ -40,7 +40,7 @@ defmodule Omunculus.Model.OpenAITest do
     model = OpenAI.new(base_url, "stub")
     {agent, call} = recorder()
 
-    assert {:ok, "benchmark complete"} = model.(@assembled, @tools, call)
+    assert {:ok, "benchmark complete"} = model.(@assembled, @tools, call, fn _message -> :ok end)
     assert calls(agent) == [{"counter", %{}}]
 
     assert {:ok, %{"last_tools" => [tool]}} = OpenAIStub.stats(stub)
@@ -53,7 +53,7 @@ defmodule Omunculus.Model.OpenAITest do
     model = OpenAI.new(base_url, "stub")
     {agent, call} = recorder()
 
-    assert {:ok, "benchmark complete"} = model.(@assembled, @tools, call)
+    assert {:ok, "benchmark complete"} = model.(@assembled, @tools, call, fn _message -> :ok end)
     assert calls(agent) == []
   end
 
@@ -61,7 +61,41 @@ defmodule Omunculus.Model.OpenAITest do
     model = OpenAI.new("http://127.0.0.1:1", "stub")
     {_agent, call} = recorder()
 
-    assert {:error, {:openai, _reason}} = model.(@assembled, @tools, call)
+    assert {:error, {:openai, _reason}} = model.(@assembled, @tools, call, fn _message -> :ok end)
+  end
+
+  for javascript <- [false] do
+    test "records all model turns and executes tools (JavaScript: #{javascript})", %{
+      stub: stub,
+      base_url: base_url
+    } do
+      :ok = OpenAIStub.configure(stub, tool_rounds: 1, javascript: unquote(javascript))
+      dir = Path.join(System.tmp_dir!(), Omunculus.Id.new())
+      File.mkdir_p!(dir)
+
+      File.write!(Path.join(dir, "omunculus.toml"), """
+      [agents.concierge]
+      depth = 0
+      text = "Count once."
+      tools = ["counter"]
+      """)
+
+      {:ok, project} = Omunculus.Project.open(dir)
+
+      on_exit(fn ->
+        Omunculus.Project.close(project)
+        File.rm_rf!(dir)
+      end)
+
+      opening = %{prompt_id: nil, work_id: nil, request_id: nil, agent: nil, via: nil}
+      assert {:ok, run} = Omunculus.Run.open(project, opening, OpenAI.new(base_url, "stub"))
+      assert File.read!(Path.join(dir, ".omunculus/counter")) |> String.trim() == "1"
+      assert {:ok, events} = Omunculus.Store.replay(project.conn, {:run, run.id})
+      assert Enum.map(events, & &1.type) == ~w(start-run model tool model end-run)
+      [first, last] = Enum.filter(events, &(&1.type == "model"))
+      assert Jason.decode!(first.body)["tool_calls"] != []
+      assert Jason.decode!(last.body)["content"] == "benchmark complete"
+    end
   end
 
   @tag :local_model
@@ -71,7 +105,7 @@ defmodule Omunculus.Model.OpenAITest do
     model = OpenAI.new(base_url, model_name)
     {_agent, call} = recorder()
 
-    assert {:ok, text} = model.("Responda apenas: pong", [], call)
+    assert {:ok, text} = model.("Responda apenas: pong", [], call, fn _message -> :ok end)
     assert text =~ "pong"
   end
 end

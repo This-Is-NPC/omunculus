@@ -48,7 +48,7 @@ defmodule Omunculus.Store.ViewTest do
   end
 
   describe "comments.inbox" do
-    test "flattens comments of every inbox entry of the work, oldest first", %{conn: conn} do
+    test "returns only comments of the requested inbox, oldest first", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
       other_work_id = Fixtures.insert(conn, :works)
 
@@ -64,13 +64,14 @@ defmodule Omunculus.Store.ViewTest do
 
       second_id =
         Fixtures.insert(conn, :comments, %{
-          inbox_id: second_inbox_id,
+          inbox_id: first_inbox_id,
           created_at: "2026-01-02T00:00:00Z"
         })
 
       Fixtures.insert(conn, :comments, %{inbox_id: other_inbox_id})
+      Fixtures.insert(conn, :comments, %{inbox_id: second_inbox_id})
 
-      assert {:ok, [first, second]} = View.view(conn, "comments.inbox", work_id)
+      assert {:ok, [first, second]} = View.view(conn, "comments.inbox", first_inbox_id)
       assert [first.id, second.id] == [first_id, second_id]
     end
 

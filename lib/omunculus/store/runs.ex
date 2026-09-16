@@ -31,6 +31,8 @@ defmodule Omunculus.Store.Runs do
                type: "tool",
                run_id: run_id,
                work_id: ctx.work_id,
+               request_id: Map.get(ctx, :request_id),
+               inbox_id: Map.get(ctx, :inbox_id),
                body: Jason.encode!(call)
              }),
            {:ok, emit_events} <- Actions.run(conn, emits, ctx) do
@@ -53,6 +55,9 @@ defmodule Omunculus.Store.Runs do
              type: "start-run",
              run_id: run_id,
              prompt_id: params.prompt_id,
+             work_id: params.work_id,
+             request_id: params.request_id,
+             inbox_id: Map.get(params, :inbox_id),
              body:
                Jason.encode!(%{
                  agent: params.agent,
@@ -78,7 +83,7 @@ defmodule Omunculus.Store.Runs do
              depth: to_string(params.depth),
              via: params.via,
              request_id: params.request_id,
-             tools: Jason.encode!(params.ceiling.have),
+             tools: Jason.encode!(Map.get(params, :tools, params.ceiling.have)),
              status: "open",
              started_at: event.at
            }),

@@ -4,8 +4,7 @@ defmodule Omunculus.Store.View do
   `prompts` rows the harness needs to assemble or continue a run, the
   unread `inbox` list with each row's earliest comment (spec §3.6), the
   unread notifications of one work (`"inbox.work"`), the comments of
-  every inbox entry of one work flattened oldest first
-  (`"comments.inbox"`), the depth of a work by walking `parent_id`, plus
+  one inbox entry, oldest first (`"comments.inbox"`), the depth of a work by walking `parent_id`, plus
   replay of `events` for a project, run, work, request, or inbox scope
   (spec §4). Never executes anything against the store.
   """
@@ -14,7 +13,8 @@ defmodule Omunculus.Store.View do
 
   @comment_views %{
     "comments.work" => :work_id,
-    "comments.request" => :request_id
+    "comments.request" => :request_id,
+    "comments.inbox" => :inbox_id
   }
 
   @inbox_columns """
@@ -72,19 +72,6 @@ defmodule Omunculus.Store.View do
     )
   end
 
-  def view(conn, "comments.inbox", work_id) do
-    Query.all(
-      conn,
-      """
-      SELECT comments.* FROM comments
-      JOIN inbox ON inbox.id = comments.inbox_id
-      WHERE inbox.work_id = ?
-      ORDER BY comments.created_at, comments.id
-      """,
-      [work_id]
-    )
-  end
-
   def view(conn, name, id) when is_map_key(@comment_views, name) do
     column = Map.fetch!(@comment_views, name)
 
@@ -113,6 +100,11 @@ defmodule Omunculus.Store.View do
   end
 
   defp replay_filter(:project), do: {"", []}
+
+  defp replay_filter({:work, id}) do
+    {" WHERE work_id = ? OR (work_id IS NULL AND run_id IN (SELECT id FROM runs WHERE work_id = ?))",
+     [id, id]}
+  end
 
   defp replay_filter({scope, id}) do
     column = Map.fetch!(@replay_columns, scope)

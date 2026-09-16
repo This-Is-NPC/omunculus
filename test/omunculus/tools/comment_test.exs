@@ -83,11 +83,11 @@ defmodule Omunculus.Tools.CommentTest do
            }
   end
 
-  test "the builtin catalog discovers comment with triggers == [\"model\"]" do
+  test "the builtin catalog discovers comment with triggers == [\"cli\", \"model\"]" do
     catalog = Catalog.discover(Catalog.roots("/nonexistent"))
 
     assert %{"comment" => manifest} = catalog
-    assert manifest.triggers == ["model"]
+    assert manifest.triggers == ["cli", "model"]
   end
 
   test "the manifest wiring yields the same emit as calling the module directly" do

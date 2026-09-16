@@ -1787,7 +1787,7 @@ defmodule Omunculus.Store.ActionsTest do
                )
 
       assert event.inbox_id == inbox_id
-      assert {:ok, [only]} = Store.view(conn, "comments.inbox", work_id)
+      assert {:ok, [only]} = Store.view(conn, "comments.inbox", inbox_id)
       assert only.body == "resumo"
     end
   end

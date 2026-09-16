@@ -1,8 +1,8 @@
 name = "comment"
 kind = "tool"
 shape = "simple"
-triggers = ["model"]
-description = "Escreve um comment no work."
+triggers = ["cli", "model"]
+description = "Escreve um comment no work, request ou inbox."
 tags = ["comment", "work", "store"]
 groups = ["store"]
 module = "Omunculus.Tools.Comment"
@@ -15,4 +15,10 @@ required = ["body"]
 type = "string"
 
 [parameters.properties.work_id]
+type = "string"
+
+[parameters.properties.request_id]
+type = "string"
+
+[parameters.properties.inbox_id]
 type = "string"

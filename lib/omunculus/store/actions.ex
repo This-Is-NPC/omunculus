@@ -185,7 +185,10 @@ defmodule Omunculus.Store.Actions do
                type: "work",
                work_id: work_id,
                run_id: ctx.run_id,
-               body: Jason.encode!(body)
+               body:
+                 Jason.encode!(
+                   Map.put(body, "start", not is_nil(stage) and not is_nil(ctx.run_id))
+                 )
              }),
            :ok <-
              Helpers.insert_work(conn, %{
