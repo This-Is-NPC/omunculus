@@ -293,15 +293,21 @@ defmodule Omunculus.Harness do
         :catalog -> {:cont, {:ok, Map.put(acc, "catalog", views.catalog)}}
         :workspaces -> {:cont, {:ok, Map.put(acc, "workspaces", views.workspaces)}}
         :paths -> {:cont, {:ok, Map.put(acc, "paths", views.paths)}}
-        {:ok, id} -> fetch_view(project, name, id, acc)
+        {:ok, canonical, id} -> fetch_view(project, name, canonical, id, acc)
+        {:ok, id} -> fetch_view(project, name, name, id, acc)
       end
     end)
   end
 
-  defp fetch_view(project, name, id, acc) do
-    case Store.view(project.conn, name, id) do
-      {:ok, result} -> {:cont, {:ok, Map.put(acc, name, result)}}
-      {:error, _reason} = error -> {:halt, error}
+  defp fetch_view(project, declared, canonical, id, acc) do
+    case Store.view(project.conn, canonical, id) do
+      {:ok, result} ->
+        acc = Map.put(acc, declared, result)
+        acc = if declared == canonical, do: acc, else: Map.put(acc, canonical, result)
+        {:cont, {:ok, acc}}
+
+      {:error, _reason} = error ->
+        {:halt, error}
     end
   end
 
@@ -313,6 +319,19 @@ defmodule Omunculus.Harness do
 
   defp resolve_view_id("events.run", run_id, _work_id, _request_id) do
     if run_id, do: {:ok, run_id}, else: :skip
+  end
+
+  defp resolve_view_id("events", run_id, _work_id, _views) do
+    if run_id, do: {:ok, "events.run", run_id}, else: :skip
+  end
+
+  defp resolve_view_id("comments", _run_id, work_id, views) do
+    cond do
+      is_binary(work_id) -> {:ok, "comments.work", work_id}
+      is_binary(views[:request_id]) -> {:ok, "comments.request", views.request_id}
+      is_binary(views[:inbox_id]) -> {:ok, "comments.inbox", views.inbox_id}
+      true -> :skip
+    end
   end
 
   defp resolve_view_id("comments.request", _run_id, _work_id, %{request_id: request_id}) do

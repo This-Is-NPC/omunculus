@@ -257,6 +257,28 @@ defmodule Omunculus.Store.ViewTest do
     assert {:error, {:unknown_view, "nope"}} = View.view(conn, "nope", "id")
   end
 
+  describe "comments alias" do
+    test "reads the same rows as comments.work", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      comment_id = Fixtures.insert(conn, :comments, %{work_id: work_id})
+
+      assert View.view(conn, "comments", work_id) == View.view(conn, "comments.work", work_id)
+      assert {:ok, [comment]} = View.view(conn, "comments", work_id)
+      assert comment.id == comment_id
+    end
+
+    test "reads the same rows as comments.request", %{conn: conn} do
+      request_id = Fixtures.insert(conn, :requests)
+      comment_id = Fixtures.insert(conn, :comments, %{request_id: request_id})
+
+      assert View.view(conn, "comments", request_id) ==
+               View.view(conn, "comments.request", request_id)
+
+      assert {:ok, [comment]} = View.view(conn, "comments", request_id)
+      assert comment.id == comment_id
+    end
+  end
+
   describe "replay" do
     test "orders events by sequence, not by at", %{conn: conn} do
       run_id = Fixtures.insert(conn, :runs)
@@ -316,6 +338,7 @@ defmodule Omunculus.Store.ViewTest do
       Fixtures.insert(conn, :events, %{run_id: other_run_id, sequence: 2})
 
       assert View.view(conn, "events.run", run_id) == View.replay(conn, {:run, run_id})
+      assert View.view(conn, "events", run_id) == View.view(conn, "events.run", run_id)
     end
   end
 end

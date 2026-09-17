@@ -4,7 +4,7 @@ shape = "composite"
 triggers = ["model"]
 description = "Summarizes comments on the work and rewrites the row: load reads, commit writes the summary."
 tags = ["comments", "compact", "work"]
-views = ["comments.work"]
+views = ["comments"]
 module = "Omunculus.Tools.CompactComments"
 
 [parameters]

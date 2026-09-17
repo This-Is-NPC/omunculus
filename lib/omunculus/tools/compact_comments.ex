@@ -1,7 +1,7 @@
 defmodule Omunculus.Tools.CompactComments do
   @moduledoc """
   Builtin `compact_comments` tool, per spec §8.2: composite tool that loads
-  the `comments.work` view for the model to summarize, then commits the
+  the `comments` view for the model to summarize, then commits the
   summary as a `compact` emit.
   """
 
@@ -10,7 +10,7 @@ defmodule Omunculus.Tools.CompactComments do
   @spec run(map) :: map
   def run(%{args: %{"op" => "load"}, view: view}) do
     output =
-      case Map.get(view, "comments.work", []) do
+      case comments_view(view) do
         [] -> Out.no_comments()
         comments -> comments |> Enum.map(&line/1) |> Enum.join("\n")
       end
@@ -44,6 +44,10 @@ defmodule Omunculus.Tools.CompactComments do
       [_ | _] = ids -> Map.put(body, "ids", ids)
       _ -> body
     end
+  end
+
+  defp comments_view(view) do
+    Map.get(view, "comments") || Map.get(view, "comments.work") || []
   end
 
   defp line(%{id: id, author: author, body: body}), do: "#{id} #{author}: #{body}"

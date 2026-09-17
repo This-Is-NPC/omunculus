@@ -14,13 +14,13 @@ defmodule Omunculus.Tools.CompactCommentsTest do
     roots: []
   }
 
-  test "load lists one line per comment in the comments.work view" do
+  test "load lists one line per comment in the comments view" do
     comments = [
       %{id: "cmt_1", author: "worker", body: "started", created_at: "t1"},
       %{id: "cmt_2", author: "reviewer", body: "ok", created_at: "t2"}
     ]
 
-    input = %{@input | args: %{"op" => "load"}, view: %{"comments.work" => comments}}
+    input = %{@input | args: %{"op" => "load"}, view: %{"comments" => comments}}
 
     assert CompactComments.run(input) == %{
              "ok" => true,
@@ -30,7 +30,7 @@ defmodule Omunculus.Tools.CompactCommentsTest do
   end
 
   test "load reports no comments when the list is empty" do
-    input = %{@input | args: %{"op" => "load"}, view: %{"comments.work" => []}}
+    input = %{@input | args: %{"op" => "load"}, view: %{"comments" => []}}
 
     assert CompactComments.run(input) == %{
              "ok" => true,
@@ -125,18 +125,18 @@ defmodule Omunculus.Tools.CompactCommentsTest do
            }
   end
 
-  test "the builtin catalog discovers compact_comments as a composite tool over comments.work" do
+  test "the builtin catalog discovers compact_comments as a composite tool over comments" do
     catalog = Catalog.unconfigured()
 
     assert %{"compact_comments" => manifest} = catalog
     assert manifest.shape == "composite"
-    assert manifest.views == ["comments.work"]
+    assert manifest.views == ["comments"]
   end
 
   test "the manifest wiring yields the same output as calling the module directly" do
     catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "compact_comments")
-    input = %{@input | args: %{"op" => "load"}, view: %{"comments.work" => []}}
+    input = %{@input | args: %{"op" => "load"}, view: %{"comments" => []}}
 
     assert {:ok, result} = Invoke.call(manifest, input)
     assert result.output == CompactComments.run(input)["output"]

@@ -41,6 +41,20 @@ defmodule Omunculus.Store.View do
 
   def view(conn, "events.run", id), do: replay(conn, {:run, id})
 
+  def view(conn, "events", id), do: view(conn, "events.run", id)
+
+  def view(conn, "comments", id) do
+    Query.all(
+      conn,
+      """
+      SELECT * FROM comments
+      WHERE work_id = ? OR request_id = ? OR inbox_id = ?
+      ORDER BY created_at, id
+      """,
+      [id, id, id]
+    )
+  end
+
   def view(conn, "work", id) do
     Query.one(conn, "SELECT * FROM works WHERE id = ?", [id])
   end

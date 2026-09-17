@@ -231,6 +231,95 @@ defmodule Omunculus.HarnessTest do
     Project.close(project)
   end
 
+  test "a tool declaring views = [\"comments\"] on a work run receives comments.work", %{
+    dir: dir
+  } do
+    write_tool(
+      dir,
+      "viewer",
+      """
+      name = "viewer"
+      kind = "tool"
+      triggers = ["model"]
+      views = ["comments"]
+      command = ["./run"]
+      """,
+      """
+      #!/bin/sh
+      data=$(cat)
+      case "$data" in
+        *"from the work"*) echo '{"ok": true, "output": "yes", "emit": []}' ;;
+        *) echo '{"ok": true, "output": "no", "emit": []}' ;;
+      esac
+      """
+    )
+
+    project = open_project(dir)
+    work_id = Fixtures.insert(project.conn, :works)
+    Fixtures.insert(project.conn, :comments, %{work_id: work_id, body: "from the work"})
+    run_id = Fixtures.insert(project.conn, :runs, %{work_id: work_id})
+
+    ctx = %{
+      trigger: "model",
+      run_id: run_id,
+      author: "agent",
+      agent: "concierge",
+      execution: execution(dir)
+    }
+
+    assert {:ok, out, _events} = Harness.dispatch(project, "viewer", %{}, ctx)
+    assert out.output == "yes"
+
+    Project.close(project)
+  end
+
+  test "a tool declaring views = [\"events\"] receives the same events as events.run", %{
+    dir: dir
+  } do
+    write_tool(
+      dir,
+      "viewer",
+      """
+      name = "viewer"
+      kind = "tool"
+      triggers = ["model"]
+      views = ["events"]
+      command = ["./run"]
+      """,
+      """
+      #!/bin/sh
+      data=$(cat)
+      case "$data" in
+        *start-run*) echo '{"ok": true, "output": "yes", "emit": []}' ;;
+        *) echo '{"ok": true, "output": "no", "emit": []}' ;;
+      esac
+      """
+    )
+
+    project = open_project(dir)
+    run_id = Fixtures.insert(project.conn, :runs)
+
+    Fixtures.insert(project.conn, :events, %{
+      run_id: run_id,
+      type: "start-run",
+      sequence: 1,
+      body: "{}"
+    })
+
+    ctx = %{
+      trigger: "model",
+      run_id: run_id,
+      author: "agent",
+      agent: "concierge",
+      execution: execution(dir)
+    }
+
+    assert {:ok, out, _events} = Harness.dispatch(project, "viewer", %{}, ctx)
+    assert out.output == "yes"
+
+    Project.close(project)
+  end
+
   test "a tool declaring views = [\"comments.request\"] receives the run's request comments", %{
     dir: dir
   } do
