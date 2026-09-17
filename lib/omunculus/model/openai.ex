@@ -47,7 +47,8 @@ defmodule Omunculus.Model.OpenAI do
     end
   end
 
-  defp request_headers(spec) do
+  @doc false
+  def request_headers(spec) do
     explicit = headers_list(Map.get(spec, "headers"))
 
     case Map.get(spec, "credential") do
@@ -85,14 +86,15 @@ defmodule Omunculus.Model.OpenAI do
   defp function_tool(%{name: name, description: description, parameters: parameters}) do
     %{
       type: "function",
-      function: %{name: name, description: description, parameters: schema(parameters)}
+      function: %{name: name, description: description, parameters: parameters_schema(parameters)}
     }
   end
 
-  defp schema(parameters) when map_size(parameters) == 0,
+  @doc false
+  def parameters_schema(parameters) when map_size(parameters) == 0,
     do: %{type: "object", properties: %{}}
 
-  defp schema(parameters), do: parameters
+  def parameters_schema(parameters), do: parameters
 
   defp loop(client, tools, messages, call, record, catalog, execution) do
     with {:ok, message} <- post(client, request_body(client, tools, messages)),

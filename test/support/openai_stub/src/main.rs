@@ -465,6 +465,146 @@ async fn completions(State(state): State<Arc<AppState>>, body: Bytes) -> Respons
         .into_response()
 }
 
+#[derive(Debug, Deserialize, Default)]
+struct ResponsesRequest {
+    #[serde(default)]
+    input: Vec<Value>,
+    #[serde(default)]
+    tools: Vec<ResponsesTool>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct ResponsesTool {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    parameters: Value,
+    #[serde(default)]
+    function: Option<Function>,
+}
+
+fn responses_tool_name(tool: &ResponsesTool) -> &str {
+    if !tool.name.is_empty() {
+        &tool.name
+    } else if let Some(function) = tool.function.as_ref() {
+        &function.name
+    } else {
+        ""
+    }
+}
+
+fn responses_tool_parameters(tool: &ResponsesTool) -> Value {
+    if tool.parameters.is_null() {
+        tool.function
+            .as_ref()
+            .map(|function| function.parameters.clone())
+            .unwrap_or(Value::Null)
+    } else {
+        tool.parameters.clone()
+    }
+}
+
+async fn responses(State(state): State<Arc<AppState>>, body: Bytes) -> Response {
+    let guard = state.begin_request(body.len());
+    let request: ResponsesRequest = match serde_json::from_slice(&body) {
+        Ok(request) => request,
+        Err(_) => {
+            guard.finish(false);
+            return error_response(StatusCode::BAD_REQUEST, "invalid json");
+        }
+    };
+    let last_tools: Value = request
+        .tools
+        .iter()
+        .map(|tool| {
+            json!({
+                "name": responses_tool_name(tool),
+                "parameters": responses_tool_parameters(tool)
+            })
+        })
+        .collect();
+    state.set_last_tools(last_tools).await;
+
+    let config = state.config().await;
+    match state
+        .barrier
+        .wait(config.expected_in_flight, config.barrier_timeout_ms)
+        .await
+    {
+        BarrierResult::Released => {}
+        BarrierResult::TimedOut(first) => {
+            if first {
+                state
+                    .counters
+                    .barrier_timeouts
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+            guard.finish(false);
+            return error_response(StatusCode::REQUEST_TIMEOUT, "in-flight barrier timed out");
+        }
+        BarrierResult::Reconfigured => {
+            guard.finish(false);
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "in-flight barrier reconfigured",
+            );
+        }
+    }
+
+    if config.delay_ms > 0 {
+        time::sleep(Duration::from_millis(config.delay_ms)).await;
+    }
+
+    let tool_outputs = request
+        .input
+        .iter()
+        .filter(|item| item.get("type").and_then(Value::as_str) == Some("function_call_output"))
+        .count() as u64;
+    let has_counter = request
+        .tools
+        .iter()
+        .any(|tool| responses_tool_name(tool) == "counter");
+
+    let output = if has_counter && tool_outputs < config.tool_rounds {
+        state.counters.tool_requests.fetch_add(1, Ordering::Relaxed);
+        let (name, arguments) = if config.javascript {
+            (
+                "__omunculus_execute",
+                r#"{"code":"return await tools.counter({})"}"#,
+            )
+        } else {
+            ("counter", "{}")
+        };
+        json!([{
+            "type": "function_call",
+            "call_id": format!("benchmark-counter-{}", tool_outputs + 1),
+            "name": name,
+            "arguments": arguments
+        }])
+    } else {
+        let mut content = "benchmark complete".to_owned();
+        if config.payload_bytes > content.len() {
+            content.extend(std::iter::repeat('x').take(config.payload_bytes - content.len()));
+        }
+        json!([{
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": content}]
+        }])
+    };
+
+    guard.finish(true);
+    (
+        StatusCode::OK,
+        Json(json!({
+            "id": "benchmark",
+            "object": "response",
+            "output": output
+        })),
+    )
+        .into_response()
+}
+
 fn error_response(status: StatusCode, message: &str) -> Response {
     (status, Json(json!({"error": {"message": message}}))).into_response()
 }
@@ -545,6 +685,7 @@ async fn main() {
         .route("/stats", get(stats))
         .route("/control", post(control))
         .route("/v1/chat/completions", post(completions))
+        .route("/v1/responses", post(responses))
         .layer(DefaultBodyLimit::max(16 * 1024 * 1024))
         .with_state(state);
 

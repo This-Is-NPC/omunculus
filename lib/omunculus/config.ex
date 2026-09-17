@@ -1430,16 +1430,26 @@ defmodule Omunculus.Config do
 
   defp parse_model(name, data, auth) when is_map(data) do
     case Map.get(data, "api") do
-      "openai-completions" -> parse_openai_model(name, data, auth)
-      "module" -> parse_module_model(name, data)
-      nil -> {:error, {:models, name, {:invalid, :api}}}
-      api -> {:error, {:models, name, {:unknown_api, api}}}
+      "openai-completions" ->
+        parse_openai_model(name, data, auth, "openai-completions", Omunculus.Model.OpenAI)
+
+      "openai-responses" ->
+        parse_openai_model(name, data, auth, "openai-responses", Omunculus.Model.OpenAIResponses)
+
+      "module" ->
+        parse_module_model(name, data)
+
+      nil ->
+        {:error, {:models, name, {:invalid, :api}}}
+
+      api ->
+        {:error, {:models, name, {:unknown_api, api}}}
     end
   end
 
   defp parse_model(name, _data, _auth), do: {:error, {:models, name, {:invalid, :api}}}
 
-  defp parse_openai_model(name, data, auth) do
+  defp parse_openai_model(name, data, auth, api, module) do
     case Map.keys(data) -- @openai_model_keys do
       [key | _] ->
         {:error, {:models, name, {:unknown_key, key}}}
@@ -1454,7 +1464,7 @@ defmodule Omunculus.Config do
              :ok <- validate_model_provider(provider, auth) do
           input =
             %{
-              "api" => "openai-completions",
+              "api" => api,
               "url" => url,
               "model" => model,
               "timeout_ms" => timeout_ms
@@ -1465,8 +1475,8 @@ defmodule Omunculus.Config do
 
           {:ok,
            %{
-             api: "openai-completions",
-             module: Omunculus.Model.OpenAI,
+             api: api,
+             module: module,
              input: input
            }}
         else

@@ -186,6 +186,7 @@ defmodule Omunculus.Model.OpenAITest do
     end
   end
 
+  @tag :local_model
   test "talks to a real local OpenAI-compatible server" do
     base_url = System.fetch_env!("OMUNCULUS_OPENAI_URL")
     model_name = System.fetch_env!("OMUNCULUS_OPENAI_MODEL")

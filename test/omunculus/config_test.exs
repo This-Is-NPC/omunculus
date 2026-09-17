@@ -2218,4 +2218,24 @@ defmodule Omunculus.ConfigAuthTest do
     assert config.auth.store == nil
     assert config.auth.providers == %{}
   end
+
+  test "openai-responses loads the responses adapter", %{dir: dir} do
+    write_toml(dir, """
+    [models.local]
+    api = "openai-responses"
+    url = "http://localhost:8080/v1"
+    model = "codex"
+    timeout_ms = 120000
+
+    [agents.concierge]
+    depth = 0
+    model = "local"
+    text = "hi"
+    """)
+
+    assert {:ok, config} = load(dir)
+    assert config.models["local"].api == "openai-responses"
+    assert config.models["local"].module == Omunculus.Model.OpenAIResponses
+    assert config.models["local"].input["url"] == "http://localhost:8080/v1"
+  end
 end
