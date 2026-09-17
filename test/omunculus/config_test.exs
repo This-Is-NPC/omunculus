@@ -74,6 +74,25 @@ defmodule Omunculus.ConfigTest do
     assert agents["concierge"].assemble == "other"
   end
 
+  test "pinned is a layer list and is absent on the default preset" do
+    assert {:ok, %Config{policy: policy, agents: agents}} = Config.load(default_preset())
+    assert policy.pinned == []
+    assert agents["concierge"].ceiling.pinned == []
+  end
+
+  test "an agent pinned list is parsed", %{dir: dir} do
+    write_toml(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["store", "fs.read"]
+    pinned = ["store"]
+    """)
+
+    assert {:ok, %Config{agents: %{"concierge" => agent}}} = load(dir)
+    assert agent.ceiling.pinned == ["store"]
+  end
+
   test "the default preset's reviewer is workflow_only with the §9.1 ceiling" do
     assert {:ok, %Config{agents: agents}} = Config.load(default_preset())
 

@@ -105,7 +105,7 @@ defmodule Omunculus.Config do
 
   @type tools :: %{paths: [String.t()], inline: %{String.t() => Manifest.t()}}
 
-  @layer_keys ~w(mode granted tools negotiable human deny)
+  @layer_keys ~w(mode granted tools negotiable human deny pinned)
   @execution_keys ~w(
     backend
     runtimes
@@ -994,7 +994,8 @@ defmodule Omunculus.Config do
       deny: Enum.uniq(inline.deny ++ file.deny),
       granted: intersect_ceiling_lists(inline.granted, file.granted),
       negotiable: intersect_ceiling_lists(inline.negotiable, file.negotiable),
-      human: intersect_ceiling_lists(inline.human, file.human)
+      human: intersect_ceiling_lists(inline.human, file.human),
+      pinned: intersect_ceiling_lists(inline.pinned, file.pinned)
     }
   end
 
@@ -1842,9 +1843,17 @@ defmodule Omunculus.Config do
              {:ok, granted} <- fetch_granted(data),
              {:ok, negotiable} <- fetch_list(data, "negotiable", :negotiable),
              {:ok, human} <- fetch_list(data, "human", :human),
-             {:ok, deny} <- fetch_list(data, "deny", :deny) do
+             {:ok, deny} <- fetch_list(data, "deny", :deny),
+             {:ok, pinned} <- fetch_list(data, "pinned", :pinned) do
           {:ok,
-           %Layer{mode: mode, granted: granted, negotiable: negotiable, human: human, deny: deny}}
+           %Layer{
+             mode: mode,
+             granted: granted,
+             negotiable: negotiable,
+             human: human,
+             deny: deny,
+             pinned: pinned
+           }}
         end
     end
   end

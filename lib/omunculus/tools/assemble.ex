@@ -1,12 +1,10 @@
 defmodule Omunculus.Tools.Assemble do
   @moduledoc """
   Builtin `assemble` tool: builds the assembled prompt of a run from
-  the hydrated views, matching the previous `Run.assemble/8` output.
+  the hydrated views. Cards follow `pinned` on the catalog view.
   """
 
   alias Omunculus.Tools.Out
-
-  @searchable_groups ~w(store sequence catalog)
 
   @spec run(map) :: map
   def run(%{args: args, view: view}) do
@@ -73,8 +71,10 @@ defmodule Omunculus.Tools.Assemble do
     names = Enum.map(cards, & &1.name)
 
     lines =
-      if "tool_search" in names and length(cards) > 12 do
-        subset_lines(cards)
+      if "tool_search" in names and pinned_subset?(cards) do
+        shown = Enum.filter(cards, &pinned?/1)
+        omitted = length(cards) - length(shown)
+        Enum.map(shown, &card/1) ++ more_tools_line(omitted)
       else
         Enum.map(cards, &card/1)
       end
@@ -82,13 +82,14 @@ defmodule Omunculus.Tools.Assemble do
     "## Tools\n#{Out.tools_preamble()}\n" <> Enum.join(lines, "\n")
   end
 
-  defp subset_lines(cards) do
-    {shown, omitted} = Enum.split_with(cards, &searchable?/1)
-    Enum.map(shown, &card/1) ++ [Out.more_tools(length(omitted))]
-  end
+  defp pinned_subset?(cards), do: Enum.any?(cards, &(not pinned?(&1)))
 
-  defp searchable?(%{groups: groups}), do: Enum.any?(@searchable_groups, &(&1 in groups))
-  defp searchable?(_card), do: false
+  defp pinned?(%{pinned: false}), do: false
+  defp pinned?(%{"pinned" => false}), do: false
+  defp pinned?(_card), do: true
+
+  defp more_tools_line(n) when n > 0, do: [Out.more_tools(n)]
+  defp more_tools_line(_n), do: []
 
   defp card(%{name: name, description: description}) do
     lines =

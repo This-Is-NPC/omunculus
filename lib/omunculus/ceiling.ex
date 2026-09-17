@@ -63,6 +63,7 @@ defmodule Omunculus.Ceiling do
     group(classes, uncited(layers, policy_mode))
     |> Map.put(:catalog, names)
     |> Map.put(:deny, Enum.flat_map(layers, fn {_, layer} -> layer.deny end) |> Enum.uniq())
+    |> Map.put(:pinned, intersect_pinned(layers))
   end
 
   @spec classify(map(), String.t()) :: String.t()
@@ -124,12 +125,33 @@ defmodule Omunculus.Ceiling do
       | granted: expand_list(layer.granted, groups),
         negotiable: expand_list(layer.negotiable, groups),
         human: expand_list(layer.human, groups),
-        deny: expand_list(layer.deny, groups)
+        deny: expand_list(layer.deny, groups),
+        pinned: expand_list(layer.pinned, groups)
     }
   end
 
   defp expand_list(list, groups) do
     list |> Enum.flat_map(&Map.get(groups, &1, [&1])) |> Enum.uniq()
+  end
+
+  # Empty pinned on a layer means that layer does not pin. Nil on the
+  # snapshot means no applying layer pinned, so every effective tool is a card.
+  defp intersect_pinned(layers) do
+    lists =
+      layers
+      |> Enum.map(fn {_role, layer} -> layer.pinned end)
+      |> Enum.reject(&(&1 == []))
+
+    case lists do
+      [] ->
+        nil
+
+      [first | rest] ->
+        rest
+        |> Enum.reduce(first, fn list, acc -> Enum.filter(acc, &(&1 in list)) end)
+        |> Enum.uniq()
+        |> Enum.sort()
+    end
   end
 
   defp classify_name(layers, policy_mode, name) do

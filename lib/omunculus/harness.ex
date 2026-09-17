@@ -90,7 +90,7 @@ defmodule Omunculus.Harness do
          :ok <- check_trigger(manifest, name, ctx.trigger),
          workspace = workspace_context(config, work),
          views = %{
-           catalog: catalog_view(run, catalog),
+           catalog: catalog_view(run, catalog, start_event(project, run)),
            workspaces: workspaces_view(config, workspace.name),
            request_id: run && run.request_id,
            inbox_id: run_inbox_id(project, run),
@@ -126,7 +126,7 @@ defmodule Omunculus.Harness do
           }
 
           views = %{
-            catalog: catalog_view(run, catalog),
+            catalog: catalog_view(run, catalog, start_event(project, run)),
             workspaces: workspaces_view(config, workspace.name),
             request_id: event.request_id,
             inbox_id: event.inbox_id,
@@ -260,25 +260,45 @@ defmodule Omunculus.Harness do
     end)
   end
 
-  defp catalog_view(nil, _catalog), do: []
+  defp catalog_view(nil, _catalog, _event), do: []
 
-  defp catalog_view(%{tools: tools}, catalog) do
+  defp catalog_view(%{tools: tools}, catalog, event) do
     model_catalog = Catalog.with_trigger(catalog, "model")
     names = if tools, do: Jason.decode!(tools), else: []
+    pinned = event_pinned(event)
 
     names
     |> Enum.filter(&Map.has_key?(model_catalog, &1))
     |> Enum.sort()
-    |> Enum.map(&catalog_card(Map.fetch!(model_catalog, &1)))
+    |> Enum.map(&catalog_card(Map.fetch!(model_catalog, &1), pinned))
   end
 
-  defp catalog_card(%Manifest{
-         name: name,
-         description: description,
-         tags: tags,
-         groups: groups
-       }),
-       do: %{name: name, description: description, tags: tags, groups: groups}
+  defp event_pinned(nil), do: nil
+
+  defp event_pinned(%{body: body}) when is_binary(body) do
+    case Jason.decode(body) do
+      {:ok, %{"ceiling" => %{"pinned" => pinned}}} -> pinned
+      _other -> nil
+    end
+  end
+
+  defp event_pinned(_event), do: nil
+
+  defp catalog_card(
+         %Manifest{name: name, description: description, tags: tags, groups: groups},
+         pinned
+       ) do
+    %{
+      name: name,
+      description: description,
+      tags: tags,
+      groups: groups,
+      pinned: pinned?(pinned, name)
+    }
+  end
+
+  defp pinned?(nil, _name), do: true
+  defp pinned?(list, name) when is_list(list), do: name in list
 
   defp store_ctx(ctx, work_id, config, catalog),
     do: %{

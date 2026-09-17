@@ -29,18 +29,44 @@ defmodule Omunculus.Tools.AssembleTest do
     assert output =~ "- break: Stops the stage."
   end
 
-  test "with tool_search and more than 12 cards keeps store/sequence/catalog" do
+  test "without pinned every catalog card is listed even past 12" do
     cards =
       for i <- 1..13 do
         name = if i == 1, do: "tool_search", else: "t#{i}"
-        groups = if i <= 3, do: ["store"], else: ["fs.read"]
-        %{name: name, description: name, tags: [], groups: groups}
+        %{name: name, description: name, tags: [], groups: [], pinned: true}
       end
 
     output = Assemble.run(%{@input | view: %{"catalog" => cards}})["output"]
     assert output =~ "- tool_search:"
-    assert output =~ Out.more_tools(10)
-    refute output =~ "- t4:"
+    assert output =~ "- t4:"
+    assert output =~ "- t13:"
+    refute output =~ Out.more_tools(1)
+  end
+
+  test "with tool_search, unpinned cards collapse behind more_tools" do
+    cards = [
+      %{name: "tool_search", description: "search", tags: [], groups: ["catalog"], pinned: true},
+      %{name: "comment", description: "note", tags: [], groups: ["store"], pinned: true},
+      %{name: "read", description: "read", tags: [], groups: ["fs.read"], pinned: false}
+    ]
+
+    output = Assemble.run(%{@input | view: %{"catalog" => cards}})["output"]
+    assert output =~ "- tool_search:"
+    assert output =~ "- comment:"
+    refute output =~ "- read:"
+    assert output =~ Out.more_tools(1)
+  end
+
+  test "without tool_search, pinned is ignored and every card is listed" do
+    cards = [
+      %{name: "comment", description: "note", tags: [], groups: ["store"], pinned: true},
+      %{name: "read", description: "read", tags: [], groups: ["fs.read"], pinned: false}
+    ]
+
+    output = Assemble.run(%{@input | view: %{"catalog" => cards}})["output"]
+    assert output =~ "- comment:"
+    assert output =~ "- read:"
+    refute output =~ "more tools"
   end
 
   test "the builtin catalog discovers assemble with triggers == [\"harness\"]" do

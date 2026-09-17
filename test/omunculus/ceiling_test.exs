@@ -293,6 +293,45 @@ defmodule Omunculus.CeilingTest do
     end
   end
 
+  describe "mount/3 pinned" do
+    test "no layer pinned leaves snapshot.pinned nil" do
+      config =
+        config(%{
+          agents: %{
+            "worker" => %{depth: 1, text: "", ceiling: policy(granted: ["comment", "read"])}
+          }
+        })
+
+      snapshot = Ceiling.mount(config, request(%{agent: "worker"}), ["comment", "read"])
+      assert snapshot.pinned == nil
+    end
+
+    test "stage pinned intersects agent pinned after group expansion" do
+      config =
+        config(%{
+          agents: %{
+            "worker" => %{
+              depth: 1,
+              text: "",
+              ceiling: policy(granted: ["comment", "read", "ls"], pinned: ["store", "fs.read"])
+            }
+          }
+        })
+
+      stage = policy(pinned: ["store"])
+      groups = %{"store" => ["comment"], "fs.read" => ["read", "ls"]}
+
+      snapshot =
+        Ceiling.mount(
+          config,
+          request(%{agent: "worker", stage: stage, groups: groups}),
+          ["comment", "read", "ls"]
+        )
+
+      assert snapshot.pinned == ["comment"]
+    end
+  end
+
   describe "classify/2" do
     setup do
       config =

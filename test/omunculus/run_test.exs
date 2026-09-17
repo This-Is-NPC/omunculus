@@ -465,7 +465,7 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
-  test "the default concierge ceiling has more than 12 effective tools and tool_search among them, so ## Tools shows only the store/sequence/catalog cards plus a count of the rest",
+  test "the default concierge ceiling has more than 12 effective tools and lists every card when nothing is pinned",
        %{dir: dir} do
     write_config(dir, """
     [agents.concierge]
@@ -491,13 +491,101 @@ defmodule Omunculus.RunTest do
     assert assembled =~ "- tool_search:"
     assert assembled =~ "- break:"
     assert assembled =~ "- comment:"
-    assert assembled =~ Out.more_tools(4)
+    assert assembled =~ "- read:"
+    assert assembled =~ "- ls:"
+    refute assembled =~ Out.more_tools(1)
+
+    Project.close(project)
+  end
+
+  test "pinned ∩ effective become cards; the rest hide behind tool_search", %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store"]
+    pinned = ["store", "sequence", "catalog"]
+    """)
+
+    project = open_project(dir)
+    test_pid = self()
+
+    model = fn assembled, _tools, _call ->
+      send(test_pid, {:assembled, assembled})
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(project, model)
+
+    assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+    assert_received {:assembled, assembled}
+    assert assembled =~ "- tool_search:"
+    assert assembled =~ "- comment:"
     refute assembled =~ "- read:"
     refute assembled =~ "- ls:"
-    refute assembled =~ "- grep:"
-    refute assembled =~ "- find:"
-    refute assembled =~ "- directory:"
-    refute assembled =~ "- workspaces:"
+    assert assembled =~ Out.more_tools(4)
+
+    Project.close(project)
+  end
+
+  test "a 13th effective tool does not hide the others unless pinned is set", %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store", "counter"]
+    """)
+
+    project = open_project(dir)
+    test_pid = self()
+
+    model = fn assembled, _tools, _call ->
+      send(test_pid, {:assembled, assembled})
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(project, model)
+
+    assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+    assert_received {:assembled, assembled}
+    assert assembled =~ "- counter:"
+    assert assembled =~ "- read:"
+    refute assembled =~ Out.more_tools(1)
+
+    Project.close(project)
+  end
+
+  test "stage pinned intersects agent pinned", %{dir: dir} do
+    write_config(dir, """
+    [policy]
+    workflow = "delivery"
+
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["store", "fs.read", "catalog"]
+    pinned = ["store", "fs.read"]
+
+    [workflows.delivery]
+    steps = [{name = "first", agent = "concierge", pinned = ["store"]}]
+    """)
+
+    project = open_project(dir)
+    work = Fixtures.insert(project.conn, :works, %{stage: "first", assignee: "concierge"})
+    test_pid = self()
+
+    model = fn assembled, _tools, _call ->
+      send(test_pid, {:assembled, assembled})
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(project, model)
+
+    assert {:ok, _run} = Run.open(project, open(message(project.conn), work))
+    assert_received {:assembled, assembled}
+    assert assembled =~ "- comment:"
+    refute assembled =~ "- read:"
+    refute assembled =~ "- ls:"
 
     Project.close(project)
   end
