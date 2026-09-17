@@ -532,7 +532,7 @@ defmodule Omunculus.RunTest do
     refute_received :reached_second_call
 
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
-    assert Enum.map(events, & &1.type) == ["start-run", "tool", "request", "tool", "end-run"]
+    assert Enum.map(events, & &1.type) == ["start-run", "tool", "request", "end-run", "tool"]
 
     assert {:ok, stored} = Query.one(project.conn, "SELECT * FROM runs WHERE id = ?", [run.id])
     assert stored.status == "done"

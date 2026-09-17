@@ -12,8 +12,6 @@ defmodule Omunculus.Run do
   alias Omunculus.Tool.{Catalog, Manifest}
   alias Omunculus.Tools.Out
 
-  @ending_events ~w(request deny grant continue break delegate)
-
   @spec open(
           Project.t(),
           %{
@@ -331,7 +329,7 @@ defmodule Omunculus.Run do
 
         case Harness.dispatch(project, name, args, ctx) do
           {:ok, out, events} ->
-            if Enum.any?(events, &ending_event?/1) do
+            if Enum.any?(events, &Harness.ending_event?/1) do
               throw({:run_ended, run.id})
             end
 
@@ -340,7 +338,7 @@ defmodule Omunculus.Run do
           {:error, _reason} = error ->
             # An action may already have committed before a hook failed.
             {:ok, events} = Store.replay(project.conn, {:run, run.id})
-            if Enum.any?(events, &ending_event?/1), do: throw({:run_ended, run.id})
+            if Enum.any?(events, &Harness.ending_event?/1), do: throw({:run_ended, run.id})
             error
         end
       else
@@ -348,9 +346,6 @@ defmodule Omunculus.Run do
       end
     end
   end
-
-  defp ending_event?(%{type: "work", body: body}), do: Jason.decode!(body)["start"] == true
-  defp ending_event?(event), do: event.type in @ending_events
 
   defp record_model(project, run, execution, text) do
     body = if is_binary(text), do: text, else: Jason.encode!(text)

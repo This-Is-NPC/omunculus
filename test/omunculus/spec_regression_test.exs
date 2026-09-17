@@ -351,7 +351,7 @@ defmodule Omunculus.SpecRegressionTest do
     assert Enum.map(work_events, & &1.id) == Enum.map(events, & &1.id)
   end
 
-  test "a hook cannot advance the workflow without an agent run", %{project: p} do
+  test "a hook continue advances the workflow when the sequence is valid", %{project: p} do
     write_config(
       p,
       @config <>
@@ -366,18 +366,87 @@ defmodule Omunculus.SpecRegressionTest do
     hook(p, "on-notify", "notify", [%{type: "continue", body: %{}}])
     work = Fixtures.insert(p.conn, :works, %{stage: "first", assignee: "concierge"})
 
-    Fixtures.use_model(p, fn _, _, call ->
-      assert {:error, {:hook, {:cannot_sequence, "continue"}}} =
-               call.("notify", %{"body" => "notice"})
+    {:ok, n} = Agent.start_link(fn -> 0 end)
 
-      {:ok, "done"}
+    Fixtures.use_model(p, fn _, _, call ->
+      case Agent.get_and_update(n, fn i -> {i, i + 1} end) do
+        0 ->
+          assert {:ok, _} = call.("notify", %{"body" => "notice"})
+          flunk("continue from the hook must end the run")
+
+        _ ->
+          {:ok, "done"}
+      end
     end)
 
     assert {:ok, _} =
              Run.open(p, opening(work))
 
-    assert {:ok, %{stage: "first"}} = Store.view(p.conn, "work", work)
-    assert {:ok, []} = Query.all(p.conn, "SELECT * FROM events WHERE type = 'continue'")
+    assert {:ok, %{stage: "second"}} = Store.view(p.conn, "work", work)
+    assert {:ok, [_continue]} = Query.all(p.conn, "SELECT * FROM events WHERE type = 'continue'")
+  end
+
+  test "on-continue sees the next stage after end-run and the next start-run", %{project: p} do
+    write_config(
+      p,
+      String.replace(
+        @config,
+        ~s(tools = ["work", "comment", "reply", "request_access", "notify", "read", "write", "sandbox.network"]),
+        ~s(tools = ["work", "comment", "reply", "request_access", "notify", "read", "write", "sandbox.network", "continue"])
+      ) <>
+        """
+        [policy]
+        workflow = "delivery"
+        [workflows.delivery]
+        steps = [{name = "first", agent = "concierge"}, {name = "second", agent = "concierge"}]
+        """
+    )
+
+    hook(p, "on-continue", "continue")
+    work = Fixtures.insert(p.conn, :works, %{stage: "first", assignee: "concierge"})
+
+    {:ok, n} = Agent.start_link(fn -> 0 end)
+
+    Fixtures.use_model(p, fn _, _, call ->
+      case Agent.get_and_update(n, fn i -> {i, i + 1} end) do
+        0 ->
+          call.("continue", %{})
+          flunk("continue must end the run")
+
+        _ ->
+          {:ok, "later"}
+      end
+    end)
+
+    assert {:ok, _} =
+             Run.open(p, opening(work))
+
+    assert {:ok, %{stage: "second"}} = Store.view(p.conn, "work", work)
+    assert {:ok, events} = Store.replay(p.conn, {:work, work})
+    types = Enum.map(events, & &1.type)
+
+    continue_at = Enum.find_index(types, &(&1 == "continue"))
+    end_at = Enum.find_index(types, &(&1 == "end-run"))
+    starts = Enum.with_index(types) |> Enum.filter(fn {type, _} -> type == "start-run" end)
+    assert continue_at < end_at
+    assert length(starts) == 2
+    {_type, second_start} = List.last(starts)
+    assert end_at < second_start
+
+    names =
+      for %{type: "tool", body: body} <- events, do: Jason.decode!(body)["name"]
+
+    hook_at =
+      events
+      |> Enum.with_index()
+      |> Enum.find_value(fn {event, index} ->
+        event.type == "tool" and Jason.decode!(event.body)["name"] == "on-continue" and index
+      end)
+
+    assert hook_at
+    assert end_at < hook_at
+    assert second_start < hook_at
+    assert "on-continue" in names
   end
 
   test "creating a workflow work ends the old run and mounts its first agent and ceiling", %{
@@ -487,7 +556,7 @@ defmodule Omunculus.SpecRegressionTest do
              Run.open(p, opening())
 
     assert {:ok, events} = Store.replay(p.conn, {:run, run.id})
-    assert Enum.map(events, & &1.type) == ~w(start-run model tool request tool end-run)
+    assert Enum.map(events, & &1.type) == ~w(start-run model tool request end-run tool)
     assert Enum.find(events, &(&1.type == "model")).body =~ "I need access"
   end
 

@@ -4,10 +4,11 @@ defmodule Omunculus.Harness do
   declared views, commits calls and emits atomically, then reacts to their
   events. Run lifecycle events use the same `react/2` path.
 
-  Only actions schedule protocol runs. Hooks can emit notifications and
-  comments, or name an agent for a separate reaction run; their programs
-  cannot sequence work directly. `follow_up/2` opens action runs before
-  agent reactions, preserving the originating tool or hook in `via`.
+  Hooks use the same emit path as tools. Non-terminal events still run
+  hooks during the model unroll; events that end the run wait until
+  `follow_up/2` has closed the run and opened the next one. `follow_up/2`
+  opens action runs, then those deferred hooks, then agent reactions,
+  preserving the originating tool or hook in `via`.
   """
 
   alias Omunculus.{Config, Project, Run, Store}
@@ -98,7 +99,7 @@ defmodule Omunculus.Harness do
          {:ok, out, events} <-
            call(project, manifest, args, work_id, ctx, config, catalog, views, workspace),
          {:ok, hook_events} <-
-           react(project, events, [], Map.get(ctx, :execution)) do
+           maybe_react(project, events, [], Map.get(ctx, :execution)) do
       {:ok, augment(out, events), events ++ hook_events}
     end
   end
@@ -184,6 +185,7 @@ defmodule Omunculus.Harness do
          {:ok, config} <- Config.for_workspace(config, Config.effective_workspace(config, nil)),
          catalog = Catalog.discover(config.tools, config.mcp, nil),
          {:ok, _via} <- walk(project, catalog, events, :actions),
+         {:ok, _hooks} <- react(project, Enum.filter(events, &ending_event?/1), []),
          {:ok, _via} <- walk(project, catalog, events, :hooks) do
       :ok
     end
@@ -356,7 +358,7 @@ defmodule Omunculus.Harness do
     |> Enum.reduce_while({:ok, []}, fn hook, {:ok, acc} ->
       case invoke_hook(project, hook, event, work_id, ctx, config, catalog, views, workspace) do
         {:ok, hook_events} ->
-          case react(project, hook_events, [hook.name | active], ctx.execution) do
+          case maybe_react(project, hook_events, [hook.name | active], ctx.execution) do
             {:ok, reactions} -> {:cont, {:ok, acc ++ hook_events ++ reactions}}
             error -> {:halt, error}
           end
@@ -401,7 +403,6 @@ defmodule Omunculus.Harness do
          {:ok, out} <- Invoke.call(manifest, input, execution),
          emits = if(out.ok, do: out.emit, else: []),
          record = %{name: manifest.name, args: args, ok: out.ok, output: out.output},
-         :ok <- check_hook_emits(manifest, emits),
          {:ok, events} <-
            Store.record_tool(
              project.conn,
@@ -414,14 +415,15 @@ defmodule Omunculus.Harness do
     end
   end
 
-  defp check_hook_emits(%{kind: "hook"}, emits) do
-    case Enum.find(emits, &(&1["type"] in ~w(prompt work request reply delegate continue break))) do
-      nil -> :ok
-      emit -> {:error, {:hook, {:cannot_sequence, emit["type"]}}}
-    end
+  @ending_events ~w(request deny grant continue break delegate)
+
+  defp maybe_react(project, events, active, execution) do
+    react(project, Enum.reject(events, &ending_event?/1), active, execution)
   end
 
-  defp check_hook_emits(_manifest, _emits), do: :ok
+  @spec ending_event?(map) :: boolean
+  def ending_event?(%{type: "work", body: body}), do: Jason.decode!(body)["start"] == true
+  def ending_event?(event), do: event.type in @ending_events
 
   defp execution_context(
          _manifest,

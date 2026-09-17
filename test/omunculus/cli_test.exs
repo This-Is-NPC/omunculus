@@ -808,10 +808,13 @@ defmodule Omunculus.CLITest do
       assert run2.via == "continue"
 
       assert {:ok, events1} = Store.replay(project.conn, {:run, run1.id})
-      refute "model" in Enum.map(events1, & &1.type)
-      assert List.last(events1).type == "end-run"
-      assert Enum.at(events1, -2).type == "tool"
-      assert Enum.at(events1, -3).type == "continue"
+      types1 = Enum.map(events1, & &1.type)
+      refute "model" in types1
+      continue_at = Enum.find_index(types1, &(&1 == "continue"))
+      end_at = Enum.find_index(types1, &(&1 == "end-run"))
+      assert continue_at < end_at
+      assert List.last(events1).type == "tool"
+      assert Jason.decode!(List.last(events1).body)["name"] == "on-continue"
 
       assert {:ok, assembled2} =
                Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [run2.prompt_id])
@@ -1325,15 +1328,17 @@ defmodule Omunculus.CLITest do
 
       project = open(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
-      types = Enum.map(events, & &1.type)
 
-      request_index = Enum.find_index(types, &(&1 == "request"))
-      assert Enum.at(types, request_index + 1) == "tool"
+      request_event = Enum.find(events, &(&1.type == "request"))
+      end_event = Enum.find(events, &(&1.type == "end-run" and &1.run_id == request_event.run_id))
 
-      request_event = Enum.at(events, request_index)
-      hook_event = Enum.at(events, request_index + 1)
+      hook_event =
+        Enum.find(events, fn event ->
+          event.type == "tool" and Jason.decode!(event.body)["name"] == "on-request"
+        end)
 
-      assert Jason.decode!(hook_event.body)["name"] == "on-request"
+      assert request_event.sequence < end_event.sequence
+      assert end_event.sequence < hook_event.sequence
       assert hook_event.run_id == request_event.run_id
       assert hook_event.work_id == request_event.work_id
 
@@ -1400,15 +1405,19 @@ defmodule Omunculus.CLITest do
 
       project = open(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
-      types = Enum.map(events, & &1.type)
 
-      continue_index = Enum.find_index(types, &(&1 == "continue"))
-      assert Enum.at(types, continue_index + 1) == "tool"
+      continue_event = events |> Enum.filter(&(&1.type == "continue")) |> List.last()
 
-      continue_event = Enum.at(events, continue_index)
-      hook_event = Enum.at(events, continue_index + 1)
+      end_event =
+        Enum.find(events, &(&1.type == "end-run" and &1.run_id == continue_event.run_id))
 
-      assert Jason.decode!(hook_event.body)["name"] == "on-continue"
+      hook_event =
+        Enum.find(events, fn event ->
+          event.type == "tool" and Jason.decode!(event.body)["name"] == "on-continue"
+        end)
+
+      assert continue_event.sequence < end_event.sequence
+      assert end_event.sequence < hook_event.sequence
       assert hook_event.run_id == continue_event.run_id
 
       Project.close(project)
@@ -1440,15 +1449,17 @@ defmodule Omunculus.CLITest do
 
       project = open(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
-      types = Enum.map(events, & &1.type)
 
-      break_index = Enum.find_index(types, &(&1 == "break"))
-      assert Enum.at(types, break_index + 1) == "tool"
+      break_event = Enum.find(events, &(&1.type == "break"))
+      end_event = Enum.find(events, &(&1.type == "end-run" and &1.run_id == break_event.run_id))
 
-      break_event = Enum.at(events, break_index)
-      hook_event = Enum.at(events, break_index + 1)
+      hook_event =
+        Enum.find(events, fn event ->
+          event.type == "tool" and Jason.decode!(event.body)["name"] == "on-break"
+        end)
 
-      assert Jason.decode!(hook_event.body)["name"] == "on-break"
+      assert break_event.sequence < end_event.sequence
+      assert end_event.sequence < hook_event.sequence
       assert hook_event.run_id == break_event.run_id
 
       Project.close(project)
@@ -1554,7 +1565,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      assert_received {:notify_result, {:error, {:hook, {:cannot_sequence, "continue"}}}}
+      assert_received {:notify_result, {:error, {:continue, :workflow_off}}}
 
       project = open(dir)
 
