@@ -16,6 +16,16 @@ A single depth-0 agent. `send` opens a run; there is no `delegate` and no
 sequence. The model reads and edits, and asks when `sandbox.write` is not have.
 This is the `pi-like` preset, minus the Anthropic login.
 
+```mermaid
+flowchart LR
+    person[person]
+    send[send]
+    pi["pi — depth 0"]
+    store[(store)]
+    person -->|CLI| send --> pi
+    pi -->|tools.*| store
+```
+
 ```toml
 [tools]
 paths = ["../../tools"]
@@ -46,6 +56,25 @@ rewriting the agent.
 Depth 0 talks to you. Depth 1 does the work. The child is a `delegate` emit, not
 a second CLI. The parent waits (`waiting = child`) until the child is `done`.
 The default preset is this, with a reviewer parked behind `workflow_only`.
+
+```mermaid
+flowchart TB
+    person[person]
+    send[send]
+    subgraph d0 [depth 0]
+        concierge[concierge]
+    end
+    subgraph d1 [depth 1]
+        worker[worker]
+        reviewer["reviewer — workflow_only, idle"]
+    end
+    store[(one store)]
+    person -->|CLI| send --> concierge
+    concierge -->|delegate| worker
+    worker -->|"waiting = child until done"| concierge
+    concierge --- store
+    worker --- store
+```
 
 ```toml
 [models.fake]
@@ -82,6 +111,24 @@ pipeline.
 
 `continue` does not pick the next stage. The TOML does. The reviewer never
 appears as a free agent at its depth; only the step may call it.
+
+```mermaid
+flowchart LR
+    person[person]
+    subgraph seq [workflows.delivery]
+        todo["to_do — worker"]
+        review["review — reviewer"]
+        todo -->|continue| review
+        review -->|continue on last| done[done]
+    end
+    store[(store)]
+    person -->|send / reply| todo
+    todo --- store
+    review --- store
+```
+
+The reviewer is not on the depth-1 free list. `continue` walks this graph; it
+does not name the next node.
 
 ```toml
 [agents.worker]
@@ -124,6 +171,28 @@ Unnamed depths stay off the sequence.
 Depth 0 routes. Depth 1 manages. Depth 2 executes. Each floor is a ceiling
 layer: a tool the manager does not have, the worker cannot inherit by existing.
 
+```mermaid
+flowchart TB
+    person[person]
+    subgraph d0 [depth 0 — routes]
+        concierge[concierge]
+    end
+    subgraph d1 [depth 1 — manages]
+        manager[manager]
+    end
+    subgraph d2 [depth 2 — executes]
+        worker[worker]
+    end
+    store[(store)]
+    person -->|send / reply| concierge
+    concierge -->|delegate| manager
+    manager -->|delegate| worker
+    worker -->|request with nobody above at 0| person
+    concierge --- store
+    manager --- store
+    worker --- store
+```
+
 ```toml
 [agents.concierge]
 depth = 0
@@ -160,6 +229,24 @@ request from the concierge goes to the person.
 Workspaces are directories plus a ceiling, not extra databases. `[store]` stays
 global. Overlay tables on the section win; a list replaces, it does not
 concatenate. Two workspaces can run two models without two SQLite files.
+
+```mermaid
+flowchart TB
+    person[person]
+    send[send]
+    subgraph app [workspace app]
+        aagent["concierge — model fake"]
+    end
+    subgraph docsWs [workspace docs]
+        dagent["concierge — model battery"]
+    end
+    store[(one store)]
+    person --> send
+    send -->|default workspace = app| aagent
+    send -->|work.workspace = docs| dagent
+    aagent --- store
+    dagent --- store
+```
 
 ```toml
 [project]
@@ -212,6 +299,20 @@ minus `[workspaces]` and `[store]`. Precedence is global, then the inline
 section, then the file. Missing file is an error. A permanent grant with
 `--scope workspace` writes that file when it exists.
 
+```mermaid
+flowchart TB
+    global["omunculus.toml — global + store"]
+    section["workspaces.app — root + overlay"]
+    file["app/omunculus.toml — no store, no workspaces"]
+    agent[concierge on app]
+    store[(global store)]
+    global --> section --> file --> agent
+    global --> store
+    agent --- store
+```
+
+Precedence: global, then the inline section, then the file.
+
 ```toml
 [workspaces.app]
 root = "app"
@@ -242,6 +343,18 @@ workspaces.
 ## 7. Who may call what
 
 The same agent list, three policies.
+
+```mermaid
+flowchart TB
+    call[emit request]
+    call --> classify{ceiling}
+    classify -->|have| granted["already granted"]
+    classify -->|blocked| deny["EVENTS deny"]
+    classify -->|sealed or nobody above| human["REQUESTS arbiter = human"]
+    classify -->|askable + agent above| above["REQUESTS arbiter = that agent"]
+    human --> reply["reply grant / deny"]
+    above --> reply
+```
 
 **Allowlist** — only what was named is have. Everything else is blocked, not
 asked:
@@ -291,6 +404,16 @@ Without `pinned`, every effective tool is a card. With `tool_search` in the
 effective set, `pinned` ∩ effective become cards and the rest hide behind
 search. Without `tool_search`, `pinned` is ignored.
 
+```mermaid
+flowchart LR
+    effective[effective tools]
+    pinned["pinned intersect effective"]
+    search[tool_search]
+    cards[cards on the assembled]
+    effective --> pinned --> cards
+    effective --> search
+```
+
 ```toml
 [agents.concierge]
 depth = 0
@@ -312,6 +435,19 @@ list on a layer does not restrict.
 Discovery is `paths`, then MCP, then inline. The last `name` wins. A name the
 ceiling listed that nobody exposed is blocked. A server that fails to list is
 skipped and logged; the run still opens.
+
+```mermaid
+flowchart LR
+    paths["tools.paths"]
+    mcp["mcp.servers"]
+    inline["tools.name inline"]
+    catalog[catalog]
+    agent[agent ceiling]
+    paths --> catalog
+    mcp --> catalog
+    inline --> catalog
+    catalog -->|last name wins| agent
+```
 
 ```toml
 [tools]
@@ -337,6 +473,18 @@ classified like `read`.
 
 Every agent names a model. Switching provider is switching that name, not an
 environment variable.
+
+```mermaid
+flowchart LR
+    agent["agents.x.model"]
+    models["models.name"]
+    auth["auth.provider"]
+    file["auth JSON 0600"]
+    api["api: module / HTTP / command"]
+    agent --> models
+    models -->|provider| auth --> file
+    models --> api
+```
 
 **Local OpenAI-compatible:**
 
