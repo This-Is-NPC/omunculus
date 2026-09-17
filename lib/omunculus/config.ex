@@ -15,6 +15,7 @@ defmodule Omunculus.Config do
   """
 
   alias Omunculus.Config.Layer
+  alias Omunculus.Tool.Manifest
 
   @enforce_keys [
     :root,
@@ -27,7 +28,8 @@ defmodule Omunculus.Config do
     :policy_workspace,
     :depth_workflows,
     :mcp,
-    :execution
+    :execution,
+    :tools
   ]
   defstruct @enforce_keys
 
@@ -62,8 +64,11 @@ defmodule Omunculus.Config do
           policy_workspace: String.t() | nil,
           depth_workflows: %{non_neg_integer => String.t()},
           mcp: [mcp_server],
-          execution: execution
+          execution: execution,
+          tools: tools
         }
+
+  @type tools :: %{paths: [String.t()], inline: %{String.t() => Manifest.t()}}
 
   @layer_keys ~w(mode granted tools negotiable human deny)
   @execution_keys ~w(
@@ -239,7 +244,7 @@ defmodule Omunculus.Config do
 
   defp parse(data, path) do
     case Map.keys(data) --
-           ["policy", "workspaces", "agents", "workflows", "mcp", "execution", "project"] do
+           ["policy", "workspaces", "agents", "workflows", "mcp", "execution", "project", "tools"] do
       [key | _] ->
         {:error, {:unknown_key, key}}
 
@@ -253,7 +258,8 @@ defmodule Omunculus.Config do
              {:ok, workflows} <- parse_workflows(Map.get(data, "workflows", %{}), agents),
              {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows} <-
                parse_policy(Map.get(data, "policy", %{}), workflows, workspaces),
-             {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{})) do
+             {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{})),
+             {:ok, tools} <- parse_tools(Map.get(data, "tools"), config_dir) do
           if map_size(agents) == 0 do
             {:error, :no_agents}
           else
@@ -269,7 +275,8 @@ defmodule Omunculus.Config do
                policy_workspace: policy_workspace,
                depth_workflows: depth_workflows,
                mcp: mcp,
-               execution: execution
+               execution: execution,
+               tools: tools
              }}
           end
         end
@@ -298,6 +305,75 @@ defmodule Omunculus.Config do
   end
 
   defp parse_project(_data, _config_dir), do: {:error, {:project, {:invalid, :table}}}
+
+  defp parse_tools(nil, _config_dir), do: {:ok, %{paths: [], inline: %{}}}
+
+  defp parse_tools(data, config_dir) when is_map(data) do
+    {paths_raw, rest} = Map.pop(data, "paths", [])
+
+    with {:ok, paths} <- parse_tool_paths(paths_raw, config_dir),
+         {:ok, inline} <- parse_inline_tools(rest, config_dir) do
+      {:ok, %{paths: paths, inline: inline}}
+    end
+  end
+
+  defp parse_tools(_data, _config_dir), do: {:error, {:tools, {:invalid, :table}}}
+
+  defp parse_tool_paths(paths, config_dir) when is_list(paths) do
+    Enum.reduce_while(paths, {:ok, []}, fn path, {:ok, acc} ->
+      case expand_tool_path(path, config_dir) do
+        {:ok, expanded} -> {:cont, {:ok, acc ++ [expanded]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp parse_tool_paths(_paths, _config_dir), do: {:error, {:tools, {:invalid, :paths}}}
+
+  defp expand_tool_path("~" <> _rest = path, _config_dir) when path != "~" do
+    {:ok, Path.expand(path)}
+  end
+
+  defp expand_tool_path(path, config_dir) when is_binary(path) and path != "" do
+    {:ok, Path.expand(path, config_dir)}
+  end
+
+  defp expand_tool_path(_path, _config_dir), do: {:error, {:tools, {:invalid, :paths}}}
+
+  defp parse_inline_tools(data, config_dir) do
+    Enum.reduce_while(data, {:ok, %{}}, fn {name, value}, {:ok, acc} ->
+      case parse_inline_tool(name, value, config_dir) do
+        {:ok, manifest} -> {:cont, {:ok, Map.put(acc, name, manifest)}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp parse_inline_tool("paths", _value, _config_dir),
+    do: {:error, {:tools, {:invalid, :paths}}}
+
+  defp parse_inline_tool(name, value, config_dir) when is_map(value) do
+    raw =
+      case Map.fetch(value, "name") do
+        :error -> Map.put(value, "name", name)
+        {:ok, ^name} -> value
+        {:ok, _other} -> value
+      end
+
+    cond do
+      Map.get(raw, "name") != name ->
+        {:error, {:tools, name, {:invalid, :name}}}
+
+      true ->
+        case Manifest.parse(raw, config_dir) do
+          {:ok, manifest} -> {:ok, manifest}
+          {:error, reason} -> {:error, {:tools, name, reason}}
+        end
+    end
+  end
+
+  defp parse_inline_tool(name, _value, _config_dir),
+    do: {:error, {:tools, name, {:invalid, :table}}}
 
   defp parse_execution(nil), do: {:error, {:execution, :missing, @execution_keys}}
 

@@ -60,7 +60,7 @@ defmodule Omunculus.Tools.ReadTest do
   end
 
   test "the builtin catalog discovers read with triggers == [\"model\"]" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"read" => manifest} = catalog
     assert manifest.triggers == ["model"]
@@ -70,7 +70,7 @@ defmodule Omunculus.Tools.ReadTest do
   test "the manifest wiring yields the same result as calling the module directly", %{
     root: root
   } do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "read")
     input = %{@input | args: %{"path" => "file.txt"}, roots: [root]}
 

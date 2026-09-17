@@ -67,7 +67,7 @@ defmodule Omunculus.Tools.LsTest do
   end
 
   test "the builtin catalog discovers ls with triggers == [\"model\"]" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"ls" => manifest} = catalog
     assert manifest.triggers == ["model"]
@@ -77,7 +77,7 @@ defmodule Omunculus.Tools.LsTest do
   test "the manifest wiring yields the same result as calling the module directly", %{
     root: root
   } do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "ls")
     input = %{@input | args: %{}, roots: [root]}
 

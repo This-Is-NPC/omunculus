@@ -84,14 +84,14 @@ defmodule Omunculus.Tools.CommentTest do
   end
 
   test "the builtin catalog discovers comment with triggers == [\"cli\", \"model\"]" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"comment" => manifest} = catalog
     assert manifest.triggers == ["cli", "model"]
   end
 
   test "the manifest wiring yields the same emit as calling the module directly" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "comment")
     input = %{@input | args: %{"body" => "looks good"}, work_id: "wrk_3"}
 

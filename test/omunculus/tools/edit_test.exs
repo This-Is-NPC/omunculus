@@ -102,7 +102,7 @@ defmodule Omunculus.Tools.EditTest do
   end
 
   test "the builtin catalog discovers edit with triggers == [\"model\"]" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"edit" => manifest} = catalog
     assert manifest.triggers == ["model"]
@@ -113,7 +113,7 @@ defmodule Omunculus.Tools.EditTest do
     root: root
   } do
     File.write!(Path.join(root, "wired.txt"), "hello world\n")
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "edit")
 
     input = %{

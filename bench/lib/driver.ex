@@ -124,7 +124,8 @@ defmodule Omunculus.Benchmark.Driver do
         "queue_timeout_ms" => 120_000
       },
       "policy" => %{"mode" => "allowlist"},
-      "agents" => %{"bench" => %{"depth" => 0, "text" => "Wait for the model response."}}
+      "agents" => %{"bench" => %{"depth" => 0, "text" => "Wait for the model response."}},
+      "tools" => %{"paths" => [Application.app_dir(:omunculus, Path.join("priv", "tools"))]}
     })
   end
 

@@ -58,14 +58,14 @@ defmodule Omunculus.Tools.BreakTest do
   end
 
   test "the builtin catalog discovers break with triggers == [\"model\"]" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"break" => manifest} = catalog
     assert manifest.triggers == ["model"]
   end
 
   test "the manifest wiring yields the same emit as calling the module directly" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "break")
     input = %{@input | args: %{"body" => "waiting on design review"}}
 

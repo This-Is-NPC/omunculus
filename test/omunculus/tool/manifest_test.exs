@@ -362,4 +362,21 @@ defmodule Omunculus.Tool.ManifestTest do
 
     assert Manifest.load(path) == {:error, {:invalid, :config}}
   end
+
+  test "parse/2 builds a manifest from a map", %{dir: dir} do
+    assert {:ok, manifest} =
+             Manifest.parse(
+               %{
+                 "name" => "echo",
+                 "kind" => "tool",
+                 "description" => "from a map",
+                 "module" => "Omunculus.Tools.Comment"
+               },
+               dir
+             )
+
+    assert manifest.name == "echo"
+    assert manifest.description == "from a map"
+    assert manifest.dir == dir
+  end
 end

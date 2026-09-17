@@ -41,14 +41,14 @@ defmodule Omunculus.Tools.InboxReadTest do
   end
 
   test "the builtin catalog discovers inbox_read with triggers == [\"cli\"]" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"inbox_read" => manifest} = catalog
     assert manifest.triggers == ["cli"]
   end
 
   test "the manifest wiring yields the same emit as calling the module directly" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "inbox_read")
     input = %{@input | args: %{"inbox_id" => "inb_1"}}
 

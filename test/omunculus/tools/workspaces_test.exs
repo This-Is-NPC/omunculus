@@ -39,7 +39,7 @@ defmodule Omunculus.Tools.WorkspacesTest do
   end
 
   test "the builtin catalog discovers workspaces with triggers == [\"model\"]" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"workspaces" => manifest} = catalog
     assert manifest.triggers == ["model"]
@@ -48,7 +48,7 @@ defmodule Omunculus.Tools.WorkspacesTest do
   end
 
   test "the manifest wiring yields the same output as calling the module directly" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "workspaces")
     input = %{@input | view: %{"workspaces" => []}}
 

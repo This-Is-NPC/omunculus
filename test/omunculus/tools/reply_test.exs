@@ -131,14 +131,14 @@ defmodule Omunculus.Tools.ReplyTest do
   end
 
   test "the builtin catalog discovers reply with triggers cli and model" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"reply" => manifest} = catalog
     assert manifest.triggers == ["cli", "model"]
   end
 
   test "the manifest wiring yields the same emit as calling the module directly" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "reply")
     input = %{@input | args: %{"request_id" => "req_1", "decision" => "deny", "body" => "no"}}
 

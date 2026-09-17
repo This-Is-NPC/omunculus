@@ -56,14 +56,14 @@ defmodule Omunculus.Tools.NotifyTest do
   end
 
   test "the builtin catalog discovers notify with triggers == [\"model\"]" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"notify" => manifest} = catalog
     assert manifest.triggers == ["model"]
   end
 
   test "the manifest wiring yields the same emit as calling the module directly" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "notify")
     input = %{@input | args: %{"body" => "need help"}}
 

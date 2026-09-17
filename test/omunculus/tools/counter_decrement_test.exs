@@ -31,7 +31,7 @@ defmodule Omunculus.Tools.CounterDecrementTest do
   end
 
   test "the builtin catalog discovers counter_decrement in the bench group" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"counter_decrement" => manifest} = catalog
     assert manifest.triggers == ["model"]
@@ -40,7 +40,7 @@ defmodule Omunculus.Tools.CounterDecrementTest do
   end
 
   test "the manifest wiring yields the same output as calling the module directly" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "counter_decrement")
     input = %{@input | view: %{"counter" => 0}}
 

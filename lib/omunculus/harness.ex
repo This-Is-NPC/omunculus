@@ -17,9 +17,9 @@ defmodule Omunculus.Harness do
 
   @spec manifest(Project.t(), String.t()) ::
           {:ok, Manifest.t()} | {:error, {:unknown_tool, String.t()}}
-  def manifest(%Project{dir: dir, config_path: path}, name) do
+  def manifest(%Project{config_path: path}, name) do
     with {:ok, config} <- Config.load(path) do
-      dir |> Catalog.roots() |> Catalog.discover(config.mcp, nil) |> fetch_manifest(name)
+      config.tools |> Catalog.discover(config.mcp, nil) |> fetch_dispatch_manifest(name, "cli")
     end
   end
 
@@ -40,7 +40,7 @@ defmodule Omunculus.Harness do
 
   @spec dispatch(Project.t(), String.t(), map, map) :: {:ok, map, [map]} | {:error, term}
   def dispatch(project, name, args, ctx) do
-    folder_catalog = Catalog.discover(Catalog.roots(project.dir))
+    folder_catalog = Catalog.unconfigured()
 
     case Map.get(folder_catalog, name) do
       %Manifest{config: false} = manifest when ctx.trigger == "cli" ->
@@ -74,10 +74,8 @@ defmodule Omunculus.Harness do
   defp dispatch_with_config(project, name, args, ctx) do
     with {:ok, config} <- Config.load(project.config_path),
          catalog =
-           project.dir
-           |> Catalog.roots()
-           |> Catalog.discover(config.mcp, Map.get(ctx, :execution)),
-         {:ok, manifest} <- fetch_manifest(catalog, name),
+           Catalog.discover(config.tools, config.mcp, Map.get(ctx, :execution)),
+         {:ok, manifest} <- fetch_dispatch_manifest(catalog, name, ctx.trigger),
          :ok <- check_trigger(manifest, name, ctx.trigger),
          {:ok, run} <- resolve_run(project, ctx.run_id),
          work_id = run_work_id(run),
@@ -101,7 +99,7 @@ defmodule Omunculus.Harness do
   @doc "Dispatches reactions to committed events, including the run lifecycle."
   def react(project, events, active \\ [], execution \\ nil) do
     with {:ok, config} <- Config.load(project.config_path) do
-      catalog = project.dir |> Catalog.roots() |> Catalog.discover(config.mcp, execution)
+      catalog = Catalog.discover(config.tools, config.mcp, execution)
 
       Enum.reduce_while(events, {:ok, []}, fn event, {:ok, acc} ->
         with {:ok, run} <- resolve_run(project, event.run_id),
@@ -176,7 +174,7 @@ defmodule Omunculus.Harness do
           :ok | {:error, term}
   def follow_up(project, events, model) do
     with {:ok, config} <- Config.load(project.config_path),
-         catalog = project.dir |> Catalog.roots() |> Catalog.discover(config.mcp, nil),
+         catalog = Catalog.discover(config.tools, config.mcp, nil),
          {:ok, _via} <- walk(project, catalog, events, model, :actions),
          {:ok, _via} <- walk(project, catalog, events, model, :hooks) do
       :ok
@@ -198,6 +196,26 @@ defmodule Omunculus.Harness do
       :error -> {:error, {:unknown_tool, name}}
     end
   end
+
+  defp fetch_dispatch_manifest(catalog, name, "cli") do
+    case fetch_manifest(catalog, name) do
+      {:ok, _manifest} = ok ->
+        ok
+
+      {:error, {:unknown_tool, ^name}} ->
+        case Map.fetch(Catalog.unconfigured(), name) do
+          {:ok, %Manifest{config: true} = manifest} ->
+            if Manifest.triggered_by?(manifest, "cli"),
+              do: {:ok, manifest},
+              else: {:error, {:unknown_tool, name}}
+
+          _missing ->
+            {:error, {:unknown_tool, name}}
+        end
+    end
+  end
+
+  defp fetch_dispatch_manifest(catalog, name, _trigger), do: fetch_manifest(catalog, name)
 
   defp check_trigger(manifest, name, trigger) do
     if Manifest.triggered_by?(manifest, trigger),

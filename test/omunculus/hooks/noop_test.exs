@@ -21,7 +21,7 @@ defmodule Omunculus.Hooks.NoopTest do
 
   for hook <- ~w(on-request on-notify on-continue on-break) do
     test "invoking the builtin #{hook} hook manifest yields the no-op out" do
-      catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+      catalog = Catalog.unconfigured()
       manifest = Map.fetch!(catalog, unquote(hook))
 
       assert manifest.kind == "hook"

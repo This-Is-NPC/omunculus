@@ -3,12 +3,17 @@ defmodule Omunculus.Tool.CatalogTest do
 
   alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Tool.Catalog
+  alias Omunculus.Tool.Manifest
 
   setup do
     project_dir = Path.join(System.tmp_dir!(), Omunculus.Id.new())
     File.mkdir_p!(project_dir)
     on_exit(fn -> File.rm_rf!(project_dir) end)
     %{project_dir: project_dir}
+  end
+
+  defp tools(paths, inline \\ %{}) do
+    %{paths: List.wrap(paths), inline: inline}
   end
 
   defp write_tool(root, name, filename \\ "tool.toml", content) do
@@ -27,16 +32,6 @@ defmodule Omunculus.Tool.CatalogTest do
     )
   end
 
-  test "roots/1 orders builtin, user, then project, least to most specific", %{
-    project_dir: project_dir
-  } do
-    assert Catalog.roots(project_dir) == [
-             Application.app_dir(:omunculus, "priv/tools"),
-             Path.expand("~/.omunculus/tools"),
-             Path.join(project_dir, "tools")
-           ]
-  end
-
   test "discovers a tool folder", %{project_dir: project_dir} do
     write_tool(project_dir, "read", """
     name = "read"
@@ -44,31 +39,31 @@ defmodule Omunculus.Tool.CatalogTest do
     command = ["./run"]
     """)
 
-    catalog = Catalog.discover([project_dir])
+    catalog = Catalog.discover(tools(project_dir))
     assert %{"read" => manifest} = catalog
     assert manifest.dir == Path.join(project_dir, "read")
   end
 
-  test "a later root overrides an earlier one on the same name", %{project_dir: project_dir} do
-    builtin = Path.join(project_dir, "builtin")
-    project = Path.join(project_dir, "project")
+  test "a later path overrides an earlier one on the same name", %{project_dir: project_dir} do
+    first = Path.join(project_dir, "first")
+    second = Path.join(project_dir, "second")
 
-    write_tool(builtin, "send", """
+    write_tool(first, "send", """
     name = "send"
     kind = "tool"
-    description = "builtin"
+    description = "first"
     command = ["./run"]
     """)
 
-    write_tool(project, "send", """
+    write_tool(second, "send", """
     name = "send"
     kind = "tool"
-    description = "from the project"
+    description = "second"
     command = ["./run"]
     """)
 
-    catalog = Catalog.discover([builtin, project])
-    assert catalog["send"].description == "from the project"
+    catalog = Catalog.discover(tools([first, second]))
+    assert catalog["send"].description == "second"
   end
 
   test "a folder without a manifest is ignored", %{project_dir: project_dir} do
@@ -80,7 +75,7 @@ defmodule Omunculus.Tool.CatalogTest do
     command = ["./run"]
     """)
 
-    catalog = Catalog.discover([project_dir])
+    catalog = Catalog.discover(tools(project_dir))
     assert Map.keys(catalog) == ["read"]
   end
 
@@ -96,7 +91,7 @@ defmodule Omunculus.Tool.CatalogTest do
     command = ["./run"]
     """)
 
-    catalog = Catalog.discover([project_dir])
+    catalog = Catalog.discover(tools(project_dir))
     assert Map.keys(catalog) == ["read"]
   end
 
@@ -119,7 +114,7 @@ defmodule Omunculus.Tool.CatalogTest do
     command = ["./run"]
     """)
 
-    catalog = Catalog.discover([project_dir])
+    catalog = Catalog.discover(tools(project_dir))
     assert catalog == %{}
   end
 
@@ -131,13 +126,30 @@ defmodule Omunculus.Tool.CatalogTest do
     command = ["./run"]
     """)
 
-    catalog = Catalog.discover([project_dir])
+    catalog = Catalog.discover(tools(project_dir))
     assert %{"on-request" => manifest} = catalog
     assert manifest.kind == "hook"
   end
 
-  test "a nonexistent root is skipped" do
-    assert Catalog.discover([Path.join(System.tmp_dir!(), Omunculus.Id.new())]) == %{}
+  test "a nonexistent path is skipped" do
+    assert Catalog.discover(tools(Path.join(System.tmp_dir!(), Omunculus.Id.new()))) == %{}
+  end
+
+  test "an empty tools table yields an empty catalog" do
+    assert Catalog.discover(tools([])) == %{}
+  end
+
+  test "a path that is not listed is not discovered", %{project_dir: project_dir} do
+    hidden = Path.join(project_dir, "hidden")
+
+    write_tool(hidden, "secret", """
+    name = "secret"
+    kind = "tool"
+    command = ["./run"]
+    """)
+
+    assert Catalog.discover(tools([])) == %{}
+    refute Map.has_key?(Catalog.unconfigured(), "secret")
   end
 
   test "with_trigger/2 filters by trigger", %{project_dir: project_dir} do
@@ -155,28 +167,27 @@ defmodule Omunculus.Tool.CatalogTest do
     command = ["./run"]
     """)
 
-    catalog = Catalog.discover([project_dir])
+    catalog = Catalog.discover(tools(project_dir))
     assert Map.keys(Catalog.with_trigger(catalog, "model")) == ["read"]
     assert Map.keys(Catalog.with_trigger(catalog, "cli")) == ["send"]
   end
 
-  test "roots/1's builtin root discovers send with triggers == [\"cli\"]" do
-    [builtin_root | _] = Catalog.roots(".")
-    catalog = Catalog.discover([builtin_root])
+  test "package tools discover send with triggers == [\"cli\"]" do
+    catalog = Catalog.unconfigured()
 
     assert %{"send" => manifest} = catalog
     assert manifest.triggers == ["cli"]
   end
 
   test "hooks_for/2 returns the hooks whose events include the type, sorted by name" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert Enum.map(Catalog.hooks_for(catalog, "request"), & &1.name) == ["on-request"]
     assert Catalog.hooks_for(catalog, "prompt") == []
   end
 
   test "a hook never appears in with_trigger/2, neither for \"model\" nor \"cli\"" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     refute Map.has_key?(Catalog.with_trigger(catalog, "model"), "on-request")
     refute Map.has_key?(Catalog.with_trigger(catalog, "cli"), "on-request")
@@ -206,7 +217,7 @@ defmodule Omunculus.Tool.CatalogTest do
     command = ["./run"]
     """)
 
-    catalog = Catalog.discover([project_dir])
+    catalog = Catalog.discover(tools(project_dir))
 
     assert Catalog.groups(catalog) == %{
              "fs.read" => ["ls", "read"],
@@ -221,23 +232,31 @@ defmodule Omunculus.Tool.CatalogTest do
     command = ["./run"]
     """)
 
-    catalog = Catalog.discover([project_dir])
+    catalog = Catalog.discover(tools(project_dir))
     assert Catalog.groups(catalog) == %{}
   end
 
-  test "a project hook overrides the builtin hook of the same name", %{project_dir: project_dir} do
-    [builtin_root | _] = Catalog.roots(".")
-
-    write_tool(project_dir, "on-request", "hook.toml", """
-    name = "on-request"
-    kind = "hook"
-    events = ["request"]
-    description = "from the project"
+  test "inline tables win over a path of the same name", %{project_dir: project_dir} do
+    write_tool(project_dir, "echo", """
+    name = "echo"
+    kind = "tool"
+    description = "from the folder"
     command = ["./run"]
     """)
 
-    catalog = Catalog.discover([builtin_root, project_dir])
-    assert catalog["on-request"].description == "from the project"
+    {:ok, inline} =
+      Manifest.parse(
+        %{
+          "name" => "echo",
+          "kind" => "tool",
+          "description" => "from inline",
+          "module" => "Omunculus.Tools.Comment"
+        },
+        project_dir
+      )
+
+    catalog = Catalog.discover(tools(project_dir, %{"echo" => inline}))
+    assert catalog["echo"].description == "from inline"
   end
 
   describe "MCP servers" do
@@ -246,7 +265,7 @@ defmodule Omunculus.Tool.CatalogTest do
     test "a server's tools/list becomes names in the catalog, tagged and carrying the server", %{
       project_dir: project_dir
     } do
-      catalog = Catalog.discover([project_dir], [@mcp_server], mcp_policy())
+      catalog = Catalog.discover(tools(project_dir), [@mcp_server], mcp_policy())
 
       assert %{"echo" => echo, "shout" => shout} = catalog
       assert echo.description == "Echoes text"
@@ -256,37 +275,34 @@ defmodule Omunculus.Tool.CatalogTest do
       assert shout.description == "Upper-cases text"
     end
 
-    test "a project folder tool wins over an MCP tool of the same name", %{
-      project_dir: project_dir
-    } do
+    test "an MCP tool wins over a path tool of the same name", %{project_dir: project_dir} do
       write_tool(project_dir, "echo", """
       name = "echo"
       kind = "tool"
-      description = "from the project"
+      description = "from the folder"
       command = ["./run"]
       """)
 
-      catalog = Catalog.discover([project_dir], [@mcp_server], mcp_policy())
-      assert catalog["echo"].description == "from the project"
-      assert catalog["echo"].mcp == nil
-    end
-
-    test "an MCP tool wins over an earlier root's tool of the same name", %{
-      project_dir: project_dir
-    } do
-      home_root = Path.join(project_dir, "home")
-      project_root = Path.join(project_dir, "project")
-
-      write_tool(home_root, "echo", """
-      name = "echo"
-      kind = "tool"
-      description = "from the user"
-      command = ["./run"]
-      """)
-
-      catalog = Catalog.discover([home_root, project_root], [@mcp_server], mcp_policy())
+      catalog = Catalog.discover(tools(project_dir), [@mcp_server], mcp_policy())
       assert catalog["echo"].mcp == @mcp_server
       assert catalog["echo"].description == "Echoes text"
+    end
+
+    test "an inline tool wins over an MCP tool of the same name", %{project_dir: project_dir} do
+      {:ok, inline} =
+        Manifest.parse(
+          %{
+            "name" => "echo",
+            "kind" => "tool",
+            "description" => "from inline",
+            "module" => "Omunculus.Tools.Comment"
+          },
+          project_dir
+        )
+
+      catalog = Catalog.discover(tools([], %{"echo" => inline}), [@mcp_server], mcp_policy())
+      assert catalog["echo"].description == "from inline"
+      assert catalog["echo"].mcp == nil
     end
 
     test "a server that fails to list is skipped, not raised", %{project_dir: project_dir} do
@@ -298,7 +314,7 @@ defmodule Omunculus.Tool.CatalogTest do
       command = ["./run"]
       """)
 
-      catalog = Catalog.discover([project_dir], [broken], mcp_policy())
+      catalog = Catalog.discover(tools(project_dir), [broken], mcp_policy())
       assert Map.keys(catalog) == ["read"]
     end
   end

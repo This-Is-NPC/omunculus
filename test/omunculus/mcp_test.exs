@@ -130,7 +130,7 @@ defmodule Omunculus.McpTest do
       write_config(dir, mcp_config(@server.command |> hd()))
 
       {:ok, config} = Fixtures.load_config(dir)
-      catalog = Catalog.discover(Catalog.roots(dir), config.mcp, policy())
+      catalog = Catalog.discover(config.tools, config.mcp, policy())
 
       refute Map.has_key?(catalog, "mcp")
       assert Map.has_key?(catalog, "echo")

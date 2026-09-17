@@ -8,6 +8,9 @@ max_concurrent = 4
 max_queue = 64
 queue_timeout_ms = 30000
 
+[tools]
+paths = ["../../tools", "./tools"]
+
 [agents.codex]
 depth = 0
 tools = ["bash", "catalog", "fs.read", "fs.write", "request_access", "sandbox.write", "store"]

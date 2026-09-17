@@ -10,7 +10,10 @@ module = "Omunculus.Tools.Preset"
 
 [parameters]
 type = "object"
-required = ["name"]
+required = ["name", "from"]
 
 [parameters.properties.name]
+type = "string"
+
+[parameters.properties.from]
 type = "string"

@@ -101,14 +101,14 @@ defmodule Omunculus.Tools.RequestAccessTest do
   end
 
   test "the builtin catalog discovers request_access with triggers == [\"model\"]" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"request_access" => manifest} = catalog
     assert manifest.triggers == ["model"]
   end
 
   test "the manifest wiring yields the same emit as calling the module directly" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "request_access")
     input = %{@input | args: %{"kind" => "directory", "name" => "./secrets", "reason" => "ler"}}
 

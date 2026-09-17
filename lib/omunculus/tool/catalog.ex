@@ -1,12 +1,10 @@
 defmodule Omunculus.Tool.Catalog do
   @moduledoc """
-  Discovers tool/hook folders on disk and MCP servers' tools, per spec
-  §8.4 and §8.7. Folder roots are merged builtin, user, then project root;
-  MCP servers are merged between the user root and the project root, so a
-  project folder wins over an MCP name and an MCP name wins over the
-  builtin, the most specific always winning on a shared `name`. Also
-  derives the group map of spec §9.5 from the manifests' own `groups`
-  field.
+  Discovers tool/hook folders and MCP servers' tools, per spec §8.4 and
+  §8.7. Discovery walks `tools.paths` in order, then `[[mcp.servers]]`,
+  then inline `[tools.<name>]` tables; the last declaration of a `name`
+  wins. Also derives the group map of spec §9.5 from the manifests'
+  own `groups` field.
   """
 
   require Logger
@@ -14,32 +12,34 @@ defmodule Omunculus.Tool.Catalog do
   alias Omunculus.Mcp
   alias Omunculus.Tool.Manifest
 
-  @spec roots(String.t()) :: [Path.t()]
-  def roots(project_dir) do
-    [
-      Application.app_dir(:omunculus, "priv/tools"),
-      Path.expand("~/.omunculus/tools"),
-      Path.join(project_dir, "tools")
-    ]
-  end
-
   alias Omunculus.Execution.Policy
 
-  @spec discover([Path.t()], [Omunculus.Config.mcp_server()], Policy.t() | nil) ::
-          %{String.t() => Manifest.t()}
-  def discover(roots, servers \\ [], policy \\ nil)
+  @type tools :: %{paths: [String.t()], inline: %{String.t() => Manifest.t()}}
 
-  def discover(roots, servers, policy) do
-    [project_root | earlier_roots] = Enum.reverse(roots)
+  @spec unconfigured() :: %{String.t() => Manifest.t()}
+  def unconfigured do
+    case Application.get_env(:omunculus, :package_tools) do
+      path when is_binary(path) and path != "" ->
+        discover(%{paths: [path], inline: %{}}, [], nil)
 
-    earlier_roots
-    |> Enum.reverse()
-    |> discover_folders()
-    |> discover_mcp(servers, policy)
-    |> discover_folders([project_root])
+      _missing ->
+        %{}
+    end
   end
 
-  defp discover_folders(acc \\ %{}, roots) do
+  @spec discover(tools, [Omunculus.Config.mcp_server()], Policy.t() | nil) ::
+          %{String.t() => Manifest.t()}
+  def discover(tools, servers \\ [], policy \\ nil)
+
+  def discover(%{paths: paths, inline: inline}, servers, policy)
+      when is_list(paths) and is_map(inline) do
+    %{}
+    |> discover_folders(paths)
+    |> discover_mcp(servers, policy)
+    |> Map.merge(inline)
+  end
+
+  defp discover_folders(acc, roots) do
     Enum.reduce(roots, acc, fn root, acc ->
       if File.dir?(root) do
         root |> subfolders() |> Enum.reduce(acc, &load_into(&2, &1))

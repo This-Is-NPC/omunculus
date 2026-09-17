@@ -33,14 +33,14 @@ defmodule Omunculus.Tools.ContinueTest do
   end
 
   test "the builtin catalog discovers continue with triggers == [\"model\"]" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"continue" => manifest} = catalog
     assert manifest.triggers == ["model"]
   end
 
   test "the manifest wiring yields the same emit as calling the module directly" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "continue")
     input = %{@input | args: %{"stage" => "review"}}
 

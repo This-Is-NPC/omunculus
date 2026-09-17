@@ -39,7 +39,7 @@ defmodule Omunculus.Tools.InboxTest do
   end
 
   test "the builtin catalog discovers inbox with triggers == [\"cli\"]" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"inbox" => manifest} = catalog
     assert manifest.triggers == ["cli"]
@@ -47,7 +47,7 @@ defmodule Omunculus.Tools.InboxTest do
   end
 
   test "the manifest wiring yields the same output as calling the module directly" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "inbox")
     input = %{@input | view: %{"inbox" => []}}
 

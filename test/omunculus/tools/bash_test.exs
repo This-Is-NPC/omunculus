@@ -65,7 +65,7 @@ defmodule Omunculus.Tools.BashTest do
   end
 
   test "the builtin catalog never discovers bash" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     refute Map.has_key?(catalog, "bash")
   end

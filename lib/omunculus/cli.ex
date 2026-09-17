@@ -64,7 +64,7 @@ defmodule Omunculus.CLI do
 
   defp dispatch_named(name, args, config_path, model) do
     dir = Path.dirname(config_path)
-    catalog = Catalog.discover(Catalog.roots(dir))
+    catalog = Catalog.unconfigured()
 
     case Map.get(catalog, name) do
       %Manifest{config: false} = manifest ->

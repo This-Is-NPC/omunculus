@@ -1286,4 +1286,130 @@ defmodule Omunculus.ConfigTest do
       assert {:error, {:mcp, {:unknown_key, "timeout"}}} = load(dir)
     end
   end
+
+  describe "tools" do
+    test "without [tools] paths and inline are empty", %{dir: dir} do
+      write_toml(dir, """
+      [tools]
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      """)
+
+      assert {:ok, %Config{tools: %{paths: [], inline: inline}}} = load(dir)
+      assert inline == %{}
+    end
+
+    test "omitting [tools] is an empty catalog, not an error", %{dir: dir} do
+      File.write!(toml(dir), """
+      [execution]
+      backend = "bubblewrap"
+      runtimes = ["/usr"]
+      environment = ["LANG"]
+      timeout_ms = 1
+      max_output_bytes = 1
+      max_concurrent = 1
+      max_queue = 1
+      queue_timeout_ms = 1
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      """)
+
+      assert {:ok, %Config{tools: %{paths: [], inline: inline}}} = load(dir)
+      assert inline == %{}
+    end
+
+    test "paths are resolved against the config file directory", %{dir: dir} do
+      extra = Path.join(dir, "extra")
+      File.mkdir_p!(extra)
+
+      write_toml(dir, """
+      [tools]
+      paths = ["./extra"]
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      """)
+
+      assert {:ok, %Config{tools: %{paths: [path]}}} = load(dir)
+      assert path == extra
+    end
+
+    test "~ in a tools path expands to the home directory", %{dir: dir} do
+      write_toml(dir, """
+      [tools]
+      paths = ["~/.omunculus-omunculus-test-tools"]
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      """)
+
+      assert {:ok, %Config{tools: %{paths: [path]}}} = load(dir)
+      assert path == Path.expand("~/.omunculus-omunculus-test-tools")
+    end
+
+    test "an inline tool is parsed with the section name", %{dir: dir} do
+      write_toml(dir, """
+      [tools.echo]
+      kind = "tool"
+      description = "inline echo"
+      module = "Omunculus.Tools.Comment"
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      """)
+
+      assert {:ok, %Config{tools: %{inline: %{"echo" => manifest}}}} = load(dir)
+      assert manifest.name == "echo"
+      assert manifest.description == "inline echo"
+      assert manifest.dir == Path.expand(dir)
+    end
+
+    test "an inline tool whose name does not match the section is rejected", %{dir: dir} do
+      write_toml(dir, """
+      [tools.echo]
+      name = "other"
+      kind = "tool"
+      module = "Omunculus.Tools.Comment"
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      """)
+
+      assert {:error, {:tools, "echo", {:invalid, :name}}} = load(dir)
+    end
+
+    test "an invalid inline tool is a config error", %{dir: dir} do
+      write_toml(dir, """
+      [tools.echo]
+      kind = "tool"
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      """)
+
+      assert {:error, {:tools, "echo", {:invalid, :command}}} = load(dir)
+    end
+
+    test "tools.paths that is not a list is rejected", %{dir: dir} do
+      write_toml(dir, """
+      [tools]
+      paths = "tools"
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      """)
+
+      assert {:error, {:tools, {:invalid, :paths}}} = load(dir)
+    end
+  end
 end

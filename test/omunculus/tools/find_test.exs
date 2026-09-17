@@ -63,7 +63,7 @@ defmodule Omunculus.Tools.FindTest do
   end
 
   test "the builtin catalog discovers find with triggers == [\"model\"]" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"find" => manifest} = catalog
     assert manifest.triggers == ["model"]
@@ -73,7 +73,7 @@ defmodule Omunculus.Tools.FindTest do
   test "the manifest wiring yields the same result as calling the module directly", %{
     root: root
   } do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "find")
     input = %{@input | args: %{"pattern" => "*.txt"}, roots: [root]}
 

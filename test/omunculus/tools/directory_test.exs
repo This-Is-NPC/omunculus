@@ -56,7 +56,7 @@ defmodule Omunculus.Tools.DirectoryTest do
   end
 
   test "the builtin catalog discovers directory with triggers == [\"model\"]" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"directory" => manifest} = catalog
     assert manifest.triggers == ["model"]
@@ -66,7 +66,7 @@ defmodule Omunculus.Tools.DirectoryTest do
   test "the manifest wiring yields the same output as calling the module directly", %{
     root: root
   } do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "directory")
     input = %{@input | roots: [root]}
 

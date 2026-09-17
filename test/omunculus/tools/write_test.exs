@@ -88,7 +88,7 @@ defmodule Omunculus.Tools.WriteTest do
   end
 
   test "the builtin catalog discovers write with triggers == [\"model\"]" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"write" => manifest} = catalog
     assert manifest.triggers == ["model"]
@@ -98,7 +98,7 @@ defmodule Omunculus.Tools.WriteTest do
   test "the manifest wiring yields the same result as calling the module directly", %{
     root: root
   } do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "write")
     input = %{@input | args: %{"path" => "wired.txt", "content" => "hi"}, roots: [root]}
 

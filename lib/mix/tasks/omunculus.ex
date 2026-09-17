@@ -10,6 +10,7 @@ defmodule Mix.Tasks.Omunculus do
   @impl Mix.Task
   def run(argv) do
     Mix.Task.run("app.start")
+    Application.put_env(:omunculus, :package_tools, Application.app_dir(:omunculus, "priv/tools"))
     Omunculus.CLI.main(argv)
   end
 end

@@ -96,7 +96,7 @@ defmodule Omunculus.Tools.ToolSearchTest do
   end
 
   test "the builtin catalog discovers tool_search in the catalog group" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"tool_search" => manifest} = catalog
     assert manifest.triggers == ["model"]
@@ -105,7 +105,7 @@ defmodule Omunculus.Tools.ToolSearchTest do
   end
 
   test "the manifest wiring yields the same output as calling the module directly" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "tool_search")
     input = %{@input | view: %{"catalog" => @cards}}
 

@@ -7,6 +7,7 @@ defmodule Omunculus.Fixtures do
   alias Omunculus.Config
   alias Omunculus.Id
   alias Omunculus.Store.Query
+  alias Omunculus.Tools.Preset
 
   @now "2026-01-01T00:00:00Z"
   @execution """
@@ -65,8 +66,25 @@ defmodule Omunculus.Fixtures do
 
   @spec write_config(String.t(), String.t()) :: :ok
   def write_config(dir, toml) do
-    File.write!(config_path(dir), toml <> "\n" <> @execution)
+    body = toml <> "\n" <> @execution
+    body = if String.contains?(toml, "[tools]"), do: body, else: body <> "\n" <> tools_table(dir)
+    File.write!(config_path(dir), body)
   end
+
+  @spec tools_table(String.t()) :: String.t()
+  def tools_table(dir) do
+    """
+    [tools]
+    paths = #{Jason.encode!([package_tools(), Path.join(dir, "tools")])}
+    """
+  end
+
+  @spec package_tools() :: String.t()
+  def package_tools, do: Application.app_dir(:omunculus, Path.join("priv", "tools"))
+
+  @spec preset_dir(String.t()) :: String.t()
+  def preset_dir(name),
+    do: Path.join(Application.app_dir(:omunculus, Path.join("priv", "presets")), name)
 
   @spec config_path(String.t()) :: String.t()
   def config_path(dir), do: Path.join(dir, "omunculus.toml")
@@ -79,10 +97,11 @@ defmodule Omunculus.Fixtures do
 
   @spec install_default(String.t()) :: :ok
   def install_default(dir) do
-    File.cp!(
-      Application.app_dir(:omunculus, "priv/presets/default/omunculus.toml"),
-      config_path(dir)
-    )
+    %{"ok" => true} =
+      Preset.run(%{
+        args: %{"name" => "default", "from" => preset_dir("default")},
+        config_path: config_path(dir)
+      })
 
     :ok
   end

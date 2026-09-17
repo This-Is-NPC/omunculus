@@ -76,7 +76,7 @@ defmodule Omunculus.Tools.GrepTest do
   end
 
   test "the builtin catalog discovers grep with triggers == [\"model\"]" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"grep" => manifest} = catalog
     assert manifest.triggers == ["model"]
@@ -86,7 +86,7 @@ defmodule Omunculus.Tools.GrepTest do
   test "the manifest wiring yields the same result as calling the module directly", %{
     root: root
   } do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "grep")
     input = %{@input | args: %{"pattern" => "hello"}, roots: [root]}
 

@@ -126,7 +126,7 @@ defmodule Omunculus.Tools.CompactCommentsTest do
   end
 
   test "the builtin catalog discovers compact_comments as a composite tool over comments.work" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
 
     assert %{"compact_comments" => manifest} = catalog
     assert manifest.shape == "composite"
@@ -134,7 +134,7 @@ defmodule Omunculus.Tools.CompactCommentsTest do
   end
 
   test "the manifest wiring yields the same output as calling the module directly" do
-    catalog = Catalog.discover(Catalog.roots("/nonexistent"))
+    catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "compact_comments")
     input = %{@input | args: %{"op" => "load"}, view: %{"comments.work" => []}}
 

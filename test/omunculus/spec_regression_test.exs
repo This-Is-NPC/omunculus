@@ -29,7 +29,7 @@ defmodule Omunculus.SpecRegressionTest do
   setup do
     dir = Path.join(System.tmp_dir!(), "omunculus-spec-" <> Id.new())
     File.mkdir_p!(dir)
-    File.write!(Path.join(dir, "omunculus.toml"), @config)
+    File.write!(Path.join(dir, "omunculus.toml"), @config <> "\n" <> Fixtures.tools_table(dir))
     {:ok, project} = Project.open(dir)
 
     on_exit(fn ->
@@ -47,8 +47,14 @@ defmodule Omunculus.SpecRegressionTest do
         overrides
       )
 
-  defp write_config(project, text),
-    do: File.write!(Path.join(project.dir, "omunculus.toml"), text)
+  defp write_config(project, text) do
+    body =
+      if String.contains?(text, "[tools]"),
+        do: text,
+        else: text <> "\n" <> Fixtures.tools_table(project.dir)
+
+    File.write!(Path.join(project.dir, "omunculus.toml"), body)
+  end
 
   defp hook(project, name, event, emits \\ [], agent \\ nil) do
     dir = Path.join([project.dir, "tools", name])

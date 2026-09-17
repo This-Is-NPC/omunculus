@@ -172,8 +172,7 @@ defmodule Omunculus.Tool.InvokeTest do
 
   describe "the builtin send tool" do
     setup do
-      [builtin_root | _] = Catalog.roots(".")
-      catalog = Catalog.discover([builtin_root])
+      catalog = Catalog.unconfigured()
       %{manifest: Map.fetch!(catalog, "send")}
     end
 

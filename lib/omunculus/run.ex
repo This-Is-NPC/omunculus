@@ -54,7 +54,7 @@ defmodule Omunculus.Run do
            stage: stage,
            workspace: workspace.layer
          },
-         local_catalog = discover_catalog(project.dir),
+         local_catalog = Catalog.discover(config.tools),
          discovery_snapshot =
            Ceiling.mount(
              config,
@@ -64,7 +64,7 @@ defmodule Omunculus.Run do
          mcp_roots = Mcp.implementation_roots(config.mcp),
          {:ok, discovery} <-
            Policy.discovery(config, discovery_snapshot, workspace, project.dir, mcp_roots),
-         catalog = discover_catalog(project.dir, config.mcp, discovery),
+         catalog = Catalog.discover(config.tools, config.mcp, discovery),
          model_catalog = Catalog.with_trigger(catalog, "model"),
          snapshot =
            Ceiling.mount(
@@ -244,9 +244,6 @@ defmodule Omunculus.Run do
     header = "#{request.id}: #{ask["kind"]} #{ask["name"]} #{Out.requested_by(request.agent)}"
     ["## Request\n" <> Enum.join([header | Enum.map(comments, & &1.body)], "\n")]
   end
-
-  defp discover_catalog(dir, servers \\ [], policy \\ nil),
-    do: dir |> Catalog.roots() |> Catalog.discover(servers, policy)
 
   defp effective_names(snapshot, catalog) do
     snapshot.have |> Enum.filter(&Map.has_key?(catalog, &1)) |> Enum.sort()

@@ -138,12 +138,16 @@ defmodule Omunculus.CLITest do
     path = Path.expand("omunculus.toml", dir)
     File.rm!(path)
 
-    assert {:ok, applied} = CLI.run(["preset", "default"], dir, fake())
+    assert {:ok, applied} =
+             CLI.run(
+               ["preset", "default", "--from", Fixtures.preset_dir("default")],
+               dir,
+               fake()
+             )
+
     assert applied == Out.preset_applied("default")
-
-    assert File.read!(path) ==
-             File.read!(Application.app_dir(:omunculus, "priv/presets/default/omunculus.toml"))
-
+    {:ok, config} = Omunculus.Config.load(path)
+    assert Fixtures.package_tools() in config.tools.paths
     refute File.dir?(Path.join(dir, ".omunculus"))
   end
 
@@ -185,6 +189,25 @@ defmodule Omunculus.CLITest do
 
   test "a missing --config value is an error", %{dir: dir} do
     assert {:error, {:missing_value, "config"}} = CLI.run(["--config"], dir, fake())
+  end
+
+  test "a config without [tools] opens a run with no tool cards", %{dir: dir} do
+    write_config(dir, """
+    [tools]
+
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["comment", "reply"]
+    """)
+
+    model = fn assembled, tools, _call ->
+      refute assembled =~ "- comment:"
+      assert tools == []
+      {:ok, "ok"}
+    end
+
+    assert {:ok, ""} = CLI.run(["send", "x"], dir, model)
   end
 
   test "a missing [execution] table lists the required keys" do

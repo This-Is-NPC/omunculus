@@ -47,8 +47,13 @@ defmodule Omunculus.Tool.Manifest do
   @spec load(String.t()) :: {:ok, t} | {:error, term}
   def load(path) do
     with {:ok, raw} <- Toml.decode_file(path) do
-      build(raw, Path.dirname(path))
+      parse(raw, Path.dirname(path))
     end
+  end
+
+  @spec parse(map, String.t()) :: {:ok, t} | {:error, term}
+  def parse(raw, dir) when is_map(raw) and is_binary(dir) do
+    build(raw, dir)
   end
 
   @spec card(t) :: String.t()

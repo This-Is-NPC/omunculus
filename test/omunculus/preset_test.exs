@@ -41,7 +41,13 @@ defmodule Omunculus.PresetTest do
   describe "codex-like" do
     test "a codex run with network access executes bash through its policy",
          %{dir: dir} do
-      assert {:ok, applied} = CLI.run(["preset", "codex-like"], dir, fake())
+      assert {:ok, applied} =
+               CLI.run(
+                 ["preset", "codex-like", "--from", Fixtures.preset_dir("codex-like")],
+                 dir,
+                 fake()
+               )
+
       assert applied == Out.preset_applied("codex-like")
 
       assert :ok = Fixtures.grant(dir, {:agent, "codex"}, "sandbox.network")
@@ -69,7 +75,13 @@ defmodule Omunculus.PresetTest do
 
   describe "pi-like" do
     test "applying the preset switches the run to the pi agent, with no bash", %{dir: dir} do
-      assert {:ok, applied} = CLI.run(["preset", "pi-like"], dir, fake())
+      assert {:ok, applied} =
+               CLI.run(
+                 ["preset", "pi-like", "--from", Fixtures.preset_dir("pi-like")],
+                 dir,
+                 fake()
+               )
+
       assert applied == Out.preset_applied("pi-like")
 
       model = fn assembled, _tools, _call ->
