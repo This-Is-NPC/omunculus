@@ -53,13 +53,37 @@ defmodule Omunculus.Fixtures do
   def config(toml \\ nil) do
     dir = Path.join(System.tmp_dir!(), Id.new())
     File.mkdir_p!(dir)
-    if toml, do: write_config(dir, toml)
-    {:ok, config} = Config.load(dir)
+
+    case toml do
+      nil -> install_default(dir)
+      contents -> write_config(dir, contents)
+    end
+
+    {:ok, config} = load_config(dir)
     config
   end
 
   @spec write_config(String.t(), String.t()) :: :ok
   def write_config(dir, toml) do
-    File.write!(Path.join(dir, "omunculus.toml"), toml <> "\n" <> @execution)
+    File.write!(config_path(dir), toml <> "\n" <> @execution)
+  end
+
+  @spec config_path(String.t()) :: String.t()
+  def config_path(dir), do: Path.join(dir, "omunculus.toml")
+
+  @spec load_config(String.t()) :: {:ok, Config.t()} | {:error, term}
+  def load_config(dir), do: Config.load(config_path(dir))
+
+  @spec grant(String.t(), Config.grant_layer(), String.t()) :: :ok | {:error, term}
+  def grant(dir, layer, name), do: Config.grant(config_path(dir), layer, name)
+
+  @spec install_default(String.t()) :: :ok
+  def install_default(dir) do
+    File.cp!(
+      Application.app_dir(:omunculus, "priv/presets/default/omunculus.toml"),
+      config_path(dir)
+    )
+
+    :ok
   end
 end

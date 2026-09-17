@@ -1,7 +1,7 @@
 defmodule Omunculus.McpTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Config, ExecutionPolicyFixtures, Fixtures, Id, Mcp, Project}
+  alias Omunculus.{CLI, ExecutionPolicyFixtures, Fixtures, Id, Mcp, Project}
   alias Omunculus.Tool.Catalog
 
   @server %{name: "fake", command: [Path.expand("test/support/mcp_server")]}
@@ -129,7 +129,7 @@ defmodule Omunculus.McpTest do
     test "no tool named mcp exists in the catalog even with a server configured", %{dir: dir} do
       write_config(dir, mcp_config(@server.command |> hd()))
 
-      {:ok, config} = Config.load(dir)
+      {:ok, config} = Fixtures.load_config(dir)
       catalog = Catalog.discover(Catalog.roots(dir), config.mcp, policy())
 
       refute Map.has_key?(catalog, "mcp")

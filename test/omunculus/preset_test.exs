@@ -1,7 +1,7 @@
 defmodule Omunculus.PresetTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Config, Fixtures, Id, Project}
+  alias Omunculus.{CLI, Fixtures, Id, Project}
   alias Omunculus.Model.Fake
   alias Omunculus.Store.Query
   alias Omunculus.Tools.Out
@@ -44,7 +44,7 @@ defmodule Omunculus.PresetTest do
       assert {:ok, applied} = CLI.run(["preset", "codex-like"], dir, fake())
       assert applied == Out.preset_applied("codex-like")
 
-      assert :ok = Config.grant(dir, {:agent, "codex"}, "sandbox.network")
+      assert :ok = Fixtures.grant(dir, {:agent, "codex"}, "sandbox.network")
 
       model = fn assembled, _tools, call ->
         assert assembled =~ "You are a Codex-style coding agent"
@@ -90,6 +90,8 @@ defmodule Omunculus.PresetTest do
 
   describe "default package" do
     test "no run ever has bash, and calling it is refused", %{dir: dir} do
+      Fixtures.install_default(dir)
+
       model = fn _assembled, _tools, call ->
         assert {:error, {:not_allowed, "bash"}} = call.("bash", %{"command" => "echo hi"})
         {:ok, "ok"}

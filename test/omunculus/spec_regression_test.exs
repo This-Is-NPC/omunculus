@@ -73,7 +73,7 @@ defmodule Omunculus.SpecRegressionTest do
 
   test "unknown emit fields roll back the entire batch and its tool event", %{project: p} do
     work = Fixtures.insert(p.conn, :works)
-    {:ok, config} = Config.load(p.dir)
+    {:ok, config} = Config.load(p.config_path)
     ctx = %{run_id: nil, work_id: work, author: "human", agent: nil, config: config, groups: %{}}
 
     emits = [
@@ -209,8 +209,8 @@ defmodule Omunculus.SpecRegressionTest do
 
   test "permanent grant clears human and negotiable in the chosen layer", %{project: p} do
     write_config(p, @config <> "negotiable = [\"write\"]\n")
-    assert :ok = Config.grant(p.dir, {:agent, "worker"}, "write")
-    {:ok, config} = Config.load(p.dir)
+    assert :ok = Config.grant(p.config_path, {:agent, "worker"}, "write")
+    {:ok, config} = Config.load(p.config_path)
 
     snapshot =
       Ceiling.mount(

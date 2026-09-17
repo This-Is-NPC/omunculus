@@ -37,6 +37,7 @@ defmodule Omunculus.Tool.ManifestTest do
     assert manifest.views == []
     assert manifest.events == []
     assert manifest.dir == dir
+    assert manifest.config == true
   end
 
   test "reads declared fields", %{dir: dir} do
@@ -310,5 +311,55 @@ defmodule Omunculus.Tool.ManifestTest do
 
     assert {:ok, manifest} = Manifest.load(path)
     assert manifest.agent == nil
+  end
+
+  test "config defaults to true", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "read"
+      kind = "tool"
+      command = ["./run"]
+      """)
+
+    assert {:ok, %{config: true}} = Manifest.load(path)
+  end
+
+  test "config = false is valid only on the preset cli tool", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "preset"
+      kind = "tool"
+      triggers = ["cli"]
+      config = false
+      module = "Omunculus.Tools.Preset"
+      """)
+
+    assert {:ok, %{config: false, triggers: ["cli"]}} = Manifest.load(path)
+  end
+
+  test "config = false with a model trigger is rejected", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "preset"
+      kind = "tool"
+      triggers = ["model"]
+      config = false
+      module = "Omunculus.Tools.Preset"
+      """)
+
+    assert Manifest.load(path) == {:error, {:invalid, :config}}
+  end
+
+  test "config = false on a tool other than preset is rejected", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "send"
+      kind = "tool"
+      triggers = ["cli"]
+      config = false
+      module = "Omunculus.Tools.Send"
+      """)
+
+    assert Manifest.load(path) == {:error, {:invalid, :config}}
   end
 end

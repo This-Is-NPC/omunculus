@@ -2,6 +2,7 @@ name = "preset"
 kind = "tool"
 shape = "simple"
 triggers = ["cli"]
+config = false
 description = "Applies a preset: TOML and tool folders into the project."
 tags = ["cli", "preset"]
 groups = ["cli"]

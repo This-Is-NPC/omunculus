@@ -293,7 +293,7 @@ defmodule Omunculus.WorkspaceTest do
                reply_model
              )
 
-    assert {:ok, %Config{workspaces: workspaces}} = Config.load(dir)
+    assert {:ok, %Config{workspaces: workspaces}} = Fixtures.load_config(dir)
     assert "delete" in workspaces["two"].ceiling.granted
   end
 
@@ -379,7 +379,7 @@ defmodule Omunculus.WorkspaceTest do
                reply_model
              )
 
-    assert {:ok, %Config{workflows: %{"delivery" => [to_do]}}} = Config.load(dir)
+    assert {:ok, %Config{workflows: %{"delivery" => [to_do]}}} = Fixtures.load_config(dir)
     assert "delete" in to_do.ceiling.granted
   end
 end

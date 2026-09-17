@@ -1,7 +1,7 @@
 defmodule Omunculus.Execution.PolicyTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{Ceiling, Config, Id, Project}
+  alias Omunculus.{Ceiling, Fixtures, Id, Project}
   alias Omunculus.Config.Layer
   alias Omunculus.Execution.Policy
 
@@ -9,6 +9,7 @@ defmodule Omunculus.Execution.PolicyTest do
     dir = Path.join(System.tmp_dir!(), Id.new())
     File.mkdir_p!(dir)
     on_exit(fn -> File.rm_rf!(dir) end)
+    Fixtures.install_default(dir)
     %{dir: dir}
   end
 
@@ -45,7 +46,7 @@ defmodule Omunculus.Execution.PolicyTest do
   end
 
   test "builds a read-only, network-free policy for an ungranted run", %{dir: dir} do
-    {:ok, config} = Config.load(dir)
+    {:ok, config} = Fixtures.load_config(dir)
 
     assert {:ok, policy} = policy(config, "concierge", dir)
 
@@ -65,7 +66,7 @@ defmodule Omunculus.Execution.PolicyTest do
   test "grants sandbox resources independently for workspace writes and network access", %{
     dir: dir
   } do
-    {:ok, config} = Config.load(dir)
+    {:ok, config} = Fixtures.load_config(dir)
 
     assert {:ok, policy} =
              policy(config, "worker", dir, ["sandbox.write", "sandbox.network"], [
@@ -80,7 +81,7 @@ defmodule Omunculus.Execution.PolicyTest do
   test "keeps denied paths hidden below a writable workspace", %{dir: dir} do
     private = Path.join(dir, "private")
     File.mkdir_p!(private)
-    {:ok, config} = Config.load(dir)
+    {:ok, config} = Fixtures.load_config(dir)
     worker = config.agents["worker"]
     ceiling = %Layer{worker.ceiling | deny: ["./private"]}
     config = %{config | agents: Map.put(config.agents, "worker", %{worker | ceiling: ceiling})}
@@ -94,7 +95,7 @@ defmodule Omunculus.Execution.PolicyTest do
   test "keeps implementation directories read-only below a writable workspace", %{dir: dir} do
     tool_dir = Path.join([dir, "tools", "fixture"])
     File.mkdir_p!(tool_dir)
-    {:ok, config} = Config.load(dir)
+    {:ok, config} = Fixtures.load_config(dir)
     names = ["sandbox.write", "sandbox.network"]
 
     assert {:ok, policy} =
@@ -115,7 +116,7 @@ defmodule Omunculus.Execution.PolicyTest do
   test "builds MCP discovery policy without mounting the workspace", %{dir: dir} do
     implementation_root = Path.join(dir, "mcp")
     File.mkdir_p!(implementation_root)
-    {:ok, config} = Config.load(dir)
+    {:ok, config} = Fixtures.load_config(dir)
     names = ["sandbox.network"]
     snapshot = snapshot(config, "worker", names, ["sandbox.network"])
 
@@ -137,7 +138,7 @@ defmodule Omunculus.Execution.PolicyTest do
   test "narrows the JavaScript coordinator to its implementation directory", %{dir: dir} do
     coordinator_root = Path.join(dir, "coordinator")
     File.mkdir_p!(coordinator_root)
-    {:ok, config} = Config.load(dir)
+    {:ok, config} = Fixtures.load_config(dir)
     {:ok, execution} = policy(config, "worker", dir)
 
     assert {:ok, coordinator} = Policy.coordinator(execution, coordinator_root)
@@ -152,7 +153,7 @@ defmodule Omunculus.Execution.PolicyTest do
     File.write!(external, "external")
     on_exit(fn -> File.rm(external) end)
 
-    {:ok, config} = Config.load(dir)
+    {:ok, config} = Fixtures.load_config(dir)
     worker = config.agents["worker"]
     ceiling = %Layer{worker.ceiling | granted: worker.ceiling.granted ++ [external]}
     config = %{config | agents: Map.put(config.agents, "worker", %{worker | ceiling: ceiling})}
@@ -165,7 +166,7 @@ defmodule Omunculus.Execution.PolicyTest do
   end
 
   test "rejects a runtime root that exposes the user home", %{dir: dir} do
-    {:ok, config} = Config.load(dir)
+    {:ok, config} = Fixtures.load_config(dir)
     config = %{config | execution: %{config.execution | runtimes: ["/"]}}
 
     assert {:error, {:runtime, "/", :overlaps_protected_path}} = policy(config, "concierge", dir)
@@ -174,7 +175,7 @@ defmodule Omunculus.Execution.PolicyTest do
   test "rejects an unnamed project workspace that contains a named workspace", %{dir: dir} do
     nested = Path.join(dir, "nested")
     File.mkdir_p!(nested)
-    {:ok, config} = Config.load(dir)
+    {:ok, config} = Fixtures.load_config(dir)
     config = %{config | workspaces: %{"nested" => %{root: nested, ceiling: %Layer{}}}}
 
     assert {:error, {:workspace, {:contains_workspace, "nested"}}} =

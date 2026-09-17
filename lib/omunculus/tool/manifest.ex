@@ -20,7 +20,8 @@ defmodule Omunculus.Tool.Manifest do
             events: [],
             agent: nil,
             dir: nil,
-            mcp: nil
+            mcp: nil,
+            config: true
 
   @type t :: %__MODULE__{
           name: String.t(),
@@ -37,10 +38,11 @@ defmodule Omunculus.Tool.Manifest do
           events: [String.t()],
           agent: String.t() | nil,
           dir: String.t() | nil,
-          mcp: Omunculus.Config.mcp_server() | nil
+          mcp: Omunculus.Config.mcp_server() | nil,
+          config: boolean
         }
 
-  @known_keys ~w(name kind shape triggers description tags groups command module parameters views events agent)
+  @known_keys ~w(name kind shape triggers description tags groups command module parameters views events agent config)
 
   @spec load(String.t()) :: {:ok, t} | {:error, term}
   def load(path) do
@@ -80,7 +82,9 @@ defmodule Omunculus.Tool.Manifest do
          {:ok, groups} <- optional_string_list(raw, "groups", []),
          {:ok, parameters} <- optional_map(raw, "parameters", %{}),
          {:ok, views} <- optional_string_list(raw, "views", []),
-         {:ok, {triggers, events, agent}} <- kind_fields(raw, kind) do
+         {:ok, {triggers, events, agent}} <- kind_fields(raw, kind),
+         {:ok, config} <- optional_bool(raw, "config", true),
+         :ok <- check_config_flag(name, kind, triggers, config) do
       {:ok,
        %__MODULE__{
          name: name,
@@ -96,10 +100,15 @@ defmodule Omunculus.Tool.Manifest do
          views: views,
          events: events,
          agent: agent,
-         dir: dir
+         dir: dir,
+         config: config
        }}
     end
   end
+
+  defp check_config_flag(_name, _kind, _triggers, true), do: :ok
+  defp check_config_flag("preset", "tool", ["cli"], false), do: :ok
+  defp check_config_flag(_name, _kind, _triggers, false), do: {:error, {:invalid, :config}}
 
   defp kind_fields(raw, "tool") do
     with :ok <- forbidden(raw, "events"),
@@ -202,6 +211,14 @@ defmodule Omunculus.Tool.Manifest do
     case Map.fetch(raw, key) do
       :error -> {:ok, default}
       {:ok, value} when is_map(value) -> {:ok, value}
+      _ -> {:error, {:invalid, String.to_atom(key)}}
+    end
+  end
+
+  defp optional_bool(raw, key, default) do
+    case Map.fetch(raw, key) do
+      :error -> {:ok, default}
+      {:ok, value} when is_boolean(value) -> {:ok, value}
       _ -> {:error, {:invalid, String.to_atom(key)}}
     end
   end

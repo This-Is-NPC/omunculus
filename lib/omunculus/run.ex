@@ -37,7 +37,7 @@ defmodule Omunculus.Run do
         } = opening,
         model
       ) do
-    with {:ok, config} <- Config.load(project.dir),
+    with {:ok, config} <- Config.load(project.config_path),
          {:ok, work} <- fetch_work(project.conn, work_id),
          {:ok, {name, text, depth, stage}} <- resolve_agent(config, project.conn, work, agent),
          {:ok, message} <- fetch_prompt(project.conn, message_prompt_id),

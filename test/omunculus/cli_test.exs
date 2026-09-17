@@ -1,7 +1,7 @@
 defmodule Omunculus.CLITest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Config, Fixtures, Id, Project, Store}
+  alias Omunculus.{CLI, Fixtures, Id, Project, Store}
   alias Omunculus.Model.Fake
   alias Omunculus.Store.Query
   alias Omunculus.Tools.Out
@@ -10,6 +10,7 @@ defmodule Omunculus.CLITest do
     dir = Path.join(System.tmp_dir!(), Id.new())
     File.mkdir_p!(dir)
     on_exit(fn -> File.rm_rf!(dir) end)
+    Fixtures.install_default(dir)
     %{dir: dir}
   end
 
@@ -120,6 +121,88 @@ defmodule Omunculus.CLITest do
 
   test "an unknown tool errors", %{dir: dir} do
     assert {:error, {:unknown_tool, "nope"}} = CLI.run(["nope"], dir, fake())
+  end
+
+  test "send without a config file does not open a run", %{dir: dir} do
+    path = Path.expand("omunculus.toml", dir)
+    File.rm!(path)
+
+    assert CLI.run(["send", "x"], dir, fake()) == {:error, {:config, :missing, path}}
+    refute File.dir?(Path.join(dir, ".omunculus"))
+
+    assert CLI.format_error({:config, :missing, path}) =~
+             "run `omunculus preset <name> --from <dir>`"
+  end
+
+  test "preset default writes the config file without opening the store", %{dir: dir} do
+    path = Path.expand("omunculus.toml", dir)
+    File.rm!(path)
+
+    assert {:ok, applied} = CLI.run(["preset", "default"], dir, fake())
+    assert applied == Out.preset_applied("default")
+
+    assert File.read!(path) ==
+             File.read!(Application.app_dir(:omunculus, "priv/presets/default/omunculus.toml"))
+
+    refute File.dir?(Path.join(dir, ".omunculus"))
+  end
+
+  test "--config uses that file; the project root is the file's directory", %{dir: dir} do
+    File.rm!(Path.join(dir, "omunculus.toml"))
+    other = Path.join(System.tmp_dir!(), Id.new())
+    File.mkdir_p!(other)
+    on_exit(fn -> File.rm_rf!(other) end)
+    Fixtures.install_default(other)
+    config = Path.join(other, "omunculus.toml")
+
+    assert {:ok, ""} = CLI.run(["--config", config, "send", "x"], dir, fake())
+    assert File.dir?(Path.join(other, ".omunculus"))
+    refute File.dir?(Path.join(dir, ".omunculus"))
+  end
+
+  test "--config with [project] root opens the store under that root", %{dir: dir} do
+    File.rm!(Path.join(dir, "omunculus.toml"))
+    repo = Path.join(dir, "repo")
+    File.mkdir_p!(repo)
+    config_dir = Path.join(dir, "cfg")
+    File.mkdir_p!(config_dir)
+
+    Fixtures.write_config(config_dir, """
+    [project]
+    root = "#{repo}"
+
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["reply"]
+    """)
+
+    path = Path.join(config_dir, "omunculus.toml")
+    assert {:ok, ""} = CLI.run(["--config", path, "send", "x"], dir, fake())
+    assert File.dir?(Path.join(repo, ".omunculus"))
+    refute File.dir?(Path.join(config_dir, ".omunculus"))
+  end
+
+  test "a missing --config value is an error", %{dir: dir} do
+    assert {:error, {:missing_value, "config"}} = CLI.run(["--config"], dir, fake())
+  end
+
+  test "a missing [execution] table lists the required keys" do
+    keys = [
+      "backend",
+      "runtimes",
+      "environment",
+      "timeout_ms",
+      "max_output_bytes",
+      "max_concurrent",
+      "max_queue",
+      "queue_timeout_ms"
+    ]
+
+    message = CLI.format_error({:execution, :missing, keys})
+    assert message =~ "backend"
+    assert message =~ "queue_timeout_ms"
+    refute message =~ ":missing"
   end
 
   test "send with no args fails and reports the tool's own output", %{dir: dir} do
@@ -363,7 +446,7 @@ defmodule Omunculus.CLITest do
       assert work.grants == nil
       Project.close(project)
 
-      assert {:ok, config} = Config.load(dir)
+      assert {:ok, config} = Fixtures.load_config(dir)
       assert "write" in config.agents["concierge"].ceiling.granted
 
       project = open(dir)

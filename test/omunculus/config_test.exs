@@ -16,56 +16,36 @@ defmodule Omunculus.ConfigTest do
     Fixtures.write_config(dir, contents)
   end
 
-  test "no project file yields the builtin concierge at depth 0", %{dir: dir} do
-    assert {:ok, %Config{agents: agents, policy: policy, execution: execution}} = Config.load(dir)
+  defp toml(dir), do: Path.join(dir, "omunculus.toml")
+  defp load(dir), do: Config.load(toml(dir))
+  defp grant(dir, layer, name), do: Config.grant(toml(dir), layer, name)
 
-    assert %{"concierge" => %{depth: 0, text: text, ceiling: ceiling}} = agents
-    assert text != ""
+  defp default_preset,
+    do: Application.app_dir(:omunculus, "priv/presets/default/omunculus.toml")
 
-    assert ceiling.granted == [
-             "break",
-             "catalog",
-             "continue",
-             "delegate",
-             "fs.read",
-             "reply",
-             "store"
-           ]
-
-    assert policy.mode == "auto"
-
-    assert execution == %{
-             backend: "bubblewrap",
-             runtimes: ["/usr"],
-             environment: ["LANG", "LC_ALL", "TERM"],
-             timeout_ms: 30_000,
-             max_output_bytes: 1_048_576,
-             max_concurrent: 4,
-             max_queue: 64,
-             queue_timeout_ms: 30_000
-           }
+  test "no project file is an error", %{dir: dir} do
+    path = toml(dir)
+    assert Config.load(path) == {:error, {:config, :missing, path}}
   end
 
-  test "the default file has worker at depth 1 and a delivery workflow with two steps", %{
-    dir: dir
-  } do
-    assert {:ok, %Config{agents: agents, workflows: workflows} = config} = Config.load(dir)
+  test "the default preset has worker at depth 1 and a delivery workflow with two steps" do
+    assert {:ok, %Config{agents: agents, workflows: workflows} = config} =
+             Config.load(default_preset())
 
     assert %{"worker" => %{depth: 1}} = agents
     assert %{"delivery" => [%{name: "to_do"}, %{name: "review"}]} = workflows
     assert Config.workflow_for(config, 0) == :off
   end
 
-  test "the default file's reviewer is workflow_only with the §9.1 ceiling", %{dir: dir} do
-    assert {:ok, %Config{agents: agents}} = Config.load(dir)
+  test "the default preset's reviewer is workflow_only with the §9.1 ceiling" do
+    assert {:ok, %Config{agents: agents}} = Config.load(default_preset())
 
     assert %{"reviewer" => %{depth: 1, workflow_only: true, ceiling: ceiling}} = agents
     assert ceiling.granted == ["break", "comment", "continue", "fs.read", "notify"]
   end
 
-  test "the default delivery workflow's review step denies filesystem writes",
-       %{dir: dir} do
-    assert {:ok, %Config{workflows: workflows}} = Config.load(dir)
+  test "the default delivery workflow's review step denies filesystem writes" do
+    assert {:ok, %Config{workflows: workflows}} = Config.load(default_preset())
 
     assert %{"delivery" => [_to_do, review]} = workflows
     assert review.name == "review"
@@ -80,7 +60,18 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:execution, :missing}} = Config.load(dir)
+    assert {:error, {:execution, :missing, keys}} = load(dir)
+
+    assert keys == [
+             "backend",
+             "runtimes",
+             "environment",
+             "timeout_ms",
+             "max_output_bytes",
+             "max_concurrent",
+             "max_queue",
+             "queue_timeout_ms"
+           ]
   end
 
   test "execution configuration rejects unsupported and malformed values", %{dir: dir} do
@@ -93,7 +84,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:execution, {:invalid, :backend}}} = Config.load(dir)
+    assert {:error, {:execution, {:invalid, :backend}}} = load(dir)
 
     File.write!(Path.join(dir, "omunculus.toml"), """
     [execution]
@@ -111,12 +102,11 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:execution, {:invalid, :runtimes}}} = Config.load(dir)
+    assert {:error, {:execution, {:invalid, :runtimes}}} = load(dir)
   end
 
-  test "agent_at_depth prefers a non-workflow_only agent at the same depth on the default file",
-       %{dir: dir} do
-    {:ok, config} = Config.load(dir)
+  test "agent_at_depth prefers a non-workflow_only agent at the same depth on the default file" do
+    {:ok, config} = Config.load(default_preset())
     assert {:ok, {"worker", %{depth: 1}}} = Config.agent_at_depth(config, 1)
   end
 
@@ -127,7 +117,7 @@ defmodule Omunculus.ConfigTest do
     text = "watch"
     """)
 
-    assert {:ok, %Config{agents: agents}} = Config.load(dir)
+    assert {:ok, %Config{agents: agents}} = load(dir)
     assert Map.has_key?(agents, "watcher")
     refute Map.has_key?(agents, "concierge")
   end
@@ -140,7 +130,7 @@ defmodule Omunculus.ConfigTest do
     granted = ["read", "ls"]
     """)
 
-    assert {:ok, %Config{agents: %{"concierge" => agent}}} = Config.load(dir)
+    assert {:ok, %Config{agents: %{"concierge" => agent}}} = load(dir)
     assert agent.ceiling.granted == ["read", "ls"]
   end
 
@@ -152,7 +142,7 @@ defmodule Omunculus.ConfigTest do
     tools = ["read", "ls"]
     """)
 
-    assert {:ok, %Config{agents: %{"concierge" => agent}}} = Config.load(dir)
+    assert {:ok, %Config{agents: %{"concierge" => agent}}} = load(dir)
     assert agent.ceiling.granted == ["read", "ls"]
   end
 
@@ -165,7 +155,7 @@ defmodule Omunculus.ConfigTest do
     granted = ["ls"]
     """)
 
-    assert {:error, {:agent, "concierge", {:invalid, :granted}}} = Config.load(dir)
+    assert {:error, {:agent, "concierge", {:invalid, :granted}}} = load(dir)
   end
 
   test "unknown top-level key", %{dir: dir} do
@@ -177,19 +167,19 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:unknown_key, "workflow"}} = Config.load(dir)
+    assert {:error, {:unknown_key, "workflow"}} = load(dir)
   end
 
   test "no agents at all", %{dir: dir} do
     write_toml(dir, "")
 
-    assert {:error, :no_agents} = Config.load(dir)
+    assert {:error, :no_agents} = load(dir)
   end
 
   test "empty agents table is also no_agents", %{dir: dir} do
     write_toml(dir, "[agents]\n")
 
-    assert {:error, :no_agents} = Config.load(dir)
+    assert {:error, :no_agents} = load(dir)
   end
 
   test "unknown key inside an agent", %{dir: dir} do
@@ -200,7 +190,7 @@ defmodule Omunculus.ConfigTest do
     fs = ["fs.read"]
     """)
 
-    assert {:error, {:agent, "concierge", {:unknown_key, "fs"}}} = Config.load(dir)
+    assert {:error, {:agent, "concierge", {:unknown_key, "fs"}}} = load(dir)
   end
 
   test "missing depth is invalid", %{dir: dir} do
@@ -209,7 +199,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:agent, "concierge", {:invalid, :depth}}} = Config.load(dir)
+    assert {:error, {:agent, "concierge", {:invalid, :depth}}} = load(dir)
   end
 
   test "negative depth is invalid", %{dir: dir} do
@@ -219,7 +209,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:agent, "concierge", {:invalid, :depth}}} = Config.load(dir)
+    assert {:error, {:agent, "concierge", {:invalid, :depth}}} = load(dir)
   end
 
   test "missing text is invalid", %{dir: dir} do
@@ -228,7 +218,7 @@ defmodule Omunculus.ConfigTest do
     depth = 0
     """)
 
-    assert {:error, {:agent, "concierge", {:invalid, :text}}} = Config.load(dir)
+    assert {:error, {:agent, "concierge", {:invalid, :text}}} = load(dir)
   end
 
   test "empty text is valid", %{dir: dir} do
@@ -238,7 +228,7 @@ defmodule Omunculus.ConfigTest do
     text = ""
     """)
 
-    assert {:ok, %Config{agents: %{"concierge" => %{text: ""}}}} = Config.load(dir)
+    assert {:ok, %Config{agents: %{"concierge" => %{text: ""}}}} = load(dir)
   end
 
   test "workflow_only defaults to false", %{dir: dir} do
@@ -248,7 +238,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:ok, %Config{agents: %{"concierge" => agent}}} = Config.load(dir)
+    assert {:ok, %Config{agents: %{"concierge" => agent}}} = load(dir)
     assert agent.workflow_only == false
   end
 
@@ -260,7 +250,7 @@ defmodule Omunculus.ConfigTest do
     workflow_only = true
     """)
 
-    assert {:ok, %Config{agents: %{"reviewer" => agent}}} = Config.load(dir)
+    assert {:ok, %Config{agents: %{"reviewer" => agent}}} = load(dir)
     assert agent.workflow_only == true
   end
 
@@ -272,7 +262,7 @@ defmodule Omunculus.ConfigTest do
     workflow_only = "yes"
     """)
 
-    assert {:error, {:agent, "reviewer", {:invalid, :workflow_only}}} = Config.load(dir)
+    assert {:error, {:agent, "reviewer", {:invalid, :workflow_only}}} = load(dir)
   end
 
   test "agent_at_depth skips a workflow_only agent at that depth when it is the only one", %{
@@ -285,7 +275,7 @@ defmodule Omunculus.ConfigTest do
     workflow_only = true
     """)
 
-    {:ok, config} = Config.load(dir)
+    {:ok, config} = load(dir)
     assert {:error, {:no_agent_at_depth, 1}} = Config.agent_at_depth(config, 1)
   end
 
@@ -307,7 +297,7 @@ defmodule Omunculus.ConfigTest do
     ]
     """)
 
-    assert {:ok, %Config{workflows: workflows}} = Config.load(dir)
+    assert {:ok, %Config{workflows: workflows}} = load(dir)
     assert %{"delivery" => [_to_do, %{agent: "reviewer"}]} = workflows
   end
 
@@ -319,7 +309,7 @@ defmodule Omunculus.ConfigTest do
     granted = "read"
     """)
 
-    assert {:error, {:agent, "concierge", {:invalid, :granted}}} = Config.load(dir)
+    assert {:error, {:agent, "concierge", {:invalid, :granted}}} = load(dir)
   end
 
   test "granted list with a non-string entry is invalid", %{dir: dir} do
@@ -330,7 +320,7 @@ defmodule Omunculus.ConfigTest do
     granted = ["read", 1]
     """)
 
-    assert {:error, {:agent, "concierge", {:invalid, :granted}}} = Config.load(dir)
+    assert {:error, {:agent, "concierge", {:invalid, :granted}}} = load(dir)
   end
 
   test "agent ceiling reads mode, negotiable, human, and deny", %{dir: dir} do
@@ -345,7 +335,7 @@ defmodule Omunculus.ConfigTest do
     deny = ["format"]
     """)
 
-    assert {:ok, %Config{agents: %{"worker" => agent}}} = Config.load(dir)
+    assert {:ok, %Config{agents: %{"worker" => agent}}} = load(dir)
 
     assert agent.ceiling == %Layer{
              mode: "allowlist",
@@ -364,7 +354,7 @@ defmodule Omunculus.ConfigTest do
     mode = "deny"
     """)
 
-    assert {:ok, %Config{agents: %{"concierge" => agent}}} = Config.load(dir)
+    assert {:ok, %Config{agents: %{"concierge" => agent}}} = load(dir)
     assert agent.ceiling.mode == "allowlist"
   end
 
@@ -376,7 +366,7 @@ defmodule Omunculus.ConfigTest do
     mode = "allow"
     """)
 
-    assert {:ok, %Config{agents: %{"concierge" => agent}}} = Config.load(dir)
+    assert {:ok, %Config{agents: %{"concierge" => agent}}} = load(dir)
     assert agent.ceiling.mode == "blocklist"
   end
 
@@ -388,7 +378,7 @@ defmodule Omunculus.ConfigTest do
     mode = "sometimes"
     """)
 
-    assert {:error, {:agent, "concierge", {:invalid, :mode}}} = Config.load(dir)
+    assert {:error, {:agent, "concierge", {:invalid, :mode}}} = load(dir)
   end
 
   test "agent ceiling mode defaults to nil", %{dir: dir} do
@@ -398,7 +388,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:ok, %Config{agents: %{"concierge" => agent}}} = Config.load(dir)
+    assert {:ok, %Config{agents: %{"concierge" => agent}}} = load(dir)
     assert agent.ceiling.mode == nil
   end
 
@@ -409,7 +399,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:ok, %Config{policy: policy}} = Config.load(dir)
+    assert {:ok, %Config{policy: policy}} = load(dir)
     assert policy.mode == "auto"
   end
 
@@ -423,7 +413,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:ok, %Config{policy: policy}} = Config.load(dir)
+    assert {:ok, %Config{policy: policy}} = load(dir)
     assert policy.mode == "auto"
     assert policy.deny == ["delete"]
   end
@@ -438,7 +428,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:ok, %Config{policy: policy}} = Config.load(dir)
+    assert {:ok, %Config{policy: policy}} = load(dir)
     assert policy.mode == "blocklist"
   end
 
@@ -454,7 +444,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:ok, %Config{depths: depths}} = Config.load(dir)
+    assert {:ok, %Config{depths: depths}} = load(dir)
     assert %{1 => %Layer{mode: "allowlist", granted: ["counter"], negotiable: ["write"]}} = depths
   end
 
@@ -468,7 +458,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:policy, {:invalid, :depth}}} = Config.load(dir)
+    assert {:error, {:policy, {:invalid, :depth}}} = load(dir)
   end
 
   test "policy depth value that is not a table is invalid", %{dir: dir} do
@@ -481,7 +471,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:policy, {:invalid, :depth}}} = Config.load(dir)
+    assert {:error, {:policy, {:invalid, :depth}}} = load(dir)
   end
 
   test "invalid layer content inside a policy depth", %{dir: dir} do
@@ -494,7 +484,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:policy, {:depth, 2, {:invalid, :mode}}}} = Config.load(dir)
+    assert {:error, {:policy, {:depth, 2, {:invalid, :mode}}}} = load(dir)
   end
 
   test "unknown key under policy besides layer keys, depth, and workflow", %{dir: dir} do
@@ -507,7 +497,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:policy, {:unknown_key, "priority"}}} = Config.load(dir)
+    assert {:error, {:policy, {:unknown_key, "priority"}}} = load(dir)
   end
 
   test "invalid mode inside policy itself", %{dir: dir} do
@@ -520,7 +510,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:policy, {:invalid, :mode}}} = Config.load(dir)
+    assert {:error, {:policy, {:invalid, :mode}}} = load(dir)
   end
 
   test "workspaces are parsed into a root plus a ceiling layer", %{dir: dir} do
@@ -538,7 +528,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:ok, %Config{workspaces: workspaces, policy_workspace: "app"}} = Config.load(dir)
+    assert {:ok, %Config{workspaces: workspaces, policy_workspace: "app"}} = load(dir)
 
     assert %{"app" => %{root: root, ceiling: %Layer{deny: ["delete"], human: ["deploy"]}}} =
              workspaces
@@ -559,8 +549,58 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:ok, %Config{workspaces: %{"app" => %{root: root}}}} = Config.load(dir)
+    assert {:ok, %Config{workspaces: %{"app" => %{root: root}}}} = load(dir)
     assert root == Path.join(dir, "sub/dir")
+  end
+
+  test "project root defaults to the config file directory", %{dir: dir} do
+    write_toml(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    assert {:ok, %Config{root: root}} = load(dir)
+    assert root == Path.expand(dir)
+  end
+
+  test "[project] root is resolved against the config file directory", %{dir: dir} do
+    root = Path.join(dir, "repo")
+    File.mkdir_p!(root)
+
+    write_toml(dir, """
+    [project]
+    root = "repo"
+
+    [workspaces.app]
+    root = "app"
+
+    [policy]
+    workspace = "app"
+
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    assert {:ok, %Config{root: project_root, workspaces: %{"app" => %{root: workspace_root}}}} =
+             load(dir)
+
+    assert project_root == root
+    assert workspace_root == Path.join(root, "app")
+  end
+
+  test "an unknown [project] key is rejected", %{dir: dir} do
+    write_toml(dir, """
+    [project]
+    name = "nope"
+
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    assert {:error, {:project, {:unknown_key, "name"}}} = load(dir)
   end
 
   test "a workspace without a root is rejected", %{dir: dir} do
@@ -573,7 +613,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:workspace, "app", {:invalid, :root}}} = Config.load(dir)
+    assert {:error, {:workspace, "app", {:invalid, :root}}} = load(dir)
   end
 
   test "invalid workspace content", %{dir: dir} do
@@ -590,7 +630,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:workspace, "app", {:invalid, :mode}}} = Config.load(dir)
+    assert {:error, {:workspace, "app", {:invalid, :mode}}} = load(dir)
   end
 
   test "unknown key inside a workspace", %{dir: dir} do
@@ -607,7 +647,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:workspace, "app", {:unknown_key, "fs"}}} = Config.load(dir)
+    assert {:error, {:workspace, "app", {:unknown_key, "fs"}}} = load(dir)
   end
 
   test "policy workspace names an undefined workspace", %{dir: dir} do
@@ -623,7 +663,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:policy, {:unknown_workspace, "ghost"}}} = Config.load(dir)
+    assert {:error, {:policy, {:unknown_workspace, "ghost"}}} = load(dir)
   end
 
   test "a workspace defined with no policy default is rejected", %{dir: dir} do
@@ -636,26 +676,23 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:policy, :no_default_workspace}} = Config.load(dir)
+    assert {:error, {:policy, :no_default_workspace}} = load(dir)
   end
 
-  test "agent_at_depth found", %{dir: dir} do
-    {:ok, config} = Config.load(dir)
+  test "agent_at_depth found" do
+    {:ok, config} = Config.load(default_preset())
     assert {:ok, {"concierge", %{depth: 0}}} = Config.agent_at_depth(config, 0)
   end
 
-  test "agent_at_depth not found", %{dir: dir} do
-    {:ok, config} = Config.load(dir)
+  test "agent_at_depth not found" do
+    {:ok, config} = Config.load(default_preset())
     assert {:error, {:no_agent_at_depth, 7}} = Config.agent_at_depth(config, 7)
   end
 
-  test "grant on a project with no file creates one from the default", %{dir: dir} do
-    assert :ok = Config.grant(dir, {:agent, "concierge"}, "delete")
-
-    assert {:ok, %Config{agents: %{"concierge" => agent}}} = Config.load(dir)
-    assert "delete" in agent.ceiling.granted
-    assert agent.depth == 0
-    assert "store" in agent.ceiling.granted
+  test "a permanent grant without a config file does not create one", %{dir: dir} do
+    path = toml(dir)
+    assert grant(dir, {:agent, "concierge"}, "delete") == {:error, {:config, :missing, path}}
+    refute File.exists?(path)
   end
 
   test "grant appends to an existing tools alias list", %{dir: dir} do
@@ -666,10 +703,10 @@ defmodule Omunculus.ConfigTest do
     text = "work"
     """)
 
-    assert :ok = Config.grant(dir, {:agent, "worker"}, "write")
+    assert :ok = grant(dir, {:agent, "worker"}, "write")
 
     assert File.read!(Path.join(dir, "omunculus.toml")) =~ ~s(tools = ["counter", "write"])
-    assert {:ok, %Config{agents: %{"worker" => agent}}} = Config.load(dir)
+    assert {:ok, %Config{agents: %{"worker" => agent}}} = load(dir)
     assert agent.ceiling.granted == ["counter", "write"]
   end
 
@@ -680,9 +717,9 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert :ok = Config.grant(dir, {:depth, 1}, "counter")
+    assert :ok = grant(dir, {:depth, 1}, "counter")
 
-    assert {:ok, %Config{depths: depths}} = Config.load(dir)
+    assert {:ok, %Config{depths: depths}} = load(dir)
     assert depths[1].granted == ["counter"]
   end
 
@@ -694,9 +731,9 @@ defmodule Omunculus.ConfigTest do
     granted = ["counter"]
     """)
 
-    assert :ok = Config.grant(dir, {:agent, "concierge"}, "counter")
+    assert :ok = grant(dir, {:agent, "concierge"}, "counter")
 
-    assert {:ok, %Config{agents: %{"concierge" => agent}}} = Config.load(dir)
+    assert {:ok, %Config{agents: %{"concierge" => agent}}} = load(dir)
     assert agent.ceiling.granted == ["counter"]
   end
 
@@ -707,7 +744,7 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert {:error, {:agent, "ghost", :unknown}} = Config.grant(dir, {:agent, "ghost"}, "counter")
+    assert {:error, {:agent, "ghost", :unknown}} = grant(dir, {:agent, "ghost"}, "counter")
   end
 
   test "grant creates the workspace layer when absent", %{dir: dir} do
@@ -723,9 +760,9 @@ defmodule Omunculus.ConfigTest do
     text = "hi"
     """)
 
-    assert :ok = Config.grant(dir, {:workspace, "app"}, "write")
+    assert :ok = grant(dir, {:workspace, "app"}, "write")
 
-    assert {:ok, %Config{workspaces: workspaces}} = Config.load(dir)
+    assert {:ok, %Config{workspaces: workspaces}} = load(dir)
     assert workspaces["app"].ceiling.granted == ["write"]
     assert workspaces["app"].root == Path.join(dir, "app")
   end
@@ -747,9 +784,9 @@ defmodule Omunculus.ConfigTest do
     ]
     """)
 
-    assert :ok = Config.grant(dir, {:stage, "delivery", "to_do"}, "write")
+    assert :ok = grant(dir, {:stage, "delivery", "to_do"}, "write")
 
-    assert {:ok, %Config{workflows: %{"delivery" => [to_do, review]}}} = Config.load(dir)
+    assert {:ok, %Config{workflows: %{"delivery" => [to_do, review]}}} = load(dir)
     assert to_do.ceiling.granted == ["write"]
     assert review.ceiling.granted == []
   end
@@ -762,7 +799,7 @@ defmodule Omunculus.ConfigTest do
     """)
 
     assert {:error, {:workflow, "ghost", :unknown}} =
-             Config.grant(dir, {:stage, "ghost", "to_do"}, "counter")
+             grant(dir, {:stage, "ghost", "to_do"}, "counter")
   end
 
   test "grant to an unknown step is an error", %{dir: dir} do
@@ -776,7 +813,7 @@ defmodule Omunculus.ConfigTest do
     """)
 
     assert {:error, {:workflow, "delivery", {:unknown_step, "ghost"}}} =
-             Config.grant(dir, {:stage, "delivery", "ghost"}, "counter")
+             grant(dir, {:stage, "delivery", "ghost"}, "counter")
   end
 
   describe "workflows" do
@@ -805,7 +842,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:ok, %Config{workflows: workflows}} = Config.load(dir)
+      assert {:ok, %Config{workflows: workflows}} = load(dir)
 
       assert %{
                "delivery" => [
@@ -827,7 +864,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:error, {:workflow, "delivery", :no_steps}} = Config.load(dir)
+      assert {:error, {:workflow, "delivery", :no_steps}} = load(dir)
     end
 
     test "empty steps list is :no_steps", %{dir: dir} do
@@ -840,7 +877,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:error, {:workflow, "delivery", :no_steps}} = Config.load(dir)
+      assert {:error, {:workflow, "delivery", :no_steps}} = load(dir)
     end
 
     test "step missing a name is invalid", %{dir: dir} do
@@ -853,7 +890,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:error, {:workflow, "delivery", {:invalid, :name}}} = Config.load(dir)
+      assert {:error, {:workflow, "delivery", {:invalid, :name}}} = load(dir)
     end
 
     test "step missing an agent is invalid", %{dir: dir} do
@@ -866,7 +903,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:error, {:workflow, "delivery", {:invalid, :agent}}} = Config.load(dir)
+      assert {:error, {:workflow, "delivery", {:invalid, :agent}}} = load(dir)
     end
 
     test "step agent must be defined among agents", %{dir: dir} do
@@ -879,7 +916,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:error, {:workflow, "delivery", {:unknown_agent, "ghost"}}} = Config.load(dir)
+      assert {:error, {:workflow, "delivery", {:unknown_agent, "ghost"}}} = load(dir)
     end
 
     test "duplicate step names are rejected", %{dir: dir} do
@@ -895,7 +932,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:error, {:workflow, "delivery", {:duplicate_step, "to_do"}}} = Config.load(dir)
+      assert {:error, {:workflow, "delivery", {:duplicate_step, "to_do"}}} = load(dir)
     end
 
     test "invalid ceiling content inside a step is tagged with the workflow", %{dir: dir} do
@@ -908,7 +945,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:error, {:workflow, "delivery", {:invalid, :mode}}} = Config.load(dir)
+      assert {:error, {:workflow, "delivery", {:invalid, :mode}}} = load(dir)
     end
 
     test "unknown key inside a step", %{dir: dir} do
@@ -921,7 +958,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:error, {:workflow, "delivery", {:unknown_key, "stage"}}} = Config.load(dir)
+      assert {:error, {:workflow, "delivery", {:unknown_key, "stage"}}} = load(dir)
     end
 
     test "unknown key inside the workflow table", %{dir: dir} do
@@ -935,7 +972,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:error, {:workflow, "delivery", {:unknown_key, "note"}}} = Config.load(dir)
+      assert {:error, {:workflow, "delivery", {:unknown_key, "note"}}} = load(dir)
     end
 
     test "policy workflow must be a defined workflow", %{dir: dir} do
@@ -948,7 +985,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:error, {:policy, {:unknown_workflow, "ghost"}}} = Config.load(dir)
+      assert {:error, {:policy, {:unknown_workflow, "ghost"}}} = load(dir)
     end
 
     test "policy depth workflow must be a defined workflow", %{dir: dir} do
@@ -961,7 +998,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:error, {:policy, {:depth, 1, {:unknown_workflow, "ghost"}}}} = Config.load(dir)
+      assert {:error, {:policy, {:depth, 1, {:unknown_workflow, "ghost"}}}} = load(dir)
     end
 
     test "policy workflow names the default workflow", %{dir: dir} do
@@ -980,7 +1017,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:ok, config} = Config.load(dir)
+      assert {:ok, config} = load(dir)
       assert {:ok, [%{name: "to_do"}, %{name: "review"}]} = Config.workflow_for(config, 0)
       assert {:ok, [%{name: "to_do"}, %{name: "review"}]} = Config.workflow_for(config, 1)
     end
@@ -1004,7 +1041,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:ok, config} = Config.load(dir)
+      assert {:ok, config} = load(dir)
       assert {:ok, [%{name: "to_do"}]} = Config.workflow_for(config, 0)
       assert {:ok, [%{name: "only"}]} = Config.workflow_for(config, 1)
     end
@@ -1019,7 +1056,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:ok, config} = Config.load(dir)
+      assert {:ok, config} = load(dir)
       assert Config.workflow_for(config, 0) == :off
     end
 
@@ -1039,7 +1076,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:ok, config} = Config.load(dir)
+      assert {:ok, config} = load(dir)
       assert {:ok, steps} = Config.workflow_for(config, 0)
       assert {:ok, %{name: "review", agent: "reviewer"}} = Config.step_at(steps, "review")
     end
@@ -1057,7 +1094,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:ok, config} = Config.load(dir)
+      assert {:ok, config} = load(dir)
       assert {:ok, steps} = Config.workflow_for(config, 0)
       assert {:error, :off_sequence} = Config.step_at(steps, "ghost")
     end
@@ -1078,7 +1115,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:ok, config} = Config.load(dir)
+      assert {:ok, config} = load(dir)
       assert {:ok, steps} = Config.workflow_for(config, 0)
       assert {:ok, %{name: "review"}} = Config.next_step(steps, "to_do")
     end
@@ -1099,7 +1136,7 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:ok, config} = Config.load(dir)
+      assert {:ok, config} = load(dir)
       assert {:ok, steps} = Config.workflow_for(config, 0)
       assert {:ok, nil} = Config.next_step(steps, "review")
     end
@@ -1117,15 +1154,15 @@ defmodule Omunculus.ConfigTest do
           """
       )
 
-      assert {:ok, config} = Config.load(dir)
+      assert {:ok, config} = load(dir)
       assert {:ok, steps} = Config.workflow_for(config, 0)
       assert {:error, :off_sequence} = Config.next_step(steps, "ghost")
     end
   end
 
   describe "mcp" do
-    test "the default file has no MCP servers", %{dir: dir} do
-      assert {:ok, %Config{mcp: []}} = Config.load(dir)
+    test "the default preset has no MCP servers" do
+      assert {:ok, %Config{mcp: []}} = Config.load(default_preset())
     end
 
     test "[[mcp.servers]] is parsed into name and command", %{dir: dir} do
@@ -1139,7 +1176,7 @@ defmodule Omunculus.ConfigTest do
       command = ["npx", "-y", "@modelcontextprotocol/server-github"]
       """)
 
-      assert {:ok, %Config{mcp: mcp}} = Config.load(dir)
+      assert {:ok, %Config{mcp: mcp}} = load(dir)
 
       assert mcp == [
                %{name: "github", command: ["npx", "-y", "@modelcontextprotocol/server-github"]}
@@ -1161,7 +1198,7 @@ defmodule Omunculus.ConfigTest do
       command = ["fs-mcp"]
       """)
 
-      assert {:ok, %Config{mcp: mcp}} = Config.load(dir)
+      assert {:ok, %Config{mcp: mcp}} = load(dir)
       assert Enum.map(mcp, & &1.name) == ["github", "fs"]
     end
 
@@ -1175,7 +1212,7 @@ defmodule Omunculus.ConfigTest do
       command = ["gh-mcp"]
       """)
 
-      assert {:error, {:mcp, {:invalid, :name}}} = Config.load(dir)
+      assert {:error, {:mcp, {:invalid, :name}}} = load(dir)
     end
 
     test "a server missing a command is invalid", %{dir: dir} do
@@ -1188,7 +1225,7 @@ defmodule Omunculus.ConfigTest do
       name = "github"
       """)
 
-      assert {:error, {:mcp, {:invalid, :command}}} = Config.load(dir)
+      assert {:error, {:mcp, {:invalid, :command}}} = load(dir)
     end
 
     test "a server with a non-list command is invalid", %{dir: dir} do
@@ -1202,7 +1239,7 @@ defmodule Omunculus.ConfigTest do
       command = "gh-mcp"
       """)
 
-      assert {:error, {:mcp, {:invalid, :command}}} = Config.load(dir)
+      assert {:error, {:mcp, {:invalid, :command}}} = load(dir)
     end
 
     test "mcp.servers must be a list", %{dir: dir} do
@@ -1215,7 +1252,7 @@ defmodule Omunculus.ConfigTest do
       servers = "github"
       """)
 
-      assert {:error, {:mcp, {:invalid, :servers}}} = Config.load(dir)
+      assert {:error, {:mcp, {:invalid, :servers}}} = load(dir)
     end
 
     test "duplicate server names are rejected", %{dir: dir} do
@@ -1233,7 +1270,7 @@ defmodule Omunculus.ConfigTest do
       command = ["gh-mcp-2"]
       """)
 
-      assert {:error, {:mcp, {:duplicate, "github"}}} = Config.load(dir)
+      assert {:error, {:mcp, {:duplicate, "github"}}} = load(dir)
     end
 
     test "an unknown key under mcp besides servers is rejected", %{dir: dir} do
@@ -1246,7 +1283,7 @@ defmodule Omunculus.ConfigTest do
       timeout = 5
       """)
 
-      assert {:error, {:mcp, {:unknown_key, "timeout"}}} = Config.load(dir)
+      assert {:error, {:mcp, {:unknown_key, "timeout"}}} = load(dir)
     end
   end
 end

@@ -9,6 +9,7 @@ defmodule Omunculus.RunTest do
     dir = Path.join(System.tmp_dir!(), Id.new())
     File.mkdir_p!(dir)
     on_exit(fn -> File.rm_rf!(dir) end)
+    Fixtures.install_default(dir)
     %{dir: dir}
   end
 

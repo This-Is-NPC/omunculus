@@ -1,21 +1,23 @@
 defmodule Omunculus.Config do
   @moduledoc """
-  Loads and validates `omunculus.toml`: a project file replaces the
-  package default whole, never merges with it (spec §5). Parses the
-  policy layer, the per-depth layers under `[policy.depth.N]`, the
-  workspaces under `[workspaces.<name>]` — each a directory `root`
-  (resolved against the project dir) plus a ceiling layer — and the
-  `[policy] workspace` default, each agent's ceiling layer, the named
-  workflows under `[workflows.<name>]` (spec §3.4), and the MCP
-  servers under `[[mcp.servers]]` (spec §8.7), the required `[execution]`
-  table, and grants a permanent
-  ceiling addition — to an agent, a depth, a workflow step, or a
-  workspace — by rewriting the TOML file.
+  Loads and validates a TOML config file. There is no package fallback:
+  a missing file is `{:config, :missing, path}`. `load/1` and `grant/3`
+  take the file path. The project root is the file's directory, or
+  `[project] root` resolved against it. Parses the policy layer, the
+  per-depth layers under `[policy.depth.N]`, the workspaces under
+  `[workspaces.<name>]` — each a directory `root` (resolved against the
+  project root) plus a ceiling layer — and the `[policy] workspace`
+  default, each agent's ceiling layer, the named workflows under
+  `[workflows.<name>]` (spec §3.4), and the MCP servers under
+  `[[mcp.servers]]` (spec §8.7), the required `[execution]` table, and
+  grants a permanent ceiling addition — to an agent, a depth, a workflow
+  step, or a workspace — by rewriting that same file.
   """
 
   alias Omunculus.Config.Layer
 
   @enforce_keys [
+    :root,
     :policy,
     :depths,
     :workspaces,
@@ -50,6 +52,7 @@ defmodule Omunculus.Config do
         }
 
   @type t :: %__MODULE__{
+          root: String.t(),
           policy: Layer.t(),
           depths: %{non_neg_integer => Layer.t()},
           workspaces: %{String.t() => workspace},
@@ -77,9 +80,9 @@ defmodule Omunculus.Config do
   @step_extra_keys ~w(name agent)
 
   @spec load(String.t()) :: {:ok, t} | {:error, term}
-  def load(project_dir) do
-    with {:ok, data} <- Toml.decode_file(config_path(project_dir)) do
-      parse(data, project_dir)
+  def load(path) do
+    with {:ok, data} <- read(path) do
+      parse(data, path)
     end
   end
 
@@ -150,20 +153,18 @@ defmodule Omunculus.Config do
           | {:workspace, String.t()}
 
   @spec grant(String.t(), grant_layer, String.t()) :: :ok | {:error, term}
-  def grant(project_dir, layer, name) do
-    with {:ok, data} <- Toml.decode_file(config_path(project_dir)),
+  def grant(path, layer, name) do
+    with {:ok, data} <- read(path),
          {:ok, data} <- add_grant(data, layer, name) do
-      File.write(Path.join(project_dir, "omunculus.toml"), Omunculus.Config.Toml.encode(data))
+      File.write(path, Omunculus.Config.Toml.encode(data))
     end
   end
 
-  defp config_path(project_dir) do
-    project_file = Path.join(project_dir, "omunculus.toml")
-
-    if File.regular?(project_file) do
-      project_file
+  defp read(path) do
+    if File.regular?(path) do
+      Toml.decode_file(path)
     else
-      Application.app_dir(:omunculus, "priv/omunculus.toml")
+      {:error, {:config, :missing, path}}
     end
   end
 
@@ -236,14 +237,18 @@ defmodule Omunculus.Config do
     if name in list, do: list, else: list ++ [name]
   end
 
-  defp parse(data, project_dir) do
-    case Map.keys(data) -- ["policy", "workspaces", "agents", "workflows", "mcp", "execution"] do
+  defp parse(data, path) do
+    case Map.keys(data) --
+           ["policy", "workspaces", "agents", "workflows", "mcp", "execution", "project"] do
       [key | _] ->
         {:error, {:unknown_key, key}}
 
       [] ->
-        with {:ok, execution} <- parse_execution(Map.get(data, "execution")),
-             {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), project_dir),
+        config_dir = Path.dirname(Path.expand(path))
+
+        with {:ok, root} <- parse_project(Map.get(data, "project"), config_dir),
+             {:ok, execution} <- parse_execution(Map.get(data, "execution")),
+             {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), root),
              {:ok, agents} <- parse_agents(Map.get(data, "agents", %{})),
              {:ok, workflows} <- parse_workflows(Map.get(data, "workflows", %{}), agents),
              {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows} <-
@@ -254,6 +259,7 @@ defmodule Omunculus.Config do
           else
             {:ok,
              %__MODULE__{
+               root: root,
                policy: policy,
                depths: depths,
                workspaces: workspaces,
@@ -270,7 +276,30 @@ defmodule Omunculus.Config do
     end
   end
 
-  defp parse_execution(nil), do: {:error, {:execution, :missing}}
+  defp parse_project(nil, config_dir), do: {:ok, config_dir}
+
+  defp parse_project(data, config_dir) when is_map(data) do
+    case Map.keys(data) -- ["root"] do
+      [key | _] ->
+        {:error, {:project, {:unknown_key, key}}}
+
+      [] ->
+        case Map.fetch(data, "root") do
+          :error ->
+            {:ok, config_dir}
+
+          {:ok, root} when is_binary(root) and root != "" ->
+            {:ok, Path.expand(root, config_dir)}
+
+          _ ->
+            {:error, {:project, {:invalid, :root}}}
+        end
+    end
+  end
+
+  defp parse_project(_data, _config_dir), do: {:error, {:project, {:invalid, :table}}}
+
+  defp parse_execution(nil), do: {:error, {:execution, :missing, @execution_keys}}
 
   defp parse_execution(data) when is_map(data) do
     case Map.keys(data) -- @execution_keys do

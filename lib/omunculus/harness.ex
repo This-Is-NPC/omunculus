@@ -17,8 +17,8 @@ defmodule Omunculus.Harness do
 
   @spec manifest(Project.t(), String.t()) ::
           {:ok, Manifest.t()} | {:error, {:unknown_tool, String.t()}}
-  def manifest(%Project{dir: dir}, name) do
-    with {:ok, config} <- Config.load(dir) do
+  def manifest(%Project{dir: dir, config_path: path}, name) do
+    with {:ok, config} <- Config.load(path) do
       dir |> Catalog.roots() |> Catalog.discover(config.mcp, nil) |> fetch_manifest(name)
     end
   end
@@ -40,7 +40,39 @@ defmodule Omunculus.Harness do
 
   @spec dispatch(Project.t(), String.t(), map, map) :: {:ok, map, [map]} | {:error, term}
   def dispatch(project, name, args, ctx) do
-    with {:ok, config} <- Config.load(project.dir),
+    folder_catalog = Catalog.discover(Catalog.roots(project.dir))
+
+    case Map.get(folder_catalog, name) do
+      %Manifest{config: false} = manifest when ctx.trigger == "cli" ->
+        dispatch_without_config(project, manifest, args, ctx)
+
+      _other ->
+        dispatch_with_config(project, name, args, ctx)
+    end
+  end
+
+  defp dispatch_without_config(project, manifest, args, ctx) do
+    with :ok <- check_trigger(manifest, manifest.name, ctx.trigger) do
+      input = %{
+        name: manifest.name,
+        args: args,
+        view: %{},
+        run_id: nil,
+        work_id: nil,
+        workspace: nil,
+        roots: [project.dir],
+        config_path: project.config_path
+      }
+
+      case Invoke.call(manifest, input) do
+        {:ok, out} -> {:ok, out, []}
+        {:error, _reason} = error -> error
+      end
+    end
+  end
+
+  defp dispatch_with_config(project, name, args, ctx) do
+    with {:ok, config} <- Config.load(project.config_path),
          catalog =
            project.dir
            |> Catalog.roots()
@@ -68,7 +100,7 @@ defmodule Omunculus.Harness do
 
   @doc "Dispatches reactions to committed events, including the run lifecycle."
   def react(project, events, active \\ [], execution \\ nil) do
-    with {:ok, config} <- Config.load(project.dir) do
+    with {:ok, config} <- Config.load(project.config_path) do
       catalog = project.dir |> Catalog.roots() |> Catalog.discover(config.mcp, execution)
 
       Enum.reduce_while(events, {:ok, []}, fn event, {:ok, acc} ->
@@ -143,7 +175,7 @@ defmodule Omunculus.Harness do
   @spec follow_up(Project.t(), [map], (String.t(), fun -> {:ok, String.t()} | {:error, term})) ::
           :ok | {:error, term}
   def follow_up(project, events, model) do
-    with {:ok, config} <- Config.load(project.dir),
+    with {:ok, config} <- Config.load(project.config_path),
          catalog = project.dir |> Catalog.roots() |> Catalog.discover(config.mcp, nil),
          {:ok, _via} <- walk(project, catalog, events, model, :actions),
          {:ok, _via} <- walk(project, catalog, events, model, :hooks) do
@@ -318,7 +350,8 @@ defmodule Omunculus.Harness do
            run_id: ctx.run_id,
            work_id: work_id,
            workspace: workspace.name,
-           roots: if(workspace.root, do: [workspace.root], else: [project.dir])
+           roots: if(workspace.root, do: [workspace.root], else: [project.dir]),
+           config_path: project.config_path
          },
          {:ok, out} <- Invoke.call(manifest, input, execution),
          emits = if(out.ok, do: out.emit, else: []),
@@ -489,16 +522,16 @@ defmodule Omunculus.Harness do
 
     case body["scope"] do
       "agent" ->
-        Config.grant(project.dir, {:agent, body["agent"]}, body["name"])
+        Config.grant(project.config_path, {:agent, body["agent"]}, body["name"])
 
       "depth" ->
-        Config.grant(project.dir, {:depth, body["depth"]}, body["name"])
+        Config.grant(project.config_path, {:depth, body["depth"]}, body["name"])
 
       "stage" ->
-        Config.grant(project.dir, {:stage, body["workflow"], body["stage"]}, body["name"])
+        Config.grant(project.config_path, {:stage, body["workflow"], body["stage"]}, body["name"])
 
       "workspace" ->
-        Config.grant(project.dir, {:workspace, body["workspace"]}, body["name"])
+        Config.grant(project.config_path, {:workspace, body["workspace"]}, body["name"])
 
       _ ->
         :ok

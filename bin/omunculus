@@ -1,4 +1,12 @@
 #!/bin/sh
-export OMUNCULUS_PROJECT="${OMUNCULUS_PROJECT:-$PWD}"
-cd "$(dirname "$0")/.." || exit 1
-exec mise exec -- mix omunculus "$@"
+root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+cwd="$PWD"
+cd "$root" || exit 1
+case "$1" in
+  --config)
+    exec mise exec -- mix omunculus "$@"
+    ;;
+  *)
+    exec mise exec -- mix omunculus --config "$cwd/omunculus.toml" "$@"
+    ;;
+esac
