@@ -30,9 +30,9 @@ defmodule Omunculus.Tools.ToolSearchTest do
     assert ToolSearch.run(input) == %{
              "ok" => true,
              "output" =>
-               "- compact_comments: Clear old comment history. [compact]\n" <>
-                 "- read: Reads a file from the workspace. [fs.read]\n" <>
-                 "- write: Writes a file in the workspace. [fs.write]",
+               "- compact_comments: Clear old comment history. [tags: compact]\n" <>
+                 "- read: Reads a file from the workspace. [tags: fs.read]\n" <>
+                 "- write: Writes a file in the workspace. [tags: fs.write]",
              "emit" => []
            }
   end
@@ -41,19 +41,21 @@ defmodule Omunculus.Tools.ToolSearchTest do
     input = %{@input | view: %{"catalog" => @cards}, args: %{"q" => "WRITE"}}
 
     assert ToolSearch.run(input)["output"] ==
-             "- write: Writes a file in the workspace. [fs.write]"
+             "- write: Writes a file in the workspace. [tags: fs.write]"
   end
 
   test "q matches the description case-insensitively" do
     input = %{@input | view: %{"catalog" => @cards}, args: %{"q" => "clear old"}}
 
     assert ToolSearch.run(input)["output"] ==
-             "- compact_comments: Clear old comment history. [compact]"
+             "- compact_comments: Clear old comment history. [tags: compact]"
   end
 
   test "q matches a tag case-insensitively" do
     input = %{@input | view: %{"catalog" => @cards}, args: %{"q" => "FS.READ"}}
-    assert ToolSearch.run(input)["output"] == "- read: Reads a file from the workspace. [fs.read]"
+
+    assert ToolSearch.run(input)["output"] ==
+             "- read: Reads a file from the workspace. [tags: fs.read]"
   end
 
   test "tags requires every listed tag to be present" do
@@ -63,7 +65,7 @@ defmodule Omunculus.Tools.ToolSearchTest do
     ]
 
     input = %{@input | view: %{"catalog" => cards}, args: %{"tags" => ["x", "y"]}}
-    assert ToolSearch.run(input)["output"] == "- a: a [x, y]"
+    assert ToolSearch.run(input)["output"] == "- a: a [tags: x, y]"
   end
 
   test "q and tags combine" do
@@ -74,7 +76,7 @@ defmodule Omunculus.Tools.ToolSearchTest do
     }
 
     assert ToolSearch.run(input)["output"] ==
-             "- write: Writes a file in the workspace. [fs.write]"
+             "- write: Writes a file in the workspace. [tags: fs.write]"
   end
 
   test "nothing found" do

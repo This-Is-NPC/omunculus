@@ -5,6 +5,7 @@ defmodule Omunculus.Tools.ToolSearch do
   or reaching past the ceiling.
   """
 
+  alias Omunculus.Tool.Manifest
   alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
@@ -47,11 +48,5 @@ defmodule Omunculus.Tools.ToolSearch do
   end
 
   defp format([]), do: Out.no_tools_found()
-  defp format(cards), do: cards |> Enum.map(&line/1) |> Enum.join("\n")
-
-  defp line(%{name: name, description: description, tags: []}),
-    do: "- #{name}: #{description}"
-
-  defp line(%{name: name, description: description, tags: tags}),
-    do: "- #{name}: #{description} [#{Enum.join(tags, ", ")}]"
+  defp format(cards), do: cards |> Enum.map(&Manifest.card/1) |> Enum.join("\n")
 end

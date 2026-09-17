@@ -140,6 +140,10 @@ defmodule Omunculus.CLITest do
     assert {:ok, output} = CLI.run(["prompt"], dir)
     assert output =~ "second message"
     refute output =~ "first message"
+    assert output =~ "- read: Reads a file. [tags: fs]"
+
+    assert output =~
+             "- comment: Writes a comment on the work, request, or inbox. [tags: comment, work, store]"
   end
 
   test "prompt --run prints that run assembled prompt", %{dir: dir} do

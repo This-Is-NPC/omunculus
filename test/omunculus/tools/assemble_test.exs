@@ -18,7 +18,12 @@ defmodule Omunculus.Tools.AssembleTest do
     view = %{
       "prompt" => %{body: "count to 5"},
       "catalog" => [
-        %{name: "break", description: "Stops the stage.", tags: [], groups: ["sequence"]}
+        %{
+          name: "break",
+          description: "Stops the stage.",
+          tags: ["sequence", "work"],
+          groups: ["sequence"]
+        }
       ]
     }
 
@@ -26,7 +31,7 @@ defmodule Omunculus.Tools.AssembleTest do
     assert output =~ "You are the concierge."
     assert output =~ "## Message\ncount to 5"
     assert output =~ Out.tools_preamble()
-    assert output =~ "- break: Stops the stage."
+    assert output =~ "- break: Stops the stage. [tags: sequence, work]"
   end
 
   test "without pinned every catalog card is listed even past 12" do
@@ -55,6 +60,13 @@ defmodule Omunculus.Tools.AssembleTest do
     assert output =~ "- comment:"
     refute output =~ "- read:"
     assert output =~ Out.more_tools(1)
+  end
+
+  test "cards without tags have no [tags:] suffix" do
+    cards = [%{name: "break", description: "Stops the stage.", tags: [], groups: ["sequence"]}]
+    output = Assemble.run(%{@input | view: %{"catalog" => cards}})["output"]
+    assert output =~ "- break: Stops the stage."
+    refute output =~ "[tags:"
   end
 
   test "without tool_search, pinned is ignored and every card is listed" do

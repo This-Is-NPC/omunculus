@@ -5,6 +5,7 @@ defmodule Omunculus.Tools.Assemble do
   Inbox is included only when the opening carried `inbox_id`.
   """
 
+  alias Omunculus.Tool.Manifest
   alias Omunculus.Tools.Out
 
   @spec run(map) :: map
@@ -79,13 +80,5 @@ defmodule Omunculus.Tools.Assemble do
   defp more_tools_line(n) when n > 0, do: [Out.more_tools(n)]
   defp more_tools_line(_n), do: []
 
-  defp card(%{name: name, description: description}) do
-    lines =
-      description
-      |> String.split("\n")
-      |> Enum.take(3)
-      |> Enum.join("\n")
-
-    "- #{name}: #{lines}"
-  end
+  defp card(card), do: Manifest.card(card)
 end

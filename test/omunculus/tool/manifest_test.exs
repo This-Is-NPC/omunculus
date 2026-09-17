@@ -195,6 +195,49 @@ defmodule Omunculus.Tool.ManifestTest do
     assert Manifest.card(manifest) == "- read: Reads a file."
   end
 
+  test "card/1 appends tags after the description", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "compact_comments"
+      kind = "tool"
+      command = ["./run"]
+      description = "Summarizes comments on the work."
+      tags = ["comments", "compact"]
+      """)
+
+    assert {:ok, manifest} = Manifest.load(path)
+
+    assert Manifest.card(manifest) ==
+             "- compact_comments: Summarizes comments on the work. [tags: comments, compact]"
+  end
+
+  test "card/1 omits the suffix when tags is empty", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "read"
+      kind = "tool"
+      command = ["./run"]
+      description = "Reads a file."
+      """)
+
+    assert {:ok, manifest} = Manifest.load(path)
+    refute Manifest.card(manifest) =~ "[tags:"
+  end
+
+  test "card/1 appends tags after a 3-line cut", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "read"
+      kind = "tool"
+      command = ["./run"]
+      description = "line 1\\nline 2\\nline 3\\nline 4"
+      tags = ["fs"]
+      """)
+
+    assert {:ok, manifest} = Manifest.load(path)
+    assert Manifest.card(manifest) == "- read: line 1\nline 2\nline 3 [tags: fs]"
+  end
+
   test "triggered_by?/2 checks the triggers list", %{dir: dir} do
     path =
       write_toml(dir, """
