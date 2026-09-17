@@ -39,7 +39,7 @@ defmodule Omunculus.RunTest do
     """
 
   defp open_project(dir) do
-    {:ok, project} = Project.open(dir)
+    {:ok, project} = Fixtures.open_project(dir)
     project
   end
 

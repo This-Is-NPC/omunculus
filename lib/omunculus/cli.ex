@@ -48,6 +48,10 @@ defmodule Omunculus.CLI do
     "omunculus.toml is missing [models]"
   end
 
+  def format_error({:store, :missing}) do
+    "omunculus.toml is missing [store]"
+  end
+
   def format_error({:agent, name, {:invalid, :model}}) do
     "omunculus.toml agent #{name} is missing model"
   end
@@ -73,7 +77,7 @@ defmodule Omunculus.CLI do
 
       _other ->
         with {:ok, config} <- Config.load(config_path),
-             {:ok, project} <- Project.open(config.root, config_path) do
+             {:ok, project} <- Project.open(config) do
           try do
             with {:ok, manifest} <- Harness.manifest(project, name) do
               run_tool(manifest, name, args, project, true)

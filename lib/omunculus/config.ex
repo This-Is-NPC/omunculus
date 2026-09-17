@@ -10,9 +10,9 @@ defmodule Omunculus.Config do
   default, each agent's ceiling layer, the named `[models.<name>]`
   adapters, the named workflows under `[workflows.<name>]` (spec §3.4),
   the MCP servers under `[[mcp.servers]]` (spec §8.7), the required
-  `[execution]` table, and grants a permanent ceiling addition — to an
-  agent, a depth, a workflow step, or a workspace — by rewriting that
-  same file.
+  `[execution]` and `[store]` tables, and grants a permanent ceiling
+  addition — to an agent, a depth, a workflow step, or a workspace — by
+  rewriting that same file.
   """
 
   alias Omunculus.Config.Layer
@@ -31,7 +31,9 @@ defmodule Omunculus.Config do
     :mcp,
     :execution,
     :tools,
-    :models
+    :models,
+    :path,
+    :store
   ]
   defstruct @enforce_keys
 
@@ -70,7 +72,9 @@ defmodule Omunculus.Config do
           mcp: [mcp_server],
           execution: execution,
           tools: tools,
-          models: %{String.t() => model}
+          models: %{String.t() => model},
+          path: String.t(),
+          store: %{path: String.t()}
         }
 
   @type tools :: %{paths: [String.t()], inline: %{String.t() => Manifest.t()}}
@@ -272,17 +276,20 @@ defmodule Omunculus.Config do
              "execution",
              "project",
              "tools",
-             "models"
+             "models",
+             "store"
            ] do
       [key | _] ->
         {:error, {:unknown_key, key}}
 
       [] ->
-        config_dir = Path.dirname(Path.expand(path))
+        config_path = Path.expand(path)
+        config_dir = Path.dirname(config_path)
 
         with {:ok, root} <- parse_project(Map.get(data, "project"), config_dir),
              {:ok, execution} <- parse_execution(Map.get(data, "execution")),
              {:ok, models} <- parse_models(Map.get(data, "models")),
+             {:ok, store} <- parse_store(Map.get(data, "store"), config_dir),
              {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), root),
              {:ok, agents} <- parse_agents(Map.get(data, "agents", %{}), models),
              {:ok, workflows} <- parse_workflows(Map.get(data, "workflows", %{}), agents),
@@ -307,7 +314,9 @@ defmodule Omunculus.Config do
                mcp: mcp,
                execution: execution,
                tools: tools,
-               models: models
+               models: models,
+               path: config_path,
+               store: store
              }}
           end
         end
@@ -336,6 +345,31 @@ defmodule Omunculus.Config do
   end
 
   defp parse_project(_data, _config_dir), do: {:error, {:project, {:invalid, :table}}}
+
+  defp parse_store(nil, _config_dir), do: {:error, {:store, :missing}}
+
+  defp parse_store(data, config_dir) when is_map(data) do
+    case Map.keys(data) -- ["path"] do
+      [key | _] ->
+        {:error, {:store, {:unknown_key, key}}}
+
+      [] ->
+        case Map.fetch(data, "path") do
+          {:ok, path} when is_binary(path) and path != "" ->
+            {:ok, %{path: expand_store_path(path, config_dir)}}
+
+          _ ->
+            {:error, {:store, {:invalid, :path}}}
+        end
+    end
+  end
+
+  defp parse_store(_data, _config_dir), do: {:error, {:store, {:invalid, :table}}}
+
+  defp expand_store_path("~" <> _rest = path, _config_dir) when path != "~",
+    do: Path.expand(path)
+
+  defp expand_store_path(path, config_dir), do: Path.expand(path, config_dir)
 
   defp parse_tools(nil, _config_dir), do: {:ok, %{paths: [], inline: %{}}}
 

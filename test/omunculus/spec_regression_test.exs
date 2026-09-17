@@ -15,6 +15,9 @@ defmodule Omunculus.SpecRegressionTest do
   max_queue = 64
   queue_timeout_ms = 30000
 
+  [store]
+  path = ".omunculus/store.sqlite3"
+
   [models.fake]
   api = "module"
   module = "Omunculus.Model.Fake"
@@ -36,7 +39,7 @@ defmodule Omunculus.SpecRegressionTest do
     dir = Path.join(System.tmp_dir!(), "omunculus-spec-" <> Id.new())
     File.mkdir_p!(dir)
     File.write!(Path.join(dir, "omunculus.toml"), @config <> "\n" <> Fixtures.tools_table(dir))
-    {:ok, project} = Project.open(dir)
+    {:ok, project} = Fixtures.open_project(dir)
 
     on_exit(fn ->
       Project.close(project)

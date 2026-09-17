@@ -1,13 +1,13 @@
 defmodule Omunculus.Project do
   @moduledoc """
-  A project's store connection: `open/2` creates private state under
-  `.omunculus` and opens its SQLite database, `close/1` closes it.
-  `config_path` is the TOML file this project was opened with. A project
-  built without opening the store (CLI tools with `config = false`) has
-  `conn: nil`.
+  A project's store connection: `open/1` takes a loaded config, creates
+  the store file's parent directory, and opens that SQLite database.
+  `close/1` closes it. `config_path` is the TOML file this project was
+  opened with. A project built without opening the store (CLI tools with
+  `config = false`) has `conn: nil`.
   """
 
-  alias Omunculus.Store
+  alias Omunculus.{Config, Store}
 
   @enforce_keys [:dir, :conn, :config_path]
   defstruct [:dir, :conn, :config_path]
@@ -18,17 +18,13 @@ defmodule Omunculus.Project do
           config_path: String.t()
         }
 
-  @spec state_dir(String.t()) :: String.t()
-  def state_dir(dir), do: Path.join(dir, ".omunculus")
+  @spec open(Config.t()) :: {:ok, t} | {:error, term}
+  def open(%Config{} = config) do
+    store = config.store.path
 
-  @spec open(String.t()) :: {:ok, t} | {:error, term}
-  def open(dir), do: open(dir, Path.join(dir, "omunculus.toml"))
-
-  @spec open(String.t(), String.t()) :: {:ok, t} | {:error, term}
-  def open(dir, config_path) do
-    with :ok <- File.mkdir_p(state_dir(dir)),
-         {:ok, conn} <- Store.open(Path.join(state_dir(dir), "store.sqlite3")) do
-      {:ok, %__MODULE__{dir: dir, conn: conn, config_path: Path.expand(config_path)}}
+    with :ok <- File.mkdir_p(Path.dirname(store)),
+         {:ok, conn} <- Store.open(store) do
+      {:ok, %__MODULE__{dir: config.root, conn: conn, config_path: config.path}}
     end
   end
 

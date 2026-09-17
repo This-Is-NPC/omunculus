@@ -1,7 +1,7 @@
 defmodule Omunculus.Execution.PolicyTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{Ceiling, Fixtures, Id, Project}
+  alias Omunculus.{Ceiling, Fixtures, Id}
   alias Omunculus.Config.Layer
   alias Omunculus.Execution.Policy
 
@@ -182,7 +182,8 @@ defmodule Omunculus.Execution.PolicyTest do
              policy(config, "concierge", dir)
   end
 
-  test "keeps the harness state in a dedicated directory", %{dir: dir} do
-    assert Project.state_dir(dir) == Path.join(dir, ".omunculus")
+  test "hides the store directory declared in the config", %{dir: dir} do
+    {:ok, config} = Fixtures.load_config(dir)
+    assert config.store.path == Path.join(dir, ".omunculus/store.sqlite3")
   end
 end

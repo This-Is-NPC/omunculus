@@ -20,7 +20,8 @@ defmodule Omunculus.Benchmark.Driver do
     Req.default_options(finch: [size: 65_536])
     File.mkdir_p!(config["work_dir"])
     File.write!(Path.join(config["work_dir"], "omunculus.toml"), project_config(config))
-    {:ok, project} = Project.open(config["work_dir"])
+    {:ok, loaded} = Config.load(Path.join(config["work_dir"], "omunculus.toml"))
+    {:ok, project} = Project.open(loaded)
     :ok = Project.close(project)
     {:ok, supervisor} = Task.Supervisor.start_link()
 
@@ -75,7 +76,8 @@ defmodule Omunculus.Benchmark.Driver do
   defp resident(config, parent, agent) do
     # One connection per actor, with admission serialized until Run.open has
     # persisted its state. Existing runs stay alive waiting on the Rust model.
-    {:ok, project} = Project.open(config["work_dir"])
+    {:ok, loaded} = Config.load(Path.join(config["work_dir"], "omunculus.toml"))
+    {:ok, project} = Project.open(loaded)
 
     try do
       prompt_id = Id.new()
@@ -136,7 +138,8 @@ defmodule Omunculus.Benchmark.Driver do
           "model" => "bench"
         }
       },
-      "tools" => %{"paths" => [Application.app_dir(:omunculus, Path.join("priv", "tools"))]}
+      "tools" => %{"paths" => [Application.app_dir(:omunculus, Path.join("priv", "tools"))]},
+      "store" => %{"path" => ".omunculus/store.sqlite3"}
     })
   end
 

@@ -3,7 +3,8 @@ defmodule Omunculus.ConfigTest do
 
   alias Omunculus.Config
   alias Omunculus.Config.Layer
-  alias Omunculus.{Fixtures, Id}
+  alias Omunculus.{Fixtures, Id, Project}
+  alias Omunculus.Store.Query
 
   setup do
     dir = Path.join(System.tmp_dir!(), Id.new())
@@ -1313,6 +1314,9 @@ defmodule Omunculus.ConfigTest do
       max_queue = 1
       queue_timeout_ms = 1
 
+      [store]
+      path = ".omunculus/store.sqlite3"
+
       [models.fake]
       api = "module"
       module = "Omunculus.Model.Fake"
@@ -1516,6 +1520,80 @@ defmodule Omunculus.ConfigTest do
       """)
 
       assert {:error, {:models, "local", {:invalid, :timeout_ms}}} = load(dir)
+    end
+  end
+
+  describe "store" do
+    test "missing store table is an error", %{dir: dir} do
+      File.write!(toml(dir), """
+      #{execution()}
+      [models.fake]
+      api = "module"
+      module = "Omunculus.Model.Fake"
+
+      [agents.concierge]
+      depth = 0
+      model = "fake"
+      text = "hi"
+      """)
+
+      assert {:error, {:store, :missing}} = load(dir)
+    end
+
+    test "path is resolved against the config file", %{dir: dir} do
+      write_toml(dir, """
+      [store]
+      path = "data/alt.sqlite3"
+
+      [models.fake]
+      api = "module"
+      module = "Omunculus.Model.Fake"
+
+      [agents.concierge]
+      depth = 0
+      model = "fake"
+      text = "hi"
+      """)
+
+      assert {:ok, config} = load(dir)
+      assert config.store.path == Path.join(dir, "data/alt.sqlite3")
+    end
+
+    test "two configs in one directory can use different stores", %{dir: dir} do
+      write_toml(dir, """
+      [store]
+      path = "one.sqlite3"
+
+      [models.fake]
+      api = "module"
+      module = "Omunculus.Model.Fake"
+
+      [agents.concierge]
+      depth = 0
+      model = "fake"
+      text = "hi"
+      """)
+
+      other = Path.join(dir, "other.toml")
+      File.cp!(toml(dir), other)
+      {:ok, data} = Toml.decode_file(other)
+      data = put_in(data, ["store", "path"], "two.sqlite3")
+      File.write!(other, Config.Toml.encode(data))
+
+      {:ok, first} = Config.load(toml(dir))
+      {:ok, second} = Config.load(other)
+      {:ok, project_one} = Project.open(first)
+      {:ok, project_two} = Project.open(second)
+
+      id = Fixtures.insert(project_one.conn, :prompts, %{body: "only-in-one"})
+
+      assert {:ok, %{body: "only-in-one"}} =
+               Query.one(project_one.conn, "SELECT * FROM prompts WHERE id = ?", [id])
+
+      assert {:ok, []} = Query.all(project_two.conn, "SELECT * FROM prompts")
+
+      Project.close(project_one)
+      Project.close(project_two)
     end
   end
 end

@@ -13,7 +13,7 @@ defmodule Omunculus.PresetTest do
   end
 
   defp open(dir) do
-    {:ok, project} = Project.open(dir)
+    {:ok, project} = Fixtures.open_project(dir)
     project
   end
 

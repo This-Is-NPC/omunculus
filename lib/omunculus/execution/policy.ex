@@ -4,7 +4,7 @@ defmodule Omunculus.Execution.Policy do
   single run before an external process is started.
   """
 
-  alias Omunculus.{Ceiling, Config, Project}
+  alias Omunculus.{Ceiling, Config}
   alias Omunculus.Path, as: FilesystemPath
 
   @enforce_keys [
@@ -51,7 +51,7 @@ defmodule Omunculus.Execution.Policy do
          {:ok, paths} <- resolve_ceiling_paths(snapshot, workspace_root),
          {:ok, runtimes} <- resolve_runtimes(config.execution.runtimes, workspace_root),
          {:ok, implementation_roots} <- resolve_implementation_roots(implementation_roots),
-         hidden <- unique(paths.denied ++ paths.restricted ++ protected_paths(project_root)),
+         hidden <- unique(paths.denied ++ paths.restricted ++ protected_paths(config)),
          policy <-
            build_policy(
              config,
@@ -80,7 +80,7 @@ defmodule Omunculus.Execution.Policy do
         workspace: %{name: workspace.name, root: workspace_root},
         read_only: implementation_roots,
         read_write: [],
-        hidden: protected_paths(project_root),
+        hidden: protected_paths(config),
         runtimes: runtimes,
         backend: config.execution.backend,
         environment: environment(config.execution.environment),
@@ -300,9 +300,19 @@ defmodule Omunculus.Execution.Policy do
     end
   end
 
-  defp protected_paths(project_root) do
-    [Project.state_dir(project_root), Path.join(project_root, "omunculus.toml")]
-    |> Enum.map(&Path.expand/1)
+  defp protected_paths(config) do
+    store = Path.expand(config.store.path)
+    parent = Path.dirname(store)
+    root = Path.expand(config.root)
+
+    store_hidden =
+      if parent != root and FilesystemPath.within?(root, parent) do
+        parent
+      else
+        store
+      end
+
+    [store_hidden, Path.expand(config.path)]
   end
 
   defp protected?(policy, path),

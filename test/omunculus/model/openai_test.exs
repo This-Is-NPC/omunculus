@@ -95,7 +95,7 @@ defmodule Omunculus.Model.OpenAITest do
       tools = ["counter"]
       """)
 
-      {:ok, project} = Omunculus.Project.open(dir)
+      {:ok, project} = Omunculus.Fixtures.open_project(dir)
 
       on_exit(fn ->
         Omunculus.Project.close(project)

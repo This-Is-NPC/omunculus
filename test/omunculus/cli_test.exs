@@ -14,7 +14,7 @@ defmodule Omunculus.CLITest do
   end
 
   defp open(dir) do
-    {:ok, project} = Project.open(dir)
+    {:ok, project} = Fixtures.open_project(dir)
     project
   end
 
@@ -160,7 +160,7 @@ defmodule Omunculus.CLITest do
     refute File.dir?(Path.join(dir, ".omunculus"))
   end
 
-  test "--config with [project] root opens the store under that root", %{dir: dir} do
+  test "--config with [project] root still stores next to the config file", %{dir: dir} do
     File.rm!(Path.join(dir, "omunculus.toml"))
     repo = Path.join(dir, "repo")
     File.mkdir_p!(repo)
@@ -179,8 +179,8 @@ defmodule Omunculus.CLITest do
 
     path = Path.join(config_dir, "omunculus.toml")
     assert {:ok, ""} = CLI.run(["--config", path, "send", "x"], dir)
-    assert File.dir?(Path.join(repo, ".omunculus"))
-    refute File.dir?(Path.join(config_dir, ".omunculus"))
+    assert File.dir?(Path.join(config_dir, ".omunculus"))
+    refute File.dir?(Path.join(repo, ".omunculus"))
   end
 
   test "a missing --config value is an error", %{dir: dir} do

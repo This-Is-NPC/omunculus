@@ -79,25 +79,34 @@ defmodule Omunculus.Fixtures do
     body = toml <> "\n" <> @execution
     body = if String.contains?(toml, "[tools]"), do: body, else: body <> "\n" <> tools_table(dir)
     File.write!(config_path(dir), body)
-    apply_models(dir, opts)
+    apply_defaults(dir, opts)
+  end
+
+  @spec open_project(String.t()) :: {:ok, Project.t()} | {:error, term}
+  def open_project(dir) do
+    with {:ok, config} <- load_config(dir) do
+      Project.open(config)
+    end
   end
 
   @spec use_model(String.t() | Project.t(), fun) :: :ok
   def use_model(%Project{dir: dir}, fun), do: use_model(dir, fun)
 
   def use_model(dir, fun) when is_binary(dir) and is_function(fun),
-    do: apply_models(dir, model: fun)
+    do: apply_defaults(dir, model: fun)
 
-  defp apply_models(dir, opts) do
+  defp apply_defaults(dir, opts) do
     path = config_path(dir)
 
     case Toml.decode_file(path) do
-      {:ok, data} -> File.write!(path, Config.Toml.encode(inject_models(data, opts)))
+      {:ok, data} -> File.write!(path, Config.Toml.encode(inject_defaults(data, opts)))
       _invalid -> :ok
     end
   end
 
-  defp inject_models(data, opts) do
+  defp inject_defaults(data, opts) do
+    data = maybe_put_store(data)
+
     case Keyword.get(opts, :model) do
       fun when is_function(fun) ->
         id = Id.new()
@@ -161,6 +170,16 @@ defmodule Omunculus.Fixtures do
   end
 
   defp put_agent_model(agent, _name, _force), do: agent
+
+  defp maybe_put_store(data) do
+    case Map.get(data, "store") do
+      store when is_map(store) ->
+        data
+
+      _ ->
+        Map.put(data, "store", %{"path" => ".omunculus/store.sqlite3"})
+    end
+  end
 
   @spec tools_table(String.t()) :: String.t()
   def tools_table(dir) do
