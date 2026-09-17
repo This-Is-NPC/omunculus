@@ -56,8 +56,9 @@ bin/omunculus login --provider anthropic
 ```
 
 Every verb is in [the command line](docs/cli.md). The file the verbs read is
-[the TOML](docs/config.md). What a send actually does to the store is
-[the cycle](docs/cycle.md). Who may call what is [the ceiling](docs/ceiling.md).
+[the TOML](docs/config.md). Shapes that file can take are
+[possibilities](docs/possibilities.md). What a send actually does to the store
+is [the cycle](docs/cycle.md). Who may call what is [the ceiling](docs/ceiling.md).
 A folder of your own is [a tool](docs/tools.md).
 
 ## Requirements
