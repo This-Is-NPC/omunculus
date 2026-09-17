@@ -62,6 +62,26 @@ defmodule Omunculus.ConfigTest do
     assert ceiling.granted == ["break", "comment", "continue", "fs.read", "notify"]
   end
 
+  test "the default preset's worker asks for sandbox.write" do
+    assert {:ok, %Config{agents: agents}} = Config.load(default_preset())
+
+    assert %{"worker" => %{ceiling: ceiling}} = agents
+    assert "request_sandbox" in ceiling.granted
+    refute "sandbox.write" in ceiling.granted
+    assert ceiling.negotiable == ["sandbox.write"]
+  end
+
+  test "codex-like and pi-like presets keep sandbox.write negotiable" do
+    for {preset, agent} <- [{"codex-like", "codex"}, {"pi-like", "pi"}] do
+      path = Application.app_dir(:omunculus, "priv/presets/#{preset}/omunculus.toml")
+      assert {:ok, %Config{agents: agents}} = Config.load(path)
+      ceiling = agents[agent].ceiling
+      assert "request_sandbox" in ceiling.granted
+      refute "sandbox.write" in ceiling.granted
+      assert "sandbox.write" in ceiling.negotiable
+    end
+  end
+
   test "the default delivery workflow's review step denies filesystem writes" do
     assert {:ok, %Config{workflows: workflows}} = Config.load(default_preset())
 

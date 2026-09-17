@@ -566,6 +566,34 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
+  test "the default worker asks for sandbox.write instead of having it", %{dir: dir} do
+    project = open_project(dir)
+
+    model = fn _assembled, _tools, call ->
+      call.("request_sandbox", %{"name" => "sandbox.write", "reason" => "need to write"})
+      {:ok, "unused"}
+    end
+
+    Fixtures.use_model(project, model)
+
+    assert {:ok, _run} =
+             Run.open(project, %{
+               prompt_id: message(project.conn),
+               work_id: nil,
+               request_id: nil,
+               via: nil,
+               agent: "worker"
+             })
+
+    assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
+    ask = Jason.decode!(request.ask)
+    assert ask["kind"] == "resource"
+    assert ask["name"] == "sandbox.write"
+    assert request.status == "waiting_human"
+
+    Project.close(project)
+  end
+
   test "opening with an agent runs that named agent regardless of work or stage, and an unknown agent fails",
        %{dir: dir} do
     write_config(dir, """

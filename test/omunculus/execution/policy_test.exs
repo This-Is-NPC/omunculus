@@ -70,14 +70,20 @@ defmodule Omunculus.Execution.PolicyTest do
   } do
     {:ok, config} = Fixtures.load_config(dir)
 
-    assert {:ok, policy} =
+    assert {:ok, with_write} =
+             policy(config, "worker", dir, ["sandbox.write", "sandbox.network"], ["sandbox.write"])
+
+    assert with_write.read_write == [dir]
+    assert with_write.network == "none"
+
+    assert {:ok, with_network} =
              policy(config, "worker", dir, ["sandbox.write", "sandbox.network"], [
                "sandbox.network"
              ])
 
-    assert policy.read_only == []
-    assert policy.read_write == [dir]
-    assert policy.network == "host"
+    assert with_network.read_only == [dir]
+    assert with_network.read_write == []
+    assert with_network.network == "host"
   end
 
   test "keeps denied paths hidden below a writable workspace", %{dir: dir} do
@@ -88,7 +94,7 @@ defmodule Omunculus.Execution.PolicyTest do
     ceiling = %Layer{worker.ceiling | deny: ["./private"]}
     config = %{config | agents: Map.put(config.agents, "worker", %{worker | ceiling: ceiling})}
 
-    assert {:ok, policy} = policy(config, "worker", dir)
+    assert {:ok, policy} = policy(config, "worker", dir, ["sandbox.write"], ["sandbox.write"])
 
     assert policy.read_write == [dir]
     assert private in policy.hidden
@@ -103,7 +109,7 @@ defmodule Omunculus.Execution.PolicyTest do
     assert {:ok, policy} =
              Policy.build(
                config,
-               snapshot(config, "worker", names, []),
+               snapshot(config, "worker", names, ["sandbox.write"]),
                %{name: nil, root: nil},
                dir,
                names,
@@ -161,7 +167,9 @@ defmodule Omunculus.Execution.PolicyTest do
     config = %{config | agents: Map.put(config.agents, "worker", %{worker | ceiling: ceiling})}
 
     assert {:ok, policy} =
-             policy(config, "worker", dir, [external, "sandbox.write", "sandbox.network"])
+             policy(config, "worker", dir, [external, "sandbox.write", "sandbox.network"], [
+               "sandbox.write"
+             ])
 
     assert policy.read_write == [dir]
     assert policy.read_only == [external]

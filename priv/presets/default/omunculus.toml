@@ -36,7 +36,8 @@ You are the project concierge. Read the message, use `tools.*` when needed, and 
 [agents.worker]
 depth = 1
 model = "fake"
-tools = ["break", "comment", "continue", "fs.read", "fs.write", "notify", "request_access", "request_sandbox", "sandbox.write"]
+tools = ["break", "comment", "continue", "fs.read", "fs.write", "notify", "request_access", "request_sandbox"]
+negotiable = ["sandbox.write"]
 text = """
 You are the worker. Complete the assigned work, report progress, and call continue when the stage is complete.
 """
