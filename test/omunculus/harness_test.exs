@@ -3,6 +3,7 @@ defmodule Omunculus.HarnessTest do
 
   alias Omunculus.{ExecutionPolicyFixtures, Fixtures, Harness, Id, Project, Run}
   alias Omunculus.Store.Query
+  alias Omunculus.Tools.Out
 
   setup do
     dir = Path.join(System.tmp_dir!(), Id.new())
@@ -241,7 +242,7 @@ defmodule Omunculus.HarnessTest do
       #!/bin/sh
       data=$(cat)
       case "$data" in
-        *"preciso disso"*) echo '{"ok": true, "output": "yes", "emit": []}' ;;
+        *"need this"*) echo '{"ok": true, "output": "yes", "emit": []}' ;;
         *) echo '{"ok": true, "output": "no", "emit": []}' ;;
       esac
       """
@@ -249,7 +250,7 @@ defmodule Omunculus.HarnessTest do
 
     project = open_project(dir)
     request_id = Fixtures.insert(project.conn, :requests)
-    Fixtures.insert(project.conn, :comments, %{request_id: request_id, body: "preciso disso"})
+    Fixtures.insert(project.conn, :comments, %{request_id: request_id, body: "need this"})
     run_id = Fixtures.insert(project.conn, :runs, %{request_id: request_id})
 
     ctx = %{
@@ -282,7 +283,7 @@ defmodule Omunculus.HarnessTest do
       #!/bin/sh
       data=$(cat)
       case "$data" in
-        *"preciso avisar"*) echo '{"ok": true, "output": "yes", "emit": []}' ;;
+        *"need to notify"*) echo '{"ok": true, "output": "yes", "emit": []}' ;;
         *) echo '{"ok": true, "output": "no", "emit": []}' ;;
       esac
       """
@@ -291,7 +292,7 @@ defmodule Omunculus.HarnessTest do
     project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works)
     inbox_id = Fixtures.insert(project.conn, :inbox, %{work_id: work_id})
-    Fixtures.insert(project.conn, :comments, %{inbox_id: inbox_id, body: "preciso avisar"})
+    Fixtures.insert(project.conn, :comments, %{inbox_id: inbox_id, body: "need to notify"})
     run_id = Fixtures.insert(project.conn, :runs, %{work_id: work_id})
 
     ctx = %{
@@ -451,7 +452,7 @@ defmodule Omunculus.HarnessTest do
       name = "granted"
       kind = "tool"
       triggers = ["model"]
-      description = "Uma tool concedida."
+      description = "A granted tool."
       command = ["./run"]
       """,
       """
@@ -467,7 +468,7 @@ defmodule Omunculus.HarnessTest do
       name = "blocked"
       kind = "tool"
       triggers = ["model"]
-      description = "Uma tool bloqueada."
+      description = "A blocked tool."
       command = ["./run"]
       """,
       """
@@ -493,8 +494,10 @@ defmodule Omunculus.HarnessTest do
     project = open_project(dir)
     ctx = %{trigger: "model", run_id: nil, author: "agent", agent: "concierge"}
 
-    assert {:ok, %{ok: true, output: "nenhuma tool encontrada"}, _events} =
+    assert {:ok, %{ok: true, output: output}, _events} =
              Harness.dispatch(project, "tool_search", %{}, ctx)
+
+    assert output == Out.no_tools_found()
 
     Project.close(project)
   end
@@ -520,7 +523,7 @@ defmodule Omunculus.HarnessTest do
     run_id = Fixtures.insert(project.conn, :runs, %{})
     ctx = %{trigger: "model", run_id: run_id, author: "agent", agent: "concierge"}
 
-    assert {:error, _reason} = Harness.dispatch(project, "notify", %{"body" => "oi"}, ctx)
+    assert {:error, _reason} = Harness.dispatch(project, "notify", %{"body" => "hi"}, ctx)
 
     assert {:ok, [_inbox_row]} = Query.all(project.conn, "SELECT * FROM inbox")
 

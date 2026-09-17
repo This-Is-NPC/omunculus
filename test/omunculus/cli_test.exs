@@ -4,6 +4,7 @@ defmodule Omunculus.CLITest do
   alias Omunculus.{CLI, Config, Fixtures, Id, Project, Store}
   alias Omunculus.Model.Fake
   alias Omunculus.Store.Query
+  alias Omunculus.Tools.Out
 
   setup do
     dir = Path.join(System.tmp_dir!(), Id.new())
@@ -74,7 +75,7 @@ defmodule Omunculus.CLITest do
   end
 
   test "send delivers a message, opens a run and the run reaches done", %{dir: dir} do
-    assert {:ok, ""} = CLI.run(["send", "conte até 5"], dir, fake())
+    assert {:ok, ""} = CLI.run(["send", "count to 5"], dir, fake())
 
     project = open(dir)
 
@@ -95,7 +96,7 @@ defmodule Omunculus.CLITest do
     assert {:ok, events} = Store.replay(project.conn, :project)
     assert Enum.map(events, & &1.type) == ["tool", "prompt", "start-run", "model", "end-run"]
 
-    assert assembled.body =~ "conte até 5"
+    assert assembled.body =~ "count to 5"
     assert assembled.body =~ "tools.*"
     refute assembled.body =~ "send"
 
@@ -144,17 +145,17 @@ defmodule Omunculus.CLITest do
     test "the concierge creates the work, a follow-up comments on it, and a third opening sees the last comment",
          %{dir: dir} do
       model = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "Contar até cinco"})
+        assert {:ok, ""} = call.("work", %{"title" => "Count to five"})
         {:ok, "ok"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "Contar até 5"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "Count to 5"], dir, model)
 
       project = open(dir)
 
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
-      assert work.title == "Contar até cinco"
-      assert work.title != "Contar até 5"
+      assert work.title == "Count to five"
+      assert work.title != "Count to 5"
       assert work.assignee == "concierge"
 
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
@@ -174,24 +175,24 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         send(test_pid, {:second_assembled, assembled})
-        assert {:ok, ""} = call.("comment", %{"body" => "primeiro comment"})
+        assert {:ok, ""} = call.("comment", %{"body" => "first comment"})
         {:ok, "done"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "continua"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "keep going"], dir, model)
 
       assert_received {:second_assembled, second_assembled}
       assert second_assembled =~ "## Work"
       assert second_assembled =~ work.title
-      assert second_assembled =~ "## Message\ncontinua"
-      refute second_assembled =~ "Contar até 5"
+      assert second_assembled =~ "## Message\nkeep going"
+      refute second_assembled =~ "Count to 5"
       refute second_assembled =~ first_assembled.body
 
       project = open(dir)
 
       assert {:ok, [comment]} = Query.all(project.conn, "SELECT * FROM comments")
       assert comment.work_id == work.id
-      assert comment.body == "primeiro comment"
+      assert comment.body == "first comment"
 
       Project.close(project)
 
@@ -200,11 +201,11 @@ defmodule Omunculus.CLITest do
         {:ok, "seen"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "mais"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "again"], dir, model)
 
       assert_received {:third_assembled, third_assembled}
       assert third_assembled =~ "## Last comment"
-      assert third_assembled =~ "primeiro comment"
+      assert third_assembled =~ "first comment"
     end
 
     test "send --work_id pointing at a work that does not exist refuses and leaves events untouched",
@@ -229,7 +230,7 @@ defmodule Omunculus.CLITest do
         call.("request_access", %{
           "kind" => "tool",
           "name" => "write",
-          "reason" => "preciso gravar"
+          "reason" => "need to write"
         })
 
         {:ok, "unused"}
@@ -237,8 +238,8 @@ defmodule Omunculus.CLITest do
 
       args =
         if work_id,
-          do: ["send", "--work_id", work_id, "grava isso"],
-          else: ["send", "grava isso"]
+          do: ["send", "--work_id", work_id, "save this"],
+          else: ["send", "save this"]
 
       assert {:ok, ""} = CLI.run(args, dir, model)
 
@@ -271,7 +272,7 @@ defmodule Omunculus.CLITest do
                  request_id
                ])
 
-      assert comment.body == "preciso gravar"
+      assert comment.body == "need to write"
 
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
       assert work.state == "waiting"
@@ -293,7 +294,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, [old_run]} = Query.all(project.conn, "SELECT * FROM runs")
       Project.close(project)
 
-      model = fn _assembled, _tools, _call -> {:ok, "obrigado"} end
+      model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
 
       assert {:ok, ""} =
                CLI.run(
@@ -339,7 +340,7 @@ defmodule Omunculus.CLITest do
 
       request_id = open_write_request(dir, work_id)
 
-      model = fn _assembled, _tools, _call -> {:ok, "obrigado"} end
+      model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
 
       assert {:ok, ""} =
                CLI.run(
@@ -351,7 +352,7 @@ defmodule Omunculus.CLITest do
                    "grant",
                    "--scope",
                    "agent",
-                   "pode para sempre"
+                   "allowed forever"
                  ],
                  dir,
                  model
@@ -370,7 +371,7 @@ defmodule Omunculus.CLITest do
       Project.close(project)
 
       model = fn _assembled, _tools, _call -> {:ok, "ok"} end
-      assert {:ok, ""} = CLI.run(["send", "--work_id", other_work_id, "novo pedido"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "--work_id", other_work_id, "new request"], dir, model)
 
       project = open(dir)
 
@@ -392,11 +393,11 @@ defmodule Omunculus.CLITest do
       """)
 
       model = fn _assembled, _tools, call ->
-        call.("request_access", %{"kind" => "tool", "name" => "write", "reason" => "preciso"})
+        call.("request_access", %{"kind" => "tool", "name" => "write", "reason" => "need it"})
         {:ok, "unused"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "grava"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "save"], dir, model)
 
       project = open(dir)
 
@@ -420,17 +421,17 @@ defmodule Omunculus.CLITest do
                  call.("request_access", %{
                    "kind" => "tool",
                    "name" => "comment",
-                   "reason" => "só confirmando"
+                   "reason" => "just checking"
                  })
 
         send(test_pid, {:output, output})
-        {:ok, "seguindo"}
+        {:ok, "continuing"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "oi"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "hi"], dir, model)
 
       assert_received {:output, output}
-      assert output =~ "already granted: comment"
+      assert output =~ Out.already_granted("comment")
 
       project = open(dir)
       assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
@@ -455,11 +456,11 @@ defmodule Omunculus.CLITest do
       assert {:ok, [old_run]} = Query.all(project.conn, "SELECT * FROM runs")
       Project.close(project)
 
-      model = fn _assembled, _tools, _call -> {:ok, "obrigado"} end
+      model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--decision", "deny", "não pode"],
+                 ["reply", "--request_id", request_id, "--decision", "deny", "not allowed"],
                  dir,
                  model
                )
@@ -522,7 +523,7 @@ defmodule Omunculus.CLITest do
 
     test "replying twice to the same request fails the second time", %{dir: dir} do
       request_id = open_write_request(dir)
-      model = fn _assembled, _tools, _call -> {:ok, "obrigado"} end
+      model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
 
       assert {:ok, ""} =
                CLI.run(
@@ -553,7 +554,7 @@ defmodule Omunculus.CLITest do
         """,
         """
         #!/bin/sh
-        echo '{"ok": true, "output": "", "emit": [{"type": "notify", "body": {"body": "pedido aberto"}}]}'
+        echo '{"ok": true, "output": "", "emit": [{"type": "notify", "body": {"body": "open request"}}]}'
         """
       )
 
@@ -664,10 +665,10 @@ defmodule Omunculus.CLITest do
       model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("work", %{"title" => "No sequence"})
         assert {:error, {:continue, :workflow_off}} = call.("continue", %{})
-        {:ok, "seguindo mesmo assim"}
+        {:ok, "continuing anyway"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "oi"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "hi"], dir, model)
 
       project = open(dir)
 
@@ -708,10 +709,10 @@ defmodule Omunculus.CLITest do
 
         assert {:error, {:continue, {:forbidden, "stage"}}} = call.("bad_continue", %{})
 
-        {:ok, "seguindo"}
+        {:ok, "continuing"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "oi"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "hi"], dir, model)
 
       project = open(dir)
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
@@ -759,7 +760,7 @@ defmodule Omunculus.CLITest do
         end
       end
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "segue"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "go on"], dir, model)
 
       project = open(dir)
 
@@ -790,12 +791,12 @@ defmodule Omunculus.CLITest do
       """)
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work", do: call.("work", %{"title" => "Precisa de ajuda"})
-        call.("break", %{"body" => "preciso pausar"})
+        unless assembled =~ "## Work", do: call.("work", %{"title" => "Needs help"})
+        call.("break", %{"body" => "need to pause"})
         {:ok, "unused"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "cuide disso"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "handle this"], dir, model)
 
       project = open(dir)
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
@@ -804,7 +805,7 @@ defmodule Omunculus.CLITest do
       assert work.waiting_from == "concierge"
 
       assert {:ok, [comment]} = Query.all(project.conn, "SELECT * FROM comments")
-      assert comment.body == "preciso pausar"
+      assert comment.body == "need to pause"
 
       assert {:ok, previous_runs} = Query.all(project.conn, "SELECT * FROM runs")
       assert length(previous_runs) == 2
@@ -812,7 +813,7 @@ defmodule Omunculus.CLITest do
 
       model = fn _assembled, _tools, _call -> {:ok, "voltei"} end
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "volta"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "come back"], dir, model)
 
       project = open(dir)
 
@@ -844,7 +845,7 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         cond do
           assembled =~ "Sou o worker." ->
-            {:ok, "feito"}
+            {:ok, "done"}
 
           assembled =~ "## Work" ->
             {:ok, "acompanhando"}
@@ -853,7 +854,7 @@ defmodule Omunculus.CLITest do
             assert {:ok, ""} = call.("work", %{"title" => "Big task"})
 
             assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task", "body" => "faça isso"})
+                     call.("delegate", %{"title" => "Sub task", "body" => "do this"})
 
             {:ok, "unused"}
         end
@@ -885,7 +886,7 @@ defmodule Omunculus.CLITest do
                Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [run2.prompt_id])
 
       assert assembled2.body =~ "Sub task"
-      assert assembled2.body =~ "## Last comment\nfaça isso"
+      assert assembled2.body =~ "## Last comment\ndo this"
 
       assert {:ok, project_events} = Store.replay(project.conn, :project)
 
@@ -936,7 +937,7 @@ defmodule Omunculus.CLITest do
             assert {:ok, ""} = call.("work", %{"title" => "Big task2"})
 
             assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task2", "body" => "faça isso2"})
+                     call.("delegate", %{"title" => "Sub task2", "body" => "do this 2"})
 
             {:ok, "unused"}
         end
@@ -990,7 +991,7 @@ defmodule Omunculus.CLITest do
                 call.("request_access", %{
                   "kind" => "tool",
                   "name" => "write",
-                  "reason" => "preciso escrever"
+                  "reason" => "need to write"
                 })
 
                 {:ok, "unused"}
@@ -1010,7 +1011,7 @@ defmodule Omunculus.CLITest do
                      call.("reply", %{
                        "request_id" => request.id,
                        "decision" => "grant",
-                       "body" => "pode escrever"
+                       "body" => "you may write"
                      })
 
             {:ok, "concedido"}
@@ -1045,7 +1046,7 @@ defmodule Omunculus.CLITest do
                ])
 
       assert request_assembled.body =~ "## Request"
-      assert request_assembled.body =~ "preciso escrever"
+      assert request_assembled.body =~ "need to write"
 
       assert {:ok, works} = Query.all(reader.conn, "SELECT * FROM works ORDER BY created_at")
       [parent, child] = works
@@ -1072,11 +1073,11 @@ defmodule Omunculus.CLITest do
          %{dir: dir} do
       model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("work", %{"title" => "Ajuda"})
-        assert {:ok, ""} = call.("notify", %{"body" => "preciso de ajuda"})
+        assert {:ok, ""} = call.("notify", %{"body" => "need help"})
         {:ok, "ok"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "oi"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "hi"], dir, model)
 
       project = open(dir)
 
@@ -1091,7 +1092,7 @@ defmodule Omunculus.CLITest do
                  inbox_row.id
                ])
 
-      assert comment.body == "preciso de ajuda"
+      assert comment.body == "need help"
 
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
       assert run.status == "done"
@@ -1101,7 +1102,7 @@ defmodule Omunculus.CLITest do
 
       Project.close(project)
 
-      expected_line = "#{inbox_row.id} concierge: preciso de ajuda"
+      expected_line = "#{inbox_row.id} concierge: need help"
       assert {:ok, ^expected_line} = CLI.run(["inbox"], dir, fake())
       assert {:ok, ""} = CLI.run(["inbox_read", inbox_row.id], dir, fake())
 
@@ -1116,7 +1117,8 @@ defmodule Omunculus.CLITest do
 
       Project.close(project)
 
-      assert {:ok, "inbox vazio"} = CLI.run(["inbox"], dir, fake())
+      assert {:ok, empty} = CLI.run(["inbox"], dir, fake())
+      assert empty == Out.empty_inbox()
     end
   end
 
@@ -1159,11 +1161,11 @@ defmodule Omunculus.CLITest do
     test "a notify emits a tool event named on-notify right after it, carrying the call's run and work ids",
          %{dir: dir} do
       model = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("notify", %{"body" => "aviso"})
+        assert {:ok, ""} = call.("notify", %{"body" => "notice"})
         {:ok, "ok"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "oi"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "hi"], dir, model)
 
       project = open(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
@@ -1203,7 +1205,7 @@ defmodule Omunculus.CLITest do
         {:ok, "unused"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "oi"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "hi"], dir, model)
 
       project = open(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
@@ -1236,12 +1238,12 @@ defmodule Omunculus.CLITest do
       """)
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work", do: call.("work", %{"title" => "Precisa de ajuda"})
-        call.("break", %{"body" => "preciso pausar"})
+        unless assembled =~ "## Work", do: call.("work", %{"title" => "Needs help"})
+        call.("break", %{"body" => "need to pause"})
         {:ok, "unused"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "cuide disso"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "handle this"], dir, model)
 
       project = open(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
@@ -1292,14 +1294,14 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         if assembled =~ "## Message" do
-          assert {:ok, ""} = call.("notify", %{"body" => "aviso"})
+          assert {:ok, ""} = call.("notify", %{"body" => "notice"})
           {:ok, "ok"}
         else
           {:ok, "reagido"}
         end
       end
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "cuide"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "handle"], dir, model)
 
       project = open(dir)
 
@@ -1349,11 +1351,11 @@ defmodule Omunculus.CLITest do
 
       model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
-        send(test_pid, {:notify_result, call.("notify", %{"body" => "aviso"})})
-        {:ok, "seguindo"}
+        send(test_pid, {:notify_result, call.("notify", %{"body" => "notice"})})
+        {:ok, "continuing"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "oi"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "hi"], dir, model)
 
       assert_received {:notify_result, {:error, {:hook, {:cannot_sequence, "continue"}}}}
 
@@ -1378,19 +1380,19 @@ defmodule Omunculus.CLITest do
       """)
 
       model1 = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "Contagem"})
-        assert {:ok, ""} = call.("comment", %{"body" => "um"})
-        assert {:ok, ""} = call.("comment", %{"body" => "dois"})
-        assert {:ok, ""} = call.("comment", %{"body" => "três"})
+        assert {:ok, ""} = call.("work", %{"title" => "Tally"})
+        assert {:ok, ""} = call.("comment", %{"body" => "one"})
+        assert {:ok, ""} = call.("comment", %{"body" => "two"})
+        assert {:ok, ""} = call.("comment", %{"body" => "three"})
         {:ok, "ok"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "conta os passos"], dir, model1)
+      assert {:ok, ""} = CLI.run(["send", "count the steps"], dir, model1)
 
       project = open(dir)
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
       assert {:ok, comments} = Store.view(project.conn, "comments.work", work.id)
-      assert Enum.map(comments, & &1.body) == ["um", "dois", "três"]
+      assert Enum.map(comments, & &1.body) == ["one", "two", "three"]
       Project.close(project)
 
       test_pid = self()
@@ -1400,12 +1402,12 @@ defmodule Omunculus.CLITest do
         send(test_pid, {:load_output, load_output})
 
         assert {:ok, ""} =
-                 call.("compact_comments", %{"op" => "commit", "summary" => "resumo: 1 2 3"})
+                 call.("compact_comments", %{"op" => "commit", "summary" => "summary: 1 2 3"})
 
-        {:ok, "compactado"}
+        {:ok, "compacted"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "compacta"], dir, model2)
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "compact"], dir, model2)
 
       assert_received {:load_output, load_output}
       expected = comments |> Enum.map(&"#{&1.id} #{&1.author}: #{&1.body}") |> Enum.join("\n")
@@ -1414,7 +1416,7 @@ defmodule Omunculus.CLITest do
       project = open(dir)
 
       assert {:ok, [summary]} = Store.view(project.conn, "comments.work", work.id)
-      assert summary.body == "resumo: 1 2 3"
+      assert summary.body == "summary: 1 2 3"
 
       assert {:ok, work_events} = Store.replay(project.conn, {:work, work.id})
       comment_events = Enum.filter(work_events, &(&1.type == "comment"))
@@ -1437,13 +1439,13 @@ defmodule Omunculus.CLITest do
         {:ok, "visto"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "mais"], dir, model3)
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "again"], dir, model3)
 
       assert_received {:third_assembled, third_assembled}
-      assert third_assembled =~ "## Last comment\nresumo: 1 2 3"
+      assert third_assembled =~ "## Last comment\nsummary: 1 2 3"
       refute third_assembled =~ ~r/^um$/m
       refute third_assembled =~ ~r/^dois$/m
-      refute third_assembled =~ ~r/^três$/m
+      refute third_assembled =~ ~r/^three$/m
     end
 
     test "compact refuses another work", %{dir: dir} do
@@ -1459,14 +1461,14 @@ defmodule Omunculus.CLITest do
       other_work_id = Fixtures.insert(project.conn, :works, %{title: "Outro work"})
 
       other_comment_id =
-        Fixtures.insert(project.conn, :comments, %{work_id: other_work_id, body: "não toque"})
+        Fixtures.insert(project.conn, :comments, %{work_id: other_work_id, body: "do not touch"})
 
       Project.close(project)
 
       write_emit_tool(
         dir,
         "foreign_compact",
-        ~s({"ok": true, "output": "", "emit": [{"type": "compact", "body": {"work_id": "#{other_work_id}", "summary": "roubado"}}]})
+        ~s({"ok": true, "output": "", "emit": [{"type": "compact", "body": {"work_id": "#{other_work_id}", "summary": "stolen"}}]})
       )
 
       model = fn _assembled, _tools, call ->
@@ -1474,13 +1476,13 @@ defmodule Omunculus.CLITest do
         {:ok, "ok"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", my_work_id, "compacta"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "--work_id", my_work_id, "compact"], dir, model)
 
       project = open(dir)
 
       assert {:ok, [comment]} = Store.view(project.conn, "comments.work", other_work_id)
       assert comment.id == other_comment_id
-      assert comment.body == "não toque"
+      assert comment.body == "do not touch"
 
       Project.close(project)
     end
@@ -1500,7 +1502,7 @@ defmodule Omunculus.CLITest do
       [agents.reviewer]
       depth = 1
       workflow_only = true
-      text = "Você é o reviewer."
+      text = "You are the reviewer."
       tools = ["comment", "continue", "fs.read", "notify"]
 
       [workflows.delivery]
@@ -1515,12 +1517,12 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         cond do
-          assembled =~ "Você é o reviewer." ->
+          assembled =~ "You are the reviewer." ->
             call.("continue", %{})
-            {:ok, "revisado"}
+            {:ok, "reviewed"}
 
           assembled =~ "Sou o worker." ->
-            assert {:ok, ""} = call.("comment", %{"body" => "feito"})
+            assert {:ok, ""} = call.("comment", %{"body" => "done"})
             call.("continue", %{})
             {:ok, "unused"}
 
@@ -1531,7 +1533,7 @@ defmodule Omunculus.CLITest do
             assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
 
             assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task", "body" => "faça isso"})
+                     call.("delegate", %{"title" => "Sub task", "body" => "do this"})
 
             {:ok, "unused"}
         end
@@ -1558,7 +1560,7 @@ defmodule Omunculus.CLITest do
                  reviewer_run.prompt_id
                ])
 
-      assert assembled.body =~ "## Last comment\nfeito"
+      assert assembled.body =~ "## Last comment\ndone"
       refute assembled.body =~ "- write:"
 
       assert {:ok, works} = Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
@@ -1584,14 +1586,14 @@ defmodule Omunculus.CLITest do
       [agents.reviewer]
       depth = 1
       workflow_only = true
-      text = "Você é o reviewer."
+      text = "You are the reviewer."
       tools = ["comment"]
       """)
 
       model = fn assembled, _tools, call ->
         cond do
           assembled =~ "Sou o worker." ->
-            {:ok, "feito"}
+            {:ok, "done"}
 
           assembled =~ "## Work" ->
             {:ok, "acompanhando"}
@@ -1600,7 +1602,7 @@ defmodule Omunculus.CLITest do
             assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
 
             assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task", "body" => "faça isso"})
+                     call.("delegate", %{"title" => "Sub task", "body" => "do this"})
 
             {:ok, "unused"}
         end

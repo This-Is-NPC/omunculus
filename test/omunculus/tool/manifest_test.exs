@@ -46,7 +46,7 @@ defmodule Omunculus.Tool.ManifestTest do
       kind = "tool"
       shape = "composite"
       triggers = ["model", "cli"]
-      description = "Resume comments do work."
+      description = "Summarizes comments on the work."
       tags = ["comments", "compact"]
       groups = ["work.write"]
       command = ["./run"]
@@ -61,7 +61,7 @@ defmodule Omunculus.Tool.ManifestTest do
 
     assert manifest.shape == "composite"
     assert manifest.triggers == ["model", "cli"]
-    assert manifest.description == "Resume comments do work."
+    assert manifest.description == "Summarizes comments on the work."
     assert manifest.tags == ["comments", "compact"]
     assert manifest.groups == ["work.write"]
     assert manifest.views == ["comments"]
@@ -174,11 +174,11 @@ defmodule Omunculus.Tool.ManifestTest do
       name = "read"
       kind = "tool"
       command = ["./run"]
-      description = "linha 1\\nlinha 2\\nlinha 3\\nlinha 4"
+      description = "line 1\\nline 2\\nline 3\\nline 4"
       """)
 
     assert {:ok, manifest} = Manifest.load(path)
-    assert Manifest.card(manifest) == "- read: linha 1\nlinha 2\nlinha 3"
+    assert Manifest.card(manifest) == "- read: line 1\nline 2\nline 3"
   end
 
   test "card/1 stays on one line for a one-line description", %{dir: dir} do
@@ -187,11 +187,11 @@ defmodule Omunculus.Tool.ManifestTest do
       name = "read"
       kind = "tool"
       command = ["./run"]
-      description = "Le um arquivo."
+      description = "Reads a file."
       """)
 
     assert {:ok, manifest} = Manifest.load(path)
-    assert Manifest.card(manifest) == "- read: Le um arquivo."
+    assert Manifest.card(manifest) == "- read: Reads a file."
   end
 
   test "triggered_by?/2 checks the triggers list", %{dir: dir} do

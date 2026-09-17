@@ -15,17 +15,17 @@ defmodule Omunculus.Tools.NotifyTest do
   }
 
   test "emits a notify with the body" do
-    input = %{@input | args: %{"body" => "preciso de ajuda"}}
+    input = %{@input | args: %{"body" => "need help"}}
 
     assert Notify.run(input) == %{
              "ok" => true,
              "output" => "",
-             "emit" => [%{"type" => "notify", "body" => %{"body" => "preciso de ajuda"}}]
+             "emit" => [%{"type" => "notify", "body" => %{"body" => "need help"}}]
            }
   end
 
   test "carries an optional work_id" do
-    input = %{@input | args: %{"body" => "preciso de ajuda", "work_id" => "wrk_1"}}
+    input = %{@input | args: %{"body" => "need help", "work_id" => "wrk_1"}}
 
     assert Notify.run(input) == %{
              "ok" => true,
@@ -33,7 +33,7 @@ defmodule Omunculus.Tools.NotifyTest do
              "emit" => [
                %{
                  "type" => "notify",
-                 "body" => %{"body" => "preciso de ajuda", "work_id" => "wrk_1"}
+                 "body" => %{"body" => "need help", "work_id" => "wrk_1"}
                }
              ]
            }
@@ -65,7 +65,7 @@ defmodule Omunculus.Tools.NotifyTest do
   test "the manifest wiring yields the same emit as calling the module directly" do
     catalog = Catalog.discover(Catalog.roots("/nonexistent"))
     manifest = Map.fetch!(catalog, "notify")
-    input = %{@input | args: %{"body" => "preciso de ajuda"}}
+    input = %{@input | args: %{"body" => "need help"}}
 
     assert {:ok, result} = Invoke.call(manifest, input)
     assert result.emit == Notify.run(input)["emit"]

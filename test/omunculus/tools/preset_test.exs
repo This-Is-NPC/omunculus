@@ -1,7 +1,7 @@
 defmodule Omunculus.Tools.PresetTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.Tools.Preset
+  alias Omunculus.Tools.{Out, Preset}
 
   setup do
     root = Path.join(System.tmp_dir!(), Omunculus.Id.new())
@@ -25,7 +25,7 @@ defmodule Omunculus.Tools.PresetTest do
 
     assert Preset.run(input) == %{
              "ok" => true,
-             "output" => "preset codex-like aplicado",
+             "output" => Out.preset_applied("codex-like"),
              "emit" => []
            }
 
@@ -46,7 +46,7 @@ defmodule Omunculus.Tools.PresetTest do
 
     assert Preset.run(input) == %{
              "ok" => true,
-             "output" => "preset pi-like aplicado",
+             "output" => Out.preset_applied("pi-like"),
              "emit" => []
            }
 

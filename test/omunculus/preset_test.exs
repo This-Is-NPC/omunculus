@@ -4,6 +4,7 @@ defmodule Omunculus.PresetTest do
   alias Omunculus.{CLI, Config, Fixtures, Id, Project}
   alias Omunculus.Model.Fake
   alias Omunculus.Store.Query
+  alias Omunculus.Tools.Out
 
   setup do
     dir = Path.join(System.tmp_dir!(), Id.new())
@@ -40,18 +41,18 @@ defmodule Omunculus.PresetTest do
   describe "codex-like" do
     test "a codex run with network access executes bash through its policy",
          %{dir: dir} do
-      assert {:ok, "preset codex-like aplicado"} =
-               CLI.run(["preset", "codex-like"], dir, fake())
+      assert {:ok, applied} = CLI.run(["preset", "codex-like"], dir, fake())
+      assert applied == Out.preset_applied("codex-like")
 
       assert :ok = Config.grant(dir, {:agent, "codex"}, "sandbox.network")
 
       model = fn assembled, _tools, call ->
         assert assembled =~ "You are a Codex-style coding agent"
         assert {:ok, "hi\n"} = call.("bash", %{"command" => "echo hi"})
-        {:ok, "feito"}
+        {:ok, "done"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "roda um comando"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "run a command"], dir, model)
 
       project = open(dir)
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
@@ -68,14 +69,15 @@ defmodule Omunculus.PresetTest do
 
   describe "pi-like" do
     test "applying the preset switches the run to the pi agent, with no bash", %{dir: dir} do
-      assert {:ok, "preset pi-like aplicado"} = CLI.run(["preset", "pi-like"], dir, fake())
+      assert {:ok, applied} = CLI.run(["preset", "pi-like"], dir, fake())
+      assert applied == Out.preset_applied("pi-like")
 
       model = fn assembled, _tools, _call ->
         assert assembled =~ "You are a Pi-style agent"
-        {:ok, "feito"}
+        {:ok, "done"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "oi"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "hi"], dir, model)
 
       project = open(dir)
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
@@ -93,7 +95,7 @@ defmodule Omunculus.PresetTest do
         {:ok, "ok"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "oi"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "hi"], dir, model)
 
       project = open(dir)
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
@@ -115,7 +117,7 @@ defmodule Omunculus.PresetTest do
       write_emit_tool(
         dir,
         "request_secret",
-        ~s({"ok": true, "output": "", "emit": [{"type": "request", "body": {"kind": "secret", "name": "vault", "reason": "preciso"}}]})
+        ~s({"ok": true, "output": "", "emit": [{"type": "request", "body": {"kind": "secret", "name": "vault", "reason": "need it"}}]})
       )
 
       :ok
@@ -124,7 +126,7 @@ defmodule Omunculus.PresetTest do
     test "a custom-kind request opens REQUESTS waiting_human and a grant lands in works.grants",
          %{dir: dir} do
       project = open(dir)
-      work_id = Fixtures.insert(project.conn, :works, %{title: "Guardar o segredo"})
+      work_id = Fixtures.insert(project.conn, :works, %{title: "Keep the secret"})
       Project.close(project)
 
       model = fn _assembled, _tools, call ->
@@ -132,7 +134,7 @@ defmodule Omunculus.PresetTest do
         {:ok, "unused"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "preciso do vault"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "need the vault"], dir, model)
 
       project = open(dir)
       assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
@@ -140,7 +142,7 @@ defmodule Omunculus.PresetTest do
       assert Jason.decode!(request.ask) == %{"kind" => "secret", "name" => "vault"}
       Project.close(project)
 
-      reply_model = fn _assembled, _tools, _call -> {:ok, "obrigado"} end
+      reply_model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
 
       assert {:ok, ""} =
                CLI.run(

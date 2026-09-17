@@ -13,6 +13,7 @@ defmodule Omunculus.Harness do
   alias Omunculus.{Config, Project, Run, Store}
   alias Omunculus.Execution.Policy
   alias Omunculus.Tool.{Catalog, Invoke, Manifest}
+  alias Omunculus.Tools.Out
 
   @spec manifest(Project.t(), String.t()) ::
           {:ok, Manifest.t()} | {:error, {:unknown_tool, String.t()}}
@@ -399,7 +400,7 @@ defmodule Omunculus.Harness do
         if Enum.any?(events, &(&1.type in ["request", "deny"])) do
           out
         else
-          %{out | output: out.output <> "\nalready granted: #{name}"}
+          %{out | output: out.output <> "\n#{Out.already_granted(name)}"}
         end
     end
   end

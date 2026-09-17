@@ -2,7 +2,7 @@ defmodule Omunculus.Tools.CompactCommentsTest do
   use ExUnit.Case, async: true
 
   alias Omunculus.Tool.{Catalog, Invoke}
-  alias Omunculus.Tools.CompactComments
+  alias Omunculus.Tools.{CompactComments, Out}
 
   @input %{
     name: "compact_comments",
@@ -16,7 +16,7 @@ defmodule Omunculus.Tools.CompactCommentsTest do
 
   test "load lists one line per comment in the comments.work view" do
     comments = [
-      %{id: "cmt_1", author: "worker", body: "comecei", created_at: "t1"},
+      %{id: "cmt_1", author: "worker", body: "started", created_at: "t1"},
       %{id: "cmt_2", author: "reviewer", body: "ok", created_at: "t2"}
     ]
 
@@ -24,29 +24,39 @@ defmodule Omunculus.Tools.CompactCommentsTest do
 
     assert CompactComments.run(input) == %{
              "ok" => true,
-             "output" => "cmt_1 worker: comecei\ncmt_2 reviewer: ok",
+             "output" => "cmt_1 worker: started\ncmt_2 reviewer: ok",
              "emit" => []
            }
   end
 
   test "load reports no comments when the list is empty" do
     input = %{@input | args: %{"op" => "load"}, view: %{"comments.work" => []}}
-    assert CompactComments.run(input) == %{"ok" => true, "output" => "sem comments", "emit" => []}
+
+    assert CompactComments.run(input) == %{
+             "ok" => true,
+             "output" => Out.no_comments(),
+             "emit" => []
+           }
   end
 
   test "load reports no comments when the view is absent" do
     input = %{@input | args: %{"op" => "load"}}
-    assert CompactComments.run(input) == %{"ok" => true, "output" => "sem comments", "emit" => []}
+
+    assert CompactComments.run(input) == %{
+             "ok" => true,
+             "output" => Out.no_comments(),
+             "emit" => []
+           }
   end
 
   test "commit emits a compact for the run's work_id" do
-    input = %{@input | args: %{"op" => "commit", "summary" => "feito"}, work_id: "wrk_1"}
+    input = %{@input | args: %{"op" => "commit", "summary" => "done"}, work_id: "wrk_1"}
 
     assert CompactComments.run(input) == %{
              "ok" => true,
              "output" => "",
              "emit" => [
-               %{"type" => "compact", "body" => %{"work_id" => "wrk_1", "summary" => "feito"}}
+               %{"type" => "compact", "body" => %{"work_id" => "wrk_1", "summary" => "done"}}
              ]
            }
   end
@@ -54,7 +64,7 @@ defmodule Omunculus.Tools.CompactCommentsTest do
   test "commit keeps ids when given a non-empty list" do
     input = %{
       @input
-      | args: %{"op" => "commit", "summary" => "feito", "ids" => ["cmt_1", "cmt_2"]},
+      | args: %{"op" => "commit", "summary" => "done", "ids" => ["cmt_1", "cmt_2"]},
         work_id: "wrk_1"
     }
 
@@ -66,7 +76,7 @@ defmodule Omunculus.Tools.CompactCommentsTest do
                  "type" => "compact",
                  "body" => %{
                    "work_id" => "wrk_1",
-                   "summary" => "feito",
+                   "summary" => "done",
                    "ids" => ["cmt_1", "cmt_2"]
                  }
                }
@@ -77,7 +87,7 @@ defmodule Omunculus.Tools.CompactCommentsTest do
   test "commit drops ids when given an empty list" do
     input = %{
       @input
-      | args: %{"op" => "commit", "summary" => "feito", "ids" => []},
+      | args: %{"op" => "commit", "summary" => "done", "ids" => []},
         work_id: "wrk_1"
     }
 
@@ -96,7 +106,7 @@ defmodule Omunculus.Tools.CompactCommentsTest do
   end
 
   test "commit without a target work fails" do
-    input = %{@input | args: %{"op" => "commit", "summary" => "feito"}}
+    input = %{@input | args: %{"op" => "commit", "summary" => "done"}}
 
     assert CompactComments.run(input) == %{
              "ok" => false,

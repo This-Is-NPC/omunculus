@@ -6,17 +6,18 @@ defmodule Omunculus.Model.OpenAITest do
   alias Omunculus.{ExecutionPolicyFixtures, Fixtures}
   alias Omunculus.Model.OpenAI
   alias Omunculus.OpenAIStub
+  alias Omunculus.Tools.Out
 
   @assembled """
-  Você é o worker.
+  You are the worker.
 
   ## Tools
-  As tools estão em `tools.*`.
-  - counter: incrementa e devolve o total
+  #{Out.tools_preamble()}
+  - counter: increments and returns the total
   """
 
   @tools [
-    %{name: "counter", description: "incrementa e devolve o total", parameters: %{}}
+    %{name: "counter", description: "increments and returns the total", parameters: %{}}
   ]
 
   defp recorder do

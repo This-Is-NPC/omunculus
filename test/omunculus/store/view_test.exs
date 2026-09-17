@@ -105,12 +105,12 @@ defmodule Omunculus.Store.ViewTest do
 
       Fixtures.insert(conn, :inbox, %{work_id: other_work_id})
 
-      Fixtures.insert(conn, :comments, %{inbox_id: first_id, body: "preciso disso"})
+      Fixtures.insert(conn, :comments, %{inbox_id: first_id, body: "need this"})
       Fixtures.insert(conn, :comments, %{inbox_id: read_id, body: "ignored"})
 
       assert {:ok, [entry]} = View.view(conn, "inbox.work", work_id)
       assert entry.id == first_id
-      assert entry.body == "preciso disso"
+      assert entry.body == "need this"
     end
 
     test "returns an empty list for a work with no notifications", %{conn: conn} do
@@ -199,11 +199,11 @@ defmodule Omunculus.Store.ViewTest do
 
   describe "prompt" do
     test "returns the prompt row", %{conn: conn} do
-      prompt_id = Fixtures.insert(conn, :prompts, %{body: "conte até 5"})
+      prompt_id = Fixtures.insert(conn, :prompts, %{body: "count to 5"})
 
       assert {:ok, prompt} = View.view(conn, "prompt", prompt_id)
       assert prompt.id == prompt_id
-      assert prompt.body == "conte até 5"
+      assert prompt.body == "count to 5"
     end
 
     test "returns nil for an unknown id", %{conn: conn} do

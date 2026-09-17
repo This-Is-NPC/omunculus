@@ -140,7 +140,7 @@ defmodule Omunculus.Tools.ReplyTest do
   test "the manifest wiring yields the same emit as calling the module directly" do
     catalog = Catalog.discover(Catalog.roots("/nonexistent"))
     manifest = Map.fetch!(catalog, "reply")
-    input = %{@input | args: %{"request_id" => "req_1", "decision" => "deny", "body" => "não"}}
+    input = %{@input | args: %{"request_id" => "req_1", "decision" => "deny", "body" => "no"}}
 
     assert {:ok, result} = Invoke.call(manifest, input)
     assert result.emit == Reply.run(input)["emit"]

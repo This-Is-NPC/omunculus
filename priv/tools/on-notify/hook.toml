@@ -1,5 +1,5 @@
 name = "on-notify"
 kind = "hook"
 events = ["notify"]
-description = "Reage a um notify. Default: no-op."
+description = "Reacts to a notify. Default: no-op."
 module = "Omunculus.Hooks.Noop"

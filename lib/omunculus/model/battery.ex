@@ -1,16 +1,19 @@
 defmodule Omunculus.Model.Battery do
   @moduledoc """
-  The bench model of spec §6, the "conte até 5" scenario: decides only
+  The bench model of spec §6, the "count to 5" scenario: decides only
   from what it can see in the assembled prompt — the cards under
   `## Tools`, the presence of `## Work`, the text under `## Last
   comment` and the agent's own first line — opening the work when there
   is none, delegating when it can, counting to 5 with `counter`
   otherwise, delegating one more floor down when it still cannot count
-  and has not already (marked by its own "delegado" comment, so a later
+  and has not already (marked by its own "delegated" comment, so a later
   reopening of the same work does not delegate again), reviewing a
   finished count on the next opening, and reacting as an observer when
   addressed as one.
   """
+
+  @counted "counted to 5"
+  @delegated "delegated"
 
   @spec complete(String.t(), [map], (String.t(), map -> {:ok, String.t()} | {:error, term})) ::
           {:ok, String.t()}
@@ -25,7 +28,7 @@ defmodule Omunculus.Model.Battery do
   defp decide(parsed, call), do: count(parsed, call)
 
   defp open_work(%{cards: cards} = parsed, call) do
-    call.("work", %{"title" => "Contar até 5"})
+    call.("work", %{"title" => "Count to 5"})
 
     if MapSet.member?(cards, "delegate") do
       delegate_down(cards, call)
@@ -37,19 +40,19 @@ defmodule Omunculus.Model.Battery do
   defp count(%{cards: cards} = parsed, call) do
     if MapSet.member?(cards, "counter") do
       count_to_five(call, 5)
-      if MapSet.member?(cards, "comment"), do: call.("comment", %{"body" => "contei até 5"})
-      if MapSet.member?(cards, "notify"), do: call.("notify", %{"body" => "cheguei a 5"})
+      if MapSet.member?(cards, "comment"), do: call.("comment", %{"body" => @counted})
+      if MapSet.member?(cards, "notify"), do: call.("notify", %{"body" => "reached 5"})
       if MapSet.member?(cards, "continue"), do: call.("continue", %{})
-      {:ok, "contei até 5"}
+      {:ok, @counted}
     else
       review(parsed, call)
     end
   end
 
   defp delegate_down(cards, call) do
-    if MapSet.member?(cards, "comment"), do: call.("comment", %{"body" => "delegado"})
-    call.("delegate", %{"title" => "Conte até 5", "body" => "conte com counter até 5"})
-    {:ok, "delegado"}
+    if MapSet.member?(cards, "comment"), do: call.("comment", %{"body" => @delegated})
+    call.("delegate", %{"title" => "Count to 5", "body" => "count with counter to 5"})
+    {:ok, @delegated}
   end
 
   defp count_to_five(_call, 0), do: :ok
@@ -65,7 +68,7 @@ defmodule Omunculus.Model.Battery do
     cond do
       reviewable?(comment, cards) ->
         call.("continue", %{})
-        {:ok, "revisado"}
+        {:ok, "reviewed"}
 
       MapSet.member?(cards, "delegate") and not delegated?(comment) ->
         delegate_down(cards, call)
@@ -77,17 +80,17 @@ defmodule Omunculus.Model.Battery do
 
   defp reviewable?(comment, cards),
     do:
-      is_binary(comment) and String.contains?(comment, "contei até 5") and
+      is_binary(comment) and String.contains?(comment, @counted) and
         MapSet.member?(cards, "continue")
 
-  defp delegated?(comment), do: is_binary(comment) and String.contains?(comment, "delegado")
+  defp delegated?(comment), do: is_binary(comment) and String.contains?(comment, @delegated)
 
   defp observe(%{agent_line: line, cards: cards, work: work?}, call) do
     if String.contains?(line, "observer") and MapSet.member?(cards, "comment") and work? do
-      call.("comment", %{"body" => "observado"})
-      {:ok, "observado"}
+      call.("comment", %{"body" => "observed"})
+      {:ok, "observed"}
     else
-      {:ok, "nada a fazer"}
+      {:ok, "nothing to do"}
     end
   end
 

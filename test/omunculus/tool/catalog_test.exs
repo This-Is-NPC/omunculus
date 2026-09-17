@@ -63,12 +63,12 @@ defmodule Omunculus.Tool.CatalogTest do
     write_tool(project, "send", """
     name = "send"
     kind = "tool"
-    description = "do projeto"
+    description = "from the project"
     command = ["./run"]
     """)
 
     catalog = Catalog.discover([builtin, project])
-    assert catalog["send"].description == "do projeto"
+    assert catalog["send"].description == "from the project"
   end
 
   test "a folder without a manifest is ignored", %{project_dir: project_dir} do
@@ -232,12 +232,12 @@ defmodule Omunculus.Tool.CatalogTest do
     name = "on-request"
     kind = "hook"
     events = ["request"]
-    description = "do projeto"
+    description = "from the project"
     command = ["./run"]
     """)
 
     catalog = Catalog.discover([builtin_root, project_dir])
-    assert catalog["on-request"].description == "do projeto"
+    assert catalog["on-request"].description == "from the project"
   end
 
   describe "MCP servers" do
@@ -262,12 +262,12 @@ defmodule Omunculus.Tool.CatalogTest do
       write_tool(project_dir, "echo", """
       name = "echo"
       kind = "tool"
-      description = "do projeto"
+      description = "from the project"
       command = ["./run"]
       """)
 
       catalog = Catalog.discover([project_dir], [@mcp_server], mcp_policy())
-      assert catalog["echo"].description == "do projeto"
+      assert catalog["echo"].description == "from the project"
       assert catalog["echo"].mcp == nil
     end
 
@@ -280,7 +280,7 @@ defmodule Omunculus.Tool.CatalogTest do
       write_tool(home_root, "echo", """
       name = "echo"
       kind = "tool"
-      description = "da pessoa"
+      description = "from the user"
       command = ["./run"]
       """)
 

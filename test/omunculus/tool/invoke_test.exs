@@ -63,9 +63,9 @@ defmodule Omunculus.Tool.InvokeTest do
     printf '{"ok": true, "output": "", "emit": [{"type": "echo", "body": {"message": "%s"}}]}' "$message"
     """)
 
-    input = %{@input | args: %{"message" => "conte até 5"}}
+    input = %{@input | args: %{"message" => "count to 5"}}
     assert {:ok, result} = Invoke.call(manifest(dir), input, policy(dir))
-    assert result.emit == [%{"type" => "echo", "body" => %{"message" => "conte até 5"}}]
+    assert result.emit == [%{"type" => "echo", "body" => %{"message" => "count to 5"}}]
   end
 
   test "emit defaults to [] and output defaults to \"\"", %{dir: dir} do
@@ -145,14 +145,14 @@ defmodule Omunculus.Tool.InvokeTest do
   describe "module path" do
     test "happy path calls module.run/1 and validates its result", %{dir: dir} do
       manifest = manifest(dir, %{command: nil, module: "Omunculus.Tools.Send"})
-      input = %{@input | args: %{"message" => "oi"}}
+      input = %{@input | args: %{"message" => "hi"}}
 
       assert {:ok, result} = Invoke.call(manifest, input)
 
       assert result == %{
                ok: true,
                output: "",
-               emit: [%{"type" => "prompt", "body" => %{"message" => "oi"}}]
+               emit: [%{"type" => "prompt", "body" => %{"message" => "hi"}}]
              }
     end
 
@@ -178,13 +178,13 @@ defmodule Omunculus.Tool.InvokeTest do
     end
 
     test "with a message returns ok and one prompt emit", %{manifest: manifest} do
-      input = %{@input | name: "send", args: %{"message" => "conte até 5"}}
+      input = %{@input | name: "send", args: %{"message" => "count to 5"}}
       assert {:ok, result} = Invoke.call(manifest, input)
 
       assert result.ok == true
 
       assert result.emit == [
-               %{"type" => "prompt", "body" => %{"message" => "conte até 5"}}
+               %{"type" => "prompt", "body" => %{"message" => "count to 5"}}
              ]
     end
 

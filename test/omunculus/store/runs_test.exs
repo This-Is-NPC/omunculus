@@ -33,7 +33,7 @@ defmodule Omunculus.Store.RunsTest do
   end
 
   test "open writes the assembled prompt, the run row and the start-run event", %{conn: conn} do
-    message_id = Fixtures.insert(conn, :prompts, %{kind: "message", body: "conte até 5"})
+    message_id = Fixtures.insert(conn, :prompts, %{kind: "message", body: "count to 5"})
 
     assert {:ok, run} = Runs.open(conn, open_params(message_id))
 

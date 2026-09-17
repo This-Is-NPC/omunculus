@@ -2,7 +2,7 @@ defmodule Omunculus.Tools.ToolSearchTest do
   use ExUnit.Case, async: true
 
   alias Omunculus.Tool.{Catalog, Invoke}
-  alias Omunculus.Tools.ToolSearch
+  alias Omunculus.Tools.{Out, ToolSearch}
 
   @input %{
     name: "tool_search",
@@ -15,11 +15,11 @@ defmodule Omunculus.Tools.ToolSearchTest do
   }
 
   @cards [
-    %{name: "write", description: "Escreve um arquivo no workspace.", tags: ["fs.write"]},
-    %{name: "read", description: "Lê um arquivo do workspace.", tags: ["fs.read"]},
+    %{name: "write", description: "Writes a file in the workspace.", tags: ["fs.write"]},
+    %{name: "read", description: "Reads a file from the workspace.", tags: ["fs.read"]},
     %{
       name: "compact_comments",
-      description: "Limpar histórico de comments antigos.",
+      description: "Clear old comment history.",
       tags: ["compact"]
     }
   ]
@@ -30,9 +30,9 @@ defmodule Omunculus.Tools.ToolSearchTest do
     assert ToolSearch.run(input) == %{
              "ok" => true,
              "output" =>
-               "- compact_comments: Limpar histórico de comments antigos. [compact]\n" <>
-                 "- read: Lê um arquivo do workspace. [fs.read]\n" <>
-                 "- write: Escreve um arquivo no workspace. [fs.write]",
+               "- compact_comments: Clear old comment history. [compact]\n" <>
+                 "- read: Reads a file from the workspace. [fs.read]\n" <>
+                 "- write: Writes a file in the workspace. [fs.write]",
              "emit" => []
            }
   end
@@ -41,19 +41,19 @@ defmodule Omunculus.Tools.ToolSearchTest do
     input = %{@input | view: %{"catalog" => @cards}, args: %{"q" => "WRITE"}}
 
     assert ToolSearch.run(input)["output"] ==
-             "- write: Escreve um arquivo no workspace. [fs.write]"
+             "- write: Writes a file in the workspace. [fs.write]"
   end
 
   test "q matches the description case-insensitively" do
-    input = %{@input | view: %{"catalog" => @cards}, args: %{"q" => "limpar histórico"}}
+    input = %{@input | view: %{"catalog" => @cards}, args: %{"q" => "clear old"}}
 
     assert ToolSearch.run(input)["output"] ==
-             "- compact_comments: Limpar histórico de comments antigos. [compact]"
+             "- compact_comments: Clear old comment history. [compact]"
   end
 
   test "q matches a tag case-insensitively" do
     input = %{@input | view: %{"catalog" => @cards}, args: %{"q" => "FS.READ"}}
-    assert ToolSearch.run(input)["output"] == "- read: Lê um arquivo do workspace. [fs.read]"
+    assert ToolSearch.run(input)["output"] == "- read: Reads a file from the workspace. [fs.read]"
   end
 
   test "tags requires every listed tag to be present" do
@@ -70,19 +70,19 @@ defmodule Omunculus.Tools.ToolSearchTest do
     input = %{
       @input
       | view: %{"catalog" => @cards},
-        args: %{"q" => "arquivo", "tags" => ["fs.write"]}
+        args: %{"q" => "file", "tags" => ["fs.write"]}
     }
 
     assert ToolSearch.run(input)["output"] ==
-             "- write: Escreve um arquivo no workspace. [fs.write]"
+             "- write: Writes a file in the workspace. [fs.write]"
   end
 
   test "nothing found" do
-    input = %{@input | view: %{"catalog" => @cards}, args: %{"q" => "nada disso existe"}}
+    input = %{@input | view: %{"catalog" => @cards}, args: %{"q" => "does not exist at all"}}
 
     assert ToolSearch.run(input) == %{
              "ok" => true,
-             "output" => "nenhuma tool encontrada",
+             "output" => Out.no_tools_found(),
              "emit" => []
            }
   end
@@ -90,7 +90,7 @@ defmodule Omunculus.Tools.ToolSearchTest do
   test "view absent yields the same message" do
     assert ToolSearch.run(@input) == %{
              "ok" => true,
-             "output" => "nenhuma tool encontrada",
+             "output" => Out.no_tools_found(),
              "emit" => []
            }
   end

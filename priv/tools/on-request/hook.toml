@@ -1,5 +1,5 @@
 name = "on-request"
 kind = "hook"
 events = ["request"]
-description = "Reage a um request aberto. Default: no-op."
+description = "Reacts to an open request. Default: no-op."
 module = "Omunculus.Hooks.Noop"

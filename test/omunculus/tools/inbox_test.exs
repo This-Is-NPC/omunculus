@@ -2,7 +2,7 @@ defmodule Omunculus.Tools.InboxTest do
   use ExUnit.Case, async: true
 
   alias Omunculus.Tool.{Catalog, Invoke}
-  alias Omunculus.Tools.Inbox
+  alias Omunculus.Tools.{Inbox, Out}
 
   @input %{
     name: "inbox",
@@ -16,7 +16,7 @@ defmodule Omunculus.Tools.InboxTest do
 
   test "lists one line per inbox item" do
     items = [
-      %{id: "inb_1", agent: "worker", work_id: "wrk_1", created_at: "t1", body: "acabei"},
+      %{id: "inb_1", agent: "worker", work_id: "wrk_1", created_at: "t1", body: "done"},
       %{id: "inb_2", agent: "concierge", work_id: nil, created_at: "t2", body: nil}
     ]
 
@@ -24,18 +24,18 @@ defmodule Omunculus.Tools.InboxTest do
 
     assert Inbox.run(input) == %{
              "ok" => true,
-             "output" => "inb_1 worker: acabei\ninb_2 concierge: (sem texto)",
+             "output" => "inb_1 worker: done\ninb_2 concierge: #{Out.no_text()}",
              "emit" => []
            }
   end
 
   test "reports an empty inbox when the list is empty" do
     input = %{@input | view: %{"inbox" => []}}
-    assert Inbox.run(input) == %{"ok" => true, "output" => "inbox vazio", "emit" => []}
+    assert Inbox.run(input) == %{"ok" => true, "output" => Out.empty_inbox(), "emit" => []}
   end
 
   test "reports an empty inbox when the key is absent" do
-    assert Inbox.run(@input) == %{"ok" => true, "output" => "inbox vazio", "emit" => []}
+    assert Inbox.run(@input) == %{"ok" => true, "output" => Out.empty_inbox(), "emit" => []}
   end
 
   test "the builtin catalog discovers inbox with triggers == [\"cli\"]" do

@@ -33,6 +33,6 @@ defmodule Omunculus.Tools.Preset do
       File.cp_r!(tools_dir, Path.join(root, "tools"))
     end
 
-    Out.ok("preset #{name} aplicado")
+    Out.ok(Out.preset_applied(name))
   end
 end

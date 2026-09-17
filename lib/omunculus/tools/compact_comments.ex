@@ -11,7 +11,7 @@ defmodule Omunculus.Tools.CompactComments do
   def run(%{args: %{"op" => "load"}, view: view}) do
     output =
       case Map.get(view, "comments.work", []) do
-        [] -> "sem comments"
+        [] -> Out.no_comments()
         comments -> comments |> Enum.map(&line/1) |> Enum.join("\n")
       end
 

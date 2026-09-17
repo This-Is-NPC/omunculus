@@ -101,13 +101,13 @@ defmodule Omunculus.McpTest do
 
       model = fn assembled, _tools, call ->
         send(test_pid, {:assembled, assembled})
-        assert {:ok, "oi"} = call.("echo", %{"text" => "oi"})
-        assert {:error, {:not_allowed, "shout"}} = call.("shout", %{"text" => "oi"})
+        assert {:ok, "hi"} = call.("echo", %{"text" => "hi"})
+        assert {:error, {:not_allowed, "shout"}} = call.("shout", %{"text" => "hi"})
         assert {:error, {:not_allowed, "whisper"}} = call.("whisper", %{})
         {:ok, "done"}
       end
 
-      assert {:ok, ""} = CLI.run(["send", "oi"], dir, model)
+      assert {:ok, ""} = CLI.run(["send", "hi"], dir, model)
 
       assert_received {:assembled, assembled}
       assert assembled =~ "- echo:"

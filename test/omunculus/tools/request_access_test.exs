@@ -15,7 +15,7 @@ defmodule Omunculus.Tools.RequestAccessTest do
   }
 
   test "emits a request with kind, name and reason" do
-    input = %{@input | args: %{"kind" => "tool", "name" => "write", "reason" => "preciso gravar"}}
+    input = %{@input | args: %{"kind" => "tool", "name" => "write", "reason" => "need to write"}}
 
     assert RequestAccess.run(input) == %{
              "ok" => true,
@@ -23,7 +23,7 @@ defmodule Omunculus.Tools.RequestAccessTest do
              "emit" => [
                %{
                  "type" => "request",
-                 "body" => %{"kind" => "tool", "name" => "write", "reason" => "preciso gravar"}
+                 "body" => %{"kind" => "tool", "name" => "write", "reason" => "need to write"}
                }
              ]
            }

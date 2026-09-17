@@ -46,7 +46,7 @@ defmodule Omunculus.Tools.ToolSearch do
     end
   end
 
-  defp format([]), do: "nenhuma tool encontrada"
+  defp format([]), do: Out.no_tools_found()
   defp format(cards), do: cards |> Enum.map(&line/1) |> Enum.join("\n")
 
   defp line(%{name: name, description: description, tags: []}),

@@ -81,7 +81,7 @@ defmodule Omunculus.Store.ActionsTest do
     {:ok, [_tool_event, event]} =
       record_tool(
         conn,
-        [request_emit("tool", "write", "preciso gravar")],
+        [request_emit("tool", "write", "need to write")],
         request_ctx(run, work_id)
       )
 
@@ -335,7 +335,7 @@ defmodule Omunculus.Store.ActionsTest do
     assert {:ok, [_tool_event, event]} =
              record_tool(
                conn,
-               [%{"type" => "prompt", "body" => %{"message" => "conte até 5"}}],
+               [%{"type" => "prompt", "body" => %{"message" => "count to 5"}}],
                @ctx
              )
 
@@ -346,7 +346,7 @@ defmodule Omunculus.Store.ActionsTest do
              Query.one(conn, "SELECT * FROM prompts WHERE id = ?", [event.prompt_id])
 
     assert prompt.kind == "message"
-    assert prompt.body == "conte até 5"
+    assert prompt.body == "count to 5"
     assert prompt.run_id == nil
   end
 
@@ -716,7 +716,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:error, {:break, :workflow_off}} =
                record_tool(
                  conn,
-                 [%{"type" => "break", "body" => %{"body" => "preciso pausar"}}],
+                 [%{"type" => "break", "body" => %{"body" => "need to pause"}}],
                  ctx
                )
     end
@@ -729,7 +729,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, [_tool_event, event]} =
                record_tool(
                  conn,
-                 [%{"type" => "break", "body" => %{"body" => "preciso pausar"}}],
+                 [%{"type" => "break", "body" => %{"body" => "need to pause"}}],
                  ctx
                )
 
@@ -740,7 +740,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, comment} =
                Query.one(conn, "SELECT * FROM comments WHERE work_id = ?", [work_id])
 
-      assert comment.body == "preciso pausar"
+      assert comment.body == "need to pause"
 
       assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
       assert work.state == "waiting"
@@ -783,7 +783,7 @@ defmodule Omunculus.Store.ActionsTest do
                  [
                    %{
                      "type" => "delegate",
-                     "body" => %{"title" => "Sub task", "body" => "faça isso"}
+                     "body" => %{"title" => "Sub task", "body" => "do this"}
                    }
                  ],
                  ctx
@@ -804,7 +804,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, comment} =
                Query.one(conn, "SELECT * FROM comments WHERE work_id = ?", [child_id])
 
-      assert comment.body == "faça isso"
+      assert comment.body == "do this"
 
       assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
       assert parent.state == "waiting"
@@ -814,7 +814,7 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert Jason.decode!(event.body) == %{
                "title" => "Sub task",
-               "body" => "faça isso",
+               "body" => "do this",
                "parent_id" => parent_id
              }
     end
@@ -1036,7 +1036,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, [_tool_event, event]} =
                record_tool(
                  conn,
-                 [request_emit("tool", "write", "preciso gravar")],
+                 [request_emit("tool", "write", "need to write")],
                  request_ctx(run, work_id)
                )
 
@@ -1056,7 +1056,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, comment} =
                Query.one(conn, "SELECT * FROM comments WHERE request_id = ?", [event.request_id])
 
-      assert comment.body == "preciso gravar"
+      assert comment.body == "need to write"
       assert comment.event_id == event.id
 
       assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
@@ -1109,7 +1109,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, [_tool_event, event]} =
                record_tool(
                  conn,
-                 [request_emit("secret", "vault", "preciso do segredo")],
+                 [request_emit("secret", "vault", "need the secret")],
                  request_ctx(run, work_id)
                )
 
@@ -1178,7 +1178,7 @@ defmodule Omunculus.Store.ActionsTest do
       ctx = request_ctx(run, work_id, Fixtures.config(grant_write_toml()))
 
       assert {:ok, [_tool_event, event]} =
-               record_tool(conn, [request_emit("tool", "write", "preciso gravar")], ctx)
+               record_tool(conn, [request_emit("tool", "write", "need to write")], ctx)
 
       assert {:ok, request} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
@@ -1200,7 +1200,7 @@ defmodule Omunculus.Store.ActionsTest do
       ctx = request_ctx(run, work_id, Fixtures.config(deny_write_toml()))
 
       assert {:ok, [_tool_event, event]} =
-               record_tool(conn, [request_emit("tool", "write", "preciso gravar")], ctx)
+               record_tool(conn, [request_emit("tool", "write", "need to write")], ctx)
 
       assert {:ok, request} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
@@ -1227,7 +1227,7 @@ defmodule Omunculus.Store.ActionsTest do
                      "body" => %{
                        "request_id" => request_id,
                        "decision" => "grant",
-                       "body" => "ok, pode gravar"
+                       "body" => "ok, you can write"
                      }
                    }
                  ],
@@ -1255,7 +1255,7 @@ defmodule Omunculus.Store.ActionsTest do
                  reply_event.id
                ])
 
-      assert comment.body == "ok, pode gravar"
+      assert comment.body == "ok, you can write"
 
       assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
       assert Jason.decode!(work.grants) == ["write"]
@@ -1346,7 +1346,7 @@ defmodule Omunculus.Store.ActionsTest do
                      "body" => %{
                        "request_id" => request_id,
                        "decision" => "deny",
-                       "body" => "não pode"
+                       "body" => "not allowed"
                      }
                    }
                  ],
@@ -1450,7 +1450,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, [_tool_event, event]} =
                record_tool(
                  conn,
-                 [%{"type" => "notify", "body" => %{"body" => "preciso avisar"}}],
+                 [%{"type" => "notify", "body" => %{"body" => "need to notify"}}],
                  ctx
                )
 
@@ -1468,7 +1468,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, comment} =
                Query.one(conn, "SELECT * FROM comments WHERE inbox_id = ?", [event.inbox_id])
 
-      assert comment.body == "preciso avisar"
+      assert comment.body == "need to notify"
       assert comment.event_id == event.id
 
       assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
@@ -1486,7 +1486,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, [_tool_event, event]} =
                record_tool(
                  conn,
-                 [%{"type" => "notify", "body" => %{"body" => "aviso solto"}}],
+                 [%{"type" => "notify", "body" => %{"body" => "loose notice"}}],
                  ctx
                )
 
@@ -1504,7 +1504,7 @@ defmodule Omunculus.Store.ActionsTest do
                  [
                    %{
                      "type" => "notify",
-                     "body" => %{"body" => "aviso", "work_id" => "nope"}
+                     "body" => %{"body" => "notice", "work_id" => "nope"}
                    }
                  ],
                  ctx
@@ -1529,7 +1529,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:error, {:notify, :no_run}} =
                record_tool(
                  conn,
-                 [%{"type" => "notify", "body" => %{"body" => "aviso"}}],
+                 [%{"type" => "notify", "body" => %{"body" => "notice"}}],
                  @ctx
                )
 
@@ -1602,7 +1602,7 @@ defmodule Omunculus.Store.ActionsTest do
                  [
                    %{
                      "type" => "compact",
-                     "body" => %{"work_id" => work_id, "summary" => "resumo"}
+                     "body" => %{"work_id" => work_id, "summary" => "summary"}
                    }
                  ],
                  ctx
@@ -1612,14 +1612,14 @@ defmodule Omunculus.Store.ActionsTest do
       assert event.work_id == work_id
 
       assert Jason.decode!(event.body) == %{
-               "summary" => "resumo",
+               "summary" => "summary",
                "deleted" => [first, second, third]
              }
 
       assert {:ok, summary} =
                Query.one(conn, "SELECT * FROM comments WHERE work_id = ?", [work_id])
 
-      assert summary.body == "resumo"
+      assert summary.body == "summary"
       assert summary.author == ctx.author
       assert event.comment_id == summary.id
       assert count(conn, "comments") == 1
@@ -1648,7 +1648,7 @@ defmodule Omunculus.Store.ActionsTest do
                      "type" => "compact",
                      "body" => %{
                        "work_id" => work_id,
-                       "summary" => "resumo",
+                       "summary" => "summary",
                        "ids" => [second, first]
                      }
                    }
@@ -1674,7 +1674,7 @@ defmodule Omunculus.Store.ActionsTest do
                      "type" => "compact",
                      "body" => %{
                        "work_id" => work_id,
-                       "summary" => "resumo",
+                       "summary" => "summary",
                        "ids" => [comment_id, foreign_id]
                      }
                    }
@@ -1698,7 +1698,7 @@ defmodule Omunculus.Store.ActionsTest do
                  [
                    %{
                      "type" => "compact",
-                     "body" => %{"work_id" => work_b, "summary" => "resumo"}
+                     "body" => %{"work_id" => work_b, "summary" => "summary"}
                    }
                  ],
                  ctx
@@ -1723,7 +1723,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:error, {:compact, :no_target}} =
                record_tool(
                  conn,
-                 [%{"type" => "compact", "body" => %{"summary" => "resumo"}}],
+                 [%{"type" => "compact", "body" => %{"summary" => "summary"}}],
                  @ctx
                )
     end
@@ -1741,7 +1741,7 @@ defmodule Omunculus.Store.ActionsTest do
                      "body" => %{
                        "work_id" => work_id,
                        "request_id" => request_id,
-                       "summary" => "resumo"
+                       "summary" => "summary"
                      }
                    }
                  ],
@@ -1759,7 +1759,7 @@ defmodule Omunculus.Store.ActionsTest do
                  [
                    %{
                      "type" => "compact",
-                     "body" => %{"request_id" => request_id, "summary" => "resumo"}
+                     "body" => %{"request_id" => request_id, "summary" => "summary"}
                    }
                  ],
                  @ctx
@@ -1767,7 +1767,7 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert event.request_id == request_id
       assert {:ok, [only]} = Store.view(conn, "comments.request", request_id)
-      assert only.body == "resumo"
+      assert only.body == "summary"
     end
 
     test "works the same on an inbox target", %{conn: conn} do
@@ -1781,7 +1781,7 @@ defmodule Omunculus.Store.ActionsTest do
                  [
                    %{
                      "type" => "compact",
-                     "body" => %{"inbox_id" => inbox_id, "summary" => "resumo"}
+                     "body" => %{"inbox_id" => inbox_id, "summary" => "summary"}
                    }
                  ],
                  @ctx
@@ -1789,7 +1789,7 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert event.inbox_id == inbox_id
       assert {:ok, [only]} = Store.view(conn, "comments.inbox", inbox_id)
-      assert only.body == "resumo"
+      assert only.body == "summary"
     end
   end
 

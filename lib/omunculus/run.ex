@@ -10,6 +10,7 @@ defmodule Omunculus.Run do
   alias Omunculus.{Ceiling, Config, Harness, Mcp, Project, Store}
   alias Omunculus.Execution.Policy
   alias Omunculus.Tool.{Catalog, Manifest}
+  alias Omunculus.Tools.Out
 
   @ending_events ~w(request deny grant continue break delegate)
   @resources ~w(sandbox.write sandbox.network)
@@ -240,7 +241,7 @@ defmodule Omunculus.Run do
 
   defp request_section(request, comments) do
     ask = Jason.decode!(request.ask)
-    header = "#{request.id}: #{ask["kind"]} #{ask["name"]} pedido por #{request.agent}"
+    header = "#{request.id}: #{ask["kind"]} #{ask["name"]} #{Out.requested_by(request.agent)}"
     ["## Request\n" <> Enum.join([header | Enum.map(comments, & &1.body)], "\n")]
   end
 
@@ -290,13 +291,13 @@ defmodule Omunculus.Run do
         Enum.map(names, &Manifest.card(Map.fetch!(catalog, &1)))
       end
 
-    "## Tools\nAs tools estão em `tools.*`.\n" <> Enum.join(lines, "\n")
+    "## Tools\n#{Out.tools_preamble()}\n" <> Enum.join(lines, "\n")
   end
 
   defp subset_lines(names, catalog) do
     {shown, omitted} = Enum.split_with(names, &searchable?(Map.fetch!(catalog, &1)))
     cards = Enum.map(shown, &Manifest.card(Map.fetch!(catalog, &1)))
-    cards ++ ["Mais #{length(omitted)} tools: procure com tool_search."]
+    cards ++ [Out.more_tools(length(omitted))]
   end
 
   defp searchable?(%Manifest{groups: groups}), do: Enum.any?(@searchable_groups, &(&1 in groups))

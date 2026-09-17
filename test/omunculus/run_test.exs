@@ -3,6 +3,7 @@ defmodule Omunculus.RunTest do
 
   alias Omunculus.{Fixtures, Id, Project, Run, Store}
   alias Omunculus.Store.Query
+  alias Omunculus.Tools.Out
 
   setup do
     dir = Path.join(System.tmp_dir!(), Id.new())
@@ -225,8 +226,8 @@ defmodule Omunculus.RunTest do
         created_at: "2026-01-02T00:00:00Z"
       })
 
-    Fixtures.insert(project.conn, :comments, %{inbox_id: first_id, body: "primeiro"})
-    Fixtures.insert(project.conn, :comments, %{inbox_id: second_id, body: "segundo"})
+    Fixtures.insert(project.conn, :comments, %{inbox_id: first_id, body: "first"})
+    Fixtures.insert(project.conn, :comments, %{inbox_id: second_id, body: "second"})
 
     test_pid = self()
 
@@ -238,7 +239,7 @@ defmodule Omunculus.RunTest do
     assert {:ok, _run} = Run.open(project, open(message_id, work_id), model)
 
     assert_received {:assembled, assembled}
-    assert assembled =~ "## Inbox\nprimeiro\nsegundo"
+    assert assembled =~ "## Inbox\nfirst\nsecond"
 
     Project.close(project)
   end
@@ -381,7 +382,7 @@ defmodule Omunculus.RunTest do
     assert assembled =~ "- tool_search:"
     assert assembled =~ "- break:"
     assert assembled =~ "- comment:"
-    assert assembled =~ "Mais 6 tools: procure com tool_search."
+    assert assembled =~ Out.more_tools(6)
     refute assembled =~ "- read:"
     refute assembled =~ "- ls:"
     refute assembled =~ "- grep:"
@@ -469,9 +470,9 @@ defmodule Omunculus.RunTest do
     test_pid = self()
 
     model = fn _assembled, _tools, call ->
-      call.("request_access", %{"kind" => "path", "name" => "./secret", "reason" => "preciso"})
+      call.("request_access", %{"kind" => "path", "name" => "./secret", "reason" => "need it"})
       send(test_pid, :reached_second_call)
-      call.("request_access", %{"kind" => "tool", "name" => "outro", "reason" => "x"})
+      call.("request_access", %{"kind" => "tool", "name" => "other", "reason" => "x"})
       {:ok, "unused"}
     end
 

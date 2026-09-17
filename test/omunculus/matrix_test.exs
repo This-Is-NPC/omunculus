@@ -1,7 +1,7 @@
 defmodule Omunculus.MatrixTest do
   @moduledoc """
   Walks the twelve D0/D1/D2 × H0/H1 × W0/W1 cells of spec §6 through the
-  same "conte até 5" task, driven by `Omunculus.Model.Battery`.
+  same "count to 5" task, driven by `Omunculus.Model.Battery`.
   """
 
   use ExUnit.Case, async: true
@@ -17,10 +17,10 @@ defmodule Omunculus.MatrixTest do
   @worker_d2_tools ~w(bench comment continue fs.read notify request_access sandbox.network)
   @manager_tools ~w(delegate fs.read sandbox.network sequence store)
 
-  @concierge_text "Você é o concierge do projeto. Leia a message, use as tools em `tools.*` quando precisar e responda."
-  @worker_text "Você é o worker. Faça o work que recebeu, comente o progresso e chame continue quando terminar a etapa."
-  @manager_text "Você é o manager. Delegue para quem está abaixo e revise quando o work voltar."
-  @observer_text "Você é o observer. Registre o aviso."
+  @concierge_text "You are the project concierge. Read the message, use the tools in `tools.*` when you need them, and respond."
+  @worker_text "You are the worker. Do the work you received, comment on progress, and call continue when the stage is done."
+  @manager_text "You are the manager. Delegate to whoever is below and review when the work comes back."
+  @observer_text "You are the observer. Record the notification."
 
   setup do
     dir = Path.join(System.tmp_dir!(), Id.new())
@@ -159,7 +159,7 @@ defmodule Omunculus.MatrixTest do
     write_config(dir, depth, workflow?)
     if hook?, do: add_observer_hook(dir)
 
-    assert {:ok, ""} = CLI.run(["send", "conte até 5"], dir, &Battery.complete/3)
+    assert {:ok, ""} = CLI.run(["send", "count to 5"], dir, &Battery.complete/3)
   end
 
   defp counter_value(conn) do
@@ -169,7 +169,7 @@ defmodule Omunculus.MatrixTest do
 
   defp counted_work(conn) do
     assert {:ok, [comment]} =
-             Query.all(conn, "SELECT * FROM comments WHERE body = ?", ["contei até 5"])
+             Query.all(conn, "SELECT * FROM comments WHERE body = ?", ["counted to 5"])
 
     assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [comment.work_id])
     work
@@ -197,7 +197,7 @@ defmodule Omunculus.MatrixTest do
     assert {:ok, [_reaction]} =
              Query.all(conn, "SELECT * FROM runs WHERE via = 'on-notify' AND agent = 'observer'")
 
-    assert {:ok, [_comment]} = Query.all(conn, "SELECT * FROM comments WHERE body = 'observado'")
+    assert {:ok, [_comment]} = Query.all(conn, "SELECT * FROM comments WHERE body = 'observed'")
   end
 
   defp refute_observer_reacted(conn),

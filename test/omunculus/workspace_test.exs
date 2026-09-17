@@ -93,7 +93,7 @@ defmodule Omunculus.WorkspaceTest do
       {:ok, "done"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "oi"], dir, model)
+    assert {:ok, ""} = CLI.run(["send", "hi"], dir, model)
   end
 
   test "write in the default workspace writes into its root, not the project dir", %{
@@ -109,7 +109,7 @@ defmodule Omunculus.WorkspaceTest do
       {:ok, "done"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "oi"], dir, model)
+    assert {:ok, ""} = CLI.run(["send", "hi"], dir, model)
 
     assert File.read!(Path.join(one, "note.txt")) == "hi"
     refute File.exists?(Path.join(dir, "note.txt"))
@@ -128,7 +128,7 @@ defmodule Omunculus.WorkspaceTest do
 
     model = fn _assembled, _tools, _call -> {:ok, "done"} end
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "oi"], dir, model)
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir, model)
 
     project = open(dir)
 
@@ -148,22 +148,22 @@ defmodule Omunculus.WorkspaceTest do
     three: three
   } do
     write_config(dir, base_toml(one, two, three))
-    File.write!(Path.join(two, "secret.txt"), "segredo")
-    File.write!(Path.join(one, "other.txt"), "outro")
+    File.write!(Path.join(two, "secret.txt"), "secret")
+    File.write!(Path.join(one, "other.txt"), "other")
 
     project = open(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
     model = fn _assembled, _tools, call ->
-      assert {:ok, "segredo"} = call.("read", %{"path" => "secret.txt"})
+      assert {:ok, "secret"} = call.("read", %{"path" => "secret.txt"})
 
       assert {:ok, message} = call.("read", %{"path" => Path.join(one, "other.txt")})
       assert message =~ "path outside roots"
       {:ok, "done"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "oi"], dir, model)
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir, model)
   end
 
   test "a child delegated from a workspace-two work inherits workspace two", %{
@@ -181,14 +181,14 @@ defmodule Omunculus.WorkspaceTest do
 
     model = fn _assembled, _tools, call ->
       case Agent.get_and_update(counter, fn n -> {n, n + 1} end) do
-        0 -> call.("delegate", %{"title" => "child", "body" => "faça isso"})
+        0 -> call.("delegate", %{"title" => "child", "body" => "do this"})
         _already_delegated -> :ok
       end
 
       {:ok, "done"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "oi"], dir, model)
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir, model)
 
     project = open(dir)
 
@@ -218,7 +218,7 @@ defmodule Omunculus.WorkspaceTest do
       {:ok, "done"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "oi"], dir, model)
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir, model)
 
     assert_received {:output, output}
     assert output == "one #{one}\nthree #{three}\ntwo #{two} *"
@@ -245,7 +245,7 @@ defmodule Omunculus.WorkspaceTest do
       {:ok, "done"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "oi"], dir, model)
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir, model)
 
     assert_received {:output, output}
     assert output == "#{three}\n  marker.txt"
@@ -263,19 +263,19 @@ defmodule Omunculus.WorkspaceTest do
       call.("request_access", %{
         "kind" => "tool",
         "name" => "delete",
-        "reason" => "preciso apagar"
+        "reason" => "need to delete"
       })
 
       {:ok, "unused"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "oi"], dir, request_model)
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir, request_model)
 
     project = open(dir)
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
     Project.close(project)
 
-    reply_model = fn _assembled, _tools, _call -> {:ok, "obrigado"} end
+    reply_model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
 
     assert {:ok, ""} =
              CLI.run(
@@ -287,7 +287,7 @@ defmodule Omunculus.WorkspaceTest do
                  "grant",
                  "--scope",
                  "workspace",
-                 "pode para sempre"
+                 "allowed forever"
                ],
                dir,
                reply_model
@@ -349,19 +349,19 @@ defmodule Omunculus.WorkspaceTest do
       call.("request_access", %{
         "kind" => "tool",
         "name" => "delete",
-        "reason" => "preciso apagar"
+        "reason" => "need to delete"
       })
 
       {:ok, "unused"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "oi"], dir, request_model)
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir, request_model)
 
     project = open(dir)
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
     Project.close(project)
 
-    reply_model = fn _assembled, _tools, _call -> {:ok, "obrigado"} end
+    reply_model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
 
     assert {:ok, ""} =
              CLI.run(
@@ -373,7 +373,7 @@ defmodule Omunculus.WorkspaceTest do
                  "grant",
                  "--scope",
                  "stage",
-                 "pode para sempre"
+                 "allowed forever"
                ],
                dir,
                reply_model
