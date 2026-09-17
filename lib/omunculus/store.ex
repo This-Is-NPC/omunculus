@@ -2,7 +2,7 @@ defmodule Omunculus.Store do
   @moduledoc """
   The project's SQLite file behind one API: functions (`view/3`, `replay/2`,
   `work_depth/2`, `grants/2`) read a cut of the tables; the run cycle
-  (`open_run/2`, `record_model/3`, `record_tool/5`, `close_run/2`) and
+  (`begin_run/2`, `attach_assembled/3`, `open_run/2`, `record_model/3`, `record_tool/5`, `close_run/2`) and
   `finish_work/3` are written by the harness. Every emit a call produces is
   applied inside that same call's transaction (spec §8.1, §8.7) — tools
   never touch SQL directly.
@@ -28,6 +28,8 @@ defmodule Omunculus.Store do
   defdelegate replay(conn, scope), to: View
   defdelegate work_depth(conn, work), to: View
   defdelegate grants(conn, work), to: Helpers
+  defdelegate begin_run(conn, params), to: Runs, as: :begin
+  defdelegate attach_assembled(conn, run_id, body), to: Runs
   defdelegate open_run(conn, params), to: Runs, as: :open
   defdelegate record_model(conn, run_id, text), to: Runs
   defdelegate record_tool(conn, run_id, call, emits, ctx), to: Runs

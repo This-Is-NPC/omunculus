@@ -55,6 +55,25 @@ defmodule Omunculus.ConfigTest do
     assert Config.workflow_for(config, 0) == :off
   end
 
+  test "the default preset names assemble on policy" do
+    assert {:ok, %Config{assemble: "assemble"}} = Config.load(default_preset())
+  end
+
+  test "an agent's assemble overrides policy assemble", %{dir: dir} do
+    write_toml(dir, """
+    [policy]
+    assemble = "assemble"
+
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    assemble = "other"
+    """)
+
+    assert {:ok, %Config{assemble: "assemble", agents: agents}} = load(dir)
+    assert agents["concierge"].assemble == "other"
+  end
+
   test "the default preset's reviewer is workflow_only with the §9.1 ceiling" do
     assert {:ok, %Config{agents: agents}} = Config.load(default_preset())
 

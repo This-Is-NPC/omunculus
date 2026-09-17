@@ -71,6 +71,8 @@ defmodule Omunculus.CLI do
   def format_error(:no_runs), do: "no runs"
   def format_error({:unknown_run, id}), do: "unknown run #{id}"
   def format_error(:no_assembled), do: "no assembled prompt"
+  def format_error({:assemble, :missing}), do: "omunculus.toml is missing assemble"
+  def format_error({:assemble, :empty}), do: "assemble returned an empty prompt"
 
   def format_error(reason), do: inspect(reason)
 

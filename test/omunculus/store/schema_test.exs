@@ -49,8 +49,13 @@ defmodule Omunculus.Store.SchemaTest do
 
     assert message =~ "runs.tools: system column"
 
+    prompt_id = Fixtures.insert(conn, :prompts, %{kind: "assembled", body: "x"})
+    assert :ok = Query.exec(conn, "UPDATE runs SET prompt_id = ? WHERE id = ?", [prompt_id, id])
+
+    other = Fixtures.insert(conn, :prompts, %{kind: "assembled", body: "y"})
+
     assert {:error, message} =
-             Query.exec(conn, "UPDATE runs SET prompt_id = ? WHERE id = ?", ["p1", id])
+             Query.exec(conn, "UPDATE runs SET prompt_id = ? WHERE id = ?", [other, id])
 
     assert message =~ "runs.prompt_id: system column"
 

@@ -107,7 +107,7 @@ defmodule Omunculus.Fixtures do
   end
 
   defp inject_defaults(data, opts) do
-    data = data |> maybe_put_store() |> maybe_put_sandbox()
+    data = data |> maybe_put_store() |> maybe_put_sandbox() |> maybe_put_assemble(opts)
 
     case Keyword.get(opts, :model) do
       fun when is_function(fun) ->
@@ -172,6 +172,21 @@ defmodule Omunculus.Fixtures do
   end
 
   defp put_agent_model(agent, _name, _force), do: agent
+
+  defp maybe_put_assemble(data, opts) do
+    if Keyword.get(opts, :assemble, true) == false do
+      data
+    else
+      policy = Map.get(data, "policy")
+      policy = if is_map(policy), do: policy, else: %{}
+
+      if Map.has_key?(policy, "assemble") do
+        data
+      else
+        Map.put(data, "policy", Map.put(policy, "assemble", "assemble"))
+      end
+    end
+  end
 
   defp maybe_put_store(data) do
     case Map.get(data, "store") do

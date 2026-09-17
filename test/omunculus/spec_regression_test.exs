@@ -45,7 +45,12 @@ defmodule Omunculus.SpecRegressionTest do
   setup do
     dir = Path.join(System.tmp_dir!(), "omunculus-spec-" <> Id.new())
     File.mkdir_p!(dir)
-    File.write!(Path.join(dir, "omunculus.toml"), @config <> "\n" <> Fixtures.tools_table(dir))
+
+    File.write!(
+      Path.join(dir, "omunculus.toml"),
+      ensure_assemble(@config <> "\n" <> Fixtures.tools_table(dir))
+    )
+
     {:ok, project} = Fixtures.open_project(dir)
 
     on_exit(fn ->
@@ -63,13 +68,25 @@ defmodule Omunculus.SpecRegressionTest do
         overrides
       )
 
+  defp ensure_assemble(body) do
+    if String.contains?(body, "assemble =") do
+      body
+    else
+      if String.contains?(body, "[policy]") do
+        String.replace(body, "[policy]", "[policy]\nassemble = \"assemble\"", global: false)
+      else
+        body <> "\n[policy]\nassemble = \"assemble\"\n"
+      end
+    end
+  end
+
   defp write_config(project, text) do
     body =
       if String.contains?(text, "[tools]"),
         do: text,
         else: text <> "\n" <> Fixtures.tools_table(project.dir)
 
-    File.write!(Path.join(project.dir, "omunculus.toml"), body)
+    File.write!(Path.join(project.dir, "omunculus.toml"), ensure_assemble(body))
   end
 
   defp hook(project, name, event, emits \\ [], agent \\ nil) do
@@ -556,7 +573,7 @@ defmodule Omunculus.SpecRegressionTest do
              Run.open(p, opening())
 
     assert {:ok, events} = Store.replay(p.conn, {:run, run.id})
-    assert Enum.map(events, & &1.type) == ~w(start-run model tool request end-run tool)
+    assert Enum.map(events, & &1.type) == ~w(start-run tool model tool request end-run tool)
     assert Enum.find(events, &(&1.type == "model")).body =~ "I need access"
   end
 

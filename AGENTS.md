@@ -16,9 +16,9 @@ The core is `lib/omunculus/`. Read these modules first, in this order.
 | --- | --- |
 | `Omunculus.CLI` | Entry point. `omunculus <name> [--key value]` dispatches a tool with trigger `cli`, then hands the resulting events to the harness. Reads `OMUNCULUS_PROJECT` and `OMUNCULUS_MODEL` from the environment. |
 | `Omunculus.Project` | Opens `<project>/.omunculus/store.sqlite3` and holds the connection. |
-| `Omunculus.Config` | Loads and validates `omunculus.toml`: policy, depth layers, workspaces, agents, workflows, MCP servers and the required `[execution]` table (including `resources`). Also rewrites the file for permanent grants. |
+| `Omunculus.Config` | Loads and validates `omunculus.toml`: policy (including `assemble`), depth layers, workspaces, agents, workflows, MCP servers and the required `[execution]` table (including `resources`). Also rewrites the file for permanent grants. |
 | `Omunculus.Harness` | Discovers the catalog, checks the trigger, hydrates the views a manifest declares, invokes the tool, records `EVENTS(tool)`, and applies the emitted actions. Hooks on non-terminal events run immediately; hooks on events that end the run wait until `follow_up/2` has opened the next run. |
-| `Omunculus.Run` | Opens one run: resolves the agent for the depth or workflow stage, mounts the ceiling, builds the execution policy, assembles the prompt, writes `RUNS` and `PROMPTS(assembled)`, drives the model, closes the run. |
+| `Omunculus.Run` | Opens one run: resolves the agent for the depth or workflow stage, mounts the ceiling, builds the execution policy, begins the run, dispatches the `assemble` tool, attaches `PROMPTS(assembled)`, drives the model, closes the run. |
 | `Omunculus.Ceiling` | Intersects the policy, workspace, depth, agent and stage layers into the effective tool set of a run and classifies a name as have, askable, sealed or blocked. |
 | `Omunculus.Store` and `Omunculus.Store.*` | The only code that touches SQL. `View` reads cuts of the tables. `Actions` applies emits (`comment`, `request`, `reply`, `work`, `delegate`, `continue`, `break`, `notify`, `prompt`, `compact`, ...). `Runs` and `Events` write the run lifecycle. `Schema` creates the seven tables. |
 | `Omunculus.Tool.Catalog`, `Manifest`, `Invoke` | Discover `tool.toml` / `hook.toml` folders and MCP servers, parse manifests, and call a tool either as an Elixir module or as an external command fed JSON on stdin. |
@@ -35,7 +35,8 @@ omunculus send "text"
   → tool send emits prompt → PROMPTS(message) + EVENTS(prompt)
   → follow_up opens a run
       Config.load, Catalog.discover, Ceiling.mount, Policy.build
-      assemble prompt → PROMPTS(assembled) + RUNS + EVENTS(start-run)
+      RUNS + EVENTS(start-run)
+      assemble tool → PROMPTS(assembled) + EVENTS(tool)
       model → tool calls → EVENTS(tool) + emitted actions + hooks
       EVENTS(model), EVENTS(end-run), RUNS.status = done
   → follow_up opens the next run if an action asked for one

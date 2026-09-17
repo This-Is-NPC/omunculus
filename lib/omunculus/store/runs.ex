@@ -1,7 +1,9 @@
 defmodule Omunculus.Store.Runs do
   @moduledoc """
-  Harness-side writes of the run cycle (spec §3.2, §3.3, §8.7): `open/2`
-  starts a run from an assembled prompt, `record_model/3` logs a model
+  Harness-side writes of the run cycle (spec §3.2, §3.3, §8.7): `begin/2`
+  inserts the run and `start-run` without a prompt, `attach_assembled/3`
+  stores `PROMPTS(assembled)` and fills `prompt_id` once, `open/2`
+  is begin-then-attach for tests, `record_model/3` logs a model
   turn, `record_tool/5` logs a call and applies its emits as one
   transaction so a failed emit leaves no stray `tool` event, `close/2`
   ends the run.
@@ -10,9 +12,23 @@ defmodule Omunculus.Store.Runs do
   alias Omunculus.Id
   alias Omunculus.Store.{Actions, Events, Query}
 
+  @spec begin(Exqlite.Sqlite3.db(), map) :: {:ok, map} | {:error, term}
+  def begin(conn, params) do
+    Query.transaction(conn, fn -> do_begin(conn, params) end)
+  end
+
+  @spec attach_assembled(Exqlite.Sqlite3.db(), String.t(), String.t()) ::
+          {:ok, map} | {:error, term}
+  def attach_assembled(conn, run_id, body) do
+    Query.transaction(conn, fn -> do_attach(conn, run_id, body) end)
+  end
+
   @spec open(Exqlite.Sqlite3.db(), map) :: {:ok, map} | {:error, term}
   def open(conn, params) do
-    Query.transaction(conn, fn -> do_open(conn, params) end)
+    assembled = Map.fetch!(params, :assembled)
+
+    with {:ok, run} <- begin(conn, params),
+         do: attach_assembled(conn, run.id, assembled)
   end
 
   @spec record_model(Exqlite.Sqlite3.db(), String.t(), String.t()) :: {:ok, map} | {:error, term}
@@ -46,9 +62,8 @@ defmodule Omunculus.Store.Runs do
     Query.transaction(conn, fn -> do_close(conn, run_id) end)
   end
 
-  defp do_open(conn, params) do
+  defp do_begin(conn, params) do
     run_id = Id.new()
-    assembled_id = Id.new()
 
     with {:ok, event} <-
            Events.append(conn, %{
@@ -67,18 +82,10 @@ defmodule Omunculus.Store.Runs do
                })
            }),
          :ok <-
-           Query.insert(conn, :prompts, %{
-             id: assembled_id,
-             kind: "assembled",
-             body: params.assembled,
-             run_id: run_id,
-             created_at: event.at
-           }),
-         :ok <-
            Query.insert(conn, :runs, %{
              id: run_id,
              work_id: params.work_id,
-             prompt_id: assembled_id,
+             prompt_id: nil,
              event_id: event.id,
              agent: params.agent,
              depth: to_string(params.depth),
@@ -92,6 +99,29 @@ defmodule Omunculus.Store.Runs do
       Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id])
     end
   end
+
+  defp do_attach(conn, run_id, body) do
+    assembled_id = Id.new()
+
+    with {:ok, run} <- Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id]),
+         :ok <- attachable_run(run),
+         {:ok, event} <- Query.one(conn, "SELECT * FROM events WHERE id = ?", [run.event_id]),
+         :ok <-
+           Query.insert(conn, :prompts, %{
+             id: assembled_id,
+             kind: "assembled",
+             body: body,
+             run_id: run_id,
+             created_at: event.at
+           }),
+         :ok <-
+           Query.exec(conn, "UPDATE runs SET prompt_id = ? WHERE id = ?", [assembled_id, run_id]) do
+      Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id])
+    end
+  end
+
+  defp attachable_run(%{status: "open", prompt_id: nil}), do: :ok
+  defp attachable_run(_run), do: {:error, {:run, :not_open}}
 
   defp link_message(_conn, nil, _run_id), do: :ok
 

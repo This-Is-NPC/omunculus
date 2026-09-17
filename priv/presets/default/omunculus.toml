@@ -56,3 +56,6 @@ steps = [
   { name = "to_do", agent = "worker" },
   { name = "review", agent = "reviewer", deny = ["fs.write", "bench", "sandbox.write"] },
 ]
+
+[policy]
+assemble = "assemble"

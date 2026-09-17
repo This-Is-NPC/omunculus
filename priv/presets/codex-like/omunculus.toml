@@ -67,3 +67,6 @@ human = ["delete"]
 text = """
 You are a Codex-style coding agent. Work in the repository with Bash and filesystem tools, report progress on the work item, and finish when the task is complete.
 """
+
+[policy]
+assemble = "assemble"

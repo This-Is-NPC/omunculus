@@ -55,3 +55,6 @@ negotiable = ["sandbox.write"]
 text = """
 You are a Pi-style agent: compact, direct, and without shell access. Read and edit files with tools, record the work performed, and request access when needed.
 """
+
+[policy]
+assemble = "assemble"

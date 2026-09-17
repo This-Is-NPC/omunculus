@@ -154,6 +154,17 @@ defmodule Omunculus.Store.Schema do
     end)
   end
 
+  defp system_column_trigger({"runs", "prompt_id"}) do
+    """
+    CREATE TRIGGER IF NOT EXISTS runs_prompt_id_system
+    BEFORE UPDATE OF prompt_id ON runs
+    WHEN OLD.prompt_id IS NOT NULL
+    BEGIN
+      SELECT RAISE(ABORT, 'runs.prompt_id: system column');
+    END
+    """
+  end
+
   defp system_column_trigger({table, column}) do
     """
     CREATE TRIGGER IF NOT EXISTS #{table}_#{column}_system

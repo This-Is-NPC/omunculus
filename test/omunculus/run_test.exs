@@ -13,7 +13,30 @@ defmodule Omunculus.RunTest do
     %{dir: dir}
   end
 
-  defp write_config(dir, contents), do: Fixtures.write_config(dir, contents)
+  defp write_config(dir, contents, opts \\ []), do: Fixtures.write_config(dir, contents, opts)
+
+  defp assemble_toml do
+    """
+    name = "assemble"
+    kind = "tool"
+    triggers = ["harness"]
+    command = ["./run"]
+    """
+  end
+
+  defp custom_assemble_script(output) do
+    """
+    #!/bin/sh
+    echo '{"ok": true, "output": #{Jason.encode!(output)}, "emit": []}'
+    """
+  end
+
+  defp empty_assemble_script do
+    """
+    #!/bin/sh
+    echo '{"ok": true, "output": "", "emit": []}'
+    """
+  end
 
   defp write_tool(dir, name, toml, script) do
     tool_dir = Path.join([dir, "tools", name])
@@ -111,8 +134,68 @@ defmodule Omunculus.RunTest do
 
     assert {:ok, run} = Run.open(project, open(message_id))
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
-    assert Enum.map(events, & &1.type) == ["start-run", "tool", "model", "end-run"]
+    assert Enum.map(events, & &1.type) == ["start-run", "tool", "tool", "model", "end-run"]
+    [assemble_event, echo_event] = Enum.filter(events, &(&1.type == "tool"))
+    assert Jason.decode!(assemble_event.body)["name"] == "assemble"
+    assert Jason.decode!(echo_event.body)["name"] == "echo"
 
+    Project.close(project)
+  end
+
+  test "opening a run without assemble in the TOML fails", %{dir: dir} do
+    write_config(
+      dir,
+      """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      """,
+      assemble: false
+    )
+
+    project = open_project(dir)
+    assert {:error, {:assemble, :missing}} = Run.open(project, open(message(project.conn)))
+    assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
+    Project.close(project)
+  end
+
+  test "an empty assemble output closes the run without an assembled prompt", %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    write_tool(dir, "assemble", assemble_toml(), empty_assemble_script())
+    project = open_project(dir)
+    Fixtures.use_model(project, fn _assembled, _tools, _call -> raise "must never be called" end)
+
+    assert {:error, {:assemble, :empty}} = Run.open(project, open(message(project.conn)))
+    assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
+    assert run.status == "done"
+    assert run.prompt_id == nil
+    assert {:ok, []} = Query.all(project.conn, "SELECT * FROM prompts WHERE kind = 'assembled'")
+    Project.close(project)
+  end
+
+  test "a project assemble folder replaces the builtin without recompiling", %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """)
+
+    write_tool(dir, "assemble", assemble_toml(), custom_assemble_script("CUSTOM ASSEMBLED"))
+    project = open_project(dir)
+    test_pid = self()
+
+    Fixtures.use_model(project, fn assembled, _tools, _call ->
+      send(test_pid, {:assembled, assembled})
+      {:ok, "done"}
+    end)
+
+    assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+    assert_received {:assembled, "CUSTOM ASSEMBLED"}
     Project.close(project)
   end
 
@@ -127,7 +210,8 @@ defmodule Omunculus.RunTest do
 
     assert {:error, {:not_allowed, "nonexistent"}} = Run.open(project, open(message_id))
 
-    assert {:ok, []} = Query.all(project.conn, "SELECT * FROM events WHERE type = 'tool'")
+    assert {:ok, events} = Query.all(project.conn, "SELECT * FROM events WHERE type = 'tool'")
+    assert Enum.map(events, &Jason.decode!(&1.body)["name"]) == ["assemble"]
 
     Project.close(project)
   end
@@ -532,7 +616,15 @@ defmodule Omunculus.RunTest do
     refute_received :reached_second_call
 
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
-    assert Enum.map(events, & &1.type) == ["start-run", "tool", "request", "end-run", "tool"]
+
+    assert Enum.map(events, & &1.type) == [
+             "start-run",
+             "tool",
+             "tool",
+             "request",
+             "end-run",
+             "tool"
+           ]
 
     assert {:ok, stored} = Query.one(project.conn, "SELECT * FROM runs WHERE id = ?", [run.id])
     assert stored.status == "done"

@@ -32,6 +32,24 @@ defmodule Omunculus.Store.RunsTest do
     }
   end
 
+  test "begin leaves prompt_id nil until attach_assembled", %{conn: conn} do
+    message_id = Fixtures.insert(conn, :prompts, %{kind: "message", body: "count to 5"})
+    params = Map.delete(open_params(message_id), :assembled)
+
+    assert {:ok, run} = Runs.begin(conn, params)
+    assert run.prompt_id == nil
+    assert run.status == "open"
+
+    assert {:ok, run} = Runs.attach_assembled(conn, run.id, "assembled text")
+
+    assert {:ok, assembled} =
+             Query.one(conn, "SELECT * FROM prompts WHERE id = ?", [run.prompt_id])
+
+    assert assembled.kind == "assembled"
+    assert assembled.body == "assembled text"
+    assert assembled.run_id == run.id
+  end
+
   test "open writes the assembled prompt, the run row and the start-run event", %{conn: conn} do
     message_id = Fixtures.insert(conn, :prompts, %{kind: "message", body: "count to 5"})
 

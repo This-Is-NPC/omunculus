@@ -97,7 +97,15 @@ defmodule Omunculus.CLITest do
     assert run.prompt_id == assembled.id
 
     assert {:ok, events} = Store.replay(project.conn, :project)
-    assert Enum.map(events, & &1.type) == ["tool", "prompt", "start-run", "model", "end-run"]
+
+    assert Enum.map(events, & &1.type) == [
+             "tool",
+             "prompt",
+             "start-run",
+             "tool",
+             "model",
+             "end-run"
+           ]
 
     assert assembled.body =~ "count to 5"
     assert assembled.body =~ "tools.*"
@@ -314,7 +322,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, events} = Store.replay(project.conn, :project)
 
       assert Enum.map(events, & &1.type) ==
-               ["tool", "prompt", "start-run", "tool", "work", "model", "end-run"]
+               ["tool", "prompt", "start-run", "tool", "tool", "work", "model", "end-run"]
 
       assert {:ok, [first_assembled]} =
                Query.all(project.conn, "SELECT * FROM prompts WHERE kind = 'assembled'")

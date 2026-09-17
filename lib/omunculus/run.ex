@@ -2,15 +2,16 @@ defmodule Omunculus.Run do
   @moduledoc """
   Opens a run with freshly assembled context and permissions. A named
   reaction agent still obeys the work's stage and workflow-only flags.
-  The agent's `model` from config is constructed via `new/1`. Streaming
-  adapters record each message before tools. Terminal actions close the
-  run before its action or hook continuations.
+  The agent's `model` from config is constructed via `new/1`. The
+  assembled prompt is the `output` of the tool named by
+  `agents.<x>.assemble` or `[policy] assemble`. Streaming adapters
+  record each message before tools. Terminal actions close the run
+  before its action or hook continuations.
   """
 
   alias Omunculus.{Ceiling, Config, Harness, Mcp, Project, Store}
   alias Omunculus.Execution.Policy
-  alias Omunculus.Tool.{Catalog, Manifest}
-  alias Omunculus.Tools.Out
+  alias Omunculus.Tool.Catalog
 
   @spec open(
           Project.t(),
@@ -38,12 +39,8 @@ defmodule Omunculus.Run do
            Config.for_workspace(config, Config.effective_workspace(config, work)),
          {:ok, {name, text, depth, stage}} <- resolve_agent(config, project.conn, work, agent),
          {:ok, model} <- Config.model_fun(config, name),
-         {:ok, message} <- fetch_prompt(project.conn, message_prompt_id),
-         {:ok, comment} <- fetch_last_comment(project.conn, work_id),
-         {:ok, inbox_notifications} <-
-           fetch_inbox(project.conn, work_id, Map.get(opening, :inbox_id)),
+         {:ok, _message} <- fetch_prompt(project.conn, message_prompt_id),
          {:ok, grants} <- Store.grants(project.conn, work),
-         {:ok, request_section} <- fetch_request_section(project.conn, request_id),
          workspace = Harness.workspace_context(config, work),
          context = %{
            agent: name,
@@ -81,31 +78,30 @@ defmodule Omunculus.Run do
              names,
              Catalog.implementation_roots(catalog) ++ mcp_roots
            ),
-         assembled =
-           assemble(
-             text,
-             message,
-             work,
-             comment,
-             inbox_notifications,
-             request_section,
-             names,
-             model_catalog
-           ),
+         {:ok, assemble_name} <- assemble_tool(config, name),
          {:ok, run} <-
-           Store.open_run(project.conn, %{
+           Store.begin_run(project.conn, %{
              prompt_id: message_prompt_id,
              agent: name,
              depth: depth,
              ceiling: snapshot,
              execution: Policy.serializable(execution),
-             assembled: assembled,
              work_id: work_id,
              via: via,
              request_id: request_id,
              inbox_id: Map.get(opening, :inbox_id),
              tools: names
            }),
+         {:ok, run, assembled} <-
+           invoke_assemble(
+             project,
+             run,
+             assemble_name,
+             text,
+             message_prompt_id,
+             Map.get(opening, :inbox_id),
+             execution
+           ),
          call = build_call(project, run, names, execution) do
       run_model(
         project,
@@ -203,44 +199,53 @@ defmodule Omunculus.Run do
     end
   end
 
-  defp fetch_last_comment(_conn, nil), do: {:ok, nil}
+  defp assemble_tool(config, agent_name) do
+    agent = Map.fetch!(config.agents, agent_name)
 
-  defp fetch_last_comment(conn, work_id) do
-    case Store.view(conn, "comments.work", work_id) do
-      {:ok, comments} -> {:ok, List.last(comments)}
-      {:error, _reason} = error -> error
+    case Map.get(agent, :assemble) || config.assemble do
+      nil -> {:error, {:assemble, :missing}}
+      name -> {:ok, name}
     end
   end
 
-  defp fetch_inbox(conn, _work_id, inbox_id) when not is_nil(inbox_id) do
-    with {:ok, comments} <- Store.view(conn, "comments.inbox", inbox_id),
-         do: {:ok, %{id: inbox_id, comments: comments}}
-  end
+  defp invoke_assemble(project, run, name, text, prompt_id, inbox_id, execution) do
+    ctx = %{
+      trigger: "harness",
+      run_id: run.id,
+      author: "agent",
+      agent: run.agent,
+      execution: execution,
+      prompt_id: prompt_id,
+      request_id: run.request_id,
+      inbox_id: inbox_id
+    }
 
-  defp fetch_inbox(_conn, nil, nil), do: {:ok, []}
-  defp fetch_inbox(conn, work_id, nil), do: Store.view(conn, "inbox.work", work_id)
+    args =
+      %{"text" => text}
+      |> then(fn args -> if inbox_id, do: Map.put(args, "inbox_id", inbox_id), else: args end)
 
-  defp fetch_request_section(_conn, nil), do: {:ok, []}
+    case Harness.dispatch(project, name, args, ctx) do
+      {:ok, out, _events} ->
+        with :ok <- assembled_output(out),
+             {:ok, run} <- Store.attach_assembled(project.conn, run.id, out.output) do
+          {:ok, run, out.output}
+        else
+          error -> fail_run(project, run, error)
+        end
 
-  defp fetch_request_section(conn, request_id) do
-    with {:ok, request} <- fetch_request(conn, request_id),
-         {:ok, comments} <- Store.view(conn, "comments.request", request_id) do
-      {:ok, request_section(request, comments)}
+      {:error, _reason} = error ->
+        fail_run(project, run, error)
     end
   end
 
-  defp fetch_request(conn, id) do
-    case Store.view(conn, "request", id) do
-      {:ok, nil} -> {:error, {:no_request, id}}
-      {:ok, request} -> {:ok, request}
-      {:error, _reason} = error -> error
-    end
-  end
+  defp assembled_output(%{ok: true, output: output}) when is_binary(output) and output != "",
+    do: :ok
 
-  defp request_section(request, comments) do
-    ask = Jason.decode!(request.ask)
-    header = "#{request.id}: #{ask["kind"]} #{ask["name"]} #{Out.requested_by(request.agent)}"
-    ["## Request\n" <> Enum.join([header | Enum.map(comments, & &1.body)], "\n")]
+  defp assembled_output(_out), do: {:error, {:assemble, :empty}}
+
+  defp fail_run(project, run, reason) do
+    _ = Store.close_run(project.conn, run.id)
+    reason
   end
 
   defp effective_names(snapshot, catalog) do
@@ -253,66 +258,6 @@ defmodule Omunculus.Run do
       %{name: manifest.name, description: manifest.description, parameters: manifest.parameters}
     end)
   end
-
-  @searchable_groups ~w(store sequence catalog)
-
-  defp assemble(
-         text,
-         message,
-         work,
-         comment,
-         inbox_notifications,
-         request_section,
-         names,
-         catalog
-       ) do
-    sections =
-      [String.trim(text)] ++
-        message_section(message) ++
-        work_section(work) ++
-        comment_section(comment) ++
-        inbox_section(inbox_notifications) ++
-        request_section ++
-        [tools_section(names, catalog)]
-
-    Enum.join(sections, "\n\n")
-  end
-
-  defp tools_section(names, catalog) do
-    lines =
-      if "tool_search" in names and length(names) > 12 do
-        subset_lines(names, catalog)
-      else
-        Enum.map(names, &Manifest.card(Map.fetch!(catalog, &1)))
-      end
-
-    "## Tools\n#{Out.tools_preamble()}\n" <> Enum.join(lines, "\n")
-  end
-
-  defp subset_lines(names, catalog) do
-    {shown, omitted} = Enum.split_with(names, &searchable?(Map.fetch!(catalog, &1)))
-    cards = Enum.map(shown, &Manifest.card(Map.fetch!(catalog, &1)))
-    cards ++ [Out.more_tools(length(omitted))]
-  end
-
-  defp searchable?(%Manifest{groups: groups}), do: Enum.any?(@searchable_groups, &(&1 in groups))
-
-  defp message_section(nil), do: []
-  defp message_section(message), do: ["## Message\n#{message.body}"]
-
-  defp work_section(nil), do: []
-  defp work_section(work), do: ["## Work\n#{work.title}"]
-
-  defp comment_section(nil), do: []
-  defp comment_section(comment), do: ["## Last comment\n#{comment.body}"]
-
-  defp inbox_section(%{id: id, comments: comments}),
-    do: ["## Inbox\n#{id}\n" <> Enum.map_join(comments, "\n", & &1.body)]
-
-  defp inbox_section([]), do: []
-
-  defp inbox_section(notifications),
-    do: ["## Inbox\n" <> Enum.map_join(notifications, "\n", & &1.body)]
 
   defp build_call(project, run, names, execution) do
     allowed = MapSet.new(names)
@@ -367,8 +312,9 @@ defmodule Omunculus.Run do
     result =
       try do
         {:ok, events} = Store.replay(project.conn, {:run, run.id})
+        start = Enum.filter(events, &(&1.type == "start-run"))
 
-        with {:ok, _hooks} <- Harness.react(project, events, [], execution) do
+        with {:ok, _hooks} <- Harness.react(project, start, [], execution) do
           model.(
             assembled,
             tools,

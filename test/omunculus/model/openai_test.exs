@@ -106,7 +106,7 @@ defmodule Omunculus.Model.OpenAITest do
       assert {:ok, run} = Omunculus.Run.open(project, opening)
       assert {:ok, 1} = Omunculus.Store.view(project.conn, "counter", nil)
       assert {:ok, events} = Omunculus.Store.replay(project.conn, {:run, run.id})
-      assert Enum.map(events, & &1.type) == ~w(start-run model tool model end-run)
+      assert Enum.map(events, & &1.type) == ~w(start-run tool model tool model end-run)
       [first, last] = Enum.filter(events, &(&1.type == "model"))
       assert Jason.decode!(first.body)["tool_calls"] != []
       assert Jason.decode!(last.body)["content"] == "benchmark complete"

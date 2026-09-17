@@ -175,7 +175,7 @@ defmodule Omunculus.HarnessTest do
                run.id
              ])
 
-    assert event.body == "1"
+    assert event.body == "2"
 
     Project.close(project)
   end

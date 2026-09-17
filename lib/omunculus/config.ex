@@ -30,6 +30,7 @@ defmodule Omunculus.Config do
     :workspaces,
     :agents,
     :workflows,
+    :assemble,
     :policy_workflow,
     :policy_workspace,
     :depth_workflows,
@@ -49,6 +50,7 @@ defmodule Omunculus.Config do
           text: String.t(),
           workflow_only: boolean,
           model: String.t(),
+          assemble: String.t() | nil,
           ceiling: Layer.t()
         }
   @type model :: %{api: String.t(), module: module, input: map}
@@ -87,6 +89,7 @@ defmodule Omunculus.Config do
           workspaces: %{String.t() => workspace},
           agents: %{String.t() => agent},
           workflows: %{String.t() => [step]},
+          assemble: String.t() | nil,
           policy_workflow: String.t() | nil,
           policy_workspace: String.t() | nil,
           depth_workflows: %{non_neg_integer => String.t()},
@@ -119,7 +122,7 @@ defmodule Omunculus.Config do
   @mcp_server_keys ~w(name command protocol_version)
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
-  @agent_extra_keys ~w(depth text workflow_only model)
+  @agent_extra_keys ~w(depth text workflow_only model assemble)
   @openai_model_keys ~w(api url model timeout_ms temperature headers provider)
   @module_model_keys ~w(api module params)
   @command_model_keys ~w(api command model provider params)
@@ -380,7 +383,7 @@ defmodule Omunculus.Config do
              {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), root),
              {:ok, agents} <- parse_agents(Map.get(data, "agents", %{}), models),
              {:ok, workflows} <- parse_workflows(Map.get(data, "workflows", %{}), agents),
-             {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows} <-
+             {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows, assemble} <-
                parse_policy(Map.get(data, "policy", %{}), workflows, workspaces),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{})),
              {:ok, tools} <- parse_tools(Map.get(data, "tools"), config_dir) do
@@ -394,6 +397,7 @@ defmodule Omunculus.Config do
               workspaces: workspaces,
               agents: agents,
               workflows: workflows,
+              assemble: assemble,
               policy_workflow: policy_workflow,
               policy_workspace: policy_workspace,
               depth_workflows: depth_workflows,
@@ -743,7 +747,14 @@ defmodule Omunculus.Config do
     depth_data = Map.get(data, "depth", %{})
     workflow_data = Map.get(data, "workflow")
     workspace_data = Map.get(data, "workspace")
-    layer_data = data |> Map.delete("depth") |> Map.delete("workflow") |> Map.delete("workspace")
+    assemble_data = Map.get(data, "assemble")
+
+    layer_data =
+      data
+      |> Map.delete("depth")
+      |> Map.delete("workflow")
+      |> Map.delete("workspace")
+      |> Map.delete("assemble")
 
     case Map.keys(layer_data) -- @layer_keys do
       [key | _] ->
@@ -756,14 +767,21 @@ defmodule Omunculus.Config do
              {:ok, policy_workspace} <-
                tag_error(fetch_workspace(workspace_data, workspaces), :policy),
              :ok <- ensure_default_workspace(policy_workspace, workspaces),
-             {:ok, depths, depth_workflows} <- parse_depths(depth_data, workflows) do
-          {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows}
+             {:ok, depths, depth_workflows} <- parse_depths(depth_data, workflows),
+             {:ok, assemble} <- tag_error(fetch_assemble(assemble_data), :policy) do
+          {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows, assemble}
         end
     end
   end
 
   defp tag_error({:ok, _} = ok, _tag), do: ok
   defp tag_error({:error, reason}, tag), do: {:error, {tag, reason}}
+
+  defp fetch_assemble(nil), do: {:ok, nil}
+
+  defp fetch_assemble(name) when is_binary(name) and name != "", do: {:ok, name}
+
+  defp fetch_assemble(_invalid), do: {:error, {:invalid, :assemble}}
 
   defp fetch_workflow(nil, _workflows), do: {:ok, nil}
 
@@ -1685,6 +1703,7 @@ defmodule Omunculus.Config do
              {:ok, text} <- fetch_text(data),
              {:ok, workflow_only} <- fetch_workflow_only(data),
              {:ok, model} <- fetch_model(data, models),
+             {:ok, assemble} <- fetch_assemble(data["assemble"]),
              {:ok, ceiling} <- parse_layer(Map.drop(data, @agent_extra_keys), nil) do
           {:ok,
            %{
@@ -1692,6 +1711,7 @@ defmodule Omunculus.Config do
              text: text,
              workflow_only: workflow_only,
              model: model,
+             assemble: assemble,
              ceiling: ceiling
            }}
         else

@@ -207,7 +207,7 @@ defmodule Omunculus.Harness do
     end
   end
 
-  defp fetch_dispatch_manifest(catalog, name, "cli") do
+  defp fetch_dispatch_manifest(catalog, name, trigger) when trigger in ["cli", "harness"] do
     case fetch_manifest(catalog, name) do
       {:ok, _manifest} = ok ->
         ok
@@ -215,7 +215,7 @@ defmodule Omunculus.Harness do
       {:error, {:unknown_tool, ^name}} ->
         case Map.fetch(Catalog.unconfigured(), name) do
           {:ok, %Manifest{config: true} = manifest} ->
-            if Manifest.triggered_by?(manifest, "cli"),
+            if Manifest.triggered_by?(manifest, trigger),
               do: {:ok, manifest},
               else: {:error, {:unknown_tool, name}}
 
@@ -272,8 +272,13 @@ defmodule Omunculus.Harness do
     |> Enum.map(&catalog_card(Map.fetch!(model_catalog, &1)))
   end
 
-  defp catalog_card(%Manifest{name: name, description: description, tags: tags}),
-    do: %{name: name, description: description, tags: tags}
+  defp catalog_card(%Manifest{
+         name: name,
+         description: description,
+         tags: tags,
+         groups: groups
+       }),
+       do: %{name: name, description: description, tags: tags, groups: groups}
 
   defp store_ctx(ctx, work_id, config, catalog),
     do: %{
@@ -345,6 +350,10 @@ defmodule Omunculus.Harness do
     if inbox_id, do: {:ok, inbox_id}, else: :skip
   end
 
+  defp resolve_view_id("request", _run_id, _work_id, %{request_id: request_id}) do
+    if request_id, do: {:ok, request_id}, else: :skip
+  end
+
   defp resolve_view_id("paths", _run_id, _work_id, _views), do: :paths
   defp resolve_view_id("counter", _run_id, _work_id, _views), do: {:ok, nil}
   defp resolve_view_id("inbox", _run_id, _work_id, _request_id), do: {:ok, nil}
@@ -354,6 +363,13 @@ defmodule Omunculus.Harness do
 
   defp resolve_view_id("prompt", _run_id, _work_id, %{trigger: "cli"} = views),
     do: {:cli_prompt, Map.get(views, :args, %{})}
+
+  defp resolve_view_id("prompt", _run_id, _work_id, views) do
+    case Map.get(views, :prompt_id) do
+      id when is_binary(id) and id != "" -> {:ok, id}
+      _missing -> :skip
+    end
+  end
 
   defp resolve_view_id(name, _run_id, _work_id, _request_id), do: {:error, {:unknown_view, name}}
 
@@ -426,7 +442,12 @@ defmodule Omunculus.Harness do
   defp call(project, manifest, args, work_id, ctx, config, catalog, views, workspace) do
     with {:ok, execution} <-
            execution_context(manifest, ctx, config, workspace, project.dir, catalog),
-         views = Map.merge(views, %{trigger: Map.get(ctx, :trigger), args: args}),
+         views =
+           Map.merge(views, %{
+             trigger: Map.get(ctx, :trigger),
+             args: args,
+             prompt_id: Map.get(ctx, :prompt_id)
+           }),
          {:ok, view} <- hydrate_views(project, manifest.views, ctx.run_id, work_id, views),
          input = %{
            name: manifest.name,
