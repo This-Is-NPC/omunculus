@@ -1847,4 +1847,242 @@ defmodule Omunculus.ConfigTest do
       assert resolved.agents["concierge"].model == config.agents["concierge"].model
     end
   end
+
+  describe "workspace config file" do
+    test "file wins over inline timeout", %{dir: dir} do
+      workspace_root = Path.join(dir, "app")
+      File.mkdir_p!(workspace_root)
+
+      File.write!(Path.join(workspace_root, "omunculus.toml"), """
+      [execution]
+      timeout_ms = 180000
+      """)
+
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [workspaces.app]
+      root = "app"
+      config = "omunculus.toml"
+
+      [policy]
+      workspace = "app"
+
+      [workspaces.app.execution]
+      timeout_ms = 120000
+      """)
+
+      assert {:ok, config} = load(dir)
+      assert {:ok, resolved} = Config.for_workspace(config, "app")
+      assert resolved.execution.timeout_ms == 180_000
+    end
+
+    test "missing workspace config file is an error", %{dir: dir} do
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [workspaces.app]
+      root = "app"
+      config = "missing.toml"
+
+      [policy]
+      workspace = "app"
+      """)
+
+      missing = Path.join(dir, "app/missing.toml")
+      assert {:error, {:workspace, "app", {:config, :missing, path}}} = load(dir)
+      assert path == missing
+    end
+
+    test "[store] in a workspace file is unknown_key", %{dir: dir} do
+      workspace_root = Path.join(dir, "app")
+      File.mkdir_p!(workspace_root)
+
+      File.write!(Path.join(workspace_root, "omunculus.toml"), """
+      [store]
+      path = "other.sqlite3"
+      """)
+
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [workspaces.app]
+      root = "app"
+      config = "omunculus.toml"
+
+      [policy]
+      workspace = "app"
+      """)
+
+      assert {:error, {:workspace, "app", {:unknown_key, "store"}}} = load(dir)
+    end
+
+    test "invalid policy in a workspace file is an error", %{dir: dir} do
+      workspace_root = Path.join(dir, "app")
+      File.mkdir_p!(workspace_root)
+
+      File.write!(Path.join(workspace_root, "omunculus.toml"), """
+      [policy]
+      granted = ["write"]
+      tools = ["write"]
+      """)
+
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [workspaces.app]
+      root = "app"
+      config = "omunculus.toml"
+
+      [policy]
+      workspace = "app"
+      """)
+
+      assert {:error, {:invalid, :granted}} = load(dir)
+    end
+
+    test "[workspaces] in a workspace file is unknown_key", %{dir: dir} do
+      workspace_root = Path.join(dir, "app")
+      File.mkdir_p!(workspace_root)
+
+      File.write!(Path.join(workspace_root, "omunculus.toml"), """
+      [workspaces.other]
+      root = "other"
+      """)
+
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [workspaces.app]
+      root = "app"
+      config = "omunculus.toml"
+
+      [policy]
+      workspace = "app"
+      """)
+
+      assert {:error, {:workspace, "app", {:unknown_key, "workspaces"}}} = load(dir)
+    end
+
+    test "tools.paths and sandbox.script resolve against the workspace file dir", %{dir: dir} do
+      workspace_root = Path.join(dir, "app")
+      nested = Path.join(workspace_root, "cfg")
+      File.mkdir_p!(nested)
+      extra = Path.join(nested, "extra")
+      File.mkdir_p!(extra)
+      script = Path.join(nested, "sandbox.js")
+      File.write!(script, "// test")
+
+      File.write!(Path.join(nested, "omunculus.toml"), """
+      [tools]
+      paths = ["./extra"]
+
+      [execution.sandbox]
+      script = "./sandbox.js"
+      command = ["deno", "run"]
+      runner = "deno"
+      exec = "deno"
+      """)
+
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [workspaces.app]
+      root = "app"
+      config = "cfg/omunculus.toml"
+
+      [policy]
+      workspace = "app"
+      """)
+
+      assert {:ok, config} = load(dir)
+      assert {:ok, resolved} = Config.for_workspace(config, "app")
+      assert resolved.tools.paths == [extra]
+      assert resolved.execution.sandbox.script == script
+    end
+
+    test "global deny is not cleared by file policy deny = []", %{dir: dir} do
+      workspace_root = Path.join(dir, "app")
+      File.mkdir_p!(workspace_root)
+
+      File.write!(Path.join(workspace_root, "omunculus.toml"), """
+      [policy]
+      deny = []
+      """)
+
+      write_toml(dir, """
+      [policy]
+      deny = ["delete"]
+      workspace = "app"
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [workspaces.app]
+      root = "app"
+      config = "omunculus.toml"
+      """)
+
+      assert {:ok, config} = load(dir)
+      assert {:ok, resolved} = Config.for_workspace(config, "app")
+      assert config.policy.deny == ["delete"]
+      assert resolved.policy.deny == ["delete"]
+    end
+
+    test "grant to a workspace file writes policy.granted", %{dir: dir} do
+      workspace_root = Path.join(dir, "app")
+      File.mkdir_p!(workspace_root)
+
+      File.write!(Path.join(workspace_root, "omunculus.toml"), "")
+
+      write_toml(dir, """
+      [workspaces.app]
+      root = "app"
+      config = "omunculus.toml"
+
+      [policy]
+      workspace = "app"
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      """)
+
+      assert :ok = grant(dir, {:workspace, "app"}, "write")
+
+      workspace_file = Path.join(workspace_root, "omunculus.toml")
+      assert File.read!(workspace_file) =~ ~s(granted = ["write"])
+      refute File.read!(toml(dir)) =~ ~s(granted = ["write"])
+    end
+
+    test "grant without a workspace file writes the inline section", %{dir: dir} do
+      write_toml(dir, """
+      [workspaces.app]
+      root = "app"
+
+      [policy]
+      workspace = "app"
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      """)
+
+      assert :ok = grant(dir, {:workspace, "app"}, "write")
+      assert File.read!(toml(dir)) =~ ~s(granted = ["write"])
+    end
+  end
 end

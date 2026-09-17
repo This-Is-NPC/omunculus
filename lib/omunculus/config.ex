@@ -12,7 +12,10 @@ defmodule Omunculus.Config do
   the MCP servers under `[[mcp.servers]]` (spec §8.7), the required
   `[execution]` and `[store]` tables, and grants a permanent ceiling
   addition — to an agent, a depth, a workflow step, or a workspace — by
-  rewriting that same file.
+  rewriting that same file. A workspace may name a `config` file relative
+  to its `root`; that file uses the same schema minus `[workspaces]` and
+  `[store]`, and its tables overlay the global config after any inline
+  `[workspaces.<name>]` tables.
   """
 
   alias Omunculus.Config.Layer
@@ -49,8 +52,10 @@ defmodule Omunculus.Config do
   @type step :: %{name: String.t(), agent: String.t(), ceiling: Layer.t()}
   @type workspace :: %{
           root: String.t(),
+          config: String.t() | nil,
           ceiling: Layer.t(),
-          overlay: map
+          overlay: map,
+          resolved: t() | nil
         }
   @type mcp_server :: %{name: String.t(), command: [String.t()], protocol_version: String.t()}
   @type sandbox :: %{
@@ -106,6 +111,7 @@ defmodule Omunculus.Config do
   @sandbox_keys ~w(script command runner exec)
   @mcp_server_keys ~w(name command protocol_version)
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp)
+  @workspace_file_keys ~w(policy agents workflows mcp execution project tools models)
   @agent_extra_keys ~w(depth text workflow_only model)
   @openai_model_keys ~w(api url model timeout_ms temperature key_env headers)
   @module_model_keys ~w(api module params)
@@ -142,8 +148,11 @@ defmodule Omunculus.Config do
       :error ->
         {:error, {:workspace, name, :unknown}}
 
-      {:ok, %{overlay: overlay}} ->
-        overlay_config(config, overlay)
+      {:ok, %{resolved: resolved}} when not is_nil(resolved) ->
+        {:ok, resolved}
+
+      {:ok, _} ->
+        {:error, {:workspace, name, :unresolved}}
     end
   end
 
@@ -211,9 +220,17 @@ defmodule Omunculus.Config do
 
   @spec grant(String.t(), grant_layer, String.t()) :: :ok | {:error, term}
   def grant(path, layer, name) do
-    with {:ok, data} <- read(path),
-         {:ok, data} <- add_grant(data, layer, name) do
-      File.write(path, Omunculus.Config.Toml.encode(data))
+    with {:ok, data} <- read(path) do
+      case add_grant(data, path, layer, name) do
+        {:ok, {:workspace_file, workspace_path, workspace_data}} ->
+          File.write(workspace_path, Omunculus.Config.Toml.encode(workspace_data))
+
+        {:ok, data} ->
+          File.write(path, Omunculus.Config.Toml.encode(data))
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   end
 
@@ -225,7 +242,7 @@ defmodule Omunculus.Config do
     end
   end
 
-  defp add_grant(data, {:agent, agent_name}, name) do
+  defp add_grant(data, _path, {:agent, agent_name}, name) do
     agents = Map.get(data, "agents", %{})
 
     case Map.fetch(agents, agent_name) do
@@ -234,17 +251,31 @@ defmodule Omunculus.Config do
     end
   end
 
-  defp add_grant(data, {:depth, n}, name) do
+  defp add_grant(data, _path, {:depth, n}, name) do
     path = keys(["policy", "depth", Integer.to_string(n)])
     {:ok, put_in(data, path, add_name(get_in(data, path), name))}
   end
 
-  defp add_grant(data, {:workspace, workspace_name}, name) do
-    path = keys(["workspaces", workspace_name])
-    {:ok, put_in(data, path, add_name(get_in(data, path), name))}
+  defp add_grant(data, config_path, {:workspace, workspace_name}, name) do
+    workspaces = Map.get(data, "workspaces", %{})
+
+    case Map.fetch(workspaces, workspace_name) do
+      :error ->
+        {:error, {:workspace, workspace_name, :unknown}}
+
+      {:ok, workspace} ->
+        case Map.get(workspace, "config") do
+          config when is_binary(config) and config != "" ->
+            grant_workspace_file(data, config_path, workspace_name, workspace, name)
+
+          _ ->
+            path = keys(["workspaces", workspace_name])
+            {:ok, put_in(data, path, add_name(workspace, name))}
+        end
+    end
   end
 
-  defp add_grant(data, {:stage, workflow_name, stage}, name) do
+  defp add_grant(data, _path, {:stage, workflow_name, stage}, name) do
     workflows = Map.get(data, "workflows", %{})
 
     case Map.fetch(workflows, workflow_name) do
@@ -349,7 +380,7 @@ defmodule Omunculus.Config do
             }
 
             if validate_overlays?,
-              do: validate_workspace_overlays(config),
+              do: resolve_all_workspaces(config),
               else: {:ok, config}
           end
         end
@@ -762,15 +793,23 @@ defmodule Omunculus.Config do
   defp parse_workspace(data, project_dir) when is_map(data) do
     {overlays, rest} = Map.split(data, @workspace_overlay_keys)
 
-    case Map.keys(rest) -- ["root" | @layer_keys] do
+    case Map.keys(rest) -- ["root", "config" | @layer_keys] do
       [key | _] ->
         {:error, {:unknown_key, key}}
 
       [] ->
         with {:ok, root} <- fetch_root(rest, project_dir),
-             {:ok, ceiling} <- parse_layer(Map.delete(rest, "root"), nil),
+             {:ok, config} <- fetch_workspace_config_path(rest),
+             {:ok, ceiling} <- parse_layer(Map.drop(rest, ["root", "config"]), nil),
              {:ok, overlay} <- parse_workspace_overlay(overlays) do
-          {:ok, %{root: root, ceiling: ceiling, overlay: overlay}}
+          {:ok,
+           %{
+             root: root,
+             config: config,
+             ceiling: ceiling,
+             overlay: overlay,
+             resolved: nil
+           }}
         end
     end
   end
@@ -796,21 +835,251 @@ defmodule Omunculus.Config do
   defp overlay_table_error("mcp"), do: {:mcp, {:invalid, :servers}}
   defp overlay_table_error(key), do: {:unknown_key, key}
 
-  defp overlay_config(%__MODULE__{} = config, overlay) when overlay == %{}, do: {:ok, config}
+  defp overlay_config(%__MODULE__{} = config, inline_overlay, file_overlay, _file_dir)
+       when inline_overlay == %{} and file_overlay == %{} do
+    {:ok, config}
+  end
 
-  defp overlay_config(%__MODULE__{} = config, overlay) do
+  defp overlay_config(%__MODULE__{} = config, inline_overlay, file_overlay, file_dir) do
+    file_dir = file_dir || Path.dirname(config.path)
+
     config.data
-    |> deep_merge(strip_ceiling(overlay))
+    |> deep_merge(strip_ceiling(inline_overlay))
+    |> deep_merge(strip_ceiling(expand_overlay_paths(file_overlay, file_dir)))
     |> parse(config.path, false)
   end
 
-  defp validate_workspace_overlays(config) do
-    Enum.reduce_while(config.workspaces, {:ok, config}, fn {_name, workspace}, {:ok, acc} ->
-      case overlay_config(acc, workspace.overlay) do
-        {:ok, _resolved} -> {:cont, {:ok, acc}}
-        {:error, _reason} = error -> {:halt, error}
+  defp resolve_all_workspaces(config) do
+    Enum.reduce_while(config.workspaces, {:ok, config}, fn {name, workspace}, {:ok, acc} ->
+      case resolve_workspace(acc, name, workspace) do
+        {:ok, updated_workspace} ->
+          {:cont, {:ok, %{acc | workspaces: Map.put(acc.workspaces, name, updated_workspace)}}}
+
+        {:error, _reason} = error ->
+          {:halt, error}
       end
     end)
+  end
+
+  defp resolve_workspace(config, name, workspace) do
+    with {:ok, file_data} <- read_workspace_config(name, workspace),
+         :ok <- validate_workspace_file_keys(file_data, name),
+         {:ok, file_policy_layer} <- extract_file_policy_layer(file_data),
+         ceiling = intersect_ceiling(workspace.ceiling, file_policy_layer),
+         file_dir = workspace_file_dir(workspace),
+         {:ok, resolved} <- overlay_config(config, workspace.overlay, file_data, file_dir),
+         resolved = patch_workspace_ceiling(resolved, name, ceiling) do
+      {:ok, %{workspace | ceiling: ceiling, resolved: resolved}}
+    end
+  end
+
+  defp read_workspace_config(_name, %{config: nil}), do: {:ok, %{}}
+
+  defp read_workspace_config(name, %{config: config_rel, root: root}) do
+    read_workspace_file(name, Path.expand(config_rel, root))
+  end
+
+  defp read_workspace_file(name, path) do
+    if File.regular?(path) do
+      Toml.decode_file(path)
+    else
+      {:error, {:workspace, name, {:config, :missing, path}}}
+    end
+  end
+
+  defp validate_workspace_file_keys(data, _name) when data == %{} do
+    :ok
+  end
+
+  defp validate_workspace_file_keys(data, name) when is_map(data) do
+    case Map.keys(data) -- @workspace_file_keys do
+      [key | _] -> {:error, {:workspace, name, {:unknown_key, key}}}
+      [] -> :ok
+    end
+  end
+
+  defp validate_workspace_file_keys(_data, name),
+    do: {:error, {:workspace, name, {:invalid, :table}}}
+
+  defp workspace_file_dir(%{config: nil, root: root}), do: root
+
+  defp workspace_file_dir(%{config: config_rel, root: root}),
+    do: Path.dirname(Path.expand(config_rel, root))
+
+  defp extract_file_policy_layer(file_data) do
+    case Map.fetch(file_data, "policy") do
+      :error ->
+        {:ok, %Layer{}}
+
+      {:ok, policy} when is_map(policy) ->
+        policy
+        |> Map.drop(["depth", "workflow", "workspace"])
+        |> parse_layer(nil)
+
+      {:ok, _} ->
+        {:error, {:policy, {:invalid, :table}}}
+    end
+  end
+
+  defp intersect_ceiling(%Layer{} = inline, %Layer{} = file) do
+    %Layer{
+      mode: file.mode || inline.mode,
+      deny: Enum.uniq(inline.deny ++ file.deny),
+      granted: intersect_ceiling_lists(inline.granted, file.granted),
+      negotiable: intersect_ceiling_lists(inline.negotiable, file.negotiable),
+      human: intersect_ceiling_lists(inline.human, file.human)
+    }
+  end
+
+  defp intersect_ceiling_lists(left, right) do
+    cond do
+      left == [] -> right
+      right == [] -> left
+      true -> Enum.filter(left, &(&1 in right))
+    end
+  end
+
+  defp patch_workspace_ceiling(config, name, ceiling) do
+    update_in(config.workspaces[name].ceiling, fn _ -> ceiling end)
+  end
+
+  defp fetch_workspace_config_path(data) do
+    case Map.fetch(data, "config") do
+      :error -> {:ok, nil}
+      {:ok, path} when is_binary(path) and path != "" -> {:ok, path}
+      _ -> {:error, {:invalid, :config}}
+    end
+  end
+
+  defp grant_workspace_file(data, config_path, workspace_name, workspace, tool_name) do
+    config_dir = Path.dirname(Path.expand(config_path))
+    project_root = project_root_from_data(data, config_dir)
+    workspace_root = Path.expand(workspace["root"], project_root)
+    workspace_file = Path.expand(workspace["config"], workspace_root)
+
+    with {:ok, workspace_data} <- read_workspace_file(workspace_name, workspace_file) do
+      policy = Map.get(workspace_data, "policy", %{})
+      updated = Map.put(workspace_data, "policy", add_name(policy, tool_name))
+      {:ok, {:workspace_file, workspace_file, updated}}
+    end
+  end
+
+  defp project_root_from_data(data, config_dir) do
+    case get_in(data, ["project", "root"]) do
+      root when is_binary(root) and root != "" -> Path.expand(root, config_dir)
+      _ -> config_dir
+    end
+  end
+
+  defp expand_overlay_paths(overlay, _file_dir) when overlay == %{} do
+    overlay
+  end
+
+  defp expand_overlay_paths(overlay, file_dir) when is_map(overlay) do
+    overlay
+    |> expand_overlay_tools_paths(file_dir)
+    |> expand_overlay_execution_paths(file_dir)
+    |> expand_overlay_mcp_paths(file_dir)
+  end
+
+  defp expand_overlay_tools_paths(overlay, file_dir) do
+    case Map.get(overlay, "tools") do
+      tools when is_map(tools) ->
+        tools =
+          case Map.get(tools, "paths") do
+            paths when is_list(paths) ->
+              expanded =
+                Enum.map(paths, fn path ->
+                  {:ok, expanded} = expand_tool_path(path, file_dir)
+                  expanded
+                end)
+
+              Map.put(tools, "paths", expanded)
+
+            _ ->
+              tools
+          end
+
+        tools =
+          Map.new(tools, fn
+            {"paths", value} ->
+              {"paths", value}
+
+            {name, %{"command" => command} = tool} when is_list(command) ->
+              {name, Map.put(tool, "command", expand_relative_commands(command, file_dir))}
+
+            entry ->
+              entry
+          end)
+
+        Map.put(overlay, "tools", tools)
+
+      _ ->
+        overlay
+    end
+  end
+
+  defp expand_overlay_execution_paths(overlay, file_dir) do
+    case Map.get(overlay, "execution") do
+      %{"sandbox" => sandbox} = execution when is_map(sandbox) ->
+        sandbox =
+          case Map.get(sandbox, "script") do
+            script when is_binary(script) and script != "" ->
+              Map.put(sandbox, "script", expand_sandbox_script(script, file_dir))
+
+            _ ->
+              sandbox
+          end
+
+        sandbox =
+          case Map.get(sandbox, "command") do
+            command when is_list(command) ->
+              Map.put(sandbox, "command", expand_relative_commands(command, file_dir))
+
+            _ ->
+              sandbox
+          end
+
+        Map.put(overlay, "execution", Map.put(execution, "sandbox", sandbox))
+
+      _ ->
+        overlay
+    end
+  end
+
+  defp expand_overlay_mcp_paths(overlay, file_dir) do
+    case Map.get(overlay, "mcp") do
+      %{"servers" => servers} = mcp when is_list(servers) ->
+        servers =
+          Enum.map(servers, fn
+            %{"command" => command} = server when is_list(command) ->
+              Map.put(server, "command", expand_relative_commands(command, file_dir))
+
+            server ->
+              server
+          end)
+
+        Map.put(overlay, "mcp", Map.put(mcp, "servers", servers))
+
+      _ ->
+        overlay
+    end
+  end
+
+  defp expand_relative_commands(command, file_dir) when is_list(command) do
+    Enum.map(command, fn
+      elem ->
+        if relative_command_path?(elem) do
+          Path.expand(elem, file_dir)
+        else
+          elem
+        end
+    end)
+  end
+
+  defp relative_command_path?(path) do
+    is_binary(path) and path != "" and not String.starts_with?(path, "~") and
+      Path.type(path) == :relative
   end
 
   defp strip_ceiling(overlay) do
