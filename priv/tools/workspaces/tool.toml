@@ -4,7 +4,6 @@ shape = "simple"
 triggers = ["model"]
 description = "Lists configured workspaces, with * on the run's."
 tags = ["fs"]
-groups = ["fs.read"]
 module = "Omunculus.Tools.Workspaces"
 views = ["workspaces"]
 

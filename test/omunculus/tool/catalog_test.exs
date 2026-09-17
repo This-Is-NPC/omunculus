@@ -236,6 +236,14 @@ defmodule Omunculus.Tool.CatalogTest do
     assert Catalog.groups(catalog) == %{}
   end
 
+  test "builtin fs.read is find, grep, ls and read" do
+    catalog = Catalog.unconfigured()
+
+    assert Catalog.groups(catalog)["fs.read"] == ["find", "grep", "ls", "read"]
+    assert catalog["directory"].groups == []
+    assert catalog["workspaces"].groups == []
+  end
+
   test "inline tables win over a path of the same name", %{project_dir: project_dir} do
     write_tool(project_dir, "echo", """
     name = "echo"

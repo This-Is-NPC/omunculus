@@ -43,7 +43,7 @@ defmodule Omunculus.Tools.WorkspacesTest do
 
     assert %{"workspaces" => manifest} = catalog
     assert manifest.triggers == ["model"]
-    assert manifest.groups == ["fs.read"]
+    assert manifest.groups == []
     assert manifest.views == ["workspaces"]
   end
 

@@ -401,19 +401,39 @@ defmodule Omunculus.RunTest do
     Fixtures.use_model(project, model)
 
     assert {:ok, run} = Run.open(project, open(message(project.conn)))
-    assert length(Jason.decode!(run.tools)) == 15
+    assert length(Jason.decode!(run.tools)) == 13
 
     assert_received {:assembled, assembled}
     assert assembled =~ "- tool_search:"
     assert assembled =~ "- break:"
     assert assembled =~ "- comment:"
-    assert assembled =~ Out.more_tools(6)
+    assert assembled =~ Out.more_tools(4)
     refute assembled =~ "- read:"
     refute assembled =~ "- ls:"
     refute assembled =~ "- grep:"
     refute assembled =~ "- find:"
     refute assembled =~ "- directory:"
     refute assembled =~ "- workspaces:"
+
+    Project.close(project)
+  end
+
+  test "an agent granted only fs.read does not receive directory or workspaces", %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["fs.read"]
+    """)
+
+    project = open_project(dir)
+    Fixtures.use_model(project, fn _assembled, _tools, _call -> {:ok, "done"} end)
+
+    assert {:ok, run} = Run.open(project, open(message(project.conn)))
+    names = Jason.decode!(run.tools)
+    assert names == ["find", "grep", "ls", "read"]
+    assert {:ok, [start | _]} = Store.replay(project.conn, {:run, run.id})
+    assert Jason.decode!(start.body)["execution"]["tools"] == names
 
     Project.close(project)
   end

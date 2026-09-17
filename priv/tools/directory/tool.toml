@@ -5,7 +5,6 @@ views = ["paths"]
 triggers = ["model"]
 description = "Lists the run roots and the top-level entries of each."
 tags = ["fs"]
-groups = ["fs.read"]
 module = "Omunculus.Tools.Directory"
 
 [parameters]

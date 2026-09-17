@@ -60,7 +60,7 @@ defmodule Omunculus.Tools.DirectoryTest do
 
     assert %{"directory" => manifest} = catalog
     assert manifest.triggers == ["model"]
-    assert manifest.groups == ["fs.read"]
+    assert manifest.groups == []
   end
 
   test "the manifest wiring yields the same output as calling the module directly", %{
