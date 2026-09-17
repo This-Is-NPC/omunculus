@@ -1,101 +1,86 @@
-# Omunculus
+# omunculus
 
-Omunculus is a local workflow harness for tool-using agents. It targets Linux,
-Elixir 1.17, OTP 27, Deno 2.9, and Bubblewrap 0.8 or newer.
+A local CLI harness for tool-using models. The store is one SQLite file, the
+ceiling is the TOML, and the filesystem stays the filesystem.
 
-## Runtime requirements
+There is no daemon and no chat window. `omunculus send "count to 5"` is a tool
+call, the same contract the model uses, and what happens next is already in
+the file: a prompt is recorded, a run opens, the model calls tools inside a
+Bubblewrap sandbox, every step is an event, and the store applies whatever
+those tools emit. Work, requests and notifications are rows. The harness
+follows them.
 
-`bwrap` must be installed and the kernel must allow Bubblewrap to create its
-user, mount, PID, IPC, UTS, and network namespaces. Omunculus verifies the
-backend before starting a command and returns an execution error when the
-required isolation cannot be created. It never retries that command on the
-host.
+## Install
 
-Every project configuration declares the executable roots made available to a
-run. A runtime root is read-only inside the sandbox and exposes the binaries it
-contains; it is not a per-binary allowlist. Keep runtime installations outside
-workspaces and in locations the sandboxed process cannot modify.
+From a checkout:
 
-```toml
-[execution]
-backend = "bubblewrap"
-runtimes = ["/usr"]
-environment = ["LANG", "LC_ALL", "TERM"]
-timeout_ms = 30000
-max_output_bytes = 1048576
-max_concurrent = 4
-max_queue = 64
-queue_timeout_ms = 30000
+```bash
+mise install
+mix deps.get
 ```
 
-A project configuration must include this table. The executor does not install
-Bubblewrap or language runtimes, and it does not support an older execution
-configuration.
+`bin/omunculus` is the command. It runs through `mise exec`, so the Elixir,
+OTP and Deno pins in `mise.toml` are the ones that run. There is no install
+into `~/.local` yet.
 
-## Sandbox permissions
+A project will not start from an empty directory. Copy a preset in — that
+writes `omunculus.toml` and is the one verb that does not need the file
+already there:
 
-`sandbox.write` and `sandbox.network` are ceiling resources. They are separate
-from the authorization to call a tool with a similar name.
+```bash
+bin/omunculus preset default --from priv/presets/default
+bin/omunculus send "count to 5"
+bin/omunculus prompt
+```
 
-| Resource state | Execution effect |
-| --- | --- |
-| `sandbox.write = have` | The authorized workspace is writable. |
-| any other `sandbox.write` state | The workspace is read-only for external commands. |
-| `sandbox.network = have` | Bubblewrap shares the host network namespace. |
-| any other `sandbox.network` state | Bubblewrap creates a network namespace without host networking. |
+`send` prints nothing on success. The model's text lives in the store; `prompt`
+prints the assembled prompt of the last run. The default preset's model is
+`fake`, which echoes the first line, so a first send is a cycle without a
+network.
 
-A grant ends the current run, so only the next run receives the new policy.
-Network access does not provide credentials, host environment variables, home
-directories, SSH agents, desktop sockets, or write access outside the workspace.
+`codex-like` and `pi-like` are the other two folders under `priv/presets/`.
+Each is a TOML and, for Codex, a `bash` tool — not a different harness.
 
-The JavaScript coordinator has no direct workspace, network, environment, or
-process access. It can only call the tools authorized for the current run. MCP
-discovery and MCP calls run in separate sandboxed sessions. Discovery mounts
-only its configured server implementation, runtime roots, and private
-execution files; it does not mount the workspace.
+## The binary
 
-External grants are read-only. Runs that can write share the real workspace, so
-concurrent changes to the same files are not isolated. The executor enforces
-concurrency, queue, timeout, and output limits. CPU, memory, process-count,
-and disk quotas are not configured.
+`omunculus <name> [--key value]` dispatches the tool named `<name>`. Flags
+before the name: only `--config <path>`, and without it the file is
+`./omunculus.toml` in the working directory. A missing file is a refusal,
+not a fall-back to the package.
+
+```bash
+bin/omunculus send "look at the inbox"
+bin/omunculus inbox
+bin/omunculus reply "granted" --request_id <id> --decision grant
+bin/omunculus login --provider anthropic
+```
+
+Every verb is in [the command line](docs/cli.md). The file the verbs read is
+[the TOML](docs/config.md). What a send actually does to the store is
+[the cycle](docs/cycle.md). Who may call what is [the ceiling](docs/ceiling.md).
+A folder of your own is [a tool](docs/tools.md).
+
+## Requirements
+
+- Linux, with Bubblewrap 0.8 or newer (`bwrap`) able to create user, mount,
+  PID, IPC, UTS and network namespaces
+- [mise](https://mise.jdx.dev/) for the pins in `mise.toml` (Elixir 1.17,
+  OTP 27, Deno 2.9)
+- A project `omunculus.toml` with `[execution]`, `[execution.sandbox]`,
+  `[store]` and `[models]`, and every agent naming a model
+
+The executor does not install Bubblewrap or language runtimes. A runtime root
+in `[execution] runtimes` is read-only inside the sandbox and exposes the
+binaries it contains; it is not a per-binary allowlist. Keep those
+installations outside workspaces.
 
 ## Verification
 
-Verification is implemented as executable scripts in `mise-tasks/`. Run the
-regular suite with:
-
-```sh
-mise run validate:regular
+```bash
+mise run pre-commit            # mix format --check-formatted
+mise run validate:regular      # mix test, excluding cargo and sandbox
+mise run validate:sandbox      # needs a host where Bubblewrap can unshare
 ```
-
-The `sandbox` tests require a Linux environment where Bubblewrap can create a
-network namespace. Run them in that environment with:
-
-```sh
-mise run validate:sandbox
-```
-
-`mise run pre-commit` checks formatting and `mise run pre-push` runs the
-regular suite. Those task scripts can also be invoked by Git hooks.
-
-The live OpenAI-compatible model test additionally requires `--include
-local_model`, `OMUNCULUS_OPENAI_URL`, and `OMUNCULUS_OPENAI_MODEL`.
-
-## Local capacity benchmark
 
 The [benchmark guide](bench/README.md) measures resident capacity by adding
-one real run at a time, keeping earlier runs alive until the workload fails.
-It uses the Rust model stub from `master` and a Rust cgroup launcher/collector,
-with aggregate budgets of 1 CPU/512 MiB and 2 CPUs/1 GiB. CPU pinning is
-optional (`--pin-cpus`); quotas remain mandatory.
-
-```sh
-mise run benchmark:build
-mise run benchmark:check
-mise run benchmark:preflight
-mise run benchmark:run
-```
-
-Results are local, ignored artifacts under `bench/results/`, replaced on each run.
-Build artifacts stay under `_build/bench/`. Results record
-confirmed resident runs and the failure that ended each hardware profile.
+one real run at a time.
