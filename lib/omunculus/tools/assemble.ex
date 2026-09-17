@@ -2,6 +2,7 @@ defmodule Omunculus.Tools.Assemble do
   @moduledoc """
   Builtin `assemble` tool: builds the assembled prompt of a run from
   the hydrated views. Cards follow `pinned` on the catalog view.
+  Inbox is included only when the opening carried `inbox_id`.
   """
 
   alias Omunculus.Tools.Out
@@ -15,8 +16,8 @@ defmodule Omunculus.Tools.Assemble do
         message_section(view["prompt"]) ++
         work_section(view["work"]) ++
         comment_section(last_comment(view["comments.work"])) ++
-        inbox_section(view, args) ++
         request_section(view["request"], view["comments.request"]) ++
+        inbox_section(view, args) ++
         [tools_section(view["catalog"] || [])]
 
     Out.ok(Enum.join(sections, "\n\n"))
@@ -35,28 +36,15 @@ defmodule Omunculus.Tools.Assemble do
   defp comment_section(comment), do: ["## Last comment\n#{comment.body}"]
 
   defp inbox_section(view, args) do
-    cond do
-      Map.has_key?(view, "comments.inbox") ->
+    case Map.get(args, "inbox_id") do
+      id when is_binary(id) and id != "" ->
         comments = view["comments.inbox"] || []
-        id = Map.get(args, "inbox_id") || inbox_id(comments)
         ["## Inbox\n#{id}\n" <> Enum.map_join(comments, "\n", & &1.body)]
 
-      notifications = view["inbox.work"] ->
-        inbox_work_section(notifications)
-
-      true ->
+      _other ->
         []
     end
   end
-
-  defp inbox_work_section(nil), do: []
-  defp inbox_work_section([]), do: []
-
-  defp inbox_work_section(notifications),
-    do: ["## Inbox\n" <> Enum.map_join(notifications, "\n", & &1.body)]
-
-  defp inbox_id([comment | _]), do: comment.inbox_id
-  defp inbox_id(_), do: nil
 
   defp request_section(nil, _comments), do: []
 

@@ -5,7 +5,7 @@ triggers = ["harness"]
 description = "Builds the assembled prompt of a run from its views."
 tags = ["prompt"]
 groups = ["prompt"]
-views = ["prompt", "work", "comments.work", "comments.request", "comments.inbox", "inbox.work", "request", "catalog"]
+views = ["prompt", "work", "comments.work", "comments.request", "comments.inbox", "request", "catalog"]
 module = "Omunculus.Tools.Assemble"
 
 [parameters]

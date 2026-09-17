@@ -304,7 +304,7 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
-  test "a work with unread notifications assembles an ## Inbox section oldest first", %{
+  test "a work with unread notifications has no ## Inbox without inbox_id", %{
     dir: dir
   } do
     project = open_project(dir)
@@ -317,14 +317,7 @@ defmodule Omunculus.RunTest do
         created_at: "2026-01-01T00:00:00Z"
       })
 
-    second_id =
-      Fixtures.insert(project.conn, :inbox, %{
-        work_id: work_id,
-        created_at: "2026-01-02T00:00:00Z"
-      })
-
     Fixtures.insert(project.conn, :comments, %{inbox_id: first_id, body: "first"})
-    Fixtures.insert(project.conn, :comments, %{inbox_id: second_id, body: "second"})
 
     test_pid = self()
 
@@ -338,7 +331,47 @@ defmodule Omunculus.RunTest do
     assert {:ok, _run} = Run.open(project, open(message_id, work_id))
 
     assert_received {:assembled, assembled}
-    assert assembled =~ "## Inbox\nfirst\nsecond"
+    refute assembled =~ "## Inbox"
+
+    Project.close(project)
+  end
+
+  test "a run opened with inbox_id assembles that thread after ## Request when both exist", %{
+    dir: dir
+  } do
+    project = open_project(dir)
+    message_id = message(project.conn)
+    work_id = Fixtures.insert(project.conn, :works, %{title: "Fix the parser"})
+    request_id = Fixtures.insert(project.conn, :requests, %{work_id: work_id, agent: "worker"})
+    inbox_id = Fixtures.insert(project.conn, :inbox, %{work_id: work_id})
+    Fixtures.insert(project.conn, :comments, %{inbox_id: inbox_id, body: "standalone notice"})
+    Fixtures.insert(project.conn, :comments, %{request_id: request_id, body: "please look"})
+
+    test_pid = self()
+
+    model = fn assembled, _tools, _call ->
+      send(test_pid, {:assembled, assembled})
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(project, model)
+
+    opening =
+      open(message_id, work_id)
+      |> Map.put(:request_id, request_id)
+      |> Map.put(:inbox_id, inbox_id)
+
+    assert {:ok, _run} = Run.open(project, opening)
+
+    assert_received {:assembled, assembled}
+    assert assembled =~ "## Request"
+    assert assembled =~ "## Inbox\n" <> inbox_id
+    assert assembled =~ "standalone notice"
+    request_at = :binary.match(assembled, "## Request") |> elem(0)
+    inbox_at = :binary.match(assembled, "## Inbox") |> elem(0)
+    tools_at = :binary.match(assembled, "## Tools") |> elem(0)
+    assert request_at < inbox_at
+    assert inbox_at < tools_at
 
     Project.close(project)
   end

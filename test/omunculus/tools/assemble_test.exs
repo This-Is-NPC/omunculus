@@ -69,6 +69,47 @@ defmodule Omunculus.Tools.AssembleTest do
     refute output =~ "more tools"
   end
 
+  test "inbox appears only when args carry inbox_id, after request" do
+    view = %{
+      "prompt" => %{body: "hi"},
+      "work" => %{title: "Fix the parser"},
+      "comments.work" => [%{body: "last note"}],
+      "request" => %{
+        id: "req_1",
+        agent: "worker",
+        ask: ~s({"kind":"tool","name":"write"})
+      },
+      "comments.request" => [%{body: "please look"}],
+      "comments.inbox" => [%{body: "standalone notice"}],
+      "inbox.work" => [%{body: "should not appear"}],
+      "catalog" => []
+    }
+
+    without = Assemble.run(%{@input | view: view})["output"]
+    refute without =~ "## Inbox"
+    refute without =~ "should not appear"
+
+    with_inbox =
+      Assemble.run(%{
+        @input
+        | args: %{"text" => "You are the concierge.", "inbox_id" => "inb_1"},
+          view: view
+      })[
+        "output"
+      ]
+
+    assert with_inbox =~ "## Inbox\ninb_1\nstandalone notice"
+    refute with_inbox =~ "should not appear"
+
+    request_at = :binary.match(with_inbox, "## Request") |> elem(0)
+    inbox_at = :binary.match(with_inbox, "## Inbox") |> elem(0)
+    tools_at = :binary.match(with_inbox, "## Tools") |> elem(0)
+    last_at = :binary.match(with_inbox, "## Last comment") |> elem(0)
+    assert last_at < request_at
+    assert request_at < inbox_at
+    assert inbox_at < tools_at
+  end
+
   test "the builtin catalog discovers assemble with triggers == [\"harness\"]" do
     catalog = Catalog.unconfigured()
     assert %{"assemble" => manifest} = catalog
