@@ -13,7 +13,6 @@ defmodule Omunculus.Run do
   alias Omunculus.Tools.Out
 
   @ending_events ~w(request deny grant continue break delegate)
-  @resources ~w(sandbox.write sandbox.network)
 
   @spec open(
           Project.t(),
@@ -60,7 +59,7 @@ defmodule Omunculus.Run do
            Ceiling.mount(
              config,
              Map.put(context, :groups, Catalog.groups(local_catalog)),
-             Map.keys(local_catalog) ++ @resources
+             Map.keys(local_catalog) ++ config.execution.resources
            ),
          mcp_roots = Mcp.implementation_roots(config.mcp),
          {:ok, discovery} <-
@@ -71,7 +70,7 @@ defmodule Omunculus.Run do
            Ceiling.mount(
              config,
              Map.put(context, :groups, Catalog.groups(catalog)),
-             Map.keys(catalog)
+             Map.keys(catalog) ++ config.execution.resources
            ),
          names = effective_names(snapshot, model_catalog),
          tools = effective_tools(names, model_catalog),

@@ -7,6 +7,7 @@ max_output_bytes = 1048576
 max_concurrent = 4
 max_queue = 64
 queue_timeout_ms = 30000
+resources = ["sandbox.write", "sandbox.network"]
 
 [execution.sandbox]
 script = "../../sandbox.js"
@@ -35,7 +36,7 @@ You are the project concierge. Read the message, use `tools.*` when needed, and 
 [agents.worker]
 depth = 1
 model = "fake"
-tools = ["break", "comment", "continue", "fs.read", "fs.write", "notify", "request_access", "sandbox.write"]
+tools = ["break", "comment", "continue", "fs.read", "fs.write", "notify", "request_access", "request_sandbox", "sandbox.write"]
 text = """
 You are the worker. Complete the assigned work, report progress, and call continue when the stage is complete.
 """

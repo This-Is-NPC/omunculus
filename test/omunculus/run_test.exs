@@ -540,6 +540,32 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
+  test "request_sandbox with sandbox.write opens a REQUESTS row", %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["request_sandbox"]
+    """)
+
+    project = open_project(dir)
+
+    model = fn _assembled, _tools, call ->
+      call.("request_sandbox", %{"name" => "sandbox.write", "reason" => "need to write"})
+      {:ok, "unused"}
+    end
+
+    Fixtures.use_model(project, model)
+
+    assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+    assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
+    ask = Jason.decode!(request.ask)
+    assert ask["kind"] == "resource"
+    assert ask["name"] == "sandbox.write"
+
+    Project.close(project)
+  end
+
   test "opening with an agent runs that named agent regardless of work or stage, and an unknown agent fails",
        %{dir: dir} do
     write_config(dir, """

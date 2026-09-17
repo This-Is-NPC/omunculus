@@ -44,6 +44,10 @@ defmodule Omunculus.CLI do
     "omunculus.toml is missing [execution]; required keys: #{Enum.join(keys, ", ")}"
   end
 
+  def format_error({:execution, {:unknown_resource, name}}) do
+    "omunculus.toml [execution] resources includes unknown name #{name}"
+  end
+
   def format_error({:models, :missing}) do
     "omunculus.toml is missing [models]"
   end

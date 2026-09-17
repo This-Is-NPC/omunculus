@@ -7,6 +7,8 @@ defmodule Omunculus.Execution.Policy do
   alias Omunculus.{Ceiling, Config}
   alias Omunculus.Path, as: FilesystemPath
 
+  @resources ~w(sandbox.write sandbox.network)
+
   @enforce_keys [
     :id,
     :workspace,
@@ -52,7 +54,8 @@ defmodule Omunculus.Execution.Policy do
   @spec build(Config.t(), map, map, String.t(), [String.t()], [String.t()]) ::
           {:ok, t} | {:error, term}
   def build(config, snapshot, workspace, project_dir, tools, implementation_roots) do
-    with {:ok, project_root} <- canonical_directory(project_dir, :project),
+    with :ok <- validate_resources(config),
+         {:ok, project_root} <- canonical_directory(project_dir, :project),
          {:ok, workspace_root} <- canonical_directory(workspace.root || project_root, :workspace),
          :ok <- validate_workspace_boundary(config, workspace.name, workspace_root),
          {:ok, paths} <- resolve_ceiling_paths(snapshot, workspace_root),
@@ -77,7 +80,8 @@ defmodule Omunculus.Execution.Policy do
 
   @spec restricted(Config.t(), map, String.t(), [String.t()]) :: {:ok, t} | {:error, term}
   def restricted(config, workspace, project_dir, implementation_roots) do
-    with {:ok, project_root} <- canonical_directory(project_dir, :project),
+    with :ok <- validate_resources(config),
+         {:ok, project_root} <- canonical_directory(project_dir, :project),
          {:ok, workspace_root} <- canonical_directory(workspace.root || project_root, :workspace),
          :ok <- validate_workspace_boundary(config, workspace.name, workspace_root),
          {:ok, runtimes} <- resolve_runtimes(config.execution.runtimes, workspace_root),
@@ -352,5 +356,13 @@ defmodule Omunculus.Execution.Policy do
   end
 
   defp stringify_keys(map), do: Map.new(map, fn {key, value} -> {Atom.to_string(key), value} end)
+
+  defp validate_resources(%{execution: %{resources: resources}}) when is_list(resources) do
+    case Enum.find(resources, &(&1 not in @resources)) do
+      nil -> :ok
+      name -> {:error, {:execution, {:unknown_resource, name}}}
+    end
+  end
+
   defp unique(paths), do: paths |> Enum.uniq() |> Enum.sort()
 end

@@ -16,7 +16,7 @@ The core is `lib/omunculus/`. Read these modules first, in this order.
 | --- | --- |
 | `Omunculus.CLI` | Entry point. `omunculus <name> [--key value]` dispatches a tool with trigger `cli`, then hands the resulting events to the harness. Reads `OMUNCULUS_PROJECT` and `OMUNCULUS_MODEL` from the environment. |
 | `Omunculus.Project` | Opens `<project>/.omunculus/store.sqlite3` and holds the connection. |
-| `Omunculus.Config` | Loads and validates `omunculus.toml`: policy, depth layers, workspaces, agents, workflows, MCP servers and the required `[execution]` table. Also rewrites the file for permanent grants. |
+| `Omunculus.Config` | Loads and validates `omunculus.toml`: policy, depth layers, workspaces, agents, workflows, MCP servers and the required `[execution]` table (including `resources`). Also rewrites the file for permanent grants. |
 | `Omunculus.Harness` | Discovers the catalog, checks the trigger, hydrates the views a manifest declares, invokes the tool, records `EVENTS(tool)`, applies the emitted actions, then runs the hooks for each event. `follow_up/3` opens the runs that actions ask for. |
 | `Omunculus.Run` | Opens one run: resolves the agent for the depth or workflow stage, mounts the ceiling, builds the execution policy, assembles the prompt, writes `RUNS` and `PROMPTS(assembled)`, drives the model, closes the run. |
 | `Omunculus.Ceiling` | Intersects the policy, workspace, depth, agent and stage layers into the effective tool set of a run and classifies a name as have, askable, sealed or blocked. |

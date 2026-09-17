@@ -35,6 +35,7 @@ defmodule Omunculus.ConfigTest do
     max_concurrent = 4
     max_queue = 64
     queue_timeout_ms = 30000
+    resources = ["sandbox.write", "sandbox.network"]
     """
   end
 
@@ -87,7 +88,8 @@ defmodule Omunculus.ConfigTest do
              "max_output_bytes",
              "max_concurrent",
              "max_queue",
-             "queue_timeout_ms"
+             "queue_timeout_ms",
+             "resources"
            ]
   end
 
@@ -1634,6 +1636,32 @@ defmodule Omunculus.ConfigTest do
     test "missing [execution.sandbox] is an error", %{dir: dir} do
       File.write!(toml(dir), execution_without_sandbox() <> "\n" <> agent())
       assert {:error, {:execution, {:sandbox, :missing}}} = load(dir)
+    end
+
+    test "execution resources must be the known sandbox names", %{dir: dir} do
+      File.write!(
+        toml(dir),
+        String.replace(
+          execution_without_sandbox(),
+          ~s(resources = ["sandbox.write", "sandbox.network"]),
+          ~s(resources = ["sandbox.shell"])
+        ) <> "\n" <> agent()
+      )
+
+      assert {:error, {:execution, {:unknown_resource, "sandbox.shell"}}} = load(dir)
+    end
+
+    test "execution resources are required", %{dir: dir} do
+      File.write!(
+        toml(dir),
+        String.replace(
+          execution_without_sandbox(),
+          ~s(\nresources = ["sandbox.write", "sandbox.network"]),
+          ""
+        ) <> "\n" <> Fixtures.sandbox_table() <> "\n" <> agent()
+      )
+
+      assert {:error, {:execution, {:invalid, :resources}}} = load(dir)
     end
 
     test "each sandbox key is required", %{dir: dir} do

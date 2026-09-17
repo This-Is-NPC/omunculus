@@ -23,6 +23,7 @@ defmodule Omunculus.Fixtures do
   max_concurrent = 4
   max_queue = 64
   queue_timeout_ms = 30000
+  resources = ["sandbox.write", "sandbox.network"]
   """
 
   @defaults %{

@@ -29,7 +29,7 @@ defmodule Omunculus.Tools.RequestAccessTest do
            }
   end
 
-  test "emits supported sandbox resource requests" do
+  test "rejects kind resource as an unsupported access kind" do
     input = %{
       @input
       | args: %{
@@ -39,31 +39,15 @@ defmodule Omunculus.Tools.RequestAccessTest do
         }
     }
 
-    assert RequestAccess.run(input)["emit"] == [
-             %{
-               "type" => "request",
-               "body" => %{
-                 "kind" => "resource",
-                 "name" => "sandbox.network",
-                 "reason" => "needs a package download"
-               }
-             }
-           ]
-  end
-
-  test "rejects unsupported resources and access kinds" do
-    resource = %{
-      @input
-      | args: %{"kind" => "resource", "name" => "sandbox.shell", "reason" => "x"}
-    }
-
-    kind = %{@input | args: %{"kind" => "secret", "name" => "vault", "reason" => "x"}}
-
-    assert RequestAccess.run(resource) == %{
+    assert RequestAccess.run(input) == %{
              "ok" => false,
-             "output" => "unsupported resource: sandbox.shell",
+             "output" => "unsupported access kind: resource",
              "emit" => []
            }
+  end
+
+  test "rejects unsupported access kinds" do
+    kind = %{@input | args: %{"kind" => "secret", "name" => "vault", "reason" => "x"}}
 
     assert RequestAccess.run(kind) == %{
              "ok" => false,

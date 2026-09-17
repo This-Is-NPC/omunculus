@@ -222,7 +222,8 @@ defmodule Omunculus.CLITest do
       "max_output_bytes",
       "max_concurrent",
       "max_queue",
-      "queue_timeout_ms"
+      "queue_timeout_ms",
+      "resources"
     ]
 
     message = CLI.format_error({:execution, :missing, keys})

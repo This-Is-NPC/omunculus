@@ -1,0 +1,19 @@
+name = "request_sandbox"
+kind = "tool"
+shape = "simple"
+triggers = ["model"]
+description = "Requests a sandbox capability such as write or network."
+tags = ["sandbox", "request"]
+groups = ["sandbox"]
+module = "Omunculus.Tools.RequestSandbox"
+
+[parameters]
+type = "object"
+required = ["name", "reason"]
+
+[parameters.properties.name]
+type = "string"
+enum = ["sandbox.write", "sandbox.network"]
+
+[parameters.properties.reason]
+type = "string"

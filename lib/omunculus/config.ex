@@ -76,6 +76,7 @@ defmodule Omunculus.Config do
           max_concurrent: pos_integer,
           max_queue: pos_integer,
           queue_timeout_ms: pos_integer,
+          resources: [String.t()],
           sandbox: sandbox
         }
 
@@ -111,7 +112,9 @@ defmodule Omunculus.Config do
     max_concurrent
     max_queue
     queue_timeout_ms
+    resources
   )
+  @known_execution_resources ~w(sandbox.write sandbox.network)
   @sandbox_keys ~w(script command runner exec)
   @mcp_server_keys ~w(name command protocol_version)
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
@@ -547,6 +550,7 @@ defmodule Omunculus.Config do
              {:ok, max_concurrent} <- execution_positive_integer(rest, "max_concurrent"),
              {:ok, max_queue} <- execution_positive_integer(rest, "max_queue"),
              {:ok, queue_timeout_ms} <- execution_positive_integer(rest, "queue_timeout_ms"),
+             {:ok, resources} <- execution_resources(rest),
              {:ok, sandbox} <- parse_sandbox(sandbox_data, config_dir) do
           {:ok,
            %{
@@ -558,6 +562,7 @@ defmodule Omunculus.Config do
              max_concurrent: max_concurrent,
              max_queue: max_queue,
              queue_timeout_ms: queue_timeout_ms,
+             resources: resources,
              sandbox: sandbox
            }}
         end
@@ -643,6 +648,24 @@ defmodule Omunculus.Config do
   end
 
   defp execution_environment(_data), do: {:error, {:execution, {:invalid, :environment}}}
+
+  defp execution_resources(%{"resources" => resources}) when is_list(resources) do
+    cond do
+      not Enum.all?(resources, &(is_binary(&1) and &1 != "")) ->
+        {:error, {:execution, {:invalid, :resources}}}
+
+      Enum.uniq(resources) != resources ->
+        {:error, {:execution, {:invalid, :resources}}}
+
+      true ->
+        case Enum.find(resources, &(&1 not in @known_execution_resources)) do
+          nil -> {:ok, resources}
+          name -> {:error, {:execution, {:unknown_resource, name}}}
+        end
+    end
+  end
+
+  defp execution_resources(_data), do: {:error, {:execution, {:invalid, :resources}}}
 
   defp environment_name?(name) when is_binary(name), do: name =~ ~r/^[A-Za-z_][A-Za-z0-9_]*$/
   defp environment_name?(_name), do: false
