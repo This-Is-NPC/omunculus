@@ -384,6 +384,40 @@ defmodule Omunculus.Store.ActionsTest do
     assert count(conn, "events") == 0
   end
 
+  test "prompt on a waiting work reopens it before the prompt event", %{conn: conn} do
+    work_id =
+      Fixtures.insert(conn, :works, %{
+        state: "waiting",
+        waiting: "access",
+        waiting_for: "write",
+        waiting_from: "concierge"
+      })
+
+    assert {:ok, [_tool_event, work_event, prompt_event]} =
+             record_tool(
+               conn,
+               [%{"type" => "prompt", "body" => %{"message" => "hi", "work_id" => work_id}}],
+               @ctx
+             )
+
+    assert work_event.type == "work"
+    assert work_event.work_id == work_id
+
+    assert Jason.decode!(work_event.body) == %{
+             "state" => "open",
+             "reason" => "reopened_by_prompt"
+           }
+
+    assert prompt_event.type == "prompt"
+    assert prompt_event.work_id == work_id
+
+    assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+    assert work.state == "open"
+    assert work.waiting == nil
+    assert work.waiting_for == nil
+    assert work.waiting_from == nil
+  end
+
   test "an action outside the catalogue is unknown and rolls back the tool event", %{
     conn: conn
   } do
@@ -623,6 +657,27 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert {:error, {:continue, :workflow_off}} =
                record_tool(conn, [%{"type" => "continue", "body" => %{}}], ctx)
+    end
+
+    test "waiting work does not advance", %{conn: conn} do
+      work_id =
+        Fixtures.insert(conn, :works, %{
+          stage: "to_do",
+          state: "waiting",
+          waiting: "access",
+          waiting_for: "write"
+        })
+
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
+
+      assert {:error, {:continue, :waiting}} =
+               record_tool(conn, [%{"type" => "continue", "body" => %{}}], ctx)
+
+      assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+      assert work.state == "waiting"
+      assert work.stage == "to_do"
+      assert work.waiting_for == "write"
     end
 
     test "moves to the next stage and updates the assignee", %{conn: conn} do
@@ -1332,7 +1387,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert count(conn, "works") == 0
     end
 
-    test "deny reopens the linked work and writes a deny event", %{conn: conn} do
+    test "deny leaves the linked work waiting and writes a deny event", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
       {run, request_id} = open_request(conn, @ceiling, work_id)
       ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
@@ -1358,8 +1413,9 @@ defmodule Omunculus.Store.ActionsTest do
       assert Jason.decode!(deny_event.body) == %{"kind" => "tool", "name" => "write"}
 
       assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
-      assert work.state == "open"
-      assert work.waiting == nil
+      assert work.state == "waiting"
+      assert work.waiting == "access"
+      assert work.waiting_for == "write"
     end
 
     test "a missing request is rejected", %{conn: conn} do

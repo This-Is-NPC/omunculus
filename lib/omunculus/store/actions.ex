@@ -113,12 +113,34 @@ defmodule Omunculus.Store.Actions do
 
   defp prompt(conn, %{"message" => text} = body) when is_binary(text) and text != "" do
     with :ok <-
-           Helpers.tag_error(:prompt, Helpers.ensure_exist(conn, [{:works, body["work_id"]}])) do
-      write_prompt(conn, body, text)
+           Helpers.tag_error(:prompt, Helpers.ensure_exist(conn, [{:works, body["work_id"]}])),
+         {:ok, reopened} <- reopen_waiting_work(conn, body["work_id"]),
+         {:ok, prompt_event} <- write_prompt(conn, body, text) do
+      {:ok, Enum.reject([reopened, prompt_event], &is_nil/1)}
     end
   end
 
   defp prompt(_conn, _body), do: {:error, {:prompt, :no_message}}
+
+  defp reopen_waiting_work(_conn, nil), do: {:ok, nil}
+
+  defp reopen_waiting_work(conn, work_id) do
+    with {:ok, work} <- Query.one(conn, "SELECT state FROM works WHERE id = ?", [work_id]) do
+      case work do
+        %{state: "waiting"} ->
+          with :ok <- Helpers.reopen_work(conn, work_id) do
+            Events.append(conn, %{
+              type: "work",
+              work_id: work_id,
+              body: Jason.encode!(%{state: "open", reason: "reopened_by_prompt"})
+            })
+          end
+
+        _other ->
+          {:ok, nil}
+      end
+    end
+  end
 
   defp write_prompt(conn, body, text) do
     prompt_id = Id.new()
@@ -474,15 +496,13 @@ defmodule Omunculus.Store.Actions do
   defp apply_decision(conn, ctx, "deny", request, _scope) do
     ask = Jason.decode!(request.ask)
 
-    with :ok <- Helpers.reopen_work(conn, request.work_id) do
-      Events.append(conn, %{
-        type: "deny",
-        run_id: ctx.run_id,
-        request_id: request.id,
-        work_id: request.work_id,
-        body: Jason.encode!(%{name: ask["name"], kind: ask["kind"]})
-      })
-    end
+    Events.append(conn, %{
+      type: "deny",
+      run_id: ctx.run_id,
+      request_id: request.id,
+      work_id: request.work_id,
+      body: Jason.encode!(%{name: ask["name"], kind: ask["kind"]})
+    })
   end
 
   defp run_depth(conn, run_id) do

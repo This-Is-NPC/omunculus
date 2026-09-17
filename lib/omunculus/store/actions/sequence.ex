@@ -18,6 +18,7 @@ defmodule Omunculus.Store.Actions.Sequence do
     with :ok <- ensure_context(:continue, ctx),
          :ok <- Helpers.ensure_no_forbidden(:continue, body),
          {:ok, work} <- fetch_work(:continue, conn, ctx.work_id),
+         :ok <- ensure_open(:continue, work),
          {:ok, steps} <- fetch_steps(:continue, ctx.config, View.work_depth(conn, work)),
          {:ok, next} <- Helpers.tag_error(:continue, Config.next_step(steps, work.stage)) do
       apply_continue(conn, ctx, work, next)
@@ -93,6 +94,10 @@ defmodule Omunculus.Store.Actions.Sequence do
       {:error, _reason} = error -> error
     end
   end
+
+  defp ensure_open(_tag, %{state: "open"}), do: :ok
+  defp ensure_open(tag, %{state: "waiting"}), do: {:error, {tag, :waiting}}
+  defp ensure_open(tag, %{state: state}), do: {:error, {tag, {:not_open, state}}}
 
   defp fetch_steps(tag, config, depth) do
     case Config.workflow_for(config, depth) do

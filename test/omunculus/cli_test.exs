@@ -571,7 +571,9 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "reply deny closes the request, reopens the work, and opens no new run", %{dir: dir} do
+    test "reply deny closes the request, leaves the work waiting, and opens no new run", %{
+      dir: dir
+    } do
       project = open(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
@@ -603,7 +605,9 @@ defmodule Omunculus.CLITest do
       assert deny_event.request_id == request_id
 
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
-      assert work.state == "open"
+      assert work.state == "waiting"
+      assert work.waiting == "access"
+      assert work.waiting_for == "write"
 
       assert {:ok, runs} =
                Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
@@ -611,6 +615,40 @@ defmodule Omunculus.CLITest do
       assert length(runs) == 1
       assert hd(runs).id == old_run.id
 
+      Project.close(project)
+
+      model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
+      Fixtures.use_model(dir, model)
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "try again"], dir)
+
+      project = open(dir)
+      assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
+      assert work.state == "open"
+      assert work.waiting == nil
+      grants = if work.grants, do: Jason.decode!(work.grants), else: []
+      refute "write" in grants
+
+      assert {:ok, events} = Store.replay(project.conn, :project)
+
+      work_event =
+        Enum.find(events, fn event ->
+          event.type == "work" and Jason.decode!(event.body)["reason"] == "reopened_by_prompt"
+        end)
+
+      prompt_event =
+        Enum.find(events, fn event ->
+          event.type == "prompt" and event.work_id == work_id and
+            Jason.decode!(event.body)["message"] == "try again"
+        end)
+
+      assert work_event
+      assert prompt_event
+      assert work_event.sequence < prompt_event.sequence
+
+      assert {:ok, runs} =
+               Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
+
+      assert length(runs) == 2
       Project.close(project)
     end
 
@@ -962,6 +1000,8 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work.id])
       assert work.stage == "to_do"
+      assert work.state == "open"
+      assert work.waiting == nil
 
       Project.close(project)
     end
