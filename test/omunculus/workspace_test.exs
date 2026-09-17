@@ -399,4 +399,65 @@ defmodule Omunculus.WorkspaceTest do
     assert {:ok, %Config{workflows: %{"delivery" => [to_do]}}} = Fixtures.load_config(dir)
     assert "delete" in to_do.ceiling.granted
   end
+
+  test "a run in the default workspace uses that workspace's execution timeout", %{
+    dir: dir,
+    one: one,
+    two: two,
+    three: three
+  } do
+    write_config(
+      dir,
+      base_toml(one, two, three) <>
+        """
+
+        [workspaces.one.execution]
+        timeout_ms = 120000
+        """
+    )
+
+    model = fn _assembled, _tools, _call -> {:ok, "done"} end
+    Fixtures.use_model(dir, model)
+
+    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+
+    project = open(dir)
+    assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
+
+    assert {:ok, event} =
+             Query.one(project.conn, "SELECT * FROM events WHERE id = ?", [run.event_id])
+
+    assert Jason.decode!(event.body)["execution"]["limits"]["timeout_ms"] == 120_000
+    Project.close(project)
+  end
+
+  test "a run in workspace two uses that workspace's agent text", %{
+    dir: dir,
+    one: one,
+    two: two,
+    three: three
+  } do
+    write_config(
+      dir,
+      base_toml(one, two, three) <>
+        """
+
+        [workspaces.two.agents.concierge]
+        text = "You are the app worker."
+        """
+    )
+
+    project = open(dir)
+    work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
+    Project.close(project)
+
+    model = fn assembled, _tools, _call ->
+      assert assembled =~ "You are the app worker."
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(dir, model)
+
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+  end
 end

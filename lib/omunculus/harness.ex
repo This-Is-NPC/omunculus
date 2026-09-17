@@ -18,7 +18,8 @@ defmodule Omunculus.Harness do
   @spec manifest(Project.t(), String.t()) ::
           {:ok, Manifest.t()} | {:error, {:unknown_tool, String.t()}}
   def manifest(%Project{config_path: path}, name) do
-    with {:ok, config} <- Config.load(path) do
+    with {:ok, config} <- Config.load(path),
+         {:ok, config} <- Config.for_workspace(config, Config.effective_workspace(config, nil)) do
       config.tools |> Catalog.discover(config.mcp, nil) |> fetch_dispatch_manifest(name, "cli")
     end
   end
@@ -36,6 +37,12 @@ defmodule Omunculus.Harness do
       root: Config.workspace_root(config, name),
       layer: Config.workspace_ceiling(config, name)
     }
+  end
+
+  defp resolved_config(project, work) do
+    with {:ok, config} <- Config.load(project.config_path) do
+      Config.for_workspace(config, Config.effective_workspace(config, work))
+    end
   end
 
   @spec dispatch(Project.t(), String.t(), map, map) :: {:ok, map, [map]} | {:error, term}
@@ -72,14 +79,14 @@ defmodule Omunculus.Harness do
   end
 
   defp dispatch_with_config(project, name, args, ctx) do
-    with {:ok, config} <- Config.load(project.config_path),
+    with {:ok, run} <- resolve_run(project, ctx.run_id),
+         work_id = run_work_id(run),
+         {:ok, work} <- fetch_work(project, work_id),
+         {:ok, config} <- resolved_config(project, work),
          catalog =
            Catalog.discover(config.tools, config.mcp, Map.get(ctx, :execution)),
          {:ok, manifest} <- fetch_dispatch_manifest(catalog, name, ctx.trigger),
          :ok <- check_trigger(manifest, name, ctx.trigger),
-         {:ok, run} <- resolve_run(project, ctx.run_id),
-         work_id = run_work_id(run),
-         {:ok, work} <- fetch_work(project, work_id),
          workspace = workspace_context(config, work),
          views = %{
            catalog: catalog_view(run, catalog),
@@ -98,12 +105,13 @@ defmodule Omunculus.Harness do
 
   @doc "Dispatches reactions to committed events, including the run lifecycle."
   def react(project, events, active \\ [], execution \\ nil) do
-    with {:ok, config} <- Config.load(project.config_path) do
-      catalog = Catalog.discover(config.tools, config.mcp, execution)
-
+    with {:ok, base} <- Config.load(project.config_path) do
       Enum.reduce_while(events, {:ok, []}, fn event, {:ok, acc} ->
         with {:ok, run} <- resolve_run(project, event.run_id),
-             {:ok, work} <- fetch_work(project, event.work_id) do
+             {:ok, work} <- fetch_work(project, event.work_id),
+             {:ok, config} <-
+               Config.for_workspace(base, Config.effective_workspace(base, work)) do
+          catalog = Catalog.discover(config.tools, config.mcp, execution)
           workspace = workspace_context(config, work)
 
           ctx = %{
@@ -173,6 +181,7 @@ defmodule Omunculus.Harness do
   @spec follow_up(Project.t(), [map]) :: :ok | {:error, term}
   def follow_up(project, events) do
     with {:ok, config} <- Config.load(project.config_path),
+         {:ok, config} <- Config.for_workspace(config, Config.effective_workspace(config, nil)),
          catalog = Catalog.discover(config.tools, config.mcp, nil),
          {:ok, _via} <- walk(project, catalog, events, :actions),
          {:ok, _via} <- walk(project, catalog, events, :hooks) do

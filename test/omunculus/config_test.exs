@@ -1683,4 +1683,168 @@ defmodule Omunculus.ConfigTest do
       assert hd(config.execution.sandbox.command) == "deno"
     end
   end
+
+  describe "workspace overlay" do
+    test "execution scalars from the workspace replace the global", %{dir: dir} do
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [workspaces.app]
+      root = "app"
+
+      [policy]
+      workspace = "app"
+
+      [workspaces.app.execution]
+      timeout_ms = 120000
+      """)
+
+      assert {:ok, config} = load(dir)
+      assert config.execution.timeout_ms == 30_000
+      assert {:ok, resolved} = Config.for_workspace(config, "app")
+      assert resolved.execution.timeout_ms == 120_000
+      assert resolved.execution.backend == "bubblewrap"
+    end
+
+    test "models merge by key and keep global fields", %{dir: dir} do
+      write_toml(dir, """
+      [models.local]
+      api = "openai-completions"
+      url = "http://localhost:8080/v1"
+      model = "qwen"
+      timeout_ms = 120000
+
+      [agents.concierge]
+      depth = 0
+      model = "local"
+      text = "hi"
+
+      [workspaces.app]
+      root = "app"
+
+      [policy]
+      workspace = "app"
+
+      [workspaces.app.models.local]
+      model = "qwen-coder"
+      """)
+
+      assert {:ok, config} = load(dir)
+      assert {:ok, resolved} = Config.for_workspace(config, "app")
+      assert config.models["local"].input["model"] == "qwen"
+      assert resolved.models["local"].input["model"] == "qwen-coder"
+      assert resolved.models["local"].input["url"] == "http://localhost:8080/v1"
+    end
+
+    test "tools.paths from the workspace replaces the global list", %{dir: dir} do
+      extra = Path.join(dir, "extra")
+      File.mkdir_p!(extra)
+
+      write_toml(dir, """
+      [tools]
+      paths = ["./missing"]
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [workspaces.app]
+      root = "app"
+
+      [policy]
+      workspace = "app"
+
+      [workspaces.app.tools]
+      paths = ["./extra"]
+      """)
+
+      assert {:ok, config} = load(dir)
+      assert {:ok, resolved} = Config.for_workspace(config, "app")
+      assert config.tools.paths == [Path.join(dir, "missing")]
+      assert resolved.tools.paths == [extra]
+    end
+
+    test "workspace deny does not enter the merged policy", %{dir: dir} do
+      write_toml(dir, """
+      [policy]
+      deny = ["delete"]
+      workspace = "app"
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [workspaces.app]
+      root = "app"
+      deny = []
+      """)
+
+      assert {:ok, config} = load(dir)
+      assert {:ok, resolved} = Config.for_workspace(config, "app")
+      assert config.policy.deny == ["delete"]
+      assert resolved.policy.deny == ["delete"]
+      assert resolved.workspaces["app"].ceiling.deny == []
+    end
+
+    test "an unknown execution key in a workspace is the same error as global", %{dir: dir} do
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [workspaces.app]
+      root = "app"
+
+      [policy]
+      workspace = "app"
+
+      [workspaces.app.execution]
+      flavour = "strict"
+      """)
+
+      assert {:error, {:execution, {:unknown_key, "flavour"}}} = load(dir)
+    end
+
+    test "[store] inside a workspace is unknown", %{dir: dir} do
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [workspaces.app]
+      root = "app"
+      store = { path = "other.sqlite3" }
+
+      [policy]
+      workspace = "app"
+      """)
+
+      assert {:error, {:workspace, "app", {:unknown_key, "store"}}} = load(dir)
+    end
+
+    test "agent text from the workspace replaces the global", %{dir: dir} do
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "global"
+
+      [workspaces.app]
+      root = "app"
+
+      [policy]
+      workspace = "app"
+
+      [workspaces.app.agents.concierge]
+      text = "You are the app worker."
+      """)
+
+      assert {:ok, config} = load(dir)
+      assert {:ok, resolved} = Config.for_workspace(config, "app")
+      assert config.agents["concierge"].text == "global"
+      assert resolved.agents["concierge"].text == "You are the app worker."
+      assert resolved.agents["concierge"].model == config.agents["concierge"].model
+    end
+  end
 end

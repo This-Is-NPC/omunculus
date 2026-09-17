@@ -33,7 +33,8 @@ defmodule Omunculus.Config do
     :tools,
     :models,
     :path,
-    :store
+    :store,
+    :data
   ]
   defstruct @enforce_keys
 
@@ -46,7 +47,11 @@ defmodule Omunculus.Config do
         }
   @type model :: %{api: String.t(), module: module, input: map}
   @type step :: %{name: String.t(), agent: String.t(), ceiling: Layer.t()}
-  @type workspace :: %{root: String.t(), ceiling: Layer.t()}
+  @type workspace :: %{
+          root: String.t(),
+          ceiling: Layer.t(),
+          overlay: map
+        }
   @type mcp_server :: %{name: String.t(), command: [String.t()], protocol_version: String.t()}
   @type sandbox :: %{
           script: String.t(),
@@ -81,7 +86,8 @@ defmodule Omunculus.Config do
           tools: tools,
           models: %{String.t() => model},
           path: String.t(),
-          store: %{path: String.t()}
+          store: %{path: String.t()},
+          data: map
         }
 
   @type tools :: %{paths: [String.t()], inline: %{String.t() => Manifest.t()}}
@@ -99,6 +105,7 @@ defmodule Omunculus.Config do
   )
   @sandbox_keys ~w(script command runner exec)
   @mcp_server_keys ~w(name command protocol_version)
+  @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp)
   @agent_extra_keys ~w(depth text workflow_only model)
   @openai_model_keys ~w(api url model timeout_ms temperature key_env headers)
   @module_model_keys ~w(api module params)
@@ -107,7 +114,7 @@ defmodule Omunculus.Config do
   @spec load(String.t()) :: {:ok, t} | {:error, term}
   def load(path) do
     with {:ok, data} <- read(path) do
-      parse(data, path)
+      parse(data, path, true)
     end
   end
 
@@ -126,6 +133,19 @@ defmodule Omunculus.Config do
 
   def workspace_root(config, name),
     do: config.workspaces |> Map.get(name) |> then(&(&1 && &1.root))
+
+  @spec for_workspace(t, String.t() | nil) :: {:ok, t} | {:error, term}
+  def for_workspace(%__MODULE__{} = config, nil), do: {:ok, config}
+
+  def for_workspace(%__MODULE__{} = config, name) when is_binary(name) do
+    case Map.fetch(config.workspaces, name) do
+      :error ->
+        {:error, {:workspace, name, :unknown}}
+
+      {:ok, %{overlay: overlay}} ->
+        overlay_config(config, overlay)
+    end
+  end
 
   @spec model_fun(t, String.t()) :: {:ok, fun} | {:error, term}
   def model_fun(%__MODULE__{agents: agents, models: models}, agent_name) do
@@ -274,7 +294,7 @@ defmodule Omunculus.Config do
     if name in list, do: list, else: list ++ [name]
   end
 
-  defp parse(data, path) do
+  defp parse(data, path, validate_overlays?) do
     case Map.keys(data) --
            [
              "policy",
@@ -309,24 +329,28 @@ defmodule Omunculus.Config do
           if map_size(agents) == 0 do
             {:error, :no_agents}
           else
-            {:ok,
-             %__MODULE__{
-               root: root,
-               policy: policy,
-               depths: depths,
-               workspaces: workspaces,
-               agents: agents,
-               workflows: workflows,
-               policy_workflow: policy_workflow,
-               policy_workspace: policy_workspace,
-               depth_workflows: depth_workflows,
-               mcp: mcp,
-               execution: execution,
-               tools: tools,
-               models: models,
-               path: config_path,
-               store: store
-             }}
+            config = %__MODULE__{
+              root: root,
+              policy: policy,
+              depths: depths,
+              workspaces: workspaces,
+              agents: agents,
+              workflows: workflows,
+              policy_workflow: policy_workflow,
+              policy_workspace: policy_workspace,
+              depth_workflows: depth_workflows,
+              mcp: mcp,
+              execution: execution,
+              tools: tools,
+              models: models,
+              path: config_path,
+              store: store,
+              data: data
+            }
+
+            if validate_overlays?,
+              do: validate_workspace_overlays(config),
+              else: {:ok, config}
           end
         end
     end
@@ -735,19 +759,127 @@ defmodule Omunculus.Config do
     end)
   end
 
-  @workspace_keys ["root" | @layer_keys]
-
   defp parse_workspace(data, project_dir) when is_map(data) do
-    case Map.keys(data) -- @workspace_keys do
+    {overlays, rest} = Map.split(data, @workspace_overlay_keys)
+
+    case Map.keys(rest) -- ["root" | @layer_keys] do
       [key | _] ->
         {:error, {:unknown_key, key}}
 
       [] ->
-        with {:ok, root} <- fetch_root(data, project_dir),
-             {:ok, ceiling} <- parse_layer(Map.delete(data, "root"), nil) do
-          {:ok, %{root: root, ceiling: ceiling}}
+        with {:ok, root} <- fetch_root(rest, project_dir),
+             {:ok, ceiling} <- parse_layer(Map.delete(rest, "root"), nil),
+             {:ok, overlay} <- parse_workspace_overlay(overlays) do
+          {:ok, %{root: root, ceiling: ceiling, overlay: overlay}}
         end
     end
+  end
+
+  defp parse_workspace(_data, _project_dir), do: {:error, {:invalid, :table}}
+
+  defp parse_workspace_overlay(overlays) do
+    Enum.reduce_while(overlays, {:ok, %{}}, fn {key, value}, {:ok, acc} ->
+      if is_map(value) do
+        {:cont, {:ok, Map.put(acc, key, value)}}
+      else
+        {:halt, {:error, overlay_table_error(key)}}
+      end
+    end)
+  end
+
+  defp overlay_table_error("execution"), do: {:execution, {:invalid, :table}}
+  defp overlay_table_error("models"), do: {:models, :invalid}
+  defp overlay_table_error("agents"), do: {:invalid, :agents}
+  defp overlay_table_error("workflows"), do: {:invalid, :workflows}
+  defp overlay_table_error("tools"), do: {:tools, {:invalid, :table}}
+  defp overlay_table_error("policy"), do: {:policy, {:invalid, :table}}
+  defp overlay_table_error("mcp"), do: {:mcp, {:invalid, :servers}}
+  defp overlay_table_error(key), do: {:unknown_key, key}
+
+  defp overlay_config(%__MODULE__{} = config, overlay) when overlay == %{}, do: {:ok, config}
+
+  defp overlay_config(%__MODULE__{} = config, overlay) do
+    config.data
+    |> deep_merge(strip_ceiling(overlay))
+    |> parse(config.path, false)
+  end
+
+  defp validate_workspace_overlays(config) do
+    Enum.reduce_while(config.workspaces, {:ok, config}, fn {_name, workspace}, {:ok, acc} ->
+      case overlay_config(acc, workspace.overlay) do
+        {:ok, _resolved} -> {:cont, {:ok, acc}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp strip_ceiling(overlay) do
+    overlay
+    |> strip_layer_keys("policy")
+    |> strip_agents_ceiling()
+    |> strip_workflows_ceiling()
+  end
+
+  defp strip_layer_keys(overlay, key) do
+    case Map.get(overlay, key) do
+      policy when is_map(policy) -> Map.put(overlay, key, Map.drop(policy, @layer_keys))
+      _ -> overlay
+    end
+  end
+
+  defp strip_agents_ceiling(overlay) do
+    case Map.get(overlay, "agents") do
+      agents when is_map(agents) ->
+        Map.put(
+          overlay,
+          "agents",
+          Map.new(agents, fn {name, agent} ->
+            {name, if(is_map(agent), do: Map.drop(agent, @layer_keys), else: agent)}
+          end)
+        )
+
+      _ ->
+        overlay
+    end
+  end
+
+  defp strip_workflows_ceiling(overlay) do
+    case Map.get(overlay, "workflows") do
+      workflows when is_map(workflows) ->
+        Map.put(
+          overlay,
+          "workflows",
+          Map.new(workflows, fn {name, workflow} ->
+            {name, strip_workflow_ceiling(workflow)}
+          end)
+        )
+
+      _ ->
+        overlay
+    end
+  end
+
+  defp strip_workflow_ceiling(%{"steps" => steps} = workflow) when is_list(steps) do
+    Map.put(
+      workflow,
+      "steps",
+      Enum.map(steps, fn
+        step when is_map(step) -> Map.drop(step, @layer_keys)
+        step -> step
+      end)
+    )
+  end
+
+  defp strip_workflow_ceiling(workflow), do: workflow
+
+  defp deep_merge(base, overlay) when is_map(base) and is_map(overlay) do
+    Map.merge(base, overlay, fn _key, left, right ->
+      if is_map(left) and is_map(right) and not is_struct(left) and not is_struct(right) do
+        deep_merge(left, right)
+      else
+        right
+      end
+    end)
   end
 
   defp fetch_root(data, project_dir) do

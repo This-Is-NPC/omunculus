@@ -6,7 +6,7 @@ defmodule Omunculus.MatrixTest do
 
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Fixtures, Id, Project, Store}
+  alias Omunculus.{CLI, Config, Fixtures, Id, Project, Store}
   alias Omunculus.Store.Query
 
   @concierge_d0_tools ~w(bench break continue fs.read sandbox.network store)
@@ -398,5 +398,61 @@ defmodule Omunculus.MatrixTest do
     assert_observer_reacted(project.conn)
 
     Project.close(project)
+  end
+
+  test "two workspaces in one store can name different models", %{dir: dir} do
+    one = Path.join(dir, "one")
+    two = Path.join(dir, "two")
+    File.mkdir_p!(one)
+    File.mkdir_p!(two)
+
+    Fixtures.write_config(dir, """
+    [models.one]
+    api = "module"
+    module = "Omunculus.Model.Fake"
+
+    [models.two]
+    api = "module"
+    module = "Omunculus.Model.Battery"
+
+    [agents.concierge]
+    depth = 0
+    model = "one"
+    text = "global"
+    tools = #{inspect(@concierge_d0_tools)}
+
+    [policy]
+    workspace = "one"
+
+    [workspaces.one]
+    root = "#{one}"
+
+    [workspaces.one.agents.concierge]
+    model = "one"
+    text = "workspace-one"
+
+    [workspaces.two]
+    root = "#{two}"
+
+    [workspaces.two.agents.concierge]
+    model = "two"
+    text = "workspace-two"
+    """)
+
+    {:ok, config} = Fixtures.load_config(dir)
+    {:ok, resolved_one} = Config.for_workspace(config, "one")
+    {:ok, resolved_two} = Config.for_workspace(config, "two")
+
+    assert resolved_one.agents["concierge"].model == "one"
+    assert resolved_two.agents["concierge"].model == "two"
+    assert resolved_one.models["one"].module == Omunculus.Model.Fake
+    assert resolved_two.models["two"].module == Omunculus.Model.Battery
+    assert resolved_one.store.path == resolved_two.store.path
+
+    {:ok, project} = Project.open(config)
+    {:ok, project_two} = Project.open(resolved_two)
+    assert project.dir == project_two.dir
+    Project.close(project)
+    Project.close(project_two)
   end
 end
