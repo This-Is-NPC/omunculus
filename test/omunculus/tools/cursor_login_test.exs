@@ -1,8 +1,8 @@
 defmodule Omunculus.Tools.CursorLoginTest do
   use ExUnit.Case, async: true
 
-  @login Path.expand("priv/tools/cursor_login/run", File.cwd!())
-  @refresh Path.expand("priv/tools/cursor_refresh/run", File.cwd!())
+  @login Application.app_dir(:omunculus, "priv/tools/cursor_login/run")
+  @refresh Application.app_dir(:omunculus, "priv/tools/cursor_refresh/run")
 
   test "cursor_login polls a fake server and prints a credential" do
     {:ok, server} = start_server()
@@ -10,17 +10,16 @@ defmodule Omunculus.Tools.CursorLoginTest do
     base = "http://127.0.0.1:#{server.port}"
 
     {stdout, 0} =
-      System.cmd(
-        "sh",
-        ["-c", "python3 \"$1\" < /dev/null", "omunculus-login", @login],
-        env: [
+      python(
+        @login,
+        "",
+        [
           {"OMUNCULUS_CURSOR_LOGIN_URL", base <> "/loginDeepControl"},
           {"OMUNCULUS_CURSOR_POLL_URL", base <> "/auth/poll"},
           {"OMUNCULUS_CURSOR_EXCHANGE_URL", base <> "/auth/exchange_user_api_key"},
           {"OMUNCULUS_CURSOR_NO_BROWSER", "1"},
           {"OMUNCULUS_CURSOR_POLL_SECONDS", "5"}
-        ],
-        stderr_to_stdout: true
+        ]
       )
 
     assert {:ok, %{"ok" => true, "output" => output, "emit" => []}} = Jason.decode(stdout)
@@ -45,22 +44,10 @@ defmodule Omunculus.Tools.CursorLoginTest do
         }
       })
 
-    in_path =
-      Path.join(
-        System.tmp_dir!(),
-        "omunculus-cursor-refresh-#{System.unique_integer([:positive])}.json"
-      )
-
-    File.write!(in_path, input)
-    on_exit(fn -> File.rm(in_path) end)
-
     {stdout, 0} =
-      System.cmd(
-        "sh",
-        ["-c", "python3 \"$1\" < \"$2\"", "omunculus-refresh", @refresh, in_path],
-        env: [{"OMUNCULUS_CURSOR_EXCHANGE_URL", base <> "/auth/exchange_user_api_key"}],
-        stderr_to_stdout: true
-      )
+      python(@refresh, input, [
+        {"OMUNCULUS_CURSOR_EXCHANGE_URL", base <> "/auth/exchange_user_api_key"}
+      ])
 
     assert {:ok, %{"ok" => true, "output" => output, "emit" => []}} = Jason.decode(stdout)
     assert {:ok, cred} = Jason.decode(output)
@@ -68,22 +55,44 @@ defmodule Omunculus.Tools.CursorLoginTest do
     assert cred["refresh"] == "refresh-token"
   end
 
+  defp python(script, stdin, extra_env) do
+    env = [
+      {"no_proxy", "*"},
+      {"NO_PROXY", "*"},
+      {"http_proxy", ""},
+      {"https_proxy", ""},
+      {"HTTP_PROXY", ""},
+      {"HTTPS_PROXY", ""}
+      | extra_env
+    ]
+
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "omunculus-cursor-#{System.unique_integer([:positive])}.in"
+      )
+
+    File.write!(path, stdin)
+    on_exit(fn -> File.rm(path) end)
+
+    System.cmd(
+      "sh",
+      ["-c", "exec python3 \"$1\" < \"$2\"", "omunculus-python", script, path],
+      env: env,
+      stderr_to_stdout: true
+    )
+  end
+
   defp start_server do
-    {:ok, listen} = :gen_tcp.listen(0, [:binary, packet: :raw, active: false, reuseaddr: true])
+    {:ok, listen} =
+      :gen_tcp.listen(
+        0,
+        [:binary, packet: :raw, active: false, reuseaddr: true, ip: {127, 0, 0, 1}, backlog: 16]
+      )
+
     {:ok, port} = :inet.port(listen)
-    parent = self()
-
-    pid =
-      spawn_link(fn ->
-        send(parent, {:ready, self()})
-        accept_loop(listen)
-      end)
-
-    receive do
-      {:ready, ^pid} -> {:ok, %{pid: pid, listen: listen, port: port}}
-    after
-      1_000 -> {:error, :timeout}
-    end
+    pid = spawn_link(fn -> accept_loop(listen) end)
+    {:ok, %{pid: pid, listen: listen, port: port}}
   end
 
   defp stop_server(%{pid: pid, listen: listen}) do
@@ -93,7 +102,7 @@ defmodule Omunculus.Tools.CursorLoginTest do
   end
 
   defp accept_loop(listen) do
-    case :gen_tcp.accept(listen, 5_000) do
+    case :gen_tcp.accept(listen, 10_000) do
       {:ok, socket} ->
         handle_http(socket)
         :gen_tcp.close(socket)
@@ -105,18 +114,45 @@ defmodule Omunculus.Tools.CursorLoginTest do
   end
 
   defp handle_http(socket) do
-    case :gen_tcp.recv(socket, 0, 2_000) do
-      {:ok, packet} ->
-        request = to_string(packet)
+    case recv_headers(socket, "") do
+      {:ok, request} ->
+        _ = drain_body(socket, request)
         body = response_body(request)
 
-        payload =
+        :gen_tcp.send(
+          socket,
           "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: #{byte_size(body)}\r\nconnection: close\r\n\r\n#{body}"
-
-        :gen_tcp.send(socket, payload)
+        )
 
       {:error, _reason} ->
         :ok
+    end
+  end
+
+  defp drain_body(socket, request) do
+    case Regex.run(~r/content-length:\s*(\d+)/i, request) do
+      [_, digits] -> recv_n(socket, String.to_integer(digits))
+      nil -> :ok
+    end
+  end
+
+  defp recv_n(_socket, 0), do: :ok
+
+  defp recv_n(socket, n) do
+    case :gen_tcp.recv(socket, n, 2_000) do
+      {:ok, _data} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp recv_headers(socket, acc) do
+    if String.contains?(acc, "\r\n\r\n") do
+      {:ok, acc}
+    else
+      case :gen_tcp.recv(socket, 1, 2_000) do
+        {:ok, byte} -> recv_headers(socket, acc <> byte)
+        {:error, reason} -> {:error, reason}
+      end
     end
   end
 

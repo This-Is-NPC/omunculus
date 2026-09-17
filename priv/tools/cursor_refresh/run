@@ -56,10 +56,15 @@ def http_json(url, body):
     request = urllib.request.Request(
         url,
         data=data,
-        headers={"accept": "application/json", "content-type": "application/json"},
+        headers={
+            "accept": "application/json",
+            "content-type": "application/json",
+            "connection": "close",
+        },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=15) as response:
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(request, timeout=2) as response:
         return json.loads(response.read().decode("utf-8"))
 
 

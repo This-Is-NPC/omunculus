@@ -60,12 +60,13 @@ def open_browser(url):
 
 def http_json(url, method="GET", body=None):
     data = None if body is None else json.dumps(body).encode("utf-8")
-    headers = {"accept": "application/json"}
+    headers = {"accept": "application/json", "connection": "close"}
     if data is not None:
         headers["content-type"] = "application/json"
     request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
-        with urllib.request.urlopen(request, timeout=15) as response:
+        with opener.open(request, timeout=2) as response:
             raw = response.read()
             if not raw:
                 return None
