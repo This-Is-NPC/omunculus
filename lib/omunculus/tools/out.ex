@@ -41,6 +41,24 @@ defmodule Omunculus.Tools.Out do
   @spec no_text() :: String.t()
   def no_text, do: "(no text)"
 
+  @spec api_key_prompt() :: String.t()
+  def api_key_prompt, do: "api key: "
+
+  @spec logged_in(String.t()) :: String.t()
+  def logged_in(provider), do: "logged in to #{provider}"
+
+  @spec logged_out(String.t()) :: String.t()
+  def logged_out(provider), do: "logged out of #{provider}"
+
+  @spec unknown_auth_provider(String.t()) :: String.t()
+  def unknown_auth_provider(provider), do: "unknown auth provider: #{provider}"
+
+  @spec unknown_auth_kind(String.t()) :: String.t()
+  def unknown_auth_kind(kind), do: "unknown auth kind: #{kind}"
+
+  @spec login_tool_failed() :: String.t()
+  def login_tool_failed, do: "login tool failed"
+
   @spec user_facing() :: [String.t()]
   def user_facing do
     [
@@ -52,7 +70,13 @@ defmodule Omunculus.Tools.Out do
       no_tools_found(),
       no_comments(),
       empty_inbox(),
-      no_text()
+      no_text(),
+      api_key_prompt(),
+      logged_in("openai"),
+      logged_out("openai"),
+      unknown_auth_provider("openai"),
+      unknown_auth_kind("oauth"),
+      login_tool_failed()
     ]
   end
 end

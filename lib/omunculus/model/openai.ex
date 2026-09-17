@@ -2,7 +2,7 @@ defmodule Omunculus.Model.OpenAI do
   @moduledoc """
   Factory for an OpenAI-compatible model of the contract of spec §8.6:
   `new/1` takes the `[models.<name>]` spec (`url`, `model`, `timeout_ms`,
-  optional `temperature`, `key_env`, `headers`) and returns a 5-arity
+  optional `temperature`, `headers`, `credential`) and returns a 5-arity
   `(assembled, tools, call, record, execution)` fun. Declares each of
   `tools` (the run's effective tools, as `%{name, description,
   parameters}`) as a function with its real `parameters` schema — an
@@ -50,12 +50,12 @@ defmodule Omunculus.Model.OpenAI do
   defp request_headers(spec) do
     explicit = headers_list(Map.get(spec, "headers"))
 
-    case Map.get(spec, "key_env") do
-      var when is_binary(var) ->
-        case System.get_env(var) do
-          nil -> explicit
-          key -> [{"authorization", "Bearer " <> key} | explicit]
-        end
+    case Map.get(spec, "credential") do
+      %{"access" => access} when is_binary(access) and access != "" ->
+        [{"authorization", "Bearer " <> access} | explicit]
+
+      %{access: access} when is_binary(access) and access != "" ->
+        [{"authorization", "Bearer " <> access} | explicit]
 
       _absent ->
         explicit

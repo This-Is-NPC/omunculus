@@ -60,6 +60,10 @@ defmodule Omunculus.CLI do
     "omunculus.toml agent #{name} is missing model"
   end
 
+  def format_error({:auth, :not_logged_in, id}) do
+    "not logged in to #{id}; run `omunculus login --provider #{id}`"
+  end
+
   def format_error(reason), do: inspect(reason)
 
   defp split_config(["--config"], _cwd), do: {:error, {:missing_value, "config"}}

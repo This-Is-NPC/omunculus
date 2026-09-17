@@ -379,4 +379,28 @@ defmodule Omunculus.Tool.ManifestTest do
     assert manifest.description == "from a map"
     assert manifest.dir == dir
   end
+
+  test "harness-only triggers are valid", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "internal"
+      kind = "tool"
+      triggers = ["harness"]
+      module = "Omunculus.Tools.Comment"
+      """)
+
+    assert {:ok, %Manifest{triggers: ["harness"]}} = Manifest.load(path)
+  end
+
+  test "harness mixed with other triggers is rejected", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "internal"
+      kind = "tool"
+      triggers = ["harness", "model"]
+      module = "Omunculus.Tools.Comment"
+      """)
+
+    assert Manifest.load(path) == {:error, {:invalid, :triggers}}
+  end
 end

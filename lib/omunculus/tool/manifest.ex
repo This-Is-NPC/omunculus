@@ -118,7 +118,9 @@ defmodule Omunculus.Tool.Manifest do
   defp kind_fields(raw, "tool") do
     with :ok <- forbidden(raw, "events"),
          :ok <- forbidden(raw, "agent"),
-         {:ok, triggers} <- optional_enum_list(raw, "triggers", ["model"], ["model", "cli"]) do
+         {:ok, triggers} <-
+           optional_enum_list(raw, "triggers", ["model"], ["model", "cli", "harness"]),
+         :ok <- validate_harness_triggers(triggers) do
       {:ok, {triggers, [], nil}}
     end
   end
@@ -129,6 +131,12 @@ defmodule Omunculus.Tool.Manifest do
          {:ok, agent} <- optional_agent(raw) do
       {:ok, {[], events, agent}}
     end
+  end
+
+  defp validate_harness_triggers(["harness"]), do: :ok
+
+  defp validate_harness_triggers(triggers) do
+    if "harness" in triggers, do: {:error, {:invalid, :triggers}}, else: :ok
   end
 
   defp forbidden(raw, key) do

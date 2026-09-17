@@ -2086,3 +2086,136 @@ defmodule Omunculus.ConfigTest do
     end
   end
 end
+
+defmodule Omunculus.ConfigAuthTest do
+  use ExUnit.Case, async: true
+
+  alias Omunculus.Config
+  alias Omunculus.{Fixtures, Id}
+
+  setup do
+    dir = Path.join(System.tmp_dir!(), Id.new())
+    File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf!(dir) end)
+    %{dir: dir}
+  end
+
+  defp write_toml(dir, contents), do: Fixtures.write_config(dir, contents)
+  defp load(dir), do: Config.load(Path.join(dir, "omunculus.toml"))
+
+  defp base(extra) do
+    """
+    [models.fake]
+    api = "module"
+    module = "Omunculus.Model.Fake"
+
+    [agents.concierge]
+    depth = 0
+    model = "fake"
+    text = "hi"
+
+    #{extra}
+    """
+  end
+
+  test "auth provider without store is rejected", %{dir: dir} do
+    write_toml(
+      dir,
+      base("""
+      [auth.openai]
+      kind = "api_key"
+      key = "x"
+      """)
+    )
+
+    assert {:error, {:auth, :missing_store}} = load(dir)
+  end
+
+  test "unknown auth kind is rejected", %{dir: dir} do
+    write_toml(
+      dir,
+      base("""
+      [auth]
+      store = ".auth.json"
+
+      [auth.openai]
+      kind = "unknown"
+      """)
+    )
+
+    assert {:error, {:auth, "openai", {:unknown_kind, "unknown"}}} = load(dir)
+  end
+
+  test "unknown model provider is rejected", %{dir: dir} do
+    write_toml(dir, """
+    [auth]
+    store = ".auth.json"
+
+    [models.local]
+    api = "openai-completions"
+    url = "http://localhost:8080/v1"
+    model = "qwen"
+    timeout_ms = 120000
+    provider = "missing"
+
+    [agents.concierge]
+    depth = 0
+    model = "local"
+    text = "hi"
+    """)
+
+    assert {:error, {:models, "local", {:unknown_provider, "missing"}}} = load(dir)
+  end
+
+  test "key_env is rejected on openai models", %{dir: dir} do
+    write_toml(
+      dir,
+      base("""
+      [models.local]
+      api = "openai-completions"
+      url = "http://localhost:8080/v1"
+      model = "qwen"
+      timeout_ms = 120000
+      key_env = "OPENAI_API_KEY"
+      """)
+    )
+
+    assert {:error, {:models, "local", {:unknown_key, "key_env"}}} = load(dir)
+  end
+
+  test "workspace overlay can replace auth", %{dir: dir} do
+    write_toml(
+      dir,
+      base("""
+      [auth]
+      store = ".auth.json"
+
+      [auth.openai]
+      kind = "api_key"
+      key = "global"
+
+      [workspaces.app]
+      root = "app"
+
+      [policy]
+      workspace = "app"
+
+      [workspaces.app.auth.openai]
+      kind = "api_key"
+      key = "overlay"
+      """)
+    )
+
+    assert {:ok, config} = load(dir)
+    assert config.auth.providers["openai"].key == "global"
+    assert {:ok, resolved} = Config.for_workspace(config, "app")
+    assert resolved.auth.providers["openai"].key == "overlay"
+  end
+
+  test "default preset loads without auth" do
+    path = Application.app_dir(:omunculus, "priv/presets/default/omunculus.toml")
+    assert {:ok, config} = Config.load(path)
+    assert config.auth.store == nil
+    assert config.auth.providers == %{}
+  end
+end

@@ -72,6 +72,11 @@ defmodule Omunculus.CLITest do
     |> Enum.map(&Jason.decode!(&1.body)["name"])
   end
 
+  test "format_error for not_logged_in", _ctx do
+    assert CLI.format_error({:auth, :not_logged_in, "openai"}) =~
+             "omunculus login --provider openai"
+  end
+
   test "send delivers a message, opens a run and the run reaches done", %{dir: dir} do
     assert {:ok, ""} = CLI.run(["send", "count to 5"], dir)
 

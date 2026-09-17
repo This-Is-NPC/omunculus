@@ -1,0 +1,15 @@
+name = "logout"
+kind = "tool"
+shape = "simple"
+triggers = ["cli"]
+description = "Removes stored credentials for an auth provider."
+tags = ["cli", "auth"]
+groups = ["cli"]
+module = "Omunculus.Tools.Logout"
+
+[parameters]
+type = "object"
+required = ["provider"]
+
+[parameters.properties.provider]
+type = "string"

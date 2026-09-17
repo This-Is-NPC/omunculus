@@ -9,8 +9,9 @@ defmodule Omunculus.Config do
   project root) plus a ceiling layer — and the `[policy] workspace`
   default, each agent's ceiling layer, the named `[models.<name>]`
   adapters, the named workflows under `[workflows.<name>]` (spec §3.4),
-  the MCP servers under `[[mcp.servers]]` (spec §8.7), the required
-  `[execution]` and `[store]` tables, and grants a permanent ceiling
+  the MCP servers under `[[mcp.servers]]` (spec §8.7), the `[auth]`
+  providers (spec §11.1), the required `[execution]` and `[store]`
+  tables, and grants a permanent ceiling
   addition — to an agent, a depth, a workflow step, or a workspace — by
   rewriting that same file. A workspace may name a `config` file relative
   to its `root`; that file uses the same schema minus `[workspaces]` and
@@ -18,6 +19,7 @@ defmodule Omunculus.Config do
   `[workspaces.<name>]` tables.
   """
 
+  alias Omunculus.Auth
   alias Omunculus.Config.Layer
   alias Omunculus.Tool.Manifest
 
@@ -37,6 +39,7 @@ defmodule Omunculus.Config do
     :models,
     :path,
     :store,
+    :auth,
     :data
   ]
   defstruct @enforce_keys
@@ -92,6 +95,7 @@ defmodule Omunculus.Config do
           models: %{String.t() => model},
           path: String.t(),
           store: %{path: String.t()},
+          auth: %{store: String.t() | nil, providers: %{String.t() => map}},
           data: map
         }
 
@@ -110,10 +114,10 @@ defmodule Omunculus.Config do
   )
   @sandbox_keys ~w(script command runner exec)
   @mcp_server_keys ~w(name command protocol_version)
-  @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp)
-  @workspace_file_keys ~w(policy agents workflows mcp execution project tools models)
+  @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
+  @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
   @agent_extra_keys ~w(depth text workflow_only model)
-  @openai_model_keys ~w(api url model timeout_ms temperature key_env headers)
+  @openai_model_keys ~w(api url model timeout_ms temperature headers provider)
   @module_model_keys ~w(api module params)
   @step_extra_keys ~w(name agent)
 
@@ -157,11 +161,28 @@ defmodule Omunculus.Config do
   end
 
   @spec model_fun(t, String.t()) :: {:ok, fun} | {:error, term}
-  def model_fun(%__MODULE__{agents: agents, models: models}, agent_name) do
-    case Map.fetch(agents, agent_name) do
+  def model_fun(%__MODULE__{} = config, agent_name) do
+    case Map.fetch(config.agents, agent_name) do
       {:ok, %{model: name}} ->
-        spec = Map.fetch!(models, name)
-        {:ok, spec.module.new(spec.input)}
+        spec = Map.fetch!(config.models, name)
+        input = spec.input
+
+        case Map.get(input, "provider") do
+          nil ->
+            {:ok, spec.module.new(input)}
+
+          provider_id ->
+            case Auth.credential(config, provider_id) do
+              {:ok, nil} ->
+                {:ok, spec.module.new(input)}
+
+              {:ok, credential} ->
+                {:ok, spec.module.new(Map.put(input, "credential", credential))}
+
+              {:error, reason} ->
+                {:error, reason}
+            end
+        end
 
       :error ->
         {:error, {:no_agent, agent_name}}
@@ -337,7 +358,8 @@ defmodule Omunculus.Config do
              "project",
              "tools",
              "models",
-             "store"
+             "store",
+             "auth"
            ] do
       [key | _] ->
         {:error, {:unknown_key, key}}
@@ -348,7 +370,8 @@ defmodule Omunculus.Config do
 
         with {:ok, root} <- parse_project(Map.get(data, "project"), config_dir),
              {:ok, execution} <- parse_execution(Map.get(data, "execution"), config_dir),
-             {:ok, models} <- parse_models(Map.get(data, "models")),
+             {:ok, auth} <- parse_auth(Map.get(data, "auth"), config_dir),
+             {:ok, models} <- parse_models(Map.get(data, "models"), auth),
              {:ok, store} <- parse_store(Map.get(data, "store"), config_dir),
              {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), root),
              {:ok, agents} <- parse_agents(Map.get(data, "agents", %{}), models),
@@ -376,6 +399,7 @@ defmodule Omunculus.Config do
               models: models,
               path: config_path,
               store: store,
+              auth: auth,
               data: data
             }
 
@@ -833,6 +857,7 @@ defmodule Omunculus.Config do
   defp overlay_table_error("tools"), do: {:tools, {:invalid, :table}}
   defp overlay_table_error("policy"), do: {:policy, {:invalid, :table}}
   defp overlay_table_error("mcp"), do: {:mcp, {:invalid, :servers}}
+  defp overlay_table_error("auth"), do: {:auth, {:invalid, :table}}
   defp overlay_table_error(key), do: {:unknown_key, key}
 
   defp overlay_config(%__MODULE__{} = config, inline_overlay, file_overlay, _file_dir)
@@ -1158,31 +1183,263 @@ defmodule Omunculus.Config do
     end
   end
 
-  defp parse_models(nil), do: {:error, {:models, :missing}}
+  defp parse_auth(nil, _config_dir), do: {:ok, %{store: nil, providers: %{}}}
 
-  defp parse_models(data) when is_map(data) do
+  defp parse_auth(data, config_dir) when is_map(data) do
+    {store_raw, providers} = Map.pop(data, "store")
+
+    cond do
+      not is_nil(store_raw) and not is_binary(store_raw) ->
+        {:error, {:auth, {:invalid, :store}}}
+
+      map_size(providers) > 0 and store_raw in [nil, ""] ->
+        {:error, {:auth, :missing_store}}
+
+      true ->
+        with {:ok, store} <- parse_auth_store(store_raw, config_dir),
+             {:ok, parsed} <- parse_auth_providers(providers) do
+          {:ok, %{store: store, providers: parsed}}
+        end
+    end
+  end
+
+  defp parse_auth(_data, _config_dir), do: {:error, {:auth, {:invalid, :table}}}
+
+  defp parse_auth_store(nil, _config_dir), do: {:ok, nil}
+
+  defp parse_auth_store(path, config_dir) when is_binary(path) and path != "" do
+    {:ok, Path.expand(path, config_dir)}
+  end
+
+  defp parse_auth_store(_path, _config_dir), do: {:error, {:auth, {:invalid, :store}}}
+
+  defp parse_auth_providers(providers) when is_map(providers) do
+    Enum.reduce_while(providers, {:ok, %{}}, fn {id, data}, {:ok, acc} ->
+      case parse_auth_provider(id, data) do
+        {:ok, provider} -> {:cont, {:ok, Map.put(acc, id, provider)}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp parse_auth_provider(id, data) when is_map(data) do
+    case Map.get(data, "kind") do
+      "api_key" -> parse_api_key_provider(id, data)
+      "oauth-code" -> parse_oauth_provider(id, data)
+      "tool" -> parse_tool_provider(id, data)
+      kind when is_binary(kind) -> {:error, {:auth, id, {:unknown_kind, kind}}}
+      nil -> {:error, {:auth, id, {:invalid, :kind}}}
+      _ -> {:error, {:auth, id, {:invalid, :kind}}}
+    end
+  end
+
+  defp parse_auth_provider(id, _data), do: {:error, {:auth, id, {:invalid, :table}}}
+
+  defp parse_api_key_provider(id, data) do
+    case Map.keys(data) -- ~w(kind key) do
+      [key | _] ->
+        {:error, {:auth, id, {:unknown_key, key}}}
+
+      [] ->
+        case Map.get(data, "key") do
+          key when is_binary(key) ->
+            {:ok, %{kind: "api_key", key: key}}
+
+          _ ->
+            {:error, {:auth, id, {:invalid, :key}}}
+        end
+    end
+  end
+
+  defp parse_oauth_provider(id, data) do
+    {callback_raw, rest} = Map.pop(data, "callback")
+    {credential_raw, rest} = Map.pop(rest, "credential")
+    {authorize_params, rest} = Map.pop(rest, "authorize_params", %{})
+    {refresh_raw, rest} = Map.pop(rest, "refresh")
+    required = ~w(kind authorize_url token_url client_id scopes pkce)
+
+    case Map.keys(rest) -- required do
+      [key | _] ->
+        {:error, {:auth, id, {:unknown_key, key}}}
+
+      [] ->
+        with {:ok, authorize_url} <- auth_string(rest, "authorize_url"),
+             {:ok, token_url} <- auth_string(rest, "token_url"),
+             {:ok, client_id} <- auth_string(rest, "client_id"),
+             {:ok, scopes} <- auth_string_list(rest, "scopes"),
+             {:ok, pkce} <- auth_bool(rest, "pkce"),
+             {:ok, callback} <- parse_auth_callback(id, callback_raw),
+             {:ok, credential} <- parse_auth_credential(id, credential_raw),
+             {:ok, authorize_params} <- auth_params_map(authorize_params),
+             {:ok, refresh} <- parse_auth_refresh(refresh_raw) do
+          {:ok,
+           %{
+             kind: "oauth-code",
+             authorize_url: authorize_url,
+             token_url: token_url,
+             client_id: client_id,
+             scopes: scopes,
+             pkce: pkce,
+             callback: callback,
+             credential: credential,
+             authorize_params: authorize_params,
+             refresh: refresh
+           }}
+        else
+          {:error, {:auth, ^id, _} = reason} -> {:error, reason}
+          {:error, reason} -> {:error, {:auth, id, reason}}
+        end
+    end
+  end
+
+  defp parse_tool_provider(id, data) do
+    case Map.keys(data) -- ~w(kind login refresh) do
+      [key | _] ->
+        {:error, {:auth, id, {:unknown_key, key}}}
+
+      [] ->
+        with {:ok, login} <- auth_string(data, "login"),
+             {:ok, refresh} <- auth_string(data, "refresh") do
+          {:ok, %{kind: "tool", login: login, refresh: refresh}}
+        else
+          {:error, reason} -> {:error, {:auth, id, reason}}
+        end
+    end
+  end
+
+  defp parse_auth_callback(_id, data) when is_map(data) do
+    case Map.keys(data) -- ~w(host port path) do
+      [key | _] ->
+        {:error, {:unknown_key, key}}
+
+      [] ->
+        with {:ok, host} <- auth_string(data, "host"),
+             {:ok, port} <- auth_port(data),
+             {:ok, path} <- auth_string(data, "path") do
+          {:ok, %{host: host, port: port, path: path}}
+        end
+    end
+  end
+
+  defp parse_auth_callback(_id, _data), do: {:error, {:invalid, :callback}}
+
+  defp parse_auth_credential(_id, data) when is_map(data) do
+    {refresh, rest} = Map.pop(data, "refresh")
+
+    case Map.keys(rest) -- ~w(access expires) do
+      [key | _] ->
+        {:error, {:unknown_key, key}}
+
+      [] ->
+        with {:ok, access} <- auth_string(rest, "access"),
+             {:ok, expires} <- auth_string(rest, "expires") do
+          credential = %{access: access, expires: expires}
+
+          cond do
+            is_nil(refresh) -> {:ok, credential}
+            is_binary(refresh) and refresh != "" -> {:ok, Map.put(credential, :refresh, refresh)}
+            true -> {:error, {:invalid, :refresh}}
+          end
+        end
+    end
+  end
+
+  defp parse_auth_credential(_id, _data), do: {:error, {:invalid, :credential}}
+
+  defp parse_auth_refresh(nil), do: {:ok, nil}
+
+  defp parse_auth_refresh(data) when is_map(data) do
+    case Map.keys(data) -- ~w(token_url) do
+      [key | _] ->
+        {:error, {:unknown_key, key}}
+
+      [] ->
+        with {:ok, token_url} <- auth_string(data, "token_url") do
+          {:ok, %{token_url: token_url}}
+        end
+    end
+  end
+
+  defp parse_auth_refresh(_data), do: {:error, {:invalid, :refresh}}
+
+  defp auth_string(data, key) do
+    case Map.get(data, key) do
+      value when is_binary(value) and value != "" -> {:ok, value}
+      _ -> {:error, {:invalid, String.to_atom(key)}}
+    end
+  end
+
+  defp auth_string_list(data, key) do
+    case Map.get(data, key) do
+      list when is_list(list) and list != [] ->
+        if Enum.all?(list, &(is_binary(&1) and &1 != "")),
+          do: {:ok, list},
+          else: {:error, {:invalid, String.to_atom(key)}}
+
+      _ ->
+        {:error, {:invalid, String.to_atom(key)}}
+    end
+  end
+
+  defp auth_bool(data, key) do
+    case Map.get(data, key) do
+      value when is_boolean(value) -> {:ok, value}
+      _ -> {:error, {:invalid, String.to_atom(key)}}
+    end
+  end
+
+  defp auth_port(data) do
+    case Map.get(data, "port") do
+      port when is_integer(port) and port > 0 and port < 65_536 -> {:ok, port}
+      _ -> {:error, {:invalid, :port}}
+    end
+  end
+
+  defp auth_params_map(params) when is_map(params) do
+    if Enum.all?(params, fn {k, v} -> is_binary(k) and is_binary(v) end) do
+      {:ok, params}
+    else
+      {:error, {:invalid, :authorize_params}}
+    end
+  end
+
+  defp auth_params_map(_params), do: {:error, {:invalid, :authorize_params}}
+
+  defp validate_model_provider(nil, _auth), do: :ok
+
+  defp validate_model_provider(provider, %{providers: providers}) do
+    if Map.has_key?(providers, provider) do
+      :ok
+    else
+      {:error, {:unknown_provider, provider}}
+    end
+  end
+
+  defp parse_models(nil, _auth), do: {:error, {:models, :missing}}
+
+  defp parse_models(data, auth) when is_map(data) do
     Enum.reduce_while(data, {:ok, %{}}, fn {name, spec}, {:ok, acc} ->
-      case parse_model(name, spec) do
+      case parse_model(name, spec, auth) do
         {:ok, model} -> {:cont, {:ok, Map.put(acc, name, model)}}
         {:error, _reason} = error -> {:halt, error}
       end
     end)
   end
 
-  defp parse_models(_data), do: {:error, {:models, :invalid}}
+  defp parse_models(_data, _auth), do: {:error, {:models, :invalid}}
 
-  defp parse_model(name, data) when is_map(data) do
+  defp parse_model(name, data, auth) when is_map(data) do
     case Map.get(data, "api") do
-      "openai-completions" -> parse_openai_model(name, data)
+      "openai-completions" -> parse_openai_model(name, data, auth)
       "module" -> parse_module_model(name, data)
       nil -> {:error, {:models, name, {:invalid, :api}}}
       api -> {:error, {:models, name, {:unknown_api, api}}}
     end
   end
 
-  defp parse_model(name, _data), do: {:error, {:models, name, {:invalid, :api}}}
+  defp parse_model(name, _data, _auth), do: {:error, {:models, name, {:invalid, :api}}}
 
-  defp parse_openai_model(name, data) do
+  defp parse_openai_model(name, data, auth) do
     case Map.keys(data) -- @openai_model_keys do
       [key | _] ->
         {:error, {:models, name, {:unknown_key, key}}}
@@ -1192,8 +1449,9 @@ defmodule Omunculus.Config do
              {:ok, model} <- model_string(data, "model"),
              {:ok, timeout_ms} <- model_timeout(data),
              {:ok, temperature} <- model_temperature(data),
-             {:ok, key_env} <- model_optional_string(data, "key_env"),
-             {:ok, headers} <- model_headers(data) do
+             {:ok, headers} <- model_headers(data),
+             {:ok, provider} <- model_optional_string(data, "provider"),
+             :ok <- validate_model_provider(provider, auth) do
           input =
             %{
               "api" => "openai-completions",
@@ -1202,8 +1460,8 @@ defmodule Omunculus.Config do
               "timeout_ms" => timeout_ms
             }
             |> maybe_put_model("temperature", temperature)
-            |> maybe_put_model("key_env", key_env)
             |> maybe_put_model("headers", headers)
+            |> maybe_put_model("provider", provider)
 
           {:ok,
            %{

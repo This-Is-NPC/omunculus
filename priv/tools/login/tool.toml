@@ -1,0 +1,21 @@
+name = "login"
+kind = "tool"
+shape = "simple"
+triggers = ["cli"]
+description = "Stores credentials for an auth provider."
+tags = ["cli", "auth"]
+groups = ["cli"]
+module = "Omunculus.Tools.Login"
+
+[parameters]
+type = "object"
+required = ["provider"]
+
+[parameters.properties.provider]
+type = "string"
+
+[parameters.properties.key]
+type = "string"
+
+[parameters.properties.redirect_url]
+type = "string"
