@@ -20,9 +20,31 @@ path = ".omunculus/store.sqlite3"
 [tools]
 paths = ["../../tools"]
 
+[auth]
+store = ".omunculus/auth.json"
+
+[auth.anthropic]
+kind = "oauth-code"
+authorize_url = "https://claude.ai/oauth/authorize"
+token_url = "https://console.anthropic.com/v1/oauth/token"
+client_id = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+scopes = ["org:create_api_key", "user:profile", "user:inference"]
+pkce = true
+callback = { host = "localhost", port = 54545, path = "/callback" }
+credential = { access = "access_token", refresh = "refresh_token", expires = "expires_in" }
+refresh = { token_url = "https://console.anthropic.com/v1/oauth/token" }
+
 [models.fake]
 api = "module"
 module = "Omunculus.Model.Fake"
+
+[models.claude]
+provider = "anthropic"
+api = "anthropic-messages"
+url = "https://api.anthropic.com/v1"
+model = "claude-sonnet-4-5"
+timeout_ms = 120000
+headers = { anthropic-beta = "oauth-2025-04-08" }
 
 [agents.pi]
 depth = 0

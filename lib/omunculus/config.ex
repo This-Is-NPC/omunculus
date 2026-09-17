@@ -1436,6 +1436,15 @@ defmodule Omunculus.Config do
       "openai-responses" ->
         parse_openai_model(name, data, auth, "openai-responses", Omunculus.Model.OpenAIResponses)
 
+      "anthropic-messages" ->
+        parse_openai_model(
+          name,
+          data,
+          auth,
+          "anthropic-messages",
+          Omunculus.Model.AnthropicMessages
+        )
+
       "module" ->
         parse_module_model(name, data)
 

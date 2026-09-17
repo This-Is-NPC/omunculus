@@ -2212,11 +2212,45 @@ defmodule Omunculus.ConfigAuthTest do
     assert resolved.auth.providers["openai"].key == "overlay"
   end
 
+  test "pi-like preset loads public Claude Code oauth" do
+    path = Application.app_dir(:omunculus, "priv/presets/pi-like/omunculus.toml")
+    assert {:ok, config} = Config.load(path)
+    provider = config.auth.providers["anthropic"]
+    assert provider.kind == "oauth-code"
+    assert provider.authorize_url == "https://claude.ai/oauth/authorize"
+    assert provider.token_url == "https://console.anthropic.com/v1/oauth/token"
+    assert provider.client_id == "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+    assert config.models["claude"].api == "anthropic-messages"
+    assert config.models["claude"].module == Omunculus.Model.AnthropicMessages
+    assert config.models["claude"].input["provider"] == "anthropic"
+    assert config.models["claude"].input["url"] == "https://api.anthropic.com/v1"
+  end
+
   test "default preset loads without auth" do
     path = Application.app_dir(:omunculus, "priv/presets/default/omunculus.toml")
     assert {:ok, config} = Config.load(path)
     assert config.auth.store == nil
     assert config.auth.providers == %{}
+  end
+
+  test "anthropic-messages loads the messages adapter", %{dir: dir} do
+    write_toml(dir, """
+    [models.local]
+    api = "anthropic-messages"
+    url = "http://localhost:8080/v1"
+    model = "claude"
+    timeout_ms = 120000
+
+    [agents.concierge]
+    depth = 0
+    model = "local"
+    text = "hi"
+    """)
+
+    assert {:ok, config} = load(dir)
+    assert config.models["local"].api == "anthropic-messages"
+    assert config.models["local"].module == Omunculus.Model.AnthropicMessages
+    assert config.models["local"].input["url"] == "http://localhost:8080/v1"
   end
 
   test "openai-responses loads the responses adapter", %{dir: dir} do

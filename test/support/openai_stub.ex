@@ -2,7 +2,7 @@ defmodule Omunculus.OpenAIStub do
   @moduledoc """
   Builds and drives the Rust binary at `test/support/openai_stub` for
   `Omunculus.Model.OpenAI` tests: an OpenAI-compatible
-  `/v1/chat/completions` and `/v1/responses` server that, while a request carries a
+  `/v1/chat/completions`, `/v1/responses` and `/v1/messages` server that, while a request carries a
   `counter` tool and fewer `tool` messages than its configured
   `tool_rounds`, replies with a `counter` tool call; otherwise it replies
   with the content `"benchmark complete"`. `GET /stats` reports counters

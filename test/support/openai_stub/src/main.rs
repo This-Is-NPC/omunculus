@@ -605,6 +605,131 @@ async fn responses(State(state): State<Arc<AppState>>, body: Bytes) -> Response 
         .into_response()
 }
 
+#[derive(Debug, Deserialize, Default)]
+struct MessagesRequest {
+    #[serde(default)]
+    tools: Vec<MessagesTool>,
+    #[serde(default)]
+    messages: Vec<Value>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct MessagesTool {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    input_schema: Value,
+}
+
+fn count_tool_results(messages: &[Value]) -> u64 {
+    messages
+        .iter()
+        .flat_map(|message| match message.get("content") {
+            Some(Value::Array(items)) => items.iter().collect::<Vec<_>>(),
+            _ => Vec::new(),
+        })
+        .filter(|item| item.get("type").and_then(Value::as_str) == Some("tool_result"))
+        .count() as u64
+}
+
+async fn messages(State(state): State<Arc<AppState>>, body: Bytes) -> Response {
+    let guard = state.begin_request(body.len());
+    let request: MessagesRequest = match serde_json::from_slice(&body) {
+        Ok(request) => request,
+        Err(_) => {
+            guard.finish(false);
+            return error_response(StatusCode::BAD_REQUEST, "invalid json");
+        }
+    };
+    let last_tools: Value = request
+        .tools
+        .iter()
+        .map(|tool| {
+            json!({
+                "name": tool.name,
+                "parameters": tool.input_schema
+            })
+        })
+        .collect();
+    state.set_last_tools(last_tools).await;
+
+    let config = state.config().await;
+    match state
+        .barrier
+        .wait(config.expected_in_flight, config.barrier_timeout_ms)
+        .await
+    {
+        BarrierResult::Released => {}
+        BarrierResult::TimedOut(first) => {
+            if first {
+                state
+                    .counters
+                    .barrier_timeouts
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+            guard.finish(false);
+            return error_response(StatusCode::REQUEST_TIMEOUT, "in-flight barrier timed out");
+        }
+        BarrierResult::Reconfigured => {
+            guard.finish(false);
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "in-flight barrier reconfigured",
+            );
+        }
+    }
+
+    if config.delay_ms > 0 {
+        time::sleep(Duration::from_millis(config.delay_ms)).await;
+    }
+
+    let tool_results = count_tool_results(&request.messages);
+    let has_counter = request.tools.iter().any(|tool| tool.name == "counter");
+
+    let content = if has_counter && tool_results < config.tool_rounds {
+        state.counters.tool_requests.fetch_add(1, Ordering::Relaxed);
+        let (name, input) = if config.javascript {
+            (
+                "__omunculus_execute",
+                json!({"code": "return await tools.counter({})"}),
+            )
+        } else {
+            ("counter", json!({}))
+        };
+        json!([{
+            "type": "tool_use",
+            "id": format!("benchmark-counter-{}", tool_results + 1),
+            "name": name,
+            "input": input
+        }])
+    } else {
+        let mut text = "benchmark complete".to_owned();
+        if config.payload_bytes > text.len() {
+            text.extend(std::iter::repeat('x').take(config.payload_bytes - text.len()));
+        }
+        json!([{"type": "text", "text": text}])
+    };
+
+    let stop_reason = if has_counter && tool_results < config.tool_rounds {
+        "tool_use"
+    } else {
+        "end_turn"
+    };
+
+    guard.finish(true);
+    (
+        StatusCode::OK,
+        Json(json!({
+            "id": "benchmark",
+            "type": "message",
+            "role": "assistant",
+            "content": content,
+            "stop_reason": stop_reason
+        })),
+    )
+        .into_response()
+}
+
 fn error_response(status: StatusCode, message: &str) -> Response {
     (status, Json(json!({"error": {"message": message}}))).into_response()
 }
@@ -686,6 +811,7 @@ async fn main() {
         .route("/control", post(control))
         .route("/v1/chat/completions", post(completions))
         .route("/v1/responses", post(responses))
+        .route("/v1/messages", post(messages))
         .layer(DefaultBodyLimit::max(16 * 1024 * 1024))
         .with_state(state);
 
