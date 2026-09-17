@@ -1,8 +1,9 @@
 defmodule Omunculus.Tools.Preset do
   @moduledoc """
   `preset` tool: copies `omunculus.toml` and `tools/` from `--from <dir>`
-  onto the resolved config path, rewriting `[tools] paths` to absolute
-  locations resolved against that source directory.
+  onto the resolved config path, rewriting `[tools] paths` and
+  `execution.sandbox.script` to absolute locations resolved against that
+  source directory.
   """
 
   alias Omunculus.Config.Toml, as: ConfigToml
@@ -56,7 +57,21 @@ defmodule Omunculus.Tools.Preset do
       |> Enum.uniq()
 
     tools = data |> Map.get("tools", %{}) |> Map.put("paths", paths)
-    File.write!(config_path, ConfigToml.encode(Map.put(data, "tools", tools)))
+
+    data
+    |> Map.put("tools", tools)
+    |> rewrite_sandbox_script(from)
+    |> then(&File.write!(config_path, ConfigToml.encode(&1)))
+  end
+
+  defp rewrite_sandbox_script(data, from) do
+    case get_in(data, ["execution", "sandbox", "script"]) do
+      script when is_binary(script) ->
+        put_in(data, ["execution", "sandbox", "script"], expand_from(script, from))
+
+      _ ->
+        data
+    end
   end
 
   defp expand_from("~" <> _rest = path, _from), do: Path.expand(path)

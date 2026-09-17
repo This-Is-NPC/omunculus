@@ -42,6 +42,7 @@ defmodule Omunculus.Tools.PresetTest do
     assert Path.join(from("codex-like"), "tools") in config.tools.paths
     assert Path.join(root, "tools") in config.tools.paths
     assert Enum.all?(config.tools.paths, &(Path.type(&1) == :absolute))
+    assert config.execution.sandbox.script == Application.app_dir(:omunculus, "priv/sandbox.js")
   end
 
   test "applying codex-like overwrites an existing omunculus.toml", %{root: root} do

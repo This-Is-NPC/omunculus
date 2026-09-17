@@ -12,8 +12,6 @@ defmodule Omunculus.Tool.Invoke do
   alias Omunculus.Path, as: FilesystemPath
   alias Omunculus.Tool.Manifest
 
-  @runner ~s(exec "$@")
-
   @spec call(Manifest.t(), map) ::
           {:ok, %{ok: boolean, output: String.t(), emit: [map]}} | {:error, term}
   def call(manifest, input), do: call(manifest, input, nil)
@@ -82,7 +80,7 @@ defmodule Omunculus.Tool.Invoke do
          {:ok, command} <-
            Command.new(
              "/usr/bin/sh",
-             ["-c", @runner, "omunculus-tool", executable | args],
+             ["-c", policy.sandbox.exec, "omunculus-tool", executable | args],
              cwd: dir
            ) do
       {:ok, command}

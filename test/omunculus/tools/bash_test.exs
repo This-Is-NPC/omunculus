@@ -2,6 +2,7 @@ defmodule Omunculus.Tools.BashTest do
   use ExUnit.Case, async: true
 
   alias Omunculus.Execution.Policy
+  alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Tool.{Catalog, Invoke, Manifest}
   alias Omunculus.Tools.Bash
 
@@ -103,7 +104,8 @@ defmodule Omunculus.Tools.BashTest do
         max_queue: 1,
         queue_timeout_ms: 100
       },
-      tools: ["bash"]
+      tools: ["bash"],
+      sandbox: ExecutionPolicyFixtures.sandbox()
     }
   end
 end

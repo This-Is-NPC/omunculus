@@ -61,6 +61,8 @@ defmodule Omunculus.Execution.PolicyTest do
     assert serializable["environment"] == ["LANG", "LC_ALL", "TERM"]
     refute Map.has_key?(serializable, "environment_values")
     assert String.length(serializable["id"]) == 64
+    assert policy.sandbox == config.execution.sandbox
+    assert serializable["sandbox"]["command"] == config.execution.sandbox.command
   end
 
   test "grants sandbox resources independently for workspace writes and network access", %{

@@ -3,6 +3,34 @@ defmodule Omunculus.ExecutionPolicyFixtures do
 
   alias Omunculus.Execution.Policy
 
+  @command ~w(
+    deno
+    run
+    --no-config
+    --no-lock
+    --no-prompt
+    --cached-only
+    --deny-read
+    --deny-write
+    --deny-net
+    --deny-env
+    --deny-run
+    --deny-ffi
+    --deny-sys
+    --deny-import
+  )
+  @runner "input=$1; errors=$2; status=$3; shift 3; \"$@\" < \"$input\" 2> \"$errors\"; result=$?; printf %s \"$result\" > \"$status\"; exit \"$result\""
+  @exec ~s(exec "$@")
+
+  def sandbox(overrides \\ []) do
+    %{
+      script: Keyword.get(overrides, :script, Application.app_dir(:omunculus, "priv/sandbox.js")),
+      command: Keyword.get(overrides, :command, @command),
+      runner: Keyword.get(overrides, :runner, @runner),
+      exec: Keyword.get(overrides, :exec, @exec)
+    }
+  end
+
   def policy(roots, options \\ []) do
     roots = List.wrap(roots)
     writable? = Keyword.get(options, :writable, false)
@@ -31,7 +59,8 @@ defmodule Omunculus.ExecutionPolicyFixtures do
           },
           Keyword.get(options, :limits, %{})
         ),
-      tools: []
+      tools: [],
+      sandbox: Keyword.get(options, :sandbox, sandbox())
     }
   end
 end

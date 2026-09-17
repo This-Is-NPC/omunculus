@@ -35,6 +35,7 @@ defmodule Omunculus.Execution.ProcessTest do
   use ExUnit.Case, async: false
 
   alias Omunculus.Execution.{Command, Limiter, Policy, Process}
+  alias Omunculus.ExecutionPolicyFixtures
 
   @limits %{
     timeout_ms: 1_000,
@@ -140,7 +141,8 @@ defmodule Omunculus.Execution.ProcessTest do
       environment: %{},
       network: "host",
       limits: limits,
-      tools: []
+      tools: [],
+      sandbox: ExecutionPolicyFixtures.sandbox()
     }
   end
 end

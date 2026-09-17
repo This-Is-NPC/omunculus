@@ -9,7 +9,6 @@ defmodule Omunculus.Mcp do
   alias Omunculus.Path, as: FilesystemPath
 
   @protocol_version "2025-03-26"
-  @runner ~s(exec "$@")
 
   @type server :: %{name: String.t(), command: [String.t()]}
 
@@ -67,7 +66,7 @@ defmodule Omunculus.Mcp do
          {:ok, command} <-
            Command.new(
              "/usr/bin/sh",
-             ["-c", @runner, "omunculus-mcp", executable | args],
+             ["-c", policy.sandbox.exec, "omunculus-mcp", executable | args],
              cwd: Path.dirname(executable)
            ) do
       {:ok, command}

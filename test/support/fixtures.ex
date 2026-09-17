@@ -5,6 +5,7 @@ defmodule Omunculus.Fixtures do
   """
 
   alias Omunculus.Config
+  alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Id
   alias Omunculus.Project
   alias Omunculus.Store.Query
@@ -105,7 +106,7 @@ defmodule Omunculus.Fixtures do
   end
 
   defp inject_defaults(data, opts) do
-    data = maybe_put_store(data)
+    data = data |> maybe_put_store() |> maybe_put_sandbox()
 
     case Keyword.get(opts, :model) do
       fun when is_function(fun) ->
@@ -179,6 +180,44 @@ defmodule Omunculus.Fixtures do
       _ ->
         Map.put(data, "store", %{"path" => ".omunculus/store.sqlite3"})
     end
+  end
+
+  defp maybe_put_sandbox(data) do
+    case get_in(data, ["execution", "sandbox"]) do
+      sandbox when is_map(sandbox) ->
+        data
+
+      _ ->
+        if is_map(Map.get(data, "execution")) do
+          put_in(data, ["execution", "sandbox"], sandbox_table_data())
+        else
+          data
+        end
+    end
+  end
+
+  defp sandbox_table_data do
+    sandbox = ExecutionPolicyFixtures.sandbox()
+
+    %{
+      "script" => sandbox.script,
+      "command" => sandbox.command,
+      "runner" => sandbox.runner,
+      "exec" => sandbox.exec
+    }
+  end
+
+  @spec sandbox_table() :: String.t()
+  def sandbox_table do
+    sandbox = ExecutionPolicyFixtures.sandbox()
+
+    """
+    [execution.sandbox]
+    script = #{Jason.encode!(sandbox.script)}
+    command = #{Jason.encode!(sandbox.command)}
+    runner = #{Jason.encode!(sandbox.runner)}
+    exec = #{Jason.encode!(sandbox.exec)}
+    """
   end
 
   @spec tools_table(String.t()) :: String.t()

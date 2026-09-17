@@ -24,6 +24,22 @@ defmodule Omunculus.ConfigTest do
   defp default_preset,
     do: Application.app_dir(:omunculus, "priv/presets/default/omunculus.toml")
 
+  defp execution_without_sandbox do
+    """
+    [execution]
+    backend = "bubblewrap"
+    runtimes = ["/usr"]
+    environment = ["LANG"]
+    timeout_ms = 30000
+    max_output_bytes = 1048576
+    max_concurrent = 4
+    max_queue = 64
+    queue_timeout_ms = 30000
+    """
+  end
+
+  defp execution, do: execution_without_sandbox() <> "\n" <> Fixtures.sandbox_table()
+
   test "no project file is an error", %{dir: dir} do
     path = toml(dir)
     assert Config.load(path) == {:error, {:config, :missing, path}}
@@ -1304,16 +1320,7 @@ defmodule Omunculus.ConfigTest do
 
     test "omitting [tools] is an empty catalog, not an error", %{dir: dir} do
       File.write!(toml(dir), """
-      [execution]
-      backend = "bubblewrap"
-      runtimes = ["/usr"]
-      environment = ["LANG"]
-      timeout_ms = 1
-      max_output_bytes = 1
-      max_concurrent = 1
-      max_queue = 1
-      queue_timeout_ms = 1
-
+      #{execution()}
       [store]
       path = ".omunculus/store.sqlite3"
 
@@ -1423,20 +1430,6 @@ defmodule Omunculus.ConfigTest do
   end
 
   describe "models" do
-    defp execution do
-      """
-      [execution]
-      backend = "bubblewrap"
-      runtimes = ["/usr"]
-      environment = ["LANG"]
-      timeout_ms = 30000
-      max_output_bytes = 1048576
-      max_concurrent = 4
-      max_queue = 64
-      queue_timeout_ms = 30000
-      """
-    end
-
     test "an agent without model is an error", %{dir: dir} do
       write_toml(dir, """
       [models.fake]
@@ -1594,6 +1587,76 @@ defmodule Omunculus.ConfigTest do
 
       Project.close(project_one)
       Project.close(project_two)
+    end
+  end
+
+  describe "sandbox" do
+    defp agent do
+      """
+      [store]
+      path = ".omunculus/store.sqlite3"
+
+      [models.fake]
+      api = "module"
+      module = "Omunculus.Model.Fake"
+
+      [agents.concierge]
+      depth = 0
+      model = "fake"
+      text = "hi"
+      """
+    end
+
+    test "missing [execution.sandbox] is an error", %{dir: dir} do
+      File.write!(toml(dir), execution_without_sandbox() <> "\n" <> agent())
+      assert {:error, {:execution, {:sandbox, :missing}}} = load(dir)
+    end
+
+    test "each sandbox key is required", %{dir: dir} do
+      complete = %{
+        "script" => "./bridge.js",
+        "command" => ["deno", "run"],
+        "runner" => "true",
+        "exec" => ~s(exec "$@")
+      }
+
+      for key <- ~w(script command runner exec) do
+        {:ok, data} = Toml.decode(execution_without_sandbox())
+        data = put_in(data, ["execution", "sandbox"], Map.delete(complete, key))
+        File.write!(toml(dir), Config.Toml.encode(data) <> "\n" <> agent())
+
+        assert {:error, {:execution, {:sandbox, {:invalid, atom}}}} = load(dir)
+        assert atom == String.to_existing_atom(key)
+      end
+    end
+
+    test "command comes from the TOML", %{dir: dir} do
+      write_toml(dir, """
+      [execution.sandbox]
+      script = "./bridge.js"
+      command = ["deno", "run", "--allow-none"]
+      runner = "true"
+      exec = 'exec "$@"'
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      """)
+
+      assert {:ok, config} = load(dir)
+      assert config.execution.sandbox.command == ["deno", "run", "--allow-none"]
+      assert config.execution.sandbox.script == Path.join(dir, "bridge.js")
+      assert config.execution.sandbox.runner == "true"
+      assert config.execution.sandbox.exec == ~s(exec "$@")
+    end
+
+    test "the default preset expands sandbox.script against the preset directory" do
+      assert {:ok, config} = Config.load(default_preset())
+
+      assert config.execution.sandbox.script ==
+               Application.app_dir(:omunculus, "priv/sandbox.js")
+
+      assert hd(config.execution.sandbox.command) == "deno"
     end
   end
 end

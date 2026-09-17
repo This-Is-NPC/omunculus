@@ -117,7 +117,15 @@ defmodule Omunculus.Benchmark.Driver do
         "max_output_bytes" => 1_048_576,
         "max_concurrent" => 4,
         "max_queue" => 256,
-        "queue_timeout_ms" => 120_000
+        "queue_timeout_ms" => 120_000,
+        "sandbox" => %{
+          "script" => Application.app_dir(:omunculus, "priv/sandbox.js"),
+          "command" =>
+            ~w(deno run --no-config --no-lock --no-prompt --cached-only --deny-read --deny-write --deny-net --deny-env --deny-run --deny-ffi --deny-sys --deny-import),
+          "runner" =>
+            "input=$1; errors=$2; status=$3; shift 3; \"$@\" < \"$input\" 2> \"$errors\"; result=$?; printf %s \"$result\" > \"$status\"; exit \"$result\"",
+          "exec" => ~s(exec "$@")
+        }
       },
       "policy" => %{"mode" => "allowlist"},
       "models" => %{

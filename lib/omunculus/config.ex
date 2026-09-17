@@ -48,6 +48,12 @@ defmodule Omunculus.Config do
   @type step :: %{name: String.t(), agent: String.t(), ceiling: Layer.t()}
   @type workspace :: %{root: String.t(), ceiling: Layer.t()}
   @type mcp_server :: %{name: String.t(), command: [String.t()]}
+  @type sandbox :: %{
+          script: String.t(),
+          command: [String.t()],
+          runner: String.t(),
+          exec: String.t()
+        }
   @type execution :: %{
           backend: String.t(),
           runtimes: [String.t()],
@@ -56,7 +62,8 @@ defmodule Omunculus.Config do
           max_output_bytes: pos_integer,
           max_concurrent: pos_integer,
           max_queue: pos_integer,
-          queue_timeout_ms: pos_integer
+          queue_timeout_ms: pos_integer,
+          sandbox: sandbox
         }
 
   @type t :: %__MODULE__{
@@ -90,6 +97,7 @@ defmodule Omunculus.Config do
     max_queue
     queue_timeout_ms
   )
+  @sandbox_keys ~w(script command runner exec)
   @agent_extra_keys ~w(depth text workflow_only model)
   @openai_model_keys ~w(api url model timeout_ms temperature key_env headers)
   @module_model_keys ~w(api module params)
@@ -287,7 +295,7 @@ defmodule Omunculus.Config do
         config_dir = Path.dirname(config_path)
 
         with {:ok, root} <- parse_project(Map.get(data, "project"), config_dir),
-             {:ok, execution} <- parse_execution(Map.get(data, "execution")),
+             {:ok, execution} <- parse_execution(Map.get(data, "execution"), config_dir),
              {:ok, models} <- parse_models(Map.get(data, "models")),
              {:ok, store} <- parse_store(Map.get(data, "store"), config_dir),
              {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), root),
@@ -440,22 +448,25 @@ defmodule Omunculus.Config do
   defp parse_inline_tool(name, _value, _config_dir),
     do: {:error, {:tools, name, {:invalid, :table}}}
 
-  defp parse_execution(nil), do: {:error, {:execution, :missing, @execution_keys}}
+  defp parse_execution(nil, _config_dir), do: {:error, {:execution, :missing, @execution_keys}}
 
-  defp parse_execution(data) when is_map(data) do
-    case Map.keys(data) -- @execution_keys do
+  defp parse_execution(data, config_dir) when is_map(data) do
+    {sandbox_data, rest} = Map.pop(data, "sandbox")
+
+    case Map.keys(rest) -- @execution_keys do
       [key | _] ->
         {:error, {:execution, {:unknown_key, key}}}
 
       [] ->
-        with {:ok, backend} <- execution_backend(data),
-             {:ok, runtimes} <- execution_runtimes(data),
-             {:ok, environment} <- execution_environment(data),
-             {:ok, timeout_ms} <- execution_positive_integer(data, "timeout_ms"),
-             {:ok, max_output_bytes} <- execution_positive_integer(data, "max_output_bytes"),
-             {:ok, max_concurrent} <- execution_positive_integer(data, "max_concurrent"),
-             {:ok, max_queue} <- execution_positive_integer(data, "max_queue"),
-             {:ok, queue_timeout_ms} <- execution_positive_integer(data, "queue_timeout_ms") do
+        with {:ok, backend} <- execution_backend(rest),
+             {:ok, runtimes} <- execution_runtimes(rest),
+             {:ok, environment} <- execution_environment(rest),
+             {:ok, timeout_ms} <- execution_positive_integer(rest, "timeout_ms"),
+             {:ok, max_output_bytes} <- execution_positive_integer(rest, "max_output_bytes"),
+             {:ok, max_concurrent} <- execution_positive_integer(rest, "max_concurrent"),
+             {:ok, max_queue} <- execution_positive_integer(rest, "max_queue"),
+             {:ok, queue_timeout_ms} <- execution_positive_integer(rest, "queue_timeout_ms"),
+             {:ok, sandbox} <- parse_sandbox(sandbox_data, config_dir) do
           {:ok,
            %{
              backend: backend,
@@ -465,13 +476,67 @@ defmodule Omunculus.Config do
              max_output_bytes: max_output_bytes,
              max_concurrent: max_concurrent,
              max_queue: max_queue,
-             queue_timeout_ms: queue_timeout_ms
+             queue_timeout_ms: queue_timeout_ms,
+             sandbox: sandbox
            }}
         end
     end
   end
 
-  defp parse_execution(_data), do: {:error, {:execution, {:invalid, :table}}}
+  defp parse_execution(_data, _config_dir), do: {:error, {:execution, {:invalid, :table}}}
+
+  defp parse_sandbox(nil, _config_dir), do: {:error, {:execution, {:sandbox, :missing}}}
+
+  defp parse_sandbox(data, config_dir) when is_map(data) do
+    case Map.keys(data) -- @sandbox_keys do
+      [key | _] ->
+        {:error, {:execution, {:sandbox, {:unknown_key, key}}}}
+
+      [] ->
+        with {:ok, script} <- sandbox_script(data, config_dir),
+             {:ok, command} <- sandbox_command(data),
+             {:ok, runner} <- sandbox_string(data, "runner"),
+             {:ok, exec} <- sandbox_string(data, "exec") do
+          {:ok, %{script: script, command: command, runner: runner, exec: exec}}
+        end
+    end
+  end
+
+  defp parse_sandbox(_data, _config_dir),
+    do: {:error, {:execution, {:sandbox, {:invalid, :table}}}}
+
+  defp sandbox_script(%{"script" => script}, config_dir)
+       when is_binary(script) and script != "" do
+    {:ok, expand_sandbox_script(script, config_dir)}
+  end
+
+  defp sandbox_script(_data, _config_dir),
+    do: {:error, {:execution, {:sandbox, {:invalid, :script}}}}
+
+  defp expand_sandbox_script("~" <> _rest = path, _config_dir) when path != "~",
+    do: Path.expand(path)
+
+  defp expand_sandbox_script(path, config_dir), do: Path.expand(path, config_dir)
+
+  defp sandbox_command(%{"command" => [_ | _] = command}) do
+    if Enum.all?(command, &(is_binary(&1) and &1 != "")) do
+      {:ok, command}
+    else
+      {:error, {:execution, {:sandbox, {:invalid, :command}}}}
+    end
+  end
+
+  defp sandbox_command(_data), do: {:error, {:execution, {:sandbox, {:invalid, :command}}}}
+
+  defp sandbox_string(data, key) do
+    case Map.fetch(data, key) do
+      {:ok, value} when is_binary(value) and value != "" ->
+        {:ok, value}
+
+      _ ->
+        {:error, {:execution, {:sandbox, {:invalid, String.to_existing_atom(key)}}}}
+    end
+  end
 
   defp execution_backend(%{"backend" => "bubblewrap"}), do: {:ok, "bubblewrap"}
   defp execution_backend(_data), do: {:error, {:execution, {:invalid, :backend}}}

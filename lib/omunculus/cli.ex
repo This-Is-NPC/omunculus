@@ -52,6 +52,10 @@ defmodule Omunculus.CLI do
     "omunculus.toml is missing [store]"
   end
 
+  def format_error({:execution, {:sandbox, :missing}}) do
+    "omunculus.toml is missing [execution.sandbox]"
+  end
+
   def format_error({:agent, name, {:invalid, :model}}) do
     "omunculus.toml agent #{name} is missing model"
   end

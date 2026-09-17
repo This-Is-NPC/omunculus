@@ -3,6 +3,7 @@ defmodule Omunculus.Execution.BubblewrapTest do
 
   alias Omunculus.Id
   alias Omunculus.Execution.{Bubblewrap, Command, Policy}
+  alias Omunculus.ExecutionPolicyFixtures
 
   setup do
     workspace = Path.join(System.tmp_dir!(), Id.new())
@@ -107,6 +108,20 @@ defmodule Omunculus.Execution.BubblewrapTest do
            |> Enum.any?(&(&1 == ["--ro-bind", "/", "/"]))
   end
 
+  test "uses the runner from the policy", %{workspace: workspace} do
+    {:ok, command} = Command.new("/usr/bin/sh", ["-c", "true"])
+    runner = "exit 0"
+
+    args =
+      Bubblewrap.arguments(
+        command,
+        policy(workspace, sandbox: ExecutionPolicyFixtures.sandbox(runner: runner)),
+        Path.join(workspace, "temporary")
+      )
+
+    assert runner in args
+  end
+
   test "reports a setup failure when the runner did not write an exit status", %{
     workspace: workspace
   } do
@@ -143,7 +158,8 @@ defmodule Omunculus.Execution.BubblewrapTest do
         max_queue: 1,
         queue_timeout_ms: 100
       },
-      tools: []
+      tools: [],
+      sandbox: Keyword.get(overrides, :sandbox, ExecutionPolicyFixtures.sandbox())
     }
   end
 end

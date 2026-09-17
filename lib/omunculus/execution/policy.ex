@@ -18,7 +18,8 @@ defmodule Omunculus.Execution.Policy do
     :environment,
     :network,
     :limits,
-    :tools
+    :tools,
+    :sandbox
   ]
   defstruct @enforce_keys
 
@@ -39,7 +40,13 @@ defmodule Omunculus.Execution.Policy do
             max_queue: pos_integer,
             queue_timeout_ms: pos_integer
           },
-          tools: [String.t()]
+          tools: [String.t()],
+          sandbox: %{
+            script: String.t(),
+            command: [String.t()],
+            runner: String.t(),
+            exec: String.t()
+          }
         }
 
   @spec build(Config.t(), map, map, String.t(), [String.t()], [String.t()]) ::
@@ -86,7 +93,8 @@ defmodule Omunculus.Execution.Policy do
         environment: environment(config.execution.environment),
         network: "none",
         limits: limits(config),
-        tools: []
+        tools: [],
+        sandbox: config.execution.sandbox
       }
 
       {:ok, %{policy | id: policy_id(policy)}}
@@ -134,7 +142,8 @@ defmodule Omunculus.Execution.Policy do
       "environment" => Map.keys(policy.environment) |> Enum.sort(),
       "network" => policy.network,
       "limits" => stringify_keys(policy.limits),
-      "tools" => policy.tools
+      "tools" => policy.tools,
+      "sandbox" => stringify_keys(policy.sandbox)
     }
   end
 
@@ -201,7 +210,8 @@ defmodule Omunculus.Execution.Policy do
       environment: environment(config.execution.environment),
       network: network,
       limits: limits(config),
-      tools: Enum.sort(tools)
+      tools: Enum.sort(tools),
+      sandbox: config.execution.sandbox
     }
 
     %{policy | id: policy_id(policy)}

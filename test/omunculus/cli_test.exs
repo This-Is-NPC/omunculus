@@ -226,6 +226,10 @@ defmodule Omunculus.CLITest do
     refute message =~ ":missing"
   end
 
+  test "a missing [execution.sandbox] table is named in the error" do
+    assert CLI.format_error({:execution, {:sandbox, :missing}}) =~ "[execution.sandbox]"
+  end
+
   test "send with no args fails and reports the tool's own output", %{dir: dir} do
     assert {:error, {:tool_failed, "message required"}} = CLI.run(["send"], dir)
   end

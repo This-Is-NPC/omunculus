@@ -10,7 +10,6 @@ defmodule Omunculus.Execution.Bubblewrap do
   alias Omunculus.Execution.{Command, Policy}
 
   @minimum_version {0, 8, 0}
-  @runner "input=$1; errors=$2; status=$3; shift 3; \"$@\" < \"$input\" 2> \"$errors\"; result=$?; printf %s \"$result\" > \"$status\"; exit \"$result\""
 
   defmodule Handle do
     @moduledoc false
@@ -116,7 +115,7 @@ defmodule Omunculus.Execution.Bubblewrap do
       mount_args(mounts) ++
       hidden_args(policy.hidden, mounts, temp_dir) ++
       environment_args(policy, mounts) ++
-      ["--chdir", command.cwd, "--", "/usr/bin/sh", "-c", @runner, "omunculus-exec"] ++
+      ["--chdir", command.cwd, "--", "/usr/bin/sh", "-c", policy.sandbox.runner, "omunculus-exec"] ++
       [
         Path.join(temp_dir, "input"),
         Path.join(temp_dir, "stderr"),

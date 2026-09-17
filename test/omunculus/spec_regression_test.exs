@@ -15,6 +15,12 @@ defmodule Omunculus.SpecRegressionTest do
   max_queue = 64
   queue_timeout_ms = 30000
 
+  [execution.sandbox]
+  script = #{Jason.encode!(Application.app_dir(:omunculus, "priv/sandbox.js"))}
+  command = ["deno", "run", "--no-config", "--no-lock", "--no-prompt", "--cached-only", "--deny-read", "--deny-write", "--deny-net", "--deny-env", "--deny-run", "--deny-ffi", "--deny-sys", "--deny-import"]
+  runner = 'input=$1; errors=$2; status=$3; shift 3; "$@" < "$input" 2> "$errors"; result=$?; printf %s "$result" > "$status"; exit "$result"'
+  exec = 'exec "$@"'
+
   [store]
   path = ".omunculus/store.sqlite3"
 

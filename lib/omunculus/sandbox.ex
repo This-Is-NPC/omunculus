@@ -8,22 +8,6 @@ defmodule Omunculus.Sandbox do
   alias Omunculus.Execution.{Command, Policy}
   alias Omunculus.Path, as: FilesystemPath
 
-  @flags ~w(
-    run
-    --no-config
-    --no-lock
-    --no-prompt
-    --cached-only
-    --deny-read
-    --deny-write
-    --deny-net
-    --deny-env
-    --deny-run
-    --deny-ffi
-    --deny-sys
-    --deny-import
-  )
-
   @spec run(
           String.t(),
           [map],
@@ -32,11 +16,12 @@ defmodule Omunculus.Sandbox do
         ) ::
           {:ok, String.t()} | {:error, term}
   def run(code, tools, call, %Policy{} = execution) when is_binary(code) do
-    script = Application.app_dir(:omunculus, "priv/sandbox.js")
+    [program | flags] = execution.sandbox.command
 
-    with {:ok, policy} <- Policy.coordinator(execution, Path.dirname(script)),
-         {:ok, deno} <- deno(policy),
-         {:ok, command} <- Command.new(deno, @flags ++ [script], cwd: Path.dirname(script)),
+    with {:ok, script} <- FilesystemPath.canonical(execution.sandbox.script),
+         {:ok, policy} <- Policy.coordinator(execution, Path.dirname(script)),
+         {:ok, binary} <- resolve_program(program, policy),
+         {:ok, command} <- Command.new(binary, flags ++ [script], cwd: Path.dirname(script)),
          {:ok, handle} <- Execution.start(command, policy, self(), make_ref(), :coordinator) do
       try do
         :ok =
@@ -122,9 +107,9 @@ defmodule Omunculus.Sandbox do
   defp handle_message(_handle, _rest, _allowed, _call, _deadline, _message),
     do: {:error, :invalid_sandbox_output}
 
-  defp deno(policy) do
+  defp resolve_program(program, policy) do
     policy.runtimes
-    |> Enum.map(&Path.join([&1, "bin", "deno"]))
+    |> Enum.map(&Path.join([&1, "bin", program]))
     |> Enum.find_value({:error, :deno_not_found}, fn path ->
       with {:ok, canonical} <- FilesystemPath.canonical(path),
            true <- File.regular?(canonical) do
