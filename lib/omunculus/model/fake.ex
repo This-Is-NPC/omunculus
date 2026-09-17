@@ -4,14 +4,23 @@ defmodule Omunculus.Model.Fake do
   non-empty line of the assembled prompt it was given.
   """
 
-  @spec complete(String.t(), [map], (String.t(), map -> {:ok, String.t()} | {:error, term})) ::
-          {:ok, String.t()}
-  def complete(assembled, _tools, _call) do
-    first_line =
-      assembled
-      |> String.split("\n")
-      |> Enum.find("", &(&1 != ""))
+  @spec new(map) ::
+          (String.t(),
+           [map],
+           (String.t(), map -> {:ok, String.t()} | {:error, term}),
+           (map -> :ok | {:error, term}),
+           term ->
+             {:ok, String.t()})
+  def new(_spec) do
+    fn assembled, _tools, _call, record, _execution ->
+      first_line =
+        assembled
+        |> String.split("\n")
+        |> Enum.find("", &(&1 != ""))
 
-    {:ok, "fake model: " <> first_line}
+      text = "fake model: " <> first_line
+      :ok = record.(text)
+      {:ok, text}
+    end
   end
 end

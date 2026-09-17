@@ -2,7 +2,6 @@ defmodule Omunculus.Benchmark.Driver do
   @moduledoc "Linear resident-run benchmark, compiled only with MIX_ENV=bench."
 
   alias Omunculus.{Config, Id, Project, Run}
-  alias Omunculus.Model.OpenAI
   alias Omunculus.Store.Query
 
   def main do
@@ -20,7 +19,7 @@ defmodule Omunculus.Benchmark.Driver do
     # connections from substituting a software cap for the requested hardware test.
     Req.default_options(finch: [size: 65_536])
     File.mkdir_p!(config["work_dir"])
-    File.write!(Path.join(config["work_dir"], "omunculus.toml"), project_config())
+    File.write!(Path.join(config["work_dir"], "omunculus.toml"), project_config(config))
     {:ok, project} = Project.open(config["work_dir"])
     :ok = Project.close(project)
     {:ok, supervisor} = Task.Supervisor.start_link()
@@ -92,15 +91,10 @@ defmodule Omunculus.Benchmark.Driver do
           created_at: DateTime.utc_now() |> DateTime.to_iso8601()
         })
 
-      model = OpenAI.new(config["model_url"] <> "/v1", "benchmark", timeout: 86_460_000)
-
-      wrapped = fn assembled, tools, call, record, execution ->
-        send(parent, {:resident, agent, byte_size(assembled)})
-        model.(assembled, tools, call, record, execution)
-      end
+      Process.put(:omunculus_bench, {parent, agent})
 
       opening = %{prompt_id: prompt_id, work_id: nil, request_id: nil, agent: nil, via: nil}
-      result = Run.open(project, opening, wrapped)
+      result = Run.open(project, opening)
       send(parent, {:failed, agent, inspect(result, limit: 10, printable_limit: 2000)})
     after
       Project.close(project)
@@ -111,7 +105,7 @@ defmodule Omunculus.Benchmark.Driver do
     kind, reason -> send(parent, {:failed, agent, inspect({kind, reason})})
   end
 
-  defp project_config do
+  defp project_config(config) do
     Config.Toml.encode(%{
       "execution" => %{
         "backend" => "bubblewrap",
@@ -124,7 +118,24 @@ defmodule Omunculus.Benchmark.Driver do
         "queue_timeout_ms" => 120_000
       },
       "policy" => %{"mode" => "allowlist"},
-      "agents" => %{"bench" => %{"depth" => 0, "text" => "Wait for the model response."}},
+      "models" => %{
+        "bench" => %{
+          "api" => "module",
+          "module" => "Omunculus.Benchmark.ResidentModel",
+          "params" => %{
+            "url" => config["model_url"] <> "/v1",
+            "model" => "benchmark",
+            "timeout_ms" => 86_460_000
+          }
+        }
+      },
+      "agents" => %{
+        "bench" => %{
+          "depth" => 0,
+          "text" => "Wait for the model response.",
+          "model" => "bench"
+        }
+      },
       "tools" => %{"paths" => [Application.app_dir(:omunculus, Path.join("priv", "tools"))]}
     })
   end

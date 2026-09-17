@@ -6,4 +6,6 @@ Application.put_env(
   Application.app_dir(:omunculus, Path.join("priv", "tools"))
 )
 
+{:ok, _} = Omunculus.Test.ScriptedModel.start_link()
+
 ExUnit.start(exclude: [:local_model] ++ cargo_exclusions)

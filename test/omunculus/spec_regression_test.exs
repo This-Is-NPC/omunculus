@@ -15,12 +15,18 @@ defmodule Omunculus.SpecRegressionTest do
   max_queue = 64
   queue_timeout_ms = 30000
 
+  [models.fake]
+  api = "module"
+  module = "Omunculus.Model.Fake"
+
   [agents.concierge]
   depth = 0
+  model = "fake"
   text = "concierge"
   tools = ["work", "comment", "reply", "request_access", "notify", "read", "write", "sandbox.network"]
   [agents.worker]
   depth = 1
+  model = "fake"
   text = "worker"
   tools = ["comment", "request_access", "read"]
   human = ["write"]
@@ -101,16 +107,18 @@ defmodule Omunculus.SpecRegressionTest do
     parent = Fixtures.insert(p.conn, :works, %{assignee: "concierge"})
     child = Fixtures.insert(p.conn, :works, %{assignee: "worker", parent_id: parent})
 
-    assert {:ok, _} =
-             Run.open(p, opening(child), fn _, _, call ->
-               call.("request_access", %{
-                 "kind" => "tool",
-                 "name" => "write",
-                 "reason" => "write report"
-               })
+    Fixtures.use_model(p, fn _, _, call ->
+      call.("request_access", %{
+        "kind" => "tool",
+        "name" => "write",
+        "reason" => "write report"
+      })
 
-               flunk("request must end the run")
-             end)
+      flunk("request must end the run")
+    end)
+
+    assert {:ok, _} =
+             Run.open(p, opening(child))
 
     assert {:ok, [%{arbiter: "human", status: "waiting_human"}]} =
              Query.all(p.conn, "SELECT * FROM requests")
@@ -122,16 +130,18 @@ defmodule Omunculus.SpecRegressionTest do
     requester = Fixtures.insert(p.conn, :runs)
     request = Fixtures.insert(p.conn, :requests, %{run_id: requester})
 
-    assert {:ok, _} =
-             Run.open(p, opening(), fn _, _, call ->
-               for scope <- [nil, "agent"] do
-                 args = %{"request_id" => request, "decision" => "grant", "body" => "approve"}
-                 args = if scope, do: Map.put(args, "scope", scope), else: args
-                 assert {:error, {:reply, :not_arbiter}} = call.("reply", args)
-               end
+    Fixtures.use_model(p, fn _, _, call ->
+      for scope <- [nil, "agent"] do
+        args = %{"request_id" => request, "decision" => "grant", "body" => "approve"}
+        args = if scope, do: Map.put(args, "scope", scope), else: args
+        assert {:error, {:reply, :not_arbiter}} = call.("reply", args)
+      end
 
-               {:ok, "done"}
-             end)
+      {:ok, "done"}
+    end)
+
+    assert {:ok, _} =
+             Run.open(p, opening())
 
     assert {:ok, %{status: "waiting_human"}} = Store.view(p.conn, "request", request)
   end
@@ -166,23 +176,25 @@ defmodule Omunculus.SpecRegressionTest do
         status: "waiting_agent"
       })
 
+    Fixtures.use_model(p, fn assembled, tools, call ->
+      if String.starts_with?(assembled, "concierge") do
+        assert assembled =~ request
+
+        call.("reply", %{
+          "request_id" => request,
+          "decision" => "grant",
+          "body" => "approved"
+        })
+
+        flunk("grant must end the arbiter's run")
+      else
+        assert Enum.any?(tools, &(&1.name == "write"))
+        {:ok, "resumed"}
+      end
+    end)
+
     assert {:ok, _} =
-             Run.open(p, opening(parent, %{request_id: request}), fn assembled, tools, call ->
-               if String.starts_with?(assembled, "concierge") do
-                 assert assembled =~ request
-
-                 call.("reply", %{
-                   "request_id" => request,
-                   "decision" => "grant",
-                   "body" => "approved"
-                 })
-
-                 flunk("grant must end the arbiter's run")
-               else
-                 assert Enum.any?(tools, &(&1.name == "write"))
-                 {:ok, "resumed"}
-               end
-             end)
+             Run.open(p, opening(parent, %{request_id: request}))
 
     assert {:ok, %{status: "closed"}} = Store.view(p.conn, "request", request)
     assert {:ok, events} = Store.replay(p.conn, {:request, request})
@@ -194,18 +206,20 @@ defmodule Omunculus.SpecRegressionTest do
   test "missing tool is blocked and absent from the run's tools", %{project: p} do
     write_config(p, String.replace(@config, "\"work\",", "\"missing_tool\", \"work\","))
 
+    Fixtures.use_model(p, fn _, tools, call ->
+      refute Enum.any?(tools, &(&1.name == "missing_tool"))
+
+      call.("request_access", %{
+        "kind" => "tool",
+        "name" => "missing_tool",
+        "reason" => "test"
+      })
+
+      flunk("blocked request ends the run")
+    end)
+
     assert {:ok, run} =
-             Run.open(p, opening(), fn _, tools, call ->
-               refute Enum.any?(tools, &(&1.name == "missing_tool"))
-
-               call.("request_access", %{
-                 "kind" => "tool",
-                 "name" => "missing_tool",
-                 "reason" => "test"
-               })
-
-               flunk("blocked request ends the run")
-             end)
+             Run.open(p, opening())
 
     refute "missing_tool" in Jason.decode!(run.tools)
     assert {:ok, []} = Query.all(p.conn, "SELECT * FROM requests")
@@ -240,10 +254,12 @@ defmodule Omunculus.SpecRegressionTest do
       Fixtures.insert(p.conn, :works, %{assignee: "concierge", grants: Jason.encode!(["write"])})
 
     child = Fixtures.insert(p.conn, :works, %{assignee: "worker", parent_id: parent})
-    assert {:ok, run} = Run.open(p, opening(child), fn _, _, _ -> {:ok, "done"} end)
+    Fixtures.use_model(p, fn _, _, _ -> {:ok, "done"} end)
+    assert {:ok, run} = Run.open(p, opening(child))
     assert "write" in Jason.decode!(run.tools)
     write_config(p, config_text <> "deny = [\"write\"]\n")
-    assert {:ok, run} = Run.open(p, opening(child), fn _, _, _ -> {:ok, "done"} end)
+    Fixtures.use_model(p, fn _, _, _ -> {:ok, "done"} end)
+    assert {:ok, run} = Run.open(p, opening(child))
     refute "write" in Jason.decode!(run.tools)
   end
 
@@ -260,31 +276,35 @@ defmodule Omunculus.SpecRegressionTest do
     File.write!(Path.join(outside, "report"), "granted report")
     File.ln_s!(outside, Path.join(p.dir, "escape"))
 
+    Fixtures.use_model(p, fn _, _, call ->
+      assert {:ok, error} = call.("read", %{"path" => "./secret"})
+      refute error =~ "SECRET MARKER"
+      assert error =~ "path outside roots"
+      assert {:ok, error} = call.("read", %{"path" => "escape/report"})
+      assert error =~ "path outside roots"
+
+      assert {:ok, error} =
+               call.("write", %{"path" => "escape/new", "content" => "forbidden"})
+
+      assert error =~ "path outside roots"
+      refute File.exists?(Path.join(outside, "new"))
+      {:ok, "done"}
+    end)
+
     assert {:ok, _} =
-             Run.open(p, opening(), fn _, _, call ->
-               assert {:ok, error} = call.("read", %{"path" => "./secret"})
-               refute error =~ "SECRET MARKER"
-               assert error =~ "path outside roots"
-               assert {:ok, error} = call.("read", %{"path" => "escape/report"})
-               assert error =~ "path outside roots"
-
-               assert {:ok, error} =
-                        call.("write", %{"path" => "escape/new", "content" => "forbidden"})
-
-               assert error =~ "path outside roots"
-               refute File.exists?(Path.join(outside, "new"))
-               {:ok, "done"}
-             end)
+             Run.open(p, opening())
 
     work = Fixtures.insert(p.conn, :works, %{grants: Jason.encode!([outside])})
 
-    assert {:ok, _} =
-             Run.open(p, opening(work), fn _, _, call ->
-               assert {:ok, "granted report"} =
-                        call.("read", %{"path" => Path.join(outside, "report")})
+    Fixtures.use_model(p, fn _, _, call ->
+      assert {:ok, "granted report"} =
+               call.("read", %{"path" => Path.join(outside, "report")})
 
-               {:ok, "done"}
-             end)
+      {:ok, "done"}
+    end)
+
+    assert {:ok, _} =
+             Run.open(p, opening(work))
   end
 
   test "CLI comments on an inbox without creating a request", %{project: p} do
@@ -293,8 +313,7 @@ defmodule Omunculus.SpecRegressionTest do
     assert {:ok, ""} =
              CLI.run(
                ["comment", "noted", "--inbox_id", inbox],
-               p.dir,
-               &Omunculus.Model.Fake.complete/3
+               p.dir
              )
 
     assert {:ok, [%{body: "noted", author: "human"}]} =
@@ -307,11 +326,13 @@ defmodule Omunculus.SpecRegressionTest do
     for event <- ~w(start-run model tool end-run), do: hook(p, "watch-" <> event, event)
     work = Fixtures.insert(p.conn, :works)
 
+    Fixtures.use_model(p, fn _, _, call ->
+      assert {:ok, _} = call.("comment", %{"body" => "note"})
+      {:ok, "done"}
+    end)
+
     assert {:ok, run} =
-             Run.open(p, opening(work), fn _, _, call ->
-               assert {:ok, _} = call.("comment", %{"body" => "note"})
-               {:ok, "done"}
-             end)
+             Run.open(p, opening(work))
 
     {:ok, events} = Store.replay(p.conn, {:run, run.id})
     calls = for %{type: "tool", body: body} <- events, do: Jason.decode!(body)["name"]
@@ -335,13 +356,15 @@ defmodule Omunculus.SpecRegressionTest do
     hook(p, "on-notify", "notify", [%{type: "continue", body: %{}}])
     work = Fixtures.insert(p.conn, :works, %{stage: "first", assignee: "concierge"})
 
-    assert {:ok, _} =
-             Run.open(p, opening(work), fn _, _, call ->
-               assert {:error, {:hook, {:cannot_sequence, "continue"}}} =
-                        call.("notify", %{"body" => "notice"})
+    Fixtures.use_model(p, fn _, _, call ->
+      assert {:error, {:hook, {:cannot_sequence, "continue"}}} =
+               call.("notify", %{"body" => "notice"})
 
-               {:ok, "done"}
-             end)
+      {:ok, "done"}
+    end)
+
+    assert {:ok, _} =
+             Run.open(p, opening(work))
 
     assert {:ok, %{stage: "first"}} = Store.view(p.conn, "work", work)
     assert {:ok, []} = Query.all(p.conn, "SELECT * FROM events WHERE type = 'continue'")
@@ -361,18 +384,20 @@ defmodule Omunculus.SpecRegressionTest do
         """
     )
 
+    Fixtures.use_model(p, fn assembled, tools, call ->
+      if assembled =~ "## Work" do
+        assert String.starts_with?(assembled, "worker")
+        refute assembled =~ "## Message"
+        refute Enum.any?(tools, &(&1.name == "write"))
+        {:ok, "first stage"}
+      else
+        call.("work", %{"title" => "stage handoff"})
+        flunk("creation must end the old run")
+      end
+    end)
+
     assert {:ok, _} =
-             Run.open(p, opening(), fn assembled, tools, call ->
-               if assembled =~ "## Work" do
-                 assert String.starts_with?(assembled, "worker")
-                 refute assembled =~ "## Message"
-                 refute Enum.any?(tools, &(&1.name == "write"))
-                 {:ok, "first stage"}
-               else
-                 call.("work", %{"title" => "stage handoff"})
-                 flunk("creation must end the old run")
-               end
-             end)
+             Run.open(p, opening())
 
     assert {:ok, [work]} = Query.all(p.conn, "SELECT * FROM works")
     assert work.stage == "first"
@@ -394,6 +419,7 @@ defmodule Omunculus.SpecRegressionTest do
         """
         [agents.reviewer]
         depth = 1
+        model = "fake"
         text = "reviewer"
         workflow_only = true
         [workflows.delivery]
@@ -405,14 +431,14 @@ defmodule Omunculus.SpecRegressionTest do
 
     work = Fixtures.insert(p.conn, :works, %{stage: "review"})
 
+    Fixtures.use_model(p, fn _, tools, call ->
+      refute Enum.any?(tools, &(&1.name == "write"))
+      assert {:error, {:not_allowed, "write"}} = call.("write", %{})
+      {:ok, "done"}
+    end)
+
     assert {:ok, _} =
-             Run.open(p, opening(work, %{agent: "concierge", via: "reaction"}), fn _,
-                                                                                   tools,
-                                                                                   call ->
-               refute Enum.any?(tools, &(&1.name == "write"))
-               assert {:error, {:not_allowed, "write"}} = call.("write", %{})
-               {:ok, "done"}
-             end)
+             Run.open(p, opening(work, %{agent: "concierge", via: "reaction"}))
 
     write_config(
       p,
@@ -420,30 +446,35 @@ defmodule Omunculus.SpecRegressionTest do
         """
         [agents.reviewer]
         depth = 1
+        model = "fake"
         text = "reviewer"
         workflow_only = true
         """
     )
 
+    Fixtures.use_model(p, fn _, _, _ ->
+      flunk("reviewer must not run")
+    end)
+
     assert {:error, {:workflow_off, "reviewer"}} =
-             Run.open(p, opening(nil, %{agent: "reviewer"}), fn _, _, _ ->
-               flunk("reviewer must not run")
-             end)
+             Run.open(p, opening(nil, %{agent: "reviewer"}))
   end
 
   test "model messages are recorded before terminal actions", %{project: p} do
+    Fixtures.use_model(p, fn _, _, call, record ->
+      :ok = record.(%{content: "I need access", tool_calls: [%{name: "request_access"}]})
+
+      call.("request_access", %{
+        "kind" => "path",
+        "name" => "./secret",
+        "reason" => "read report"
+      })
+
+      flunk("request ends run")
+    end)
+
     assert {:ok, run} =
-             Run.open(p, opening(), fn _, _, call, record ->
-               :ok = record.(%{content: "I need access", tool_calls: [%{name: "request_access"}]})
-
-               call.("request_access", %{
-                 "kind" => "path",
-                 "name" => "./secret",
-                 "reason" => "read report"
-               })
-
-               flunk("request ends run")
-             end)
+             Run.open(p, opening())
 
     assert {:ok, events} = Store.replay(p.conn, {:run, run.id})
     assert Enum.map(events, & &1.type) == ~w(start-run model tool request tool end-run)
@@ -453,17 +484,19 @@ defmodule Omunculus.SpecRegressionTest do
   test "inbox hook's agent sees only that inbox's complete thread", %{project: p} do
     hook(p, "on-notify", "notify", [], "worker")
 
+    Fixtures.use_model(p, fn assembled, _, call ->
+      if String.starts_with?(assembled, "concierge") do
+        assert {:ok, _} = call.("notify", %{"body" => "standalone notice"})
+        {:ok, "notified"}
+      else
+        assert assembled =~ "## Inbox\n"
+        assert assembled =~ "standalone notice"
+        {:ok, "observed"}
+      end
+    end)
+
     assert {:ok, _} =
-             Run.open(p, opening(), fn assembled, _, call ->
-               if String.starts_with?(assembled, "concierge") do
-                 assert {:ok, _} = call.("notify", %{"body" => "standalone notice"})
-                 {:ok, "notified"}
-               else
-                 assert assembled =~ "## Inbox\n"
-                 assert assembled =~ "standalone notice"
-                 {:ok, "observed"}
-               end
-             end)
+             Run.open(p, opening())
 
     assert {:ok, [%{id: inbox}]} = Query.all(p.conn, "SELECT * FROM inbox")
     assert {:ok, events} = Store.replay(p.conn, {:inbox, inbox})

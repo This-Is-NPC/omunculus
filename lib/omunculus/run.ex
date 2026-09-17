@@ -2,9 +2,9 @@ defmodule Omunculus.Run do
   @moduledoc """
   Opens a run with freshly assembled context and permissions. A named
   reaction agent still obeys the work's stage and workflow-only flags.
-  Three-argument scripted models return one final message; streaming
-  adapters accept a fourth callback and record each message before tools.
-  Terminal actions close the run before its action or hook continuations.
+  The agent's `model` from config is constructed via `new/1`. Streaming
+  adapters record each message before tools. Terminal actions close the
+  run before its action or hook continuations.
   """
 
   alias Omunculus.{Ceiling, Config, Harness, Mcp, Project, Store}
@@ -23,8 +23,7 @@ defmodule Omunculus.Run do
             request_id: String.t() | nil,
             via: String.t() | nil,
             agent: String.t() | nil
-          },
-          (String.t(), [map], fun -> {:ok, String.t()} | {:error, term})
+          }
         ) :: {:ok, map} | {:error, term}
   def open(
         project,
@@ -34,12 +33,12 @@ defmodule Omunculus.Run do
           request_id: request_id,
           via: via,
           agent: agent
-        } = opening,
-        model
+        } = opening
       ) do
     with {:ok, config} <- Config.load(project.config_path),
          {:ok, work} <- fetch_work(project.conn, work_id),
          {:ok, {name, text, depth, stage}} <- resolve_agent(config, project.conn, work, agent),
+         {:ok, model} <- Config.model_fun(config, name),
          {:ok, message} <- fetch_prompt(project.conn, message_prompt_id),
          {:ok, comment} <- fetch_last_comment(project.conn, work_id),
          {:ok, inbox_notifications} <-
@@ -374,24 +373,13 @@ defmodule Omunculus.Run do
         {:ok, events} = Store.replay(project.conn, {:run, run.id})
 
         with {:ok, _hooks} <- Harness.react(project, events, [], execution) do
-          cond do
-            is_function(model, 5) ->
-              model.(
-                assembled,
-                tools,
-                call,
-                &record_model(project, run, execution, &1),
-                execution
-              )
-
-            is_function(model, 4) ->
-              model.(assembled, tools, call, &record_model(project, run, execution, &1))
-
-            true ->
-              with {:ok, text} <- model.(assembled, tools, call),
-                   :ok <- record_model(project, run, execution, text),
-                   do: {:ok, text}
-          end
+          model.(
+            assembled,
+            tools,
+            call,
+            &record_model(project, run, execution, &1),
+            execution
+          )
         end
       rescue
         exception -> {:error, {:model_crashed, exception}}
@@ -403,23 +391,23 @@ defmodule Omunculus.Run do
     with :ok <- close_run(project, run, execution) do
       case result do
         {:ok, _text} ->
-          finish_and_follow_up(project, run, config, work, model, execution, true)
+          finish_and_follow_up(project, run, config, work, execution, true)
 
         :ended ->
-          finish_and_follow_up(project, run, config, work, model, execution, false)
+          finish_and_follow_up(project, run, config, work, execution, false)
 
         {:error, _reason} = error ->
           with {:ok, _} <-
-                 finish_and_follow_up(project, run, config, work, model, execution, false),
+                 finish_and_follow_up(project, run, config, work, execution, false),
                do: error
       end
     end
   end
 
-  defp finish_and_follow_up(project, run, config, work, model, execution, ended_normally?) do
+  defp finish_and_follow_up(project, run, config, work, execution, ended_normally?) do
     with :ok <- maybe_finish_work(project, config, work, run.id, execution, ended_normally?),
          {:ok, events} <- Store.replay(project.conn, {:run, run.id}),
-         :ok <- Harness.follow_up(project, events, model) do
+         :ok <- Harness.follow_up(project, events) do
       {:ok, run}
     end
   end

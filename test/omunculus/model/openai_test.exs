@@ -39,7 +39,7 @@ defmodule Omunculus.Model.OpenAITest do
     base_url: base_url
   } do
     :ok = OpenAIStub.configure(%{base_url: String.trim_trailing(base_url, "/v1")}, tool_rounds: 1)
-    model = OpenAI.new(base_url, "stub")
+    model = OpenAI.new(spec(base_url))
     {agent, call} = recorder()
 
     assert {:ok, "benchmark complete"} =
@@ -55,7 +55,7 @@ defmodule Omunculus.Model.OpenAITest do
 
   test "tool_rounds: 0 never calls the tool", %{base_url: base_url} do
     :ok = OpenAIStub.configure(%{base_url: String.trim_trailing(base_url, "/v1")}, tool_rounds: 0)
-    model = OpenAI.new(base_url, "stub")
+    model = OpenAI.new(spec(base_url))
     {agent, call} = recorder()
 
     assert {:ok, "benchmark complete"} =
@@ -65,7 +65,7 @@ defmodule Omunculus.Model.OpenAITest do
   end
 
   test "an unreachable base_url yields {:error, {:openai, _}}" do
-    model = OpenAI.new("http://127.0.0.1:1", "stub")
+    model = OpenAI.new(spec("http://127.0.0.1:1"))
     {_agent, call} = recorder()
 
     assert {:error, {:openai, _reason}} =
@@ -82,8 +82,15 @@ defmodule Omunculus.Model.OpenAITest do
       File.mkdir_p!(dir)
 
       Fixtures.write_config(dir, """
+      [models.local]
+      api = "openai-completions"
+      url = "#{base_url}"
+      model = "stub"
+      timeout_ms = 120000
+
       [agents.concierge]
       depth = 0
+      model = "local"
       text = "Count once."
       tools = ["counter"]
       """)
@@ -96,7 +103,7 @@ defmodule Omunculus.Model.OpenAITest do
       end)
 
       opening = %{prompt_id: nil, work_id: nil, request_id: nil, agent: nil, via: nil}
-      assert {:ok, run} = Omunculus.Run.open(project, opening, OpenAI.new(base_url, "stub"))
+      assert {:ok, run} = Omunculus.Run.open(project, opening)
       assert {:ok, 1} = Omunculus.Store.view(project.conn, "counter", nil)
       assert {:ok, events} = Omunculus.Store.replay(project.conn, {:run, run.id})
       assert Enum.map(events, & &1.type) == ~w(start-run model tool model end-run)
@@ -110,13 +117,17 @@ defmodule Omunculus.Model.OpenAITest do
   test "talks to a real local OpenAI-compatible server" do
     base_url = System.fetch_env!("OMUNCULUS_OPENAI_URL")
     model_name = System.fetch_env!("OMUNCULUS_OPENAI_MODEL")
-    model = OpenAI.new(base_url, model_name)
+    model = OpenAI.new(spec(base_url, model_name))
     {_agent, call} = recorder()
 
     assert {:ok, text} =
              model.("Responda apenas: pong", [], call, fn _message -> :ok end, policy())
 
     assert text =~ "pong"
+  end
+
+  defp spec(url, model \\ "stub") do
+    %{"url" => url, "model" => model, "timeout_ms" => 120_000}
   end
 
   defp policy do

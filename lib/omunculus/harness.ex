@@ -6,7 +6,7 @@ defmodule Omunculus.Harness do
 
   Only actions schedule protocol runs. Hooks can emit notifications and
   comments, or name an agent for a separate reaction run; their programs
-  cannot sequence work directly. `follow_up/3` opens action runs before
+  cannot sequence work directly. `follow_up/2` opens action runs before
   agent reactions, preserving the originating tool or hook in `via`.
   """
 
@@ -170,20 +170,19 @@ defmodule Omunculus.Harness do
     end
   end
 
-  @spec follow_up(Project.t(), [map], (String.t(), fun -> {:ok, String.t()} | {:error, term})) ::
-          :ok | {:error, term}
-  def follow_up(project, events, model) do
+  @spec follow_up(Project.t(), [map]) :: :ok | {:error, term}
+  def follow_up(project, events) do
     with {:ok, config} <- Config.load(project.config_path),
          catalog = Catalog.discover(config.tools, config.mcp, nil),
-         {:ok, _via} <- walk(project, catalog, events, model, :actions),
-         {:ok, _via} <- walk(project, catalog, events, model, :hooks) do
+         {:ok, _via} <- walk(project, catalog, events, :actions),
+         {:ok, _via} <- walk(project, catalog, events, :hooks) do
       :ok
     end
   end
 
-  defp walk(project, catalog, events, model, phase) do
+  defp walk(project, catalog, events, phase) do
     Enum.reduce_while(events, {:ok, nil}, fn event, {:ok, via} ->
-      case advance(project, catalog, event, via, model, phase) do
+      case advance(project, catalog, event, via, phase) do
         {:ok, _via} = ok -> {:cont, ok}
         {:error, _reason} = error -> {:halt, error}
       end
@@ -465,62 +464,61 @@ defmodule Omunculus.Harness do
     end)
   end
 
-  defp advance(project, catalog, %{type: "tool", body: body} = event, _via, model, :hooks) do
+  defp advance(project, catalog, %{type: "tool", body: body} = event, _via, :hooks) do
     name = Jason.decode!(body)["name"]
 
     case Map.get(catalog, name) do
       %Manifest{kind: "hook", agent: agent} when not is_nil(agent) ->
-        with :ok <- open_reaction_run(project, event, name, agent, model), do: {:ok, name}
+        with :ok <- open_reaction_run(project, event, name, agent), do: {:ok, name}
 
       _not_a_calling_hook ->
         {:ok, name}
     end
   end
 
-  defp advance(_project, _catalog, %{type: "tool", body: body}, _via, _model, :actions),
+  defp advance(_project, _catalog, %{type: "tool", body: body}, _via, :actions),
     do: {:ok, Jason.decode!(body)["name"]}
 
-  defp advance(project, _catalog, %{type: "prompt"} = event, via, model, :actions) do
+  defp advance(project, _catalog, %{type: "prompt"} = event, via, :actions) do
     with :ok <-
            open_run(
              project,
-             open_params(prompt_id: event.prompt_id, work_id: event.work_id, via: via),
-             model
+             open_params(prompt_id: event.prompt_id, work_id: event.work_id, via: via)
            ),
          do: {:ok, via}
   end
 
-  defp advance(project, _catalog, %{type: "grant"} = event, via, model, :actions) do
+  defp advance(project, _catalog, %{type: "grant"} = event, via, :actions) do
     with :ok <- apply_grant(project, event),
-         :ok <- open_grant_run(project, event, via, model) do
+         :ok <- open_grant_run(project, event, via) do
       {:ok, via}
     end
   end
 
-  defp advance(project, _catalog, %{type: "continue"} = event, via, model, :actions) do
-    with :ok <- open_continue_run(project, event, via, model), do: {:ok, via}
+  defp advance(project, _catalog, %{type: "continue"} = event, via, :actions) do
+    with :ok <- open_continue_run(project, event, via), do: {:ok, via}
   end
 
-  defp advance(project, _catalog, %{type: "delegate"} = event, via, model, :actions) do
+  defp advance(project, _catalog, %{type: "delegate"} = event, via, :actions) do
     with :ok <-
-           open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via), model),
+           open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via)),
          do: {:ok, via}
   end
 
-  defp advance(project, _catalog, %{type: "request"} = event, via, model, :actions) do
-    with :ok <- open_request_run(project, event, via, model), do: {:ok, via}
+  defp advance(project, _catalog, %{type: "request"} = event, via, :actions) do
+    with :ok <- open_request_run(project, event, via), do: {:ok, via}
   end
 
-  defp advance(project, _catalog, %{type: "work"} = event, via, model, :actions) do
-    with :ok <- open_finished_work_run(project, event, via, model), do: {:ok, via}
+  defp advance(project, _catalog, %{type: "work"} = event, via, :actions) do
+    with :ok <- open_finished_work_run(project, event, via), do: {:ok, via}
   end
 
-  defp advance(_project, _catalog, _event, via, _model, _phase), do: {:ok, via}
+  defp advance(_project, _catalog, _event, via, _phase), do: {:ok, via}
 
   defp open_params(prompt_id: prompt_id, work_id: work_id, via: via),
     do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: via, agent: nil}
 
-  defp open_reaction_run(project, event, hook_name, agent, model) do
+  defp open_reaction_run(project, event, hook_name, agent) do
     open_run(
       project,
       %{
@@ -530,8 +528,7 @@ defmodule Omunculus.Harness do
         inbox_id: event.inbox_id,
         via: hook_name,
         agent: agent
-      },
-      model
+      }
     )
   end
 
@@ -556,30 +553,29 @@ defmodule Omunculus.Harness do
     end
   end
 
-  defp open_grant_run(_project, %{work_id: nil}, _via, _model), do: :ok
+  defp open_grant_run(_project, %{work_id: nil}, _via), do: :ok
 
-  defp open_grant_run(project, %{work_id: work_id, request_id: request_id}, via, model) do
+  defp open_grant_run(project, %{work_id: work_id, request_id: request_id}, via) do
     open_run(
       project,
-      %{prompt_id: nil, work_id: work_id, request_id: request_id, via: via, agent: nil},
-      model
+      %{prompt_id: nil, work_id: work_id, request_id: request_id, via: via, agent: nil}
     )
   end
 
-  defp open_continue_run(project, event, via, model) do
+  defp open_continue_run(project, event, via) do
     case Jason.decode!(event.body) do
       %{"to" => to} when not is_nil(to) ->
-        open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via), model)
+        open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via))
 
       %{"parent_id" => parent_id} when not is_nil(parent_id) ->
-        open_run(project, open_params(prompt_id: nil, work_id: parent_id, via: via), model)
+        open_run(project, open_params(prompt_id: nil, work_id: parent_id, via: via))
 
       _no_next_run ->
         :ok
     end
   end
 
-  defp open_request_run(project, event, via, model) do
+  defp open_request_run(project, event, via) do
     case Jason.decode!(event.body) do
       %{"arbiter" => arbiter, "arbiter_work_id" => work_id} ->
         with :ok <-
@@ -591,8 +587,7 @@ defmodule Omunculus.Harness do
                    request_id: event.request_id,
                    via: via,
                    agent: arbiter
-                 },
-                 model
+                 }
                ),
              do: :ok
 
@@ -601,16 +596,15 @@ defmodule Omunculus.Harness do
     end
   end
 
-  defp open_finished_work_run(project, event, via, model) do
+  defp open_finished_work_run(project, event, via) do
     case Jason.decode!(event.body) do
       %{"start" => true} ->
-        open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via), model)
+        open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via))
 
       %{"state" => "done", "parent_id" => parent_id} when not is_nil(parent_id) ->
         open_run(
           project,
-          %{prompt_id: nil, work_id: parent_id, request_id: nil, via: nil, agent: nil},
-          model
+          %{prompt_id: nil, work_id: parent_id, request_id: nil, via: nil, agent: nil}
         )
 
       _no_parent_to_wake ->
@@ -618,8 +612,8 @@ defmodule Omunculus.Harness do
     end
   end
 
-  defp open_run(project, params, model) do
-    case Run.open(project, params, model) do
+  defp open_run(project, params) do
+    case Run.open(project, params) do
       {:ok, _run} -> :ok
       {:error, _reason} = error -> error
     end

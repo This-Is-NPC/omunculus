@@ -1,34 +1,35 @@
 defmodule Omunculus.Model.OpenAI do
   @moduledoc """
   Factory for an OpenAI-compatible model of the contract of spec §8.6:
-  `new/3` returns a `(assembled, tools, call, record) :: {:ok, text} | {:error,
-  term}` fun. Declares each of `tools` (the run's effective tools, as
-  `%{name, description, parameters}`) as a function with its real
-  `parameters` schema — an empty schema becomes `%{type: "object",
-  properties: %{}}` so servers accept it — posts the assembled as the
-  user turn to `<base_url>/chat/completions`, and for every `tool_calls`
-  entry in the reply runs `call.(name, args)` and feeds the output back
-  as a `tool` message, looping until a reply carries no tool call. Every reply is recorded
-  before dispatch. `__omunculus_execute` runs JavaScript in the sandbox
-  and uses the same authorized call callback as native tool calls.
+  `new/1` takes the `[models.<name>]` spec (`url`, `model`, `timeout_ms`,
+  optional `temperature`, `key_env`, `headers`) and returns a 5-arity
+  `(assembled, tools, call, record, execution)` fun. Declares each of
+  `tools` (the run's effective tools, as `%{name, description,
+  parameters}`) as a function with its real `parameters` schema — an
+  empty schema becomes `%{type: "object", properties: %{}}` so servers
+  accept it — posts the assembled as the user turn to
+  `<url>/chat/completions`, and for every `tool_calls` entry in the
+  reply runs `call.(name, args)` and feeds the output back as a `tool`
+  message, looping until a reply carries no tool call. Every reply is
+  recorded before dispatch. `__omunculus_execute` runs JavaScript in the
+  sandbox and uses the same authorized call callback as native tool
+  calls.
   """
 
-  @default_timeout 120_000
-
-  @spec new(String.t(), String.t(), keyword) ::
+  @spec new(map) ::
           (String.t(),
            [map],
            (String.t(), map -> {:ok, String.t()} | {:error, term}),
            (map -> :ok | {:error, term}),
            Omunculus.Execution.Policy.t() ->
              {:ok, String.t()} | {:error, term})
-  def new(base_url, model_name, opts \\ []) do
+  def new(spec) when is_map(spec) do
     client = %{
-      url: base_url <> "/chat/completions",
-      model: model_name,
-      timeout: Keyword.get(opts, :timeout, @default_timeout),
-      headers: Keyword.get(opts, :headers, []),
-      temperature: Keyword.get(opts, :temperature)
+      url: spec["url"] <> "/chat/completions",
+      model: spec["model"],
+      timeout: spec["timeout_ms"],
+      headers: request_headers(spec),
+      temperature: spec["temperature"]
     }
 
     fn assembled, tools, call, record, execution ->
@@ -45,6 +46,27 @@ defmodule Omunculus.Model.OpenAI do
       )
     end
   end
+
+  defp request_headers(spec) do
+    explicit = headers_list(Map.get(spec, "headers"))
+
+    case Map.get(spec, "key_env") do
+      var when is_binary(var) ->
+        case System.get_env(var) do
+          nil -> explicit
+          key -> [{"authorization", "Bearer " <> key} | explicit]
+        end
+
+      _absent ->
+        explicit
+    end
+  end
+
+  defp headers_list(nil), do: []
+  defp headers_list(headers) when is_list(headers), do: headers
+
+  defp headers_list(headers) when is_map(headers),
+    do: Enum.map(headers, fn {key, value} -> {key, value} end)
 
   defp executor_tool do
     function_tool(%{

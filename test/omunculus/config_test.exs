@@ -1313,8 +1313,13 @@ defmodule Omunculus.ConfigTest do
       max_queue = 1
       queue_timeout_ms = 1
 
+      [models.fake]
+      api = "module"
+      module = "Omunculus.Model.Fake"
+
       [agents.concierge]
       depth = 0
+      model = "fake"
       text = "hi"
       """)
 
@@ -1410,6 +1415,107 @@ defmodule Omunculus.ConfigTest do
       """)
 
       assert {:error, {:tools, {:invalid, :paths}}} = load(dir)
+    end
+  end
+
+  describe "models" do
+    defp execution do
+      """
+      [execution]
+      backend = "bubblewrap"
+      runtimes = ["/usr"]
+      environment = ["LANG"]
+      timeout_ms = 30000
+      max_output_bytes = 1048576
+      max_concurrent = 4
+      max_queue = 64
+      queue_timeout_ms = 30000
+      """
+    end
+
+    test "an agent without model is an error", %{dir: dir} do
+      write_toml(dir, """
+      [models.fake]
+      api = "module"
+      module = "Omunculus.Model.Fake"
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      """)
+
+      assert {:error, {:agent, "concierge", {:invalid, :model}}} = load(dir)
+    end
+
+    test "unknown api is an error", %{dir: dir} do
+      write_toml(dir, """
+      [models.local]
+      api = "mystery"
+      url = "http://localhost:8080/v1"
+
+      [agents.concierge]
+      depth = 0
+      model = "local"
+      text = "hi"
+      """)
+
+      assert {:error, {:models, "local", {:unknown_api, "mystery"}}} = load(dir)
+    end
+
+    test "missing models table is an error", %{dir: dir} do
+      File.write!(toml(dir), """
+      #{execution()}
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      model = "fake"
+      """)
+
+      assert {:error, {:models, :missing}} = load(dir)
+    end
+
+    test "two agents can name different models", %{dir: dir} do
+      write_toml(dir, """
+      [models.fake]
+      api = "module"
+      module = "Omunculus.Model.Fake"
+
+      [models.battery]
+      api = "module"
+      module = "Omunculus.Model.Battery"
+
+      [agents.concierge]
+      depth = 0
+      model = "fake"
+      text = "hi"
+
+      [agents.worker]
+      depth = 1
+      model = "battery"
+      text = "work"
+      """)
+
+      assert {:ok, config} = load(dir)
+      assert config.agents["concierge"].model == "fake"
+      assert config.agents["worker"].model == "battery"
+      assert config.models["fake"].module == Omunculus.Model.Fake
+      assert config.models["battery"].module == Omunculus.Model.Battery
+    end
+
+    test "openai-completions requires url, model and timeout_ms", %{dir: dir} do
+      write_toml(dir, """
+      [models.local]
+      api = "openai-completions"
+      url = "http://localhost:8080/v1"
+      model = "qwen"
+
+      [agents.concierge]
+      depth = 0
+      model = "local"
+      text = "hi"
+      """)
+
+      assert {:error, {:models, "local", {:invalid, :timeout_ms}}} = load(dir)
     end
   end
 end

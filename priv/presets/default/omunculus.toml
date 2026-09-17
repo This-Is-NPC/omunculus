@@ -11,8 +11,13 @@ queue_timeout_ms = 30000
 [tools]
 paths = ["../../tools"]
 
+[models.fake]
+api = "module"
+module = "Omunculus.Model.Fake"
+
 [agents.concierge]
 depth = 0
+model = "fake"
 tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store"]
 text = """
 You are the project concierge. Read the message, use `tools.*` when needed, and respond.
@@ -20,6 +25,7 @@ You are the project concierge. Read the message, use `tools.*` when needed, and 
 
 [agents.worker]
 depth = 1
+model = "fake"
 tools = ["break", "comment", "continue", "fs.read", "fs.write", "notify", "request_access", "sandbox.write"]
 text = """
 You are the worker. Complete the assigned work, report progress, and call continue when the stage is complete.
@@ -27,6 +33,7 @@ You are the worker. Complete the assigned work, report progress, and call contin
 
 [agents.reviewer]
 depth = 1
+model = "fake"
 workflow_only = true
 tools = ["break", "comment", "continue", "fs.read", "notify"]
 text = """

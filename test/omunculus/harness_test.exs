@@ -71,8 +71,9 @@ defmodule Omunculus.HarnessTest do
 
     assert message.body == "override"
     assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
+    Fixtures.use_model(project, model)
 
-    assert :ok = Harness.follow_up(project, events, model)
+    assert :ok = Harness.follow_up(project, events)
 
     assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
     assert run.status == "done"
@@ -165,7 +166,9 @@ defmodule Omunculus.HarnessTest do
       {:ok, output}
     end
 
-    assert {:ok, run} = Run.open(project, open(message_id), model)
+    Fixtures.use_model(project, model)
+
+    assert {:ok, run} = Run.open(project, open(message_id))
 
     assert {:ok, [event]} =
              Query.all(project.conn, "SELECT * FROM events WHERE type = 'model' AND run_id = ?", [
@@ -214,7 +217,9 @@ defmodule Omunculus.HarnessTest do
       call.("viewer", %{})
     end
 
-    assert {:ok, run} = Run.open(project, open(message_id), model)
+    Fixtures.use_model(project, model)
+
+    assert {:ok, run} = Run.open(project, open(message_id))
 
     assert {:ok, [event]} =
              Query.all(project.conn, "SELECT * FROM events WHERE type = 'model' AND run_id = ?", [
@@ -395,9 +400,10 @@ defmodule Omunculus.HarnessTest do
     project = open_project(dir)
     message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
     event = %{type: "prompt", prompt_id: message_id, work_id: nil}
+    Fixtures.use_model(project, fn _assembled, _tools, _call -> {:ok, "done"} end)
 
     assert :ok =
-             Harness.follow_up(project, [event], fn _assembled, _tools, _call -> {:ok, "done"} end)
+             Harness.follow_up(project, [event])
 
     assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
     assert run.status == "done"

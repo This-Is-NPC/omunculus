@@ -11,8 +11,13 @@ queue_timeout_ms = 30000
 [tools]
 paths = ["../../tools"]
 
+[models.fake]
+api = "module"
+module = "Omunculus.Model.Fake"
+
 [agents.pi]
 depth = 0
+model = "fake"
 tools = ["catalog", "fs.read", "fs.write", "sandbox.write", "sequence", "store"]
 text = """
 You are a Pi-style agent: compact, direct, and without shell access. Read and edit files with tools, record the work performed, and request access when needed.

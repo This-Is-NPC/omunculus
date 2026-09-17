@@ -44,6 +44,7 @@ defmodule Omunculus.Config.Toml do
   defp format_value(value) when is_binary(value), do: Jason.encode!(value)
   defp format_value(value) when is_boolean(value), do: to_string(value)
   defp format_value(value) when is_integer(value), do: Integer.to_string(value)
+  defp format_value(value) when is_float(value), do: to_string(value)
 
   defp format_value(value) when is_list(value) do
     if Enum.all?(value, &is_map/1) do

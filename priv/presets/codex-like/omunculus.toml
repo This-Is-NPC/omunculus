@@ -11,8 +11,13 @@ queue_timeout_ms = 30000
 [tools]
 paths = ["../../tools", "./tools"]
 
+[models.fake]
+api = "module"
+module = "Omunculus.Model.Fake"
+
 [agents.codex]
 depth = 0
+model = "fake"
 tools = ["bash", "catalog", "fs.read", "fs.write", "request_access", "sandbox.write", "store"]
 human = ["delete"]
 text = """

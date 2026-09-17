@@ -93,7 +93,9 @@ defmodule Omunculus.WorkspaceTest do
       {:ok, "done"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "hi"], dir, model)
+    Fixtures.use_model(dir, model)
+
+    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
   end
 
   test "write in the default workspace writes into its root, not the project dir", %{
@@ -109,7 +111,9 @@ defmodule Omunculus.WorkspaceTest do
       {:ok, "done"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "hi"], dir, model)
+    Fixtures.use_model(dir, model)
+
+    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
     assert File.read!(Path.join(one, "note.txt")) == "hi"
     refute File.exists?(Path.join(dir, "note.txt"))
@@ -127,8 +131,9 @@ defmodule Omunculus.WorkspaceTest do
     Project.close(project)
 
     model = fn _assembled, _tools, _call -> {:ok, "done"} end
+    Fixtures.use_model(dir, model)
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir, model)
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
     project = open(dir)
 
@@ -163,7 +168,9 @@ defmodule Omunculus.WorkspaceTest do
       {:ok, "done"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir, model)
+    Fixtures.use_model(dir, model)
+
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
   end
 
   test "a child delegated from a workspace-two work inherits workspace two", %{
@@ -188,7 +195,9 @@ defmodule Omunculus.WorkspaceTest do
       {:ok, "done"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir, model)
+    Fixtures.use_model(dir, model)
+
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
     project = open(dir)
 
@@ -218,7 +227,9 @@ defmodule Omunculus.WorkspaceTest do
       {:ok, "done"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir, model)
+    Fixtures.use_model(dir, model)
+
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
     assert_received {:output, output}
     assert output == "one #{one}\nthree #{three}\ntwo #{two} *"
@@ -245,7 +256,9 @@ defmodule Omunculus.WorkspaceTest do
       {:ok, "done"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir, model)
+    Fixtures.use_model(dir, model)
+
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
     assert_received {:output, output}
     assert output == "#{three}\n  marker.txt"
@@ -269,13 +282,16 @@ defmodule Omunculus.WorkspaceTest do
       {:ok, "unused"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir, request_model)
+    Fixtures.use_model(dir, request_model)
+
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
     project = open(dir)
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
     Project.close(project)
 
     reply_model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
+    Fixtures.use_model(dir, reply_model)
 
     assert {:ok, ""} =
              CLI.run(
@@ -289,8 +305,7 @@ defmodule Omunculus.WorkspaceTest do
                  "workspace",
                  "allowed forever"
                ],
-               dir,
-               reply_model
+               dir
              )
 
     assert {:ok, %Config{workspaces: workspaces}} = Fixtures.load_config(dir)
@@ -355,13 +370,16 @@ defmodule Omunculus.WorkspaceTest do
       {:ok, "unused"}
     end
 
-    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir, request_model)
+    Fixtures.use_model(dir, request_model)
+
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
     project = open(dir)
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
     Project.close(project)
 
     reply_model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
+    Fixtures.use_model(dir, reply_model)
 
     assert {:ok, ""} =
              CLI.run(
@@ -375,8 +393,7 @@ defmodule Omunculus.WorkspaceTest do
                  "stage",
                  "allowed forever"
                ],
-               dir,
-               reply_model
+               dir
              )
 
     assert {:ok, %Config{workflows: %{"delivery" => [to_do]}}} = Fixtures.load_config(dir)

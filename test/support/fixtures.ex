@@ -6,7 +6,9 @@ defmodule Omunculus.Fixtures do
 
   alias Omunculus.Config
   alias Omunculus.Id
+  alias Omunculus.Project
   alias Omunculus.Store.Query
+  alias Omunculus.Test.ScriptedModel
   alias Omunculus.Tools.Preset
 
   @now "2026-01-01T00:00:00Z"
@@ -50,26 +52,115 @@ defmodule Omunculus.Fixtures do
     row.id
   end
 
-  @spec config(String.t() | nil) :: Config.t()
-  def config(toml \\ nil) do
+  @spec config(String.t() | nil, keyword) :: Config.t()
+  def config(toml \\ nil, opts \\ []) do
     dir = Path.join(System.tmp_dir!(), Id.new())
     File.mkdir_p!(dir)
 
     case toml do
-      nil -> install_default(dir)
-      contents -> write_config(dir, contents)
+      nil ->
+        install_default(dir)
+
+        case Keyword.get(opts, :model) do
+          fun when is_function(fun) -> use_model(dir, fun)
+          _ -> :ok
+        end
+
+      contents ->
+        write_config(dir, contents, opts)
     end
 
     {:ok, config} = load_config(dir)
     config
   end
 
-  @spec write_config(String.t(), String.t()) :: :ok
-  def write_config(dir, toml) do
+  @spec write_config(String.t(), String.t(), keyword) :: :ok
+  def write_config(dir, toml, opts \\ []) when is_list(opts) do
     body = toml <> "\n" <> @execution
     body = if String.contains?(toml, "[tools]"), do: body, else: body <> "\n" <> tools_table(dir)
     File.write!(config_path(dir), body)
+    apply_models(dir, opts)
   end
+
+  @spec use_model(String.t() | Project.t(), fun) :: :ok
+  def use_model(%Project{dir: dir}, fun), do: use_model(dir, fun)
+
+  def use_model(dir, fun) when is_binary(dir) and is_function(fun),
+    do: apply_models(dir, model: fun)
+
+  defp apply_models(dir, opts) do
+    path = config_path(dir)
+
+    case Toml.decode_file(path) do
+      {:ok, data} -> File.write!(path, Config.Toml.encode(inject_models(data, opts)))
+      _invalid -> :ok
+    end
+  end
+
+  defp inject_models(data, opts) do
+    case Keyword.get(opts, :model) do
+      fun when is_function(fun) ->
+        id = Id.new()
+        ScriptedModel.put(id, fun)
+
+        data
+        |> put_model("scripted", scripted_spec(id))
+        |> put_agent_models("scripted")
+
+      _absent ->
+        case Map.get(data, "models") do
+          models when is_map(models) and map_size(models) > 0 ->
+            data
+
+          _ ->
+            data
+            |> put_model("fake", %{
+              "api" => "module",
+              "module" => "Omunculus.Model.Fake"
+            })
+            |> put_missing_agent_models("fake")
+        end
+    end
+  end
+
+  defp put_model(data, name, spec) do
+    models = data |> Map.get("models") |> then(&if(is_map(&1), do: &1, else: %{}))
+    Map.put(data, "models", Map.put(models, name, spec))
+  end
+
+  defp scripted_spec(id) do
+    %{
+      "api" => "module",
+      "module" => "Omunculus.Test.ScriptedModel",
+      "params" => %{"script" => id}
+    }
+  end
+
+  defp put_agent_models(data, name) do
+    update_agents(data, fn agent -> put_agent_model(agent, name, true) end)
+  end
+
+  defp put_missing_agent_models(data, name) do
+    update_agents(data, fn agent -> put_agent_model(agent, name, false) end)
+  end
+
+  defp update_agents(data, fun) do
+    case Map.get(data, "agents") do
+      agents when is_map(agents) ->
+        Map.put(data, "agents", Map.new(agents, fn {name, agent} -> {name, fun.(agent)} end))
+
+      _ ->
+        data
+    end
+  end
+
+  defp put_agent_model(agent, name, true) when is_map(agent), do: Map.put(agent, "model", name)
+
+  defp put_agent_model(agent, name, false) when is_map(agent) do
+    if Map.has_key?(agent, "model"), do: agent, else: Map.put(agent, "model", name)
+  end
+
+  defp put_agent_model(agent, _name, _force), do: agent
 
   @spec tools_table(String.t()) :: String.t()
   def tools_table(dir) do

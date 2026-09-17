@@ -7,7 +7,6 @@ defmodule Omunculus.MatrixTest do
   use ExUnit.Case, async: true
 
   alias Omunculus.{CLI, Fixtures, Id, Project, Store}
-  alias Omunculus.Model.Battery
   alias Omunculus.Store.Query
 
   @concierge_d0_tools ~w(bench break continue fs.read sandbox.network store)
@@ -36,8 +35,13 @@ defmodule Omunculus.MatrixTest do
 
   defp concierge_section(tools) do
     """
+    [models.battery]
+    api = "module"
+    module = "Omunculus.Model.Battery"
+
     [agents.concierge]
     depth = 0
+    model = "battery"
     tools = #{inspect(tools)}
     text = "#{@concierge_text}"
     """
@@ -48,6 +52,7 @@ defmodule Omunculus.MatrixTest do
 
     [agents.#{name}]
     depth = #{depth}
+    model = "battery"
     tools = #{inspect(tools)}
     text = "#{text}"
     """
@@ -129,6 +134,7 @@ defmodule Omunculus.MatrixTest do
 
         [agents.observer]
         depth = 0
+        model = "battery"
         tools = ["comment"]
         text = "#{@observer_text}"
         """
@@ -159,7 +165,7 @@ defmodule Omunculus.MatrixTest do
     write_config(dir, depth, workflow?)
     if hook?, do: add_observer_hook(dir)
 
-    assert {:ok, ""} = CLI.run(["send", "count to 5"], dir, &Battery.complete/3)
+    assert {:ok, ""} = CLI.run(["send", "count to 5"], dir)
   end
 
   defp counter_value(conn) do

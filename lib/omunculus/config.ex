@@ -7,11 +7,12 @@ defmodule Omunculus.Config do
   per-depth layers under `[policy.depth.N]`, the workspaces under
   `[workspaces.<name>]` — each a directory `root` (resolved against the
   project root) plus a ceiling layer — and the `[policy] workspace`
-  default, each agent's ceiling layer, the named workflows under
-  `[workflows.<name>]` (spec §3.4), and the MCP servers under
-  `[[mcp.servers]]` (spec §8.7), the required `[execution]` table, and
-  grants a permanent ceiling addition — to an agent, a depth, a workflow
-  step, or a workspace — by rewriting that same file.
+  default, each agent's ceiling layer, the named `[models.<name>]`
+  adapters, the named workflows under `[workflows.<name>]` (spec §3.4),
+  the MCP servers under `[[mcp.servers]]` (spec §8.7), the required
+  `[execution]` table, and grants a permanent ceiling addition — to an
+  agent, a depth, a workflow step, or a workspace — by rewriting that
+  same file.
   """
 
   alias Omunculus.Config.Layer
@@ -29,7 +30,8 @@ defmodule Omunculus.Config do
     :depth_workflows,
     :mcp,
     :execution,
-    :tools
+    :tools,
+    :models
   ]
   defstruct @enforce_keys
 
@@ -37,8 +39,10 @@ defmodule Omunculus.Config do
           depth: non_neg_integer,
           text: String.t(),
           workflow_only: boolean,
+          model: String.t(),
           ceiling: Layer.t()
         }
+  @type model :: %{api: String.t(), module: module, input: map}
   @type step :: %{name: String.t(), agent: String.t(), ceiling: Layer.t()}
   @type workspace :: %{root: String.t(), ceiling: Layer.t()}
   @type mcp_server :: %{name: String.t(), command: [String.t()]}
@@ -65,7 +69,8 @@ defmodule Omunculus.Config do
           depth_workflows: %{non_neg_integer => String.t()},
           mcp: [mcp_server],
           execution: execution,
-          tools: tools
+          tools: tools,
+          models: %{String.t() => model}
         }
 
   @type tools :: %{paths: [String.t()], inline: %{String.t() => Manifest.t()}}
@@ -81,7 +86,9 @@ defmodule Omunculus.Config do
     max_queue
     queue_timeout_ms
   )
-  @agent_extra_keys ~w(depth text workflow_only)
+  @agent_extra_keys ~w(depth text workflow_only model)
+  @openai_model_keys ~w(api url model timeout_ms temperature key_env headers)
+  @module_model_keys ~w(api module params)
   @step_extra_keys ~w(name agent)
 
   @spec load(String.t()) :: {:ok, t} | {:error, term}
@@ -106,6 +113,18 @@ defmodule Omunculus.Config do
 
   def workspace_root(config, name),
     do: config.workspaces |> Map.get(name) |> then(&(&1 && &1.root))
+
+  @spec model_fun(t, String.t()) :: {:ok, fun} | {:error, term}
+  def model_fun(%__MODULE__{agents: agents, models: models}, agent_name) do
+    case Map.fetch(agents, agent_name) do
+      {:ok, %{model: name}} ->
+        spec = Map.fetch!(models, name)
+        {:ok, spec.module.new(spec.input)}
+
+      :error ->
+        {:error, {:no_agent, agent_name}}
+    end
+  end
 
   @spec agent_at_depth(t, non_neg_integer) ::
           {:ok, {String.t(), agent}} | {:error, {:no_agent_at_depth, non_neg_integer}}
@@ -244,7 +263,17 @@ defmodule Omunculus.Config do
 
   defp parse(data, path) do
     case Map.keys(data) --
-           ["policy", "workspaces", "agents", "workflows", "mcp", "execution", "project", "tools"] do
+           [
+             "policy",
+             "workspaces",
+             "agents",
+             "workflows",
+             "mcp",
+             "execution",
+             "project",
+             "tools",
+             "models"
+           ] do
       [key | _] ->
         {:error, {:unknown_key, key}}
 
@@ -253,8 +282,9 @@ defmodule Omunculus.Config do
 
         with {:ok, root} <- parse_project(Map.get(data, "project"), config_dir),
              {:ok, execution} <- parse_execution(Map.get(data, "execution")),
+             {:ok, models} <- parse_models(Map.get(data, "models")),
              {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), root),
-             {:ok, agents} <- parse_agents(Map.get(data, "agents", %{})),
+             {:ok, agents} <- parse_agents(Map.get(data, "agents", %{}), models),
              {:ok, workflows} <- parse_workflows(Map.get(data, "workflows", %{}), agents),
              {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows} <-
                parse_policy(Map.get(data, "policy", %{}), workflows, workspaces),
@@ -276,7 +306,8 @@ defmodule Omunculus.Config do
                depth_workflows: depth_workflows,
                mcp: mcp,
                execution: execution,
-               tools: tools
+               tools: tools,
+               models: models
              }}
           end
         end
@@ -619,16 +650,162 @@ defmodule Omunculus.Config do
     end
   end
 
-  defp parse_agents(agents) when is_map(agents) do
+  defp parse_models(nil), do: {:error, {:models, :missing}}
+
+  defp parse_models(data) when is_map(data) do
+    Enum.reduce_while(data, {:ok, %{}}, fn {name, spec}, {:ok, acc} ->
+      case parse_model(name, spec) do
+        {:ok, model} -> {:cont, {:ok, Map.put(acc, name, model)}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp parse_models(_data), do: {:error, {:models, :invalid}}
+
+  defp parse_model(name, data) when is_map(data) do
+    case Map.get(data, "api") do
+      "openai-completions" -> parse_openai_model(name, data)
+      "module" -> parse_module_model(name, data)
+      nil -> {:error, {:models, name, {:invalid, :api}}}
+      api -> {:error, {:models, name, {:unknown_api, api}}}
+    end
+  end
+
+  defp parse_model(name, _data), do: {:error, {:models, name, {:invalid, :api}}}
+
+  defp parse_openai_model(name, data) do
+    case Map.keys(data) -- @openai_model_keys do
+      [key | _] ->
+        {:error, {:models, name, {:unknown_key, key}}}
+
+      [] ->
+        with {:ok, url} <- model_string(data, "url"),
+             {:ok, model} <- model_string(data, "model"),
+             {:ok, timeout_ms} <- model_timeout(data),
+             {:ok, temperature} <- model_temperature(data),
+             {:ok, key_env} <- model_optional_string(data, "key_env"),
+             {:ok, headers} <- model_headers(data) do
+          input =
+            %{
+              "api" => "openai-completions",
+              "url" => url,
+              "model" => model,
+              "timeout_ms" => timeout_ms
+            }
+            |> maybe_put_model("temperature", temperature)
+            |> maybe_put_model("key_env", key_env)
+            |> maybe_put_model("headers", headers)
+
+          {:ok,
+           %{
+             api: "openai-completions",
+             module: Omunculus.Model.OpenAI,
+             input: input
+           }}
+        else
+          {:error, reason} -> {:error, {:models, name, reason}}
+        end
+    end
+  end
+
+  defp parse_module_model(name, data) do
+    case Map.keys(data) -- @module_model_keys do
+      [key | _] ->
+        {:error, {:models, name, {:unknown_key, key}}}
+
+      [] ->
+        with {:ok, module_name} <- model_string(data, "module"),
+             {:ok, params} <- model_params(data),
+             {:ok, module} <- resolve_model_module(module_name) do
+          {:ok,
+           %{
+             api: "module",
+             module: module,
+             input: %{"api" => "module", "module" => module_name, "params" => params}
+           }}
+        else
+          {:error, reason} -> {:error, {:models, name, reason}}
+        end
+    end
+  end
+
+  defp model_string(data, key) do
+    case Map.fetch(data, key) do
+      {:ok, value} when is_binary(value) and value != "" -> {:ok, value}
+      _ -> {:error, {:invalid, String.to_atom(key)}}
+    end
+  end
+
+  defp model_timeout(%{"timeout_ms" => timeout}) when is_integer(timeout) and timeout > 0,
+    do: {:ok, timeout}
+
+  defp model_timeout(_data), do: {:error, {:invalid, :timeout_ms}}
+
+  defp model_temperature(data) do
+    case Map.fetch(data, "temperature") do
+      :error -> {:ok, nil}
+      {:ok, value} when is_number(value) -> {:ok, value}
+      _ -> {:error, {:invalid, :temperature}}
+    end
+  end
+
+  defp model_optional_string(data, key) do
+    case Map.fetch(data, key) do
+      :error -> {:ok, nil}
+      {:ok, value} when is_binary(value) and value != "" -> {:ok, value}
+      _ -> {:error, {:invalid, String.to_atom(key)}}
+    end
+  end
+
+  defp model_headers(data) do
+    case Map.fetch(data, "headers") do
+      :error ->
+        {:ok, nil}
+
+      {:ok, headers} when is_map(headers) ->
+        if Enum.all?(headers, fn {key, value} -> is_binary(key) and is_binary(value) end) do
+          {:ok, headers}
+        else
+          {:error, {:invalid, :headers}}
+        end
+
+      _ ->
+        {:error, {:invalid, :headers}}
+    end
+  end
+
+  defp model_params(data) do
+    case Map.fetch(data, "params") do
+      :error -> {:ok, %{}}
+      {:ok, params} when is_map(params) -> {:ok, params}
+      _ -> {:error, {:invalid, :params}}
+    end
+  end
+
+  defp resolve_model_module(name) do
+    module = Module.concat([name])
+
+    if Code.ensure_loaded?(module) and function_exported?(module, :new, 1) do
+      {:ok, module}
+    else
+      {:error, {:unknown_module, name}}
+    end
+  end
+
+  defp maybe_put_model(map, _key, nil), do: map
+  defp maybe_put_model(map, key, value), do: Map.put(map, key, value)
+
+  defp parse_agents(agents, models) when is_map(agents) do
     Enum.reduce_while(agents, {:ok, %{}}, fn {name, data}, {:ok, acc} ->
-      case parse_agent(name, data) do
+      case parse_agent(name, data, models) do
         {:ok, agent} -> {:cont, {:ok, Map.put(acc, name, agent)}}
         {:error, _reason} = error -> {:halt, error}
       end
     end)
   end
 
-  defp parse_agent(name, data) when is_map(data) do
+  defp parse_agent(name, data, models) when is_map(data) do
     case Map.keys(data) -- (@agent_extra_keys ++ @layer_keys) do
       [key | _] ->
         {:error, {:agent, name, {:unknown_key, key}}}
@@ -637,15 +814,33 @@ defmodule Omunculus.Config do
         with {:ok, depth} <- fetch_depth(data),
              {:ok, text} <- fetch_text(data),
              {:ok, workflow_only} <- fetch_workflow_only(data),
+             {:ok, model} <- fetch_model(data, models),
              {:ok, ceiling} <- parse_layer(Map.drop(data, @agent_extra_keys), nil) do
-          {:ok, %{depth: depth, text: text, workflow_only: workflow_only, ceiling: ceiling}}
+          {:ok,
+           %{
+             depth: depth,
+             text: text,
+             workflow_only: workflow_only,
+             model: model,
+             ceiling: ceiling
+           }}
         else
           {:error, reason} -> {:error, {:agent, name, reason}}
         end
     end
   end
 
-  defp parse_agent(name, _data), do: {:error, {:agent, name, {:invalid, :depth}}}
+  defp parse_agent(name, _data, _models), do: {:error, {:agent, name, {:invalid, :depth}}}
+
+  defp fetch_model(data, models) do
+    case Map.fetch(data, "model") do
+      {:ok, name} when is_binary(name) and name != "" ->
+        if Map.has_key?(models, name), do: {:ok, name}, else: {:error, {:unknown_model, name}}
+
+      _ ->
+        {:error, {:invalid, :model}}
+    end
+  end
 
   defp fetch_depth(data) do
     case Map.fetch(data, "depth") do

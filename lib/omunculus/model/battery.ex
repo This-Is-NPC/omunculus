@@ -15,10 +15,20 @@ defmodule Omunculus.Model.Battery do
   @counted "counted to 5"
   @delegated "delegated"
 
-  @spec complete(String.t(), [map], (String.t(), map -> {:ok, String.t()} | {:error, term})) ::
-          {:ok, String.t()}
-  def complete(assembled, tools, call) do
-    assembled |> parse(tools) |> decide(call)
+  @spec new(map) ::
+          (String.t(),
+           [map],
+           (String.t(), map -> {:ok, String.t()} | {:error, term}),
+           (map -> :ok | {:error, term}),
+           term ->
+             {:ok, String.t()})
+  def new(_spec) do
+    fn assembled, tools, call, record, _execution ->
+      with {:ok, text} <- assembled |> parse(tools) |> decide(call) do
+        :ok = record.(text)
+        {:ok, text}
+      end
+    end
   end
 
   defp decide(%{work: false, cards: cards} = parsed, call) do

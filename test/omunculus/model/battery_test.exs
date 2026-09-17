@@ -33,13 +33,17 @@ defmodule Omunculus.Model.BatteryTest do
 
   defp tools(names), do: Enum.map(names, &%{name: &1, description: "a tool", parameters: %{}})
 
+  defp complete(assembled, tools, call) do
+    Battery.new(%{}).(assembled, tools, call, fn _text -> :ok end, nil)
+  end
+
   test "rule 1 with delegate: opens the work then delegates, ending before counting" do
     names = ~w(work delegate counter)
     assembled = Enum.join(["You are the concierge.", tools_section(names)], "\n\n")
 
     {agent, call} = recorder()
 
-    assert {:ok, _result} = Battery.complete(assembled, tools(names), call)
+    assert {:ok, _result} = complete(assembled, tools(names), call)
 
     assert calls(agent) == [
              {"work", %{"title" => "Count to 5"}},
@@ -53,7 +57,7 @@ defmodule Omunculus.Model.BatteryTest do
 
     {agent, call} = recorder(%{"counter" => ["1", "2", "3", "4", "5"]})
 
-    assert {:ok, "counted to 5"} = Battery.complete(assembled, tools(names), call)
+    assert {:ok, "counted to 5"} = complete(assembled, tools(names), call)
 
     [first | rest] = calls(agent)
     assert first == {"work", %{"title" => "Count to 5"}}
@@ -71,7 +75,7 @@ defmodule Omunculus.Model.BatteryTest do
 
     {agent, call} = recorder(%{"counter" => ["1", "2", "3", "4", "5"]})
 
-    assert {:ok, "counted to 5"} = Battery.complete(assembled, tools(names), call)
+    assert {:ok, "counted to 5"} = complete(assembled, tools(names), call)
 
     call_names = calls(agent) |> Enum.map(&elem(&1, 0))
     assert Enum.count(call_names, &(&1 == "counter")) == 5
@@ -98,7 +102,7 @@ defmodule Omunculus.Model.BatteryTest do
 
     {agent, call} = recorder(%{"counter" => ["4", "5"]})
 
-    assert {:ok, "counted to 5"} = Battery.complete(assembled, tools(names), call)
+    assert {:ok, "counted to 5"} = complete(assembled, tools(names), call)
 
     call_names = calls(agent) |> Enum.map(&elem(&1, 0))
     assert call_names == ["counter", "counter"]
@@ -115,7 +119,7 @@ defmodule Omunculus.Model.BatteryTest do
 
     {agent, call} = recorder()
 
-    assert {:ok, "reviewed"} = Battery.complete(assembled, tools(names), call)
+    assert {:ok, "reviewed"} = complete(assembled, tools(names), call)
     assert calls(agent) == [{"continue", %{}}]
   end
 
@@ -130,7 +134,7 @@ defmodule Omunculus.Model.BatteryTest do
 
     {agent, call} = recorder()
 
-    assert {:ok, "observed"} = Battery.complete(assembled, tools(names), call)
+    assert {:ok, "observed"} = complete(assembled, tools(names), call)
     assert calls(agent) == [{"comment", %{"body" => "observed"}}]
   end
 
@@ -140,7 +144,7 @@ defmodule Omunculus.Model.BatteryTest do
 
     {agent, call} = recorder()
 
-    assert {:ok, "nothing to do"} = Battery.complete(assembled, tools(names), call)
+    assert {:ok, "nothing to do"} = complete(assembled, tools(names), call)
     assert calls(agent) == []
   end
 end
