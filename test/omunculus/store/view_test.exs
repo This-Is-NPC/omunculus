@@ -257,6 +257,31 @@ defmodule Omunculus.Store.ViewTest do
     assert {:error, {:unknown_view, "nope"}} = View.view(conn, "nope", "id")
   end
 
+  describe "runs.last" do
+    test "returns the newest started_at, then id", %{conn: conn} do
+      older = Fixtures.insert(conn, :runs, %{started_at: "2026-01-01T00:00:00Z"})
+      newer = Fixtures.insert(conn, :runs, %{started_at: "2026-01-02T00:00:00Z"})
+      Fixtures.insert(conn, :runs, %{started_at: "2026-01-01T12:00:00Z"})
+
+      assert {:ok, run} = View.view(conn, "runs.last", nil)
+      assert run.id == newer
+      refute run.id == older
+    end
+
+    test "breaks a started_at tie by id descending", %{conn: conn} do
+      first = Fixtures.insert(conn, :runs, %{id: "run_a", started_at: "2026-01-01T00:00:00Z"})
+      second = Fixtures.insert(conn, :runs, %{id: "run_b", started_at: "2026-01-01T00:00:00Z"})
+
+      assert {:ok, run} = View.view(conn, "runs.last", nil)
+      assert run.id == second
+      refute run.id == first
+    end
+
+    test "returns nil when the store has no runs", %{conn: conn} do
+      assert {:ok, nil} = View.view(conn, "runs.last", nil)
+    end
+  end
+
   describe "comments alias" do
     test "reads the same rows as comments.work", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)

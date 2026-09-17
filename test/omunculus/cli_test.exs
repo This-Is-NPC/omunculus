@@ -125,6 +125,40 @@ defmodule Omunculus.CLITest do
     assert {:error, {:unknown_tool, "nope"}} = CLI.run(["nope"], dir)
   end
 
+  test "prompt prints the last run assembled prompt", %{dir: dir} do
+    assert {:ok, ""} = CLI.run(["send", "first message"], dir)
+    assert {:ok, ""} = CLI.run(["send", "second message"], dir)
+
+    assert {:ok, output} = CLI.run(["prompt"], dir)
+    assert output =~ "second message"
+    refute output =~ "first message"
+  end
+
+  test "prompt --run prints that run assembled prompt", %{dir: dir} do
+    assert {:ok, ""} = CLI.run(["send", "first message"], dir)
+    project = open(dir)
+    assert {:ok, [first]} = Query.all(project.conn, "SELECT * FROM runs")
+    first_id = first.id
+    Project.close(project)
+
+    assert {:ok, ""} = CLI.run(["send", "second message"], dir)
+
+    assert {:ok, output} = CLI.run(["prompt", "--run", first_id], dir)
+    assert output =~ "first message"
+    refute output =~ "second message"
+  end
+
+  test "prompt without runs is a clear error", %{dir: dir} do
+    assert {:error, :no_runs} = CLI.run(["prompt"], dir)
+    assert CLI.format_error(:no_runs) == "no runs"
+  end
+
+  test "prompt --run with an unknown id is a clear error", %{dir: dir} do
+    assert {:error, {:unknown_run, "missing"}} = CLI.run(["prompt", "--run", "missing"], dir)
+
+    assert CLI.format_error({:unknown_run, "missing"}) == "unknown run missing"
+  end
+
   test "send without a config file does not open a run", %{dir: dir} do
     path = Path.expand("omunculus.toml", dir)
     File.rm!(path)

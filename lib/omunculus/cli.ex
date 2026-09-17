@@ -68,6 +68,10 @@ defmodule Omunculus.CLI do
     "not logged in to #{id}; run `omunculus login --provider #{id}`"
   end
 
+  def format_error(:no_runs), do: "no runs"
+  def format_error({:unknown_run, id}), do: "unknown run #{id}"
+  def format_error(:no_assembled), do: "no assembled prompt"
+
   def format_error(reason), do: inspect(reason)
 
   defp split_config(["--config"], _cwd), do: {:error, {:missing_value, "config"}}

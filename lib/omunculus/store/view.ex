@@ -4,9 +4,11 @@ defmodule Omunculus.Store.View do
   `prompts` rows the harness needs to assemble or continue a run, the
   unread `inbox` list with each row's earliest comment (spec §3.6), the
   unread notifications of one work (`"inbox.work"`), the comments of
-  one inbox entry, oldest first (`"comments.inbox"`), the depth of a work by walking `parent_id`, plus
-  replay of `events` for a project, run, work, request, or inbox scope
-  (spec §4). Never executes anything against the store.
+  one inbox entry, oldest first (`"comments.inbox"`), the most recently
+  started run (`"runs.last"`), the depth of a work by walking
+  `parent_id`, plus replay of `events` for a project, run, work,
+  request, or inbox scope (spec §4). Never executes anything against
+  the store.
   """
 
   alias Omunculus.Store.Query
@@ -61,6 +63,10 @@ defmodule Omunculus.Store.View do
 
   def view(conn, "run", id) do
     Query.one(conn, "SELECT * FROM runs WHERE id = ?", [id])
+  end
+
+  def view(conn, "runs.last", _id) do
+    Query.one(conn, "SELECT * FROM runs ORDER BY started_at DESC, id DESC LIMIT 1")
   end
 
   def view(conn, "request", id) do

@@ -295,6 +295,7 @@ defmodule Omunculus.Harness do
         :catalog -> {:cont, {:ok, Map.put(acc, "catalog", views.catalog)}}
         :workspaces -> {:cont, {:ok, Map.put(acc, "workspaces", views.workspaces)}}
         :paths -> {:cont, {:ok, Map.put(acc, "paths", views.paths)}}
+        {:cli_prompt, args} -> fetch_cli_prompt(project, name, args, acc)
         {:ok, canonical, id} -> fetch_view(project, name, canonical, id, acc)
         {:ok, id} -> fetch_view(project, name, name, id, acc)
       end
@@ -349,7 +350,43 @@ defmodule Omunculus.Harness do
   defp resolve_view_id("inbox", _run_id, _work_id, _request_id), do: {:ok, nil}
   defp resolve_view_id("catalog", _run_id, _work_id, _request_id), do: :catalog
   defp resolve_view_id("workspaces", _run_id, _work_id, _request_id), do: :workspaces
+  defp resolve_view_id("runs.last", _run_id, _work_id, _views), do: {:ok, nil}
+
+  defp resolve_view_id("prompt", _run_id, _work_id, %{trigger: "cli"} = views),
+    do: {:cli_prompt, Map.get(views, :args, %{})}
+
   defp resolve_view_id(name, _run_id, _work_id, _request_id), do: {:error, {:unknown_view, name}}
+
+  defp fetch_cli_prompt(project, name, args, acc) do
+    case cli_assembled_id(project, args) do
+      {:ok, id} -> fetch_view(project, name, "prompt", id, acc)
+      {:error, _reason} = error -> {:halt, error}
+    end
+  end
+
+  defp cli_assembled_id(project, args) do
+    with {:ok, run} <- cli_run(project, Map.get(args, "run")),
+         id when is_binary(id) and id != "" <- run.prompt_id do
+      {:ok, id}
+    else
+      nil -> {:error, :no_assembled}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp cli_run(project, id) when is_binary(id) and id != "" do
+    case Store.view(project.conn, "run", id) do
+      {:ok, nil} -> {:error, {:unknown_run, id}}
+      other -> other
+    end
+  end
+
+  defp cli_run(project, _id) do
+    case Store.view(project.conn, "runs.last", nil) do
+      {:ok, nil} -> {:error, :no_runs}
+      other -> other
+    end
+  end
 
   defp run_hooks_for(project, catalog, event, work_id, ctx, config, views, workspace, active) do
     catalog
@@ -389,6 +426,7 @@ defmodule Omunculus.Harness do
   defp call(project, manifest, args, work_id, ctx, config, catalog, views, workspace) do
     with {:ok, execution} <-
            execution_context(manifest, ctx, config, workspace, project.dir, catalog),
+         views = Map.merge(views, %{trigger: Map.get(ctx, :trigger), args: args}),
          {:ok, view} <- hydrate_views(project, manifest.views, ctx.run_id, work_id, views),
          input = %{
            name: manifest.name,
