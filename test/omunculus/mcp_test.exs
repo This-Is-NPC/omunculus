@@ -4,7 +4,12 @@ defmodule Omunculus.McpTest do
   alias Omunculus.{CLI, ExecutionPolicyFixtures, Fixtures, Id, Mcp, Project}
   alias Omunculus.Tool.Catalog
 
-  @server %{name: "fake", command: [Path.expand("test/support/mcp_server")]}
+  @protocol_version "2025-03-26"
+  @server %{
+    name: "fake",
+    command: [Path.expand("test/support/mcp_server")],
+    protocol_version: @protocol_version
+  }
 
   defp server(overrides), do: Map.merge(@server, overrides)
 
@@ -54,6 +59,13 @@ defmodule Omunculus.McpTest do
                Mcp.call(@server, "nope", %{}, policy())
     end
 
+    test "initialize sends the server's protocol_version" do
+      assert {:ok, tools} =
+               Mcp.list_tools(server(%{protocol_version: "1999-01-01"}), policy())
+
+      assert Enum.map(tools, & &1.name) |> Enum.sort() == ["echo", "shout"]
+    end
+
     test "an executable that does not exist is :not_found" do
       assert Mcp.call(
                server(%{command: ["definitely-not-a-real-binary-xyz"]}),
@@ -91,6 +103,7 @@ defmodule Omunculus.McpTest do
       [[mcp.servers]]
       name = "fake"
       command = ["#{command_path}"]
+      protocol_version = "#{@protocol_version}"
       """
     end
 

@@ -25,7 +25,7 @@ for await (const chunk of Deno.stdin.readable) {
 
     if (message.method === "initialize") {
       reply(message.id, {
-        protocolVersion: "2025-03-26",
+        protocolVersion: message.params.protocolVersion,
         capabilities: {tools: {}},
         serverInfo: {name: "fake", version: "0"}
       });

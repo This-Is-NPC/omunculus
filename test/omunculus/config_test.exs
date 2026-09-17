@@ -1191,12 +1191,17 @@ defmodule Omunculus.ConfigTest do
       [[mcp.servers]]
       name = "github"
       command = ["npx", "-y", "@modelcontextprotocol/server-github"]
+      protocol_version = "2025-03-26"
       """)
 
       assert {:ok, %Config{mcp: mcp}} = load(dir)
 
       assert mcp == [
-               %{name: "github", command: ["npx", "-y", "@modelcontextprotocol/server-github"]}
+               %{
+                 name: "github",
+                 command: ["npx", "-y", "@modelcontextprotocol/server-github"],
+                 protocol_version: "2025-03-26"
+               }
              ]
     end
 
@@ -1209,14 +1214,17 @@ defmodule Omunculus.ConfigTest do
       [[mcp.servers]]
       name = "github"
       command = ["gh-mcp"]
+      protocol_version = "2025-03-26"
 
       [[mcp.servers]]
       name = "fs"
       command = ["fs-mcp"]
+      protocol_version = "2024-11-05"
       """)
 
       assert {:ok, %Config{mcp: mcp}} = load(dir)
       assert Enum.map(mcp, & &1.name) == ["github", "fs"]
+      assert Enum.map(mcp, & &1.protocol_version) == ["2025-03-26", "2024-11-05"]
     end
 
     test "a server missing a name is invalid", %{dir: dir} do
@@ -1259,6 +1267,20 @@ defmodule Omunculus.ConfigTest do
       assert {:error, {:mcp, {:invalid, :command}}} = load(dir)
     end
 
+    test "a server missing protocol_version is invalid", %{dir: dir} do
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [[mcp.servers]]
+      name = "github"
+      command = ["gh-mcp"]
+      """)
+
+      assert {:error, {:mcp, {:invalid, :protocol_version}}} = load(dir)
+    end
+
     test "mcp.servers must be a list", %{dir: dir} do
       write_toml(dir, """
       [agents.concierge]
@@ -1281,10 +1303,12 @@ defmodule Omunculus.ConfigTest do
       [[mcp.servers]]
       name = "github"
       command = ["gh-mcp"]
+      protocol_version = "2025-03-26"
 
       [[mcp.servers]]
       name = "github"
       command = ["gh-mcp-2"]
+      protocol_version = "2025-03-26"
       """)
 
       assert {:error, {:mcp, {:duplicate, "github"}}} = load(dir)

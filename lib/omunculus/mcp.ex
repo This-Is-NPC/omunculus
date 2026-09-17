@@ -8,9 +8,7 @@ defmodule Omunculus.Mcp do
   alias Omunculus.Execution.{Command, Policy}
   alias Omunculus.Path, as: FilesystemPath
 
-  @protocol_version "2025-03-26"
-
-  @type server :: %{name: String.t(), command: [String.t()]}
+  @type server :: %{name: String.t(), command: [String.t()], protocol_version: String.t()}
 
   @spec list_tools(server, Policy.t()) ::
           {:ok, [%{name: String.t(), description: String.t(), parameters: map}]} | {:error, term}
@@ -78,7 +76,7 @@ defmodule Omunculus.Mcp do
   defp initialize(state) do
     with {:ok, _result, state} <-
            request(state, "initialize", %{
-             protocolVersion: @protocol_version,
+             protocolVersion: state.server.protocol_version,
              capabilities: %{},
              clientInfo: %{name: "omunculus", version: "0.1.0"}
            }),

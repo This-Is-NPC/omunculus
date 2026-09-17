@@ -47,7 +47,7 @@ defmodule Omunculus.Config do
   @type model :: %{api: String.t(), module: module, input: map}
   @type step :: %{name: String.t(), agent: String.t(), ceiling: Layer.t()}
   @type workspace :: %{root: String.t(), ceiling: Layer.t()}
-  @type mcp_server :: %{name: String.t(), command: [String.t()]}
+  @type mcp_server :: %{name: String.t(), command: [String.t()], protocol_version: String.t()}
   @type sandbox :: %{
           script: String.t(),
           command: [String.t()],
@@ -98,6 +98,7 @@ defmodule Omunculus.Config do
     queue_timeout_ms
   )
   @sandbox_keys ~w(script command runner exec)
+  @mcp_server_keys ~w(name command protocol_version)
   @agent_extra_keys ~w(depth text workflow_only model)
   @openai_model_keys ~w(api url model timeout_ms temperature key_env headers)
   @module_model_keys ~w(api module params)
@@ -594,10 +595,17 @@ defmodule Omunculus.Config do
   defp parse_mcp_servers(_servers), do: {:error, {:mcp, {:invalid, :servers}}}
 
   defp parse_mcp_server(data, acc) when is_map(data) do
-    with {:ok, name} <- mcp_string(data, "name"),
-         :ok <- check_unique_mcp_name(acc, name),
-         {:ok, command} <- mcp_command(data) do
-      {:ok, %{name: name, command: command}}
+    case Map.keys(data) -- @mcp_server_keys do
+      [key | _] ->
+        {:error, {:mcp, {:unknown_key, key}}}
+
+      [] ->
+        with {:ok, name} <- mcp_string(data, "name"),
+             :ok <- check_unique_mcp_name(acc, name),
+             {:ok, command} <- mcp_command(data),
+             {:ok, protocol_version} <- mcp_string(data, "protocol_version") do
+          {:ok, %{name: name, command: command, protocol_version: protocol_version}}
+        end
     end
   end
 

@@ -260,7 +260,11 @@ defmodule Omunculus.Tool.CatalogTest do
   end
 
   describe "MCP servers" do
-    @mcp_server %{name: "fake", command: [Path.expand("test/support/mcp_server")]}
+    @mcp_server %{
+      name: "fake",
+      command: [Path.expand("test/support/mcp_server")],
+      protocol_version: "2025-03-26"
+    }
 
     test "a server's tools/list becomes names in the catalog, tagged and carrying the server", %{
       project_dir: project_dir
@@ -306,7 +310,11 @@ defmodule Omunculus.Tool.CatalogTest do
     end
 
     test "a server that fails to list is skipped, not raised", %{project_dir: project_dir} do
-      broken = %{name: "broken", command: ["definitely-not-a-real-binary-xyz"]}
+      broken = %{
+        name: "broken",
+        command: ["definitely-not-a-real-binary-xyz"],
+        protocol_version: "2025-03-26"
+      }
 
       write_tool(project_dir, "read", """
       name = "read"
