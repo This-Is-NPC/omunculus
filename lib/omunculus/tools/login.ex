@@ -4,6 +4,8 @@ defmodule Omunculus.Tools.Login do
   """
 
   alias Omunculus.{Auth, Config, Harness, Project}
+  alias Omunculus.Execution.Policy
+  alias Omunculus.Tool.Catalog
   alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
@@ -78,9 +80,25 @@ defmodule Omunculus.Tools.Login do
   end
 
   defp tool_login(config, project, provider_id, login_name) do
-    ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil}
+    catalog = Catalog.discover(config.tools, config.mcp, nil)
+    workspace = %{name: nil, root: config.root}
 
     with :ok <- ensure_store(config),
+         {:ok, policy} <-
+           Policy.restricted(
+             config,
+             workspace,
+             config.root,
+             Catalog.implementation_roots(catalog)
+           ),
+         ctx =
+           %{
+             trigger: "cli",
+             run_id: nil,
+             author: "human",
+             agent: nil,
+             execution: %{policy | network: "host"}
+           },
          {:ok, out, _events} <- Harness.dispatch(project, login_name, %{}, ctx),
          true <- out.ok,
          {:ok, parsed} <- Jason.decode(out.output),

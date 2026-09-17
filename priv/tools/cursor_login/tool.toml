@@ -1,0 +1,11 @@
+name = "cursor_login"
+kind = "tool"
+shape = "simple"
+triggers = ["cli"]
+description = "Opens Cursor's browser login and stores the resulting credential."
+tags = ["cli", "auth"]
+groups = ["cli"]
+command = ["./run"]
+
+[parameters]
+type = "object"

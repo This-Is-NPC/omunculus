@@ -119,6 +119,7 @@ defmodule Omunculus.Config do
   @agent_extra_keys ~w(depth text workflow_only model)
   @openai_model_keys ~w(api url model timeout_ms temperature headers provider)
   @module_model_keys ~w(api module params)
+  @command_model_keys ~w(api command model provider params)
   @step_extra_keys ~w(name agent)
 
   @spec load(String.t()) :: {:ok, t} | {:error, term}
@@ -371,7 +372,7 @@ defmodule Omunculus.Config do
         with {:ok, root} <- parse_project(Map.get(data, "project"), config_dir),
              {:ok, execution} <- parse_execution(Map.get(data, "execution"), config_dir),
              {:ok, auth} <- parse_auth(Map.get(data, "auth"), config_dir),
-             {:ok, models} <- parse_models(Map.get(data, "models"), auth),
+             {:ok, models} <- parse_models(Map.get(data, "models"), auth, config_dir),
              {:ok, store} <- parse_store(Map.get(data, "store"), config_dir),
              {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), root),
              {:ok, agents} <- parse_agents(Map.get(data, "agents", %{}), models),
@@ -1005,6 +1006,7 @@ defmodule Omunculus.Config do
     |> expand_overlay_tools_paths(file_dir)
     |> expand_overlay_execution_paths(file_dir)
     |> expand_overlay_mcp_paths(file_dir)
+    |> expand_overlay_models_paths(file_dir)
   end
 
   defp expand_overlay_tools_paths(overlay, file_dir) do
@@ -1085,6 +1087,25 @@ defmodule Omunculus.Config do
           end)
 
         Map.put(overlay, "mcp", Map.put(mcp, "servers", servers))
+
+      _ ->
+        overlay
+    end
+  end
+
+  defp expand_overlay_models_paths(overlay, file_dir) do
+    case Map.get(overlay, "models") do
+      models when is_map(models) ->
+        models =
+          Map.new(models, fn
+            {name, %{"command" => command} = spec} when is_list(command) ->
+              {name, Map.put(spec, "command", expand_relative_commands(command, file_dir))}
+
+            entry ->
+              entry
+          end)
+
+        Map.put(overlay, "models", models)
 
       _ ->
         overlay
@@ -1415,20 +1436,20 @@ defmodule Omunculus.Config do
     end
   end
 
-  defp parse_models(nil, _auth), do: {:error, {:models, :missing}}
+  defp parse_models(nil, _auth, _config_dir), do: {:error, {:models, :missing}}
 
-  defp parse_models(data, auth) when is_map(data) do
+  defp parse_models(data, auth, config_dir) when is_map(data) do
     Enum.reduce_while(data, {:ok, %{}}, fn {name, spec}, {:ok, acc} ->
-      case parse_model(name, spec, auth) do
+      case parse_model(name, spec, auth, config_dir) do
         {:ok, model} -> {:cont, {:ok, Map.put(acc, name, model)}}
         {:error, _reason} = error -> {:halt, error}
       end
     end)
   end
 
-  defp parse_models(_data, _auth), do: {:error, {:models, :invalid}}
+  defp parse_models(_data, _auth, _config_dir), do: {:error, {:models, :invalid}}
 
-  defp parse_model(name, data, auth) when is_map(data) do
+  defp parse_model(name, data, auth, config_dir) when is_map(data) do
     case Map.get(data, "api") do
       "openai-completions" ->
         parse_openai_model(name, data, auth, "openai-completions", Omunculus.Model.OpenAI)
@@ -1445,6 +1466,9 @@ defmodule Omunculus.Config do
           Omunculus.Model.AnthropicMessages
         )
 
+      "command" ->
+        parse_command_model(name, data, auth, config_dir)
+
       "module" ->
         parse_module_model(name, data)
 
@@ -1456,7 +1480,8 @@ defmodule Omunculus.Config do
     end
   end
 
-  defp parse_model(name, _data, _auth), do: {:error, {:models, name, {:invalid, :api}}}
+  defp parse_model(name, _data, _auth, _config_dir),
+    do: {:error, {:models, name, {:invalid, :api}}}
 
   defp parse_openai_model(name, data, auth, api, module) do
     case Map.keys(data) -- @openai_model_keys do
@@ -1493,6 +1518,43 @@ defmodule Omunculus.Config do
         end
     end
   end
+
+  defp parse_command_model(name, data, auth, config_dir) do
+    case Map.keys(data) -- @command_model_keys do
+      [key | _] ->
+        {:error, {:models, name, {:unknown_key, key}}}
+
+      [] ->
+        with {:ok, command} <- model_command(data, config_dir),
+             {:ok, model} <- model_string(data, "model"),
+             {:ok, params} <- model_params(data),
+             {:ok, provider} <- model_optional_string(data, "provider"),
+             :ok <- validate_model_provider(provider, auth) do
+          input =
+            %{
+              "api" => "command",
+              "command" => command,
+              "model" => model,
+              "params" => params
+            }
+            |> maybe_put_model("provider", provider)
+
+          {:ok, %{api: "command", module: Omunculus.Model.Command, input: input}}
+        else
+          {:error, reason} -> {:error, {:models, name, reason}}
+        end
+    end
+  end
+
+  defp model_command(%{"command" => [_ | _] = command}, config_dir) do
+    if Enum.all?(command, &(is_binary(&1) and &1 != "")) do
+      {:ok, expand_relative_commands(command, config_dir)}
+    else
+      {:error, {:invalid, :command}}
+    end
+  end
+
+  defp model_command(_data, _config_dir), do: {:error, {:invalid, :command}}
 
   defp parse_module_model(name, data) do
     case Map.keys(data) -- @module_model_keys do

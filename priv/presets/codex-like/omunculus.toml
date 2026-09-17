@@ -20,9 +20,42 @@ path = ".omunculus/store.sqlite3"
 [tools]
 paths = ["../../tools", "./tools"]
 
+[auth]
+store = ".omunculus/auth.json"
+
+[auth.openai-codex]
+kind = "oauth-code"
+authorize_url = "https://auth.openai.com/oauth/authorize"
+token_url = "https://auth.openai.com/oauth/token"
+client_id = "app_EMoamEEZ73f0CkXaXp7hrann"
+scopes = ["openid", "profile", "email", "offline_access"]
+pkce = true
+authorize_params = { originator = "omunculus", codex_cli_simplified_flow = "true" }
+callback = { host = "localhost", port = 1455, path = "/auth/callback" }
+credential = { access = "access_token", refresh = "refresh_token", expires = "expires_in" }
+refresh = { token_url = "https://auth.openai.com/oauth/token" }
+
+[auth.cursor]
+kind = "tool"
+login = "cursor_login"
+refresh = "cursor_refresh"
+
 [models.fake]
 api = "module"
 module = "Omunculus.Model.Fake"
+
+[models.codex]
+provider = "openai-codex"
+api = "openai-responses"
+url = "https://chatgpt.com/backend-api/codex"
+model = "gpt-5-codex"
+timeout_ms = 120000
+
+[models.cursor]
+provider = "cursor"
+api = "command"
+command = ["./bridges/cursor-agent"]
+model = "composer-2.5"
 
 [agents.codex]
 depth = 0

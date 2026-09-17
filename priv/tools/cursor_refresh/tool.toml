@@ -1,0 +1,10 @@
+name = "cursor_refresh"
+kind = "tool"
+shape = "simple"
+triggers = ["harness"]
+description = "Refreshes a stored Cursor credential."
+tags = ["auth"]
+command = ["./run"]
+
+[parameters]
+type = "object"

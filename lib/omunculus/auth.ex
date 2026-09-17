@@ -164,7 +164,7 @@ defmodule Omunculus.Auth do
   defp refresh_token_url(%{refresh: %{token_url: url}}) when is_binary(url), do: url
   defp refresh_token_url(%{token_url: url}), do: url
 
-  defp refresh_tool(config, store, provider_id, %{refresh: refresh_name} = provider, record) do
+  defp refresh_tool(config, store, provider_id, %{refresh: refresh_name} = _provider, record) do
     catalog = Catalog.discover(config.tools, config.mcp, nil)
 
     case Map.fetch(catalog, refresh_name) do
@@ -183,10 +183,20 @@ defmodule Omunculus.Auth do
           config_path: config.path
         }
 
-        with {:ok, out} <- Invoke.call(manifest, input),
+        workspace = %{name: nil, root: config.root}
+
+        with {:ok, policy} <-
+               Omunculus.Execution.Policy.restricted(
+                 config,
+                 workspace,
+                 config.root,
+                 Catalog.implementation_roots(catalog)
+               ),
+             policy = %{policy | network: "host"},
+             {:ok, out} <- Invoke.call(manifest, input, policy),
              true <- out.ok,
              {:ok, parsed} <- Jason.decode(out.output),
-             {:ok, updated} <- map_token_response(parsed, provider, record),
+             {:ok, updated} <- tool_store_record(parsed, record),
              :ok <- write_record(store, provider_id, updated) do
           {:ok, updated}
         else
@@ -199,6 +209,31 @@ defmodule Omunculus.Auth do
           {:error, reason} ->
             {:error, reason}
         end
+    end
+  end
+
+  defp tool_store_record(parsed, record) when is_map(parsed) do
+    access = Map.get(parsed, "access")
+
+    if is_binary(access) and access != "" do
+      updated =
+        record
+        |> Map.put("access", access)
+        |> maybe_copy(parsed, "refresh")
+        |> maybe_copy(parsed, "expires_at")
+
+      {:ok, updated}
+    else
+      {:error, {:auth, :invalid_token_response, parsed}}
+    end
+  end
+
+  defp tool_store_record(parsed, _record), do: {:error, {:auth, :invalid_token_response, parsed}}
+
+  defp maybe_copy(record, source, key) do
+    case Map.get(source, key) do
+      value when is_binary(value) and value != "" -> Map.put(record, key, value)
+      _ -> record
     end
   end
 

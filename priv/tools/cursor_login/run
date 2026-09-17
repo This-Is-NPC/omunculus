@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""CLI login for Cursor: open loginDeepControl, poll, optional API-key exchange."""
+
+import hashlib
+import json
+import os
+import secrets
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+from datetime import datetime, timedelta, timezone
+
+LOGIN_URL = os.environ.get(
+    "OMUNCULUS_CURSOR_LOGIN_URL", "https://cursor.com/loginDeepControl"
+)
+POLL_URL = os.environ.get(
+    "OMUNCULUS_CURSOR_POLL_URL", "https://api2.cursor.sh/auth/poll"
+)
+EXCHANGE_URL = os.environ.get(
+    "OMUNCULUS_CURSOR_EXCHANGE_URL",
+    "https://api2.cursor.sh/auth/exchange_user_api_key",
+)
+NO_BROWSER = os.environ.get("OMUNCULUS_CURSOR_NO_BROWSER", "") == "1"
+POLL_SECONDS = int(os.environ.get("OMUNCULUS_CURSOR_POLL_SECONDS", "120"))
+
+
+def emit(ok, output):
+    json.dump({"ok": ok, "output": output, "emit": []}, sys.stdout)
+    sys.stdout.write("\n")
+
+
+def read_input():
+    raw = sys.stdin.read()
+    if not raw.strip():
+        return {}
+    return json.loads(raw)
+
+
+def b64url(data):
+    import base64
+
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def open_browser(url):
+    if NO_BROWSER:
+        return
+    for opener in ("xdg-open", "open"):
+        from shutil import which
+        from subprocess import run
+
+        path = which(opener)
+        if path:
+            run([path, url], check=False, capture_output=True)
+            return
+
+
+def http_json(url, method="GET", body=None):
+    data = None if body is None else json.dumps(body).encode("utf-8")
+    headers = {"accept": "application/json"}
+    if data is not None:
+        headers["content-type"] = "application/json"
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            raw = response.read()
+            if not raw:
+                return None
+            return json.loads(raw.decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        if error.code in {204, 404, 202}:
+            return None
+        detail = error.read().decode("utf-8", "replace")
+        raise RuntimeError(f"http {error.code}: {detail}") from error
+
+
+def credential_from(body):
+    access = (
+        body.get("access")
+        or body.get("accessToken")
+        or body.get("access_token")
+        or body.get("token")
+    )
+    if not isinstance(access, str) or not access:
+        return None
+    refresh = body.get("refresh") or body.get("refreshToken") or body.get("refresh_token")
+    expires = body.get("expires_at") or body.get("expiresAt")
+    if not expires:
+        seconds = body.get("expires_in") or body.get("expiresIn") or 3600
+        try:
+            seconds = int(seconds)
+        except (TypeError, ValueError):
+            seconds = 3600
+        expires = (
+            datetime.now(timezone.utc) + timedelta(seconds=seconds)
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    record = {"access": access, "expires_at": expires}
+    if isinstance(refresh, str) and refresh:
+        record["refresh"] = refresh
+    return record
+
+
+def poll(uuid_value, verifier):
+    query = urllib.parse.urlencode({"uuid": uuid_value, "verifier": verifier})
+    url = POLL_URL + ("&" if "?" in POLL_URL else "?") + query
+    deadline = time.time() + POLL_SECONDS
+    while time.time() < deadline:
+        body = http_json(url)
+        if isinstance(body, dict):
+            record = credential_from(body)
+            if record:
+                return record
+        time.sleep(0.2)
+    raise RuntimeError("poll timed out")
+
+
+def maybe_exchange(record):
+    token = record.get("refresh") or record.get("access")
+    if not token:
+        return record
+    try:
+        body = http_json(EXCHANGE_URL, method="POST", body={"apiKey": token})
+    except RuntimeError:
+        return record
+    if not isinstance(body, dict):
+        return record
+    exchanged = credential_from(body)
+    if not exchanged:
+        return record
+    if "refresh" not in exchanged and "refresh" in record:
+        exchanged["refresh"] = record["refresh"]
+    return exchanged
+
+
+def main():
+    try:
+        payload = read_input()
+    except json.JSONDecodeError:
+        emit(False, "invalid json")
+        return
+    args = payload.get("args") or {}
+    login_uuid = args.get("uuid") or str(uuid.uuid4())
+    verifier = args.get("verifier") or secrets.token_urlsafe(32)
+    challenge = b64url(hashlib.sha256(verifier.encode("utf-8")).digest())
+    query = urllib.parse.urlencode(
+        {"challenge": challenge, "uuid": login_uuid, "mode": "login"}
+    )
+    url = LOGIN_URL + ("&" if "?" in LOGIN_URL else "?") + query
+    open_browser(url)
+    try:
+        record = poll(login_uuid, verifier)
+        record = maybe_exchange(record)
+        emit(True, json.dumps(record))
+    except Exception as error:  # noqa: BLE001 — tool output is the error string
+        emit(False, str(error))
+
+
+if __name__ == "__main__":
+    main()

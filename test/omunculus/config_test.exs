@@ -2253,6 +2253,39 @@ defmodule Omunculus.ConfigAuthTest do
     assert config.models["local"].input["url"] == "http://localhost:8080/v1"
   end
 
+  test "command loads the command adapter", %{dir: dir} do
+    write_toml(dir, """
+    [models.local]
+    api = "command"
+    command = ["./bridges/cursor-agent"]
+    model = "composer-2.5"
+
+    [agents.concierge]
+    depth = 0
+    model = "local"
+    text = "hi"
+    """)
+
+    assert {:ok, config} = load(dir)
+    assert config.models["local"].api == "command"
+    assert config.models["local"].module == Omunculus.Model.Command
+    assert hd(config.models["local"].input["command"]) == Path.expand("bridges/cursor-agent", dir)
+    assert config.models["local"].input["model"] == "composer-2.5"
+  end
+
+  test "codex-like preset loads public Codex oauth and Cursor tools" do
+    path = Application.app_dir(:omunculus, "priv/presets/codex-like/omunculus.toml")
+    assert {:ok, config} = Config.load(path)
+    provider = config.auth.providers["openai-codex"]
+    assert provider.kind == "oauth-code"
+    assert provider.authorize_url == "https://auth.openai.com/oauth/authorize"
+    assert config.auth.providers["cursor"].kind == "tool"
+    assert config.auth.providers["cursor"].login == "cursor_login"
+    assert config.models["codex"].api == "openai-responses"
+    assert config.models["cursor"].api == "command"
+    assert config.models["cursor"].module == Omunculus.Model.Command
+  end
+
   test "openai-responses loads the responses adapter", %{dir: dir} do
     write_toml(dir, """
     [models.local]

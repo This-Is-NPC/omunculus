@@ -26,7 +26,7 @@ The core is `lib/omunculus/`. Read these modules first, in this order.
 | `Omunculus.Sandbox` | Runs the code the model submits inside the execution sandbox and answers each `tools.<name>(args)` call it makes. |
 | `Omunculus.Execution.*` | Starts every external process through Bubblewrap under an immutable per-run policy, with concurrency, queue, timeout and output limits. |
 | `Omunculus.Mcp` | JSON-RPC to one MCP server, run through the execution sandbox, for discovery and calls. |
-| `Omunculus.Model.Fake`, `Battery`, `OpenAI`, `OpenAIResponses`, `AnthropicMessages` | Model adapters. `fake` echoes the first prompt line. `battery` is the scripted "count to 5" model. `openai` posts to `/chat/completions`, `openai-responses` to `/responses`, `anthropic-messages` to `/messages`. |
+| `Omunculus.Model.Fake`, `Battery`, `OpenAI`, `OpenAIResponses`, `AnthropicMessages`, `Command` | Model adapters. `fake` echoes the first prompt line. `battery` is the scripted "count to 5" model. `openai` posts to `/chat/completions`, `openai-responses` to `/responses`, `anthropic-messages` to `/messages`. `command` runs an external program over the sandbox NDJSON protocol. |
 
 ### The run cycle
 
