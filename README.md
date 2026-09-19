@@ -85,3 +85,7 @@ mise run validate:sandbox      # needs a host where Bubblewrap can unshare
 
 The [benchmark guide](bench/README.md) measures resident capacity by adding
 one real run at a time.
+
+## License
+
+Omunculus is available under the [MIT License](LICENSE).
