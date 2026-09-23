@@ -2,9 +2,12 @@ defmodule Omunculus.Store.Actions.Sequence do
   @moduledoc """
   Sequence actions of spec §3.4: `continue` moves a work to the next
   workflow stage, or closes it on the last stage or when its depth has no
-  workflow; `break` parks it with a comment; both reopen a parent waiting
-  on the work and name it as `parent_id` in their event. `delegate` opens
-  a child with its title and goal and parks the parent on it. Those three
+  workflow; `break` parks it with a comment. A `break` reopens a parent
+  waiting on its children at once; closing a work reopens it once none of
+  its children is left undone; either names the reopened parent as
+  `parent_id` in its event. `delegate` opens a child with its title and
+  goal and parks the parent on its children; unnamed, the child's agent
+  is the first stage's agent or the depth's first agent. Those three
   need a work already linked to the run. `end` appends the `end` event
   that ends the run and needs only the run.
   `finish_work/3` is the harness-side counterpart of `continue`'s last
@@ -42,16 +45,14 @@ defmodule Omunculus.Store.Actions.Sequence do
   def delegate(conn, body, ctx) do
     with :ok <- ensure_context(:delegate, ctx),
          :ok <- Helpers.ensure_no_forbidden(:delegate, body),
-         :ok <- ensure_title(body),
+         :ok <- Helpers.ensure_title(:delegate, body),
          :ok <- Helpers.ensure_goal(:delegate, body),
          {:ok, parent} <- fetch_work(:delegate, conn, ctx.work_id),
          child_depth = View.work_depth(conn, parent) + 1,
          {:ok, {stage, assignee}} <-
            Helpers.tag_error(
              :delegate,
-             Helpers.stage_and_assignee(ctx.config, child_depth, fn ->
-               depth_agent(ctx.config, child_depth)
-             end)
+             Helpers.stage_and_assignee(ctx.config, child_depth, body["agent"])
            ),
          {:ok, workspace} <-
            Helpers.tag_error(
@@ -98,9 +99,6 @@ defmodule Omunculus.Store.Actions.Sequence do
   defp ensure_body_text(_tag, %{"body" => text}) when is_binary(text) and text != "", do: :ok
   defp ensure_body_text(tag, _body), do: {:error, {tag, :no_body}}
 
-  defp ensure_title(%{"title" => title}) when is_binary(title) and title != "", do: :ok
-  defp ensure_title(_body), do: {:error, {:delegate, :no_title}}
-
   defp fetch_work(tag, conn, work_id) do
     case Helpers.fetch_work(conn, work_id) do
       {:ok, nil} -> {:error, {tag, {:missing, :works, work_id}}}
@@ -117,13 +115,6 @@ defmodule Omunculus.Store.Actions.Sequence do
     case Config.workflow_for(config, View.work_depth(conn, work)) do
       {:ok, steps} -> Helpers.tag_error(:continue, Config.next_step(steps, work.stage))
       :off -> {:ok, nil}
-    end
-  end
-
-  defp depth_agent(config, depth) do
-    case Config.agent_at_depth(config, depth) do
-      {:ok, {name, _agent}} -> {:ok, name}
-      {:error, _reason} = error -> error
     end
   end
 
@@ -160,29 +151,44 @@ defmodule Omunculus.Store.Actions.Sequence do
              Events.now(),
              work.id
            ]) do
-      reopen_waiting_parent(conn, work)
+      reopen_waiting_parent(conn, work, :all_done)
     end
   end
 
-  defp reopen_waiting_parent(_conn, %{parent_id: nil}), do: {:ok, nil}
+  # A child that closes wakes its waiting parent once no sibling is left
+  # undone; a child that breaks wakes it at once.
+  defp reopen_waiting_parent(_conn, %{parent_id: nil}, _when_to), do: {:ok, nil}
 
-  defp reopen_waiting_parent(conn, %{parent_id: parent_id, id: work_id}) do
-    case Helpers.fetch_work(conn, parent_id) do
-      {:ok, %{waiting: "child", waiting_for: ^work_id} = parent} ->
-        with :ok <- Helpers.reopen_work(conn, parent.id), do: {:ok, parent_id}
-
-      {:ok, _parent} ->
+  defp reopen_waiting_parent(conn, %{parent_id: parent_id}, when_to) do
+    with {:ok, parent} <- Helpers.fetch_work(conn, parent_id),
+         {:ok, wake?} <- wake_parent?(conn, parent, when_to) do
+      if wake? do
+        with :ok <- Helpers.reopen_work(conn, parent_id), do: {:ok, parent_id}
+      else
         {:ok, nil}
-
-      {:error, _reason} = error ->
-        error
+      end
     end
   end
+
+  defp wake_parent?(_conn, %{waiting: "child"}, :now), do: {:ok, true}
+
+  defp wake_parent?(conn, %{waiting: "child", id: parent_id}, :all_done) do
+    with {:ok, row} <-
+           Query.one(
+             conn,
+             "SELECT COUNT(*) AS undone FROM works WHERE parent_id = ? AND state != 'done'",
+             [parent_id]
+           ) do
+      {:ok, row.undone == 0}
+    end
+  end
+
+  defp wake_parent?(_conn, _parent, _when_to), do: {:ok, false}
 
   defp apply_break(conn, ctx, body, work) do
     comment_id = Id.new()
 
-    with {:ok, parent_id} <- reopen_waiting_parent(conn, work),
+    with {:ok, parent_id} <- reopen_waiting_parent(conn, work, :now),
          {:ok, event} <-
            Events.append(conn, %{
              type: "break",
@@ -236,8 +242,8 @@ defmodule Omunculus.Store.Actions.Sequence do
          :ok <-
            Query.exec(
              conn,
-             "UPDATE works SET state = 'waiting', waiting = 'child', waiting_for = ?, waiting_from = ?, updated_at = ? WHERE id = ?",
-             [child_id, ctx.agent, Events.now(), parent.id]
+             "UPDATE works SET state = 'waiting', waiting = 'child', waiting_from = ?, updated_at = ? WHERE id = ?",
+             [ctx.agent, Events.now(), parent.id]
            ) do
       {:ok, event}
     end

@@ -97,7 +97,7 @@ assemble = "assemble"
 [agents.concierge]
 depth = 0
 model = "fake"
-tools = ["break", "catalog", "continue", "delegate", "end", "fs.read", "reply", "store"]
+tools = ["break", "catalog", "continue", "delegate", "end", "fs.read", "reply", "store", "work"]
 text = """
 You are the project concierge.
 """
@@ -123,8 +123,8 @@ Each ceiling layer, and a workflow, may override three keys of a tool's
 manifest under `overrides.<tool>`:
 
 ```toml
-[policy.overrides.done]
-schema = "short"
+[policy.depth.0.overrides.work]
+schema = "staged"
 
 [policy.depth.1.overrides.done]
 then = []

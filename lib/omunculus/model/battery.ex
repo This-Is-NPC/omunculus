@@ -3,21 +3,21 @@ defmodule Omunculus.Model.Battery do
   The bench model of spec §6, the "count to 5" scenario: decides only
   from what it can see in the assembled prompt — the cards under
   `## Tools`, the presence of `## Work`, the text under `## Last
-  comment` and the agent's own first line — opening the work when there
-  is none, delegating when it can, handing the new work to its next run
-  when it can `end` but not delegate, counting to 5 with `counter`
-  otherwise, delegating one more floor down when it still cannot count
-  and has not already (marked by its own "delegated" comment, so a later
+  comment` and the agent's own first line — opening the work with `work`
+  when there is none, counting to 5 with `counter` when it can,
+  delegating one floor down with `work` when it still cannot count and
+  has not already (marked by its own "delegated" report, so a later
   reopening of the same work does not delegate again), reviewing a
   finished count on the next opening, and reacting as an observer when
-  addressed as one. It calls `end` after `delegate` when it has the card,
-  and concludes a count or a review with `done` when it has the card,
-  otherwise with `continue` and then `end` when it has that card.
+  addressed as one. It concludes a count or a review with `done` when it
+  has the card, otherwise with `continue` and then `end` when it has that
+  card.
   """
 
   @counted "counted to 5"
   @delegated "delegated"
-  @goal "count with counter to 5"
+  @opened "opened"
+  @count_work %{"title" => "Count to 5", "goal" => "count with counter to 5"}
 
   @spec new(map) ::
           (String.t(),
@@ -36,25 +36,16 @@ defmodule Omunculus.Model.Battery do
   end
 
   defp decide(%{work: false, cards: cards} = parsed, call) do
-    if MapSet.member?(cards, "work"), do: open_work(parsed, call), else: count(parsed, call)
+    if MapSet.member?(cards, "work"),
+      do: create_work(call, @opened),
+      else: count(parsed, call)
   end
 
   defp decide(parsed, call), do: count(parsed, call)
 
-  defp open_work(%{cards: cards} = parsed, call) do
-    call.("work", %{"title" => "Count to 5", "goal" => @goal})
-
-    cond do
-      MapSet.member?(cards, "delegate") ->
-        delegate_down(cards, call)
-
-      MapSet.member?(cards, "end") ->
-        call.("end", %{})
-        {:ok, "opened"}
-
-      true ->
-        count(%{parsed | work: true}, call)
-    end
+  defp create_work(call, report) do
+    call.("work", %{"report" => report, "works" => [@count_work]})
+    {:ok, report}
   end
 
   defp count(%{cards: cards} = parsed, call) do
@@ -70,13 +61,6 @@ defmodule Omunculus.Model.Battery do
     else
       review(parsed, call)
     end
-  end
-
-  defp delegate_down(cards, call) do
-    if MapSet.member?(cards, "comment"), do: call.("comment", %{"body" => @delegated})
-    call.("delegate", %{"title" => "Count to 5", "goal" => @goal})
-    end_run(cards, call)
-    {:ok, @delegated}
   end
 
   defp conclude(cards, call, report) do
@@ -107,8 +91,8 @@ defmodule Omunculus.Model.Battery do
         conclude(cards, call, "reviewed")
         {:ok, "reviewed"}
 
-      MapSet.member?(cards, "delegate") and not delegated?(comment) ->
-        delegate_down(cards, call)
+      MapSet.member?(cards, "work") and not delegated?(comment) ->
+        create_work(call, @delegated)
 
       true ->
         observe(parsed, call)

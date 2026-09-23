@@ -3,14 +3,14 @@ defmodule Omunculus.Store.Actions.Helpers do
   Shared machinery between `Actions` and `Actions.Sequence`: existence
   checks and error tagging (spec §8.3), the `COMMENTS` insert every
   action that writes one reuses, reopening a waiting work, a new work's
-  depth and its stage/assignee from the workflow, resolving its
-  `workspace` from a given name, its parent, or the project's default
-  (spec §9.1), inserting the `WORKS` row itself, and the ancestor grants
-  walk of spec §5.
+  stage and assignee from the workflow, the named agent or the depth's
+  first agent, resolving its `workspace` from a given name, its parent,
+  or the project's default (spec §9.1), inserting the `WORKS` row itself,
+  and the ancestor grants walk of spec §5.
   """
 
   alias Omunculus.Config
-  alias Omunculus.Store.{Events, Query, View}
+  alias Omunculus.Store.{Events, Query}
 
   @forbidden ~w(stage agent model)
 
@@ -35,11 +35,20 @@ defmodule Omunculus.Store.Actions.Helpers do
 
   @spec ensure_no_forbidden(atom, map) :: :ok | {:error, {atom, {:forbidden, String.t()}}}
   def ensure_no_forbidden(tag, body) do
-    case Enum.find(@forbidden, &Map.has_key?(body, &1)) do
+    case Enum.find(forbidden(tag), &Map.has_key?(body, &1)) do
       nil -> :ok
       key -> {:error, {tag, {:forbidden, key}}}
     end
   end
+
+  # `work` and `delegate` may name the new work's agent; `stage_and_assignee`
+  # checks it against the TOML.
+  defp forbidden(tag) when tag in [:work, :delegate], do: @forbidden -- ["agent"]
+  defp forbidden(_tag), do: @forbidden
+
+  @spec ensure_title(atom, map) :: :ok | {:error, {atom, :no_title}}
+  def ensure_title(_tag, %{"title" => title}) when is_binary(title) and title != "", do: :ok
+  def ensure_title(tag, _body), do: {:error, {tag, :no_title}}
 
   @spec ensure_goal(atom, map) :: :ok | {:error, {atom, :no_goal}}
   def ensure_goal(_tag, %{"goal" => goal}) when is_binary(goal) and goal != "", do: :ok
@@ -73,24 +82,23 @@ defmodule Omunculus.Store.Actions.Helpers do
     )
   end
 
-  @spec depth_at(Exqlite.Sqlite3.db(), String.t() | nil) ::
-          {:ok, non_neg_integer} | {:error, term}
-  def depth_at(_conn, nil), do: {:ok, 0}
-
-  def depth_at(conn, parent_id) do
-    case Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id]) do
-      {:ok, nil} -> {:error, {:missing, :works, parent_id}}
-      {:ok, parent} -> {:ok, View.work_depth(conn, parent) + 1}
-      {:error, _reason} = error -> error
-    end
-  end
-
-  @spec stage_and_assignee(Config.t(), non_neg_integer, (-> {:ok, String.t()} | {:error, term})) ::
+  @spec stage_and_assignee(Config.t(), non_neg_integer, String.t() | nil) ::
           {:ok, {String.t() | nil, String.t()}} | {:error, term}
-  def stage_and_assignee(config, depth, fallback_agent) do
-    case Config.workflow_for(config, depth) do
-      {:ok, [step | _rest]} -> {:ok, {step.name, step.agent}}
-      :off -> with {:ok, agent} <- fallback_agent.(), do: {:ok, {nil, agent}}
+  def stage_and_assignee(config, depth, agent) do
+    case {Config.workflow_for(config, depth), agent} do
+      {{:ok, [step | _rest]}, nil} ->
+        {:ok, {step.name, step.agent}}
+
+      {{:ok, _steps}, _agent} ->
+        {:error, :agent_with_workflow}
+
+      {:off, nil} ->
+        with {:ok, {name, _agent}} <- Config.agent_at_depth(config, depth), do: {:ok, {nil, name}}
+
+      {:off, agent} ->
+        if List.keymember?(Config.agents_at_depth(config, depth), agent, 0),
+          do: {:ok, {nil, agent}},
+          else: {:error, {:agent_not_allowed, agent}}
     end
   end
 

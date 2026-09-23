@@ -1,8 +1,9 @@
 defmodule Omunculus.Tools.Assemble do
   @moduledoc """
   Builtin `assemble` tool: builds the assembled prompt of a run from
-  the hydrated views: the work's title and goal, its last comment, and
-  the cards, which follow `pinned` on the catalog view.
+  the hydrated views: the work's title and goal, its last comment, the
+  agents the `agents` view says a new work may name when the run has the
+  `work` card, and the cards, which follow `pinned` on the catalog view.
   Inbox is included only when the opening carried `inbox_id`.
   """
 
@@ -20,6 +21,7 @@ defmodule Omunculus.Tools.Assemble do
         comment_section(last_comment(view["comments.work"])) ++
         request_section(view["request"], view["comments.request"]) ++
         inbox_section(view, args) ++
+        agents_section(view["agents"] || [], view["catalog"] || []) ++
         [tools_section(view["catalog"] || [])]
 
     Out.ok(Enum.join(sections, "\n\n"))
@@ -46,6 +48,14 @@ defmodule Omunculus.Tools.Assemble do
       _other ->
         []
     end
+  end
+
+  defp agents_section([], _cards), do: []
+
+  defp agents_section(agents, cards) do
+    if Enum.any?(cards, &(&1.name == "work")),
+      do: ["## Agents\n" <> Enum.map_join(agents, "\n", &"- #{&1}")],
+      else: []
   end
 
   defp request_section(nil, _comments), do: []

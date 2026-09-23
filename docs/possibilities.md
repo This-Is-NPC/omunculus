@@ -12,8 +12,8 @@ required table is still a refusal, not an implied default.
 
 ## 1. One agent, no work
 
-A single depth-0 agent. `send` opens a run; there is no `delegate` and no
-sequence. The model reads and edits, and asks when `sandbox.write` is not have.
+A single depth-0 agent. `send` opens a run; there is no work below it and
+no workflow. The model reads and edits, and asks when `sandbox.write` is not have.
 This is the `pi-like` preset, minus the Anthropic login.
 
 ```mermaid
@@ -52,13 +52,18 @@ workflow, `continue` closes it and `break` parks it with a comment; a later
 `[workflows.*]` turns `continue` into a stage walk without rewriting the agent.
 `end`, also in `sequence`, ends the run; neither `continue` nor `break` does.
 `done`, in `sequence` too, chains `comment` with its report, `continue` and
-`end` in one call.
+`end` in one call. `work`, also there, opens the root work from the run `send`
+opened and ends that run; the root's run follows.
 
 ## 2. Concierge that delegates
 
-Depth 0 talks to you. Depth 1 does the work. The child is a `delegate` emit, not
-a second CLI. The parent waits (`waiting = child`) until the child is `done`.
-The default preset is this, with a reviewer parked behind `workflow_only`.
+Depth 0 talks to you. Depth 1 does the work. The concierge calls `work` with a
+report and the works to create: from the run `send` opened it creates the root
+work, and from the root's run it chains one `delegate` per child, not a second
+CLI. The parent waits (`waiting = child`) until all its children are `done`.
+Each item may name the child's `agent` among the depth-1 agents the prompt
+lists under `## Agents`. The default preset is this, with a reviewer parked
+behind `workflow_only`.
 
 ```mermaid
 flowchart TB
@@ -73,8 +78,8 @@ flowchart TB
     end
     store[(one store)]
     person -->|CLI| send --> concierge
-    concierge -->|delegate| worker
-    worker -->|"waiting = child until done"| concierge
+    concierge -->|"work → delegate"| worker
+    worker -->|"waiting = child until all done"| concierge
     concierge --- store
     worker --- store
 ```
@@ -87,9 +92,9 @@ module = "Omunculus.Model.Fake"
 [agents.concierge]
 depth = 0
 model = "fake"
-tools = ["break", "catalog", "continue", "delegate", "end", "fs.read", "reply", "store"]
+tools = ["break", "catalog", "continue", "delegate", "end", "fs.read", "reply", "store", "work"]
 text = """
-You are the project concierge. Read the message and delegate when the work is a job, then end the run.
+You are the project concierge. Read the message and call work with a report and the works to create.
 """
 
 [agents.worker]
@@ -165,9 +170,14 @@ Depth can choose a different workflow than `[policy]`:
 ```toml
 [policy.depth.1]
 workflow = "delivery"
+
+[policy.depth.0.overrides.work]
+schema = "staged"
 ```
 
-Unnamed depths stay off the sequence.
+Unnamed depths stay off the sequence. On a depth with a workflow the stages
+name the agents: the store refuses an `agent` on the works created there, and
+the `staged` schema of `work` lets the depth above leave it out.
 
 ## 4. Three floors
 
@@ -188,8 +198,8 @@ flowchart TB
     end
     store[(store)]
     person -->|send / reply| concierge
-    concierge -->|delegate| manager
-    manager -->|delegate| worker
+    concierge -->|"work → delegate"| manager
+    manager -->|"work → delegate"| worker
     worker -->|request with nobody above at 0| person
     concierge --- store
     manager --- store
@@ -200,12 +210,12 @@ flowchart TB
 [agents.concierge]
 depth = 0
 model = "fake"
-tools = ["catalog", "delegate", "end", "reply", "store"]
+tools = ["catalog", "delegate", "end", "reply", "store", "work"]
 
 [agents.manager]
 depth = 1
 model = "fake"
-tools = ["comment", "delegate", "end", "notify", "reply"]
+tools = ["comment", "delegate", "end", "notify", "reply", "work"]
 
 [agents.worker]
 depth = 2

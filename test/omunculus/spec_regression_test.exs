@@ -470,14 +470,14 @@ defmodule Omunculus.SpecRegressionTest do
     assert second_start < hook_at.("on-end")
   end
 
-  test "delegate does not end the run: its hook runs at once and the child opens after the close",
+  test "work with then = [] does not end the run: the delegate hook runs at once and the child opens after the close",
        %{project: p} do
     write_config(
       p,
       String.replace(
         @config,
         ~s("sandbox.network", "end"]),
-        ~s("sandbox.network", "end", "delegate"])
+        ~s("sandbox.network", "end", "delegate"]\noverrides.work.then = [])
       )
     )
 
@@ -489,12 +489,17 @@ defmodule Omunculus.SpecRegressionTest do
         not String.starts_with?(assembled, "concierge") ->
           {:ok, "child done"}
 
-        assembled =~ "delegated" ->
+        assembled =~ "still here" ->
           {:ok, "child is back"}
 
         true ->
-          assert {:ok, _} = call.("delegate", %{"title" => "child", "goal" => "child goal"})
-          assert {:ok, _} = call.("comment", %{"body" => "delegated", "work_id" => parent})
+          assert {:ok, _} =
+                   call.("work", %{
+                     "report" => "delegated",
+                     "works" => [%{"title" => "child", "goal" => "child goal"}]
+                   })
+
+          assert {:ok, _} = call.("comment", %{"body" => "still here"})
           {:ok, "delegated"}
       end
     end)
@@ -564,7 +569,7 @@ defmodule Omunculus.SpecRegressionTest do
     end
   end
 
-  test "a workflow work created before end opens with its first agent and ceiling", %{
+  test "a workflow work created by work opens with its first agent and ceiling", %{
     project: p
   } do
     write_config(
@@ -585,9 +590,12 @@ defmodule Omunculus.SpecRegressionTest do
         refute Enum.any?(tools, &(&1.name == "write"))
         {:ok, "first stage"}
       else
-        call.("work", %{"title" => "stage handoff", "goal" => "stage handoff"})
-        call.("end", %{})
-        flunk("end must end the old run")
+        call.("work", %{
+          "report" => "handed off",
+          "works" => [%{"title" => "stage handoff", "goal" => "stage handoff"}]
+        })
+
+        flunk("work must end the old run")
       end
     end)
 

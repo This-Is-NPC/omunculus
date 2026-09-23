@@ -187,7 +187,7 @@ defmodule Omunculus.HarnessTest do
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["work", "viewer", "sandbox.network"]
+    tools = ["work", "end", "viewer", "sandbox.network"]
     """)
 
     write_tool(
@@ -213,8 +213,14 @@ defmodule Omunculus.HarnessTest do
     project = open_project(dir)
     message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
 
-    model = fn _assembled, _tools, call ->
-      assert {:ok, ""} = call.("work", %{"title" => "Fix the parser", "goal" => "Fix the parser"})
+    model = fn assembled, _tools, call ->
+      unless assembled =~ "## Work",
+        do:
+          call.("work", %{
+            "report" => "opened",
+            "works" => [%{"title" => "Fix the parser", "goal" => "Fix the parser"}]
+          })
+
       call.("viewer", %{})
     end
 
@@ -223,9 +229,11 @@ defmodule Omunculus.HarnessTest do
     assert {:ok, run} = Run.open(project, open(message_id))
 
     assert {:ok, [event]} =
-             Query.all(project.conn, "SELECT * FROM events WHERE type = 'model' AND run_id = ?", [
-               run.id
-             ])
+             Query.all(
+               project.conn,
+               "SELECT * FROM events WHERE type = 'model' AND run_id IN (SELECT id FROM runs WHERE work_id IS NOT NULL AND id != ?)",
+               [run.id]
+             )
 
     assert event.body == "yes"
 

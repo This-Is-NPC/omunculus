@@ -29,7 +29,7 @@ defmodule Omunculus.Tools.DelegateTest do
            }
   end
 
-  test "does not forward stage or agent from args" do
+  test "forwards an agent but not a stage" do
     input = %{
       @input
       | args: %{
@@ -46,7 +46,11 @@ defmodule Omunculus.Tools.DelegateTest do
              "emit" => [
                %{
                  "type" => "delegate",
-                 "body" => %{"title" => "review the design", "goal" => "please take a look"}
+                 "body" => %{
+                   "title" => "review the design",
+                   "goal" => "please take a look",
+                   "agent" => "worker"
+                 }
                }
              ]
            }
@@ -94,11 +98,11 @@ defmodule Omunculus.Tools.DelegateTest do
            }
   end
 
-  test "the builtin catalog discovers delegate with triggers == [\"model\"]" do
+  test "the builtin catalog discovers delegate as a chain step only" do
     catalog = Catalog.unconfigured()
 
     assert %{"delegate" => manifest} = catalog
-    assert manifest.triggers == ["model"]
+    assert manifest.triggers == ["chain"]
   end
 
   test "the manifest wiring yields the same emit as calling the module directly" do

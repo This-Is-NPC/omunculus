@@ -111,10 +111,9 @@ defmodule Omunculus.Store.ActionsTest do
 
   defp waiting_parent_and_child(conn, stage) do
     parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
-    child_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, stage: stage})
 
-    :ok =
-      Query.exec(conn, "UPDATE works SET waiting_for = ? WHERE id = ?", [child_id, parent_id])
+    child_id =
+      Fixtures.insert(conn, :works, %{parent_id: parent_id, stage: stage, assignee: "worker"})
 
     {parent_id, child_id}
   end
@@ -437,314 +436,148 @@ defmodule Omunculus.Store.ActionsTest do
     assert count(conn, "events") == 0
   end
 
-  test "work creates a row, its event, and links them", %{conn: conn} do
-    ctx = %{@ctx | agent: "concierge"}
+  describe "work action" do
+    defp work_emit(body),
+      do: %{"type" => "work", "body" => Map.merge(%{"goal" => "g", "report" => "r"}, body)}
 
-    assert {:ok, [_tool_event, event]} =
-             record_tool(
-               conn,
-               [%{"type" => "work", "body" => %{"title" => "Ship the store", "goal" => "g"}}],
-               ctx
-             )
+    test "creates a root work with the report as its first comment and marks it to start", %{
+      conn: conn
+    } do
+      run_id = Fixtures.insert(conn, :runs, %{work_id: nil})
+      ctx = %{@ctx | run_id: run_id}
 
-    assert event.type == "work"
-    assert event.work_id != nil
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [work_emit(%{"title" => "Ship the store", "report" => "planned"})],
+                 ctx
+               )
 
-    assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
-    assert work.title == "Ship the store"
-    assert work.goal == "g"
-    assert work.assignee == "concierge"
-    assert work.state == "open"
-    assert work.parent_id == nil
-    assert work.event_id == event.id
-  end
+      assert event.type == "work"
+      assert Jason.decode!(event.body)["start"] == true
 
-  test "work creates a child of an existing parent", %{conn: conn} do
-    parent_id = Fixtures.insert(conn, :works)
+      assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
+      assert work.title == "Ship the store"
+      assert work.goal == "g"
+      assert work.assignee == "concierge"
+      assert work.stage == nil
+      assert work.state == "open"
+      assert work.parent_id == nil
+      assert work.event_id == event.id
 
-    assert {:ok, [_tool_event, event]} =
-             record_tool(
-               conn,
-               [
-                 %{
-                   "type" => "work",
-                   "body" => %{"title" => "child", "goal" => "g", "parent_id" => parent_id}
-                 }
-               ],
-               @ctx
-             )
+      assert {:ok, [comment]} =
+               Query.all(conn, "SELECT * FROM comments WHERE work_id = ?", [event.work_id])
 
-    assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
-    assert work.parent_id == parent_id
-  end
+      assert comment.body == "planned"
+      assert comment.id == event.comment_id
+      assert comment.run_id == run_id
 
-  test "work with a non-existent parent is rejected and writes nothing", %{conn: conn} do
-    assert {:error, {:work, {:missing, :works, "nope"}}} =
-             record_tool(
-               conn,
-               [
-                 %{
-                   "type" => "work",
-                   "body" => %{"title" => "child", "goal" => "g", "parent_id" => "nope"}
-                 }
-               ],
-               @ctx
-             )
-
-    assert count(conn, "works") == 0
-    assert count(conn, "events") == 0
-  end
-
-  test "work without a title is rejected", %{conn: conn} do
-    assert {:error, {:work, :no_title}} =
-             record_tool(conn, [%{"type" => "work", "body" => %{}}], @ctx)
-
-    assert count(conn, "works") == 0
-    assert count(conn, "events") == 0
-  end
-
-  test "work without a goal is rejected and writes nothing", %{conn: conn} do
-    for body <- [%{"title" => "Ship the store"}, %{"title" => "Ship the store", "goal" => ""}] do
-      assert {:error, {:work, :no_goal}} =
-               record_tool(conn, [%{"type" => "work", "body" => body}], @ctx)
+      assert {:ok, run} = Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id])
+      assert run.work_id == event.work_id
     end
 
-    assert count(conn, "works") == 0
-    assert count(conn, "events") == 0
-  end
+    test "a second work in the same run does not overwrite runs.work_id", %{conn: conn} do
+      run_id = Fixtures.insert(conn, :runs, %{work_id: nil})
+      ctx = %{@ctx | run_id: run_id}
 
-  test "work update changes the title and goal and appends a second work event", %{
-    conn: conn
-  } do
-    work_id = Fixtures.insert(conn, :works, %{title: "old"})
+      assert {:ok, [_tool_event, first_event]} =
+               record_tool(conn, [work_emit(%{"title" => "first"})], ctx)
 
-    assert {:ok, [_tool_event, event]} =
-             record_tool(
-               conn,
-               [
-                 %{
-                   "type" => "work",
-                   "body" => %{"title" => "new", "goal" => "g", "work_id" => work_id}
-                 }
-               ],
-               @ctx
-             )
+      assert {:ok, [_tool_event, _second_event]} =
+               record_tool(conn, [work_emit(%{"title" => "second"})], ctx)
 
-    assert event.type == "work"
-    assert event.work_id == work_id
+      assert {:ok, run} = Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id])
+      assert run.work_id == first_event.work_id
+    end
 
-    assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
-    assert work.title == "new"
-    assert work.goal == "g"
-    assert work.updated_at != nil
+    test "without a title, a goal or a report it is rejected and writes nothing", %{conn: conn} do
+      for {body, reason} <- [
+            {%{}, :no_title},
+            {%{"title" => "t", "goal" => ""}, :no_goal},
+            {%{"title" => "t", "report" => ""}, :no_report}
+          ] do
+        assert {:error, {:work, ^reason}} = record_tool(conn, [work_emit(body)], @ctx)
+      end
 
-    assert {:ok, events} = Query.all(conn, "SELECT * FROM events WHERE type = 'work'")
-    assert length(events) == 1
-  end
+      assert count(conn, "works") == 0
+      assert count(conn, "comments") == 0
+      assert count(conn, "events") == 0
+    end
 
-  test "work update of a missing work is rejected", %{conn: conn} do
-    assert {:error, {:work, {:missing, :works, "nope"}}} =
-             record_tool(
-               conn,
-               [
-                 %{
-                   "type" => "work",
-                   "body" => %{"title" => "new", "goal" => "g", "work_id" => "nope"}
-                 }
-               ],
-               @ctx
-             )
+    test "is rejected when the body carries stage or model", %{conn: conn} do
+      for key <- ["stage", "model"] do
+        assert {:error, {:work, {:forbidden, ^key}}} =
+                 record_tool(conn, [work_emit(%{"title" => "x", key => "v"})], @ctx)
+      end
 
-    assert count(conn, "events") == 0
-  end
+      assert count(conn, "works") == 0
+    end
 
-  test "creating a work inside a run without one sets runs.work_id", %{conn: conn} do
-    run_id = Fixtures.insert(conn, :runs, %{work_id: nil})
-    ctx = %{@ctx | run_id: run_id}
+    test "a named agent must be one of depth 0 outside workflows", %{conn: conn} do
+      config = Fixtures.config(grant_write_toml())
 
-    assert {:ok, [_tool_event, event]} =
-             record_tool(
-               conn,
-               [%{"type" => "work", "body" => %{"title" => "first", "goal" => "g"}}],
-               ctx
-             )
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [work_emit(%{"title" => "x", "agent" => "concierge"})],
+                 %{@ctx | config: config}
+               )
 
-    assert {:ok, run} = Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id])
-    assert run.work_id == event.work_id
-  end
+      assert {:ok, %{assignee: "concierge"}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
 
-  test "a second work in the same run does not overwrite runs.work_id", %{conn: conn} do
-    run_id = Fixtures.insert(conn, :runs, %{work_id: nil})
-    ctx = %{@ctx | run_id: run_id}
+      assert {:error, {:work, {:agent_not_allowed, "worker"}}} =
+               record_tool(
+                 conn,
+                 [work_emit(%{"title" => "x", "agent" => "worker"})],
+                 %{@ctx | config: config}
+               )
 
-    assert {:ok, [_tool_event, first_event]} =
-             record_tool(
-               conn,
-               [%{"type" => "work", "body" => %{"title" => "first", "goal" => "g"}}],
-               ctx
-             )
+      assert {:error, {:work, :agent_with_workflow}} =
+               record_tool(
+                 conn,
+                 [work_emit(%{"title" => "x", "agent" => "concierge"})],
+                 %{@ctx | config: Fixtures.config(delivery_toml())}
+               )
 
-    assert {:ok, [_tool_event, _second_event]} =
-             record_tool(
-               conn,
-               [%{"type" => "work", "body" => %{"title" => "second", "goal" => "g"}}],
-               ctx
-             )
+      assert count(conn, "works") == 1
+    end
 
-    assert {:ok, run} = Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id])
-    assert run.work_id == first_event.work_id
-  end
+    test "with workflow on sets the first stage and its agent", %{conn: conn} do
+      ctx = %{@ctx | config: Fixtures.config(delivery_toml())}
 
-  test "work is rejected when the body carries stage, agent or model", %{conn: conn} do
-    assert {:error, {:work, {:forbidden, "stage"}}} =
-             record_tool(
-               conn,
-               [
-                 %{
-                   "type" => "work",
-                   "body" => %{"title" => "x", "goal" => "g", "stage" => "review"}
-                 }
-               ],
-               @ctx
-             )
+      assert {:ok, [_tool_event, event]} =
+               record_tool(conn, [work_emit(%{"title" => "Ship it"})], ctx)
 
-    assert {:error, {:work, {:forbidden, "agent"}}} =
-             record_tool(
-               conn,
-               [
-                 %{
-                   "type" => "work",
-                   "body" => %{"title" => "x", "goal" => "g", "agent" => "worker"}
-                 }
-               ],
-               @ctx
-             )
+      assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
+      assert work.stage == "to_do"
+      assert work.assignee == "concierge"
+    end
 
-    assert count(conn, "works") == 0
-  end
+    test "an explicit workspace is stored, none given falls back to the policy default", %{
+      conn: conn
+    } do
+      ctx = %{@ctx | config: Fixtures.config(workspaces_toml())}
 
-  test "work with workflow on sets the first stage and its agent", %{conn: conn} do
-    ctx = %{@ctx | config: Fixtures.config(delivery_toml())}
+      for {body, workspace} <- [{%{"workspace" => "other"}, "other"}, {%{}, "app"}] do
+        assert {:ok, [_tool_event, event]} =
+                 record_tool(conn, [work_emit(Map.put(body, "title", "x"))], ctx)
 
-    assert {:ok, [_tool_event, event]} =
-             record_tool(
-               conn,
-               [%{"type" => "work", "body" => %{"title" => "Ship it", "goal" => "g"}}],
-               ctx
-             )
+        assert {:ok, work} =
+                 Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
 
-    assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
-    assert work.stage == "to_do"
-    assert work.assignee == "concierge"
-  end
+        assert work.workspace == workspace
+      end
+    end
 
-  test "a child work picks up a workflow set only at its depth", %{conn: conn} do
-    ctx = %{@ctx | config: Fixtures.config(depth1_workflow_toml())}
-    parent_id = Fixtures.insert(conn, :works)
+    test "an unknown workspace is rejected and writes nothing", %{conn: conn} do
+      ctx = %{@ctx | config: Fixtures.config(workspaces_toml())}
 
-    assert {:ok, [_tool_event, event]} =
-             record_tool(
-               conn,
-               [
-                 %{
-                   "type" => "work",
-                   "body" => %{"title" => "child", "goal" => "g", "parent_id" => parent_id}
-                 }
-               ],
-               ctx
-             )
+      assert {:error, {:work, {:unknown_workspace, "ghost"}}} =
+               record_tool(conn, [work_emit(%{"title" => "x", "workspace" => "ghost"})], ctx)
 
-    assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
-    assert work.stage == "to_do"
-    assert work.assignee == "worker"
-  end
-
-  test "work with an explicit workspace stores it", %{conn: conn} do
-    ctx = %{@ctx | config: Fixtures.config(workspaces_toml())}
-
-    assert {:ok, [_tool_event, event]} =
-             record_tool(
-               conn,
-               [
-                 %{
-                   "type" => "work",
-                   "body" => %{"title" => "x", "goal" => "g", "workspace" => "other"}
-                 }
-               ],
-               ctx
-             )
-
-    assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
-    assert work.workspace == "other"
-  end
-
-  test "work with no workspace given falls back to the policy default", %{conn: conn} do
-    ctx = %{@ctx | config: Fixtures.config(workspaces_toml())}
-
-    assert {:ok, [_tool_event, event]} =
-             record_tool(
-               conn,
-               [%{"type" => "work", "body" => %{"title" => "x", "goal" => "g"}}],
-               ctx
-             )
-
-    assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
-    assert work.workspace == "app"
-  end
-
-  test "a child work with no workspace given inherits the parent's", %{conn: conn} do
-    ctx = %{@ctx | config: Fixtures.config(workspaces_toml())}
-
-    assert {:ok, [_tool_event, parent_event]} =
-             record_tool(
-               conn,
-               [
-                 %{
-                   "type" => "work",
-                   "body" => %{"title" => "parent", "goal" => "g", "workspace" => "other"}
-                 }
-               ],
-               ctx
-             )
-
-    assert {:ok, [_tool_event, child_event]} =
-             record_tool(
-               conn,
-               [
-                 %{
-                   "type" => "work",
-                   "body" => %{
-                     "title" => "child",
-                     "goal" => "g",
-                     "parent_id" => parent_event.work_id
-                   }
-                 }
-               ],
-               ctx
-             )
-
-    assert {:ok, child} =
-             Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_event.work_id])
-
-    assert child.workspace == "other"
-  end
-
-  test "work with an unknown workspace is rejected and writes nothing", %{conn: conn} do
-    ctx = %{@ctx | config: Fixtures.config(workspaces_toml())}
-
-    assert {:error, {:work, {:unknown_workspace, "ghost"}}} =
-             record_tool(
-               conn,
-               [
-                 %{
-                   "type" => "work",
-                   "body" => %{"title" => "x", "goal" => "g", "workspace" => "ghost"}
-                 }
-               ],
-               ctx
-             )
-
-    assert count(conn, "works") == 0
+      assert count(conn, "works") == 0
+    end
   end
 
   describe "continue action" do
@@ -988,7 +821,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
       assert parent.state == "waiting"
       assert parent.waiting == "child"
-      assert parent.waiting_for == child_id
+      assert parent.waiting_for == nil
       assert parent.waiting_from == "concierge"
 
       assert Jason.decode!(event.body) == %{
@@ -1021,6 +854,104 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, child} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
       assert child.stage == "to_do"
       assert child.assignee == "concierge"
+    end
+
+    test "a child picks up a workflow set only at its depth", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works)
+      run_id = Fixtures.insert(conn, :runs)
+
+      ctx = %{
+        @ctx
+        | run_id: run_id,
+          work_id: parent_id,
+          config: Fixtures.config(depth1_workflow_toml())
+      }
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [%{"type" => "delegate", "body" => %{"title" => "t", "goal" => "b"}}],
+                 ctx
+               )
+
+      assert {:ok, child} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
+      assert child.stage == "to_do"
+      assert child.assignee == "worker"
+    end
+
+    test "a named agent takes the child only if its depth allows it outside workflows", %{
+      conn: conn
+    } do
+      parent_id = Fixtures.insert(conn, :works)
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: parent_id}
+
+      delegate =
+        &%{"type" => "delegate", "body" => %{"title" => "t", "goal" => "b", "agent" => &1}}
+
+      assert {:ok, [_tool_event, event]} = record_tool(conn, [delegate.("worker")], ctx)
+
+      assert {:ok, %{assignee: "worker"}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
+
+      for agent <- ["concierge", "reviewer", "ghost"] do
+        assert {:error, {:delegate, {:agent_not_allowed, ^agent}}} =
+                 record_tool(conn, [delegate.(agent)], ctx)
+      end
+
+      assert {:error, {:delegate, :agent_with_workflow}} =
+               record_tool(
+                 conn,
+                 [delegate.("worker")],
+                 %{ctx | config: Fixtures.config(depth1_workflow_toml())}
+               )
+
+      assert count(conn, "works") == 2
+    end
+
+    test "the parent waits for all its children; a break wakes it at once", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works)
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: parent_id}
+      delegate = &%{"type" => "delegate", "body" => %{"title" => &1, "goal" => "b"}}
+
+      assert {:ok, [_tool_event, first, _tool_event2, second]} =
+               Store.record_tools(
+                 conn,
+                 run_id,
+                 [{@call, [delegate.("one")]}, {@call, [delegate.("two")]}],
+                 ctx
+               )
+
+      parent_state = fn ->
+        {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+        parent.state
+      end
+
+      continue = fn child_id ->
+        {:ok, [_tool_event, event]} =
+          record_tool(conn, [%{"type" => "continue", "body" => %{}}], %{ctx | work_id: child_id})
+
+        Jason.decode!(event.body)["parent_id"]
+      end
+
+      assert continue.(first.work_id) == nil
+      assert parent_state.() == "waiting"
+      assert continue.(second.work_id) == parent_id
+      assert parent_state.() == "open"
+
+      assert {:ok, [_tool_event, third]} = record_tool(conn, [delegate.("three")], ctx)
+      assert {:ok, [_tool_event, _fourth]} = record_tool(conn, [delegate.("four")], ctx)
+
+      assert {:ok, [_tool_event, break]} =
+               record_tool(
+                 conn,
+                 [%{"type" => "break", "body" => %{"body" => "stuck"}}],
+                 %{ctx | work_id: third.work_id}
+               )
+
+      assert Jason.decode!(break.body)["parent_id"] == parent_id
+      assert parent_state.() == "open"
     end
 
     test "an explicit workspace is stored on the child", %{conn: conn} do
@@ -1198,11 +1129,7 @@ defmodule Omunculus.Store.ActionsTest do
 
   describe "finish_work" do
     test "marks the work done and reopens a parent waiting on it", %{conn: conn} do
-      parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
-      child_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, state: "open"})
-
-      :ok =
-        Query.exec(conn, "UPDATE works SET waiting_for = ? WHERE id = ?", [child_id, parent_id])
+      {parent_id, child_id} = waiting_parent_and_child(conn, nil)
 
       assert {:ok, event} = Store.finish_work(conn, child_id, nil)
 

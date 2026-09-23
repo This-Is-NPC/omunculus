@@ -45,7 +45,7 @@ defmodule Omunculus.WorkspaceTest do
     [agents.concierge]
     depth = 0
     text = "concierge"
-    tools = ["work", "delegate", "directory", "workspaces", "read", "write", "request_access", "reply", "comment", "peek", "sandbox.write", "sandbox.network"]
+    tools = ["work", "delegate", "end", "directory", "workspaces", "read", "write", "request_access", "reply", "comment", "peek", "sandbox.write", "sandbox.network"]
 
     [agents.worker]
     depth = 1
@@ -188,8 +188,14 @@ defmodule Omunculus.WorkspaceTest do
 
     model = fn _assembled, _tools, call ->
       case Agent.get_and_update(counter, fn n -> {n, n + 1} end) do
-        0 -> call.("delegate", %{"title" => "child", "goal" => "do this"})
-        _already_delegated -> :ok
+        0 ->
+          call.("work", %{
+            "report" => "delegated",
+            "works" => [%{"title" => "child", "goal" => "do this"}]
+          })
+
+        _already_delegated ->
+          :ok
       end
 
       {:ok, "done"}
@@ -331,7 +337,7 @@ defmodule Omunculus.WorkspaceTest do
     [agents.concierge]
     depth = 0
     text = "concierge"
-    tools = ["work", "delegate", "read", "write", "request_access", "reply", "comment"]
+    tools = ["work", "delegate", "end", "read", "write", "request_access", "reply", "comment"]
 
     [workflows.delivery]
     steps = [

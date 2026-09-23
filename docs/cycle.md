@@ -9,8 +9,8 @@ event
     → emit → the store applies the action
     → hooks of that event run in the unroll, with the run open (not those of end)
     → end, or the model stopping by itself: EVENTS(end-run) of this run
-    → if an action of the run asked for a run (send, work on a workflow,
-      continue, break, delegate, request, reply grant)
+    → if an action of the run asked for a run (send, work, continue,
+      break, delegate, request, reply grant)
         → open the next run (agent and ceiling from the TOML, now)
     → hooks of end (they see this run closed and the next one opened)
 ```
@@ -19,7 +19,9 @@ event
 `continue`, `break`, `reply` and `work` change the store and the run goes
 on; the runs they asked for open after it closes. A tool can chain `end`:
 `done` comments its report on the run's work, continues it and ends the
-run in one call.
+run in one call; `work` comments its report on the run's work, delegates
+each new work below it and ends the run, or, in a run without a work,
+creates the root work and ends the run.
 
 A hook is a tool fired by an event: same contract, any `emit`. Who opens
 the next run of a work is the action. A hook can open a run too if its
@@ -81,6 +83,7 @@ agent text
 → if there is a work: title + goal + last comment
 → if there is a request: header + comments with that request_id
 → if the opening carried inbox_id: comments with that inbox_id
+→ if the run has the work card: the agents a new work may name
 → cards of the tools in tools.*
 ```
 
@@ -109,19 +112,21 @@ The model's final text does not reach the terminal. It is `EVENTS(model)`.
 ## Work
 
 ```text
-open:     tool work / delegate; stage = first of the TOML
-open → waiting:  break, or request (access | child)
+open:     action work (root) or delegate (child); stage = first of the TOML
+open → waiting:  break, or request (access), or delegate (child)
 waiting → waiting: reply deny — waiting = access, waiting_for intact
-waiting → open:    reply grant, or its child done or on break — same stage
+waiting → open:    reply grant, all its children done, or a child on break — same stage
 waiting → open:    send / prompt on a waiting work — reopened_by_prompt
 open → open:       continue — next stage, new run
 open → done:       continue on the last stage, or with no workflow at its depth
 ```
 
 `break` parks the work with a comment. It does not advance the sequence.
-`continue` that closes a work and `break` both hand it back: a parent
-waiting on it reopens, the event carries `parent_id`, and the parent's
-next run opens. A root work is only closed or parked. `deny` does not reopen.
+`continue` that closes a work and `break` both hand it back to a parent
+waiting on its children: a `break` reopens the parent at once, a closing
+`continue` once none of the parent's children is left undone. The event
+that reopened the parent carries its `parent_id`, and the parent's next
+run opens. A root work is only closed or parked. `deny` does not reopen.
 `continue` does not name a stage, an agent or a model — the TOML does.
 
 ## Request and inbox

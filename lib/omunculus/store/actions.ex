@@ -2,10 +2,15 @@ defmodule Omunculus.Store.Actions do
   @moduledoc """
   Write side of the store: `run/3` applies the emits from a tool's
   `out.emit` in order, inside whatever transaction the caller holds — the
-  whole batch commits or nothing does (spec §8.3). `continue`, `break`,
-  `delegate` and `end` are dispatched to `Actions.Sequence`; `notify` and
-  `inbox.read` to `Actions.Inbox`; `compact` and `comment.delete` to
-  `Actions.Comments`.
+  whole batch commits or nothing does (spec §8.3). `work` creates a root
+  work with the `report` as its first comment, links the run to it when
+  the run has no work yet, and marks it to start. `work` and `delegate`
+  may name the new work's `agent`: one of the TOML's agents at its depth
+  that is not `workflow_only`, refused when that depth has a workflow;
+  unnamed, it is the first stage's agent or the depth's first agent.
+  `continue`, `break`, `delegate` and `end` are dispatched to
+  `Actions.Sequence`; `notify` and `inbox.read` to `Actions.Inbox`;
+  `compact` and `comment.delete` to `Actions.Comments`.
   """
 
   alias Omunculus.Ceiling
@@ -164,73 +169,54 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
-  defp work(conn, %{"title" => title} = body, ctx) when is_binary(title) and title != "" do
+  defp work(conn, body, ctx) do
     with :ok <- Helpers.ensure_no_forbidden(:work, body),
-         :ok <- Helpers.ensure_goal(:work, body) do
-      case body["work_id"] do
-        nil -> create_work(conn, body, ctx)
-        work_id -> update_work(conn, work_id, body, ctx)
-      end
-    end
-  end
-
-  defp work(_conn, _body, _ctx), do: {:error, {:work, :no_title}}
-
-  defp update_work(conn, work_id, body, ctx) do
-    with :ok <- Helpers.tag_error(:work, Helpers.ensure_exist(conn, [{:works, work_id}])),
-         :ok <-
-           Query.exec(conn, "UPDATE works SET title = ?, goal = ?, updated_at = ? WHERE id = ?", [
-             body["title"],
-             body["goal"],
-             Events.now(),
-             work_id
-           ]) do
-      Events.append(conn, %{
-        type: "work",
-        work_id: work_id,
-        run_id: ctx.run_id,
-        body: Jason.encode!(body)
-      })
-    end
-  end
-
-  defp create_work(conn, body, ctx) do
-    with {:ok, depth} <- Helpers.tag_error(:work, Helpers.depth_at(conn, body["parent_id"])),
+         :ok <- Helpers.ensure_title(:work, body),
+         :ok <- Helpers.ensure_goal(:work, body),
+         :ok <- ensure_report(body),
          {:ok, {stage, assignee}} <-
-           Helpers.stage_and_assignee(ctx.config, depth, fn -> {:ok, ctx.agent} end),
-         {:ok, parent} <- Helpers.fetch_work(conn, body["parent_id"]),
-         {:ok, workspace} <-
            Helpers.tag_error(
              :work,
-             Helpers.resolve_workspace(ctx.config, body["workspace"], parent)
-           ) do
-      work_id = Id.new()
+             Helpers.stage_and_assignee(ctx.config, 0, body["agent"])
+           ),
+         {:ok, workspace} <-
+           Helpers.tag_error(:work, Helpers.resolve_workspace(ctx.config, body["workspace"], nil)) do
+      create_root(conn, body, ctx, stage, assignee, workspace)
+    end
+  end
 
-      with {:ok, event} <-
-             Events.append(conn, %{
-               type: "work",
-               work_id: work_id,
-               run_id: ctx.run_id,
-               body:
-                 Jason.encode!(
-                   Map.put(body, "start", not is_nil(stage) and not is_nil(ctx.run_id))
-                 )
-             }),
-           :ok <-
-             Helpers.insert_work(conn, %{
-               id: work_id,
-               parent_id: body["parent_id"],
-               workspace: workspace,
-               assignee: assignee,
-               stage: stage,
-               title: body["title"],
-               goal: body["goal"],
-               event_id: event.id,
-               at: event.at
-             }),
-           :ok <- link_run(conn, ctx.run_id, work_id) do
-        {:ok, event}
-      end
+  defp ensure_report(%{"report" => report}) when is_binary(report) and report != "", do: :ok
+  defp ensure_report(_body), do: {:error, {:work, :no_report}}
+
+  # The root's run opens once the run that created it has ended.
+  defp create_root(conn, body, ctx, stage, assignee, workspace) do
+    work_id = Id.new()
+    comment_id = Id.new()
+
+    with {:ok, event} <-
+           Events.append(conn, %{
+             type: "work",
+             work_id: work_id,
+             run_id: ctx.run_id,
+             comment_id: comment_id,
+             body: Jason.encode!(Map.put(body, "start", true))
+           }),
+         :ok <-
+           Helpers.insert_work(conn, %{
+             id: work_id,
+             parent_id: nil,
+             workspace: workspace,
+             assignee: assignee,
+             stage: stage,
+             title: body["title"],
+             goal: body["goal"],
+             event_id: event.id,
+             at: event.at
+           }),
+         :ok <-
+           Helpers.insert_comment(conn, comment_id, %{works: work_id}, body["report"], event, ctx),
+         :ok <- link_run(conn, ctx.run_id, work_id) do
+      {:ok, event}
     end
   end
 

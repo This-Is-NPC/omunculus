@@ -198,15 +198,19 @@ defmodule Omunculus.Config do
     end
   end
 
+  @spec agents_at_depth(t, non_neg_integer) :: [{String.t(), agent}]
+  def agents_at_depth(%__MODULE__{agents: agents}, depth) do
+    agents
+    |> Enum.filter(fn {_name, agent} -> agent.depth == depth and not agent.workflow_only end)
+    |> Enum.sort_by(fn {name, _agent} -> name end)
+  end
+
   @spec agent_at_depth(t, non_neg_integer) ::
           {:ok, {String.t(), agent}} | {:error, {:no_agent_at_depth, non_neg_integer}}
-  def agent_at_depth(%__MODULE__{agents: agents}, depth) do
-    agents
-    |> Enum.sort_by(fn {name, _agent} -> name end)
-    |> Enum.find(fn {_name, agent} -> agent.depth == depth and not agent.workflow_only end)
-    |> case do
-      nil -> {:error, {:no_agent_at_depth, depth}}
-      {name, agent} -> {:ok, {name, agent}}
+  def agent_at_depth(%__MODULE__{} = config, depth) do
+    case agents_at_depth(config, depth) do
+      [] -> {:error, {:no_agent_at_depth, depth}}
+      [first | _rest] -> {:ok, first}
     end
   end
 

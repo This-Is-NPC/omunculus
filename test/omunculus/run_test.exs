@@ -504,7 +504,7 @@ defmodule Omunculus.RunTest do
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store"]
+    tools = ["break", "catalog", "continue", "delegate", "end", "fs.read", "reply", "store", "work"]
     """)
 
     project = open_project(dir)
@@ -536,7 +536,7 @@ defmodule Omunculus.RunTest do
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store"]
+    tools = ["break", "catalog", "continue", "delegate", "end", "fs.read", "reply", "store", "work"]
     pinned = ["store", "sequence", "catalog"]
     """)
 
@@ -566,7 +566,7 @@ defmodule Omunculus.RunTest do
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store", "counter"]
+    tools = ["break", "catalog", "continue", "delegate", "end", "fs.read", "reply", "store", "work", "counter"]
     """)
 
     project = open_project(dir)
@@ -678,7 +678,7 @@ defmodule Omunculus.RunTest do
     model = fn _assembled, _tools, _call -> {:ok, "done"} end
 
     parent_id = Fixtures.insert(project.conn, :works, %{grants: ~s(["extra"])})
-    child_id = Fixtures.insert(project.conn, :works, %{parent_id: parent_id})
+    child_id = Fixtures.insert(project.conn, :works, %{parent_id: parent_id, assignee: "worker"})
     unrelated_id = Fixtures.insert(project.conn, :works)
     Fixtures.use_model(project, model)
 

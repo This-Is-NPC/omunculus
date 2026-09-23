@@ -159,12 +159,53 @@ Views the store will hydrate:
 Qualified names are canonical. A manifest copied from the spec with
 `views = ["comments"]` still loads.
 
+`agents` comes from the TOML, not the store: the names of the agents at
+the depth of the works the call would create (the depth below the run's
+work, or depth 0 without a work) that are not `workflow_only`, and none
+when that depth has a workflow. `assemble` renders them under
+`## Agents` when the run has the `work` card.
+
 Actions the store will apply: `comment`, `request`, `notify`, `prompt`,
 `inbox.read`, `reply`, `work`, `delegate`, `continue`, `break`, `end`,
 `compact`, `comment.delete`. Have on a `request` does not open a row —
 the output is `already granted: <name>`. Blocked is `deny`. `end` is the
 only action that ends the run; it needs a run. `continue` does not name a
 stage. `EVENTS` is append-only.
+
+`work` and `delegate` may name the new work's `agent`: it must be one of
+the agents the `agents` view lists for that depth, and is refused when
+the depth has a workflow. Unnamed, the new work goes to the workflow's
+first stage, or to the depth's first agent in name order. A parent that
+delegated waits for all its children: a child that closes reopens it
+once none of its children is left undone, a child that breaks reopens it
+at once.
+
+## Creating works
+
+The model creates works with the `work` tool: a `report` and the `works`
+to create, each with a `title`, a `goal`, and optionally an `agent` and a
+`workspace`.
+
+- In a run on a work W it chains `comment` with the report on W, one
+  `delegate` per item — children of W, one depth below — and `end`.
+- In the run `send` opens, which has no work, it takes exactly one item
+  and emits the `work` action: the store creates the root work at depth 0
+  with the report as its first comment, links the run to it and opens
+  the root's run once this run has ended.
+
+`delegate` is only a chain step (`triggers = ["chain"]`), so an agent
+with `work` needs `delegate`, `end` and `comment` as have too; the
+`sequence` group carries `work`, `delegate` and `end`. The manifest's
+`[schemas.staged]` drops `agent` from the items, for the layer whose new
+works land on a depth with a workflow:
+
+```toml
+[policy.depth.0.overrides.work]
+schema = "staged"
+
+[policy.depth.1]
+workflow = "delivery"
+```
 
 ## What the model calls
 
@@ -184,9 +225,9 @@ the ceiling, run in their own sandboxed sessions.
 ```text
 fs.read   = read, ls, grep, find
 fs.write  = write, edit
-store     = comment, work, request_access, reply, notify
+store     = comment, request_access, reply, notify
 sandbox   = request_sandbox
-sequence  = delegate, continue, break, end, done
+sequence  = work, delegate, continue, break, end, done
 catalog   = tool_search
 cli       = send, inbox, inbox_read, prompt, login, logout
 bench     = counter, counter_decrement

@@ -1,8 +1,9 @@
 defmodule Omunculus.Run do
   @moduledoc """
-  Opens a run with freshly assembled context and permissions. A named
-  reaction agent still obeys the work's stage and workflow-only flags.
-  The agent's `model` from config is constructed via `new/1`. The
+  Opens a run with freshly assembled context and permissions. A work
+  runs with its stage's agent, or without a stage with its assignee. A
+  named reaction agent still obeys the work's stage and workflow-only
+  flags. The agent's `model` from config is constructed via `new/1`. The
   assembled prompt is the `output` of the tool named by
   `agents.<x>.assemble` or `[policy] assemble`. Streaming adapters
   record each message before tools. The run's `overrides` apply to its
@@ -150,9 +151,16 @@ defmodule Omunculus.Run do
     with {:ok, steps} <- workflow_steps(config, depth),
          {:ok, step} <- step_for(steps, work.stage) do
       case step do
-        nil -> agent_at_depth(config, depth)
+        nil -> assignee_agent(config, work.assignee, depth)
         step -> {:ok, {step.agent, agent_text(config, step.agent), depth, step.ceiling}}
       end
+    end
+  end
+
+  defp assignee_agent(config, name, depth) do
+    case Map.fetch(config.agents, name) do
+      {:ok, agent} -> {:ok, {name, agent.text, depth, nil}}
+      :error -> {:error, {:no_agent, name}}
     end
   end
 
@@ -173,12 +181,6 @@ defmodule Omunculus.Run do
     case Config.step_at(steps, stage) do
       {:ok, step} -> {:ok, step}
       {:error, :off_sequence} -> {:error, {:off_sequence, stage}}
-    end
-  end
-
-  defp agent_at_depth(config, depth) do
-    with {:ok, {name, agent}} <- Config.agent_at_depth(config, depth) do
-      {:ok, {name, agent.text, depth, nil}}
     end
   end
 

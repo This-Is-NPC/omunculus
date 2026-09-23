@@ -66,6 +66,13 @@ defmodule Omunculus.CLITest do
     File.chmod!(run_path, 0o755)
   end
 
+  defp create_root(call, title),
+    do: call.("work", %{"report" => "opened", "works" => [%{"title" => title, "goal" => title}]})
+
+  defp delegate_one(call, title, goal),
+    do:
+      call.("work", %{"report" => "delegated", "works" => [%{"title" => title, "goal" => goal}]})
+
   defp tool_event_names(events) do
     events
     |> Enum.filter(&(&1.type == "tool"))
@@ -315,8 +322,8 @@ defmodule Omunculus.CLITest do
   describe "work + comment" do
     test "the concierge creates the work, a follow-up comments on it, and a third opening sees the last comment",
          %{dir: dir} do
-      model = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "Count to five", "goal" => "Count to five"})
+      model = fn assembled, _tools, call ->
+        unless assembled =~ "## Work", do: create_root(call, "Count to five")
         {:ok, "ok"}
       end
 
@@ -331,16 +338,20 @@ defmodule Omunculus.CLITest do
       assert work.title != "Count to 5"
       assert work.assignee == "concierge"
 
-      assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
-      assert run.work_id == work.id
+      assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs")
+      assert Enum.map(runs, & &1.work_id) == [work.id, work.id]
 
       assert {:ok, events} = Store.replay(project.conn, :project)
 
       assert Enum.map(events, & &1.type) ==
-               ["tool", "prompt", "start-run", "tool", "tool", "work", "model", "end-run"]
+               ["tool", "prompt", "start-run", "tool", "tool", "work", "tool", "end", "end-run"] ++
+                 ["start-run", "tool", "model", "end-run"]
 
-      assert {:ok, [first_assembled]} =
-               Query.all(project.conn, "SELECT * FROM prompts WHERE kind = 'assembled'")
+      assert {:ok, [first_assembled, _root_assembled]} =
+               Query.all(
+                 project.conn,
+                 "SELECT prompts.* FROM prompts JOIN runs ON runs.prompt_id = prompts.id JOIN events ON events.id = runs.event_id WHERE kind = 'assembled' ORDER BY events.sequence"
+               )
 
       Project.close(project)
 
@@ -365,7 +376,10 @@ defmodule Omunculus.CLITest do
 
       project = open(dir)
 
-      assert {:ok, [comment]} = Query.all(project.conn, "SELECT * FROM comments")
+      assert {:ok, [report, comment]} =
+               Query.all(project.conn, "SELECT * FROM comments ORDER BY created_at")
+
+      assert report.body == "opened"
       assert comment.work_id == work.id
       assert comment.body == "first comment"
 
@@ -835,7 +849,7 @@ defmodule Omunculus.CLITest do
           assembled =~ "Sou o concierge." ->
             if assembled =~ "## Work",
               do: call.("continue", %{}),
-              else: call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
+              else: create_root(call, "Ship it")
 
             call.("end", %{})
             {:ok, "unused"}
@@ -894,8 +908,8 @@ defmodule Omunculus.CLITest do
       tools = ["work", "continue", "end"]
       """)
 
-      model = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "No sequence", "goal" => "No sequence"})
+      model = fn assembled, _tools, call ->
+        unless assembled =~ "## Work", do: create_root(call, "No sequence")
         assert {:ok, ""} = call.("continue", %{})
         call.("end", %{})
         {:ok, "unused"}
@@ -907,7 +921,9 @@ defmodule Omunculus.CLITest do
 
       project = open(dir)
 
-      assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
+      assert {:ok, [_creation, run]} =
+               Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+
       assert run.status == "done"
 
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
@@ -926,7 +942,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["work", "bad_continue", "sandbox.network"]
+      tools = ["work", "bad_continue", "end", "sandbox.network"]
 
       [workflows.delivery]
       steps = [
@@ -946,7 +962,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         unless assembled =~ "## Work",
-          do: call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
+          do: create_root(call, "Ship it")
 
         assert {:error, {:continue, {:forbidden, "stage"}}} = call.("bad_continue", %{})
 
@@ -1038,7 +1054,7 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         if assembled =~ "## Work",
           do: call.("break", %{"body" => "need to pause"}),
-          else: call.("work", %{"title" => "Needs help", "goal" => "Needs help"})
+          else: create_root(call, "Needs help")
 
         call.("end", %{})
         {:ok, "unused"}
@@ -1054,7 +1070,10 @@ defmodule Omunculus.CLITest do
       assert work.stage == "to_do"
       assert work.waiting_from == "concierge"
 
-      assert {:ok, [comment]} = Query.all(project.conn, "SELECT * FROM comments")
+      assert {:ok, [report, comment]} =
+               Query.all(project.conn, "SELECT * FROM comments ORDER BY created_at")
+
+      assert report.body == "opened"
       assert comment.body == "need to pause"
 
       assert {:ok, previous_runs} = Query.all(project.conn, "SELECT * FROM runs")
@@ -1087,7 +1106,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "Sou o concierge."
-      tools = ["work", "delegate", "comment"]
+      tools = ["work", "delegate", "comment", "end"]
 
       [agents.worker]
       depth = 1
@@ -1100,15 +1119,15 @@ defmodule Omunculus.CLITest do
           assembled =~ "Sou o worker." ->
             {:ok, "done"}
 
+          assembled =~ "## Last comment\nopened" ->
+            delegate_one(call, "Sub task", "do this")
+            {:ok, "unused"}
+
           assembled =~ "## Work" ->
             {:ok, "acompanhando"}
 
           true ->
-            assert {:ok, ""} = call.("work", %{"title" => "Big task", "goal" => "Big task"})
-
-            assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task", "goal" => "do this"})
-
+            create_root(call, "Big task")
             {:ok, "unused"}
         end
       end
@@ -1128,10 +1147,11 @@ defmodule Omunculus.CLITest do
       assert child.goal == "do this"
 
       assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
-      assert length(runs) == 3
-      [run1, run2, run3] = runs
+      assert length(runs) == 4
+      [_creation, run1, run2, run3] = runs
 
       assert run1.agent == "concierge"
+      assert run1.work_id == parent.id
       assert run2.agent == "worker"
       assert run2.depth == "1"
       assert run2.via == "delegate"
@@ -1179,7 +1199,7 @@ defmodule Omunculus.CLITest do
           [agents.concierge]
           depth = 0
           text = "Sou o concierge."
-          tools = ["work", "delegate"]
+          tools = ["work", "delegate", "comment", "end"]
 
           [agents.worker]
           depth = 1
@@ -1194,15 +1214,15 @@ defmodule Omunculus.CLITest do
               call.(unquote(tool), unquote(Macro.escape(args)))
               {:ok, "unused"}
 
+            assembled =~ "## Last comment\nopened" ->
+              delegate_one(call, "Sub task", "do this")
+              {:ok, "unused"}
+
             assembled =~ "## Work" ->
               {:ok, "back"}
 
             true ->
-              assert {:ok, ""} = call.("work", %{"title" => "Big task", "goal" => "Big task"})
-
-              assert {:ok, ""} =
-                       call.("delegate", %{"title" => "Sub task", "goal" => "do this"})
-
+              create_root(call, "Big task")
               {:ok, "unused"}
           end
         end
@@ -1220,7 +1240,7 @@ defmodule Omunculus.CLITest do
         assert parent.waiting == nil
         assert child.state == unquote(child_state)
 
-        assert {:ok, [_run1, run2, run3]} =
+        assert {:ok, [_creation, _run1, run2, run3]} =
                  Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
 
         assert run2.work_id == child.id
@@ -1241,7 +1261,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "Sou o concierge."
-      tools = ["work", "delegate", "comment", "continue"]
+      tools = ["work", "delegate", "comment", "continue", "end"]
 
       [agents.worker]
       depth = 1
@@ -1253,6 +1273,9 @@ defmodule Omunculus.CLITest do
         { name = "to_do", agent = "worker" },
         { name = "review", agent = "concierge" },
       ]
+
+      [policy.depth.0.overrides.work]
+      schema = "staged"
 
       [policy.depth.1]
       workflow = "delivery"
@@ -1268,15 +1291,15 @@ defmodule Omunculus.CLITest do
             call.("continue", %{})
             {:ok, "unused"}
 
+          assembled =~ "## Last comment\nopened" ->
+            delegate_one(call, "Sub task2", "do this 2")
+            {:ok, "unused"}
+
           assembled =~ "## Work" ->
             {:ok, "acompanhando"}
 
           true ->
-            assert {:ok, ""} = call.("work", %{"title" => "Big task2", "goal" => "Big task2"})
-
-            assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task2", "goal" => "do this 2"})
-
+            create_root(call, "Big task2")
             {:ok, "unused"}
         end
       end
@@ -1294,8 +1317,8 @@ defmodule Omunculus.CLITest do
       assert child.stage == "review"
 
       assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
-      assert length(runs) == 4
-      [run1, run2, run3, run4] = runs
+      assert length(runs) == 5
+      [_creation, run1, run2, run3, run4] = runs
 
       assert run1.agent == "concierge" and run1.depth == "0"
       assert run2.agent == "worker" and run2.depth == "1"
@@ -1311,7 +1334,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "Sou o concierge."
-      tools = ["work", "delegate", "comment", "reply", "write"]
+      tools = ["work", "delegate", "comment", "end", "reply", "write"]
 
       [agents.worker]
       depth = 1
@@ -1356,15 +1379,15 @@ defmodule Omunculus.CLITest do
 
             {:ok, "concedido"}
 
+          assembled =~ "## Last comment\nopened" ->
+            delegate_one(call, "Sub task3", "write this")
+            {:ok, "unused"}
+
           assembled =~ "## Work" ->
             {:ok, "acompanhando"}
 
           true ->
-            assert {:ok, ""} = call.("work", %{"title" => "Big task3", "goal" => "Big task3"})
-
-            assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task3", "goal" => "write this"})
-
+            create_root(call, "Big task3")
             {:ok, "unused"}
         end
       end
@@ -1413,8 +1436,8 @@ defmodule Omunculus.CLITest do
   describe "inbox" do
     test "notify mid-run leaves an unread inbox row, the run keeps going and closes done, the work stays open, and CLI reads it",
          %{dir: dir} do
-      model = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "Ajuda", "goal" => "Ajuda"})
+      model = fn assembled, _tools, call ->
+        unless assembled =~ "## Work", do: create_root(call, "Ajuda")
         assert {:ok, ""} = call.("notify", %{"body" => "need help"})
         {:ok, "ok"}
       end
@@ -1438,7 +1461,9 @@ defmodule Omunculus.CLITest do
 
       assert comment.body == "need help"
 
-      assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
+      assert {:ok, [_creation, run]} =
+               Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+
       assert run.status == "done"
 
       assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
@@ -1550,7 +1575,7 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         if assembled =~ "## Work",
           do: call.("continue", %{}),
-          else: call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
+          else: create_root(call, "Ship it")
 
         call.("end", %{})
         {:ok, "unused"}
@@ -1597,7 +1622,7 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         if assembled =~ "## Work",
           do: call.("break", %{"body" => "need to pause"}),
-          else: call.("work", %{"title" => "Needs help", "goal" => "Needs help"})
+          else: create_root(call, "Needs help")
 
         call.("end", %{})
         {:ok, "unused"}
@@ -1695,7 +1720,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["work", "notify", "sandbox.network"]
+      tools = ["work", "end", "notify", "sandbox.network"]
       """)
 
       write_hook(
@@ -1713,8 +1738,8 @@ defmodule Omunculus.CLITest do
         """
       )
 
-      model = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
+      model = fn assembled, _tools, call ->
+        unless assembled =~ "## Work", do: create_root(call, "Ship it")
         call.("notify", %{"body" => "notice"})
         {:ok, "unused"}
       end
@@ -1742,11 +1767,11 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["comment", "compact_comments", "work"]
+      tools = ["comment", "compact_comments", "end", "work"]
       """)
 
-      model1 = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "Tally", "goal" => "Tally"})
+      model1 = fn assembled, _tools, call ->
+        unless assembled =~ "## Work", do: create_root(call, "Tally")
         assert {:ok, ""} = call.("comment", %{"body" => "one"})
         assert {:ok, ""} = call.("comment", %{"body" => "two"})
         assert {:ok, ""} = call.("comment", %{"body" => "three"})
@@ -1760,7 +1785,7 @@ defmodule Omunculus.CLITest do
       project = open(dir)
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
       assert {:ok, comments} = Store.view(project.conn, "comments.work", work.id)
-      assert Enum.map(comments, & &1.body) == ["one", "two", "three"]
+      assert Enum.map(comments, & &1.body) == ["opened", "one", "two", "three"]
       Project.close(project)
 
       test_pid = self()
@@ -1789,14 +1814,14 @@ defmodule Omunculus.CLITest do
       assert summary.body == "summary: 1 2 3"
 
       assert {:ok, work_events} = Store.replay(project.conn, {:work, work.id})
-      comment_events = Enum.filter(work_events, &(&1.type == "comment"))
+      comment_events = Enum.filter(work_events, &(&1.type in ["work", "comment"]))
       assert Enum.map(comment_events, & &1.comment_id) == Enum.map(comments, & &1.id)
 
       compact_event = Enum.find(work_events, &(&1.type == "compact"))
       assert compact_event
       assert Jason.decode!(compact_event.body)["deleted"] == Enum.map(comments, & &1.id)
 
-      assert {:ok, [_run1, run2]} =
+      assert {:ok, [_creation, _run1, run2]} =
                Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
 
       assert {:ok, run2_events} = Store.replay(project.conn, {:run, run2.id})
@@ -1866,7 +1891,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "Sou o concierge."
-      tools = ["catalog", "delegate", "fs.read", "sequence", "store"]
+      tools = ["catalog", "fs.read", "sequence", "store"]
 
       [agents.worker]
       depth = 1
@@ -1900,15 +1925,15 @@ defmodule Omunculus.CLITest do
             call.("continue", %{})
             {:ok, "unused"}
 
+          assembled =~ "## Last comment\nopened" ->
+            delegate_one(call, "Sub task", "do this")
+            {:ok, "unused"}
+
           assembled =~ "## Work" ->
             {:ok, "acompanhando"}
 
           true ->
-            assert {:ok, ""} = call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
-
-            assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task", "goal" => "do this"})
-
+            create_root(call, "Ship it")
             {:ok, "unused"}
         end
       end
@@ -1952,7 +1977,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "Sou o concierge."
-      tools = ["work", "delegate", "comment"]
+      tools = ["work", "delegate", "comment", "end"]
 
       [agents.worker]
       depth = 1
@@ -1971,15 +1996,15 @@ defmodule Omunculus.CLITest do
           assembled =~ "Sou o worker." ->
             {:ok, "done"}
 
+          assembled =~ "## Last comment\nopened" ->
+            delegate_one(call, "Sub task", "do this")
+            {:ok, "unused"}
+
           assembled =~ "## Work" ->
             {:ok, "acompanhando"}
 
           true ->
-            assert {:ok, ""} = call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
-
-            assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task", "goal" => "do this"})
-
+            create_root(call, "Ship it")
             {:ok, "unused"}
         end
       end

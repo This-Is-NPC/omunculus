@@ -9,13 +9,12 @@ defmodule Omunculus.MatrixTest do
   alias Omunculus.{CLI, Config, Fixtures, Id, Project, Store}
   alias Omunculus.Store.Query
 
-  @concierge_d0_tools ~w(bench break continue fs.read sandbox.network store)
-  @concierge_d0_workflow_tools ~w(bench break continue end fs.read sandbox.network store)
-  @concierge_d1_tools ~w(break catalog continue delegate end fs.read sandbox.network store)
-  @concierge_d2_tools ~w(catalog delegate fs.read sandbox.network sequence store)
+  @concierge_d0_tools ~w(bench break continue end fs.read sandbox.network store work)
+  @concierge_d1_tools ~w(break catalog continue delegate end fs.read sandbox.network store work)
+  @concierge_d2_tools ~w(catalog fs.read sandbox.network sequence store)
   @worker_tools ~w(bench break comment continue end fs.read notify request_access sandbox.network)
   @worker_d2_tools ~w(bench comment continue end fs.read notify request_access sandbox.network)
-  @manager_tools ~w(delegate fs.read sandbox.network sequence store)
+  @manager_tools ~w(fs.read sandbox.network sequence store)
 
   @concierge_text "You are the project concierge. Read the message, use the tools in `tools.*` when you need them, and respond."
   @worker_text "You are the worker. Do the work you received, comment on progress, and call continue when the stage is done."
@@ -67,7 +66,7 @@ defmodule Omunculus.MatrixTest do
   defp config_toml(0, false), do: concierge_section(@concierge_d0_tools)
 
   defp config_toml(0, true) do
-    concierge_section(@concierge_d0_workflow_tools) <>
+    concierge_section(@concierge_d0_tools) <>
       """
 
       [workflows.delivery]
@@ -78,6 +77,9 @@ defmodule Omunculus.MatrixTest do
 
       [policy]
       workflow = "delivery"
+
+      [policy.overrides.work]
+      schema = "staged"
       """
   end
 
@@ -93,6 +95,9 @@ defmodule Omunculus.MatrixTest do
         { name = "to_do", agent = "worker" },
         { name = "review", agent = "concierge", deny = ["bench"] },
       ]
+
+      [policy.depth.0.overrides.work]
+      schema = "staged"
 
       [policy.depth.1]
       workflow = "delivery"
@@ -116,6 +121,9 @@ defmodule Omunculus.MatrixTest do
         { name = "to_do", agent = "worker" },
         { name = "review", agent = "manager", deny = ["bench"] },
       ]
+
+      [policy.depth.1.overrides.work]
+      schema = "staged"
 
       [policy.depth.2]
       workflow = "delivery"

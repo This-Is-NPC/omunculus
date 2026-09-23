@@ -2,26 +2,60 @@ name = "work"
 kind = "tool"
 shape = "simple"
 triggers = ["model"]
-description = "Creates or updates the work and writes its title and goal."
-tags = ["work", "store"]
-groups = ["store"]
+description = "Creates works with a title and a goal: comments the report on the run's work, delegates each work below it and ends the run. Without a work, creates the root work with the report as its first comment."
+tags = ["sequence", "work"]
+groups = ["sequence"]
 module = "Omunculus.Tools.Work"
+chains = ["comment", "delegate", "end"]
+then = ["end"]
 
 [parameters]
 type = "object"
+required = ["report", "works"]
+
+[parameters.properties.report]
+type = "string"
+
+[parameters.properties.works]
+type = "array"
+minItems = 1
+
+[parameters.properties.works.items]
+type = "object"
 required = ["title", "goal"]
 
-[parameters.properties.title]
+[parameters.properties.works.items.properties.title]
 type = "string"
 
-[parameters.properties.goal]
+[parameters.properties.works.items.properties.goal]
 type = "string"
 
-[parameters.properties.work_id]
+[parameters.properties.works.items.properties.agent]
 type = "string"
 
-[parameters.properties.parent_id]
+[parameters.properties.works.items.properties.workspace]
 type = "string"
 
-[parameters.properties.workspace]
+[schemas.staged]
+type = "object"
+required = ["report", "works"]
+
+[schemas.staged.properties.report]
+type = "string"
+
+[schemas.staged.properties.works]
+type = "array"
+minItems = 1
+
+[schemas.staged.properties.works.items]
+type = "object"
+required = ["title", "goal"]
+
+[schemas.staged.properties.works.items.properties.title]
+type = "string"
+
+[schemas.staged.properties.works.items.properties.goal]
+type = "string"
+
+[schemas.staged.properties.works.items.properties.workspace]
 type = "string"

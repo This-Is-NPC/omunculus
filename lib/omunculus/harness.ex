@@ -98,6 +98,7 @@ defmodule Omunculus.Harness do
          views = %{
            catalog: catalog_view(run, catalog, start_event(project, run)),
            workspaces: workspaces_view(config, workspace.name),
+           agents: agents_view(project, config, work),
            request_id: run && run.request_id,
            inbox_id: run_inbox_id(project, run),
            paths: path_permissions(project, run, workspace)
@@ -133,6 +134,7 @@ defmodule Omunculus.Harness do
           views = %{
             catalog: catalog_view(run, catalog, start_event(project, run)),
             workspaces: workspaces_view(config, workspace.name),
+            agents: agents_view(project, config, work),
             request_id: event.request_id,
             inbox_id: event.inbox_id,
             paths: path_permissions(project, run, workspace)
@@ -285,6 +287,17 @@ defmodule Omunculus.Harness do
     end)
   end
 
+  # The agents a new work may name: those at the depth of the works the
+  # call would create, none when that depth has a workflow.
+  defp agents_view(project, config, work) do
+    depth = if work, do: Store.work_depth(project.conn, work) + 1, else: 0
+
+    case Config.workflow_for(config, depth) do
+      :off -> config |> Config.agents_at_depth(depth) |> Enum.map(fn {name, _agent} -> name end)
+      {:ok, _steps} -> []
+    end
+  end
+
   defp catalog_view(nil, _catalog, _event), do: []
 
   defp catalog_view(%{tools: tools}, catalog, event) do
@@ -344,6 +357,7 @@ defmodule Omunculus.Harness do
         :skip -> {:cont, {:ok, acc}}
         :catalog -> {:cont, {:ok, Map.put(acc, "catalog", views.catalog)}}
         :workspaces -> {:cont, {:ok, Map.put(acc, "workspaces", views.workspaces)}}
+        :agents -> {:cont, {:ok, Map.put(acc, "agents", views.agents)}}
         :paths -> {:cont, {:ok, Map.put(acc, "paths", views.paths)}}
         {:cli_prompt, args} -> fetch_cli_prompt(project, name, args, acc)
         {:ok, canonical, id} -> fetch_view(project, name, canonical, id, acc)
@@ -404,6 +418,7 @@ defmodule Omunculus.Harness do
   defp resolve_view_id("inbox", _run_id, _work_id, _request_id), do: {:ok, nil}
   defp resolve_view_id("catalog", _run_id, _work_id, _request_id), do: :catalog
   defp resolve_view_id("workspaces", _run_id, _work_id, _request_id), do: :workspaces
+  defp resolve_view_id("agents", _run_id, _work_id, _views), do: :agents
   defp resolve_view_id("runs.last", _run_id, _work_id, _views), do: {:ok, nil}
 
   defp resolve_view_id("prompt", _run_id, _work_id, %{trigger: "cli"} = views),

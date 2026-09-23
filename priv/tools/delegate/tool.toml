@@ -1,8 +1,8 @@
 name = "delegate"
 kind = "tool"
 shape = "simple"
-triggers = ["model"]
-description = "Creates a child work and hands it to whoever is below. The parent waits."
+triggers = ["chain"]
+description = "Creates a child work and hands it to the named agent or to whoever is below. The parent waits for all its children."
 tags = ["sequence", "work"]
 groups = ["sequence"]
 module = "Omunculus.Tools.Delegate"
@@ -15,6 +15,9 @@ required = ["title", "goal"]
 type = "string"
 
 [parameters.properties.goal]
+type = "string"
+
+[parameters.properties.agent]
 type = "string"
 
 [parameters.properties.workspace]
