@@ -43,23 +43,6 @@ defmodule Omunculus.Store.ActionsTest do
     comment_id
   end
 
-  defp open_run(conn, ceiling) do
-    params = %{
-      prompt_id: nil,
-      agent: "concierge",
-      depth: 0,
-      ceiling: ceiling,
-      execution: %{"id" => "execution-policy"},
-      assembled: "assembled",
-      work_id: nil,
-      via: nil,
-      request_id: nil
-    }
-
-    {:ok, run} = Store.open_run(conn, params)
-    run
-  end
-
   defp request_ctx(run, work_id \\ nil, config \\ @ctx.config) do
     %{
       run_id: run.id,
@@ -82,7 +65,7 @@ defmodule Omunculus.Store.ActionsTest do
     do: request_emit(%{"grant" => [grant_call(kind, name)], "deny" => []})
 
   defp open_request(conn, ceiling, work_id) do
-    run = open_run(conn, ceiling)
+    run = Fixtures.open_run(conn, %{ceiling: ceiling})
 
     {:ok, [_tool_event, event]} =
       record_tool(conn, [access_request("tool", "write")], request_ctx(run, work_id))
@@ -1149,7 +1132,7 @@ defmodule Omunculus.Store.ActionsTest do
 
   describe "request action" do
     test "have on every grant of an access request opens no request", %{conn: conn} do
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
 
       assert {:ok, [_tool_event]} =
                record_tool(conn, [access_request("tool", "comment")], request_ctx(run))
@@ -1159,7 +1142,7 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "a blocked grant appends a deny event and opens no request", %{conn: conn} do
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
 
       assert {:ok, [_tool_event, event]} =
                record_tool(conn, [access_request("tool", "delete")], request_ctx(run))
@@ -1178,7 +1161,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "stores the options, comments the reason and parks the work on the request", %{
       conn: conn
     } do
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
       work_id = Fixtures.insert(conn, :works)
 
       assert {:ok, [_tool_event, event]} =
@@ -1219,7 +1202,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "a sealed grant goes to the human even with an arbiter above", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
       ctx = request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
 
       assert {:ok, [_tool_event, event]} =
@@ -1233,7 +1216,7 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "a name in no list follows the ceiling's uncited class", %{conn: conn} do
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
 
       assert {:ok, [_tool_event, event]} =
                record_tool(conn, [access_request("directory", "./secrets")], request_ctx(run))
@@ -1242,7 +1225,7 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "a request whose options grant nothing opens a row", %{conn: conn} do
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
       emit = request_emit(%{"cancel" => [%{"name" => "cancel"}], "retry" => []})
 
       assert {:ok, [_tool_event, event]} = record_tool(conn, [emit], request_ctx(run))
@@ -1251,7 +1234,7 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "malformed options are rejected and write nothing", %{conn: conn} do
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
 
       for options <- [
             %{},
@@ -1267,7 +1250,7 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "a missing reason is rejected and writes nothing", %{conn: conn} do
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
 
       assert {:error, {:request, :no_reason}} =
                record_tool(
@@ -1289,7 +1272,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "a request without a linked work leaves work_id nil and touches no work", %{
       conn: conn
     } do
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
 
       assert {:ok, [_tool_event, event]} =
                record_tool(conn, [access_request("tool", "write")], request_ctx(run))
@@ -1304,7 +1287,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "every option tool have for the parent's agent routes to that agent", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
       ctx = request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
 
       assert {:ok, [_tool_event, event]} =
@@ -1324,7 +1307,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "an option tool the parent's agent does not have falls back to human", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
       ctx = request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
 
       options = %{
@@ -1341,7 +1324,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "a grant the parent's agent is denied falls back to human", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
       ctx = request_ctx(run, work_id, Fixtures.config(deny_write_toml()))
 
       assert {:ok, [_tool_event, event]} =
@@ -1358,7 +1341,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "a request by the harness goes to the human", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
 
       ctx = %{
         request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
@@ -1457,7 +1440,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "the arbiter agent may reply", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
       ctx = request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
       {:ok, [_tool, request]} = record_tool(conn, [access_request("tool", "write")], ctx)
       arbiter_ctx = %{ctx | agent: "concierge", work_id: parent_id}
@@ -1618,7 +1601,7 @@ defmodule Omunculus.Store.ActionsTest do
   describe "notify action" do
     test "inside a run on a work appends inbox, comment, and event; run and work are untouched",
          %{conn: conn} do
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
       work_id = Fixtures.insert(conn, :works, %{state: "open"})
       ctx = request_ctx(run, work_id)
 
@@ -1655,7 +1638,7 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "without a work leaves inbox.work_id nil", %{conn: conn} do
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
       ctx = request_ctx(run)
 
       assert {:ok, [_tool_event, event]} =
@@ -2066,7 +2049,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "takes comment, delegate and end, and refuses continue, break and request",
          %{conn: conn} do
       {parent_id, _child_id} = waiting_parent_and_child(conn, nil)
-      run = open_run(conn, @ceiling)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
       ctx = %{request_ctx(run, parent_id) | config: Fixtures.config(delivery_toml())}
 
       comment = %{"type" => "comment", "body" => %{"work_id" => parent_id, "body" => "noted"}}

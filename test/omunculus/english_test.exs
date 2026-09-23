@@ -16,9 +16,32 @@ defmodule Omunculus.EnglishTest do
   end
 
   test "builtin tool output strings have no accented characters" do
-    Enum.each(Out.user_facing(), fn string ->
+    Enum.each(user_facing(), fn string ->
       refute Regex.match?(@accent, string), string
     end)
+  end
+
+  defp user_facing do
+    [
+      Out.tools_preamble(),
+      Out.more_tools(1),
+      Out.requested_by("agent"),
+      Out.already_granted("comment"),
+      Out.preset_applied("default"),
+      Out.no_tools_found(),
+      Out.no_comments(),
+      Out.empty_inbox(),
+      Out.no_text(),
+      Out.api_key_prompt(),
+      Out.logged_in("openai"),
+      Out.logged_out("openai"),
+      Out.unknown_auth_provider("openai"),
+      Out.unknown_auth_kind("oauth"),
+      Out.login_tool_failed(),
+      Out.chain_failed("end", :after_end),
+      Out.unreported(2),
+      Out.request_inbox("id", Out.unreported(1), ["cancel", "retry"])
+    ]
   end
 
   defp manifest_paths do

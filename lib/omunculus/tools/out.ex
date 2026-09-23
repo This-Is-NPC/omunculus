@@ -79,28 +79,4 @@ defmodule Omunculus.Tools.Out do
   defp chain_reason(:not_have), do: "not have in this run"
   defp chain_reason({:failed, output}), do: output
   defp chain_reason(reason), do: inspect(reason)
-
-  @spec user_facing() :: [String.t()]
-  def user_facing do
-    [
-      tools_preamble(),
-      more_tools(1),
-      requested_by("agent"),
-      already_granted("comment"),
-      preset_applied("default"),
-      no_tools_found(),
-      no_comments(),
-      empty_inbox(),
-      no_text(),
-      api_key_prompt(),
-      logged_in("openai"),
-      logged_out("openai"),
-      unknown_auth_provider("openai"),
-      unknown_auth_kind("oauth"),
-      login_tool_failed(),
-      chain_failed("end", :after_end),
-      unreported(2),
-      request_inbox("id", unreported(1), ["cancel", "retry"])
-    ]
-  end
 end

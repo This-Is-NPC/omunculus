@@ -2,13 +2,12 @@ defmodule Omunculus.Store.Runs do
   @moduledoc """
   Harness-side writes of the run cycle (spec §3.2, §3.3, §8.7): `begin/2`
   inserts the run and `start-run` without a prompt, `attach_assembled/3`
-  stores `PROMPTS(assembled)` and fills `prompt_id` once, `open/2`
-  is begin-then-attach for tests, `record_model/3` logs a model
-  turn, `record_tools/4` logs a call and the steps it chained, each
-  followed by its emits, as one transaction so a failed emit leaves no
-  stray `tool` event, `close/2` ends the run. `begin/2` refuses a run of a cancelled
-  work, and a work's own run (`own`, no named agent) of a work that is
-  not open. `unreported/5` decides in one transaction what follows a
+  stores `PROMPTS(assembled)` and fills `prompt_id` once, `record_model/3`
+  logs a model turn, `record_tools/4` logs a call and the steps it
+  chained, each followed by its emits, as one transaction so a failed
+  emit leaves no stray `tool` event, `close/2` ends the run. `begin/2`
+  refuses a run of a cancelled work, and a work's own run (`own`, no
+  named agent) of a work that is not open. `unreported/5` decides in one transaction what follows a
   closed run whose model stopped without `end` on a work still open:
   another run while the work's latest runs without `end` are within
   `max_retries`; past it, a `break` with the given text for a child,
@@ -29,14 +28,6 @@ defmodule Omunculus.Store.Runs do
           {:ok, map} | {:error, term}
   def attach_assembled(conn, run_id, body) do
     Query.transaction(conn, fn -> do_attach(conn, run_id, body) end)
-  end
-
-  @spec open(Connection.t(), map) :: {:ok, map} | {:error, term}
-  def open(conn, params) do
-    assembled = Map.fetch!(params, :assembled)
-
-    with {:ok, run} <- begin(conn, params),
-         do: attach_assembled(conn, run.id, assembled)
   end
 
   @spec record_model(Connection.t(), String.t(), String.t()) :: {:ok, map} | {:error, term}
@@ -152,12 +143,12 @@ defmodule Omunculus.Store.Runs do
              depth: to_string(params.depth),
              via: params.via,
              request_id: params.request_id,
-             tools: Jason.encode!(Map.get(params, :tools, params.ceiling.have)),
+             tools: Jason.encode!(params.tools),
              status: "open",
              started_at: event.at
            }),
          :ok <- link_message(conn, params.prompt_id, run_id) do
-      Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id])
+      View.view(conn, "run", run_id)
     end
   end
 
@@ -178,9 +169,9 @@ defmodule Omunculus.Store.Runs do
   defp do_attach(conn, run_id, body) do
     assembled_id = Id.new()
 
-    with {:ok, run} <- Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id]),
+    with {:ok, run} <- View.view(conn, "run", run_id),
          :ok <- attachable_run(run),
-         {:ok, event} <- Query.one(conn, "SELECT * FROM events WHERE id = ?", [run.event_id]),
+         {:ok, event} <- View.view(conn, "event", run.event_id),
          :ok <-
            Query.insert(conn, :prompts, %{
              id: assembled_id,
@@ -191,7 +182,7 @@ defmodule Omunculus.Store.Runs do
            }),
          :ok <-
            Query.exec(conn, "UPDATE runs SET prompt_id = ? WHERE id = ?", [assembled_id, run_id]) do
-      Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id])
+      View.view(conn, "run", run_id)
     end
   end
 
@@ -204,7 +195,7 @@ defmodule Omunculus.Store.Runs do
     do: Query.exec(conn, "UPDATE prompts SET run_id = ? WHERE id = ?", [run_id, prompt_id])
 
   defp do_close(conn, run_id) do
-    with {:ok, run} <- Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id]) do
+    with {:ok, run} <- View.view(conn, "run", run_id) do
       close_open_run(conn, run)
     end
   end

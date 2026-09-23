@@ -18,25 +18,9 @@ defmodule Omunculus.Store.RunsTest do
     )
   end
 
-  defp open_params(prompt_id) do
-    %{
-      prompt_id: prompt_id,
-      agent: "concierge",
-      depth: 0,
-      ceiling: %{have: ["send"], askable: [], sealed: [], blocked: [], uncited: "askable"},
-      execution: %{"id" => "execution-policy"},
-      assembled: "agent text + message",
-      work_id: nil,
-      via: nil,
-      request_id: nil
-    }
-  end
-
   test "begin leaves prompt_id nil until attach_assembled", %{conn: conn} do
     message_id = Fixtures.insert(conn, :prompts, %{kind: "message", body: "count to 5"})
-    params = Map.delete(open_params(message_id), :assembled)
-
-    assert {:ok, run} = Runs.begin(conn, params)
+    assert {:ok, run} = Runs.begin(conn, Fixtures.run_params(%{prompt_id: message_id}))
     assert run.prompt_id == nil
     assert run.status == "open"
 
@@ -53,7 +37,7 @@ defmodule Omunculus.Store.RunsTest do
   test "open writes the assembled prompt, the run row and the start-run event", %{conn: conn} do
     message_id = Fixtures.insert(conn, :prompts, %{kind: "message", body: "count to 5"})
 
-    assert {:ok, run} = Runs.open(conn, open_params(message_id))
+    run = Fixtures.open_run(conn, %{prompt_id: message_id})
 
     assert run.status == "open"
     assert run.depth == "0"
@@ -78,7 +62,7 @@ defmodule Omunculus.Store.RunsTest do
   end
 
   test "open with prompt_id: nil works and leaves start-run without a prompt_id", %{conn: conn} do
-    assert {:ok, run} = Runs.open(conn, open_params(nil))
+    run = Fixtures.open_run(conn)
 
     assert {:ok, event} = Query.one(conn, "SELECT * FROM events WHERE id = ?", [run.event_id])
     assert event.type == "start-run"
@@ -86,7 +70,7 @@ defmodule Omunculus.Store.RunsTest do
   end
 
   test "record_model appends a model event carrying the run id", %{conn: conn} do
-    {:ok, run} = Runs.open(conn, open_params(nil))
+    run = Fixtures.open_run(conn)
 
     assert {:ok, event} = Runs.record_model(conn, run.id, "thinking...")
 
@@ -96,7 +80,7 @@ defmodule Omunculus.Store.RunsTest do
   end
 
   test "record_tools appends a tool event carrying the run id and the call", %{conn: conn} do
-    {:ok, run} = Runs.open(conn, open_params(nil))
+    run = Fixtures.open_run(conn)
     call = %{name: "send", args: %{"message" => "hi"}, ok: true, output: "done"}
 
     assert {:ok, [event]} = Runs.record_tools(conn, run.id, [{call, []}], ctx(run.id))
@@ -107,7 +91,7 @@ defmodule Omunculus.Store.RunsTest do
   end
 
   test "record_tools stamps the tool event with ctx.work_id", %{conn: conn} do
-    {:ok, run} = Runs.open(conn, open_params(nil))
+    run = Fixtures.open_run(conn)
     work_id = Fixtures.insert(conn, :works)
     call = %{name: "send", args: %{}, ok: true, output: "done"}
 
@@ -119,7 +103,7 @@ defmodule Omunculus.Store.RunsTest do
   end
 
   test "record_tools applies the call's emits in the same transaction", %{conn: conn} do
-    {:ok, run} = Runs.open(conn, open_params(nil))
+    run = Fixtures.open_run(conn)
     work_id = Fixtures.insert(conn, :works)
     call = %{name: "comment", args: %{}, ok: true, output: "done"}
 
@@ -136,7 +120,7 @@ defmodule Omunculus.Store.RunsTest do
   end
 
   test "record_tools rolls back the tool event when an emit fails", %{conn: conn} do
-    {:ok, run} = Runs.open(conn, open_params(nil))
+    run = Fixtures.open_run(conn)
     call = %{name: "comment", args: %{}, ok: true, output: "done"}
     emits = [%{"type" => "comment", "body" => %{"work_id" => "nope", "body" => "hi"}}]
 
@@ -148,7 +132,7 @@ defmodule Omunculus.Store.RunsTest do
   end
 
   test "record_tools rolls back every call when a later call's emit fails", %{conn: conn} do
-    {:ok, run} = Runs.open(conn, open_params(nil))
+    run = Fixtures.open_run(conn)
     work_id = Fixtures.insert(conn, :works)
     call = %{name: "comment", args: %{}, ok: true, output: ""}
     good = [%{"type" => "comment", "body" => %{"work_id" => work_id, "body" => "hi"}}]
@@ -162,7 +146,7 @@ defmodule Omunculus.Store.RunsTest do
   end
 
   test "close marks the run done and appends end-run", %{conn: conn} do
-    {:ok, run} = Runs.open(conn, open_params(nil))
+    run = Fixtures.open_run(conn)
 
     assert {:ok, event} = Runs.close(conn, run.id)
 
@@ -175,7 +159,7 @@ defmodule Omunculus.Store.RunsTest do
   end
 
   test "closing a run that is not open fails and writes nothing", %{conn: conn} do
-    {:ok, run} = Runs.open(conn, open_params(nil))
+    run = Fixtures.open_run(conn)
     {:ok, _event} = Runs.close(conn, run.id)
 
     assert {:error, {:run, :not_open}} = Runs.close(conn, run.id)
@@ -189,7 +173,7 @@ defmodule Omunculus.Store.RunsTest do
   end
 
   test "replay of the run lists start-run, model, tool, end-run in sequence", %{conn: conn} do
-    {:ok, run} = Runs.open(conn, open_params(nil))
+    run = Fixtures.open_run(conn)
     {:ok, _} = Runs.record_model(conn, run.id, "thinking...")
 
     {:ok, _} =
@@ -219,7 +203,7 @@ defmodule Omunculus.Store.RunsTest do
   test "unreported retries a work while its runs without end are within max_retries",
        %{conn: conn} do
     work_id = Fixtures.insert(conn, :works)
-    {:ok, run} = Runs.open(conn, %{open_params(nil) | work_id: work_id})
+    run = Fixtures.open_run(conn, %{work_id: work_id})
     {:ok, _} = Runs.close(conn, run.id)
 
     assert {:ok, :retry} = unreported(conn, run, 1)
@@ -232,7 +216,7 @@ defmodule Omunculus.Store.RunsTest do
        %{conn: conn} do
     parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
     child_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
-    {:ok, run} = Runs.open(conn, %{open_params(nil) | work_id: child_id})
+    run = Fixtures.open_run(conn, %{work_id: child_id})
     {:ok, _} = Runs.close(conn, run.id)
 
     assert {:ok, {:stopped, [event]}} = unreported(conn, run, 0)
@@ -258,7 +242,7 @@ defmodule Omunculus.Store.RunsTest do
   test "unreported past max_retries asks the human about a root, naming the request in the inbox",
        %{conn: conn} do
     work_id = Fixtures.insert(conn, :works)
-    {:ok, run} = Runs.open(conn, %{open_params(nil) | work_id: work_id})
+    run = Fixtures.open_run(conn, %{work_id: work_id})
     {:ok, _} = Runs.close(conn, run.id)
 
     assert {:ok, {:stopped, [request, notify]}} = unreported(conn, run, 0)
@@ -277,11 +261,11 @@ defmodule Omunculus.Store.RunsTest do
     cancelled = Fixtures.insert(conn, :works, %{state: "cancelled"})
 
     assert {:error, {:not_open, ^waiting}} =
-             Runs.begin(conn, Map.merge(open_params(nil), %{work_id: waiting, own: true}))
+             Runs.begin(conn, Fixtures.run_params(%{work_id: waiting, own: true}))
 
-    assert {:ok, _named} = Runs.begin(conn, %{open_params(nil) | work_id: waiting})
+    assert {:ok, _named} = Runs.begin(conn, Fixtures.run_params(%{work_id: waiting}))
 
     assert {:error, {:cancelled, ^cancelled}} =
-             Runs.begin(conn, %{open_params(nil) | work_id: cancelled})
+             Runs.begin(conn, Fixtures.run_params(%{work_id: cancelled}))
   end
 end
