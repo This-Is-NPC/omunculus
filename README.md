@@ -69,7 +69,8 @@ A folder of your own is [a tool](docs/tools.md).
 - [mise](https://mise.jdx.dev/) for the pins in `mise.toml` (Elixir 1.17,
   OTP 27, Deno 2.9)
 - A project `omunculus.toml` with `[execution]`, `[execution.sandbox]`,
-  `[store]` and `[models]`, and every agent naming a model
+  `[store]`, `[models]` and `[policy] max_retries`, every agent naming a
+  model, and an assemble tool named in `[policy]` or on the agent
 
 The executor does not install Bubblewrap or language runtimes. A runtime root
 in `[execution] runtimes` is read-only inside the sandbox and exposes the

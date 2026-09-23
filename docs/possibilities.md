@@ -61,7 +61,8 @@ the run `send` opened and ends that run; the root's run follows.
 Depth 0 talks to you. Depth 1 does the work. The concierge calls `work` with a
 report and the works to create: from the run `send` opened it creates the root
 work, and from the root's run it chains one `delegate` per child, not a second
-CLI. The parent waits (`waiting = child`) until all its children are `done`.
+CLI. The parent waits (`waiting = child`) until all its children are `done` or
+`cancelled`, or one of them breaks.
 Each item may name the child's `agent` among the depth-1 agents the prompt
 lists under `## Agents`. The default preset is this, with a reviewer parked
 behind `workflow_only`.

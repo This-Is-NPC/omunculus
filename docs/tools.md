@@ -7,10 +7,10 @@ Replacing a folder replaces the behaviour. A hook is the same folder with
 
 ## Contract
 
-Simple, composite, default and third-party: one shape.
+Builtin, default and third-party: one contract.
 
 ```text
-in:  { name, args, view, run_id, work_id, workspace, roots }
+in:  { name, args, view, run_id, work_id, workspace, roots, config_path }
 out: { ok, output, emit, chain }
 ```
 
@@ -61,7 +61,6 @@ tools/on-request/hook.toml
 ```toml
 name = "read"
 kind = "tool"
-shape = "simple"
 triggers = ["model"]
 description = "Reads a file."
 tags = ["fs"]
@@ -98,9 +97,9 @@ whichever schema the model saw.
 The next run that walks `[tools] paths` sees the folder. Builtin tools
 may be an Elixir `module` returning the same `out`.
 
-`shape` is `simple` (one call) or `composite` (`load` then `commit`, as
-the tool's own schema defines). The harness sees two calls of the same
-`name`.
+A tool that works in steps, like `compact_comments` (`load` then
+`commit`), takes the step as an argument of its own schema. The harness
+sees two calls of the same `name`.
 
 Copy the folder into a path listed in `[tools] paths`. Inline
 `[tools.<name>]` in the TOML is the same keys without a folder. MCP
@@ -158,6 +157,13 @@ Views the store will hydrate:
 | `runs.last.work` | the work's last closed run, its final model text (`text`) and whether it commented on the work (`commented`) | |
 | `request` | the request named by the call's `request_id` argument, or the run's request | |
 | `grant_scopes` | the scopes a permanent `grant` may name (`agent`, `depth`, `stage`, `workspace`); `request_access` builds its options from it | |
+| `prompt` | the message prompt of the run's opening; from the CLI, the assembled prompt of `--run`, or of the last run | |
+| `inbox` | unread notifications, each with its first comment as `body` | |
+| `inbox.work` | the unread notifications of that work | |
+| `catalog` | the cards of the run's effective `model` tools, each marked `pinned` or not | |
+| `workspaces` | every configured workspace, its `root` and whether it is the call's | |
+| `paths` | the path permissions of the run's ceiling | |
+| `counter` | the value the `counter` tools keep in `EVENTS` | |
 
 Qualified names are canonical. A manifest copied from the spec with
 `views = ["comments"]` still loads.
@@ -281,12 +287,12 @@ store     = comment, request_access, reply, grant, notify
 sandbox   = request_sandbox
 sequence  = work, delegate, continue, break, end, done, cancel
 catalog   = tool_search
-cli       = send, inbox, inbox_read, prompt, login, logout
+cli       = send, inbox, inbox_read, prompt, login, logout, cursor_login, preset
 bench     = counter, counter_decrement
 prompt    = assemble
 ```
 
 `directory` and `workspaces` exist as folders and are not in `fs.read`.
-`compact_comments` is on disk as a composite tool. `preset` is CLI-only
+`preset` is CLI-only
 and `config = false`. A group name in an agent's `tools` list expands to
 those names at ceiling mount.

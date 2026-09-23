@@ -60,8 +60,11 @@ module = "Omunculus.Tools.Read"
 Discovery walks `paths` in order, then `[[mcp.servers]]`, then inline
 `[tools.<name>]` tables. The last declaration of a `name` wins. There is
 no magical `priv/tools`, `~/.omunculus/tools` or `<project>/tools` outside
-what `paths` lists. A name in the ceiling that is not in the catalog is
-blocked.
+what `paths` lists, with one exception: a name the command line or the
+harness dispatches (`send`, `assemble`, …) that the catalog does not hold
+is looked up among the package's own `priv/tools` folders, and used when
+its `triggers` include that trigger. A name in the ceiling that is not in
+the catalog is blocked.
 
 `[[mcp.servers]]` is `name`, `command` and `protocol_version` per server.
 The version goes on `initialize`. There is no global protocol constant.
@@ -73,8 +76,10 @@ is skipped and logged, not fatal to the run.
 `api` is `openai-completions`, `openai-responses`, `anthropic-messages`,
 `command` or `module`. `module` names an Elixir adapter (`Omunculus.Model.Fake`
 is the one the default preset uses). `command` runs a program over the
-sandbox NDJSON protocol. The HTTP adapters take `url`, `model`, optional
-`timeout_ms`, `headers` and `provider`.
+sandbox NDJSON protocol and takes `command`, `model`, optional `provider`
+and `params`. `module` takes optional `params`. The HTTP adapters take
+`url`, `model`, optional `timeout_ms`, `temperature`, `headers` and
+`provider`.
 
 ```toml
 [auth]
@@ -204,7 +209,8 @@ key. Missing file is an error. A permanent grant with
 
 No model from the environment. No store path next to the binary. No
 sandbox flags from a module attribute. No catalog from the package unless
-`paths` pointed at it (a preset's rewritten `paths` usually does).
+`paths` pointed at it (a preset's rewritten `paths` usually does), beyond
+the command-line and harness lookup under [Catalog](#catalog).
 `$VAR` in an `[auth]` key and names listed in `[execution] environment`
 are the two times the process environment is read, and both are declared
 in this file.

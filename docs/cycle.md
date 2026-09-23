@@ -9,7 +9,7 @@ event
     → emit → the store applies the action
     → hooks of that event run in the unroll, with the run open (not those of end)
     → a call that did not end the run: if its actions asked for a run
-      (send, work, continue, break, delegate, cancel, request, reply),
+      (prompt, work, continue, break, delegate, cancel, request, reply),
       that run opens now, while this one goes on
     → end, or the model stopping by itself: EVENTS(end-run) of this run
     → if an action of the ending call asked for a run
@@ -56,13 +56,11 @@ the author's.
 ```text
 omunculus send "count to 5"
     emit prompt → PROMPTS(message) + EVENTS(prompt)
-    EVENTS(end-run) if a run was still open; otherwise this is the first
     open run → EVENTS(start-run) (prompt_id still empty)
     harness dispatches assemble (name in agents.<x>.assemble or [policy] assemble)
     non-empty output → PROMPTS(assembled) + RUNS.prompt_id
     the model sees the assembled and calls through code in the sandbox
 each tool
-    one call (simple) or load → commit (composite)
     chained steps: out.chain, then the manifest's then, each an EVENTS(tool)
       with via = the tool that chained it; a refused step writes none of them
     EVENTS(tool) — name, args, result
@@ -182,7 +180,7 @@ The model's final text does not reach the terminal. It is `EVENTS(model)`.
 
 ```text
 open:     action work (root) or delegate (child); stage = first of the TOML
-open → waiting:  break, request (waiting = request, waiting_for = the request), or delegate (child)
+open → waiting:  break, request (waiting = request, waiting_for = the request), or delegate (waiting = child)
 waiting → open:    reply to the request it waits on, all its children done or cancelled, or a child on break — same stage
 waiting → open:    send / prompt on a waiting work — reopened_by_prompt
 open → open:       continue (chained by done) — next stage, new run

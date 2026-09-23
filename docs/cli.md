@@ -9,7 +9,7 @@ answer are all 1, and the line on stderr is the reason.
 
 The binary has no verbs of its own. `omunculus send` is the `send` tool,
 `omunculus inbox` is the `inbox` tool: the same `{ name, args, view }` in and
-`{ ok, output, emit }` out the model uses, with `trigger = cli`. Replacing
+`{ ok, output, emit, chain }` out the model uses, with `trigger = cli`. Replacing
 the folder named `send` replaces the command. A name the catalog does not
 hold is a refusal.
 
@@ -20,7 +20,7 @@ is already `--config`. The project root is the directory of that file, or
 `[project] root` resolved against it. The SQLite store is `[store] path`,
 also resolved against the file.
 
-A missing file is `no config at <path>; run 'omunculus preset <name> --from <dir>'`. The package does not load `priv/omunculus.toml` behind your back.
+A missing file is `` no config at <path>; run `omunculus preset <name> --from <dir>` ``. There is no package config to fall back to.
 The one exception is a tool whose manifest set `config = false`, which is
 how `preset` can write the file every other verb then reads. `preset` still
 takes `--config` as the destination it writes to.
@@ -52,7 +52,8 @@ Copy a preset onto the config path.
 the directory that actually supplies the bytes: it must contain
 `omunculus.toml`, and if it contains `tools/` that tree is copied beside the
 file. `[tools] paths` and `[execution.sandbox] script` are rewritten to
-absolute locations resolved against `--from`, so a checkout of
+absolute locations resolved against `--from`, and the `tools/` folder
+beside the written file is appended to `paths`, so a checkout of
 `priv/presets/default` keeps pointing at `priv/tools` and `priv/sandbox.js`
 after the copy.
 
@@ -153,8 +154,8 @@ provider's `login` tool is dispatched instead (`cursor_login` is the
 one the package ships).
 
 A provider the TOML does not declare is `unknown auth provider: <id>`.
-A model that needs a login and has none fails later with `not logged in
-to <id>; run 'omunculus login --provider <id>'`.
+A model that needs a login and has none fails later with `` not logged in
+to <id>; run `omunculus login --provider <id>` ``.
 
 ## `omunculus logout`
 
@@ -175,14 +176,19 @@ refuses to open:
 
 | Line | When |
 | --- | --- |
-| `no config at <path>; run 'omunculus preset <name> --from <dir>'` | file missing |
+| `` no config at <path>; run `omunculus preset <name> --from <dir>` `` | file missing |
 | `omunculus.toml is missing [execution]; required keys: …` | table or keys absent |
 | `omunculus.toml is missing [execution.sandbox]` | sandbox table absent |
+| `omunculus.toml [execution] resources includes unknown name <name>` | a resource the executor does not know |
 | `omunculus.toml is missing [models]` | no adapters |
 | `omunculus.toml is missing [store]` | no store path |
 | `omunculus.toml agent <name> is missing model` | agent without `model` |
+| `omunculus.toml [policy] max_retries is required, a non-negative integer` | `max_retries` absent or invalid |
 | `omunculus.toml is missing assemble` | no assemble tool named |
 | `assemble returned an empty prompt` | assemble ran and produced nothing |
-| `not logged in to <id>; run 'omunculus login --provider <id>'` | credential missing |
+| `overrides.<tool>.chains names <name>, which the <tool> manifest does not chain` | an override widens `chains` |
+| `overrides of <tool> leave a then outside its chains or with end not last` | an override breaks the `then` rule |
+| `overrides.<tool>.schema names <variant>, which the <tool> manifest does not declare` | an override names an unknown schema |
+| `` not logged in to <id>; run `omunculus login --provider <id>` `` | credential missing |
 
 Anything else is `inspect` of the reason, or the tool's own `output`.
