@@ -7,13 +7,14 @@ defmodule Omunculus.Tools.Notify do
   alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
-  def run(%{args: %{"body" => text} = args}) when is_binary(text) and text != "" do
-    body = Args.put_present(%{"body" => text}, "work_id", args)
+  def run(%{args: args}) do
+    case Args.fetch(args, "body") do
+      {:ok, text} ->
+        body = Args.put_present(%{"body" => text}, "work_id", args)
+        Out.ok("", [%{"type" => "notify", "body" => body}])
 
-    Out.ok("", [%{"type" => "notify", "body" => body}])
-  end
-
-  def run(_input) do
-    Out.fail("body required")
+      {:error, message} ->
+        Out.fail(message)
+    end
   end
 end

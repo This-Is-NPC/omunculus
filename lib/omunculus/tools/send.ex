@@ -7,13 +7,14 @@ defmodule Omunculus.Tools.Send do
   alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
-  def run(%{args: %{"message" => message} = args}) when is_binary(message) and message != "" do
-    body = Args.put_present(%{"message" => message}, "work_id", args)
+  def run(%{args: args}) do
+    case Args.fetch(args, "message") do
+      {:ok, message} ->
+        body = Args.put_present(%{"message" => message}, "work_id", args)
+        Out.ok("", [%{"type" => "prompt", "body" => body}])
 
-    Out.ok("", [%{"type" => "prompt", "body" => body}])
-  end
-
-  def run(_input) do
-    Out.fail("message required")
+      {:error, error} ->
+        Out.fail(error)
+    end
   end
 end

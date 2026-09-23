@@ -1,7 +1,7 @@
 defmodule Omunculus.Tools.Args do
   @moduledoc """
-  Optional string arguments of the builtin tools: present only when given
-  as a non-empty string.
+  String arguments of the builtin tools: present only when given as a
+  non-empty string; a required one that is not is `"<key> required"`.
   """
 
   @spec present(map, String.t()) :: String.t() | nil
@@ -20,10 +20,21 @@ defmodule Omunculus.Tools.Args do
     end
   end
 
+  @spec fetch(map, String.t()) :: {:ok, String.t()} | {:error, String.t()}
+  def fetch(args, key) do
+    case present(args, key) do
+      nil -> {:error, "#{key} required"}
+      value -> {:ok, value}
+    end
+  end
+
   @spec missing(map, [String.t()]) :: String.t() | nil
   def missing(args, keys) do
     Enum.find_value(keys, fn key ->
-      if present(args, key), do: nil, else: "#{key} required"
+      case fetch(args, key) do
+        {:ok, _value} -> nil
+        {:error, message} -> message
+      end
     end)
   end
 end

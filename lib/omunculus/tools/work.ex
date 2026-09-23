@@ -15,18 +15,11 @@ defmodule Omunculus.Tools.Work do
 
   @spec run(map) :: map
   def run(%{args: args, work_id: work_id}) do
-    with {:ok, report} <- report(args),
+    with {:ok, report} <- Args.fetch(args, "report"),
          {:ok, works} <- works(args["works"]) do
       create(work_id, report, works)
     else
       {:error, message} -> Out.fail(message)
-    end
-  end
-
-  defp report(args) do
-    case Args.present(args, "report") do
-      nil -> {:error, "report required"}
-      report -> {:ok, report}
     end
   end
 

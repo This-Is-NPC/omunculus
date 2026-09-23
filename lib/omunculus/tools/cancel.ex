@@ -8,9 +8,12 @@ defmodule Omunculus.Tools.Cancel do
 
   @spec run(map) :: map
   def run(%{args: args}) do
-    case Args.present(args, "request_id") do
-      nil -> Out.fail("request_id required")
-      request_id -> Out.ok("", [%{"type" => "cancel", "body" => %{"request_id" => request_id}}])
+    case Args.fetch(args, "request_id") do
+      {:ok, request_id} ->
+        Out.ok("", [%{"type" => "cancel", "body" => %{"request_id" => request_id}}])
+
+      {:error, message} ->
+        Out.fail(message)
     end
   end
 end

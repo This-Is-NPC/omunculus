@@ -10,9 +10,9 @@ defmodule Omunculus.Tools.Break do
 
   @spec run(map) :: map
   def run(%{args: args}) do
-    case Args.present(args, "report") do
-      nil -> Out.fail("report required")
-      report -> Out.ok("", [%{"type" => "break", "body" => %{"body" => report}}])
+    case Args.fetch(args, "report") do
+      {:ok, report} -> Out.ok("", [%{"type" => "break", "body" => %{"body" => report}}])
+      {:error, message} -> Out.fail(message)
     end
   end
 end
