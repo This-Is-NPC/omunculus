@@ -1,9 +1,11 @@
 defmodule Omunculus.Harness do
   @moduledoc """
-  Discovers and dispatches tool names through the shared contract. Hydrates
-  declared views, runs the steps a call chains (`out.chain`, then the
-  manifest's `then`) under the same contract, commits the call, its steps
-  and all their emits atomically, then reacts to their events. A step
+  Discovers and dispatches tool names through the shared contract. The
+  catalog a call sees has the `overrides` of its run applied, or those of
+  the policy and workspace layers outside a run. Hydrates declared views,
+  runs the steps a call chains (`out.chain`, then the manifest's `then`)
+  under the same contract, commits the call, its steps and all their
+  emits atomically, then reacts to their events. A step
   outside the chaining tool's `chains`, without the `chain` trigger, not
   have in the run's ceiling, already on the chain path, after `end`, or
   failing fails the call and writes none of the chain's emits. Run
@@ -18,15 +20,15 @@ defmodule Omunculus.Harness do
 
   alias Omunculus.{Ceiling, Config, Project, Run, Store}
   alias Omunculus.Execution.Policy
-  alias Omunculus.Tool.{Catalog, Invoke, Manifest}
+  alias Omunculus.Tool.{Catalog, Invoke, Manifest, Overrides}
   alias Omunculus.Tools.Out
 
-  @spec manifest(Project.t(), String.t()) ::
-          {:ok, Manifest.t()} | {:error, {:unknown_tool, String.t()}}
+  @spec manifest(Project.t(), String.t()) :: {:ok, Manifest.t()} | {:error, term}
   def manifest(%Project{config_path: path}, name) do
     with {:ok, config} <- Config.load(path),
-         {:ok, config} <- Config.for_workspace(config, Config.effective_workspace(config, nil)) do
-      config.tools |> Catalog.discover(config.mcp, nil) |> fetch_dispatch_manifest(name, "cli")
+         {:ok, config} <- Config.for_workspace(config, Config.effective_workspace(config, nil)),
+         {:ok, catalog} <- catalog(nil, nil, config, workspace_context(config, nil), nil) do
+      fetch_dispatch_manifest(catalog, name, "cli")
     end
   end
 
@@ -89,11 +91,10 @@ defmodule Omunculus.Harness do
          work_id = run_work_id(run),
          {:ok, work} <- fetch_work(project, work_id),
          {:ok, config} <- resolved_config(project, work),
-         catalog =
-           Catalog.discover(config.tools, config.mcp, Map.get(ctx, :execution)),
+         workspace = workspace_context(config, work),
+         {:ok, catalog} <- catalog(project, run, config, workspace, Map.get(ctx, :execution)),
          {:ok, manifest} <- fetch_dispatch_manifest(catalog, name, ctx.trigger),
          :ok <- check_trigger(manifest, name, ctx.trigger),
-         workspace = workspace_context(config, work),
          views = %{
            catalog: catalog_view(run, catalog, start_event(project, run)),
            workspaces: workspaces_view(config, workspace.name),
@@ -116,10 +117,9 @@ defmodule Omunculus.Harness do
         with {:ok, run} <- resolve_run(project, event.run_id),
              {:ok, work} <- fetch_work(project, event.work_id),
              {:ok, config} <-
-               Config.for_workspace(base, Config.effective_workspace(base, work)) do
-          catalog = Catalog.discover(config.tools, config.mcp, execution)
-          workspace = workspace_context(config, work)
-
+               Config.for_workspace(base, Config.effective_workspace(base, work)),
+             workspace = workspace_context(config, work),
+             {:ok, catalog} <- catalog(project, run, config, workspace, execution) do
           ctx = %{
             run_id: event.run_id,
             author: if(run, do: "agent", else: "human"),
@@ -175,6 +175,25 @@ defmodule Omunculus.Harness do
     case start_event(project, run) do
       nil -> nil
       event -> Jason.decode!(event.body)["ceiling"]
+    end
+  end
+
+  # The catalog a call sees: a run's overrides come from its mounted
+  # snapshot; outside a run only the policy and workspace layers apply.
+  defp catalog(project, run, config, workspace, execution) do
+    config.tools
+    |> Catalog.discover(config.mcp, execution)
+    |> Overrides.apply(run_overrides(project, run, config, workspace))
+  end
+
+  defp run_overrides(_project, nil, config, workspace),
+    do:
+      Ceiling.overrides(config, %{agent: nil, depth: nil, stage: nil, workspace: workspace.layer})
+
+  defp run_overrides(project, run, _config, _workspace) do
+    case run_ceiling(project, run) do
+      nil -> %{}
+      ceiling -> ceiling["overrides"]
     end
   end
 

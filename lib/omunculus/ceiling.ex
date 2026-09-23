@@ -8,9 +8,15 @@ defmodule Omunculus.Ceiling do
   A layer's lists always apply; its mode, when it has one, classifies what
   the lists do not cite; the policy mode is the fallback for a name no
   layer classified. The most restrictive class wins.
+
+  The same layers, from policy to stage, resolve the per-tool
+  `overrides` of a run: for each key the most specific layer that sets it
+  wins. `mount/3` puts them on the snapshot; `overrides/2` resolves them
+  for a context without a mounted snapshot.
   """
 
   alias Omunculus.Config.Layer
+  alias Omunculus.Tool.Overrides
 
   @classes ~w(have askable sealed blocked)
 
@@ -30,7 +36,8 @@ defmodule Omunculus.Ceiling do
           askable: [String.t()],
           sealed: [String.t()],
           blocked: [String.t()],
-          uncited: String.t()
+          uncited: String.t(),
+          overrides: Overrides.t()
         }
   def mount(
         config,
@@ -64,7 +71,21 @@ defmodule Omunculus.Ceiling do
     |> Map.put(:catalog, names)
     |> Map.put(:deny, Enum.flat_map(layers, fn {_, layer} -> layer.deny end) |> Enum.uniq())
     |> Map.put(:pinned, intersect_pinned(layers))
+    |> Map.put(:overrides, merge_overrides(layers))
   end
+
+  @spec overrides(map(), %{
+          agent: String.t() | nil,
+          depth: integer() | nil,
+          stage: Layer.t() | nil,
+          workspace: Layer.t() | nil
+        }) :: Overrides.t()
+  def overrides(config, %{agent: agent_name, depth: depth, stage: stage, workspace: workspace}) do
+    config |> applying_layers(agent_name, depth, stage, workspace) |> merge_overrides()
+  end
+
+  defp merge_overrides(layers),
+    do: layers |> Enum.map(fn {_role, layer} -> layer.overrides end) |> Overrides.merge()
 
   @spec classify(map(), String.t()) :: String.t()
   def classify(snapshot, name) do

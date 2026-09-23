@@ -38,6 +38,7 @@ defmodule Omunculus.Tool.ManifestTest do
     assert manifest.events == []
     assert manifest.chains == []
     assert manifest.then == []
+    assert manifest.schemas == %{}
     assert manifest.dir == dir
     assert manifest.config == true
   end
@@ -482,6 +483,44 @@ defmodule Omunculus.Tool.ManifestTest do
         """)
 
       assert Manifest.load(path) == {:error, {:invalid, :then}}
+    end
+  end
+
+  test "schemas are named variants beside parameters", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "finish"
+      kind = "tool"
+      module = "Omunculus.Tools.Comment"
+
+      [parameters]
+      type = "object"
+      required = ["body"]
+
+      [schemas.short]
+      type = "object"
+      required = []
+      """)
+
+    assert {:ok, manifest} = Manifest.load(path)
+    assert manifest.parameters == %{"type" => "object", "required" => ["body"]}
+    assert manifest.schemas == %{"short" => %{"type" => "object", "required" => []}}
+  end
+
+  for {name, schemas} <- [
+        {"a schemas value that is not a table", ~s(schemas = "short")},
+        {"a variant that is not a table", ~s(schemas = { short = "object" })}
+      ] do
+    test "#{name} fails to load", %{dir: dir} do
+      path =
+        write_toml(dir, """
+        name = "finish"
+        kind = "tool"
+        module = "Omunculus.Tools.Comment"
+        #{unquote(schemas)}
+        """)
+
+      assert Manifest.load(path) == {:error, {:invalid, :schemas}}
     end
   end
 end

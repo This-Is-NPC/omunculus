@@ -80,6 +80,20 @@ events = ["request"]
 command = ["./run"]
 ```
 
+`parameters` is the schema the model sees by default. `[schemas.<variant>]`
+tables declare named alternatives, each a whole schema like `parameters`:
+
+```toml
+[schemas.short]
+type = "object"
+required = []
+```
+
+A layer of the TOML picks one with `overrides.<tool>.schema`
+([Overrides](config.md#overrides)); the run then serves that variant as
+the tool's `parameters`. The store rules on the arguments stay the same
+whichever schema the model saw.
+
 `run` reads JSON on stdin and prints JSON on stdout, in any language.
 The next run that walks `[tools] paths` sees the folder. Builtin tools
 may be an Elixir `module` returning the same `out`.
@@ -107,7 +121,9 @@ then = ["end"]
 
 `chains` lists the names the tool may chain. Every `then` name is in
 `chains`, and `end`, when present, is the last of `then`; otherwise the
-manifest does not load.
+manifest does not load. A layer of the TOML may replace `then` or
+restrict `chains` with `overrides.<tool>` ([Overrides](config.md#overrides));
+the chain runs with the resolved values of its run.
 
 Each step goes through the same contract as a call: the views its own
 manifest declares, its `emit`, its `EVENTS(tool)` with `via` = the name

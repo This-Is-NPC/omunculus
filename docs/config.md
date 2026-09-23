@@ -111,11 +111,58 @@ steps = [
 
 Each of `workspace`, `depth`, a workflow step, an agent and `[policy]` is
 a ceiling layer: `mode`, `granted` / `tools`, `negotiable`, `human`,
-`deny`, `pinned`. Intersected, not unioned. [The ceiling](ceiling.md) is
+`deny`, `pinned`, and the per-tool `overrides` below. Intersected, not unioned. [The ceiling](ceiling.md) is
 the rule.
 
 `text` is what the assemble tool puts first in the prompt. It is not a
 system role and it is not the message from `send`.
+
+## Overrides
+
+Each ceiling layer, and a workflow, may override three keys of a tool's
+manifest under `overrides.<tool>`:
+
+```toml
+[policy.overrides.done]
+schema = "short"
+
+[policy.depth.1.overrides.done]
+then = []
+
+[workspaces.app.overrides.done]
+chains = ["comment", "end"]
+
+[agents.worker.overrides.done]
+then = ["end"]
+
+[workflows.delivery.overrides.work]
+then = []
+
+[workflows.delivery]
+steps = [
+  { name = "review", agent = "reviewer", overrides = { done = { then = [] } } },
+]
+```
+
+- `then` replaces the manifest's `then`, under the same rule: every name
+  in the effective `chains`, `end` only last.
+- `chains` restricts the manifest's `chains`; a name the manifest does not
+  list is an error.
+- `schema` names one of the manifest's `[schemas.<variant>]`; that
+  variant is what the model sees instead of `parameters`.
+
+Any other key under `overrides.<tool>` fails the load. Each key resolves
+on its own: the most specific layer that sets it wins, in the order
+policy, workspace, depth, agent, workflow, stage. A workflow's overrides
+apply to the runs in its stages. The ceiling snapshot of a run carries the
+resolved overrides, and every call in that run, chain steps and hooks
+included, sees the catalog with them applied. Outside a run only policy
+and workspace apply; that is what the CLI uses, including which argument
+is positional.
+
+Checks against the manifest wait for the catalog: an override that does
+not fit its manifest keeps a run from opening, and fails a call outside a
+run. An override of a tool that is not in the catalog is ignored.
 
 ## Workspaces
 
@@ -126,15 +173,19 @@ deny = ["delete"]
 config = "omunculus.toml"
 ```
 
-`root` is a directory, relative to the project root. Ceiling keys on the
-section are a layer. Any other global table (`execution`, `models`,
-`agents`, `workflows`, `tools`, `policy`, `mcp`, `auth`) overlays the
-global file: the workspace wins, a list replaces rather than concatenates.
-`[store]` stays global.
+`root` is a directory, relative to the project root. Ceiling keys and
+`overrides` on the section are a layer. Any other global table
+(`execution`, `models`, `agents`, `workflows`, `tools`, `policy`, `mcp`,
+`auth`) overlays the global file: the workspace wins, a list replaces
+rather than concatenates. Ceiling keys and `overrides` inside an overlaid
+`policy`, `agents` or `workflows` table do not overlay. `[store]` stays
+global.
 
 `config` is a second TOML relative to that `root`, same schema minus
 `[workspaces]` and `[store]`. Precedence is global, then the inline
-section, then the file. Missing file is an error. A permanent grant with
+section, then the file. The ceiling keys and `overrides` of the file's
+`[policy]` join the section's layer, the file's `overrides` winning per
+key. Missing file is an error. A permanent grant with
 `scope = workspace` writes that file when it exists.
 
 ## What a load will not invent

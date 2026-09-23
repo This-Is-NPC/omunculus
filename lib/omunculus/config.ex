@@ -11,7 +11,9 @@ defmodule Omunculus.Config do
   adapters, the named workflows under `[workflows.<name>]` (spec §3.4),
   the MCP servers under `[[mcp.servers]]` (spec §8.7), the `[auth]`
   providers (spec §11.1), the required `[execution]` and `[store]`
-  tables, and grants a permanent ceiling
+  tables. Every ceiling layer, and a workflow, may carry per-tool
+  `overrides` (`Omunculus.Tool.Overrides`); a workflow's fold into each
+  of its steps beneath the step's own. It also grants a permanent ceiling
   addition — to an agent, a depth, a workflow step, or a workspace — by
   rewriting that same file. A workspace may name a `config` file relative
   to its `root`; that file uses the same schema minus `[workspaces]` and
@@ -21,7 +23,7 @@ defmodule Omunculus.Config do
 
   alias Omunculus.Auth
   alias Omunculus.Config.Layer
-  alias Omunculus.Tool.Manifest
+  alias Omunculus.Tool.{Manifest, Overrides}
 
   @enforce_keys [
     :root,
@@ -105,7 +107,7 @@ defmodule Omunculus.Config do
 
   @type tools :: %{paths: [String.t()], inline: %{String.t() => Manifest.t()}}
 
-  @layer_keys ~w(mode granted tools negotiable human deny pinned)
+  @layer_keys ~w(mode granted tools negotiable human deny pinned overrides)
   @execution_keys ~w(
     backend
     runtimes
@@ -995,7 +997,8 @@ defmodule Omunculus.Config do
       granted: intersect_ceiling_lists(inline.granted, file.granted),
       negotiable: intersect_ceiling_lists(inline.negotiable, file.negotiable),
       human: intersect_ceiling_lists(inline.human, file.human),
-      pinned: intersect_ceiling_lists(inline.pinned, file.pinned)
+      pinned: intersect_ceiling_lists(inline.pinned, file.pinned),
+      overrides: Overrides.merge([inline.overrides, file.overrides])
     }
   end
 
@@ -1217,8 +1220,9 @@ defmodule Omunculus.Config do
   end
 
   defp strip_workflow_ceiling(%{"steps" => steps} = workflow) when is_list(steps) do
-    Map.put(
-      workflow,
+    workflow
+    |> Map.delete("overrides")
+    |> Map.put(
       "steps",
       Enum.map(steps, fn
         step when is_map(step) -> Map.drop(step, @layer_keys)
@@ -1226,6 +1230,9 @@ defmodule Omunculus.Config do
       end)
     )
   end
+
+  defp strip_workflow_ceiling(workflow) when is_map(workflow),
+    do: Map.delete(workflow, "overrides")
 
   defp strip_workflow_ceiling(workflow), do: workflow
 
@@ -1765,21 +1772,22 @@ defmodule Omunculus.Config do
   end
 
   defp parse_workflow(name, data, agents) when is_map(data) do
-    case Map.keys(data) -- ["steps"] do
+    case Map.keys(data) -- ["steps", "overrides"] do
       [key | _] ->
         {:error, {:workflow, name, {:unknown_key, key}}}
 
       [] ->
-        case Map.get(data, "steps") do
-          [_ | _] = steps -> parse_steps(name, steps, agents)
-          _ -> {:error, {:workflow, name, :no_steps}}
+        case {Overrides.parse(Map.get(data, "overrides", %{})), Map.get(data, "steps")} do
+          {{:error, reason}, _steps} -> {:error, {:workflow, name, reason}}
+          {{:ok, overrides}, [_ | _] = steps} -> parse_steps(name, steps, agents, overrides)
+          {{:ok, _overrides}, _steps} -> {:error, {:workflow, name, :no_steps}}
         end
     end
   end
 
-  defp parse_steps(workflow, steps, agents) do
+  defp parse_steps(workflow, steps, agents, overrides) do
     Enum.reduce_while(steps, {:ok, []}, fn step_data, {:ok, acc} ->
-      with {:ok, step} <- parse_step(workflow, step_data, agents),
+      with {:ok, step} <- parse_step(workflow, step_data, agents, overrides),
            :ok <- check_unique_step(acc, step.name, workflow) do
         {:cont, {:ok, acc ++ [step]}}
       else
@@ -1796,7 +1804,9 @@ defmodule Omunculus.Config do
     end
   end
 
-  defp parse_step(workflow, data, agents) when is_map(data) do
+  # The workflow's overrides apply to the runs in its stages, beneath each
+  # stage's own, so they fold into every step's layer.
+  defp parse_step(workflow, data, agents, overrides) when is_map(data) do
     case Map.keys(data) -- (@step_extra_keys ++ @layer_keys) do
       [key | _] ->
         {:error, {:workflow, workflow, {:unknown_key, key}}}
@@ -1805,7 +1815,8 @@ defmodule Omunculus.Config do
         with {:ok, name} <- fetch_step_name(data),
              {:ok, agent} <- fetch_step_agent(data, agents),
              {:ok, ceiling} <- parse_layer(Map.drop(data, @step_extra_keys), nil) do
-          {:ok, %{name: name, agent: agent, ceiling: ceiling}}
+          overrides = Overrides.merge([overrides, ceiling.overrides])
+          {:ok, %{name: name, agent: agent, ceiling: %{ceiling | overrides: overrides}}}
         else
           {:error, reason} -> {:error, {:workflow, workflow, reason}}
         end
@@ -1844,7 +1855,8 @@ defmodule Omunculus.Config do
              {:ok, negotiable} <- fetch_list(data, "negotiable", :negotiable),
              {:ok, human} <- fetch_list(data, "human", :human),
              {:ok, deny} <- fetch_list(data, "deny", :deny),
-             {:ok, pinned} <- fetch_list(data, "pinned", :pinned) do
+             {:ok, pinned} <- fetch_list(data, "pinned", :pinned),
+             {:ok, overrides} <- Overrides.parse(Map.get(data, "overrides", %{})) do
           {:ok,
            %Layer{
              mode: mode,
@@ -1852,7 +1864,8 @@ defmodule Omunculus.Config do
              negotiable: negotiable,
              human: human,
              deny: deny,
-             pinned: pinned
+             pinned: pinned,
+             overrides: overrides
            }}
         end
     end

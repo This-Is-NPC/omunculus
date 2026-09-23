@@ -629,12 +629,7 @@ defmodule Omunculus.HarnessTest do
 
   describe "chains" do
     setup %{dir: dir} do
-      write_config(dir, """
-      [agents.concierge]
-      depth = 0
-      text = "hi"
-      tools = ["alpha", "beta", "comment", "delta", "end", "omega"]
-      """)
+      chain_config(dir)
 
       ChainTool.write(dir, "alpha", """
       triggers = ["model"]
@@ -659,6 +654,17 @@ defmodule Omunculus.HarnessTest do
       on_exit(fn -> Project.close(project) end)
       work_id = Fixtures.insert(project.conn, :works)
       %{project: project, work_id: work_id}
+    end
+
+    defp chain_config(dir, overrides \\ "") do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      tools = ["alpha", "beta", "comment", "delta", "end", "omega"]
+
+      #{overrides}
+      """)
     end
 
     defp outside_run, do: %{trigger: "model", run_id: nil, author: "agent", agent: "concierge"}
@@ -835,6 +841,116 @@ defmodule Omunculus.HarnessTest do
                "model",
                "end-run"
              ]
+    end
+
+    test "an override then = [] keeps the manifest's end from ending the run", %{
+      dir: dir,
+      project: project,
+      work_id: work_id
+    } do
+      chain_config(dir, """
+      [agents.concierge.overrides.omega]
+      then = []
+      """)
+
+      test_pid = self()
+
+      model = fn _assembled, _tools, call ->
+        send(test_pid, {:omega, call.("omega", %{})})
+        {:ok, "went on"}
+      end
+
+      Fixtures.use_model(dir, model)
+      message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
+
+      assert {:ok, run} = Run.open(project, open(message_id, work_id))
+      assert_received {:omega, {:ok, "omega"}}
+      assert Enum.map(tl(tool_calls(project.conn)), & &1["name"]) == ["omega"]
+      assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+      assert Enum.map(events, & &1.type) == ["start-run", "tool", "tool", "model", "end-run"]
+    end
+
+    test "an override chains restricts what the tool may chain", %{
+      dir: dir,
+      project: project
+    } do
+      chain_config(dir, """
+      [policy.overrides.alpha]
+      chains = ["comment", "end"]
+      """)
+
+      assert {:ok, %{ok: false, output: output}, _events} =
+               Harness.dispatch(project, "alpha", %{"chain" => [step("beta")]}, outside_run())
+
+      assert output == Out.chain_failed("beta", :not_chainable)
+    end
+
+    for {name, overrides, reason} <- [
+          {"chains wider than the manifest's",
+           ~s([policy.overrides.beta]\nchains = ["alpha", "gamma"]),
+           {:overrides, "beta", {:not_chainable, "gamma"}}},
+          {"a then with end before the last name",
+           ~s([policy.overrides.omega]\nthen = ["end", "beta"]),
+           {:overrides, "omega", {:invalid, :then}}},
+          {"chains that leave the manifest's then outside",
+           ~s([policy.overrides.omega]\nchains = ["comment", "end"]),
+           {:overrides, "omega", {:invalid, :then}}},
+          {"an unknown schema variant", ~s([policy.overrides.alpha]\nschema = "nope"),
+           {:overrides, "alpha", {:unknown_schema, "nope"}}}
+        ] do
+      test "#{name} fails the call and keeps the run from opening", %{
+        dir: dir,
+        project: project,
+        work_id: work_id
+      } do
+        chain_config(dir, unquote(overrides))
+        test_pid = self()
+        Fixtures.use_model(dir, fn _assembled, _tools, _call -> send(test_pid, :model) end)
+        message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
+        reason = unquote(Macro.escape(reason))
+
+        assert {:error, ^reason} = Harness.dispatch(project, "delta", %{}, outside_run())
+        assert {:error, ^reason} = Run.open(project, open(message_id, work_id))
+        refute_received :model
+        assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
+      end
+    end
+
+    test "an override schema is the parameters the model and the CLI see", %{
+      dir: dir,
+      project: project,
+      work_id: work_id
+    } do
+      ChainTool.write(dir, "delta", """
+      triggers = ["model"]
+
+      [parameters]
+      type = "object"
+      required = ["body"]
+
+      [schemas.short]
+      type = "object"
+      """)
+
+      chain_config(dir, """
+      [policy.overrides.delta]
+      schema = "short"
+      """)
+
+      test_pid = self()
+
+      model = fn _assembled, tools, _call ->
+        send(test_pid, {:tools, Map.new(tools, &{&1.name, &1.parameters})})
+        {:ok, "done"}
+      end
+
+      Fixtures.use_model(dir, model)
+      message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
+
+      assert {:ok, _run} = Run.open(project, open(message_id, work_id))
+      assert_received {:tools, %{"alpha" => %{}, "delta" => %{"type" => "object"}}}
+      assert {:ok, manifest} = Harness.manifest(project, "delta")
+      assert manifest.parameters == %{"type" => "object"}
     end
   end
 end

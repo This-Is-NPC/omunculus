@@ -2171,6 +2171,105 @@ defmodule Omunculus.ConfigTest do
       assert File.read!(toml(dir)) =~ ~s(granted = ["write"])
     end
   end
+
+  describe "overrides" do
+    test "every layer reads its overrides; a workflow's fold into its steps", %{dir: dir} do
+      File.mkdir_p!(Path.join(dir, "app"))
+
+      File.write!(Path.join(dir, "app/omunculus.toml"), """
+      [policy.overrides.done]
+      schema = "short"
+      """)
+
+      write_toml(dir, """
+      [policy]
+      workspace = "app"
+
+      [policy.overrides.done]
+      then = []
+
+      [policy.depth.1.overrides.done]
+      chains = ["end"]
+
+      [workspaces.app]
+      root = "app"
+      config = "omunculus.toml"
+
+      [workspaces.app.overrides.done]
+      then = ["end"]
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [agents.concierge.overrides.done]
+      chains = ["comment", "end"]
+
+      [workflows.delivery]
+      steps = [
+        { name = "to_do", agent = "concierge", overrides = { done = { then = ["comment"] } } },
+        { name = "review", agent = "concierge" },
+      ]
+
+      [workflows.delivery.overrides.done]
+      schema = "full"
+      chains = ["comment"]
+      """)
+
+      assert {:ok, config} = load(dir)
+      assert config.policy.overrides == %{"done" => %{"then" => []}}
+      assert config.depths[1].overrides == %{"done" => %{"chains" => ["end"]}}
+
+      assert config.workspaces["app"].ceiling.overrides == %{
+               "done" => %{"then" => ["end"], "schema" => "short"}
+             }
+
+      assert config.agents["concierge"].ceiling.overrides == %{
+               "done" => %{"chains" => ["comment", "end"]}
+             }
+
+      assert %{"delivery" => [to_do, review]} = config.workflows
+
+      assert to_do.ceiling.overrides == %{
+               "done" => %{"schema" => "full", "chains" => ["comment"], "then" => ["comment"]}
+             }
+
+      assert review.ceiling.overrides == %{
+               "done" => %{"schema" => "full", "chains" => ["comment"]}
+             }
+    end
+
+    for {layer, toml, reason} <- [
+          {"policy", "[policy.overrides.done]\nstage = \"x\"",
+           {:policy, {:overrides, "done", {:unknown_key, "stage"}}}},
+          {"depth", "[policy.depth.1.overrides.done]\nstage = \"x\"",
+           {:policy, {:depth, 1, {:overrides, "done", {:unknown_key, "stage"}}}}},
+          {"agent", "[agents.concierge.overrides.done]\nstage = \"x\"",
+           {:agent, "concierge", {:overrides, "done", {:unknown_key, "stage"}}}},
+          {"workflow",
+           "[workflows.delivery]\nsteps = [{ name = \"a\", agent = \"concierge\" }]\n[workflows.delivery.overrides.done]\nstage = \"x\"",
+           {:workflow, "delivery", {:overrides, "done", {:unknown_key, "stage"}}}},
+          {"step",
+           "[workflows.delivery]\nsteps = [{ name = \"a\", agent = \"concierge\", overrides = { done = { stage = \"x\" } } }]",
+           {:workflow, "delivery", {:overrides, "done", {:unknown_key, "stage"}}}},
+          {"policy then", "[policy.overrides.done]\nthen = \"end\"",
+           {:policy, {:overrides, "done", {:invalid, :then}}}},
+          {"policy schema", "[policy.overrides.done]\nschema = []",
+           {:policy, {:overrides, "done", {:invalid, :schema}}}}
+        ] do
+      test "an invalid override on the #{layer} layer fails the load", %{dir: dir} do
+        write_toml(dir, """
+        [agents.concierge]
+        depth = 0
+        text = "hi"
+
+        #{unquote(toml)}
+        """)
+
+        assert load(dir) == {:error, unquote(Macro.escape(reason))}
+      end
+    end
+  end
 end
 
 defmodule Omunculus.ConfigAuthTest do

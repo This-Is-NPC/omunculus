@@ -18,6 +18,7 @@ defmodule Omunculus.Tool.Manifest do
             command: nil,
             module: nil,
             parameters: %{},
+            schemas: %{},
             views: [],
             events: [],
             chains: [],
@@ -38,6 +39,7 @@ defmodule Omunculus.Tool.Manifest do
           command: [String.t()] | nil,
           module: String.t() | nil,
           parameters: map,
+          schemas: %{String.t() => map},
           views: [String.t()],
           events: [String.t()],
           chains: [String.t()],
@@ -48,7 +50,7 @@ defmodule Omunculus.Tool.Manifest do
           config: boolean
         }
 
-  @known_keys ~w(name kind shape triggers description tags groups command module parameters views events chains then agent config)
+  @known_keys ~w(name kind shape triggers description tags groups command module parameters schemas views events chains then agent config)
 
   @spec load(String.t()) :: {:ok, t} | {:error, term}
   def load(path) do
@@ -105,6 +107,7 @@ defmodule Omunculus.Tool.Manifest do
          {:ok, tags} <- optional_string_list(raw, "tags", []),
          {:ok, groups} <- optional_string_list(raw, "groups", []),
          {:ok, parameters} <- optional_map(raw, "parameters", %{}),
+         {:ok, schemas} <- schemas(raw),
          {:ok, views} <- optional_string_list(raw, "views", []),
          {:ok, chains} <- optional_string_list(raw, "chains", []),
          {:ok, then} <- optional_string_list(raw, "then", []),
@@ -124,6 +127,7 @@ defmodule Omunculus.Tool.Manifest do
          command: command,
          module: module,
          parameters: parameters,
+         schemas: schemas,
          views: views,
          events: events,
          chains: chains,
@@ -135,7 +139,16 @@ defmodule Omunculus.Tool.Manifest do
     end
   end
 
-  defp validate_then(then, chains) do
+  defp schemas(raw) do
+    with {:ok, schemas} <- optional_map(raw, "schemas", %{}) do
+      if Enum.all?(schemas, fn {_variant, schema} -> is_map(schema) end),
+        do: {:ok, schemas},
+        else: {:error, {:invalid, :schemas}}
+    end
+  end
+
+  @spec validate_then([String.t()], [String.t()]) :: :ok | {:error, {:invalid, :then}}
+  def validate_then(then, chains) do
     cond do
       Enum.any?(then, &(&1 not in chains)) -> {:error, {:invalid, :then}}
       "end" in Enum.drop(then, -1) -> {:error, {:invalid, :then}}

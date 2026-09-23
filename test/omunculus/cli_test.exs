@@ -171,6 +171,17 @@ defmodule Omunculus.CLITest do
     assert CLI.format_error({:unknown_run, "missing"}) == "unknown run missing"
   end
 
+  test "an override that does not fit its manifest is a clear error" do
+    assert CLI.format_error({:overrides, "done", {:not_chainable, "work"}}) ==
+             "overrides.done.chains names work, which the done manifest does not chain"
+
+    assert CLI.format_error({:overrides, "done", {:invalid, :then}}) ==
+             "overrides of done leave a then outside its chains or with end not last"
+
+    assert CLI.format_error({:overrides, "done", {:unknown_schema, "short"}}) ==
+             "overrides.done.schema names short, which the done manifest does not declare"
+  end
+
   test "send without a config file does not open a run", %{dir: dir} do
     path = Path.expand("omunculus.toml", dir)
     File.rm!(path)

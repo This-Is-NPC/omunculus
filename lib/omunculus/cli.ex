@@ -68,6 +68,18 @@ defmodule Omunculus.CLI do
     "not logged in to #{id}; run `omunculus login --provider #{id}`"
   end
 
+  def format_error({:overrides, tool, {:not_chainable, name}}) do
+    "overrides.#{tool}.chains names #{name}, which the #{tool} manifest does not chain"
+  end
+
+  def format_error({:overrides, tool, {:invalid, :then}}) do
+    "overrides of #{tool} leave a then outside its chains or with end not last"
+  end
+
+  def format_error({:overrides, tool, {:unknown_schema, variant}}) do
+    "overrides.#{tool}.schema names #{variant}, which the #{tool} manifest does not declare"
+  end
+
   def format_error(:no_runs), do: "no runs"
   def format_error({:unknown_run, id}), do: "unknown run #{id}"
   def format_error(:no_assembled), do: "no assembled prompt"

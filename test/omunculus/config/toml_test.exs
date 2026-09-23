@@ -61,7 +61,12 @@ defmodule Omunculus.Config.TomlTest do
         "delivery" => %{
           "steps" => [
             %{"name" => "to_do", "agent" => "worker"},
-            %{"name" => "review", "agent" => "concierge", "deny" => ["counter"]}
+            %{
+              "name" => "review",
+              "agent" => "concierge",
+              "deny" => ["counter"],
+              "overrides" => %{"done" => %{"then" => []}}
+            }
           ]
         }
       }

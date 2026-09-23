@@ -332,6 +332,68 @@ defmodule Omunculus.CeilingTest do
     end
   end
 
+  describe "overrides" do
+    defp override(value, keys), do: %{"done" => Map.new(keys, &{&1, value})}
+
+    setup do
+      config =
+        config(%{
+          policy: policy(mode: "auto", overrides: override("policy", ~w(then chains schema))),
+          depths: %{1 => policy(overrides: override("depth", ~w(then chains schema)))},
+          agents: %{
+            "worker" => %{
+              depth: 1,
+              text: "",
+              ceiling: policy(overrides: override("agent", ~w(then chains)))
+            }
+          }
+        })
+
+      %{
+        config: config,
+        workspace: policy(overrides: override("workspace", ~w(then chains schema)))
+      }
+    end
+
+    test "each key goes to the most specific layer that sets it", %{
+      config: config,
+      workspace: workspace
+    } do
+      stage = policy(overrides: override("stage", ~w(then)))
+      context = request(%{workspace: workspace, stage: stage})
+
+      assert Ceiling.overrides(config, context) == %{
+               "done" => %{"then" => "stage", "chains" => "agent", "schema" => "depth"}
+             }
+
+      assert Ceiling.mount(config, context, ["done"]).overrides ==
+               Ceiling.overrides(config, context)
+
+      assert Ceiling.overrides(config, request(%{workspace: workspace})) == %{
+               "done" => %{"then" => "agent", "chains" => "agent", "schema" => "depth"}
+             }
+    end
+
+    test "outside a run only the policy and workspace layers apply", %{
+      config: config,
+      workspace: workspace
+    } do
+      outside = %{agent: nil, depth: nil, stage: nil, workspace: workspace}
+
+      assert Ceiling.overrides(config, outside) == %{
+               "done" => %{
+                 "then" => "workspace",
+                 "chains" => "workspace",
+                 "schema" => "workspace"
+               }
+             }
+
+      assert Ceiling.overrides(config, %{outside | workspace: nil}) == %{
+               "done" => %{"then" => "policy", "chains" => "policy", "schema" => "policy"}
+             }
+    end
+  end
+
   describe "classify/2" do
     setup do
       config =

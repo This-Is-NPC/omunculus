@@ -5,15 +5,17 @@ defmodule Omunculus.Run do
   The agent's `model` from config is constructed via `new/1`. The
   assembled prompt is the `output` of the tool named by
   `agents.<x>.assemble` or `[policy] assemble`. Streaming adapters
-  record each message before tools. The `end` action stops the model
-  and closes the run before its action or hook continuations; a model
-  that stops by itself on an open child work with no workflow at its
-  depth closes that work.
+  record each message before tools. The run's `overrides` apply to its
+  catalog before the model sees it, so the model gets each tool's
+  resolved schema; an invalid override keeps the run from opening. The
+  `end` action stops the model and closes the run before its action or
+  hook continuations; a model that stops by itself on an open child work
+  with no workflow at its depth closes that work.
   """
 
   alias Omunculus.{Ceiling, Config, Harness, Mcp, Project, Store}
   alias Omunculus.Execution.Policy
-  alias Omunculus.Tool.Catalog
+  alias Omunculus.Tool.{Catalog, Overrides}
 
   @spec open(
           Project.t(),
@@ -62,13 +64,14 @@ defmodule Omunculus.Run do
          {:ok, discovery} <-
            Policy.discovery(config, discovery_snapshot, workspace, project.dir, mcp_roots),
          catalog = Catalog.discover(config.tools, config.mcp, discovery),
-         model_catalog = Catalog.with_trigger(catalog, "model"),
          snapshot =
            Ceiling.mount(
              config,
              Map.put(context, :groups, Catalog.groups(catalog)),
              Map.keys(catalog) ++ config.execution.resources
            ),
+         {:ok, catalog} <- Overrides.apply(catalog, snapshot.overrides),
+         model_catalog = Catalog.with_trigger(catalog, "model"),
          names = effective_names(snapshot, model_catalog),
          tools = effective_tools(names, model_catalog),
          {:ok, execution} <-
