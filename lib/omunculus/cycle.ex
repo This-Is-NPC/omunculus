@@ -6,7 +6,7 @@ defmodule Omunculus.Cycle do
   through it, transitively, has finished, and returns `fun`'s result, or
   the errors of `fun` and of those runs (one error as itself, several as
   `{:runs, reasons}`). With a cycle already there, `run/3` just calls
-  `fun`. `open/2` makes a run due: it opens at once, concurrently with
+  `fun`. `open/2` makes a run due, the fields it is not given `nil`: it opens at once, concurrently with
   the others, through `Run.open/2`, which waits for a slot of the `run`
   class of the execution limiter.
 
@@ -23,6 +23,8 @@ defmodule Omunculus.Cycle do
   use GenServer
 
   alias Omunculus.{Project, Run}
+
+  @opening %{prompt_id: nil, work_id: nil, request_id: nil, inbox_id: nil, via: nil, agent: nil}
 
   @spec run(Project.t(), map | nil, (Project.t() -> result)) :: result | {:error, term}
         when result: term
@@ -54,8 +56,8 @@ defmodule Omunculus.Cycle do
     do: GenServer.cast(cycle, {:link, self(), work_id})
 
   @spec open(Project.t(), map) :: :ok
-  def open(%Project{cycle: cycle}, opening) when is_pid(cycle),
-    do: GenServer.cast(cycle, {:open, opening})
+  def open(%Project{cycle: cycle}, fields) when is_pid(cycle),
+    do: GenServer.cast(cycle, {:open, Map.merge(@opening, fields)})
 
   @impl true
   def init(project) do

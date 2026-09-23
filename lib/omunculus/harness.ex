@@ -33,9 +33,8 @@ defmodule Omunculus.Harness do
   alias Omunculus.Tools.Out
 
   @spec manifest(Project.t(), String.t()) :: {:ok, Manifest.t()} | {:error, term}
-  def manifest(%Project{config_path: path}, name) do
-    with {:ok, config} <- Config.load(path),
-         {:ok, config} <- Config.for_workspace(config, Config.effective_workspace(config, nil)),
+  def manifest(%Project{} = project, name) do
+    with {:ok, config} <- resolved_config(project, nil),
          {:ok, catalog} <- catalog(nil, nil, config, workspace_context(config, nil), nil) do
       fetch_dispatch_manifest(catalog, name, "cli")
     end
@@ -104,14 +103,11 @@ defmodule Omunculus.Harness do
          {:ok, catalog} <- catalog(project, run, config, workspace, Map.get(ctx, :execution)),
          {:ok, manifest} <- fetch_dispatch_manifest(catalog, name, ctx.trigger),
          :ok <- check_trigger(manifest, name, ctx.trigger),
-         views = %{
-           catalog: catalog_view(run, catalog, start_event(project, run)),
-           workspaces: workspaces_view(config, workspace.name),
-           agents: agents_view(project, config, work),
-           request_id: run && run.request_id,
-           inbox_id: run_inbox_id(project, run),
-           paths: path_permissions(project, run, workspace)
-         },
+         views =
+           views(project, run, work, config, catalog, workspace, %{
+             request_id: run && run.request_id,
+             inbox_id: run_inbox_id(project, run)
+           }),
          {:ok, out, events} <-
            call(project, manifest, args, work_id, ctx, config, catalog, views, workspace),
          {:ok, hook_events} <-
@@ -140,14 +136,11 @@ defmodule Omunculus.Harness do
             execution: execution
           }
 
-          views = %{
-            catalog: catalog_view(run, catalog, start_event(project, run)),
-            workspaces: workspaces_view(config, workspace.name),
-            agents: agents_view(project, config, work),
-            request_id: event.request_id,
-            inbox_id: event.inbox_id,
-            paths: path_permissions(project, run, workspace)
-          }
+          views =
+            views(project, run, work, config, catalog, workspace, %{
+              request_id: event.request_id,
+              inbox_id: event.inbox_id
+            })
 
           case run_hooks_for(
                  project,
@@ -168,6 +161,17 @@ defmodule Omunculus.Harness do
         end
       end)
     end
+  end
+
+  # The views a call may declare that come from the run, its work and
+  # the config rather than from a store row, plus the ids `ids` names.
+  defp views(project, run, work, config, catalog, workspace, ids) do
+    Map.merge(ids, %{
+      catalog: catalog_view(run, catalog, start_event(project, run)),
+      workspaces: workspaces_view(config, workspace.name),
+      agents: agents_view(project, config, work),
+      paths: path_permissions(project, run, workspace)
+    })
   end
 
   defp start_event(_project, nil), do: nil
@@ -240,8 +244,7 @@ defmodule Omunculus.Harness do
   end
 
   defp follow_catalog(project) do
-    with {:ok, config} <- Config.load(project.config_path),
-         {:ok, config} <- Config.for_workspace(config, Config.effective_workspace(config, nil)) do
+    with {:ok, config} <- resolved_config(project, nil) do
       {:ok, Catalog.discover(config.tools, config.mcp, nil)}
     end
   end
@@ -416,11 +419,11 @@ defmodule Omunculus.Harness do
 
   @work_scoped_views ~w(work comments.work inbox.work runs.last.work)
 
-  defp resolve_view_id(name, _run_id, work_id, _request_id) when name in @work_scoped_views do
+  defp resolve_view_id(name, _run_id, work_id, _views) when name in @work_scoped_views do
     if work_id, do: {:ok, work_id}, else: :skip
   end
 
-  defp resolve_view_id("events.run", run_id, _work_id, _request_id) do
+  defp resolve_view_id("events.run", run_id, _work_id, _views) do
     if run_id, do: {:ok, run_id}, else: :skip
   end
 
@@ -454,9 +457,9 @@ defmodule Omunculus.Harness do
 
   defp resolve_view_id("paths", _run_id, _work_id, _views), do: :paths
   defp resolve_view_id("counter", _run_id, _work_id, _views), do: {:ok, nil}
-  defp resolve_view_id("inbox", _run_id, _work_id, _request_id), do: {:ok, nil}
-  defp resolve_view_id("catalog", _run_id, _work_id, _request_id), do: :catalog
-  defp resolve_view_id("workspaces", _run_id, _work_id, _request_id), do: :workspaces
+  defp resolve_view_id("inbox", _run_id, _work_id, _views), do: {:ok, nil}
+  defp resolve_view_id("catalog", _run_id, _work_id, _views), do: :catalog
+  defp resolve_view_id("workspaces", _run_id, _work_id, _views), do: :workspaces
   defp resolve_view_id("agents", _run_id, _work_id, _views), do: :agents
   defp resolve_view_id("grant_scopes", _run_id, _work_id, _views), do: :grant_scopes
   defp resolve_view_id("runs.last", _run_id, _work_id, _views), do: {:ok, nil}
@@ -471,7 +474,7 @@ defmodule Omunculus.Harness do
     end
   end
 
-  defp resolve_view_id(name, _run_id, _work_id, _request_id), do: {:error, {:unknown_view, name}}
+  defp resolve_view_id(name, _run_id, _work_id, _views), do: {:error, {:unknown_view, name}}
 
   defp fetch_cli_prompt(project, name, args, acc) do
     case cli_assembled_id(project, args) do
@@ -774,10 +777,7 @@ defmodule Omunculus.Harness do
 
   defp advance(project, _catalog, %{type: "prompt"} = event, via, :actions) do
     with :ok <-
-           Cycle.open(
-             project,
-             open_params(prompt_id: event.prompt_id, work_id: event.work_id, via: via)
-           ),
+           Cycle.open(project, %{prompt_id: event.prompt_id, work_id: event.work_id, via: via}),
          do: {:ok, via}
   end
 
@@ -791,9 +791,7 @@ defmodule Omunculus.Harness do
   end
 
   defp advance(project, _catalog, %{type: "delegate"} = event, via, :actions) do
-    with :ok <-
-           Cycle.open(project, open_params(prompt_id: nil, work_id: event.work_id, via: via)),
-         do: {:ok, via}
+    with :ok <- Cycle.open(project, %{work_id: event.work_id, via: via}), do: {:ok, via}
   end
 
   defp advance(project, _catalog, %{type: "request"} = event, via, :actions) do
@@ -806,21 +804,14 @@ defmodule Omunculus.Harness do
 
   defp advance(_project, _catalog, _event, via, _phase), do: {:ok, via}
 
-  defp open_params(prompt_id: prompt_id, work_id: work_id, via: via),
-    do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: via, agent: nil}
-
   defp open_reaction_run(project, event, hook_name, agent) do
-    Cycle.open(
-      project,
-      %{
-        prompt_id: nil,
-        work_id: event.work_id,
-        request_id: event.request_id,
-        inbox_id: event.inbox_id,
-        via: hook_name,
-        agent: agent
-      }
-    )
+    Cycle.open(project, %{
+      work_id: event.work_id,
+      request_id: event.request_id,
+      inbox_id: event.inbox_id,
+      via: hook_name,
+      agent: agent
+    })
   end
 
   # Permanent grants reach the TOML before any run the same events open.
@@ -861,10 +852,7 @@ defmodule Omunculus.Harness do
   defp open_reply_run(project, %{work_id: work_id, request_id: request_id}, via) do
     case Store.view(project.conn, "work", work_id) do
       {:ok, %{state: "open"}} ->
-        Cycle.open(
-          project,
-          %{prompt_id: nil, work_id: work_id, request_id: request_id, via: via, agent: nil}
-        )
+        Cycle.open(project, %{work_id: work_id, request_id: request_id, via: via})
 
       {:ok, _not_open} ->
         :ok
@@ -877,10 +865,10 @@ defmodule Omunculus.Harness do
   defp open_sequence_run(project, event, via) do
     case {event.type, Jason.decode!(event.body)} do
       {"continue", %{"to" => to}} when not is_nil(to) ->
-        Cycle.open(project, open_params(prompt_id: nil, work_id: event.work_id, via: via))
+        Cycle.open(project, %{work_id: event.work_id, via: via})
 
       {_type, %{"parent_id" => parent_id}} when not is_nil(parent_id) ->
-        Cycle.open(project, open_params(prompt_id: nil, work_id: parent_id, via: via))
+        Cycle.open(project, %{work_id: parent_id, via: via})
 
       _no_next_run ->
         :ok
@@ -891,7 +879,6 @@ defmodule Omunculus.Harness do
     case Jason.decode!(event.body) do
       %{"arbiter" => arbiter, "arbiter_work_id" => work_id} ->
         Cycle.open(project, %{
-          prompt_id: nil,
           work_id: work_id,
           request_id: event.request_id,
           via: via,
@@ -909,7 +896,7 @@ defmodule Omunculus.Harness do
     case Jason.decode!(event.body) do
       %{"start" => true} ->
         if event.run_id, do: Cycle.link(project, event.work_id)
-        Cycle.open(project, open_params(prompt_id: nil, work_id: event.work_id, via: via))
+        Cycle.open(project, %{work_id: event.work_id, via: via})
 
       _not_a_new_root ->
         :ok

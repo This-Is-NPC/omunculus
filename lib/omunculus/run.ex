@@ -436,13 +436,7 @@ defmodule Omunculus.Run do
            &Out.request_inbox/3
          ) do
       {:ok, :retry} ->
-        Cycle.open(project, %{
-          prompt_id: nil,
-          work_id: work.id,
-          request_id: nil,
-          via: "retry",
-          agent: nil
-        })
+        Cycle.open(project, %{work_id: work.id, via: "retry"})
 
       {:ok, {:stopped, events}} ->
         with {:ok, _hooks} <- Harness.react(project, events, [], state.execution) do
