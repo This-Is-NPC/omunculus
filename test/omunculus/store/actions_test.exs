@@ -71,22 +71,41 @@ defmodule Omunculus.Store.ActionsTest do
     }
   end
 
-  defp request_emit(kind, name, reason) do
-    %{"type" => "request", "body" => %{"kind" => kind, "name" => name, "reason" => reason}}
+  defp request_emit(options) do
+    %{"type" => "request", "body" => %{"reason" => "why", "options" => options}}
   end
+
+  defp grant_call(kind, name),
+    do: %{"name" => "grant", "args" => %{"kind" => kind, "name" => name}}
+
+  defp access_request(kind, name),
+    do: request_emit(%{"grant" => [grant_call(kind, name)], "deny" => []})
 
   defp open_request(conn, ceiling, work_id) do
     run = open_run(conn, ceiling)
 
     {:ok, [_tool_event, event]} =
-      record_tool(
-        conn,
-        [request_emit("tool", "write", "need to write")],
-        request_ctx(run, work_id)
-      )
+      record_tool(conn, [access_request("tool", "write")], request_ctx(run, work_id))
 
     {run, event.request_id}
   end
+
+  defp human_ctx, do: %{@ctx | author: "human", agent: nil}
+
+  defp reply_emit(request_id, option, body) do
+    %{
+      "type" => "reply",
+      "body" => %{"request_id" => request_id, "option" => option, "body" => body}
+    }
+  end
+
+  defp grant_emit(request_id, extra \\ %{}) do
+    body = Map.merge(%{"request_id" => request_id, "name" => "write", "kind" => "tool"}, extra)
+    %{"type" => "grant", "body" => body}
+  end
+
+  defp cancel_emit(request_id),
+    do: %{"type" => "cancel", "body" => %{"request_id" => request_id}}
 
   defp workspaces_toml do
     """
@@ -167,12 +186,12 @@ defmodule Omunculus.Store.ActionsTest do
     """
   end
 
-  defp grant_write_toml do
+  defp arbiter_toml do
     """
     [agents.concierge]
     depth = 0
     text = "concierge"
-    granted = ["write"]
+    granted = ["write", "grant"]
 
     [agents.worker]
     depth = 1
@@ -185,6 +204,7 @@ defmodule Omunculus.Store.ActionsTest do
     [agents.concierge]
     depth = 0
     text = "concierge"
+    granted = ["grant"]
     deny = ["write"]
 
     [agents.worker]
@@ -397,7 +417,7 @@ defmodule Omunculus.Store.ActionsTest do
     work_id =
       Fixtures.insert(conn, :works, %{
         state: "waiting",
-        waiting: "access",
+        waiting: "request",
         waiting_for: "write",
         waiting_from: "concierge"
       })
@@ -514,7 +534,7 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "a named agent must be one of depth 0 outside workflows", %{conn: conn} do
-      config = Fixtures.config(grant_write_toml())
+      config = Fixtures.config(arbiter_toml())
 
       assert {:ok, [_tool_event, event]} =
                record_tool(
@@ -606,7 +626,7 @@ defmodule Omunculus.Store.ActionsTest do
         Fixtures.insert(conn, :works, %{
           stage: "to_do",
           state: "waiting",
-          waiting: "access",
+          waiting: "request",
           waiting_for: "write"
         })
 
@@ -1128,21 +1148,21 @@ defmodule Omunculus.Store.ActionsTest do
   end
 
   describe "request action" do
-    test "have does not open a request, emits only the tool event", %{conn: conn} do
+    test "have on every grant of an access request opens no request", %{conn: conn} do
       run = open_run(conn, @ceiling)
 
       assert {:ok, [_tool_event]} =
-               record_tool(conn, [request_emit("tool", "comment", "why")], request_ctx(run))
+               record_tool(conn, [access_request("tool", "comment")], request_ctx(run))
 
       assert count(conn, "requests") == 0
       assert count(conn, "events") == 2
     end
 
-    test "blocked appends a deny event and opens no request", %{conn: conn} do
+    test "a blocked grant appends a deny event and opens no request", %{conn: conn} do
       run = open_run(conn, @ceiling)
 
       assert {:ok, [_tool_event, event]} =
-               record_tool(conn, [request_emit("tool", "delete", "why")], request_ctx(run))
+               record_tool(conn, [access_request("tool", "delete")], request_ctx(run))
 
       assert event.type == "deny"
 
@@ -1155,18 +1175,14 @@ defmodule Omunculus.Store.ActionsTest do
       assert count(conn, "requests") == 0
     end
 
-    test "askable opens a request with a comment and puts the linked work in waiting", %{
+    test "stores the options, comments the reason and parks the work on the request", %{
       conn: conn
     } do
       run = open_run(conn, @ceiling)
       work_id = Fixtures.insert(conn, :works)
 
       assert {:ok, [_tool_event, event]} =
-               record_tool(
-                 conn,
-                 [request_emit("tool", "write", "need to write")],
-                 request_ctx(run, work_id)
-               )
+               record_tool(conn, [access_request("tool", "write")], request_ctx(run, work_id))
 
       assert event.type == "request"
       assert event.request_id != nil
@@ -1179,32 +1195,40 @@ defmodule Omunculus.Store.ActionsTest do
       assert request.status == "waiting_human"
       assert request.agent == run.agent
       assert request.work_id == work_id
-      assert Jason.decode!(request.ask) == %{"kind" => "tool", "name" => "write"}
+
+      assert Jason.decode!(request.options) == %{
+               "grant" => [
+                 %{"name" => "grant", "args" => %{"kind" => "tool", "name" => "write"}}
+               ],
+               "deny" => []
+             }
 
       assert {:ok, comment} =
                Query.one(conn, "SELECT * FROM comments WHERE request_id = ?", [event.request_id])
 
-      assert comment.body == "need to write"
+      assert comment.body == "why"
       assert comment.event_id == event.id
 
       assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
       assert work.state == "waiting"
-      assert work.waiting == "access"
-      assert work.waiting_for == "write"
+      assert work.waiting == "request"
+      assert work.waiting_for == event.request_id
       assert work.waiting_from == run.agent
     end
 
-    test "sealed opens a request the same way as askable", %{conn: conn} do
+    test "a sealed grant goes to the human even with an arbiter above", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
       run = open_run(conn, @ceiling)
+      ctx = request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
 
       assert {:ok, [_tool_event, event]} =
-               record_tool(conn, [request_emit("tool", "deploy", "why")], request_ctx(run))
-
-      assert event.type == "request"
+               record_tool(conn, [access_request("tool", "deploy")], ctx)
 
       assert {:ok, request} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
 
+      assert request.arbiter == "human"
       assert request.status == "waiting_human"
     end
 
@@ -1212,52 +1236,32 @@ defmodule Omunculus.Store.ActionsTest do
       run = open_run(conn, @ceiling)
 
       assert {:ok, [_tool_event, event]} =
-               record_tool(
-                 conn,
-                 [request_emit("directory", "./secrets", "ler as chaves")],
-                 request_ctx(run)
-               )
+               record_tool(conn, [access_request("directory", "./secrets")], request_ctx(run))
 
       assert event.type == "request"
     end
 
-    test "an empty kind is rejected and writes nothing", %{conn: conn} do
+    test "a request whose options grant nothing opens a row", %{conn: conn} do
       run = open_run(conn, @ceiling)
+      emit = request_emit(%{"cancel" => [%{"name" => "cancel"}], "retry" => []})
 
-      assert {:error, {:request, {:invalid, :kind}}} =
-               record_tool(conn, [request_emit("", "write", "why")], request_ctx(run))
-
-      assert count(conn, "events") == 1
-    end
-
-    test "a custom kind opens a request classified by name, not kind", %{conn: conn} do
-      run = open_run(conn, @ceiling)
-      work_id = Fixtures.insert(conn, :works)
-
-      assert {:ok, [_tool_event, event]} =
-               record_tool(
-                 conn,
-                 [request_emit("secret", "vault", "need the secret")],
-                 request_ctx(run, work_id)
-               )
-
+      assert {:ok, [_tool_event, event]} = record_tool(conn, [emit], request_ctx(run))
       assert event.type == "request"
-
-      assert {:ok, request} =
-               Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
-
-      assert Jason.decode!(request.ask) == %{"kind" => "secret", "name" => "vault"}
+      assert count(conn, "requests") == 1
     end
 
-    test "a missing name is rejected and writes nothing", %{conn: conn} do
+    test "malformed options are rejected and write nothing", %{conn: conn} do
       run = open_run(conn, @ceiling)
 
-      assert {:error, {:request, :no_name}} =
-               record_tool(
-                 conn,
-                 [%{"type" => "request", "body" => %{"kind" => "tool", "reason" => "why"}}],
-                 request_ctx(run)
-               )
+      for options <- [
+            %{},
+            %{"grant" => "grant"},
+            %{"grant" => [%{"args" => %{}}]},
+            %{"grant" => [%{"name" => "grant", "args" => %{"name" => "write"}}]}
+          ] do
+        assert {:error, {:request, {:invalid, :options}}} =
+                 record_tool(conn, [request_emit(options)], request_ctx(run))
+      end
 
       assert count(conn, "events") == 1
     end
@@ -1268,7 +1272,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:error, {:request, :no_reason}} =
                record_tool(
                  conn,
-                 [%{"type" => "request", "body" => %{"kind" => "tool", "name" => "write"}}],
+                 [%{"type" => "request", "body" => %{"options" => %{"deny" => []}}}],
                  request_ctx(run)
                )
 
@@ -1277,7 +1281,7 @@ defmodule Omunculus.Store.ActionsTest do
 
     test "no run is rejected and writes nothing", %{conn: conn} do
       assert {:error, {:request, :no_run}} =
-               record_tool(conn, [request_emit("tool", "write", "why")], @ctx)
+               record_tool(conn, [access_request("tool", "write")], @ctx)
 
       assert count(conn, "events") == 0
     end
@@ -1288,7 +1292,7 @@ defmodule Omunculus.Store.ActionsTest do
       run = open_run(conn, @ceiling)
 
       assert {:ok, [_tool_event, event]} =
-               record_tool(conn, [request_emit("tool", "write", "why")], request_ctx(run))
+               record_tool(conn, [access_request("tool", "write")], request_ctx(run))
 
       assert {:ok, request} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
@@ -1297,16 +1301,14 @@ defmodule Omunculus.Store.ActionsTest do
       assert count(conn, "works") == 0
     end
 
-    test "askable from a child whose parent's agent has authority routes to that agent", %{
-      conn: conn
-    } do
+    test "every option tool have for the parent's agent routes to that agent", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
       run = open_run(conn, @ceiling)
-      ctx = request_ctx(run, work_id, Fixtures.config(grant_write_toml()))
+      ctx = request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
 
       assert {:ok, [_tool_event, event]} =
-               record_tool(conn, [request_emit("tool", "write", "need to write")], ctx)
+               record_tool(conn, [access_request("tool", "write")], ctx)
 
       assert {:ok, request} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
@@ -1319,16 +1321,31 @@ defmodule Omunculus.Store.ActionsTest do
       assert body["arbiter_work_id"] == parent_id
     end
 
-    test "askable from a child whose parent's agent lacks authority falls back to human", %{
-      conn: conn
-    } do
+    test "an option tool the parent's agent does not have falls back to human", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
+      run = open_run(conn, @ceiling)
+      ctx = request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
+
+      options = %{
+        "grant" => [grant_call("tool", "write")],
+        "cancel" => [%{"name" => "cancel"}]
+      }
+
+      assert {:ok, [_tool_event, event]} = record_tool(conn, [request_emit(options)], ctx)
+
+      assert {:ok, %{arbiter: "human"}} =
+               Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
+    end
+
+    test "a grant the parent's agent is denied falls back to human", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
       run = open_run(conn, @ceiling)
       ctx = request_ctx(run, work_id, Fixtures.config(deny_write_toml()))
 
       assert {:ok, [_tool_event, event]} =
-               record_tool(conn, [request_emit("tool", "write", "need to write")], ctx)
+               record_tool(conn, [access_request("tool", "write")], ctx)
 
       assert {:ok, request} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
@@ -1337,33 +1354,134 @@ defmodule Omunculus.Store.ActionsTest do
       assert request.status == "waiting_human"
       refute Map.has_key?(Jason.decode!(event.body), "arbiter")
     end
+
+    test "a request by the harness goes to the human", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
+      run = open_run(conn, @ceiling)
+
+      ctx = %{
+        request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
+        | author: "harness"
+      }
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(conn, [access_request("tool", "write")], ctx)
+
+      assert {:ok, %{arbiter: "human"}} =
+               Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
+    end
   end
 
   describe "reply action" do
-    test "grant temporary on a request with a work adds the name to works.grants and reopens it",
-         %{conn: conn} do
+    test "closes the request, comments its body and reopens the waiting work", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
-      {run, request_id} = open_request(conn, @ceiling, work_id)
-      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
+      {_run, request_id} = open_request(conn, @ceiling, work_id)
 
-      assert {:ok, [_tool_event, reply_event, grant_event]} =
-               record_tool(
-                 conn,
-                 [
-                   %{
-                     "type" => "reply",
-                     "body" => %{
-                       "request_id" => request_id,
-                       "decision" => "grant",
-                       "body" => "ok, you can write"
-                     }
-                   }
-                 ],
-                 ctx
-               )
+      assert {:ok, [_tool_event, reply_event]} =
+               record_tool(conn, [reply_emit(request_id, "deny", "not now")], human_ctx())
 
       assert reply_event.type == "reply"
+      assert reply_event.work_id == work_id
+
+      assert {:ok, %{status: "closed"}} =
+               Query.one(conn, "SELECT * FROM requests WHERE id = ?", [request_id])
+
+      assert {:ok, comment} =
+               Query.one(conn, "SELECT * FROM comments WHERE request_id = ? AND event_id = ?", [
+                 request_id,
+                 reply_event.id
+               ])
+
+      assert comment.body == "not now"
+
+      assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+      assert work.state == "open"
+      assert work.waiting == nil
+      assert work.grants == nil
+    end
+
+    test "leaves alone a work that no longer waits on the request", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      {_run, request_id} = open_request(conn, @ceiling, work_id)
+      :ok = Query.exec(conn, "UPDATE works SET state = 'done' WHERE id = ?", [work_id])
+
+      assert {:ok, _events} =
+               record_tool(conn, [reply_emit(request_id, "deny", "late")], human_ctx())
+
+      assert {:ok, %{state: "done"}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+    end
+
+    test "replying to a closed request is rejected", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      {_run, request_id} = open_request(conn, @ceiling, work_id)
+      emit = reply_emit(request_id, "deny", "ok")
+
+      assert {:ok, _events} = record_tool(conn, [emit], human_ctx())
+      assert {:error, {:reply, :closed}} = record_tool(conn, [emit], human_ctx())
+    end
+
+    test "a missing request is rejected", %{conn: conn} do
+      assert {:error, {:reply, {:missing, :requests, "nope"}}} =
+               record_tool(conn, [reply_emit("nope", "deny", "ok")], @ctx)
+    end
+
+    test "an option the request does not have is rejected", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      {_run, request_id} = open_request(conn, @ceiling, work_id)
+
+      assert {:error, {:reply, {:unknown_option, "maybe"}}} =
+               record_tool(conn, [reply_emit(request_id, "maybe", "ok")], human_ctx())
+    end
+
+    test "an empty reply body is rejected", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      {_run, request_id} = open_request(conn, @ceiling, work_id)
+
+      assert {:error, {:reply, :no_body}} =
+               record_tool(conn, [reply_emit(request_id, "deny", "")], human_ctx())
+    end
+
+    test "an agent that is not the arbiter is refused", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      {run, request_id} = open_request(conn, @ceiling, work_id)
+
+      assert {:error, {:reply, :not_arbiter}} =
+               record_tool(conn, [reply_emit(request_id, "deny", "no")], request_ctx(run))
+
+      assert {:ok, %{status: "waiting_human"}} =
+               Query.one(conn, "SELECT * FROM requests WHERE id = ?", [request_id])
+    end
+
+    test "the arbiter agent may reply", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
+      run = open_run(conn, @ceiling)
+      ctx = request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
+      {:ok, [_tool, request]} = record_tool(conn, [access_request("tool", "write")], ctx)
+      arbiter_ctx = %{ctx | agent: "concierge", work_id: parent_id}
+
+      assert {:ok, [_tool_event, _reply_event]} =
+               record_tool(conn, [reply_emit(request.request_id, "deny", "no")], arbiter_ctx)
+    end
+  end
+
+  describe "grant action" do
+    test "a temporary grant adds the name to the request's work", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      {run, request_id} = open_request(conn, @ceiling, work_id)
+
+      assert {:ok, [_tool_event, _reply_event, grant_event]} =
+               record_tool(
+                 conn,
+                 [reply_emit(request_id, "grant", "ok"), grant_emit(request_id)],
+                 human_ctx()
+               )
+
       assert grant_event.type == "grant"
+      assert grant_event.request_id == request_id
+      assert grant_event.work_id == work_id
 
       body = Jason.decode!(grant_event.body)
       assert body["name"] == "write"
@@ -1372,200 +1490,128 @@ defmodule Omunculus.Store.ActionsTest do
       assert body["depth"] == 0
       assert body["scope"] == nil
 
-      assert {:ok, request} =
-               Query.one(conn, "SELECT * FROM requests WHERE id = ?", [request_id])
-
-      assert request.status == "closed"
-
-      assert {:ok, comment} =
-               Query.one(conn, "SELECT * FROM comments WHERE request_id = ? AND event_id = ?", [
-                 request_id,
-                 reply_event.id
-               ])
-
-      assert comment.body == "ok, you can write"
-
       assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
       assert Jason.decode!(work.grants) == ["write"]
       assert work.state == "open"
-      assert work.waiting == nil
     end
 
-    test "granting a closed request is rejected", %{conn: conn} do
+    test "a scoped grant from the human writes the event but not works.grants", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
-      {run, request_id} = open_request(conn, @ceiling, work_id)
-      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
+      {_run, request_id} = open_request(conn, @ceiling, work_id)
 
-      reply_emit = %{
-        "type" => "reply",
-        "body" => %{"request_id" => request_id, "decision" => "grant", "body" => "ok"}
-      }
-
-      assert {:ok, _events} = record_tool(conn, [reply_emit], ctx)
-      assert {:error, {:reply, :closed}} = record_tool(conn, [reply_emit], ctx)
-    end
-
-    test "granting with a scope writes the grant event but does not touch works.grants", %{
-      conn: conn
-    } do
-      work_id = Fixtures.insert(conn, :works)
-      {run, request_id} = open_request(conn, @ceiling, work_id)
-      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
-
-      assert {:ok, [_tool_event, _reply_event, grant_event]} =
-               record_tool(
-                 conn,
-                 [
-                   %{
-                     "type" => "reply",
-                     "body" => %{
-                       "request_id" => request_id,
-                       "decision" => "grant",
-                       "body" => "ok, mudo o teto",
-                       "scope" => "agent"
-                     }
-                   }
-                 ],
-                 ctx
-               )
+      assert {:ok, [_tool_event, grant_event]} =
+               record_tool(conn, [grant_emit(request_id, %{"scope" => "agent"})], human_ctx())
 
       assert Jason.decode!(grant_event.body)["scope"] == "agent"
 
       assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
       assert work.grants == nil
-      assert work.state == "open"
     end
 
-    test "granting a request with no linked work only writes the grant event", %{conn: conn} do
-      {run, request_id} = open_request(conn, @ceiling, nil)
-      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
-
-      assert {:ok, [_tool_event, _reply_event, grant_event]} =
-               record_tool(
-                 conn,
-                 [
-                   %{
-                     "type" => "reply",
-                     "body" => %{
-                       "request_id" => request_id,
-                       "decision" => "grant",
-                       "body" => "ok"
-                     }
-                   }
-                 ],
-                 ctx
-               )
-
-      assert grant_event.type == "grant"
-      assert count(conn, "works") == 0
-    end
-
-    test "deny leaves the linked work waiting and writes a deny event", %{conn: conn} do
+    test "a scoped grant from an agent is refused and the batch writes nothing", %{
+      conn: conn
+    } do
       work_id = Fixtures.insert(conn, :works)
       {run, request_id} = open_request(conn, @ceiling, work_id)
-      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
+      before = count(conn, "events")
 
-      assert {:ok, [_tool_event, _reply_event, deny_event]} =
+      assert {:error, {:grant, :not_human}} =
                record_tool(
                  conn,
                  [
                    %{
-                     "type" => "reply",
-                     "body" => %{
-                       "request_id" => request_id,
-                       "decision" => "deny",
-                       "body" => "not allowed"
-                     }
-                   }
+                     "type" => "comment",
+                     "body" => %{"request_id" => request_id, "body" => "ok"}
+                   },
+                   grant_emit(request_id, %{"scope" => "agent"})
                  ],
-                 ctx
+                 %{human_ctx() | author: "agent", agent: run.agent}
                )
 
-      assert deny_event.type == "deny"
-      assert deny_event.request_id == request_id
-      assert Jason.decode!(deny_event.body) == %{"kind" => "tool", "name" => "write"}
-
-      assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
-      assert work.state == "waiting"
-      assert work.waiting == "access"
-      assert work.waiting_for == "write"
-    end
-
-    test "a missing request is rejected", %{conn: conn} do
-      assert {:error, {:reply, {:missing, :requests, "nope"}}} =
-               record_tool(
-                 conn,
-                 [
-                   %{
-                     "type" => "reply",
-                     "body" => %{"request_id" => "nope", "decision" => "grant", "body" => "ok"}
-                   }
-                 ],
-                 @ctx
-               )
-    end
-
-    test "an invalid decision is rejected", %{conn: conn} do
-      work_id = Fixtures.insert(conn, :works)
-      {run, request_id} = open_request(conn, @ceiling, work_id)
-      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
-
-      assert {:error, {:reply, {:invalid, :decision}}} =
-               record_tool(
-                 conn,
-                 [
-                   %{
-                     "type" => "reply",
-                     "body" => %{
-                       "request_id" => request_id,
-                       "decision" => "maybe",
-                       "body" => "ok"
-                     }
-                   }
-                 ],
-                 ctx
-               )
-    end
-
-    test "an empty reply body is rejected", %{conn: conn} do
-      work_id = Fixtures.insert(conn, :works)
-      {run, request_id} = open_request(conn, @ceiling, work_id)
-      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
-
-      assert {:error, {:reply, :no_body}} =
-               record_tool(
-                 conn,
-                 [
-                   %{
-                     "type" => "reply",
-                     "body" => %{"request_id" => request_id, "decision" => "grant", "body" => ""}
-                   }
-                 ],
-                 ctx
-               )
+      assert count(conn, "events") == before
     end
 
     test "an invalid scope is rejected", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
-      {run, request_id} = open_request(conn, @ceiling, work_id)
-      ctx = %{request_ctx(run) | author: "human", agent: nil, run_id: nil}
+      {_run, request_id} = open_request(conn, @ceiling, work_id)
 
-      assert {:error, {:reply, {:invalid, :scope}}} =
+      assert {:error, {:grant, {:invalid, :scope}}} =
+               record_tool(conn, [grant_emit(request_id, %{"scope" => "project"})], human_ctx())
+    end
+
+    test "a request with no linked work only writes the grant event", %{conn: conn} do
+      {_run, request_id} = open_request(conn, @ceiling, nil)
+
+      assert {:ok, [_tool_event, grant_event]} =
+               record_tool(conn, [grant_emit(request_id)], human_ctx())
+
+      assert grant_event.type == "grant"
+      assert count(conn, "works") == 0
+    end
+  end
+
+  describe "cancel action" do
+    test "cancel sets the request's work cancelled", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      {_run, request_id} = open_request(conn, @ceiling, work_id)
+
+      assert {:ok, [_tool_event, _reply_event, event]} =
                record_tool(
                  conn,
                  [
-                   %{
-                     "type" => "reply",
-                     "body" => %{
-                       "request_id" => request_id,
-                       "decision" => "grant",
-                       "body" => "ok",
-                       "scope" => "project"
-                     }
-                   }
+                   reply_emit(request_id, "deny", "stop"),
+                   cancel_emit(request_id)
                  ],
-                 ctx
+                 human_ctx()
                )
+
+      assert event.type == "cancel"
+      assert Jason.decode!(event.body)["parent_id"] == nil
+
+      assert {:ok, %{state: "cancelled", waiting: nil}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+    end
+
+    test "cancelling the last open child wakes its waiting parent", %{conn: conn} do
+      {parent_id, child_id} = waiting_parent_and_child(conn, nil)
+      Fixtures.insert(conn, :works, %{parent_id: parent_id, state: "done"})
+      {_run, request_id} = open_request(conn, @ceiling, child_id)
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(conn, [cancel_emit(request_id)], human_ctx())
+
+      assert Jason.decode!(event.body)["parent_id"] == parent_id
+
+      assert {:ok, %{state: "open", waiting: nil}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+    end
+
+    test "a cancelled sibling counts as closed when the last child is done", %{conn: conn} do
+      {parent_id, child_id} = waiting_parent_and_child(conn, nil)
+      Fixtures.insert(conn, :works, %{parent_id: parent_id, state: "cancelled"})
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: child_id}
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(conn, [%{"type" => "continue", "body" => %{}}], ctx)
+
+      assert Jason.decode!(event.body)["parent_id"] == parent_id
+    end
+
+    test "a work already done or cancelled is refused", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      {_run, request_id} = open_request(conn, @ceiling, work_id)
+      :ok = Query.exec(conn, "UPDATE works SET state = 'cancelled' WHERE id = ?", [work_id])
+
+      assert {:error, {:cancel, {:closed, "cancelled"}}} =
+               record_tool(conn, [cancel_emit(request_id)], human_ctx())
+    end
+
+    test "a request with no work is refused", %{conn: conn} do
+      {_run, request_id} = open_request(conn, @ceiling, nil)
+
+      assert {:error, {:cancel, :no_work}} =
+               record_tool(conn, [cancel_emit(request_id)], human_ctx())
     end
   end
 

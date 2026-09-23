@@ -2,7 +2,7 @@ defmodule Omunculus.Store.Schema do
   @moduledoc """
   DDL for the seven tables of spec §4 — prompts, events, runs, comments,
   works, requests, inbox — plus the store rules enforced at the database
-  level: events are append only, requests.ask is immutable, and the
+  level: events are append only, requests.options is immutable, and the
   system columns of spec §8.3 — `runs.tools`, `runs.prompt_id`,
   `runs.started_at`, and `created_at` on prompts, comments, works,
   requests and inbox — refuse UPDATE.
@@ -59,7 +59,7 @@ defmodule Omunculus.Store.Schema do
       inbox_id TEXT REFERENCES inbox (id) DEFERRABLE INITIALLY DEFERRED,
       run_id TEXT REFERENCES runs (id) DEFERRABLE INITIALLY DEFERRED,
       event_id TEXT REFERENCES events (id) DEFERRABLE INITIALLY DEFERRED,
-      author TEXT NOT NULL CHECK (author IN ('agent', 'human')),
+      author TEXT NOT NULL CHECK (author IN ('agent', 'human', 'harness')),
       kind TEXT NOT NULL CHECK (kind IN ('note')),
       body TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -76,7 +76,7 @@ defmodule Omunculus.Store.Schema do
       title TEXT NOT NULL,
       goal TEXT NOT NULL,
       stage TEXT,
-      state TEXT NOT NULL CHECK (state IN ('open', 'waiting', 'done')),
+      state TEXT NOT NULL CHECK (state IN ('open', 'waiting', 'done', 'cancelled')),
       waiting TEXT,
       waiting_for TEXT,
       waiting_from TEXT,
@@ -91,7 +91,7 @@ defmodule Omunculus.Store.Schema do
       run_id TEXT REFERENCES runs (id) DEFERRABLE INITIALLY DEFERRED,
       agent TEXT NOT NULL,
       work_id TEXT REFERENCES works (id) DEFERRABLE INITIALLY DEFERRED,
-      ask TEXT,
+      options TEXT NOT NULL,
       arbiter TEXT,
       status TEXT NOT NULL CHECK (status IN ('waiting_human', 'waiting_agent', 'closed')),
       event_id TEXT REFERENCES events (id) DEFERRABLE INITIALLY DEFERRED,
@@ -124,10 +124,10 @@ defmodule Omunculus.Store.Schema do
     END
     """,
     """
-    CREATE TRIGGER IF NOT EXISTS requests_ask_immutable
-    BEFORE UPDATE OF ask ON requests
+    CREATE TRIGGER IF NOT EXISTS requests_options_immutable
+    BEFORE UPDATE OF options ON requests
     BEGIN
-      SELECT RAISE(ABORT, 'requests.ask: immutable');
+      SELECT RAISE(ABORT, 'requests.options: immutable');
     END
     """
   ]

@@ -851,7 +851,8 @@ defmodule Omunculus.HarnessTest do
       assert gamma_output == Out.chain_failed("gamma", :not_have)
       assert_received {:chained, {:ok, "alpha"}}
 
-      assert comment_bodies(project.conn) == ["The work stopped without a report after 1 run."]
+      assert [reason, _inbox] = comment_bodies(project.conn)
+      assert reason == Out.unreported(1)
 
       assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
 
@@ -863,7 +864,9 @@ defmodule Omunculus.HarnessTest do
                "tool",
                "model",
                "end-run",
-               "break",
+               "request",
+               "notify",
+               "tool",
                "tool"
              ]
     end
@@ -890,8 +893,10 @@ defmodule Omunculus.HarnessTest do
 
       assert {:ok, run} = Run.open(project, open(message_id, work_id))
       assert_received {:omega, {:ok, "omega"}}
-      # The model stops without end, so the harness breaks the work.
-      assert Enum.map(tl(tool_calls(project.conn)), & &1["name"]) == ["omega", "on-break"]
+      # The model stops without end, so the harness asks the human about the root work.
+      assert Enum.map(tl(tool_calls(project.conn)), & &1["name"]) ==
+               ["omega", "on-request", "on-notify"]
+
       assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
 
       assert Enum.map(events, & &1.type) == [
@@ -900,7 +905,9 @@ defmodule Omunculus.HarnessTest do
                "tool",
                "model",
                "end-run",
-               "break",
+               "request",
+               "notify",
+               "tool",
                "tool"
              ]
     end

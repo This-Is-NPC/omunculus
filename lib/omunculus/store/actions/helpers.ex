@@ -1,12 +1,12 @@
 defmodule Omunculus.Store.Actions.Helpers do
   @moduledoc """
-  Shared machinery between `Actions` and `Actions.Sequence`: existence
+  Shared machinery between the `Actions` modules: existence
   checks and error tagging (spec §8.3), the `COMMENTS` insert every
   action that writes one reuses, reopening a waiting work, a new work's
   stage and assignee from the workflow, the named agent or the depth's
   first agent, resolving its `workspace` from a given name, its parent,
   or the project's default (spec §9.1), inserting the `WORKS` row itself,
-  and the ancestor grants walk of spec §5.
+  fetching a request by id, and the ancestor grants walk of spec §5.
   """
 
   alias Omunculus.Config
@@ -137,6 +137,16 @@ defmodule Omunculus.Store.Actions.Helpers do
 
   def fetch_work(conn, work_id),
     do: Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+
+  @spec fetch_request(atom, Exqlite.Sqlite3.db(), String.t() | nil) ::
+          {:ok, map} | {:error, term}
+  def fetch_request(tag, _conn, nil), do: {:error, {tag, :no_request}}
+
+  def fetch_request(tag, conn, request_id) do
+    with :ok <- tag_error(tag, ensure_exist(conn, [{:requests, request_id}])) do
+      Query.one(conn, "SELECT * FROM requests WHERE id = ?", [request_id])
+    end
+  end
 
   @spec grants(Exqlite.Sqlite3.db(), map | nil) :: {:ok, [String.t()]}
   def grants(_conn, nil), do: {:ok, []}

@@ -5,8 +5,10 @@ defmodule Omunculus.Store.Actions.Contract do
     "comment" => ~w(body work_id request_id inbox_id),
     "prompt" => ~w(message work_id),
     "work" => ~w(title goal report agent workspace),
-    "request" => ~w(kind name reason),
-    "reply" => ~w(request_id decision body scope),
+    "request" => ~w(reason options),
+    "reply" => ~w(request_id option body),
+    "grant" => ~w(request_id name kind scope),
+    "cancel" => ~w(request_id),
     "continue" => [],
     "end" => [],
     "break" => ~w(body),
@@ -52,5 +54,6 @@ defmodule Omunculus.Store.Actions.Contract do
   defp forbidden(_type, _body), do: :ok
   defp valid_value?(_key, nil), do: true
   defp valid_value?("ids", ids), do: is_list(ids) and Enum.all?(ids, &is_binary/1)
+  defp valid_value?("options", options), do: is_map(options)
   defp valid_value?(_key, value), do: is_binary(value)
 end

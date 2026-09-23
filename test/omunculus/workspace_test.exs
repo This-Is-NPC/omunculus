@@ -306,10 +306,8 @@ defmodule Omunculus.WorkspaceTest do
                  "reply",
                  "--request_id",
                  request.id,
-                 "--decision",
-                 "grant",
-                 "--scope",
-                 "workspace",
+                 "--option",
+                 "grant_workspace",
                  "allowed forever"
                ],
                dir
@@ -395,10 +393,8 @@ defmodule Omunculus.WorkspaceTest do
                  "reply",
                  "--request_id",
                  request.id,
-                 "--decision",
-                 "grant",
-                 "--scope",
-                 "stage",
+                 "--option",
+                 "grant_stage",
                  "allowed forever"
                ],
                dir

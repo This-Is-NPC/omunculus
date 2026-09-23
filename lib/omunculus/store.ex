@@ -3,7 +3,7 @@ defmodule Omunculus.Store do
   The project's SQLite file behind one API: functions (`view/3`, `replay/2`,
   `work_depth/2`, `unended_runs/2`, `grants/2`) read a cut of the tables; the
   run cycle (`begin_run/2`, `attach_assembled/3`, `open_run/2`, `record_model/3`,
-  `record_tools/4`, `close_run/2`, `break_work/3`) is written by the harness. Every emit a call and its chained
+  `record_tools/4`, `close_run/2`, `break_work/3`, `request_work/4`) is written by the harness. Every emit a call and its chained
   steps produce is applied inside that call's one transaction (spec §8.1, §8.7) — tools
   never touch SQL directly.
   """
@@ -36,4 +36,5 @@ defmodule Omunculus.Store do
   defdelegate record_tools(conn, run_id, calls, ctx), to: Runs
   defdelegate close_run(conn, run_id), to: Runs, as: :close
   defdelegate break_work(conn, run, text), to: Runs
+  defdelegate request_work(conn, run, body, inbox_text), to: Runs
 end

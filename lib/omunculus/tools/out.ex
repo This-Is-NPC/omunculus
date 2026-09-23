@@ -59,6 +59,15 @@ defmodule Omunculus.Tools.Out do
   @spec login_tool_failed() :: String.t()
   def login_tool_failed, do: "login tool failed"
 
+  @spec unreported(pos_integer) :: String.t()
+  def unreported(runs),
+    do:
+      "The work stopped without a report after #{runs} #{if runs == 1, do: "run", else: "runs"}."
+
+  @spec request_inbox(String.t(), String.t(), [String.t()]) :: String.t()
+  def request_inbox(request_id, reason, options),
+    do: "#{reason} Reply to request #{request_id} with #{Enum.join(options, " or ")}."
+
   @spec chain_failed(String.t(), term) :: String.t()
   def chain_failed(name, reason), do: "chain failed at #{name}: #{chain_reason(reason)}"
 
@@ -89,7 +98,9 @@ defmodule Omunculus.Tools.Out do
       unknown_auth_provider("openai"),
       unknown_auth_kind("oauth"),
       login_tool_failed(),
-      chain_failed("end", :after_end)
+      chain_failed("end", :after_end),
+      unreported(2),
+      request_inbox("id", unreported(1), ["cancel", "retry"])
     ]
   end
 end

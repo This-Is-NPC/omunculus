@@ -444,7 +444,7 @@ defmodule Omunculus.CLITest do
       request.id
     end
 
-    test "an askable request opens REQUESTS waiting_human, comments the reason, and marks a linked work waiting for access",
+    test "an askable request opens REQUESTS waiting_human, comments the reason, and parks a linked work on the request",
          %{dir: dir} do
       project = open(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
@@ -459,7 +459,9 @@ defmodule Omunculus.CLITest do
 
       assert request.status == "waiting_human"
       assert request.arbiter == "human"
-      assert Jason.decode!(request.ask) == %{"kind" => "tool", "name" => "write"}
+
+      assert %{"deny" => [], "grant" => [%{"name" => "grant"}]} =
+               Jason.decode!(request.options)
 
       assert {:ok, [comment]} =
                Query.all(project.conn, "SELECT * FROM comments WHERE request_id = ?", [
@@ -479,8 +481,8 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
       assert work.state == "waiting"
-      assert work.waiting == "access"
-      assert work.waiting_for == "write"
+      assert work.waiting == "request"
+      assert work.waiting_for == request_id
 
       Project.close(project)
     end
@@ -502,7 +504,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--decision", "grant", "pode"],
+                 ["reply", "--request_id", request_id, "--option", "grant", "pode"],
                  dir
                )
 
@@ -552,10 +554,8 @@ defmodule Omunculus.CLITest do
                    "reply",
                    "--request_id",
                    request_id,
-                   "--decision",
-                   "grant",
-                   "--scope",
-                   "agent",
+                   "--option",
+                   "grant_agent",
                    "allowed forever"
                  ],
                  dir
@@ -670,7 +670,7 @@ defmodule Omunculus.CLITest do
       write_emit_tool(
         dir,
         "ask_comment",
-        ~s({"ok": true, "output": "", "emit": [{"type": "request", "body": {"kind": "tool", "name": "comment", "reason": "just checking"}}]})
+        ~s({"ok": true, "output": "", "emit": [{"type": "request", "body": {"reason": "just checking", "options": {"grant": [{"name": "grant", "args": {"kind": "tool", "name": "comment"}}]}}}]})
       )
 
       test_pid = self()
@@ -700,84 +700,54 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "reply deny closes the request, leaves the work waiting, and opens no new run", %{
-      dir: dir
-    } do
+    test "reply deny closes the request, reopens the work and opens its run with the request",
+         %{dir: dir} do
       project = open(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
       request_id = open_write_request(dir, work_id)
+      test_pid = self()
 
-      project = open(dir)
-      assert {:ok, [old_run]} = Query.all(project.conn, "SELECT * FROM runs")
-      Project.close(project)
+      model = fn assembled, _tools, call ->
+        send(test_pid, {:assembled, assembled})
+        call.("end", %{})
+      end
 
-      model = fn _assembled, _tools, call -> call.("end", %{}) end
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--decision", "deny", "not allowed"],
+                 ["reply", "--request_id", request_id, "--option", "deny", "not allowed"],
                  dir
                )
 
+      assert_received {:assembled, assembled}
+      assert assembled =~ "## Request"
+      assert assembled =~ "not allowed"
+
       project = open(dir)
 
-      assert {:ok, request} =
+      assert {:ok, %{status: "closed"}} =
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
 
-      assert request.status == "closed"
-
-      assert {:ok, events} = Store.replay(project.conn, :project)
-      deny_event = Enum.find(events, &(&1.type == "deny"))
-      assert deny_event.request_id == request_id
-
-      assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
-      assert work.state == "waiting"
-      assert work.waiting == "access"
-      assert work.waiting_for == "write"
-
-      assert {:ok, runs} =
-               Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
-
-      assert length(runs) == 1
-      assert hd(runs).id == old_run.id
-
-      Project.close(project)
-
-      model = fn _assembled, _tools, call -> call.("end", %{}) end
-      Fixtures.use_model(dir, model)
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "try again"], dir)
-
-      project = open(dir)
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
       assert work.state == "open"
-      assert work.waiting == nil
-      grants = if work.grants, do: Jason.decode!(work.grants), else: []
-      refute "write" in grants
+      assert work.grants == nil
 
-      assert {:ok, events} = Store.replay(project.conn, :project)
+      assert {:ok, [_old_run, new_run]} =
+               Query.all(
+                 project.conn,
+                 "SELECT * FROM runs WHERE work_id = ? ORDER BY started_at",
+                 [
+                   work_id
+                 ]
+               )
 
-      work_event =
-        Enum.find(events, fn event ->
-          event.type == "work" and Jason.decode!(event.body)["reason"] == "reopened_by_prompt"
-        end)
+      assert new_run.request_id == request_id
+      assert new_run.via == "reply"
+      refute "write" in Jason.decode!(new_run.tools)
 
-      prompt_event =
-        Enum.find(events, fn event ->
-          event.type == "prompt" and event.work_id == work_id and
-            Jason.decode!(event.body)["message"] == "try again"
-        end)
-
-      assert work_event
-      assert prompt_event
-      assert work_event.sequence < prompt_event.sequence
-
-      assert {:ok, runs} =
-               Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
-
-      assert length(runs) == 2
       Project.close(project)
     end
 
@@ -798,7 +768,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--decision", "grant", "pode"],
+                 ["reply", "--request_id", request_id, "--option", "grant", "pode"],
                  dir
                )
 
@@ -821,7 +791,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--decision", "grant", "pode"],
+                 ["reply", "--request_id", request_id, "--option", "grant", "pode"],
                  dir
                )
 
@@ -829,7 +799,7 @@ defmodule Omunculus.CLITest do
 
       assert {:error, {:reply, :closed}} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--decision", "grant", "de novo"],
+                 ["reply", "--request_id", request_id, "--option", "grant", "de novo"],
                  dir
                )
     end
@@ -1392,7 +1362,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "Sou o concierge."
-      tools = ["work", "delegate", "comment", "end", "reply", "write"]
+      tools = ["work", "delegate", "comment", "end", "grant", "reply", "write"]
 
       [agents.worker]
       depth = 1
@@ -1432,7 +1402,7 @@ defmodule Omunculus.CLITest do
             assert {:ok, ""} =
                      call.("reply", %{
                        "request_id" => request.id,
-                       "decision" => "grant",
+                       "option" => "grant",
                        "body" => "you may write"
                      })
 

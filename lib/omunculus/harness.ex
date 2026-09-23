@@ -8,18 +8,25 @@ defmodule Omunculus.Harness do
   emits atomically, then reacts to their events. A step
   outside the chaining tool's `chains`, without the `chain` trigger, not
   have in the run's ceiling, already on the chain path, after `end`, or
-  failing fails the call and writes none of the chain's emits. Run
-  lifecycle events use the same `react/2` path.
+  failing fails the call and writes none of the chain's emits; a call
+  outside a run checks no ceiling. Run lifecycle events use the same
+  `react/2` path. The `request` view is the request named by the call's
+  `request_id` argument, or else the run's; `grant_scopes` is the list of
+  scopes the store accepts on a permanent grant.
 
   Hooks use the same emit path as tools. Hooks of every event run during
   the model unroll except those of `end`, the only event that ends a run:
   they wait until `follow_up/2` has closed the run and opened the next
-  one. `follow_up/2` opens action runs, then those deferred hooks, then
-  agent reactions, preserving the originating tool or hook in `via`.
+  one. `follow_up/2` writes the permanent grants among the events to the
+  TOML, opens action runs, then those deferred hooks, then agent
+  reactions, preserving the originating tool or hook in `via`. A `reply`
+  opens a run of the requester's work when that work is open after the
+  reply and its option's calls.
   """
 
   alias Omunculus.{Ceiling, Config, Project, Run, Store}
   alias Omunculus.Execution.Policy
+  alias Omunculus.Store.Actions.Requests
   alias Omunculus.Tool.{Catalog, Invoke, Manifest, Overrides}
   alias Omunculus.Tools.Out
 
@@ -211,6 +218,7 @@ defmodule Omunculus.Harness do
     with {:ok, config} <- Config.load(project.config_path),
          {:ok, config} <- Config.for_workspace(config, Config.effective_workspace(config, nil)),
          catalog = Catalog.discover(config.tools, config.mcp, nil),
+         :ok <- write_grants(project, events),
          {:ok, _via} <- walk(project, catalog, events, :actions),
          {:ok, _hooks} <- react(project, Enum.filter(events, &ending_event?/1), []),
          {:ok, _via} <- walk(project, catalog, events, :hooks) do
@@ -358,6 +366,7 @@ defmodule Omunculus.Harness do
         :catalog -> {:cont, {:ok, Map.put(acc, "catalog", views.catalog)}}
         :workspaces -> {:cont, {:ok, Map.put(acc, "workspaces", views.workspaces)}}
         :agents -> {:cont, {:ok, Map.put(acc, "agents", views.agents)}}
+        :grant_scopes -> {:cont, {:ok, Map.put(acc, "grant_scopes", Requests.scopes())}}
         :paths -> {:cont, {:ok, Map.put(acc, "paths", views.paths)}}
         {:cli_prompt, args} -> fetch_cli_prompt(project, name, args, acc)
         {:ok, canonical, id} -> fetch_view(project, name, canonical, id, acc)
@@ -409,8 +418,11 @@ defmodule Omunculus.Harness do
     if inbox_id, do: {:ok, inbox_id}, else: :skip
   end
 
-  defp resolve_view_id("request", _run_id, _work_id, %{request_id: request_id}) do
-    if request_id, do: {:ok, request_id}, else: :skip
+  defp resolve_view_id("request", _run_id, _work_id, views) do
+    case Map.get(views, :args, %{}) do
+      %{"request_id" => id} when is_binary(id) and id != "" -> {:ok, id}
+      _args -> if views.request_id, do: {:ok, views.request_id}, else: :skip
+    end
   end
 
   defp resolve_view_id("paths", _run_id, _work_id, _views), do: :paths
@@ -419,6 +431,7 @@ defmodule Omunculus.Harness do
   defp resolve_view_id("catalog", _run_id, _work_id, _request_id), do: :catalog
   defp resolve_view_id("workspaces", _run_id, _work_id, _request_id), do: :workspaces
   defp resolve_view_id("agents", _run_id, _work_id, _views), do: :agents
+  defp resolve_view_id("grant_scopes", _run_id, _work_id, _views), do: :grant_scopes
   defp resolve_view_id("runs.last", _run_id, _work_id, _views), do: {:ok, nil}
 
   defp resolve_view_id("prompt", _run_id, _work_id, %{trigger: "cli"} = views),
@@ -706,8 +719,14 @@ defmodule Omunculus.Harness do
 
   defp request_emit_name(emits) do
     Enum.find_value(emits, fn
-      %{"type" => "request", "body" => %{"name" => name}} -> name
-      _ -> nil
+      %{"type" => "request", "body" => %{"options" => options}} ->
+        case Requests.grant_names(options) do
+          [] -> nil
+          names -> Enum.join(names, ", ")
+        end
+
+      _other ->
+        nil
     end)
   end
 
@@ -735,15 +754,12 @@ defmodule Omunculus.Harness do
          do: {:ok, via}
   end
 
-  defp advance(project, _catalog, %{type: "grant"} = event, via, :actions) do
-    with :ok <- apply_grant(project, event),
-         :ok <- open_grant_run(project, event, via) do
-      {:ok, via}
-    end
+  defp advance(project, _catalog, %{type: "reply"} = event, via, :actions) do
+    with :ok <- open_reply_run(project, event, via), do: {:ok, via}
   end
 
   defp advance(project, _catalog, %{type: type} = event, via, :actions)
-       when type in ["continue", "break"] do
+       when type in ["continue", "break", "cancel"] do
     with :ok <- open_sequence_run(project, event, via), do: {:ok, via}
   end
 
@@ -780,9 +796,19 @@ defmodule Omunculus.Harness do
     )
   end
 
-  defp apply_grant(project, event) do
-    body = Jason.decode!(event.body)
+  # Permanent grants reach the TOML before any run the same events open.
+  defp write_grants(project, events) do
+    events
+    |> Enum.filter(&(&1.type == "grant"))
+    |> Enum.reduce_while(:ok, fn event, :ok ->
+      case write_grant(project, Jason.decode!(event.body)) do
+        :ok -> {:cont, :ok}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
 
+  defp write_grant(project, body) do
     case body["scope"] do
       "agent" ->
         Config.grant(project.config_path, {:agent, body["agent"]}, body["name"])
@@ -801,13 +827,24 @@ defmodule Omunculus.Harness do
     end
   end
 
-  defp open_grant_run(_project, %{work_id: nil}, _via), do: :ok
+  # The requester's work runs again when it is open once the reply and
+  # the calls of its option are applied.
+  defp open_reply_run(_project, %{work_id: nil}, _via), do: :ok
 
-  defp open_grant_run(project, %{work_id: work_id, request_id: request_id}, via) do
-    open_run(
-      project,
-      %{prompt_id: nil, work_id: work_id, request_id: request_id, via: via, agent: nil}
-    )
+  defp open_reply_run(project, %{work_id: work_id, request_id: request_id}, via) do
+    case Store.view(project.conn, "work", work_id) do
+      {:ok, %{state: "open"}} ->
+        open_run(
+          project,
+          %{prompt_id: nil, work_id: work_id, request_id: request_id, via: via, agent: nil}
+        )
+
+      {:ok, _not_open} ->
+        :ok
+
+      {:error, _reason} = error ->
+        error
+    end
   end
 
   defp open_sequence_run(project, event, via) do

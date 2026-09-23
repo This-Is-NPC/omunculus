@@ -33,7 +33,7 @@ defmodule Omunculus.SpecRegressionTest do
   depth = 0
   model = "fake"
   text = "concierge"
-  tools = ["work", "comment", "reply", "request_access", "notify", "read", "write", "sandbox.network", "end"]
+  tools = ["work", "comment", "grant", "reply", "request_access", "notify", "read", "write", "sandbox.network", "end"]
   [agents.worker]
   depth = 1
   model = "fake"
@@ -158,14 +158,13 @@ defmodule Omunculus.SpecRegressionTest do
     assert {:ok, [_]} = Query.all(p.conn, "SELECT * FROM runs")
   end
 
-  test "an agent cannot reply to a human request or make a permanent grant", %{project: p} do
+  test "an agent cannot reply to a human request", %{project: p} do
     requester = Fixtures.insert(p.conn, :runs)
     request = Fixtures.insert(p.conn, :requests, %{run_id: requester})
 
     Fixtures.use_model(p, fn _, _, call ->
-      for scope <- [nil, "agent"] do
-        args = %{"request_id" => request, "decision" => "grant", "body" => "approve"}
-        args = if scope, do: Map.put(args, "scope", scope), else: args
+      for option <- ["grant", "deny"] do
+        args = %{"request_id" => request, "option" => option, "body" => "approve"}
         assert {:error, {:reply, :not_arbiter}} = call.("reply", args)
       end
 
@@ -178,9 +177,53 @@ defmodule Omunculus.SpecRegressionTest do
     assert {:ok, %{status: "waiting_human"}} = Store.view(p.conn, "request", request)
   end
 
-  test "arbiter receives request id and its end closes the run before resuming the child", %{
+  test "an arbiter agent cannot make a permanent grant and the reply writes nothing", %{
     project: p
   } do
+    {parent, child, request} =
+      agent_request(p, %{
+        "grant_agent" => [
+          %{
+            "name" => "grant",
+            "args" => %{"kind" => "tool", "name" => "write", "scope" => "agent"}
+          }
+        ]
+      })
+
+    Fixtures.use_model(p, fn _, _, call ->
+      args = %{"request_id" => request, "option" => "grant_agent", "body" => "forever"}
+      assert {:error, {:grant, :not_human}} = call.("reply", args)
+      {:ok, "done"}
+    end)
+
+    assert {:ok, _} = Run.open(p, opening(parent, %{request_id: request}))
+    assert {:ok, %{status: "waiting_agent"}} = Store.view(p.conn, "request", request)
+    assert {:ok, %{state: "waiting", grants: nil}} = Store.view(p.conn, "work", child)
+    {:ok, config} = Config.load(p.config_path)
+    refute "write" in config.agents["worker"].ceiling.granted
+  end
+
+  test "an option call outside reply's chains fails the reply and writes nothing", %{
+    project: p
+  } do
+    {parent, child, request} =
+      agent_request(p, %{"note" => [%{"name" => "comment", "args" => %{"body" => "x"}}]})
+
+    Fixtures.use_model(p, fn _, _, call ->
+      args = %{"request_id" => request, "option" => "note", "body" => "noted"}
+      assert {:ok, output} = call.("reply", args)
+      assert output =~ "chain failed at comment"
+      {:ok, "done"}
+    end)
+
+    assert {:ok, _} = Run.open(p, opening(parent, %{request_id: request}))
+    assert {:ok, %{status: "waiting_agent"}} = Store.view(p.conn, "request", request)
+    assert {:ok, %{state: "waiting"}} = Store.view(p.conn, "work", child)
+  end
+
+  # A child of a concierge work, waiting on a request from its run whose
+  # arbiter is the concierge.
+  defp agent_request(p, options \\ %{}) do
     parent = Fixtures.insert(p.conn, :works, %{assignee: "concierge"})
 
     child =
@@ -188,7 +231,7 @@ defmodule Omunculus.SpecRegressionTest do
         assignee: "worker",
         parent_id: parent,
         state: "waiting",
-        waiting: "access"
+        waiting: "request"
       })
 
     requester =
@@ -199,14 +242,26 @@ defmodule Omunculus.SpecRegressionTest do
         status: "done"
       })
 
+    default = Jason.decode!(Fixtures.defaults(:requests).options)
+
     request =
       Fixtures.insert(p.conn, :requests, %{
         agent: "worker",
         run_id: requester,
         work_id: child,
         arbiter: "concierge",
-        status: "waiting_agent"
+        status: "waiting_agent",
+        options: Jason.encode!(Map.merge(default, options))
       })
+
+    :ok = Query.exec(p.conn, "UPDATE works SET waiting_for = ? WHERE id = ?", [request, child])
+    {parent, child, request}
+  end
+
+  test "arbiter receives request id and its end closes the run before resuming the child", %{
+    project: p
+  } do
+    {parent, _child, request} = agent_request(p)
 
     Fixtures.use_model(p, fn assembled, tools, call ->
       if String.starts_with?(assembled, "concierge") do
@@ -214,7 +269,7 @@ defmodule Omunculus.SpecRegressionTest do
 
         call.("reply", %{
           "request_id" => request,
-          "decision" => "grant",
+          "option" => "grant",
           "body" => "approved"
         })
 
@@ -419,8 +474,8 @@ defmodule Omunculus.SpecRegressionTest do
       p,
       String.replace(
         @config,
-        ~s(tools = ["work", "comment", "reply", "request_access", "notify", "read", "write", "sandbox.network", "end"]),
-        ~s(tools = ["work", "comment", "reply", "request_access", "notify", "read", "write", "sandbox.network", "end", "continue", "done"])
+        ~s("sandbox.network", "end"]),
+        ~s("sandbox.network", "end", "continue", "done"])
       ) <>
         """
         [policy]

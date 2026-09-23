@@ -1,7 +1,7 @@
 defmodule Omunculus.RunTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{Fixtures, Id, Project, Run, Store}
+  alias Omunculus.{CLI, Fixtures, Id, Project, Run, Store}
   alias Omunculus.Store.Query
   alias Omunculus.Tools.Out
 
@@ -808,9 +808,9 @@ defmodule Omunculus.RunTest do
 
     assert {:ok, _run} = Run.open(project, open(message(project.conn)))
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
-    ask = Jason.decode!(request.ask)
-    assert ask["kind"] == "resource"
-    assert ask["name"] == "sandbox.write"
+
+    assert %{"grant" => [%{"args" => %{"kind" => "resource", "name" => "sandbox.write"}}]} =
+             Jason.decode!(request.options)
 
     Project.close(project)
   end
@@ -942,9 +942,10 @@ defmodule Omunculus.RunTest do
              })
 
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
-    ask = Jason.decode!(request.ask)
-    assert ask["kind"] == "resource"
-    assert ask["name"] == "sandbox.write"
+
+    assert %{"grant" => [%{"args" => %{"kind" => "resource", "name" => "sandbox.write"}}]} =
+             Jason.decode!(request.options)
+
     assert request.status == "waiting_human"
 
     Project.close(project)
@@ -1128,6 +1129,13 @@ defmodule Omunculus.RunTest do
       runs
     end
 
+    defp root_request(project, work_id) do
+      {:ok, [request]} =
+        Query.all(project.conn, "SELECT * FROM requests WHERE work_id = ?", [work_id])
+
+      request
+    end
+
     defp breaks_of(project, work_id) do
       {:ok, events} = Store.replay(project.conn, {:work, work_id})
       for %{type: "break", body: body} <- events, do: Jason.decode!(body)["body"]
@@ -1205,7 +1213,7 @@ defmodule Omunculus.RunTest do
       Project.close(project)
     end
 
-    test "a root work over the limit is only parked", %{dir: dir} do
+    test "a root work over the limit asks the human to retry or cancel it", %{dir: dir} do
       retry_config(dir, "max_retries = 1")
       project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works)
@@ -1214,15 +1222,42 @@ defmodule Omunculus.RunTest do
       assert {:ok, _run} = Run.open(project, open(nil, work_id))
 
       assert length(runs_of(project, work_id)) == 2
-      assert breaks_of(project, work_id) == ["The work stopped without a report after 2 runs."]
+      assert breaks_of(project, work_id) == []
 
-      assert {:ok, %{state: "waiting", waiting_from: "concierge"}} =
+      request = root_request(project, work_id)
+      assert request.arbiter == "human"
+      assert request.status == "waiting_human"
+
+      assert Jason.decode!(request.options) == %{
+               "retry" => [],
+               "cancel" => [%{"name" => "cancel", "args" => %{}}]
+             }
+
+      assert {:ok, [reason]} =
+               Query.all(project.conn, "SELECT * FROM comments WHERE request_id = ?", [
+                 request.id
+               ])
+
+      assert reason.body == Out.unreported(2)
+      assert reason.author == "harness"
+
+      assert {:ok, [inbox]} = Query.all(project.conn, "SELECT * FROM inbox")
+      assert inbox.work_id == work_id
+
+      assert {:ok, [%{body: body}]} =
+               Query.all(project.conn, "SELECT * FROM comments WHERE inbox_id = ?", [inbox.id])
+
+      assert body == Out.request_inbox(request.id, Out.unreported(2), ["cancel", "retry"])
+
+      assert {:ok, %{state: "waiting", waiting: "request", waiting_for: waiting_for}} =
                Store.view(project.conn, "work", work_id)
+
+      assert waiting_for == request.id
 
       Project.close(project)
     end
 
-    test "max_retries = 0 breaks at once", %{dir: dir} do
+    test "max_retries = 0 asks at once", %{dir: dir} do
       retry_config(dir, "max_retries = 0")
       project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works)
@@ -1231,7 +1266,53 @@ defmodule Omunculus.RunTest do
       assert {:ok, _run} = Run.open(project, open(nil, work_id))
 
       assert [_only] = runs_of(project, work_id)
-      assert breaks_of(project, work_id) == ["The work stopped without a report after 1 run."]
+      assert %{id: request_id} = root_request(project, work_id)
+
+      assert {:ok, [%{body: body}]} =
+               Query.all(project.conn, "SELECT * FROM comments WHERE request_id = ?", [
+                 request_id
+               ])
+
+      assert body == Out.unreported(1)
+
+      Project.close(project)
+    end
+
+    test "replying retry to the root's request opens another run of it", %{dir: dir} do
+      retry_config(dir, "max_retries = 0")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      scripted(project, [idle("idle"), ending()])
+      assert {:ok, _run} = Run.open(project, open(nil, work_id))
+      request = root_request(project, work_id)
+
+      assert {:ok, ""} =
+               CLI.run(["reply", "--request_id", request.id, "--option", "retry", "go on"], dir)
+
+      assert [_first, again] = runs_of(project, work_id)
+      assert again.via == "reply"
+      assert again.request_id == request.id
+      assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", work_id)
+
+      Project.close(project)
+    end
+
+    test "replying cancel to the root's request cancels it and opens no run", %{dir: dir} do
+      retry_config(dir, "max_retries = 0")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      scripted(project, [idle("idle")])
+      assert {:ok, _run} = Run.open(project, open(nil, work_id))
+      request = root_request(project, work_id)
+
+      assert {:ok, ""} =
+               CLI.run(["reply", "--request_id", request.id, "--option", "cancel", "drop"], dir)
+
+      assert [_only] = runs_of(project, work_id)
+      assert {:ok, %{state: "cancelled"}} = Store.view(project.conn, "work", work_id)
+
+      assert {:error, {:cancelled, ^work_id}} = Run.open(project, open(nil, work_id))
+      assert [_only] = runs_of(project, work_id)
 
       Project.close(project)
     end

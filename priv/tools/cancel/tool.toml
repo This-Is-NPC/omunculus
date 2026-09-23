@@ -1,0 +1,15 @@
+name = "cancel"
+kind = "tool"
+shape = "simple"
+triggers = ["chain"]
+description = "Cancels the work of a request. A cancelled work never runs again."
+tags = ["sequence", "request"]
+groups = ["sequence"]
+module = "Omunculus.Tools.Cancel"
+
+[parameters]
+type = "object"
+required = ["request_id"]
+
+[parameters.properties.request_id]
+type = "string"

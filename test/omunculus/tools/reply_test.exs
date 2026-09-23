@@ -4,145 +4,76 @@ defmodule Omunculus.Tools.ReplyTest do
   alias Omunculus.Tool.{Catalog, Invoke}
   alias Omunculus.Tools.Reply
 
+  @request %{
+    id: "req_1",
+    options:
+      Jason.encode!(%{
+        "grant" => [%{"name" => "grant", "args" => %{"kind" => "tool", "name" => "write"}}],
+        "deny" => []
+      })
+  }
+
   @input %{
     name: "reply",
     args: %{},
-    view: %{},
+    view: %{"request" => @request},
     run_id: nil,
     work_id: nil,
     workspace: nil,
     roots: []
   }
 
-  test "emits a reply with request_id, decision and body" do
-    input = %{
-      @input
-      | args: %{"request_id" => "req_1", "decision" => "grant", "body" => "pode"}
-    }
+  @args %{"request_id" => "req_1", "option" => "grant", "body" => "go"}
 
-    assert Reply.run(input) == %{
+  test "emits the reply and chains the option's calls with the request_id" do
+    assert Reply.run(%{@input | args: @args}) == %{
              "ok" => true,
              "output" => "",
-             "emit" => [
+             "emit" => [%{"type" => "reply", "body" => @args}],
+             "chain" => [
                %{
-                 "type" => "reply",
-                 "body" => %{"request_id" => "req_1", "decision" => "grant", "body" => "pode"}
+                 "name" => "grant",
+                 "args" => %{"kind" => "tool", "name" => "write", "request_id" => "req_1"}
                }
              ]
            }
   end
 
-  test "scope is present only when given" do
-    input = %{
-      @input
-      | args: %{
-          "request_id" => "req_1",
-          "decision" => "grant",
-          "body" => "pode",
-          "scope" => "agent"
-        }
-    }
-
-    assert Reply.run(input) == %{
-             "ok" => true,
-             "output" => "",
-             "emit" => [
-               %{
-                 "type" => "reply",
-                 "body" => %{
-                   "request_id" => "req_1",
-                   "decision" => "grant",
-                   "body" => "pode",
-                   "scope" => "agent"
-                 }
-               }
-             ]
-           }
+  test "an empty option chains nothing" do
+    assert %{"chain" => []} = Reply.run(%{@input | args: %{@args | "option" => "deny"}})
   end
 
-  test "scope stage and scope workspace are forwarded" do
-    for scope <- ["stage", "workspace"] do
-      input = %{
-        @input
-        | args: %{
-            "request_id" => "req_1",
-            "decision" => "grant",
-            "body" => "pode",
-            "scope" => scope
-          }
-      }
+  test "an option the request lacks, or a request not found, chains nothing" do
+    assert %{"ok" => true, "chain" => []} =
+             Reply.run(%{@input | args: %{@args | "option" => "maybe"}})
 
-      assert Reply.run(input) == %{
-               "ok" => true,
-               "output" => "",
-               "emit" => [
-                 %{
-                   "type" => "reply",
-                   "body" => %{
-                     "request_id" => "req_1",
-                     "decision" => "grant",
-                     "body" => "pode",
-                     "scope" => scope
-                   }
-                 }
-               ]
+    assert %{"ok" => true, "chain" => []} = Reply.run(%{@input | args: @args, view: %{}})
+  end
+
+  test "refuses without a request_id, an option or a body" do
+    for key <- ["request_id", "option", "body"] do
+      assert Reply.run(%{@input | args: Map.delete(@args, key)}) == %{
+               "ok" => false,
+               "output" => "#{key} required",
+               "emit" => []
              }
     end
   end
 
-  test "ignores a blank scope" do
-    input = %{
-      @input
-      | args: %{"request_id" => "req_1", "decision" => "grant", "body" => "pode", "scope" => ""}
-    }
-
-    assert Reply.run(input) == %{
-             "ok" => true,
-             "output" => "",
-             "emit" => [
-               %{
-                 "type" => "reply",
-                 "body" => %{"request_id" => "req_1", "decision" => "grant", "body" => "pode"}
-               }
-             ]
-           }
-  end
-
-  test "refuses without a request_id" do
-    input = %{@input | args: %{"decision" => "grant", "body" => "pode"}}
-
-    assert Reply.run(input) == %{
-             "ok" => false,
-             "output" => "request_id required",
-             "emit" => []
-           }
-  end
-
-  test "refuses without a decision" do
-    input = %{@input | args: %{"request_id" => "req_1", "body" => "pode"}}
-
-    assert Reply.run(input) == %{"ok" => false, "output" => "decision required", "emit" => []}
-  end
-
-  test "refuses without a body" do
-    input = %{@input | args: %{"request_id" => "req_1", "decision" => "grant"}}
-
-    assert Reply.run(input) == %{"ok" => false, "output" => "body required", "emit" => []}
-  end
-
-  test "the builtin catalog discovers reply with triggers cli and model" do
-    catalog = Catalog.unconfigured()
-
-    assert %{"reply" => manifest} = catalog
+  test "the builtin manifest reads the request view and chains grant and cancel" do
+    assert %{"reply" => manifest} = Catalog.unconfigured()
     assert manifest.triggers == ["cli", "model"]
+    assert manifest.views == ["request"]
+    assert manifest.chains == ["grant", "cancel"]
+    assert manifest.then == []
   end
 
-  test "the manifest wiring yields the same emit as calling the module directly" do
-    catalog = Catalog.unconfigured()
-    manifest = Map.fetch!(catalog, "reply")
-    input = %{@input | args: %{"request_id" => "req_1", "decision" => "deny", "body" => "no"}}
+  test "the manifest wiring yields the same out as calling the module directly" do
+    manifest = Map.fetch!(Catalog.unconfigured(), "reply")
+    input = %{@input | args: @args}
 
     assert {:ok, result} = Invoke.call(manifest, input)
     assert result.emit == Reply.run(input)["emit"]
+    assert result.chain == [%{name: "grant", args: hd(Reply.run(input)["chain"])["args"]}]
   end
 end

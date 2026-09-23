@@ -30,7 +30,7 @@ schema, the tool failed and nothing is written.
 {
   "ok": true,
   "output": "text for the model",
-  "emit": [{ "type": "request", "body": { "kind": "tool", "name": "write" } }]
+  "emit": [{ "type": "notify", "body": { "body": "need a look" } }]
 }
 ```
 
@@ -156,6 +156,8 @@ Views the store will hydrate:
 | `work` | that work row | |
 | `runs.last` | the most recent run | CLI `prompt` |
 | `runs.last.work` | the work's last closed run, its final model text (`text`) and whether it commented on the work (`commented`) | |
+| `request` | the request named by the call's `request_id` argument, or the run's request | |
+| `grant_scopes` | the scopes a permanent `grant` may name (`agent`, `depth`, `stage`, `workspace`); `request_access` builds its options from it | |
 
 Qualified names are canonical. A manifest copied from the spec with
 `views = ["comments"]` still loads.
@@ -167,19 +169,25 @@ when that depth has a workflow. `assemble` renders them under
 `## Agents` when the run has the `work` card.
 
 Actions the store will apply: `comment`, `request`, `notify`, `prompt`,
-`inbox.read`, `reply`, `work`, `delegate`, `continue`, `break`, `end`,
-`compact`, `comment.delete`. Have on a `request` does not open a row —
-the output is `already granted: <name>`. Blocked is `deny`. `end` is the
-only action that ends the run; it needs a run. `continue` does not name a
-stage. `EVENTS` is append-only.
+`inbox.read`, `reply`, `grant`, `cancel`, `work`, `delegate`,
+`continue`, `break`, `end`, `compact`, `comment.delete`. A `request`
+carries a `reason` and `options`, a map from option name to a list of
+`{name, args}` tool calls. Options made only of `grant` calls whose
+names the run already has do not open a row — the output is
+`already granted: <name>`. A granted name that is blocked is `deny`.
+`reply` takes `request_id`, `option` and `body`; `grant` takes
+`request_id`, `name`, `kind` and an optional `scope`, which only a
+person may give; `cancel` takes `request_id` and cancels the request's
+work. `end` is the only action that ends the run; it needs a
+run. `continue` does not name a stage. `EVENTS` is append-only.
 
 `work` and `delegate` may name the new work's `agent`: it must be one of
 the agents the `agents` view lists for that depth, and is refused when
 the depth has a workflow. Unnamed, the new work goes to the workflow's
 first stage, or to the depth's first agent in name order. A parent that
-delegated waits for all its children: a child that closes reopens it
-once none of its children is left undone, a child that breaks reopens it
-at once.
+delegated waits for all its children: a child that closes or is
+cancelled reopens it once each of its children is done or cancelled, a
+child that breaks reopens it at once.
 
 ## Creating works
 
@@ -219,7 +227,7 @@ needs `end` as have too.
 | `work` | see [Creating works](#creating-works) | `end` |
 | `done` | chains `comment` with the report and `continue` | `end` |
 | `break` | emits `break`, which parks the work with the report as its comment | `end` |
-| `request_access` | emits a `comment` with the report on the run's work, then `request` | `end` |
+| `request_access` | emits a `comment` with the report on the run's work, then `request` with the options `grant`, `grant_agent`, `grant_depth`, `grant_stage`, `grant_workspace` and `deny` | `end` |
 | `request_sandbox` | the same, with `kind = resource` | `end` |
 
 `continue` is only a chain step (`triggers = ["chain"]`): the model
@@ -229,6 +237,27 @@ action writes the report on the work itself. The request tools emit the
 comment and the request themselves, so the report precedes the request in
 `EVENTS`; in a run without a work they emit only the request. A request
 for a name the run already has opens no row and still ends the run.
+
+## Answering a request
+
+`reply` takes a `request_id`, an `option` and a `body`. It reads the
+`request` view, emits the `reply` action and chains the option's calls,
+each with the request's `request_id` added to its args. The steps run
+under the chain rules: the builtin `reply` has
+`chains = ["grant", "cancel"]`, the steps are checked against the replying agent's
+ceiling (from the command line, against none), and the reply with every
+step commits or none does.
+
+| Tool | Emits |
+| --- | --- |
+| `grant` | `grant`: the name enters the request's work's `WORKS.grants`, or, with a `scope`, the harness rewrites that TOML layer |
+| `cancel` | `cancel`: the request's work becomes `cancelled` |
+
+Both are chain-only (`triggers = ["chain"]`). An option with no call,
+such as `deny` or the harness's `retry`, only reopens the work, whose
+next run opens. A request may list any tool in its options, but the
+builtin `reply` only chains those two. To answer with other tools, ship your own `reply` folder with a
+wider `chains`; the most specific folder wins.
 
 ## What the model calls
 
@@ -248,9 +277,9 @@ the ceiling, run in their own sandboxed sessions.
 ```text
 fs.read   = read, ls, grep, find
 fs.write  = write, edit
-store     = comment, request_access, reply, notify
+store     = comment, request_access, reply, grant, notify
 sandbox   = request_sandbox
-sequence  = work, delegate, continue, break, end, done
+sequence  = work, delegate, continue, break, end, done, cancel
 catalog   = tool_search
 cli       = send, inbox, inbox_read, prompt, login, logout
 bench     = counter, counter_decrement

@@ -10,16 +10,18 @@ event
     → hooks of that event run in the unroll, with the run open (not those of end)
     → end, or the model stopping by itself: EVENTS(end-run) of this run
     → if an action of the run asked for a run (send, work, continue,
-      break, delegate, request, reply grant)
+      break, delegate, cancel, request, reply)
         → open the next run (agent and ceiling from the TOML, now)
     → hooks of end (they see this run closed and the next one opened)
     → if the model stopped by itself on a work still open: a retry run of
-      that work, or a break once max_retries is used up
+      that work, or, once max_retries is used up, a break (a child) or a
+      request to the person (a root)
 ```
 
 `end` is the only action that ends a run. `delegate`, `request`,
-`continue`, `break`, `reply` and `work` change the store and the run goes
-on; the runs they asked for open after it closes. A tool can chain `end`:
+`continue`, `break`, `reply`, `grant`, `cancel` and `work` change the
+store and the run goes on; the runs they asked for open after
+it closes. A tool can chain `end`:
 `done` comments its report on the run's work, continues it and ends the
 run in one call; `work` comments its report on the run's work, delegates
 each new work below it and ends the run, or, in a run without a work,
@@ -66,7 +68,8 @@ each tool
 close (end, or the model stopped)
     EVENTS(end-run), status = done
     next runs the actions asked for, then hooks of end
-    the model stopped by itself on a work still open: retry, or break
+    the model stopped by itself on a work still open: retry, break, or a
+      request to the person
 ```
 
 The TOML is read again at this opening. `RUNS.tools` is a snapshot of the
@@ -75,7 +78,7 @@ tool named, the opening fails. An empty assemble output fails. The next
 run does not reread the old assembled prompt; assemble runs again.
 
 `via` on the run is the `name` of the tool or hook that opened it
-(`send`, `continue`, `delegate`, `on-request`, …), or `retry`.
+(`send`, `continue`, `delegate`, `reply`, `on-request`, …), or `retry`.
 
 ## A run without a report
 
@@ -85,10 +88,14 @@ opens another run of the same work with `via = retry`. The retries of a
 work are its most recent closed runs, in a row, without `end`, minus the
 first; a run that ends with `end` starts the count over. Once the retries
 reach `max_retries` (`[policy]`, or the work's workspace), the harness
-does not open another run: it applies `break` to the work with the
+does not open another run. A work with a parent gets `break` with the
 comment `The work stopped without a report after N runs.`, which parks it
-and wakes a parent waiting on it, whose run opens. A root work is only
-parked. The run opened by `send` has no work and is never retried; a run
+and wakes the parent waiting on it, whose run opens. A root work gets a
+request to the person instead, opened by the harness with that sentence
+as its reason and the options `retry` (no call) and `cancel`, and an
+inbox entry that names the request; the work waits on it. `reply --option retry`
+opens another run of the work; `reply --option cancel` cancels it. The
+run opened by `send` has no work and is never retried; a run
 opened for a named agent (a hook's `agent`, a request's arbiter) is not
 retried either; nor is a work left `waiting` or `done` by its run.
 
@@ -102,7 +109,8 @@ agent text
 → if there is a work: title + goal + last comment, or, when the work's
   last closed run commented nothing on it, that run's final model text
   under `## Last run`
-→ if there is a request: header + comments with that request_id
+→ if there is a request: header, its options with their tool calls, and
+  the comments with that request_id
 → if the opening carried inbox_id: comments with that inbox_id
 → if the run has the work card: the agents a new work may name
 → cards of the tools in tools.*
@@ -125,7 +133,7 @@ effective set, `pinned` is ignored and everything is a card. The `catalog`
 view `tool_search` searches is the whole effective set.
 
 There is no `message` section when the opening came from `continue`,
-`break`, `delegate`, `request` or `reply`.
+`break`, `delegate`, `cancel`, `request` or `reply`.
 
 The model's final text does not reach the terminal. It is `EVENTS(model)`.
 `omunculus prompt` prints the assembled prompt, not that text.
@@ -134,34 +142,51 @@ The model's final text does not reach the terminal. It is `EVENTS(model)`.
 
 ```text
 open:     action work (root) or delegate (child); stage = first of the TOML
-open → waiting:  break, or request (access), or delegate (child)
-waiting → waiting: reply deny — waiting = access, waiting_for intact
-waiting → open:    reply grant, all its children done, or a child on break — same stage
+open → waiting:  break, request (waiting = request, waiting_for = the request), or delegate (child)
+waiting → open:    reply to the request it waits on, all its children done or cancelled, or a child on break — same stage
 waiting → open:    send / prompt on a waiting work — reopened_by_prompt
 open → open:       continue (chained by done) — next stage, new run
 open → done:       continue on the last stage, or with no workflow at its depth
+open / waiting → cancelled: cancel, an option of a request
 ```
 
 `break` parks the work with its report as the comment. It does not
 advance the sequence.
-`continue` that closes a work and `break` both hand it back to a parent
-waiting on its children: a `break` reopens the parent at once, a closing
-`continue` once none of the parent's children is left undone. The event
-that reopened the parent carries its `parent_id`, and the parent's next
-run opens. A root work is only closed or parked. `deny` does not reopen.
+`continue` that closes a work, `cancel` and `break` hand it back to a
+parent waiting on its children: a `break` reopens the parent at once, a
+closing `continue` or a `cancel` once each of the parent's children is
+done or cancelled. The event that reopened the parent carries its
+`parent_id`, and the parent's next run opens. A root work is only closed,
+parked or cancelled. A cancelled work never opens a run again.
 `continue` does not name a stage, an agent or a model — the TOML does.
 
 ## Request and inbox
 
-A decision goes through `REQUESTS`. The model calls `request_access`
+A decision goes through `REQUESTS`. A `request` carries a `reason` and
+named `options`, each a list of tool calls (`{name, args}`, the shape of
+a chain); an option may list none. The model calls `request_access`
 (`kind` = `tool` | `path` | `directory`) or `request_sandbox` (`kind` =
 `resource`, `name` = `sandbox.write` | `sandbox.network`), each with a
-`report`. In a run on a work the report is commented on it first, then
-the request. Have is not a request: no row opens, and a tool that emits
-`request` without ending the run gets `already granted: <name>` in its
-output. Blocked is `EVENTS(deny)`. Askable or sealed opens a request; if
-a work is attached it becomes `waiting = access`. Both request tools end
-the asking run; the arbiter's run opens after it closes.
+`report`; both offer `grant`, one `grant_<scope>` per permanent scope and
+`deny`. In a run on a work the report is commented on it first, then the
+request. Options made only of `grant` calls whose names are all have are
+not a request: no row opens, and a tool that emits `request` without
+ending the run gets `already granted: <name>` in its output. A granted
+name that is blocked is `EVENTS(deny)`. Otherwise a request opens, its
+reason the first comment on it; if a work is attached it becomes
+`waiting = request`. [The ceiling](ceiling.md) says who the arbiter is.
+Both request tools end the asking run; an agent arbiter's run opens on
+the parent work after it closes.
+
+`reply` picks an option: the person always may, an agent only as the
+arbiter. The request closes, the reply's body is commented on it, and
+the option's calls run as steps `reply` chains — under the arbiter's
+ceiling, in the reply's transaction, each an `EVENTS(tool)` with
+`via = reply`. The builtin `reply` chains `grant` and `cancel`;
+a call outside that list fails the reply and writes nothing. The
+requester's work, if it still waits on the request, is reopened; if it
+is open once the calls applied, its next run opens with the request
+thread in its prompt. `cancel` leaves it cancelled, so no run opens.
 
 `INBOX` notifies and does not wait. It does not park a run or a work.
 
@@ -170,7 +195,7 @@ the asking run; the arbiter's run opens after it closes.
 Seven of them: `PROMPTS`, `EVENTS`, `RUNS`, `COMMENTS`, `WORKS`,
 `REQUESTS`, `INBOX`. `EVENTS.comment_id` is a weak pointer — no foreign
 key — so `compact` can delete comments without taking the event with it.
-`EVENTS` is append-only. `REQUESTS.ask` does not change after create.
+`EVENTS` is append-only. `REQUESTS.options` does not change after create.
 Tools never open SQLite; they `emit`, and the store applies or refuses
 the batch.
 

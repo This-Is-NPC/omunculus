@@ -110,17 +110,25 @@ Mark one notification read. The next `inbox` listing leaves it out.
 
 ## `omunculus reply`
 
-- **Usage:** `omunculus reply <body> --request_id <id> --decision grant|deny [--scope agent|depth|stage|workspace]`
-- **Effect:** comment + grant or deny on that request
+- **Usage:** `omunculus reply <body> --request_id <id> --option <name>`
+- **Effect:** comment + the tool calls of that option
 
-Answer a request. `grant` on a work writes `ask.name` into `WORKS.grants`
-(unless `--scope` names a TOML layer, in which case the file is rewritten
-and `grants` is left alone), clears `waiting`, and the harness opens a run
-on the same stage. `deny` leaves the work `waiting` — `waiting = access`,
-`waiting_for` intact — and opens no run.
+Answer a request with one of its options. The request is closed, the body
+becomes a comment on it, and the calls the option lists run as steps
+chained by `reply`, with `request_id` in their args and no ceiling check
+from the command line. The requester's work, if it still waits on the
+request, is reopened; when it is open after the option's calls, the
+harness opens its next run, on the same stage, with the request thread in
+its prompt. An option the request does not have is a refusal.
 
-`--scope` is a permanent ceiling change. Workspace scope writes the
-workspace's own file when `[workspaces.<name>] config` points at one.
+A request from `request_access` or `request_sandbox` has the options
+`grant` (the name enters `WORKS.grants`), `grant_agent`, `grant_depth`,
+`grant_stage`, `grant_workspace` (a permanent ceiling change: the file is
+rewritten on that layer and `grants` is left alone; workspace scope writes
+the workspace's own file when `[workspaces.<name>] config` points at one)
+and `deny` (no call: the work runs again without the name). A request the
+harness opened for a root work has `retry` (no call: the work runs
+again) and `cancel` (the work is cancelled and never runs again).
 
 ## `omunculus comment`
 

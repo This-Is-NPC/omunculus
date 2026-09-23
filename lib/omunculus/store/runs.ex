@@ -7,7 +7,9 @@ defmodule Omunculus.Store.Runs do
   turn, `record_tools/4` logs a call and the steps it chained, each
   followed by its emits, as one transaction so a failed emit leaves no
   stray `tool` event, `close/2` ends the run, `break_work/3` applies a
-  `break` with the given text to a closed run's work.
+  `break` with the given text to a closed run's work, `request_work/4`
+  opens a request by the harness for a closed run's work, with an inbox
+  entry whose text names the new request.
   """
 
   alias Omunculus.Id
@@ -70,6 +72,20 @@ defmodule Omunculus.Store.Runs do
   @spec close(Exqlite.Sqlite3.db(), String.t()) :: {:ok, map} | {:error, term}
   def close(conn, run_id) do
     Query.transaction(conn, fn -> do_close(conn, run_id) end)
+  end
+
+  @spec request_work(Exqlite.Sqlite3.db(), map, map, (String.t() -> String.t())) ::
+          {:ok, [map]} | {:error, term}
+  def request_work(conn, run, body, inbox_text) do
+    ctx = %{run_id: run.id, work_id: run.work_id, author: "harness", agent: run.agent}
+
+    Query.transaction(conn, fn ->
+      with {:ok, [request]} <- Actions.run(conn, [%{"type" => "request", "body" => body}], ctx),
+           notify = %{"body" => inbox_text.(request.request_id), "work_id" => run.work_id},
+           {:ok, inbox} <- Actions.run(conn, [%{"type" => "notify", "body" => notify}], ctx) do
+        {:ok, [request | inbox]}
+      end
+    end)
   end
 
   @spec break_work(Exqlite.Sqlite3.db(), map, String.t()) :: {:ok, [map]} | {:error, term}

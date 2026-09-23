@@ -315,7 +315,7 @@ refused.
 The section may point at a second TOML, relative to that `root`. Same schema
 minus `[workspaces]` and `[store]`. Precedence is global, then the inline
 section, then the file. Missing file is an error. A permanent grant with
-`--scope workspace` writes that file when it exists.
+the `grant_workspace` option of a request writes that file when it exists.
 
 ```mermaid
 flowchart TB

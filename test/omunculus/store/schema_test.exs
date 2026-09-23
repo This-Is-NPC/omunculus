@@ -30,11 +30,11 @@ defmodule Omunculus.Store.SchemaTest do
     assert message =~ "append only"
   end
 
-  test "requests.ask is immutable, other columns update", %{conn: conn} do
+  test "requests.options is immutable, other columns update", %{conn: conn} do
     id = Fixtures.insert(conn, :requests)
 
     assert {:error, message} =
-             Query.exec(conn, "UPDATE requests SET ask = ? WHERE id = ?", ["{}", id])
+             Query.exec(conn, "UPDATE requests SET options = ? WHERE id = ?", ["{}", id])
 
     assert message =~ "immutable"
 

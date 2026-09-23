@@ -13,13 +13,17 @@ defmodule Omunculus.Run do
   hook continuations. When the model of a run on a work stops by itself
   and the work is still open, the work gets another run with `via` =
   `retry`, until the latest runs of the work without `end` exceed
-  `max_retries`; then the harness breaks the work with a comment saying
-  so. A run opened for a named agent is not retried.
+  `max_retries`; then the harness breaks a work that has a parent with a
+  comment saying so, and for a root work opens a request to the human,
+  with that sentence as its reason, the options `retry` and `cancel`, and
+  an inbox entry naming the request. A run opened for a named agent is
+  not retried. A cancelled work does not open runs.
   """
 
   alias Omunculus.{Ceiling, Config, Harness, Mcp, Project, Store}
   alias Omunculus.Execution.Policy
   alias Omunculus.Tool.{Catalog, Overrides}
+  alias Omunculus.Tools.Out
 
   @spec open(
           Project.t(),
@@ -43,6 +47,7 @@ defmodule Omunculus.Run do
       ) do
     with {:ok, config} <- Config.load(project.config_path),
          {:ok, work} <- fetch_work(project.conn, work_id),
+         :ok <- ensure_runnable(work),
          {:ok, config} <-
            Config.for_workspace(config, Config.effective_workspace(config, work)),
          {:ok, {name, text, depth, stage}} <- resolve_agent(config, project.conn, work, agent),
@@ -209,6 +214,9 @@ defmodule Omunculus.Run do
     end
   end
 
+  defp ensure_runnable(%{state: "cancelled", id: id}), do: {:error, {:cancelled, id}}
+  defp ensure_runnable(_work), do: :ok
+
   defp assemble_tool(config, agent_name) do
     agent = Map.fetch!(config.agents, agent_name)
 
@@ -364,7 +372,8 @@ defmodule Omunculus.Run do
   end
 
   # A run on a work whose model stopped by itself leaves the work open: the
-  # work gets another run, or a break once its retries reach max_retries.
+  # work gets another run until its retries reach max_retries; then a
+  # child breaks and a root asks the human.
   defp unreported(_project, _run, _config, nil, _execution, _stopped?), do: :ok
   defp unreported(_project, _run, _config, _work, _execution, false), do: :ok
 
@@ -372,7 +381,7 @@ defmodule Omunculus.Run do
     with {:ok, current} <- fetch_work(project.conn, work.id) do
       case {current.state, Store.unended_runs(project.conn, work.id)} do
         {"open", runs} when runs > config.max_retries ->
-          break_unreported(project, run, runs, execution)
+          stop_unreported(project, run, work, runs, execution)
 
         {"open", runs} when runs > 0 ->
           retry(project, work)
@@ -389,13 +398,25 @@ defmodule Omunculus.Run do
     with {:ok, _run} <- open(project, opening), do: :ok
   end
 
-  defp break_unreported(project, run, runs, execution) do
-    text =
-      "The work stopped without a report after #{runs} #{if runs == 1, do: "run", else: "runs"}."
+  defp stop_unreported(project, run, work, runs, execution) do
+    text = Out.unreported(runs)
 
-    with {:ok, events} <- Store.break_work(project.conn, run, text),
+    with {:ok, events} <- stop_work(project.conn, run, work, text),
          {:ok, _hooks} <- Harness.react(project, events, [], execution) do
       Harness.follow_up(project, events)
     end
   end
+
+  defp stop_work(conn, run, %{parent_id: nil}, text) do
+    options = %{"retry" => [], "cancel" => [%{"name" => "cancel"}]}
+
+    Store.request_work(
+      conn,
+      run,
+      %{"reason" => text, "options" => options},
+      &Out.request_inbox(&1, text, Map.keys(options))
+    )
+  end
+
+  defp stop_work(conn, run, _child, text), do: Store.break_work(conn, run, text)
 end

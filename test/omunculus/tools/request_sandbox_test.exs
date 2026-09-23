@@ -2,61 +2,29 @@ defmodule Omunculus.Tools.RequestSandboxTest do
   use ExUnit.Case, async: true
 
   alias Omunculus.Tool.{Catalog, Invoke}
-  alias Omunculus.Tools.RequestSandbox
+  alias Omunculus.Tools.{RequestAccess, RequestSandbox}
 
   @input %{
     name: "request_sandbox",
     args: %{},
-    view: %{},
+    view: %{"grant_scopes" => ["agent"]},
     run_id: nil,
     work_id: nil,
     workspace: nil,
     roots: []
   }
 
-  test "emits a resource request for a supported sandbox capability" do
-    input = %{
-      @input
-      | args: %{
-          "report" => "blocked on access",
-          "name" => "sandbox.write",
-          "reason" => "need to write files"
-        }
-    }
+  test "emits the request of request_access for kind resource" do
+    for work_id <- [nil, "w1"] do
+      input = %{
+        @input
+        | work_id: work_id,
+          args: %{"report" => "blocked on access", "name" => "sandbox.write", "reason" => "why"}
+      }
 
-    assert RequestSandbox.run(input) == %{
-             "ok" => true,
-             "output" => "",
-             "emit" => [
-               %{
-                 "type" => "request",
-                 "body" => %{
-                   "kind" => "resource",
-                   "name" => "sandbox.write",
-                   "reason" => "need to write files"
-                 }
-               }
-             ]
-           }
-  end
-
-  test "in a run with a work, comments the report on it before the request" do
-    input = %{
-      @input
-      | work_id: "w1",
-        args: %{"report" => "blocked on access", "name" => "sandbox.write", "reason" => "why"}
-    }
-
-    assert RequestSandbox.run(input)["emit"] == [
-             %{
-               "type" => "comment",
-               "body" => %{"work_id" => "w1", "body" => "blocked on access"}
-             },
-             %{
-               "type" => "request",
-               "body" => %{"kind" => "resource", "name" => "sandbox.write", "reason" => "why"}
-             }
-           ]
+      assert RequestSandbox.run(input) ==
+               RequestAccess.emit(input, "resource", "sandbox.write")
+    end
   end
 
   test "refuses without a report" do

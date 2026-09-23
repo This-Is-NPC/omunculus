@@ -51,7 +51,7 @@ not a fall-back to the package.
 ```bash
 bin/omunculus send "look at the inbox"
 bin/omunculus inbox
-bin/omunculus reply "granted" --request_id <id> --decision grant
+bin/omunculus reply "granted" --request_id <id> --option grant
 bin/omunculus login --provider anthropic
 ```
 

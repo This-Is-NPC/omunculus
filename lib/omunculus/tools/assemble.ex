@@ -6,7 +6,9 @@ defmodule Omunculus.Tools.Assemble do
   (`runs.last.work`), the
   agents the `agents` view says a new work may name when the run has the
   `work` card, and the cards, which follow `pinned` on the catalog view.
-  Inbox is included only when the opening carried `inbox_id`.
+  A run with a request gets the request's requester, its options with
+  their tool calls, and its comments. Inbox is included only when the
+  opening carried `inbox_id`.
   """
 
   alias Omunculus.Tool.Manifest
@@ -64,11 +66,16 @@ defmodule Omunculus.Tools.Assemble do
   defp request_section(nil, _comments), do: []
 
   defp request_section(request, comments) do
-    ask = Jason.decode!(request.ask)
-    header = "#{request.id}: #{ask["kind"]} #{ask["name"]} #{Out.requested_by(request.agent)}"
-    comments = comments || []
-    ["## Request\n" <> Enum.join([header | Enum.map(comments, & &1.body)], "\n")]
+    header = "#{request.id} #{Out.requested_by(request.agent)}"
+    options = request.options |> Jason.decode!() |> Enum.sort() |> Enum.map(&option_line/1)
+    comments = Enum.map(comments || [], & &1.body)
+    ["## Request\n" <> Enum.join([header | options] ++ comments, "\n")]
   end
+
+  defp option_line({name, []}), do: "- #{name}"
+
+  defp option_line({name, calls}),
+    do: "- #{name}: " <> Enum.map_join(calls, ", ", &"#{&1["name"]} #{Jason.encode!(&1["args"])}")
 
   defp tools_section(cards) do
     names = Enum.map(cards, & &1.name)

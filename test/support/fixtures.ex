@@ -40,7 +40,7 @@ defmodule Omunculus.Fixtures do
     },
     requests: %{
       agent: "concierge",
-      ask: ~s({"kind":"tool","name":"write"}),
+      options: ~s({"grant":[{"name":"grant","args":{"kind":"tool","name":"write"}}],"deny":[]}),
       arbiter: "human",
       status: "waiting_human",
       created_at: @now
@@ -48,11 +48,14 @@ defmodule Omunculus.Fixtures do
     inbox: %{agent: "concierge", created_at: @now}
   }
 
+  @spec defaults(atom) :: map
+  def defaults(table), do: Map.fetch!(@defaults, table)
+
   @spec insert(Exqlite.Sqlite3.db(), atom, map) :: String.t()
   def insert(conn, table, attrs \\ %{}) do
     row =
-      @defaults
-      |> Map.fetch!(table)
+      table
+      |> defaults()
       |> Map.put(:id, Id.new())
       |> Map.merge(attrs)
 

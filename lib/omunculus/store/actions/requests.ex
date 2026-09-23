@@ -1,0 +1,346 @@
+defmodule Omunculus.Store.Actions.Requests do
+  @moduledoc """
+  Request actions. `request` opens a request with a `reason` and named
+  `options`, each a list of `{name, args}` tool calls, and parks the
+  requester's work on it (`waiting = request`). The names the options'
+  `grant` calls give are classified against the requester's run ceiling:
+  one blocked refuses the request with a `deny` event and no row; options
+  made only of `grant` calls whose names are all have open nothing. The
+  arbiter is the human for a request the harness opened or one granting a
+  sealed name; otherwise the parent work's agent when every tool of every
+  option is have for it and every granted name have or askable, else the
+  human. `reply` picks one option — the human always may, an agent only
+  as the request's arbiter — closes the request, comments its body on it
+  and reopens the requester's work if it still waits on the request.
+  `grant` gives the request's work a name or, with a `scope` and only
+  from a human, the TOML layer the harness rewrites.
+  """
+
+  alias Omunculus.{Ceiling, Config, Id}
+  alias Omunculus.Store.Actions.Helpers
+  alias Omunculus.Store.{Events, Query, View}
+  alias Omunculus.Tool.Invoke
+
+  @scopes ~w(agent depth stage workspace)
+
+  @spec request(Exqlite.Sqlite3.db(), map, map) :: {:ok, map | nil} | {:error, term}
+  def request(conn, body, ctx) do
+    with :ok <- ensure_text(:request, :no_reason, body["reason"]),
+         {:ok, options} <- options(body["options"]),
+         {:ok, run} <- fetch_run(conn, ctx.run_id),
+         {:ok, event} <- Query.one(conn, "SELECT body FROM events WHERE id = ?", [run.event_id]) do
+      snapshot = event.body |> Jason.decode!() |> Map.fetch!("ceiling")
+
+      classified =
+        Enum.map(grants(options), fn grant ->
+          {grant, Ceiling.classify(snapshot, grant.name, grant.kind)}
+        end)
+
+      classify_request(conn, ctx, run, body["reason"], options, classified)
+    end
+  end
+
+  @spec reply(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  def reply(conn, body, ctx) do
+    with {:ok, request} <- Helpers.fetch_request(:reply, conn, body["request_id"]),
+         :ok <- ensure_open(request),
+         :ok <- ensure_option(request, body["option"]),
+         :ok <- ensure_text(:reply, :no_body, body["body"]),
+         :ok <- authorize_reply(request, ctx) do
+      apply_reply(conn, ctx, request, body)
+    end
+  end
+
+  @spec grant(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  def grant(conn, body, ctx) do
+    with {:ok, request} <- Helpers.fetch_request(:grant, conn, body["request_id"]),
+         :ok <- ensure_text(:grant, :no_name, body["name"]),
+         :ok <- ensure_text(:grant, :no_kind, body["kind"]),
+         :ok <- ensure_scope(body["scope"], ctx),
+         {:ok, depth} <- run_depth(conn, request.run_id),
+         {:ok, work} <- Helpers.fetch_work(conn, request.work_id),
+         :ok <- grant_work(conn, work, body["name"], body["scope"]) do
+      Events.append(conn, %{
+        type: "grant",
+        run_id: ctx.run_id,
+        request_id: request.id,
+        work_id: request.work_id,
+        body:
+          Jason.encode!(%{
+            name: body["name"],
+            kind: body["kind"],
+            agent: request.agent,
+            depth: depth,
+            scope: body["scope"],
+            workflow: work && Config.workflow_name_for(ctx.config, View.work_depth(conn, work)),
+            stage: work && work.stage,
+            workspace: work && work.workspace
+          })
+      })
+    end
+  end
+
+  @doc "The scopes a permanent `grant` may name, each a TOML layer."
+  @spec scopes() :: [String.t()]
+  def scopes, do: @scopes
+
+  @doc "The names the `grant` calls of a request's `options` would give."
+  @spec grant_names(term) :: [String.t()]
+  def grant_names(raw) do
+    case options(raw) do
+      {:ok, options} -> options |> grants() |> Enum.map(& &1.name) |> Enum.uniq()
+      {:error, _reason} -> []
+    end
+  end
+
+  defp ensure_text(_tag, _reason, text) when is_binary(text) and text != "", do: :ok
+  defp ensure_text(tag, reason, _text), do: {:error, {tag, reason}}
+
+  defp options(raw) when is_map(raw) and map_size(raw) > 0 do
+    Enum.reduce_while(raw, {:ok, %{}}, fn {name, calls}, {:ok, acc} ->
+      case option_calls(name, calls) do
+        {:ok, steps} -> {:cont, {:ok, Map.put(acc, name, steps)}}
+        :error -> {:halt, {:error, {:request, {:invalid, :options}}}}
+      end
+    end)
+  end
+
+  defp options(_raw), do: {:error, {:request, {:invalid, :options}}}
+
+  defp option_calls(name, calls) when is_binary(name) and name != "" do
+    with {:ok, steps} <- Invoke.chain_steps(calls) do
+      if Enum.all?(steps, &valid_call?/1), do: {:ok, steps}, else: :error
+    end
+  end
+
+  defp option_calls(_name, _calls), do: :error
+
+  defp valid_call?(%{name: "grant", args: args}),
+    do: Enum.all?(~w(name kind), &(is_binary(args[&1]) and args[&1] != ""))
+
+  defp valid_call?(_call), do: true
+
+  defp grants(options) do
+    for {_option, calls} <- options,
+        %{name: "grant", args: args} <- calls,
+        do: %{name: args["name"], kind: args["kind"]}
+  end
+
+  defp access_only?(options) do
+    calls = options |> Map.values() |> List.flatten()
+    calls != [] and Enum.all?(calls, &(&1.name == "grant"))
+  end
+
+  defp fetch_run(_conn, nil), do: {:error, {:request, :no_run}}
+
+  defp fetch_run(conn, run_id) do
+    case Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id]) do
+      {:ok, nil} -> {:error, {:request, {:missing, :runs, run_id}}}
+      other -> other
+    end
+  end
+
+  defp classify_request(conn, ctx, run, reason, options, classified) do
+    classes = Enum.map(classified, fn {_grant, class} -> class end)
+
+    case List.keyfind(classified, "blocked", 1) do
+      {grant, "blocked"} ->
+        Events.append(conn, %{
+          type: "deny",
+          run_id: ctx.run_id,
+          work_id: ctx.work_id,
+          body: Jason.encode!(%{name: grant.name, kind: grant.kind, reason: reason})
+        })
+
+      nil ->
+        if access_only?(options) and Enum.all?(classes, &(&1 == "have")) do
+          {:ok, nil}
+        else
+          with {:ok, arbiter} <- resolve_arbiter(conn, ctx, options, "sealed" in classes) do
+            open_request(conn, ctx, run, reason, options, arbiter_info(arbiter))
+          end
+        end
+    end
+  end
+
+  defp resolve_arbiter(_conn, %{author: "harness"}, _options, _sealed?), do: {:ok, :human}
+  defp resolve_arbiter(_conn, _ctx, _options, true), do: {:ok, :human}
+
+  defp resolve_arbiter(conn, ctx, options, false) do
+    with {:ok, work} <- Helpers.fetch_work(conn, ctx.work_id),
+         {:ok, parent} <- Helpers.fetch_work(conn, work && work.parent_id) do
+      agent_arbiter(conn, ctx, parent, options)
+    end
+  end
+
+  defp agent_arbiter(_conn, _ctx, nil, _options), do: {:ok, :human}
+  defp agent_arbiter(_conn, _ctx, %{assignee: nil}, _options), do: {:ok, :human}
+
+  defp agent_arbiter(conn, ctx, parent, options) do
+    depth = View.work_depth(conn, parent)
+    tools = options |> Map.values() |> List.flatten() |> Enum.map(& &1.name) |> Enum.uniq()
+    grants = grants(options)
+
+    with {:ok, parent_grants} <- Helpers.grants(conn, parent) do
+      workspace_name = Config.effective_workspace(ctx.config, parent)
+
+      snapshot =
+        Ceiling.mount(
+          ctx.config,
+          %{
+            agent: parent.assignee,
+            depth: depth,
+            grants: parent_grants,
+            stage: stage_layer(ctx.config, depth, parent.stage),
+            workspace: Config.workspace_ceiling(ctx.config, workspace_name),
+            groups: ctx.groups
+          },
+          tools ++ Enum.map(grants, & &1.name)
+        )
+
+      if Enum.all?(tools, &(Ceiling.classify(snapshot, &1, "tool") == "have")) and
+           Enum.all?(grants, &(Ceiling.classify(snapshot, &1.name, &1.kind) in ~w(have askable))),
+         do: {:ok, {:agent, parent.assignee, parent.id}},
+         else: {:ok, :human}
+    end
+  end
+
+  defp stage_layer(_config, _depth, nil), do: nil
+
+  defp stage_layer(config, depth, stage) do
+    with {:ok, steps} <- Config.workflow_for(config, depth),
+         {:ok, step} <- Config.step_at(steps, stage) do
+      step.ceiling
+    else
+      _off_or_off_sequence -> nil
+    end
+  end
+
+  defp arbiter_info(:human), do: %{arbiter: "human", status: "waiting_human", body_extra: %{}}
+
+  defp arbiter_info({:agent, arbiter, arbiter_work_id}),
+    do: %{
+      arbiter: arbiter,
+      status: "waiting_agent",
+      body_extra: %{arbiter: arbiter, arbiter_work_id: arbiter_work_id}
+    }
+
+  defp open_request(conn, ctx, run, reason, options, arbiter) do
+    request_id = Id.new()
+    comment_id = Id.new()
+    body = Map.merge(%{reason: reason, options: options}, arbiter.body_extra)
+
+    with {:ok, event} <-
+           Events.append(conn, %{
+             type: "request",
+             run_id: ctx.run_id,
+             work_id: ctx.work_id,
+             request_id: request_id,
+             comment_id: comment_id,
+             body: Jason.encode!(body)
+           }),
+         :ok <-
+           Query.insert(conn, :requests, %{
+             id: request_id,
+             run_id: ctx.run_id,
+             agent: run.agent,
+             work_id: ctx.work_id,
+             options: Jason.encode!(options),
+             arbiter: arbiter.arbiter,
+             status: arbiter.status,
+             event_id: event.id,
+             created_at: Events.now()
+           }),
+         :ok <-
+           Helpers.insert_comment(conn, comment_id, %{requests: request_id}, reason, event, ctx),
+         :ok <- mark_waiting(conn, ctx.work_id, request_id, run.agent) do
+      {:ok, event}
+    end
+  end
+
+  defp mark_waiting(_conn, nil, _request_id, _agent), do: :ok
+
+  defp mark_waiting(conn, work_id, request_id, agent) do
+    Query.exec(
+      conn,
+      "UPDATE works SET state = 'waiting', waiting = 'request', waiting_for = ?, waiting_from = ?, updated_at = ? WHERE id = ?",
+      [request_id, agent, Events.now(), work_id]
+    )
+  end
+
+  defp ensure_open(%{status: status}) when status in ["waiting_human", "waiting_agent"], do: :ok
+  defp ensure_open(_request), do: {:error, {:reply, :closed}}
+
+  defp ensure_option(request, option) do
+    if is_binary(option) and Map.has_key?(Jason.decode!(request.options), option),
+      do: :ok,
+      else: {:error, {:reply, {:unknown_option, option}}}
+  end
+
+  defp authorize_reply(_request, %{author: "human"}), do: :ok
+  defp authorize_reply(%{status: "waiting_agent", arbiter: arbiter}, %{agent: arbiter}), do: :ok
+  defp authorize_reply(_request, _ctx), do: {:error, {:reply, :not_arbiter}}
+
+  defp apply_reply(conn, ctx, request, body) do
+    comment_id = Id.new()
+
+    with {:ok, event} <-
+           Events.append(conn, %{
+             type: "reply",
+             run_id: ctx.run_id,
+             request_id: request.id,
+             work_id: request.work_id,
+             comment_id: comment_id,
+             body: Jason.encode!(body)
+           }),
+         :ok <-
+           Helpers.insert_comment(
+             conn,
+             comment_id,
+             %{requests: request.id},
+             body["body"],
+             event,
+             ctx
+           ),
+         :ok <-
+           Query.exec(conn, "UPDATE requests SET status = 'closed' WHERE id = ?", [request.id]),
+         :ok <- reopen_requester(conn, request) do
+      {:ok, event}
+    end
+  end
+
+  defp reopen_requester(conn, request) do
+    case Helpers.fetch_work(conn, request.work_id) do
+      {:ok, %{state: "waiting", waiting: "request", waiting_for: id}} when id == request.id ->
+        Helpers.reopen_work(conn, request.work_id)
+
+      {:ok, _not_waiting_on_it} ->
+        :ok
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  defp ensure_scope(nil, _ctx), do: :ok
+  defp ensure_scope(scope, %{author: "human"}) when scope in @scopes, do: :ok
+  defp ensure_scope(scope, _ctx) when scope in @scopes, do: {:error, {:grant, :not_human}}
+  defp ensure_scope(_scope, _ctx), do: {:error, {:grant, {:invalid, :scope}}}
+
+  defp run_depth(conn, run_id) do
+    with {:ok, run} <- Query.one(conn, "SELECT depth FROM runs WHERE id = ?", [run_id]) do
+      {:ok, String.to_integer(run.depth)}
+    end
+  end
+
+  defp grant_work(_conn, nil, _name, _scope), do: :ok
+  defp grant_work(conn, work, name, nil), do: append_grant(conn, work, name)
+  defp grant_work(_conn, _work, _name, _scope), do: :ok
+
+  defp append_grant(conn, work, name) do
+    grants = if work.grants, do: Jason.decode!(work.grants), else: []
+    updated = if name in grants, do: grants, else: grants ++ [name]
+
+    Query.exec(conn, "UPDATE works SET grants = ? WHERE id = ?", [Jason.encode!(updated), work.id])
+  end
+end

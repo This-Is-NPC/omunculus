@@ -192,19 +192,24 @@ defmodule Omunculus.Tool.Invoke do
   end
 
   defp fetch_chain(decoded) do
-    case Map.get(decoded, "chain", []) do
-      list when is_list(list) ->
-        Enum.reduce_while(Enum.reverse(list), {:ok, []}, fn entry, {:ok, acc} ->
-          case chain_step(entry) do
-            {:ok, step} -> {:cont, {:ok, [step | acc]}}
-            :error -> {:halt, {:error, {:invalid_output, decoded}}}
-          end
-        end)
-
-      _ ->
-        {:error, {:invalid_output, decoded}}
+    case chain_steps(Map.get(decoded, "chain", [])) do
+      {:ok, _steps} = ok -> ok
+      :error -> {:error, {:invalid_output, decoded}}
     end
   end
+
+  @doc "Parses a list of `{name, args}` tool calls, the shape of `out.chain`."
+  @spec chain_steps(term) :: {:ok, [%{name: String.t(), args: map}]} | :error
+  def chain_steps(list) when is_list(list) do
+    Enum.reduce_while(Enum.reverse(list), {:ok, []}, fn entry, {:ok, acc} ->
+      case chain_step(entry) do
+        {:ok, step} -> {:cont, {:ok, [step | acc]}}
+        :error -> {:halt, :error}
+      end
+    end)
+  end
+
+  def chain_steps(_list), do: :error
 
   defp chain_step(%{"name" => name} = entry) when is_binary(name) and name != "" do
     case Map.get(entry, "args", %{}) do

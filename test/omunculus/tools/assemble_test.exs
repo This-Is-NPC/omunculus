@@ -124,7 +124,7 @@ defmodule Omunculus.Tools.AssembleTest do
       "request" => %{
         id: "req_1",
         agent: "worker",
-        ask: ~s({"kind":"tool","name":"write"})
+        options: ~s({"grant":[{"name":"grant","args":{"kind":"tool","name":"write"}}],"deny":[]})
       },
       "comments.request" => [%{body: "please look"}],
       "comments.inbox" => [%{body: "standalone notice"}],
@@ -146,6 +146,11 @@ defmodule Omunculus.Tools.AssembleTest do
       ]
 
     assert with_inbox =~ "## Inbox\ninb_1\nstandalone notice"
+
+    assert with_inbox =~
+             "## Request\nreq_1 requested by worker\n- deny\n" <>
+               ~s(- grant: grant {"kind":"tool","name":"write"}\nplease look)
+
     refute with_inbox =~ "should not appear"
 
     request_at = :binary.match(with_inbox, "## Request") |> elem(0)

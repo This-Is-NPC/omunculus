@@ -40,20 +40,27 @@ Lists, in any mode:
 Precedence in the effective set: `deny` > `human` > `negotiable` >
 `granted`. A layer that lists `human` beats `auto` on the others.
 
-Who answers an `emit` `request`:
+Who answers an `emit` `request`. Its options are lists of tool calls; the
+names the `grant` calls give are classified for the requester:
 
 ```text
-blocked     → deny; no REQUESTS row
-have        → already granted: <name>; no REQUESTS row
-askable + an agent above with authority (have ∪ askable of theirs)
-            → REQUESTS arbiter = that agent
-askable with nobody above, or sealed
+a granted name blocked
+            → deny; no REQUESTS row
+only grant calls, every name have
+            → already granted: <name>; no REQUESTS row
+opened by the harness, or a granted name sealed
             → REQUESTS arbiter = human
+every tool of every option have for the agent of the parent work,
+and every granted name have or askable for it
+            → REQUESTS arbiter = that agent
+otherwise   → REQUESTS arbiter = human
 ```
 
 `auto` only moves the unnamed bucket to askable. It does not skip
 `REQUESTS` and it does not write a grant on its own. Depth 0 has nobody
-above: the request goes to the person.
+above: the request goes to the person. The arbiter's `reply` runs the
+chosen option's calls under the arbiter's ceiling: an agent needs each
+of them as have in its run.
 
 `pinned` intersects the same way `granted` does: an empty list on a layer
 does not restrict. Tools in `pinned` ∩ effective become cards; the rest
@@ -62,26 +69,29 @@ effective set, `pinned` is ignored.
 
 ## Grants
 
-A grant (agent above, or person) writes three things on the **work**, not
-on the run:
+A grant is the `grant` tool, a step `reply` chains from the chosen
+option. It writes on the requester's **work**, not on the run:
 
-1. `WORKS.grants` gains `ask.name` (`write`, `./secrets`, `sandbox.write`, …)
+1. `WORKS.grants` gains the granted name (`write`, `./secrets`, `sandbox.write`, …)
 2. `EVENTS` `grant`
-3. `COMMENTS` on the request thread
 
-The old run does not gain the tool. `reply` grant prepares a run on the
-**same** stage; that run remounts and adds the grant. `reply` deny does
-not reopen the work.
+and the `reply` writes its body in `COMMENTS` on the request thread.
 
-**Temporary** — the default. `ask.name` enters only `WORKS.grants` of that
-`work_id`. No work attached, no grant on any work. The TOML does not
+The old run does not gain the tool. The `reply` reopens the work and
+prepares a run on the **same** stage; that run remounts and adds the
+grant. `deny` reopens it too, without the name.
+
+**Temporary** — no `scope`. The name enters only `WORKS.grants` of the
+request's work. No work attached, no grant on any work. The TOML does not
 change. The next run of this work (and of children, when they open) sees
 it. Sibling works do not.
 
-**Permanent** — `--scope agent|depth|stage|workspace` rewrites the file
-on that layer. Nothing is written to `grants`. Every later run that falls
-on that layer gets the access, in any work. A workspace with its own
-`config` file is written there.
+**Permanent** — `scope` = `agent`, `depth`, `stage` or `workspace`, only
+from a person: the store refuses a scoped grant by an agent. The harness
+rewrites the file on that layer before it opens the next run. Nothing is
+written to `grants`. Every later run that falls on that layer gets the
+access, in any work. A workspace with its own `config` file is written
+there.
 
 The harness does not copy `grants` onto a child at birth. At the opening
 of a run it walks `parent_id`:

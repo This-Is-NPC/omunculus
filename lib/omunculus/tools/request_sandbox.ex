@@ -1,10 +1,10 @@
 defmodule Omunculus.Tools.RequestSandbox do
   @moduledoc """
   Builtin `request_sandbox` tool: emits a `request` with `kind = resource`
-  for a sandbox capability named in `[execution] resources`. The store
-  classifies that name against the run's ceiling. Like `request_access`,
-  the `report` is commented on the run's work first and the manifest's
-  `then` appends `end`.
+  for a sandbox capability named in `[execution] resources`, with the
+  options of `request_access`. The store classifies that name against the
+  run's ceiling. Like `request_access`, the `report` is commented on the
+  run's work first and the manifest's `then` appends `end`.
   """
 
   alias Omunculus.Tools.{Args, Out, RequestAccess}
@@ -20,9 +20,8 @@ defmodule Omunculus.Tools.RequestSandbox do
     end
   end
 
-  defp validate(%{args: %{"name" => name} = args} = input) when name in @resources do
-    RequestAccess.emit(input, %{"kind" => "resource", "name" => name, "reason" => args["reason"]})
-  end
+  defp validate(%{args: %{"name" => name}} = input) when name in @resources,
+    do: RequestAccess.emit(input, "resource", name)
 
   defp validate(%{args: %{"name" => name}}), do: Out.fail("unsupported resource: #{name}")
 end

@@ -7,14 +7,28 @@ defmodule Omunculus.Tools.RequestAccessTest do
   @input %{
     name: "request_access",
     args: %{},
-    view: %{},
+    view: %{"grant_scopes" => ["agent", "workspace"]},
     run_id: nil,
     work_id: nil,
     workspace: nil,
     roots: []
   }
 
-  test "emits a request with kind, name and reason" do
+  @options %{
+    "grant" => [%{"name" => "grant", "args" => %{"kind" => "tool", "name" => "write"}}],
+    "grant_agent" => [
+      %{"name" => "grant", "args" => %{"kind" => "tool", "name" => "write", "scope" => "agent"}}
+    ],
+    "grant_workspace" => [
+      %{
+        "name" => "grant",
+        "args" => %{"kind" => "tool", "name" => "write", "scope" => "workspace"}
+      }
+    ],
+    "deny" => []
+  }
+
+  test "emits a request with the reason, grant, one grant per scope of the view, and deny" do
     input = %{
       @input
       | args: %{
@@ -31,7 +45,7 @@ defmodule Omunculus.Tools.RequestAccessTest do
              "emit" => [
                %{
                  "type" => "request",
-                 "body" => %{"kind" => "tool", "name" => "write", "reason" => "need to write"}
+                 "body" => %{"reason" => "need to write", "options" => @options}
                }
              ]
            }
@@ -56,7 +70,7 @@ defmodule Omunculus.Tools.RequestAccessTest do
              },
              %{
                "type" => "request",
-               "body" => %{"kind" => "tool", "name" => "write", "reason" => "need to write"}
+               "body" => %{"reason" => "need to write", "options" => @options}
              }
            ]
   end
@@ -157,6 +171,7 @@ defmodule Omunculus.Tools.RequestAccessTest do
 
     assert %{"request_access" => manifest} = catalog
     assert manifest.triggers == ["model"]
+    assert manifest.views == ["grant_scopes"]
     assert manifest.chains == ["end"]
     assert manifest.then == ["end"]
   end

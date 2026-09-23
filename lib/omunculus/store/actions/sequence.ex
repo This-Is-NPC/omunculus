@@ -3,13 +3,15 @@ defmodule Omunculus.Store.Actions.Sequence do
   Sequence actions of spec §3.4: `continue` moves a work to the next
   workflow stage, or closes it on the last stage or when its depth has no
   workflow; `break` parks it with a comment. A `break` reopens a parent
-  waiting on its children at once; closing a work reopens it once none of
-  its children is left undone; either names the reopened parent as
-  `parent_id` in its event. `delegate` opens a child with its title and
-  goal and parks the parent on its children; unnamed, the child's agent
-  is the first stage's agent or the depth's first agent. Those three
-  need a work already linked to the run. `end` appends the `end` event
-  that ends the run and needs only the run.
+  waiting on its children at once; closing or cancelling a work reopens
+  it once each of its children is done or cancelled; each names
+  the reopened parent as `parent_id` in its event. `delegate` opens a
+  child with its title and goal and parks the parent on its children;
+  unnamed, the child's agent is the first stage's agent or the depth's
+  first agent. Those three need a work already linked to the run. `end`
+  appends the `end` event that ends the run and needs only the run.
+  `cancel` sets the work of the request named by `request_id`
+  `cancelled`, unless it is already done or cancelled.
   """
 
   alias Omunculus.Config
@@ -60,6 +62,27 @@ defmodule Omunculus.Store.Actions.Sequence do
     end
   end
 
+  @spec cancel(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  def cancel(conn, body, ctx) do
+    with {:ok, work} <- request_work(conn, body["request_id"]),
+         :ok <- ensure_unclosed(work),
+         :ok <-
+           Query.exec(
+             conn,
+             "UPDATE works SET state = 'cancelled', waiting = NULL, waiting_for = NULL, waiting_from = NULL, updated_at = ? WHERE id = ?",
+             [Events.now(), work.id]
+           ),
+         {:ok, parent_id} <- reopen_waiting_parent(conn, work, :all_done) do
+      Events.append(conn, %{
+        type: "cancel",
+        run_id: ctx.run_id,
+        request_id: body["request_id"],
+        work_id: work.id,
+        body: Jason.encode!(Map.put(body, "parent_id", parent_id))
+      })
+    end
+  end
+
   @spec end_run(Exqlite.Sqlite3.db(), map) :: {:ok, map} | {:error, term}
   def end_run(_conn, %{run_id: nil}), do: {:error, {:end, :no_run}}
 
@@ -88,6 +111,20 @@ defmodule Omunculus.Store.Actions.Sequence do
       {:error, _reason} = error -> error
     end
   end
+
+  defp request_work(conn, request_id) do
+    with {:ok, request} <- Helpers.fetch_request(:cancel, conn, request_id) do
+      case request.work_id do
+        nil -> {:error, {:cancel, :no_work}}
+        work_id -> fetch_work(:cancel, conn, work_id)
+      end
+    end
+  end
+
+  defp ensure_unclosed(%{state: state}) when state in ["done", "cancelled"],
+    do: {:error, {:cancel, {:closed, state}}}
+
+  defp ensure_unclosed(_work), do: :ok
 
   defp ensure_open(_tag, %{state: "open"}), do: :ok
   defp ensure_open(tag, %{state: "waiting"}), do: {:error, {tag, :waiting}}
@@ -137,8 +174,8 @@ defmodule Omunculus.Store.Actions.Sequence do
     end
   end
 
-  # A child that closes wakes its waiting parent once no sibling is left
-  # undone; a child that breaks wakes it at once.
+  # A child that closes or is cancelled wakes its waiting parent once no
+  # sibling is left undone; a child that breaks wakes it at once.
   defp reopen_waiting_parent(_conn, %{parent_id: nil}, _when_to), do: {:ok, nil}
 
   defp reopen_waiting_parent(conn, %{parent_id: parent_id}, when_to) do
@@ -158,7 +195,7 @@ defmodule Omunculus.Store.Actions.Sequence do
     with {:ok, row} <-
            Query.one(
              conn,
-             "SELECT COUNT(*) AS undone FROM works WHERE parent_id = ? AND state != 'done'",
+             "SELECT COUNT(*) AS undone FROM works WHERE parent_id = ? AND state NOT IN ('done', 'cancelled')",
              [parent_id]
            ) do
       {:ok, row.undone == 0}

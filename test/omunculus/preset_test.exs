@@ -132,7 +132,7 @@ defmodule Omunculus.PresetTest do
       write_emit_tool(
         dir,
         "request_secret",
-        ~s({"ok": true, "output": "", "emit": [{"type": "request", "body": {"kind": "secret", "name": "vault", "reason": "need it"}}]})
+        ~s({"ok": true, "output": "", "emit": [{"type": "request", "body": {"reason": "need it", "options": {"grant": [{"name": "grant", "args": {"kind": "secret", "name": "vault"}}], "deny": []}}}]})
       )
 
       :ok
@@ -156,7 +156,10 @@ defmodule Omunculus.PresetTest do
       project = open(dir)
       assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
       assert request.status == "waiting_human"
-      assert Jason.decode!(request.ask) == %{"kind" => "secret", "name" => "vault"}
+
+      assert %{"grant" => [%{"args" => %{"kind" => "secret", "name" => "vault"}}]} =
+               Jason.decode!(request.options)
+
       Project.close(project)
 
       reply_model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
@@ -164,7 +167,7 @@ defmodule Omunculus.PresetTest do
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request.id, "--decision", "grant", "pode"],
+                 ["reply", "--request_id", request.id, "--option", "grant", "pode"],
                  dir
                )
 
