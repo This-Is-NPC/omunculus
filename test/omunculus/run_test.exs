@@ -719,13 +719,13 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
-  test "a request_access emit ends the run before any further tool call happens", %{dir: dir} do
+  test "end ends the run before any further tool call happens", %{dir: dir} do
     project = open_project(dir)
     message_id = message(project.conn)
     test_pid = self()
 
     model = fn _assembled, _tools, call ->
-      call.("request_access", %{"kind" => "path", "name" => "./secret", "reason" => "need it"})
+      call.("end", %{})
       send(test_pid, :reached_second_call)
       call.("request_access", %{"kind" => "tool", "name" => "other", "reason" => "x"})
       {:ok, "unused"}
@@ -737,18 +737,34 @@ defmodule Omunculus.RunTest do
     refute_received :reached_second_call
 
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
-
-    assert Enum.map(events, & &1.type) == [
-             "start-run",
-             "tool",
-             "tool",
-             "request",
-             "end-run",
-             "tool"
-           ]
+    assert Enum.map(events, & &1.type) == ["start-run", "tool", "tool", "end", "end-run"]
 
     assert {:ok, stored} = Query.one(project.conn, "SELECT * FROM runs WHERE id = ?", [run.id])
     assert stored.status == "done"
+
+    Project.close(project)
+  end
+
+  test "a request_access emit does not end the run", %{dir: dir} do
+    project = open_project(dir)
+    message_id = message(project.conn)
+
+    model = fn _assembled, _tools, call ->
+      call.("request_access", %{"kind" => "path", "name" => "./secret", "reason" => "need it"})
+      call.("request_access", %{"kind" => "path", "name" => "./other", "reason" => "x"})
+      {:ok, "asked twice"}
+    end
+
+    Fixtures.use_model(project, model)
+
+    assert {:ok, run} = Run.open(project, open(message_id))
+    assert {:ok, [_, _]} = Query.all(project.conn, "SELECT * FROM requests")
+
+    assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+    types = Enum.map(events, & &1.type)
+    assert Enum.count(types, &(&1 == "request")) == 2
+    assert List.last(types) == "end-run"
+    refute "end" in types
 
     Project.close(project)
   end

@@ -28,27 +28,27 @@ module = "Omunculus.Model.Fake"
 [agents.concierge]
 depth = 0
 model = "fake"
-tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store"]
+tools = ["break", "catalog", "continue", "delegate", "end", "fs.read", "reply", "store"]
 text = """
-You are the project concierge. Read the message, use `tools.*` when needed, and respond.
+You are the project concierge. Read the message, use `tools.*` when needed, and respond. Call end after you delegate.
 """
 
 [agents.worker]
 depth = 1
 model = "fake"
-tools = ["break", "comment", "continue", "fs.read", "fs.write", "notify", "request_access", "request_sandbox"]
+tools = ["break", "comment", "continue", "end", "fs.read", "fs.write", "notify", "request_access", "request_sandbox"]
 negotiable = ["sandbox.write"]
 text = """
-You are the worker. Complete the assigned work, report progress, and call continue when the stage is complete.
+You are the worker. Complete the assigned work, report progress, and call continue and then end when the stage is complete.
 """
 
 [agents.reviewer]
 depth = 1
 model = "fake"
 workflow_only = true
-tools = ["break", "comment", "continue", "fs.read", "notify"]
+tools = ["break", "comment", "continue", "end", "fs.read", "notify"]
 text = """
-You are the reviewer. Read the work and latest comment, assess the result, and call continue to close the stage.
+You are the reviewer. Read the work and latest comment, assess the result, and call continue and then end to close the stage.
 """
 
 [workflows.delivery]

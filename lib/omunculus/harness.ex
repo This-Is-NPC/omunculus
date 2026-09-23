@@ -4,11 +4,11 @@ defmodule Omunculus.Harness do
   declared views, commits calls and emits atomically, then reacts to their
   events. Run lifecycle events use the same `react/2` path.
 
-  Hooks use the same emit path as tools. Non-terminal events still run
-  hooks during the model unroll; events that end the run wait until
-  `follow_up/2` has closed the run and opened the next one. `follow_up/2`
-  opens action runs, then those deferred hooks, then agent reactions,
-  preserving the originating tool or hook in `via`.
+  Hooks use the same emit path as tools. Hooks of every event run during
+  the model unroll except those of `end`, the only event that ends a run:
+  they wait until `follow_up/2` has closed the run and opened the next
+  one. `follow_up/2` opens action runs, then those deferred hooks, then
+  agent reactions, preserving the originating tool or hook in `via`.
   """
 
   alias Omunculus.{Config, Project, Run, Store}
@@ -494,15 +494,12 @@ defmodule Omunculus.Harness do
     end
   end
 
-  @ending_events ~w(request deny grant continue break delegate)
-
   defp maybe_react(project, events, active, execution) do
     react(project, Enum.reject(events, &ending_event?/1), active, execution)
   end
 
   @spec ending_event?(map) :: boolean
-  def ending_event?(%{type: "work", body: body}), do: Jason.decode!(body)["start"] == true
-  def ending_event?(event), do: event.type in @ending_events
+  def ending_event?(event), do: event.type == "end"
 
   defp execution_context(
          _manifest,

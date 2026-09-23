@@ -6,8 +6,8 @@ ceiling is the TOML, and the filesystem stays the filesystem.
 There is no daemon and no chat window. `omunculus send "count to 5"` is a tool
 call, the same contract the model uses, and what happens next is already in
 the file: a prompt is recorded, a run opens, the model calls tools inside a
-Bubblewrap sandbox, every step is an event, and the store applies whatever
-those tools emit. Work, requests and notifications are rows. The harness
+Bubblewrap sandbox until it calls `end` or stops, every step is an event, and
+the store applies whatever those tools emit. Work, requests and notifications are rows. The harness
 follows them.
 
 ## Install

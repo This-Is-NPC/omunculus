@@ -55,11 +55,11 @@ defmodule Omunculus.SandboxTest do
              Sandbox.run("while (true) {}", [], fn _, _ -> :unused end, policy(timeout: 200))
   end
 
-  test "terminal tool actions propagate out and stop the sandbox" do
+  test "a throw from end propagates out and stops the sandbox" do
     assert catch_throw(
              Sandbox.run(
-               "await tools.continue({});",
-               [%{name: "continue"}],
+               "await tools.end({});",
+               [%{name: "end"}],
                fn _, _ ->
                  throw(:run_ended)
                end,

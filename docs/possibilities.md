@@ -50,6 +50,7 @@ assemble = "assemble"
 `continue` / `break` sit in `sequence` and act on the run's work. Without a
 workflow, `continue` closes it and `break` parks it with a comment; a later
 `[workflows.*]` turns `continue` into a stage walk without rewriting the agent.
+`end`, also in `sequence`, ends the run; neither `continue` nor `break` does.
 
 ## 2. Concierge that delegates
 
@@ -84,18 +85,18 @@ module = "Omunculus.Model.Fake"
 [agents.concierge]
 depth = 0
 model = "fake"
-tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store"]
+tools = ["break", "catalog", "continue", "delegate", "end", "fs.read", "reply", "store"]
 text = """
-You are the project concierge. Read the message and delegate when the work is a job.
+You are the project concierge. Read the message and delegate when the work is a job, then end the run.
 """
 
 [agents.worker]
 depth = 1
 model = "fake"
-tools = ["break", "comment", "continue", "fs.read", "fs.write", "notify", "request_access", "request_sandbox"]
+tools = ["break", "comment", "continue", "end", "fs.read", "fs.write", "notify", "request_access", "request_sandbox"]
 negotiable = ["sandbox.write"]
 text = """
-You are the worker. Complete the assigned work and call continue when the stage is complete.
+You are the worker. Complete the assigned work and call continue and then end when the stage is complete.
 """
 
 [policy]
@@ -134,13 +135,13 @@ does not name the next node.
 [agents.worker]
 depth = 1
 model = "fake"
-tools = ["comment", "continue", "fs.read", "fs.write"]
+tools = ["comment", "continue", "end", "fs.read", "fs.write"]
 
 [agents.reviewer]
 depth = 1
 model = "fake"
 workflow_only = true
-tools = ["comment", "continue", "fs.read", "notify"]
+tools = ["comment", "continue", "end", "fs.read", "notify"]
 
 [workflows.delivery]
 steps = [
@@ -197,17 +198,17 @@ flowchart TB
 [agents.concierge]
 depth = 0
 model = "fake"
-tools = ["catalog", "delegate", "reply", "store"]
+tools = ["catalog", "delegate", "end", "reply", "store"]
 
 [agents.manager]
 depth = 1
 model = "fake"
-tools = ["comment", "delegate", "notify", "reply"]
+tools = ["comment", "delegate", "end", "notify", "reply"]
 
 [agents.worker]
 depth = 2
 model = "fake"
-tools = ["comment", "continue", "fs.read", "fs.write", "request_sandbox"]
+tools = ["comment", "continue", "end", "fs.read", "fs.write", "request_sandbox"]
 negotiable = ["sandbox.write"]
 
 [policy]
@@ -216,7 +217,7 @@ mode = "auto"
 
 [policy.depth.2]
 mode = "allowlist"
-granted = ["comment", "continue", "fs.read"]
+granted = ["comment", "continue", "end", "fs.read"]
 negotiable = ["fs.write", "sandbox.write"]
 ```
 
@@ -378,7 +379,7 @@ human `reply`, not an agent above:
 [agents.codex]
 depth = 0
 model = "fake"
-tools = ["bash", "catalog", "fs.read", "fs.write", "request_access", "request_sandbox", "store"]
+tools = ["bash", "catalog", "end", "fs.read", "fs.write", "request_access", "request_sandbox", "store"]
 negotiable = ["sandbox.write"]
 human = ["delete"]
 ```

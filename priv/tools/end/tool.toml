@@ -1,0 +1,11 @@
+name = "end"
+kind = "tool"
+shape = "simple"
+triggers = ["model"]
+description = "Ends the run. Nothing after it in the same run executes."
+tags = ["sequence", "run"]
+groups = ["sequence"]
+module = "Omunculus.Tools.End"
+
+[parameters]
+type = "object"

@@ -105,10 +105,11 @@ Qualified names are canonical. A manifest copied from the spec with
 `views = ["comments"]` still loads.
 
 Actions the store will apply: `comment`, `request`, `notify`, `prompt`,
-`inbox.read`, `reply`, `work`, `delegate`, `continue`, `break`,
+`inbox.read`, `reply`, `work`, `delegate`, `continue`, `break`, `end`,
 `compact`, `comment.delete`. Have on a `request` does not open a row —
-the output is `already granted: <name>`. Blocked is `deny` and the run
-ends. `continue` does not name a stage. `EVENTS` is append-only.
+the output is `already granted: <name>`. Blocked is `deny`. `end` is the
+only action that ends the run; it needs a run. `continue` does not name a
+stage. `EVENTS` is append-only.
 
 ## What the model calls
 
@@ -130,7 +131,7 @@ fs.read   = read, ls, grep, find
 fs.write  = write, edit
 store     = comment, work, request_access, reply, notify
 sandbox   = request_sandbox
-sequence  = delegate, continue, break
+sequence  = delegate, continue, break, end
 catalog   = tool_search
 cli       = send, inbox, inbox_read, prompt, login, logout
 bench     = counter, counter_decrement

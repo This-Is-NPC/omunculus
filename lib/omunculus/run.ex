@@ -5,8 +5,10 @@ defmodule Omunculus.Run do
   The agent's `model` from config is constructed via `new/1`. The
   assembled prompt is the `output` of the tool named by
   `agents.<x>.assemble` or `[policy] assemble`. Streaming adapters
-  record each message before tools. Terminal actions close the run
-  before its action or hook continuations.
+  record each message before tools. The `end` action stops the model
+  and closes the run before its action or hook continuations; a model
+  that stops by itself on an open child work with no workflow at its
+  depth closes that work.
   """
 
   alias Omunculus.{Ceiling, Config, Harness, Mcp, Project, Store}
@@ -369,12 +371,15 @@ defmodule Omunculus.Run do
   defp maybe_finish_work(_conn, _config, _work, _run_id, _execution, false), do: :ok
 
   defp maybe_finish_work(project, config, work, run_id, execution, true) do
-    if Config.workflow_for(config, Store.work_depth(project.conn, work)) == :off do
-      with {:ok, event} <- Store.finish_work(project.conn, work.id, run_id),
-           {:ok, _hooks} <- Harness.react(project, [event], [], execution),
-           do: :ok
-    else
-      :ok
+    with {:ok, current} <- fetch_work(project.conn, work.id) do
+      if current.state == "open" and
+           Config.workflow_for(config, Store.work_depth(project.conn, current)) == :off do
+        with {:ok, event} <- Store.finish_work(project.conn, work.id, run_id),
+             {:ok, _hooks} <- Harness.react(project, [event], [], execution),
+             do: :ok
+      else
+        :ok
+      end
     end
   end
 end

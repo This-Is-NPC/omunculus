@@ -97,7 +97,7 @@ assemble = "assemble"
 [agents.concierge]
 depth = 0
 model = "fake"
-tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store"]
+tools = ["break", "catalog", "continue", "delegate", "end", "fs.read", "reply", "store"]
 text = """
 You are the project concierge.
 """

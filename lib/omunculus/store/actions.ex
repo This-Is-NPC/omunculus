@@ -2,8 +2,8 @@ defmodule Omunculus.Store.Actions do
   @moduledoc """
   Write side of the store: `run/3` applies the emits from a tool's
   `out.emit` in order, inside whatever transaction the caller holds — the
-  whole batch commits or nothing does (spec §8.3). `continue`, `break`
-  and `delegate` are dispatched to `Actions.Sequence`; `notify` and
+  whole batch commits or nothing does (spec §8.3). `continue`, `break`,
+  `delegate` and `end` are dispatched to `Actions.Sequence`; `notify` and
   `inbox.read` to `Actions.Inbox`; `compact` and `comment.delete` to
   `Actions.Comments`.
   """
@@ -56,6 +56,8 @@ defmodule Omunculus.Store.Actions do
 
   defp dispatch(conn, %{"type" => "delegate"} = emit, ctx),
     do: Sequence.delegate(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "end"}, ctx), do: Sequence.end_run(conn, ctx)
 
   defp dispatch(conn, %{"type" => "notify"} = emit, ctx),
     do: Inbox.notify(conn, Map.get(emit, "body", %{}), ctx)

@@ -108,8 +108,8 @@ the default preset has `request_sandbox` in `tools` and `sandbox.write` in
 | `sandbox.network = have` | Bubblewrap shares the host network namespace |
 | any other `sandbox.network` | a network namespace with no host networking |
 
-A grant ends the current run, so only the next run receives the new
-policy. Network access does not provide credentials, host environment
+A grant does not change the policy of a run already open; only the
+next run receives the new policy. Network access does not provide credentials, host environment
 variables, home directories, SSH agents, desktop sockets, or write access
 outside the workspace.
 

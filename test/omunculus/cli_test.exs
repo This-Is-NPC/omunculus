@@ -802,12 +802,12 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "Sou o concierge."
-      tools = ["work", "continue", "comment"]
+      tools = ["work", "continue", "comment", "end"]
 
       [agents.reviewer]
       depth = 0
       text = "Sou o reviewer."
-      tools = ["work", "continue", "comment"]
+      tools = ["work", "continue", "comment", "end"]
 
       [workflows.delivery]
       steps = [
@@ -822,14 +822,16 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         cond do
           assembled =~ "Sou o concierge." ->
-            unless assembled =~ "## Work",
-              do: call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
+            if assembled =~ "## Work",
+              do: call.("continue", %{}),
+              else: call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
 
-            call.("continue", %{})
+            call.("end", %{})
             {:ok, "unused"}
 
           assembled =~ "Sou o reviewer." ->
             call.("continue", %{})
+            call.("end", %{})
             {:ok, "unused"}
         end
       end
@@ -859,10 +861,10 @@ defmodule Omunculus.CLITest do
       types1 = Enum.map(events1, & &1.type)
       refute "model" in types1
       continue_at = Enum.find_index(types1, &(&1 == "continue"))
-      end_at = Enum.find_index(types1, &(&1 == "end-run"))
-      assert continue_at < end_at
-      assert List.last(events1).type == "tool"
-      assert Jason.decode!(List.last(events1).body)["name"] == "on-continue"
+      hook = Enum.at(events1, continue_at + 1)
+      assert hook.type == "tool"
+      assert Jason.decode!(hook.body)["name"] == "on-continue"
+      assert List.last(types1) == "end-run"
 
       assert {:ok, assembled2} =
                Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [run2.prompt_id])
@@ -873,17 +875,18 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "continue without a workflow closes a root work and ends the run", %{dir: dir} do
+    test "continue without a workflow closes a root work, and end ends the run", %{dir: dir} do
       write_config(dir, """
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["work", "continue"]
+      tools = ["work", "continue", "end"]
       """)
 
       model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("work", %{"title" => "No sequence", "goal" => "No sequence"})
-        call.("continue", %{})
+        assert {:ok, ""} = call.("continue", %{})
+        call.("end", %{})
         {:ok, "unused"}
       end
 
@@ -1012,7 +1015,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["work", "break", "comment"]
+      tools = ["work", "break", "comment", "end"]
 
       [workflows.solo]
       steps = [{ name = "to_do", agent = "concierge" }]
@@ -1022,10 +1025,11 @@ defmodule Omunculus.CLITest do
       """)
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work",
-          do: call.("work", %{"title" => "Needs help", "goal" => "Needs help"})
+        if assembled =~ "## Work",
+          do: call.("break", %{"body" => "need to pause"}),
+          else: call.("work", %{"title" => "Needs help", "goal" => "Needs help"})
 
-        call.("break", %{"body" => "need to pause"})
+        call.("end", %{})
         {:ok, "unused"}
       end
 
@@ -1476,8 +1480,8 @@ defmodule Omunculus.CLITest do
           event.type == "tool" and Jason.decode!(event.body)["name"] == "on-request"
         end)
 
-      assert request_event.sequence < end_event.sequence
-      assert end_event.sequence < hook_event.sequence
+      assert hook_event.sequence == request_event.sequence + 1
+      assert hook_event.sequence < end_event.sequence
       assert hook_event.run_id == request_event.run_id
       assert hook_event.work_id == request_event.work_id
 
@@ -1523,7 +1527,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["work", "continue"]
+      tools = ["work", "continue", "end"]
 
       [workflows.solo]
       steps = [{ name = "to_do", agent = "concierge" }]
@@ -1533,10 +1537,11 @@ defmodule Omunculus.CLITest do
       """)
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work",
-          do: call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
+        if assembled =~ "## Work",
+          do: call.("continue", %{}),
+          else: call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
 
-        call.("continue", %{})
+        call.("end", %{})
         {:ok, "unused"}
       end
 
@@ -1557,8 +1562,8 @@ defmodule Omunculus.CLITest do
           event.type == "tool" and Jason.decode!(event.body)["name"] == "on-continue"
         end)
 
-      assert continue_event.sequence < end_event.sequence
-      assert end_event.sequence < hook_event.sequence
+      assert hook_event.sequence == continue_event.sequence + 1
+      assert hook_event.sequence < end_event.sequence
       assert hook_event.run_id == continue_event.run_id
 
       Project.close(project)
@@ -1569,7 +1574,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["work", "break", "comment"]
+      tools = ["work", "break", "comment", "end"]
 
       [workflows.solo]
       steps = [{ name = "to_do", agent = "concierge" }]
@@ -1579,10 +1584,11 @@ defmodule Omunculus.CLITest do
       """)
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work",
-          do: call.("work", %{"title" => "Needs help", "goal" => "Needs help"})
+        if assembled =~ "## Work",
+          do: call.("break", %{"body" => "need to pause"}),
+          else: call.("work", %{"title" => "Needs help", "goal" => "Needs help"})
 
-        call.("break", %{"body" => "need to pause"})
+        call.("end", %{})
         {:ok, "unused"}
       end
 
@@ -1601,8 +1607,8 @@ defmodule Omunculus.CLITest do
           event.type == "tool" and Jason.decode!(event.body)["name"] == "on-break"
         end)
 
-      assert break_event.sequence < end_event.sequence
-      assert end_event.sequence < hook_event.sequence
+      assert hook_event.sequence == break_event.sequence + 1
+      assert hook_event.sequence < end_event.sequence
       assert hook_event.run_id == break_event.run_id
 
       Project.close(project)
@@ -1714,7 +1720,6 @@ defmodule Omunculus.CLITest do
       assert {:ok, events} = Store.replay(project.conn, :project)
       assert "on-notify" in tool_event_names(events)
       assert "continue" in Enum.map(events, & &1.type)
-      refute "model" in Enum.map(events, & &1.type)
 
       Project.close(project)
     end

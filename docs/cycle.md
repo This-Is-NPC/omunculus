@@ -7,13 +7,17 @@ reconstruct a work from history.
 ```text
 event
     → emit → the store applies the action
-    → if the action ends the run: EVENTS(end-run) of this one
-    → if the action asked for a run (send, continue, break, delegate, request, reply grant)
+    → hooks of that event run in the unroll, with the run open (not those of end)
+    → end, or the model stopping by itself: EVENTS(end-run) of this run
+    → if an action of the run asked for a run (send, work on a workflow,
+      continue, break, delegate, request, reply grant)
         → open the next run (agent and ceiling from the TOML, now)
-    → hooks of that terminal event (they see the previous run closed
-      and the work already on the next stage)
-    → hooks of a non-terminal event still run in the unroll, with the run open
+    → hooks of end (they see this run closed and the next one opened)
 ```
+
+`end` is the only action that ends a run. `delegate`, `request`,
+`continue`, `break`, `reply` and `work` change the store and the run goes
+on; the runs they asked for open after it closes.
 
 A hook is a tool fired by an event: same contract, any `emit`. Who opens
 the next run of a work is the action. A hook can open a run too if its
@@ -46,13 +50,13 @@ each tool
     one call (simple) or load → commit (composite)
     EVENTS(tool) — name, args, result
     emit → the store applies the action
-        if continue / break / request / delegate / reply-grant:
-            EVENTS(end-run) of this run; next run if the action asked
-            then hooks of that type
-    non-terminal hooks still in the unroll
-close
-    if still open: EVENTS(end-run)
-    status = done
+    hooks of that event, still in the unroll
+    if end: nothing after it in this run executes
+close (end, or the model stopped)
+    EVENTS(end-run), status = done
+    a child work still open, with no workflow at its depth, whose model
+    stopped without end is closed
+    next runs the actions asked for, then hooks of end
 ```
 
 The TOML is read again at this opening. `RUNS.tools` is a snapshot of the
@@ -121,10 +125,10 @@ next run opens. A root work is only closed or parked. `deny` does not reopen.
 A decision goes through `REQUESTS`. The model calls `request_access`
 (`kind` = `tool` | `path` | `directory`) or `request_sandbox` (`kind` =
 `resource`, `name` = `sandbox.write` | `sandbox.network`). Have is not a
-request: the output is `already granted: <name>`. Blocked is `EVENTS(deny)`
-and the run ends. Askable or sealed opens a request; if a work is attached
-it becomes `waiting = access`; the asking run ends before the arbiter's
-run opens.
+request: the output is `already granted: <name>`. Blocked is `EVENTS(deny)`.
+Askable or sealed opens a request; if a work is attached it becomes
+`waiting = access`. The asking run goes on until `end` or the model stops;
+the arbiter's run opens after it closes.
 
 `INBOX` notifies and does not wait. It does not park a run or a work.
 

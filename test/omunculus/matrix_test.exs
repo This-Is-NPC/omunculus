@@ -10,10 +10,11 @@ defmodule Omunculus.MatrixTest do
   alias Omunculus.Store.Query
 
   @concierge_d0_tools ~w(bench break continue fs.read sandbox.network store)
-  @concierge_d1_tools ~w(break catalog continue delegate fs.read sandbox.network store)
+  @concierge_d0_workflow_tools ~w(bench break continue end fs.read sandbox.network store)
+  @concierge_d1_tools ~w(break catalog continue delegate end fs.read sandbox.network store)
   @concierge_d2_tools ~w(catalog delegate fs.read sandbox.network sequence store)
-  @worker_tools ~w(bench break comment continue fs.read notify request_access sandbox.network)
-  @worker_d2_tools ~w(bench comment continue fs.read notify request_access sandbox.network)
+  @worker_tools ~w(bench break comment continue end fs.read notify request_access sandbox.network)
+  @worker_d2_tools ~w(bench comment continue end fs.read notify request_access sandbox.network)
   @manager_tools ~w(delegate fs.read sandbox.network sequence store)
 
   @concierge_text "You are the project concierge. Read the message, use the tools in `tools.*` when you need them, and respond."
@@ -66,7 +67,7 @@ defmodule Omunculus.MatrixTest do
   defp config_toml(0, false), do: concierge_section(@concierge_d0_tools)
 
   defp config_toml(0, true) do
-    concierge_section(@concierge_d0_tools) <>
+    concierge_section(@concierge_d0_workflow_tools) <>
       """
 
       [workflows.delivery]

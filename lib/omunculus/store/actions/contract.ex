@@ -8,6 +8,7 @@ defmodule Omunculus.Store.Actions.Contract do
     "request" => ~w(kind name reason),
     "reply" => ~w(request_id decision body scope),
     "continue" => [],
+    "end" => [],
     "break" => ~w(body),
     "delegate" => ~w(title goal workspace),
     "notify" => ~w(body work_id),

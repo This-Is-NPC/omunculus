@@ -4,10 +4,12 @@ defmodule Omunculus.Store.Actions.Sequence do
   workflow stage, or closes it on the last stage or when its depth has no
   workflow; `break` parks it with a comment; both reopen a parent waiting
   on the work and name it as `parent_id` in their event. `delegate` opens
-  a child with its title and goal and parks the parent on it. Every action
-  needs a work already linked to the run.
-  `finish_work/2` is the harness-side counterpart of `continue`'s last
-  stage for a work whose run ended with workflow off.
+  a child with its title and goal and parks the parent on it. Those three
+  need a work already linked to the run. `end` appends the `end` event
+  that ends the run and needs only the run.
+  `finish_work/3` is the harness-side counterpart of `continue`'s last
+  stage for a work still open after its model stopped without `end`, with
+  workflow off.
   """
 
   alias Omunculus.Config
@@ -58,6 +60,18 @@ defmodule Omunculus.Store.Actions.Sequence do
            ) do
       apply_delegate(conn, ctx, body, parent, stage, assignee, workspace)
     end
+  end
+
+  @spec end_run(Exqlite.Sqlite3.db(), map) :: {:ok, map} | {:error, term}
+  def end_run(_conn, %{run_id: nil}), do: {:error, {:end, :no_run}}
+
+  def end_run(conn, ctx) do
+    Events.append(conn, %{
+      type: "end",
+      run_id: ctx.run_id,
+      work_id: ctx.work_id,
+      body: "{}"
+    })
   end
 
   @spec finish_work(Exqlite.Sqlite3.db(), String.t(), String.t()) :: {:ok, map} | {:error, term}

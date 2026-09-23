@@ -1153,6 +1153,49 @@ defmodule Omunculus.Store.ActionsTest do
     end
   end
 
+  describe "end action" do
+    test "appends an end event for the run and its work", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      run_id = Fixtures.insert(conn, :runs, %{work_id: work_id})
+      ctx = %{@ctx | run_id: run_id, work_id: work_id}
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(conn, [%{"type" => "end", "body" => %{}}], ctx)
+
+      assert event.type == "end"
+      assert event.run_id == run_id
+      assert event.work_id == work_id
+
+      assert {:ok, %{state: "open"}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+    end
+
+    test "a run without a work may end", %{conn: conn} do
+      run_id = Fixtures.insert(conn, :runs)
+
+      assert {:ok, [_tool_event, %{type: "end", work_id: nil}]} =
+               record_tool(conn, [%{"type" => "end", "body" => %{}}], %{@ctx | run_id: run_id})
+    end
+
+    test "no run is rejected and writes nothing", %{conn: conn} do
+      assert {:error, {:end, :no_run}} =
+               record_tool(conn, [%{"type" => "end", "body" => %{}}], @ctx)
+
+      assert count(conn, "events") == 0
+    end
+
+    test "a body field is an unknown field", %{conn: conn} do
+      run_id = Fixtures.insert(conn, :runs)
+
+      assert {:error, {:invalid_emit, "end", {:unknown_field, "work_id"}}} =
+               record_tool(
+                 conn,
+                 [%{"type" => "end", "body" => %{"work_id" => "x"}}],
+                 %{@ctx | run_id: run_id}
+               )
+    end
+  end
+
   describe "finish_work" do
     test "marks the work done and reopens a parent waiting on it", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
