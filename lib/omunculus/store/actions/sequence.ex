@@ -1,9 +1,11 @@
 defmodule Omunculus.Store.Actions.Sequence do
   @moduledoc """
   Sequence actions of spec §3.4: `continue` moves a work to the next
-  workflow stage or closes it on the last one, `break` parks it with a
-  comment, `delegate` opens a child with its title and goal and parks the
-  parent on it. Every action needs a work already linked to the run.
+  workflow stage, or closes it on the last stage or when its depth has no
+  workflow; `break` parks it with a comment; both reopen a parent waiting
+  on the work and name it as `parent_id` in their event. `delegate` opens
+  a child with its title and goal and parks the parent on it. Every action
+  needs a work already linked to the run.
   `finish_work/2` is the harness-side counterpart of `continue`'s last
   stage for a work whose run ended with workflow off.
   """
@@ -19,8 +21,7 @@ defmodule Omunculus.Store.Actions.Sequence do
          :ok <- Helpers.ensure_no_forbidden(:continue, body),
          {:ok, work} <- fetch_work(:continue, conn, ctx.work_id),
          :ok <- ensure_open(:continue, work),
-         {:ok, steps} <- fetch_steps(:continue, ctx.config, View.work_depth(conn, work)),
-         {:ok, next} <- Helpers.tag_error(:continue, Config.next_step(steps, work.stage)) do
+         {:ok, next} <- next_step(conn, ctx.config, work) do
       apply_continue(conn, ctx, work, next)
     end
   end
@@ -30,9 +31,8 @@ defmodule Omunculus.Store.Actions.Sequence do
     with :ok <- ensure_context(:break, ctx),
          :ok <- Helpers.ensure_no_forbidden(:break, body),
          :ok <- ensure_body_text(:break, body),
-         {:ok, work} <- fetch_work(:break, conn, ctx.work_id),
-         {:ok, _steps} <- fetch_steps(:break, ctx.config, View.work_depth(conn, work)) do
-      apply_break(conn, ctx, body)
+         {:ok, work} <- fetch_work(:break, conn, ctx.work_id) do
+      apply_break(conn, ctx, body, work)
     end
   end
 
@@ -99,10 +99,10 @@ defmodule Omunculus.Store.Actions.Sequence do
   defp ensure_open(tag, %{state: "waiting"}), do: {:error, {tag, :waiting}}
   defp ensure_open(tag, %{state: state}), do: {:error, {tag, {:not_open, state}}}
 
-  defp fetch_steps(tag, config, depth) do
-    case Config.workflow_for(config, depth) do
-      {:ok, steps} -> {:ok, steps}
-      :off -> {:error, {tag, :workflow_off}}
+  defp next_step(conn, config, work) do
+    case Config.workflow_for(config, View.work_depth(conn, work)) do
+      {:ok, steps} -> Helpers.tag_error(:continue, Config.next_step(steps, work.stage))
+      :off -> {:ok, nil}
     end
   end
 
@@ -165,16 +165,17 @@ defmodule Omunculus.Store.Actions.Sequence do
     end
   end
 
-  defp apply_break(conn, ctx, body) do
+  defp apply_break(conn, ctx, body, work) do
     comment_id = Id.new()
 
-    with {:ok, event} <-
+    with {:ok, parent_id} <- reopen_waiting_parent(conn, work),
+         {:ok, event} <-
            Events.append(conn, %{
              type: "break",
              run_id: ctx.run_id,
              work_id: ctx.work_id,
              comment_id: comment_id,
-             body: Jason.encode!(body)
+             body: Jason.encode!(Map.put(body, "parent_id", parent_id))
            }),
          :ok <-
            Helpers.insert_comment(

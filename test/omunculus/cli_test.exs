@@ -873,7 +873,7 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "continue is refused while the workflow is off and the run keeps going", %{dir: dir} do
+    test "continue without a workflow closes a root work and ends the run", %{dir: dir} do
       write_config(dir, """
       [agents.concierge]
       depth = 0
@@ -883,8 +883,8 @@ defmodule Omunculus.CLITest do
 
       model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("work", %{"title" => "No sequence", "goal" => "No sequence"})
-        assert {:error, {:continue, :workflow_off}} = call.("continue", %{})
-        {:ok, "continuing anyway"}
+        call.("continue", %{})
+        {:ok, "unused"}
       end
 
       Fixtures.use_model(dir, model)
@@ -896,8 +896,13 @@ defmodule Omunculus.CLITest do
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
       assert run.status == "done"
 
+      assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
+      assert work.state == "done"
+
       assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
-      assert "model" in Enum.map(events, & &1.type)
+      refute "model" in Enum.map(events, & &1.type)
+      continue = Enum.find(events, &(&1.type == "continue"))
+      assert Jason.decode!(continue.body) == %{"from" => nil, "to" => nil, "parent_id" => nil}
 
       Project.close(project)
     end
@@ -1132,6 +1137,87 @@ defmodule Omunculus.CLITest do
       assert end_run1.sequence < start_run2.sequence
 
       Project.close(project)
+    end
+
+    for {tool, args, workflow?, child_state} <- [
+          {"continue", %{}, false, "done"},
+          {"break", %{"body" => "stuck"}, false, "waiting"},
+          {"break", %{"body" => "stuck"}, true, "waiting"}
+        ] do
+      test "#{tool} #{if workflow?, do: "with", else: "without"} a workflow hands the child back to its waiting parent and opens the parent's run",
+           %{dir: dir} do
+        workflow =
+          if unquote(workflow?),
+            do: """
+
+            [workflows.solo]
+            steps = [{ name = "to_do", agent = "worker" }]
+
+            [policy.depth.1]
+            workflow = "solo"
+            """,
+            else: ""
+
+        write_config(
+          dir,
+          """
+          [agents.concierge]
+          depth = 0
+          text = "Sou o concierge."
+          tools = ["work", "delegate"]
+
+          [agents.worker]
+          depth = 1
+          text = "Sou o worker."
+          tools = [#{inspect(unquote(tool))}]
+          """ <> workflow
+        )
+
+        model = fn assembled, _tools, call ->
+          cond do
+            assembled =~ "Sou o worker." ->
+              call.(unquote(tool), unquote(Macro.escape(args)))
+              {:ok, "unused"}
+
+            assembled =~ "## Work" ->
+              {:ok, "back"}
+
+            true ->
+              assert {:ok, ""} = call.("work", %{"title" => "Big task", "goal" => "Big task"})
+
+              assert {:ok, ""} =
+                       call.("delegate", %{"title" => "Sub task", "goal" => "do this"})
+
+              {:ok, "unused"}
+          end
+        end
+
+        Fixtures.use_model(dir, model)
+
+        assert {:ok, ""} = CLI.run(["send", "Big task please"], dir)
+
+        project = open(dir)
+
+        assert {:ok, [parent, child]} =
+                 Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
+
+        assert parent.state == "open"
+        assert parent.waiting == nil
+        assert child.state == unquote(child_state)
+
+        assert {:ok, [_run1, run2, run3]} =
+                 Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+
+        assert run2.work_id == child.id
+        assert run3.work_id == parent.id
+        assert run3.agent == "concierge"
+
+        assert {:ok, events} = Store.replay(project.conn, {:run, run2.id})
+        event = Enum.find(events, &(&1.type == unquote(tool)))
+        assert Jason.decode!(event.body)["parent_id"] == parent.id
+
+        Project.close(project)
+      end
     end
 
     test "D1-H0-W1: the child follows its own depth-scoped workflow through the parent's agents",
@@ -1586,7 +1672,7 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "a hook that emits continue on a work with workflow off fails the same as any tool and persists nothing from that call",
+    test "a hook that emits continue on a work without a workflow closes it",
          %{dir: dir} do
       write_config(dir, """
       [agents.concierge]
@@ -1610,26 +1696,25 @@ defmodule Omunculus.CLITest do
         """
       )
 
-      test_pid = self()
-
       model = fn _assembled, _tools, call ->
         assert {:ok, ""} = call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
-        send(test_pid, {:notify_result, call.("notify", %{"body" => "notice"})})
-        {:ok, "continuing"}
+        call.("notify", %{"body" => "notice"})
+        {:ok, "unused"}
       end
 
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      assert_received {:notify_result, {:error, {:continue, :workflow_off}}}
-
       project = open(dir)
 
-      assert {:ok, [_inbox_row]} = Query.all(project.conn, "SELECT * FROM inbox")
+      assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
+      assert work.state == "done"
 
       assert {:ok, events} = Store.replay(project.conn, :project)
-      refute "on-notify" in tool_event_names(events)
+      assert "on-notify" in tool_event_names(events)
+      assert "continue" in Enum.map(events, & &1.type)
+      refute "model" in Enum.map(events, & &1.type)
 
       Project.close(project)
     end

@@ -1,7 +1,7 @@
 defmodule Omunculus.Tools.Break do
   @moduledoc """
-  Builtin `break` tool, per spec §3.4: parks the work with a comment. The
-  sequence does not advance.
+  Builtin `break` tool, per spec §3.4: parks the work with a comment and
+  hands it back to a parent waiting on it. The sequence does not advance.
   """
 
   alias Omunculus.Tools.{Args, Out}

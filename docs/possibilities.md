@@ -47,9 +47,9 @@ You are a Pi-style agent: compact, direct, and without shell access.
 assemble = "assemble"
 ```
 
-`continue` / `break` sit in `sequence` but do nothing useful without a work on a
-workflow. They are listed so a later `[workflows.*]` can turn them on without
-rewriting the agent.
+`continue` / `break` sit in `sequence` and act on the run's work. Without a
+workflow, `continue` closes it and `break` parks it with a comment; a later
+`[workflows.*]` turns `continue` into a stage walk without rewriting the agent.
 
 ## 2. Concierge that delegates
 

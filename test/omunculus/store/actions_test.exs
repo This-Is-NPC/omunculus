@@ -109,6 +109,16 @@ defmodule Omunculus.Store.ActionsTest do
     """
   end
 
+  defp waiting_parent_and_child(conn, stage) do
+    parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
+    child_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, stage: stage})
+
+    :ok =
+      Query.exec(conn, "UPDATE works SET waiting_for = ? WHERE id = ?", [child_id, parent_id])
+
+    {parent_id, child_id}
+  end
+
   defp delivery_toml do
     """
     [agents.concierge]
@@ -738,13 +748,24 @@ defmodule Omunculus.Store.ActionsTest do
   end
 
   describe "continue action" do
-    test "workflow off is rejected", %{conn: conn} do
-      work_id = Fixtures.insert(conn, :works, %{stage: nil})
+    test "without a workflow closes the work and reopens a parent waiting on it", %{
+      conn: conn
+    } do
+      {parent_id, child_id} = waiting_parent_and_child(conn, nil)
       run_id = Fixtures.insert(conn, :runs)
-      ctx = %{@ctx | run_id: run_id, work_id: work_id}
+      ctx = %{@ctx | run_id: run_id, work_id: child_id}
 
-      assert {:error, {:continue, :workflow_off}} =
+      assert {:ok, [_tool_event, event]} =
                record_tool(conn, [%{"type" => "continue", "body" => %{}}], ctx)
+
+      assert Jason.decode!(event.body) == %{"from" => nil, "to" => nil, "parent_id" => parent_id}
+
+      assert {:ok, child} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
+      assert child.state == "done"
+
+      assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+      assert parent.state == "open"
+      assert parent.waiting == nil
     end
 
     test "waiting work does not advance", %{conn: conn} do
@@ -800,12 +821,7 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "the last stage reopens a parent waiting on this child", %{conn: conn} do
-      parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
-      child_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, stage: "review"})
-
-      :ok =
-        Query.exec(conn, "UPDATE works SET waiting_for = ? WHERE id = ?", [child_id, parent_id])
-
+      {parent_id, child_id} = waiting_parent_and_child(conn, "review")
       run_id = Fixtures.insert(conn, :runs)
       ctx = %{@ctx | run_id: run_id, work_id: child_id, config: Fixtures.config(delivery_toml())}
 
@@ -851,20 +867,40 @@ defmodule Omunculus.Store.ActionsTest do
   end
 
   describe "break action" do
-    test "workflow off is rejected", %{conn: conn} do
-      work_id = Fixtures.insert(conn, :works, %{stage: nil})
-      run_id = Fixtures.insert(conn, :runs)
-      ctx = %{@ctx | run_id: run_id, work_id: work_id}
+    for {label, stage} <- [{"without a workflow", nil}, {"with a workflow", "to_do"}] do
+      test "#{label} parks the child with its comment and reopens the parent waiting on it", %{
+        conn: conn
+      } do
+        {parent_id, child_id} = waiting_parent_and_child(conn, unquote(stage))
+        run_id = Fixtures.insert(conn, :runs)
+        config = if unquote(stage), do: Fixtures.config(delivery_toml()), else: @ctx.config
+        ctx = %{@ctx | run_id: run_id, work_id: child_id, config: config}
 
-      assert {:error, {:break, :workflow_off}} =
-               record_tool(
-                 conn,
-                 [%{"type" => "break", "body" => %{"body" => "need to pause"}}],
-                 ctx
-               )
+        assert {:ok, [_tool_event, event]} =
+                 record_tool(
+                   conn,
+                   [%{"type" => "break", "body" => %{"body" => "need to pause"}}],
+                   ctx
+                 )
+
+        assert Jason.decode!(event.body) == %{"body" => "need to pause", "parent_id" => parent_id}
+
+        assert {:ok, comment} =
+                 Query.one(conn, "SELECT * FROM comments WHERE work_id = ?", [child_id])
+
+        assert comment.body == "need to pause"
+
+        assert {:ok, child} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
+        assert child.state == "waiting"
+        assert child.stage == unquote(stage)
+
+        assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+        assert parent.state == "open"
+        assert parent.waiting == nil
+      end
     end
 
-    test "parks the work with a comment and leaves the stage untouched", %{conn: conn} do
+    test "parks a root work with a comment and leaves the stage untouched", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works, %{stage: "to_do", state: "open"})
       run_id = Fixtures.insert(conn, :runs)
       ctx = %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
@@ -879,6 +915,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert event.type == "break"
       assert event.work_id == work_id
       assert event.comment_id != nil
+      assert Jason.decode!(event.body) == %{"body" => "need to pause", "parent_id" => nil}
 
       assert {:ok, comment} =
                Query.one(conn, "SELECT * FROM comments WHERE work_id = ?", [work_id])

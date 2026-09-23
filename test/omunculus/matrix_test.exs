@@ -197,7 +197,11 @@ defmodule Omunculus.MatrixTest do
     assert [%{"to" => "review"}, %{"to" => nil}] = continue_events(conn)
   end
 
-  defp assert_workflow_off(conn), do: assert(continue_events(conn) == [])
+  defp assert_workflow_off(conn, work) do
+    assert work.state == "done"
+    parent_id = work.parent_id
+    assert [%{"from" => nil, "to" => nil, "parent_id" => ^parent_id}] = continue_events(conn)
+  end
 
   defp assert_observer_reacted(conn) do
     assert {:ok, [_reaction]} =
@@ -246,9 +250,8 @@ defmodule Omunculus.MatrixTest do
 
     work = assert_counted_to_five(dir, project.conn)
     assert work.parent_id == nil
-    assert work.state == "open"
 
-    assert_workflow_off(project.conn)
+    assert_workflow_off(project.conn, work)
     refute_observer_reacted(project.conn)
 
     Project.close(project)
@@ -259,9 +262,7 @@ defmodule Omunculus.MatrixTest do
     project = open(dir)
 
     work = assert_counted_to_five(dir, project.conn)
-    assert work.state == "open"
-
-    assert_workflow_off(project.conn)
+    assert_workflow_off(project.conn, work)
     assert_observer_reacted(project.conn)
 
     Project.close(project)
@@ -295,9 +296,8 @@ defmodule Omunculus.MatrixTest do
 
     work = assert_counted_to_five(dir, project.conn)
     assert work.parent_id != nil
-    assert work.state == "done"
 
-    assert_workflow_off(project.conn)
+    assert_workflow_off(project.conn, work)
     assert_child_delegated(project.conn)
     refute_observer_reacted(project.conn)
 
@@ -309,9 +309,8 @@ defmodule Omunculus.MatrixTest do
     project = open(dir)
 
     work = assert_counted_to_five(dir, project.conn)
-    assert work.state == "done"
 
-    assert_workflow_off(project.conn)
+    assert_workflow_off(project.conn, work)
     assert_child_delegated(project.conn)
     assert_observer_reacted(project.conn)
 
@@ -347,11 +346,10 @@ defmodule Omunculus.MatrixTest do
     project = open(dir)
 
     work = assert_counted_to_five(dir, project.conn)
-    assert work.state == "done"
     assert_worker_ran_at_depth_two(project.conn)
     assert_reopened_to_root(project.conn, work)
 
-    assert_workflow_off(project.conn)
+    assert_workflow_off(project.conn, work)
     refute_observer_reacted(project.conn)
 
     Project.close(project)
@@ -362,11 +360,10 @@ defmodule Omunculus.MatrixTest do
     project = open(dir)
 
     work = assert_counted_to_five(dir, project.conn)
-    assert work.state == "done"
     assert_worker_ran_at_depth_two(project.conn)
     assert_reopened_to_root(project.conn, work)
 
-    assert_workflow_off(project.conn)
+    assert_workflow_off(project.conn, work)
     assert_observer_reacted(project.conn)
 
     Project.close(project)

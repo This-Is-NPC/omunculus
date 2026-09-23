@@ -604,8 +604,9 @@ defmodule Omunculus.Harness do
     end
   end
 
-  defp advance(project, _catalog, %{type: "continue"} = event, via, :actions) do
-    with :ok <- open_continue_run(project, event, via), do: {:ok, via}
+  defp advance(project, _catalog, %{type: type} = event, via, :actions)
+       when type in ["continue", "break"] do
+    with :ok <- open_sequence_run(project, event, via), do: {:ok, via}
   end
 
   defp advance(project, _catalog, %{type: "delegate"} = event, via, :actions) do
@@ -671,12 +672,12 @@ defmodule Omunculus.Harness do
     )
   end
 
-  defp open_continue_run(project, event, via) do
-    case Jason.decode!(event.body) do
-      %{"to" => to} when not is_nil(to) ->
+  defp open_sequence_run(project, event, via) do
+    case {event.type, Jason.decode!(event.body)} do
+      {"continue", %{"to" => to}} when not is_nil(to) ->
         open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via))
 
-      %{"parent_id" => parent_id} when not is_nil(parent_id) ->
+      {_type, %{"parent_id" => parent_id}} when not is_nil(parent_id) ->
         open_run(project, open_params(prompt_id: nil, work_id: parent_id, via: via))
 
       _no_next_run ->

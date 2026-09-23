@@ -8,7 +8,7 @@ reconstruct a work from history.
 event
     → emit → the store applies the action
     → if the action ends the run: EVENTS(end-run) of this one
-    → if the action asked for a run (send, continue, delegate, request, reply grant)
+    → if the action asked for a run (send, continue, break, delegate, request, reply grant)
         → open the next run (agent and ceiling from the TOML, now)
     → hooks of that terminal event (they see the previous run closed
       and the work already on the next stage)
@@ -93,7 +93,7 @@ effective set, `pinned` is ignored and everything is a card. The `catalog`
 view `tool_search` searches is the whole effective set.
 
 There is no `message` section when the opening came from `continue`,
-`delegate`, `request` or `reply`.
+`break`, `delegate`, `request` or `reply`.
 
 The model's final text does not reach the terminal. It is `EVENTS(model)`.
 `omunculus prompt` prints the assembled prompt, not that text.
@@ -104,13 +104,16 @@ The model's final text does not reach the terminal. It is `EVENTS(model)`.
 open:     tool work / delegate; stage = first of the TOML
 open → waiting:  break, or request (access | child)
 waiting → waiting: reply deny — waiting = access, waiting_for intact
-waiting → open:    reply grant, or child done — same stage
+waiting → open:    reply grant, or its child done or on break — same stage
 waiting → open:    send / prompt on a waiting work — reopened_by_prompt
 open → open:       continue — next stage, new run
-open → done:       continue on the last stage
+open → done:       continue on the last stage, or with no workflow at its depth
 ```
 
-`break` parks. It does not advance the sequence. `deny` does not reopen.
+`break` parks the work with a comment. It does not advance the sequence.
+`continue` that closes a work and `break` both hand it back: a parent
+waiting on it reopens, the event carries `parent_id`, and the parent's
+next run opens. A root work is only closed or parked. `deny` does not reopen.
 `continue` does not name a stage, an agent or a model — the TOML does.
 
 ## Request and inbox
