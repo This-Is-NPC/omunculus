@@ -2,7 +2,8 @@ defmodule Omunculus.Store.Actions.Requests do
   @moduledoc """
   Request actions. `request` opens a request with a `reason` and named
   `options`, each a list of `{name, args}` tool calls, and parks the
-  requester's work on it (`waiting = request`). The names the options'
+  requester's work on it (`waiting = request`); a work waiting on its
+  children cannot request. The names the options'
   `grant` calls give are classified against the requester's run ceiling:
   one blocked refuses the request with a `deny` event and no row; options
   made only of `grant` calls whose names are all have open nothing. The
@@ -23,11 +24,13 @@ defmodule Omunculus.Store.Actions.Requests do
 
   @scopes ~w(agent depth stage workspace)
 
-  @spec request(Exqlite.Sqlite3.db(), map, map) :: {:ok, map | nil} | {:error, term}
+  @spec request(Omunculus.Store.Connection.t(), map, map) :: {:ok, map | nil} | {:error, term}
   def request(conn, body, ctx) do
     with :ok <- ensure_text(:request, :no_reason, body["reason"]),
          {:ok, options} <- options(body["options"]),
          {:ok, run} <- fetch_run(conn, ctx.run_id),
+         {:ok, work} <- Helpers.fetch_work(conn, ctx.work_id),
+         :ok <- Helpers.ensure_not_waiting_children(:request, work),
          {:ok, event} <- Query.one(conn, "SELECT body FROM events WHERE id = ?", [run.event_id]) do
       snapshot = event.body |> Jason.decode!() |> Map.fetch!("ceiling")
 
@@ -40,7 +43,7 @@ defmodule Omunculus.Store.Actions.Requests do
     end
   end
 
-  @spec reply(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  @spec reply(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def reply(conn, body, ctx) do
     with {:ok, request} <- Helpers.fetch_request(:reply, conn, body["request_id"]),
          :ok <- ensure_open(request),
@@ -51,7 +54,7 @@ defmodule Omunculus.Store.Actions.Requests do
     end
   end
 
-  @spec grant(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  @spec grant(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def grant(conn, body, ctx) do
     with {:ok, request} <- Helpers.fetch_request(:grant, conn, body["request_id"]),
          :ok <- ensure_text(:grant, :no_name, body["name"]),

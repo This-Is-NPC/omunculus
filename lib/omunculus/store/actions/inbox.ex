@@ -9,7 +9,7 @@ defmodule Omunculus.Store.Actions.Inbox do
   alias Omunculus.Store.Actions.Helpers
   alias Omunculus.Store.{Events, Query}
 
-  @spec notify(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  @spec notify(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def notify(conn, body, ctx) do
     with :ok <- ensure_body_text(body),
          :ok <- ensure_run(ctx),
@@ -18,7 +18,7 @@ defmodule Omunculus.Store.Actions.Inbox do
     end
   end
 
-  @spec read(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  @spec read(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def read(conn, body, ctx) do
     inbox_id = body["inbox_id"]
 

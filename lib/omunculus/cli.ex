@@ -6,7 +6,9 @@ defmodule Omunculus.CLI do
   project root is the config file's directory, or `[project] root`
   relative to it. Tools with `config = false` run without opening the
   store. Configured calls hand their events to `Harness.follow_up/2`,
-  which opens runs whose model comes from `agents.<x>.model`.
+  which opens runs whose model comes from `agents.<x>.model`, and
+  returns once every run the call opened, transitively, has finished;
+  the error of any of them fails the command, several one per line.
   """
 
   alias Omunculus.{Config, Harness, Project}
@@ -89,6 +91,8 @@ defmodule Omunculus.CLI do
   def format_error(:no_assembled), do: "no assembled prompt"
   def format_error({:assemble, :missing}), do: "omunculus.toml is missing assemble"
   def format_error({:assemble, :empty}), do: "assemble returned an empty prompt"
+
+  def format_error({:runs, reasons}), do: Enum.map_join(reasons, "\n", &format_error/1)
 
   def format_error(reason), do: inspect(reason)
 

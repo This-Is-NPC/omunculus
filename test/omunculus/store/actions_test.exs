@@ -2061,4 +2061,59 @@ defmodule Omunculus.Store.ActionsTest do
       assert Enum.at(events, 1).comment_id == comment_event.comment_id
     end
   end
+
+  describe "a work waiting on its children" do
+    test "takes comment, delegate and end, and refuses continue, break and request",
+         %{conn: conn} do
+      {parent_id, _child_id} = waiting_parent_and_child(conn, nil)
+      run = open_run(conn, @ceiling)
+      ctx = %{request_ctx(run, parent_id) | config: Fixtures.config(delivery_toml())}
+
+      comment = %{"type" => "comment", "body" => %{"work_id" => parent_id, "body" => "noted"}}
+      delegate = %{"type" => "delegate", "body" => %{"title" => "more", "goal" => "more goal"}}
+
+      assert {:ok, [_tool, %{type: "comment"}, %{type: "delegate"}, %{type: "end"}]} =
+               Store.record_tools(
+                 conn,
+                 run.id,
+                 [{@call, [comment, delegate, %{"type" => "end", "body" => %{}}]}],
+                 ctx
+               )
+
+      for {emit, refusal} <- [
+            {%{"type" => "continue", "body" => %{}}, {:continue, :waiting}},
+            {%{"type" => "break", "body" => %{"body" => "stuck"}}, {:break, :waiting_children}},
+            {request_emit(%{"grant" => [grant_call("tool", "write")], "deny" => []}),
+             {:request, :waiting_children}}
+          ] do
+        assert {:error, ^refusal} = Store.record_tools(conn, run.id, [{@call, [emit]}], ctx)
+      end
+
+      assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+      assert {parent.state, parent.waiting} == {"waiting", "child"}
+    end
+
+    test "reopens once when two children close at the same time from two processes",
+         %{conn: conn} do
+      {parent_id, first} = waiting_parent_and_child(conn, "review")
+
+      second =
+        Fixtures.insert(conn, :works, %{parent_id: parent_id, stage: "review", assignee: "worker"})
+
+      config = Fixtures.config(delivery_toml())
+
+      events =
+        [first, second]
+        |> Enum.map(fn child_id ->
+          run_id = Fixtures.insert(conn, :runs)
+          ctx = %{@ctx | run_id: run_id, work_id: child_id, config: config}
+          Task.async(fn -> record_tool(conn, [%{"type" => "continue", "body" => %{}}], ctx) end)
+        end)
+        |> Task.await_many()
+        |> Enum.map(fn {:ok, [_tool, continue]} -> Jason.decode!(continue.body)["parent_id"] end)
+
+      assert Enum.sort(events, :desc) == [parent_id, nil]
+      assert {:ok, %{state: "open"}} = Store.view(conn, "work", parent_id)
+    end
+  end
 end

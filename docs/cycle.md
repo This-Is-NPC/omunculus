@@ -8,11 +8,15 @@ reconstruct a work from history.
 event
     → emit → the store applies the action
     → hooks of that event run in the unroll, with the run open (not those of end)
+    → a call that did not end the run: if its actions asked for a run
+      (send, work, continue, break, delegate, cancel, request, reply),
+      that run opens now, while this one goes on
     → end, or the model stopping by itself: EVENTS(end-run) of this run
-    → if an action of the run asked for a run (send, work, continue,
-      break, delegate, cancel, request, reply)
+    → if an action of the ending call asked for a run
         → open the next run (agent and ceiling from the TOML, now)
-    → hooks of end (they see this run closed and the next one opened)
+    → hooks of end (they see this run closed; the next runs are due and
+      may already be running)
+    → reaction runs of hooks with an agent
     → if the model stopped by itself on a work still open: a retry run of
       that work, or, once max_retries is used up, a break (a child) or a
       request to the person (a root)
@@ -20,8 +24,8 @@ event
 
 `end` is the only action that ends a run. `delegate`, `request`,
 `continue`, `break`, `reply`, `grant`, `cancel` and `work` change the
-store and the run goes on; the runs they asked for open after
-it closes. A tool can chain `end`:
+store and the run goes on; the runs they asked for open at once, or,
+when the same call ends the run, once it has closed. A tool can chain `end`:
 `done` comments its report on the run's work, continues it and ends the
 run in one call; `work` comments its report on the run's work, delegates
 each new work below it and ends the run, or, in a run without a work,
@@ -65,9 +69,11 @@ each tool
     emit → the store applies the action, for the tool and its steps in one go
     hooks of those events, still in the unroll
     if end: nothing after it in this run executes
+    no end: the runs its actions asked for open now
 close (end, or the model stopped)
     EVENTS(end-run), status = done
-    next runs the actions asked for, then hooks of end
+    next runs the ending call's actions asked for, then hooks of end,
+      then reaction runs of hooks with an agent
     the model stopped by itself on a work still open: retry, break, or a
       request to the person
 ```
@@ -79,6 +85,40 @@ run does not reread the old assembled prompt; assemble runs again.
 
 `via` on the run is the `name` of the tool or hook that opened it
 (`send`, `continue`, `delegate`, `reply`, `on-request`, …), or `retry`.
+
+## Runs at once
+
+Every run opens in a process of its own, so the runs one command asks
+for run concurrently: the children of one `work` call, a parent reopened
+by a child, a reply, a retry. At most `[execution] max_concurrent` are
+open at once; the rest wait in the queue (`max_queue`,
+`queue_timeout_ms`). The command returns once every run it opened,
+directly or through other runs, has finished, and fails with the error
+of any of them, several one per line.
+
+A work has one run at a time. A run due for a work that has a run open
+waits until that run finishes, and the waiting runs of a work open in
+the order they became due. A run of the work's own (not a named agent's)
+due while another is already waiting is the same run, and opens once.
+A work's own run that would begin when the work is no longer open —
+done, waiting, cancelled — does not open; a named agent's run does not
+open on a cancelled work. The run of `send`, which has no work, holds the
+turn of the root it creates from then on: when it goes on after `work`
+(`then = []`), the root's run opens once it has finished.
+
+When a layer sets `then = []` on `work`, the run goes on after
+delegating: the children's runs open while it runs. The work waits on
+its children, and its run may still `comment`, `work` (delegate more)
+and `end`; `done` (its `continue`), `break` and a request are refused
+while it waits on them. The parent's next run opens once no child is
+open, after the run that delegated has finished.
+
+The store has one connection, owned by one process. Every transaction
+runs there whole, one after another, so a decision the store reads and
+writes — the last child closing wakes its parent, a request's arbiter, a
+reply to a request still open, the retry count of a work — is taken once,
+whatever the order the runs reach it. Permanent grants rewrite the TOML
+one at a time, replacing the file whole.
 
 ## A run without a report
 

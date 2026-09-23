@@ -15,7 +15,7 @@ defmodule Omunculus.Store.Actions.Comments do
 
   @targets %{"work_id" => :works, "request_id" => :requests, "inbox_id" => :inbox}
 
-  @spec compact(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  @spec compact(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def compact(conn, body, ctx) do
     with {:ok, {column, table, id}} <- target(:compact, conn, body, ctx),
          :ok <- ensure_summary(body),
@@ -25,7 +25,7 @@ defmodule Omunculus.Store.Actions.Comments do
     end
   end
 
-  @spec delete(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  @spec delete(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def delete(conn, body, ctx) do
     with {:ok, {column, _table, id}} <- target(:comment_delete, conn, body, ctx),
          {:ok, ids} <- ensure_ids(body),

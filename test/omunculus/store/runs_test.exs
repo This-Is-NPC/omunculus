@@ -206,17 +206,40 @@ defmodule Omunculus.Store.RunsTest do
     assert Enum.map(events, & &1.type) == ["start-run", "model", "tool", "end-run"]
   end
 
-  test "break_work comments the text, parks the run's work and wakes its parent", %{conn: conn} do
+  defp unreported(conn, run, max_retries),
+    do:
+      Runs.unreported(
+        conn,
+        run,
+        max_retries,
+        &"stopped after #{&1}",
+        &"#{&1} #{&2} #{Enum.join(&3, " ")}"
+      )
+
+  test "unreported retries a work while its runs without end are within max_retries",
+       %{conn: conn} do
+    work_id = Fixtures.insert(conn, :works)
+    {:ok, run} = Runs.open(conn, %{open_params(nil) | work_id: work_id})
+    {:ok, _} = Runs.close(conn, run.id)
+
+    assert {:ok, :retry} = unreported(conn, run, 1)
+
+    Query.exec(conn, "UPDATE works SET state = 'done' WHERE id = ?", [work_id])
+    assert {:ok, :none} = unreported(conn, run, 1)
+  end
+
+  test "unreported past max_retries breaks a child: comments the text, parks it and wakes its parent",
+       %{conn: conn} do
     parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
     child_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
     {:ok, run} = Runs.open(conn, %{open_params(nil) | work_id: child_id})
     {:ok, _} = Runs.close(conn, run.id)
 
-    assert {:ok, [event]} = Runs.break_work(conn, run, "stopped")
+    assert {:ok, {:stopped, [event]}} = unreported(conn, run, 0)
 
     assert event.type == "break"
     assert event.run_id == run.id
-    assert Jason.decode!(event.body) == %{"body" => "stopped", "parent_id" => parent_id}
+    assert Jason.decode!(event.body) == %{"body" => "stopped after 1", "parent_id" => parent_id}
 
     assert {:ok, child} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
     assert child.state == "waiting"
@@ -225,10 +248,40 @@ defmodule Omunculus.Store.RunsTest do
     assert {:ok, [comment]} =
              Query.all(conn, "SELECT * FROM comments WHERE work_id = ?", [child_id])
 
-    assert comment.body == "stopped"
+    assert comment.body == "stopped after 1"
     assert comment.run_id == run.id
 
     assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
     assert parent.state == "open"
+  end
+
+  test "unreported past max_retries asks the human about a root, naming the request in the inbox",
+       %{conn: conn} do
+    work_id = Fixtures.insert(conn, :works)
+    {:ok, run} = Runs.open(conn, %{open_params(nil) | work_id: work_id})
+    {:ok, _} = Runs.close(conn, run.id)
+
+    assert {:ok, {:stopped, [request, notify]}} = unreported(conn, run, 0)
+    assert request.type == "request"
+    assert notify.type == "notify"
+
+    assert {:ok, [comment]} =
+             Query.all(conn, "SELECT * FROM comments WHERE inbox_id IS NOT NULL")
+
+    assert comment.body == "#{request.request_id} stopped after 1 cancel retry"
+  end
+
+  test "begin refuses a cancelled work, and a work's own run on a work not open",
+       %{conn: conn} do
+    waiting = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
+    cancelled = Fixtures.insert(conn, :works, %{state: "cancelled"})
+
+    assert {:error, {:not_open, ^waiting}} =
+             Runs.begin(conn, Map.merge(open_params(nil), %{work_id: waiting, own: true}))
+
+    assert {:ok, _named} = Runs.begin(conn, %{open_params(nil) | work_id: waiting})
+
+    assert {:error, {:cancelled, ^cancelled}} =
+             Runs.begin(conn, %{open_params(nil) | work_id: cancelled})
   end
 end

@@ -16,7 +16,12 @@ instead of the file's directory.
 `queue_timeout_ms`, `resources`. `resources` is the universe of sandbox
 capabilities this project admits — `sandbox.write` and `sandbox.network`
 are the two names the executor knows — and a name outside that list is
-refused rather than ignored.
+refused rather than ignored. `max_concurrent`, `max_queue` and
+`queue_timeout_ms` bound the executor's processes and, in a pool of
+their own, the runs: at most `max_concurrent` runs are open at once, up
+to `max_queue` more wait for a slot, each for at most `queue_timeout_ms`,
+and a run that gets no slot fails with `:queue_full` or
+`:queue_timeout`.
 
 `[execution.sandbox]` is mandatory beside it: `script`, `command`, `runner`
 and `exec`. The coordinator the model runs, the Deno (or other) flags, and

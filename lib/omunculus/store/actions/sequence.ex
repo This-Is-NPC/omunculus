@@ -2,11 +2,14 @@ defmodule Omunculus.Store.Actions.Sequence do
   @moduledoc """
   Sequence actions of spec §3.4: `continue` moves a work to the next
   workflow stage, or closes it on the last stage or when its depth has no
-  workflow; `break` parks it with a comment. A `break` reopens a parent
+  workflow, and is refused while the work waits; `break` parks it with a
+  comment, and is refused while the work waits on its children. A
+  `break` reopens a parent
   waiting on its children at once; closing or cancelling a work reopens
   it once each of its children is done or cancelled; each names
   the reopened parent as `parent_id` in its event. `delegate` opens a
-  child with its title and goal and parks the parent on its children;
+  child with its title and goal and parks the parent on its children,
+  also when the parent already waits on others;
   unnamed, the child's agent is the first stage's agent or the depth's
   first agent. Those three need a work already linked to the run. `end`
   appends the `end` event that ends the run and needs only the run.
@@ -19,7 +22,7 @@ defmodule Omunculus.Store.Actions.Sequence do
   alias Omunculus.Store.Actions.Helpers
   alias Omunculus.Store.{Events, Query, View}
 
-  @spec continue(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  @spec continue(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def continue(conn, body, ctx) do
     with :ok <- ensure_context(:continue, ctx),
          :ok <- Helpers.ensure_no_forbidden(:continue, body),
@@ -30,17 +33,18 @@ defmodule Omunculus.Store.Actions.Sequence do
     end
   end
 
-  @spec break(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  @spec break(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def break(conn, body, ctx) do
     with :ok <- ensure_context(:break, ctx),
          :ok <- Helpers.ensure_no_forbidden(:break, body),
          :ok <- ensure_body_text(:break, body),
-         {:ok, work} <- fetch_work(:break, conn, ctx.work_id) do
+         {:ok, work} <- fetch_work(:break, conn, ctx.work_id),
+         :ok <- Helpers.ensure_not_waiting_children(:break, work) do
       apply_break(conn, ctx, body, work)
     end
   end
 
-  @spec delegate(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  @spec delegate(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def delegate(conn, body, ctx) do
     with :ok <- ensure_context(:delegate, ctx),
          :ok <- Helpers.ensure_no_forbidden(:delegate, body),
@@ -62,7 +66,7 @@ defmodule Omunculus.Store.Actions.Sequence do
     end
   end
 
-  @spec cancel(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  @spec cancel(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def cancel(conn, body, ctx) do
     with {:ok, work} <- request_work(conn, body["request_id"]),
          :ok <- ensure_unclosed(work),
@@ -83,7 +87,7 @@ defmodule Omunculus.Store.Actions.Sequence do
     end
   end
 
-  @spec end_run(Exqlite.Sqlite3.db(), map) :: {:ok, map} | {:error, term}
+  @spec end_run(Omunculus.Store.Connection.t(), map) :: {:ok, map} | {:error, term}
   def end_run(_conn, %{run_id: nil}), do: {:error, {:end, :no_run}}
 
   def end_run(conn, ctx) do

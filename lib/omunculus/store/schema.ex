@@ -143,7 +143,7 @@ defmodule Omunculus.Store.Schema do
     {"inbox", "created_at"}
   ]
 
-  @spec create(Exqlite.Sqlite3.db()) :: :ok | {:error, term}
+  @spec create(Omunculus.Store.Connection.t()) :: :ok | {:error, term}
   def create(conn) do
     statements = @statements ++ Enum.map(@system_columns, &system_column_trigger/1)
 

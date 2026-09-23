@@ -348,7 +348,8 @@ defmodule Omunculus.SpecRegressionTest do
     assert "write" in Jason.decode!(run.tools)
     write_config(p, config_text <> "deny = [\"write\"]\n")
     Fixtures.use_model(p, fn _, _, _ -> {:ok, "done"} end)
-    assert {:ok, run} = Run.open(p, opening(child))
+    # The first run broke the child, so only a named agent opens a run on it.
+    assert {:ok, run} = Run.open(p, opening(child, %{agent: "worker"}))
     refute "write" in Jason.decode!(run.tools)
   end
 
@@ -467,7 +468,7 @@ defmodule Omunculus.SpecRegressionTest do
     assert {:ok, [_continue]} = Query.all(p.conn, "SELECT * FROM events WHERE type = 'continue'")
   end
 
-  test "on-continue runs in the unroll while hooks of end wait for the next start-run", %{
+  test "on-continue runs in the unroll while hooks of end wait for the close", %{
     project: p
   } do
     write_config(
@@ -525,10 +526,11 @@ defmodule Omunculus.SpecRegressionTest do
 
     assert continue_at < hook_at.("on-continue")
     assert hook_at.("on-continue") < end_run_at
-    assert second_start < hook_at.("on-end")
+    # The next run opens concurrently with the hooks of end.
+    assert end_run_at < hook_at.("on-end")
   end
 
-  test "work with then = [] does not end the run: the delegate hook runs at once and the child opens after the close",
+  test "work with then = [] does not end the run: the delegate hook runs at once and the child opens while the parent's run goes on",
        %{project: p} do
     write_config(
       p,
@@ -541,21 +543,24 @@ defmodule Omunculus.SpecRegressionTest do
 
     hook(p, "on-delegate", "delegate")
     parent = Fixtures.insert(p.conn, :works, %{assignee: "concierge"})
+    test_pid = self()
 
     Fixtures.use_model(p, fn assembled, _, call ->
-      cond do
-        not String.starts_with?(assembled, "concierge") ->
-          call.("end", %{})
+      if String.starts_with?(assembled, "concierge") do
+        assert {:ok, _} =
+                 call.("work", %{
+                   "report" => "delegated",
+                   "works" => [%{"title" => "child", "goal" => "child goal"}]
+                 })
 
-        true ->
-          assert {:ok, _} =
-                   call.("work", %{
-                     "report" => "delegated",
-                     "works" => [%{"title" => "child", "goal" => "child goal"}]
-                   })
-
-          assert {:ok, _} = call.("comment", %{"body" => "still here"})
-          {:ok, "delegated"}
+        # The parent's model goes on only once the child's run has started.
+        assert_receive :child_started, 5_000
+        assert {:ok, _} = call.("comment", %{"body" => "still here"})
+        call.("end", %{})
+        flunk("end must end the run")
+      else
+        send(test_pid, :child_started)
+        call.("end", %{})
       end
     end)
 
@@ -566,7 +571,7 @@ defmodule Omunculus.SpecRegressionTest do
     delegate_at = Enum.find_index(types, &(&1 == "delegate"))
     assert Jason.decode!(Enum.at(events, delegate_at + 1).body)["name"] == "on-delegate"
     assert "comment" in Enum.drop(types, delegate_at)
-    assert List.last(types) == "end-run"
+    assert Enum.take(types, -2) == ["end", "end-run"]
 
     assert {:ok, [child]} = Query.all(p.conn, "SELECT * FROM works WHERE parent_id = ?", [parent])
 
@@ -583,7 +588,7 @@ defmodule Omunculus.SpecRegressionTest do
     assert {:ok, child_start} =
              Query.one(p.conn, "SELECT * FROM events WHERE id = ?", [child_run.event_id])
 
-    assert parent_end.sequence < child_start.sequence
+    assert child_start.sequence < parent_end.sequence
     assert {:ok, %{state: "open"}} = Store.view(p.conn, "work", child.id)
     assert {:ok, %{state: "waiting"}} = Store.view(p.conn, "work", parent)
   end

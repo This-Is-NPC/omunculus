@@ -1,7 +1,7 @@
 defmodule Omunculus.Execution.Limiter do
   @moduledoc false
 
-  @type class :: :tool | :coordinator
+  @type class :: :tool | :coordinator | :run
 
   @spec acquire(
           %{
@@ -12,7 +12,7 @@ defmodule Omunculus.Execution.Limiter do
           pid,
           class
         ) :: {:ok, reference} | {:error, :queue_full | :queue_timeout | term}
-  def acquire(limits, owner, class) when class in [:tool, :coordinator] do
+  def acquire(limits, owner, class) when class in [:tool, :coordinator, :run] do
     with {:ok, server} <- server(limits, class) do
       lease = make_ref()
 
@@ -28,7 +28,7 @@ defmodule Omunculus.Execution.Limiter do
 
   @spec release(%{max_concurrent: pos_integer, max_queue: non_neg_integer}, reference, class) ::
           :ok
-  def release(limits, lease, class) when class in [:tool, :coordinator] do
+  def release(limits, lease, class) when class in [:tool, :coordinator, :run] do
     case Registry.lookup(Omunculus.Execution.Registry, key(limits, class)) do
       [{server, _}] -> GenServer.cast(server, {:release, lease})
       [] -> :ok
@@ -44,7 +44,7 @@ defmodule Omunculus.Execution.Limiter do
           class
         ) ::
           :ok | {:error, :lease_missing}
-  def transfer(limits, lease, owner, class) when class in [:tool, :coordinator] do
+  def transfer(limits, lease, owner, class) when class in [:tool, :coordinator, :run] do
     case Registry.lookup(Omunculus.Execution.Registry, key(limits, class)) do
       [{server, _}] -> GenServer.call(server, {:transfer, lease, owner})
       [] -> {:error, :lease_missing}
@@ -145,7 +145,7 @@ defmodule Omunculus.Execution.Limiter do
       {:noreply, state}
     end
 
-    defp capacity(limits, :tool), do: limits.max_concurrent
+    defp capacity(limits, class) when class in [:tool, :run], do: limits.max_concurrent
     defp capacity(limits, :coordinator), do: min(limits.max_concurrent, 1)
 
     defp admit(state, owner, lease) do

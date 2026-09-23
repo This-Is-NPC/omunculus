@@ -6,7 +6,8 @@ defmodule Omunculus.Store.Actions.Helpers do
   stage and assignee from the workflow, the named agent or the depth's
   first agent, resolving its `workspace` from a given name, its parent,
   or the project's default (spec §9.1), inserting the `WORKS` row itself,
-  fetching a request by id, and the ancestor grants walk of spec §5.
+  fetching a request by id, refusing to park a work that waits on its
+  children, and the ancestor grants walk of spec §5.
   """
 
   alias Omunculus.Config
@@ -14,7 +15,8 @@ defmodule Omunculus.Store.Actions.Helpers do
 
   @forbidden ~w(stage agent model)
 
-  @spec ensure_exist(Exqlite.Sqlite3.db(), [{atom, String.t() | nil}]) :: :ok | {:error, term}
+  @spec ensure_exist(Omunculus.Store.Connection.t(), [{atom, String.t() | nil}]) ::
+          :ok | {:error, term}
   def ensure_exist(conn, targets) do
     targets
     |> Enum.reject(fn {_table, id} -> is_nil(id) end)
@@ -54,7 +56,7 @@ defmodule Omunculus.Store.Actions.Helpers do
   def ensure_goal(_tag, %{"goal" => goal}) when is_binary(goal) and goal != "", do: :ok
   def ensure_goal(tag, _body), do: {:error, {tag, :no_goal}}
 
-  @spec insert_comment(Exqlite.Sqlite3.db(), String.t(), map, String.t(), map, map) ::
+  @spec insert_comment(Omunculus.Store.Connection.t(), String.t(), map, String.t(), map, map) ::
           :ok | {:error, term}
   def insert_comment(conn, id, targets, text, event, ctx) do
     Query.insert(conn, :comments, %{
@@ -71,7 +73,14 @@ defmodule Omunculus.Store.Actions.Helpers do
     })
   end
 
-  @spec reopen_work(Exqlite.Sqlite3.db(), String.t() | nil) :: :ok | {:error, term}
+  @doc "Refuses an action that would park a work already waiting on its children."
+  @spec ensure_not_waiting_children(atom, map | nil) :: :ok | {:error, {atom, :waiting_children}}
+  def ensure_not_waiting_children(tag, %{state: "waiting", waiting: "child"}),
+    do: {:error, {tag, :waiting_children}}
+
+  def ensure_not_waiting_children(_tag, _work), do: :ok
+
+  @spec reopen_work(Omunculus.Store.Connection.t(), String.t() | nil) :: :ok | {:error, term}
   def reopen_work(_conn, nil), do: :ok
 
   def reopen_work(conn, work_id) do
@@ -102,7 +111,7 @@ defmodule Omunculus.Store.Actions.Helpers do
     end
   end
 
-  @spec insert_work(Exqlite.Sqlite3.db(), map) :: :ok | {:error, term}
+  @spec insert_work(Omunculus.Store.Connection.t(), map) :: :ok | {:error, term}
   def insert_work(conn, work) do
     Query.insert(conn, :works, %{
       id: work.id,
@@ -132,13 +141,14 @@ defmodule Omunculus.Store.Actions.Helpers do
     end
   end
 
-  @spec fetch_work(Exqlite.Sqlite3.db(), String.t() | nil) :: {:ok, map | nil} | {:error, term}
+  @spec fetch_work(Omunculus.Store.Connection.t(), String.t() | nil) ::
+          {:ok, map | nil} | {:error, term}
   def fetch_work(_conn, nil), do: {:ok, nil}
 
   def fetch_work(conn, work_id),
     do: Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
 
-  @spec fetch_request(atom, Exqlite.Sqlite3.db(), String.t() | nil) ::
+  @spec fetch_request(atom, Omunculus.Store.Connection.t(), String.t() | nil) ::
           {:ok, map} | {:error, term}
   def fetch_request(tag, _conn, nil), do: {:error, {tag, :no_request}}
 
@@ -148,7 +158,7 @@ defmodule Omunculus.Store.Actions.Helpers do
     end
   end
 
-  @spec grants(Exqlite.Sqlite3.db(), map | nil) :: {:ok, [String.t()]}
+  @spec grants(Omunculus.Store.Connection.t(), map | nil) :: {:ok, [String.t()]}
   def grants(_conn, nil), do: {:ok, []}
 
   def grants(conn, work) do

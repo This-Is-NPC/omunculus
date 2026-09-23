@@ -8,7 +8,7 @@ defmodule Omunculus.Store.Events do
   alias Omunculus.Id
   alias Omunculus.Store.Query
 
-  @spec append(Exqlite.Sqlite3.db(), map) :: {:ok, map} | {:error, term}
+  @spec append(Omunculus.Store.Connection.t(), map) :: {:ok, map} | {:error, term}
   def append(conn, fields) do
     fields = run_context(conn, fields)
     id = Id.new()

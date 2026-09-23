@@ -16,15 +16,17 @@ defmodule Omunculus.Harness do
 
   Hooks use the same emit path as tools. Hooks of every event run during
   the model unroll except those of `end`, the only event that ends a run:
-  they wait until `follow_up/2` has closed the run and opened the next
-  one. `follow_up/2` writes the permanent grants among the events to the
-  TOML, opens action runs, then those deferred hooks, then agent
-  reactions, preserving the originating tool or hook in `via`. A `reply`
-  opens a run of the requester's work when that work is open after the
-  reply and its option's calls.
+  they wait until `follow_up/3` runs after the run has closed and the
+  runs its events ask for are due. `open_due/2` writes the permanent
+  grants among the events to the TOML and makes the runs their actions
+  ask for due in the `Omunculus.Cycle`, which opens them concurrently;
+  `follow_up/3` does the same, then runs those deferred hooks, then makes
+  the reaction runs of calling hooks due, preserving the originating tool
+  or hook in `via`. A `reply` opens a run of the requester's work when
+  that work is open after the reply and its option's calls.
   """
 
-  alias Omunculus.{Ceiling, Config, Project, Run, Store}
+  alias Omunculus.{Ceiling, Config, Cycle, Project, Store}
   alias Omunculus.Execution.Policy
   alias Omunculus.Store.Actions.Requests
   alias Omunculus.Tool.{Catalog, Invoke, Manifest, Overrides}
@@ -213,17 +215,42 @@ defmodule Omunculus.Harness do
     end
   end
 
-  @spec follow_up(Project.t(), [map]) :: :ok | {:error, term}
-  def follow_up(project, events) do
+  @doc """
+  Opens the runs `events` ask for, then runs the hooks of the ending
+  events among them, then opens the reaction runs of the calling hooks
+  among `opened ++ events`. `opened` are earlier events of the same run
+  whose runs `open_due/2` already opened.
+  """
+  @spec follow_up(Project.t(), [map], [map]) :: :ok | {:error, term}
+  def follow_up(project, events, opened \\ []) do
+    Cycle.run(project, nil, fn project ->
+      with :ok <- open(project, events),
+           {:ok, catalog} <- follow_catalog(project),
+           {:ok, _hooks} <- react(project, Enum.filter(events, &ending_event?/1), []),
+           {:ok, _via} <- walk(project, catalog, opened ++ events, :hooks) do
+        :ok
+      end
+    end)
+  end
+
+  @doc "Writes the permanent grants among `events` and opens the runs their actions ask for."
+  @spec open_due(Project.t(), [map]) :: :ok | {:error, term}
+  def open_due(project, events) do
+    Cycle.run(project, nil, &open(&1, events))
+  end
+
+  defp follow_catalog(project) do
     with {:ok, config} <- Config.load(project.config_path),
-         {:ok, config} <- Config.for_workspace(config, Config.effective_workspace(config, nil)),
-         catalog = Catalog.discover(config.tools, config.mcp, nil),
-         :ok <- write_grants(project, events),
-         {:ok, _via} <- walk(project, catalog, events, :actions),
-         {:ok, _hooks} <- react(project, Enum.filter(events, &ending_event?/1), []),
-         {:ok, _via} <- walk(project, catalog, events, :hooks) do
-      :ok
+         {:ok, config} <- Config.for_workspace(config, Config.effective_workspace(config, nil)) do
+      {:ok, Catalog.discover(config.tools, config.mcp, nil)}
     end
+  end
+
+  # Only the calling hooks walk needs the catalog.
+  defp open(project, events) do
+    with :ok <- write_grants(project, events),
+         {:ok, _via} <- walk(project, nil, events, :actions),
+         do: :ok
   end
 
   defp walk(project, catalog, events, phase) do
@@ -747,7 +774,7 @@ defmodule Omunculus.Harness do
 
   defp advance(project, _catalog, %{type: "prompt"} = event, via, :actions) do
     with :ok <-
-           open_run(
+           Cycle.open(
              project,
              open_params(prompt_id: event.prompt_id, work_id: event.work_id, via: via)
            ),
@@ -765,7 +792,7 @@ defmodule Omunculus.Harness do
 
   defp advance(project, _catalog, %{type: "delegate"} = event, via, :actions) do
     with :ok <-
-           open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via)),
+           Cycle.open(project, open_params(prompt_id: nil, work_id: event.work_id, via: via)),
          do: {:ok, via}
   end
 
@@ -783,7 +810,7 @@ defmodule Omunculus.Harness do
     do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: via, agent: nil}
 
   defp open_reaction_run(project, event, hook_name, agent) do
-    open_run(
+    Cycle.open(
       project,
       %{
         prompt_id: nil,
@@ -834,7 +861,7 @@ defmodule Omunculus.Harness do
   defp open_reply_run(project, %{work_id: work_id, request_id: request_id}, via) do
     case Store.view(project.conn, "work", work_id) do
       {:ok, %{state: "open"}} ->
-        open_run(
+        Cycle.open(
           project,
           %{prompt_id: nil, work_id: work_id, request_id: request_id, via: via, agent: nil}
         )
@@ -850,10 +877,10 @@ defmodule Omunculus.Harness do
   defp open_sequence_run(project, event, via) do
     case {event.type, Jason.decode!(event.body)} do
       {"continue", %{"to" => to}} when not is_nil(to) ->
-        open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via))
+        Cycle.open(project, open_params(prompt_id: nil, work_id: event.work_id, via: via))
 
       {_type, %{"parent_id" => parent_id}} when not is_nil(parent_id) ->
-        open_run(project, open_params(prompt_id: nil, work_id: parent_id, via: via))
+        Cycle.open(project, open_params(prompt_id: nil, work_id: parent_id, via: via))
 
       _no_next_run ->
         :ok
@@ -863,38 +890,29 @@ defmodule Omunculus.Harness do
   defp open_request_run(project, event, via) do
     case Jason.decode!(event.body) do
       %{"arbiter" => arbiter, "arbiter_work_id" => work_id} ->
-        with :ok <-
-               open_run(
-                 project,
-                 %{
-                   prompt_id: nil,
-                   work_id: work_id,
-                   request_id: event.request_id,
-                   via: via,
-                   agent: arbiter
-                 }
-               ),
-             do: :ok
+        Cycle.open(project, %{
+          prompt_id: nil,
+          work_id: work_id,
+          request_id: event.request_id,
+          via: via,
+          agent: arbiter
+        })
 
       _no_agent_arbiter ->
         :ok
     end
   end
 
+  # The run that created the root is linked to it, so it holds the root's
+  # turn until it finishes; the root's own run opens after it.
   defp open_root_run(project, event, via) do
     case Jason.decode!(event.body) do
       %{"start" => true} ->
-        open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via))
+        if event.run_id, do: Cycle.link(project, event.work_id)
+        Cycle.open(project, open_params(prompt_id: nil, work_id: event.work_id, via: via))
 
       _not_a_new_root ->
         :ok
-    end
-  end
-
-  defp open_run(project, params) do
-    case Run.open(project, params) do
-      {:ok, _run} -> :ok
-      {:error, _reason} = error -> error
     end
   end
 end

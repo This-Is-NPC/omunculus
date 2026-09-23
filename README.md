@@ -8,7 +8,8 @@ call, the same contract the model uses, and what happens next is already in
 the file: a prompt is recorded, a run opens, the model calls tools inside a
 Bubblewrap sandbox until it calls `end` or stops, every step is an event, and
 the store applies whatever those tools emit. Work, requests and notifications are rows. The harness
-follows them.
+follows them: the runs they ask for open concurrently, up to `[execution]
+max_concurrent`, and the command returns when all of them have finished.
 
 ## Install
 

@@ -268,16 +268,22 @@ defmodule Omunculus.Tools.WorkTest do
                ])
                |> Enum.map(& &1.body)
 
-      runs = runs_in_order(project)
+      # The children run concurrently: which of them starts or finishes
+      # first is not defined, only that the root reopens once, after both.
       [a, b] = Enum.map(children, & &1.id)
-      assert Enum.map(runs, & &1.work_id) == [root.id, root.id, a, b, root.id]
+      assert [first, second, child_one, child_two, last] = runs_in_order(project)
+      assert [first.work_id, second.work_id, last.work_id] == [root.id, root.id, root.id]
+      assert Enum.sort([child_one.work_id, child_two.work_id]) == Enum.sort([a, b])
 
       continues =
-        for %{type: "continue", work_id: id, body: body} <- all(project, "SELECT * FROM events"),
-            into: %{},
-            do: {id, Jason.decode!(body)["parent_id"]}
+        for %{type: "continue", body: body} = event <- all(project, "SELECT * FROM events"),
+            do: {event, Jason.decode!(body)["parent_id"]}
 
-      assert continues == %{a => nil, b => root.id}
+      assert [{_event, nil}, {waking, parent_id}] = continues
+      assert parent_id == root.id
+
+      [last_start] = all(project, "SELECT * FROM events WHERE id = ?", [last.event_id])
+      assert waking.sequence < last_start.sequence
 
       Project.close(project)
     end
@@ -309,8 +315,16 @@ defmodule Omunculus.Tools.WorkTest do
       assert [%{assignee: "beta", state: "waiting"} = a, %{assignee: "alpha", state: "done"} = b] =
                all(project, "SELECT * FROM works WHERE parent_id = ? ORDER BY title", [root.id])
 
-      runs = runs_in_order(project)
-      assert Enum.map(runs, & &1.work_id) == [root.id, root.id, a.id, root.id, b.id]
+      # A and B run concurrently; the root's third run opens after A's break,
+      # while B may still run.
+      assert [first, second | rest] = runs_in_order(project)
+      assert [first.work_id, second.work_id] == [root.id, root.id]
+      assert Enum.sort(Enum.map(rest, & &1.work_id)) == Enum.sort([a.id, root.id, b.id])
+
+      [break] = all(project, "SELECT * FROM events WHERE type = 'break'")
+      [reopened] = Enum.filter(rest, &(&1.work_id == root.id))
+      [reopened_start] = all(project, "SELECT * FROM events WHERE id = ?", [reopened.event_id])
+      assert break.sequence < reopened_start.sequence
 
       Project.close(project)
     end

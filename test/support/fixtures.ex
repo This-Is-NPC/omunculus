@@ -51,7 +51,7 @@ defmodule Omunculus.Fixtures do
   @spec defaults(atom) :: map
   def defaults(table), do: Map.fetch!(@defaults, table)
 
-  @spec insert(Exqlite.Sqlite3.db(), atom, map) :: String.t()
+  @spec insert(Omunculus.Store.Connection.t(), atom, map) :: String.t()
   def insert(conn, table, attrs \\ %{}) do
     row =
       table

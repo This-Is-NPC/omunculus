@@ -20,7 +20,7 @@ defmodule Omunculus.Store.Actions do
 
   @comment_targets %{"work_id" => :works, "request_id" => :requests, "inbox_id" => :inbox}
 
-  @spec run(Exqlite.Sqlite3.db(), [map], map) :: {:ok, [map]} | {:error, term}
+  @spec run(Omunculus.Store.Connection.t(), [map], map) :: {:ok, [map]} | {:error, term}
   def run(conn, emits, ctx) do
     emits
     |> Enum.reduce_while({:ok, []}, fn emit, {:ok, events} ->

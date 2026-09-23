@@ -36,7 +36,7 @@ defmodule Omunculus.Store.View do
 
   @replay_columns %{run: :run_id, work: :work_id, request: :request_id, inbox: :inbox_id}
 
-  @spec view(Exqlite.Sqlite3.db(), String.t(), String.t()) ::
+  @spec view(Omunculus.Store.Connection.t(), String.t(), String.t()) ::
           {:ok, [map] | map | nil} | {:error, {:unknown_view, String.t()}}
   def view(conn, name, id)
 
@@ -139,7 +139,7 @@ defmodule Omunculus.Store.View do
 
   def view(_conn, name, _id), do: {:error, {:unknown_view, name}}
 
-  @spec work_depth(Exqlite.Sqlite3.db(), map) :: non_neg_integer
+  @spec work_depth(Omunculus.Store.Connection.t(), map) :: non_neg_integer
   def work_depth(_conn, %{parent_id: nil}), do: 0
 
   def work_depth(conn, %{parent_id: parent_id}) do
@@ -148,7 +148,7 @@ defmodule Omunculus.Store.View do
   end
 
   @doc "The number of the most recent closed runs of a work, in a row, without `end`."
-  @spec unended_runs(Exqlite.Sqlite3.db(), String.t()) :: non_neg_integer
+  @spec unended_runs(Omunculus.Store.Connection.t(), String.t()) :: non_neg_integer
   def unended_runs(conn, work_id) do
     {:ok, runs} =
       Query.all(
@@ -164,7 +164,10 @@ defmodule Omunculus.Store.View do
     Enum.count(Enum.take_while(runs, &(&1.ended == 0)))
   end
 
-  @spec replay(Exqlite.Sqlite3.db(), :project | {:run | :work | :request | :inbox, String.t()}) ::
+  @spec replay(
+          Omunculus.Store.Connection.t(),
+          :project | {:run | :work | :request | :inbox, String.t()}
+        ) ::
           {:ok, [map]}
   def replay(conn, scope) do
     {where, params} = replay_filter(scope)

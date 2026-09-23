@@ -6,27 +6,32 @@ defmodule Omunculus.Store.Runs do
   is begin-then-attach for tests, `record_model/3` logs a model
   turn, `record_tools/4` logs a call and the steps it chained, each
   followed by its emits, as one transaction so a failed emit leaves no
-  stray `tool` event, `close/2` ends the run, `break_work/3` applies a
-  `break` with the given text to a closed run's work, `request_work/4`
-  opens a request by the harness for a closed run's work, with an inbox
-  entry whose text names the new request.
+  stray `tool` event, `close/2` ends the run. `begin/2` refuses a run of a cancelled
+  work, and a work's own run (`own`, no named agent) of a work that is
+  not open. `unreported/5` decides in one transaction what follows a
+  closed run whose model stopped without `end` on a work still open:
+  another run while the work's latest runs without `end` are within
+  `max_retries`; past it, a `break` with the given text for a child,
+  or, for a root, a request by the harness with the options `retry` and
+  `cancel` and an inbox entry whose text names the new request.
   """
 
   alias Omunculus.Id
-  alias Omunculus.Store.{Actions, Events, Query}
+  alias Omunculus.Store.Actions.Helpers
+  alias Omunculus.Store.{Actions, Connection, Events, Query, View}
 
-  @spec begin(Exqlite.Sqlite3.db(), map) :: {:ok, map} | {:error, term}
+  @spec begin(Connection.t(), map) :: {:ok, map} | {:error, term}
   def begin(conn, params) do
     Query.transaction(conn, fn -> do_begin(conn, params) end)
   end
 
-  @spec attach_assembled(Exqlite.Sqlite3.db(), String.t(), String.t()) ::
+  @spec attach_assembled(Connection.t(), String.t(), String.t()) ::
           {:ok, map} | {:error, term}
   def attach_assembled(conn, run_id, body) do
     Query.transaction(conn, fn -> do_attach(conn, run_id, body) end)
   end
 
-  @spec open(Exqlite.Sqlite3.db(), map) :: {:ok, map} | {:error, term}
+  @spec open(Connection.t(), map) :: {:ok, map} | {:error, term}
   def open(conn, params) do
     assembled = Map.fetch!(params, :assembled)
 
@@ -34,14 +39,14 @@ defmodule Omunculus.Store.Runs do
          do: attach_assembled(conn, run.id, assembled)
   end
 
-  @spec record_model(Exqlite.Sqlite3.db(), String.t(), String.t()) :: {:ok, map} | {:error, term}
+  @spec record_model(Connection.t(), String.t(), String.t()) :: {:ok, map} | {:error, term}
   def record_model(conn, run_id, text) do
     Query.transaction(conn, fn ->
       Events.append(conn, %{type: "model", run_id: run_id, body: text})
     end)
   end
 
-  @spec record_tools(Exqlite.Sqlite3.db(), String.t() | nil, [{map, [map]}], map) ::
+  @spec record_tools(Connection.t(), String.t() | nil, [{map, [map]}], map) ::
           {:ok, [map]} | {:error, term}
   def record_tools(conn, run_id, calls, ctx) do
     Query.transaction(conn, fn ->
@@ -69,38 +74,59 @@ defmodule Omunculus.Store.Runs do
     end
   end
 
-  @spec close(Exqlite.Sqlite3.db(), String.t()) :: {:ok, map} | {:error, term}
+  @spec close(Connection.t(), String.t()) :: {:ok, map} | {:error, term}
   def close(conn, run_id) do
     Query.transaction(conn, fn -> do_close(conn, run_id) end)
   end
 
-  @spec request_work(Exqlite.Sqlite3.db(), map, map, (String.t() -> String.t())) ::
-          {:ok, [map]} | {:error, term}
-  def request_work(conn, run, body, inbox_text) do
-    ctx = %{run_id: run.id, work_id: run.work_id, author: "harness", agent: run.agent}
-
+  @spec unreported(
+          Connection.t(),
+          map,
+          non_neg_integer,
+          (pos_integer -> String.t()),
+          (String.t(), String.t(), [String.t()] -> String.t())
+        ) :: {:ok, :retry | :none | {:stopped, [map]}} | {:error, term}
+  def unreported(conn, run, max_retries, reason_text, inbox_text) do
     Query.transaction(conn, fn ->
-      with {:ok, [request]} <- Actions.run(conn, [%{"type" => "request", "body" => body}], ctx),
-           notify = %{"body" => inbox_text.(request.request_id), "work_id" => run.work_id},
-           {:ok, inbox} <- Actions.run(conn, [%{"type" => "notify", "body" => notify}], ctx) do
-        {:ok, [request | inbox]}
+      with {:ok, work} <- Helpers.fetch_work(conn, run.work_id) do
+        case {work.state, View.unended_runs(conn, work.id)} do
+          {"open", runs} when runs > max_retries ->
+            with {:ok, events} <- stop_work(conn, run, work, reason_text.(runs), inbox_text),
+                 do: {:ok, {:stopped, events}}
+
+          {"open", runs} when runs > 0 ->
+            {:ok, :retry}
+
+          _reported_or_parked ->
+            {:ok, :none}
+        end
       end
     end)
   end
 
-  @spec break_work(Exqlite.Sqlite3.db(), map, String.t()) :: {:ok, [map]} | {:error, term}
-  def break_work(conn, run, text) do
-    ctx = %{run_id: run.id, work_id: run.work_id, author: "agent", agent: run.agent}
+  defp stop_work(conn, run, %{parent_id: nil}, text, inbox_text) do
+    ctx = %{run_id: run.id, work_id: run.work_id, author: "harness", agent: run.agent}
+    options = %{"retry" => [], "cancel" => [%{"name" => "cancel"}]}
+    body = %{"reason" => text, "options" => options}
 
-    Query.transaction(conn, fn ->
-      Actions.run(conn, [%{"type" => "break", "body" => %{"body" => text}}], ctx)
-    end)
+    with {:ok, [request]} <- Actions.run(conn, [%{"type" => "request", "body" => body}], ctx),
+         inbox = inbox_text.(request.request_id, text, Map.keys(options)),
+         notify = %{"body" => inbox, "work_id" => run.work_id},
+         {:ok, inbox} <- Actions.run(conn, [%{"type" => "notify", "body" => notify}], ctx) do
+      {:ok, [request | inbox]}
+    end
+  end
+
+  defp stop_work(conn, run, _child, text, _inbox_text) do
+    ctx = %{run_id: run.id, work_id: run.work_id, author: "agent", agent: run.agent}
+    Actions.run(conn, [%{"type" => "break", "body" => %{"body" => text}}], ctx)
   end
 
   defp do_begin(conn, params) do
     run_id = Id.new()
 
-    with {:ok, event} <-
+    with :ok <- runnable(conn, params.work_id, Map.get(params, :own, false)),
+         {:ok, event} <-
            Events.append(conn, %{
              type: "start-run",
              run_id: run_id,
@@ -132,6 +158,20 @@ defmodule Omunculus.Store.Runs do
            }),
          :ok <- link_message(conn, params.prompt_id, run_id) do
       Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id])
+    end
+  end
+
+  # A cancelled work opens no run; a work's own run (no named agent)
+  # opens only while the work is open.
+  defp runnable(_conn, nil, _own), do: :ok
+
+  defp runnable(conn, work_id, own) do
+    case Helpers.fetch_work(conn, work_id) do
+      {:ok, %{state: "cancelled"}} -> {:error, {:cancelled, work_id}}
+      {:ok, %{state: "open"}} -> :ok
+      {:ok, _not_open} when own -> {:error, {:not_open, work_id}}
+      {:ok, _work} -> :ok
+      {:error, _reason} = error -> error
     end
   end
 

@@ -37,6 +37,10 @@ run that had nothing to print — `send` and `reply` are this — rather than a
 missing result. Stderr is the formatted error; a tool that failed puts its
 `output` there and exits 1.
 
+A command that opens runs returns once every run it opened, directly or
+through other runs, has finished. The error of any of them makes it exit
+1; several errors are printed one per line.
+
 ## `omunculus preset`
 
 - **Usage:** `omunculus preset <name> --from <dir>`
