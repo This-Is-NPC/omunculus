@@ -140,6 +140,10 @@ defmodule Omunculus.Config do
     end
   end
 
+  @doc "The sandbox capabilities `[execution] resources` may name."
+  @spec known_resources() :: [String.t()]
+  def known_resources, do: @known_execution_resources
+
   @spec effective_workspace(t, map | nil) :: String.t() | nil
   def effective_workspace(%__MODULE__{policy_workspace: policy_workspace}, work),
     do: (work && Map.get(work, :workspace)) || policy_workspace

@@ -7,10 +7,10 @@ defmodule Omunculus.Tools.RequestSandbox do
   run's work first and the manifest's `then` appends `end`.
   """
 
+  alias Omunculus.Config
   alias Omunculus.Tools.{Args, Out, RequestAccess}
 
   @required ~w(report name reason)
-  @resources ~w(sandbox.write sandbox.network)
 
   @spec run(map) :: map
   def run(%{args: args} = input) do
@@ -20,8 +20,9 @@ defmodule Omunculus.Tools.RequestSandbox do
     end
   end
 
-  defp validate(%{args: %{"name" => name}} = input) when name in @resources,
-    do: RequestAccess.emit(input, "resource", name)
-
-  defp validate(%{args: %{"name" => name}}), do: Out.fail("unsupported resource: #{name}")
+  defp validate(%{args: %{"name" => name}} = input) do
+    if name in Config.known_resources(),
+      do: RequestAccess.emit(input, "resource", name),
+      else: Out.fail("unsupported resource: #{name}")
+  end
 end
