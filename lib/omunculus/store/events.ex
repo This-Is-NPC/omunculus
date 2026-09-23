@@ -6,7 +6,7 @@ defmodule Omunculus.Store.Events do
   """
 
   alias Omunculus.Id
-  alias Omunculus.Store.Query
+  alias Omunculus.Store.{Query, View}
 
   @spec append(Omunculus.Store.Connection.t(), map) :: {:ok, map} | {:error, term}
   def append(conn, fields) do
@@ -17,7 +17,7 @@ defmodule Omunculus.Store.Events do
            Query.one(conn, "SELECT COALESCE(MAX(sequence), 0) AS max FROM events"),
          :ok <-
            Query.insert(conn, :events, Map.merge(fields, %{id: id, sequence: max + 1, at: now()})) do
-      Query.one(conn, "SELECT * FROM events WHERE id = ?", [id])
+      View.view(conn, "event", id)
     end
   end
 

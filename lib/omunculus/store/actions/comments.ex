@@ -18,7 +18,7 @@ defmodule Omunculus.Store.Actions.Comments do
   @spec compact(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def compact(conn, body, ctx) do
     with {:ok, {column, table, id}} <- target(:compact, conn, body, ctx),
-         :ok <- ensure_summary(body),
+         :ok <- Helpers.ensure_text(:compact, body, "summary"),
          {:ok, all_ids} <- comment_ids(conn, column, id),
          {:ok, deleted} <- resolve_deleted(:compact, all_ids, body["ids"]) do
       apply_compact(conn, column, table, id, deleted, body["summary"], ctx)
@@ -63,11 +63,6 @@ defmodule Omunculus.Store.Actions.Comments do
        do: {:error, {tag, :foreign_work}}
 
   defp ensure_same_work(_tag, _table, _id, _ctx), do: :ok
-
-  defp ensure_summary(%{"summary" => summary}) when is_binary(summary) and summary != "",
-    do: :ok
-
-  defp ensure_summary(_body), do: {:error, {:compact, :no_summary}}
 
   defp ensure_ids(%{"ids" => ids}) when is_list(ids) and ids != [], do: {:ok, ids}
   defp ensure_ids(_body), do: {:error, {:comment_delete, :no_ids}}

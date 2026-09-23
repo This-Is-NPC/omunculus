@@ -26,7 +26,7 @@ defmodule Omunculus.Store.Actions.Requests do
 
   @spec request(Omunculus.Store.Connection.t(), map, map) :: {:ok, map | nil} | {:error, term}
   def request(conn, body, ctx) do
-    with :ok <- ensure_text(:request, :no_reason, body["reason"]),
+    with :ok <- Helpers.ensure_text(:request, body, "reason"),
          {:ok, options} <- options(body["options"]),
          {:ok, run} <- fetch_run(conn, ctx.run_id),
          {:ok, work} <- Helpers.fetch_work(conn, ctx.work_id),
@@ -48,7 +48,7 @@ defmodule Omunculus.Store.Actions.Requests do
     with {:ok, request} <- Helpers.fetch_request(:reply, conn, body["request_id"]),
          :ok <- ensure_open(request),
          :ok <- ensure_option(request, body["option"]),
-         :ok <- ensure_text(:reply, :no_body, body["body"]),
+         :ok <- Helpers.ensure_text(:reply, body, "body"),
          :ok <- authorize_reply(request, ctx) do
       apply_reply(conn, ctx, request, body)
     end
@@ -57,8 +57,8 @@ defmodule Omunculus.Store.Actions.Requests do
   @spec grant(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def grant(conn, body, ctx) do
     with {:ok, request} <- Helpers.fetch_request(:grant, conn, body["request_id"]),
-         :ok <- ensure_text(:grant, :no_name, body["name"]),
-         :ok <- ensure_text(:grant, :no_kind, body["kind"]),
+         :ok <- Helpers.ensure_text(:grant, body, "name"),
+         :ok <- Helpers.ensure_text(:grant, body, "kind"),
          :ok <- ensure_scope(body["scope"], ctx),
          {:ok, depth} <- run_depth(conn, request.run_id),
          {:ok, work} <- Helpers.fetch_work(conn, request.work_id),
@@ -95,9 +95,6 @@ defmodule Omunculus.Store.Actions.Requests do
       {:error, _reason} -> []
     end
   end
-
-  defp ensure_text(_tag, _reason, text) when is_binary(text) and text != "", do: :ok
-  defp ensure_text(tag, reason, _text), do: {:error, {tag, reason}}
 
   defp options(raw) when is_map(raw) and map_size(raw) > 0 do
     Enum.reduce_while(raw, {:ok, %{}}, fn {name, calls}, {:ok, acc} ->
@@ -137,7 +134,7 @@ defmodule Omunculus.Store.Actions.Requests do
   defp fetch_run(_conn, nil), do: {:error, {:request, :no_run}}
 
   defp fetch_run(conn, run_id) do
-    case Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id]) do
+    case View.view(conn, "run", run_id) do
       {:ok, nil} -> {:error, {:request, {:missing, :runs, run_id}}}
       other -> other
     end

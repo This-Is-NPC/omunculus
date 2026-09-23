@@ -56,8 +56,7 @@ defmodule Omunculus.Store.Actions do
   defp dispatch(conn, %{"type" => "cancel"} = emit, ctx),
     do: Sequence.cancel(conn, Map.get(emit, "body", %{}), ctx)
 
-  defp dispatch(conn, %{"type" => "continue"} = emit, ctx),
-    do: Sequence.continue(conn, Map.get(emit, "body", %{}), ctx)
+  defp dispatch(conn, %{"type" => "continue"}, ctx), do: Sequence.continue(conn, ctx)
 
   defp dispatch(conn, %{"type" => "break"} = emit, ctx),
     do: Sequence.break(conn, Map.get(emit, "body", %{}), ctx)
@@ -85,15 +84,12 @@ defmodule Omunculus.Store.Actions do
     targets =
       Map.new(@comment_targets, fn {key, table} -> {table, Map.get(body, key)} end)
 
-    with :ok <- ensure_text(body),
+    with :ok <- Helpers.ensure_text(:comment, body, "body"),
          :ok <- ensure_target(targets),
          :ok <- Helpers.tag_error(:comment, Helpers.ensure_exist(conn, Map.to_list(targets))) do
       write_comment(conn, body, targets, ctx)
     end
   end
-
-  defp ensure_text(%{"body" => text}) when is_binary(text) and text != "", do: :ok
-  defp ensure_text(_body), do: {:error, {:comment, :no_body}}
 
   defp ensure_target(targets) do
     if Enum.any?(targets, fn {_table, id} -> not is_nil(id) end) do
@@ -121,16 +117,15 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
-  defp prompt(conn, %{"message" => text} = body) when is_binary(text) and text != "" do
-    with :ok <-
+  defp prompt(conn, body) do
+    with :ok <- Helpers.ensure_text(:prompt, body, "message"),
+         :ok <-
            Helpers.tag_error(:prompt, Helpers.ensure_exist(conn, [{:works, body["work_id"]}])),
          {:ok, reopened} <- reopen_waiting_work(conn, body["work_id"]),
-         {:ok, prompt_event} <- write_prompt(conn, body, text) do
+         {:ok, prompt_event} <- write_prompt(conn, body) do
       {:ok, Enum.reject([reopened, prompt_event], &is_nil/1)}
     end
   end
-
-  defp prompt(_conn, _body), do: {:error, {:prompt, :no_message}}
 
   defp reopen_waiting_work(_conn, nil), do: {:ok, nil}
 
@@ -152,14 +147,14 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
-  defp write_prompt(conn, body, text) do
+  defp write_prompt(conn, body) do
     prompt_id = Id.new()
 
     with :ok <-
            Query.insert(conn, :prompts, %{
              id: prompt_id,
              kind: "message",
-             body: text,
+             body: body["message"],
              run_id: nil,
              created_at: Events.now()
            }) do
@@ -173,10 +168,9 @@ defmodule Omunculus.Store.Actions do
   end
 
   defp work(conn, body, ctx) do
-    with :ok <- Helpers.ensure_no_forbidden(:work, body),
-         :ok <- Helpers.ensure_title(:work, body),
-         :ok <- Helpers.ensure_goal(:work, body),
-         :ok <- ensure_report(body),
+    with :ok <- Helpers.ensure_text(:work, body, "title"),
+         :ok <- Helpers.ensure_text(:work, body, "goal"),
+         :ok <- Helpers.ensure_text(:work, body, "report"),
          {:ok, {stage, assignee}} <-
            Helpers.tag_error(
              :work,
@@ -187,9 +181,6 @@ defmodule Omunculus.Store.Actions do
       create_root(conn, body, ctx, stage, assignee, workspace)
     end
   end
-
-  defp ensure_report(%{"report" => report}) when is_binary(report) and report != "", do: :ok
-  defp ensure_report(_body), do: {:error, {:work, :no_report}}
 
   # The root's run opens once the run that created it has ended.
   defp create_root(conn, body, ctx, stage, assignee, workspace) do

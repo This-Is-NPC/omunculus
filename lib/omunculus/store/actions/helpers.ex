@@ -1,7 +1,7 @@
 defmodule Omunculus.Store.Actions.Helpers do
   @moduledoc """
-  Shared machinery between the `Actions` modules: existence
-  checks and error tagging (spec §8.3), the `COMMENTS` insert every
+  Shared machinery between the `Actions` modules: existence and
+  non-empty text checks and error tagging (spec §8.3), the `COMMENTS` insert every
   action that writes one reuses, reopening a waiting work, a new work's
   stage and assignee from the workflow, the named agent or the depth's
   first agent, resolving its `workspace` from a given name, its parent,
@@ -11,9 +11,7 @@ defmodule Omunculus.Store.Actions.Helpers do
   """
 
   alias Omunculus.Config
-  alias Omunculus.Store.{Events, Query}
-
-  @forbidden ~w(stage agent model)
+  alias Omunculus.Store.{Events, Query, View}
 
   @spec ensure_exist(Omunculus.Store.Connection.t(), [{atom, String.t() | nil}]) ::
           :ok | {:error, term}
@@ -35,26 +33,14 @@ defmodule Omunculus.Store.Actions.Helpers do
   def tag_error(_tag, {:ok, _value} = ok), do: ok
   def tag_error(tag, {:error, reason}), do: {:error, {tag, reason}}
 
-  @spec ensure_no_forbidden(atom, map) :: :ok | {:error, {atom, {:forbidden, String.t()}}}
-  def ensure_no_forbidden(tag, body) do
-    case Enum.find(forbidden(tag), &Map.has_key?(body, &1)) do
-      nil -> :ok
-      key -> {:error, {tag, {:forbidden, key}}}
+  @doc "Refuses a body whose `key` is not a non-empty string with `{tag, :no_<key>}`."
+  @spec ensure_text(atom, map, String.t()) :: :ok | {:error, {atom, atom}}
+  def ensure_text(tag, body, key) do
+    case Map.get(body, key) do
+      text when is_binary(text) and text != "" -> :ok
+      _missing -> {:error, {tag, String.to_atom("no_" <> key)}}
     end
   end
-
-  # `work` and `delegate` may name the new work's agent; `stage_and_assignee`
-  # checks it against the TOML.
-  defp forbidden(tag) when tag in [:work, :delegate], do: @forbidden -- ["agent"]
-  defp forbidden(_tag), do: @forbidden
-
-  @spec ensure_title(atom, map) :: :ok | {:error, {atom, :no_title}}
-  def ensure_title(_tag, %{"title" => title}) when is_binary(title) and title != "", do: :ok
-  def ensure_title(tag, _body), do: {:error, {tag, :no_title}}
-
-  @spec ensure_goal(atom, map) :: :ok | {:error, {atom, :no_goal}}
-  def ensure_goal(_tag, %{"goal" => goal}) when is_binary(goal) and goal != "", do: :ok
-  def ensure_goal(tag, _body), do: {:error, {tag, :no_goal}}
 
   @spec insert_comment(Omunculus.Store.Connection.t(), String.t(), map, String.t(), map, map) ::
           :ok | {:error, term}
@@ -146,7 +132,7 @@ defmodule Omunculus.Store.Actions.Helpers do
   def fetch_work(_conn, nil), do: {:ok, nil}
 
   def fetch_work(conn, work_id),
-    do: Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+    do: View.view(conn, "work", work_id)
 
   @spec fetch_request(atom, Omunculus.Store.Connection.t(), String.t() | nil) ::
           {:ok, map} | {:error, term}
@@ -154,7 +140,7 @@ defmodule Omunculus.Store.Actions.Helpers do
 
   def fetch_request(tag, conn, request_id) do
     with :ok <- tag_error(tag, ensure_exist(conn, [{:requests, request_id}])) do
-      Query.one(conn, "SELECT * FROM requests WHERE id = ?", [request_id])
+      View.view(conn, "request", request_id)
     end
   end
 

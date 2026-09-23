@@ -22,10 +22,9 @@ defmodule Omunculus.Store.Actions.Sequence do
   alias Omunculus.Store.Actions.Helpers
   alias Omunculus.Store.{Events, Query, View}
 
-  @spec continue(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
-  def continue(conn, body, ctx) do
+  @spec continue(Omunculus.Store.Connection.t(), map) :: {:ok, map} | {:error, term}
+  def continue(conn, ctx) do
     with :ok <- ensure_context(:continue, ctx),
-         :ok <- Helpers.ensure_no_forbidden(:continue, body),
          {:ok, work} <- fetch_work(:continue, conn, ctx.work_id),
          :ok <- ensure_open(:continue, work),
          {:ok, next} <- next_step(conn, ctx.config, work) do
@@ -36,8 +35,7 @@ defmodule Omunculus.Store.Actions.Sequence do
   @spec break(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def break(conn, body, ctx) do
     with :ok <- ensure_context(:break, ctx),
-         :ok <- Helpers.ensure_no_forbidden(:break, body),
-         :ok <- ensure_body_text(:break, body),
+         :ok <- Helpers.ensure_text(:break, body, "body"),
          {:ok, work} <- fetch_work(:break, conn, ctx.work_id),
          :ok <- Helpers.ensure_not_waiting_children(:break, work) do
       apply_break(conn, ctx, body, work)
@@ -47,9 +45,8 @@ defmodule Omunculus.Store.Actions.Sequence do
   @spec delegate(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def delegate(conn, body, ctx) do
     with :ok <- ensure_context(:delegate, ctx),
-         :ok <- Helpers.ensure_no_forbidden(:delegate, body),
-         :ok <- Helpers.ensure_title(:delegate, body),
-         :ok <- Helpers.ensure_goal(:delegate, body),
+         :ok <- Helpers.ensure_text(:delegate, body, "title"),
+         :ok <- Helpers.ensure_text(:delegate, body, "goal"),
          {:ok, parent} <- fetch_work(:delegate, conn, ctx.work_id),
          child_depth = View.work_depth(conn, parent) + 1,
          {:ok, {stage, assignee}} <-
@@ -104,9 +101,6 @@ defmodule Omunculus.Store.Actions.Sequence do
        do: :ok
 
   defp ensure_context(tag, _ctx), do: {:error, {tag, :no_work}}
-
-  defp ensure_body_text(_tag, %{"body" => text}) when is_binary(text) and text != "", do: :ok
-  defp ensure_body_text(tag, _body), do: {:error, {tag, :no_body}}
 
   defp fetch_work(tag, conn, work_id) do
     case Helpers.fetch_work(conn, work_id) do

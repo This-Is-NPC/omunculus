@@ -11,7 +11,7 @@ defmodule Omunculus.Store.Actions.Inbox do
 
   @spec notify(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def notify(conn, body, ctx) do
-    with :ok <- ensure_body_text(body),
+    with :ok <- Helpers.ensure_text(:notify, body, "body"),
          :ok <- ensure_run(ctx),
          {:ok, work_id} <- resolve_work(conn, body, ctx) do
       apply_notify(conn, body, work_id, ctx)
@@ -32,9 +32,6 @@ defmodule Omunculus.Store.Actions.Inbox do
       })
     end
   end
-
-  defp ensure_body_text(%{"body" => text}) when is_binary(text) and text != "", do: :ok
-  defp ensure_body_text(_body), do: {:error, {:notify, :no_body}}
 
   defp ensure_run(%{run_id: run_id}) when not is_nil(run_id), do: :ok
   defp ensure_run(_ctx), do: {:error, {:notify, :no_run}}
