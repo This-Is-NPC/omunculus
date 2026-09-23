@@ -70,3 +70,4 @@ You are a Codex-style coding agent. Work in the repository with Bash and filesys
 
 [policy]
 assemble = "assemble"
+max_retries = 3

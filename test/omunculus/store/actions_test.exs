@@ -1127,32 +1127,6 @@ defmodule Omunculus.Store.ActionsTest do
     end
   end
 
-  describe "finish_work" do
-    test "marks the work done and reopens a parent waiting on it", %{conn: conn} do
-      {parent_id, child_id} = waiting_parent_and_child(conn, nil)
-
-      assert {:ok, event} = Store.finish_work(conn, child_id, nil)
-
-      assert event.type == "work"
-      assert event.work_id == child_id
-      assert Jason.decode!(event.body) == %{"state" => "done", "parent_id" => parent_id}
-
-      assert {:ok, child} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
-      assert child.state == "done"
-
-      assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
-      assert parent.state == "open"
-      assert parent.waiting == nil
-    end
-
-    test "a root work with no parent finishes with a nil parent_id", %{conn: conn} do
-      work_id = Fixtures.insert(conn, :works)
-
-      assert {:ok, event} = Store.finish_work(conn, work_id, nil)
-      assert Jason.decode!(event.body) == %{"state" => "done", "parent_id" => nil}
-    end
-  end
-
   describe "request action" do
     test "have does not open a request, emits only the tool event", %{conn: conn} do
       run = open_run(conn, @ceiling)

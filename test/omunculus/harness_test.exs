@@ -851,7 +851,7 @@ defmodule Omunculus.HarnessTest do
       assert gamma_output == Out.chain_failed("gamma", :not_have)
       assert_received {:chained, {:ok, "alpha"}}
 
-      assert comment_bodies(project.conn) == []
+      assert comment_bodies(project.conn) == ["The work stopped without a report after 1 run."]
 
       assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
 
@@ -862,7 +862,9 @@ defmodule Omunculus.HarnessTest do
                "tool",
                "tool",
                "model",
-               "end-run"
+               "end-run",
+               "break",
+               "tool"
              ]
     end
 
@@ -888,9 +890,19 @@ defmodule Omunculus.HarnessTest do
 
       assert {:ok, run} = Run.open(project, open(message_id, work_id))
       assert_received {:omega, {:ok, "omega"}}
-      assert Enum.map(tl(tool_calls(project.conn)), & &1["name"]) == ["omega"]
+      # The model stops without end, so the harness breaks the work.
+      assert Enum.map(tl(tool_calls(project.conn)), & &1["name"]) == ["omega", "on-break"]
       assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
-      assert Enum.map(events, & &1.type) == ["start-run", "tool", "tool", "model", "end-run"]
+
+      assert Enum.map(events, & &1.type) == [
+               "start-run",
+               "tool",
+               "tool",
+               "model",
+               "end-run",
+               "break",
+               "tool"
+             ]
     end
 
     test "an override chains restricts what the tool may chain", %{

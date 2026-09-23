@@ -6,7 +6,7 @@ and models that file names. These are shapes the file will load today. None of
 them invent a table [the TOML](config.md) does not already have.
 
 Each snippet sits on the required tables — `[execution]`, `[execution.sandbox]`,
-`[store]`, `[models]`, `[policy] assemble` — and on `[tools] paths` pointing at
+`[store]`, `[models]`, `[policy] assemble` and `max_retries` — and on `[tools] paths` pointing at
 the folders you mean to call. The snippets below omit those tables unless they change. A missing
 required table is still a refusal, not an implied default.
 
@@ -45,6 +45,7 @@ You are a Pi-style agent: compact, direct, and without shell access.
 
 [policy]
 assemble = "assemble"
+max_retries = 3
 ```
 
 `done` / `break` sit in `sequence` and act on the run's work, each with a
@@ -108,6 +109,7 @@ You are the worker. Complete the assigned work and call done with a report when 
 
 [policy]
 assemble = "assemble"
+max_retries = 3
 ```
 
 A `workflow_only` agent is parsed and ignored until a step names it. Defining
@@ -158,6 +160,7 @@ steps = [
 
 [policy]
 assemble = "assemble"
+max_retries = 3
 workflow = "delivery"
 ```
 
@@ -225,6 +228,7 @@ negotiable = ["sandbox.write"]
 
 [policy]
 assemble = "assemble"
+max_retries = 3
 mode = "auto"
 
 [policy.depth.2]
@@ -281,6 +285,7 @@ text = "global"
 
 [policy]
 assemble = "assemble"
+max_retries = 3
 workspace = "app"
 
 [workspaces.app]
@@ -347,6 +352,7 @@ negotiable = ["sandbox.write"]
 
 [policy]
 assemble = "assemble"
+max_retries = 3
 mode = "allowlist"
 ```
 
@@ -375,6 +381,7 @@ asked:
 ```toml
 [policy]
 assemble = "assemble"
+max_retries = 3
 mode = "allowlist"
 
 [agents.concierge]
@@ -570,6 +577,7 @@ An agent may name a different assemble tool than `[policy]`:
 ```toml
 [policy]
 assemble = "assemble"
+max_retries = 3
 
 [agents.concierge]
 depth = 0

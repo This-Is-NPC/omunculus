@@ -56,6 +56,10 @@ defmodule Omunculus.CLI do
     "omunculus.toml is missing [store]"
   end
 
+  def format_error({:policy, {:invalid, :max_retries}}) do
+    "omunculus.toml [policy] max_retries is required, a non-negative integer"
+  end
+
   def format_error({:execution, {:sandbox, :missing}}) do
     "omunculus.toml is missing [execution.sandbox]"
   end

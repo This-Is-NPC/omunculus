@@ -6,7 +6,8 @@ defmodule Omunculus.Store.Runs do
   is begin-then-attach for tests, `record_model/3` logs a model
   turn, `record_tools/4` logs a call and the steps it chained, each
   followed by its emits, as one transaction so a failed emit leaves no
-  stray `tool` event, `close/2` ends the run.
+  stray `tool` event, `close/2` ends the run, `break_work/3` applies a
+  `break` with the given text to a closed run's work.
   """
 
   alias Omunculus.Id
@@ -69,6 +70,15 @@ defmodule Omunculus.Store.Runs do
   @spec close(Exqlite.Sqlite3.db(), String.t()) :: {:ok, map} | {:error, term}
   def close(conn, run_id) do
     Query.transaction(conn, fn -> do_close(conn, run_id) end)
+  end
+
+  @spec break_work(Exqlite.Sqlite3.db(), map, String.t()) :: {:ok, [map]} | {:error, term}
+  def break_work(conn, run, text) do
+    ctx = %{run_id: run.id, work_id: run.work_id, author: "agent", agent: run.agent}
+
+    Query.transaction(conn, fn ->
+      Actions.run(conn, [%{"type" => "break", "body" => %{"body" => text}}], ctx)
+    end)
   end
 
   defp do_begin(conn, params) do

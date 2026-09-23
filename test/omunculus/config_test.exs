@@ -74,6 +74,25 @@ defmodule Omunculus.ConfigTest do
     assert agents["concierge"].assemble == "other"
   end
 
+  test "[policy] max_retries is required and a non-negative integer", %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """
+
+    Fixtures.write_config(dir, agents, max_retries: false)
+    assert {:error, {:policy, {:invalid, :max_retries}}} = load(dir)
+
+    for invalid <- ["-1", "1.5", ~s("2")] do
+      write_toml(dir, agents <> "\n[policy]\nmax_retries = #{invalid}\n")
+      assert {:error, {:policy, {:invalid, :max_retries}}} = load(dir)
+    end
+
+    write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\n")
+    assert {:ok, %Config{max_retries: 0}} = load(dir)
+  end
+
   test "pinned is a layer list and is absent on the default preset" do
     assert {:ok, %Config{policy: policy, agents: agents}} = Config.load(default_preset())
     assert policy.pinned == []
@@ -1408,6 +1427,9 @@ defmodule Omunculus.ConfigTest do
       [store]
       path = ".omunculus/store.sqlite3"
 
+      [policy]
+      max_retries = 0
+
       [models.fake]
       api = "module"
       module = "Omunculus.Model.Fake"
@@ -1935,6 +1957,37 @@ defmodule Omunculus.ConfigTest do
   end
 
   describe "workspace config file" do
+    test "max_retries from the inline section and from the file override policy", %{dir: dir} do
+      File.mkdir_p!(Path.join(dir, "app"))
+      File.mkdir_p!(Path.join(dir, "lib"))
+      File.write!(Path.join([dir, "lib", "omunculus.toml"]), "[policy]\nmax_retries = 5\n")
+
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [policy]
+      workspace = "app"
+      max_retries = 1
+
+      [workspaces.app]
+      root = "app"
+
+      [workspaces.app.policy]
+      max_retries = 3
+
+      [workspaces.lib]
+      root = "lib"
+      config = "omunculus.toml"
+      """)
+
+      assert {:ok, config} = load(dir)
+      assert config.max_retries == 1
+      assert {:ok, %Config{max_retries: 3}} = Config.for_workspace(config, "app")
+      assert {:ok, %Config{max_retries: 5}} = Config.for_workspace(config, "lib")
+    end
+
     test "file wins over inline timeout", %{dir: dir} do
       workspace_root = Path.join(dir, "app")
       File.mkdir_p!(workspace_root)

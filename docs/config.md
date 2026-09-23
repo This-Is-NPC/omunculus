@@ -32,6 +32,12 @@ the load fails.
 `[policy] assemble` (or `agents.<x>.assemble`) names the tool that builds
 the assembled prompt. Without it the opening of a run fails.
 
+`[policy] max_retries` is mandatory: a non-negative integer, how many
+times a work whose model stopped without `end` gets another run before
+the harness breaks it ([the cycle](cycle.md)). `[workspaces.<w>.policy]
+max_retries`, or `[policy] max_retries` in the workspace's `config` file,
+sets it for the works in that workspace.
+
 ## Catalog
 
 ```toml
@@ -93,6 +99,7 @@ names). Credentials are the JSON file, mode 0600, not the project SQLite.
 [policy]
 mode = "auto"
 assemble = "assemble"
+max_retries = 3
 
 [agents.concierge]
 depth = 0

@@ -10,8 +10,11 @@ defmodule Omunculus.Run do
   catalog before the model sees it, so the model gets each tool's
   resolved schema; an invalid override keeps the run from opening. The
   `end` action stops the model and closes the run before its action or
-  hook continuations; a model that stops by itself on an open child work
-  with no workflow at its depth closes that work.
+  hook continuations. When the model of a run on a work stops by itself
+  and the work is still open, the work gets another run with `via` =
+  `retry`, until the latest runs of the work without `end` exceed
+  `max_retries`; then the harness breaks the work with a comment saying
+  so. A run opened for a named agent is not retried.
   """
 
   alias Omunculus.{Ceiling, Config, Harness, Mcp, Project, Store}
@@ -340,51 +343,59 @@ defmodule Omunculus.Run do
     with :ok <- close_run(project, run, execution) do
       case result do
         {:ok, _text} ->
-          finish_and_follow_up(project, run, config, work, execution, true)
+          follow_up(project, run, config, work, execution, true)
 
         :ended ->
-          finish_and_follow_up(project, run, config, work, execution, false)
+          follow_up(project, run, config, work, execution, false)
 
         {:error, _reason} = error ->
-          with {:ok, _} <-
-                 finish_and_follow_up(project, run, config, work, execution, false),
+          with {:ok, _} <- follow_up(project, run, config, work, execution, false),
                do: error
       end
     end
   end
 
-  defp finish_and_follow_up(project, run, config, work, execution, ended_normally?) do
-    with :ok <- maybe_finish_work(project, config, work, run.id, execution, ended_normally?),
-         {:ok, events} <- Store.replay(project.conn, {:run, run.id}),
-         :ok <- Harness.follow_up(project, events) do
+  defp follow_up(project, run, config, work, execution, stopped?) do
+    with {:ok, events} <- Store.replay(project.conn, {:run, run.id}),
+         :ok <- Harness.follow_up(project, events),
+         :ok <- unreported(project, run, config, work, execution, stopped?) do
       {:ok, run}
     end
   end
 
-  defp maybe_finish_work(_conn, _config, nil, _run_id, _execution, _ended_normally?), do: :ok
+  # A run on a work whose model stopped by itself leaves the work open: the
+  # work gets another run, or a break once its retries reach max_retries.
+  defp unreported(_project, _run, _config, nil, _execution, _stopped?), do: :ok
+  defp unreported(_project, _run, _config, _work, _execution, false), do: :ok
 
-  defp maybe_finish_work(
-         _conn,
-         _config,
-         %{parent_id: nil},
-         _run_id,
-         _execution,
-         _ended_normally?
-       ),
-       do: :ok
-
-  defp maybe_finish_work(_conn, _config, _work, _run_id, _execution, false), do: :ok
-
-  defp maybe_finish_work(project, config, work, run_id, execution, true) do
+  defp unreported(project, run, config, work, execution, true) do
     with {:ok, current} <- fetch_work(project.conn, work.id) do
-      if current.state == "open" and
-           Config.workflow_for(config, Store.work_depth(project.conn, current)) == :off do
-        with {:ok, event} <- Store.finish_work(project.conn, work.id, run_id),
-             {:ok, _hooks} <- Harness.react(project, [event], [], execution),
-             do: :ok
-      else
-        :ok
+      case {current.state, Store.unended_runs(project.conn, work.id)} do
+        {"open", runs} when runs > config.max_retries ->
+          break_unreported(project, run, runs, execution)
+
+        {"open", runs} when runs > 0 ->
+          retry(project, work)
+
+        _reported_or_parked ->
+          :ok
       end
+    end
+  end
+
+  defp retry(project, work) do
+    opening = %{prompt_id: nil, work_id: work.id, request_id: nil, via: "retry", agent: nil}
+
+    with {:ok, _run} <- open(project, opening), do: :ok
+  end
+
+  defp break_unreported(project, run, runs, execution) do
+    text =
+      "The work stopped without a report after #{runs} #{if runs == 1, do: "run", else: "runs"}."
+
+    with {:ok, events} <- Store.break_work(project.conn, run, text),
+         {:ok, _hooks} <- Harness.react(project, events, [], execution) do
+      Harness.follow_up(project, events)
     end
   end
 end

@@ -58,3 +58,4 @@ You are a Pi-style agent: compact, direct, and without shell access. Read and ed
 
 [policy]
 assemble = "assemble"
+max_retries = 3

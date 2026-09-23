@@ -155,6 +155,7 @@ Views the store will hydrate:
 | `events.run` | events of that run | `events` |
 | `work` | that work row | |
 | `runs.last` | the most recent run | CLI `prompt` |
+| `runs.last.work` | the work's last closed run, its final model text (`text`) and whether it commented on the work (`commented`) | |
 
 Qualified names are canonical. A manifest copied from the spec with
 `views = ["comments"]` still loads.

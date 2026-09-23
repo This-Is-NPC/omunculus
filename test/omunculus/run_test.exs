@@ -900,7 +900,7 @@ defmodule Omunculus.RunTest do
 
     model = fn _assembled, _tools, call ->
       send(test_pid, {:break, call.("break", %{})})
-      {:ok, "still here"}
+      call.("end", %{})
     end
 
     Fixtures.use_model(project, model)
@@ -912,10 +912,7 @@ defmodule Omunculus.RunTest do
     assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", work_id)
 
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
-    types = Enum.map(events, & &1.type)
-    refute "break" in types
-    refute "end" in types
-    assert "model" in types
+    assert Enum.map(events, & &1.type) == ["start-run", "tool", "tool", "tool", "end", "end-run"]
 
     Project.close(project)
   end
@@ -1075,5 +1072,255 @@ defmodule Omunculus.RunTest do
     assert worker_assembled =~ "worker-text"
 
     Project.close(project)
+  end
+
+  describe "a run that stops without end" do
+    defp retry_config(dir, policy, extra \\ "") do
+      write_config(
+        dir,
+        """
+        [agents.concierge]
+        depth = 0
+        text = "concierge"
+        tools = ["comment", "end"]
+
+        [agents.worker]
+        depth = 1
+        text = "worker"
+        tools = ["comment", "end"]
+
+        [policy]
+        #{policy}
+        """ <> extra
+      )
+    end
+
+    # Replies from `steps` in order, one per run, and sends each assembled
+    # prompt to the test; the last step repeats.
+    defp scripted(project, steps) do
+      test_pid = self()
+      {:ok, script} = Agent.start_link(fn -> steps end)
+
+      Fixtures.use_model(project, fn assembled, _tools, call ->
+        send(test_pid, {:assembled, assembled})
+
+        step =
+          Agent.get_and_update(script, fn
+            [only] -> {only, [only]}
+            [step | rest] -> {step, rest}
+          end)
+
+        step.(call)
+      end)
+    end
+
+    defp idle(text), do: fn _call -> {:ok, text} end
+    defp ending, do: fn call -> call.("end", %{}) end
+
+    defp runs_of(project, work_id) do
+      {:ok, runs} =
+        Query.all(
+          project.conn,
+          "SELECT runs.* FROM runs JOIN events ON events.id = runs.event_id WHERE runs.work_id = ? ORDER BY events.sequence",
+          [work_id]
+        )
+
+      runs
+    end
+
+    defp breaks_of(project, work_id) do
+      {:ok, events} = Store.replay(project.conn, {:work, work_id})
+      for %{type: "break", body: body} <- events, do: Jason.decode!(body)["body"]
+    end
+
+    test "opens a retry run on the same work whose prompt has the last run's text", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      scripted(project, [idle("first try"), ending()])
+
+      assert {:ok, _run} = Run.open(project, open(nil, work_id))
+
+      assert [first, retry] = runs_of(project, work_id)
+      assert first.via == nil
+      assert retry.via == "retry"
+      assert_received {:assembled, _first}
+      assert_received {:assembled, assembled}
+      assert assembled =~ "## Last run\nfirst try"
+      refute assembled =~ "## Last comment"
+      assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", work_id)
+      assert breaks_of(project, work_id) == []
+
+      Project.close(project)
+    end
+
+    test "the retry prompt keeps the last comment when the stopped run commented", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+
+      commenting = fn call ->
+        {:ok, ""} = call.("comment", %{"body" => "halfway"})
+        {:ok, "stopped"}
+      end
+
+      scripted(project, [commenting, ending()])
+
+      assert {:ok, _run} = Run.open(project, open(nil, work_id))
+
+      assert_received {:assembled, _first}
+      assert_received {:assembled, assembled}
+      assert assembled =~ "## Last comment\nhalfway"
+      refute assembled =~ "## Last run"
+
+      Project.close(project)
+    end
+
+    test "after max_retries retries a child is broken and its waiting parent's run opens", %{
+      dir: dir
+    } do
+      retry_config(dir, "max_retries = 2")
+      project = open_project(dir)
+      parent_id = Fixtures.insert(project.conn, :works, %{state: "waiting", waiting: "child"})
+
+      child_id =
+        Fixtures.insert(project.conn, :works, %{parent_id: parent_id, assignee: "worker"})
+
+      Fixtures.use_model(project, fn assembled, _tools, call ->
+        if String.starts_with?(assembled, "worker"), do: {:ok, "idle"}, else: call.("end", %{})
+      end)
+
+      assert {:ok, _run} = Run.open(project, open(nil, child_id))
+
+      assert Enum.map(runs_of(project, child_id), & &1.via) == [nil, "retry", "retry"]
+
+      assert breaks_of(project, child_id) == [
+               "The work stopped without a report after 3 runs."
+             ]
+
+      assert {:ok, %{state: "waiting"}} = Store.view(project.conn, "work", child_id)
+      assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", parent_id)
+      assert [_parent_run] = runs_of(project, parent_id)
+
+      Project.close(project)
+    end
+
+    test "a root work over the limit is only parked", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      scripted(project, [idle("idle")])
+
+      assert {:ok, _run} = Run.open(project, open(nil, work_id))
+
+      assert length(runs_of(project, work_id)) == 2
+      assert breaks_of(project, work_id) == ["The work stopped without a report after 2 runs."]
+
+      assert {:ok, %{state: "waiting", waiting_from: "concierge"}} =
+               Store.view(project.conn, "work", work_id)
+
+      Project.close(project)
+    end
+
+    test "max_retries = 0 breaks at once", %{dir: dir} do
+      retry_config(dir, "max_retries = 0")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      scripted(project, [idle("idle")])
+
+      assert {:ok, _run} = Run.open(project, open(nil, work_id))
+
+      assert [_only] = runs_of(project, work_id)
+      assert breaks_of(project, work_id) == ["The work stopped without a report after 1 run."]
+
+      Project.close(project)
+    end
+
+    test "a run ending with end starts the count over", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      scripted(project, [idle("one"), ending(), idle("two"), ending()])
+
+      assert {:ok, _run} = Run.open(project, open(nil, work_id))
+      assert {:ok, _run} = Run.open(project, open(nil, work_id))
+
+      assert Enum.map(runs_of(project, work_id), & &1.via) == [nil, "retry", nil, "retry"]
+      assert breaks_of(project, work_id) == []
+
+      Project.close(project)
+    end
+
+    test "the work's workspace overrides max_retries", %{dir: dir} do
+      File.mkdir_p!(Path.join(dir, "main"))
+      File.mkdir_p!(Path.join(dir, "other"))
+
+      retry_config(dir, ~s(max_retries = 0\nworkspace = "main"), """
+
+      [workspaces.main]
+      root = "main"
+
+      [workspaces.other]
+      root = "other"
+
+      [workspaces.other.policy]
+      max_retries = 1
+      """)
+
+      project = open_project(dir)
+      main_id = Fixtures.insert(project.conn, :works, %{workspace: "main"})
+      other_id = Fixtures.insert(project.conn, :works, %{workspace: "other"})
+      scripted(project, [idle("idle")])
+
+      assert {:ok, _run} = Run.open(project, open(nil, main_id))
+      assert {:ok, _run} = Run.open(project, open(nil, other_id))
+
+      assert length(runs_of(project, main_id)) == 1
+      assert length(runs_of(project, other_id)) == 2
+
+      Project.close(project)
+    end
+
+    test "a work left waiting or done by its run is not retried", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+
+      for state <- ["waiting", "done"] do
+        work_id = Fixtures.insert(project.conn, :works)
+
+        scripted(project, [
+          fn _call ->
+            :ok =
+              Query.exec(project.conn, "UPDATE works SET state = ? WHERE id = ?", [state, work_id])
+
+            {:ok, "left #{state}"}
+          end
+        ])
+
+        assert {:ok, _run} = Run.open(project, open(nil, work_id))
+
+        assert [_only] = runs_of(project, work_id)
+        assert breaks_of(project, work_id) == []
+      end
+
+      Project.close(project)
+    end
+
+    test "the run opened by send and a run for a named agent are not retried", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      scripted(project, [idle("idle")])
+
+      assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+      assert {:ok, [_send_run]} = Query.all(project.conn, "SELECT * FROM runs")
+
+      assert {:ok, _run} =
+               Run.open(project, %{open(nil, work_id) | agent: "concierge"})
+
+      assert [_only] = runs_of(project, work_id)
+
+      Project.close(project)
+    end
   end
 end

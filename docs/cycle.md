@@ -13,6 +13,8 @@ event
       break, delegate, request, reply grant)
         → open the next run (agent and ceiling from the TOML, now)
     → hooks of end (they see this run closed and the next one opened)
+    → if the model stopped by itself on a work still open: a retry run of
+      that work, or a break once max_retries is used up
 ```
 
 `end` is the only action that ends a run. `delegate`, `request`,
@@ -63,9 +65,8 @@ each tool
     if end: nothing after it in this run executes
 close (end, or the model stopped)
     EVENTS(end-run), status = done
-    a child work still open, with no workflow at its depth, whose model
-    stopped without end is closed
     next runs the actions asked for, then hooks of end
+    the model stopped by itself on a work still open: retry, or break
 ```
 
 The TOML is read again at this opening. `RUNS.tools` is a snapshot of the
@@ -74,7 +75,22 @@ tool named, the opening fails. An empty assemble output fails. The next
 run does not reread the old assembled prompt; assemble runs again.
 
 `via` on the run is the `name` of the tool or hook that opened it
-(`send`, `continue`, `delegate`, `on-request`, …).
+(`send`, `continue`, `delegate`, `on-request`, …), or `retry`.
+
+## A run without a report
+
+A run whose model stops by itself, without `end`, leaves its work as it
+was. If the run was on a work and that work is still `open`, the harness
+opens another run of the same work with `via = retry`. The retries of a
+work are its most recent closed runs, in a row, without `end`, minus the
+first; a run that ends with `end` starts the count over. Once the retries
+reach `max_retries` (`[policy]`, or the work's workspace), the harness
+does not open another run: it applies `break` to the work with the
+comment `The work stopped without a report after N runs.`, which parks it
+and wakes a parent waiting on it, whose run opens. A root work is only
+parked. The run opened by `send` has no work and is never retried; a run
+opened for a named agent (a hook's `agent`, a request's arbiter) is not
+retried either; nor is a work left `waiting` or `done` by its run.
 
 ## Assemble
 
@@ -83,7 +99,9 @@ The default `assemble` tool joins, in this order:
 ```text
 agent text
 → message of this opening, if any
-→ if there is a work: title + goal + last comment
+→ if there is a work: title + goal + last comment, or, when the work's
+  last closed run commented nothing on it, that run's final model text
+  under `## Last run`
 → if there is a request: header + comments with that request_id
 → if the opening carried inbox_id: comments with that inbox_id
 → if the run has the work card: the agents a new work may name

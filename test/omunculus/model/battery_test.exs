@@ -81,7 +81,7 @@ defmodule Omunculus.Model.BatteryTest do
   end
 
   test "does not delegate again once its last comment says it delegated" do
-    names = ~w(work done)
+    names = ~w(work comment)
 
     assembled =
       Enum.join(
@@ -98,6 +98,26 @@ defmodule Omunculus.Model.BatteryTest do
 
     assert {:ok, "nothing to do"} = complete(assembled, tools(names), call)
     assert calls(agent) == []
+  end
+
+  test "reviews a delegated work that came back with done" do
+    names = ~w(work done)
+
+    assembled =
+      Enum.join(
+        [
+          "You are the manager.",
+          "## Work\nCount to 5",
+          "## Last comment\ndelegated",
+          tools_section(names)
+        ],
+        "\n\n"
+      )
+
+    {agent, call} = recorder()
+
+    assert {:ok, "reviewed"} = complete(assembled, tools(names), call)
+    assert calls(agent) == [{"done", %{"report" => "reviewed"}}]
   end
 
   test "rule 2 without done: counts to 5 with counter, stopping as soon as it reaches 5, then comments and notifies" do

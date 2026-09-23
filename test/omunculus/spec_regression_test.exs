@@ -48,7 +48,7 @@ defmodule Omunculus.SpecRegressionTest do
 
     File.write!(
       Path.join(dir, "omunculus.toml"),
-      ensure_assemble(@config <> "\n" <> Fixtures.tools_table(dir))
+      ensure_policy(@config <> "\n" <> Fixtures.tools_table(dir))
     )
 
     {:ok, project} = Fixtures.open_project(dir)
@@ -68,16 +68,20 @@ defmodule Omunculus.SpecRegressionTest do
         overrides
       )
 
-  defp ensure_assemble(body) do
-    if String.contains?(body, "assemble =") do
-      body
-    else
-      if String.contains?(body, "[policy]") do
-        String.replace(body, "[policy]", "[policy]\nassemble = \"assemble\"", global: false)
-      else
-        body <> "\n[policy]\nassemble = \"assemble\"\n"
+  defp ensure_policy(body) do
+    Enum.reduce([{"assemble", ~s("assemble")}, {"max_retries", "0"}], body, fn {key, value},
+                                                                               body ->
+      cond do
+        String.contains?(body, key <> " =") ->
+          body
+
+        String.contains?(body, "[policy]") ->
+          String.replace(body, "[policy]", "[policy]\n#{key} = #{value}", global: false)
+
+        true ->
+          body <> "\n[policy]\n#{key} = #{value}\n"
       end
-    end
+    end)
   end
 
   defp write_config(project, text) do
@@ -86,7 +90,7 @@ defmodule Omunculus.SpecRegressionTest do
         do: text,
         else: text <> "\n" <> Fixtures.tools_table(project.dir)
 
-    File.write!(Path.join(project.dir, "omunculus.toml"), ensure_assemble(body))
+    File.write!(Path.join(project.dir, "omunculus.toml"), ensure_policy(body))
   end
 
   defp hook(project, name, event, emits \\ [], agent \\ nil) do
@@ -486,10 +490,7 @@ defmodule Omunculus.SpecRegressionTest do
     Fixtures.use_model(p, fn assembled, _, call ->
       cond do
         not String.starts_with?(assembled, "concierge") ->
-          {:ok, "child done"}
-
-        assembled =~ "still here" ->
-          {:ok, "child is back"}
+          call.("end", %{})
 
         true ->
           assert {:ok, _} =
@@ -528,11 +529,11 @@ defmodule Omunculus.SpecRegressionTest do
              Query.one(p.conn, "SELECT * FROM events WHERE id = ?", [child_run.event_id])
 
     assert parent_end.sequence < child_start.sequence
-    assert {:ok, %{state: "done"}} = Store.view(p.conn, "work", child.id)
-    assert {:ok, %{state: "open"}} = Store.view(p.conn, "work", parent)
+    assert {:ok, %{state: "open"}} = Store.view(p.conn, "work", child.id)
+    assert {:ok, %{state: "waiting"}} = Store.view(p.conn, "work", parent)
   end
 
-  test "a child that ends with done or break is not closed a second time",
+  test "a child that ends with done or break is not retried",
        %{project: p} do
     write_config(
       p,
@@ -561,10 +562,8 @@ defmodule Omunculus.SpecRegressionTest do
       assert {:ok, %{state: state}} = Store.view(p.conn, "work", child)
       assert state == if(action == "done", do: "done", else: "waiting")
 
-      assert {:ok, []} =
-               Query.all(p.conn, "SELECT * FROM events WHERE type = 'work' AND work_id = ?", [
-                 child
-               ])
+      assert {:ok, [_one_run]} =
+               Query.all(p.conn, "SELECT * FROM runs WHERE work_id = ?", [child])
     end
   end
 

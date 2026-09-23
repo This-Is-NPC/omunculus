@@ -8,9 +8,10 @@ defmodule Omunculus.Model.Battery do
   delegating one floor down with `work` when it still cannot count and
   has not already (marked by its own "delegated" report, so a later
   reopening of the same work does not delegate again), reviewing a
-  finished count on the next opening, and reacting as an observer when
-  addressed as one. It concludes a count or a review with `done` when it
-  has the card; without it, it comments a count with `comment`.
+  finished count or a delegated work that came back on the next opening,
+  and reacting as an observer when addressed as one. It concludes a count
+  or a review with `done` when it has the card; without it, it comments a
+  count with `comment`.
   """
 
   @counted "counted to 5"
@@ -87,7 +88,8 @@ defmodule Omunculus.Model.Battery do
 
   defp reviewable?(comment, cards),
     do:
-      is_binary(comment) and String.contains?(comment, @counted) and
+      is_binary(comment) and
+        (String.contains?(comment, @counted) or String.contains?(comment, @delegated)) and
         MapSet.member?(cards, "done")
 
   defp delegated?(comment), do: is_binary(comment) and String.contains?(comment, @delegated)

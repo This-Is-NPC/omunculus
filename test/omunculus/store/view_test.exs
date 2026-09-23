@@ -255,6 +255,77 @@ defmodule Omunculus.Store.ViewTest do
     assert {:error, {:unknown_view, "nope"}} = View.view(conn, "nope", "id")
   end
 
+  defp closed_run(conn, work_id, events) do
+    {:ok, run} =
+      Omunculus.Store.open_run(conn, %{
+        prompt_id: nil,
+        agent: "concierge",
+        depth: 0,
+        ceiling: %{have: [], askable: [], sealed: [], blocked: [], uncited: "askable"},
+        execution: %{"id" => "execution-policy"},
+        assembled: "assembled",
+        work_id: work_id,
+        via: nil,
+        request_id: nil
+      })
+
+    Enum.each(events, fn
+      {:model, text} ->
+        {:ok, _} = Omunculus.Store.record_model(conn, run.id, text)
+
+      :comment ->
+        Fixtures.insert(conn, :comments, %{work_id: work_id, run_id: run.id})
+
+      :end ->
+        {:ok, _} =
+          Omunculus.Store.Actions.Sequence.end_run(conn, %{run_id: run.id, work_id: work_id})
+    end)
+
+    {:ok, _} = Omunculus.Store.close_run(conn, run.id)
+    run
+  end
+
+  describe "runs of a work" do
+    test "runs.last.work is the last closed run with its final text and no comment", %{
+      conn: conn
+    } do
+      work_id = Fixtures.insert(conn, :works)
+      closed_run(conn, work_id, [:comment, :end])
+      run = closed_run(conn, work_id, [{:model, "first"}, {:model, "final"}])
+
+      assert {:ok, last} = View.view(conn, "runs.last.work", work_id)
+      assert last.id == run.id
+      assert last.text == "final"
+      assert last.commented == false
+    end
+
+    test "runs.last.work says when that run commented on the work", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      closed_run(conn, work_id, [{:model, "done"}, :comment])
+
+      assert {:ok, %{commented: true, text: "done"}} = View.view(conn, "runs.last.work", work_id)
+    end
+
+    test "runs.last.work is nil for a work without closed runs", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+
+      assert {:ok, nil} = View.view(conn, "runs.last.work", work_id)
+    end
+
+    test "unended_runs counts the latest runs in a row without end", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      assert View.unended_runs(conn, work_id) == 0
+
+      closed_run(conn, work_id, [])
+      closed_run(conn, work_id, [:end])
+      assert View.unended_runs(conn, work_id) == 0
+
+      closed_run(conn, work_id, [:comment])
+      closed_run(conn, work_id, [])
+      assert View.unended_runs(conn, work_id) == 2
+    end
+  end
+
   describe "runs.last" do
     test "returns the newest started_at, then id", %{conn: conn} do
       older = Fixtures.insert(conn, :runs, %{started_at: "2026-01-01T00:00:00Z"})

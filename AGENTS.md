@@ -16,9 +16,9 @@ The core is `lib/omunculus/`. Read these modules first, in this order.
 | --- | --- |
 | `Omunculus.CLI` | Entry point. `omunculus <name> [--key value]` dispatches a tool with trigger `cli`, then hands the resulting events to the harness. Reads `OMUNCULUS_PROJECT` and `OMUNCULUS_MODEL` from the environment. |
 | `Omunculus.Project` | Opens `<project>/.omunculus/store.sqlite3` and holds the connection. |
-| `Omunculus.Config` | Loads and validates `omunculus.toml`: policy (including `assemble`), depth layers, workspaces, agents, workflows (each layer with its per-tool `overrides`), MCP servers and the required `[execution]` table (including `resources`). Also rewrites the file for permanent grants. |
+| `Omunculus.Config` | Loads and validates `omunculus.toml`: policy (including `assemble` and the required `max_retries`), depth layers, workspaces, agents, workflows (each layer with its per-tool `overrides`), MCP servers and the required `[execution]` table (including `resources`). Also rewrites the file for permanent grants. |
 | `Omunculus.Harness` | Discovers the catalog, checks the trigger, hydrates the views a manifest declares, invokes the tool and the steps it chains, records `EVENTS(tool)` for each, and applies all their emitted actions in one transaction. `end` is the only event that ends a run. Hooks of every other event run immediately; hooks of `end` wait until `follow_up/2` has opened the next run. |
-| `Omunculus.Run` | Opens one run: resolves the agent from the workflow stage, the work's assignee or the depth, mounts the ceiling, builds the execution policy, begins the run, dispatches the `assemble` tool, attaches `PROMPTS(assembled)`, drives the model until it calls `end` or stops, closes the run. |
+| `Omunculus.Run` | Opens one run: resolves the agent from the workflow stage, the work's assignee or the depth, mounts the ceiling, builds the execution policy, begins the run, dispatches the `assemble` tool, attaches `PROMPTS(assembled)`, drives the model until it calls `end` or stops, closes the run, then retries or breaks a work whose model stopped without `end`. |
 | `Omunculus.Ceiling` | Intersects the policy, workspace, depth, agent and stage layers into the effective tool set of a run and classifies a name as have, askable, sealed or blocked. `pinned` intersects the same way and marks which effective tools become cards when `tool_search` is present. The same layers resolve the run's per-tool `overrides`, the most specific layer winning per key; the snapshot carries them. |
 | `Omunculus.Store` and `Omunculus.Store.*` | The only code that touches SQL. `View` reads cuts of the tables. `Actions` applies emits (`comment`, `request`, `reply`, `work`, `delegate`, `continue`, `break`, `end`, `notify`, `prompt`, `compact`, ...). `Runs` and `Events` write the run lifecycle; `Runs.record_tools` records a call and its chained steps as one transaction. `Schema` creates the seven tables. |
 | `Omunculus.Tool.Catalog`, `Manifest`, `Overrides`, `Invoke` | Discover `tool.toml` / `hook.toml` folders and MCP servers, parse manifests (including `chains`, `then` and named `schemas`), apply a run's `overrides` (`then`, `chains`, `schema`) to the catalog, and call a tool either as an Elixir module or as an external command fed JSON on stdin. `Manifest.card/1` is `- name: description [tags: a, b]`; no tags, no suffix. |
@@ -41,6 +41,8 @@ omunculus send "text"
       until the model calls end (EVENTS(end)) or stops (EVENTS(model))
       EVENTS(end-run), RUNS.status = done
   → follow_up opens the runs the actions asked for, then runs the hooks of end
+  → a model that stopped without end on a work still open: a run with
+    via = retry on that work, or a break once [policy] max_retries is used up
 ```
 
 ### Configuration

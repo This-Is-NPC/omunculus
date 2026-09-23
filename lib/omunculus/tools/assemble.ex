@@ -1,7 +1,9 @@
 defmodule Omunculus.Tools.Assemble do
   @moduledoc """
   Builtin `assemble` tool: builds the assembled prompt of a run from
-  the hydrated views: the work's title and goal, its last comment, the
+  the hydrated views: the work's title and goal, its last comment, or the
+  final model text of its last run when that run commented nothing on it
+  (`runs.last.work`), the
   agents the `agents` view says a new work may name when the run has the
   `work` card, and the cards, which follow `pinned` on the catalog view.
   Inbox is included only when the opening carried `inbox_id`.
@@ -18,7 +20,7 @@ defmodule Omunculus.Tools.Assemble do
       [String.trim(text)] ++
         message_section(view["prompt"]) ++
         work_section(view["work"]) ++
-        comment_section(last_comment(view["comments.work"])) ++
+        last_section(view["runs.last.work"], view["comments.work"]) ++
         request_section(view["request"], view["comments.request"]) ++
         inbox_section(view, args) ++
         agents_section(view["agents"] || [], view["catalog"] || []) ++
@@ -27,17 +29,18 @@ defmodule Omunculus.Tools.Assemble do
     Out.ok(Enum.join(sections, "\n\n"))
   end
 
-  defp last_comment(nil), do: nil
-  defp last_comment(comments), do: List.last(comments)
+  defp last_section(%{commented: false, text: text}, _comments) when is_binary(text),
+    do: ["## Last run\n#{text}"]
+
+  defp last_section(_run, nil), do: []
+  defp last_section(_run, []), do: []
+  defp last_section(_run, comments), do: ["## Last comment\n#{List.last(comments).body}"]
 
   defp message_section(nil), do: []
   defp message_section(message), do: ["## Message\n#{message.body}"]
 
   defp work_section(nil), do: []
   defp work_section(work), do: ["## Work\n#{work.title}", "## Goal\n#{work.goal}"]
-
-  defp comment_section(nil), do: []
-  defp comment_section(comment), do: ["## Last comment\n#{comment.body}"]
 
   defp inbox_section(view, args) do
     case Map.get(args, "inbox_id") do

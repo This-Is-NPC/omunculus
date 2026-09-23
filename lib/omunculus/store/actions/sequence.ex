@@ -10,9 +10,6 @@ defmodule Omunculus.Store.Actions.Sequence do
   is the first stage's agent or the depth's first agent. Those three
   need a work already linked to the run. `end` appends the `end` event
   that ends the run and needs only the run.
-  `finish_work/3` is the harness-side counterpart of `continue`'s last
-  stage for a work still open after its model stopped without `end`, with
-  workflow off.
   """
 
   alias Omunculus.Config
@@ -73,21 +70,6 @@ defmodule Omunculus.Store.Actions.Sequence do
       work_id: ctx.work_id,
       body: "{}"
     })
-  end
-
-  @spec finish_work(Exqlite.Sqlite3.db(), String.t(), String.t()) :: {:ok, map} | {:error, term}
-  def finish_work(conn, work_id, run_id) do
-    Query.transaction(conn, fn ->
-      with {:ok, work} <- fetch_work(:finish, conn, work_id),
-           {:ok, parent_id} <- close_work(conn, work) do
-        Events.append(conn, %{
-          type: "work",
-          run_id: run_id,
-          work_id: work_id,
-          body: Jason.encode!(%{state: "done", parent_id: parent_id})
-        })
-      end
-    end)
   end
 
   defp ensure_context(_tag, %{run_id: run_id, work_id: work_id})

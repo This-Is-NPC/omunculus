@@ -378,7 +378,7 @@ defmodule Omunculus.Harness do
     end
   end
 
-  @work_scoped_views ~w(work comments.work inbox.work)
+  @work_scoped_views ~w(work comments.work inbox.work runs.last.work)
 
   defp resolve_view_id(name, _run_id, work_id, _request_id) when name in @work_scoped_views do
     if work_id, do: {:ok, work_id}, else: :skip
@@ -758,7 +758,7 @@ defmodule Omunculus.Harness do
   end
 
   defp advance(project, _catalog, %{type: "work"} = event, via, :actions) do
-    with :ok <- open_finished_work_run(project, event, via), do: {:ok, via}
+    with :ok <- open_root_run(project, event, via), do: {:ok, via}
   end
 
   defp advance(_project, _catalog, _event, via, _phase), do: {:ok, via}
@@ -844,18 +844,12 @@ defmodule Omunculus.Harness do
     end
   end
 
-  defp open_finished_work_run(project, event, via) do
+  defp open_root_run(project, event, via) do
     case Jason.decode!(event.body) do
       %{"start" => true} ->
         open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via))
 
-      %{"state" => "done", "parent_id" => parent_id} when not is_nil(parent_id) ->
-        open_run(
-          project,
-          %{prompt_id: nil, work_id: parent_id, request_id: nil, via: nil, agent: nil}
-        )
-
-      _no_parent_to_wake ->
+      _not_a_new_root ->
         :ok
     end
   end

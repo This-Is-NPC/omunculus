@@ -96,6 +96,26 @@ defmodule Omunculus.Tools.AssembleTest do
     refute output =~ "first note"
   end
 
+  test "a last run that commented nothing replaces the last comment with its final text" do
+    view = %{
+      "work" => %{title: "Fix the parser", goal: "the parser accepts trailing commas"},
+      "comments.work" => [%{body: "last note"}],
+      "catalog" => []
+    }
+
+    silent = Map.put(view, "runs.last.work", %{commented: false, text: "gave up"})
+
+    commented = Map.put(view, "runs.last.work", %{commented: true, text: "noted"})
+
+    output = Assemble.run(%{@input | view: silent})["output"]
+    assert output =~ "## Goal\nthe parser accepts trailing commas\n\n## Last run\ngave up"
+    refute output =~ "## Last comment"
+
+    output = Assemble.run(%{@input | view: commented})["output"]
+    assert output =~ "## Last comment\nlast note"
+    refute output =~ "## Last run"
+  end
+
   test "inbox appears only when args carry inbox_id, after request" do
     view = %{
       "prompt" => %{body: "hi"},

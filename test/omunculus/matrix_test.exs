@@ -190,26 +190,29 @@ defmodule Omunculus.MatrixTest do
     work
   end
 
-  defp continue_events(conn) do
-    assert {:ok, events} = Store.replay(conn, :project)
+  defp continue_events(conn, work) do
+    assert {:ok, events} = Store.replay(conn, {:work, work.id})
     events |> Enum.filter(&(&1.type == "continue")) |> Enum.map(&Jason.decode!(&1.body))
   end
 
   defp assert_counted_to_five(_dir, conn) do
     assert counter_value(conn) == "5"
+    assert {:ok, []} = Query.all(conn, "SELECT * FROM runs WHERE via = 'retry'")
     counted_work(conn)
   end
 
   defp assert_workflow_on(conn, work) do
     assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work.id])
     assert work.state == "done"
-    assert [%{"to" => "review"}, %{"to" => nil}] = continue_events(conn)
+    assert [%{"to" => "review"}, %{"to" => nil}] = continue_events(conn, work)
   end
 
   defp assert_workflow_off(conn, work) do
     assert work.state == "done"
     parent_id = work.parent_id
-    assert [%{"from" => nil, "to" => nil, "parent_id" => ^parent_id}] = continue_events(conn)
+
+    assert [%{"from" => nil, "to" => nil, "parent_id" => ^parent_id}] =
+             continue_events(conn, work)
   end
 
   defp assert_observer_reacted(conn) do
@@ -227,7 +230,7 @@ defmodule Omunculus.MatrixTest do
              Query.all(conn, "SELECT * FROM runs WHERE agent = 'worker' AND depth = '1'")
 
     assert {:ok, [parent]} = Query.all(conn, "SELECT * FROM works WHERE parent_id IS NULL")
-    assert parent.state == "open"
+    assert parent.state == "done"
 
     assert {:ok, parent_runs} =
              Query.all(conn, "SELECT * FROM runs WHERE work_id = ?", [parent.id])
@@ -250,7 +253,7 @@ defmodule Omunculus.MatrixTest do
              Query.one(conn, "SELECT * FROM works WHERE id = ?", [manager_work.parent_id])
 
     assert root.parent_id == nil
-    assert root.state == "open"
+    assert root.state == "done"
   end
 
   test "D0-H0-W0", %{dir: dir} do

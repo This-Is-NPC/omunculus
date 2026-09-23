@@ -5,10 +5,12 @@ defmodule Omunculus.Store.View do
   unread `inbox` list with each row's earliest comment (spec §3.6), the
   unread notifications of one work (`"inbox.work"`), the comments of
   one inbox entry, oldest first (`"comments.inbox"`), the most recently
-  started run (`"runs.last"`), the depth of a work by walking
-  `parent_id`, plus replay of `events` for a project, run, work,
-  request, or inbox scope (spec §4). Never executes anything against
-  the store.
+  started run (`"runs.last"`), the last closed run of a work with its
+  final model text and whether it commented on the work
+  (`"runs.last.work"`), how many of a work's latest closed runs in a row
+  lack `end`, the depth of a work by walking `parent_id`, plus replay of
+  `events` for a project, run, work, request, or inbox scope (spec §4).
+  Never executes anything against the store.
   """
 
   alias Omunculus.Store.Query
@@ -24,6 +26,12 @@ defmodule Omunculus.Store.View do
   (SELECT body FROM comments
     WHERE comments.inbox_id = inbox.id
     ORDER BY created_at, id LIMIT 1) AS body
+  """
+
+  @closed_runs """
+  FROM runs JOIN events AS start ON start.id = runs.event_id
+  WHERE runs.work_id = ? AND runs.status = 'done'
+  ORDER BY start.sequence DESC
   """
 
   @replay_columns %{run: :run_id, work: :work_id, request: :request_id, inbox: :inbox_id}
@@ -67,6 +75,26 @@ defmodule Omunculus.Store.View do
 
   def view(conn, "runs.last", _id) do
     Query.one(conn, "SELECT * FROM runs ORDER BY started_at DESC, id DESC LIMIT 1")
+  end
+
+  def view(conn, "runs.last.work", work_id) do
+    with {:ok, run} <-
+           Query.one(
+             conn,
+             """
+             SELECT runs.*,
+               (SELECT body FROM events
+                 WHERE events.run_id = runs.id AND events.type = 'model'
+                 ORDER BY sequence DESC LIMIT 1) AS text,
+               EXISTS (SELECT 1 FROM comments
+                 WHERE comments.run_id = runs.id AND comments.work_id = runs.work_id) AS commented
+             #{@closed_runs}
+             LIMIT 1
+             """,
+             [work_id]
+           ) do
+      {:ok, run && %{run | commented: run.commented == 1}}
+    end
   end
 
   def view(conn, "request", id) do
@@ -117,6 +145,23 @@ defmodule Omunculus.Store.View do
   def work_depth(conn, %{parent_id: parent_id}) do
     {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
     1 + work_depth(conn, parent)
+  end
+
+  @doc "The number of the most recent closed runs of a work, in a row, without `end`."
+  @spec unended_runs(Exqlite.Sqlite3.db(), String.t()) :: non_neg_integer
+  def unended_runs(conn, work_id) do
+    {:ok, runs} =
+      Query.all(
+        conn,
+        """
+        SELECT EXISTS (SELECT 1 FROM events
+          WHERE events.run_id = runs.id AND events.type = 'end') AS ended
+        #{@closed_runs}
+        """,
+        [work_id]
+      )
+
+    Enum.count(Enum.take_while(runs, &(&1.ended == 0)))
   end
 
   @spec replay(Exqlite.Sqlite3.db(), :project | {:run | :work | :request | :inbox, String.t()}) ::

@@ -205,4 +205,30 @@ defmodule Omunculus.Store.RunsTest do
     assert {:ok, events} = Omunculus.Store.replay(conn, {:run, run.id})
     assert Enum.map(events, & &1.type) == ["start-run", "model", "tool", "end-run"]
   end
+
+  test "break_work comments the text, parks the run's work and wakes its parent", %{conn: conn} do
+    parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
+    child_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
+    {:ok, run} = Runs.open(conn, %{open_params(nil) | work_id: child_id})
+    {:ok, _} = Runs.close(conn, run.id)
+
+    assert {:ok, [event]} = Runs.break_work(conn, run, "stopped")
+
+    assert event.type == "break"
+    assert event.run_id == run.id
+    assert Jason.decode!(event.body) == %{"body" => "stopped", "parent_id" => parent_id}
+
+    assert {:ok, child} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
+    assert child.state == "waiting"
+    assert child.waiting_from == "concierge"
+
+    assert {:ok, [comment]} =
+             Query.all(conn, "SELECT * FROM comments WHERE work_id = ?", [child_id])
+
+    assert comment.body == "stopped"
+    assert comment.run_id == run.id
+
+    assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+    assert parent.state == "open"
+  end
 end

@@ -184,6 +184,8 @@ defmodule Omunculus.Tools.WorkTest do
           other -> on_root.(other, call)
         end
 
+        # A run that did not end above ends here, so no work is retried.
+        call.("end", %{})
         {:ok, "idle"}
       end
     end
@@ -325,6 +327,9 @@ defmodule Omunculus.Tools.WorkTest do
               %{"title" => "A2", "goal" => "Goal A2"}
             ])
 
+          {"alpha", "sub"}, call ->
+            call.("done", %{"report" => "merged"})
+
           {"gamma", _comment}, call ->
             call.("done", %{"report" => "leaf"})
 
@@ -345,9 +350,11 @@ defmodule Omunculus.Tools.WorkTest do
       assert Enum.all?(grandchildren, &(&1.assignee == "gamma" and &1.state == "done"))
       assert Enum.all?(grandchildren, &(Store.work_depth(project.conn, &1) == 2))
 
-      assert ["sub"] =
+      assert ["sub", "merged"] =
                project
-               |> all("SELECT body FROM comments WHERE work_id = ?", [child.id])
+               |> all("SELECT body FROM comments WHERE work_id = ? ORDER BY created_at, id", [
+                 child.id
+               ])
                |> Enum.map(& &1.body)
 
       Project.close(project)
