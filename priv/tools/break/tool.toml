@@ -2,14 +2,16 @@ name = "break"
 kind = "tool"
 shape = "simple"
 triggers = ["model"]
-description = "Parks the work with a comment and hands it back to a parent waiting on it. The sequence does not advance."
+description = "Parks the work with the report as a comment, hands it back to a parent waiting on it and ends the run. The sequence does not advance."
 tags = ["sequence", "work"]
 groups = ["sequence"]
 module = "Omunculus.Tools.Break"
+chains = ["end"]
+then = ["end"]
 
 [parameters]
 type = "object"
-required = ["body"]
+required = ["report"]
 
-[parameters.properties.body]
+[parameters.properties.report]
 type = "string"

@@ -10,8 +10,7 @@ defmodule Omunculus.Model.Battery do
   reopening of the same work does not delegate again), reviewing a
   finished count on the next opening, and reacting as an observer when
   addressed as one. It concludes a count or a review with `done` when it
-  has the card, otherwise with `continue` and then `end` when it has that
-  card.
+  has the card; without it, it comments a count with `comment`.
   """
 
   @counted "counted to 5"
@@ -56,24 +55,11 @@ defmodule Omunculus.Model.Battery do
         do: call.("comment", %{"body" => @counted})
 
       if MapSet.member?(cards, "notify"), do: call.("notify", %{"body" => "reached 5"})
-      if MapSet.member?(cards, "continue"), do: conclude(cards, call, @counted)
+      if MapSet.member?(cards, "done"), do: call.("done", %{"report" => @counted})
       {:ok, @counted}
     else
       review(parsed, call)
     end
-  end
-
-  defp conclude(cards, call, report) do
-    if MapSet.member?(cards, "done") do
-      call.("done", %{"report" => report})
-    else
-      call.("continue", %{})
-      end_run(cards, call)
-    end
-  end
-
-  defp end_run(cards, call) do
-    if MapSet.member?(cards, "end"), do: call.("end", %{})
   end
 
   defp count_to_five(_call, 0), do: :ok
@@ -88,7 +74,7 @@ defmodule Omunculus.Model.Battery do
   defp review(%{last_comment: comment, cards: cards} = parsed, call) do
     cond do
       reviewable?(comment, cards) ->
-        conclude(cards, call, "reviewed")
+        call.("done", %{"report" => "reviewed"})
         {:ok, "reviewed"}
 
       MapSet.member?(cards, "work") and not delegated?(comment) ->
@@ -102,7 +88,7 @@ defmodule Omunculus.Model.Battery do
   defp reviewable?(comment, cards),
     do:
       is_binary(comment) and String.contains?(comment, @counted) and
-        MapSet.member?(cards, "continue")
+        MapSet.member?(cards, "done")
 
   defp delegated?(comment), do: is_binary(comment) and String.contains?(comment, @delegated)
 

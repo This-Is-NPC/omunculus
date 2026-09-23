@@ -12,7 +12,7 @@ effective = (ceiling ∪ grants of this work ∪ grants of ancestors) − deny o
 RUNS.tools = effective
 ```
 
-The stage is on the work. `continue` writes the next one; the run the
+The stage is on the work. `continue`, which `done` chains, writes the next one; the run the
 harness prepares after that emit already sees the new ceiling — tools in
 or out — without anyone editing `grants`.
 

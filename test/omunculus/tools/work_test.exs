@@ -291,7 +291,7 @@ defmodule Omunculus.Tools.WorkTest do
             ])
 
           {"beta", _comment}, call ->
-            call.("break", %{"body" => "stuck"})
+            call.("break", %{"report" => "stuck"})
 
           {"alpha", _comment}, call ->
             call.("done", %{"report" => "finished"})

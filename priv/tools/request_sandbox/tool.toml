@@ -2,14 +2,19 @@ name = "request_sandbox"
 kind = "tool"
 shape = "simple"
 triggers = ["model"]
-description = "Requests a sandbox capability such as write or network."
+description = "Requests a sandbox capability such as write or network: comments the report on the run's work when it has one, opens the request and ends the run."
 tags = ["sandbox", "request"]
 groups = ["sandbox"]
 module = "Omunculus.Tools.RequestSandbox"
+chains = ["end"]
+then = ["end"]
 
 [parameters]
 type = "object"
-required = ["name", "reason"]
+required = ["report", "name", "reason"]
+
+[parameters.properties.report]
+type = "string"
 
 [parameters.properties.name]
 type = "string"

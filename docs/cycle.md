@@ -21,7 +21,10 @@ on; the runs they asked for open after it closes. A tool can chain `end`:
 `done` comments its report on the run's work, continues it and ends the
 run in one call; `work` comments its report on the run's work, delegates
 each new work below it and ends the run, or, in a run without a work,
-creates the root work and ends the run.
+creates the root work and ends the run; `break` parks the work with its
+report and ends the run; `request_access` and `request_sandbox` comment
+their report on the run's work, open the request and end the run. The
+model reaches `continue` only through `done`.
 
 A hook is a tool fired by an event: same contract, any `emit`. Who opens
 the next run of a work is the action. A hook can open a run too if its
@@ -117,11 +120,12 @@ open → waiting:  break, or request (access), or delegate (child)
 waiting → waiting: reply deny — waiting = access, waiting_for intact
 waiting → open:    reply grant, all its children done, or a child on break — same stage
 waiting → open:    send / prompt on a waiting work — reopened_by_prompt
-open → open:       continue — next stage, new run
+open → open:       continue (chained by done) — next stage, new run
 open → done:       continue on the last stage, or with no workflow at its depth
 ```
 
-`break` parks the work with a comment. It does not advance the sequence.
+`break` parks the work with its report as the comment. It does not
+advance the sequence.
 `continue` that closes a work and `break` both hand it back to a parent
 waiting on its children: a `break` reopens the parent at once, a closing
 `continue` once none of the parent's children is left undone. The event
@@ -133,11 +137,13 @@ run opens. A root work is only closed or parked. `deny` does not reopen.
 
 A decision goes through `REQUESTS`. The model calls `request_access`
 (`kind` = `tool` | `path` | `directory`) or `request_sandbox` (`kind` =
-`resource`, `name` = `sandbox.write` | `sandbox.network`). Have is not a
-request: the output is `already granted: <name>`. Blocked is `EVENTS(deny)`.
-Askable or sealed opens a request; if a work is attached it becomes
-`waiting = access`. The asking run goes on until `end` or the model stops;
-the arbiter's run opens after it closes.
+`resource`, `name` = `sandbox.write` | `sandbox.network`), each with a
+`report`. In a run on a work the report is commented on it first, then
+the request. Have is not a request: no row opens, and a tool that emits
+`request` without ending the run gets `already granted: <name>` in its
+output. Blocked is `EVENTS(deny)`. Askable or sealed opens a request; if
+a work is attached it becomes `waiting = access`. Both request tools end
+the asking run; the arbiter's run opens after it closes.
 
 `INBOX` notifies and does not wait. It does not park a run or a work.
 

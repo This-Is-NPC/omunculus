@@ -132,6 +132,21 @@ defmodule Omunculus.HarnessTest do
     Project.close(project)
   end
 
+  test "the builtin continue and delegate refuse a model dispatch: they are chain steps only",
+       %{dir: dir} do
+    project = open_project(dir)
+    ctx = %{trigger: "model", run_id: nil, author: "agent", agent: nil, execution: execution(dir)}
+
+    for name <- ["continue", "delegate"] do
+      assert {:error, {:not_triggered, ^name, "model"}} =
+               Harness.dispatch(project, name, %{}, ctx)
+    end
+
+    assert {:ok, []} = Query.all(project.conn, "SELECT * FROM events")
+
+    Project.close(project)
+  end
+
   test "a tool that declares views = [\"events.run\"] receives the run's events so far", %{
     dir: dir
   } do

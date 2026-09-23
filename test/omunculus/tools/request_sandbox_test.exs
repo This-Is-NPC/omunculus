@@ -17,7 +17,11 @@ defmodule Omunculus.Tools.RequestSandboxTest do
   test "emits a resource request for a supported sandbox capability" do
     input = %{
       @input
-      | args: %{"name" => "sandbox.write", "reason" => "need to write files"}
+      | args: %{
+          "report" => "blocked on access",
+          "name" => "sandbox.write",
+          "reason" => "need to write files"
+        }
     }
 
     assert RequestSandbox.run(input) == %{
@@ -36,8 +40,40 @@ defmodule Omunculus.Tools.RequestSandboxTest do
            }
   end
 
+  test "in a run with a work, comments the report on it before the request" do
+    input = %{
+      @input
+      | work_id: "w1",
+        args: %{"report" => "blocked on access", "name" => "sandbox.write", "reason" => "why"}
+    }
+
+    assert RequestSandbox.run(input)["emit"] == [
+             %{
+               "type" => "comment",
+               "body" => %{"work_id" => "w1", "body" => "blocked on access"}
+             },
+             %{
+               "type" => "request",
+               "body" => %{"kind" => "resource", "name" => "sandbox.write", "reason" => "why"}
+             }
+           ]
+  end
+
+  test "refuses without a report" do
+    input = %{@input | args: %{"name" => "sandbox.write", "reason" => "why"}}
+
+    assert RequestSandbox.run(input) == %{
+             "ok" => false,
+             "output" => "report required",
+             "emit" => []
+           }
+  end
+
   test "rejects an unsupported resource name" do
-    input = %{@input | args: %{"name" => "sandbox.shell", "reason" => "x"}}
+    input = %{
+      @input
+      | args: %{"report" => "blocked on access", "name" => "sandbox.shell", "reason" => "x"}
+    }
 
     assert RequestSandbox.run(input) == %{
              "ok" => false,
@@ -47,7 +83,7 @@ defmodule Omunculus.Tools.RequestSandboxTest do
   end
 
   test "refuses without a name" do
-    input = %{@input | args: %{"reason" => "why"}}
+    input = %{@input | args: %{"report" => "blocked on access", "reason" => "why"}}
 
     assert RequestSandbox.run(input) == %{
              "ok" => false,
@@ -57,7 +93,7 @@ defmodule Omunculus.Tools.RequestSandboxTest do
   end
 
   test "refuses without a reason" do
-    input = %{@input | args: %{"name" => "sandbox.network"}}
+    input = %{@input | args: %{"report" => "blocked on access", "name" => "sandbox.network"}}
 
     assert RequestSandbox.run(input) == %{
              "ok" => false,
@@ -66,18 +102,28 @@ defmodule Omunculus.Tools.RequestSandboxTest do
            }
   end
 
-  test "the builtin catalog discovers request_sandbox with triggers == [\"model\"]" do
+  test "the builtin manifest is model-facing and ends the run through then" do
     catalog = Catalog.unconfigured()
 
     assert %{"request_sandbox" => manifest} = catalog
     assert manifest.triggers == ["model"]
     assert manifest.groups == ["sandbox"]
+    assert manifest.chains == ["end"]
+    assert manifest.then == ["end"]
   end
 
   test "the manifest wiring yields the same emit as calling the module directly" do
     catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "request_sandbox")
-    input = %{@input | args: %{"name" => "sandbox.network", "reason" => "download packages"}}
+
+    input = %{
+      @input
+      | args: %{
+          "report" => "blocked on access",
+          "name" => "sandbox.network",
+          "reason" => "download packages"
+        }
+    }
 
     assert {:ok, result} = Invoke.call(manifest, input)
     assert result.emit == RequestSandbox.run(input)["emit"]

@@ -9,15 +9,15 @@ defmodule Omunculus.MatrixTest do
   alias Omunculus.{CLI, Config, Fixtures, Id, Project, Store}
   alias Omunculus.Store.Query
 
-  @concierge_d0_tools ~w(bench break continue end fs.read sandbox.network store work)
-  @concierge_d1_tools ~w(break catalog continue delegate end fs.read sandbox.network store work)
+  @concierge_d0_tools ~w(bench break continue done end fs.read sandbox.network store work)
+  @concierge_d1_tools ~w(break catalog continue delegate done end fs.read sandbox.network store work)
   @concierge_d2_tools ~w(catalog fs.read sandbox.network sequence store)
-  @worker_tools ~w(bench break comment continue end fs.read notify request_access sandbox.network)
-  @worker_d2_tools ~w(bench comment continue end fs.read notify request_access sandbox.network)
+  @worker_tools ~w(bench break comment continue done end fs.read notify request_access sandbox.network)
+  @worker_d2_tools ~w(bench comment continue done end fs.read notify request_access sandbox.network)
   @manager_tools ~w(fs.read sandbox.network sequence store)
 
   @concierge_text "You are the project concierge. Read the message, use the tools in `tools.*` when you need them, and respond."
-  @worker_text "You are the worker. Do the work you received, comment on progress, and call continue when the stage is done."
+  @worker_text "You are the worker. Do the work you received, comment on progress, and call done with a report when the stage is complete."
   @manager_text "You are the manager. Delegate to whoever is below and review when the work comes back."
   @observer_text "You are the observer. Record the notification."
 

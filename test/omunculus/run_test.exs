@@ -498,13 +498,13 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
-  test "the default concierge ceiling has more than 12 effective tools and lists every card when nothing is pinned",
+  test "the default concierge ceiling has 13 model tools and lists every card when nothing is pinned",
        %{dir: dir} do
     write_config(dir, """
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["break", "catalog", "continue", "delegate", "end", "fs.read", "reply", "store", "work"]
+    tools = ["break", "catalog", "continue", "delegate", "done", "end", "fs.read", "reply", "store", "work"]
     """)
 
     project = open_project(dir)
@@ -519,6 +519,7 @@ defmodule Omunculus.RunTest do
 
     assert {:ok, run} = Run.open(project, open(message(project.conn)))
     assert length(Jason.decode!(run.tools)) == 13
+    refute "continue" in Jason.decode!(run.tools)
 
     assert_received {:assembled, assembled}
     assert assembled =~ "- tool_search:"
@@ -536,7 +537,7 @@ defmodule Omunculus.RunTest do
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["break", "catalog", "continue", "delegate", "end", "fs.read", "reply", "store", "work"]
+    tools = ["break", "catalog", "continue", "delegate", "done", "end", "fs.read", "reply", "store", "work"]
     pinned = ["store", "sequence", "catalog"]
     """)
 
@@ -727,7 +728,14 @@ defmodule Omunculus.RunTest do
     model = fn _assembled, _tools, call ->
       call.("end", %{})
       send(test_pid, :reached_second_call)
-      call.("request_access", %{"kind" => "tool", "name" => "other", "reason" => "x"})
+
+      call.("request_access", %{
+        "report" => "x",
+        "kind" => "tool",
+        "name" => "other",
+        "reason" => "x"
+      })
+
       {:ok, "unused"}
     end
 
@@ -745,26 +753,33 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
-  test "a request_access emit does not end the run", %{dir: dir} do
+  test "request_access ends the run: nothing the model calls after it runs", %{dir: dir} do
     project = open_project(dir)
     message_id = message(project.conn)
+    test_pid = self()
 
     model = fn _assembled, _tools, call ->
-      call.("request_access", %{"kind" => "path", "name" => "./secret", "reason" => "need it"})
-      call.("request_access", %{"kind" => "path", "name" => "./other", "reason" => "x"})
-      {:ok, "asked twice"}
+      call.("request_access", %{
+        "report" => "blocked",
+        "kind" => "path",
+        "name" => "./secret",
+        "reason" => "need it"
+      })
+
+      send(test_pid, :reached_after_request)
+      {:ok, "unused"}
     end
 
     Fixtures.use_model(project, model)
 
     assert {:ok, run} = Run.open(project, open(message_id))
-    assert {:ok, [_, _]} = Query.all(project.conn, "SELECT * FROM requests")
+    refute_received :reached_after_request
+    assert {:ok, [_request]} = Query.all(project.conn, "SELECT * FROM requests")
 
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
     types = Enum.map(events, & &1.type)
-    assert Enum.count(types, &(&1 == "request")) == 2
+    assert ["request", "tool", "end" | _rest] = Enum.drop_while(types, &(&1 != "request"))
     assert List.last(types) == "end-run"
-    refute "end" in types
 
     Project.close(project)
   end
@@ -774,13 +789,18 @@ defmodule Omunculus.RunTest do
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["request_sandbox"]
+    tools = ["end", "request_sandbox"]
     """)
 
     project = open_project(dir)
 
     model = fn _assembled, _tools, call ->
-      call.("request_sandbox", %{"name" => "sandbox.write", "reason" => "need to write"})
+      call.("request_sandbox", %{
+        "report" => "blocked on write",
+        "name" => "sandbox.write",
+        "reason" => "need to write"
+      })
+
       {:ok, "unused"}
     end
 
@@ -795,11 +815,121 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
+  test "request_sandbox in a run with a work comments the report on it before the request and ends the run",
+       %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["comment", "end", "request_sandbox"]
+    """)
+
+    project = open_project(dir)
+    work_id = Fixtures.insert(project.conn, :works)
+
+    model = fn _assembled, _tools, call ->
+      call.("request_sandbox", %{
+        "report" => "blocked on write",
+        "name" => "sandbox.write",
+        "reason" => "need to write"
+      })
+
+      {:ok, "unused"}
+    end
+
+    Fixtures.use_model(project, model)
+
+    assert {:ok, run} = Run.open(project, open(message(project.conn), work_id))
+    assert {:ok, [_request]} = Query.all(project.conn, "SELECT * FROM requests")
+
+    assert {:ok, [%{body: "blocked on write"}]} =
+             Store.view(project.conn, "comments.work", work_id)
+
+    assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+
+    assert ["comment", "request", "tool", "end" | _rest] =
+             events |> Enum.map(& &1.type) |> Enum.drop_while(&(&1 != "comment"))
+
+    Project.close(project)
+  end
+
+  test "continue is not offered to the model and a model call to it is refused", %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["comment", "continue", "done", "end"]
+    """)
+
+    project = open_project(dir)
+    work_id = Fixtures.insert(project.conn, :works)
+    test_pid = self()
+
+    model = fn assembled, tools, call ->
+      send(test_pid, {:offered, assembled, Enum.map(tools, & &1.name)})
+      send(test_pid, {:continue, call.("continue", %{})})
+      {:ok, "unused"}
+    end
+
+    Fixtures.use_model(project, model)
+
+    assert {:ok, run} = Run.open(project, open(message(project.conn), work_id))
+    assert_received {:offered, assembled, names}
+    refute "continue" in names
+    refute assembled =~ "- continue:"
+    assert "done" in names
+    assert_received {:continue, {:error, {:not_allowed, "continue"}}}
+
+    assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+    refute "continue" in Enum.map(events, & &1.type)
+
+    Project.close(project)
+  end
+
+  test "break without a report fails, writes nothing and leaves the run going", %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["break", "comment", "end"]
+    """)
+
+    project = open_project(dir)
+    work_id = Fixtures.insert(project.conn, :works)
+    test_pid = self()
+
+    model = fn _assembled, _tools, call ->
+      send(test_pid, {:break, call.("break", %{})})
+      {:ok, "still here"}
+    end
+
+    Fixtures.use_model(project, model)
+
+    assert {:ok, run} = Run.open(project, open(message(project.conn), work_id))
+    assert_received {:break, {:ok, "report required"}}
+
+    assert {:ok, []} = Store.view(project.conn, "comments.work", work_id)
+    assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", work_id)
+
+    assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+    types = Enum.map(events, & &1.type)
+    refute "break" in types
+    refute "end" in types
+    assert "model" in types
+
+    Project.close(project)
+  end
+
   test "the default worker asks for sandbox.write instead of having it", %{dir: dir} do
     project = open_project(dir)
 
     model = fn _assembled, _tools, call ->
-      call.("request_sandbox", %{"name" => "sandbox.write", "reason" => "need to write"})
+      call.("request_sandbox", %{
+        "report" => "blocked on write",
+        "name" => "sandbox.write",
+        "reason" => "need to write"
+      })
+
       {:ok, "unused"}
     end
 

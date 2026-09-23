@@ -61,7 +61,7 @@ defmodule Omunculus.Model.BatteryTest do
   end
 
   test "delegates one floor down with work when it cannot count" do
-    names = ~w(work continue)
+    names = ~w(work done)
 
     assembled =
       Enum.join(
@@ -81,7 +81,7 @@ defmodule Omunculus.Model.BatteryTest do
   end
 
   test "does not delegate again once its last comment says it delegated" do
-    names = ~w(work continue)
+    names = ~w(work done)
 
     assembled =
       Enum.join(
@@ -100,8 +100,8 @@ defmodule Omunculus.Model.BatteryTest do
     assert calls(agent) == []
   end
 
-  test "rule 2: counts to 5 with counter, stopping as soon as it reaches 5, then comments, notifies and continues" do
-    names = ~w(counter comment notify continue)
+  test "rule 2 without done: counts to 5 with counter, stopping as soon as it reaches 5, then comments and notifies" do
+    names = ~w(counter comment notify)
 
     assembled =
       Enum.join(
@@ -113,39 +113,13 @@ defmodule Omunculus.Model.BatteryTest do
 
     assert {:ok, "counted to 5"} = complete(assembled, tools(names), call)
 
-    call_names = calls(agent) |> Enum.map(&elem(&1, 0))
-    assert Enum.count(call_names, &(&1 == "counter")) == 5
-
-    assert call_names == [
-             "counter",
-             "counter",
-             "counter",
-             "counter",
-             "counter",
-             "comment",
-             "notify",
-             "continue"
-           ]
-
-    assert {"comment", %{"body" => "counted to 5"}} in calls(agent)
-    assert {"notify", %{"body" => "reached 5"}} in calls(agent)
-    assert {"continue", %{}} in calls(agent)
-  end
-
-  test "rule 2 with end: ends the run after continue" do
-    names = ~w(counter continue end)
-
-    assembled =
-      Enum.join(["You are the worker.", "## Work\nCount to 5", tools_section(names)], "\n\n")
-
-    {agent, call} = recorder(%{"counter" => ["5"]})
-
-    assert {:ok, "counted to 5"} = complete(assembled, tools(names), call)
-    assert Enum.map(calls(agent), &elem(&1, 0)) == ["counter", "continue", "end"]
+    assert calls(agent) ==
+             List.duplicate({"counter", %{}}, 5) ++
+               [{"comment", %{"body" => "counted to 5"}}, {"notify", %{"body" => "reached 5"}}]
   end
 
   test "rule 2 with done: notifies, then concludes with done carrying the count" do
-    names = ~w(counter comment notify continue done end)
+    names = ~w(counter comment notify done)
 
     assembled =
       Enum.join(["You are the worker.", "## Work\nCount to 5", tools_section(names)], "\n\n")
@@ -173,38 +147,8 @@ defmodule Omunculus.Model.BatteryTest do
     assert call_names == ["counter", "counter"]
   end
 
-  test "rule 3: a last comment announcing the count and a continue card advance the review" do
-    names = ~w(continue)
-
-    assembled =
-      Enum.join(
-        ["You are the concierge.", "## Last comment\ncounted to 5", tools_section(names)],
-        "\n\n"
-      )
-
-    {agent, call} = recorder()
-
-    assert {:ok, "reviewed"} = complete(assembled, tools(names), call)
-    assert calls(agent) == [{"continue", %{}}]
-  end
-
-  test "rule 3 with end: ends the run after the review's continue" do
-    names = ~w(continue end)
-
-    assembled =
-      Enum.join(
-        ["You are the concierge.", "## Last comment\ncounted to 5", tools_section(names)],
-        "\n\n"
-      )
-
-    {agent, call} = recorder()
-
-    assert {:ok, "reviewed"} = complete(assembled, tools(names), call)
-    assert calls(agent) == [{"continue", %{}}, {"end", %{}}]
-  end
-
-  test "rule 3 with done: the review concludes with done" do
-    names = ~w(continue done end)
+  test "rule 3: a last comment announcing the count and a done card conclude the review" do
+    names = ~w(done)
 
     assembled =
       Enum.join(

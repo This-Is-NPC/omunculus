@@ -207,6 +207,28 @@ schema = "staged"
 workflow = "delivery"
 ```
 
+## Handing control away
+
+Every model tool that hands the work to someone else carries a `report`
+and ends the run through its manifest's `then = ["end"]`, so the agent
+needs `end` as have too.
+
+| Tool | Writes | Then |
+| --- | --- | --- |
+| `work` | see [Creating works](#creating-works) | `end` |
+| `done` | chains `comment` with the report and `continue` | `end` |
+| `break` | emits `break`, which parks the work with the report as its comment | `end` |
+| `request_access` | emits a `comment` with the report on the run's work, then `request` | `end` |
+| `request_sandbox` | the same, with `kind = resource` | `end` |
+
+`continue` is only a chain step (`triggers = ["chain"]`): the model
+concludes or advances a work with `done`, which needs `comment`,
+`continue` and `end` as have. `break` needs no `comment`: the `break`
+action writes the report on the work itself. The request tools emit the
+comment and the request themselves, so the report precedes the request in
+`EVENTS`; in a run without a work they emit only the request. A request
+for a name the run already has opens no row and still ends the run.
+
 ## What the model calls
 
 The assembled prompt names the cards and says the tools are in

@@ -47,13 +47,13 @@ You are a Pi-style agent: compact, direct, and without shell access.
 assemble = "assemble"
 ```
 
-`continue` / `break` sit in `sequence` and act on the run's work. Without a
-workflow, `continue` closes it and `break` parks it with a comment; a later
-`[workflows.*]` turns `continue` into a stage walk without rewriting the agent.
-`end`, also in `sequence`, ends the run; neither `continue` nor `break` does.
-`done`, in `sequence` too, chains `comment` with its report, `continue` and
-`end` in one call. `work`, also there, opens the root work from the run `send`
-opened and ends that run; the root's run follows.
+`done` / `break` sit in `sequence` and act on the run's work, each with a
+report, and each ends the run. Without a workflow, `done` closes the work and
+`break` parks it with the report as its comment; a later `[workflows.*]` turns
+`done` into a stage walk without rewriting the agent. `done` chains `comment`
+with its report, `continue` and `end`; `continue` is only that chain step, and
+`sequence` carries it and `end`. `work`, also there, opens the root work from
+the run `send` opened and ends that run; the root's run follows.
 
 ## 2. Concierge that delegates
 
@@ -92,9 +92,9 @@ module = "Omunculus.Model.Fake"
 [agents.concierge]
 depth = 0
 model = "fake"
-tools = ["break", "catalog", "continue", "delegate", "end", "fs.read", "reply", "store", "work"]
+tools = ["break", "catalog", "continue", "delegate", "done", "end", "fs.read", "reply", "store", "work"]
 text = """
-You are the project concierge. Read the message and call work with a report and the works to create.
+You are the project concierge. Read the message and call work with a report and the works to create. When the work is complete, call done with a report.
 """
 
 [agents.worker]
@@ -117,7 +117,7 @@ pipeline.
 
 ## 3. A named sequence
 
-`continue` does not pick the next stage. The TOML does. The reviewer never
+`done` does not pick the next stage. The TOML does. The reviewer never
 appears as a free agent at its depth; only the step may call it.
 
 ```mermaid
@@ -126,8 +126,8 @@ flowchart LR
     subgraph seq [workflows.delivery]
         todo["to_do — worker"]
         review["review — reviewer"]
-        todo -->|continue| review
-        review -->|continue on last| done[done]
+        todo -->|done| review
+        review -->|done on last| closed[closed]
     end
     store[(store)]
     person -->|send / reply| todo
@@ -135,20 +135,20 @@ flowchart LR
     review --- store
 ```
 
-The reviewer is not on the depth-1 free list. `continue` walks this graph; it
-does not name the next node.
+The reviewer is not on the depth-1 free list. `done` walks this graph through
+the `continue` it chains; it does not name the next node.
 
 ```toml
 [agents.worker]
 depth = 1
 model = "fake"
-tools = ["comment", "continue", "end", "fs.read", "fs.write"]
+tools = ["comment", "continue", "done", "end", "fs.read", "fs.write"]
 
 [agents.reviewer]
 depth = 1
 model = "fake"
 workflow_only = true
-tools = ["comment", "continue", "end", "fs.read", "notify"]
+tools = ["comment", "continue", "done", "end", "fs.read", "notify"]
 
 [workflows.delivery]
 steps = [
@@ -220,7 +220,7 @@ tools = ["comment", "delegate", "end", "notify", "reply", "work"]
 [agents.worker]
 depth = 2
 model = "fake"
-tools = ["comment", "continue", "end", "fs.read", "fs.write", "request_sandbox"]
+tools = ["comment", "continue", "done", "end", "fs.read", "fs.write", "request_sandbox"]
 negotiable = ["sandbox.write"]
 
 [policy]
@@ -229,7 +229,7 @@ mode = "auto"
 
 [policy.depth.2]
 mode = "allowlist"
-granted = ["comment", "continue", "end", "fs.read"]
+granted = ["comment", "continue", "done", "end", "fs.read"]
 negotiable = ["fs.write", "sandbox.write"]
 ```
 
@@ -404,7 +404,7 @@ Until a grant, the workspace is read-only for external commands.
 [agents.worker]
 depth = 1
 model = "fake"
-tools = ["fs.read", "fs.write", "request_sandbox"]
+tools = ["end", "fs.read", "fs.write", "request_sandbox"]
 negotiable = ["sandbox.write"]
 ```
 

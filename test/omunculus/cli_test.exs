@@ -419,6 +419,7 @@ defmodule Omunculus.CLITest do
     defp open_write_request(dir, work_id \\ nil) do
       model = fn _assembled, _tools, call ->
         call.("request_access", %{
+          "report" => "blocked on write",
           "kind" => "tool",
           "name" => "write",
           "reason" => "need to write"
@@ -466,6 +467,15 @@ defmodule Omunculus.CLITest do
                ])
 
       assert comment.body == "need to write"
+
+      assert {:ok, [report]} =
+               Query.all(project.conn, "SELECT * FROM comments WHERE work_id = ?", [work_id])
+
+      assert report.body == "blocked on write"
+
+      assert {:ok, events} = Store.replay(project.conn, :project)
+      types = events |> Enum.map(& &1.type) |> Enum.drop_while(&(&1 != "comment"))
+      assert ["comment", "request", "tool", "end" | _rest] = types
 
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
       assert work.state == "waiting"
@@ -582,12 +592,18 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "hi"
-      tools = ["comment", "request_access", "work"]
+      tools = ["comment", "end", "request_access", "work"]
       deny = ["write"]
       """)
 
       model = fn _assembled, _tools, call ->
-        call.("request_access", %{"kind" => "tool", "name" => "write", "reason" => "need it"})
+        call.("request_access", %{
+          "report" => "blocked on write",
+          "kind" => "tool",
+          "name" => "write",
+          "reason" => "need it"
+        })
+
         {:ok, "unused"}
       end
 
@@ -608,18 +624,59 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "requesting a name the run already has does not open REQUESTS and lets the model keep calling tools",
+    test "request_access for a name the run already has opens no REQUESTS and still ends the run",
          %{dir: dir} do
       test_pid = self()
 
       model = fn _assembled, _tools, call ->
-        assert {:ok, output} =
-                 call.("request_access", %{
-                   "kind" => "tool",
-                   "name" => "comment",
-                   "reason" => "just checking"
-                 })
+        call.("request_access", %{
+          "report" => "checking comment",
+          "kind" => "tool",
+          "name" => "comment",
+          "reason" => "just checking"
+        })
 
+        send(test_pid, :reached_after_request)
+        {:ok, "unused"}
+      end
+
+      Fixtures.use_model(dir, model)
+
+      assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+      refute_received :reached_after_request
+
+      project = open(dir)
+      assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
+      assert {:ok, []} = Query.all(project.conn, "SELECT * FROM comments")
+
+      assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
+      assert run.status == "done"
+
+      assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+      assert "end" in Enum.map(events, & &1.type)
+
+      Project.close(project)
+    end
+
+    test "a request emit for a name the run already has opens no REQUESTS and lets the model keep calling tools",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      tools = ["ask_comment", "comment"]
+      """)
+
+      write_emit_tool(
+        dir,
+        "ask_comment",
+        ~s({"ok": true, "output": "", "emit": [{"type": "request", "body": {"kind": "tool", "name": "comment", "reason": "just checking"}}]})
+      )
+
+      test_pid = self()
+
+      model = fn _assembled, _tools, call ->
+        assert {:ok, output} = call.("ask_comment", %{})
         send(test_pid, {:output, output})
         {:ok, "continuing"}
       end
@@ -821,18 +878,18 @@ defmodule Omunculus.CLITest do
   end
 
   describe "sequence and child" do
-    test "D0-H0-W1: continue moves a work through the workflow's steps and the last stage closes it",
+    test "D0-H0-W1: done moves a work through the workflow's steps and the last stage closes it",
          %{dir: dir} do
       write_config(dir, """
       [agents.concierge]
       depth = 0
       text = "Sou o concierge."
-      tools = ["work", "continue", "comment", "end"]
+      tools = ["work", "continue", "comment", "done", "end"]
 
       [agents.reviewer]
       depth = 0
       text = "Sou o reviewer."
-      tools = ["work", "continue", "comment", "end"]
+      tools = ["work", "continue", "comment", "done", "end"]
 
       [workflows.delivery]
       steps = [
@@ -848,15 +905,13 @@ defmodule Omunculus.CLITest do
         cond do
           assembled =~ "Sou o concierge." ->
             if assembled =~ "## Work",
-              do: call.("continue", %{}),
+              do: call.("done", %{"report" => "built"}),
               else: create_root(call, "Ship it")
 
-            call.("end", %{})
             {:ok, "unused"}
 
           assembled =~ "Sou o reviewer." ->
-            call.("continue", %{})
-            call.("end", %{})
+            call.("done", %{"report" => "reviewed"})
             {:ok, "unused"}
         end
       end
@@ -886,7 +941,8 @@ defmodule Omunculus.CLITest do
       types1 = Enum.map(events1, & &1.type)
       refute "model" in types1
       continue_at = Enum.find_index(types1, &(&1 == "continue"))
-      hook = Enum.at(events1, continue_at + 1)
+      assert Enum.at(types1, continue_at + 2) == "end"
+      hook = Enum.at(events1, continue_at + 3)
       assert hook.type == "tool"
       assert Jason.decode!(hook.body)["name"] == "on-continue"
       assert List.last(types1) == "end-run"
@@ -900,18 +956,19 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "continue without a workflow closes a root work, and end ends the run", %{dir: dir} do
+    test "done without a workflow closes a root work and ends the run", %{dir: dir} do
       write_config(dir, """
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["work", "continue", "end"]
+      tools = ["work", "comment", "continue", "done", "end"]
       """)
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work", do: create_root(call, "No sequence")
-        assert {:ok, ""} = call.("continue", %{})
-        call.("end", %{})
+        if assembled =~ "## Work",
+          do: call.("done", %{"report" => "closed"}),
+          else: create_root(call, "No sequence")
+
         {:ok, "unused"}
       end
 
@@ -985,7 +1042,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["counter", "continue"]
+      tools = ["counter", "comment", "continue", "done", "end"]
 
       [workflows.delivery]
       steps = [
@@ -1012,7 +1069,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         if assembled =~ "- counter:" do
-          call.("continue", %{})
+          call.("done", %{"report" => "counted"})
           {:ok, "unused"}
         else
           {:ok, "done"}
@@ -1053,10 +1110,9 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         if assembled =~ "## Work",
-          do: call.("break", %{"body" => "need to pause"}),
+          do: call.("break", %{"report" => "need to pause"}),
           else: create_root(call, "Needs help")
 
-        call.("end", %{})
         {:ok, "unused"}
       end
 
@@ -1174,10 +1230,11 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    for {tool, args, workflow?, child_state} <- [
-          {"continue", %{}, false, "done"},
-          {"break", %{"body" => "stuck"}, false, "waiting"},
-          {"break", %{"body" => "stuck"}, true, "waiting"}
+    for {tool, args, tools, action, workflow?, child_state} <- [
+          {"done", %{"report" => "finished"}, ~w(comment continue done end), "continue", false,
+           "done"},
+          {"break", %{"report" => "stuck"}, ~w(break end), "break", false, "waiting"},
+          {"break", %{"report" => "stuck"}, ~w(break end), "break", true, "waiting"}
         ] do
       test "#{tool} #{if workflow?, do: "with", else: "without"} a workflow hands the child back to its waiting parent and opens the parent's run",
            %{dir: dir} do
@@ -1204,7 +1261,7 @@ defmodule Omunculus.CLITest do
           [agents.worker]
           depth = 1
           text = "Sou o worker."
-          tools = [#{inspect(unquote(tool))}]
+          tools = #{inspect(unquote(tools))}
           """ <> workflow
         )
 
@@ -1248,8 +1305,9 @@ defmodule Omunculus.CLITest do
         assert run3.agent == "concierge"
 
         assert {:ok, events} = Store.replay(project.conn, {:run, run2.id})
-        event = Enum.find(events, &(&1.type == unquote(tool)))
+        event = Enum.find(events, &(&1.type == unquote(action)))
         assert Jason.decode!(event.body)["parent_id"] == parent.id
+        assert "end" in Enum.map(events, & &1.type)
 
         Project.close(project)
       end
@@ -1261,12 +1319,12 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "Sou o concierge."
-      tools = ["work", "delegate", "comment", "continue", "end"]
+      tools = ["work", "delegate", "comment", "continue", "done", "end"]
 
       [agents.worker]
       depth = 1
       text = "Sou o worker."
-      tools = ["comment", "continue"]
+      tools = ["comment", "continue", "done", "end"]
 
       [workflows.delivery]
       steps = [
@@ -1284,11 +1342,11 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         cond do
           assembled =~ "Sou o worker." ->
-            call.("continue", %{})
+            call.("done", %{"report" => "built"})
             {:ok, "unused"}
 
           assembled =~ "Sub task2" ->
-            call.("continue", %{})
+            call.("done", %{"report" => "reviewed"})
             {:ok, "unused"}
 
           assembled =~ "## Last comment\nopened" ->
@@ -1339,7 +1397,7 @@ defmodule Omunculus.CLITest do
       [agents.worker]
       depth = 1
       text = "Sou o worker."
-      tools = ["comment", "request_access"]
+      tools = ["comment", "end", "request_access"]
       """)
 
       reader = open(dir)
@@ -1352,6 +1410,7 @@ defmodule Omunculus.CLITest do
             case Agent.get_and_update(counter, fn n -> {n, n + 1} end) do
               0 ->
                 call.("request_access", %{
+                  "report" => "blocked on write",
                   "kind" => "tool",
                   "name" => "write",
                   "reason" => "need to write"
@@ -1497,7 +1556,7 @@ defmodule Omunculus.CLITest do
       :ok
     end
 
-    test "a request emits a tool event named on-request right after it, carrying the call's run and work ids",
+    test "a request emits a tool event named on-request right after the call's chain, carrying the call's run and work ids",
          %{dir: dir} do
       project = open(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
@@ -1516,7 +1575,9 @@ defmodule Omunculus.CLITest do
           event.type == "tool" and Jason.decode!(event.body)["name"] == "on-request"
         end)
 
-      assert hook_event.sequence == request_event.sequence + 1
+      chain_end = Enum.find(events, &(&1.type == "end" and &1.run_id == request_event.run_id))
+      assert request_event.sequence < chain_end.sequence
+      assert hook_event.sequence == chain_end.sequence + 1
       assert hook_event.sequence < end_event.sequence
       assert hook_event.run_id == request_event.run_id
       assert hook_event.work_id == request_event.work_id
@@ -1557,13 +1618,13 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "a continue with a workflow on emits a tool event named on-continue right after it",
+    test "a continue with a workflow on emits a tool event named on-continue right after the call's chain",
          %{dir: dir} do
       write_config(dir, """
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["work", "continue", "end"]
+      tools = ["work", "comment", "continue", "done", "end"]
 
       [workflows.solo]
       steps = [{ name = "to_do", agent = "concierge" }]
@@ -1574,10 +1635,9 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         if assembled =~ "## Work",
-          do: call.("continue", %{}),
+          do: call.("done", %{"report" => "shipped"}),
           else: create_root(call, "Ship it")
 
-        call.("end", %{})
         {:ok, "unused"}
       end
 
@@ -1598,14 +1658,16 @@ defmodule Omunculus.CLITest do
           event.type == "tool" and Jason.decode!(event.body)["name"] == "on-continue"
         end)
 
-      assert hook_event.sequence == continue_event.sequence + 1
+      chain_end = Enum.find(events, &(&1.type == "end" and &1.run_id == continue_event.run_id))
+      assert continue_event.sequence < chain_end.sequence
+      assert hook_event.sequence == chain_end.sequence + 1
       assert hook_event.sequence < end_event.sequence
       assert hook_event.run_id == continue_event.run_id
 
       Project.close(project)
     end
 
-    test "a break emits a tool event named on-break right after it", %{dir: dir} do
+    test "a break emits a tool event named on-break right after the call's chain", %{dir: dir} do
       write_config(dir, """
       [agents.concierge]
       depth = 0
@@ -1621,10 +1683,9 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         if assembled =~ "## Work",
-          do: call.("break", %{"body" => "need to pause"}),
+          do: call.("break", %{"report" => "need to pause"}),
           else: create_root(call, "Needs help")
 
-        call.("end", %{})
         {:ok, "unused"}
       end
 
@@ -1643,7 +1704,9 @@ defmodule Omunculus.CLITest do
           event.type == "tool" and Jason.decode!(event.body)["name"] == "on-break"
         end)
 
-      assert hook_event.sequence == break_event.sequence + 1
+      chain_end = Enum.find(events, &(&1.type == "end" and &1.run_id == break_event.run_id))
+      assert break_event.sequence < chain_end.sequence
+      assert hook_event.sequence == chain_end.sequence + 1
       assert hook_event.sequence < end_event.sequence
       assert hook_event.run_id == break_event.run_id
 
@@ -1896,13 +1959,13 @@ defmodule Omunculus.CLITest do
       [agents.worker]
       depth = 1
       text = "Sou o worker."
-      tools = ["comment", "continue", "fs.read", "fs.write"]
+      tools = ["comment", "continue", "done", "end", "fs.read", "fs.write"]
 
       [agents.reviewer]
       depth = 1
       workflow_only = true
       text = "You are the reviewer."
-      tools = ["comment", "continue", "fs.read", "notify"]
+      tools = ["comment", "continue", "done", "end", "fs.read", "notify"]
 
       [workflows.delivery]
       steps = [
@@ -1917,12 +1980,11 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         cond do
           assembled =~ "You are the reviewer." ->
-            call.("continue", %{})
-            {:ok, "reviewed"}
+            call.("done", %{"report" => "reviewed"})
+            {:ok, "unused"}
 
           assembled =~ "Sou o worker." ->
-            assert {:ok, ""} = call.("comment", %{"body" => "done"})
-            call.("continue", %{})
+            call.("done", %{"report" => "done"})
             {:ok, "unused"}
 
           assembled =~ "## Last comment\nopened" ->

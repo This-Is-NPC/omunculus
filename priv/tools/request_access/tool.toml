@@ -2,14 +2,19 @@ name = "request_access"
 kind = "tool"
 shape = "simple"
 triggers = ["model"]
-description = "Requests access to a tool, path, or directory."
+description = "Requests access to a tool, path, or directory: comments the report on the run's work when it has one, opens the request and ends the run."
 tags = ["store", "request"]
 groups = ["store"]
 module = "Omunculus.Tools.RequestAccess"
+chains = ["end"]
+then = ["end"]
 
 [parameters]
 type = "object"
-required = ["kind", "name", "reason"]
+required = ["report", "kind", "name", "reason"]
+
+[parameters.properties.report]
+type = "string"
 
 [parameters.properties.kind]
 type = "string"

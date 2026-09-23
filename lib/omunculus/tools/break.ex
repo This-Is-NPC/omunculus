@@ -1,22 +1,18 @@
 defmodule Omunculus.Tools.Break do
   @moduledoc """
-  Builtin `break` tool, per spec §3.4: parks the work with a comment and
-  hands it back to a parent waiting on it. The sequence does not advance.
+  Builtin `break` tool, per spec §3.4: emits `break` with the `report`,
+  which parks the work with the report as its comment and hands it back
+  to a parent waiting on it. The sequence does not advance. Its
+  manifest's `then` appends `end`.
   """
 
   alias Omunculus.Tools.{Args, Out}
 
-  @required ~w(body)
-
   @spec run(map) :: map
   def run(%{args: args}) do
-    case Args.missing(args, @required) do
-      nil ->
-        body = %{"body" => args["body"]}
-        Out.ok("", [%{"type" => "break", "body" => body}])
-
-      message ->
-        Out.fail(message)
+    case Args.present(args, "report") do
+      nil -> Out.fail("report required")
+      report -> Out.ok("", [%{"type" => "break", "body" => %{"body" => report}}])
     end
   end
 end

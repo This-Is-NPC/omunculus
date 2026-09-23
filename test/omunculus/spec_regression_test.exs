@@ -136,13 +136,13 @@ defmodule Omunculus.SpecRegressionTest do
 
     Fixtures.use_model(p, fn _, _, call ->
       call.("request_access", %{
+        "report" => "blocked",
         "kind" => "tool",
         "name" => "write",
         "reason" => "write report"
       })
 
-      call.("end", %{})
-      flunk("end must end the run")
+      flunk("request_access must end the run")
     end)
 
     assert {:ok, _} =
@@ -239,13 +239,13 @@ defmodule Omunculus.SpecRegressionTest do
       refute Enum.any?(tools, &(&1.name == "missing_tool"))
 
       call.("request_access", %{
+        "report" => "blocked",
         "kind" => "tool",
         "name" => "missing_tool",
         "reason" => "test"
       })
 
-      call.("end", %{})
-      flunk("end must end the run")
+      flunk("request_access must end the run")
     end)
 
     assert {:ok, run} =
@@ -416,7 +416,7 @@ defmodule Omunculus.SpecRegressionTest do
       String.replace(
         @config,
         ~s(tools = ["work", "comment", "reply", "request_access", "notify", "read", "write", "sandbox.network", "end"]),
-        ~s(tools = ["work", "comment", "reply", "request_access", "notify", "read", "write", "sandbox.network", "end", "continue"])
+        ~s(tools = ["work", "comment", "reply", "request_access", "notify", "read", "write", "sandbox.network", "end", "continue", "done"])
       ) <>
         """
         [policy]
@@ -435,9 +435,8 @@ defmodule Omunculus.SpecRegressionTest do
     Fixtures.use_model(p, fn _, _, call ->
       case Agent.get_and_update(n, fn i -> {i, i + 1} end) do
         0 ->
-          assert {:ok, _} = call.("continue", %{})
-          call.("end", %{})
-          flunk("end must end the run")
+          call.("done", %{"report" => "first done"})
+          flunk("done must end the run")
 
         _ ->
           {:ok, "later"}
@@ -533,25 +532,25 @@ defmodule Omunculus.SpecRegressionTest do
     assert {:ok, %{state: "open"}} = Store.view(p.conn, "work", parent)
   end
 
-  test "a child that stops by itself after continue or break is not closed a second time",
+  test "a child that ends with done or break is not closed a second time",
        %{project: p} do
     write_config(
       p,
       String.replace(
         @config,
         ~s(tools = ["comment", "request_access", "read", "end"]),
-        ~s(tools = ["comment", "request_access", "read", "end", "continue", "break"])
+        ~s(tools = ["comment", "request_access", "read", "end", "continue", "done", "break"])
       )
     )
 
-    for action <- ["continue", "break"] do
+    for action <- ["done", "break"] do
       parent = Fixtures.insert(p.conn, :works, %{assignee: "concierge"})
       child = Fixtures.insert(p.conn, :works, %{assignee: "worker", parent_id: parent})
 
       Fixtures.use_model(p, fn assembled, _, call ->
         if String.starts_with?(assembled, "worker") do
-          assert {:ok, _} = call.(action, %{"body" => "stopping"})
-          {:ok, "stopped"}
+          call.(action, %{"report" => "stopping"})
+          flunk("#{action} must end the run")
         else
           {:ok, "parent"}
         end
@@ -560,7 +559,7 @@ defmodule Omunculus.SpecRegressionTest do
       assert {:ok, _run} = Run.open(p, opening(child))
 
       assert {:ok, %{state: state}} = Store.view(p.conn, "work", child)
-      assert state == if(action == "continue", do: "done", else: "waiting")
+      assert state == if(action == "done", do: "done", else: "waiting")
 
       assert {:ok, []} =
                Query.all(p.conn, "SELECT * FROM events WHERE type = 'work' AND work_id = ?", [
@@ -668,13 +667,13 @@ defmodule Omunculus.SpecRegressionTest do
       :ok = record.(%{content: "I need access", tool_calls: [%{name: "request_access"}]})
 
       call.("request_access", %{
+        "report" => "blocked",
         "kind" => "path",
         "name" => "./secret",
         "reason" => "read report"
       })
 
-      call.("end", %{})
-      flunk("end must end the run")
+      flunk("request_access must end the run")
     end)
 
     assert {:ok, run} =
@@ -683,7 +682,7 @@ defmodule Omunculus.SpecRegressionTest do
     assert {:ok, events} = Store.replay(p.conn, {:run, run.id})
 
     assert Enum.map(events, & &1.type) ==
-             ~w(start-run tool model tool request tool tool end end-run)
+             ~w(start-run tool model tool request tool end tool end-run)
 
     assert Enum.find(events, &(&1.type == "model")).body =~ "I need access"
   end
