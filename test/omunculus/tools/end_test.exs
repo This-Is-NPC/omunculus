@@ -22,9 +22,9 @@ defmodule Omunculus.Tools.EndTest do
            }
   end
 
-  test "the builtin catalog discovers end in the sequence group with triggers == [\"model\"]" do
+  test "the builtin catalog discovers end in the sequence group with triggers == [\"model\", \"chain\"]" do
     assert %{"end" => manifest} = Catalog.unconfigured()
-    assert manifest.triggers == ["model"]
+    assert manifest.triggers == ["model", "chain"]
     assert manifest.groups == ["sequence"]
   end
 

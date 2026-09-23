@@ -3,7 +3,8 @@ defmodule Omunculus.Tool.Invoke do
   Runs a tool or hook's contract per spec §8.1 and §8.7: JSON `in` on
   stdin, JSON `out` on stdout for a `command`; a `tools/call` to the MCP
   server for a manifest with `mcp` set. Either way the result goes through
-  the same `validate/1`.
+  the same `validate/1`. The optional `chain` of `out` is a list of
+  `{name, args}` steps; `args` defaults to an empty map.
   """
 
   alias Omunculus.Execution
@@ -12,12 +13,17 @@ defmodule Omunculus.Tool.Invoke do
   alias Omunculus.Path, as: FilesystemPath
   alias Omunculus.Tool.Manifest
 
-  @spec call(Manifest.t(), map) ::
-          {:ok, %{ok: boolean, output: String.t(), emit: [map]}} | {:error, term}
+  @type out :: %{
+          ok: boolean,
+          output: String.t(),
+          emit: [map],
+          chain: [%{name: String.t(), args: map}]
+        }
+
+  @spec call(Manifest.t(), map) :: {:ok, out} | {:error, term}
   def call(manifest, input), do: call(manifest, input, nil)
 
-  @spec call(Manifest.t(), map, Policy.t() | nil) ::
-          {:ok, %{ok: boolean, output: String.t(), emit: [map]}} | {:error, term}
+  @spec call(Manifest.t(), map, Policy.t() | nil) :: {:ok, out} | {:error, term}
   def call(%Manifest{mcp: mcp} = manifest, input, %Policy{} = execution) when not is_nil(mcp) do
     with {:ok, result} <- Mcp.call(mcp, manifest.name, input.args, execution) do
       validate(%{"ok" => result.ok, "output" => result.output, "emit" => result.emit})
@@ -147,8 +153,9 @@ defmodule Omunculus.Tool.Invoke do
   defp validate(decoded) when is_map(decoded) do
     with {:ok, ok} <- fetch_bool(decoded, "ok"),
          {:ok, output} <- fetch_string(decoded, "output", ""),
-         {:ok, emit} <- fetch_emit(decoded) do
-      {:ok, %{ok: ok, output: output, emit: emit}}
+         {:ok, emit} <- fetch_emit(decoded),
+         {:ok, chain} <- fetch_chain(decoded) do
+      {:ok, %{ok: ok, output: output, emit: emit, chain: chain}}
     end
   end
 
@@ -183,6 +190,30 @@ defmodule Omunculus.Tool.Invoke do
         {:error, {:invalid_output, decoded}}
     end
   end
+
+  defp fetch_chain(decoded) do
+    case Map.get(decoded, "chain", []) do
+      list when is_list(list) ->
+        Enum.reduce_while(Enum.reverse(list), {:ok, []}, fn entry, {:ok, acc} ->
+          case chain_step(entry) do
+            {:ok, step} -> {:cont, {:ok, [step | acc]}}
+            :error -> {:halt, {:error, {:invalid_output, decoded}}}
+          end
+        end)
+
+      _ ->
+        {:error, {:invalid_output, decoded}}
+    end
+  end
+
+  defp chain_step(%{"name" => name} = entry) when is_binary(name) and name != "" do
+    case Map.get(entry, "args", %{}) do
+      args when is_map(args) -> {:ok, %{name: name, args: args}}
+      _ -> :error
+    end
+  end
+
+  defp chain_step(_entry), do: :error
 
   defp valid_emit_entry?(%{"type" => type, "body" => body}),
     do: is_binary(type) and is_map(body)

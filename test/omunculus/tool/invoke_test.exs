@@ -52,7 +52,8 @@ defmodule Omunculus.Tool.InvokeTest do
     assert result == %{
              ok: true,
              output: "done",
-             emit: [%{"type" => "prompt", "body" => %{"message" => "hi"}}]
+             emit: [%{"type" => "prompt", "body" => %{"message" => "hi"}}],
+             chain: []
            }
   end
 
@@ -68,13 +69,23 @@ defmodule Omunculus.Tool.InvokeTest do
     assert result.emit == [%{"type" => "echo", "body" => %{"message" => "count to 5"}}]
   end
 
-  test "emit defaults to [] and output defaults to \"\"", %{dir: dir} do
+  test "emit and chain default to [] and output defaults to \"\"", %{dir: dir} do
     write_run!(dir, """
     #!/bin/sh
     echo '{"ok": true}'
     """)
 
-    assert {:ok, %{ok: true, output: "", emit: []}} =
+    assert {:ok, %{ok: true, output: "", emit: [], chain: []}} =
+             Invoke.call(manifest(dir), @input, policy(dir))
+  end
+
+  test "a command tool's chain is parsed like a module's", %{dir: dir} do
+    write_run!(dir, """
+    #!/bin/sh
+    echo '{"ok": true, "chain": [{"name": "end"}]}'
+    """)
+
+    assert {:ok, %{chain: [%{name: "end", args: %{}}]}} =
              Invoke.call(manifest(dir), @input, policy(dir))
   end
 
@@ -152,8 +163,37 @@ defmodule Omunculus.Tool.InvokeTest do
       assert result == %{
                ok: true,
                output: "",
-               emit: [%{"type" => "prompt", "body" => %{"message" => "hi"}}]
+               emit: [%{"type" => "prompt", "body" => %{"message" => "hi"}}],
+               chain: []
              }
+    end
+
+    test "a chain in out is parsed into name and args steps", %{dir: dir} do
+      manifest = manifest(dir, %{command: nil, module: "Omunculus.Test.ChainTool"})
+
+      input = %{
+        @input
+        | args: %{
+            "chain" => [%{"name" => "comment", "args" => %{"body" => "hi"}}, %{"name" => "end"}]
+          }
+      }
+
+      assert {:ok, %{chain: chain}} = Invoke.call(manifest, input)
+      assert chain == [%{name: "comment", args: %{"body" => "hi"}}, %{name: "end", args: %{}}]
+    end
+
+    for {name, chain} <- [
+          {"a chain that is not a list", "end"},
+          {"a step without a name", [%{"args" => %{}}]},
+          {"a step with an empty name", [%{"name" => ""}]},
+          {"a step whose args are not a map", [%{"name" => "end", "args" => []}]}
+        ] do
+      test "#{name} fails the call", %{dir: dir} do
+        manifest = manifest(dir, %{command: nil, module: "Omunculus.Test.ChainTool"})
+        input = %{@input | args: %{"chain" => unquote(Macro.escape(chain))}}
+
+        assert {:error, {:invalid_output, _decoded}} = Invoke.call(manifest, input)
+      end
     end
 
     test "unknown module returns no_module", %{dir: dir} do

@@ -28,7 +28,7 @@ defmodule Omunculus.Store.ActionsTest do
     count
   end
 
-  defp record_tool(conn, emits, ctx), do: Store.record_tool(conn, nil, @call, emits, ctx)
+  defp record_tool(conn, emits, ctx), do: Store.record_tools(conn, nil, [{@call, emits}], ctx)
 
   defp seed_comment(conn, target, sequence, at, body \\ "note") do
     comment_id =

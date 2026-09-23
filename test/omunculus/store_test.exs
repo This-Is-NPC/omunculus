@@ -27,7 +27,7 @@ defmodule Omunculus.StoreTest do
     emit = %{"type" => "comment", "body" => %{"work_id" => work_id, "body" => "first"}}
     call = %{name: "comment", args: %{}, ok: true, output: "first"}
 
-    assert {:ok, [tool_event, event]} = Store.record_tool(conn, nil, call, [emit], ctx)
+    assert {:ok, [tool_event, event]} = Store.record_tools(conn, nil, [{call, [emit]}], ctx)
     :ok = Store.close(conn)
 
     {:ok, conn} = Store.open(path)

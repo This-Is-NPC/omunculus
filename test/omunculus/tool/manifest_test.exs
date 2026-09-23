@@ -36,6 +36,8 @@ defmodule Omunculus.Tool.ManifestTest do
     assert manifest.parameters == %{}
     assert manifest.views == []
     assert manifest.events == []
+    assert manifest.chains == []
+    assert manifest.then == []
     assert manifest.dir == dir
     assert manifest.config == true
   end
@@ -445,5 +447,41 @@ defmodule Omunculus.Tool.ManifestTest do
       """)
 
     assert Manifest.load(path) == {:error, {:invalid, :triggers}}
+  end
+
+  test "chains, then and the chain trigger are read", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "finish"
+      kind = "tool"
+      triggers = ["model", "chain"]
+      module = "Omunculus.Tools.Comment"
+      chains = ["comment", "end"]
+      then = ["comment", "end"]
+      """)
+
+    assert {:ok, %Manifest{triggers: ["model", "chain"], chains: ["comment", "end"]} = manifest} =
+             Manifest.load(path)
+
+    assert manifest.then == ["comment", "end"]
+  end
+
+  for {name, then} <- [
+        {"a then name outside chains", ~s(["comment", "end", "notify"])},
+        {"end before the last then name", ~s(["end", "comment"])},
+        {"end twice in then", ~s(["end", "end"])}
+      ] do
+    test "#{name} fails to load", %{dir: dir} do
+      path =
+        write_toml(dir, """
+        name = "finish"
+        kind = "tool"
+        module = "Omunculus.Tools.Comment"
+        chains = ["comment", "end"]
+        then = #{unquote(then)}
+        """)
+
+      assert Manifest.load(path) == {:error, {:invalid, :then}}
+    end
   end
 end

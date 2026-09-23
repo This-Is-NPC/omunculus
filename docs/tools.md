@@ -11,7 +11,7 @@ Simple, composite, default and third-party: one shape.
 
 ```text
 in:  { name, args, view, run_id, work_id, workspace, roots }
-out: { ok, output, emit }
+out: { ok, output, emit, chain }
 ```
 
 `view` is the cut of the store the harness already resolved, from the
@@ -34,6 +34,10 @@ schema, the tool failed and nothing is written.
 }
 ```
 
+`chain` is optional: a list of `{ "name": …, "args": { … } }` steps the
+tool asks to run right after it, in the same call. See
+[Chains](#chains).
+
 Two contracts, not one:
 
 1. **Model ↔ tool** — the manifest (`description`, `parameters`, tags).
@@ -41,9 +45,10 @@ Two contracts, not one:
 2. **Tool ↔ store** — functions arrive in `in.view`; actions leave in
    `emit`. The harness publishes both.
 
-`triggers` is `model`, `cli`, `harness`, or `cli` and `model` together.
-`harness` does not mix with the others. CLI-only stays out of the
-assembled prompt; the binary still calls the contract.
+`triggers` lists `model`, `cli` and `chain`, or is `harness` alone. A
+tool without `model` stays out of the assembled prompt and out of
+`tool_search`; the binary and chains still call the contract. `chain`
+lets another tool chain it.
 
 ## On disk
 
@@ -88,6 +93,40 @@ Copy the folder into a path listed in `[tools] paths`. Inline
 servers contribute names after `paths` and before inline; the last `name`
 wins. A name the ceiling listed that nobody exposed is blocked.
 
+## Chains
+
+A tool may ask that other tools run right after it, within the same call.
+The steps are its `out.chain` followed by its manifest's `then`, each
+`then` name run with empty args:
+
+```toml
+name = "done"
+chains = ["comment", "continue", "end"]
+then = ["end"]
+```
+
+`chains` lists the names the tool may chain. Every `then` name is in
+`chains`, and `end`, when present, is the last of `then`; otherwise the
+manifest does not load.
+
+Each step goes through the same contract as a call: the views its own
+manifest declares, its `emit`, its `EVENTS(tool)` with `via` = the name
+of the tool that chained it. A step's own `chain` and `then` run right
+after it, under its own `chains`. The whole chain is refused when a step:
+
+- is not in the `chains` of the tool that chained it;
+- does not have `chain` in its `triggers`;
+- is not have in the run's ceiling, when the chain runs in a run;
+- is already on the path of tools that led to it;
+- comes after `end`;
+- fails.
+
+The emits of the tool and of every step are applied in one transaction.
+A refused chain writes none of them: the called tool is recorded as a
+failed `EVENTS(tool)` whose `output` says which step failed and why. An
+emit the store rejects writes nothing at all. Hooks react to the step
+events like to any event, after the chain commits.
+
 ## Views and actions
 
 Views the store will hydrate:
@@ -131,7 +170,7 @@ fs.read   = read, ls, grep, find
 fs.write  = write, edit
 store     = comment, work, request_access, reply, notify
 sandbox   = request_sandbox
-sequence  = delegate, continue, break, end
+sequence  = delegate, continue, break, end, done
 catalog   = tool_search
 cli       = send, inbox, inbox_read, prompt, login, logout
 bench     = counter, counter_decrement

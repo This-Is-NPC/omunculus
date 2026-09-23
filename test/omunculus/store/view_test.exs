@@ -138,20 +138,18 @@ defmodule Omunculus.Store.ViewTest do
     context = %{run_id: nil, work_id: nil, author: "human", agent: nil, config: nil, groups: %{}}
 
     assert {:ok, _events} =
-             Omunculus.Store.record_tool(
+             Omunculus.Store.record_tools(
                conn,
                nil,
-               %{name: "counter", args: %{}, ok: true, output: "1"},
-               [],
+               [{%{name: "counter", args: %{}, ok: true, output: "1"}, []}],
                context
              )
 
     assert {:ok, _events} =
-             Omunculus.Store.record_tool(
+             Omunculus.Store.record_tools(
                conn,
                nil,
-               %{name: "counter_decrement", args: %{}, ok: true, output: "0"},
-               [],
+               [{%{name: "counter_decrement", args: %{}, ok: true, output: "0"}, []}],
                context
              )
 

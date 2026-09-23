@@ -51,6 +51,8 @@ assemble = "assemble"
 workflow, `continue` closes it and `break` parks it with a comment; a later
 `[workflows.*]` turns `continue` into a stage walk without rewriting the agent.
 `end`, also in `sequence`, ends the run; neither `continue` nor `break` does.
+`done`, in `sequence` too, chains `comment` with its report, `continue` and
+`end` in one call.
 
 ## 2. Concierge that delegates
 
@@ -93,10 +95,10 @@ You are the project concierge. Read the message and delegate when the work is a 
 [agents.worker]
 depth = 1
 model = "fake"
-tools = ["break", "comment", "continue", "end", "fs.read", "fs.write", "notify", "request_access", "request_sandbox"]
+tools = ["break", "comment", "continue", "done", "end", "fs.read", "fs.write", "notify", "request_access", "request_sandbox"]
 negotiable = ["sandbox.write"]
 text = """
-You are the worker. Complete the assigned work and call continue and then end when the stage is complete.
+You are the worker. Complete the assigned work and call done with a report when the stage is complete.
 """
 
 [policy]

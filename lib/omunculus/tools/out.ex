@@ -59,6 +59,18 @@ defmodule Omunculus.Tools.Out do
   @spec login_tool_failed() :: String.t()
   def login_tool_failed, do: "login tool failed"
 
+  @spec chain_failed(String.t(), term) :: String.t()
+  def chain_failed(name, reason), do: "chain failed at #{name}: #{chain_reason(reason)}"
+
+  defp chain_reason(:not_chainable), do: "not in the chains of the tool that chained it"
+  defp chain_reason(:loop), do: "already in the chain"
+  defp chain_reason(:after_end), do: "after end"
+  defp chain_reason(:unknown_tool), do: "unknown tool"
+  defp chain_reason(:not_triggered), do: "not triggered by chain"
+  defp chain_reason(:not_have), do: "not have in this run"
+  defp chain_reason({:failed, output}), do: output
+  defp chain_reason(reason), do: inspect(reason)
+
   @spec user_facing() :: [String.t()]
   def user_facing do
     [
@@ -76,7 +88,8 @@ defmodule Omunculus.Tools.Out do
       logged_out("openai"),
       unknown_auth_provider("openai"),
       unknown_auth_kind("oauth"),
-      login_tool_failed()
+      login_tool_failed(),
+      chain_failed("end", :after_end)
     ]
   end
 end

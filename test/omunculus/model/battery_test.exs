@@ -133,6 +133,23 @@ defmodule Omunculus.Model.BatteryTest do
     assert Enum.map(calls(agent), &elem(&1, 0)) == ["counter", "continue", "end"]
   end
 
+  test "rule 2 with done: notifies, then concludes with done carrying the count" do
+    names = ~w(counter comment notify continue done end)
+
+    assembled =
+      Enum.join(["You are the worker.", "## Work\nCount to 5", tools_section(names)], "\n\n")
+
+    {agent, call} = recorder(%{"counter" => ["5"]})
+
+    assert {:ok, "counted to 5"} = complete(assembled, tools(names), call)
+
+    assert calls(agent) == [
+             {"counter", %{}},
+             {"notify", %{"body" => "reached 5"}},
+             {"done", %{"report" => "counted to 5"}}
+           ]
+  end
+
   test "rule 2 stops as soon as the counter reaches 5 without exhausting the 5 calls" do
     names = ~w(counter)
     assembled = Enum.join(["You are the worker.", tools_section(names)], "\n\n")
@@ -173,6 +190,21 @@ defmodule Omunculus.Model.BatteryTest do
 
     assert {:ok, "reviewed"} = complete(assembled, tools(names), call)
     assert calls(agent) == [{"continue", %{}}, {"end", %{}}]
+  end
+
+  test "rule 3 with done: the review concludes with done" do
+    names = ~w(continue done end)
+
+    assembled =
+      Enum.join(
+        ["You are the concierge.", "## Last comment\ncounted to 5", tools_section(names)],
+        "\n\n"
+      )
+
+    {agent, call} = recorder()
+
+    assert {:ok, "reviewed"} = complete(assembled, tools(names), call)
+    assert calls(agent) == [{"done", %{"report" => "reviewed"}}]
   end
 
   test "rule 4: an agent addressed as observer comments on the work it is watching" do

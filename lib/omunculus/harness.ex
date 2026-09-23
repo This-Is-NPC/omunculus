@@ -1,8 +1,13 @@
 defmodule Omunculus.Harness do
   @moduledoc """
   Discovers and dispatches tool names through the shared contract. Hydrates
-  declared views, commits calls and emits atomically, then reacts to their
-  events. Run lifecycle events use the same `react/2` path.
+  declared views, runs the steps a call chains (`out.chain`, then the
+  manifest's `then`) under the same contract, commits the call, its steps
+  and all their emits atomically, then reacts to their events. A step
+  outside the chaining tool's `chains`, without the `chain` trigger, not
+  have in the run's ceiling, already on the chain path, after `end`, or
+  failing fails the call and writes none of the chain's emits. Run
+  lifecycle events use the same `react/2` path.
 
   Hooks use the same emit path as tools. Hooks of every event run during
   the model unroll except those of `end`, the only event that ends a run:
@@ -11,7 +16,7 @@ defmodule Omunculus.Harness do
   agent reactions, preserving the originating tool or hook in `via`.
   """
 
-  alias Omunculus.{Config, Project, Run, Store}
+  alias Omunculus.{Ceiling, Config, Project, Run, Store}
   alias Omunculus.Execution.Policy
   alias Omunculus.Tool.{Catalog, Invoke, Manifest}
   alias Omunculus.Tools.Out
@@ -166,16 +171,17 @@ defmodule Omunculus.Harness do
     event && event.inbox_id
   end
 
-  defp path_permissions(project, run, workspace) do
+  defp run_ceiling(project, run) do
     case start_event(project, run) do
-      nil ->
-        %{}
+      nil -> nil
+      event -> Jason.decode!(event.body)["ceiling"]
+    end
+  end
 
-      event ->
-        Omunculus.Ceiling.paths(
-          Jason.decode!(event.body)["ceiling"],
-          workspace.root || project.dir
-        )
+  defp path_permissions(project, run, workspace) do
+    case run_ceiling(project, run) do
+      nil -> %{}
+      ceiling -> Ceiling.paths(ceiling, workspace.root || project.dir)
     end
   end
 
@@ -460,38 +466,139 @@ defmodule Omunculus.Harness do
   end
 
   defp call(project, manifest, args, work_id, ctx, config, catalog, views, workspace) do
-    with {:ok, execution} <-
-           execution_context(manifest, ctx, config, workspace, project.dir, catalog),
-         views =
-           Map.merge(views, %{
-             trigger: Map.get(ctx, :trigger),
-             args: args,
-             prompt_id: Map.get(ctx, :prompt_id)
-           }),
-         {:ok, view} <- hydrate_views(project, manifest.views, ctx.run_id, work_id, views),
-         input = %{
-           name: manifest.name,
-           args: args,
-           view: view,
-           run_id: ctx.run_id,
-           work_id: work_id,
-           workspace: workspace.name,
-           roots: if(workspace.root, do: [workspace.root], else: [project.dir]),
-           config_path: project.config_path
-         },
-         {:ok, out} <- Invoke.call(manifest, input, execution),
-         emits = if(out.ok, do: out.emit, else: []),
-         record = %{name: manifest.name, args: args, ok: out.ok, output: out.output},
-         {:ok, events} <-
-           Store.record_tool(
-             project.conn,
-             ctx.run_id,
-             record,
-             emits,
-             store_ctx(ctx, work_id, config, catalog)
-           ) do
-      {:ok, out, events}
+    env = %{
+      project: project,
+      work_id: work_id,
+      ctx: ctx,
+      config: config,
+      catalog: catalog,
+      views: views,
+      workspace: workspace
+    }
+
+    with {:ok, out} <- invoke(env, manifest, args) do
+      {out, calls} =
+        case chain(env, manifest, out, [manifest.name], [call_entry(manifest, args, out, nil)]) do
+          {:ok, calls} ->
+            {out, calls}
+
+          {:error, {:chain, name, reason}} ->
+            failed = %{out | ok: false, output: Out.chain_failed(name, reason)}
+            {failed, [call_entry(manifest, args, failed, nil)]}
+        end
+
+      with {:ok, events} <-
+             Store.record_tools(
+               project.conn,
+               ctx.run_id,
+               calls,
+               store_ctx(ctx, work_id, config, catalog)
+             ) do
+        {:ok, out, events}
+      end
     end
+  end
+
+  defp invoke(env, manifest, args) do
+    with {:ok, execution} <-
+           execution_context(
+             manifest,
+             env.ctx,
+             env.config,
+             env.workspace,
+             env.project.dir,
+             env.catalog
+           ),
+         views =
+           Map.merge(env.views, %{
+             trigger: Map.get(env.ctx, :trigger),
+             args: args,
+             prompt_id: Map.get(env.ctx, :prompt_id)
+           }),
+         {:ok, view} <-
+           hydrate_views(env.project, manifest.views, env.ctx.run_id, env.work_id, views) do
+      input = %{
+        name: manifest.name,
+        args: args,
+        view: view,
+        run_id: env.ctx.run_id,
+        work_id: env.work_id,
+        workspace: env.workspace.name,
+        roots: if(env.workspace.root, do: [env.workspace.root], else: [env.project.dir]),
+        config_path: env.project.config_path
+      }
+
+      Invoke.call(manifest, input, execution)
+    end
+  end
+
+  defp call_entry(manifest, args, out, via) do
+    record = %{name: manifest.name, args: args, ok: out.ok, output: out.output}
+    record = if via, do: Map.put(record, :via, via), else: record
+    {record, if(out.ok, do: out.emit, else: [])}
+  end
+
+  # Steps run depth first: a step's own chain runs before the next step.
+  # `active` is the path from the called tool to the current one; `calls`
+  # is everything executed so far, the called tool first.
+  defp chain(_env, _manifest, %{ok: false}, _active, calls), do: {:ok, calls}
+
+  defp chain(env, manifest, out, active, calls) do
+    steps = out.chain ++ Enum.map(manifest.then, &%{name: &1, args: %{}})
+
+    Enum.reduce_while(steps, {:ok, calls}, fn step, {:ok, calls} ->
+      case chain_step(env, manifest, step, active, calls) do
+        {:ok, _calls} = ok -> {:cont, ok}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp chain_step(env, parent, %{name: name, args: args}, active, calls) do
+    step_env = %{env | ctx: Map.put(env.ctx, :trigger, "chain")}
+
+    with :ok <- chain_check(name, name in parent.chains, :not_chainable),
+         :ok <- chain_check(name, name not in active, :loop),
+         :ok <- chain_check(name, not Enum.any?(calls, &ended?/1), :after_end),
+         {:ok, manifest} <- chain_manifest(env.catalog, name),
+         :ok <- chain_check(name, Manifest.triggered_by?(manifest, "chain"), :not_triggered),
+         :ok <- chain_check(name, run_has?(env, name), :not_have),
+         {:ok, out} <- chain_invoke(step_env, manifest, args),
+         :ok <- chain_check(name, out.ok, {:failed, out.output}) do
+      chain(
+        step_env,
+        manifest,
+        out,
+        [name | active],
+        calls ++ [call_entry(manifest, args, out, parent.name)]
+      )
+    end
+  end
+
+  defp chain_check(_name, true, _reason), do: :ok
+  defp chain_check(name, false, reason), do: {:error, {:chain, name, reason}}
+
+  defp ended?({%{name: name}, _emits}), do: name == "end"
+
+  defp chain_manifest(catalog, name) do
+    case fetch_manifest(catalog, name) do
+      {:ok, _manifest} = ok -> ok
+      {:error, _reason} -> {:error, {:chain, name, :unknown_tool}}
+    end
+  end
+
+  defp chain_invoke(env, manifest, args) do
+    case invoke(env, manifest, args) do
+      {:ok, _out} = ok -> ok
+      {:error, reason} -> {:error, {:chain, manifest.name, reason}}
+    end
+  end
+
+  defp run_has?(%{ctx: %{run_id: nil}}, _name), do: true
+
+  defp run_has?(env, name) do
+    {:ok, run} = resolve_run(env.project, env.ctx.run_id)
+    Ceiling.classify(run_ceiling(env.project, run), name, "tool") == "have"
   end
 
   defp maybe_react(project, events, active, execution) do

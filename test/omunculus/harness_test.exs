@@ -1,8 +1,9 @@
 defmodule Omunculus.HarnessTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{ExecutionPolicyFixtures, Fixtures, Harness, Id, Project, Run}
+  alias Omunculus.{ExecutionPolicyFixtures, Fixtures, Harness, Id, Project, Run, Store}
   alias Omunculus.Store.Query
+  alias Omunculus.Test.ChainTool
   alias Omunculus.Tools.Out
 
   setup do
@@ -624,5 +625,216 @@ defmodule Omunculus.HarnessTest do
     assert {:ok, [_inbox_row]} = Query.all(project.conn, "SELECT * FROM inbox")
 
     Project.close(project)
+  end
+
+  describe "chains" do
+    setup %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      tools = ["alpha", "beta", "comment", "delta", "end", "omega"]
+      """)
+
+      ChainTool.write(dir, "alpha", """
+      triggers = ["model"]
+      chains = ["alpha", "beta", "comment", "delta", "end", "gamma"]
+      """)
+
+      ChainTool.write(dir, "beta", """
+      triggers = ["chain"]
+      chains = ["alpha", "comment"]
+      """)
+
+      ChainTool.write(dir, "gamma", ~s(triggers = ["model", "chain"]))
+      ChainTool.write(dir, "delta", ~s(triggers = ["model"]))
+
+      ChainTool.write(dir, "omega", """
+      triggers = ["model"]
+      chains = ["beta", "comment", "end"]
+      then = ["beta", "end"]
+      """)
+
+      project = open_project(dir)
+      on_exit(fn -> Project.close(project) end)
+      work_id = Fixtures.insert(project.conn, :works)
+      %{project: project, work_id: work_id}
+    end
+
+    defp outside_run, do: %{trigger: "model", run_id: nil, author: "agent", agent: "concierge"}
+
+    defp comment_emit(work_id, body),
+      do: %{"type" => "comment", "body" => %{"work_id" => work_id, "body" => body}}
+
+    defp step(name, args \\ %{}), do: %{"name" => name, "args" => args}
+
+    defp tool_calls(conn) do
+      {:ok, events} =
+        Query.all(conn, "SELECT * FROM events WHERE type = 'tool' ORDER BY sequence")
+
+      Enum.map(events, &Jason.decode!(&1.body))
+    end
+
+    defp comment_bodies(conn) do
+      {:ok, comments} = Query.all(conn, "SELECT body FROM comments ORDER BY created_at")
+      Enum.map(comments, & &1.body)
+    end
+
+    test "out.chain runs its steps after the tool, each recorded with via", %{
+      project: project,
+      work_id: work_id
+    } do
+      args = %{
+        "emit" => [comment_emit(work_id, "alpha")],
+        "chain" => [
+          step("beta", %{
+            "chain" => [step("comment", %{"body" => "nested", "work_id" => work_id})]
+          })
+        ]
+      }
+
+      assert {:ok, %{ok: true, output: "alpha"}, events} =
+               Harness.dispatch(project, "alpha", args, outside_run())
+
+      assert Enum.map(events, & &1.type) == ["tool", "comment", "tool", "tool", "comment"]
+
+      assert [
+               %{"name" => "alpha"} = alpha,
+               %{"name" => "beta", "via" => "alpha"},
+               %{"name" => "comment", "via" => "beta"}
+             ] = tool_calls(project.conn)
+
+      refute Map.has_key?(alpha, "via")
+      assert comment_bodies(project.conn) == ["alpha", "nested"]
+    end
+
+    test "inside a run then runs after out.chain, in order, and its end ends the run", %{
+      dir: dir,
+      project: project,
+      work_id: work_id
+    } do
+      test_pid = self()
+
+      model = fn _assembled, _tools, call ->
+        call.("omega", %{"chain" => [step("comment", %{"body" => "first"})]})
+        send(test_pid, :reached_after_end)
+        {:ok, "unused"}
+      end
+
+      Fixtures.use_model(dir, model)
+      message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
+
+      assert {:ok, run} = Run.open(project, open(message_id, work_id))
+      refute_received :reached_after_end
+
+      assert Enum.map(tl(tool_calls(project.conn)), &{&1["name"], &1["via"]}) == [
+               {"omega", nil},
+               {"comment", "omega"},
+               {"beta", "omega"},
+               {"end", "omega"}
+             ]
+
+      assert comment_bodies(project.conn) == ["first"]
+      assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+      assert Enum.map(events, & &1.type) |> Enum.take(-2) == ["end", "end-run"]
+    end
+
+    for {name, chain, failed_at, reason} <- [
+          {"a step outside chains", [{"gamma", %{}}, {"omega", %{}}], "omega", :not_chainable},
+          {"a step without the chain trigger", [{"delta", %{}}], "delta", :not_triggered},
+          {"a loop", [{"beta", %{"chain" => [%{"name" => "alpha"}]}}], "alpha", :loop},
+          {"a step after end", [{"end", %{}}, {"beta", %{}}], "beta", :after_end},
+          {"a failing middle step", [{"beta", %{}}, {"beta", %{"fail" => true}}, {"end", %{}}],
+           "beta", {:failed, "beta"}}
+        ] do
+      test "#{name} refuses the whole chain and writes none of its emits", %{
+        project: project,
+        work_id: work_id
+      } do
+        steps = Enum.map(unquote(Macro.escape(chain)), fn {name, args} -> step(name, args) end)
+
+        args = %{
+          "emit" => [comment_emit(work_id, "alpha")],
+          "chain" => [step("comment", %{"body" => "stepped", "work_id" => work_id}) | steps]
+        }
+
+        assert {:ok, %{ok: false, output: output}, [event]} =
+                 Harness.dispatch(project, "alpha", args, outside_run())
+
+        assert output == Out.chain_failed(unquote(failed_at), unquote(Macro.escape(reason)))
+        assert event.type == "tool"
+        assert [%{"name" => "alpha", "ok" => false}] = tool_calls(project.conn)
+        assert comment_bodies(project.conn) == []
+      end
+    end
+
+    test "a step emit that fails to apply rolls back the tool and every step", %{
+      project: project,
+      work_id: work_id
+    } do
+      args = %{
+        "emit" => [comment_emit(work_id, "alpha")],
+        "chain" => [
+          step("comment", %{"body" => "stepped", "work_id" => work_id}),
+          step("beta", %{"emit" => [comment_emit("nope", "broken")]})
+        ]
+      }
+
+      assert {:error, {:comment, {:missing, :works, "nope"}}} =
+               Harness.dispatch(project, "alpha", args, outside_run())
+
+      assert {:ok, []} = Query.all(project.conn, "SELECT * FROM events")
+      assert comment_bodies(project.conn) == []
+    end
+
+    test "inside a run a step that is not have fails the chain and the run goes on", %{
+      dir: dir,
+      project: project,
+      work_id: work_id
+    } do
+      test_pid = self()
+
+      model = fn _assembled, tools, call ->
+        send(test_pid, {:cards, Enum.map(tools, & &1.name)})
+        send(test_pid, {:beta, call.("beta", %{})})
+
+        send(
+          test_pid,
+          {:gamma,
+           call.("alpha", %{
+             "chain" => [step("comment", %{"body" => "stepped"}), step("gamma")]
+           })}
+        )
+
+        send(test_pid, {:chained, call.("alpha", %{"chain" => [step("beta")]})})
+        {:ok, "went on"}
+      end
+
+      Fixtures.use_model(dir, model)
+      message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
+
+      assert {:ok, run} = Run.open(project, open(message_id, work_id))
+
+      assert_received {:cards, cards}
+      assert cards == ["alpha", "comment", "delta", "end", "omega"]
+      assert_received {:beta, {:error, {:not_allowed, "beta"}}}
+      assert_received {:gamma, {:ok, gamma_output}}
+      assert gamma_output == Out.chain_failed("gamma", :not_have)
+      assert_received {:chained, {:ok, "alpha"}}
+
+      assert comment_bodies(project.conn) == []
+
+      assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+
+      assert Enum.map(events, & &1.type) == [
+               "start-run",
+               "tool",
+               "tool",
+               "tool",
+               "tool",
+               "model",
+               "end-run"
+             ]
+    end
   end
 end

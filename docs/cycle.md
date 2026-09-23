@@ -17,7 +17,9 @@ event
 
 `end` is the only action that ends a run. `delegate`, `request`,
 `continue`, `break`, `reply` and `work` change the store and the run goes
-on; the runs they asked for open after it closes.
+on; the runs they asked for open after it closes. A tool can chain `end`:
+`done` comments its report on the run's work, continues it and ends the
+run in one call.
 
 A hook is a tool fired by an event: same contract, any `emit`. Who opens
 the next run of a work is the action. A hook can open a run too if its
@@ -48,9 +50,11 @@ omunculus send "count to 5"
     the model sees the assembled and calls through code in the sandbox
 each tool
     one call (simple) or load → commit (composite)
+    chained steps: out.chain, then the manifest's then, each an EVENTS(tool)
+      with via = the tool that chained it; a refused step writes none of them
     EVENTS(tool) — name, args, result
-    emit → the store applies the action
-    hooks of that event, still in the unroll
+    emit → the store applies the action, for the tool and its steps in one go
+    hooks of those events, still in the unroll
     if end: nothing after it in this run executes
 close (end, or the model stopped)
     EVENTS(end-run), status = done

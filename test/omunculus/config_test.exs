@@ -97,7 +97,7 @@ defmodule Omunculus.ConfigTest do
     assert {:ok, %Config{agents: agents}} = Config.load(default_preset())
 
     assert %{"reviewer" => %{depth: 1, workflow_only: true, ceiling: ceiling}} = agents
-    assert ceiling.granted == ["break", "comment", "continue", "end", "fs.read", "notify"]
+    assert ceiling.granted == ["break", "comment", "continue", "done", "end", "fs.read", "notify"]
   end
 
   test "the default preset's worker asks for sandbox.write" do

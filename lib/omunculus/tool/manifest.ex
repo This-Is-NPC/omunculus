@@ -2,7 +2,9 @@ defmodule Omunculus.Tool.Manifest do
   @moduledoc """
   Struct parsed from a `tool.toml` or `hook.toml`, per spec §8.5. An entry
   built from an MCP server's `tools/list` (spec §8.7) sets `mcp` instead of
-  going through `load/1`.
+  going through `load/1`. `chains` lists the tools this one may chain and
+  `then` the ones chained after its `out.chain`; every name in `then` is in
+  `chains` and `end`, when present, is the last of `then`.
   """
 
   @enforce_keys [:name, :kind, :dir]
@@ -18,6 +20,8 @@ defmodule Omunculus.Tool.Manifest do
             parameters: %{},
             views: [],
             events: [],
+            chains: [],
+            then: [],
             agent: nil,
             dir: nil,
             mcp: nil,
@@ -36,13 +40,15 @@ defmodule Omunculus.Tool.Manifest do
           parameters: map,
           views: [String.t()],
           events: [String.t()],
+          chains: [String.t()],
+          then: [String.t()],
           agent: String.t() | nil,
           dir: String.t() | nil,
           mcp: Omunculus.Config.mcp_server() | nil,
           config: boolean
         }
 
-  @known_keys ~w(name kind shape triggers description tags groups command module parameters views events agent config)
+  @known_keys ~w(name kind shape triggers description tags groups command module parameters views events chains then agent config)
 
   @spec load(String.t()) :: {:ok, t} | {:error, term}
   def load(path) do
@@ -100,6 +106,9 @@ defmodule Omunculus.Tool.Manifest do
          {:ok, groups} <- optional_string_list(raw, "groups", []),
          {:ok, parameters} <- optional_map(raw, "parameters", %{}),
          {:ok, views} <- optional_string_list(raw, "views", []),
+         {:ok, chains} <- optional_string_list(raw, "chains", []),
+         {:ok, then} <- optional_string_list(raw, "then", []),
+         :ok <- validate_then(then, chains),
          {:ok, {triggers, events, agent}} <- kind_fields(raw, kind),
          {:ok, config} <- optional_bool(raw, "config", true),
          :ok <- check_config_flag(name, kind, triggers, config) do
@@ -117,10 +126,20 @@ defmodule Omunculus.Tool.Manifest do
          parameters: parameters,
          views: views,
          events: events,
+         chains: chains,
+         then: then,
          agent: agent,
          dir: dir,
          config: config
        }}
+    end
+  end
+
+  defp validate_then(then, chains) do
+    cond do
+      Enum.any?(then, &(&1 not in chains)) -> {:error, {:invalid, :then}}
+      "end" in Enum.drop(then, -1) -> {:error, {:invalid, :then}}
+      true -> :ok
     end
   end
 
@@ -132,7 +151,7 @@ defmodule Omunculus.Tool.Manifest do
     with :ok <- forbidden(raw, "events"),
          :ok <- forbidden(raw, "agent"),
          {:ok, triggers} <-
-           optional_enum_list(raw, "triggers", ["model"], ["model", "cli", "harness"]),
+           optional_enum_list(raw, "triggers", ["model"], ["model", "cli", "harness", "chain"]),
          :ok <- validate_harness_triggers(triggers) do
       {:ok, {triggers, [], nil}}
     end

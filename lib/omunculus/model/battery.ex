@@ -10,8 +10,9 @@ defmodule Omunculus.Model.Battery do
   and has not already (marked by its own "delegated" comment, so a later
   reopening of the same work does not delegate again), reviewing a
   finished count on the next opening, and reacting as an observer when
-  addressed as one. After `delegate` or `continue` it calls `end` when it
-  has the card.
+  addressed as one. It calls `end` after `delegate` when it has the card,
+  and concludes a count or a review with `done` when it has the card,
+  otherwise with `continue` and then `end` when it has that card.
   """
 
   @counted "counted to 5"
@@ -59,9 +60,12 @@ defmodule Omunculus.Model.Battery do
   defp count(%{cards: cards} = parsed, call) do
     if MapSet.member?(cards, "counter") do
       count_to_five(call, 5)
-      if MapSet.member?(cards, "comment"), do: call.("comment", %{"body" => @counted})
+
+      if MapSet.member?(cards, "comment") and not MapSet.member?(cards, "done"),
+        do: call.("comment", %{"body" => @counted})
+
       if MapSet.member?(cards, "notify"), do: call.("notify", %{"body" => "reached 5"})
-      if MapSet.member?(cards, "continue"), do: continue_and_end(cards, call)
+      if MapSet.member?(cards, "continue"), do: conclude(cards, call, @counted)
       {:ok, @counted}
     else
       review(parsed, call)
@@ -75,9 +79,13 @@ defmodule Omunculus.Model.Battery do
     {:ok, @delegated}
   end
 
-  defp continue_and_end(cards, call) do
-    call.("continue", %{})
-    end_run(cards, call)
+  defp conclude(cards, call, report) do
+    if MapSet.member?(cards, "done") do
+      call.("done", %{"report" => report})
+    else
+      call.("continue", %{})
+      end_run(cards, call)
+    end
   end
 
   defp end_run(cards, call) do
@@ -96,7 +104,7 @@ defmodule Omunculus.Model.Battery do
   defp review(%{last_comment: comment, cards: cards} = parsed, call) do
     cond do
       reviewable?(comment, cards) ->
-        continue_and_end(cards, call)
+        conclude(cards, call, "reviewed")
         {:ok, "reviewed"}
 
       MapSet.member?(cards, "delegate") and not delegated?(comment) ->

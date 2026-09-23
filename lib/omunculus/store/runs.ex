@@ -4,9 +4,9 @@ defmodule Omunculus.Store.Runs do
   inserts the run and `start-run` without a prompt, `attach_assembled/3`
   stores `PROMPTS(assembled)` and fills `prompt_id` once, `open/2`
   is begin-then-attach for tests, `record_model/3` logs a model
-  turn, `record_tool/5` logs a call and applies its emits as one
-  transaction so a failed emit leaves no stray `tool` event, `close/2`
-  ends the run.
+  turn, `record_tools/4` logs a call and the steps it chained, each
+  followed by its emits, as one transaction so a failed emit leaves no
+  stray `tool` event, `close/2` ends the run.
   """
 
   alias Omunculus.Id
@@ -38,23 +38,32 @@ defmodule Omunculus.Store.Runs do
     end)
   end
 
-  @spec record_tool(Exqlite.Sqlite3.db(), String.t() | nil, map, [map], map) ::
+  @spec record_tools(Exqlite.Sqlite3.db(), String.t() | nil, [{map, [map]}], map) ::
           {:ok, [map]} | {:error, term}
-  def record_tool(conn, run_id, call, emits, ctx) do
+  def record_tools(conn, run_id, calls, ctx) do
     Query.transaction(conn, fn ->
-      with {:ok, tool_event} <-
-             Events.append(conn, %{
-               type: "tool",
-               run_id: run_id,
-               work_id: ctx.work_id,
-               request_id: Map.get(ctx, :request_id),
-               inbox_id: Map.get(ctx, :inbox_id),
-               body: Jason.encode!(call)
-             }),
-           {:ok, emit_events} <- Actions.run(conn, emits, ctx) do
-        {:ok, [tool_event | emit_events]}
-      end
+      Enum.reduce_while(calls, {:ok, []}, fn {call, emits}, {:ok, acc} ->
+        case record_call(conn, run_id, call, emits, ctx) do
+          {:ok, events} -> {:cont, {:ok, acc ++ events}}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
     end)
+  end
+
+  defp record_call(conn, run_id, call, emits, ctx) do
+    with {:ok, tool_event} <-
+           Events.append(conn, %{
+             type: "tool",
+             run_id: run_id,
+             work_id: ctx.work_id,
+             request_id: Map.get(ctx, :request_id),
+             inbox_id: Map.get(ctx, :inbox_id),
+             body: Jason.encode!(call)
+           }),
+         {:ok, emit_events} <- Actions.run(conn, emits, ctx) do
+      {:ok, [tool_event | emit_events]}
+    end
   end
 
   @spec close(Exqlite.Sqlite3.db(), String.t()) :: {:ok, map} | {:error, term}

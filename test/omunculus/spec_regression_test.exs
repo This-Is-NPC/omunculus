@@ -124,7 +124,7 @@ defmodule Omunculus.SpecRegressionTest do
     ]
 
     assert {:error, {:invalid_emit, "comment", {:unknown_field, "created_at"}}} =
-             Store.record_tool(p.conn, nil, %{name: "comment"}, emits, ctx)
+             Store.record_tools(p.conn, nil, [{%{name: "comment"}, emits}], ctx)
 
     assert {:ok, []} = Store.replay(p.conn, :project)
     assert {:ok, []} = Store.view(p.conn, "comments.work", work)

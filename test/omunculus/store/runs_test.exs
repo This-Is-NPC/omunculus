@@ -95,30 +95,30 @@ defmodule Omunculus.Store.RunsTest do
     assert event.body == "thinking..."
   end
 
-  test "record_tool appends a tool event carrying the run id and the call", %{conn: conn} do
+  test "record_tools appends a tool event carrying the run id and the call", %{conn: conn} do
     {:ok, run} = Runs.open(conn, open_params(nil))
     call = %{name: "send", args: %{"message" => "hi"}, ok: true, output: "done"}
 
-    assert {:ok, [event]} = Runs.record_tool(conn, run.id, call, [], ctx(run.id))
+    assert {:ok, [event]} = Runs.record_tools(conn, run.id, [{call, []}], ctx(run.id))
 
     assert event.type == "tool"
     assert event.run_id == run.id
     assert event.body == Jason.encode!(call)
   end
 
-  test "record_tool stamps the tool event with ctx.work_id", %{conn: conn} do
+  test "record_tools stamps the tool event with ctx.work_id", %{conn: conn} do
     {:ok, run} = Runs.open(conn, open_params(nil))
     work_id = Fixtures.insert(conn, :works)
     call = %{name: "send", args: %{}, ok: true, output: "done"}
 
     assert {:ok, [event]} =
-             Runs.record_tool(conn, run.id, call, [], ctx(run.id, %{work_id: work_id}))
+             Runs.record_tools(conn, run.id, [{call, []}], ctx(run.id, %{work_id: work_id}))
 
     assert event.type == "tool"
     assert event.work_id == work_id
   end
 
-  test "record_tool applies the call's emits in the same transaction", %{conn: conn} do
+  test "record_tools applies the call's emits in the same transaction", %{conn: conn} do
     {:ok, run} = Runs.open(conn, open_params(nil))
     work_id = Fixtures.insert(conn, :works)
     call = %{name: "comment", args: %{}, ok: true, output: "done"}
@@ -128,23 +128,37 @@ defmodule Omunculus.Store.RunsTest do
     ]
 
     assert {:ok, [tool_event, comment_event]} =
-             Runs.record_tool(conn, run.id, call, emits, ctx(run.id))
+             Runs.record_tools(conn, run.id, [{call, emits}], ctx(run.id))
 
     assert tool_event.type == "tool"
     assert comment_event.type == "comment"
     assert comment_event.sequence == tool_event.sequence + 1
   end
 
-  test "record_tool rolls back the tool event when an emit fails", %{conn: conn} do
+  test "record_tools rolls back the tool event when an emit fails", %{conn: conn} do
     {:ok, run} = Runs.open(conn, open_params(nil))
     call = %{name: "comment", args: %{}, ok: true, output: "done"}
     emits = [%{"type" => "comment", "body" => %{"work_id" => "nope", "body" => "hi"}}]
 
     assert {:error, {:comment, {:missing, :works, "nope"}}} =
-             Runs.record_tool(conn, run.id, call, emits, ctx(run.id))
+             Runs.record_tools(conn, run.id, [{call, emits}], ctx(run.id))
 
     assert {:ok, events} = Query.all(conn, "SELECT * FROM events WHERE type = 'tool'")
     assert events == []
+  end
+
+  test "record_tools rolls back every call when a later call's emit fails", %{conn: conn} do
+    {:ok, run} = Runs.open(conn, open_params(nil))
+    work_id = Fixtures.insert(conn, :works)
+    call = %{name: "comment", args: %{}, ok: true, output: ""}
+    good = [%{"type" => "comment", "body" => %{"work_id" => work_id, "body" => "hi"}}]
+    bad = [%{"type" => "comment", "body" => %{"work_id" => "nope", "body" => "hi"}}]
+
+    assert {:error, {:comment, {:missing, :works, "nope"}}} =
+             Runs.record_tools(conn, run.id, [{call, good}, {call, bad}], ctx(run.id))
+
+    assert {:ok, []} = Query.all(conn, "SELECT * FROM events WHERE type IN ('tool', 'comment')")
+    assert {:ok, []} = Query.all(conn, "SELECT * FROM comments")
   end
 
   test "close marks the run done and appends end-run", %{conn: conn} do
@@ -179,11 +193,10 @@ defmodule Omunculus.Store.RunsTest do
     {:ok, _} = Runs.record_model(conn, run.id, "thinking...")
 
     {:ok, _} =
-      Runs.record_tool(
+      Runs.record_tools(
         conn,
         run.id,
-        %{name: "send", args: %{}, ok: true, output: "ok"},
-        [],
+        [{%{name: "send", args: %{}, ok: true, output: "ok"}, []}],
         ctx(run.id)
       )
 
