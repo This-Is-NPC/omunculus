@@ -255,19 +255,34 @@ defmodule Omunculus.Config do
           | {:stage, String.t(), String.t()}
           | {:workspace, String.t()}
 
+  @doc """
+  Adds `name` to a layer of the TOML at `path`. Grants to one file apply
+  one after another, and the file is replaced whole, so a concurrent
+  `load/1` reads it before or after a grant, never halfway.
+  """
   @spec grant(String.t(), grant_layer, String.t()) :: :ok | {:error, term}
   def grant(path, layer, name) do
-    with {:ok, data} <- read(path) do
-      case add_grant(data, path, layer, name) do
-        {:ok, {:workspace_file, workspace_path, workspace_data}} ->
-          File.write(workspace_path, Omunculus.Config.Toml.encode(workspace_data))
+    :global.trans({{__MODULE__, path}, self()}, fn ->
+      with {:ok, data} <- read(path) do
+        case add_grant(data, path, layer, name) do
+          {:ok, {:workspace_file, workspace_path, workspace_data}} ->
+            replace(workspace_path, workspace_data)
 
-        {:ok, data} ->
-          File.write(path, Omunculus.Config.Toml.encode(data))
+          {:ok, data} ->
+            replace(path, data)
 
-        {:error, reason} ->
-          {:error, reason}
+          {:error, reason} ->
+            {:error, reason}
+        end
       end
+    end)
+  end
+
+  defp replace(path, data) do
+    temporary = "#{path}.#{Omunculus.Id.new()}"
+
+    with :ok <- File.write(temporary, Omunculus.Config.Toml.encode(data)) do
+      File.rename(temporary, path)
     end
   end
 

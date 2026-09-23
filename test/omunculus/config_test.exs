@@ -806,6 +806,29 @@ defmodule Omunculus.ConfigTest do
     assert agent.ceiling.granted == ["counter", "write"]
   end
 
+  test "concurrent grants to one file all land, and concurrent loads read a whole file",
+       %{dir: dir} do
+    write_toml(dir, """
+    [agents.worker]
+    depth = 1
+    tools = ["counter"]
+    text = "work"
+    """)
+
+    names = Enum.map(1..10, &"tool#{&1}")
+
+    grants =
+      Enum.map(names, fn name -> Task.async(fn -> grant(dir, {:agent, "worker"}, name) end) end)
+
+    loads = Enum.map(names, fn _ -> Task.async(fn -> load(dir) end) end)
+
+    assert Enum.uniq(Task.await_many(grants)) == [:ok]
+    assert Enum.all?(Task.await_many(loads), &match?({:ok, %Config{}}, &1))
+
+    assert {:ok, %Config{agents: %{"worker" => agent}}} = load(dir)
+    assert Enum.sort(agent.ceiling.granted) == Enum.sort(["counter" | names])
+  end
+
   test "grant creates the depth layer when absent", %{dir: dir} do
     write_toml(dir, """
     [agents.concierge]
