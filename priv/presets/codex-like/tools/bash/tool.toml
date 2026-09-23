@@ -1,6 +1,5 @@
 name = "bash"
 kind = "tool"
-shape = "simple"
 triggers = ["model"]
 description = "Runs a shell command in the workspace."
 tags = ["shell"]

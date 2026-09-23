@@ -1,6 +1,5 @@
 name = "delegate"
 kind = "tool"
-shape = "simple"
 triggers = ["chain"]
 description = "Creates a child work and hands it to the named agent or to whoever is below. The parent waits for all its children."
 tags = ["sequence", "work"]

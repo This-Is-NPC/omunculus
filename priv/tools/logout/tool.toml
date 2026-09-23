@@ -1,6 +1,5 @@
 name = "logout"
 kind = "tool"
-shape = "simple"
 triggers = ["cli"]
 description = "Removes stored credentials for an auth provider."
 tags = ["cli", "auth"]

@@ -1,6 +1,5 @@
 name = "inbox"
 kind = "tool"
-shape = "simple"
 triggers = ["cli"]
 description = "Lists unread notifications."
 tags = ["cli", "inbox"]

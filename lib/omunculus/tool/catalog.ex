@@ -69,7 +69,6 @@ defmodule Omunculus.Tool.Catalog do
     %Manifest{
       name: tool.name,
       kind: "tool",
-      shape: "simple",
       triggers: ["model"],
       description: tool.description,
       parameters: tool.parameters,

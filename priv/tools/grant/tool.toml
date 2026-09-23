@@ -1,6 +1,5 @@
 name = "grant"
 kind = "tool"
-shape = "simple"
 triggers = ["chain"]
 description = "Grants a name to the work of a request, or with a scope to a TOML layer. A scope needs a human."
 tags = ["store", "request"]

@@ -26,7 +26,6 @@ defmodule Omunculus.Tool.ManifestTest do
 
     assert manifest.name == "read"
     assert manifest.kind == "tool"
-    assert manifest.shape == "simple"
     assert manifest.triggers == ["model"]
     assert manifest.description == ""
     assert manifest.tags == []
@@ -46,7 +45,6 @@ defmodule Omunculus.Tool.ManifestTest do
       write_toml(dir, """
       name = "compact_comments"
       kind = "tool"
-      shape = "composite"
       triggers = ["model", "cli"]
       description = "Summarizes comments on the work."
       tags = ["comments", "compact"]
@@ -61,7 +59,6 @@ defmodule Omunculus.Tool.ManifestTest do
 
     assert {:ok, manifest} = Manifest.load(path)
 
-    assert manifest.shape == "composite"
     assert manifest.triggers == ["model", "cli"]
     assert manifest.description == "Summarizes comments on the work."
     assert manifest.tags == ["comments", "compact"]

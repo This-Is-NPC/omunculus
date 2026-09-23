@@ -1,6 +1,5 @@
 name = "send"
 kind = "tool"
-shape = "simple"
 triggers = ["cli"]
 description = "Delivers the message and opens the first run."
 groups = ["cli"]

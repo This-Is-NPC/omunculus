@@ -1,6 +1,5 @@
 name = "find"
 kind = "tool"
-shape = "simple"
 views = ["paths"]
 triggers = ["model"]
 description = "Finds paths by pattern."

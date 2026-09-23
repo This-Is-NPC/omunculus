@@ -1,6 +1,5 @@
 name = "cancel"
 kind = "tool"
-shape = "simple"
 triggers = ["chain"]
 description = "Cancels the work of a request. A cancelled work never runs again."
 tags = ["sequence", "request"]

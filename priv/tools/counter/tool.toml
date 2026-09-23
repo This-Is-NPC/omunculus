@@ -1,6 +1,5 @@
 name = "counter"
 kind = "tool"
-shape = "simple"
 triggers = ["model"]
 description = "Increments the benchmark counter and returns its value."
 tags = ["bench"]

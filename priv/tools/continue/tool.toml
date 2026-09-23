@@ -1,6 +1,5 @@
 name = "continue"
 kind = "tool"
-shape = "simple"
 triggers = ["chain"]
 description = "Asks for the next workflow step, or closes the work when there is none. The TOML decides which."
 tags = ["sequence", "work"]

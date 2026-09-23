@@ -1,6 +1,5 @@
 name = "counter_decrement"
 kind = "tool"
-shape = "simple"
 triggers = ["model"]
 description = "Decrements the benchmark counter and returns its value."
 tags = ["bench"]

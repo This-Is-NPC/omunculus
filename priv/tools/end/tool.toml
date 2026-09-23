@@ -1,6 +1,5 @@
 name = "end"
 kind = "tool"
-shape = "simple"
 triggers = ["model", "chain"]
 description = "Ends the run. Nothing after it in the same run executes."
 tags = ["sequence", "run"]

@@ -1,6 +1,5 @@
 name = "login"
 kind = "tool"
-shape = "simple"
 triggers = ["cli"]
 description = "Stores credentials for an auth provider."
 tags = ["cli", "auth"]

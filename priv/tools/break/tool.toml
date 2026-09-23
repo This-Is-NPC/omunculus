@@ -1,6 +1,5 @@
 name = "break"
 kind = "tool"
-shape = "simple"
 triggers = ["model"]
 description = "Parks the work with the report as a comment, hands it back to a parent waiting on it and ends the run. The sequence does not advance."
 tags = ["sequence", "work"]

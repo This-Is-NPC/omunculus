@@ -1,6 +1,5 @@
 name = "assemble"
 kind = "tool"
-shape = "simple"
 triggers = ["harness"]
 description = "Builds the assembled prompt of a run from its views."
 tags = ["prompt"]

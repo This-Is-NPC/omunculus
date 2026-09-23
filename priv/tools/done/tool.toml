@@ -1,6 +1,5 @@
 name = "done"
 kind = "tool"
-shape = "simple"
 triggers = ["model"]
 description = "Concludes the run's work: comments the report on it, continues it and ends the run."
 tags = ["sequence", "work"]

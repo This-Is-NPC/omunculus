@@ -1,6 +1,5 @@
 name = "write"
 kind = "tool"
-shape = "simple"
 views = ["paths"]
 triggers = ["model"]
 description = "Creates or overwrites a file."

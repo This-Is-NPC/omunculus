@@ -1,6 +1,5 @@
 name = "work"
 kind = "tool"
-shape = "simple"
 triggers = ["model"]
 description = "Creates works with a title and a goal: comments the report on the run's work, delegates each work below it and ends the run. Without a work, creates the root work with the report as its first comment."
 tags = ["sequence", "work"]

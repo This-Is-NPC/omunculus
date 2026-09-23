@@ -1,6 +1,5 @@
 name = "prompt"
 kind = "tool"
-shape = "simple"
 triggers = ["cli"]
 description = "Prints the assembled prompt of a run."
 tags = ["cli", "prompt"]

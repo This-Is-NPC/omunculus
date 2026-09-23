@@ -1,6 +1,5 @@
 name = "compact_comments"
 kind = "tool"
-shape = "composite"
 triggers = ["model"]
 description = "Summarizes comments on the work and rewrites the row: load reads, commit writes the summary."
 tags = ["comments", "compact", "work"]

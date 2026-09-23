@@ -10,7 +10,6 @@ defmodule Omunculus.Tool.Manifest do
   @enforce_keys [:name, :kind, :dir]
   defstruct name: nil,
             kind: nil,
-            shape: "simple",
             triggers: ["model"],
             description: "",
             tags: [],
@@ -31,7 +30,6 @@ defmodule Omunculus.Tool.Manifest do
   @type t :: %__MODULE__{
           name: String.t(),
           kind: String.t(),
-          shape: String.t(),
           triggers: [String.t()],
           description: String.t(),
           tags: [String.t()],
@@ -50,7 +48,7 @@ defmodule Omunculus.Tool.Manifest do
           config: boolean
         }
 
-  @known_keys ~w(name kind shape triggers description tags groups command module parameters schemas views events chains then agent config)
+  @known_keys ~w(name kind triggers description tags groups command module parameters schemas views events chains then agent config)
 
   @spec load(String.t()) :: {:ok, t} | {:error, term}
   def load(path) do
@@ -102,7 +100,6 @@ defmodule Omunculus.Tool.Manifest do
     with {:ok, name} <- required_string(raw, "name"),
          {:ok, kind} <- required_enum(raw, "kind", ["tool", "hook"]),
          {:ok, {command, module}} <- required_command_or_module(raw),
-         {:ok, shape} <- optional_string(raw, "shape", "simple"),
          {:ok, description} <- optional_string(raw, "description", ""),
          {:ok, tags} <- optional_string_list(raw, "tags", []),
          {:ok, groups} <- optional_string_list(raw, "groups", []),
@@ -119,7 +116,6 @@ defmodule Omunculus.Tool.Manifest do
        %__MODULE__{
          name: name,
          kind: kind,
-         shape: shape,
          triggers: triggers,
          description: description,
          tags: tags,
