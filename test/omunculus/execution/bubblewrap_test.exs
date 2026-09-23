@@ -1,14 +1,11 @@
 defmodule Omunculus.Execution.BubblewrapTest do
   use ExUnit.Case, async: false
 
-  alias Omunculus.Id
   alias Omunculus.Execution.{Bubblewrap, Command, Policy}
   alias Omunculus.ExecutionPolicyFixtures
 
   setup do
-    workspace = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(workspace)
-    on_exit(fn -> File.rm_rf!(workspace) end)
+    workspace = Omunculus.Fixtures.tmp_dir()
     %{workspace: workspace}
   end
 

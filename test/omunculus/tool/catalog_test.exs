@@ -6,9 +6,7 @@ defmodule Omunculus.Tool.CatalogTest do
   alias Omunculus.Tool.Manifest
 
   setup do
-    project_dir = Path.join(System.tmp_dir!(), Omunculus.Id.new())
-    File.mkdir_p!(project_dir)
-    on_exit(fn -> File.rm_rf!(project_dir) end)
+    project_dir = Omunculus.Fixtures.tmp_dir()
     %{project_dir: project_dir}
   end
 

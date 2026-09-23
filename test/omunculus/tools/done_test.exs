@@ -1,7 +1,7 @@
 defmodule Omunculus.Tools.DoneTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{Fixtures, Id, Project, Run, Store}
+  alias Omunculus.{Fixtures, Project, Run, Store}
   alias Omunculus.Store.Query
   alias Omunculus.Tool.Catalog
   alias Omunculus.Tools.Done
@@ -31,9 +31,7 @@ defmodule Omunculus.Tools.DoneTest do
   end
 
   test "in a run it comments, continues and ends in one call, before the hooks react" do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
 
     Fixtures.write_config(dir, """
     [agents.concierge]
@@ -50,10 +48,10 @@ defmodule Omunculus.Tools.DoneTest do
       {:ok, "unused"}
     end)
 
-    {:ok, project} = Fixtures.open_project(dir)
+    project = Fixtures.open_project(dir)
     work_id = Fixtures.insert(project.conn, :works)
     message_id = Fixtures.insert(project.conn, :prompts)
-    opening = %{prompt_id: message_id, work_id: work_id, request_id: nil, via: nil, agent: nil}
+    opening = Fixtures.opening(message_id, work_id)
 
     assert {:ok, run} = Run.open(project, opening)
     refute_received :reached_after_done

@@ -1,69 +1,23 @@
 defmodule Omunculus.CLITest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Fixtures, Id, Project, Store}
+  alias Omunculus.{CLI, Fixtures, Project, Store}
   alias Omunculus.Store.Query
   alias Omunculus.Tools.Out
 
+  import Omunculus.Fixtures,
+    only: [
+      open_project: 1,
+      write_config: 2,
+      write_hook: 4,
+      write_model_tool: 2,
+      write_model_tool: 3
+    ]
+
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
     Fixtures.install_default(dir)
     %{dir: dir}
-  end
-
-  defp open(dir) do
-    {:ok, project} = Fixtures.open_project(dir)
-    project
-  end
-
-  defp write_config(dir, contents), do: Fixtures.write_config(dir, contents)
-
-  defp write_tool(dir, name) do
-    tool_dir = Path.join([dir, "tools", name])
-    File.mkdir_p!(tool_dir)
-
-    File.write!(Path.join(tool_dir, "tool.toml"), """
-    name = "#{name}"
-    kind = "tool"
-    triggers = ["model"]
-    command = ["./run"]
-    """)
-
-    run_path = Path.join(tool_dir, "run")
-
-    File.write!(run_path, """
-    #!/bin/sh
-    echo '{"ok": true, "output": "", "emit": []}'
-    """)
-
-    File.chmod!(run_path, 0o755)
-  end
-
-  defp write_emit_tool(dir, name, emit_json) do
-    tool_dir = Path.join([dir, "tools", name])
-    File.mkdir_p!(tool_dir)
-
-    File.write!(Path.join(tool_dir, "tool.toml"), """
-    name = "#{name}"
-    kind = "tool"
-    triggers = ["model"]
-    command = ["./run"]
-    """)
-
-    run_path = Path.join(tool_dir, "run")
-    File.write!(run_path, "#!/bin/sh\necho '#{emit_json}'\n")
-    File.chmod!(run_path, 0o755)
-  end
-
-  defp write_hook(dir, name, toml, script) do
-    hook_dir = Path.join([dir, "tools", name])
-    File.mkdir_p!(hook_dir)
-    File.write!(Path.join(hook_dir, "hook.toml"), toml)
-    run_path = Path.join(hook_dir, "run")
-    File.write!(run_path, script)
-    File.chmod!(run_path, 0o755)
   end
 
   defp create_root(call, title),
@@ -87,7 +41,7 @@ defmodule Omunculus.CLITest do
   test "send delivers a message, opens a run and the run reaches done", %{dir: dir} do
     assert {:ok, ""} = CLI.run(["send", "count to 5"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
 
     assert {:ok, [message]} =
              Query.all(project.conn, "SELECT * FROM prompts WHERE kind = 'message'")
@@ -126,7 +80,7 @@ defmodule Omunculus.CLITest do
   test "the --message form works", %{dir: dir} do
     assert {:ok, ""} = CLI.run(["send", "--message", "hello"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
 
     assert {:ok, [message]} =
              Query.all(project.conn, "SELECT * FROM prompts WHERE kind = 'message'")
@@ -155,7 +109,7 @@ defmodule Omunculus.CLITest do
 
   test "prompt --run prints that run assembled prompt", %{dir: dir} do
     assert {:ok, ""} = CLI.run(["send", "first message"], dir)
-    project = open(dir)
+    project = open_project(dir)
     assert {:ok, [first]} = Query.all(project.conn, "SELECT * FROM runs")
     first_id = first.id
     Project.close(project)
@@ -218,9 +172,7 @@ defmodule Omunculus.CLITest do
 
   test "--config uses that file; the project root is the file's directory", %{dir: dir} do
     File.rm!(Path.join(dir, "omunculus.toml"))
-    other = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(other)
-    on_exit(fn -> File.rm_rf!(other) end)
+    other = Fixtures.tmp_dir()
     Fixtures.install_default(other)
     config = Path.join(other, "omunculus.toml")
 
@@ -309,7 +261,7 @@ defmodule Omunculus.CLITest do
     assert {:ok, ""} = CLI.run(["send", "first"], dir)
     assert {:ok, ""} = CLI.run(["send", "second"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
 
     assert {:ok, assembleds} =
              Query.all(project.conn, "SELECT * FROM prompts WHERE kind = 'assembled'")
@@ -331,7 +283,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "Count to 5"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
       assert work.title == "Count to five"
@@ -374,7 +326,7 @@ defmodule Omunculus.CLITest do
       refute second_assembled =~ "Count to 5"
       refute second_assembled =~ first_assembled.body
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [report, comment]} =
                Query.all(project.conn, "SELECT * FROM comments ORDER BY created_at")
@@ -404,7 +356,7 @@ defmodule Omunculus.CLITest do
       assert {:error, {:prompt, {:missing, :works, "nope"}}} =
                CLI.run(["send", "--work_id", "nope", "x"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, []} = Query.all(project.conn, "SELECT * FROM events")
       Project.close(project)
     end
@@ -412,7 +364,7 @@ defmodule Omunculus.CLITest do
 
   describe "request and reply" do
     setup %{dir: dir} do
-      write_tool(dir, "write")
+      write_model_tool(dir, "write")
       :ok
     end
 
@@ -437,7 +389,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(args, dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
       Project.close(project)
 
@@ -446,13 +398,13 @@ defmodule Omunculus.CLITest do
 
     test "an askable request opens REQUESTS waiting_human, comments the reason, and parks a linked work on the request",
          %{dir: dir} do
-      project = open(dir)
+      project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
       request_id = open_write_request(dir, work_id)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, request} =
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
@@ -489,13 +441,13 @@ defmodule Omunculus.CLITest do
 
     test "reply grant adds the name to works.grants, reopens the work, and opens a new run on the same stage with the granted tool",
          %{dir: dir} do
-      project = open(dir)
+      project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
       request_id = open_write_request(dir, work_id)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, [old_run]} = Query.all(project.conn, "SELECT * FROM runs")
       Project.close(project)
 
@@ -504,11 +456,11 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--option", "grant", "pode"],
+                 ["reply", "--request_id", request_id, "--option", "grant", "allowed"],
                  dir
                )
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, request} =
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
@@ -539,7 +491,7 @@ defmodule Omunculus.CLITest do
 
     test "reply grant with scope agent writes the permanent grant to the project's omunculus.toml, leaves works.grants untouched, and a fresh work also gets the tool",
          %{dir: dir} do
-      project = open(dir)
+      project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
@@ -561,7 +513,7 @@ defmodule Omunculus.CLITest do
                  dir
                )
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
       assert work.grants == nil
       Project.close(project)
@@ -569,7 +521,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, config} = Fixtures.load_config(dir)
       assert "write" in config.agents["concierge"].ceiling.granted
 
-      project = open(dir)
+      project = open_project(dir)
       other_work_id = Fixtures.insert(project.conn, :works, %{title: "Another one"})
       Project.close(project)
 
@@ -577,7 +529,7 @@ defmodule Omunculus.CLITest do
       Fixtures.use_model(dir, model)
       assert {:ok, ""} = CLI.run(["send", "--work_id", other_work_id, "new request"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [run]} =
                Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [other_work_id])
@@ -611,7 +563,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "save"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
 
@@ -645,7 +597,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
       refute_received :reached_after_request
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
       assert {:ok, []} = Query.all(project.conn, "SELECT * FROM comments")
 
@@ -667,7 +619,7 @@ defmodule Omunculus.CLITest do
       tools = ["ask_comment", "comment"]
       """)
 
-      write_emit_tool(
+      write_model_tool(
         dir,
         "ask_comment",
         ~s({"ok": true, "output": "", "emit": [{"type": "request", "body": {"reason": "just checking", "options": {"grant": [{"name": "grant", "args": {"kind": "tool", "name": "comment"}}]}}}]})
@@ -688,7 +640,7 @@ defmodule Omunculus.CLITest do
       assert_received {:output, output}
       assert output =~ Out.already_granted("comment")
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
 
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
@@ -702,7 +654,7 @@ defmodule Omunculus.CLITest do
 
     test "reply deny closes the request, reopens the work and opens its run with the request",
          %{dir: dir} do
-      project = open(dir)
+      project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
@@ -726,7 +678,7 @@ defmodule Omunculus.CLITest do
       assert assembled =~ "## Request"
       assert assembled =~ "not allowed"
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, %{status: "closed"}} =
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
@@ -755,7 +707,7 @@ defmodule Omunculus.CLITest do
          %{dir: dir} do
       request_id = open_write_request(dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, request} =
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
@@ -768,11 +720,11 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--option", "grant", "pode"],
+                 ["reply", "--request_id", request_id, "--option", "grant", "allowed"],
                  dir
                )
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
       assert "grant" in Enum.map(events, & &1.type)
 
@@ -791,7 +743,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--option", "grant", "pode"],
+                 ["reply", "--request_id", request_id, "--option", "grant", "allowed"],
                  dir
                )
 
@@ -822,13 +774,13 @@ defmodule Omunculus.CLITest do
         """
       )
 
-      project = open(dir)
+      project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
       request_id = open_write_request(dir, work_id)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, request} =
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
@@ -853,12 +805,12 @@ defmodule Omunculus.CLITest do
       write_config(dir, """
       [agents.concierge]
       depth = 0
-      text = "Sou o concierge."
+      text = "I am the concierge."
       tools = ["work", "continue", "comment", "done", "end"]
 
       [agents.reviewer]
       depth = 0
-      text = "Sou o reviewer."
+      text = "I am the reviewer."
       tools = ["work", "continue", "comment", "done", "end"]
 
       [workflows.delivery]
@@ -873,14 +825,14 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         cond do
-          assembled =~ "Sou o concierge." ->
+          assembled =~ "I am the concierge." ->
             if assembled =~ "## Work",
               do: call.("done", %{"report" => "built"}),
               else: create_root(call, "Ship it")
 
             {:ok, "unused"}
 
-          assembled =~ "Sou o reviewer." ->
+          assembled =~ "I am the reviewer." ->
             call.("done", %{"report" => "reviewed"})
             {:ok, "unused"}
         end
@@ -890,7 +842,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "Ship it please"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
       assert work.state == "done"
@@ -946,7 +898,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [_creation, run]} =
                Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
@@ -981,7 +933,7 @@ defmodule Omunculus.CLITest do
       workflow = "delivery"
       """)
 
-      write_emit_tool(
+      write_model_tool(
         dir,
         "bad_continue",
         ~s({"ok": true, "output": "", "emit": [{"type": "continue", "body": {"stage": "review"}}]})
@@ -1000,7 +952,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
       assert work.stage == "to_do"
       Project.close(project)
@@ -1024,9 +976,9 @@ defmodule Omunculus.CLITest do
       workflow = "delivery"
       """)
 
-      write_tool(dir, "counter")
+      write_model_tool(dir, "counter")
 
-      project = open(dir)
+      project = open_project(dir)
 
       work_id =
         Fixtures.insert(project.conn, :works, %{
@@ -1050,7 +1002,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "go on"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
       assert length(runs) == 2
@@ -1090,7 +1042,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "handle this"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
       assert work.state == "waiting"
       assert work.stage == "to_do"
@@ -1111,7 +1063,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "come back"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs")
       assert length(runs) == 3
@@ -1131,18 +1083,18 @@ defmodule Omunculus.CLITest do
       write_config(dir, """
       [agents.concierge]
       depth = 0
-      text = "Sou o concierge."
+      text = "I am the concierge."
       tools = ["work", "delegate", "comment", "end"]
 
       [agents.worker]
       depth = 1
-      text = "Sou o worker."
+      text = "I am the worker."
       tools = ["comment", "continue", "done", "end"]
       """)
 
       model = fn assembled, _tools, call ->
         cond do
-          assembled =~ "Sou o worker." ->
+          assembled =~ "I am the worker." ->
             call.("done", %{"report" => "finished"})
 
           assembled =~ "## Last comment\nopened" ->
@@ -1162,7 +1114,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "Big task please"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, works} = Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
       [parent, child] = works
@@ -1225,19 +1177,19 @@ defmodule Omunculus.CLITest do
           """
           [agents.concierge]
           depth = 0
-          text = "Sou o concierge."
+          text = "I am the concierge."
           tools = ["work", "delegate", "comment", "end"]
 
           [agents.worker]
           depth = 1
-          text = "Sou o worker."
+          text = "I am the worker."
           tools = #{inspect(unquote(tools))}
           """ <> workflow
         )
 
         model = fn assembled, _tools, call ->
           cond do
-            assembled =~ "Sou o worker." ->
+            assembled =~ "I am the worker." ->
               call.(unquote(tool), unquote(Macro.escape(args)))
               {:ok, "unused"}
 
@@ -1258,7 +1210,7 @@ defmodule Omunculus.CLITest do
 
         assert {:ok, ""} = CLI.run(["send", "Big task please"], dir)
 
-        project = open(dir)
+        project = open_project(dir)
 
         assert {:ok, [parent, child]} =
                  Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
@@ -1288,12 +1240,12 @@ defmodule Omunculus.CLITest do
       write_config(dir, """
       [agents.concierge]
       depth = 0
-      text = "Sou o concierge."
+      text = "I am the concierge."
       tools = ["work", "delegate", "comment", "continue", "done", "end"]
 
       [agents.worker]
       depth = 1
-      text = "Sou o worker."
+      text = "I am the worker."
       tools = ["comment", "continue", "done", "end"]
 
       [workflows.delivery]
@@ -1311,7 +1263,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         cond do
-          assembled =~ "Sou o worker." ->
+          assembled =~ "I am the worker." ->
             call.("done", %{"report" => "built"})
             {:ok, "unused"}
 
@@ -1336,7 +1288,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "Big task2 please"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, works} = Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
       [parent, child] = works
@@ -1361,22 +1313,22 @@ defmodule Omunculus.CLITest do
       write_config(dir, """
       [agents.concierge]
       depth = 0
-      text = "Sou o concierge."
+      text = "I am the concierge."
       tools = ["work", "delegate", "comment", "end", "grant", "reply", "write"]
 
       [agents.worker]
       depth = 1
-      text = "Sou o worker."
+      text = "I am the worker."
       tools = ["comment", "continue", "done", "end", "request_access"]
       """)
 
-      reader = open(dir)
+      reader = open_project(dir)
       {:ok, counter} = Agent.start_link(fn -> 0 end)
       on_exit(fn -> Project.close(reader) end)
 
       model = fn assembled, _tools, call ->
         cond do
-          assembled =~ "Sou o worker." ->
+          assembled =~ "I am the worker." ->
             case Agent.get_and_update(counter, fn n -> {n, n + 1} end) do
               0 ->
                 call.("request_access", %{
@@ -1406,7 +1358,7 @@ defmodule Omunculus.CLITest do
                        "body" => "you may write"
                      })
 
-            {:ok, "concedido"}
+            {:ok, "granted"}
 
           assembled =~ "## Last comment\nopened" ->
             delegate_one(call, "Sub task3", "write this")
@@ -1466,7 +1418,7 @@ defmodule Omunculus.CLITest do
     test "notify mid-run leaves an unread inbox row, the run keeps going and closes done, the work stays open, and CLI reads it",
          %{dir: dir} do
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work", do: create_root(call, "Ajuda")
+        unless assembled =~ "## Work", do: create_root(call, "Help")
         assert {:ok, ""} = call.("notify", %{"body" => "need help"})
         call.("end", %{})
       end
@@ -1475,7 +1427,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
       assert work.state == "open"
@@ -1504,7 +1456,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, ^expected_line} = CLI.run(["inbox"], dir)
       assert {:ok, ""} = CLI.run(["inbox_read", inbox_row.id], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, read} =
                Query.one(project.conn, "SELECT * FROM inbox WHERE id = ?", [inbox_row.id])
@@ -1522,19 +1474,19 @@ defmodule Omunculus.CLITest do
 
   describe "D0-H1-W0: builtin no-op hooks" do
     setup %{dir: dir} do
-      write_tool(dir, "write")
+      write_model_tool(dir, "write")
       :ok
     end
 
     test "a request emits a tool event named on-request right after the call's chain, carrying the call's run and work ids",
          %{dir: dir} do
-      project = open(dir)
+      project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
       request_id = open_write_request(dir, work_id)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
 
       request_event = Enum.find(events, &(&1.type == "request"))
@@ -1571,7 +1523,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
       types = Enum.map(events, & &1.type)
 
@@ -1615,7 +1567,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
 
       continue_event = events |> Enum.filter(&(&1.type == "continue")) |> List.last()
@@ -1663,7 +1615,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "handle this"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
 
       break_event = Enum.find(events, &(&1.type == "break"))
@@ -1710,7 +1662,7 @@ defmodule Omunculus.CLITest do
         """
       )
 
-      project = open(dir)
+      project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
@@ -1719,7 +1671,7 @@ defmodule Omunculus.CLITest do
           assert {:ok, ""} = call.("notify", %{"body" => "notice"})
           {:ok, "ok"}
         else
-          {:ok, "reagido"}
+          {:ok, "reacted"}
         end
       end
 
@@ -1727,7 +1679,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "handle"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, runs} =
                Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
@@ -1781,7 +1733,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
       assert work.state == "done"
@@ -1815,7 +1767,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "count the steps"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
       assert {:ok, comments} = Store.view(project.conn, "comments.work", work.id)
       assert Enum.map(comments, & &1.body) == ["opened", "one", "two", "three"]
@@ -1841,7 +1793,7 @@ defmodule Omunculus.CLITest do
       expected = comments |> Enum.map(&"#{&1.id} #{&1.author}: #{&1.body}") |> Enum.join("\n")
       assert load_output == expected
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [summary]} = Store.view(project.conn, "comments.work", work.id)
       assert summary.body == "summary: 1 2 3"
@@ -1864,7 +1816,7 @@ defmodule Omunculus.CLITest do
 
       model3 = fn assembled, _tools, _call ->
         send(test_pid, {:third_assembled, assembled})
-        {:ok, "visto"}
+        {:ok, "seen"}
       end
 
       Fixtures.use_model(dir, model3)
@@ -1873,8 +1825,8 @@ defmodule Omunculus.CLITest do
 
       assert_received {:third_assembled, third_assembled}
       assert third_assembled =~ "## Last comment\nsummary: 1 2 3"
-      refute third_assembled =~ ~r/^um$/m
-      refute third_assembled =~ ~r/^dois$/m
+      refute third_assembled =~ ~r/^one$/m
+      refute third_assembled =~ ~r/^two$/m
       refute third_assembled =~ ~r/^three$/m
     end
 
@@ -1886,16 +1838,16 @@ defmodule Omunculus.CLITest do
       tools = ["comment", "compact_comments", "foreign_compact", "work", "sandbox.network"]
       """)
 
-      project = open(dir)
-      my_work_id = Fixtures.insert(project.conn, :works, %{title: "Meu work"})
-      other_work_id = Fixtures.insert(project.conn, :works, %{title: "Outro work"})
+      project = open_project(dir)
+      my_work_id = Fixtures.insert(project.conn, :works, %{title: "My work"})
+      other_work_id = Fixtures.insert(project.conn, :works, %{title: "Other work"})
 
       other_comment_id =
         Fixtures.insert(project.conn, :comments, %{work_id: other_work_id, body: "do not touch"})
 
       Project.close(project)
 
-      write_emit_tool(
+      write_model_tool(
         dir,
         "foreign_compact",
         ~s({"ok": true, "output": "", "emit": [{"type": "compact", "body": {"work_id": "#{other_work_id}", "summary": "stolen"}}]})
@@ -1910,7 +1862,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "--work_id", my_work_id, "compact"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [comment]} = Store.view(project.conn, "comments.work", other_work_id)
       assert comment.id == other_comment_id
@@ -1923,12 +1875,12 @@ defmodule Omunculus.CLITest do
       write_config(dir, """
       [agents.concierge]
       depth = 0
-      text = "Sou o concierge."
+      text = "I am the concierge."
       tools = ["catalog", "fs.read", "sequence", "store"]
 
       [agents.worker]
       depth = 1
-      text = "Sou o worker."
+      text = "I am the worker."
       tools = ["comment", "continue", "done", "end", "fs.read", "fs.write"]
 
       [agents.reviewer]
@@ -1953,7 +1905,7 @@ defmodule Omunculus.CLITest do
             call.("done", %{"report" => "reviewed"})
             {:ok, "unused"}
 
-          assembled =~ "Sou o worker." ->
+          assembled =~ "I am the worker." ->
             call.("done", %{"report" => "done"})
             {:ok, "unused"}
 
@@ -1974,7 +1926,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "Ship it please"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [reviewer_run]} =
                Query.all(project.conn, "SELECT * FROM runs WHERE agent = 'reviewer'")
@@ -2008,12 +1960,12 @@ defmodule Omunculus.CLITest do
       write_config(dir, """
       [agents.concierge]
       depth = 0
-      text = "Sou o concierge."
+      text = "I am the concierge."
       tools = ["work", "delegate", "comment", "end"]
 
       [agents.worker]
       depth = 1
-      text = "Sou o worker."
+      text = "I am the worker."
       tools = ["comment"]
 
       [agents.reviewer]
@@ -2025,7 +1977,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         cond do
-          assembled =~ "Sou o worker." ->
+          assembled =~ "I am the worker." ->
             {:ok, "done"}
 
           assembled =~ "## Last comment\nopened" ->
@@ -2045,7 +1997,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "Ship it please"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [child_run]} =
                Query.all(project.conn, "SELECT * FROM runs WHERE agent = 'worker'")

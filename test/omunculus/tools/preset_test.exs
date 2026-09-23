@@ -6,9 +6,7 @@ defmodule Omunculus.Tools.PresetTest do
   alias Omunculus.Tools.{Out, Preset}
 
   setup do
-    root = Path.join(System.tmp_dir!(), Omunculus.Id.new())
-    File.mkdir_p!(root)
-    on_exit(fn -> File.rm_rf!(root) end)
+    root = Fixtures.tmp_dir()
     %{root: root}
   end
 

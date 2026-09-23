@@ -6,8 +6,10 @@ defmodule Omunculus.MatrixTest do
 
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Config, Fixtures, Id, Project, Store}
+  alias Omunculus.{CLI, Config, Fixtures, Project, Store}
   alias Omunculus.Store.Query
+
+  import Omunculus.Fixtures, only: [open_project: 1]
 
   @concierge_d0_tools ~w(bench break continue done end fs.read sandbox.network store work)
   @concierge_d1_tools ~w(break catalog continue delegate done end fs.read sandbox.network store work)
@@ -22,15 +24,8 @@ defmodule Omunculus.MatrixTest do
   @observer_text "You are the observer. Record the notification."
 
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
     %{dir: dir}
-  end
-
-  defp open(dir) do
-    {:ok, project} = Fixtures.open_project(dir)
-    project
   end
 
   defp concierge_section(tools) do
@@ -258,7 +253,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D0-H0-W0", %{dir: dir} do
     run_cell(dir, 0, false, false)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert work.parent_id == nil
@@ -271,7 +266,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D0-H1-W0", %{dir: dir} do
     run_cell(dir, 0, true, false)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert_workflow_off(project.conn, work)
@@ -282,7 +277,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D0-H0-W1", %{dir: dir} do
     run_cell(dir, 0, false, true)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert_workflow_on(project.conn, work)
@@ -293,7 +288,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D0-H1-W1", %{dir: dir} do
     run_cell(dir, 0, true, true)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert_workflow_on(project.conn, work)
@@ -304,7 +299,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D1-H0-W0", %{dir: dir} do
     run_cell(dir, 1, false, false)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert work.parent_id != nil
@@ -318,7 +313,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D1-H1-W0", %{dir: dir} do
     run_cell(dir, 1, true, false)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
 
@@ -331,7 +326,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D1-H0-W1", %{dir: dir} do
     run_cell(dir, 1, false, true)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert_workflow_on(project.conn, work)
@@ -343,7 +338,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D1-H1-W1", %{dir: dir} do
     run_cell(dir, 1, true, true)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert_workflow_on(project.conn, work)
@@ -355,7 +350,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D2-H0-W0", %{dir: dir} do
     run_cell(dir, 2, false, false)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert_worker_ran_at_depth_two(project.conn)
@@ -369,7 +364,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D2-H1-W0", %{dir: dir} do
     run_cell(dir, 2, true, false)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert_worker_ran_at_depth_two(project.conn)
@@ -383,7 +378,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D2-H0-W1", %{dir: dir} do
     run_cell(dir, 2, false, true)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert_worker_ran_at_depth_two(project.conn)
@@ -397,7 +392,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D2-H1-W1", %{dir: dir} do
     run_cell(dir, 2, true, true)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert_worker_ran_at_depth_two(project.conn)

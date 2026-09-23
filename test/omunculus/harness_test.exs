@@ -1,46 +1,19 @@
 defmodule Omunculus.HarnessTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{ExecutionPolicyFixtures, Fixtures, Harness, Id, Project, Run, Store}
+  alias Omunculus.{ExecutionPolicyFixtures, Fixtures, Harness, Project, Run, Store}
   alias Omunculus.Store.Query
   alias Omunculus.Test.ChainTool
   alias Omunculus.Tools.Out
 
+  import Omunculus.Fixtures,
+    only: [open_project: 1, opening: 1, opening: 2, write_config: 2, write_hook: 4, write_tool: 4]
+
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
     Fixtures.install_default(dir)
     %{dir: dir}
   end
-
-  defp write_tool(dir, name, toml, script) do
-    tool_dir = Path.join([dir, "tools", name])
-    File.mkdir_p!(tool_dir)
-    File.write!(Path.join(tool_dir, "tool.toml"), toml)
-    run_path = Path.join(tool_dir, "run")
-    File.write!(run_path, script)
-    File.chmod!(run_path, 0o755)
-  end
-
-  defp write_hook(dir, name, toml, script) do
-    hook_dir = Path.join([dir, "tools", name])
-    File.mkdir_p!(hook_dir)
-    File.write!(Path.join(hook_dir, "hook.toml"), toml)
-    run_path = Path.join(hook_dir, "run")
-    File.write!(run_path, script)
-    File.chmod!(run_path, 0o755)
-  end
-
-  defp open_project(dir) do
-    {:ok, project} = Fixtures.open_project(dir)
-    project
-  end
-
-  defp write_config(dir, contents), do: Fixtures.write_config(dir, contents)
-
-  defp open(prompt_id, work_id \\ nil),
-    do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: nil, agent: nil}
 
   defp execution(dir), do: ExecutionPolicyFixtures.policy(dir, network: "host")
 
@@ -184,7 +157,7 @@ defmodule Omunculus.HarnessTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message_id))
+    assert {:ok, run} = Run.open(project, opening(message_id))
 
     assert {:ok, [event]} =
              Query.all(project.conn, "SELECT * FROM events WHERE type = 'model' AND run_id = ?", [
@@ -241,7 +214,7 @@ defmodule Omunculus.HarnessTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message_id))
+    assert {:ok, run} = Run.open(project, opening(message_id))
 
     assert {:ok, [event]} =
              Query.all(
@@ -753,7 +726,7 @@ defmodule Omunculus.HarnessTest do
       Fixtures.use_model(dir, model)
       message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
 
-      assert {:ok, run} = Run.open(project, open(message_id, work_id))
+      assert {:ok, run} = Run.open(project, opening(message_id, work_id))
       refute_received :reached_after_end
 
       assert Enum.map(tl(tool_calls(project.conn)), &{&1["name"], &1["via"]}) == [
@@ -842,7 +815,7 @@ defmodule Omunculus.HarnessTest do
       Fixtures.use_model(dir, model)
       message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
 
-      assert {:ok, run} = Run.open(project, open(message_id, work_id))
+      assert {:ok, run} = Run.open(project, opening(message_id, work_id))
 
       assert_received {:cards, cards}
       assert cards == ["alpha", "comment", "delta", "end", "omega"]
@@ -891,7 +864,7 @@ defmodule Omunculus.HarnessTest do
       Fixtures.use_model(dir, model)
       message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
 
-      assert {:ok, run} = Run.open(project, open(message_id, work_id))
+      assert {:ok, run} = Run.open(project, opening(message_id, work_id))
       assert_received {:omega, {:ok, "omega"}}
       # The model stops without end, so the harness asks the human about the root work.
       assert Enum.map(tl(tool_calls(project.conn)), & &1["name"]) ==
@@ -952,7 +925,7 @@ defmodule Omunculus.HarnessTest do
         reason = unquote(Macro.escape(reason))
 
         assert {:error, ^reason} = Harness.dispatch(project, "delta", %{}, outside_run())
-        assert {:error, ^reason} = Run.open(project, open(message_id, work_id))
+        assert {:error, ^reason} = Run.open(project, opening(message_id, work_id))
         refute_received :model
         assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
       end
@@ -989,7 +962,7 @@ defmodule Omunculus.HarnessTest do
       Fixtures.use_model(dir, model)
       message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
 
-      assert {:ok, _run} = Run.open(project, open(message_id, work_id))
+      assert {:ok, _run} = Run.open(project, opening(message_id, work_id))
       assert_received {:tools, %{"alpha" => %{}, "delta" => %{"type" => "object"}}}
       assert {:ok, manifest} = Harness.manifest(project, "delta")
       assert manifest.parameters == %{"type" => "object"}

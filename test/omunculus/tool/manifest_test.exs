@@ -4,9 +4,7 @@ defmodule Omunculus.Tool.ManifestTest do
   alias Omunculus.Tool.Manifest
 
   setup do
-    dir = Path.join(System.tmp_dir!(), Omunculus.Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Omunculus.Fixtures.tmp_dir()
     %{dir: dir}
   end
 

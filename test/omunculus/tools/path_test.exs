@@ -35,9 +35,7 @@ defmodule Omunculus.Tools.PathTest do
   end
 
   test "accepts an absolute path under a later, non-first root", %{root: root} do
-    other = Path.join(System.tmp_dir!(), Omunculus.Id.new())
-    File.mkdir_p!(other)
-    on_exit(fn -> File.rm_rf!(other) end)
+    other = Omunculus.Fixtures.tmp_dir()
 
     absolute = Path.join(root, "sub/file.txt")
     assert PathAuth.resolve([other, root], absolute) == {:ok, absolute}

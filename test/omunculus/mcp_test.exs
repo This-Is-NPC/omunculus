@@ -1,8 +1,10 @@
 defmodule Omunculus.McpTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, ExecutionPolicyFixtures, Fixtures, Id, Mcp, Project}
+  alias Omunculus.{CLI, ExecutionPolicyFixtures, Fixtures, Mcp, Project}
   alias Omunculus.Tool.Catalog
+
+  import Omunculus.Fixtures, only: [open_project: 1, write_config: 2]
 
   @protocol_version "2025-03-26"
   @server %{
@@ -79,17 +81,8 @@ defmodule Omunculus.McpTest do
 
   describe "end-to-end through Omunculus.CLI.run/3" do
     setup do
-      dir = Path.join(System.tmp_dir!(), Id.new())
-      File.mkdir_p!(dir)
-      on_exit(fn -> File.rm_rf!(dir) end)
+      dir = Fixtures.tmp_dir()
       %{dir: dir}
-    end
-
-    defp write_config(dir, contents), do: Fixtures.write_config(dir, contents)
-
-    defp open(dir) do
-      {:ok, project} = Fixtures.open_project(dir)
-      project
     end
 
     defp mcp_config(command_path) do
@@ -130,7 +123,7 @@ defmodule Omunculus.McpTest do
       refute assembled =~ "- whisper:"
       refute assembled =~ "- mcp:"
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, events} = Omunculus.Store.replay(project.conn, :project)
 
       tool_names =

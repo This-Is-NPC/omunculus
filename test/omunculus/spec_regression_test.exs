@@ -51,7 +51,7 @@ defmodule Omunculus.SpecRegressionTest do
       ensure_policy(@config <> "\n" <> Fixtures.tools_table(dir))
     )
 
-    {:ok, project} = Fixtures.open_project(dir)
+    project = Fixtures.open_project(dir)
 
     on_exit(fn ->
       Project.close(project)
@@ -60,13 +60,6 @@ defmodule Omunculus.SpecRegressionTest do
 
     %{project: project, dir: dir}
   end
-
-  defp opening(work_id \\ nil, overrides \\ %{}),
-    do:
-      Map.merge(
-        %{prompt_id: nil, work_id: work_id, request_id: nil, via: nil, agent: nil},
-        overrides
-      )
 
   defp ensure_policy(body) do
     Enum.reduce([{"assemble", ~s("assemble")}, {"max_retries", "0"}], body, fn {key, value},
@@ -150,7 +143,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening(child))
+             Run.open(p, Fixtures.opening(nil, child))
 
     assert {:ok, [%{arbiter: "human", status: "waiting_human"}]} =
              Query.all(p.conn, "SELECT * FROM requests")
@@ -172,7 +165,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening())
+             Run.open(p, Fixtures.opening(nil))
 
     assert {:ok, %{status: "waiting_human"}} = Store.view(p.conn, "request", request)
   end
@@ -196,7 +189,7 @@ defmodule Omunculus.SpecRegressionTest do
       {:ok, "done"}
     end)
 
-    assert {:ok, _} = Run.open(p, opening(parent, %{request_id: request}))
+    assert {:ok, _} = Run.open(p, Fixtures.opening(nil, parent, %{request_id: request}))
     assert {:ok, %{status: "waiting_agent"}} = Store.view(p.conn, "request", request)
     assert {:ok, %{state: "waiting", grants: nil}} = Store.view(p.conn, "work", child)
     {:ok, config} = Config.load(p.config_path)
@@ -216,7 +209,7 @@ defmodule Omunculus.SpecRegressionTest do
       {:ok, "done"}
     end)
 
-    assert {:ok, _} = Run.open(p, opening(parent, %{request_id: request}))
+    assert {:ok, _} = Run.open(p, Fixtures.opening(nil, parent, %{request_id: request}))
     assert {:ok, %{status: "waiting_agent"}} = Store.view(p.conn, "request", request)
     assert {:ok, %{state: "waiting"}} = Store.view(p.conn, "work", child)
   end
@@ -282,7 +275,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening(parent, %{request_id: request}))
+             Run.open(p, Fixtures.opening(nil, parent, %{request_id: request}))
 
     assert {:ok, %{status: "closed"}} = Store.view(p.conn, "request", request)
     assert {:ok, events} = Store.replay(p.conn, {:request, request})
@@ -308,7 +301,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, run} =
-             Run.open(p, opening())
+             Run.open(p, Fixtures.opening(nil))
 
     refute "missing_tool" in Jason.decode!(run.tools)
     assert {:ok, []} = Query.all(p.conn, "SELECT * FROM requests")
@@ -344,12 +337,12 @@ defmodule Omunculus.SpecRegressionTest do
 
     child = Fixtures.insert(p.conn, :works, %{assignee: "worker", parent_id: parent})
     Fixtures.use_model(p, fn _, _, _ -> {:ok, "done"} end)
-    assert {:ok, run} = Run.open(p, opening(child))
+    assert {:ok, run} = Run.open(p, Fixtures.opening(nil, child))
     assert "write" in Jason.decode!(run.tools)
     write_config(p, config_text <> "deny = [\"write\"]\n")
     Fixtures.use_model(p, fn _, _, _ -> {:ok, "done"} end)
     # The first run broke the child, so only a named agent opens a run on it.
-    assert {:ok, run} = Run.open(p, opening(child, %{agent: "worker"}))
+    assert {:ok, run} = Run.open(p, Fixtures.opening(nil, child, %{agent: "worker"}))
     refute "write" in Jason.decode!(run.tools)
   end
 
@@ -382,7 +375,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening())
+             Run.open(p, Fixtures.opening(nil))
 
     work = Fixtures.insert(p.conn, :works, %{grants: Jason.encode!([outside])})
 
@@ -394,7 +387,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening(work))
+             Run.open(p, Fixtures.opening(nil, work))
   end
 
   test "CLI comments on an inbox without creating a request", %{project: p} do
@@ -422,7 +415,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, run} =
-             Run.open(p, opening(work))
+             Run.open(p, Fixtures.opening(nil, work))
 
     {:ok, events} = Store.replay(p.conn, {:run, run.id})
     calls = for %{type: "tool", body: body} <- events, do: Jason.decode!(body)["name"]
@@ -462,7 +455,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening(work))
+             Run.open(p, Fixtures.opening(nil, work))
 
     assert {:ok, %{stage: "second"}} = Store.view(p.conn, "work", work)
     assert {:ok, [_continue]} = Query.all(p.conn, "SELECT * FROM events WHERE type = 'continue'")
@@ -504,7 +497,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening(work))
+             Run.open(p, Fixtures.opening(nil, work))
 
     assert {:ok, %{stage: "second"}} = Store.view(p.conn, "work", work)
     assert {:ok, events} = Store.replay(p.conn, {:work, work})
@@ -564,7 +557,7 @@ defmodule Omunculus.SpecRegressionTest do
       end
     end)
 
-    assert {:ok, run} = Run.open(p, opening(parent))
+    assert {:ok, run} = Run.open(p, Fixtures.opening(nil, parent))
 
     assert {:ok, events} = Store.replay(p.conn, {:run, run.id})
     types = Enum.map(events, & &1.type)
@@ -617,7 +610,7 @@ defmodule Omunculus.SpecRegressionTest do
         end
       end)
 
-      assert {:ok, _run} = Run.open(p, opening(child))
+      assert {:ok, _run} = Run.open(p, Fixtures.opening(nil, child))
 
       assert {:ok, %{state: state}} = Store.view(p.conn, "work", child)
       assert state == if(action == "done", do: "done", else: "waiting")
@@ -658,7 +651,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening())
+             Run.open(p, Fixtures.opening(nil))
 
     assert {:ok, [work]} = Query.all(p.conn, "SELECT * FROM works")
     assert work.stage == "first"
@@ -699,7 +692,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening(work, %{agent: "concierge", via: "reaction"}))
+             Run.open(p, Fixtures.opening(nil, work, %{agent: "concierge", via: "reaction"}))
 
     write_config(
       p,
@@ -718,7 +711,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:error, {:workflow_off, "reviewer"}} =
-             Run.open(p, opening(nil, %{agent: "reviewer"}))
+             Run.open(p, Fixtures.opening(nil, nil, %{agent: "reviewer"}))
   end
 
   test "model messages are recorded before the actions they call", %{project: p} do
@@ -736,7 +729,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, run} =
-             Run.open(p, opening())
+             Run.open(p, Fixtures.opening(nil))
 
     assert {:ok, events} = Store.replay(p.conn, {:run, run.id})
 
@@ -761,7 +754,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening())
+             Run.open(p, Fixtures.opening(nil))
 
     assert {:ok, [%{id: inbox}]} = Query.all(p.conn, "SELECT * FROM inbox")
     assert {:ok, events} = Store.replay(p.conn, {:inbox, inbox})

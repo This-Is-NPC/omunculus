@@ -1,10 +1,12 @@
 defmodule Omunculus.Tools.WorkTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Fixtures, Id, Project, Store}
+  alias Omunculus.{CLI, Fixtures, Project, Store}
   alias Omunculus.Store.Query
   alias Omunculus.Tool.{Catalog, Invoke}
   alias Omunculus.Tools.{Out, Work}
+
+  import Omunculus.Fixtures, only: [last_comment: 1, role: 1]
 
   @input %{
     name: "work",
@@ -108,9 +110,7 @@ defmodule Omunculus.Tools.WorkTest do
 
   describe "in the run cycle" do
     setup do
-      dir = Path.join(System.tmp_dir!(), Id.new())
-      File.mkdir_p!(dir)
-      on_exit(fn -> File.rm_rf!(dir) end)
+      dir = Fixtures.tmp_dir()
       %{dir: dir}
     end
 
@@ -146,22 +146,13 @@ defmodule Omunculus.Tools.WorkTest do
       """
     end
 
-    defp role(assembled), do: assembled |> String.split("\n", parts: 2) |> hd()
-
-    defp last_comment(assembled) do
-      case String.split(assembled, "## Last comment\n", parts: 2) do
-        [_before, rest] -> rest |> String.split("\n\n", parts: 2) |> hd()
-        [_none] -> nil
-      end
-    end
-
     defp create(call, report, works), do: call.("work", %{"report" => report, "works" => works})
 
     defp setup_project(dir, toml, model) do
       Fixtures.write_config(dir, toml)
       Fixtures.use_model(dir, model)
       assert {:ok, ""} = CLI.run(["send", "go"], dir)
-      {:ok, project} = Fixtures.open_project(dir)
+      project = Fixtures.open_project(dir)
       project
     end
 
@@ -483,7 +474,7 @@ defmodule Omunculus.Tools.WorkTest do
       end)
 
       assert {:ok, ""} = CLI.run(["send", "go"], dir)
-      {:ok, project} = Fixtures.open_project(dir)
+      project = Fixtures.open_project(dir)
 
       assert_received {:named, {:error, {:delegate, :agent_with_workflow}}}
       assert_received {:schema, "lead", staged}

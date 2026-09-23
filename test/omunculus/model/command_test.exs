@@ -19,9 +19,7 @@ defmodule Omunculus.Model.CommandTest do
   defp calls(agent), do: Agent.get(agent, & &1)
 
   test "a bash/python bridge calls tools then returns text" do
-    dir = Path.join(System.tmp_dir!(), Omunculus.Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Omunculus.Fixtures.tmp_dir()
 
     policy =
       ExecutionPolicyFixtures.policy([dir, Path.dirname(@bridge)],

@@ -6,9 +6,7 @@ defmodule Omunculus.Execution.PolicyTest do
   alias Omunculus.Execution.Policy
 
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
     Fixtures.install_default(dir)
     %{dir: dir}
   end

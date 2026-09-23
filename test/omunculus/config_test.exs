@@ -3,13 +3,11 @@ defmodule Omunculus.ConfigTest do
 
   alias Omunculus.Config
   alias Omunculus.Config.Layer
-  alias Omunculus.{Fixtures, Id, Project}
+  alias Omunculus.{Fixtures, Project}
   alias Omunculus.Store.Query
 
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
     %{dir: dir}
   end
 
@@ -2352,12 +2350,10 @@ defmodule Omunculus.ConfigAuthTest do
   use ExUnit.Case, async: true
 
   alias Omunculus.Config
-  alias Omunculus.{Fixtures, Id}
+  alias Omunculus.Fixtures
 
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
     %{dir: dir}
   end
 

@@ -6,9 +6,7 @@ defmodule Omunculus.Tools.WriteTest do
   alias Omunculus.Tools.Write
 
   setup do
-    root = Path.join(System.tmp_dir!(), Omunculus.Id.new())
-    File.mkdir_p!(root)
-    on_exit(fn -> File.rm_rf!(root) end)
+    root = Omunculus.Fixtures.tmp_dir()
     %{root: root}
   end
 
@@ -52,9 +50,7 @@ defmodule Omunculus.Tools.WriteTest do
   end
 
   test "rejects roots supplied outside the execution policy", %{root: root} do
-    outside = Path.join(System.tmp_dir!(), Omunculus.Id.new())
-    File.mkdir_p!(outside)
-    on_exit(fn -> File.rm_rf!(outside) end)
+    outside = Omunculus.Fixtures.tmp_dir()
 
     input = %{@input | args: %{"path" => "file.txt", "content" => "hi"}, roots: [outside]}
 

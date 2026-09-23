@@ -1,13 +1,13 @@
 defmodule Omunculus.WorkspaceTest do
   use ExUnit.Case, async: false
 
-  alias Omunculus.{CLI, Config, Fixtures, Id, Project}
+  alias Omunculus.{CLI, Config, Fixtures, Project}
   alias Omunculus.Store.Query
 
+  import Omunculus.Fixtures, only: [open_project: 1, write_config: 2]
+
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
 
     [one, two, three] =
       for n <- ["001", "002", "003"] do
@@ -19,13 +19,6 @@ defmodule Omunculus.WorkspaceTest do
 
     %{dir: dir, one: one, two: two, three: three}
   end
-
-  defp open(dir) do
-    {:ok, project} = Fixtures.open_project(dir)
-    project
-  end
-
-  defp write_config(dir, contents), do: Fixtures.write_config(dir, contents)
 
   defp base_toml(one, two, three) do
     """
@@ -126,7 +119,7 @@ defmodule Omunculus.WorkspaceTest do
     three: three
   } do
     write_config(dir, base_toml(one, two, three))
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
@@ -135,7 +128,7 @@ defmodule Omunculus.WorkspaceTest do
 
     assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
 
     assert {:ok, [run]} =
              Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
@@ -156,7 +149,7 @@ defmodule Omunculus.WorkspaceTest do
     File.write!(Path.join(two, "secret.txt"), "secret")
     File.write!(Path.join(one, "other.txt"), "other")
 
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
@@ -180,7 +173,7 @@ defmodule Omunculus.WorkspaceTest do
     three: three
   } do
     write_config(dir, base_toml(one, two, three))
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
@@ -205,7 +198,7 @@ defmodule Omunculus.WorkspaceTest do
 
     assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
 
     assert {:ok, [child]} =
              Query.all(project.conn, "SELECT * FROM works WHERE parent_id = ?", [work_id])
@@ -221,7 +214,7 @@ defmodule Omunculus.WorkspaceTest do
     three: three
   } do
     write_config(dir, base_toml(one, two, three))
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
@@ -250,7 +243,7 @@ defmodule Omunculus.WorkspaceTest do
     write_config(dir, base_toml(one, two, three))
     File.write!(Path.join(three, "marker.txt"), "m")
 
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "three", title: "In three"})
     Project.close(project)
 
@@ -274,7 +267,7 @@ defmodule Omunculus.WorkspaceTest do
        %{dir: dir, one: one, two: two, three: three} do
     write_config(dir, base_toml(one, two, three))
     write_check_tool(dir, "delete", "delete")
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
@@ -293,7 +286,7 @@ defmodule Omunculus.WorkspaceTest do
 
     assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
     Project.close(project)
 
@@ -354,7 +347,7 @@ defmodule Omunculus.WorkspaceTest do
     write_config(dir, stage_scope_toml(one, two, three))
 
     write_check_tool(dir, "delete", "delete")
-    project = open(dir)
+    project = open_project(dir)
 
     work_id =
       Fixtures.insert(project.conn, :works, %{
@@ -380,7 +373,7 @@ defmodule Omunculus.WorkspaceTest do
 
     assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
     Project.close(project)
 
@@ -425,7 +418,7 @@ defmodule Omunculus.WorkspaceTest do
 
     assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
     assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
 
     assert {:ok, event} =
@@ -451,7 +444,7 @@ defmodule Omunculus.WorkspaceTest do
         """
     )
 
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
@@ -491,7 +484,7 @@ defmodule Omunculus.WorkspaceTest do
 
     assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
     assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
 
     assert {:ok, event} =
@@ -522,7 +515,7 @@ defmodule Omunculus.WorkspaceTest do
         """
     )
 
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 

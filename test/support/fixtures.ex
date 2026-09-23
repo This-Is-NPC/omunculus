@@ -8,7 +8,7 @@ defmodule Omunculus.Fixtures do
   alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Id
   alias Omunculus.Project
-  alias Omunculus.Store.Query
+  alias Omunculus.Store.{Query, Runs}
   alias Omunculus.Test.ScriptedModel
   alias Omunculus.Tools.Preset
 
@@ -93,10 +93,98 @@ defmodule Omunculus.Fixtures do
     apply_defaults(dir, opts)
   end
 
-  @spec open_project(String.t()) :: {:ok, Project.t()} | {:error, term}
+  @doc "A fresh directory under the system temp dir, removed when the test exits."
+  @spec tmp_dir() :: String.t()
+  def tmp_dir do
+    dir = Path.join(System.tmp_dir!(), Id.new())
+    File.mkdir_p!(dir)
+    ExUnit.Callbacks.on_exit(fn -> File.rm_rf!(dir) end)
+    dir
+  end
+
+  @doc "The params `Runs.begin/2` takes for a concierge run at depth 0, merged with `fields`."
+  @spec run_params(map) :: map
+  def run_params(fields \\ %{}) do
+    params =
+      Map.merge(
+        %{
+          prompt_id: nil,
+          agent: "concierge",
+          depth: 0,
+          ceiling: %{have: ["send"], askable: [], sealed: [], blocked: [], uncited: "askable"},
+          execution: %{"id" => "execution-policy"},
+          work_id: nil,
+          via: nil,
+          request_id: nil
+        },
+        fields
+      )
+
+    Map.put_new(params, :tools, params.ceiling.have)
+  end
+
+  @doc "Begins a run with `run_params(fields)` and attaches an assembled prompt to it."
+  @spec open_run(Omunculus.Store.Connection.t(), map) :: map
+  def open_run(conn, fields \\ %{}) do
+    {:ok, run} = Runs.begin(conn, run_params(fields))
+    {:ok, run} = Runs.attach_assembled(conn, run.id, "assembled")
+    run
+  end
+
+  @spec open_project(String.t()) :: Project.t()
   def open_project(dir) do
-    with {:ok, config} <- load_config(dir) do
-      Project.open(config)
+    {:ok, config} = load_config(dir)
+    {:ok, project} = Project.open(config)
+    project
+  end
+
+  @doc "The opening `Run.open/2` takes, every field not given `nil`."
+  @spec opening(String.t() | nil, String.t() | nil, map) :: map
+  def opening(prompt_id, work_id \\ nil, fields \\ %{}),
+    do:
+      Map.merge(
+        %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: nil, agent: nil},
+        fields
+      )
+
+  @spec write_tool(String.t(), String.t(), String.t(), String.t()) :: :ok
+  def write_tool(dir, name, toml, script), do: write_command(dir, name, "tool.toml", toml, script)
+
+  @spec write_hook(String.t(), String.t(), String.t(), String.t()) :: :ok
+  def write_hook(dir, name, toml, script), do: write_command(dir, name, "hook.toml", toml, script)
+
+  @doc "Installs a model-triggered command tool that prints `out_json` as its `out`."
+  @spec write_model_tool(String.t(), String.t(), String.t()) :: :ok
+  def write_model_tool(dir, name, out_json \\ ~s({"ok": true, "output": "", "emit": []})) do
+    toml = """
+    name = "#{name}"
+    kind = "tool"
+    triggers = ["model"]
+    command = ["./run"]
+    """
+
+    write_tool(dir, name, toml, "#!/bin/sh\necho '#{out_json}'\n")
+  end
+
+  defp write_command(dir, name, file, toml, script) do
+    tool_dir = Path.join([dir, "tools", name])
+    File.mkdir_p!(tool_dir)
+    File.write!(Path.join(tool_dir, file), toml)
+    run_path = Path.join(tool_dir, "run")
+    File.write!(run_path, script)
+    File.chmod!(run_path, 0o755)
+  end
+
+  @doc "The first line of an assembled prompt, the agent's own text."
+  @spec role(String.t()) :: String.t()
+  def role(assembled), do: assembled |> String.split("\n", parts: 2) |> hd()
+
+  @doc "The text under `## Last comment` of an assembled prompt, or nil."
+  @spec last_comment(String.t()) :: String.t() | nil
+  def last_comment(assembled) do
+    case String.split(assembled, "## Last comment\n", parts: 2) do
+      [_before, rest] -> rest |> String.split("\n\n", parts: 2) |> hd()
+      [_none] -> nil
     end
   end
 

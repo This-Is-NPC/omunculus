@@ -1,8 +1,10 @@
 defmodule Omunculus.CycleTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Fixtures, Id, Project}
+  alias Omunculus.{CLI, Fixtures, Project}
   alias Omunculus.Store.Query
+
+  import Omunculus.Fixtures, only: [last_comment: 1, role: 1]
 
   @toml """
   [agents.lead]
@@ -17,9 +19,7 @@ defmodule Omunculus.CycleTest do
   """
 
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
     %{dir: dir}
   end
 
@@ -38,15 +38,6 @@ defmodule Omunculus.CycleTest do
         "max_queue = #{1000 + :erlang.unique_integer([:positive])}"
       )
     )
-  end
-
-  defp role(assembled), do: assembled |> String.split("\n", parts: 2) |> hd()
-
-  defp last_comment(assembled) do
-    case String.split(assembled, "## Last comment\n", parts: 2) do
-      [_before, rest] -> rest |> String.split("\n\n", parts: 2) |> hd()
-      [_none] -> nil
-    end
   end
 
   # The root is created by the run of send, splits into two children and
@@ -124,7 +115,7 @@ defmodule Omunculus.CycleTest do
     )
 
     assert {:ok, ""} = CLI.run(["send", "go"], dir)
-    {:ok, project} = Fixtures.open_project(dir)
+    project = Fixtures.open_project(dir)
 
     {root, runs} = root_runs(project)
     assert length(runs) == 3
@@ -164,7 +155,7 @@ defmodule Omunculus.CycleTest do
     assert {:ok, ""} = CLI.run(["send", "go"], dir)
     assert Agent.get(active, & &1.most) == 1
 
-    {:ok, project} = Fixtures.open_project(dir)
+    project = Fixtures.open_project(dir)
     {_root, runs} = root_runs(project)
     assert length(runs) == 3
     Project.close(project)
@@ -185,7 +176,7 @@ defmodule Omunculus.CycleTest do
 
     assert {:error, :child_failed} = CLI.run(["send", "go"], dir)
 
-    {:ok, project} = Fixtures.open_project(dir)
+    project = Fixtures.open_project(dir)
     assert all(project, "SELECT * FROM runs WHERE status != 'done'") == []
 
     {root, runs} = root_runs(project)
@@ -236,7 +227,7 @@ defmodule Omunculus.CycleTest do
     end)
 
     assert {:ok, ""} = CLI.run(["send", "go"], dir)
-    {:ok, project} = Fixtures.open_project(dir)
+    project = Fixtures.open_project(dir)
 
     {_root, runs} = root_runs(project)
     {[send_run], [root_run]} = Enum.split_with(runs, &(&1.via == "send"))

@@ -5,15 +5,23 @@ defmodule Omunculus.RunTest do
   alias Omunculus.Store.Query
   alias Omunculus.Tools.Out
 
+  import Omunculus.Fixtures,
+    only: [
+      open_project: 1,
+      opening: 1,
+      opening: 2,
+      opening: 3,
+      write_config: 2,
+      write_config: 3,
+      write_model_tool: 3,
+      write_tool: 4
+    ]
+
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
     Fixtures.install_default(dir)
     %{dir: dir}
   end
-
-  defp write_config(dir, contents, opts \\ []), do: Fixtures.write_config(dir, contents, opts)
 
   defp assemble_toml do
     """
@@ -38,39 +46,8 @@ defmodule Omunculus.RunTest do
     """
   end
 
-  defp write_tool(dir, name, toml, script) do
-    tool_dir = Path.join([dir, "tools", name])
-    File.mkdir_p!(tool_dir)
-    File.write!(Path.join(tool_dir, "tool.toml"), toml)
-    run_path = Path.join(tool_dir, "run")
-    File.write!(run_path, script)
-    File.chmod!(run_path, 0o755)
-  end
-
-  defp model_tool_toml(name),
-    do: """
-    name = "#{name}"
-    kind = "tool"
-    triggers = ["model"]
-    command = ["./run"]
-    """
-
-  defp fixed_output_script(output),
-    do: """
-    #!/bin/sh
-    echo '{"ok": true, "output": "#{output}", "emit": []}'
-    """
-
-  defp open_project(dir) do
-    {:ok, project} = Fixtures.open_project(dir)
-    project
-  end
-
   defp message(conn, body \\ "hi"),
     do: Fixtures.insert(conn, :prompts, %{kind: "message", body: body})
-
-  defp open(prompt_id, work_id \\ nil),
-    do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: nil, agent: nil}
 
   test "a model that raises leaves the run done and returns the crash", %{dir: dir} do
     write_config(dir, """
@@ -84,7 +61,7 @@ defmodule Omunculus.RunTest do
     Fixtures.use_model(project, fn _assembled, _tools, _call -> raise "boom" end)
 
     assert {:error, {:model_crashed, %RuntimeError{message: "boom"}}} =
-             Run.open(project, open(prompt_id))
+             Run.open(project, opening(prompt_id))
 
     assert {:ok, [run]} = Store.Query.all(project.conn, "SELECT status FROM runs")
     assert run.status == "done"
@@ -105,7 +82,7 @@ defmodule Omunculus.RunTest do
     end)
 
     assert {:error, {:openai, :down}} =
-             Run.open(project, open(prompt_id))
+             Run.open(project, opening(prompt_id))
 
     assert {:ok, [run]} = Store.Query.all(project.conn, "SELECT status FROM runs")
     assert run.status == "done"
@@ -121,7 +98,7 @@ defmodule Omunculus.RunTest do
     tools = ["echo", "sandbox.network"]
     """)
 
-    write_tool(dir, "echo", model_tool_toml("echo"), fixed_output_script("echoed"))
+    write_model_tool(dir, "echo", ~s({"ok": true, "output": "echoed", "emit": []}))
     project = open_project(dir)
     message_id = message(project.conn)
 
@@ -132,7 +109,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message_id))
+    assert {:ok, run} = Run.open(project, opening(message_id))
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
     assert Enum.map(events, & &1.type) == ["start-run", "tool", "tool", "model", "end-run"]
     [assemble_event, echo_event] = Enum.filter(events, &(&1.type == "tool"))
@@ -154,7 +131,7 @@ defmodule Omunculus.RunTest do
     )
 
     project = open_project(dir)
-    assert {:error, {:assemble, :missing}} = Run.open(project, open(message(project.conn)))
+    assert {:error, {:assemble, :missing}} = Run.open(project, opening(message(project.conn)))
     assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
     Project.close(project)
   end
@@ -170,7 +147,7 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
     Fixtures.use_model(project, fn _assembled, _tools, _call -> raise "must never be called" end)
 
-    assert {:error, {:assemble, :empty}} = Run.open(project, open(message(project.conn)))
+    assert {:error, {:assemble, :empty}} = Run.open(project, opening(message(project.conn)))
     assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
     assert run.status == "done"
     assert run.prompt_id == nil
@@ -194,21 +171,21 @@ defmodule Omunculus.RunTest do
       {:ok, "done"}
     end)
 
-    assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+    assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
     assert_received {:assembled, "CUSTOM ASSEMBLED"}
     Project.close(project)
   end
 
   test "a model calling a name outside the effective set is rejected and nothing is recorded",
        %{dir: dir} do
-    write_tool(dir, "echo", model_tool_toml("echo"), fixed_output_script("echoed"))
+    write_model_tool(dir, "echo", ~s({"ok": true, "output": "echoed", "emit": []}))
     project = open_project(dir)
     message_id = message(project.conn)
 
     model = fn _assembled, _tools, call -> call.("nonexistent", %{}) end
     Fixtures.use_model(project, model)
 
-    assert {:error, {:not_allowed, "nonexistent"}} = Run.open(project, open(message_id))
+    assert {:error, {:not_allowed, "nonexistent"}} = Run.open(project, opening(message_id))
 
     assert {:ok, events} = Query.all(project.conn, "SELECT * FROM events WHERE type = 'tool'")
     assert Enum.map(events, &Jason.decode!(&1.body)["name"]) == ["assemble"]
@@ -229,7 +206,7 @@ defmodule Omunculus.RunTest do
     model = fn _assembled, _tools, _call -> raise "must never be called" end
     Fixtures.use_model(project, model)
 
-    assert {:error, {:no_agent_at_depth, 0}} = Run.open(project, open(message_id))
+    assert {:error, {:no_agent_at_depth, 0}} = Run.open(project, opening(message_id))
     assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
 
     Project.close(project)
@@ -243,8 +220,8 @@ defmodule Omunculus.RunTest do
     tools = ["one", "sandbox.network"]
     """)
 
-    write_tool(dir, "one", model_tool_toml("one"), fixed_output_script("one-out"))
-    write_tool(dir, "two", model_tool_toml("two"), fixed_output_script("two-out"))
+    write_model_tool(dir, "one", ~s({"ok": true, "output": "one-out", "emit": []}))
+    write_model_tool(dir, "two", ~s({"ok": true, "output": "two-out", "emit": []}))
 
     project = open_project(dir)
     message_id = message(project.conn)
@@ -259,7 +236,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message_id))
+    assert {:ok, _run} = Run.open(project, opening(message_id))
 
     assert_received {:assembled, assembled}
     assert assembled =~ "- one:"
@@ -277,7 +254,7 @@ defmodule Omunculus.RunTest do
     model = fn assembled, _tools, _call -> {:ok, assembled} end
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message_id))
+    assert {:ok, run} = Run.open(project, opening(message_id))
     refute run.work_id
     Project.close(project)
   end
@@ -295,7 +272,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message_id, work_id))
+    assert {:ok, run} = Run.open(project, opening(message_id, work_id))
     assert run.work_id == work_id
 
     assert_received {:assembled, assembled}
@@ -328,7 +305,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message_id, work_id))
+    assert {:ok, _run} = Run.open(project, opening(message_id, work_id))
 
     assert_received {:assembled, assembled}
     refute assembled =~ "## Inbox"
@@ -357,7 +334,7 @@ defmodule Omunculus.RunTest do
     Fixtures.use_model(project, model)
 
     opening =
-      open(message_id, work_id)
+      opening(message_id, work_id)
       |> Map.put(:request_id, request_id)
       |> Map.put(:inbox_id, inbox_id)
 
@@ -389,7 +366,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message_id, work_id))
+    assert {:ok, _run} = Run.open(project, opening(message_id, work_id))
 
     assert_received {:assembled, assembled}
     refute assembled =~ "## Inbox"
@@ -404,7 +381,7 @@ defmodule Omunculus.RunTest do
     model = fn _assembled, _tools, _call -> raise "must never be called" end
     Fixtures.use_model(project, model)
 
-    assert {:error, {:no_work, "nope"}} = Run.open(project, open(message_id, "nope"))
+    assert {:error, {:no_work, "nope"}} = Run.open(project, opening(message_id, "nope"))
     assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
 
     Project.close(project)
@@ -422,16 +399,11 @@ defmodule Omunculus.RunTest do
     deny = ["deny_tool"]
     """)
 
-    write_tool(dir, "granted_tool", model_tool_toml("granted_tool"), fixed_output_script("ok"))
+    write_model_tool(dir, "granted_tool", ~s({"ok": true, "output": "ok", "emit": []}))
 
-    write_tool(
-      dir,
-      "negotiable_tool",
-      model_tool_toml("negotiable_tool"),
-      fixed_output_script("ok")
-    )
+    write_model_tool(dir, "negotiable_tool", ~s({"ok": true, "output": "ok", "emit": []}))
 
-    write_tool(dir, "deny_tool", model_tool_toml("deny_tool"), fixed_output_script("ok"))
+    write_model_tool(dir, "deny_tool", ~s({"ok": true, "output": "ok", "emit": []}))
 
     project = open_project(dir)
     message_id = message(project.conn)
@@ -444,7 +416,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message_id))
+    assert {:ok, run} = Run.open(project, opening(message_id))
 
     assert Jason.decode!(run.tools) == ["granted_tool"]
 
@@ -466,14 +438,14 @@ defmodule Omunculus.RunTest do
     tools = ["a"]
     """)
 
-    write_tool(dir, "a", model_tool_toml("a"), fixed_output_script("ok"))
-    write_tool(dir, "b", model_tool_toml("b"), fixed_output_script("ok"))
+    write_model_tool(dir, "a", ~s({"ok": true, "output": "ok", "emit": []}))
+    write_model_tool(dir, "b", ~s({"ok": true, "output": "ok", "emit": []}))
 
     project = open_project(dir)
     model = fn _assembled, _tools, _call -> {:ok, "done"} end
     Fixtures.use_model(project, model)
 
-    assert {:ok, run1} = Run.open(project, open(message(project.conn)))
+    assert {:ok, run1} = Run.open(project, opening(message(project.conn)))
     assert Jason.decode!(run1.tools) == ["a"]
     assert {:ok, [start1 | _]} = Store.replay(project.conn, {:run, run1.id})
     policy1 = Jason.decode!(start1.body)["execution"]
@@ -488,7 +460,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run2} = Run.open(project, open(message(project.conn)))
+    assert {:ok, run2} = Run.open(project, opening(message(project.conn)))
     assert Jason.decode!(run2.tools) == ["a", "b"]
     assert {:ok, [start2 | _]} = Store.replay(project.conn, {:run, run2.id})
     policy2 = Jason.decode!(start2.body)["execution"]
@@ -517,7 +489,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message(project.conn)))
+    assert {:ok, run} = Run.open(project, opening(message(project.conn)))
     assert length(Jason.decode!(run.tools)) == 13
     refute "continue" in Jason.decode!(run.tools)
 
@@ -551,7 +523,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+    assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
     assert_received {:assembled, assembled}
     assert assembled =~ "- tool_search:"
     assert assembled =~ "- comment:"
@@ -580,7 +552,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+    assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
     assert_received {:assembled, assembled}
     assert assembled =~ "- counter:"
     assert assembled =~ "- read:"
@@ -615,7 +587,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message(project.conn), work))
+    assert {:ok, _run} = Run.open(project, opening(message(project.conn), work))
     assert_received {:assembled, assembled}
     assert assembled =~ "- comment:"
     refute assembled =~ "- read:"
@@ -635,7 +607,7 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
     Fixtures.use_model(project, fn _assembled, _tools, _call -> {:ok, "done"} end)
 
-    assert {:ok, run} = Run.open(project, open(message(project.conn)))
+    assert {:ok, run} = Run.open(project, opening(message(project.conn)))
     names = Jason.decode!(run.tools)
     assert names == ["find", "grep", "ls", "read"]
     assert {:ok, [start | _]} = Store.replay(project.conn, {:run, run.id})
@@ -663,17 +635,17 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+    assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
 
     assert_received {:assembled, assembled}
     assert assembled =~ "- tool_search:"
-    refute assembled =~ "Mais "
+    refute assembled =~ "more tools"
 
     Project.close(project)
   end
 
   test "a child work sees its parent's grants but an unrelated work does not", %{dir: dir} do
-    write_tool(dir, "extra", model_tool_toml("extra"), fixed_output_script("ok"))
+    write_model_tool(dir, "extra", ~s({"ok": true, "output": "ok", "emit": []}))
 
     project = open_project(dir)
     model = fn _assembled, _tools, _call -> {:ok, "done"} end
@@ -684,13 +656,13 @@ defmodule Omunculus.RunTest do
     Fixtures.use_model(project, model)
 
     assert {:ok, child_run} =
-             Run.open(project, open(message(project.conn), child_id))
+             Run.open(project, opening(message(project.conn), child_id))
 
     assert "extra" in Jason.decode!(child_run.tools)
     Fixtures.use_model(project, model)
 
     assert {:ok, unrelated_run} =
-             Run.open(project, open(message(project.conn), unrelated_id))
+             Run.open(project, opening(message(project.conn), unrelated_id))
 
     refute "extra" in Jason.decode!(unrelated_run.tools)
 
@@ -705,7 +677,7 @@ defmodule Omunculus.RunTest do
     deny = ["write"]
     """)
 
-    write_tool(dir, "write", model_tool_toml("write"), fixed_output_script("ok"))
+    write_model_tool(dir, "write", ~s({"ok": true, "output": "ok", "emit": []}))
 
     project = open_project(dir)
     model = fn _assembled, _tools, _call -> {:ok, "done"} end
@@ -713,7 +685,7 @@ defmodule Omunculus.RunTest do
     work_id = Fixtures.insert(project.conn, :works, %{grants: ~s(["write"])})
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message(project.conn), work_id))
+    assert {:ok, run} = Run.open(project, opening(message(project.conn), work_id))
 
     refute "write" in Jason.decode!(run.tools)
 
@@ -741,7 +713,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message_id))
+    assert {:ok, run} = Run.open(project, opening(message_id))
     refute_received :reached_second_call
 
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
@@ -772,7 +744,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message_id))
+    assert {:ok, run} = Run.open(project, opening(message_id))
     refute_received :reached_after_request
     assert {:ok, [_request]} = Query.all(project.conn, "SELECT * FROM requests")
 
@@ -806,7 +778,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+    assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
 
     assert %{"grant" => [%{"args" => %{"kind" => "resource", "name" => "sandbox.write"}}]} =
@@ -839,7 +811,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message(project.conn), work_id))
+    assert {:ok, run} = Run.open(project, opening(message(project.conn), work_id))
     assert {:ok, [_request]} = Query.all(project.conn, "SELECT * FROM requests")
 
     assert {:ok, [%{body: "blocked on write"}]} =
@@ -873,7 +845,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message(project.conn), work_id))
+    assert {:ok, run} = Run.open(project, opening(message(project.conn), work_id))
     assert_received {:offered, assembled, names}
     refute "continue" in names
     refute assembled =~ "- continue:"
@@ -905,7 +877,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message(project.conn), work_id))
+    assert {:ok, run} = Run.open(project, opening(message(project.conn), work_id))
     assert_received {:break, {:ok, "report required"}}
 
     assert {:ok, []} = Store.view(project.conn, "comments.work", work_id)
@@ -996,7 +968,7 @@ defmodule Omunculus.RunTest do
     assert {:error, {:no_agent, "nope"}} =
              Run.open(
                project,
-               %{prompt_id: nil, work_id: nil, request_id: nil, via: nil, agent: "nope"}
+               opening(nil, nil, %{agent: "nope"})
              )
 
     Project.close(project)
@@ -1147,7 +1119,7 @@ defmodule Omunculus.RunTest do
       work_id = Fixtures.insert(project.conn, :works)
       scripted(project, [idle("first try"), ending()])
 
-      assert {:ok, _run} = Run.open(project, open(nil, work_id))
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
 
       assert [first, retry] = runs_of(project, work_id)
       assert first.via == nil
@@ -1174,7 +1146,7 @@ defmodule Omunculus.RunTest do
 
       scripted(project, [commenting, ending()])
 
-      assert {:ok, _run} = Run.open(project, open(nil, work_id))
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
 
       assert_received {:assembled, _first}
       assert_received {:assembled, assembled}
@@ -1198,7 +1170,7 @@ defmodule Omunculus.RunTest do
         if String.starts_with?(assembled, "worker"), do: {:ok, "idle"}, else: call.("end", %{})
       end)
 
-      assert {:ok, _run} = Run.open(project, open(nil, child_id))
+      assert {:ok, _run} = Run.open(project, opening(nil, child_id))
 
       assert Enum.map(runs_of(project, child_id), & &1.via) == [nil, "retry", "retry"]
 
@@ -1219,7 +1191,7 @@ defmodule Omunculus.RunTest do
       work_id = Fixtures.insert(project.conn, :works)
       scripted(project, [idle("idle")])
 
-      assert {:ok, _run} = Run.open(project, open(nil, work_id))
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
 
       assert length(runs_of(project, work_id)) == 2
       assert breaks_of(project, work_id) == []
@@ -1263,7 +1235,7 @@ defmodule Omunculus.RunTest do
       work_id = Fixtures.insert(project.conn, :works)
       scripted(project, [idle("idle")])
 
-      assert {:ok, _run} = Run.open(project, open(nil, work_id))
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
 
       assert [_only] = runs_of(project, work_id)
       assert %{id: request_id} = root_request(project, work_id)
@@ -1283,7 +1255,7 @@ defmodule Omunculus.RunTest do
       project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works)
       scripted(project, [idle("idle"), ending()])
-      assert {:ok, _run} = Run.open(project, open(nil, work_id))
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
       request = root_request(project, work_id)
 
       assert {:ok, ""} =
@@ -1302,7 +1274,7 @@ defmodule Omunculus.RunTest do
       project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works)
       scripted(project, [idle("idle")])
-      assert {:ok, _run} = Run.open(project, open(nil, work_id))
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
       request = root_request(project, work_id)
 
       assert {:ok, ""} =
@@ -1311,7 +1283,7 @@ defmodule Omunculus.RunTest do
       assert [_only] = runs_of(project, work_id)
       assert {:ok, %{state: "cancelled"}} = Store.view(project.conn, "work", work_id)
 
-      assert {:error, {:cancelled, ^work_id}} = Run.open(project, open(nil, work_id))
+      assert {:error, {:cancelled, ^work_id}} = Run.open(project, opening(nil, work_id))
       assert [_only] = runs_of(project, work_id)
 
       Project.close(project)
@@ -1323,8 +1295,8 @@ defmodule Omunculus.RunTest do
       work_id = Fixtures.insert(project.conn, :works)
       scripted(project, [idle("one"), ending(), idle("two"), ending()])
 
-      assert {:ok, _run} = Run.open(project, open(nil, work_id))
-      assert {:ok, _run} = Run.open(project, open(nil, work_id))
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
 
       assert Enum.map(runs_of(project, work_id), & &1.via) == [nil, "retry", nil, "retry"]
       assert breaks_of(project, work_id) == []
@@ -1353,8 +1325,8 @@ defmodule Omunculus.RunTest do
       other_id = Fixtures.insert(project.conn, :works, %{workspace: "other"})
       scripted(project, [idle("idle")])
 
-      assert {:ok, _run} = Run.open(project, open(nil, main_id))
-      assert {:ok, _run} = Run.open(project, open(nil, other_id))
+      assert {:ok, _run} = Run.open(project, opening(nil, main_id))
+      assert {:ok, _run} = Run.open(project, opening(nil, other_id))
 
       assert length(runs_of(project, main_id)) == 1
       assert length(runs_of(project, other_id)) == 2
@@ -1378,7 +1350,7 @@ defmodule Omunculus.RunTest do
           end
         ])
 
-        assert {:ok, _run} = Run.open(project, open(nil, work_id))
+        assert {:ok, _run} = Run.open(project, opening(nil, work_id))
 
         assert [_only] = runs_of(project, work_id)
         assert breaks_of(project, work_id) == []
@@ -1393,11 +1365,11 @@ defmodule Omunculus.RunTest do
       work_id = Fixtures.insert(project.conn, :works)
       scripted(project, [idle("idle")])
 
-      assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+      assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
       assert {:ok, [_send_run]} = Query.all(project.conn, "SELECT * FROM runs")
 
       assert {:ok, _run} =
-               Run.open(project, %{open(nil, work_id) | agent: "concierge"})
+               Run.open(project, %{opening(nil, work_id) | agent: "concierge"})
 
       assert [_only] = runs_of(project, work_id)
 
