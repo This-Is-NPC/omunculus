@@ -305,7 +305,7 @@ defmodule Omunculus.CLITest do
     test "the concierge creates the work, a follow-up comments on it, and a third opening sees the last comment",
          %{dir: dir} do
       model = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "Count to five"})
+        assert {:ok, ""} = call.("work", %{"title" => "Count to five", "goal" => "Count to five"})
         {:ok, "ok"}
       end
 
@@ -822,7 +822,9 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         cond do
           assembled =~ "Sou o concierge." ->
-            unless assembled =~ "## Work", do: call.("work", %{"title" => "Ship it"})
+            unless assembled =~ "## Work",
+              do: call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
+
             call.("continue", %{})
             {:ok, "unused"}
 
@@ -880,7 +882,7 @@ defmodule Omunculus.CLITest do
       """)
 
       model = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "No sequence"})
+        assert {:ok, ""} = call.("work", %{"title" => "No sequence", "goal" => "No sequence"})
         assert {:error, {:continue, :workflow_off}} = call.("continue", %{})
         {:ok, "continuing anyway"}
       end
@@ -924,7 +926,8 @@ defmodule Omunculus.CLITest do
       )
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work", do: call.("work", %{"title" => "Ship it"})
+        unless assembled =~ "## Work",
+          do: call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
 
         assert {:error, {:continue, {:forbidden, "stage"}}} = call.("bad_continue", %{})
 
@@ -1014,7 +1017,9 @@ defmodule Omunculus.CLITest do
       """)
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work", do: call.("work", %{"title" => "Needs help"})
+        unless assembled =~ "## Work",
+          do: call.("work", %{"title" => "Needs help", "goal" => "Needs help"})
+
         call.("break", %{"body" => "need to pause"})
         {:ok, "unused"}
       end
@@ -1079,10 +1084,10 @@ defmodule Omunculus.CLITest do
             {:ok, "acompanhando"}
 
           true ->
-            assert {:ok, ""} = call.("work", %{"title" => "Big task"})
+            assert {:ok, ""} = call.("work", %{"title" => "Big task", "goal" => "Big task"})
 
             assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task", "body" => "do this"})
+                     call.("delegate", %{"title" => "Sub task", "goal" => "do this"})
 
             {:ok, "unused"}
         end
@@ -1100,6 +1105,7 @@ defmodule Omunculus.CLITest do
       assert child.state == "done"
       assert child.assignee == "worker"
       assert child.parent_id == parent.id
+      assert child.goal == "do this"
 
       assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
       assert length(runs) == 3
@@ -1116,7 +1122,8 @@ defmodule Omunculus.CLITest do
                Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [run2.prompt_id])
 
       assert assembled2.body =~ "Sub task"
-      assert assembled2.body =~ "## Last comment\ndo this"
+      assert assembled2.body =~ "## Goal\ndo this"
+      refute assembled2.body =~ "## Last comment"
 
       assert {:ok, project_events} = Store.replay(project.conn, :project)
 
@@ -1164,10 +1171,10 @@ defmodule Omunculus.CLITest do
             {:ok, "acompanhando"}
 
           true ->
-            assert {:ok, ""} = call.("work", %{"title" => "Big task2"})
+            assert {:ok, ""} = call.("work", %{"title" => "Big task2", "goal" => "Big task2"})
 
             assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task2", "body" => "do this 2"})
+                     call.("delegate", %{"title" => "Sub task2", "goal" => "do this 2"})
 
             {:ok, "unused"}
         end
@@ -1252,10 +1259,10 @@ defmodule Omunculus.CLITest do
             {:ok, "acompanhando"}
 
           true ->
-            assert {:ok, ""} = call.("work", %{"title" => "Big task3"})
+            assert {:ok, ""} = call.("work", %{"title" => "Big task3", "goal" => "Big task3"})
 
             assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task3", "body" => "escreva isso"})
+                     call.("delegate", %{"title" => "Sub task3", "goal" => "write this"})
 
             {:ok, "unused"}
         end
@@ -1306,7 +1313,7 @@ defmodule Omunculus.CLITest do
     test "notify mid-run leaves an unread inbox row, the run keeps going and closes done, the work stays open, and CLI reads it",
          %{dir: dir} do
       model = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "Ajuda"})
+        assert {:ok, ""} = call.("work", %{"title" => "Ajuda", "goal" => "Ajuda"})
         assert {:ok, ""} = call.("notify", %{"body" => "need help"})
         {:ok, "ok"}
       end
@@ -1440,7 +1447,9 @@ defmodule Omunculus.CLITest do
       """)
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work", do: call.("work", %{"title" => "Ship it"})
+        unless assembled =~ "## Work",
+          do: call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
+
         call.("continue", %{})
         {:ok, "unused"}
       end
@@ -1484,7 +1493,9 @@ defmodule Omunculus.CLITest do
       """)
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work", do: call.("work", %{"title" => "Needs help"})
+        unless assembled =~ "## Work",
+          do: call.("work", %{"title" => "Needs help", "goal" => "Needs help"})
+
         call.("break", %{"body" => "need to pause"})
         {:ok, "unused"}
       end
@@ -1602,7 +1613,7 @@ defmodule Omunculus.CLITest do
       test_pid = self()
 
       model = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
+        assert {:ok, ""} = call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
         send(test_pid, {:notify_result, call.("notify", %{"body" => "notice"})})
         {:ok, "continuing"}
       end
@@ -1634,7 +1645,7 @@ defmodule Omunculus.CLITest do
       """)
 
       model1 = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "Tally"})
+        assert {:ok, ""} = call.("work", %{"title" => "Tally", "goal" => "Tally"})
         assert {:ok, ""} = call.("comment", %{"body" => "one"})
         assert {:ok, ""} = call.("comment", %{"body" => "two"})
         assert {:ok, ""} = call.("comment", %{"body" => "three"})
@@ -1792,10 +1803,10 @@ defmodule Omunculus.CLITest do
             {:ok, "acompanhando"}
 
           true ->
-            assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
+            assert {:ok, ""} = call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
 
             assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task", "body" => "do this"})
+                     call.("delegate", %{"title" => "Sub task", "goal" => "do this"})
 
             {:ok, "unused"}
         end
@@ -1863,10 +1874,10 @@ defmodule Omunculus.CLITest do
             {:ok, "acompanhando"}
 
           true ->
-            assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
+            assert {:ok, ""} = call.("work", %{"title" => "Ship it", "goal" => "Ship it"})
 
             assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task", "body" => "do this"})
+                     call.("delegate", %{"title" => "Sub task", "goal" => "do this"})
 
             {:ok, "unused"}
         end

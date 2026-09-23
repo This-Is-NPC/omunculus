@@ -433,7 +433,7 @@ defmodule Omunculus.Store.ActionsTest do
     assert {:ok, [_tool_event, event]} =
              record_tool(
                conn,
-               [%{"type" => "work", "body" => %{"title" => "Ship the store"}}],
+               [%{"type" => "work", "body" => %{"title" => "Ship the store", "goal" => "g"}}],
                ctx
              )
 
@@ -442,6 +442,7 @@ defmodule Omunculus.Store.ActionsTest do
 
     assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
     assert work.title == "Ship the store"
+    assert work.goal == "g"
     assert work.assignee == "concierge"
     assert work.state == "open"
     assert work.parent_id == nil
@@ -454,7 +455,12 @@ defmodule Omunculus.Store.ActionsTest do
     assert {:ok, [_tool_event, event]} =
              record_tool(
                conn,
-               [%{"type" => "work", "body" => %{"title" => "child", "parent_id" => parent_id}}],
+               [
+                 %{
+                   "type" => "work",
+                   "body" => %{"title" => "child", "goal" => "g", "parent_id" => parent_id}
+                 }
+               ],
                @ctx
              )
 
@@ -466,7 +472,12 @@ defmodule Omunculus.Store.ActionsTest do
     assert {:error, {:work, {:missing, :works, "nope"}}} =
              record_tool(
                conn,
-               [%{"type" => "work", "body" => %{"title" => "child", "parent_id" => "nope"}}],
+               [
+                 %{
+                   "type" => "work",
+                   "body" => %{"title" => "child", "goal" => "g", "parent_id" => "nope"}
+                 }
+               ],
                @ctx
              )
 
@@ -482,13 +493,30 @@ defmodule Omunculus.Store.ActionsTest do
     assert count(conn, "events") == 0
   end
 
-  test "work update changes the title and appends a second work event", %{conn: conn} do
+  test "work without a goal is rejected and writes nothing", %{conn: conn} do
+    for body <- [%{"title" => "Ship the store"}, %{"title" => "Ship the store", "goal" => ""}] do
+      assert {:error, {:work, :no_goal}} =
+               record_tool(conn, [%{"type" => "work", "body" => body}], @ctx)
+    end
+
+    assert count(conn, "works") == 0
+    assert count(conn, "events") == 0
+  end
+
+  test "work update changes the title and goal and appends a second work event", %{
+    conn: conn
+  } do
     work_id = Fixtures.insert(conn, :works, %{title: "old"})
 
     assert {:ok, [_tool_event, event]} =
              record_tool(
                conn,
-               [%{"type" => "work", "body" => %{"title" => "new", "work_id" => work_id}}],
+               [
+                 %{
+                   "type" => "work",
+                   "body" => %{"title" => "new", "goal" => "g", "work_id" => work_id}
+                 }
+               ],
                @ctx
              )
 
@@ -497,6 +525,7 @@ defmodule Omunculus.Store.ActionsTest do
 
     assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
     assert work.title == "new"
+    assert work.goal == "g"
     assert work.updated_at != nil
 
     assert {:ok, events} = Query.all(conn, "SELECT * FROM events WHERE type = 'work'")
@@ -507,7 +536,12 @@ defmodule Omunculus.Store.ActionsTest do
     assert {:error, {:work, {:missing, :works, "nope"}}} =
              record_tool(
                conn,
-               [%{"type" => "work", "body" => %{"title" => "new", "work_id" => "nope"}}],
+               [
+                 %{
+                   "type" => "work",
+                   "body" => %{"title" => "new", "goal" => "g", "work_id" => "nope"}
+                 }
+               ],
                @ctx
              )
 
@@ -519,7 +553,11 @@ defmodule Omunculus.Store.ActionsTest do
     ctx = %{@ctx | run_id: run_id}
 
     assert {:ok, [_tool_event, event]} =
-             record_tool(conn, [%{"type" => "work", "body" => %{"title" => "first"}}], ctx)
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "first", "goal" => "g"}}],
+               ctx
+             )
 
     assert {:ok, run} = Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id])
     assert run.work_id == event.work_id
@@ -530,10 +568,18 @@ defmodule Omunculus.Store.ActionsTest do
     ctx = %{@ctx | run_id: run_id}
 
     assert {:ok, [_tool_event, first_event]} =
-             record_tool(conn, [%{"type" => "work", "body" => %{"title" => "first"}}], ctx)
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "first", "goal" => "g"}}],
+               ctx
+             )
 
     assert {:ok, [_tool_event, _second_event]} =
-             record_tool(conn, [%{"type" => "work", "body" => %{"title" => "second"}}], ctx)
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "second", "goal" => "g"}}],
+               ctx
+             )
 
     assert {:ok, run} = Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id])
     assert run.work_id == first_event.work_id
@@ -543,14 +589,24 @@ defmodule Omunculus.Store.ActionsTest do
     assert {:error, {:work, {:forbidden, "stage"}}} =
              record_tool(
                conn,
-               [%{"type" => "work", "body" => %{"title" => "x", "stage" => "review"}}],
+               [
+                 %{
+                   "type" => "work",
+                   "body" => %{"title" => "x", "goal" => "g", "stage" => "review"}
+                 }
+               ],
                @ctx
              )
 
     assert {:error, {:work, {:forbidden, "agent"}}} =
              record_tool(
                conn,
-               [%{"type" => "work", "body" => %{"title" => "x", "agent" => "worker"}}],
+               [
+                 %{
+                   "type" => "work",
+                   "body" => %{"title" => "x", "goal" => "g", "agent" => "worker"}
+                 }
+               ],
                @ctx
              )
 
@@ -561,7 +617,11 @@ defmodule Omunculus.Store.ActionsTest do
     ctx = %{@ctx | config: Fixtures.config(delivery_toml())}
 
     assert {:ok, [_tool_event, event]} =
-             record_tool(conn, [%{"type" => "work", "body" => %{"title" => "Ship it"}}], ctx)
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "Ship it", "goal" => "g"}}],
+               ctx
+             )
 
     assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
     assert work.stage == "to_do"
@@ -575,7 +635,12 @@ defmodule Omunculus.Store.ActionsTest do
     assert {:ok, [_tool_event, event]} =
              record_tool(
                conn,
-               [%{"type" => "work", "body" => %{"title" => "child", "parent_id" => parent_id}}],
+               [
+                 %{
+                   "type" => "work",
+                   "body" => %{"title" => "child", "goal" => "g", "parent_id" => parent_id}
+                 }
+               ],
                ctx
              )
 
@@ -590,7 +655,12 @@ defmodule Omunculus.Store.ActionsTest do
     assert {:ok, [_tool_event, event]} =
              record_tool(
                conn,
-               [%{"type" => "work", "body" => %{"title" => "x", "workspace" => "other"}}],
+               [
+                 %{
+                   "type" => "work",
+                   "body" => %{"title" => "x", "goal" => "g", "workspace" => "other"}
+                 }
+               ],
                ctx
              )
 
@@ -602,7 +672,11 @@ defmodule Omunculus.Store.ActionsTest do
     ctx = %{@ctx | config: Fixtures.config(workspaces_toml())}
 
     assert {:ok, [_tool_event, event]} =
-             record_tool(conn, [%{"type" => "work", "body" => %{"title" => "x"}}], ctx)
+             record_tool(
+               conn,
+               [%{"type" => "work", "body" => %{"title" => "x", "goal" => "g"}}],
+               ctx
+             )
 
     assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
     assert work.workspace == "app"
@@ -614,7 +688,12 @@ defmodule Omunculus.Store.ActionsTest do
     assert {:ok, [_tool_event, parent_event]} =
              record_tool(
                conn,
-               [%{"type" => "work", "body" => %{"title" => "parent", "workspace" => "other"}}],
+               [
+                 %{
+                   "type" => "work",
+                   "body" => %{"title" => "parent", "goal" => "g", "workspace" => "other"}
+                 }
+               ],
                ctx
              )
 
@@ -624,7 +703,11 @@ defmodule Omunculus.Store.ActionsTest do
                [
                  %{
                    "type" => "work",
-                   "body" => %{"title" => "child", "parent_id" => parent_event.work_id}
+                   "body" => %{
+                     "title" => "child",
+                     "goal" => "g",
+                     "parent_id" => parent_event.work_id
+                   }
                  }
                ],
                ctx
@@ -642,7 +725,12 @@ defmodule Omunculus.Store.ActionsTest do
     assert {:error, {:work, {:unknown_workspace, "ghost"}}} =
              record_tool(
                conn,
-               [%{"type" => "work", "body" => %{"title" => "x", "workspace" => "ghost"}}],
+               [
+                 %{
+                   "type" => "work",
+                   "body" => %{"title" => "x", "goal" => "g", "workspace" => "ghost"}
+                 }
+               ],
                ctx
              )
 
@@ -827,7 +915,9 @@ defmodule Omunculus.Store.ActionsTest do
   end
 
   describe "delegate action" do
-    test "creates a child work, comments it, and parks the parent", %{conn: conn} do
+    test "creates a child work with its goal, writes no comment, and parks the parent", %{
+      conn: conn
+    } do
       parent_id = Fixtures.insert(conn, :works)
       run_id = Fixtures.insert(conn, :runs)
       ctx = %{@ctx | run_id: run_id, work_id: parent_id}
@@ -838,7 +928,7 @@ defmodule Omunculus.Store.ActionsTest do
                  [
                    %{
                      "type" => "delegate",
-                     "body" => %{"title" => "Sub task", "body" => "do this"}
+                     "body" => %{"title" => "Sub task", "goal" => "do this"}
                    }
                  ],
                  ctx
@@ -846,20 +936,17 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert event.type == "delegate"
       assert event.work_id != nil
-      assert event.comment_id != nil
+      assert event.comment_id == nil
 
       child_id = event.work_id
 
       assert {:ok, child} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
       assert child.parent_id == parent_id
       assert child.title == "Sub task"
+      assert child.goal == "do this"
       assert child.state == "open"
       assert child.assignee == "worker"
-
-      assert {:ok, comment} =
-               Query.one(conn, "SELECT * FROM comments WHERE work_id = ?", [child_id])
-
-      assert comment.body == "do this"
+      assert count(conn, "comments") == 0
 
       assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
       assert parent.state == "waiting"
@@ -869,7 +956,7 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert Jason.decode!(event.body) == %{
                "title" => "Sub task",
-               "body" => "do this",
+               "goal" => "do this",
                "parent_id" => parent_id
              }
     end
@@ -890,7 +977,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, [_tool_event, event]} =
                record_tool(
                  conn,
-                 [%{"type" => "delegate", "body" => %{"title" => "t", "body" => "b"}}],
+                 [%{"type" => "delegate", "body" => %{"title" => "t", "goal" => "b"}}],
                  ctx
                )
 
@@ -916,7 +1003,7 @@ defmodule Omunculus.Store.ActionsTest do
                  [
                    %{
                      "type" => "delegate",
-                     "body" => %{"title" => "t", "body" => "b", "workspace" => "other"}
+                     "body" => %{"title" => "t", "goal" => "b", "workspace" => "other"}
                    }
                  ],
                  ctx
@@ -940,7 +1027,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, [_tool_event, event]} =
                record_tool(
                  conn,
-                 [%{"type" => "delegate", "body" => %{"title" => "t", "body" => "b"}}],
+                 [%{"type" => "delegate", "body" => %{"title" => "t", "goal" => "b"}}],
                  ctx
                )
 
@@ -965,7 +1052,7 @@ defmodule Omunculus.Store.ActionsTest do
                  [
                    %{
                      "type" => "delegate",
-                     "body" => %{"title" => "t", "body" => "b", "workspace" => "ghost"}
+                     "body" => %{"title" => "t", "goal" => "b", "workspace" => "ghost"}
                    }
                  ],
                  ctx
@@ -981,7 +1068,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:error, {:delegate, :no_work}} =
                record_tool(
                  conn,
-                 [%{"type" => "delegate", "body" => %{"title" => "t", "body" => "b"}}],
+                 [%{"type" => "delegate", "body" => %{"title" => "t", "goal" => "b"}}],
                  ctx
                )
     end
@@ -1000,7 +1087,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:error, {:delegate, {:no_agent_at_depth, 1}}} =
                record_tool(
                  conn,
-                 [%{"type" => "delegate", "body" => %{"title" => "t", "body" => "b"}}],
+                 [%{"type" => "delegate", "body" => %{"title" => "t", "goal" => "b"}}],
                  ctx
                )
     end
@@ -1011,16 +1098,21 @@ defmodule Omunculus.Store.ActionsTest do
       ctx = %{@ctx | run_id: run_id, work_id: parent_id}
 
       assert {:error, {:delegate, :no_title}} =
-               record_tool(conn, [%{"type" => "delegate", "body" => %{"body" => "b"}}], ctx)
+               record_tool(conn, [%{"type" => "delegate", "body" => %{"goal" => "b"}}], ctx)
     end
 
-    test "no body is rejected", %{conn: conn} do
+    test "no goal is rejected and writes nothing", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works)
       run_id = Fixtures.insert(conn, :runs)
       ctx = %{@ctx | run_id: run_id, work_id: parent_id}
 
-      assert {:error, {:delegate, :no_body}} =
-               record_tool(conn, [%{"type" => "delegate", "body" => %{"title" => "t"}}], ctx)
+      for body <- [%{"title" => "t"}, %{"title" => "t", "goal" => ""}] do
+        assert {:error, {:delegate, :no_goal}} =
+                 record_tool(conn, [%{"type" => "delegate", "body" => body}], ctx)
+      end
+
+      assert count(conn, "works") == 1
+      assert count(conn, "events") == 0
     end
   end
 

@@ -41,6 +41,10 @@ defmodule Omunculus.Store.Actions.Helpers do
     end
   end
 
+  @spec ensure_goal(atom, map) :: :ok | {:error, {atom, :no_goal}}
+  def ensure_goal(_tag, %{"goal" => goal}) when is_binary(goal) and goal != "", do: :ok
+  def ensure_goal(tag, _body), do: {:error, {tag, :no_goal}}
+
   @spec insert_comment(Exqlite.Sqlite3.db(), String.t(), map, String.t(), map, map) ::
           :ok | {:error, term}
   def insert_comment(conn, id, targets, text, event, ctx) do
@@ -99,6 +103,7 @@ defmodule Omunculus.Store.Actions.Helpers do
       workspace: work.workspace,
       assignee: work.assignee,
       title: work.title,
+      goal: work.goal,
       stage: work.stage,
       state: "open",
       created_at: work.at,

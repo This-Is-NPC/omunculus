@@ -2,16 +2,19 @@ name = "work"
 kind = "tool"
 shape = "simple"
 triggers = ["model"]
-description = "Creates or updates the work and writes its title."
+description = "Creates or updates the work and writes its title and goal."
 tags = ["work", "store"]
 groups = ["store"]
 module = "Omunculus.Tools.Work"
 
 [parameters]
 type = "object"
-required = ["title"]
+required = ["title", "goal"]
 
 [parameters.properties.title]
+type = "string"
+
+[parameters.properties.goal]
 type = "string"
 
 [parameters.properties.work_id]

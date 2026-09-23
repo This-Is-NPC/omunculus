@@ -46,8 +46,8 @@ defmodule Omunculus.Model.BatteryTest do
     assert {:ok, _result} = complete(assembled, tools(names), call)
 
     assert calls(agent) == [
-             {"work", %{"title" => "Count to 5"}},
-             {"delegate", %{"title" => "Count to 5", "body" => "count with counter to 5"}}
+             {"work", %{"title" => "Count to 5", "goal" => "count with counter to 5"}},
+             {"delegate", %{"title" => "Count to 5", "goal" => "count with counter to 5"}}
            ]
   end
 
@@ -60,7 +60,7 @@ defmodule Omunculus.Model.BatteryTest do
     assert {:ok, "counted to 5"} = complete(assembled, tools(names), call)
 
     [first | rest] = calls(agent)
-    assert first == {"work", %{"title" => "Count to 5"}}
+    assert first == {"work", %{"title" => "Count to 5", "goal" => "count with counter to 5"}}
     assert Enum.count(rest, fn {name, _args} -> name == "counter" end) == 5
   end
 

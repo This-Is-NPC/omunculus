@@ -1,20 +1,20 @@
 defmodule Omunculus.Tools.Delegate do
   @moduledoc """
-  Builtin `delegate` tool, per spec §3.4 and §9.1: creates a child work,
-  with an optional `workspace` name, and hands it to whoever is below. The
-  parent waits.
+  Builtin `delegate` tool, per spec §3.4 and §9.1: creates a child work
+  with a `title`, a `goal` and an optional `workspace` name, and hands it
+  to whoever is below. The parent waits.
   """
 
   alias Omunculus.Tools.{Args, Out}
 
-  @required ~w(title body)
+  @required ~w(title goal)
 
   @spec run(map) :: map
   def run(%{args: args}) do
     case Args.missing(args, @required) do
       nil ->
         body =
-          %{"title" => args["title"], "body" => args["body"]}
+          %{"title" => args["title"], "goal" => args["goal"]}
           |> Args.put_present("workspace", args)
 
         Out.ok("", [%{"type" => "delegate", "body" => body}])

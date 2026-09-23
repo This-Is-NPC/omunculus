@@ -14,6 +14,7 @@ defmodule Omunculus.Model.Battery do
 
   @counted "counted to 5"
   @delegated "delegated"
+  @goal "count with counter to 5"
 
   @spec new(map) ::
           (String.t(),
@@ -38,7 +39,7 @@ defmodule Omunculus.Model.Battery do
   defp decide(parsed, call), do: count(parsed, call)
 
   defp open_work(%{cards: cards} = parsed, call) do
-    call.("work", %{"title" => "Count to 5"})
+    call.("work", %{"title" => "Count to 5", "goal" => @goal})
 
     if MapSet.member?(cards, "delegate") do
       delegate_down(cards, call)
@@ -61,7 +62,7 @@ defmodule Omunculus.Model.Battery do
 
   defp delegate_down(cards, call) do
     if MapSet.member?(cards, "comment"), do: call.("comment", %{"body" => @delegated})
-    call.("delegate", %{"title" => "Count to 5", "body" => "count with counter to 5"})
+    call.("delegate", %{"title" => "Count to 5", "goal" => @goal})
     {:ok, @delegated}
   end
 

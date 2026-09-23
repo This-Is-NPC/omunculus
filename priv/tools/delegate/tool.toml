@@ -9,12 +9,12 @@ module = "Omunculus.Tools.Delegate"
 
 [parameters]
 type = "object"
-required = ["title", "body"]
+required = ["title", "goal"]
 
 [parameters.properties.title]
 type = "string"
 
-[parameters.properties.body]
+[parameters.properties.goal]
 type = "string"
 
 [parameters.properties.workspace]

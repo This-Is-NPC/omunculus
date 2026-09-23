@@ -188,7 +188,7 @@ defmodule Omunculus.WorkspaceTest do
 
     model = fn _assembled, _tools, call ->
       case Agent.get_and_update(counter, fn n -> {n, n + 1} end) do
-        0 -> call.("delegate", %{"title" => "child", "body" => "do this"})
+        0 -> call.("delegate", %{"title" => "child", "goal" => "do this"})
         _already_delegated -> :ok
       end
 

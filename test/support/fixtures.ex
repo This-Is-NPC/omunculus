@@ -31,7 +31,7 @@ defmodule Omunculus.Fixtures do
     events: %{type: "comment", body: "{}", at: @now},
     runs: %{agent: "concierge", depth: "0", status: "open"},
     comments: %{author: "agent", kind: "note", body: "note", created_at: @now},
-    works: %{title: "a work", state: "open", created_at: @now},
+    works: %{title: "a work", goal: "a goal", state: "open", created_at: @now},
     requests: %{
       agent: "concierge",
       ask: ~s({"kind":"tool","name":"write"}),

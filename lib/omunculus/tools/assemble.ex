@@ -1,7 +1,8 @@
 defmodule Omunculus.Tools.Assemble do
   @moduledoc """
   Builtin `assemble` tool: builds the assembled prompt of a run from
-  the hydrated views. Cards follow `pinned` on the catalog view.
+  the hydrated views: the work's title and goal, its last comment, and
+  the cards, which follow `pinned` on the catalog view.
   Inbox is included only when the opening carried `inbox_id`.
   """
 
@@ -31,7 +32,7 @@ defmodule Omunculus.Tools.Assemble do
   defp message_section(message), do: ["## Message\n#{message.body}"]
 
   defp work_section(nil), do: []
-  defp work_section(work), do: ["## Work\n#{work.title}"]
+  defp work_section(work), do: ["## Work\n#{work.title}", "## Goal\n#{work.goal}"]
 
   defp comment_section(nil), do: []
   defp comment_section(comment), do: ["## Last comment\n#{comment.body}"]

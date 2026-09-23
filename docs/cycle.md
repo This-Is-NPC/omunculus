@@ -20,13 +20,14 @@ the next run of a work is the action. A hook can open a run too if its
 manifest has `agent`, or if it emits one of those actions. Cascades are
 the author's.
 
-## Three texts, and a fourth
+## Four texts, and a fifth
 
 | Piece | Who writes it | Where it lives |
 | --- | --- | --- |
 | **message** | you, via `send` | `PROMPTS` (`kind = message`) |
 | **agent text** | whoever edits the TOML | the file |
 | **title** | whoever created the work | `WORKS.title` |
+| **goal** | whoever created the work, required by `work` and `delegate` | `WORKS.goal` |
 | **assembled** | the `assemble` tool, at the opening of a run | `PROMPTS` (`kind = assembled`) |
 
 `send` does not create a work and does not copy the message onto the title.
@@ -69,7 +70,7 @@ The default `assemble` tool joins, in this order:
 ```text
 agent text
 → message of this opening, if any
-→ if there is a work: title + last comment
+→ if there is a work: title + goal + last comment
 → if there is a request: header + comments with that request_id
 → if the opening carried inbox_id: comments with that inbox_id
 → cards of the tools in tools.*

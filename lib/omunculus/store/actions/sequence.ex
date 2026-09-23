@@ -2,10 +2,10 @@ defmodule Omunculus.Store.Actions.Sequence do
   @moduledoc """
   Sequence actions of spec §3.4: `continue` moves a work to the next
   workflow stage or closes it on the last one, `break` parks it with a
-  comment, `delegate` opens a child and parks the parent on it. Every
-  action needs a work already linked to the run. `finish_work/2` is the
-  harness-side counterpart of `continue`'s last stage for a work whose
-  run ended with workflow off.
+  comment, `delegate` opens a child with its title and goal and parks the
+  parent on it. Every action needs a work already linked to the run.
+  `finish_work/2` is the harness-side counterpart of `continue`'s last
+  stage for a work whose run ended with workflow off.
   """
 
   alias Omunculus.Config
@@ -41,7 +41,7 @@ defmodule Omunculus.Store.Actions.Sequence do
     with :ok <- ensure_context(:delegate, ctx),
          :ok <- Helpers.ensure_no_forbidden(:delegate, body),
          :ok <- ensure_title(body),
-         :ok <- ensure_body_text(:delegate, body),
+         :ok <- Helpers.ensure_goal(:delegate, body),
          {:ok, parent} <- fetch_work(:delegate, conn, ctx.work_id),
          child_depth = View.work_depth(conn, parent) + 1,
          {:ok, {stage, assignee}} <-
@@ -197,16 +197,14 @@ defmodule Omunculus.Store.Actions.Sequence do
 
   defp apply_delegate(conn, ctx, body, parent, stage, assignee, workspace) do
     child_id = Id.new()
-    comment_id = Id.new()
 
     with {:ok, event} <-
            Events.append(conn, %{
              type: "delegate",
              run_id: ctx.run_id,
              work_id: child_id,
-             comment_id: comment_id,
              body:
-               Jason.encode!(%{title: body["title"], body: body["body"], parent_id: parent.id})
+               Jason.encode!(%{title: body["title"], goal: body["goal"], parent_id: parent.id})
            }),
          :ok <-
            Helpers.insert_work(conn, %{
@@ -216,11 +214,10 @@ defmodule Omunculus.Store.Actions.Sequence do
              assignee: assignee,
              stage: stage,
              title: body["title"],
+             goal: body["goal"],
              event_id: event.id,
              at: event.at
            }),
-         :ok <-
-           Helpers.insert_comment(conn, comment_id, %{works: child_id}, body["body"], event, ctx),
          :ok <-
            Query.exec(
              conn,

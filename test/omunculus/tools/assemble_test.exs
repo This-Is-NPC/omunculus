@@ -81,10 +81,25 @@ defmodule Omunculus.Tools.AssembleTest do
     refute output =~ "more tools"
   end
 
+  test "renders the work title, its goal and the last comment, in that order" do
+    view = %{
+      "work" => %{title: "Fix the parser", goal: "the parser accepts trailing commas"},
+      "comments.work" => [%{body: "first note"}, %{body: "last note"}],
+      "catalog" => []
+    }
+
+    output = Assemble.run(%{@input | view: view})["output"]
+
+    assert output =~
+             "## Work\nFix the parser\n\n## Goal\nthe parser accepts trailing commas\n\n## Last comment\nlast note"
+
+    refute output =~ "first note"
+  end
+
   test "inbox appears only when args carry inbox_id, after request" do
     view = %{
       "prompt" => %{body: "hi"},
-      "work" => %{title: "Fix the parser"},
+      "work" => %{title: "Fix the parser", goal: "the parser accepts trailing commas"},
       "comments.work" => [%{body: "last note"}],
       "request" => %{
         id: "req_1",

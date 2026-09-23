@@ -213,7 +213,7 @@ defmodule Omunculus.HarnessTest do
     message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
 
     model = fn _assembled, _tools, call ->
-      assert {:ok, ""} = call.("work", %{"title" => "Fix the parser"})
+      assert {:ok, ""} = call.("work", %{"title" => "Fix the parser", "goal" => "Fix the parser"})
       call.("viewer", %{})
     end
 

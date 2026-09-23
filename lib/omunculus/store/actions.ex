@@ -163,7 +163,8 @@ defmodule Omunculus.Store.Actions do
   end
 
   defp work(conn, %{"title" => title} = body, ctx) when is_binary(title) and title != "" do
-    with :ok <- Helpers.ensure_no_forbidden(:work, body) do
+    with :ok <- Helpers.ensure_no_forbidden(:work, body),
+         :ok <- Helpers.ensure_goal(:work, body) do
       case body["work_id"] do
         nil -> create_work(conn, body, ctx)
         work_id -> update_work(conn, work_id, body, ctx)
@@ -176,8 +177,9 @@ defmodule Omunculus.Store.Actions do
   defp update_work(conn, work_id, body, ctx) do
     with :ok <- Helpers.tag_error(:work, Helpers.ensure_exist(conn, [{:works, work_id}])),
          :ok <-
-           Query.exec(conn, "UPDATE works SET title = ?, updated_at = ? WHERE id = ?", [
+           Query.exec(conn, "UPDATE works SET title = ?, goal = ?, updated_at = ? WHERE id = ?", [
              body["title"],
+             body["goal"],
              Events.now(),
              work_id
            ]) do
@@ -220,6 +222,7 @@ defmodule Omunculus.Store.Actions do
                assignee: assignee,
                stage: stage,
                title: body["title"],
+               goal: body["goal"],
                event_id: event.id,
                at: event.at
              }),

@@ -487,7 +487,7 @@ defmodule Omunculus.SpecRegressionTest do
         refute Enum.any?(tools, &(&1.name == "write"))
         {:ok, "first stage"}
       else
-        call.("work", %{"title" => "stage handoff"})
+        call.("work", %{"title" => "stage handoff", "goal" => "stage handoff"})
         flunk("creation must end the old run")
       end
     end)
