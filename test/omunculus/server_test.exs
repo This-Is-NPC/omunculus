@@ -99,6 +99,23 @@ defmodule Omunculus.ServerTest do
     {:ok, _server} = Server.start_link(server_path)
     assert {:error, :project_in_use} = CLI.run(["send", "while server runs"], dir)
 
+    openapi = Req.get!("http://127.0.0.1:#{port}/openapi.json")
+    assert openapi.status == 200
+    assert ["application/json" <> _] = Req.Response.get_header(openapi, "content-type")
+    assert openapi.body["openapi"] == "3.1.0"
+
+    message_operation =
+      openapi.body["paths"]["/v1/projects/{project_id}/conversations/{conversation_id}/messages"][
+        "post"
+      ]
+
+    assert message_operation["operationId"] == "send_message"
+
+    assert Enum.any?(
+             message_operation["parameters"],
+             &(&1["name"] == "Idempotency-Key" and &1["required"])
+           )
+
     reader = Fixtures.open_project(dir)
     assert {:ok, %{status: "done"}} = Store.view(reader.conn, "run", orphan.id)
     Project.close(reader)

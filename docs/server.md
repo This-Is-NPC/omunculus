@@ -57,6 +57,8 @@ Paths in the registry resolve relative to it. The public key must be a PEM key; 
 bin/omunculus serve --config /path/to/server.toml
 ```
 
+The server publishes an OpenAPI 3.1 document at `GET /openapi.json`, without authentication. It is generated from the same declarations that register the Plug routes, so the list of paths and HTTP methods follows the running server. Request and response schemas are defined in `Omunculus.Server.OpenAPI`. A web app can import this URL into an OpenAPI client generator or documentation viewer. The document itself is JSON; the server does not bundle a browser documentation UI.
+
 ## Web app contract
 
 Send `Authorization: Bearer <JWT>` on every request. Use `/v1/projects/{project}` as the base path. Conversation creation and tool commands require an `Idempotency-Key` header of 1 to 128 bytes. Repeating the same operation with the same key returns its original result; using that key for a different operation returns `409`. Conversation creation returns `201`; a successful tool command returns `202` and a cursor, while its runs proceed asynchronously.

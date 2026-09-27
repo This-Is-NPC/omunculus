@@ -4,17 +4,25 @@ defmodule Omunculus.Server.Router do
   use Plug.Router
   require Logger
 
-  alias Omunculus.Server.{Auth, Contract, Project, StreamLimiter}
+  alias Omunculus.Server.{Auth, Contract, OpenAPI, Project, StreamLimiter}
+  require OpenAPI
+
+  Module.register_attribute(__MODULE__, :openapi_routes, accumulate: true)
+  @before_compile OpenAPI
 
   plug(Plug.Parsers, parsers: [:json], pass: ["application/json"], json_decoder: Jason)
   plug(:match)
   plug(:dispatch)
 
-  get "/health" do
-    send_resp(conn, 200, "ok")
+  OpenAPI.route :get, "/health", :health do
+    conn |> put_resp_content_type("text/plain") |> send_resp(200, "ok")
   end
 
-  get "/v1/identity" do
+  OpenAPI.route :get, "/openapi.json", :openapi do
+    reply(conn, 200, OpenAPI.document(openapi_routes()))
+  end
+
+  OpenAPI.route :get, "/v1/identity", :identity do
     with {:ok, principal} <- authenticate(conn, opts) do
       reply(conn, 200, principal)
     else
@@ -22,7 +30,7 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  post "/v1/projects/:project_id/conversations" do
+  OpenAPI.route :post, "/v1/projects/:project_id/conversations", :create_conversation do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, command_id} <- command_id(conn),
          {:ok, conversation} <- Project.create_conversation(project_id, principal, command_id) do
@@ -32,7 +40,7 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  get "/v1/projects/:project_id/conversations" do
+  OpenAPI.route :get, "/v1/projects/:project_id/conversations", :list_conversations do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, conversations} <- Project.conversations(project_id, principal) do
       reply(conn, 200, %{items: Enum.map(conversations, &Contract.conversation/1)})
@@ -41,7 +49,7 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  post "/v1/projects/:project_id/members" do
+  OpenAPI.route :post, "/v1/projects/:project_id/members", :put_project_member do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, target} <- target(conn.body_params),
          {:ok, role} <- required_string(conn.body_params, "role"),
@@ -52,7 +60,9 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  delete "/v1/projects/:project_id/members/:issuer/:subject" do
+  OpenAPI.route :delete,
+                "/v1/projects/:project_id/members/:issuer/:subject",
+                :remove_project_member do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          :ok <-
            Project.remove_member(project_id, principal, %{issuer: issuer, subject: subject}, nil) do
@@ -62,7 +72,9 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  get "/v1/projects/:project_id/conversations/:conversation_id" do
+  OpenAPI.route :get,
+                "/v1/projects/:project_id/conversations/:conversation_id",
+                :get_conversation do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, conversation} <- Project.conversation(project_id, principal, conversation_id) do
       reply(conn, 200, Contract.conversation(conversation))
@@ -71,7 +83,9 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  get "/v1/projects/:project_id/conversations/:conversation_id/snapshot" do
+  OpenAPI.route :get,
+                "/v1/projects/:project_id/conversations/:conversation_id/snapshot",
+                :snapshot do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, snapshot} <- Project.snapshot(project_id, principal, conversation_id) do
       reply(conn, 200, Contract.snapshot(snapshot))
@@ -80,7 +94,9 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  post "/v1/projects/:project_id/conversations/:conversation_id/messages" do
+  OpenAPI.route :post,
+                "/v1/projects/:project_id/conversations/:conversation_id/messages",
+                :send_message do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, command_id} <- command_id(conn),
          {:ok, args} <- send_args(conn.body_params),
@@ -99,7 +115,9 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  post "/v1/projects/:project_id/conversations/:conversation_id/requests/:request_id/reply" do
+  OpenAPI.route :post,
+                "/v1/projects/:project_id/conversations/:conversation_id/requests/:request_id/reply",
+                :reply_request do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, command_id} <- command_id(conn),
          {:ok, option} <- required_string(conn.body_params, "option"),
@@ -119,7 +137,9 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  post "/v1/projects/:project_id/conversations/:conversation_id/comments" do
+  OpenAPI.route :post,
+                "/v1/projects/:project_id/conversations/:conversation_id/comments",
+                :comment do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, command_id} <- command_id(conn),
          {:ok, args} <- comment_args(conn.body_params),
@@ -138,7 +158,9 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  post "/v1/projects/:project_id/conversations/:conversation_id/inbox/:inbox_id/read" do
+  OpenAPI.route :post,
+                "/v1/projects/:project_id/conversations/:conversation_id/inbox/:inbox_id/read",
+                :read_inbox do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, command_id} <- command_id(conn),
          {:ok, result} <-
@@ -156,7 +178,7 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  get "/v1/projects/:project_id/conversations/:conversation_id/events" do
+  OpenAPI.route :get, "/v1/projects/:project_id/conversations/:conversation_id/events", :events do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, cursor} <- Contract.decode_cursor(conn.params["after"]),
          {:ok, events} <- Project.events(project_id, principal, conversation_id, cursor) do
@@ -166,7 +188,7 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  get "/v1/projects/:project_id/conversations/:conversation_id/stream" do
+  OpenAPI.route :get, "/v1/projects/:project_id/conversations/:conversation_id/stream", :stream do
     runtime = conn.assigns.server_opts
 
     with {:ok, principal} <- project_principal(conn, opts, project_id),
@@ -187,7 +209,9 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  get "/v1/projects/:project_id/conversations/:conversation_id/:kind" do
+  OpenAPI.route :get,
+                "/v1/projects/:project_id/conversations/:conversation_id/:kind",
+                :list_items do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, table} <- list_kind(kind),
          {:ok, rows} <- Project.list(project_id, principal, conversation_id, table) do
@@ -197,7 +221,9 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  post "/v1/projects/:project_id/conversations/:conversation_id/members" do
+  OpenAPI.route :post,
+                "/v1/projects/:project_id/conversations/:conversation_id/members",
+                :put_conversation_member do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, target} <- target(conn.body_params),
          {:ok, role} <- required_string(conn.body_params, "role"),
@@ -208,7 +234,9 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  delete "/v1/projects/:project_id/conversations/:conversation_id/members/:issuer/:subject" do
+  OpenAPI.route :delete,
+                "/v1/projects/:project_id/conversations/:conversation_id/members/:issuer/:subject",
+                :remove_conversation_member do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          :ok <-
            Project.remove_member(
