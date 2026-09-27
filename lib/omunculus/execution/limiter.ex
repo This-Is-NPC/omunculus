@@ -67,7 +67,8 @@ defmodule Omunculus.Execution.Limiter do
     end
   end
 
-  defp key(limits, class), do: {class, limits.max_concurrent, limits.max_queue}
+  defp key(limits, class),
+    do: {Map.get(limits, :scope), class, limits.max_concurrent, limits.max_queue}
 
   defmodule Server do
     @moduledoc false
@@ -78,7 +79,8 @@ defmodule Omunculus.Execution.Limiter do
       GenServer.start_link(__MODULE__, {limits, class},
         name:
           {:via, Registry,
-           {Omunculus.Execution.Registry, {class, limits.max_concurrent, limits.max_queue}}}
+           {Omunculus.Execution.Registry,
+            {Map.get(limits, :scope), class, limits.max_concurrent, limits.max_queue}}}
       )
     end
 

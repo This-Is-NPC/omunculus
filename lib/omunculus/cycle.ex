@@ -26,10 +26,13 @@ defmodule Omunculus.Cycle do
 
   @opening %{prompt_id: nil, work_id: nil, request_id: nil, inbox_id: nil, via: nil, agent: nil}
 
+  @spec start_link(Project.t()) :: GenServer.on_start()
+  def start_link(project), do: GenServer.start_link(__MODULE__, project)
+
   @spec run(Project.t(), map | nil, (Project.t() -> result)) :: result | {:error, term}
         when result: term
   def run(%Project{cycle: nil} = project, opening, fun) do
-    {:ok, cycle} = GenServer.start_link(__MODULE__, project)
+    {:ok, cycle} = start_link(project)
     :ok = GenServer.call(cycle, {:claim, work_key(opening)})
 
     result =

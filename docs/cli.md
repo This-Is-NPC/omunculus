@@ -7,13 +7,13 @@ missing config, or a tool that returned `ok` false. There is no exit 2. A
 path that is not there, a store that will not open and a model that will not
 answer are all 1, and the line on stderr is the reason.
 
-The binary has no verbs of its own. `omunculus send` is the `send` tool,
+The binary also has `serve` and `access bootstrap` commands. Other names dispatch tools: `omunculus send` is the `send` tool,
 `omunculus inbox` is the `inbox` tool: the same `{ name, args, view }` in and
 `{ ok, output, emit, chain }` out the model uses, with `trigger = cli`. Replacing
 the folder named `send` replaces the command. A name the catalog does not
 hold is a refusal.
 
-`--config <path>` is the only flag that belongs to the binary, and it must
+For tools and `access bootstrap`, `--config <path>` is the only flag that belongs to the binary, and it must
 come first. Without it the file is `./omunculus.toml` in the working
 directory. `bin/omunculus` always passes that path unless the first argument
 is already `--config`. The project root is the directory of that file, or
@@ -40,6 +40,8 @@ missing result. Stderr is the formatted error; a tool that failed puts its
 A command that opens runs returns once every run it opened, directly or
 through other runs, has finished. The error of any of them makes it exit
 1; several errors are printed one per line.
+
+`omunculus --config <project.toml> access bootstrap --issuer <issuer> --subject <subject>` seeds the first project administrator. It requires ownership of the project config file and an empty project membership table. `omunculus serve --config <server.toml>` starts the optional HTTP server; see [the server guide](server.md).
 
 ## `omunculus preset`
 

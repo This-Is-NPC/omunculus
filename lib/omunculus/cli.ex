@@ -11,15 +11,22 @@ defmodule Omunculus.CLI do
   the error of any of them fails the command, several one per line.
   """
 
-  alias Omunculus.{Config, Harness, Project}
+  alias Omunculus.{Config, Harness, Operations, Project}
+  alias Omunculus.Store.Access
   alias Omunculus.Tool.{Catalog, Manifest}
 
   @spec run([String.t()], String.t()) :: {:ok, String.t()} | {:error, term}
   def run(argv, cwd) do
     with {:ok, config_path, rest} <- split_config(argv, cwd) do
       case rest do
-        [] -> {:error, :no_tool}
-        [name | args] -> dispatch_named(name, args, config_path)
+        [] ->
+          {:error, :no_tool}
+
+        ["access", "bootstrap", "--issuer", issuer, "--subject", subject] ->
+          bootstrap(config_path, %{issuer: issuer, subject: subject})
+
+        [name | args] ->
+          dispatch_named(name, args, config_path)
       end
     end
   end
@@ -87,6 +94,14 @@ defmodule Omunculus.CLI do
   end
 
   def format_error(:no_runs), do: "no runs"
+  def format_error(:project_in_use), do: "project is in use by another Omunculus process"
+
+  def format_error(:store_requires_recreation),
+    do: "store schema predates conversations; recreate the store"
+
+  def format_error(:not_project_owner),
+    do: "only the owner of the project config may bootstrap access"
+
   def format_error({:unknown_run, id}), do: "unknown run #{id}"
   def format_error(:no_assembled), do: "no assembled prompt"
   def format_error({:assemble, :missing}), do: "omunculus.toml is missing assemble"
@@ -115,7 +130,7 @@ defmodule Omunculus.CLI do
 
       _other ->
         with {:ok, config} <- Config.load(config_path),
-             {:ok, project} <- Project.open(config) do
+             {:ok, project} <- Project.open(config, lock: true) do
           try do
             with {:ok, manifest} <- Harness.manifest(project, name) do
               run_tool(manifest, name, args, project, true)
@@ -127,17 +142,33 @@ defmodule Omunculus.CLI do
     end
   end
 
-  defp run_tool(manifest, name, rest, project, follow_up?) do
-    with {:ok, args} <- build_args(rest, manifest),
-         ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil},
-         {:ok, out, events} <- Harness.dispatch(project, name, args, ctx),
-         :ok <- maybe_follow_up(follow_up?, project, events) do
-      if out.ok, do: {:ok, out.output}, else: {:error, {:tool_failed, out.output}}
+  defp bootstrap(config_path, principal) do
+    with {:ok, config} <- Config.load(config_path),
+         :ok <- owner_of_config(config_path),
+         {:ok, project} <- Project.open(config, lock: true) do
+      try do
+        case Access.bootstrap(project, principal) do
+          :ok -> {:ok, "access bootstrapped"}
+          error -> error
+        end
+      after
+        Project.close(project)
+      end
     end
   end
 
-  defp maybe_follow_up(true, project, events), do: Harness.follow_up(project, events)
-  defp maybe_follow_up(false, _project, _events), do: :ok
+  defp owner_of_config(path) do
+    if File.stat!(path).uid == File.stat!("/proc/self").uid,
+      do: :ok,
+      else: {:error, :not_project_owner}
+  end
+
+  defp run_tool(manifest, name, rest, project, follow_up?) do
+    with {:ok, args} <- build_args(rest, manifest),
+         {:ok, out, _events} <- Operations.call(project, name, args, %{}, follow_up?) do
+      if out.ok, do: {:ok, out.output}, else: {:error, {:tool_failed, out.output}}
+    end
+  end
 
   defp build_args(rest, manifest) do
     positional_key =

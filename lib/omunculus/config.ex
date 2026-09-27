@@ -44,6 +44,7 @@ defmodule Omunculus.Config do
     :path,
     :store,
     :auth,
+    :access,
     :data
   ]
   defstruct @enforce_keys
@@ -104,6 +105,7 @@ defmodule Omunculus.Config do
           path: String.t(),
           store: %{path: String.t()},
           auth: %{store: String.t() | nil, providers: %{String.t() => map}},
+          access: map | nil,
           data: map
         }
 
@@ -394,7 +396,8 @@ defmodule Omunculus.Config do
              "tools",
              "models",
              "store",
-             "auth"
+             "auth",
+             "access"
            ] do
       [key | _] ->
         {:error, {:unknown_key, key}}
@@ -406,6 +409,7 @@ defmodule Omunculus.Config do
         with {:ok, root} <- parse_project(Map.get(data, "project"), config_dir),
              {:ok, execution} <- parse_execution(Map.get(data, "execution"), config_dir),
              {:ok, auth} <- parse_auth(Map.get(data, "auth"), config_dir),
+             {:ok, access} <- parse_access(Map.get(data, "access")),
              {:ok, models} <- parse_models(Map.get(data, "models"), auth, config_dir),
              {:ok, store} <- parse_store(Map.get(data, "store"), config_dir),
              {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), root),
@@ -438,6 +442,7 @@ defmodule Omunculus.Config do
               path: config_path,
               store: store,
               auth: auth,
+              access: access,
               data: data
             }
 
@@ -447,6 +452,53 @@ defmodule Omunculus.Config do
           end
         end
     end
+  end
+
+  @capabilities ~w(
+    project.manage_access project.manage_config conversation.create
+    conversation.read conversation.send conversation.comment
+    conversation.reply conversation.manage_access conversation.manage
+  )
+
+  defp parse_access(nil), do: {:ok, nil}
+
+  defp parse_access(
+         %{"creator_role" => creator, "bootstrap_role" => bootstrap, "roles" => roles} = data
+       )
+       when is_binary(creator) and is_binary(bootstrap) and is_map(roles) do
+    with [] <- Map.keys(data) -- ~w(creator_role bootstrap_role roles),
+         true <- map_size(roles) > 0,
+         true <- Map.has_key?(roles, creator) and Map.has_key?(roles, bootstrap),
+         {:ok, parsed} <- parse_access_roles(roles),
+         true <- "conversation.manage_access" in parsed[creator].capabilities,
+         true <- "project.manage_access" in parsed[bootstrap].capabilities,
+         true <- "project.manage_config" in parsed[bootstrap].capabilities do
+      {:ok, %{creator_role: creator, bootstrap_role: bootstrap, roles: parsed}}
+    else
+      _ -> {:error, {:access, :invalid}}
+    end
+  end
+
+  defp parse_access(_), do: {:error, {:access, :invalid}}
+
+  defp parse_access_roles(roles) do
+    Enum.reduce_while(roles, {:ok, %{}}, fn {name, role}, {:ok, acc} ->
+      case role do
+        %{"scope" => scope, "capabilities" => caps} = data
+        when scope in ~w(project conversation) and is_list(caps) ->
+          if Map.keys(data) -- ~w(scope capabilities) == [] and
+               Enum.all?(caps, &(&1 in @capabilities)) and
+               (scope == "project" or
+                  Enum.all?(caps, &String.starts_with?(&1, "conversation."))) do
+            {:cont, {:ok, Map.put(acc, name, %{scope: scope, capabilities: caps})}}
+          else
+            {:halt, {:error, {:access, :invalid_role, name}}}
+          end
+
+        _ ->
+          {:halt, {:error, {:access, :invalid_role, name}}}
+      end
+    end)
   end
 
   defp parse_project(nil, config_dir), do: {:ok, config_dir}

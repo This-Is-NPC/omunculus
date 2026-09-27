@@ -152,7 +152,7 @@ defmodule Omunculus.Store.View do
 
   @spec replay(
           Omunculus.Store.Connection.t(),
-          :project | {:run | :work | :request | :inbox, String.t()}
+          :project | {:run | :work | :request | :inbox | :conversation, String.t()}
         ) ::
           {:ok, [map]}
   def replay(conn, scope) do
@@ -161,6 +161,8 @@ defmodule Omunculus.Store.View do
   end
 
   defp replay_filter(:project), do: {"", []}
+
+  defp replay_filter({:conversation, id}), do: {" WHERE conversation_id = ?", [id]}
 
   defp replay_filter({:work, id}) do
     {" WHERE work_id = ? OR (work_id IS NULL AND run_id IN (SELECT id FROM runs WHERE work_id = ?))",

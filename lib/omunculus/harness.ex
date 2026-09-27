@@ -130,6 +130,11 @@ defmodule Omunculus.Harness do
             run_id: event.run_id,
             author: if(run, do: "agent", else: "human"),
             agent: run && run.agent,
+            issuer: Map.get(event, :actor_issuer),
+            subject: Map.get(event, :actor_subject),
+            origin_issuer: Map.get(event, :origin_issuer),
+            origin_subject: Map.get(event, :origin_subject),
+            conversation_id: Map.get(event, :conversation_id),
             request_id: event.request_id,
             inbox_id: event.inbox_id,
             via: run && run.via,
@@ -382,6 +387,15 @@ defmodule Omunculus.Harness do
       work_id: work_id,
       author: ctx.author,
       agent: ctx.agent,
+      issuer: Map.get(ctx, :issuer),
+      subject: Map.get(ctx, :subject),
+      origin_issuer: Map.get(ctx, :origin_issuer),
+      origin_subject: Map.get(ctx, :origin_subject),
+      principal: Map.get(ctx, :principal),
+      capability: Map.get(ctx, :capability),
+      conversation_id: Map.get(ctx, :conversation_id),
+      command_id: Map.get(ctx, :command_id),
+      command_hash: Map.get(ctx, :command_hash),
       config: config,
       groups: Catalog.groups(catalog),
       request_id: Map.get(ctx, :request_id),
@@ -777,7 +791,7 @@ defmodule Omunculus.Harness do
 
   defp advance(project, _catalog, %{type: "prompt"} = event, via, :actions) do
     with :ok <-
-           Cycle.open(project, %{prompt_id: event.prompt_id, work_id: event.work_id, via: via}),
+           due(project, event, %{prompt_id: event.prompt_id, work_id: event.work_id, via: via}),
          do: {:ok, via}
   end
 
@@ -791,7 +805,7 @@ defmodule Omunculus.Harness do
   end
 
   defp advance(project, _catalog, %{type: "delegate"} = event, via, :actions) do
-    with :ok <- Cycle.open(project, %{work_id: event.work_id, via: via}), do: {:ok, via}
+    with :ok <- due(project, event, %{work_id: event.work_id, via: via}), do: {:ok, via}
   end
 
   defp advance(project, _catalog, %{type: "request"} = event, via, :actions) do
@@ -805,7 +819,7 @@ defmodule Omunculus.Harness do
   defp advance(_project, _catalog, _event, via, _phase), do: {:ok, via}
 
   defp open_reaction_run(project, event, hook_name, agent) do
-    Cycle.open(project, %{
+    due(project, event, %{
       work_id: event.work_id,
       request_id: event.request_id,
       inbox_id: event.inbox_id,
@@ -849,10 +863,10 @@ defmodule Omunculus.Harness do
   # the calls of its option are applied.
   defp open_reply_run(_project, %{work_id: nil}, _via), do: :ok
 
-  defp open_reply_run(project, %{work_id: work_id, request_id: request_id}, via) do
+  defp open_reply_run(project, %{work_id: work_id, request_id: request_id} = event, via) do
     case Store.view(project.conn, "work", work_id) do
       {:ok, %{state: "open"}} ->
-        Cycle.open(project, %{work_id: work_id, request_id: request_id, via: via})
+        due(project, event, %{work_id: work_id, request_id: request_id, via: via})
 
       {:ok, _not_open} ->
         :ok
@@ -865,10 +879,10 @@ defmodule Omunculus.Harness do
   defp open_sequence_run(project, event, via) do
     case {event.type, Jason.decode!(event.body)} do
       {"continue", %{"to" => to}} when not is_nil(to) ->
-        Cycle.open(project, %{work_id: event.work_id, via: via})
+        due(project, event, %{work_id: event.work_id, via: via})
 
       {_type, %{"parent_id" => parent_id}} when not is_nil(parent_id) ->
-        Cycle.open(project, %{work_id: parent_id, via: via})
+        due(project, event, %{work_id: parent_id, via: via})
 
       _no_next_run ->
         :ok
@@ -878,7 +892,7 @@ defmodule Omunculus.Harness do
   defp open_request_run(project, event, via) do
     case Jason.decode!(event.body) do
       %{"arbiter" => arbiter, "arbiter_work_id" => work_id} ->
-        Cycle.open(project, %{
+        due(project, event, %{
           work_id: work_id,
           request_id: event.request_id,
           via: via,
@@ -896,10 +910,20 @@ defmodule Omunculus.Harness do
     case Jason.decode!(event.body) do
       %{"start" => true} ->
         if event.run_id, do: Cycle.link(project, event.work_id)
-        Cycle.open(project, %{work_id: event.work_id, via: via})
+        due(project, event, %{work_id: event.work_id, via: via})
 
       _not_a_new_root ->
         :ok
     end
+  end
+
+  defp due(project, event, opening) do
+    Cycle.open(
+      project,
+      Map.merge(opening, %{
+        origin_issuer: Map.get(event, :origin_issuer),
+        origin_subject: Map.get(event, :origin_subject)
+      })
+    )
   end
 end

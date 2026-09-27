@@ -4,7 +4,7 @@ Instructions for any agent or person working in this repository. Everything here
 
 ## What Omunculus is
 
-A local, CLI-only harness that orchestrates tool-using language models. It opens a SQLite store per project, assembles a prompt for one run, lets the model call tools inside the execution sandbox, records every step as an event, and applies the store actions those tools emit. Work items, requests, notifications and workflow stages are state in the store; the harness only follows them.
+A local harness with a direct CLI and an optional HTTP server that orchestrates tool-using language models. It opens a SQLite store per project, assembles a prompt for one run, lets the model call tools inside the execution sandbox, records every step as an event, and applies the store actions those tools emit. Work items, conversations, memberships, requests, notifications and workflow stages are state in the store; the harness only follows them.
 
 Targets Linux, Elixir 1.17, OTP 27, Deno 2.9 and Bubblewrap 0.8 or newer. Tool versions are pinned in `mise.toml`.
 
@@ -14,14 +14,16 @@ The core is `lib/omunculus/`. Read these modules first, in this order.
 
 | Module | Role |
 | --- | --- |
-| `Omunculus.CLI` | Entry point. `omunculus [--config <path>] <name> [--key value]` dispatches a tool with trigger `cli`, then hands the resulting events to `Harness.follow_up/3`. Without `--config` the file is `./omunculus.toml`; `bin/omunculus` passes `--config $PWD/omunculus.toml` unless the first argument is already `--config`. A missing file is a refusal, except for a tool with `config = false` (`preset`). Reads no environment variables. |
-| `Omunculus.Project` | Opens the SQLite file `[store] path` names and holds the connection, the config path, and the cycle the runs opened through it join. |
+| `Omunculus.CLI` | Direct entry point. `omunculus [--config <path>] <name> [--key value]` dispatches a tool with trigger `cli` through `Operations`, then follows up its events. `access bootstrap` seeds an administrator. Without `--config` the file is `./omunculus.toml`; `bin/omunculus` passes `--config $PWD/omunculus.toml` unless the first argument is already `--config`. A missing file is a refusal, except for a tool with `config = false` (`preset`). Reads no environment variables. |
+| `Omunculus.Project` | Opens the SQLite file `[store] path` names and holds the connection, the config path, and the cycle the runs opened through it join. CLI and server acquire an OS file lock for exclusive project ownership. |
 | `Omunculus.Cycle` | The runs one command opens, each in a process of its own. The command returns once every run it opened, transitively, has finished, and fails with the errors of any of them. A work has one run at a time: runs due for a work with a run open wait for it, in the order they became due; a work's own run due while another waits is merged into it. A run without a work that creates the root holds the root's turn until it finishes. |
-| `Omunculus.Config` | Loads and validates `omunculus.toml`: policy (including `assemble` and the required `max_retries`), depth layers, workspaces, agents, workflows (each layer with its per-tool `overrides`), models, `[auth]`, MCP servers, `[store]` and the required `[execution]` table (including `resources`, `max_concurrent`, `max_queue` and `queue_timeout_ms`). `Config.Layer` is one ceiling layer; `Config.Toml` encodes the file. Also rewrites the file for permanent grants, replacing it whole through a temporary file. |
+| `Omunculus.Config` | Loads and validates `omunculus.toml`: policy (including `assemble` and the required `max_retries`), depth layers, workspaces, agents, workflows (each layer with its per-tool `overrides`), models, `[auth]`, optional `[access]` role definitions, MCP servers, `[store]` and the required `[execution]` table (including `resources`, `max_concurrent`, `max_queue` and `queue_timeout_ms`). `Config.Layer` is one ceiling layer; `Config.Toml` encodes the file. Also rewrites the file for permanent grants, replacing it whole through a temporary file. |
 | `Omunculus.Harness` | Discovers the catalog, checks the trigger, hydrates the views a manifest declares, invokes the tool and the steps it chains, records `EVENTS(tool)` for each, and applies all their emitted actions in one transaction. `end` is the only event that ends a run. Hooks of every other event run immediately; hooks of `end` wait until the run has closed and the runs its events ask for are due. `open_due/2` (after each model call) and `follow_up/3` (after the close) write permanent grants to the TOML before making runs due; a `reply` opens a run of the requester's work when that work is open. |
 | `Omunculus.Run` | Opens one run, holding a slot of the execution limiter's `run` class (`[execution]` `max_concurrent`, `max_queue`, `queue_timeout_ms`): resolves the agent from the workflow stage, the work's assignee or the depth, mounts the ceiling, builds the execution policy, begins the run, dispatches the `assemble` tool, attaches `PROMPTS(assembled)`, drives the model until it calls `end` or stops, making the runs each call's actions ask for due at once, closes the run, then retries a work whose model stopped without `end`; over `max_retries` it breaks a child work and opens a request to the human, with `retry` and `cancel` options and an inbox entry, for a root work. A cancelled work opens no run; a work's own run does not open once the work is no longer open. |
 | `Omunculus.Ceiling` | Intersects the policy, workspace, depth, agent and stage layers into the effective tool set of a run and classifies a name as have, askable, sealed or blocked. `pinned` intersects the same way and marks which effective tools become cards when `tool_search` is present. The same layers resolve the run's per-tool `overrides`, the most specific layer winning per key; the snapshot carries them. |
-| `Omunculus.Store` and `Omunculus.Store.*` | The only code that touches SQL. `Connection` is the one process that owns the SQLite handle; every statement and transaction runs in it, so concurrent runs apply their transactions one after another. `View` reads cuts of the tables. `Actions` applies emits (`comment`, `request`, `reply`, `grant`, `cancel`, `work`, `delegate`, `continue`, `break`, `end`, `notify`, `prompt`, `compact`, ...); a request carries named options of tool calls and its arbiter is resolved in the store. `Runs` and `Events` write the run lifecycle; `Runs.record_tools` records a call and its chained steps as one transaction; `Runs.unreported` decides a retry, break or request in one. `Schema` creates the seven tables. |
+| `Omunculus.Store` and `Omunculus.Store.*` | The only code that touches SQL. `Connection` is the one process that owns the SQLite handle; every statement and transaction runs in it, so concurrent runs apply their transactions one after another. `Access` checks project and conversation memberships, scopes reads, and manages idempotent command receipts. `View` reads cuts of the tables. `Actions` applies emits (`comment`, `request`, `reply`, `grant`, `cancel`, `work`, `delegate`, `continue`, `break`, `end`, `notify`, `prompt`, `compact`, ...); a request carries named options of tool calls and its arbiter is resolved in the store. `Runs` and `Events` write the run lifecycle; `Runs.record_tools` records a call and its chained steps as one transaction; `Runs.unreported` decides a retry, break or request in one. `Schema` creates eleven tables. |
+| `Omunculus.Operations` | Shares tool dispatch, human authorization and cycle follow-up between the direct CLI and HTTP commands. |
+| `Omunculus.Server` and `Omunculus.Server.*` | Optional Bandit/Plug HTTP server. Its TOML registry maps project IDs to project configs, JWT claims to human principals, and listener/run/stream limits. Each project owns a persistent cycle. The versioned contract exposes scoped conversations, snapshots, events, SSE and typed commands; the core store enforces access. |
 | `Omunculus.Tool.Catalog`, `Manifest`, `Overrides`, `Invoke` | Discover `tool.toml` / `hook.toml` folders and MCP servers, parse manifests (including `chains`, `then` and named `schemas`), apply a run's `overrides` (`then`, `chains`, `schema`) to the catalog, and call a tool either as an Elixir module or as an external command fed JSON on stdin. `Manifest.card/1` is `- name: description [tags: a, b]`; no tags, no suffix. |
 | `Omunculus.Tools.*`, `Omunculus.Hooks.Noop` | The builtin tools. Each has a manifest under `priv/tools/<name>/` and a module here; the builtin hooks (`on-request`, `on-notify`, `on-continue`, `on-break`) all use `Hooks.Noop`. The model tools that hand a work away (`work`, `done`, `break`, `request_access`, `request_sandbox`) take a `report` and end the run through `then = ["end"]`; `delegate` and `continue` are chain-only steps of `work` and `done`; `grant` and `cancel` are chain-only steps of `reply`, which chains the chosen option of a request. |
 | `Omunculus.Sandbox` | Runs the code the model submits inside the execution sandbox and answers each `tools.<name>(args)` call it makes. |
@@ -54,7 +56,7 @@ omunculus send "text"
 
 ### Configuration
 
-All configuration is TOML. The project file is `./omunculus.toml`, or the path `--config` names; the project root is its directory, or `[project] root`. There is no package config: a missing file is `` no config at <path>; run `omunculus preset <name> --from <dir>` ``. The presets under `priv/presets/` (`default`, `codex-like`, `pi-like`) are copied into the project by the `preset` tool. Nothing in the store is configuration.
+All configuration is TOML. The project file is `./omunculus.toml`, or the path `--config` names; the project root is its directory, or `[project] root`. The optional server uses its own TOML registry of project config paths, listener limits and JWT verification. There is no package config: a missing project file is `` no config at <path>; run `omunculus preset <name> --from <dir>` ``. The presets under `priv/presets/` (`default`, `codex-like`, `pi-like`) are copied into the project by the `preset` tool. Memberships are state in the store; role definitions are configuration.
 
 ### Tools, hooks and presets
 
@@ -66,7 +68,7 @@ A tool is a folder with `tool.toml` and either `module = "Elixir.Module"` or `co
 
 ```text
 bin/omunculus        shell wrapper: mise exec -- mix omunculus
-lib/omunculus/       core, config, tool, tools, hooks, models, execution, store
+lib/omunculus/       core, config, server, tool, tools, hooks, models, execution, store
 lib/mix/tasks/       the omunculus and omunculus.presets mix tasks
 priv/tools/          builtin tool and hook manifests
 priv/presets/        default, codex-like, pi-like
@@ -90,6 +92,7 @@ mise run pre-push               # validate:regular
 mix compile --warnings-as-errors
 bin/omunculus preset default --from priv/presets/default
 bin/omunculus send "text"
+bin/omunculus serve --config server.toml
 ```
 
 The CLI reads no environment variables. The config file, and with it the model of every agent, comes from `--config <path>` or `./omunculus.toml`.

@@ -1,9 +1,9 @@
 # omunculus
 
-A local CLI harness for tool-using models. The store is one SQLite file, the
+A local harness for tool-using models, with an optional HTTP server. The store is one SQLite file per project, the
 ceiling is the TOML, and the filesystem stays the filesystem.
 
-There is no daemon and no chat window. `omunculus send "count to 5"` is a tool
+The CLI works directly without a server. `omunculus send "count to 5"` is a tool
 call, the same contract the model uses, and what happens next is already in
 the file: a prompt is recorded, a run opens, the model calls tools inside a
 Bubblewrap sandbox until it calls `end` or stops, every step is an event, and
@@ -61,6 +61,10 @@ Every verb is in [the command line](docs/cli.md). The file the verbs read is
 [possibilities](docs/possibilities.md). What a send actually does to the store
 is [the cycle](docs/cycle.md). Who may call what is [the ceiling](docs/ceiling.md).
 A folder of your own is [a tool](docs/tools.md).
+
+## HTTP server
+
+The optional [server](docs/server.md) opens configured projects, verifies signed JWTs, and exposes conversations, commands, snapshots, events and SSE to web apps. Each project keeps its own SQLite store. The server has no built-in chat page.
 
 ## Requirements
 

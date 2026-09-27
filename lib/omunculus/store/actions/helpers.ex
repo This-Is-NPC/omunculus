@@ -47,6 +47,8 @@ defmodule Omunculus.Store.Actions.Helpers do
   def insert_comment(conn, id, targets, text, event, ctx) do
     Query.insert(conn, :comments, %{
       id: id,
+      actor_issuer: Map.get(ctx, :issuer),
+      actor_subject: Map.get(ctx, :subject),
       work_id: targets[:works],
       request_id: targets[:requests],
       inbox_id: targets[:inbox],
@@ -101,6 +103,7 @@ defmodule Omunculus.Store.Actions.Helpers do
   def insert_work(conn, work) do
     Query.insert(conn, :works, %{
       id: work.id,
+      conversation_id: Map.get(work, :conversation_id),
       parent_id: work.parent_id,
       event_id: work.event_id,
       workspace: work.workspace,

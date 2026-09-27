@@ -16,8 +16,13 @@ defmodule Omunculus.Store.Runs do
   """
 
   alias Omunculus.Id
+  alias Omunculus.Store.Access
   alias Omunculus.Store.Actions.Helpers
   alias Omunculus.Store.{Actions, Connection, Events, Query, View}
+
+  @spec open_runs(Connection.t()) :: {:ok, [map]} | {:error, term}
+  def open_runs(conn),
+    do: Query.all(conn, "SELECT * FROM runs WHERE status = 'open' ORDER BY started_at, id")
 
   @spec begin(Connection.t(), map) :: {:ok, map} | {:error, term}
   def begin(conn, params) do
@@ -33,7 +38,7 @@ defmodule Omunculus.Store.Runs do
   @spec record_model(Connection.t(), String.t(), String.t()) :: {:ok, map} | {:error, term}
   def record_model(conn, run_id, text) do
     Query.transaction(conn, fn ->
-      Events.append(conn, %{type: "model", run_id: run_id, body: text})
+      Events.append(conn, %{type: "model", actor_kind: "agent", run_id: run_id, body: text})
     end)
   end
 
@@ -41,20 +46,53 @@ defmodule Omunculus.Store.Runs do
           {:ok, [map]} | {:error, term}
   def record_tools(conn, run_id, calls, ctx) do
     Query.transaction(conn, fn ->
-      Enum.reduce_while(calls, {:ok, []}, fn {call, emits}, {:ok, acc} ->
-        case record_call(conn, run_id, call, emits, ctx) do
-          {:ok, events} -> {:cont, {:ok, acc ++ events}}
-          {:error, _reason} = error -> {:halt, error}
-        end
-      end)
+      with {:ok, events} <-
+             Enum.reduce_while(calls, {:ok, []}, fn {call, emits}, {:ok, acc} ->
+               case record_call(conn, run_id, call, emits, ctx) do
+                 {:ok, events} -> {:cont, {:ok, acc ++ events}}
+                 {:error, _reason} = error -> {:halt, error}
+               end
+             end),
+           :ok <- record_receipt(conn, ctx, calls, events) do
+        {:ok, events}
+      end
     end)
   end
 
+  defp record_receipt(conn, ctx, calls, events) do
+    case Map.get(ctx, :command_id) do
+      nil ->
+        :ok
+
+      command_id ->
+        last = List.last(events)
+
+        Query.insert(conn, :command_receipts, %{
+          issuer: ctx.issuer,
+          subject: ctx.subject,
+          command_id: command_id,
+          operation: ctx.command_hash,
+          result:
+            Jason.encode!(%{
+              cursor: last && last.sequence,
+              ok: calls |> hd() |> elem(0) |> Map.fetch!(:ok)
+            }),
+          created_at: Events.now()
+        })
+    end
+  end
+
   defp record_call(conn, run_id, call, emits, ctx) do
-    with {:ok, tool_event} <-
+    with :ok <- authorize_human(conn, ctx),
+         {:ok, tool_event} <-
            Events.append(conn, %{
              type: "tool",
+             actor_kind: Map.get(ctx, :author),
+             actor_id: Map.get(ctx, :agent),
              run_id: run_id,
+             conversation_id: Map.get(ctx, :conversation_id),
+             actor_issuer: Map.get(ctx, :issuer),
+             actor_subject: Map.get(ctx, :subject),
              work_id: ctx.work_id,
              request_id: Map.get(ctx, :request_id),
              inbox_id: Map.get(ctx, :inbox_id),
@@ -63,6 +101,13 @@ defmodule Omunculus.Store.Runs do
          {:ok, emit_events} <- Actions.run(conn, emits, ctx) do
       {:ok, [tool_event | emit_events]}
     end
+  end
+
+  defp authorize_human(_conn, ctx) when not is_map_key(ctx, :principal), do: :ok
+  defp authorize_human(_conn, %{principal: nil}), do: :ok
+
+  defp authorize_human(conn, %{principal: principal, capability: capability} = ctx) do
+    Access.check(conn, ctx.config.access, principal, capability, ctx.conversation_id)
   end
 
   @spec close(Connection.t(), String.t()) :: {:ok, map} | {:error, term}
@@ -120,6 +165,10 @@ defmodule Omunculus.Store.Runs do
          {:ok, event} <-
            Events.append(conn, %{
              type: "start-run",
+             actor_kind: "harness",
+             conversation_id: Map.get(params, :conversation_id),
+             origin_issuer: Map.get(params, :origin_issuer),
+             origin_subject: Map.get(params, :origin_subject),
              run_id: run_id,
              prompt_id: params.prompt_id,
              work_id: params.work_id,
@@ -136,6 +185,9 @@ defmodule Omunculus.Store.Runs do
          :ok <-
            Query.insert(conn, :runs, %{
              id: run_id,
+             conversation_id: Map.get(params, :conversation_id),
+             origin_issuer: Map.get(params, :origin_issuer),
+             origin_subject: Map.get(params, :origin_subject),
              work_id: params.work_id,
              prompt_id: nil,
              event_id: event.id,
@@ -175,6 +227,7 @@ defmodule Omunculus.Store.Runs do
          :ok <-
            Query.insert(conn, :prompts, %{
              id: assembled_id,
+             conversation_id: run.conversation_id,
              kind: "assembled",
              body: body,
              run_id: run_id,
@@ -211,7 +264,7 @@ defmodule Omunculus.Store.Runs do
              Events.now(),
              run.id
            ]) do
-      Events.append(conn, %{type: "end-run", run_id: run.id, body: "{}"})
+      Events.append(conn, %{type: "end-run", actor_kind: "harness", run_id: run.id, body: "{}"})
     end
   end
 end

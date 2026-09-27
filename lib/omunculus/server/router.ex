@@ -1,0 +1,382 @@
+defmodule Omunculus.Server.Router do
+  @moduledoc "The versioned HTTP entry for the Omunculus server."
+
+  use Plug.Router
+  require Logger
+
+  alias Omunculus.Server.{Auth, Contract, Project, StreamLimiter}
+
+  plug(Plug.Parsers, parsers: [:json], pass: ["application/json"], json_decoder: Jason)
+  plug(:match)
+  plug(:dispatch)
+
+  get "/health" do
+    send_resp(conn, 200, "ok")
+  end
+
+  get "/v1/identity" do
+    with {:ok, principal} <- authenticate(conn, opts) do
+      reply(conn, 200, principal)
+    else
+      _ -> reply(conn, 401, %{error: "unauthorized"})
+    end
+  end
+
+  post "/v1/projects/:project_id/conversations" do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, command_id} <- command_id(conn),
+         {:ok, conversation} <- Project.create_conversation(project_id, principal, command_id) do
+      reply(conn, 201, Contract.created(conversation))
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  get "/v1/projects/:project_id/conversations" do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, conversations} <- Project.conversations(project_id, principal) do
+      reply(conn, 200, %{items: Enum.map(conversations, &Contract.conversation/1)})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  post "/v1/projects/:project_id/members" do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, target} <- target(conn.body_params),
+         {:ok, role} <- required_string(conn.body_params, "role"),
+         :ok <- Project.put_member(project_id, principal, target, role, nil) do
+      reply(conn, 200, %{status: "updated"})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  delete "/v1/projects/:project_id/members/:issuer/:subject" do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         :ok <-
+           Project.remove_member(project_id, principal, %{issuer: issuer, subject: subject}, nil) do
+      reply(conn, 200, %{status: "removed"})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  get "/v1/projects/:project_id/conversations/:conversation_id" do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, conversation} <- Project.conversation(project_id, principal, conversation_id) do
+      reply(conn, 200, Contract.conversation(conversation))
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  get "/v1/projects/:project_id/conversations/:conversation_id/snapshot" do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, snapshot} <- Project.snapshot(project_id, principal, conversation_id) do
+      reply(conn, 200, Contract.snapshot(snapshot))
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  post "/v1/projects/:project_id/conversations/:conversation_id/messages" do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, command_id} <- command_id(conn),
+         {:ok, args} <- send_args(conn.body_params),
+         {:ok, result} <-
+           Project.command(
+             project_id,
+             "send",
+             args,
+             principal,
+             conversation_id,
+             command_id
+           ) do
+      reply(conn, 202, Contract.accepted(result))
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  post "/v1/projects/:project_id/conversations/:conversation_id/requests/:request_id/reply" do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, command_id} <- command_id(conn),
+         {:ok, option} <- required_string(conn.body_params, "option"),
+         {:ok, body} <- required_string(conn.body_params, "body"),
+         {:ok, result} <-
+           Project.command(
+             project_id,
+             "reply",
+             %{"request_id" => request_id, "option" => option, "body" => body},
+             principal,
+             conversation_id,
+             command_id
+           ) do
+      reply(conn, 202, Contract.accepted(result))
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  post "/v1/projects/:project_id/conversations/:conversation_id/comments" do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, command_id} <- command_id(conn),
+         {:ok, args} <- comment_args(conn.body_params),
+         {:ok, result} <-
+           Project.command(
+             project_id,
+             "comment",
+             args,
+             principal,
+             conversation_id,
+             command_id
+           ) do
+      reply(conn, 202, Contract.accepted(result))
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  post "/v1/projects/:project_id/conversations/:conversation_id/inbox/:inbox_id/read" do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, command_id} <- command_id(conn),
+         {:ok, result} <-
+           Project.command(
+             project_id,
+             "inbox_read",
+             %{"inbox_id" => inbox_id},
+             principal,
+             conversation_id,
+             command_id
+           ) do
+      reply(conn, 202, Contract.accepted(result))
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  get "/v1/projects/:project_id/conversations/:conversation_id/events" do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, cursor} <- Contract.decode_cursor(conn.params["after"]),
+         {:ok, events} <- Project.events(project_id, principal, conversation_id, cursor) do
+      reply(conn, 200, %{events: Enum.map(events, &Contract.event(project_id, &1))})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  get "/v1/projects/:project_id/conversations/:conversation_id/stream" do
+    runtime = conn.assigns.server_opts
+
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, cursor} <- Contract.decode_cursor(conn.params["after"]),
+         {:ok, _events} <- Project.events(project_id, principal, conversation_id, cursor),
+         :ok <- StreamLimiter.acquire(runtime[:stream_key]) do
+      try do
+        conn
+        |> put_resp_content_type("text/event-stream")
+        |> put_resp_header("cache-control", "no-store")
+        |> send_chunked(200)
+        |> stream(project_id, principal, conversation_id, cursor)
+      after
+        StreamLimiter.release(runtime[:stream_key])
+      end
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  get "/v1/projects/:project_id/conversations/:conversation_id/:kind" do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, table} <- list_kind(kind),
+         {:ok, rows} <- Project.list(project_id, principal, conversation_id, table) do
+      reply(conn, 200, %{items: Enum.map(rows, &Contract.item(table, &1))})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  post "/v1/projects/:project_id/conversations/:conversation_id/members" do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, target} <- target(conn.body_params),
+         {:ok, role} <- required_string(conn.body_params, "role"),
+         :ok <- Project.put_member(project_id, principal, target, role, conversation_id) do
+      reply(conn, 200, %{status: "updated"})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  delete "/v1/projects/:project_id/conversations/:conversation_id/members/:issuer/:subject" do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         :ok <-
+           Project.remove_member(
+             project_id,
+             principal,
+             %{issuer: issuer, subject: subject},
+             conversation_id
+           ) do
+      reply(conn, 200, %{status: "removed"})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  match _ do
+    reply(conn, 404, %{error: "not_found"})
+  end
+
+  defp authenticate(conn, opts) do
+    opts = Keyword.merge(opts, conn.assigns.server_opts)
+
+    case get_req_header(conn, "authorization") do
+      ["Bearer " <> token] -> Auth.verify(Keyword.fetch!(opts, :auth), token)
+      _ -> {:error, :unauthorized}
+    end
+  end
+
+  defp project_principal(conn, opts, id) do
+    opts = Keyword.merge(opts, conn.assigns.server_opts)
+
+    with {:ok, principal} <- authenticate(conn, opts),
+         true <- id in Keyword.fetch!(opts, :projects) do
+      {:ok, principal}
+    else
+      false -> {:error, :not_found}
+      error -> error
+    end
+  end
+
+  defp command_id(conn) do
+    case get_req_header(conn, "idempotency-key") do
+      [id] when byte_size(id) in 1..128 -> {:ok, id}
+      _ -> {:error, :invalid}
+    end
+  end
+
+  defp required_string(map, key) when is_map(map) do
+    case Map.get(map, key) do
+      value when is_binary(value) and value != "" -> {:ok, value}
+      _ -> {:error, :invalid}
+    end
+  end
+
+  defp required_string(_, _), do: {:error, :invalid}
+
+  defp target(body) do
+    with {:ok, issuer} <- required_string(body, "issuer"),
+         {:ok, subject} <- required_string(body, "subject") do
+      {:ok, %{issuer: issuer, subject: subject}}
+    end
+  end
+
+  defp comment_args(body) when is_map(body) do
+    targets = Enum.filter(~w(work_id request_id inbox_id), &is_binary(body[&1]))
+
+    with {:ok, text} <- required_string(body, "body"),
+         [target] <- targets do
+      {:ok, %{"body" => text, target => body[target]}}
+    else
+      _ -> {:error, :invalid}
+    end
+  end
+
+  defp comment_args(_), do: {:error, :invalid}
+
+  defp send_args(body) when is_map(body) do
+    with {:ok, message} <- required_string(body, "message"),
+         [] <- Map.keys(body) -- ~w(message work_id) do
+      case body["work_id"] do
+        nil ->
+          {:ok, %{"message" => message}}
+
+        work_id when is_binary(work_id) and work_id != "" ->
+          {:ok, %{"message" => message, "work_id" => work_id}}
+
+        _ ->
+          {:error, :invalid}
+      end
+    else
+      _ -> {:error, :invalid}
+    end
+  end
+
+  defp send_args(_), do: {:error, :invalid}
+
+  defp list_kind("works"), do: {:ok, :works}
+  defp list_kind("runs"), do: {:ok, :runs}
+  defp list_kind("prompts"), do: {:ok, :prompts}
+  defp list_kind("requests"), do: {:ok, :requests}
+  defp list_kind("inbox"), do: {:ok, :inbox}
+  defp list_kind(_), do: {:error, :not_found}
+
+  defp stream(conn, project_id, principal, conversation_id, cursor) do
+    case Project.events(project_id, principal, conversation_id, cursor) do
+      {:ok, []} ->
+        case chunk(conn, ": keepalive\n\n") do
+          {:ok, conn} ->
+            Process.sleep(1_000)
+            stream(conn, project_id, principal, conversation_id, cursor)
+
+          _closed ->
+            conn
+        end
+
+      {:ok, events} ->
+        case Enum.reduce_while(events, {:ok, conn, cursor}, fn event, {:ok, conn, _cursor} ->
+               case Project.can_read(project_id, principal, conversation_id) do
+                 :ok ->
+                   data =
+                     "id: #{Contract.cursor(event.sequence)}\ndata: #{Jason.encode!(Contract.event(project_id, event))}\n\n"
+
+                   case chunk(conn, data) do
+                     {:ok, conn} -> {:cont, {:ok, conn, event.sequence}}
+                     error -> {:halt, error}
+                   end
+
+                 _revoked ->
+                   {:halt, :revoked}
+               end
+             end) do
+          {:ok, conn, next_cursor} ->
+            stream(conn, project_id, principal, conversation_id, next_cursor)
+
+          _closed ->
+            conn
+        end
+
+      _revoked ->
+        conn
+    end
+  end
+
+  defp error_reply(conn, {:error, :unauthorized}), do: reply(conn, 401, %{error: "unauthorized"})
+  defp error_reply(conn, {:error, :invalid}), do: reply(conn, 400, %{error: "invalid"})
+  defp error_reply(conn, {:error, :invalid_role}), do: reply(conn, 400, %{error: "invalid_role"})
+
+  defp error_reply(conn, {:error, :command_id_conflict}),
+    do: reply(conn, 409, %{error: "command_id_conflict"})
+
+  defp error_reply(conn, {:error, :last_administrator}),
+    do: reply(conn, 409, %{error: "last_administrator"})
+
+  defp error_reply(conn, {:error, :too_many_streams}),
+    do: reply(conn, 429, %{error: "too_many_streams"})
+
+  defp error_reply(conn, {:error, :tool_failed}), do: reply(conn, 422, %{error: "tool_failed"})
+
+  defp error_reply(conn, {:error, reason}) when reason in [:forbidden, :not_found],
+    do: reply(conn, 404, %{error: "not_found"})
+
+  defp error_reply(conn, {:error, reason}) do
+    Logger.error("server request failed: #{inspect(reason)}")
+    reply(conn, 500, %{error: "internal_error"})
+  end
+
+  defp reply(conn, status, body) do
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(status, Jason.encode!(body))
+  end
+end

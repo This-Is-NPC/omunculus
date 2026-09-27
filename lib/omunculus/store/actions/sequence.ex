@@ -247,6 +247,7 @@ defmodule Omunculus.Store.Actions.Sequence do
          :ok <-
            Helpers.insert_work(conn, %{
              id: child_id,
+             conversation_id: parent.conversation_id,
              parent_id: parent.id,
              workspace: workspace,
              assignee: assignee,

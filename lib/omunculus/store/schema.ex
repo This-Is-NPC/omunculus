@@ -1,8 +1,8 @@
 defmodule Omunculus.Store.Schema do
   @moduledoc """
-  DDL for the seven tables of spec §4 — prompts, events, runs, comments,
-  works, requests, inbox — plus the store rules enforced at the database
-  level: events are append only, requests.options is immutable, and the
+  DDL for prompts, events, runs, comments, works, requests, inbox,
+  conversations, memberships and command receipts. It also enforces the
+  store rules at the database level: events are append only, requests.options is immutable, and the
   system columns of spec §8.3 — `runs.tools`, `runs.prompt_id`,
   `runs.started_at`, and `created_at` on prompts, comments, works,
   requests and inbox — refuse UPDATE.
@@ -12,8 +12,49 @@ defmodule Omunculus.Store.Schema do
 
   @statements [
     """
+    CREATE TABLE IF NOT EXISTS conversations (
+      id TEXT PRIMARY KEY,
+      created_issuer TEXT NOT NULL,
+      created_subject TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS project_members (
+      issuer TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      role TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (issuer, subject)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS conversation_members (
+      conversation_id TEXT NOT NULL REFERENCES conversations (id),
+      issuer TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      role TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (conversation_id, issuer, subject)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS command_receipts (
+      issuer TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      command_id TEXT NOT NULL,
+      operation TEXT NOT NULL,
+      result TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (issuer, subject, command_id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS prompts (
       id TEXT PRIMARY KEY,
+      conversation_id TEXT REFERENCES conversations (id),
+      actor_issuer TEXT,
+      actor_subject TEXT,
       kind TEXT NOT NULL CHECK (kind IN ('message', 'assembled')),
       body TEXT NOT NULL,
       run_id TEXT REFERENCES runs (id) DEFERRABLE INITIALLY DEFERRED,
@@ -25,6 +66,13 @@ defmodule Omunculus.Store.Schema do
       id TEXT PRIMARY KEY,
       sequence INTEGER NOT NULL UNIQUE,
       type TEXT NOT NULL,
+      conversation_id TEXT REFERENCES conversations (id),
+      actor_kind TEXT CHECK (actor_kind IN ('human', 'agent', 'harness')),
+      actor_id TEXT,
+      actor_issuer TEXT,
+      actor_subject TEXT,
+      origin_issuer TEXT,
+      origin_subject TEXT,
       prompt_id TEXT REFERENCES prompts (id) DEFERRABLE INITIALLY DEFERRED,
       run_id TEXT REFERENCES runs (id) DEFERRABLE INITIALLY DEFERRED,
       work_id TEXT REFERENCES works (id) DEFERRABLE INITIALLY DEFERRED,
@@ -38,6 +86,9 @@ defmodule Omunculus.Store.Schema do
     """
     CREATE TABLE IF NOT EXISTS runs (
       id TEXT PRIMARY KEY,
+      conversation_id TEXT REFERENCES conversations (id),
+      origin_issuer TEXT,
+      origin_subject TEXT,
       work_id TEXT REFERENCES works (id) DEFERRABLE INITIALLY DEFERRED,
       prompt_id TEXT REFERENCES prompts (id) DEFERRABLE INITIALLY DEFERRED,
       event_id TEXT REFERENCES events (id) DEFERRABLE INITIALLY DEFERRED,
@@ -54,6 +105,8 @@ defmodule Omunculus.Store.Schema do
     """
     CREATE TABLE IF NOT EXISTS comments (
       id TEXT PRIMARY KEY,
+      actor_issuer TEXT,
+      actor_subject TEXT,
       work_id TEXT REFERENCES works (id) DEFERRABLE INITIALLY DEFERRED,
       request_id TEXT REFERENCES requests (id) DEFERRABLE INITIALLY DEFERRED,
       inbox_id TEXT REFERENCES inbox (id) DEFERRABLE INITIALLY DEFERRED,
@@ -69,6 +122,7 @@ defmodule Omunculus.Store.Schema do
     """
     CREATE TABLE IF NOT EXISTS works (
       id TEXT PRIMARY KEY,
+      conversation_id TEXT REFERENCES conversations (id),
       parent_id TEXT REFERENCES works (id) DEFERRABLE INITIALLY DEFERRED,
       event_id TEXT REFERENCES events (id) DEFERRABLE INITIALLY DEFERRED,
       workspace TEXT,
@@ -85,6 +139,8 @@ defmodule Omunculus.Store.Schema do
       updated_at TEXT
     )
     """,
+    "CREATE INDEX IF NOT EXISTS events_conversation_cursor ON events (conversation_id, sequence)",
+    "CREATE INDEX IF NOT EXISTS works_conversation ON works (conversation_id)",
     """
     CREATE TABLE IF NOT EXISTS requests (
       id TEXT PRIMARY KEY,
@@ -145,12 +201,40 @@ defmodule Omunculus.Store.Schema do
 
   @spec create(Omunculus.Store.Connection.t()) :: :ok | {:error, term}
   def create(conn) do
-    statements = @statements ++ Enum.map(@system_columns, &system_column_trigger/1)
+    with :ok <- compatible_existing(conn) do
+      statements = @statements ++ Enum.map(@system_columns, &system_column_trigger/1)
 
-    Enum.reduce_while(statements, :ok, fn statement, :ok ->
-      case Query.exec(conn, statement) do
-        :ok -> {:cont, :ok}
-        {:error, _reason} = error -> {:halt, error}
+      Enum.reduce_while(statements, :ok, fn statement, :ok ->
+        case Query.exec(conn, statement) do
+          :ok -> {:cont, :ok}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+    end
+  end
+
+  defp compatible_existing(conn) do
+    required = %{
+      "events" => ~w(conversation_id actor_kind origin_issuer origin_subject),
+      "prompts" => ~w(conversation_id actor_issuer actor_subject),
+      "runs" => ~w(conversation_id origin_issuer origin_subject),
+      "works" => ~w(conversation_id)
+    }
+
+    Enum.reduce_while(required, :ok, fn {table, columns_required}, :ok ->
+      case Query.all(conn, "PRAGMA table_info(#{table})") do
+        {:ok, []} ->
+          {:cont, :ok}
+
+        {:ok, columns} ->
+          names = Enum.map(columns, & &1.name)
+
+          if Enum.all?(columns_required, &(&1 in names)),
+            do: {:cont, :ok},
+            else: {:halt, {:error, :store_requires_recreation}}
+
+        error ->
+          {:halt, error}
       end
     end)
   end

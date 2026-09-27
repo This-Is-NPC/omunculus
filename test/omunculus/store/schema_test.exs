@@ -4,14 +4,15 @@ defmodule Omunculus.Store.SchemaTest do
   alias Omunculus.Fixtures
   alias Omunculus.Store.Query
 
-  test "creates exactly the seven tables", %{conn: conn} do
+  test "creates the store and access tables", %{conn: conn} do
     {:ok, rows} =
       Query.all(
         conn,
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
       )
 
-    assert Enum.map(rows, & &1.name) == ~w(comments events inbox prompts requests runs works)
+    assert Enum.map(rows, & &1.name) ==
+             ~w(command_receipts comments conversation_members conversations events inbox project_members prompts requests runs works)
   end
 
   test "foreign keys are enforced", %{conn: conn} do

@@ -16,10 +16,21 @@ defmodule Omunculus.Store do
 
   @spec open(String.t()) :: {:ok, Connection.t()} | {:error, term}
   def open(path) do
-    with {:ok, conn} <- Connection.open(path),
-         :ok <- Query.exec(conn, "PRAGMA foreign_keys = ON"),
-         :ok <- Schema.create(conn) do
-      {:ok, conn}
+    with {:ok, conn} <- Connection.open(path) do
+      case initialize(conn) do
+        :ok ->
+          {:ok, conn}
+
+        {:error, reason} ->
+          Connection.close(conn)
+          {:error, reason}
+      end
+    end
+  end
+
+  defp initialize(conn) do
+    with :ok <- Query.exec(conn, "PRAGMA foreign_keys = ON") do
+      Schema.create(conn)
     end
   end
 
@@ -36,4 +47,5 @@ defmodule Omunculus.Store do
   defdelegate record_tools(conn, run_id, calls, ctx), to: Runs
   defdelegate close_run(conn, run_id), to: Runs, as: :close
   defdelegate unreported(conn, run, max_retries, reason_text, inbox_text), to: Runs
+  defdelegate open_runs(conn), to: Runs
 end

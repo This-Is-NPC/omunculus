@@ -22,24 +22,29 @@ defmodule Omunculus.Store.Actions do
 
   @spec run(Omunculus.Store.Connection.t(), [map], map) :: {:ok, [map]} | {:error, term}
   def run(conn, emits, ctx) do
-    emits
-    |> Enum.reduce_while({:ok, []}, fn emit, {:ok, events} ->
-      case with(:ok <- Contract.validate(emit), do: dispatch(conn, emit, ctx)) do
-        {:ok, result} -> {:cont, {:ok, [result | events]}}
-        {:error, _reason} = error -> {:halt, error}
+    Events.with_actor(conn, ctx, fn ->
+      emits
+      |> Enum.reduce_while({:ok, []}, fn emit, {:ok, events} ->
+        case with(:ok <- Contract.validate(emit), do: dispatch(conn, emit, ctx)) do
+          {:ok, result} -> {:cont, {:ok, [result | events]}}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+      |> case do
+        {:ok, events} ->
+          {:ok, events |> Enum.reverse() |> List.flatten() |> Enum.reject(&is_nil/1)}
+
+        error ->
+          error
       end
     end)
-    |> case do
-      {:ok, events} -> {:ok, events |> Enum.reverse() |> List.flatten() |> Enum.reject(&is_nil/1)}
-      error -> error
-    end
   end
 
   defp dispatch(conn, %{"type" => "comment"} = emit, ctx),
     do: comment(conn, Map.get(emit, "body", %{}), ctx)
 
-  defp dispatch(conn, %{"type" => "prompt"} = emit, _ctx),
-    do: prompt(conn, Map.get(emit, "body", %{}))
+  defp dispatch(conn, %{"type" => "prompt"} = emit, ctx),
+    do: prompt(conn, Map.get(emit, "body", %{}), ctx)
 
   defp dispatch(conn, %{"type" => "work"} = emit, ctx),
     do: work(conn, Map.get(emit, "body", %{}), ctx)
@@ -117,12 +122,12 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
-  defp prompt(conn, body) do
+  defp prompt(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:prompt, body, "message"),
          :ok <-
            Helpers.tag_error(:prompt, Helpers.ensure_exist(conn, [{:works, body["work_id"]}])),
          {:ok, reopened} <- reopen_waiting_work(conn, body["work_id"]),
-         {:ok, prompt_event} <- write_prompt(conn, body) do
+         {:ok, prompt_event} <- write_prompt(conn, body, ctx) do
       {:ok, Enum.reject([reopened, prompt_event], &is_nil/1)}
     end
   end
@@ -147,12 +152,27 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
-  defp write_prompt(conn, body) do
+  defp write_prompt(conn, body, ctx) do
     prompt_id = Id.new()
+
+    conversation_id =
+      case body["work_id"] do
+        nil ->
+          Map.get(ctx, :conversation_id)
+
+        work_id ->
+          case Query.one(conn, "SELECT conversation_id FROM works WHERE id = ?", [work_id]) do
+            {:ok, work} -> work && work.conversation_id
+            _ -> nil
+          end
+      end
 
     with :ok <-
            Query.insert(conn, :prompts, %{
              id: prompt_id,
+             conversation_id: conversation_id,
+             actor_issuer: Map.get(ctx, :issuer),
+             actor_subject: Map.get(ctx, :subject),
              kind: "message",
              body: body["message"],
              run_id: nil,
@@ -162,6 +182,9 @@ defmodule Omunculus.Store.Actions do
         type: "prompt",
         prompt_id: prompt_id,
         work_id: body["work_id"],
+        conversation_id: conversation_id,
+        actor_issuer: Map.get(ctx, :issuer),
+        actor_subject: Map.get(ctx, :subject),
         body: Jason.encode!(body)
       })
     end
@@ -198,6 +221,7 @@ defmodule Omunculus.Store.Actions do
          :ok <-
            Helpers.insert_work(conn, %{
              id: work_id,
+             conversation_id: event.conversation_id,
              parent_id: nil,
              workspace: workspace,
              assignee: assignee,

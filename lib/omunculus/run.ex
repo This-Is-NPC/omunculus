@@ -34,6 +34,29 @@ defmodule Omunculus.Run do
   alias Omunculus.Tool.{Catalog, Overrides}
   alias Omunculus.Tools.Out
 
+  @spec recover(Project.t()) :: :ok | {:error, term}
+  def recover(project) do
+    with {:ok, runs} <- Store.open_runs(project.conn),
+         {:ok, config} <- Config.load(project.config_path) do
+      Enum.reduce_while(runs, :ok, fn run, :ok ->
+        case recover_one(project, config, run) do
+          :ok -> {:cont, :ok}
+          error -> {:halt, error}
+        end
+      end)
+    end
+  end
+
+  defp recover_one(project, config, run) do
+    with {:ok, _model} <-
+           Store.record_model(project.conn, run.id, "Run interrupted by server restart."),
+         {:ok, closed} <- Store.close_run(project.conn, run.id),
+         :ok <- Harness.follow_up(project, [closed]),
+         {:ok, work} <- Store.view(project.conn, "work", run.work_id) do
+      unreported(project, %{run: run, config: config, execution: nil}, work, true)
+    end
+  end
+
   @spec open(
           Project.t(),
           %{
@@ -50,14 +73,25 @@ defmodule Omunculus.Run do
 
   defp admitted(project, opening) do
     with {:ok, config} <- Config.load(project.config_path),
-         {:ok, lease} <- Limiter.acquire(config.execution, self(), :run) do
+         {:ok, global_lease} <- acquire_global(project.global_limits) do
+      local_limits = Map.put(config.execution, :scope, {:project, config.store.path})
+
       try do
-        start(project, config, opening)
+        with {:ok, lease} <- Limiter.acquire(local_limits, self(), :run) do
+          try do
+            start(project, config, opening)
+          after
+            Limiter.release(local_limits, lease, :run)
+          end
+        end
       after
-        Limiter.release(config.execution, lease, :run)
+        if global_lease, do: Limiter.release(project.global_limits, global_lease, :run)
       end
     end
   end
+
+  defp acquire_global(nil), do: {:ok, nil}
+  defp acquire_global(limits), do: Limiter.acquire(limits, self(), :run)
 
   defp start(
          project,
@@ -75,7 +109,7 @@ defmodule Omunculus.Run do
            Config.for_workspace(config, Config.effective_workspace(config, work)),
          {:ok, {name, text, depth, stage}} <- resolve_agent(config, project.conn, work, agent),
          {:ok, model} <- Config.model_fun(config, name),
-         {:ok, _message} <- fetch_prompt(project.conn, message_prompt_id),
+         {:ok, message} <- fetch_prompt(project.conn, message_prompt_id),
          {:ok, grants} <- Store.grants(project.conn, work),
          workspace = Harness.workspace_context(config, work),
          context = %{
@@ -124,6 +158,11 @@ defmodule Omunculus.Run do
              ceiling: snapshot,
              execution: Policy.serializable(execution),
              work_id: work_id,
+             conversation_id:
+               (work && work.conversation_id) || (message && message.conversation_id),
+             origin_issuer: (message && message.actor_issuer) || Map.get(opening, :origin_issuer),
+             origin_subject:
+               (message && message.actor_subject) || Map.get(opening, :origin_subject),
              own: is_nil(agent),
              via: via,
              request_id: request_id,
@@ -436,7 +475,12 @@ defmodule Omunculus.Run do
            &Out.request_inbox/3
          ) do
       {:ok, :retry} ->
-        Cycle.open(project, %{work_id: work.id, via: "retry"})
+        Cycle.open(project, %{
+          work_id: work.id,
+          via: "retry",
+          origin_issuer: state.run.origin_issuer,
+          origin_subject: state.run.origin_subject
+        })
 
       {:ok, {:stopped, events}} ->
         with {:ok, _hooks} <- Harness.react(project, events, [], state.execution) do
