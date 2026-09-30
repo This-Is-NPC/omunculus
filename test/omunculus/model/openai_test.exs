@@ -1,5 +1,8 @@
 defmodule Omunculus.Model.OpenAITest do
-  use Omunculus.HttpModelCase, module: Omunculus.Model.OpenAI, error: :openai
+  use Omunculus.HttpModelCase,
+    module: Omunculus.Model.OpenAI,
+    error: :openai,
+    prompt_cache_key: true
 
   alias Omunculus.Model.OpenAI
 

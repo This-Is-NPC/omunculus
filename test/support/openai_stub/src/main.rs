@@ -196,6 +196,7 @@ struct AppState {
     counters: Counters,
     barrier: RequestBarrier,
     last_tools: RwLock<Value>,
+    last_prompt_cache_key: RwLock<Option<String>>,
 }
 
 impl AppState {
@@ -205,11 +206,16 @@ impl AppState {
             counters: Counters::new(),
             barrier: RequestBarrier::new(),
             last_tools: RwLock::new(json!([])),
+            last_prompt_cache_key: RwLock::new(None),
         })
     }
 
     async fn set_last_tools(&self, tools: Value) {
         *self.last_tools.write().await = tools;
+    }
+
+    async fn set_last_prompt_cache_key(&self, key: Option<String>) {
+        *self.last_prompt_cache_key.write().await = key;
     }
 
     async fn configure(&self, input: ControlRequest) {
@@ -277,6 +283,7 @@ impl AppState {
             "failed": self.counters.failed.load(Ordering::Relaxed),
             "barrier_timeouts": self.counters.barrier_timeouts.load(Ordering::Relaxed),
             "last_tools": self.last_tools.read().await.clone(),
+            "last_prompt_cache_key": self.last_prompt_cache_key.read().await.clone(),
         })
     }
 }
@@ -336,6 +343,8 @@ struct ChatRequest {
     messages: Vec<Message>,
     #[serde(default)]
     tools: Vec<Tool>,
+    #[serde(default)]
+    prompt_cache_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -414,6 +423,9 @@ async fn completions(State(state): State<Arc<AppState>>, body: Bytes) -> Respons
         .map(|function| json!({"name": function.name, "parameters": function.parameters}))
         .collect();
     state.set_last_tools(last_tools).await;
+    state
+        .set_last_prompt_cache_key(request.prompt_cache_key.clone())
+        .await;
 
     let config = state.config().await;
     match state
@@ -522,6 +534,8 @@ struct ResponsesRequest {
     input: Vec<Value>,
     #[serde(default)]
     tools: Vec<ResponsesTool>,
+    #[serde(default)]
+    prompt_cache_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -575,6 +589,9 @@ async fn responses(State(state): State<Arc<AppState>>, body: Bytes) -> Response 
         })
         .collect();
     state.set_last_tools(last_tools).await;
+    state
+        .set_last_prompt_cache_key(request.prompt_cache_key.clone())
+        .await;
 
     let config = state.config().await;
     match state

@@ -1,5 +1,8 @@
 defmodule Omunculus.Model.OpenAIResponsesTest do
-  use Omunculus.HttpModelCase, module: Omunculus.Model.OpenAIResponses, error: :openai
+  use Omunculus.HttpModelCase,
+    module: Omunculus.Model.OpenAIResponses,
+    error: :openai,
+    prompt_cache_key: true
 
   for stream <- [false, true] do
     test "records all model turns and executes tools (stream: #{stream})", %{

@@ -15,6 +15,22 @@ defmodule Omunculus.ConfigTest do
     Fixtures.write_config(dir, contents)
   end
 
+  defp write_http_model(dir, api, line) do
+    write_toml(dir, """
+    [models.local]
+    api = "#{api}"
+    url = "http://localhost:8080/v1"
+    model = "local"
+    timeout_ms = 120000
+    #{line}
+
+    [agents.concierge]
+    depth = 0
+    model = "local"
+    text = "hi"
+    """)
+  end
+
   defp toml(dir), do: Path.join(dir, "omunculus.toml")
   defp load(dir), do: Config.load(toml(dir))
   defp grant(dir, layer, name), do: Config.grant(toml(dir), layer, name)
@@ -1643,27 +1659,26 @@ defmodule Omunculus.ConfigTest do
     end
 
     test "stream is an optional boolean of the HTTP adapters", %{dir: dir} do
-      model = """
-      [models.local]
-      api = "anthropic-messages"
-      url = "http://localhost:8080/v1"
-      model = "claude"
-      timeout_ms = 120000
-      """
-
-      agent = """
-      [agents.concierge]
-      depth = 0
-      model = "local"
-      text = "hi"
-      """
-
-      write_toml(dir, model <> "stream = true\n\n" <> agent)
+      write_http_model(dir, "anthropic-messages", "stream = true")
       assert {:ok, config} = load(dir)
       assert config.models["local"].input["stream"] == true
 
-      write_toml(dir, model <> "stream = \"yes\"\n\n" <> agent)
+      write_http_model(dir, "anthropic-messages", "stream = \"yes\"")
       assert {:error, {:models, "local", {:invalid, :stream}}} = load(dir)
+    end
+
+    test "prompt_cache_key is an optional string of the OpenAI adapters", %{dir: dir} do
+      for api <- ["openai-completions", "openai-responses"] do
+        write_http_model(dir, api, "prompt_cache_key = \"worker\"")
+        assert {:ok, config} = load(dir)
+        assert config.models["local"].input["prompt_cache_key"] == "worker"
+
+        write_http_model(dir, api, "prompt_cache_key = \"\"")
+        assert {:error, {:models, "local", {:invalid, :prompt_cache_key}}} = load(dir)
+      end
+
+      write_http_model(dir, "anthropic-messages", "prompt_cache_key = \"worker\"")
+      assert {:error, {:models, "local", {:unknown_key, "prompt_cache_key"}}} = load(dir)
     end
   end
 

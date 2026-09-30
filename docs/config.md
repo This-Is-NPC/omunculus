@@ -88,7 +88,10 @@ the recorded turn is the same as without it. `openai-completions` and
 `openai-responses` record, with each turn in `EVENTS(model)`, the
 `usage` object the server returns (input, cached input and output
 tokens); streamed, `openai-completions` asks for it with
-`stream_options.include_usage`.
+`stream_options.include_usage`. They also take an optional
+`prompt_cache_key`, sent as is in every request, which OpenAI uses with
+the prompt's prefix to route requests to the server holding that prefix
+in cache.
 
 ```toml
 [auth]

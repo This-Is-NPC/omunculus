@@ -130,7 +130,8 @@ defmodule Omunculus.Config do
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
   @policy_extra_keys ~w(depth workflow workspace assemble max_retries)
   @agent_extra_keys ~w(depth text workflow_only model assemble)
-  @openai_model_keys ~w(api url model timeout_ms temperature headers provider stream)
+  @http_model_keys ~w(api url model timeout_ms temperature headers provider stream)
+  @openai_model_keys @http_model_keys ++ ~w(prompt_cache_key)
   @module_model_keys ~w(api module params)
   @command_model_keys ~w(api command model provider params)
   @step_extra_keys ~w(name agent)
@@ -1580,19 +1581,13 @@ defmodule Omunculus.Config do
   defp parse_model(name, data, auth, config_dir) when is_map(data) do
     case Map.get(data, "api") do
       "openai-completions" ->
-        parse_openai_model(name, data, auth, "openai-completions", Omunculus.Model.OpenAI)
+        parse_http_model(name, data, auth, @openai_model_keys, Omunculus.Model.OpenAI)
 
       "openai-responses" ->
-        parse_openai_model(name, data, auth, "openai-responses", Omunculus.Model.OpenAIResponses)
+        parse_http_model(name, data, auth, @openai_model_keys, Omunculus.Model.OpenAIResponses)
 
       "anthropic-messages" ->
-        parse_openai_model(
-          name,
-          data,
-          auth,
-          "anthropic-messages",
-          Omunculus.Model.AnthropicMessages
-        )
+        parse_http_model(name, data, auth, @http_model_keys, Omunculus.Model.AnthropicMessages)
 
       "command" ->
         parse_command_model(name, data, auth, config_dir)
@@ -1611,8 +1606,10 @@ defmodule Omunculus.Config do
   defp parse_model(name, _data, _auth, _config_dir),
     do: {:error, {:models, name, {:invalid, :api}}}
 
-  defp parse_openai_model(name, data, auth, api, module) do
-    case Map.keys(data) -- @openai_model_keys do
+  defp parse_http_model(name, data, auth, keys, module) do
+    api = data["api"]
+
+    case Map.keys(data) -- keys do
       [key | _] ->
         {:error, {:models, name, {:unknown_key, key}}}
 
@@ -1623,6 +1620,7 @@ defmodule Omunculus.Config do
              {:ok, temperature} <- model_temperature(data),
              {:ok, headers} <- model_headers(data),
              {:ok, stream} <- model_stream(data),
+             {:ok, prompt_cache_key} <- model_optional_string(data, "prompt_cache_key"),
              {:ok, provider} <- model_optional_string(data, "provider"),
              :ok <- validate_model_provider(provider, auth) do
           input =
@@ -1635,6 +1633,7 @@ defmodule Omunculus.Config do
             |> maybe_put_model("temperature", temperature)
             |> maybe_put_model("headers", headers)
             |> maybe_put_model("stream", stream)
+            |> maybe_put_model("prompt_cache_key", prompt_cache_key)
             |> maybe_put_model("provider", provider)
 
           {:ok,

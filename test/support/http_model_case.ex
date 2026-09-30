@@ -2,7 +2,8 @@ defmodule Omunculus.HttpModelCase do
   @moduledoc """
   The tests every HTTP model adapter shares against the Rust OpenAI stub:
   one tool round, no tool round and an unreachable url. `use` it with the
-  adapter `module` and the `error` tag of a failed request; `run_counter/2`
+  adapter `module` and the `error` tag of a failed request, and
+  `prompt_cache_key: true` when the adapter sends one; `run_counter/2`
   opens a run whose agent counts once through the adapter named by `api`.
   """
 
@@ -78,6 +79,19 @@ defmodule Omunculus.HttpModelCase do
 
         assert {:error, {@error, _reason}} = call_model(@adapter, "http://127.0.0.1:1", call)
       end
+
+      if unquote(Keyword.get(opts, :prompt_cache_key, false)) do
+        test "prompt_cache_key goes in every request of the run", %{stub: stub} do
+          :ok = OpenAIStub.configure(stub, tool_rounds: 1)
+          {_agent, call} = recorder()
+
+          assert {:ok, "benchmark complete"} =
+                   call_model(@adapter, stub.base_url <> "/v1", call, prompt_cache_key: "worker")
+
+          assert {:ok, %{"requests" => 2, "last_prompt_cache_key" => "worker"}} =
+                   OpenAIStub.stats(stub)
+        end
+      end
     end
   end
 
@@ -122,11 +136,16 @@ defmodule Omunculus.HttpModelCase do
 
   @doc """
   Calls the adapter `module` at `url` with the shared prompt and tools;
-  `stream: true` streams the reply into the `delta` fun.
+  `stream: true` streams the reply into the `delta` fun, and
+  `prompt_cache_key` goes into the spec.
   """
   @spec call_model(module, String.t(), fun, keyword) :: {:ok, String.t()} | {:error, term}
   def call_model(module, url, call, opts \\ []) do
-    spec = if opts[:stream], do: Map.put(spec(url), "stream", true), else: spec(url)
+    spec =
+      opts
+      |> Keyword.take([:stream, :prompt_cache_key])
+      |> Map.new(fn {key, value} -> {Atom.to_string(key), value} end)
+      |> Map.merge(spec(url))
 
     module.new(spec).(
       assembled(),

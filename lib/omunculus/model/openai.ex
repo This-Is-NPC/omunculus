@@ -2,7 +2,8 @@ defmodule Omunculus.Model.OpenAI do
   @moduledoc """
   Factory for an OpenAI-compatible model of the contract of spec §8.6:
   `new/1` takes the `[models.<name>]` spec (`url`, `model`, `timeout_ms`,
-  optional `temperature`, `headers`, `credential`) and returns a 6-arity
+  optional `temperature`, `headers`, `prompt_cache_key`, `credential`) and
+  returns a 6-arity
   `(assembled, tools, call, record, delta, execution)` fun. Declares each of
   `tools` (the run's effective tools, as `%{name, description,
   parameters}`) as a function with its real `parameters` schema — an
@@ -36,7 +37,8 @@ defmodule Omunculus.Model.OpenAI do
       timeout: spec["timeout_ms"],
       headers: request_headers(spec),
       temperature: spec["temperature"],
-      stream: spec["stream"] == true
+      stream: spec["stream"] == true,
+      prompt_cache_key: spec["prompt_cache_key"]
     }
 
     fn assembled, tools, call, record, delta, execution ->
@@ -129,6 +131,7 @@ defmodule Omunculus.Model.OpenAI do
   defp request_body(client, tools, messages) do
     %{model: client.model, messages: messages, tools: tools}
     |> maybe_put(:temperature, client.temperature)
+    |> maybe_put(:prompt_cache_key, client.prompt_cache_key)
     |> maybe_put(:stream, client.stream || nil)
     |> maybe_put(:stream_options, if(client.stream, do: %{include_usage: true}))
   end
