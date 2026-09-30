@@ -8,8 +8,13 @@ defmodule Omunculus.Model.AnthropicMessages do
   items, runs each `tool_use` through `call.(name, args)`, appends a
   `tool_result` user turn, and loops until a reply has none.
   `__omunculus_execute` is the same sandbox bridge as `Model.OpenAI`.
-  The `url` is always the spec's; nothing in this module names a host.
+  With `stream = true` the reply is read as server-sent events and put
+  back together from its content blocks, each `text_delta` going to
+  `delta`. The `url` is always the spec's; nothing in this module names a
+  host.
   """
+
+  alias Omunculus.Model.EventStream
 
   @spec new(map) ::
           (String.t(),
@@ -25,14 +30,15 @@ defmodule Omunculus.Model.AnthropicMessages do
       model: spec["model"],
       timeout: spec["timeout_ms"],
       headers: request_headers(spec),
-      temperature: spec["temperature"]
+      temperature: spec["temperature"],
+      stream: spec["stream"] == true
     }
 
-    fn assembled, tools, call, record, _delta, execution ->
+    fn assembled, tools, call, record, delta, execution ->
       function_tools = Enum.map(tools, &anthropic_tool/1) ++ [executor_tool()]
 
       loop(
-        client,
+        Map.put(client, :delta, delta),
         assembled,
         function_tools,
         [%{role: "user", content: "Proceed."}],
@@ -126,10 +132,26 @@ defmodule Omunculus.Model.AnthropicMessages do
       tools: tools
     }
     |> maybe_put(:temperature, client.temperature)
+    |> maybe_put(:stream, client.stream || nil)
   end
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp post(%{stream: true} = client, body) do
+    reply = %{message: nil, blocks: %{}, json: %{}}
+
+    case EventStream.post(client, body, reply, &event(&1, &2, client)) do
+      {:ok, %{message: message} = reply} when is_map(message) ->
+        extract_message(Map.put(message, "content", streamed_content(reply)))
+
+      {:ok, _incomplete} ->
+        {:error, {:anthropic, {:invalid_response, :incomplete}}}
+
+      {:error, reason} ->
+        {:error, {:anthropic, reason}}
+    end
+  end
 
   defp post(client, body) do
     case Req.post(client.url,
@@ -152,6 +174,57 @@ defmodule Omunculus.Model.AnthropicMessages do
     do: {:ok, message}
 
   defp extract_message(body), do: {:error, {:anthropic, {:invalid_response, body}}}
+
+  defp event(%{"type" => "message_start", "message" => message}, reply, _client),
+    do: %{reply | message: message}
+
+  defp event(%{"type" => "content_block_start", "index" => index} = data, reply, _client),
+    do: %{reply | blocks: Map.put(reply.blocks, index, data["content_block"])}
+
+  defp event(
+         %{"type" => "content_block_delta", "index" => index, "delta" => delta},
+         reply,
+         client
+       ) do
+    case delta do
+      %{"type" => "text_delta", "text" => text} ->
+        :ok = client.delta.(text)
+
+        %{
+          reply
+          | blocks:
+              Map.update!(
+                reply.blocks,
+                index,
+                &Map.update(&1, "text", text, fn prior -> prior <> text end)
+              )
+        }
+
+      %{"type" => "input_json_delta", "partial_json" => json} ->
+        %{reply | json: Map.update(reply.json, index, json, &(&1 <> json))}
+
+      _other ->
+        reply
+    end
+  end
+
+  defp event(%{"type" => "message_delta", "delta" => delta}, %{message: message} = reply, _)
+       when is_map(message),
+       do: %{reply | message: Map.merge(message, delta)}
+
+  defp event(_other, reply, _client), do: reply
+
+  defp streamed_content(reply) do
+    reply.blocks
+    |> Enum.sort_by(&elem(&1, 0))
+    |> Enum.map(fn {index, block} ->
+      case Map.fetch(reply.json, index) do
+        {:ok, ""} -> Map.put(block, "input", %{})
+        {:ok, json} -> Map.put(block, "input", Jason.decode!(json))
+        :error -> block
+      end
+    end)
+  end
 
   defp strip_message(message), do: Map.take(message, ["role", "content", "stop_reason"])
 

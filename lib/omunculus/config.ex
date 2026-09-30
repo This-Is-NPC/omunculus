@@ -130,7 +130,7 @@ defmodule Omunculus.Config do
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
   @policy_extra_keys ~w(depth workflow workspace assemble max_retries)
   @agent_extra_keys ~w(depth text workflow_only model assemble)
-  @openai_model_keys ~w(api url model timeout_ms temperature headers provider)
+  @openai_model_keys ~w(api url model timeout_ms temperature headers provider stream)
   @module_model_keys ~w(api module params)
   @command_model_keys ~w(api command model provider params)
   @step_extra_keys ~w(name agent)
@@ -1622,6 +1622,7 @@ defmodule Omunculus.Config do
              {:ok, timeout_ms} <- model_timeout(data),
              {:ok, temperature} <- model_temperature(data),
              {:ok, headers} <- model_headers(data),
+             {:ok, stream} <- model_stream(data),
              {:ok, provider} <- model_optional_string(data, "provider"),
              :ok <- validate_model_provider(provider, auth) do
           input =
@@ -1633,6 +1634,7 @@ defmodule Omunculus.Config do
             }
             |> maybe_put_model("temperature", temperature)
             |> maybe_put_model("headers", headers)
+            |> maybe_put_model("stream", stream)
             |> maybe_put_model("provider", provider)
 
           {:ok,
@@ -1722,6 +1724,14 @@ defmodule Omunculus.Config do
       :error -> {:ok, nil}
       {:ok, value} when is_number(value) -> {:ok, value}
       _ -> {:error, {:invalid, :temperature}}
+    end
+  end
+
+  defp model_stream(data) do
+    case Map.fetch(data, "stream") do
+      :error -> {:ok, nil}
+      {:ok, value} when is_boolean(value) -> {:ok, value}
+      _ -> {:error, {:invalid, :stream}}
     end
   end
 

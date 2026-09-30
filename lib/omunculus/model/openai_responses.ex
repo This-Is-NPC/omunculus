@@ -8,8 +8,13 @@ defmodule Omunculus.Model.OpenAIResponses do
   each `function_call` through `call.(name, args)`, appends
   `function_call_output`, and loops until a reply has none.
   `__omunculus_execute` is the same sandbox bridge as `Model.OpenAI`.
-  The `url` is always the spec's; nothing in this module names a host.
+  With `stream = true` the reply is read as server-sent events: each
+  `response.output_text.delta` goes to `delta`, and `response.completed`
+  carries the output. The `url` is always the spec's; nothing in this
+  module names a host.
   """
+
+  alias Omunculus.Model.EventStream
 
   @spec new(map) ::
           (String.t(),
@@ -25,14 +30,15 @@ defmodule Omunculus.Model.OpenAIResponses do
       model: spec["model"],
       timeout: spec["timeout_ms"],
       headers: Omunculus.Model.OpenAI.request_headers(spec),
-      temperature: spec["temperature"]
+      temperature: spec["temperature"],
+      stream: spec["stream"] == true
     }
 
-    fn assembled, tools, call, record, _delta, execution ->
+    fn assembled, tools, call, record, delta, execution ->
       function_tools = Enum.map(tools, &function_tool/1) ++ [executor_tool()]
 
       loop(
-        client,
+        Map.put(client, :delta, delta),
         function_tools,
         [%{role: "user", content: assembled}],
         call,
@@ -92,10 +98,19 @@ defmodule Omunculus.Model.OpenAIResponses do
   defp request_body(client, tools, input) do
     %{model: client.model, input: input, tools: tools}
     |> maybe_put(:temperature, client.temperature)
+    |> maybe_put(:stream, client.stream || nil)
   end
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp post(%{stream: true} = client, body) do
+    case EventStream.post(client, body, nil, &event(&1, &2, client)) do
+      {:ok, output} when is_list(output) -> {:ok, output}
+      {:ok, _incomplete} -> {:error, {:openai, {:invalid_response, :incomplete}}}
+      {:error, reason} -> {:error, {:openai, reason}}
+    end
+  end
 
   defp post(client, body) do
     case Req.post(client.url,
@@ -116,6 +131,17 @@ defmodule Omunculus.Model.OpenAIResponses do
 
   defp extract_output(%{"output" => output}) when is_list(output), do: {:ok, output}
   defp extract_output(body), do: {:error, {:openai, {:invalid_response, body}}}
+
+  defp event(%{"type" => "response.output_text.delta", "delta" => text}, output, client)
+       when is_binary(text) do
+    :ok = client.delta.(text)
+    output
+  end
+
+  defp event(%{"type" => "response.completed", "response" => %{"output" => output}}, _, _client),
+    do: output
+
+  defp event(_other, output, _client), do: output
 
   defp function_calls(output) do
     Enum.filter(output, fn

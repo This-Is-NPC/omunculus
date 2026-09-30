@@ -1641,6 +1641,30 @@ defmodule Omunculus.ConfigTest do
 
       assert {:error, {:models, "local", {:invalid, :timeout_ms}}} = load(dir)
     end
+
+    test "stream is an optional boolean of the HTTP adapters", %{dir: dir} do
+      model = """
+      [models.local]
+      api = "anthropic-messages"
+      url = "http://localhost:8080/v1"
+      model = "claude"
+      timeout_ms = 120000
+      """
+
+      agent = """
+      [agents.concierge]
+      depth = 0
+      model = "local"
+      text = "hi"
+      """
+
+      write_toml(dir, model <> "stream = true\n\n" <> agent)
+      assert {:ok, config} = load(dir)
+      assert config.models["local"].input["stream"] == true
+
+      write_toml(dir, model <> "stream = \"yes\"\n\n" <> agent)
+      assert {:error, {:models, "local", {:invalid, :stream}}} = load(dir)
+    end
   end
 
   describe "store" do

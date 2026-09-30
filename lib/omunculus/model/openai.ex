@@ -13,8 +13,11 @@ defmodule Omunculus.Model.OpenAI do
   message, looping until a reply carries no tool call. Every reply is
   recorded before dispatch. `__omunculus_execute` runs JavaScript in the
   sandbox and uses the same authorized call callback as native tool
-  calls.
+  calls. With `stream = true` the reply is read as server-sent events,
+  its text passed to `delta` as it arrives.
   """
+
+  alias Omunculus.Model.EventStream
 
   @spec new(map) ::
           (String.t(),
@@ -30,14 +33,15 @@ defmodule Omunculus.Model.OpenAI do
       model: spec["model"],
       timeout: spec["timeout_ms"],
       headers: request_headers(spec),
-      temperature: spec["temperature"]
+      temperature: spec["temperature"],
+      stream: spec["stream"] == true
     }
 
-    fn assembled, tools, call, record, _delta, execution ->
+    fn assembled, tools, call, record, delta, execution ->
       function_tools = Enum.map(tools, &function_tool/1) ++ [executor_tool()]
 
       loop(
-        client,
+        Map.put(client, :delta, delta),
         function_tools,
         [%{role: "user", content: assembled}],
         call,
@@ -123,10 +127,18 @@ defmodule Omunculus.Model.OpenAI do
   defp request_body(client, tools, messages) do
     %{model: client.model, messages: messages, tools: tools}
     |> maybe_put(:temperature, client.temperature)
+    |> maybe_put(:stream, client.stream || nil)
   end
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp post(%{stream: true} = client, body) do
+    case EventStream.post(client, body, %{content: nil, tool_calls: %{}}, &chunk(&1, &2, client)) do
+      {:ok, reply} -> {:ok, streamed_message(reply)}
+      {:error, reason} -> {:error, {:openai, reason}}
+    end
+  end
 
   defp post(client, body) do
     case Req.post(client.url,
@@ -147,6 +159,53 @@ defmodule Omunculus.Model.OpenAI do
 
   defp extract_message(%{"choices" => [%{"message" => message} | _]}), do: {:ok, message}
   defp extract_message(body), do: {:error, {:openai, {:invalid_response, body}}}
+
+  defp chunk(%{"choices" => [%{"delta" => delta} | _]}, reply, client) do
+    reply
+    |> chunk_content(delta["content"], client)
+    |> chunk_tool_calls(delta["tool_calls"])
+  end
+
+  defp chunk(_other, reply, _client), do: reply
+
+  defp chunk_content(reply, text, client) when is_binary(text) and text != "" do
+    :ok = client.delta.(text)
+    %{reply | content: (reply.content || "") <> text}
+  end
+
+  defp chunk_content(reply, _text, _client), do: reply
+
+  defp chunk_tool_calls(reply, [_ | _] = calls) do
+    Enum.reduce(calls, reply, fn %{"index" => index} = part, reply ->
+      current =
+        Map.get(reply.tool_calls, index, %{
+          "id" => nil,
+          "type" => "function",
+          "function" => %{"name" => "", "arguments" => ""}
+        })
+
+      function = Map.get(part, "function", %{})
+
+      updated =
+        current
+        |> Map.put("id", part["id"] || current["id"])
+        |> update_in(["function", "name"], &(&1 <> (function["name"] || "")))
+        |> update_in(["function", "arguments"], &(&1 <> (function["arguments"] || "")))
+
+      %{reply | tool_calls: Map.put(reply.tool_calls, index, updated)}
+    end)
+  end
+
+  defp chunk_tool_calls(reply, _calls), do: reply
+
+  defp streamed_message(%{content: content, tool_calls: calls}) do
+    message = %{"role" => "assistant", "content" => content}
+
+    case calls |> Enum.sort_by(&elem(&1, 0)) |> Enum.map(&elem(&1, 1)) do
+      [] -> message
+      tool_calls -> Map.put(message, "tool_calls", tool_calls)
+    end
+  end
 
   defp run_tool_calls(tool_calls, call, catalog, execution) do
     Enum.reduce_while(tool_calls, {:ok, []}, fn tool_call, {:ok, acc} ->

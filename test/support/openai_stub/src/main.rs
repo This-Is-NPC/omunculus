@@ -1,7 +1,7 @@
 use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, State},
-    http::StatusCode,
+    http::{header, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -329,6 +329,8 @@ struct ControlRequest {
 #[derive(Debug, Deserialize, Default)]
 struct ChatRequest {
     #[serde(default)]
+    stream: bool,
+    #[serde(default)]
     messages: Vec<Message>,
     #[serde(default)]
     tools: Vec<Tool>,
@@ -453,6 +455,24 @@ async fn completions(State(state): State<Arc<AppState>>, body: Bytes) -> Respons
     };
 
     guard.finish(true);
+    if request.stream {
+        let mut chunks = Vec::new();
+        if let Some(call) = message["tool_calls"].get(0) {
+            let arguments = call["function"]["arguments"].as_str().unwrap_or("");
+            let (head, tail) = arguments.split_at(arguments.len() / 2);
+            chunks.push(json!({"choices": [{"index": 0, "delta": {"role": "assistant", "tool_calls": [{"index": 0, "id": call["id"], "type": "function", "function": {"name": call["function"]["name"], "arguments": head}}]}}]}));
+            chunks.push(json!({"choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "function": {"arguments": tail}}]}}]}));
+        } else {
+            let (head, tail) = split_text(message["content"].as_str().unwrap_or(""));
+            chunks.push(json!({"choices": [{"index": 0, "delta": {"role": "assistant", "content": head}}]}));
+            chunks.push(json!({"choices": [{"index": 0, "delta": {"content": tail}}]}));
+        }
+        chunks.push(json!({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}));
+        let mut events: Vec<(Option<&str>, String)> =
+            chunks.iter().map(|chunk| (None, chunk.to_string())).collect();
+        events.push((None, "[DONE]".to_owned()));
+        return event_stream(events);
+    }
     (
         StatusCode::OK,
         Json(json!({
@@ -467,6 +487,8 @@ async fn completions(State(state): State<Arc<AppState>>, body: Bytes) -> Respons
 
 #[derive(Debug, Deserialize, Default)]
 struct ResponsesRequest {
+    #[serde(default)]
+    stream: bool,
     #[serde(default)]
     input: Vec<Value>,
     #[serde(default)]
@@ -594,6 +616,26 @@ async fn responses(State(state): State<Arc<AppState>>, body: Bytes) -> Response 
     };
 
     guard.finish(true);
+    if request.stream {
+        let mut events = vec![(
+            Some("response.created"),
+            json!({"type": "response.created", "response": {"id": "benchmark", "output": []}}).to_string(),
+        )];
+        if let Some(text) = output[0]["content"][0]["text"].as_str() {
+            let (head, tail) = split_text(text);
+            for part in [head, tail] {
+                events.push((
+                    Some("response.output_text.delta"),
+                    json!({"type": "response.output_text.delta", "delta": part}).to_string(),
+                ));
+            }
+        }
+        events.push((
+            Some("response.completed"),
+            json!({"type": "response.completed", "response": {"id": "benchmark", "object": "response", "output": output}}).to_string(),
+        ));
+        return event_stream(events);
+    }
     (
         StatusCode::OK,
         Json(json!({
@@ -607,6 +649,8 @@ async fn responses(State(state): State<Arc<AppState>>, body: Bytes) -> Response 
 
 #[derive(Debug, Deserialize, Default)]
 struct MessagesRequest {
+    #[serde(default)]
+    stream: bool,
     #[serde(default)]
     tools: Vec<MessagesTool>,
     #[serde(default)]
@@ -717,6 +761,39 @@ async fn messages(State(state): State<Arc<AppState>>, body: Bytes) -> Response {
     };
 
     guard.finish(true);
+    if request.stream {
+        let block = &content[0];
+        let (start, deltas) = if block["type"] == "text" {
+            let (head, tail) = split_text(block["text"].as_str().unwrap_or(""));
+            (
+                json!({"type": "text", "text": ""}),
+                [head, tail].map(|part| json!({"type": "text_delta", "text": part})),
+            )
+        } else {
+            let input = block["input"].to_string();
+            let (head, tail) = input.split_at(input.len() / 2);
+            (
+                json!({"type": "tool_use", "id": block["id"], "name": block["name"], "input": {}}),
+                [head, tail].map(|part| json!({"type": "input_json_delta", "partial_json": part})),
+            )
+        };
+        let mut events = vec![
+            ("message_start", json!({"type": "message_start", "message": {"id": "benchmark", "type": "message", "role": "assistant", "content": [], "stop_reason": Value::Null}})),
+            ("content_block_start", json!({"type": "content_block_start", "index": 0, "content_block": start})),
+        ];
+        for delta in deltas {
+            events.push(("content_block_delta", json!({"type": "content_block_delta", "index": 0, "delta": delta})));
+        }
+        events.push(("content_block_stop", json!({"type": "content_block_stop", "index": 0})));
+        events.push(("message_delta", json!({"type": "message_delta", "delta": {"stop_reason": stop_reason}})));
+        events.push(("message_stop", json!({"type": "message_stop"})));
+        return event_stream(
+            events
+                .into_iter()
+                .map(|(name, data)| (Some(name), data.to_string()))
+                .collect(),
+        );
+    }
     (
         StatusCode::OK,
         Json(json!({
@@ -728,6 +805,21 @@ async fn messages(State(state): State<Arc<AppState>>, body: Bytes) -> Response {
         })),
     )
         .into_response()
+}
+
+fn split_text(text: &str) -> (&str, &str) {
+    text.split_at(text.len().min("benchmark ".len()))
+}
+
+fn event_stream(events: Vec<(Option<&str>, String)>) -> Response {
+    let mut body = String::new();
+    for (name, data) in events {
+        if let Some(name) = name {
+            body.push_str(&format!("event: {name}\n"));
+        }
+        body.push_str(&format!("data: {data}\n\n"));
+    }
+    (StatusCode::OK, [(header::CONTENT_TYPE, "text/event-stream")], body).into_response()
 }
 
 fn error_response(status: StatusCode, message: &str) -> Response {

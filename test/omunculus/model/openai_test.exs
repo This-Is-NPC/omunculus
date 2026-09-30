@@ -3,13 +3,11 @@ defmodule Omunculus.Model.OpenAITest do
 
   alias Omunculus.Model.OpenAI
 
-  for javascript <- [false, true] do
-    test "records all model turns and executes tools (JavaScript: #{javascript})", %{
-      stub: stub,
-      base_url: base_url
-    } do
+  for javascript <- [false, true], stream <- [false, true] do
+    test "records all model turns and executes tools (JavaScript: #{javascript}, stream: #{stream})",
+         %{stub: stub, base_url: base_url} do
       :ok = OpenAIStub.configure(stub, tool_rounds: 1, javascript: unquote(javascript))
-      events = run_counter("openai-completions", base_url)
+      events = run_counter("openai-completions", base_url, unquote(stream))
 
       assert Enum.map(events, & &1.type) == ~w(start-run tool model tool model end-run)
       [first, last] = Enum.filter(events, &(&1.type == "model"))

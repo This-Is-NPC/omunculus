@@ -81,8 +81,10 @@ is the one the default preset uses). `command` runs a program over the
 sandbox NDJSON protocol (a `{"type":"delta","text":"..."}` line passes
 partial reply text to the run without recording it) and takes `command`, `model`, optional `provider`
 and `params`. `module` takes optional `params`. The HTTP adapters take
-`url`, `model`, optional `timeout_ms`, `temperature`, `headers` and
-`provider`.
+`url`, `model`, `timeout_ms`, and optional `temperature`, `headers`,
+`provider` and `stream`. With `stream = true` the adapter asks for
+server-sent events and passes the reply text to the run as it arrives;
+the recorded turn is the same as without it.
 
 ```toml
 [auth]

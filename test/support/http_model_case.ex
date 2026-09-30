@@ -50,6 +50,29 @@ defmodule Omunculus.HttpModelCase do
         assert calls(agent) == []
       end
 
+      test "stream: true passes the reply text as deltas and still runs tool calls", %{
+        base_url: base_url
+      } do
+        :ok =
+          OpenAIStub.configure(%{base_url: String.trim_trailing(base_url, "/v1")}, tool_rounds: 1)
+
+        {agent, call} = recorder()
+        test = self()
+
+        delta = fn text ->
+          send(test, {:delta, text})
+          :ok
+        end
+
+        assert {:ok, "benchmark complete"} =
+                 call_model(@adapter, base_url, call, stream: true, delta: delta)
+
+        assert calls(agent) == [{"counter", %{}}]
+        assert_received {:delta, "benchmark "}
+        assert_received {:delta, "complete"}
+        refute_received {:delta, _more}
+      end
+
       test "an unreachable base_url yields {:error, {#{inspect(@error)}, _}}" do
         {_agent, call} = recorder()
 
@@ -97,25 +120,31 @@ defmodule Omunculus.HttpModelCase do
   def policy,
     do: ExecutionPolicyFixtures.policy(Application.app_dir(:omunculus, "priv"), network: "none")
 
-  @doc "Calls the adapter `module` at `url` with the shared prompt and tools."
-  @spec call_model(module, String.t(), fun) :: {:ok, String.t()} | {:error, term}
-  def call_model(module, url, call),
-    do:
-      module.new(spec(url)).(
-        assembled(),
-        tools(),
-        call,
-        fn _message -> :ok end,
-        fn _text -> :ok end,
-        policy()
-      )
+  @doc """
+  Calls the adapter `module` at `url` with the shared prompt and tools;
+  `stream: true` streams the reply into the `delta` fun.
+  """
+  @spec call_model(module, String.t(), fun, keyword) :: {:ok, String.t()} | {:error, term}
+  def call_model(module, url, call, opts \\ []) do
+    spec = if opts[:stream], do: Map.put(spec(url), "stream", true), else: spec(url)
+
+    module.new(spec).(
+      assembled(),
+      tools(),
+      call,
+      fn _message -> :ok end,
+      Keyword.get(opts, :delta, fn _text -> :ok end),
+      policy()
+    )
+  end
 
   @doc """
   Opens one run in a fresh project whose agent counts once through a model
-  of the adapter `api` at `base_url`, and returns the run's events.
+  of the adapter `api` at `base_url`, streamed when `stream` is true, and
+  returns the run's events.
   """
-  @spec run_counter(String.t(), String.t()) :: [map]
-  def run_counter(api, base_url) do
+  @spec run_counter(String.t(), String.t(), boolean) :: [map]
+  def run_counter(api, base_url, stream \\ false) do
     dir = Fixtures.tmp_dir()
 
     Fixtures.write_config(dir, """
@@ -124,6 +153,7 @@ defmodule Omunculus.HttpModelCase do
     url = "#{base_url}"
     model = "stub"
     timeout_ms = 120000
+    stream = #{stream}
 
     [agents.concierge]
     depth = 0
