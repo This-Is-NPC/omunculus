@@ -39,6 +39,18 @@ defmodule Omunculus.Server.Contract do
     }
   end
 
+  @spec delta(String.t(), map) :: map
+  def delta(project_id, delta) do
+    %{
+      v: @version,
+      project: project_id,
+      type: "run.delta",
+      run_id: delta.run_id,
+      work_id: delta.work_id,
+      text: delta.text
+    }
+  end
+
   @spec item(atom, map) :: map
   def item(:works, row),
     do:

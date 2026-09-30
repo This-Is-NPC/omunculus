@@ -42,11 +42,18 @@ defmodule Omunculus.Model.CommandTest do
     {agent, call} = recorder()
     recorded = Agent.start_link(fn -> [] end) |> elem(1)
     record = fn message -> Agent.update(recorded, &(&1 ++ [message])) end
+    test = self()
 
-    assert {:ok, "benchmark complete"} = model.(@assembled, @tools, call, record, policy)
+    delta = fn text ->
+      send(test, {:delta, text})
+      :ok
+    end
+
+    assert {:ok, "benchmark complete"} = model.(@assembled, @tools, call, record, delta, policy)
     assert calls(agent) == [{"counter", %{}}]
     messages = Agent.get(recorded, & &1)
-    assert Enum.any?(messages, &(&1["type"] == "call"))
-    assert Enum.any?(messages, &(&1["type"] == "text"))
+    assert Enum.map(messages, & &1["type"]) == ["call", "text"]
+    assert_received {:delta, "benchmark "}
+    assert_received {:delta, "complete"}
   end
 end

@@ -34,7 +34,7 @@ defmodule Omunculus.Model.BatteryTest do
   defp tools(names), do: Enum.map(names, &%{name: &1, description: "a tool", parameters: %{}})
 
   defp complete(assembled, tools, call) do
-    Battery.new(%{}).(assembled, tools, call, fn _text -> :ok end, nil)
+    Battery.new(%{}).(assembled, tools, call, fn _text -> :ok end, fn _text -> :ok end, nil)
   end
 
   @count_work %{"title" => "Count to 5", "goal" => "count with counter to 5"}

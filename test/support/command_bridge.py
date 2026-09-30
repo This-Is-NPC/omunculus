@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test bridge for Model.Command: one counter call, then a text turn."""
+"""Test bridge for Model.Command: one counter call, two deltas, then a text turn."""
 
 from __future__ import annotations
 
@@ -21,6 +21,8 @@ def main() -> None:
         if not reply.get("ok"):
             send({"type": "error", "output": str(reply.get("output"))})
             return
+    send({"type": "delta", "text": "benchmark "})
+    send({"type": "delta", "text": "complete"})
     send({"type": "text", "output": "benchmark complete"})
 
 

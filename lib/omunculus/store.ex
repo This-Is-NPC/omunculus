@@ -37,6 +37,7 @@ defmodule Omunculus.Store do
   @spec close(Connection.t()) :: :ok
   defdelegate close(conn), to: Connection
   defdelegate subscribe(conn), to: Connection
+  defdelegate publish(conn, message), to: Connection
 
   defdelegate view(conn, name, id), to: View
   defdelegate replay(conn, scope), to: View

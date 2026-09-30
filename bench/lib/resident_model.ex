@@ -6,13 +6,13 @@ defmodule Omunculus.Benchmark.ResidentModel do
   def new(spec) when is_map(spec) do
     inner = OpenAI.new(spec["params"])
 
-    fn assembled, tools, call, record, execution ->
+    fn assembled, tools, call, record, delta, execution ->
       case Process.get(:omunculus_bench) do
         {parent, agent} -> send(parent, {:resident, agent, byte_size(assembled)})
         nil -> :ok
       end
 
-      inner.(assembled, tools, call, record, execution)
+      inner.(assembled, tools, call, record, delta, execution)
     end
   end
 end

@@ -2,8 +2,8 @@ defmodule Omunculus.Model.AnthropicMessages do
   @moduledoc """
   Factory for an Anthropic Messages model of the contract of spec §8.6:
   `new/1` takes the `[models.<name>]` spec (`url`, `model`, `timeout_ms`,
-  optional `temperature`, `headers`, `credential`) and returns a 5-arity
-  `(assembled, tools, call, record, execution)` fun. Posts the assembled
+  optional `temperature`, `headers`, `credential`) and returns a 6-arity
+  `(assembled, tools, call, record, delta, execution)` fun. Posts the assembled
   as `system` to `<url>/messages` with tools as Anthropic `input_schema`
   items, runs each `tool_use` through `call.(name, args)`, appends a
   `tool_result` user turn, and loops until a reply has none.
@@ -16,6 +16,7 @@ defmodule Omunculus.Model.AnthropicMessages do
            [map],
            (String.t(), map -> {:ok, String.t()} | {:error, term}),
            (map -> :ok | {:error, term}),
+           (String.t() -> :ok),
            Omunculus.Execution.Policy.t() ->
              {:ok, String.t()} | {:error, term})
   def new(spec) when is_map(spec) do
@@ -27,7 +28,7 @@ defmodule Omunculus.Model.AnthropicMessages do
       temperature: spec["temperature"]
     }
 
-    fn assembled, tools, call, record, execution ->
+    fn assembled, tools, call, record, _delta, execution ->
       function_tools = Enum.map(tools, &anthropic_tool/1) ++ [executor_tool()]
 
       loop(

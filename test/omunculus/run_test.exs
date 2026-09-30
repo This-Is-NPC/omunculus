@@ -1047,6 +1047,32 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
+  test "the deltas of a model reach the store's subscribers without being recorded", %{
+    dir: dir
+  } do
+    project = open_project(dir)
+
+    Fixtures.use_model(project, fn _assembled, _tools, _call, record, delta, _execution ->
+      :ok = delta.("hel")
+      :ok = delta.("lo")
+      :ok = record.("hello")
+      {:ok, "hello"}
+    end)
+
+    :ok = Store.subscribe(project.conn)
+    assert {:ok, run} = Run.open(project, opening(nil))
+    owner = project.conn.owner
+
+    assert_received {:store, ^owner, {:delta, %{run_id: run_id, text: "hel"}}}
+    assert_received {:store, ^owner, {:delta, %{run_id: ^run_id, text: "lo"}}}
+    assert run_id == run.id
+
+    {:ok, events} = Store.replay(project.conn, {:run, run.id})
+    assert [%{body: "hello"}] = Enum.filter(events, &(&1.type == "model"))
+
+    Project.close(project)
+  end
+
   describe "a run that stops without end" do
     defp retry_config(dir, policy, extra \\ "") do
       write_config(

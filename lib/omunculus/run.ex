@@ -404,6 +404,19 @@ defmodule Omunculus.Run do
          do: :ok
   end
 
+  defp publish_delta(project, run, text) do
+    Store.publish(
+      project.conn,
+      {:delta,
+       %{
+         run_id: run.id,
+         work_id: run.work_id,
+         conversation_id: run.conversation_id,
+         text: text
+       }}
+    )
+  end
+
   defp close_run(project, run, execution) do
     with {:ok, event} <- Store.close_run(project.conn, run.id),
          {:ok, _hooks} <- Harness.react(project, [event], [], execution),
@@ -425,6 +438,7 @@ defmodule Omunculus.Run do
             tools,
             call,
             &record_model(project, run, execution, &1),
+            &publish_delta(project, run, &1),
             execution
           )
         end

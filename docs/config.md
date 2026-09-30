@@ -78,7 +78,8 @@ is skipped and logged, not fatal to the run.
 `api` is `openai-completions`, `openai-responses`, `anthropic-messages`,
 `command` or `module`. `module` names an Elixir adapter (`Omunculus.Model.Fake`
 is the one the default preset uses). `command` runs a program over the
-sandbox NDJSON protocol and takes `command`, `model`, optional `provider`
+sandbox NDJSON protocol (a `{"type":"delta","text":"..."}` line passes
+partial reply text to the run without recording it) and takes `command`, `model`, optional `provider`
 and `params`. `module` takes optional `params`. The HTTP adapters take
 `url`, `model`, optional `timeout_ms`, `temperature`, `headers` and
 `provider`.

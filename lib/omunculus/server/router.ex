@@ -382,6 +382,17 @@ defmodule Omunculus.Server.Router do
       {:store, _owner, :events} ->
         drain_announcements()
         stream(conn, project_id, principal, conversation_id, cursor)
+
+      {:store, _owner, {:delta, %{conversation_id: ^conversation_id} = delta}} ->
+        data = "data: #{Jason.encode!(Contract.delta(project_id, delta))}\n\n"
+
+        case chunk(conn, data) do
+          {:ok, conn} -> await(conn, project_id, principal, conversation_id, cursor)
+          _closed -> conn
+        end
+
+      {:store, _owner, {:delta, _other_conversation}} ->
+        await(conn, project_id, principal, conversation_id, cursor)
     after
       @keepalive_ms ->
         case chunk(conn, ": keepalive\n\n") do

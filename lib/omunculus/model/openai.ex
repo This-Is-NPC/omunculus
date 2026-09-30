@@ -2,8 +2,8 @@ defmodule Omunculus.Model.OpenAI do
   @moduledoc """
   Factory for an OpenAI-compatible model of the contract of spec §8.6:
   `new/1` takes the `[models.<name>]` spec (`url`, `model`, `timeout_ms`,
-  optional `temperature`, `headers`, `credential`) and returns a 5-arity
-  `(assembled, tools, call, record, execution)` fun. Declares each of
+  optional `temperature`, `headers`, `credential`) and returns a 6-arity
+  `(assembled, tools, call, record, delta, execution)` fun. Declares each of
   `tools` (the run's effective tools, as `%{name, description,
   parameters}`) as a function with its real `parameters` schema — an
   empty schema becomes `%{type: "object", properties: %{}}` so servers
@@ -21,6 +21,7 @@ defmodule Omunculus.Model.OpenAI do
            [map],
            (String.t(), map -> {:ok, String.t()} | {:error, term}),
            (map -> :ok | {:error, term}),
+           (String.t() -> :ok),
            Omunculus.Execution.Policy.t() ->
              {:ok, String.t()} | {:error, term})
   def new(spec) when is_map(spec) do
@@ -32,7 +33,7 @@ defmodule Omunculus.Model.OpenAI do
       temperature: spec["temperature"]
     }
 
-    fn assembled, tools, call, record, execution ->
+    fn assembled, tools, call, record, _delta, execution ->
       function_tools = Enum.map(tools, &function_tool/1) ++ [executor_tool()]
 
       loop(

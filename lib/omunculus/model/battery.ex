@@ -24,10 +24,11 @@ defmodule Omunculus.Model.Battery do
            [map],
            (String.t(), map -> {:ok, String.t()} | {:error, term}),
            (map -> :ok | {:error, term}),
+           (String.t() -> :ok),
            term ->
              {:ok, String.t()})
   def new(_spec) do
-    fn assembled, tools, call, record, _execution ->
+    fn assembled, tools, call, record, _delta, _execution ->
       with {:ok, text} <- assembled |> parse(tools) |> decide(call) do
         :ok = record.(text)
         {:ok, text}

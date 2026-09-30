@@ -100,7 +100,15 @@ defmodule Omunculus.HttpModelCase do
   @doc "Calls the adapter `module` at `url` with the shared prompt and tools."
   @spec call_model(module, String.t(), fun) :: {:ok, String.t()} | {:error, term}
   def call_model(module, url, call),
-    do: module.new(spec(url)).(assembled(), tools(), call, fn _message -> :ok end, policy())
+    do:
+      module.new(spec(url)).(
+        assembled(),
+        tools(),
+        call,
+        fn _message -> :ok end,
+        fn _text -> :ok end,
+        policy()
+      )
 
   @doc """
   Opens one run in a fresh project whose agent counts once through a model

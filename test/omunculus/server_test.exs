@@ -28,6 +28,12 @@ defmodule Omunculus.ServerTest do
     project_path = Fixtures.config_path(dir)
     File.write!(project_path, File.read!(project_path) <> "\n" <> @access)
 
+    Fixtures.use_model(dir, fn _assembled, _tools, _call, record, delta, _execution ->
+      :ok = delta.("partial")
+      :ok = record.("whole")
+      {:ok, "whole"}
+    end)
+
     assert {:ok, "access bootstrapped"} =
              CLI.run(
                [
@@ -262,17 +268,27 @@ defmodule Omunculus.ServerTest do
 
     {:ok, latest_sequence} = Contract.decode_cursor(latest)
 
-    assert %{"type" => "prompt"} =
-             receive_event(stream, fn event ->
-               event["type"] == "prompt" and
-                 Contract.decode_cursor(event["cursor"]) > {:ok, latest_sequence}
-             end)
+    prompt? = fn event ->
+      event["type"] == "prompt" and
+        Contract.decode_cursor(event["cursor"]) > {:ok, latest_sequence}
+    end
+
+    delta? = &(&1["type"] == "run.delta")
+
+    events =
+      receive_events(stream, fn events ->
+        Enum.any?(events, prompt?) and Enum.any?(events, delta?)
+      end)
+
+    assert %{"text" => "partial", "run_id" => run_id} = Enum.find(events, delta?)
+    assert is_binary(run_id)
+    refute Map.has_key?(Enum.find(events, delta?), "cursor")
 
     :gen_tcp.close(stream)
   end
 
-  defp receive_event(socket, match?, received \\ "") do
-    found =
+  defp receive_events(socket, done?, received \\ "") do
+    events =
       received
       |> String.split("\n")
       |> Enum.flat_map(fn line ->
@@ -282,13 +298,12 @@ defmodule Omunculus.ServerTest do
           _partial_or_other -> []
         end
       end)
-      |> Enum.find(match?)
 
-    if found do
-      found
+    if done?.(events) do
+      events
     else
       {:ok, data} = :gen_tcp.recv(socket, 0, 2_000)
-      receive_event(socket, match?, received <> data)
+      receive_events(socket, done?, received <> data)
     end
   end
 

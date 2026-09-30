@@ -9,10 +9,11 @@ defmodule Omunculus.Model.Fake do
            [map],
            (String.t(), map -> {:ok, String.t()} | {:error, term}),
            (map -> :ok | {:error, term}),
+           (String.t() -> :ok),
            term ->
              {:ok, String.t()})
   def new(_spec) do
-    fn assembled, _tools, _call, record, _execution ->
+    fn assembled, _tools, _call, record, _delta, _execution ->
       first_line =
         assembled
         |> String.split("\n")
