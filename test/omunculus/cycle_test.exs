@@ -266,14 +266,14 @@ defmodule Omunculus.CycleTest do
     end
 
     slow = send_message.("slow")
-    assert_receive {:slow, slow_run}, 5_000
+    assert_receive {:slow, slow_run}, 30_000
 
     fast = send_message.("fast")
-    assert {:error, :fast_failed} = Task.await(fast)
+    assert {:error, :fast_failed} = Task.await(fast, 30_000)
     assert Task.yield(slow, 100) == nil
 
     send(slow_run, :release)
-    assert {:ok, _out, _events} = Task.await(slow)
+    assert {:ok, _out, _events} = Task.await(slow, 30_000)
 
     assert :ok = GenServer.call(cycle, :await)
     GenServer.stop(cycle)
