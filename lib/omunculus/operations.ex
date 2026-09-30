@@ -125,7 +125,9 @@ defmodule Omunculus.Operations do
 
   defp check_reply_option(_project, _config, _name, _args, _principal), do: :ok
 
-  defp local_principal do
+  @doc "The operating-system user running this process."
+  @spec local_principal() :: Access.principal()
+  def local_principal do
     %{issuer: "local", subject: to_string(File.stat!("/proc/self").uid)}
   end
 

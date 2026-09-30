@@ -24,44 +24,65 @@ capabilities = ["conversation.read"]
 
 The capabilities accepted by the config are `project.manage_access`, `project.manage_config`, `conversation.create`, `conversation.read`, `conversation.send`, `conversation.comment`, `conversation.reply`, `conversation.manage_access` and `conversation.manage`. A role grants only the capabilities it lists. Project roles apply to all conversations; conversation roles apply to one. A member can assign only capabilities they hold. The last bootstrap administrator cannot be removed.
 
-Before starting the server, seed the first project administrator with the subject of a token issued by your identity provider:
+Before starting the server, seed the first project administrator. For the local user, the principal is issuer `local` and the numeric user ID as subject, the same principal the direct CLI acts as:
 
 ```sh
-bin/omunculus --config /path/to/project/omunculus.toml access bootstrap --issuer my-idp --subject alice
+bin/omunculus --config /path/to/project/omunculus.toml access bootstrap --issuer local --subject "$(id -u)"
 ```
 
-The caller must own the project config file. Bootstrap works once while the project has no members. Make a server registry TOML:
+For web users, use the subject of a token issued by your identity provider instead, for example `--issuer my-idp --subject alice`. The caller must own the project config file. Bootstrap works once while the project has no members. Make a server registry TOML:
+
+```toml
+[server]
+max_concurrent = 8
+max_queue = 64
+queue_timeout_ms = 30000
+max_connections = 64
+
+[projects.demo]
+config = "/path/to/project/omunculus.toml"
+```
+
+```sh
+bin/omunculus serve --config /path/to/server.toml
+```
+
+Paths in the registry resolve relative to it. `max_concurrent`, `max_queue` and `queue_timeout_ms` bound runs across projects in addition to each project's `[execution]` limits. `max_connections` bounds simultaneous event streams.
+
+## Local socket
+
+Each project is served on a Unix socket next to its SQLite file, `<store path>.omunculus.sock`, with mode `0600`: only the user running the server can connect. Requests on it need no token and act as the local principal. Any HTTP client that can use a Unix socket works:
+
+```sh
+curl --unix-socket .omunculus/store.sqlite3.omunculus.sock http://localhost/v1/projects/demo/conversations
+```
+
+The socket path must fit in 107 bytes; a longer one keeps the server from starting. The server removes the socket when it stops, and a socket left by a server that crashed is replaced by the next one.
+
+## TCP listener
+
+To serve web apps, add `host` and `port` to `[server]` together with an `[auth]` table. One comes only with the other.
 
 ```toml
 [server]
 host = "127.0.0.1"
 port = 4000
-max_concurrent = 8
-max_queue = 64
-queue_timeout_ms = 30000
-max_connections = 64
+# limits as above
 
 [auth]
 issuer = "my-idp"
 audience = "omunculus"
 algorithm = "RS256"
 public_key = "./jwt-public.pem"
-
-[projects.demo]
-config = "/path/to/project/omunculus.toml"
 ```
 
-Paths in the registry resolve relative to it. The public key must be a PEM key; `RS256` and `ES256` are accepted. Tokens must be signed and contain matching `iss` and `aud`, a nonempty `sub`, a future `exp`, and an optional valid `nbf`. The server does not issue tokens. `max_concurrent`, `max_queue` and `queue_timeout_ms` bound runs across projects in addition to each project's `[execution]` limits. `max_connections` bounds simultaneous event streams.
-
-```sh
-bin/omunculus serve --config /path/to/server.toml
-```
+The public key must be a PEM key; `RS256` and `ES256` are accepted. Tokens must be signed and contain matching `iss` and `aud`, a nonempty `sub`, a future `exp`, and an optional valid `nbf`. The server does not issue tokens.
 
 The server publishes an OpenAPI 3.1 document at `GET /openapi.json`, without authentication. It is generated from the same declarations that register the Plug routes, so the list of paths and HTTP methods follows the running server. Request and response schemas are defined in `Omunculus.Server.OpenAPI`. A web app can import this URL into an OpenAPI client generator or documentation viewer. The document itself is JSON; the server does not bundle a browser documentation UI.
 
-## Web app contract
+## Contract
 
-Send `Authorization: Bearer <JWT>` on every request. Use `/v1/projects/{project}` as the base path. Conversation creation and tool commands require an `Idempotency-Key` header of 1 to 128 bytes. Repeating the same operation with the same key returns its original result; using that key for a different operation returns `409`. Conversation creation returns `201`; a successful tool command returns `202` and a cursor, while its runs proceed asynchronously.
+On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/v1/projects/{project}` as the base path. Conversation creation and tool commands require an `Idempotency-Key` header of 1 to 128 bytes. Repeating the same operation with the same key returns its original result; using that key for a different operation returns `409`. Conversation creation returns `201`; a successful tool command returns `202` and a cursor, while its runs proceed asynchronously.
 
 | Method and path | Purpose |
 | --- | --- |

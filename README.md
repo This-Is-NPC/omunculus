@@ -64,7 +64,7 @@ A folder of your own is [a tool](docs/tools.md).
 
 ## HTTP server
 
-The optional [server](docs/server.md) opens configured projects, verifies signed JWTs, and exposes conversations, commands, snapshots, events and SSE to web apps. It publishes its OpenAPI contract at `/openapi.json`. Each project keeps its own SQLite store. The server has no built-in chat page.
+The optional [server](docs/server.md) opens configured projects and exposes conversations, commands, snapshots, events and SSE to any HTTP client: to the local user on a Unix socket next to each store, and, when it has a TCP listener, to web apps with signed JWTs. It publishes its OpenAPI contract at `/openapi.json`. Each project keeps its own SQLite store. The server has no built-in chat page.
 
 ## Requirements
 

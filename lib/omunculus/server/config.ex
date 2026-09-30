@@ -1,57 +1,53 @@
 defmodule Omunculus.Server.Config do
-  @moduledoc "Loads the server's TOML registry, listener and token verifier."
+  @moduledoc """
+  Loads the server's TOML registry: run and stream limits, the projects,
+  and the optional TCP listener, whose `host` and `port` come together
+  with the `[auth]` token verifier.
+  """
 
-  @enforce_keys [
-    :host,
-    :port,
-    :limits,
-    :max_connections,
-    :projects,
-    :issuer,
-    :audience,
-    :algorithm,
-    :public_key
-  ]
+  @enforce_keys [:limits, :max_connections, :projects, :http, :auth]
   defstruct @enforce_keys
 
   @type t :: %__MODULE__{
-          host: :inet.ip_address(),
-          port: pos_integer,
           limits: map,
           max_connections: pos_integer,
           projects: %{String.t() => String.t()},
-          issuer: String.t(),
-          audience: String.t(),
-          algorithm: String.t(),
-          public_key: String.t()
+          http: %{host: :inet.ip_address(), port: pos_integer} | nil,
+          auth:
+            %{
+              issuer: String.t(),
+              audience: String.t(),
+              algorithm: String.t(),
+              public_key: String.t()
+            }
+            | nil
         }
 
   @spec load(String.t()) :: {:ok, %__MODULE__{}} | {:error, term}
   def load(path) do
+    dir = Path.dirname(Path.expand(path))
+
     with true <- File.regular?(path) || {:error, {:server, :missing, path}},
          {:ok, data} <- Toml.decode_file(path),
          :ok <- keys(data, ~w(server auth projects)),
-         {:ok, listener} <- listener(data["server"]),
-         {:ok, auth} <- auth(data["auth"], Path.dirname(Path.expand(path))),
-         {:ok, projects} <- projects(data["projects"], Path.dirname(Path.expand(path))) do
-      {:ok, struct!(__MODULE__, Map.merge(listener, Map.merge(auth, %{projects: projects})))}
+         {:ok, server} <- server(data["server"]),
+         {:ok, auth} <- auth(data["auth"], server.http, dir),
+         {:ok, projects} <- projects(data["projects"], dir) do
+      {:ok, struct!(__MODULE__, Map.merge(server, %{auth: auth, projects: projects}))}
     end
   end
 
-  defp listener(data) when is_map(data) do
+  defp server(data) when is_map(data) do
     with :ok <-
            keys(data, ~w(host port max_concurrent max_queue queue_timeout_ms max_connections)),
-         host when is_binary(host) <- data["host"],
-         {:ok, ip} <- parse_ip(host),
-         port when is_integer(port) and port in 1..65_535 <- data["port"],
+         {:ok, http} <- http(data["host"], data["port"]),
          concurrent when is_integer(concurrent) and concurrent > 0 <- data["max_concurrent"],
          queue when is_integer(queue) and queue >= 0 <- data["max_queue"],
          timeout when is_integer(timeout) and timeout > 0 <- data["queue_timeout_ms"],
          connections when is_integer(connections) and connections > 0 <- data["max_connections"] do
       {:ok,
        %{
-         host: ip,
-         port: port,
+         http: http,
          max_connections: connections,
          limits: %{max_concurrent: concurrent, max_queue: queue, queue_timeout_ms: timeout}
        }}
@@ -60,9 +56,20 @@ defmodule Omunculus.Server.Config do
     end
   end
 
-  defp listener(_), do: {:error, {:server, :missing_listener}}
+  defp server(_), do: {:error, {:server, :missing_listener}}
 
-  defp auth(data, dir) when is_map(data) do
+  defp http(nil, nil), do: {:ok, nil}
+
+  defp http(host, port) when is_binary(host) and is_integer(port) and port in 1..65_535 do
+    with {:ok, ip} <- parse_ip(host), do: {:ok, %{host: ip, port: port}}
+  end
+
+  defp http(_host, _port), do: {:error, :invalid_http}
+
+  defp auth(nil, nil, _dir), do: {:ok, nil}
+  defp auth(_data, nil, _dir), do: {:error, {:server, :auth_without_listener}}
+
+  defp auth(data, _http, dir) when is_map(data) do
     with :ok <- keys(data, ~w(issuer audience algorithm public_key)),
          issuer when is_binary(issuer) and issuer != "" <- data["issuer"],
          audience when is_binary(audience) and audience != "" <- data["audience"],
@@ -76,7 +83,7 @@ defmodule Omunculus.Server.Config do
     end
   end
 
-  defp auth(_, _), do: {:error, {:server, :missing_auth}}
+  defp auth(_, _http, _dir), do: {:error, {:server, :missing_auth}}
 
   defp projects(data, dir) when is_map(data) and map_size(data) > 0 do
     Enum.reduce_while(data, {:ok, %{}}, fn {id, project}, {:ok, acc} ->

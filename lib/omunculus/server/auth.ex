@@ -1,10 +1,10 @@
 defmodule Omunculus.Server.Auth do
   @moduledoc "Verifies a signed bearer token and returns its stable principal."
 
-  @spec load(Omunculus.Server.Config.t()) :: {:ok, map} | {:error, term}
+  @spec load(map) :: {:ok, map} | {:error, term}
   def load(config) do
     try do
-      {:ok, Map.put(Map.from_struct(config), :jwk, JOSE.JWK.from_pem_file(config.public_key))}
+      {:ok, Map.put(config, :jwk, JOSE.JWK.from_pem_file(config.public_key))}
     rescue
       _ -> {:error, {:server, :invalid_public_key}}
     end

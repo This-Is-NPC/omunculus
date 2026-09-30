@@ -1,8 +1,8 @@
 defmodule Omunculus.ServerTest do
   use ExUnit.Case, async: false
 
-  alias Omunculus.{CLI, Fixtures, Project, Server, Store}
-  alias Omunculus.Server.Contract
+  alias Omunculus.{CLI, Config, Fixtures, Operations, Project, Server, Store}
+  alias Omunculus.Server.{Contract, Socket}
 
   @access """
   [access]
@@ -285,6 +285,69 @@ defmodule Omunculus.ServerTest do
     refute Map.has_key?(Enum.find(events, delta?), "cursor")
 
     :gen_tcp.close(stream)
+  end
+
+  test "each project is served to the local user on a socket next to its store" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(project_path, File.read!(project_path) <> "\n" <> @access)
+    uid = Operations.local_principal().subject
+
+    assert {:ok, "access bootstrapped"} =
+             CLI.run(
+               ["--config", project_path, "access", "bootstrap"] ++
+                 ["--issuer", "local", "--subject", uid],
+               dir
+             )
+
+    server_path = Path.join(dir, "server.toml")
+
+    File.write!(server_path, """
+    [server]
+    max_concurrent = 4
+    max_queue = 64
+    queue_timeout_ms = 30000
+    max_connections = 4
+
+    [projects.solo]
+    config = "omunculus.toml"
+    """)
+
+    {:ok, config} = Config.load(project_path)
+    socket = Socket.path(config.store.path)
+    {:ok, server} = Server.start_link(server_path)
+
+    assert Bitwise.band(File.stat!(socket).mode, 0o777) == 0o600
+    assert [] = Path.wildcard(Path.join(Path.dirname(socket), ".omunculus-*"), match_dot: true)
+
+    local = fn method, path, opts ->
+      Req.request!(
+        [method: method, url: "http://localhost" <> path, unix_socket: socket, retry: false] ++
+          opts
+      )
+    end
+
+    assert local.(:get, "/v1/identity", []).body == %{"issuer" => "local", "subject" => uid}
+
+    created =
+      local.(:post, "/v1/projects/solo/conversations",
+        headers: [{"idempotency-key", "c1"}],
+        json: %{}
+      )
+
+    assert created.status == 201
+
+    sent =
+      local.(:post, "/v1/projects/solo/conversations/#{created.body["id"]}/messages",
+        headers: [{"idempotency-key", "m1"}],
+        json: %{message: "hi"}
+      )
+
+    assert sent.status == 202
+
+    :ok = Supervisor.stop(server)
+    refute File.exists?(socket)
   end
 
   defp receive_events(socket, done?, received \\ "") do

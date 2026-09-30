@@ -262,8 +262,9 @@ defmodule Omunculus.Server.Router do
   defp authenticate(conn, opts) do
     opts = Keyword.merge(opts, conn.assigns.server_opts)
 
-    case get_req_header(conn, "authorization") do
-      ["Bearer " <> token] -> Auth.verify(Keyword.fetch!(opts, :auth), token)
+    case {Keyword.fetch(opts, :principal), get_req_header(conn, "authorization")} do
+      {{:ok, principal}, _header} -> {:ok, principal}
+      {:error, ["Bearer " <> token]} -> Auth.verify(Keyword.fetch!(opts, :auth), token)
       _ -> {:error, :unauthorized}
     end
   end
