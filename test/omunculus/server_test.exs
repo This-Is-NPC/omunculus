@@ -2,6 +2,7 @@ defmodule Omunculus.ServerTest do
   use ExUnit.Case, async: false
 
   alias Omunculus.{CLI, Fixtures, Project, Server, Store}
+  alias Omunculus.Server.Contract
 
   @access """
   [access]
@@ -186,7 +187,11 @@ defmodule Omunculus.ServerTest do
         headers: auth(outsider)
       )
 
-    assert after_snapshot.body["events"] == []
+    {:ok, snapshot_sequence} = Contract.decode_cursor(snapshot.body["cursor"])
+
+    assert Enum.all?(after_snapshot.body["events"], fn event ->
+             Contract.decode_cursor(event["cursor"]) > {:ok, snapshot_sequence}
+           end)
 
     prompt_event = Enum.find(events.body["events"], &(&1["type"] == "prompt"))
     assert prompt_event["actor"] == %{"kind" => "human", "issuer" => "test", "subject" => "admin"}
