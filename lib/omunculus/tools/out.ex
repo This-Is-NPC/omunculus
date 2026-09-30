@@ -40,6 +40,12 @@ defmodule Omunculus.Tools.Out do
   @spec bytes_cut(pos_integer) :: String.t()
   def bytes_cut(count), do: "(#{count} bytes cut)"
 
+  @spec lines_shown(pos_integer, non_neg_integer, non_neg_integer) :: String.t()
+  def lines_shown(first, last, total), do: "(lines #{first}-#{last} of #{total})"
+
+  @spec more_matches(pos_integer) :: String.t()
+  def more_matches(count), do: "(#{count} more #{if count == 1, do: "match", else: "matches"})"
+
   @spec requested_by(String.t()) :: String.t()
   def requested_by(agent), do: "requested by #{agent}"
 

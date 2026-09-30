@@ -2,7 +2,7 @@ name = "grep"
 kind = "tool"
 views = ["paths"]
 triggers = ["model"]
-description = "Searches file contents for text."
+description = "Searches file contents for text, keeping at most limit matches."
 tags = ["fs"]
 groups = ["fs.read"]
 module = "Omunculus.Tools.Grep"
@@ -16,3 +16,7 @@ type = "string"
 
 [parameters.properties.path]
 type = "string"
+
+[parameters.properties.limit]
+type = "integer"
+minimum = 1

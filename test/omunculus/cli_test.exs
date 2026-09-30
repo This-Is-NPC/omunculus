@@ -112,7 +112,9 @@ defmodule Omunculus.CLITest do
     assert {:ok, output} = CLI.run(["prompt"], dir)
     assert output =~ "second message"
     refute output =~ "first message"
-    assert output =~ "- read: Reads a file. [tags: fs]"
+
+    assert output =~
+             "- read: Reads a file, or limit lines of it from line offset (from 1). [tags: fs]"
 
     assert output =~
              "- comment: Writes a comment on the work, request, or inbox. [tags: comment, work, store]"

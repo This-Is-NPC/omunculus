@@ -2,7 +2,8 @@ defmodule Omunculus.Tools.Grep do
   @moduledoc """
   Builtin `grep` tool, per spec §9.2: searches regular files under `path`
   for a regex pattern, recursively, skipping files that are not valid
-  UTF-8.
+  UTF-8. With `limit`, it keeps that many matches and a last line says
+  how many more there are.
   """
 
   alias Omunculus.Execution.Policy
@@ -12,32 +13,39 @@ defmodule Omunculus.Tools.Grep do
   def run(%{args: args, roots: roots} = input, %Policy{} = policy) do
     permissions = Omunculus.Tools.Path.permissions(input)
 
-    case Args.missing(args, ~w(pattern)) do
-      nil ->
-        search(roots, args["pattern"], Args.present(args, "path") || ".", permissions, policy)
-
-      message ->
-        Out.fail(message)
+    with nil <- Args.missing(args, ~w(pattern)),
+         {:ok, limit} <- Args.count(args, "limit") do
+      path = Args.present(args, "path") || "."
+      search(roots, args["pattern"], path, limit, permissions, policy)
+    else
+      {:error, message} -> Out.fail(message)
+      message -> Out.fail(message)
     end
   end
 
-  defp search(roots, pattern, path, permissions, policy) do
+  defp search(roots, pattern, path, limit, permissions, policy) do
     with {:ok, regex} <- compile(pattern),
          {:ok, absolute} <- Omunculus.Tools.Path.resolve(roots, path, permissions, policy) do
-      output =
-        absolute
-        |> files()
-        |> Enum.filter(
-          &match?({:ok, _}, Omunculus.Tools.Path.resolve(roots, &1, permissions, policy))
-        )
-        |> Enum.sort()
-        |> Enum.flat_map(&matches(&1, absolute, regex))
-        |> Enum.join("\n")
-
-      Out.ok(output)
+      absolute
+      |> files()
+      |> Enum.filter(
+        &match?({:ok, _}, Omunculus.Tools.Path.resolve(roots, &1, permissions, policy))
+      )
+      |> Enum.sort()
+      |> Enum.flat_map(&matches(&1, absolute, regex))
+      |> kept(limit)
+      |> Out.ok()
     else
       {:error, message} -> Out.fail(message)
     end
+  end
+
+  defp kept(matches, limit) when is_nil(limit) or length(matches) <= limit,
+    do: Enum.join(matches, "\n")
+
+  defp kept(matches, limit) do
+    {shown, rest} = Enum.split(matches, limit)
+    Enum.join(shown ++ [Out.more_matches(length(rest))], "\n")
   end
 
   defp compile(pattern) do
