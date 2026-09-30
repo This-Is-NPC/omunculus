@@ -1,6 +1,8 @@
 defmodule Omunculus.ServerTest do
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias Omunculus.{CLI, Config, Fixtures, Operations, Project, Server, Store}
   alias Omunculus.Server.{Contract, Socket}
 
@@ -264,8 +266,15 @@ defmodule Omunculus.ServerTest do
     assert Req.get!(base <> "/conversations/#{id}/events", headers: auth(outsider)).status == 404
     assert Req.get!(base <> "/conversations/#{id}/stream", headers: auth(outsider)).status == 404
 
-    plain = Req.get!(base <> "/conversations/#{id}/stream", headers: auth(admin), retry: false)
-    assert plain.status == 400
+    plain_log =
+      capture_log(fn ->
+        plain =
+          Req.get!(base <> "/conversations/#{id}/stream", headers: auth(admin), retry: false)
+
+        assert plain.status == 400
+      end)
+
+    refute plain_log =~ "HTTPError"
 
     latest =
       Req.get!(base <> "/conversations/#{id}/snapshot", headers: auth(admin)).body["cursor"]

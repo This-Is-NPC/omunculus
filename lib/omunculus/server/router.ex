@@ -209,7 +209,8 @@ defmodule Omunculus.Server.Router do
   OpenAPI.route :get, "/v1/projects/:project_id/conversations/:conversation_id/stream", :stream do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, cursor} <- Contract.decode_cursor(conn.params["after"]),
-         {:ok, _conversation} <- Project.conversation(project_id, principal, conversation_id) do
+         {:ok, _conversation} <- Project.conversation(project_id, principal, conversation_id),
+         :ok <- websocket_request(conn) do
       state = %{
         project: project_id,
         principal: principal,
@@ -354,6 +355,14 @@ defmodule Omunculus.Server.Router do
   defp list_kind("requests"), do: {:ok, :requests}
   defp list_kind("inbox"), do: {:ok, :inbox}
   defp list_kind(_), do: {:error, :not_found}
+
+  # Bandit validates the rest of the handshake; a plain request stops here
+  # so it gets a 400 without Bandit logging a protocol error.
+  defp websocket_request(conn) do
+    if conn |> get_req_header("upgrade") |> Enum.any?(&(String.downcase(&1) =~ "websocket")),
+      do: :ok,
+      else: {:error, :invalid}
+  end
 
   defp error_reply(conn, {:error, :unauthorized}), do: reply(conn, 401, %{error: "unauthorized"})
   defp error_reply(conn, {:error, :invalid}), do: reply(conn, 400, %{error: "invalid"})
