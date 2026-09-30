@@ -445,41 +445,41 @@ defmodule Omunculus.ServerTest do
     spawn_link(fn ->
       {:ok, conn} = Mint.HTTP.connect(:http, address, port, [protocols: [:http1]] ++ opts)
       {:ok, conn, ref} = Mint.WebSocket.upgrade(:ws, conn, path, headers)
-      stream_frames(test, conn, ref, nil, %{})
+      stream_frames(test, conn, ref, nil, nil)
     end)
   end
 
-  defp stream_frames(test, conn, ref, websocket, upgrade) do
+  # Mint can hand over the first frames before `:done` when they arrive with
+  # the upgrade response, so the WebSocket is made as soon as the headers are.
+  defp stream_frames(test, conn, ref, websocket, status) do
     receive do
       {:send, frame} ->
         {:ok, websocket, data} = Mint.WebSocket.encode(websocket, frame)
         {:ok, conn} = Mint.WebSocket.stream_request_body(conn, ref, data)
-        stream_frames(test, conn, ref, websocket, upgrade)
+        stream_frames(test, conn, ref, websocket, status)
 
       message ->
         case Mint.WebSocket.stream(conn, message) do
           {:ok, conn, responses} ->
-            {conn, websocket, upgrade} =
-              Enum.reduce(responses, {conn, websocket, upgrade}, fn
-                {:status, ^ref, status}, {conn, nil, upgrade} ->
-                  {conn, nil, Map.put(upgrade, :status, status)}
+            {conn, websocket, status} =
+              Enum.reduce(responses, {conn, websocket, status}, fn
+                {:status, ^ref, status}, {conn, nil, _status} ->
+                  {conn, nil, status}
 
-                {:headers, ^ref, headers}, {conn, nil, upgrade} ->
-                  {conn, nil, Map.put(upgrade, :headers, headers)}
+                {:headers, ^ref, headers}, {conn, nil, status} ->
+                  {:ok, conn, websocket} = Mint.WebSocket.new(conn, ref, status, headers)
+                  {conn, websocket, status}
 
-                {:done, ^ref}, {conn, nil, upgrade} ->
-                  {:ok, conn, websocket} =
-                    Mint.WebSocket.new(conn, ref, upgrade.status, upgrade.headers)
+                {:done, ^ref}, acc ->
+                  acc
 
-                  {conn, websocket, upgrade}
-
-                {:data, ^ref, data}, {conn, websocket, upgrade} ->
+                {:data, ^ref, data}, {conn, websocket, status} ->
                   {:ok, websocket, frames} = Mint.WebSocket.decode(websocket, data)
                   Enum.each(frames, &send(test, {:frame, self(), &1}))
-                  {conn, websocket, upgrade}
+                  {conn, websocket, status}
               end)
 
-            stream_frames(test, conn, ref, websocket, upgrade)
+            stream_frames(test, conn, ref, websocket, status)
 
           {:error, _conn, _reason, _responses} ->
             :closed

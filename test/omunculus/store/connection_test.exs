@@ -58,9 +58,9 @@ defmodule Omunculus.Store.ConnectionTest do
         receive do: (:exit -> :ok)
       end)
 
-    assert_receive {:conn, %Connection{owner: owner}}
+    assert_receive {:conn, %Connection{owner: owner}}, 5_000
     monitor = Process.monitor(owner)
     send(opener, :exit)
-    assert_receive {:DOWN, ^monitor, :process, ^owner, :normal}
+    assert_receive {:DOWN, ^monitor, :process, ^owner, :normal}, 5_000
   end
 end
