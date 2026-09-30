@@ -1191,6 +1191,27 @@ defmodule Omunculus.RunTest do
       Project.close(project)
     end
 
+    test "[policy] last_run_output_bytes cuts the outputs in the retry prompt", %{dir: dir} do
+      retry_config(dir, "max_retries = 1\nlast_run_output_bytes = 2")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+
+      failing = fn call ->
+        {:ok, _output} = call.("comment", %{})
+        {:ok, "stopped"}
+      end
+
+      scripted(project, [failing, ending()])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+      assert_received {:assembled, _first}
+      assert_received {:assembled, assembled}
+      assert assembled =~ ~r/- tool comment \{\} failed\n.{2}\n\(\d+ bytes cut\)\n/
+
+      Project.close(project)
+    end
+
     test "after max_retries retries a child is broken and its waiting parent's run opens", %{
       dir: dir
     } do

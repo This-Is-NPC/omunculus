@@ -262,6 +262,9 @@ defmodule Omunculus.CLITest do
   test "a missing [execution.sandbox] table is named in the error" do
     assert CLI.format_error({:execution, {:sandbox, :missing}}) =~ "[execution.sandbox]"
     assert CLI.format_error({:policy, {:invalid, :max_retries}}) =~ "[policy] max_retries"
+
+    assert CLI.format_error({:policy, {:invalid, :last_run_output_bytes}}) =~
+             "[policy] last_run_output_bytes"
   end
 
   test "send with no args fails and reports the tool's own output", %{dir: dir} do

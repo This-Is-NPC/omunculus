@@ -175,7 +175,7 @@ defmodule Omunculus.Run do
              project,
              run,
              assemble_name,
-             text,
+             assemble_args(config, text, Map.get(opening, :inbox_id)),
              message_prompt_id,
              Map.get(opening, :inbox_id),
              execution
@@ -286,7 +286,14 @@ defmodule Omunculus.Run do
     end
   end
 
-  defp invoke_assemble(project, run, name, text, prompt_id, inbox_id, execution) do
+  defp assemble_args(config, text, inbox_id) do
+    [{"inbox_id", inbox_id}, {"last_run_output_bytes", config.last_run_output_bytes}]
+    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+    |> Map.new()
+    |> Map.put("text", text)
+  end
+
+  defp invoke_assemble(project, run, name, args, prompt_id, inbox_id, execution) do
     ctx = %{
       trigger: "harness",
       run_id: run.id,
@@ -297,10 +304,6 @@ defmodule Omunculus.Run do
       request_id: run.request_id,
       inbox_id: inbox_id
     }
-
-    args =
-      %{"text" => text}
-      |> then(fn args -> if inbox_id, do: Map.put(args, "inbox_id", inbox_id), else: args end)
 
     case Harness.dispatch(project, name, args, ctx) do
       {:ok, out, _events} ->

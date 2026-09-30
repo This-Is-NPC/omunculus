@@ -7,7 +7,8 @@ defmodule Omunculus.Config do
   per-depth layers under `[policy.depth.N]`, the workspaces under
   `[workspaces.<name>]` — each a directory `root` (resolved against the
   project root) plus a ceiling layer — the `[policy] workspace`
-  default, the required `[policy] max_retries`, each agent's ceiling layer, the named `[models.<name>]`
+  default, the required `[policy] max_retries`, the optional `[policy]
+  last_run_output_bytes`, each agent's ceiling layer, the named `[models.<name>]`
   adapters, the named workflows under `[workflows.<name>]` (spec §3.4),
   the MCP servers under `[[mcp.servers]]` (spec §8.7), the `[auth]`
   providers (spec §11.1), the required `[execution]` and `[store]`
@@ -34,6 +35,7 @@ defmodule Omunculus.Config do
     :workflows,
     :assemble,
     :max_retries,
+    :last_run_output_bytes,
     :policy_workflow,
     :policy_workspace,
     :depth_workflows,
@@ -95,6 +97,7 @@ defmodule Omunculus.Config do
           workflows: %{String.t() => [step]},
           assemble: String.t() | nil,
           max_retries: non_neg_integer,
+          last_run_output_bytes: pos_integer | nil,
           policy_workflow: String.t() | nil,
           policy_workspace: String.t() | nil,
           depth_workflows: %{non_neg_integer => String.t()},
@@ -128,7 +131,7 @@ defmodule Omunculus.Config do
   @mcp_server_keys ~w(name command protocol_version)
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
-  @policy_extra_keys ~w(depth workflow workspace assemble max_retries)
+  @policy_extra_keys ~w(depth workflow workspace assemble max_retries last_run_output_bytes)
   @agent_extra_keys ~w(depth text workflow_only model assemble)
   @http_model_keys ~w(api url model timeout_ms temperature headers provider stream)
   @openai_model_keys @http_model_keys ++ ~w(prompt_cache_key)
@@ -417,7 +420,8 @@ defmodule Omunculus.Config do
              {:ok, agents} <- parse_agents(Map.get(data, "agents", %{}), models),
              {:ok, workflows} <- parse_workflows(Map.get(data, "workflows", %{}), agents),
              {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows, assemble,
-              max_retries} <-
+              max_retries,
+              last_run_output_bytes} <-
                parse_policy(Map.get(data, "policy", %{}), workflows, workspaces),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{})),
              {:ok, tools} <- parse_tools(Map.get(data, "tools"), config_dir) do
@@ -433,6 +437,7 @@ defmodule Omunculus.Config do
               workflows: workflows,
               assemble: assemble,
               max_retries: max_retries,
+              last_run_output_bytes: last_run_output_bytes,
               policy_workflow: policy_workflow,
               policy_workspace: policy_workspace,
               depth_workflows: depth_workflows,
@@ -846,9 +851,10 @@ defmodule Omunculus.Config do
              :ok <- ensure_default_workspace(policy_workspace, workspaces),
              {:ok, depths, depth_workflows} <- parse_depths(depth_data, workflows),
              {:ok, assemble} <- tag_error(fetch_assemble(assemble_data), :policy),
-             {:ok, max_retries} <- fetch_max_retries(data) do
+             {:ok, max_retries} <- fetch_max_retries(data),
+             {:ok, last_run_output_bytes} <- fetch_last_run_output_bytes(data) do
           {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows, assemble,
-           max_retries}
+           max_retries, last_run_output_bytes}
         end
     end
   end
@@ -864,6 +870,14 @@ defmodule Omunculus.Config do
 
   defp fetch_max_retries(%{"max_retries" => n}) when is_integer(n) and n >= 0, do: {:ok, n}
   defp fetch_max_retries(_data), do: {:error, {:policy, {:invalid, :max_retries}}}
+
+  defp fetch_last_run_output_bytes(%{"last_run_output_bytes" => n}) when is_integer(n) and n > 0,
+    do: {:ok, n}
+
+  defp fetch_last_run_output_bytes(%{"last_run_output_bytes" => _invalid}),
+    do: {:error, {:policy, {:invalid, :last_run_output_bytes}}}
+
+  defp fetch_last_run_output_bytes(_data), do: {:ok, nil}
 
   defp fetch_workflow(nil, _workflows), do: {:ok, nil}
 

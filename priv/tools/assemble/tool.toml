@@ -15,3 +15,7 @@ type = "string"
 
 [parameters.properties.inbox_id]
 type = "string"
+
+[parameters.properties.last_run_output_bytes]
+type = "integer"
+minimum = 1

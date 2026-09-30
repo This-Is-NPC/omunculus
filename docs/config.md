@@ -45,6 +45,12 @@ the harness breaks it ([the cycle](cycle.md)). `[workspaces.<w>.policy]
 max_retries`, or `[policy] max_retries` in the workspace's `config` file,
 sets it for the works in that workspace.
 
+`[policy] last_run_output_bytes` is optional: a positive integer, how
+many bytes of each tool call's output the `## Last run` section of the
+assembled prompt keeps; the rest is cut and a line says how many bytes
+were cut. Without it the section keeps each output whole. A workspace
+sets it the same way as `max_retries`.
+
 ## Catalog
 
 ```toml

@@ -10,10 +10,12 @@ defmodule Omunculus.Tools.Assemble do
   event it recorded but the calls of this tool and its start and end,
   that is the model's messages as recorded but their `usage`, each tool
   call with its args, status and output, and each store action it
-  emitted. A run with a request gets the request's requester, its
-  options with their tool calls, and its comments. Inbox is included only
-  when the opening carried `inbox_id`. The message of the opening comes
-  last.
+  emitted. With `last_run_output_bytes` in the args, each call's output
+  keeps that many bytes, cut on a character boundary, and a line says how
+  many bytes were cut. A run with a request gets the request's requester,
+  its options with their tool calls, and its comments. Inbox is included
+  only when the opening carried `inbox_id`. The message of the opening
+  comes last.
   """
 
   alias Omunculus.Tool.Manifest
@@ -31,7 +33,7 @@ defmodule Omunculus.Tools.Assemble do
         [tools_section(view["catalog"] || [])] ++
         work_section(view["work"]) ++
         comment_section(view["comments.work"]) ++
-        last_run_section(view["runs.last.work"] || view["runs.request"], name) ++
+        last_run_section(view["runs.last.work"] || view["runs.request"], name, args) ++
         request_section(view["request"], view["comments.request"]) ++
         inbox_section(view, args) ++
         message_section(view["prompt"])
@@ -43,26 +45,27 @@ defmodule Omunculus.Tools.Assemble do
   defp comment_section([]), do: []
   defp comment_section(comments), do: ["## Last comment\n#{List.last(comments).body}"]
 
-  defp last_run_section(nil, _name), do: []
+  defp last_run_section(nil, _name, _args), do: []
 
-  defp last_run_section(run, name) do
+  defp last_run_section(run, name, args) do
+    limit = args["last_run_output_bytes"]
     message = if run.message, do: ["- message #{run.message.body}"], else: []
-    entries = message ++ Enum.flat_map(run.events, &entry(&1, name))
+    entries = message ++ Enum.flat_map(run.events, &entry(&1, name, limit))
     ["## Last run\n" <> Enum.join(entries, "\n")]
   end
 
   # A call of this tool holds a whole earlier prompt, and the lifecycle
   # events say nothing of what the run did.
-  defp entry(%{type: type}, _name) when type in ["start-run", "end-run"], do: []
+  defp entry(%{type: type}, _name, _limit) when type in ["start-run", "end-run"], do: []
 
-  defp entry(%{type: "tool", body: body}, name) do
+  defp entry(%{type: "tool", body: body}, name, limit) do
     case Jason.decode!(body) do
       %{"name" => ^name} -> []
-      call -> [call_entry(call)]
+      call -> [call_entry(call, limit)]
     end
   end
 
-  defp entry(%{type: type, body: body}, _name), do: ["- #{type} #{shown(type, body)}"]
+  defp entry(%{type: type, body: body}, _name, _limit), do: ["- #{type} #{shown(type, body)}"]
 
   # The usage a server reports on a reply is for measuring the run, not
   # something the next run acts on.
@@ -75,16 +78,28 @@ defmodule Omunculus.Tools.Assemble do
 
   defp shown(_type, body), do: body
 
-  defp call_entry(call) do
+  defp call_entry(call, limit) do
     via = if call["via"], do: " via #{call["via"]}", else: ""
     status = if call["ok"], do: "ok", else: "failed"
     head = "- tool #{call["name"]}#{via} #{Jason.encode!(call["args"])} #{status}"
 
     case call["output"] do
       output when output in [nil, ""] -> head
-      output when is_binary(output) -> head <> "\n" <> output
-      output -> head <> "\n" <> Jason.encode!(output)
+      output when is_binary(output) -> head <> "\n" <> cut(output, limit)
+      output -> head <> "\n" <> cut(Jason.encode!(output), limit)
     end
+  end
+
+  defp cut(output, limit) when is_nil(limit) or byte_size(output) <= limit, do: output
+
+  defp cut(output, limit) do
+    kept =
+      case :unicode.characters_to_binary(binary_part(output, 0, limit)) do
+        {_incomplete_or_error, valid, _rest} -> valid
+        valid -> valid
+      end
+
+    kept <> "\n" <> Out.bytes_cut(byte_size(output) - byte_size(kept))
   end
 
   defp message_section(nil), do: []

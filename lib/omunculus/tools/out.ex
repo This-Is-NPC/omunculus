@@ -20,6 +20,9 @@ defmodule Omunculus.Tools.Out do
   @spec more_tools(non_neg_integer()) :: String.t()
   def more_tools(count), do: "#{count} more tools: search with tool_search."
 
+  @spec bytes_cut(pos_integer) :: String.t()
+  def bytes_cut(count), do: "(#{count} bytes cut)"
+
   @spec requested_by(String.t()) :: String.t()
   def requested_by(agent), do: "requested by #{agent}"
 

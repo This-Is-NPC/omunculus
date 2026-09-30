@@ -107,6 +107,29 @@ defmodule Omunculus.ConfigTest do
     assert {:ok, %Config{max_retries: 0}} = load(dir)
   end
 
+  test "[policy] last_run_output_bytes is an optional positive integer", %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """
+
+    write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\n")
+    assert {:ok, %Config{last_run_output_bytes: nil}} = load(dir)
+
+    for invalid <- ["0", "-1", "1.5", ~s("2")] do
+      write_toml(
+        dir,
+        agents <> "\n[policy]\nmax_retries = 0\nlast_run_output_bytes = #{invalid}\n"
+      )
+
+      assert {:error, {:policy, {:invalid, :last_run_output_bytes}}} = load(dir)
+    end
+
+    write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\nlast_run_output_bytes = 4096\n")
+    assert {:ok, %Config{last_run_output_bytes: 4096}} = load(dir)
+  end
+
   test "pinned is a layer list and is absent on the default preset" do
     assert {:ok, %Config{policy: policy, agents: agents}} = Config.load(default_preset())
     assert policy.pinned == []

@@ -146,6 +146,34 @@ defmodule Omunculus.Tools.AssembleTest do
     refute output =~ "worker"
   end
 
+  test "last_run_output_bytes cuts each call's output on a character boundary" do
+    call = fn output ->
+      %{type: "tool", body: Jason.encode!(%{name: "read", args: %{}, ok: true, output: output})}
+    end
+
+    view = %{
+      "runs.last.work" => %{message: nil, events: [call.("abcdef"), call.("ab€"), call.("abc")]},
+      "catalog" => []
+    }
+
+    args = Map.put(@input.args, "last_run_output_bytes", 3)
+    output = Assemble.run(%{@input | args: args, view: view})["output"]
+
+    assert output =~
+             """
+             - tool read {} ok
+             abc
+             #{Out.bytes_cut(3)}
+             - tool read {} ok
+             ab
+             #{Out.bytes_cut(3)}
+             - tool read {} ok
+             abc\
+             """
+
+    assert Assemble.run(%{@input | view: view})["output"] =~ "abcdef\n- tool read {} ok\nab€"
+  end
+
   test "without a work, the last run is the one that opened the run's request" do
     view = %{
       "runs.request" => %{
