@@ -51,6 +51,13 @@ assembled prompt keeps; the rest is cut and a line says how many bytes
 were cut. Without it the section keeps each output whole. A workspace
 sets it the same way as `max_retries`.
 
+`[policy] tool_output_bytes` is optional: a positive integer, how many
+bytes of each tool call's output the model gets back during the run,
+from a call it makes directly or through `tools.*`; the rest is cut the
+same way. The recorded call keeps the output whole. Without it the model
+gets each output whole. A workspace sets it the same way as
+`max_retries`.
+
 ## Catalog
 
 ```toml

@@ -60,3 +60,4 @@ You are a Pi-style agent: compact, direct, and without shell access. Read and ed
 assemble = "assemble"
 max_retries = 3
 last_run_output_bytes = 8192
+tool_output_bytes = 32768

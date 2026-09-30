@@ -14,7 +14,10 @@ defmodule Omunculus.Run do
   `agents.<x>.assemble` or `[policy] assemble`. Streaming adapters
   record each message before tools. The run's `overrides` apply to its
   catalog before the model sees it, so the model gets each tool's
-  resolved schema; an invalid override keeps the run from opening. After
+  resolved schema; an invalid override keeps the run from opening. With
+  `[policy] tool_output_bytes`, the output of each call the model makes,
+  directly or through `tools.*`, reaches it cut to that many bytes, while
+  the recorded call keeps it whole. After
   each call of the model, the runs the actions of the call ask for are
   due at once, while this run goes on; the `end` action instead stops
   the model and closes the run before its action or hook continuations,
@@ -181,7 +184,7 @@ defmodule Omunculus.Run do
              execution
            ),
          cursor = :atomics.new(1, []),
-         call = build_call(project, run, names, execution, cursor) do
+         call = build_call(project, run, names, config, execution, cursor) do
       run_model(
         project,
         %{run: run, config: config, execution: execution, cursor: cursor},
@@ -340,7 +343,7 @@ defmodule Omunculus.Run do
     end)
   end
 
-  defp build_call(project, run, names, execution, cursor) do
+  defp build_call(project, run, names, config, execution, cursor) do
     allowed = MapSet.new(names)
 
     fn name, args ->
@@ -358,7 +361,7 @@ defmodule Omunculus.Run do
         follow_call(project, run, cursor)
 
         case result do
-          {:ok, out, _events} -> {:ok, out.output}
+          {:ok, out, _events} -> {:ok, Out.cut(out.output, config.tool_output_bytes)}
           {:error, _reason} = error -> error
         end
       else

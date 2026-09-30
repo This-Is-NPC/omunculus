@@ -1212,6 +1212,33 @@ defmodule Omunculus.RunTest do
       Project.close(project)
     end
 
+    test "[policy] tool_output_bytes cuts what the model gets but not the recorded call", %{
+      dir: dir
+    } do
+      retry_config(dir, "max_retries = 1\ntool_output_bytes = 2")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      test_pid = self()
+
+      failing = fn call ->
+        {:ok, output} = call.("comment", %{})
+        send(test_pid, {:tool_output, output})
+        {:ok, "stopped"}
+      end
+
+      scripted(project, [failing, ending()])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+      assert_received {:tool_output, output}
+      assert output == "bo\n(11 bytes cut)"
+      assert_received {:assembled, _first}
+      assert_received {:assembled, assembled}
+      assert assembled =~ "- tool comment {} failed\nbody required"
+
+      Project.close(project)
+    end
+
     test "after max_retries retries a child is broken and its waiting parent's run opens", %{
       dir: dir
     } do

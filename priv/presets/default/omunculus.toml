@@ -61,3 +61,4 @@ steps = [
 assemble = "assemble"
 max_retries = 3
 last_run_output_bytes = 8192
+tool_output_bytes = 32768

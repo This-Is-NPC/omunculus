@@ -107,7 +107,8 @@ defmodule Omunculus.ConfigTest do
     assert {:ok, %Config{max_retries: 0}} = load(dir)
   end
 
-  test "[policy] last_run_output_bytes is an optional positive integer", %{dir: dir} do
+  test "[policy] last_run_output_bytes and tool_output_bytes are optional positive integers",
+       %{dir: dir} do
     agents = """
     [agents.concierge]
     depth = 0
@@ -115,19 +116,18 @@ defmodule Omunculus.ConfigTest do
     """
 
     write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\n")
-    assert {:ok, %Config{last_run_output_bytes: nil}} = load(dir)
+    assert {:ok, %Config{last_run_output_bytes: nil, tool_output_bytes: nil}} = load(dir)
 
-    for invalid <- ["0", "-1", "1.5", ~s("2")] do
-      write_toml(
-        dir,
-        agents <> "\n[policy]\nmax_retries = 0\nlast_run_output_bytes = #{invalid}\n"
-      )
+    for key <- [:last_run_output_bytes, :tool_output_bytes] do
+      for invalid <- ["0", "-1", "1.5", ~s("2")] do
+        write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\n#{key} = #{invalid}\n")
+        assert {:error, {:policy, {:invalid, ^key}}} = load(dir)
+      end
 
-      assert {:error, {:policy, {:invalid, :last_run_output_bytes}}} = load(dir)
+      write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\n#{key} = 4096\n")
+      assert {:ok, config} = load(dir)
+      assert Map.fetch!(config, key) == 4096
     end
-
-    write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\nlast_run_output_bytes = 4096\n")
-    assert {:ok, %Config{last_run_output_bytes: 4096}} = load(dir)
   end
 
   test "pinned is a layer list and is absent on the default preset" do

@@ -85,21 +85,9 @@ defmodule Omunculus.Tools.Assemble do
 
     case call["output"] do
       output when output in [nil, ""] -> head
-      output when is_binary(output) -> head <> "\n" <> cut(output, limit)
-      output -> head <> "\n" <> cut(Jason.encode!(output), limit)
+      output when is_binary(output) -> head <> "\n" <> Out.cut(output, limit)
+      output -> head <> "\n" <> Out.cut(Jason.encode!(output), limit)
     end
-  end
-
-  defp cut(output, limit) when is_nil(limit) or byte_size(output) <= limit, do: output
-
-  defp cut(output, limit) do
-    kept =
-      case :unicode.characters_to_binary(binary_part(output, 0, limit)) do
-        {_incomplete_or_error, valid, _rest} -> valid
-        valid -> valid
-      end
-
-    kept <> "\n" <> Out.bytes_cut(byte_size(output) - byte_size(kept))
   end
 
   defp message_section(nil), do: []

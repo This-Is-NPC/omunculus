@@ -265,6 +265,9 @@ defmodule Omunculus.CLITest do
 
     assert CLI.format_error({:policy, {:invalid, :last_run_output_bytes}}) =~
              "[policy] last_run_output_bytes"
+
+    assert CLI.format_error({:policy, {:invalid, :tool_output_bytes}}) =~
+             "[policy] tool_output_bytes"
   end
 
   test "send with no args fails and reports the tool's own output", %{dir: dir} do

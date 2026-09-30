@@ -20,6 +20,23 @@ defmodule Omunculus.Tools.Out do
   @spec more_tools(non_neg_integer()) :: String.t()
   def more_tools(count), do: "#{count} more tools: search with tool_search."
 
+  @doc """
+  Keeps at most `limit` bytes of `text`, cut on a character boundary,
+  and a line saying how many bytes were cut. A nil `limit` keeps it all.
+  """
+  @spec cut(String.t(), pos_integer | nil) :: String.t()
+  def cut(text, limit) when is_nil(limit) or byte_size(text) <= limit, do: text
+
+  def cut(text, limit) do
+    kept =
+      case :unicode.characters_to_binary(binary_part(text, 0, limit)) do
+        {_incomplete_or_error, valid, _rest} -> valid
+        valid -> valid
+      end
+
+    kept <> "\n" <> bytes_cut(byte_size(text) - byte_size(kept))
+  end
+
   @spec bytes_cut(pos_integer) :: String.t()
   def bytes_cut(count), do: "(#{count} bytes cut)"
 
