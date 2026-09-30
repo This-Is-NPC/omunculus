@@ -33,9 +33,6 @@ defmodule Omunculus.Server.Project do
   def events(id, principal, conversation_id, cursor),
     do: GenServer.call(via(id), {:events, principal, conversation_id, cursor})
 
-  def can_read(id, principal, conversation_id),
-    do: GenServer.call(via(id), {:can_read, principal, conversation_id})
-
   @doc "Subscribes the calling process to the project's store announcements."
   def subscribe(id), do: Store.subscribe(GenServer.call(via(id), :project).conn)
 
@@ -96,10 +93,6 @@ defmodule Omunculus.Server.Project do
   end
 
   def handle_call(:project, _from, project), do: {:reply, project, project}
-
-  def handle_call({:can_read, principal, id}, _from, project) do
-    {:reply, Access.check(project, principal, "conversation.read", id), project}
-  end
 
   def handle_call({:list, principal, id, kind}, _from, project) do
     {:reply, Access.list(project, principal, id, kind), project}

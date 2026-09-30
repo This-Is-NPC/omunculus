@@ -94,7 +94,7 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `GET /conversations/{id}/snapshot` | Read works, runs, prompts, requests and inbox at one event cursor. |
 | `GET /conversations/{id}/{works,runs,prompts,requests,inbox}` | Read one resource list. |
 | `GET /conversations/{id}/events?after={cursor}` | Read up to 500 later events in sequence order. |
-| `GET /conversations/{id}/stream?after={cursor}` | Stream later events as SSE as soon as they are committed; each event has its cursor as SSE `id`. An idle stream sends a comment line every 15 seconds. Partial model text arrives as `{"v":1,"type":"run.delta","project","run_id","work_id","text"}` without a cursor; it is not stored, so a resumed stream does not repeat it, and the recorded `model` event holds the whole reply. |
+| `GET /conversations/{id}/stream?after={cursor}` | Open a WebSocket of later events; see [Event stream](#event-stream). |
 | `POST /conversations/{id}/messages` | Send `{"message":"text"}` with optional `work_id`. |
 | `POST /conversations/{id}/requests/{request_id}/reply` | Send `{"option":"name","body":"text"}`. |
 | `POST /conversations/{id}/comments` | Send `{"body":"text"}` and exactly one of `work_id`, `request_id` or `inbox_id`. |
@@ -102,6 +102,19 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `POST /members`, `DELETE /members/{issuer}/{subject}` | Assign or revoke a project role. |
 | `POST /conversations/{id}/members`, `DELETE /conversations/{id}/members/{issuer}/{subject}` | Assign or revoke a conversation role. |
 
-Membership `POST` bodies are `{"issuer":"my-idp","subject":"bob","role":"reader"}`. Create a conversation, then send a message with an idempotency key. Fetch its snapshot and resume with `/events?after=<snapshot.cursor>` or `/stream?after=<snapshot.cursor>`. Each event includes version `v`, `cursor`, `project`, `type`, `at`, `actor`, `origin`, resource IDs and `body`. Access is checked again during streaming, so revocation closes the stream. A caller without access gets `404` for conversation resources.
+Membership `POST` bodies are `{"issuer":"my-idp","subject":"bob","role":"reader"}`. Create a conversation, then send a message with an idempotency key. Fetch its snapshot and resume with `/events?after=<snapshot.cursor>` or `/stream?after=<snapshot.cursor>`. Each event includes version `v`, `cursor`, `project`, `type`, `at`, `actor`, `origin`, resource IDs and `body`. A caller without access gets `404` for conversation resources.
+
+## Event stream
+
+`GET /conversations/{id}/stream` upgrades to a WebSocket, authenticated like any other request: the local principal on the socket, the `Authorization` header on TCP. A request without the WebSocket upgrade headers gets `400`. The stream is read-only; commands go through the `POST` routes.
+
+Each frame is a JSON text frame. The first frames are the events after `after` (all of them without it), then each event as soon as it is committed, with its cursor in `cursor`. Partial model text arrives as `{"v":1,"type":"run.delta","project","run_id","work_id","text"}` without a cursor; it is not stored, so a resumed stream does not repeat it, and the recorded `model` event holds the whole reply. The server pings every 15 seconds and reads again, so a revoked membership closes the stream even while the conversation is idle.
+
+| Close code | Reason |
+| --- | --- |
+| `1003 unsupported` | The client sent a data frame. |
+| `1008 forbidden` | The caller lost read access to the conversation. |
+| `1011 internal_error` | The server could not read the events. |
+| `1013 too_many_streams` | `max_connections` streams are already open. |
 
 An older store without conversation columns is rejected and must be recreated. The server closes runs left open by an interrupted process and applies the existing retry policy to their work. HTTP requests do not wait for a run to finish.

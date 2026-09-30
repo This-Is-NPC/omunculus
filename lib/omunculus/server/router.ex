@@ -5,10 +5,8 @@ defmodule Omunculus.Server.Router do
   require Logger
 
   alias Omunculus.{CLI, Operations}
-  alias Omunculus.Server.{Auth, Contract, OpenAPI, Project, StreamLimiter}
+  alias Omunculus.Server.{Auth, Contract, EventStream, OpenAPI, Project}
   require OpenAPI
-
-  @keepalive_ms 15_000
 
   Module.register_attribute(__MODULE__, :openapi_routes, accumulate: true)
   @before_compile OpenAPI
@@ -209,23 +207,18 @@ defmodule Omunculus.Server.Router do
   end
 
   OpenAPI.route :get, "/v1/projects/:project_id/conversations/:conversation_id/stream", :stream do
-    runtime = conn.assigns.server_opts
-
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, cursor} <- Contract.decode_cursor(conn.params["after"]),
-         {:ok, _events} <- Project.events(project_id, principal, conversation_id, cursor),
-         :ok <- StreamLimiter.acquire(runtime[:stream_key]) do
-      try do
-        :ok = Project.subscribe(project_id)
+         {:ok, _conversation} <- Project.conversation(project_id, principal, conversation_id) do
+      state = %{
+        project: project_id,
+        principal: principal,
+        conversation_id: conversation_id,
+        cursor: cursor,
+        stream_key: conn.assigns.server_opts[:stream_key]
+      }
 
-        conn
-        |> put_resp_content_type("text/event-stream")
-        |> put_resp_header("cache-control", "no-store")
-        |> send_chunked(200)
-        |> stream(project_id, principal, conversation_id, cursor)
-      after
-        StreamLimiter.release(runtime[:stream_key])
-      end
+      upgrade_adapter(conn, :websocket, {EventStream, state, []})
     else
       error -> error_reply(conn, error)
     end
@@ -362,73 +355,6 @@ defmodule Omunculus.Server.Router do
   defp list_kind("inbox"), do: {:ok, :inbox}
   defp list_kind(_), do: {:error, :not_found}
 
-  defp stream(conn, project_id, principal, conversation_id, cursor) do
-    case Project.events(project_id, principal, conversation_id, cursor) do
-      {:ok, []} ->
-        await(conn, project_id, principal, conversation_id, cursor)
-
-      {:ok, events} ->
-        case Enum.reduce_while(events, {:ok, conn, cursor}, fn event, {:ok, conn, _cursor} ->
-               case Project.can_read(project_id, principal, conversation_id) do
-                 :ok ->
-                   data =
-                     "id: #{Contract.cursor(event.sequence)}\ndata: #{Jason.encode!(Contract.event(project_id, event))}\n\n"
-
-                   case chunk(conn, data) do
-                     {:ok, conn} -> {:cont, {:ok, conn, event.sequence}}
-                     error -> {:halt, error}
-                   end
-
-                 _revoked ->
-                   {:halt, :revoked}
-               end
-             end) do
-          {:ok, conn, next_cursor} ->
-            stream(conn, project_id, principal, conversation_id, next_cursor)
-
-          _closed ->
-            conn
-        end
-
-      _revoked ->
-        conn
-    end
-  end
-
-  # Reading again after a keepalive also notices a revoked membership.
-  defp await(conn, project_id, principal, conversation_id, cursor) do
-    receive do
-      {:store, _owner, :events} ->
-        drain_announcements()
-        stream(conn, project_id, principal, conversation_id, cursor)
-
-      {:store, _owner, {:delta, %{conversation_id: ^conversation_id} = delta}} ->
-        data = "data: #{Jason.encode!(Contract.delta(project_id, delta))}\n\n"
-
-        case chunk(conn, data) do
-          {:ok, conn} -> await(conn, project_id, principal, conversation_id, cursor)
-          _closed -> conn
-        end
-
-      {:store, _owner, {:delta, _other_conversation}} ->
-        await(conn, project_id, principal, conversation_id, cursor)
-    after
-      @keepalive_ms ->
-        case chunk(conn, ": keepalive\n\n") do
-          {:ok, conn} -> stream(conn, project_id, principal, conversation_id, cursor)
-          _closed -> conn
-        end
-    end
-  end
-
-  defp drain_announcements do
-    receive do
-      {:store, _owner, :events} -> drain_announcements()
-    after
-      0 -> :ok
-    end
-  end
-
   defp error_reply(conn, {:error, :unauthorized}), do: reply(conn, 401, %{error: "unauthorized"})
   defp error_reply(conn, {:error, :invalid}), do: reply(conn, 400, %{error: "invalid"})
   defp error_reply(conn, {:error, :invalid_role}), do: reply(conn, 400, %{error: "invalid_role"})
@@ -438,9 +364,6 @@ defmodule Omunculus.Server.Router do
 
   defp error_reply(conn, {:error, :last_administrator}),
     do: reply(conn, 409, %{error: "last_administrator"})
-
-  defp error_reply(conn, {:error, :too_many_streams}),
-    do: reply(conn, 429, %{error: "too_many_streams"})
 
   defp error_reply(conn, {:error, :tool_failed}), do: reply(conn, 422, %{error: "tool_failed"})
 

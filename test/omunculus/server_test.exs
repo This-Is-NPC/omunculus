@@ -233,6 +233,13 @@ defmodule Omunculus.ServerTest do
 
     assert upgraded.status == 200
 
+    stream_path = "/v1/projects/alpha/conversations/#{id}/stream"
+    revoked = open_stream(port, stream_path, outsider)
+    assert_receive {:frame, ^revoked, {:text, _history}}, 3_000
+
+    limited = open_stream(port, stream_path, admin)
+    assert_receive {:frame, ^limited, {:close, 1013, "too_many_streams"}}, 3_000
+
     second_message =
       Req.post!(message_url,
         headers: auth(outsider) ++ [{"idempotency-key", "message-2"}],
@@ -253,16 +260,17 @@ defmodule Omunculus.ServerTest do
       Req.delete!(base <> "/conversations/#{id}/members/test/outsider", headers: auth(admin))
 
     assert removed.status == 200
+    assert_receive {:frame, ^revoked, {:close, 1008, "forbidden"}}, 3_000
     assert Req.get!(base <> "/conversations/#{id}/events", headers: auth(outsider)).status == 404
+    assert Req.get!(base <> "/conversations/#{id}/stream", headers: auth(outsider)).status == 404
+
+    plain = Req.get!(base <> "/conversations/#{id}/stream", headers: auth(admin), retry: false)
+    assert plain.status == 400
 
     latest =
       Req.get!(base <> "/conversations/#{id}/snapshot", headers: auth(admin)).body["cursor"]
 
-    stream =
-      open_stream(port, "/v1/projects/alpha/conversations/#{id}/stream?after=#{latest}", admin)
-
-    limited = Req.get!(base <> "/conversations/#{id}/stream", headers: auth(admin), retry: false)
-    assert limited.status == 429
+    stream = open_stream(port, stream_path <> "?after=#{latest}", admin)
 
     streamed =
       Req.post!(message_url,
@@ -290,7 +298,8 @@ defmodule Omunculus.ServerTest do
     assert is_binary(run_id)
     refute Map.has_key?(Enum.find(events, delta?), "cursor")
 
-    :gen_tcp.close(stream)
+    send(stream, {:send, {:text, "hello"}})
+    assert_receive {:frame, ^stream, {:close, 1003, "unsupported"}}, 3_000
   end
 
   test "each project is served to the local user on a socket next to its store" do
@@ -352,6 +361,17 @@ defmodule Omunculus.ServerTest do
 
     assert sent.status == 202
 
+    local_stream =
+      open_stream(
+        {:local, socket},
+        0,
+        "/v1/projects/solo/conversations/#{created.body["id"]}/stream",
+        [],
+        hostname: "localhost"
+      )
+
+    assert_receive {:frame, ^local_stream, {:text, _event}}, 3_000
+
     assert {:ok, _output} = CLI.run(["send", "from the cli"], dir)
 
     assert [_ | _] =
@@ -373,23 +393,12 @@ defmodule Omunculus.ServerTest do
     refute File.exists?(socket)
   end
 
-  defp receive_events(socket, done?, received \\ "") do
-    events =
-      received
-      |> String.split("\n")
-      |> Enum.flat_map(fn line ->
-        with "data: " <> json <- line, {:ok, event} <- Jason.decode(json) do
-          [event]
-        else
-          _partial_or_other -> []
-        end
-      end)
-
+  defp receive_events(stream, done?, events \\ []) do
     if done?.(events) do
       events
     else
-      {:ok, data} = :gen_tcp.recv(socket, 0, 2_000)
-      receive_events(socket, done?, received <> data)
+      assert_receive {:frame, ^stream, {:text, json}}, 3_000
+      receive_events(stream, done?, events ++ [Jason.decode!(json)])
     end
   end
 
@@ -416,18 +425,57 @@ defmodule Omunculus.ServerTest do
     port
   end
 
-  defp open_stream(port, path, token) do
-    {:ok, socket} = :gen_tcp.connect({127, 0, 0, 1}, port, [:binary, active: false])
+  # A WebSocket client process: it sends the test each frame it receives as
+  # `{:frame, pid, frame}` and sends the server each `{:send, frame}` it gets.
+  defp open_stream(port, path, token),
+    do: open_stream("127.0.0.1", port, path, auth(token), [])
 
-    :ok =
-      :gen_tcp.send(
-        socket,
-        "GET #{path} HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer #{token}\r\n\r\n"
-      )
+  defp open_stream(address, port, path, headers, opts) do
+    test = self()
 
-    {:ok, response} = :gen_tcp.recv(socket, 0, 3_000)
-    assert response =~ "200 OK"
-    socket
+    spawn_link(fn ->
+      {:ok, conn} = Mint.HTTP.connect(:http, address, port, [protocols: [:http1]] ++ opts)
+      {:ok, conn, ref} = Mint.WebSocket.upgrade(:ws, conn, path, headers)
+      stream_frames(test, conn, ref, nil, %{})
+    end)
+  end
+
+  defp stream_frames(test, conn, ref, websocket, upgrade) do
+    receive do
+      {:send, frame} ->
+        {:ok, websocket, data} = Mint.WebSocket.encode(websocket, frame)
+        {:ok, conn} = Mint.WebSocket.stream_request_body(conn, ref, data)
+        stream_frames(test, conn, ref, websocket, upgrade)
+
+      message ->
+        case Mint.WebSocket.stream(conn, message) do
+          {:ok, conn, responses} ->
+            {conn, websocket, upgrade} =
+              Enum.reduce(responses, {conn, websocket, upgrade}, fn
+                {:status, ^ref, status}, {conn, nil, upgrade} ->
+                  {conn, nil, Map.put(upgrade, :status, status)}
+
+                {:headers, ^ref, headers}, {conn, nil, upgrade} ->
+                  {conn, nil, Map.put(upgrade, :headers, headers)}
+
+                {:done, ^ref}, {conn, nil, upgrade} ->
+                  {:ok, conn, websocket} =
+                    Mint.WebSocket.new(conn, ref, upgrade.status, upgrade.headers)
+
+                  {conn, websocket, upgrade}
+
+                {:data, ^ref, data}, {conn, websocket, upgrade} ->
+                  {:ok, websocket, frames} = Mint.WebSocket.decode(websocket, data)
+                  Enum.each(frames, &send(test, {:frame, self(), &1}))
+                  {conn, websocket, upgrade}
+              end)
+
+            stream_frames(test, conn, ref, websocket, upgrade)
+
+          {:error, _conn, _reason, _responses} ->
+            :closed
+        end
+    end
   end
 
   defp eventually(fun, attempts \\ 20)

@@ -39,7 +39,7 @@ defmodule Omunculus.Server.OpenAPI do
     },
     stream: %{
       summary: "Subscribe to later conversation events",
-      status: 200,
+      status: 101,
       response: :stream,
       cursor: true
     },
@@ -199,8 +199,8 @@ defmodule Omunculus.Server.OpenAPI do
 
         :stream ->
           %{
-            description: "Server-sent event stream",
-            content: %{"text/event-stream" => %{schema: %{type: "string"}}}
+            description:
+              "Switches to a WebSocket that sends each later event and partial model reply as a JSON text frame"
           }
 
         name ->
@@ -221,7 +221,6 @@ defmodule Omunculus.Server.OpenAPI do
           {404, "Resource unavailable"},
           {409, "Command conflict"},
           {422, "Tool refused the command"},
-          {429, "Stream connection limit reached"},
           {500, "Internal server error"}
         ],
         into: %{} do

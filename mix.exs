@@ -35,7 +35,8 @@ defmodule Omunculus.MixProject do
       {:req, "~> 0.5"},
       {:plug, "~> 1.20"},
       {:bandit, "~> 1.8"},
-      {:jose, "~> 1.11"}
+      {:jose, "~> 1.11"},
+      {:mint_web_socket, "~> 1.0", only: :test}
     ]
   end
 end
