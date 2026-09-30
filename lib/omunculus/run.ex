@@ -159,7 +159,8 @@ defmodule Omunculus.Run do
              execution: Policy.serializable(execution),
              work_id: work_id,
              conversation_id:
-               (work && work.conversation_id) || (message && message.conversation_id),
+               (work && work.conversation_id) || (message && message.conversation_id) ||
+                 Map.get(opening, :conversation_id),
              origin_issuer: (message && message.actor_issuer) || Map.get(opening, :origin_issuer),
              origin_subject:
                (message && message.actor_subject) || Map.get(opening, :origin_subject),

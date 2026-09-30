@@ -288,6 +288,19 @@ defmodule Omunculus.Store.ViewTest do
       assert ["start-run", "model", "model", "end-run"] = Enum.map(last.events, & &1.type)
     end
 
+    test "runs.request is the run that opened the request, with its message and events", %{
+      conn: conn
+    } do
+      run = closed_run(conn, nil, [{:model, "asked"}])
+      Fixtures.insert(conn, :prompts, %{run_id: run.id, body: "save this"})
+      request_id = Fixtures.insert(conn, :requests, %{run_id: run.id})
+
+      assert {:ok, found} = View.view(conn, "runs.request", request_id)
+      assert found.id == run.id
+      assert found.message.body == "save this"
+      assert ["start-run", "model", "end-run"] = Enum.map(found.events, & &1.type)
+    end
+
     test "runs.last.work is nil for a work without closed runs", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
 

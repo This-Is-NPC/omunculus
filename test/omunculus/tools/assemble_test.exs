@@ -114,7 +114,7 @@ defmodule Omunculus.Tools.AssembleTest do
     view = %{
       "work" => %{title: "Fix the parser", goal: "the parser accepts trailing commas"},
       "comments.work" => [%{body: "first note"}, %{body: "last note"}],
-      "runs.last.work" => %{events: events},
+      "runs.last.work" => %{message: %{body: "fix the parser"}, events: events},
       "catalog" => []
     }
 
@@ -129,6 +129,7 @@ defmodule Omunculus.Tools.AssembleTest do
              last note
 
              ## Last run
+             - message fix the parser
              - model {"content":"reading"}
              - tool read {"path":"parser.ex"} ok
              defmodule Parser
@@ -141,6 +142,19 @@ defmodule Omunculus.Tools.AssembleTest do
 
     refute output =~ "an earlier prompt"
     refute output =~ "worker"
+  end
+
+  test "without a work, the last run is the one that opened the run's request" do
+    view = %{
+      "runs.request" => %{
+        message: nil,
+        events: [%{type: "model", body: "asked for write"}]
+      },
+      "catalog" => []
+    }
+
+    output = Assemble.run(%{@input | view: view})["output"]
+    assert output =~ "## Last run\n- model asked for write"
   end
 
   test "inbox appears only when args carry inbox_id, after request" do

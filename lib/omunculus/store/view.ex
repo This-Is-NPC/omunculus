@@ -5,8 +5,10 @@ defmodule Omunculus.Store.View do
   unread `inbox` list with each row's earliest comment (spec §3.6), the
   unread notifications of one work (`"inbox.work"`), the comments of
   one inbox entry, oldest first (`"comments.inbox"`), the most recently
-  started run (`"runs.last"`), the last closed run of a work with every
-  event it recorded (`"runs.last.work"`), how many of a work's latest closed runs in a row
+  started run (`"runs.last"`), the last closed run of a work
+  (`"runs.last.work"`) and the run that opened a request
+  (`"runs.request"`), each with the message that opened it and every
+  event it recorded, how many of a work's latest closed runs in a row
   lack `end`, the depth of a work by walking `parent_id`, plus replay of
   `events` for a project, run, work, request, or inbox scope (spec §4).
   Never executes anything against the store.
@@ -64,7 +66,18 @@ defmodule Omunculus.Store.View do
 
   def view(conn, "runs.last.work", work_id) do
     with {:ok, run} <- Query.one(conn, "SELECT runs.* #{@closed_runs} LIMIT 1", [work_id]) do
-      with_events(conn, run)
+      with_record(conn, run)
+    end
+  end
+
+  def view(conn, "runs.request", request_id) do
+    with {:ok, run} <-
+           Query.one(
+             conn,
+             "SELECT runs.* FROM runs JOIN requests ON requests.run_id = runs.id WHERE requests.id = ?",
+             [request_id]
+           ) do
+      with_record(conn, run)
     end
   end
 
@@ -159,10 +172,14 @@ defmodule Omunculus.Store.View do
     {" WHERE #{column} = ?", [id]}
   end
 
-  defp with_events(_conn, nil), do: {:ok, nil}
+  defp with_record(_conn, nil), do: {:ok, nil}
 
-  defp with_events(conn, run) do
-    with {:ok, events} <- replay(conn, {:run, run.id}), do: {:ok, Map.put(run, :events, events)}
+  defp with_record(conn, run) do
+    with {:ok, message} <-
+           Query.one(conn, "SELECT * FROM prompts WHERE run_id = ? AND kind = 'message'", [run.id]),
+         {:ok, events} <- replay(conn, {:run, run.id}) do
+      {:ok, Map.merge(run, %{message: message, events: events})}
+    end
   end
 
   defp counter_value(events) do

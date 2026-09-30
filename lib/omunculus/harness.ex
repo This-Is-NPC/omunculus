@@ -23,7 +23,10 @@ defmodule Omunculus.Harness do
   `follow_up/3` does the same, then runs those deferred hooks, then makes
   the reaction runs of calling hooks due, preserving the originating tool
   or hook in `via`. A `reply` opens a run of the requester's work when
-  that work is open after the reply and its option's calls.
+  that work is open after the reply and its option's calls, and, for a
+  request from a run without a work, a run of that run's agent in its
+  conversation. The `runs.request` view is the run that opened the run's
+  request.
   """
 
   alias Omunculus.{Ceiling, Config, Cycle, Project, Store}
@@ -454,7 +457,8 @@ defmodule Omunculus.Harness do
     end
   end
 
-  defp resolve_view_id("comments.request", _run_id, _work_id, %{request_id: request_id}) do
+  defp resolve_view_id(name, _run_id, _work_id, %{request_id: request_id})
+       when name in ["comments.request", "runs.request"] do
     if request_id, do: {:ok, request_id}, else: :skip
   end
 
@@ -860,8 +864,19 @@ defmodule Omunculus.Harness do
   end
 
   # The requester's work runs again when it is open once the reply and
-  # the calls of its option are applied.
-  defp open_reply_run(_project, %{work_id: nil}, _via), do: :ok
+  # the calls of its option are applied; without a work, its agent runs
+  # again in the requesting run's conversation.
+  defp open_reply_run(project, %{work_id: nil, request_id: request_id} = event, via) do
+    with {:ok, request} <- Store.view(project.conn, "request", request_id),
+         {:ok, run} <- Store.view(project.conn, "run", request.run_id) do
+      due(project, event, %{
+        request_id: request_id,
+        via: via,
+        agent: run.agent,
+        conversation_id: run.conversation_id
+      })
+    end
+  end
 
   defp open_reply_run(project, %{work_id: work_id, request_id: request_id} = event, via) do
     case Store.view(project.conn, "work", work_id) do

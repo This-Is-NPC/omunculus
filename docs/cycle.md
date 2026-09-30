@@ -145,10 +145,11 @@ The default `assemble` tool joins, in this order:
 agent text
 → message of this opening, if any
 → if there is a work: title + goal + last comment, then, under
-  `## Last run`, every event of the work's last closed run but the calls
-  of assemble and the run's start and end: the model's messages as
-  recorded, each tool call with its args, status and output, and each
-  store action it emitted
+  `## Last run`, the work's last closed run; without a work, the run that
+  opened this run's request: the message that opened it and every event
+  it recorded but the calls of assemble and its start and end, that is
+  the model's messages as recorded, each tool call with its args, status
+  and output, and each store action it emitted
 → if there is a request: header, its options with their tool calls, and
   the comments with that request_id
 → if the opening carried inbox_id: comments with that inbox_id
@@ -226,7 +227,10 @@ ceiling, in the reply's transaction, each an `EVENTS(tool)` with
 a call outside that list fails the reply and writes nothing. The
 requester's work, if it still waits on the request, is reopened; if it
 is open once the calls applied, its next run opens with the request
-thread in its prompt. `cancel` leaves it cancelled, so no run opens.
+thread in its prompt. `cancel` leaves it cancelled, so no run opens. A
+request from a run without a work has nowhere to wait: the reply opens
+a run of that run's agent in its conversation, with the request thread
+and the asking run in its prompt.
 
 `INBOX` notifies and does not wait. It does not park a run or a work.
 

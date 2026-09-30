@@ -714,7 +714,7 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "a request without a linked work has no work_id, and granting it for the agent opens no run and touches no work",
+    test "a request without a linked work has no work_id; the reply runs its agent again with the request and the asking run",
          %{dir: dir} do
       request_id = open_write_request(dir)
 
@@ -726,7 +726,13 @@ defmodule Omunculus.CLITest do
       assert request.work_id == nil
       Project.close(project)
 
-      model = fn _assembled, _tools, _call -> raise "must never be called" end
+      test_pid = self()
+
+      model = fn assembled, _tools, call ->
+        send(test_pid, {:assembled, assembled})
+        call.("end", %{})
+      end
+
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} =
@@ -735,14 +741,25 @@ defmodule Omunculus.CLITest do
                  dir
                )
 
+      assert_received {:assembled, assembled}
+      assert assembled =~ "## Request\n#{request_id}"
+      assert assembled =~ "allowed"
+      assert assembled =~ "## Last run\n- message save this"
+      assert assembled =~ "- tool request_access"
+
       project = open_project(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
       assert "grant" in Enum.map(events, & &1.type)
 
       assert {:ok, []} = Query.all(project.conn, "SELECT * FROM works")
 
-      assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs")
-      assert length(runs) == 1
+      assert {:ok, [asking, again]} =
+               Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+
+      assert again.via == "reply"
+      assert again.agent == asking.agent
+      assert again.request_id == request_id
+      assert "write" in Jason.decode!(again.tools)
 
       Project.close(project)
     end

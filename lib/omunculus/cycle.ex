@@ -26,7 +26,15 @@ defmodule Omunculus.Cycle do
 
   alias Omunculus.{Project, Run}
 
-  @opening %{prompt_id: nil, work_id: nil, request_id: nil, inbox_id: nil, via: nil, agent: nil}
+  @opening %{
+    prompt_id: nil,
+    work_id: nil,
+    request_id: nil,
+    inbox_id: nil,
+    via: nil,
+    agent: nil,
+    conversation_id: nil
+  }
 
   @spec start_link(Project.t()) :: GenServer.on_start()
   def start_link(project), do: GenServer.start_link(__MODULE__, project)

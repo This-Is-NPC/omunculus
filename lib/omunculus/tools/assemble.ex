@@ -2,10 +2,12 @@ defmodule Omunculus.Tools.Assemble do
   @moduledoc """
   Builtin `assemble` tool: builds the assembled prompt of a run from
   the hydrated views: the work's title and goal, its last comment, and
-  every event of its last closed run (`runs.last.work`) but the calls of
-  this tool and the run's start and end: the model's messages as
-  recorded, each tool call with its args, status and output, and each
-  store action it emitted. Then the
+  its last closed run (`runs.last.work`), or, without a work, the run
+  that opened the run's request (`runs.request`): the message that
+  opened that run and every event it recorded but the calls of this tool
+  and its start and end, that is the model's messages as recorded, each
+  tool call with its args, status and output, and each store action it
+  emitted. Then the
   agents the `agents` view says a new work may name when the run has the
   `work` card, and the cards, which follow `pinned` on the catalog view.
   A run with a request gets the request's requester, its options with
@@ -25,7 +27,7 @@ defmodule Omunculus.Tools.Assemble do
         message_section(view["prompt"]) ++
         work_section(view["work"]) ++
         comment_section(view["comments.work"]) ++
-        last_run_section(view["runs.last.work"], name) ++
+        last_run_section(view["runs.last.work"] || view["runs.request"], name) ++
         request_section(view["request"], view["comments.request"]) ++
         inbox_section(view, args) ++
         agents_section(view["agents"] || [], view["catalog"] || []) ++
@@ -41,7 +43,9 @@ defmodule Omunculus.Tools.Assemble do
   defp last_run_section(nil, _name), do: []
 
   defp last_run_section(run, name) do
-    ["## Last run\n" <> Enum.join(Enum.flat_map(run.events, &entry(&1, name)), "\n")]
+    message = if run.message, do: ["- message #{run.message.body}"], else: []
+    entries = message ++ Enum.flat_map(run.events, &entry(&1, name))
+    ["## Last run\n" <> Enum.join(entries, "\n")]
   end
 
   # A call of this tool holds a whole earlier prompt, and the lifecycle
