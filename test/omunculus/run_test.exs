@@ -346,9 +346,7 @@ defmodule Omunculus.RunTest do
     assert assembled =~ "standalone notice"
     request_at = :binary.match(assembled, "## Request") |> elem(0)
     inbox_at = :binary.match(assembled, "## Inbox") |> elem(0)
-    tools_at = :binary.match(assembled, "## Tools") |> elem(0)
     assert request_at < inbox_at
-    assert inbox_at < tools_at
 
     Project.close(project)
   end

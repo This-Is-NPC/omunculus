@@ -1,18 +1,19 @@
 defmodule Omunculus.Tools.Assemble do
   @moduledoc """
   Builtin `assemble` tool: builds the assembled prompt of a run from
-  the hydrated views: the work's title and goal, its last comment, and
-  its last closed run (`runs.last.work`), or, without a work, the run
-  that opened the run's request (`runs.request`): the message that
-  opened that run and every event it recorded but the calls of this tool
-  and its start and end, that is the model's messages as recorded but
-  their `usage`, each tool call with its args, status and output, and each
-  store action it emitted. Then the
-  agents the `agents` view says a new work may name when the run has the
-  `work` card, and the cards, which follow `pinned` on the catalog view.
-  A run with a request gets the request's requester, its options with
-  their tool calls, and its comments. Inbox is included only when the
-  opening carried `inbox_id`.
+  the hydrated views. After the agent's text come the agents the
+  `agents` view says a new work may name when the run has the `work`
+  card, and the cards, which follow `pinned` on the catalog view. Then
+  the work's title and goal, its last comment, and its last closed run
+  (`runs.last.work`), or, without a work, the run that opened the run's
+  request (`runs.request`): the message that opened that run and every
+  event it recorded but the calls of this tool and its start and end,
+  that is the model's messages as recorded but their `usage`, each tool
+  call with its args, status and output, and each store action it
+  emitted. A run with a request gets the request's requester, its
+  options with their tool calls, and its comments. Inbox is included only
+  when the opening carried `inbox_id`. The message of the opening comes
+  last.
   """
 
   alias Omunculus.Tool.Manifest
@@ -22,16 +23,18 @@ defmodule Omunculus.Tools.Assemble do
   def run(%{name: name, args: args, view: view}) do
     text = Map.get(args, "text", "")
 
+    # What stays the same across an agent's runs comes first, so a server
+    # that caches the prefix of a prompt reuses it from one run to the next.
     sections =
       [String.trim(text)] ++
-        message_section(view["prompt"]) ++
+        agents_section(view["agents"] || [], view["catalog"] || []) ++
+        [tools_section(view["catalog"] || [])] ++
         work_section(view["work"]) ++
         comment_section(view["comments.work"]) ++
         last_run_section(view["runs.last.work"] || view["runs.request"], name) ++
         request_section(view["request"], view["comments.request"]) ++
         inbox_section(view, args) ++
-        agents_section(view["agents"] || [], view["catalog"] || []) ++
-        [tools_section(view["catalog"] || [])]
+        message_section(view["prompt"])
 
     Out.ok(Enum.join(sections, "\n\n"))
   end
@@ -135,7 +138,7 @@ defmodule Omunculus.Tools.Assemble do
         Enum.map(cards, &card/1)
       end
 
-    "## Tools\n#{Out.tools_preamble()}\n" <> Enum.join(lines, "\n")
+    Enum.join(["## Tools", Out.tools_preamble() | lines], "\n")
   end
 
   defp pinned_subset?(cards), do: Enum.any?(cards, &(not pinned?(&1)))

@@ -143,7 +143,8 @@ The default `assemble` tool joins, in this order:
 
 ```text
 agent text
-→ message of this opening, if any
+→ if the run has the work card: the agents a new work may name
+→ cards of the tools in tools.*
 → if there is a work: title + goal + last comment, then, under
   `## Last run`, the work's last closed run; without a work, the run that
   opened this run's request: the message that opened it and every event
@@ -153,9 +154,12 @@ agent text
 → if there is a request: header, its options with their tool calls, and
   the comments with that request_id
 → if the opening carried inbox_id: comments with that inbox_id
-→ if the run has the work card: the agents a new work may name
-→ cards of the tools in tools.*
+→ message of this opening, if any
 ```
+
+What stays the same across an agent's runs comes first, so a model
+server that caches the prefix of a prompt reuses it from one run to the
+next.
 
 Inbox does not appear because the work has unread notifications. Without
 `inbox_id` on the opening there is no `## Inbox`. Unread notifications of

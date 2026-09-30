@@ -120,7 +120,8 @@ defmodule Omunculus.Tools.AssembleTest do
 
     output = Assemble.run(%{@input | view: view})["output"]
 
-    assert output =~
+    assert String.ends_with?(
+             output <> "\n",
              """
              ## Goal
              the parser accepts trailing commas
@@ -139,6 +140,7 @@ defmodule Omunculus.Tools.AssembleTest do
              - comment {"body":"halfway"}
              - tool end via done {} ok
              """
+           )
 
     refute output =~ "an earlier prompt"
     refute output =~ "worker"
@@ -157,7 +159,7 @@ defmodule Omunculus.Tools.AssembleTest do
     assert output =~ "## Last run\n- model asked for write"
   end
 
-  test "inbox appears only when args carry inbox_id, after request" do
+  test "inbox appears only when args carry inbox_id, and the sections go from what stays to what changes" do
     view = %{
       "prompt" => %{body: "hi"},
       "work" => %{title: "Fix the parser", goal: "the parser accepts trailing commas"},
@@ -194,13 +196,9 @@ defmodule Omunculus.Tools.AssembleTest do
 
     refute with_inbox =~ "should not appear"
 
-    request_at = :binary.match(with_inbox, "## Request") |> elem(0)
-    inbox_at = :binary.match(with_inbox, "## Inbox") |> elem(0)
-    tools_at = :binary.match(with_inbox, "## Tools") |> elem(0)
-    last_at = :binary.match(with_inbox, "## Last comment") |> elem(0)
-    assert last_at < request_at
-    assert request_at < inbox_at
-    assert inbox_at < tools_at
+    headers = ["Tools", "Work", "Goal", "Last comment", "Request", "Inbox", "Message"]
+    at = Enum.map(headers, &(:binary.match(with_inbox, "## " <> &1) |> elem(0)))
+    assert at == Enum.sort(at)
   end
 
   test "the builtin catalog discovers assemble with triggers == [\"harness\"]" do
