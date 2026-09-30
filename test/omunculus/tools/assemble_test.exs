@@ -102,7 +102,7 @@ defmodule Omunculus.Tools.AssembleTest do
     events = [
       %{type: "start-run", body: ~s({"agent":"worker"})},
       call.(%{name: "assemble", args: %{}, ok: true, output: "an earlier prompt"}),
-      %{type: "model", body: ~s({"content":"reading"})},
+      %{type: "model", body: ~s({"content":"reading","usage":{"prompt_tokens":3}})},
       call.(%{name: "read", args: %{path: "parser.ex"}, ok: true, output: "defmodule Parser"}),
       call.(%{name: "write", args: %{path: "parser.ex"}, ok: false, output: "not writable"}),
       call.(%{name: "comment", args: %{body: "halfway"}, ok: true, output: ""}),

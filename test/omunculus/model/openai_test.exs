@@ -10,9 +10,13 @@ defmodule Omunculus.Model.OpenAITest do
       events = run_counter("openai-completions", base_url, unquote(stream))
 
       assert Enum.map(events, & &1.type) == ~w(start-run tool model tool model end-run)
-      [first, last] = Enum.filter(events, &(&1.type == "model"))
+      [first, last] = replies = Enum.filter(events, &(&1.type == "model"))
       assert Jason.decode!(first.body)["tool_calls"] != []
       assert Jason.decode!(last.body)["content"] == "benchmark complete"
+
+      assert Enum.all?(replies, fn reply ->
+               Jason.decode!(reply.body)["usage"]["prompt_tokens_details"]["cached_tokens"] == 2
+             end)
     end
   end
 

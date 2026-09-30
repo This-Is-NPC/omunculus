@@ -148,8 +148,8 @@ agent text
   `## Last run`, the work's last closed run; without a work, the run that
   opened this run's request: the message that opened it and every event
   it recorded but the calls of assemble and its start and end, that is
-  the model's messages as recorded, each tool call with its args, status
-  and output, and each store action it emitted
+  the model's messages as recorded but their `usage`, each tool call
+  with its args, status and output, and each store action it emitted
 → if there is a request: header, its options with their tool calls, and
   the comments with that request_id
 → if the opening carried inbox_id: comments with that inbox_id

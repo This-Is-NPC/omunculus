@@ -5,9 +5,9 @@ defmodule Omunculus.Tools.Assemble do
   its last closed run (`runs.last.work`), or, without a work, the run
   that opened the run's request (`runs.request`): the message that
   opened that run and every event it recorded but the calls of this tool
-  and its start and end, that is the model's messages as recorded, each
-  tool call with its args, status and output, and each store action it
-  emitted. Then the
+  and its start and end, that is the model's messages as recorded but
+  their `usage`, each tool call with its args, status and output, and each
+  store action it emitted. Then the
   agents the `agents` view says a new work may name when the run has the
   `work` card, and the cards, which follow `pinned` on the catalog view.
   A run with a request gets the request's requester, its options with
@@ -59,7 +59,18 @@ defmodule Omunculus.Tools.Assemble do
     end
   end
 
-  defp entry(%{type: type, body: body}, _name), do: ["- #{type} #{body}"]
+  defp entry(%{type: type, body: body}, _name), do: ["- #{type} #{shown(type, body)}"]
+
+  # The usage a server reports on a reply is for measuring the run, not
+  # something the next run acts on.
+  defp shown("model", body) do
+    case Jason.decode(body) do
+      {:ok, %{"usage" => _usage} = reply} -> Jason.encode!(Map.delete(reply, "usage"))
+      _other -> body
+    end
+  end
+
+  defp shown(_type, body), do: body
 
   defp call_entry(call) do
     via = if call["via"], do: " via #{call["via"]}", else: ""

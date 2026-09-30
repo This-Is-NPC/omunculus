@@ -84,7 +84,11 @@ and `params`. `module` takes optional `params`. The HTTP adapters take
 `url`, `model`, `timeout_ms`, and optional `temperature`, `headers`,
 `provider` and `stream`. With `stream = true` the adapter asks for
 server-sent events and passes the reply text to the run as it arrives;
-the recorded turn is the same as without it.
+the recorded turn is the same as without it. `openai-completions` and
+`openai-responses` record, with each turn in `EVENTS(model)`, the
+`usage` object the server returns (input, cached input and output
+tokens); streamed, `openai-completions` asks for it with
+`stream_options.include_usage`.
 
 ```toml
 [auth]

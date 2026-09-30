@@ -10,9 +10,13 @@ defmodule Omunculus.Model.OpenAIResponsesTest do
       events = run_counter("openai-responses", base_url, unquote(stream))
 
       assert Enum.map(events, & &1.type) == ~w(start-run tool model tool model end-run)
-      [first, last] = Enum.filter(events, &(&1.type == "model"))
+      [first, last] = replies = Enum.filter(events, &(&1.type == "model"))
       assert Jason.decode!(first.body)["output"] != []
       assert Jason.decode!(last.body)["output"] != []
+
+      assert Enum.all?(replies, fn reply ->
+               Jason.decode!(reply.body)["usage"]["input_tokens_details"]["cached_tokens"] == 2
+             end)
     end
   end
 end

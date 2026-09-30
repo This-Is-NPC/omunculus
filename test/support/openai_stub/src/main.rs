@@ -331,9 +331,35 @@ struct ChatRequest {
     #[serde(default)]
     stream: bool,
     #[serde(default)]
+    stream_options: StreamOptions,
+    #[serde(default)]
     messages: Vec<Message>,
     #[serde(default)]
     tools: Vec<Tool>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct StreamOptions {
+    #[serde(default)]
+    include_usage: bool,
+}
+
+fn chat_usage() -> Value {
+    json!({
+        "prompt_tokens": 3,
+        "completion_tokens": 1,
+        "total_tokens": 4,
+        "prompt_tokens_details": {"cached_tokens": 2}
+    })
+}
+
+fn responses_usage() -> Value {
+    json!({
+        "input_tokens": 3,
+        "input_tokens_details": {"cached_tokens": 2},
+        "output_tokens": 1,
+        "total_tokens": 4
+    })
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -468,6 +494,9 @@ async fn completions(State(state): State<Arc<AppState>>, body: Bytes) -> Respons
             chunks.push(json!({"choices": [{"index": 0, "delta": {"content": tail}}]}));
         }
         chunks.push(json!({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}));
+        if request.stream_options.include_usage {
+            chunks.push(json!({"choices": [], "usage": chat_usage()}));
+        }
         let mut events: Vec<(Option<&str>, String)> =
             chunks.iter().map(|chunk| (None, chunk.to_string())).collect();
         events.push((None, "[DONE]".to_owned()));
@@ -479,7 +508,7 @@ async fn completions(State(state): State<Arc<AppState>>, body: Bytes) -> Respons
             "id": "benchmark",
             "object": "chat.completion",
             "choices": [{"index": 0, "message": message, "finish_reason": "stop"}],
-            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+            "usage": chat_usage()
         })),
     )
         .into_response()
@@ -632,7 +661,7 @@ async fn responses(State(state): State<Arc<AppState>>, body: Bytes) -> Response 
         }
         events.push((
             Some("response.completed"),
-            json!({"type": "response.completed", "response": {"id": "benchmark", "object": "response", "output": output}}).to_string(),
+            json!({"type": "response.completed", "response": {"id": "benchmark", "object": "response", "output": output, "usage": responses_usage()}}).to_string(),
         ));
         return event_stream(events);
     }
@@ -641,7 +670,8 @@ async fn responses(State(state): State<Arc<AppState>>, body: Bytes) -> Response 
         Json(json!({
             "id": "benchmark",
             "object": "response",
-            "output": output
+            "output": output,
+            "usage": responses_usage()
         })),
     )
         .into_response()

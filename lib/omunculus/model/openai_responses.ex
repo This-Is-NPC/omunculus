@@ -6,11 +6,12 @@ defmodule Omunculus.Model.OpenAIResponses do
   `(assembled, tools, call, record, delta, execution)` fun. Posts the assembled
   as `input` to `<url>/responses` with tools as `function` items, runs
   each `function_call` through `call.(name, args)`, appends
-  `function_call_output`, and loops until a reply has none.
+  `function_call_output`, and loops until a reply has none. Each reply is
+  recorded as its `output` and, when the server sends one, its `usage`.
   `__omunculus_execute` is the same sandbox bridge as `Model.OpenAI`.
   With `stream = true` the reply is read as server-sent events: each
   `response.output_text.delta` goes to `delta`, and `response.completed`
-  carries the output. The `url` is always the spec's; nothing in this
+  carries the response. The `url` is always the spec's; nothing in this
   module names a host.
   """
 
@@ -73,8 +74,8 @@ defmodule Omunculus.Model.OpenAIResponses do
   end
 
   defp loop(client, tools, input, call, record, catalog, execution) do
-    with {:ok, output} <- post(client, request_body(client, tools, input)),
-         :ok <- record.(%{"output" => output}) do
+    with {:ok, %{"output" => output} = reply} <- post(client, request_body(client, tools, input)),
+         :ok <- record.(reply) do
       case function_calls(output) do
         [] ->
           {:ok, output_text(output)}
@@ -106,7 +107,7 @@ defmodule Omunculus.Model.OpenAIResponses do
 
   defp post(%{stream: true} = client, body) do
     case EventStream.post(client, body, nil, &event(&1, &2, client)) do
-      {:ok, output} when is_list(output) -> {:ok, output}
+      {:ok, %{"output" => _output} = reply} -> {:ok, reply}
       {:ok, _incomplete} -> {:error, {:openai, {:invalid_response, :incomplete}}}
       {:error, reason} -> {:error, {:openai, reason}}
     end
@@ -129,8 +130,11 @@ defmodule Omunculus.Model.OpenAIResponses do
     end
   end
 
-  defp extract_output(%{"output" => output}) when is_list(output), do: {:ok, output}
+  defp extract_output(%{"output" => output} = body) when is_list(output), do: {:ok, reply(body)}
   defp extract_output(body), do: {:error, {:openai, {:invalid_response, body}}}
+
+  defp reply(response),
+    do: maybe_put(%{"output" => response["output"]}, "usage", response["usage"])
 
   defp event(%{"type" => "response.output_text.delta", "delta" => text}, output, client)
        when is_binary(text) do
@@ -138,8 +142,13 @@ defmodule Omunculus.Model.OpenAIResponses do
     output
   end
 
-  defp event(%{"type" => "response.completed", "response" => %{"output" => output}}, _, _client),
-    do: output
+  defp event(
+         %{"type" => "response.completed", "response" => %{"output" => output} = response},
+         _,
+         _
+       )
+       when is_list(output),
+       do: reply(response)
 
   defp event(_other, output, _client), do: output
 

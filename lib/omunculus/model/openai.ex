@@ -11,10 +11,12 @@ defmodule Omunculus.Model.OpenAI do
   `<url>/chat/completions`, and for every `tool_calls` entry in the
   reply runs `call.(name, args)` and feeds the output back as a `tool`
   message, looping until a reply carries no tool call. Every reply is
-  recorded before dispatch. `__omunculus_execute` runs JavaScript in the
-  sandbox and uses the same authorized call callback as native tool
-  calls. With `stream = true` the reply is read as server-sent events,
-  its text passed to `delta` as it arrives.
+  recorded before dispatch, with the reply's `usage` when the server
+  sends one; the next request carries the reply without it.
+  `__omunculus_execute` runs JavaScript in the sandbox and uses the same
+  authorized call callback as native tool calls. With `stream = true` the
+  reply is read as server-sent events, its text passed to `delta` as it
+  arrives, and `stream_options.include_usage` asks for the `usage` chunk.
   """
 
   alias Omunculus.Model.EventStream
@@ -103,7 +105,7 @@ defmodule Omunculus.Model.OpenAI do
 
   defp loop(client, tools, messages, call, record, catalog, execution) do
     with {:ok, message} <- post(client, request_body(client, tools, messages)),
-         :ok <- record.(strip_message(message)) do
+         :ok <- record.(maybe_put(strip_message(message), "usage", message["usage"])) do
       case message do
         %{"tool_calls" => [_ | _] = tool_calls} ->
           with {:ok, tool_messages} <- run_tool_calls(tool_calls, call, catalog, execution) do
@@ -128,13 +130,16 @@ defmodule Omunculus.Model.OpenAI do
     %{model: client.model, messages: messages, tools: tools}
     |> maybe_put(:temperature, client.temperature)
     |> maybe_put(:stream, client.stream || nil)
+    |> maybe_put(:stream_options, if(client.stream, do: %{include_usage: true}))
   end
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp post(%{stream: true} = client, body) do
-    case EventStream.post(client, body, %{content: nil, tool_calls: %{}}, &chunk(&1, &2, client)) do
+    reply = %{content: nil, tool_calls: %{}, usage: nil}
+
+    case EventStream.post(client, body, reply, &chunk(&1, &2, client)) do
       {:ok, reply} -> {:ok, streamed_message(reply)}
       {:error, reason} -> {:error, {:openai, reason}}
     end
@@ -157,16 +162,22 @@ defmodule Omunculus.Model.OpenAI do
     end
   end
 
-  defp extract_message(%{"choices" => [%{"message" => message} | _]}), do: {:ok, message}
+  defp extract_message(%{"choices" => [%{"message" => message} | _]} = body),
+    do: {:ok, maybe_put(message, "usage", body["usage"])}
+
   defp extract_message(body), do: {:error, {:openai, {:invalid_response, body}}}
 
-  defp chunk(%{"choices" => [%{"delta" => delta} | _]}, reply, client) do
+  defp chunk(%{"choices" => [%{"delta" => delta} | _]} = data, reply, client) do
     reply
+    |> chunk_usage(data["usage"])
     |> chunk_content(delta["content"], client)
     |> chunk_tool_calls(delta["tool_calls"])
   end
 
-  defp chunk(_other, reply, _client), do: reply
+  defp chunk(data, reply, _client), do: chunk_usage(reply, data["usage"])
+
+  defp chunk_usage(reply, nil), do: reply
+  defp chunk_usage(reply, usage), do: %{reply | usage: usage}
 
   defp chunk_content(reply, text, client) when is_binary(text) and text != "" do
     :ok = client.delta.(text)
@@ -198,8 +209,8 @@ defmodule Omunculus.Model.OpenAI do
 
   defp chunk_tool_calls(reply, _calls), do: reply
 
-  defp streamed_message(%{content: content, tool_calls: calls}) do
-    message = %{"role" => "assistant", "content" => content}
+  defp streamed_message(%{content: content, tool_calls: calls, usage: usage}) do
+    message = maybe_put(%{"role" => "assistant", "content" => content}, "usage", usage)
 
     case calls |> Enum.sort_by(&elem(&1, 0)) |> Enum.map(&elem(&1, 1)) do
       [] -> message
