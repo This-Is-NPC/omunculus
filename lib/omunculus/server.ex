@@ -47,8 +47,20 @@ defmodule Omunculus.Server do
       {:ok, supervisor} ->
         Process.unlink(supervisor)
         monitor = Process.monitor(supervisor)
+        main = self()
+
+        # The VM's own SIGTERM stop skips the supervisor, which is in no application.
+        {:ok, _id} =
+          System.trap_signal(:sigterm, fn ->
+            send(main, :stop)
+            :ok
+          end)
 
         receive do
+          :stop ->
+            Supervisor.stop(supervisor)
+            System.halt(0)
+
           {:DOWN, ^monitor, :process, ^supervisor, reason} ->
             IO.puts(:stderr, "server stopped: #{inspect(reason)}")
             System.halt(1)
