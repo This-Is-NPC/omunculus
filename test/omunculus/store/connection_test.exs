@@ -28,6 +28,26 @@ defmodule Omunculus.Store.ConnectionTest do
     assert {:ok, []} = Query.all(conn, "SELECT * FROM events")
   end
 
+  test "subscribers hear of appended events once their transaction returns", %{conn: conn} do
+    :ok = Store.subscribe(conn)
+    owner = conn.owner
+    test = self()
+
+    {:ok, _event} =
+      Query.transaction(conn, fn ->
+        {:ok, event} = Events.append(conn, %{type: "comment", body: "{}"})
+        send(test, :written)
+        {:ok, event}
+      end)
+
+    assert_receive :written
+    assert_receive {:store, ^owner, :events}
+    refute_received {:store, ^owner, :events}
+
+    {:ok, _event} = Events.append(conn, %{type: "comment", body: "{}"})
+    assert_receive {:store, ^owner, :events}
+  end
+
   test "the owner stops when the process that opened it exits" do
     parent = self()
 

@@ -71,7 +71,7 @@ Send `Authorization: Bearer <JWT>` on every request. Use `/v1/projects/{project}
 | `GET /conversations/{id}/snapshot` | Read works, runs, prompts, requests and inbox at one event cursor. |
 | `GET /conversations/{id}/{works,runs,prompts,requests,inbox}` | Read one resource list. |
 | `GET /conversations/{id}/events?after={cursor}` | Read up to 500 later events in sequence order. |
-| `GET /conversations/{id}/stream?after={cursor}` | Stream later events as SSE; each event has its cursor as SSE `id`. |
+| `GET /conversations/{id}/stream?after={cursor}` | Stream later events as SSE as soon as they are committed; each event has its cursor as SSE `id`. An idle stream sends a comment line every 15 seconds. |
 | `POST /conversations/{id}/messages` | Send `{"message":"text"}` with optional `work_id`. |
 | `POST /conversations/{id}/requests/{request_id}/reply` | Send `{"option":"name","body":"text"}`. |
 | `POST /conversations/{id}/comments` | Send `{"body":"text"}` and exactly one of `work_id`, `request_id` or `inbox_id`. |

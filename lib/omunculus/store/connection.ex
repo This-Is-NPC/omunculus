@@ -8,6 +8,11 @@ defmodule Omunculus.Store.Connection do
   body, runs directly. An exception raised in the owner is raised again
   in the caller. The owner closes the handle and stops when `close/1` is
   called or when the process that opened it exits.
+
+  Processes that `subscribe/1` receive `{:store, owner, message}` for
+  each `publish/2`. `appended/1` publishes `:events` once the rows it
+  announces are committed: at once outside the owner, and inside it after
+  the call that wrote them, and so the transaction around them, returns.
   """
 
   use GenServer
@@ -18,6 +23,9 @@ defmodule Omunculus.Store.Connection do
   defstruct @enforce_keys
 
   @type t :: %__MODULE__{owner: pid, db: Sqlite3.db()}
+
+  @subscribers Omunculus.Store.Subscribers
+  @appended :omunculus_store_appended
 
   @spec open(String.t()) :: {:ok, t} | {:error, term}
   def open(path) do
@@ -43,6 +51,27 @@ defmodule Omunculus.Store.Connection do
     end
   end
 
+  @spec subscribe(t) :: :ok
+  def subscribe(%__MODULE__{owner: owner}) do
+    {:ok, _owner} = Registry.register(@subscribers, owner, nil)
+    :ok
+  end
+
+  @spec publish(t, term) :: :ok
+  def publish(%__MODULE__{owner: owner}, message) do
+    Registry.dispatch(@subscribers, owner, fn entries ->
+      Enum.each(entries, fn {pid, _value} -> send(pid, {:store, owner, message}) end)
+    end)
+  end
+
+  @spec appended(t) :: :ok
+  def appended(%__MODULE__{owner: owner}) when owner == self() do
+    Process.put(@appended, true)
+    :ok
+  end
+
+  def appended(conn), do: publish(conn, :events)
+
   @impl true
   def init({path, opener}) do
     case Sqlite3.open(path) do
@@ -66,6 +95,7 @@ defmodule Omunculus.Store.Connection do
         kind, reason -> {:caught, kind, reason, __STACKTRACE__}
       end
 
+    if Process.delete(@appended), do: publish(%__MODULE__{owner: self(), db: db}, :events)
     {:reply, reply, db}
   end
 

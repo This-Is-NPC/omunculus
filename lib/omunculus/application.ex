@@ -8,6 +8,7 @@ defmodule Omunculus.Application do
     children = [
       {Registry, keys: :unique, name: Omunculus.Server.Registry},
       {Registry, keys: :unique, name: Omunculus.Execution.Registry},
+      {Registry, keys: :duplicate, name: Omunculus.Store.Subscribers},
       {DynamicSupervisor, strategy: :one_for_one, name: Omunculus.Execution.Limiter.Supervisor},
       {DynamicSupervisor, strategy: :one_for_one, name: Omunculus.Execution.ProcessSupervisor}
     ]

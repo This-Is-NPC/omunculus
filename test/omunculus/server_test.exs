@@ -243,12 +243,53 @@ defmodule Omunculus.ServerTest do
     assert removed.status == 200
     assert Req.get!(base <> "/conversations/#{id}/events", headers: auth(outsider)).status == 404
 
-    stream = open_stream(port, "/v1/projects/alpha/conversations/#{id}/stream", admin)
+    latest =
+      Req.get!(base <> "/conversations/#{id}/snapshot", headers: auth(admin)).body["cursor"]
+
+    stream =
+      open_stream(port, "/v1/projects/alpha/conversations/#{id}/stream?after=#{latest}", admin)
 
     limited = Req.get!(base <> "/conversations/#{id}/stream", headers: auth(admin), retry: false)
     assert limited.status == 429
 
+    streamed =
+      Req.post!(message_url,
+        headers: auth(admin) ++ [{"idempotency-key", "message-3"}],
+        json: %{message: "streamed"}
+      )
+
+    assert streamed.status == 202
+
+    {:ok, latest_sequence} = Contract.decode_cursor(latest)
+
+    assert %{"type" => "prompt"} =
+             receive_event(stream, fn event ->
+               event["type"] == "prompt" and
+                 Contract.decode_cursor(event["cursor"]) > {:ok, latest_sequence}
+             end)
+
     :gen_tcp.close(stream)
+  end
+
+  defp receive_event(socket, match?, received \\ "") do
+    found =
+      received
+      |> String.split("\n")
+      |> Enum.flat_map(fn line ->
+        with "data: " <> json <- line, {:ok, event} <- Jason.decode(json) do
+          [event]
+        else
+          _partial_or_other -> []
+        end
+      end)
+      |> Enum.find(match?)
+
+    if found do
+      found
+    else
+      {:ok, data} = :gen_tcp.recv(socket, 0, 2_000)
+      receive_event(socket, match?, received <> data)
+    end
   end
 
   defp token(key, subject) do

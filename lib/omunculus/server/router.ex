@@ -7,6 +7,8 @@ defmodule Omunculus.Server.Router do
   alias Omunculus.Server.{Auth, Contract, OpenAPI, Project, StreamLimiter}
   require OpenAPI
 
+  @keepalive_ms 15_000
+
   Module.register_attribute(__MODULE__, :openapi_routes, accumulate: true)
   @before_compile OpenAPI
 
@@ -196,6 +198,8 @@ defmodule Omunculus.Server.Router do
          {:ok, _events} <- Project.events(project_id, principal, conversation_id, cursor),
          :ok <- StreamLimiter.acquire(runtime[:stream_key]) do
       try do
+        :ok = Project.subscribe(project_id)
+
         conn
         |> put_resp_content_type("text/event-stream")
         |> put_resp_header("cache-control", "no-store")
@@ -342,14 +346,7 @@ defmodule Omunculus.Server.Router do
   defp stream(conn, project_id, principal, conversation_id, cursor) do
     case Project.events(project_id, principal, conversation_id, cursor) do
       {:ok, []} ->
-        case chunk(conn, ": keepalive\n\n") do
-          {:ok, conn} ->
-            Process.sleep(1_000)
-            stream(conn, project_id, principal, conversation_id, cursor)
-
-          _closed ->
-            conn
-        end
+        await(conn, project_id, principal, conversation_id, cursor)
 
       {:ok, events} ->
         case Enum.reduce_while(events, {:ok, conn, cursor}, fn event, {:ok, conn, _cursor} ->
@@ -376,6 +373,29 @@ defmodule Omunculus.Server.Router do
 
       _revoked ->
         conn
+    end
+  end
+
+  # Reading again after a keepalive also notices a revoked membership.
+  defp await(conn, project_id, principal, conversation_id, cursor) do
+    receive do
+      {:store, _owner, :events} ->
+        drain_announcements()
+        stream(conn, project_id, principal, conversation_id, cursor)
+    after
+      @keepalive_ms ->
+        case chunk(conn, ": keepalive\n\n") do
+          {:ok, conn} -> stream(conn, project_id, principal, conversation_id, cursor)
+          _closed -> conn
+        end
+    end
+  end
+
+  defp drain_announcements do
+    receive do
+      {:store, _owner, :events} -> drain_announcements()
+    after
+      0 -> :ok
     end
   end
 

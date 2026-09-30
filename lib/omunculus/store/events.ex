@@ -48,7 +48,8 @@ defmodule Omunculus.Store.Events do
     with {:ok, %{max: max}} <-
            Query.one(conn, "SELECT COALESCE(MAX(sequence), 0) AS max FROM events"),
          :ok <-
-           Query.insert(conn, :events, Map.merge(fields, %{id: id, sequence: max + 1, at: now()})) do
+           Query.insert(conn, :events, Map.merge(fields, %{id: id, sequence: max + 1, at: now()})),
+         :ok <- Connection.appended(conn) do
       View.view(conn, "event", id)
     end
   end
