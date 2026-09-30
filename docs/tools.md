@@ -154,7 +154,7 @@ Views the store will hydrate:
 | `events.run` | events of that run | `events` |
 | `work` | that work row | |
 | `runs.last` | the most recent run | CLI `prompt` |
-| `runs.last.work` | the work's last closed run, its final model text (`text`) and whether it commented on the work (`commented`) | |
+| `runs.last.work` | the work's last closed run with every event it recorded (`events`) | |
 | `request` | the request named by the call's `request_id` argument, or the run's request | |
 | `grant_scopes` | the scopes a permanent `grant` may name (`agent`, `depth`, `stage`, `workspace`); `request_access` builds its options from it | |
 | `prompt` | the message prompt of the run's opening; from the CLI, the assembled prompt of `--run`, or of the last run | |

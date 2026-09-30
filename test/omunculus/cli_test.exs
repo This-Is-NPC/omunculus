@@ -1278,7 +1278,7 @@ defmodule Omunculus.CLITest do
             call.("done", %{"report" => "built"})
             {:ok, "unused"}
 
-          assembled =~ "Sub task2" ->
+          assembled =~ "## Work\nSub task2" ->
             call.("done", %{"report" => "reviewed"})
             {:ok, "unused"}
 

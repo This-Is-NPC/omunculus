@@ -96,24 +96,51 @@ defmodule Omunculus.Tools.AssembleTest do
     refute output =~ "first note"
   end
 
-  test "a last run that commented nothing replaces the last comment with its final text" do
+  test "the last run lists every event but this tool's calls and the run's start and end" do
+    call = fn body -> %{type: "tool", body: Jason.encode!(body)} end
+
+    events = [
+      %{type: "start-run", body: ~s({"agent":"worker"})},
+      call.(%{name: "assemble", args: %{}, ok: true, output: "an earlier prompt"}),
+      %{type: "model", body: ~s({"content":"reading"})},
+      call.(%{name: "read", args: %{path: "parser.ex"}, ok: true, output: "defmodule Parser"}),
+      call.(%{name: "write", args: %{path: "parser.ex"}, ok: false, output: "not writable"}),
+      call.(%{name: "comment", args: %{body: "halfway"}, ok: true, output: ""}),
+      %{type: "comment", body: ~s({"body":"halfway"})},
+      call.(%{name: "end", args: %{}, ok: true, output: "", via: "done"}),
+      %{type: "end-run", body: "{}"}
+    ]
+
     view = %{
       "work" => %{title: "Fix the parser", goal: "the parser accepts trailing commas"},
-      "comments.work" => [%{body: "last note"}],
+      "comments.work" => [%{body: "first note"}, %{body: "last note"}],
+      "runs.last.work" => %{events: events},
       "catalog" => []
     }
 
-    silent = Map.put(view, "runs.last.work", %{commented: false, text: "gave up"})
+    output = Assemble.run(%{@input | view: view})["output"]
 
-    commented = Map.put(view, "runs.last.work", %{commented: true, text: "noted"})
+    assert output =~
+             """
+             ## Goal
+             the parser accepts trailing commas
 
-    output = Assemble.run(%{@input | view: silent})["output"]
-    assert output =~ "## Goal\nthe parser accepts trailing commas\n\n## Last run\ngave up"
-    refute output =~ "## Last comment"
+             ## Last comment
+             last note
 
-    output = Assemble.run(%{@input | view: commented})["output"]
-    assert output =~ "## Last comment\nlast note"
-    refute output =~ "## Last run"
+             ## Last run
+             - model {"content":"reading"}
+             - tool read {"path":"parser.ex"} ok
+             defmodule Parser
+             - tool write {"path":"parser.ex"} failed
+             not writable
+             - tool comment {"body":"halfway"} ok
+             - comment {"body":"halfway"}
+             - tool end via done {} ok
+             """
+
+    refute output =~ "an earlier prompt"
+    refute output =~ "worker"
   end
 
   test "inbox appears only when args carry inbox_id, after request" do

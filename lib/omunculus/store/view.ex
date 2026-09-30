@@ -5,9 +5,8 @@ defmodule Omunculus.Store.View do
   unread `inbox` list with each row's earliest comment (spec §3.6), the
   unread notifications of one work (`"inbox.work"`), the comments of
   one inbox entry, oldest first (`"comments.inbox"`), the most recently
-  started run (`"runs.last"`), the last closed run of a work with its
-  final model text and whether it commented on the work
-  (`"runs.last.work"`), how many of a work's latest closed runs in a row
+  started run (`"runs.last"`), the last closed run of a work with every
+  event it recorded (`"runs.last.work"`), how many of a work's latest closed runs in a row
   lack `end`, the depth of a work by walking `parent_id`, plus replay of
   `events` for a project, run, work, request, or inbox scope (spec §4).
   Never executes anything against the store.
@@ -64,22 +63,8 @@ defmodule Omunculus.Store.View do
   end
 
   def view(conn, "runs.last.work", work_id) do
-    with {:ok, run} <-
-           Query.one(
-             conn,
-             """
-             SELECT runs.*,
-               (SELECT body FROM events
-                 WHERE events.run_id = runs.id AND events.type = 'model'
-                 ORDER BY sequence DESC LIMIT 1) AS text,
-               EXISTS (SELECT 1 FROM comments
-                 WHERE comments.run_id = runs.id AND comments.work_id = runs.work_id) AS commented
-             #{@closed_runs}
-             LIMIT 1
-             """,
-             [work_id]
-           ) do
-      {:ok, run && %{run | commented: run.commented == 1}}
+    with {:ok, run} <- Query.one(conn, "SELECT runs.* #{@closed_runs} LIMIT 1", [work_id]) do
+      with_events(conn, run)
     end
   end
 
@@ -172,6 +157,12 @@ defmodule Omunculus.Store.View do
   defp replay_filter({scope, id}) do
     column = Map.fetch!(@replay_columns, scope)
     {" WHERE #{column} = ?", [id]}
+  end
+
+  defp with_events(_conn, nil), do: {:ok, nil}
+
+  defp with_events(conn, run) do
+    with {:ok, events} <- replay(conn, {:run, run.id}), do: {:ok, Map.put(run, :events, events)}
   end
 
   defp counter_value(events) do

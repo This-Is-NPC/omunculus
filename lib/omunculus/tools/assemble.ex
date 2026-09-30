@@ -1,9 +1,11 @@
 defmodule Omunculus.Tools.Assemble do
   @moduledoc """
   Builtin `assemble` tool: builds the assembled prompt of a run from
-  the hydrated views: the work's title and goal, its last comment, or the
-  final model text of its last run when that run commented nothing on it
-  (`runs.last.work`), the
+  the hydrated views: the work's title and goal, its last comment, and
+  every event of its last closed run (`runs.last.work`) but the calls of
+  this tool and the run's start and end: the model's messages as
+  recorded, each tool call with its args, status and output, and each
+  store action it emitted. Then the
   agents the `agents` view says a new work may name when the run has the
   `work` card, and the cards, which follow `pinned` on the catalog view.
   A run with a request gets the request's requester, its options with
@@ -15,14 +17,15 @@ defmodule Omunculus.Tools.Assemble do
   alias Omunculus.Tools.Out
 
   @spec run(map) :: map
-  def run(%{args: args, view: view}) do
+  def run(%{name: name, args: args, view: view}) do
     text = Map.get(args, "text", "")
 
     sections =
       [String.trim(text)] ++
         message_section(view["prompt"]) ++
         work_section(view["work"]) ++
-        last_section(view["runs.last.work"], view["comments.work"]) ++
+        comment_section(view["comments.work"]) ++
+        last_run_section(view["runs.last.work"], name) ++
         request_section(view["request"], view["comments.request"]) ++
         inbox_section(view, args) ++
         agents_section(view["agents"] || [], view["catalog"] || []) ++
@@ -31,12 +34,40 @@ defmodule Omunculus.Tools.Assemble do
     Out.ok(Enum.join(sections, "\n\n"))
   end
 
-  defp last_section(%{commented: false, text: text}, _comments) when is_binary(text),
-    do: ["## Last run\n#{text}"]
+  defp comment_section(nil), do: []
+  defp comment_section([]), do: []
+  defp comment_section(comments), do: ["## Last comment\n#{List.last(comments).body}"]
 
-  defp last_section(_run, nil), do: []
-  defp last_section(_run, []), do: []
-  defp last_section(_run, comments), do: ["## Last comment\n#{List.last(comments).body}"]
+  defp last_run_section(nil, _name), do: []
+
+  defp last_run_section(run, name) do
+    ["## Last run\n" <> Enum.join(Enum.flat_map(run.events, &entry(&1, name)), "\n")]
+  end
+
+  # A call of this tool holds a whole earlier prompt, and the lifecycle
+  # events say nothing of what the run did.
+  defp entry(%{type: type}, _name) when type in ["start-run", "end-run"], do: []
+
+  defp entry(%{type: "tool", body: body}, name) do
+    case Jason.decode!(body) do
+      %{"name" => ^name} -> []
+      call -> [call_entry(call)]
+    end
+  end
+
+  defp entry(%{type: type, body: body}, _name), do: ["- #{type} #{body}"]
+
+  defp call_entry(call) do
+    via = if call["via"], do: " via #{call["via"]}", else: ""
+    status = if call["ok"], do: "ok", else: "failed"
+    head = "- tool #{call["name"]}#{via} #{Jason.encode!(call["args"])} #{status}"
+
+    case call["output"] do
+      output when output in [nil, ""] -> head
+      output when is_binary(output) -> head <> "\n" <> output
+      output -> head <> "\n" <> Jason.encode!(output)
+    end
+  end
 
   defp message_section(nil), do: []
   defp message_section(message), do: ["## Message\n#{message.body}"]

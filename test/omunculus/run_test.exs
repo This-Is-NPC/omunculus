@@ -1147,7 +1147,9 @@ defmodule Omunculus.RunTest do
       for %{type: "break", body: body} <- events, do: Jason.decode!(body)["body"]
     end
 
-    test "opens a retry run on the same work whose prompt has the last run's text", %{dir: dir} do
+    test "opens a retry run on the same work whose prompt has the last run's events", %{
+      dir: dir
+    } do
       retry_config(dir, "max_retries = 1")
       project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works)
@@ -1160,7 +1162,7 @@ defmodule Omunculus.RunTest do
       assert retry.via == "retry"
       assert_received {:assembled, _first}
       assert_received {:assembled, assembled}
-      assert assembled =~ "## Last run\nfirst try"
+      assert assembled =~ "## Last run\n- model first try"
       refute assembled =~ "## Last comment"
       assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", work_id)
       assert breaks_of(project, work_id) == []
@@ -1168,7 +1170,7 @@ defmodule Omunculus.RunTest do
       Project.close(project)
     end
 
-    test "the retry prompt keeps the last comment when the stopped run commented", %{dir: dir} do
+    test "the retry prompt has the last comment and the stopped run's calls", %{dir: dir} do
       retry_config(dir, "max_retries = 1")
       project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works)
@@ -1185,7 +1187,8 @@ defmodule Omunculus.RunTest do
       assert_received {:assembled, _first}
       assert_received {:assembled, assembled}
       assert assembled =~ "## Last comment\nhalfway"
-      refute assembled =~ "## Last run"
+      assert assembled =~ ~s(- tool comment {"body":"halfway"} ok)
+      assert assembled =~ "- model stopped"
 
       Project.close(project)
     end

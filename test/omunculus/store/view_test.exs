@@ -275,24 +275,17 @@ defmodule Omunculus.Store.ViewTest do
   end
 
   describe "runs of a work" do
-    test "runs.last.work is the last closed run with its final text and no comment", %{
-      conn: conn
-    } do
+    test "runs.last.work is the last closed run with every event it recorded", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
       closed_run(conn, work_id, [:comment, :end])
       run = closed_run(conn, work_id, [{:model, "first"}, {:model, "final"}])
 
       assert {:ok, last} = View.view(conn, "runs.last.work", work_id)
       assert last.id == run.id
-      assert last.text == "final"
-      assert last.commented == false
-    end
+      assert {:ok, events} = View.replay(conn, {:run, run.id})
+      assert last.events == events
 
-    test "runs.last.work says when that run commented on the work", %{conn: conn} do
-      work_id = Fixtures.insert(conn, :works)
-      closed_run(conn, work_id, [{:model, "done"}, :comment])
-
-      assert {:ok, %{commented: true, text: "done"}} = View.view(conn, "runs.last.work", work_id)
+      assert ["start-run", "model", "model", "end-run"] = Enum.map(last.events, & &1.type)
     end
 
     test "runs.last.work is nil for a work without closed runs", %{conn: conn} do

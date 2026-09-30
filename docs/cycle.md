@@ -144,9 +144,11 @@ The default `assemble` tool joins, in this order:
 ```text
 agent text
 → message of this opening, if any
-→ if there is a work: title + goal + last comment, or, when the work's
-  last closed run commented nothing on it, that run's final model text
-  under `## Last run`
+→ if there is a work: title + goal + last comment, then, under
+  `## Last run`, every event of the work's last closed run but the calls
+  of assemble and the run's start and end: the model's messages as
+  recorded, each tool call with its args, status and output, and each
+  store action it emitted
 → if there is a request: header, its options with their tool calls, and
   the comments with that request_id
 → if the opening carried inbox_id: comments with that inbox_id
