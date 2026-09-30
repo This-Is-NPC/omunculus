@@ -1,12 +1,34 @@
 #!/bin/sh
 root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 cwd="$PWD"
-cd "$root" || exit 1
+
+absolute() {
+  case "$1" in
+    /*) printf '%s' "$1" ;;
+    *) printf '%s/%s' "$cwd" "$1" ;;
+  esac
+}
+
+# mix runs in the package root, so a relative --config resolves here first.
 case "$1" in
-  --config|serve)
-    exec mise exec -- mix omunculus "$@"
+  serve)
+    if [ "$2" = --config ] && [ -n "$3" ]; then
+      config="$(absolute "$3")"
+      shift 3
+      set -- serve --config "$config" "$@"
+    fi
+    ;;
+  --config)
+    if [ -n "$2" ]; then
+      config="$(absolute "$2")"
+      shift 2
+      set -- --config "$config" "$@"
+    fi
     ;;
   *)
-    exec mise exec -- mix omunculus --config "$cwd/omunculus.toml" "$@"
+    set -- --config "$cwd/omunculus.toml" "$@"
     ;;
 esac
+
+cd "$root" || exit 1
+exec mise exec -- mix omunculus "$@"
