@@ -41,6 +41,13 @@ A command that opens runs returns once every run it opened, directly or
 through other runs, has finished. The error of any of them makes it exit
 1; several errors are printed one per line.
 
+While a [server](server.md) owns the project, a command goes to it over
+the project's local socket, runs there as the same local user, and
+returns the same output once the runs it opened have finished. The
+project's `[access]` then applies to the local user, who needs a
+membership. A project held by another direct command is refused as in
+use.
+
 `omunculus --config <project.toml> access bootstrap --issuer <issuer> --subject <subject>` seeds the first project administrator. It requires ownership of the project config file and an empty project membership table. `omunculus serve --config <server.toml>` starts the optional HTTP server; see [the server guide](server.md).
 
 ## `omunculus preset`

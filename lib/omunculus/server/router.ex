@@ -4,6 +4,7 @@ defmodule Omunculus.Server.Router do
   use Plug.Router
   require Logger
 
+  alias Omunculus.{CLI, Operations}
   alias Omunculus.Server.{Auth, Contract, OpenAPI, Project, StreamLimiter}
   require OpenAPI
 
@@ -29,6 +30,23 @@ defmodule Omunculus.Server.Router do
       reply(conn, 200, principal)
     else
       _ -> reply(conn, 401, %{error: "unauthorized"})
+    end
+  end
+
+  OpenAPI.route :post, "/v1/cli", :cli do
+    with {:ok, project_id} <- Keyword.fetch(conn.assigns.server_opts, :local),
+         %{"argv" => [_ | _] = argv} <- conn.body_params,
+         true <- Enum.all?(argv, &is_binary/1) do
+      case Project.cli(project_id, argv) do
+        {:ok, output} ->
+          reply(conn, 200, %{output: output})
+
+        {:error, reason} ->
+          reply(conn, 422, %{error: "command_failed", message: CLI.format_error(reason)})
+      end
+    else
+      :error -> reply(conn, 404, %{error: "not_found"})
+      _invalid -> reply(conn, 400, %{error: "invalid"})
     end
   end
 
@@ -262,8 +280,8 @@ defmodule Omunculus.Server.Router do
   defp authenticate(conn, opts) do
     opts = Keyword.merge(opts, conn.assigns.server_opts)
 
-    case {Keyword.fetch(opts, :principal), get_req_header(conn, "authorization")} do
-      {{:ok, principal}, _header} -> {:ok, principal}
+    case {Keyword.fetch(opts, :local), get_req_header(conn, "authorization")} do
+      {{:ok, _project_id}, _header} -> {:ok, Operations.local_principal()}
       {:error, ["Bearer " <> token]} -> Auth.verify(Keyword.fetch!(opts, :auth), token)
       _ -> {:error, :unauthorized}
     end

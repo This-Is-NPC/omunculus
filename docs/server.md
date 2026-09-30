@@ -57,6 +57,8 @@ Each project is served on a Unix socket next to its SQLite file, `<store path>.o
 curl --unix-socket .omunculus/store.sqlite3.omunculus.sock http://localhost/v1/projects/demo/conversations
 ```
 
+The direct CLI uses the socket too: while the server owns the project, `bin/omunculus <command>` posts its command line to `POST /v1/cli`, which only the socket serves, and waits for the runs that command opened.
+
 The socket path must fit in 107 bytes; a longer one keeps the server from starting. The server removes the socket when it stops, and a socket left by a server that crashed is replaced by the next one.
 
 ## TCP listener

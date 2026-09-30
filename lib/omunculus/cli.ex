@@ -9,9 +9,12 @@ defmodule Omunculus.CLI do
   which opens runs whose model comes from `agents.<x>.model`, and
   returns once every run the call opened, transitively, has finished;
   the error of any of them fails the command, several one per line.
+  When a server owns the project, the command line goes to it over the
+  project's local socket and is answered the same way.
   """
 
   alias Omunculus.{Config, Harness, Operations, Project}
+  alias Omunculus.Server.Socket
   alias Omunculus.Store.Access
   alias Omunculus.Tool.{Catalog, Manifest}
 
@@ -22,14 +25,43 @@ defmodule Omunculus.CLI do
         [] ->
           {:error, :no_tool}
 
-        ["access", "bootstrap", "--issuer", issuer, "--subject", subject] ->
-          bootstrap(config_path, %{issuer: issuer, subject: subject})
-
         [name | args] ->
-          dispatch_named(name, args, config_path)
+          case Map.get(Catalog.unconfigured(), name) do
+            %Manifest{config: false} = manifest ->
+              project = %Project{
+                dir: Path.dirname(config_path),
+                conn: nil,
+                config_path: config_path
+              }
+
+              run_tool(manifest, name, args, project, false)
+
+            _other ->
+              with {:ok, config} <- Config.load(config_path), do: open(config, rest)
+          end
       end
     end
   end
+
+  @doc """
+  Runs a command line, without `--config`, against a project already
+  open, as the local principal.
+  """
+  @spec in_project(Project.t(), [String.t()]) :: {:ok, String.t()} | {:error, term}
+  def in_project(project, ["access", "bootstrap", "--issuer", issuer, "--subject", subject]) do
+    with :ok <- owner_of_config(project.config_path),
+         :ok <- Access.bootstrap(project, %{issuer: issuer, subject: subject}) do
+      {:ok, "access bootstrapped"}
+    end
+  end
+
+  def in_project(project, [name | args]) do
+    with {:ok, manifest} <- Harness.manifest(project, name) do
+      run_tool(manifest, name, args, project, true)
+    end
+  end
+
+  def in_project(_project, []), do: {:error, :no_tool}
 
   @spec main([String.t()]) :: :ok
   def main(argv) do
@@ -108,6 +140,7 @@ defmodule Omunculus.CLI do
   def format_error({:assemble, :empty}), do: "assemble returned an empty prompt"
 
   def format_error({:runs, reasons}), do: Enum.map_join(reasons, "\n", &format_error/1)
+  def format_error({:forwarded, message}), do: message
 
   def format_error(reason), do: inspect(reason)
 
@@ -119,41 +152,35 @@ defmodule Omunculus.CLI do
   defp split_config(argv, cwd),
     do: {:ok, Path.expand("omunculus.toml", cwd), argv}
 
-  defp dispatch_named(name, args, config_path) do
-    dir = Path.dirname(config_path)
-    catalog = Catalog.unconfigured()
-
-    case Map.get(catalog, name) do
-      %Manifest{config: false} = manifest ->
-        project = %Project{dir: dir, conn: nil, config_path: config_path}
-        run_tool(manifest, name, args, project, false)
-
-      _other ->
-        with {:ok, config} <- Config.load(config_path),
-             {:ok, project} <- Project.open(config, lock: true) do
-          try do
-            with {:ok, manifest} <- Harness.manifest(project, name) do
-              run_tool(manifest, name, args, project, true)
-            end
-          after
-            Project.close(project)
-          end
+  defp open(config, argv) do
+    case Project.open(config, lock: true) do
+      {:ok, project} ->
+        try do
+          in_project(project, argv)
+        after
+          Project.close(project)
         end
+
+      {:error, :project_in_use} ->
+        forward(config, argv)
+
+      error ->
+        error
     end
   end
 
-  defp bootstrap(config_path, principal) do
-    with {:ok, config} <- Config.load(config_path),
-         :ok <- owner_of_config(config_path),
-         {:ok, project} <- Project.open(config, lock: true) do
-      try do
-        case Access.bootstrap(project, principal) do
-          :ok -> {:ok, "access bootstrapped"}
-          error -> error
-        end
-      after
-        Project.close(project)
-      end
+  # A project held without a socket, by another direct command, stays in use.
+  defp forward(config, argv) do
+    case Req.post("http://localhost/v1/cli",
+           unix_socket: Socket.path(config.store.path),
+           json: %{argv: argv},
+           receive_timeout: :infinity,
+           retry: false
+         ) do
+      {:ok, %{status: 200, body: %{"output" => output}}} -> {:ok, output}
+      {:ok, %{status: 422, body: %{"message" => message}}} -> {:error, {:forwarded, message}}
+      {:ok, %{status: status}} -> {:error, {:forwarded, "server replied #{status}"}}
+      {:error, _unreachable} -> {:error, :project_in_use}
     end
   end
 

@@ -1,7 +1,7 @@
 defmodule Omunculus.CycleTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Fixtures, Project}
+  alias Omunculus.{CLI, Cycle, Fixtures, Operations, Project}
   alias Omunculus.Store.Query
 
   import Omunculus.Fixtures, only: [last_comment: 1, role: 1]
@@ -238,6 +238,45 @@ defmodule Omunculus.CycleTest do
     [root_start] = all(project, "SELECT * FROM events WHERE id = ?", [root_run.event_id])
     assert send_end.sequence < root_start.sequence
 
+    Project.close(project)
+  end
+
+  test "a command in a shared cycle waits for its own runs and fails with their errors only",
+       %{dir: dir} do
+    write_config(dir, 4)
+    test = self()
+
+    Fixtures.use_model(dir, fn assembled, _tools, _call ->
+      if assembled =~ "slow" do
+        send(test, {:slow, self()})
+        receive do: (:release -> {:ok, "slow"})
+      else
+        {:error, :fast_failed}
+      end
+    end)
+
+    project = Fixtures.open_project(dir)
+    {:ok, cycle} = Cycle.start_link(project)
+    project = %{project | cycle: cycle}
+
+    send_message = fn text ->
+      Task.async(fn ->
+        Cycle.command(project, nil, &Operations.call(&1, "send", %{"message" => text}, %{}))
+      end)
+    end
+
+    slow = send_message.("slow")
+    assert_receive {:slow, slow_run}, 5_000
+
+    fast = send_message.("fast")
+    assert {:error, :fast_failed} = Task.await(fast)
+    assert Task.yield(slow, 100) == nil
+
+    send(slow_run, :release)
+    assert {:ok, _out, _events} = Task.await(slow)
+
+    assert :ok = GenServer.call(cycle, :await)
+    GenServer.stop(cycle)
     Project.close(project)
   end
 end

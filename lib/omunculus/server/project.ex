@@ -5,7 +5,7 @@ defmodule Omunculus.Server.Project do
 
   use GenServer
 
-  alias Omunculus.{Config, Cycle, Operations, Project, Run, Store}
+  alias Omunculus.{CLI, Config, Cycle, Operations, Project, Run, Store}
   alias Omunculus.Store.Access
 
   def start_link({id, config_path, global_limits}) do
@@ -37,7 +37,14 @@ defmodule Omunculus.Server.Project do
     do: GenServer.call(via(id), {:can_read, principal, conversation_id})
 
   @doc "Subscribes the calling process to the project's store announcements."
-  def subscribe(id), do: via(id) |> GenServer.call(:connection) |> Store.subscribe()
+  def subscribe(id), do: Store.subscribe(GenServer.call(via(id), :project).conn)
+
+  @doc """
+  Runs a command line in the calling process as one command of the
+  project's cycle, returning once the runs it opened have finished.
+  """
+  def cli(id, argv),
+    do: via(id) |> GenServer.call(:project) |> Cycle.command(nil, &CLI.in_project(&1, argv))
 
   def list(id, principal, conversation_id, kind),
     do: GenServer.call(via(id), {:list, principal, conversation_id, kind})
@@ -88,7 +95,7 @@ defmodule Omunculus.Server.Project do
     {:reply, Access.events(project, principal, id, cursor), project}
   end
 
-  def handle_call(:connection, _from, project), do: {:reply, project.conn, project}
+  def handle_call(:project, _from, project), do: {:reply, project, project}
 
   def handle_call({:can_read, principal, id}, _from, project) do
     {:reply, Access.check(project, principal, "conversation.read", id), project}

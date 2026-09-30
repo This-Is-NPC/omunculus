@@ -10,7 +10,7 @@ defmodule Omunculus.Server.Socket do
 
   use GenServer
 
-  alias Omunculus.{Config, Operations}
+  alias Omunculus.Config
   alias Omunculus.Server.Endpoint
 
   # sun_path holds 108 bytes, the terminating NUL included.
@@ -26,11 +26,7 @@ defmodule Omunculus.Server.Socket do
   def init({id, config_path, stream_key}) do
     Process.flag(:trap_exit, true)
 
-    endpoint = [
-      principal: Operations.local_principal(),
-      projects: [id],
-      stream_key: stream_key
-    ]
+    endpoint = [local: id, projects: [id], stream_key: stream_key]
 
     with {:ok, config} <- Config.load(config_path),
          path = path(config.store.path),

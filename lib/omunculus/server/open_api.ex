@@ -10,6 +10,12 @@ defmodule Omunculus.Server.OpenAPI do
       public: true
     },
     identity: %{summary: "Read the token principal", status: 200, response: "Principal"},
+    cli: %{
+      summary: "Run a command line on the local socket's project",
+      status: 200,
+      response: "CliOutput",
+      request: "CliCommand"
+    },
     create_conversation: %{
       summary: "Create a conversation",
       status: 201,
@@ -259,7 +265,9 @@ defmodule Omunculus.Server.OpenAPI do
           %{status: %{type: "string", const: "accepted"}, cursor: %{type: ["string", "null"]}},
           ["status", "cursor"]
         ),
-      "Error" => object(%{error: string()}, ["error"]),
+      "Error" => object(%{error: string(), message: string()}, ["error"]),
+      "CliCommand" => object(%{argv: array(string())}, ["argv"]),
+      "CliOutput" => object(%{output: string()}, ["output"]),
       "Updated" => object(%{status: %{type: "string", const: "updated"}}, ["status"]),
       "Removed" => object(%{status: %{type: "string", const: "removed"}}, ["status"]),
       "Membership" =>

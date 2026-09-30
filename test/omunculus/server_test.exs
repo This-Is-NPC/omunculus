@@ -104,7 +104,7 @@ defmodule Omunculus.ServerTest do
     Project.close(project)
 
     {:ok, _server} = Server.start_link(server_path)
-    assert {:error, :project_in_use} = CLI.run(["send", "while server runs"], dir)
+    assert {:error, {:forwarded, ":forbidden"}} = CLI.run(["send", "while server runs"], dir)
 
     openapi = Req.get!("http://127.0.0.1:#{port}/openapi.json")
     assert openapi.status == 200
@@ -133,6 +133,12 @@ defmodule Omunculus.ServerTest do
 
     assert Req.get!(base <> "/conversations", headers: auth(outsider)).body["items"] == []
     assert Req.get!(base <> "/conversations", headers: auth("invalid")).status == 401
+
+    assert Req.post!("http://127.0.0.1:#{port}/v1/cli",
+             headers: auth(admin),
+             json: %{argv: ["send", "x"]}
+           ).status ==
+             404
 
     create_headers = auth(admin) ++ [{"idempotency-key", "create-1"}]
     created = Req.post!(base <> "/conversations", headers: create_headers, json: %{})
@@ -345,6 +351,23 @@ defmodule Omunculus.ServerTest do
       )
 
     assert sent.status == 202
+
+    assert {:ok, _output} = CLI.run(["send", "from the cli"], dir)
+
+    assert [_ | _] =
+             runs =
+             for(
+               %{"id" => id} <- local.(:get, "/v1/projects/solo/conversations", []).body["items"],
+               id != created.body["id"],
+               run <-
+                 local.(:get, "/v1/projects/solo/conversations/#{id}/runs", []).body["items"],
+               do: run
+             )
+
+    assert Enum.all?(runs, &(&1["status"] == "done"))
+
+    assert {:error, {:forwarded, message}} = CLI.run(["no_such_tool"], dir)
+    assert message =~ "no_such_tool"
 
     :ok = Supervisor.stop(server)
     refute File.exists?(socket)

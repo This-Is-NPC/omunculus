@@ -94,6 +94,17 @@ defmodule Omunculus.CLITest do
     assert {:error, {:unknown_tool, "nope"}} = CLI.run(["nope"], dir)
   end
 
+  test "a project another command holds without a server is in use", %{dir: dir} do
+    {:ok, config} = Omunculus.Config.load(Fixtures.config_path(dir))
+    {:ok, holder} = Project.open(config, lock: true)
+
+    try do
+      assert {:error, :project_in_use} = CLI.run(["send", "blocked"], dir)
+    after
+      Project.close(holder)
+    end
+  end
+
   test "prompt prints the last run assembled prompt", %{dir: dir} do
     assert {:ok, ""} = CLI.run(["send", "first message"], dir)
     assert {:ok, ""} = CLI.run(["send", "second message"], dir)
