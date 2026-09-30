@@ -205,9 +205,9 @@ named `options`, each a list of tool calls (`{name, args}`, the shape of
 a chain); an option may list none. The model calls `request_access`
 (`kind` = `tool` | `path` | `directory`) or `request_sandbox` (`kind` =
 `resource`, `name` = `sandbox.write` | `sandbox.network`), each with a
-`report`; both offer `grant`, one `grant_<scope>` per permanent scope and
-`deny`. In a run on a work the report is commented on it first, then the
-request. Options made only of `grant` calls whose names are all have are
+`report`; both offer one `grant_<scope>` per permanent scope and `deny`,
+and, in a run on a work, `grant`, which grants on that work. In a run on
+a work the report is commented on it first, then the request. Options made only of `grant` calls whose names are all have are
 not a request: no row opens, and a tool that emits `request` without
 ending the run gets `already granted: <name>` in its output. A granted
 name that is blocked is `EVENTS(deny)`. Otherwise a request opens, its

@@ -2,8 +2,9 @@ defmodule Omunculus.Tools.RequestAccess do
   @moduledoc """
   Builtin `request_access` tool, per spec §3.5: emits a `request` for a
   tool, path, or directory. Sandbox capabilities go through `request_sandbox`.
-  The options are `grant`, one `grant_<scope>` per scope of the
-  `grant_scopes` view, each a `grant` call, and `deny`, with no call. In a run with a work, a
+  The options are one `grant_<scope>` per scope of the `grant_scopes`
+  view, each a permanent `grant` call, `deny`, with no call, and, in a run
+  with a work, `grant`, which grants on that work. In a run with a work, a
   `comment` with the `report` on that work comes first. Its manifest's
   `then` appends `end`.
   """
@@ -39,17 +40,18 @@ defmodule Omunculus.Tools.RequestAccess do
         do: [%{"type" => "comment", "body" => %{"work_id" => work_id, "body" => report}}],
         else: []
 
-    request = %{"reason" => reason, "options" => options(input.view["grant_scopes"], kind, name)}
+    options = options(input.view["grant_scopes"], kind, name, work_id)
+    request = %{"reason" => reason, "options" => options}
     Out.ok("", comment ++ [%{"type" => "request", "body" => request}])
   end
 
-  defp options(scopes, kind, name) do
+  defp options(scopes, kind, name, work_id) do
     grant = %{"name" => name, "kind" => kind}
 
     scopes
     |> Map.new(&{"grant_#{&1}", [grant_call(Map.put(grant, "scope", &1))]})
-    |> Map.put("grant", [grant_call(grant)])
     |> Map.put("deny", [])
+    |> then(&if(work_id, do: Map.put(&1, "grant", [grant_call(grant)]), else: &1))
   end
 
   defp grant_call(args), do: %{"name" => "grant", "args" => args}

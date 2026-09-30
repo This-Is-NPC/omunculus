@@ -781,8 +781,12 @@ defmodule Omunculus.RunTest do
     assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
 
-    assert %{"grant" => [%{"args" => %{"kind" => "resource", "name" => "sandbox.write"}}]} =
-             Jason.decode!(request.options)
+    options = Jason.decode!(request.options)
+
+    assert %{"grant_agent" => [%{"args" => %{"kind" => "resource", "name" => "sandbox.write"}}]} =
+             options
+
+    refute Map.has_key?(options, "grant")
 
     Project.close(project)
   end
@@ -915,8 +919,12 @@ defmodule Omunculus.RunTest do
 
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
 
-    assert %{"grant" => [%{"args" => %{"kind" => "resource", "name" => "sandbox.write"}}]} =
-             Jason.decode!(request.options)
+    options = Jason.decode!(request.options)
+
+    assert %{"grant_agent" => [%{"args" => %{"kind" => "resource", "name" => "sandbox.write"}}]} =
+             options
+
+    refute Map.has_key?(options, "grant")
 
     assert request.status == "waiting_human"
 

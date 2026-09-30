@@ -14,8 +14,7 @@ defmodule Omunculus.Tools.RequestAccessTest do
     roots: []
   }
 
-  @options %{
-    "grant" => [%{"name" => "grant", "args" => %{"kind" => "tool", "name" => "write"}}],
+  @permanent %{
     "grant_agent" => [
       %{"name" => "grant", "args" => %{"kind" => "tool", "name" => "write", "scope" => "agent"}}
     ],
@@ -28,7 +27,11 @@ defmodule Omunculus.Tools.RequestAccessTest do
     "deny" => []
   }
 
-  test "emits a request with the reason, grant, one grant per scope of the view, and deny" do
+  @on_work Map.put(@permanent, "grant", [
+             %{"name" => "grant", "args" => %{"kind" => "tool", "name" => "write"}}
+           ])
+
+  test "without a work, emits a request with the reason, one grant per scope of the view, and deny" do
     input = %{
       @input
       | args: %{
@@ -45,13 +48,13 @@ defmodule Omunculus.Tools.RequestAccessTest do
              "emit" => [
                %{
                  "type" => "request",
-                 "body" => %{"reason" => "need to write", "options" => @options}
+                 "body" => %{"reason" => "need to write", "options" => @permanent}
                }
              ]
            }
   end
 
-  test "in a run with a work, comments the report on it before the request" do
+  test "in a run with a work, comments the report on it before a request that also grants on it" do
     input = %{
       @input
       | work_id: "w1",
@@ -70,7 +73,7 @@ defmodule Omunculus.Tools.RequestAccessTest do
              },
              %{
                "type" => "request",
-               "body" => %{"reason" => "need to write", "options" => @options}
+               "body" => %{"reason" => "need to write", "options" => @on_work}
              }
            ]
   end

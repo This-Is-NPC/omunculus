@@ -714,7 +714,7 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "a request without a linked work has no work_id, and granting it opens no run and touches no work",
+    test "a request without a linked work has no work_id, and granting it for the agent opens no run and touches no work",
          %{dir: dir} do
       request_id = open_write_request(dir)
 
@@ -731,7 +731,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--option", "grant", "allowed"],
+                 ["reply", "--request_id", request_id, "--option", "grant_agent", "allowed"],
                  dir
                )
 
@@ -754,7 +754,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--option", "grant", "allowed"],
+                 ["reply", "--request_id", request_id, "--option", "deny", "no"],
                  dir
                )
 
@@ -762,7 +762,7 @@ defmodule Omunculus.CLITest do
 
       assert {:error, {:reply, :closed}} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--option", "grant", "de novo"],
+                 ["reply", "--request_id", request_id, "--option", "deny", "again"],
                  dir
                )
     end

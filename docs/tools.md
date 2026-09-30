@@ -233,7 +233,7 @@ needs `end` as have too.
 | `work` | see [Creating works](#creating-works) | `end` |
 | `done` | chains `comment` with the report and `continue` | `end` |
 | `break` | emits `break`, which parks the work with the report as its comment | `end` |
-| `request_access` | emits a `comment` with the report on the run's work, then `request` with the options `grant`, `grant_agent`, `grant_depth`, `grant_stage`, `grant_workspace` and `deny` | `end` |
+| `request_access` | emits a `comment` with the report on the run's work, then `request` with the options `grant_agent`, `grant_depth`, `grant_stage`, `grant_workspace`, `deny` and, on a work, `grant` | `end` |
 | `request_sandbox` | the same, with `kind = resource` | `end` |
 
 `continue` is only a chain step (`triggers = ["chain"]`): the model
