@@ -66,6 +66,30 @@ A folder of your own is [a tool](docs/tools.md).
 
 The optional [server](docs/server.md) opens configured projects and exposes conversations, commands, snapshots, events and a WebSocket event stream to any HTTP client: to the local user on a Unix socket next to each store, and, when it has a TCP listener, to web apps with signed JWTs. It publishes its OpenAPI contract at `/openapi.json`. Each project keeps its own SQLite store. The server has no built-in chat page.
 
+## Window
+
+`bin/omunculus-gui` opens a window on a project of a running
+[server](docs/server.md). It talks to the project's local socket, so it acts
+as the local user:
+
+```bash
+bin/omunculus serve --config server.toml
+bin/omunculus-gui --config server.toml --project demo
+```
+
+`--project` may be left out when the registry holds one project.
+
+It lists the conversations and follows the open one live as a chat between
+you and the root agent: what each of you said and, on a line below each run,
+what the agent did. A map shows the agents at work, each work handed down
+joined to the one it came from; whatever an agent asked and still waits for,
+and the notes it left you, hang from its node, with the options to answer.
+The composer counts what waits on you and leads to the map. Opening a node
+shows what that agent said and did, and writes to it. What the conversation
+cost opens from its masthead. It needs
+[Quickshell](https://quickshell.org/), `curl` with WebSocket support and a
+Wayland session.
+
 ## Requirements
 
 - Linux, with Bubblewrap 0.8 or newer (`bwrap`) able to create user, mount,

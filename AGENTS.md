@@ -68,8 +68,10 @@ A tool is a folder with `tool.toml` and either `module = "Elixir.Module"` or `co
 
 ```text
 bin/omunculus        shell wrapper: mise exec -- mix omunculus
+bin/omunculus-gui    opens the window on a project of a running server's registry
+gui/                 the window: QML on Quickshell, a client of the server's local socket
 lib/omunculus/       core, config, server, tool, tools, hooks, models, execution, store
-lib/mix/tasks/       the omunculus and omunculus.presets mix tasks
+lib/mix/tasks/       the omunculus, omunculus.presets and omunculus.socket mix tasks
 priv/tools/          builtin tool and hook manifests
 priv/presets/        default, codex-like, pi-like
 priv/sandbox.js      tool-call bridge run by Omunculus.Sandbox
@@ -93,7 +95,12 @@ mix compile --warnings-as-errors
 bin/omunculus preset default --from priv/presets/default
 bin/omunculus send "text"
 bin/omunculus serve --config server.toml
+bin/omunculus-gui --config server.toml [--project <id>]
 ```
+
+### The window
+
+`gui/` is a client of the server, like any other: it never opens the store or the TOML. The `Omunculus` singleton holds the project as the window sees it and makes every request through `curl` on the project's local socket; the conversation's event stream is `curl` on its WebSocket, whose frames it splits into events. It folds the events into threads: the main one, yours with the root agent, and one per work handed down, where its agent's runs show; a run at depth 0 belongs to the main thread, a deeper one to its work's. Requests and unread notes are not in threads: they hang from the work that made them on the orchestration map. It reads the snapshot again after each event. Views only bind that singleton. The controls and the theme are a copy of eco's overlay, Omarchy's voice session app. It needs Quickshell, `curl` with WebSocket support and a Wayland session; `bin/omunculus-gui` takes the server registry and a project id, which may be left out when the registry holds one project; `mix omunculus.socket` resolves the project's socket, and the launcher passes both as `OMUNCULUS_GUI_SOCKET` and `OMUNCULUS_GUI_PROJECT`.
 
 The CLI reads no environment variables. The config file, and with it the model of every agent, comes from `--config <path>` or `./omunculus.toml`.
 
