@@ -136,7 +136,8 @@ model = "claude-sonnet-4-5"
 ```
 
 `kind` is `api_key` (`key` = `$VAR`, `!cmd`, or a literal; empty falls
-through to a stored login), `oauth-code`, or `tool` (`login` / `refresh`
+through to a stored login; a password kept by omapass is
+`!<program> get -- <account>`, which `omunculus omapass` lists), `oauth-code`, or `tool` (`login` / `refresh`
 names). Credentials are the JSON file, mode 0600, not the project SQLite.
 `login` and `logout` write that file.
 

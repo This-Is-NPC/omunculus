@@ -1,0 +1,10 @@
+name = "omapass"
+kind = "tool"
+triggers = ["cli"]
+description = "Prints whether omapass is installed, its program and the passwords it keeps, never their secrets, as JSON."
+tags = ["cli", "config"]
+groups = ["cli"]
+module = "Omunculus.Tools.Omapass"
+
+[parameters]
+type = "object"

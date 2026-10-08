@@ -155,6 +155,20 @@ temporary file, in the same form as a permanent grant writes it: keys in
 order, text over several lines as multi-line strings. Like every tool
 not scoped to a conversation, it needs `project.manage_config`.
 
+## `omunculus omapass`
+
+- **Usage:** `omunculus omapass`
+- **Effect:** read-only
+
+Print, as JSON, what a client needs to take a provider's key from
+omapass, the optional Omarchy password plugin: `installed`, and once it
+is, `program` (the `omapass` on `PATH`, or the plugin's own under
+`HOME`), `accounts` (each password's `account` and `folder`, without its
+Nostr keys and never a secret) and `error` when it could not list them.
+A key taken from it is `key = "!<program> get -- <account>"`. It runs
+omapass in the harness's process, as a `!` key does, since the keyring
+answers only outside the sandbox.
+
 ## `omunculus inbox_read`
 
 - **Usage:** `omunculus inbox_read <inbox_id>`
