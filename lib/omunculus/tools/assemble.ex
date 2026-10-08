@@ -3,26 +3,23 @@ defmodule Omunculus.Tools.Assemble do
   Builtin `assemble` tool: builds the assembled prompt of a run from
   the hydrated views. After the agent's text come the agents the
   `agents` view says a new work may name when the run has the `work`
-  card, each with the tools it has that this run has not, and the cards, which follow `pinned` on the catalog view. Then
-  the work's title and goal, its last comment, and its last closed run
-  (`last_run`), or, without a work, the run that opened the run's request
-  (`opener`): the message that opened that run and every
-  event it recorded but the calls of this tool and its start and end,
-  that is the model's messages as recorded but their `usage`, each tool
-  call with its args, status and output, and each store action it
-  emitted. With `last_run_output_bytes` in the args, each call's output
-  keeps that many bytes, cut on a character boundary, and a line says how
-  many bytes were cut. Then, under `## Results`, what the works handed down
-  from the run's work came back with since its last closed run: each child
-  closed or cancelled since, with its last comment, and, when the run was
-  opened by a child's `break`, that child's report. A run with a request gets the request's requester,
-  its options with their tool calls, and its comments. Inbox is included
-  only when the opening carried `inbox_id`. The message of the opening
-  comes last.
+  card, each with the tools it has that this run has not, and the cards,
+  which follow `pinned` on the catalog view. Then the work's title and
+  goal, its last comment, and its last closed run (`last_run`), or,
+  without a work, the run that opened the run's request (`opener`), as
+  `Omunculus.Tools.Record` lines without this tool's calls, each call's
+  output cut to `last_run_output_bytes` in the args when set. Then, under
+  `## Results`, what the works handed down from the run's work came back
+  with since its last closed run: each child closed or cancelled since,
+  with its last comment, and, when the run was opened by a child's
+  `break`, that child's report. A run with a request gets the request's
+  requester, its options with their tool calls, and its comments. Inbox is
+  included only when the opening carried `inbox_id`. The message of the
+  opening comes last.
   """
 
   alias Omunculus.Tool.Manifest
-  alias Omunculus.Tools.Out
+  alias Omunculus.Tools.{Out, Record}
 
   @spec run(map) :: map
   def run(%{name: name, args: args, view: view}) do
@@ -52,46 +49,7 @@ defmodule Omunculus.Tools.Assemble do
   defp last_run_section(nil, _name, _args), do: []
 
   defp last_run_section(run, name, args) do
-    limit = args["last_run_output_bytes"]
-    message = if run.message, do: ["- message #{run.message.body}"], else: []
-    entries = message ++ Enum.flat_map(run.events, &entry(&1, name, limit))
-    ["## Last run\n" <> Enum.join(entries, "\n")]
-  end
-
-  # A call of this tool holds a whole earlier prompt, and the lifecycle
-  # events say nothing of what the run did.
-  defp entry(%{type: type}, _name, _limit) when type in ["start-run", "end-run"], do: []
-
-  defp entry(%{type: "tool", body: body}, name, limit) do
-    case Jason.decode!(body) do
-      %{"name" => ^name} -> []
-      call -> [call_entry(call, limit)]
-    end
-  end
-
-  defp entry(%{type: type, body: body}, _name, _limit), do: ["- #{type} #{shown(type, body)}"]
-
-  # The usage a server reports on a reply is for measuring the run, not
-  # something the next run acts on.
-  defp shown("model", body) do
-    case Jason.decode(body) do
-      {:ok, %{"usage" => _usage} = reply} -> Jason.encode!(Map.delete(reply, "usage"))
-      _other -> body
-    end
-  end
-
-  defp shown(_type, body), do: body
-
-  defp call_entry(call, limit) do
-    via = if call["via"], do: " via #{call["via"]}", else: ""
-    status = if call["ok"], do: "ok", else: "failed"
-    head = "- tool #{call["name"]}#{via} #{Jason.encode!(call["args"])} #{status}"
-
-    case call["output"] do
-      output when output in [nil, ""] -> head
-      output when is_binary(output) -> head <> "\n" <> Out.cut(output, limit)
-      output -> head <> "\n" <> Out.cut(Jason.encode!(output), limit)
-    end
+    ["## Last run\n" <> Enum.join(Record.lines(run, name, args["last_run_output_bytes"]), "\n")]
   end
 
   # What the works handed down from this one came back with since its last
