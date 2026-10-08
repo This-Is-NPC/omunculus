@@ -143,7 +143,7 @@ defmodule Omunculus.CLITest do
     assert {:ok, ""} = CLI.run(["send", "Alo"], dir)
 
     assert_received {:results, assembled}
-    assert assembled =~ "## Results\n- Answer (worker, done): said hello back"
+    assert assembled =~ ~r/## Results\n- Answer \(worker, done, work \w+\): said hello back/
 
     project = open_project(dir)
     {:ok, runs} = Query.all(project.conn, "SELECT agent FROM runs ORDER BY started_at")

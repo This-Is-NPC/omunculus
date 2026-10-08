@@ -255,6 +255,15 @@ comment and the request themselves, so the report precedes the request in
 `EVENTS`; in a run without a work they emit only the request. A request
 for a name the run already has opens no row and still ends the run.
 
+## Reading a work below
+
+`read_work` takes a `work_id`. Its `target` view reaches only a work
+below the run's own; any other id refuses the call. It returns the work's
+title, agent, state, stage and goal, every comment on it, and the record
+of each of its closed runs as `## Last run` shows one, without the call
+that assembled each run's prompt. `## Results` names each child's work
+id.
+
 ## Answering a request
 
 `reply` takes a `request_id`, an `option` and a `body`. It reads the
@@ -294,7 +303,7 @@ the ceiling, run in their own sandboxed sessions.
 ```text
 fs.read   = read, ls, grep, find
 fs.write  = write, edit
-store     = comment, request_access, reply, grant, notify
+store     = comment, request_access, reply, grant, notify, read_work
 sandbox   = request_sandbox
 sequence  = work, delegate, continue, break, end, done, cancel
 catalog   = tool_search

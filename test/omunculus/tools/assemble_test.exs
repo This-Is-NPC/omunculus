@@ -54,8 +54,14 @@ defmodule Omunculus.Tools.AssembleTest do
   test "results list each closed child with its report, and the report of a child that broke" do
     view = %{
       "results" => [
-        %{title: "Answer", assignee: "worker", state: "done", last_comment: %{body: "said hi"}},
-        %{title: "Skip", assignee: "worker", state: "cancelled", last_comment: nil}
+        %{
+          id: "w1",
+          title: "Answer",
+          assignee: "worker",
+          state: "done",
+          last_comment: %{body: "said hi"}
+        },
+        %{id: "w2", title: "Skip", assignee: "worker", state: "cancelled", last_comment: nil}
       ],
       "cause" => %{type: "break", actor_id: "worker", body: ~s({"body":"no access"})}
     }
@@ -63,7 +69,7 @@ defmodule Omunculus.Tools.AssembleTest do
     output = Assemble.run(%{@input | view: view})["output"]
 
     assert output =~
-             "## Results\n- Answer (worker, done): said hi\n- Skip (worker, cancelled)\n- worker broke its work: no access"
+             "## Results\n- Answer (worker, done, work w1): said hi\n- Skip (worker, cancelled, work w2)\n- worker broke its work: no access"
   end
 
   test "no results, no section" do

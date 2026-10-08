@@ -59,7 +59,7 @@ defmodule Omunculus.Tools.Assemble do
     lines =
       Enum.map(children, fn child ->
         report = if child.last_comment, do: ": " <> child.last_comment.body, else: ""
-        "- #{child.title} (#{child.assignee}, #{child.state})#{report}"
+        "- #{child.title} (#{child.assignee}, #{child.state}, work #{child.id})#{report}"
       end) ++ broken(cause)
 
     if lines == [], do: [], else: ["## Results\n" <> Enum.join(lines, "\n")]
