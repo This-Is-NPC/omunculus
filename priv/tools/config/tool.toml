@@ -1,0 +1,10 @@
+name = "config"
+kind = "tool"
+triggers = ["cli"]
+description = "Prints the project's agents, models, workspaces and workflows as JSON."
+tags = ["cli", "config"]
+groups = ["cli"]
+module = "Omunculus.Tools.Config"
+
+[parameters]
+type = "object"

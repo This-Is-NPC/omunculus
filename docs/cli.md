@@ -115,6 +115,20 @@ prints `empty inbox` and still exits 0 — that is the answer, not a
 failure to find one. Inbox does not wait on a decision and does not
 park a work.
 
+## `omunculus config`
+
+- **Usage:** `omunculus config`
+- **Effect:** read-only
+
+Print the project's setup as one JSON object, for a client to show:
+`agents` (name, depth, model, `workflow_only` and the `granted`,
+`negotiable`, `human` and `deny` lists of its own layer), `models` (name,
+`api`, `provider`, `model`, and nothing else of their tables),
+`workspaces` (name, root), the default `workspace`, and `workflows` with
+their steps. It loads the TOML in the harness's process; the sandbox hides
+the file from external tools. A server's local socket runs it through
+`POST /v1/cli`.
+
 ## `omunculus inbox_read`
 
 - **Usage:** `omunculus inbox_read <inbox_id>`
