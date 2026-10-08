@@ -174,12 +174,13 @@ argument of the call.
 | `counter` | the value the `counter` tools keep in `EVENTS` | |
 | `catalog` | the cards of the run's effective `model` tools, each marked `pinned` or not | |
 | `workspaces` | every configured workspace, its `root` and whether it is the call's | |
-| `agents` | the agents a new work may name, below the run's work (depth 0 without one), not `workflow_only`, none when that depth has a workflow | |
+| `agents` | the agents a new work may name, below the run's work (depth 0 without one), not `workflow_only`, none when that depth has a workflow | `include = ["tools"]` gives each as `{name, tools}`, with the model tools its own ceiling has at that depth |
 | `paths` | the path permissions of the run's ceiling | |
 | `grant_scopes` | the scopes a permanent `grant` may name (`agent`, `depth`, `stage`, `workspace`) | |
 
 Every read stays in the call's conversation and goes only through these
-relations. `assemble` renders `agents` under `## Agents` when the run has
+relations. The harness computes `catalog`, `workspaces`, `agents`,
+`paths` and `grant_scopes` only for a call that declares them. `assemble` renders `agents` under `## Agents` when the run has
 the `work` card.
 
 ## Actions

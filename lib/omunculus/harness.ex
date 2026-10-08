@@ -172,14 +172,16 @@ defmodule Omunculus.Harness do
   end
 
   # What a call's views read that the harness computes rather than the
-  # store — the catalog, workspaces, agents and paths of the run — plus
-  # the request and inbox ids `ids` names, which anchor its views.
+  # store — the catalog, workspaces, agents, paths and grant scopes of the
+  # run, each computed only when a view asks for it — plus the request and
+  # inbox ids `ids` names, which anchor its views.
   defp views(project, run, work, config, catalog, workspace, ids) do
-    Map.merge(ids, %{
-      catalog: catalog_view(run, catalog, start_event(project, run)),
-      workspaces: workspaces_view(config, workspace.name),
-      agents: agents_view(project, config, work),
-      paths: path_permissions(project, run, workspace)
+    Map.put(ids, :computed, %{
+      "catalog" => fn _spec -> catalog_view(run, catalog, start_event(project, run)) end,
+      "workspaces" => fn _spec -> workspaces_view(config, workspace.name) end,
+      "agents" => fn spec -> agents_view(project, config, work, catalog, workspace, spec) end,
+      "paths" => fn _spec -> path_permissions(project, run, workspace) end,
+      "grant_scopes" => fn _spec -> Requests.scopes() end
     })
   end
 
@@ -335,14 +337,46 @@ defmodule Omunculus.Harness do
   end
 
   # The agents a new work may name: those at the depth of the works the
-  # call would create, none when that depth has a workflow.
-  defp agents_view(project, config, work) do
+  # call would create, none when that depth has a workflow. With `tools`,
+  # each comes with the model tools its own ceiling has at that depth.
+  defp agents_view(project, config, work, catalog, workspace, spec) do
     depth = if work, do: Store.work_depth(project.conn, work) + 1, else: 0
 
     case Config.workflow_for(config, depth) do
-      :off -> config |> Config.agents_at_depth(depth) |> Enum.map(fn {name, _agent} -> name end)
-      {:ok, _steps} -> []
+      :off ->
+        names = config |> Config.agents_at_depth(depth) |> Enum.map(fn {name, _agent} -> name end)
+
+        if "tools" in spec.include,
+          do:
+            Enum.map(
+              names,
+              &%{name: &1, tools: agent_tools(config, &1, depth, catalog, workspace)}
+            ),
+          else: names
+
+      {:ok, _steps} ->
+        []
     end
+  end
+
+  defp agent_tools(config, agent, depth, catalog, workspace) do
+    model_catalog = Catalog.with_trigger(catalog, "model")
+
+    snapshot =
+      Ceiling.mount(
+        config,
+        %{
+          agent: agent,
+          depth: depth,
+          grants: [],
+          stage: nil,
+          groups: Catalog.groups(catalog),
+          workspace: workspace.layer
+        },
+        Map.keys(model_catalog)
+      )
+
+    snapshot.have |> Enum.filter(&Map.has_key?(model_catalog, &1)) |> Enum.sort()
   end
 
   defp catalog_view(nil, _catalog, _event), do: []
@@ -415,13 +449,7 @@ defmodule Omunculus.Harness do
       inbox_id: env.views.inbox_id,
       prompt_id: Map.get(env.ctx, :prompt_id),
       args: args,
-      computed: %{
-        "catalog" => env.views.catalog,
-        "workspaces" => env.views.workspaces,
-        "agents" => env.views.agents,
-        "paths" => env.views.paths,
-        "grant_scopes" => Requests.scopes()
-      }
+      computed: env.views.computed
     }
   end
 

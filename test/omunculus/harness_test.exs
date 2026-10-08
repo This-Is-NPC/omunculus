@@ -281,6 +281,48 @@ defmodule Omunculus.HarnessTest do
     Project.close(project)
   end
 
+  test "an agents view with tools gives each agent a new work may name with its model tools",
+       %{dir: dir} do
+    write_tool(
+      dir,
+      "viewer",
+      """
+      name = "viewer"
+      kind = "tool"
+      triggers = ["model"]
+      command = ["./run"]
+
+      [views.agents]
+      source = "agents"
+      include = ["tools"]
+      """,
+      """
+      #!/bin/sh
+      data=$(cat)
+      case "$data" in
+        *'"name":"worker","tools":['*'"write"'*) echo '{"ok": true, "output": "yes", "emit": []}' ;;
+        *) echo '{"ok": true, "output": "no", "emit": []}' ;;
+      esac
+      """
+    )
+
+    project = open_project(dir)
+    work_id = Fixtures.insert(project.conn, :works)
+    run_id = Fixtures.insert(project.conn, :runs, %{work_id: work_id})
+
+    ctx = %{
+      trigger: "model",
+      run_id: run_id,
+      author: "agent",
+      agent: "concierge",
+      execution: execution(dir)
+    }
+
+    assert {:ok, %{output: "yes"}, _events} = Harness.dispatch(project, "viewer", %{}, ctx)
+
+    Project.close(project)
+  end
+
   test "a comments view from the request receives the run's request comments", %{
     dir: dir
   } do

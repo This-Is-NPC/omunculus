@@ -32,7 +32,9 @@ defmodule Omunculus.Tool.Views do
     `from = ["work"]`.
   - `counter`: the bench counter of the project.
   - `catalog`, `workspaces`, `agents`, `paths`, `grant_scopes`: computed
-    by the harness for the call; they take no options.
+    by the harness for the call, each only when a view asks for it, through
+    a function of the view in `computed`. `agents` takes `include =
+    ["tools"]`, which gives each agent with the model tools it has.
 
   Every read is of the call's conversation, through those relations only;
   tools never open the store.
@@ -155,6 +157,12 @@ defmodule Omunculus.Tool.Views do
     with :ok <- only_keys(table, ~w(from)), do: {:ok, spec}
   end
 
+  defp source_spec("agents", table, spec) do
+    with :ok <- only_keys(table, ~w(include)),
+         {:ok, include} <- subset(table, "include", ["tools"]),
+         do: {:ok, %{spec | include: include || []}}
+  end
+
   defp source_spec(source, table, spec) when source in ["counter" | @computed] do
     with :ok <- only_keys(table, []), do: {:ok, spec}
   end
@@ -252,7 +260,8 @@ defmodule Omunculus.Tool.Views do
   @doc """
   Reads every view of `specs` for one call. `scope` holds the call's
   anchors (`run_id`, `work_id`, `request_id`, `inbox_id`, `prompt_id`,
-  `args`) and `computed`, the harness's values by source name.
+  `args`) and `computed`, the harness's functions by source name, each
+  given the view it computes for.
   """
   @spec hydrate(Omunculus.Store.Connection.t(), [spec], map) :: {:ok, map} | {:error, term}
   def hydrate(conn, specs, scope) do
@@ -265,8 +274,8 @@ defmodule Omunculus.Tool.Views do
     end)
   end
 
-  defp read(_conn, %{source: source}, scope) when source in @computed,
-    do: {:ok, Map.fetch!(scope.computed, source)}
+  defp read(_conn, %{source: source} = spec, scope) when source in @computed,
+    do: {:ok, Map.fetch!(scope.computed, source).(spec)}
 
   defp read(conn, %{source: "counter"}, _scope), do: Store.counter(conn)
   defp read(conn, %{source: "inbox", from: []}, _scope), do: Store.unread_inbox(conn, nil)
