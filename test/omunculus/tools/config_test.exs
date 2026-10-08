@@ -36,7 +36,7 @@ defmodule Omunculus.Tools.ConfigTest do
              described["workflows"]
   end
 
-  test "lists the workspaces with the default one, and keeps model secrets out" do
+  test "lists the workspaces with the default one, and keeps model secrets out of the setup" do
     dir = Fixtures.tmp_dir()
     root = Path.join(dir, "site")
     File.mkdir_p!(root)
@@ -87,7 +87,26 @@ defmodule Omunculus.Tools.ConfigTest do
            ] =
              described["models"]
 
-    refute Jason.encode!(described) =~ "secret"
+    refute described |> Map.drop(["document"]) |> Jason.encode!() =~ "secret"
+    refute Jason.encode!(described) =~ "secret-key"
+    assert described["literal_keys"] == ["openrouter"]
+  end
+
+  test "adds the tables an editor writes, the file's revision and the ceiling names" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    path = Fixtures.config_path(dir)
+    described = describe(path)
+
+    assert Map.keys(described["document"]) == ~w(agents auth models policy workflows)
+    assert described["literal_keys"] == []
+    assert described["document"]["agents"]["worker"]["human"] == ["sandbox.write"]
+
+    assert described["revision"] ==
+             :crypto.hash(:sha256, File.read!(path)) |> Base.encode16(case: :lower)
+
+    assert Enum.all?(~w(work done store sandbox.write), &(&1 in described["names"]))
+    refute "send" in described["names"]
   end
 
   test "fails without a config path" do

@@ -125,9 +125,35 @@ Print the project's setup as one JSON object, for a client to show: its
 `negotiable`, `human` and `deny` lists of its own layer), `models` (name,
 `api`, `provider`, `model`, and nothing else of their tables),
 `workspaces` (name, root), the default `workspace`, and `workflows` with
-their steps. It loads the TOML in the harness's process; the sandbox hides
-the file from external tools. A server's local socket runs it through
-`POST /v1/cli`.
+their steps. For an editor it adds `document`: the `agents`, `models`,
+`workflows`, `workspaces` and `auth` providers by name and the `policy`
+and `access` tables, as the file writes them, but for a provider's
+literal `key`, which stays in the file; `literal_keys` names the
+providers that have one. It adds `revision`, the SHA-256 of the file's
+bytes, and `names`, what a ceiling list may hold: the model tools, their
+groups and the sandbox resources. It loads the TOML in the harness's
+process; the sandbox hides the file from external tools. A server's local
+socket runs it through `POST /v1/cli`.
+
+## `omunculus configure`
+
+- **Usage:** `omunculus configure --item <item> --value <json> --revision <sha256> [--from <name>]`
+- **Effect:** rewrites `omunculus.toml`
+
+Write one item: `agents.<name>`, `models.<name>`, `workflows.<name>`,
+`workspaces.<name>` or `auth.<name>` as the JSON table `value`, or
+`policy` / `access` whole; `null` removes it. `from` names an item of the
+same section removed in the same write, which renames it. A provider
+written without a `key` keeps the literal key the file holds for it.
+The rest of the file keeps what it holds; `[auth] store` and the tables
+of the process (`project`, `execution`, `store`, `tools`, `mcp`) are not
+items. The file must still be at `revision`, the one `config` printed, or
+it is `omunculus.toml changed since it was read; read it again`. The
+result must load as a config, or the reason it does not is the failure
+and the file stays as it was. The file is rewritten whole, through a
+temporary file, in the same form as a permanent grant writes it: keys in
+order, text over several lines as multi-line strings. Like every tool
+not scoped to a conversation, it needs `project.manage_config`.
 
 ## `omunculus inbox_read`
 

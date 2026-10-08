@@ -16,7 +16,8 @@ defmodule Omunculus.Config do
   `overrides` (`Omunculus.Tool.Overrides`); a workflow's fold into each
   of its steps beneath the step's own. It also grants a permanent ceiling
   addition — to an agent, a depth, a workflow step, or a workspace — by
-  rewriting that same file. A workspace may name a `config` file relative
+  rewriting that same file, and `edit/5` writes one item a client edits
+  (`document/1`) the same way. A workspace may name a `config` file relative
   to its `root`; that file uses the same schema minus `[workspaces]` and
   `[store]`, and its tables overlay the global config after any inline
   `[workspaces.<name>]` tables.
@@ -140,6 +141,10 @@ defmodule Omunculus.Config do
   @module_model_keys ~w(api module params)
   @command_model_keys ~w(api command model provider params)
   @step_extra_keys ~w(name agent)
+  # What a client edits, item by item; the process's own tables (project,
+  # execution, store, tools, mcp) and `[auth] store` stay in the file alone.
+  @named_items ~w(agents models workflows workspaces auth)
+  @single_items ~w(policy access)
 
   @spec load(String.t()) :: {:ok, t} | {:error, term}
   def load(path) do
@@ -298,9 +303,133 @@ defmodule Omunculus.Config do
     end
   end
 
+  @doc """
+  What a client edits of the TOML at `path`: `document`, its `agents`,
+  `models`, `workflows`, `workspaces` and `auth` providers by name and
+  its `policy` and `access` tables, as the file writes them but for the
+  key a provider writes literally, which stays in the file and is named in
+  `literal_keys`; and `revision`, the SHA-256 of the file's bytes, in hex.
+  """
+  @spec document(String.t()) ::
+          {:ok, %{document: map, literal_keys: [String.t()], revision: String.t()}}
+          | {:error, term}
+  def document(path) do
+    with {:ok, text} <- read_text(path),
+         {:ok, data} <- Toml.decode(text) do
+      providers = data |> Map.get("auth", %{}) |> Map.drop(["store"])
+      literal = for {name, provider} <- providers, literal_key?(provider), do: name
+
+      document =
+        data
+        |> Map.take(@named_items ++ @single_items)
+        |> Map.put(
+          "auth",
+          Map.new(providers, fn {name, provider} -> {name, unkeyed(provider, name in literal)} end)
+        )
+
+      {:ok, %{document: document, literal_keys: Enum.sort(literal), revision: revision(text)}}
+    end
+  end
+
+  @doc """
+  Writes one item of the TOML at `path` — `{section, name}` of the named
+  sections `document/1` reads, or `{section}` for `policy` and `access` —
+  as `value`, or removes it for nil, while the file is still at `revision`
+  and the result loads; the rest of the file keeps what it holds. With
+  `from`, the item under that name in the same section is removed in the
+  same write: a rename. An `auth` provider written without a key keeps
+  the literal key the file holds for it. Edits and grants to one file
+  apply one after another.
+  """
+  @spec edit(String.t(), String.t(), tuple, map | nil, String.t() | nil) :: :ok | {:error, term}
+  def edit(path, revision, item, value, from \\ nil) do
+    :global.trans({{__MODULE__, path}, self()}, fn ->
+      with {:ok, text} <- read_text(path),
+           :ok <- current(text, revision),
+           {:ok, keys} <- item_keys(item, from),
+           :ok <- editable(value),
+           {:ok, data} <- Toml.decode(text),
+           data = put_item(data, keys, value, from),
+           {:ok, _config} <- parse(data, path, true) do
+        replace(path, data)
+      end
+    end)
+  end
+
+  defp current(text, revision) do
+    if revision(text) == revision, do: :ok, else: {:error, {:config, :stale}}
+  end
+
+  defp revision(text), do: :crypto.hash(:sha256, text) |> Base.encode16(case: :lower)
+
+  defp item_keys({section, name}, from)
+       when section in @named_items and is_binary(name) and name != "" and
+              (is_nil(from) or (is_binary(from) and from != "")) do
+    if section == "auth" and "store" in [name, from],
+      do: {:error, {:config, :invalid_item}},
+      else: {:ok, [section, name]}
+  end
+
+  defp item_keys({section}, nil) when section in @single_items, do: {:ok, [section]}
+  defp item_keys(_item, _from), do: {:error, {:config, :invalid_item}}
+
+  defp editable(nil), do: :ok
+
+  defp editable(value) when is_map(value) do
+    if toml?(value), do: :ok, else: {:error, {:config, :invalid_item}}
+  end
+
+  defp editable(_value), do: {:error, {:config, :invalid_item}}
+
+  defp put_item(data, [section], nil, nil), do: Map.delete(data, section)
+  defp put_item(data, [section], value, nil), do: Map.put(data, section, value)
+
+  defp put_item(data, [section, name], value, from) do
+    table = Map.get(data, section, %{})
+    held = Map.get(table, from || name)
+    table = Map.drop(table, Enum.reject([from], &is_nil/1))
+
+    table =
+      cond do
+        is_nil(value) -> Map.delete(table, name)
+        section == "auth" -> Map.put(table, name, keyed(value, held))
+        true -> Map.put(table, name, value)
+      end
+
+    Map.put(data, section, table)
+  end
+
+  # A literal key is the secret itself; `$VAR` and `!cmd` only say where it is.
+  defp literal_key?(%{"key" => key}) when is_binary(key),
+    do: key != "" and not String.starts_with?(key, ["$", "!"])
+
+  defp literal_key?(_provider), do: false
+
+  defp unkeyed(provider, true), do: Map.delete(provider, "key")
+  defp unkeyed(provider, false), do: provider
+
+  defp keyed(value, held) do
+    if not Map.has_key?(value, "key") and is_map(held) and literal_key?(held),
+      do: Map.put(value, "key", held["key"]),
+      else: value
+  end
+
+  # TOML has no null: every value is a string, number, boolean, array or table.
+  defp toml?(value) when is_binary(value) or is_number(value) or is_boolean(value), do: true
+  defp toml?(value) when is_list(value), do: Enum.all?(value, &toml?/1)
+
+  defp toml?(value) when is_map(value),
+    do: Enum.all?(value, fn {key, item} -> is_binary(key) and toml?(item) end)
+
+  defp toml?(_value), do: false
+
   defp read(path) do
+    with {:ok, text} <- read_text(path), do: Toml.decode(text)
+  end
+
+  defp read_text(path) do
     if File.regular?(path) do
-      Toml.decode_file(path)
+      File.read(path)
     else
       {:error, {:config, :missing, path}}
     end

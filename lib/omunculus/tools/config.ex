@@ -4,17 +4,29 @@ defmodule Omunculus.Tools.Config do
   JSON. The project root, agents with their depth, model and ceiling
   lists, the models by name with their api, provider and model id and
   nothing else of their table, the workspaces with their roots and the
-  default one, and each workflow's steps. It loads the TOML in the harness's own process, since
-  the sandbox hides the file from external tools.
+  default one, and each workflow's steps. Then what an editor needs: the
+  items `configure` writes as the file holds them, but a provider's
+  literal key, named in `literal_keys`; the file's revision; and the names
+  a ceiling list may hold — the model tools, their groups and the sandbox
+  resources. It loads the TOML in the harness's own
+  process, since the sandbox hides the file from external tools.
   """
 
   alias Omunculus.Config
+  alias Omunculus.Tool.Catalog
   alias Omunculus.Tools.Out
 
   @spec run(map) :: map
   def run(%{config_path: path}) when is_binary(path) do
-    case Config.load(path) do
-      {:ok, config} -> config |> describe() |> Jason.encode!() |> Out.ok()
+    with {:ok, config} <- Config.load(path),
+         {:ok, editable} <- Config.document(path) do
+      config
+      |> describe()
+      |> Map.merge(editable)
+      |> Map.put(:names, names(config))
+      |> Jason.encode!()
+      |> Out.ok()
+    else
       {:error, reason} -> Out.fail(inspect(reason))
     end
   end
@@ -36,6 +48,12 @@ defmodule Omunculus.Tools.Config do
       workspace: config.policy_workspace,
       workflows: config.workflows |> Enum.sort() |> Enum.map(&workflow/1)
     }
+  end
+
+  defp names(config) do
+    tools = config.tools |> Catalog.discover() |> Catalog.with_trigger("model")
+    groups = tools |> Catalog.groups() |> Map.keys()
+    Enum.sort(Enum.uniq(Map.keys(tools) ++ groups ++ Config.known_resources()))
   end
 
   defp agent({name, agent}) do

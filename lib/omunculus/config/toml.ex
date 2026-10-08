@@ -1,8 +1,9 @@
 defmodule Omunculus.Config.Toml do
   @moduledoc """
   Encodes a nested map of string keys into TOML text: the writer
-  `Omunculus.Config.grant/3` needs to persist a permanent grant back to
-  `omunculus.toml`, nothing more. Text over several lines is a multi-line string. A list whose
+  `Omunculus.Config.grant/3` and `Omunculus.Config.edit/5` need to put a
+  permanent grant or an edited item back into `omunculus.toml`, nothing
+  more. Text over several lines is a multi-line string. A list whose
   entries are all maps (a workflow's `steps`) renders as a list of inline
   tables, and a map inside one (a step's `overrides`) as a nested inline
   table.
