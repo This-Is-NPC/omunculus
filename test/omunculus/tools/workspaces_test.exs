@@ -44,7 +44,7 @@ defmodule Omunculus.Tools.WorkspacesTest do
     assert %{"workspaces" => manifest} = catalog
     assert manifest.triggers == ["model"]
     assert manifest.groups == []
-    assert manifest.views == ["workspaces"]
+    assert Enum.map(manifest.views, &{&1.key, &1.source}) == [{"workspaces", "workspaces"}]
   end
 
   test "the manifest wiring yields the same output as calling the module directly" do

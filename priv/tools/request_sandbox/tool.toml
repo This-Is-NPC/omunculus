@@ -3,7 +3,6 @@ kind = "tool"
 triggers = ["model"]
 description = "Requests a sandbox capability such as write or network: comments the report on the run's work when it has one, opens the request and ends the run."
 tags = ["sandbox", "request"]
-views = ["grant_scopes"]
 groups = ["sandbox"]
 module = "Omunculus.Tools.RequestSandbox"
 chains = ["end"]
@@ -22,3 +21,6 @@ enum = ["sandbox.write", "sandbox.network"]
 
 [parameters.properties.reason]
 type = "string"
+
+[views.grant_scopes]
+source = "grant_scopes"

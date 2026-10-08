@@ -40,6 +40,15 @@ defmodule Omunculus.Store do
   defdelegate publish(conn, message), to: Connection
 
   defdelegate view(conn, name, id), to: View
+  defdelegate children(conn, work_id, states, since_last_run), to: View
+  defdelegate comments(conn, target, id), to: View
+  defdelegate last_closed_run(conn, work_id), to: View
+  defdelegate closed_runs(conn, work_id), to: View
+  defdelegate opener_run(conn, request_id), to: View
+  defdelegate latest_run(conn), to: View
+  defdelegate unread_inbox(conn, work_id), to: View
+  defdelegate counter(conn), to: View
+  defdelegate descends?(conn, work_id, ancestor_id), to: View
   defdelegate replay(conn, scope), to: View
   defdelegate work_depth(conn, work), to: View
   defdelegate grants(conn, work), to: Helpers

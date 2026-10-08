@@ -1786,7 +1786,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert Enum.map(events, & &1.type) == ["comment", "comment", "comment", "tool", "compact"]
       assert Enum.map(Enum.take(events, 3), & &1.comment_id) == [first, second, third]
 
-      assert {:ok, [only]} = Store.view(conn, "comments.work", work_id)
+      assert {:ok, [only]} = Store.comments(conn, :work, work_id)
       assert only.id == summary.id
     end
 
@@ -1924,7 +1924,7 @@ defmodule Omunculus.Store.ActionsTest do
                )
 
       assert event.request_id == request_id
-      assert {:ok, [only]} = Store.view(conn, "comments.request", request_id)
+      assert {:ok, [only]} = Store.comments(conn, :request, request_id)
       assert only.body == "summary"
     end
 
@@ -1946,7 +1946,7 @@ defmodule Omunculus.Store.ActionsTest do
                )
 
       assert event.inbox_id == inbox_id
-      assert {:ok, [only]} = Store.view(conn, "comments.inbox", inbox_id)
+      assert {:ok, [only]} = Store.comments(conn, :inbox, inbox_id)
       assert only.body == "summary"
     end
   end

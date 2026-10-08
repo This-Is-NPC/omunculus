@@ -50,11 +50,13 @@ defmodule Omunculus.Tool.ManifestTest do
       tags = ["comments", "compact"]
       groups = ["work.write"]
       command = ["./run"]
-      views = ["comments"]
 
       [parameters]
       type = "object"
       required = ["path"]
+
+      [views.comments]
+      source = "comments"
       """)
 
     assert {:ok, manifest} = Manifest.load(path)
@@ -63,8 +65,63 @@ defmodule Omunculus.Tool.ManifestTest do
     assert manifest.description == "Summarizes comments on the work."
     assert manifest.tags == ["comments", "compact"]
     assert manifest.groups == ["work.write"]
-    assert manifest.views == ["comments"]
+
+    assert [%{key: "comments", source: "comments", from: ["work", "request", "inbox"]}] =
+             manifest.views
+
     assert manifest.parameters == %{"type" => "object", "required" => ["path"]}
+  end
+
+  test "parses views composed of a source, anchors and options", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "results"
+      kind = "tool"
+      command = ["./run"]
+
+      [views.results]
+      source = "works"
+      relation = "children"
+      state = ["done", "waiting"]
+      since = "last_run"
+      include = ["last_comment"]
+
+      [views.target]
+      source = "works"
+      from = ["args.work_id"]
+      within = "descendants"
+      include = ["comments", "runs"]
+      """)
+
+    assert {:ok, manifest} = Manifest.load(path)
+
+    assert [
+             %{
+               key: "results",
+               relation: "children",
+               states: ["done", "waiting"],
+               since_last_run: true,
+               include: ["last_comment"],
+               from: ["work"]
+             },
+             %{key: "target", relation: "self", from: ["args.work_id"], within: "descendants"}
+           ] = manifest.views
+  end
+
+  test "refuses views as a list, an unknown source and options out of place", %{dir: dir} do
+    for {views, reason} <- [
+          {~s(views = ["comments"]), {:views, :not_a_table}},
+          {"[views.x]\nsource = \"nope\"", {:views, "x", {:unknown_source, "nope"}}},
+          {"[views.x]\nsource = \"works\"\nstate = [\"done\"]", {:views, "x", :children_only}},
+          {"[views.x]\nsource = \"works\"\nfrom = [\"args.id\"]",
+           {:views, "x", {:anchors, ["args.id"]}}},
+          {"[views.x]\nsource = \"runs\"", {:views, "x", {:missing, :relation}}},
+          {"[views.x]\nsource = \"catalog\"\nfrom = [\"work\"]",
+           {:views, "x", {:unknown_key, "from"}}}
+        ] do
+      path = write_toml(dir, "name = \"t\"\nkind = \"tool\"\ncommand = [\"./run\"]\n" <> views)
+      assert {:error, ^reason} = Manifest.load(path)
+    end
   end
 
   test "rejects a missing name", %{dir: dir} do

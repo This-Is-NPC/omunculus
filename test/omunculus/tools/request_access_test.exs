@@ -174,7 +174,7 @@ defmodule Omunculus.Tools.RequestAccessTest do
 
     assert %{"request_access" => manifest} = catalog
     assert manifest.triggers == ["model"]
-    assert manifest.views == ["grant_scopes"]
+    assert Enum.map(manifest.views, &{&1.key, &1.source}) == [{"grant_scopes", "grant_scopes"}]
     assert manifest.chains == ["end"]
     assert manifest.then == ["end"]
   end

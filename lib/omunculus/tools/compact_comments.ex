@@ -47,7 +47,7 @@ defmodule Omunculus.Tools.CompactComments do
   end
 
   defp comments_view(view) do
-    Map.get(view, "comments") || Map.get(view, "comments.work") || []
+    Map.get(view, "comments", [])
   end
 
   defp line(%{id: id, author: author, body: body}), do: "#{id} #{author}: #{body}"

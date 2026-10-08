@@ -5,8 +5,8 @@ defmodule Omunculus.Tools.Assemble do
   `agents` view says a new work may name when the run has the `work`
   card, and the cards, which follow `pinned` on the catalog view. Then
   the work's title and goal, its last comment, and its last closed run
-  (`runs.last.work`), or, without a work, the run that opened the run's
-  request (`runs.request`): the message that opened that run and every
+  (`last_run`), or, without a work, the run that opened the run's request
+  (`opener`): the message that opened that run and every
   event it recorded but the calls of this tool and its start and end,
   that is the model's messages as recorded but their `usage`, each tool
   call with its args, status and output, and each store action it
@@ -32,11 +32,11 @@ defmodule Omunculus.Tools.Assemble do
         agents_section(view["agents"] || [], view["catalog"] || []) ++
         [tools_section(view["catalog"] || [])] ++
         work_section(view["work"]) ++
-        comment_section(view["comments.work"]) ++
-        last_run_section(view["runs.last.work"] || view["runs.request"], name, args) ++
-        request_section(view["request"], view["comments.request"]) ++
+        comment_section(view["comments"]) ++
+        last_run_section(view["last_run"] || view["opener"], name, args) ++
+        request_section(view["request"], view["request_comments"]) ++
         inbox_section(view, args) ++
-        message_section(view["prompt"])
+        message_section(view["message"])
 
     Out.ok(Enum.join(sections, "\n\n"))
   end
@@ -99,7 +99,7 @@ defmodule Omunculus.Tools.Assemble do
   defp inbox_section(view, args) do
     case Map.get(args, "inbox_id") do
       id when is_binary(id) and id != "" ->
-        comments = view["comments.inbox"] || []
+        comments = view["inbox_comments"] || []
         ["## Inbox\n#{id}\n" <> Enum.map_join(comments, "\n", & &1.body)]
 
       _other ->

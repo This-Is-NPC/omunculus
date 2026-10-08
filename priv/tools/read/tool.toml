@@ -1,6 +1,5 @@
 name = "read"
 kind = "tool"
-views = ["paths"]
 triggers = ["model"]
 description = "Reads a file, or limit lines of it from line offset (from 1)."
 tags = ["fs"]
@@ -21,3 +20,6 @@ minimum = 1
 [parameters.properties.limit]
 type = "integer"
 minimum = 1
+
+[views.paths]
+source = "paths"

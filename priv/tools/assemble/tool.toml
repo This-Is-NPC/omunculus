@@ -4,7 +4,6 @@ triggers = ["harness"]
 description = "Builds the assembled prompt of a run from its views."
 tags = ["prompt"]
 groups = ["prompt"]
-views = ["prompt", "work", "comments.work", "runs.last.work", "runs.request", "comments.request", "comments.inbox", "request", "agents", "catalog"]
 module = "Omunculus.Tools.Assemble"
 
 [parameters]
@@ -19,3 +18,39 @@ type = "string"
 [parameters.properties.last_run_output_bytes]
 type = "integer"
 minimum = 1
+
+[views.message]
+source = "prompts"
+relation = "message"
+
+[views.work]
+source = "works"
+
+[views.comments]
+source = "comments"
+from = ["work"]
+
+[views.last_run]
+source = "runs"
+relation = "last_closed"
+
+[views.opener]
+source = "runs"
+relation = "opener"
+
+[views.request]
+source = "requests"
+
+[views.request_comments]
+source = "comments"
+from = ["request"]
+
+[views.inbox_comments]
+source = "comments"
+from = ["inbox"]
+
+[views.agents]
+source = "agents"
+
+[views.catalog]
+source = "catalog"

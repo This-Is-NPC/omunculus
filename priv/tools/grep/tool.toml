@@ -1,6 +1,5 @@
 name = "grep"
 kind = "tool"
-views = ["paths"]
 triggers = ["model"]
 description = "Searches file contents for text, keeping at most limit matches."
 tags = ["fs"]
@@ -20,3 +19,6 @@ type = "string"
 [parameters.properties.limit]
 type = "integer"
 minimum = 1
+
+[views.paths]
+source = "paths"

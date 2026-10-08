@@ -4,7 +4,7 @@ defmodule Omunculus.Store.ViewTest do
   alias Omunculus.Fixtures
   alias Omunculus.Store.View
 
-  describe "comments.work" do
+  describe "comments of a work" do
     test "returns only comments of that work, ordered by created_at", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
       other_work_id = Fixtures.insert(conn, :works)
@@ -17,18 +17,18 @@ defmodule Omunculus.Store.ViewTest do
 
       Fixtures.insert(conn, :comments, %{work_id: other_work_id})
 
-      assert {:ok, [first, second]} = View.view(conn, "comments.work", work_id)
+      assert {:ok, [first, second]} = View.comments(conn, :work, work_id)
       assert [first.id, second.id] == [first_id, second_id]
     end
 
     test "returns an empty list for a work with no comments", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
 
-      assert {:ok, []} = View.view(conn, "comments.work", work_id)
+      assert {:ok, []} = View.comments(conn, :work, work_id)
     end
   end
 
-  describe "comments.request" do
+  describe "comments of a request" do
     test "returns only comments of that request", %{conn: conn} do
       request_id = Fixtures.insert(conn, :requests)
       other_request_id = Fixtures.insert(conn, :requests)
@@ -36,18 +36,18 @@ defmodule Omunculus.Store.ViewTest do
       comment_id = Fixtures.insert(conn, :comments, %{request_id: request_id})
       Fixtures.insert(conn, :comments, %{request_id: other_request_id})
 
-      assert {:ok, [comment]} = View.view(conn, "comments.request", request_id)
+      assert {:ok, [comment]} = View.comments(conn, :request, request_id)
       assert comment.id == comment_id
     end
 
     test "returns an empty list for a request with no comments", %{conn: conn} do
       request_id = Fixtures.insert(conn, :requests)
 
-      assert {:ok, []} = View.view(conn, "comments.request", request_id)
+      assert {:ok, []} = View.comments(conn, :request, request_id)
     end
   end
 
-  describe "comments.inbox" do
+  describe "comments of an inbox entry" do
     test "returns only comments of the requested inbox, oldest first", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
       other_work_id = Fixtures.insert(conn, :works)
@@ -71,18 +71,18 @@ defmodule Omunculus.Store.ViewTest do
       Fixtures.insert(conn, :comments, %{inbox_id: other_inbox_id})
       Fixtures.insert(conn, :comments, %{inbox_id: second_inbox_id})
 
-      assert {:ok, [first, second]} = View.view(conn, "comments.inbox", first_inbox_id)
+      assert {:ok, [first, second]} = View.comments(conn, :inbox, first_inbox_id)
       assert [first.id, second.id] == [first_id, second_id]
     end
 
     test "returns an empty list for a work with no inbox comments", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
 
-      assert {:ok, []} = View.view(conn, "comments.inbox", work_id)
+      assert {:ok, []} = View.comments(conn, :inbox, work_id)
     end
   end
 
-  describe "inbox.work" do
+  describe "unread inbox of a work" do
     test "lists unread entries of that work only, each with its earliest comment body", %{
       conn: conn
     } do
@@ -108,7 +108,7 @@ defmodule Omunculus.Store.ViewTest do
       Fixtures.insert(conn, :comments, %{inbox_id: first_id, body: "need this"})
       Fixtures.insert(conn, :comments, %{inbox_id: read_id, body: "ignored"})
 
-      assert {:ok, [entry]} = View.view(conn, "inbox.work", work_id)
+      assert {:ok, [entry]} = View.unread_inbox(conn, work_id)
       assert entry.id == first_id
       assert entry.body == "need this"
     end
@@ -116,7 +116,7 @@ defmodule Omunculus.Store.ViewTest do
     test "returns an empty list for a work with no notifications", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
 
-      assert {:ok, []} = View.view(conn, "inbox.work", work_id)
+      assert {:ok, []} = View.unread_inbox(conn, work_id)
     end
   end
 
@@ -153,7 +153,7 @@ defmodule Omunculus.Store.ViewTest do
                context
              )
 
-    assert {:ok, 0} = View.view(conn, "counter", nil)
+    assert {:ok, 0} = View.counter(conn)
   end
 
   describe "work_depth" do
@@ -209,7 +209,7 @@ defmodule Omunculus.Store.ViewTest do
     end
   end
 
-  describe "inbox" do
+  describe "unread inbox" do
     test "lists unread entries in order, each with its earliest comment body", %{conn: conn} do
       first_id =
         Fixtures.insert(conn, :inbox, %{agent: "concierge", created_at: "2026-01-01T00:00:00Z"})
@@ -237,7 +237,7 @@ defmodule Omunculus.Store.ViewTest do
 
       Fixtures.insert(conn, :comments, %{inbox_id: read_id, body: "ignored"})
 
-      assert {:ok, [first, second]} = View.view(conn, "inbox", nil)
+      assert {:ok, [first, second]} = View.unread_inbox(conn, nil)
 
       assert first.id == first_id
       assert first.agent == "concierge"
@@ -275,12 +275,12 @@ defmodule Omunculus.Store.ViewTest do
   end
 
   describe "runs of a work" do
-    test "runs.last.work is the last closed run with every event it recorded", %{conn: conn} do
+    test "last_closed_run is the last closed run with every event it recorded", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
       closed_run(conn, work_id, [:comment, :end])
       run = closed_run(conn, work_id, [{:model, "first"}, {:model, "final"}])
 
-      assert {:ok, last} = View.view(conn, "runs.last.work", work_id)
+      assert {:ok, last} = View.last_closed_run(conn, work_id)
       assert last.id == run.id
       assert {:ok, events} = View.replay(conn, {:run, run.id})
       assert last.events == events
@@ -288,23 +288,23 @@ defmodule Omunculus.Store.ViewTest do
       assert ["start-run", "model", "model", "end-run"] = Enum.map(last.events, & &1.type)
     end
 
-    test "runs.request is the run that opened the request, with its message and events", %{
+    test "opener_run is the run that opened the request, with its message and events", %{
       conn: conn
     } do
       run = closed_run(conn, nil, [{:model, "asked"}])
       Fixtures.insert(conn, :prompts, %{run_id: run.id, body: "save this"})
       request_id = Fixtures.insert(conn, :requests, %{run_id: run.id})
 
-      assert {:ok, found} = View.view(conn, "runs.request", request_id)
+      assert {:ok, found} = View.opener_run(conn, request_id)
       assert found.id == run.id
       assert found.message.body == "save this"
       assert ["start-run", "model", "end-run"] = Enum.map(found.events, & &1.type)
     end
 
-    test "runs.last.work is nil for a work without closed runs", %{conn: conn} do
+    test "last_closed_run is nil for a work without closed runs", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
 
-      assert {:ok, nil} = View.view(conn, "runs.last.work", work_id)
+      assert {:ok, nil} = View.last_closed_run(conn, work_id)
     end
 
     test "unended_runs counts the latest runs in a row without end", %{conn: conn} do
@@ -321,13 +321,13 @@ defmodule Omunculus.Store.ViewTest do
     end
   end
 
-  describe "runs.last" do
+  describe "latest_run" do
     test "returns the newest started_at, then id", %{conn: conn} do
       older = Fixtures.insert(conn, :runs, %{started_at: "2026-01-01T00:00:00Z"})
       newer = Fixtures.insert(conn, :runs, %{started_at: "2026-01-02T00:00:00Z"})
       Fixtures.insert(conn, :runs, %{started_at: "2026-01-01T12:00:00Z"})
 
-      assert {:ok, run} = View.view(conn, "runs.last", nil)
+      assert {:ok, run} = View.latest_run(conn)
       assert run.id == newer
       refute run.id == older
     end
@@ -336,13 +336,13 @@ defmodule Omunculus.Store.ViewTest do
       first = Fixtures.insert(conn, :runs, %{id: "run_a", started_at: "2026-01-01T00:00:00Z"})
       second = Fixtures.insert(conn, :runs, %{id: "run_b", started_at: "2026-01-01T00:00:00Z"})
 
-      assert {:ok, run} = View.view(conn, "runs.last", nil)
+      assert {:ok, run} = View.latest_run(conn)
       assert run.id == second
       refute run.id == first
     end
 
     test "returns nil when the store has no runs", %{conn: conn} do
-      assert {:ok, nil} = View.view(conn, "runs.last", nil)
+      assert {:ok, nil} = View.latest_run(conn)
     end
   end
 
@@ -395,16 +395,6 @@ defmodule Omunculus.Store.ViewTest do
 
       assert {:ok, events} = View.replay(conn, :project)
       assert Enum.map(events, & &1.id) == [first_id, second_id]
-    end
-
-    test "events.run view equals replay({:run, id})", %{conn: conn} do
-      run_id = Fixtures.insert(conn, :runs)
-      other_run_id = Fixtures.insert(conn, :runs)
-
-      Fixtures.insert(conn, :events, %{run_id: run_id, sequence: 1})
-      Fixtures.insert(conn, :events, %{run_id: other_run_id, sequence: 2})
-
-      assert View.view(conn, "events.run", run_id) == View.replay(conn, {:run, run_id})
     end
   end
 end

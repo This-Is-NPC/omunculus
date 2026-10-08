@@ -1,26 +1,22 @@
 defmodule Omunculus.Store.View do
   @moduledoc """
-  Read side of the store: the five functions of spec §8.3, the `runs` and
-  `prompts` rows the harness needs to assemble or continue a run, the
-  unread `inbox` list with each row's earliest comment (spec §3.6), the
-  unread notifications of one work (`"inbox.work"`), the comments of
-  one inbox entry, oldest first (`"comments.inbox"`), the most recently
-  started run (`"runs.last"`), the last closed run of a work
-  (`"runs.last.work"`) and the run that opened a request
-  (`"runs.request"`), each with the message that opened it and every
-  event it recorded, how many of a work's latest closed runs in a row
-  lack `end`, the depth of a work by walking `parent_id`, plus replay of
-  `events` for a project, run, work, request, or inbox scope (spec §4).
-  Never executes anything against the store.
+  Read side of the store. `view/3` reads one row the harness and the store
+  need by id: an `event`, `work`, `run`, `request` or `prompt`. The named
+  functions read the cuts a tool's views are composed from
+  (`Omunculus.Tool.Views`): a work's children, parent and comments, the
+  comments of a request or an inbox entry, a work's last closed run and
+  the run that opened a request — each with the message that opened it and
+  every event it recorded — the events of a run, the most recent run, the
+  unread inbox of the project or of a work, and the bench counter. Also how
+  many of a work's latest closed runs in a row lack `end`, the depth of a
+  work by walking `parent_id`, whether a work descends from another, and
+  replay of `events` for a project, run, work, request, inbox or
+  conversation scope. Never executes anything against the store.
   """
 
   alias Omunculus.Store.Query
 
-  @comment_views %{
-    "comments.work" => :work_id,
-    "comments.request" => :request_id,
-    "comments.inbox" => :inbox_id
-  }
+  @comment_columns %{work: :work_id, request: :request_id, inbox: :inbox_id}
 
   @inbox_columns """
   id, agent, work_id, created_at,
@@ -32,45 +28,101 @@ defmodule Omunculus.Store.View do
   @closed_runs """
   FROM runs JOIN events AS start ON start.id = runs.event_id
   WHERE runs.work_id = ? AND runs.status = 'done'
-  ORDER BY start.sequence DESC
   """
 
   @replay_columns %{run: :run_id, work: :work_id, request: :request_id, inbox: :inbox_id}
 
   @spec view(Omunculus.Store.Connection.t(), String.t(), String.t()) ::
-          {:ok, [map] | map | nil} | {:error, {:unknown_view, String.t()}}
+          {:ok, map | nil} | {:error, {:unknown_view, String.t()}}
   def view(conn, name, id)
 
   def view(conn, "event", id), do: Query.one(conn, "SELECT * FROM events WHERE id = ?", [id])
+  def view(conn, "work", id), do: Query.one(conn, "SELECT * FROM works WHERE id = ?", [id])
+  def view(conn, "run", id), do: Query.one(conn, "SELECT * FROM runs WHERE id = ?", [id])
 
-  def view(conn, "counter", _id) do
-    with {:ok, events} <-
-           Query.all(conn, "SELECT body FROM events WHERE type = 'tool' ORDER BY sequence") do
-      {:ok, counter_value(events)}
+  def view(conn, "request", id),
+    do: Query.one(conn, "SELECT * FROM requests WHERE id = ?", [id])
+
+  def view(conn, "prompt", id), do: Query.one(conn, "SELECT * FROM prompts WHERE id = ?", [id])
+  def view(_conn, name, _id), do: {:error, {:unknown_view, name}}
+
+  @doc """
+  The children of a work, oldest first: only those in `states` when given,
+  and, with `since_last_run`, only those changed after the work's last
+  closed run finished.
+  """
+  @spec children(Omunculus.Store.Connection.t(), String.t(), [String.t()] | nil, boolean) ::
+          {:ok, [map]}
+  def children(conn, work_id, states, since_last_run) do
+    {state_filter, state_params} =
+      case states do
+        nil -> {"", []}
+        states -> {" AND state IN (#{Enum.map_join(states, ", ", fn _ -> "?" end)})", states}
+      end
+
+    with {:ok, since} <- since(conn, work_id, since_last_run) do
+      {since_filter, since_params} =
+        if since, do: {" AND updated_at > ?", [since]}, else: {"", []}
+
+      Query.all(
+        conn,
+        "SELECT * FROM works WHERE parent_id = ?#{state_filter}#{since_filter} ORDER BY created_at, id",
+        [work_id | state_params] ++ since_params
+      )
     end
   end
 
-  def view(conn, "events.run", id), do: replay(conn, {:run, id})
+  defp since(_conn, _work_id, false), do: {:ok, nil}
 
-  def view(conn, "work", id) do
-    Query.one(conn, "SELECT * FROM works WHERE id = ?", [id])
+  defp since(conn, work_id, true) do
+    with {:ok, run} <-
+           Query.one(
+             conn,
+             "SELECT runs.finished_at #{@closed_runs} ORDER BY start.sequence DESC LIMIT 1",
+             [work_id]
+           ) do
+      {:ok, run && run.finished_at}
+    end
   end
 
-  def view(conn, "run", id) do
-    Query.one(conn, "SELECT * FROM runs WHERE id = ?", [id])
+  @doc "The comments of a work, request or inbox entry, oldest first."
+  @spec comments(Omunculus.Store.Connection.t(), :work | :request | :inbox, String.t()) ::
+          {:ok, [map]}
+  def comments(conn, target, id) do
+    column = Map.fetch!(@comment_columns, target)
+    Query.all(conn, "SELECT * FROM comments WHERE #{column} = ? ORDER BY created_at, id", [id])
   end
 
-  def view(conn, "runs.last", _id) do
-    Query.one(conn, "SELECT * FROM runs ORDER BY started_at DESC, id DESC LIMIT 1")
-  end
-
-  def view(conn, "runs.last.work", work_id) do
-    with {:ok, run} <- Query.one(conn, "SELECT runs.* #{@closed_runs} LIMIT 1", [work_id]) do
+  @doc "The last closed run of a work, with its record."
+  @spec last_closed_run(Omunculus.Store.Connection.t(), String.t()) :: {:ok, map | nil}
+  def last_closed_run(conn, work_id) do
+    with {:ok, run} <-
+           Query.one(
+             conn,
+             "SELECT runs.* #{@closed_runs} ORDER BY start.sequence DESC LIMIT 1",
+             [work_id]
+           ) do
       with_record(conn, run)
     end
   end
 
-  def view(conn, "runs.request", request_id) do
+  @doc "The closed runs of a work, oldest first, each with its record."
+  @spec closed_runs(Omunculus.Store.Connection.t(), String.t()) :: {:ok, [map]}
+  def closed_runs(conn, work_id) do
+    with {:ok, runs} <-
+           Query.all(conn, "SELECT runs.* #{@closed_runs} ORDER BY start.sequence", [work_id]) do
+      Enum.reduce_while(runs, {:ok, []}, fn run, {:ok, acc} ->
+        case with_record(conn, run) do
+          {:ok, recorded} -> {:cont, {:ok, acc ++ [recorded]}}
+          error -> {:halt, error}
+        end
+      end)
+    end
+  end
+
+  @doc "The run that opened a request, with its record."
+  @spec opener_run(Omunculus.Store.Connection.t(), String.t()) :: {:ok, map | nil}
+  def opener_run(conn, request_id) do
     with {:ok, run} <-
            Query.one(
              conn,
@@ -81,15 +133,14 @@ defmodule Omunculus.Store.View do
     end
   end
 
-  def view(conn, "request", id) do
-    Query.one(conn, "SELECT * FROM requests WHERE id = ?", [id])
-  end
+  @doc "The most recently started run."
+  @spec latest_run(Omunculus.Store.Connection.t()) :: {:ok, map | nil}
+  def latest_run(conn),
+    do: Query.one(conn, "SELECT * FROM runs ORDER BY started_at DESC, id DESC LIMIT 1")
 
-  def view(conn, "prompt", id) do
-    Query.one(conn, "SELECT * FROM prompts WHERE id = ?", [id])
-  end
-
-  def view(conn, "inbox", _id) do
+  @doc "The unread inbox, of the project or of one work, each entry with its first comment."
+  @spec unread_inbox(Omunculus.Store.Connection.t(), String.t() | nil) :: {:ok, [map]}
+  def unread_inbox(conn, nil) do
     Query.all(conn, """
     SELECT #{@inbox_columns}
     FROM inbox
@@ -98,7 +149,7 @@ defmodule Omunculus.Store.View do
     """)
   end
 
-  def view(conn, "inbox.work", work_id) do
+  def unread_inbox(conn, work_id) do
     Query.all(
       conn,
       """
@@ -111,17 +162,14 @@ defmodule Omunculus.Store.View do
     )
   end
 
-  def view(conn, name, id) when is_map_key(@comment_views, name) do
-    column = Map.fetch!(@comment_views, name)
-
-    Query.all(
-      conn,
-      "SELECT * FROM comments WHERE #{column} = ? ORDER BY created_at, id",
-      [id]
-    )
+  @doc "The bench counter: `counter` calls minus `counter_decrement` calls."
+  @spec counter(Omunculus.Store.Connection.t()) :: {:ok, integer}
+  def counter(conn) do
+    with {:ok, events} <-
+           Query.all(conn, "SELECT body FROM events WHERE type = 'tool' ORDER BY sequence") do
+      {:ok, counter_value(events)}
+    end
   end
-
-  def view(_conn, name, _id), do: {:error, {:unknown_view, name}}
 
   @spec work_depth(Omunculus.Store.Connection.t(), map) :: non_neg_integer
   def work_depth(_conn, %{parent_id: nil}), do: 0
@@ -129,6 +177,17 @@ defmodule Omunculus.Store.View do
   def work_depth(conn, %{parent_id: parent_id}) do
     {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
     1 + work_depth(conn, parent)
+  end
+
+  @doc "Whether `work_id` is below `ancestor_id`, at any depth."
+  @spec descends?(Omunculus.Store.Connection.t(), String.t(), String.t()) :: boolean
+  def descends?(conn, work_id, ancestor_id) do
+    case Query.one(conn, "SELECT parent_id FROM works WHERE id = ?", [work_id]) do
+      {:ok, %{parent_id: ^ancestor_id}} -> true
+      {:ok, %{parent_id: nil}} -> false
+      {:ok, %{parent_id: parent_id}} -> descends?(conn, parent_id, ancestor_id)
+      {:ok, nil} -> false
+    end
   end
 
   @doc "The number of the most recent closed runs of a work, in a row, without `end`."
@@ -141,6 +200,7 @@ defmodule Omunculus.Store.View do
         SELECT EXISTS (SELECT 1 FROM events
           WHERE events.run_id = runs.id AND events.type = 'end') AS ended
         #{@closed_runs}
+        ORDER BY start.sequence DESC
         """,
         [work_id]
       )

@@ -3,7 +3,6 @@ kind = "tool"
 triggers = ["model"]
 description = "Requests access to a tool, path, or directory: comments the report on the run's work when it has one, opens the request and ends the run."
 tags = ["store", "request"]
-views = ["grant_scopes"]
 groups = ["store"]
 module = "Omunculus.Tools.RequestAccess"
 chains = ["end"]
@@ -25,3 +24,6 @@ type = "string"
 
 [parameters.properties.reason]
 type = "string"
+
+[views.grant_scopes]
+source = "grant_scopes"

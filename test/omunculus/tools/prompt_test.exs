@@ -33,7 +33,7 @@ defmodule Omunculus.Tools.PromptTest do
 
     assert %{"prompt" => manifest} = catalog
     assert manifest.triggers == ["cli"]
-    assert manifest.views == ["prompt"]
+    assert Enum.map(manifest.views, &{&1.key, &1.source}) == [{"prompt", "prompts"}]
     assert manifest.groups == ["cli"]
   end
 

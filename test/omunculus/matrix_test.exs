@@ -173,7 +173,7 @@ defmodule Omunculus.MatrixTest do
   end
 
   defp counter_value(conn) do
-    assert {:ok, value} = Store.view(conn, "counter", nil)
+    assert {:ok, value} = Store.counter(conn)
     Integer.to_string(value)
   end
 

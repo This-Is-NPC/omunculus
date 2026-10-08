@@ -817,7 +817,7 @@ defmodule Omunculus.RunTest do
     assert {:ok, [_request]} = Query.all(project.conn, "SELECT * FROM requests")
 
     assert {:ok, [%{body: "blocked on write"}]} =
-             Store.view(project.conn, "comments.work", work_id)
+             Store.comments(project.conn, :work, work_id)
 
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
 
@@ -882,7 +882,7 @@ defmodule Omunculus.RunTest do
     assert {:ok, run} = Run.open(project, opening(message(project.conn), work_id))
     assert_received {:break, {:ok, "report required"}}
 
-    assert {:ok, []} = Store.view(project.conn, "comments.work", work_id)
+    assert {:ok, []} = Store.comments(project.conn, :work, work_id)
     assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", work_id)
 
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})

@@ -1,6 +1,5 @@
 name = "edit"
 kind = "tool"
-views = ["paths"]
 triggers = ["model"]
 description = "Replaces an exact span in a file."
 tags = ["fs"]
@@ -19,3 +18,6 @@ type = "string"
 
 [parameters.properties.new]
 type = "string"
+
+[views.paths]
+source = "paths"

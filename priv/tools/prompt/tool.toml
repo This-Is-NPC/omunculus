@@ -4,7 +4,6 @@ triggers = ["cli"]
 description = "Prints the assembled prompt of a run."
 tags = ["cli", "prompt"]
 groups = ["cli"]
-views = ["prompt"]
 module = "Omunculus.Tools.Prompt"
 
 [parameters]
@@ -12,3 +11,7 @@ type = "object"
 
 [parameters.properties.run]
 type = "string"
+
+[views.prompt]
+source = "prompts"
+relation = "assembled"

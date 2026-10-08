@@ -124,7 +124,7 @@ defmodule Omunculus.SpecRegressionTest do
              Store.record_tools(p.conn, nil, [{%{name: "comment"}, emits}], ctx)
 
     assert {:ok, []} = Store.replay(p.conn, :project)
-    assert {:ok, []} = Store.view(p.conn, "comments.work", work)
+    assert {:ok, []} = Store.comments(p.conn, :work, work)
   end
 
   test "sealed child request goes to the human even when the parent has authority", %{project: p} do
@@ -400,7 +400,7 @@ defmodule Omunculus.SpecRegressionTest do
              )
 
     assert {:ok, [%{body: "noted", author: "human"}]} =
-             Store.view(p.conn, "comments.inbox", inbox)
+             Store.comments(p.conn, :inbox, inbox)
 
     assert {:ok, []} = Query.all(p.conn, "SELECT * FROM requests")
   end

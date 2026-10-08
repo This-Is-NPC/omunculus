@@ -83,7 +83,7 @@ defmodule Omunculus.Tools.DoneTest do
              {"on-continue", nil}
            ]
 
-    assert {:ok, [%{body: "all counted"}]} = Store.view(project.conn, "comments.work", work_id)
+    assert {:ok, [%{body: "all counted"}]} = Store.comments(project.conn, :work, work_id)
 
     assert {:ok, %{state: "done"}} =
              Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])

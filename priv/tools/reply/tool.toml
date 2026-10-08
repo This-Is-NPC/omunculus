@@ -4,7 +4,6 @@ triggers = ["cli", "model"]
 description = "Answers a request: picks one of its options, whose tool calls run, with a comment."
 tags = ["store", "request"]
 groups = ["store"]
-views = ["request"]
 module = "Omunculus.Tools.Reply"
 chains = ["grant", "cancel"]
 
@@ -20,3 +19,6 @@ type = "string"
 
 [parameters.properties.option]
 type = "string"
+
+[views.request]
+source = "requests"

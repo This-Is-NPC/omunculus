@@ -1805,7 +1805,7 @@ defmodule Omunculus.CLITest do
 
       project = open_project(dir)
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
-      assert {:ok, comments} = Store.view(project.conn, "comments.work", work.id)
+      assert {:ok, comments} = Store.comments(project.conn, :work, work.id)
       assert Enum.map(comments, & &1.body) == ["opened", "one", "two", "three"]
       Project.close(project)
 
@@ -1831,7 +1831,7 @@ defmodule Omunculus.CLITest do
 
       project = open_project(dir)
 
-      assert {:ok, [summary]} = Store.view(project.conn, "comments.work", work.id)
+      assert {:ok, [summary]} = Store.comments(project.conn, :work, work.id)
       assert summary.body == "summary: 1 2 3"
 
       assert {:ok, work_events} = Store.replay(project.conn, {:work, work.id})
@@ -1900,7 +1900,7 @@ defmodule Omunculus.CLITest do
 
       project = open_project(dir)
 
-      assert {:ok, [comment]} = Store.view(project.conn, "comments.work", other_work_id)
+      assert {:ok, [comment]} = Store.comments(project.conn, :work, other_work_id)
       assert comment.id == other_comment_id
       assert comment.body == "do not touch"
 

@@ -185,7 +185,7 @@ defmodule Omunculus.HttpModelCase do
 
     try do
       {:ok, run} = Run.open(project, Fixtures.opening(nil))
-      {:ok, 1} = Store.view(project.conn, "counter", nil)
+      {:ok, 1} = Store.counter(project.conn)
       {:ok, events} = Store.replay(project.conn, {:run, run.id})
       events
     after

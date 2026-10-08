@@ -14,10 +14,9 @@ in:  { name, args, view, run_id, work_id, workspace, roots, config_path }
 out: { ok, output, emit, chain }
 ```
 
-`view` is the cut of the store the harness already resolved, from the
-names the manifest listed (`views = ["comments"]`, or a `load` that
-points at a cut). Without a declaration, `view` is empty. The tool does
-not open SQLite.
+`view` holds what the harness read for the call, one entry per
+`[views.<key>]` table of the manifest (see [Views](#views)). Without a
+declaration, `view` is empty. The tool does not open SQLite.
 
 `output` is what the model (or the CLI) reads from this call. It is not
 `PROMPTS.assembled` — that is the `output` of the `assemble` tool after
@@ -142,38 +141,48 @@ failed `EVENTS(tool)` whose `output` says which step failed and why. An
 emit the store rejects writes nothing at all. Hooks react to the step
 events like to any event, after the chain commits.
 
-## Views and actions
+## Views
 
-Views the store will hydrate:
+A view is a table of the manifest. Its key is the name the call reads it
+under in `view`; `source` says what it reads, `from` where it starts —
+a list of anchors, the first one present wins — and the rest are the
+options of that source. A view whose anchors are all absent is left out.
+A declaration the core does not know refuses the manifest.
 
-| View | Cut | Alias |
+```toml
+[views.results]
+source   = "works"
+relation = "children"
+state    = ["done", "cancelled", "waiting"]
+since    = "last_run"
+include  = ["last_comment"]
+```
+
+Anchors are the call's own: `work`, `run`, `request`, `inbox`, `prompt`;
+`latest_run`, the most recently started run; `args.<name>`, a string
+argument of the call.
+
+| Source | Reads | Options |
 | --- | --- | --- |
-| `comments.work` | comments of that work | `comments`, when the run is on a work |
-| `comments.request` | of that request | `comments`, on a request |
-| `comments.inbox` | of that inbox | `comments`, on an inbox |
-| `events.run` | events of that run | `events` |
-| `work` | that work row | |
-| `runs.last` | the most recent run | CLI `prompt` |
-| `runs.last.work` | the work's last closed run with the message that opened it (`message`) and every event it recorded (`events`) | |
-| `runs.request` | the run that opened the run's request, with `message` and `events` | |
-| `request` | the request named by the call's `request_id` argument, or the run's request | |
-| `grant_scopes` | the scopes a permanent `grant` may name (`agent`, `depth`, `stage`, `workspace`); `request_access` builds its options from it | |
-| `prompt` | the message prompt of the run's opening; from the CLI, the assembled prompt of `--run`, or of the last run | |
-| `inbox` | unread notifications, each with its first comment as `body` | |
-| `inbox.work` | the unread notifications of that work | |
+| `works` | the work (`relation = "self"`, the default), its `parent`, or its `children`, oldest first | `from` is `work` (default) or `args.<name>` with `within = "descendants"`, which reads only a work below the call's own; children take `state` (a list) and `since = "last_run"` (changed after the work's last closed run finished); `include` adds `last_comment`, `comments` or the closed `runs` with their record to each work |
+| `comments` | the comments of the first of `from` among `work`, `request`, `inbox`, oldest first | `from` (default all three, in that order) |
+| `runs` | `relation = "last_closed"`: the work's last closed run; `"opener"`: the run that opened the call's request — each with the message that opened it (`message`) and every event it recorded (`events`) | `relation` (required) |
+| `events` | `relation = "run"`: the events of the call's run so far | `relation` (required) |
+| `requests` | the request named by the `request_id` argument, or the call's request | `from` |
+| `prompts` | `relation = "message"`: the prompt that opened the run; `"assembled"`: the assembled prompt of the run named by `from` (default `args.run`, then `latest_run`) | `relation` (required); `from` for `assembled` |
+| `inbox` | unread notifications, each with its first comment as `body`: of the project, or of the call's work with `from = ["work"]` | `from` |
+| `counter` | the value the `counter` tools keep in `EVENTS` | |
 | `catalog` | the cards of the run's effective `model` tools, each marked `pinned` or not | |
 | `workspaces` | every configured workspace, its `root` and whether it is the call's | |
+| `agents` | the agents a new work may name, below the run's work (depth 0 without one), not `workflow_only`, none when that depth has a workflow | |
 | `paths` | the path permissions of the run's ceiling | |
-| `counter` | the value the `counter` tools keep in `EVENTS` | |
+| `grant_scopes` | the scopes a permanent `grant` may name (`agent`, `depth`, `stage`, `workspace`) | |
 
-Qualified names are canonical. A manifest copied from the spec with
-`views = ["comments"]` still loads.
+Every read stays in the call's conversation and goes only through these
+relations. `assemble` renders `agents` under `## Agents` when the run has
+the `work` card.
 
-`agents` comes from the TOML, not the store: the names of the agents at
-the depth of the works the call would create (the depth below the run's
-work, or depth 0 without a work) that are not `workflow_only`, and none
-when that depth has a workflow. `assemble` renders them under
-`## Agents` when the run has the `work` card.
+## Actions
 
 Actions the store will apply: `comment`, `request`, `notify`, `prompt`,
 `inbox.read`, `reply`, `grant`, `cancel`, `work`, `delegate`,

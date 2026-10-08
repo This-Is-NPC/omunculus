@@ -120,7 +120,7 @@ defmodule Omunculus.HarnessTest do
     Project.close(project)
   end
 
-  test "a tool that declares views = [\"events.run\"] receives the run's events so far", %{
+  test "a tool with an events view of its run receives the run's events so far", %{
     dir: dir
   } do
     write_config(dir, """
@@ -137,8 +137,11 @@ defmodule Omunculus.HarnessTest do
       name = "counter"
       kind = "tool"
       triggers = ["model"]
-      views = ["events.run"]
       command = ["./run"]
+
+      [views.events]
+      source = "events"
+      relation = "run"
       """,
       """
       #!/bin/sh
@@ -169,7 +172,7 @@ defmodule Omunculus.HarnessTest do
     Project.close(project)
   end
 
-  test "a project tool declaring views = [\"work\", \"comments.work\"] receives both once the run is on a work",
+  test "a project tool with work and comments views receives both once the run is on a work",
        %{dir: dir} do
     write_config(dir, """
     [agents.concierge]
@@ -185,8 +188,14 @@ defmodule Omunculus.HarnessTest do
       name = "viewer"
       kind = "tool"
       triggers = ["model"]
-      views = ["work", "comments.work"]
       command = ["./run"]
+
+      [views.work]
+      source = "works"
+
+      [views.comments]
+      source = "comments"
+      from = ["work"]
       """,
       """
       #!/bin/sh
@@ -228,7 +237,7 @@ defmodule Omunculus.HarnessTest do
     Project.close(project)
   end
 
-  test "a tool declaring views = [\"comments\"] on a work run receives comments.work", %{
+  test "a comments view with the default anchors on a work run receives the work's comments", %{
     dir: dir
   } do
     write_tool(
@@ -238,8 +247,10 @@ defmodule Omunculus.HarnessTest do
       name = "viewer"
       kind = "tool"
       triggers = ["model"]
-      views = ["comments"]
       command = ["./run"]
+
+      [views.comments]
+      source = "comments"
       """,
       """
       #!/bin/sh
@@ -270,7 +281,7 @@ defmodule Omunculus.HarnessTest do
     Project.close(project)
   end
 
-  test "a tool declaring views = [\"events\"] receives the same events as events.run", %{
+  test "a comments view from the request receives the run's request comments", %{
     dir: dir
   } do
     write_tool(
@@ -280,55 +291,11 @@ defmodule Omunculus.HarnessTest do
       name = "viewer"
       kind = "tool"
       triggers = ["model"]
-      views = ["events"]
       command = ["./run"]
-      """,
-      """
-      #!/bin/sh
-      data=$(cat)
-      case "$data" in
-        *start-run*) echo '{"ok": true, "output": "yes", "emit": []}' ;;
-        *) echo '{"ok": true, "output": "no", "emit": []}' ;;
-      esac
-      """
-    )
 
-    project = open_project(dir)
-    run_id = Fixtures.insert(project.conn, :runs)
-
-    Fixtures.insert(project.conn, :events, %{
-      run_id: run_id,
-      type: "start-run",
-      sequence: 1,
-      body: "{}"
-    })
-
-    ctx = %{
-      trigger: "model",
-      run_id: run_id,
-      author: "agent",
-      agent: "concierge",
-      execution: execution(dir)
-    }
-
-    assert {:ok, out, _events} = Harness.dispatch(project, "viewer", %{}, ctx)
-    assert out.output == "yes"
-
-    Project.close(project)
-  end
-
-  test "a tool declaring views = [\"comments.request\"] receives the run's request comments", %{
-    dir: dir
-  } do
-    write_tool(
-      dir,
-      "viewer",
-      """
-      name = "viewer"
-      kind = "tool"
-      triggers = ["model"]
-      views = ["comments.request"]
-      command = ["./run"]
+      [views.comments]
+      source = "comments"
+      from = ["request"]
       """,
       """
       #!/bin/sh
@@ -359,7 +326,7 @@ defmodule Omunculus.HarnessTest do
     Project.close(project)
   end
 
-  test "a tool declaring views = [\"comments.inbox\", \"inbox.work\"] receives the work's inbox comments and notifications",
+  test "an inbox view from the work receives that work's unread notifications",
        %{dir: dir} do
     write_tool(
       dir,
@@ -368,8 +335,11 @@ defmodule Omunculus.HarnessTest do
       name = "viewer"
       kind = "tool"
       triggers = ["model"]
-      views = ["comments.inbox", "inbox.work"]
       command = ["./run"]
+
+      [views.inbox]
+      source = "inbox"
+      from = ["work"]
       """,
       """
       #!/bin/sh
@@ -502,7 +472,7 @@ defmodule Omunculus.HarnessTest do
     Project.close(project)
   end
 
-  test "a tool declaring views = [\"inbox\"] receives the unread list outside any run", %{
+  test "an inbox view receives the unread list outside any run", %{
     dir: dir
   } do
     write_tool(
@@ -512,8 +482,10 @@ defmodule Omunculus.HarnessTest do
       name = "peek"
       kind = "tool"
       triggers = ["cli"]
-      views = ["inbox"]
       command = ["./run"]
+
+      [views.inbox]
+      source = "inbox"
       """,
       """
       #!/bin/sh

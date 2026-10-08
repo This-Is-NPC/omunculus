@@ -42,7 +42,7 @@ defmodule Omunculus.Tools.CounterTest do
     assert %{"counter" => manifest} = catalog
     assert manifest.triggers == ["model"]
     assert manifest.groups == ["bench"]
-    assert manifest.views == ["counter"]
+    assert Enum.map(manifest.views, &{&1.key, &1.source}) == [{"counter", "counter"}]
   end
 
   test "the manifest wiring yields the same output as calling the module directly" do

@@ -4,8 +4,10 @@ triggers = ["cli"]
 description = "Lists unread notifications."
 tags = ["cli", "inbox"]
 groups = ["cli"]
-views = ["inbox"]
 module = "Omunculus.Tools.Inbox"
 
 [parameters]
 type = "object"
+
+[views.inbox]
+source = "inbox"

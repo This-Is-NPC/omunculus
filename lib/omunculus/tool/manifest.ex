@@ -4,8 +4,11 @@ defmodule Omunculus.Tool.Manifest do
   built from an MCP server's `tools/list` (spec §8.7) sets `mcp` instead of
   going through `load/1`. `chains` lists the tools this one may chain and
   `then` the ones chained after its `out.chain`; every name in `then` is in
-  `chains` and `end`, when present, is the last of `then`.
+  `chains` and `end`, when present, is the last of `then`. `views` are the
+  `[views.<key>]` tables `Omunculus.Tool.Views` parses.
   """
+
+  alias Omunculus.Tool.Views
 
   @enforce_keys [:name, :kind, :dir]
   defstruct name: nil,
@@ -38,7 +41,7 @@ defmodule Omunculus.Tool.Manifest do
           module: String.t() | nil,
           parameters: map,
           schemas: %{String.t() => map},
-          views: [String.t()],
+          views: [Views.spec()],
           events: [String.t()],
           chains: [String.t()],
           then: [String.t()],
@@ -105,7 +108,7 @@ defmodule Omunculus.Tool.Manifest do
          {:ok, groups} <- optional_string_list(raw, "groups", []),
          {:ok, parameters} <- optional_map(raw, "parameters", %{}),
          {:ok, schemas} <- schemas(raw),
-         {:ok, views} <- optional_string_list(raw, "views", []),
+         {:ok, views} <- Views.parse(Map.get(raw, "views", %{})),
          {:ok, chains} <- optional_string_list(raw, "chains", []),
          {:ok, then} <- optional_string_list(raw, "then", []),
          :ok <- validate_then(then, chains),

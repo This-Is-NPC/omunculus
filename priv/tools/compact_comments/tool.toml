@@ -3,7 +3,6 @@ kind = "tool"
 triggers = ["model"]
 description = "Summarizes comments on the work and rewrites the row: load reads, commit writes the summary."
 tags = ["comments", "compact", "work"]
-views = ["comments"]
 module = "Omunculus.Tools.CompactComments"
 
 [parameters]
@@ -22,3 +21,6 @@ type = "array"
 
 [parameters.properties.ids.items]
 type = "string"
+
+[views.comments]
+source = "comments"

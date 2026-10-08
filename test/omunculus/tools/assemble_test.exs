@@ -16,7 +16,7 @@ defmodule Omunculus.Tools.AssembleTest do
 
   test "joins agent text, message and every catalog card" do
     view = %{
-      "prompt" => %{body: "count to 5"},
+      "message" => %{body: "count to 5"},
       "catalog" => [
         %{
           name: "break",
@@ -84,7 +84,7 @@ defmodule Omunculus.Tools.AssembleTest do
   test "renders the work title, its goal and the last comment, in that order" do
     view = %{
       "work" => %{title: "Fix the parser", goal: "the parser accepts trailing commas"},
-      "comments.work" => [%{body: "first note"}, %{body: "last note"}],
+      "comments" => [%{body: "first note"}, %{body: "last note"}],
       "catalog" => []
     }
 
@@ -113,8 +113,8 @@ defmodule Omunculus.Tools.AssembleTest do
 
     view = %{
       "work" => %{title: "Fix the parser", goal: "the parser accepts trailing commas"},
-      "comments.work" => [%{body: "first note"}, %{body: "last note"}],
-      "runs.last.work" => %{message: %{body: "fix the parser"}, events: events},
+      "comments" => [%{body: "first note"}, %{body: "last note"}],
+      "last_run" => %{message: %{body: "fix the parser"}, events: events},
       "catalog" => []
     }
 
@@ -152,7 +152,7 @@ defmodule Omunculus.Tools.AssembleTest do
     end
 
     view = %{
-      "runs.last.work" => %{message: nil, events: [call.("abcdef"), call.("ab€"), call.("abc")]},
+      "last_run" => %{message: nil, events: [call.("abcdef"), call.("ab€"), call.("abc")]},
       "catalog" => []
     }
 
@@ -176,7 +176,7 @@ defmodule Omunculus.Tools.AssembleTest do
 
   test "without a work, the last run is the one that opened the run's request" do
     view = %{
-      "runs.request" => %{
+      "opener" => %{
         message: nil,
         events: [%{type: "model", body: "asked for write"}]
       },
@@ -189,16 +189,16 @@ defmodule Omunculus.Tools.AssembleTest do
 
   test "inbox appears only when args carry inbox_id, and the sections go from what stays to what changes" do
     view = %{
-      "prompt" => %{body: "hi"},
+      "message" => %{body: "hi"},
       "work" => %{title: "Fix the parser", goal: "the parser accepts trailing commas"},
-      "comments.work" => [%{body: "last note"}],
+      "comments" => [%{body: "last note"}],
       "request" => %{
         id: "req_1",
         agent: "worker",
         options: ~s({"grant":[{"name":"grant","args":{"kind":"tool","name":"write"}}],"deny":[]})
       },
-      "comments.request" => [%{body: "please look"}],
-      "comments.inbox" => [%{body: "standalone notice"}],
+      "request_comments" => [%{body: "please look"}],
+      "inbox_comments" => [%{body: "standalone notice"}],
       "inbox.work" => [%{body: "should not appear"}],
       "catalog" => []
     }
@@ -233,7 +233,7 @@ defmodule Omunculus.Tools.AssembleTest do
     catalog = Catalog.unconfigured()
     assert %{"assemble" => manifest} = catalog
     assert manifest.triggers == ["harness"]
-    assert "catalog" in manifest.views
+    assert Enum.any?(manifest.views, &(&1.key == "catalog" and &1.source == "catalog"))
   end
 
   test "the manifest wiring yields the same output as calling the module directly" do

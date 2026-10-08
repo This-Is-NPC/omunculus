@@ -34,7 +34,7 @@ defmodule Omunculus.StoreTest do
     assert {:ok, [^tool_event, ^event]} = Store.replay(conn, :project)
 
     assert {:ok, [%{body: "first", event_id: event_id}]} =
-             Store.view(conn, "comments.work", work_id)
+             Store.comments(conn, :work, work_id)
 
     assert event_id == event.id
     :ok = Store.close(conn)

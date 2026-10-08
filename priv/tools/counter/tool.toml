@@ -4,8 +4,10 @@ triggers = ["model"]
 description = "Increments the benchmark counter and returns its value."
 tags = ["bench"]
 groups = ["bench"]
-views = ["counter"]
 module = "Omunculus.Tools.Counter"
 
 [parameters]
 type = "object"
+
+[views.counter]
+source = "counter"

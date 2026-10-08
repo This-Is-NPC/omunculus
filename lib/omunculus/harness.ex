@@ -32,7 +32,7 @@ defmodule Omunculus.Harness do
   alias Omunculus.{Ceiling, Config, Cycle, Project, Store}
   alias Omunculus.Execution.Policy
   alias Omunculus.Store.Actions.Requests
-  alias Omunculus.Tool.{Catalog, Invoke, Manifest, Overrides}
+  alias Omunculus.Tool.{Catalog, Invoke, Manifest, Overrides, Views}
   alias Omunculus.Tools.Out
 
   @spec manifest(Project.t(), String.t()) :: {:ok, Manifest.t()} | {:error, term}
@@ -171,8 +171,9 @@ defmodule Omunculus.Harness do
     end
   end
 
-  # The views a call may declare that come from the run, its work and
-  # the config rather than from a store row, plus the ids `ids` names.
+  # What a call's views read that the harness computes rather than the
+  # store — the catalog, workspaces, agents and paths of the run — plus
+  # the request and inbox ids `ids` names, which anchor its views.
   defp views(project, run, work, config, catalog, workspace, ids) do
     Map.merge(ids, %{
       catalog: catalog_view(run, catalog, start_event(project, run)),
@@ -405,124 +406,23 @@ defmodule Omunculus.Harness do
       inbox_id: Map.get(ctx, :inbox_id)
     }
 
-  defp hydrate_views(project, names, run_id, work_id, views) do
-    Enum.reduce_while(names, {:ok, %{}}, fn name, {:ok, acc} ->
-      case resolve_view_id(name, run_id, work_id, views) do
-        {:error, _reason} = error -> {:halt, error}
-        :skip -> {:cont, {:ok, acc}}
-        :catalog -> {:cont, {:ok, Map.put(acc, "catalog", views.catalog)}}
-        :workspaces -> {:cont, {:ok, Map.put(acc, "workspaces", views.workspaces)}}
-        :agents -> {:cont, {:ok, Map.put(acc, "agents", views.agents)}}
-        :grant_scopes -> {:cont, {:ok, Map.put(acc, "grant_scopes", Requests.scopes())}}
-        :paths -> {:cont, {:ok, Map.put(acc, "paths", views.paths)}}
-        {:cli_prompt, args} -> fetch_cli_prompt(project, name, args, acc)
-        {:ok, canonical, id} -> fetch_view(project, name, canonical, id, acc)
-        {:ok, id} -> fetch_view(project, name, name, id, acc)
-      end
-    end)
-  end
-
-  defp fetch_view(project, declared, canonical, id, acc) do
-    case Store.view(project.conn, canonical, id) do
-      {:ok, result} ->
-        acc = Map.put(acc, declared, result)
-        acc = if declared == canonical, do: acc, else: Map.put(acc, canonical, result)
-        {:cont, {:ok, acc}}
-
-      {:error, _reason} = error ->
-        {:halt, error}
-    end
-  end
-
-  @work_scoped_views ~w(work comments.work inbox.work runs.last.work)
-
-  defp resolve_view_id(name, _run_id, work_id, _views) when name in @work_scoped_views do
-    if work_id, do: {:ok, work_id}, else: :skip
-  end
-
-  defp resolve_view_id("events.run", run_id, _work_id, _views) do
-    if run_id, do: {:ok, run_id}, else: :skip
-  end
-
-  defp resolve_view_id("events", run_id, _work_id, _views) do
-    if run_id, do: {:ok, "events.run", run_id}, else: :skip
-  end
-
-  defp resolve_view_id("comments", _run_id, work_id, views) do
-    cond do
-      is_binary(work_id) -> {:ok, "comments.work", work_id}
-      is_binary(views[:request_id]) -> {:ok, "comments.request", views.request_id}
-      is_binary(views[:inbox_id]) -> {:ok, "comments.inbox", views.inbox_id}
-      true -> :skip
-    end
-  end
-
-  defp resolve_view_id(name, _run_id, _work_id, %{request_id: request_id})
-       when name in ["comments.request", "runs.request"] do
-    if request_id, do: {:ok, request_id}, else: :skip
-  end
-
-  defp resolve_view_id("comments.inbox", _run_id, _work_id, %{inbox_id: inbox_id}) do
-    if inbox_id, do: {:ok, inbox_id}, else: :skip
-  end
-
-  defp resolve_view_id("request", _run_id, _work_id, views) do
-    case Map.get(views, :args, %{}) do
-      %{"request_id" => id} when is_binary(id) and id != "" -> {:ok, id}
-      _args -> if views.request_id, do: {:ok, views.request_id}, else: :skip
-    end
-  end
-
-  defp resolve_view_id("paths", _run_id, _work_id, _views), do: :paths
-  defp resolve_view_id("counter", _run_id, _work_id, _views), do: {:ok, nil}
-  defp resolve_view_id("inbox", _run_id, _work_id, _views), do: {:ok, nil}
-  defp resolve_view_id("catalog", _run_id, _work_id, _views), do: :catalog
-  defp resolve_view_id("workspaces", _run_id, _work_id, _views), do: :workspaces
-  defp resolve_view_id("agents", _run_id, _work_id, _views), do: :agents
-  defp resolve_view_id("grant_scopes", _run_id, _work_id, _views), do: :grant_scopes
-  defp resolve_view_id("runs.last", _run_id, _work_id, _views), do: {:ok, nil}
-
-  defp resolve_view_id("prompt", _run_id, _work_id, %{trigger: "cli"} = views),
-    do: {:cli_prompt, Map.get(views, :args, %{})}
-
-  defp resolve_view_id("prompt", _run_id, _work_id, views) do
-    case Map.get(views, :prompt_id) do
-      id when is_binary(id) and id != "" -> {:ok, id}
-      _missing -> :skip
-    end
-  end
-
-  defp resolve_view_id(name, _run_id, _work_id, _views), do: {:error, {:unknown_view, name}}
-
-  defp fetch_cli_prompt(project, name, args, acc) do
-    case cli_assembled_id(project, args) do
-      {:ok, id} -> fetch_view(project, name, "prompt", id, acc)
-      {:error, _reason} = error -> {:halt, error}
-    end
-  end
-
-  defp cli_assembled_id(project, args) do
-    with {:ok, run} <- cli_run(project, Map.get(args, "run")),
-         id when is_binary(id) and id != "" <- run.prompt_id do
-      {:ok, id}
-    else
-      nil -> {:error, :no_assembled}
-      {:error, _reason} = error -> error
-    end
-  end
-
-  defp cli_run(project, id) when is_binary(id) and id != "" do
-    case Store.view(project.conn, "run", id) do
-      {:ok, nil} -> {:error, {:unknown_run, id}}
-      other -> other
-    end
-  end
-
-  defp cli_run(project, _id) do
-    case Store.view(project.conn, "runs.last", nil) do
-      {:ok, nil} -> {:error, :no_runs}
-      other -> other
-    end
+  # Where a call's views start, and the values the harness computes for it.
+  defp view_scope(env, args) do
+    %{
+      run_id: env.ctx.run_id,
+      work_id: env.work_id,
+      request_id: env.views.request_id,
+      inbox_id: env.views.inbox_id,
+      prompt_id: Map.get(env.ctx, :prompt_id),
+      args: args,
+      computed: %{
+        "catalog" => env.views.catalog,
+        "workspaces" => env.views.workspaces,
+        "agents" => env.views.agents,
+        "paths" => env.views.paths,
+        "grant_scopes" => Requests.scopes()
+      }
+    }
   end
 
   defp run_hooks_for(project, catalog, event, work_id, ctx, config, views, workspace, active) do
@@ -604,14 +504,7 @@ defmodule Omunculus.Harness do
              env.project.dir,
              env.catalog
            ),
-         views =
-           Map.merge(env.views, %{
-             trigger: Map.get(env.ctx, :trigger),
-             args: args,
-             prompt_id: Map.get(env.ctx, :prompt_id)
-           }),
-         {:ok, view} <-
-           hydrate_views(env.project, manifest.views, env.ctx.run_id, env.work_id, views) do
+         {:ok, view} <- Views.hydrate(env.project.conn, manifest.views, view_scope(env, args)) do
       input = %{
         name: manifest.name,
         args: args,
