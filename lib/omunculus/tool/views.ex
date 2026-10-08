@@ -22,7 +22,8 @@ defmodule Omunculus.Tool.Views do
     (default all three, in that order).
   - `runs`: `relation` `last_closed` (from `work`) or `opener` (the run
     that opened the call's `request`), with its opening message and events.
-  - `events`: `relation` `run`, the events of the call's run so far.
+  - `events`: `relation` `run`, the events of the call's run so far, or
+    `cause`, the event that made the call's run due.
   - `requests`: from `args.request_id` then `request` (default).
   - `prompts`: `relation` `message`, the prompt that opened the run, or
     `assembled`, the assembled prompt of the run named by `from` (default
@@ -126,7 +127,7 @@ defmodule Omunculus.Tool.Views do
 
   defp source_spec("events", table, spec) do
     with :ok <- only_keys(table, ~w(relation)),
-         {:ok, relation} <- one_of(table, "relation", ["run"], nil),
+         {:ok, relation} <- one_of(table, "relation", ~w(run cause), nil),
          :ok <- required(relation, :relation) do
       {:ok, %{spec | from: ["run"], relation: relation}}
     end
@@ -302,8 +303,14 @@ defmodule Omunculus.Tool.Views do
   defp read_from(conn, %{source: "runs", relation: "opener"}, _anchor, id, _scope),
     do: Store.opener_run(conn, id)
 
-  defp read_from(conn, %{source: "events"}, _anchor, id, _scope),
+  defp read_from(conn, %{source: "events", relation: "run"}, _anchor, id, _scope),
     do: Store.replay(conn, {:run, id})
+
+  defp read_from(conn, %{source: "events", relation: "cause"}, _anchor, id, _scope) do
+    with {:ok, run} <- Store.view(conn, "run", id) do
+      if run && run.cause_id, do: Store.view(conn, "event", run.cause_id), else: {:ok, nil}
+    end
+  end
 
   defp read_from(conn, %{source: "requests"}, _anchor, id, _scope),
     do: Store.view(conn, "request", id)

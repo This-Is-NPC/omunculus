@@ -195,6 +195,7 @@ defmodule Omunculus.Store.Runs do
              depth: to_string(params.depth),
              via: params.via,
              request_id: params.request_id,
+             cause_id: Map.get(params, :cause_id),
              tools: Jason.encode!(params.tools),
              status: "open",
              started_at: event.at

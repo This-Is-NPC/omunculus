@@ -77,6 +77,46 @@ defmodule Omunculus.CLITest do
     Project.close(project)
   end
 
+  test "each run records the event that made it due", %{dir: dir} do
+    model = fn assembled, _tools, call ->
+      cond do
+        assembled =~ "You are the worker." ->
+          call.("done", %{"report" => "answered"})
+
+        assembled =~ "## Last comment\nanswered" or assembled =~ "## Last comment\ndelegated" ->
+          call.("done", %{"report" => "closed"})
+
+        assembled =~ "## Last comment\nopened" ->
+          delegate_one(call, "Answer", "answer it")
+
+        true ->
+          create_root(call, "Root")
+      end
+
+      {:ok, "unused"}
+    end
+
+    Fixtures.use_model(dir, model)
+    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+
+    project = open_project(dir)
+
+    {:ok, runs} =
+      Query.all(
+        project.conn,
+        "SELECT runs.*, cause.type AS cause_type, cause.work_id AS cause_work FROM runs LEFT JOIN events AS cause ON cause.id = runs.cause_id ORDER BY runs.started_at"
+      )
+
+    assert [
+             %{via: "send", cause_type: "prompt"},
+             %{via: "work", cause_type: "work"},
+             %{agent: "worker", via: "delegate", cause_type: "delegate", work_id: child},
+             %{agent: "concierge", via: "continue", cause_type: "continue", cause_work: child}
+           ] = runs
+
+    Project.close(project)
+  end
+
   test "the --message form works", %{dir: dir} do
     assert {:ok, ""} = CLI.run(["send", "--message", "hello"], dir)
 

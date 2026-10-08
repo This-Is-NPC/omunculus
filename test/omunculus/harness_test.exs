@@ -455,7 +455,14 @@ defmodule Omunculus.HarnessTest do
   test "follow_up opens a run for a prompt event and drives the model", %{dir: dir} do
     project = open_project(dir)
     message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
-    event = %{type: "prompt", prompt_id: message_id, work_id: nil}
+
+    {:ok, event} =
+      Omunculus.Store.Events.append(project.conn, %{
+        type: "prompt",
+        prompt_id: message_id,
+        body: "{}"
+      })
+
     Fixtures.use_model(project, fn _assembled, _tools, _call -> {:ok, "done"} end)
 
     assert :ok =
@@ -463,6 +470,7 @@ defmodule Omunculus.HarnessTest do
 
     assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
     assert run.status == "done"
+    assert run.cause_id == event.id
 
     assert {:ok, message} =
              Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [message_id])

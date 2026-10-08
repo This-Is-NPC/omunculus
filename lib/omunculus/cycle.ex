@@ -33,7 +33,8 @@ defmodule Omunculus.Cycle do
     inbox_id: nil,
     via: nil,
     agent: nil,
-    conversation_id: nil
+    conversation_id: nil,
+    cause_id: nil
   }
 
   @spec start_link(Project.t()) :: GenServer.on_start()

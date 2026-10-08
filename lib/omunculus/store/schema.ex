@@ -96,6 +96,7 @@ defmodule Omunculus.Store.Schema do
       depth TEXT NOT NULL,
       via TEXT,
       request_id TEXT REFERENCES requests (id) DEFERRABLE INITIALLY DEFERRED,
+      cause_id TEXT REFERENCES events (id) DEFERRABLE INITIALLY DEFERRED,
       tools TEXT,
       status TEXT NOT NULL CHECK (status IN ('open', 'done')),
       started_at TEXT,
@@ -217,7 +218,7 @@ defmodule Omunculus.Store.Schema do
     required = %{
       "events" => ~w(conversation_id actor_kind origin_issuer origin_subject),
       "prompts" => ~w(conversation_id actor_issuer actor_subject),
-      "runs" => ~w(conversation_id origin_issuer origin_subject),
+      "runs" => ~w(conversation_id origin_issuer origin_subject cause_id),
       "works" => ~w(conversation_id)
     }
 

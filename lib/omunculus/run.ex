@@ -171,6 +171,7 @@ defmodule Omunculus.Run do
              via: via,
              request_id: request_id,
              inbox_id: Map.get(opening, :inbox_id),
+             cause_id: Map.get(opening, :cause_id),
              tools: names
            }),
          {:ok, run, assembled} <-

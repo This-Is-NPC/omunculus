@@ -167,7 +167,7 @@ argument of the call.
 | `works` | the work (`relation = "self"`, the default), its `parent`, or its `children`, oldest first | `from` is `work` (default) or `args.<name>` with `within = "descendants"`, which reads only a work below the call's own; children take `state` (a list) and `since = "last_run"` (changed after the work's last closed run finished); `include` adds `last_comment`, `comments` or the closed `runs` with their record to each work |
 | `comments` | the comments of the first of `from` among `work`, `request`, `inbox`, oldest first | `from` (default all three, in that order) |
 | `runs` | `relation = "last_closed"`: the work's last closed run; `"opener"`: the run that opened the call's request — each with the message that opened it (`message`) and every event it recorded (`events`) | `relation` (required) |
-| `events` | `relation = "run"`: the events of the call's run so far | `relation` (required) |
+| `events` | `relation = "run"`: the events of the call's run so far; `"cause"`: the event that made the call's run due | `relation` (required) |
 | `requests` | the request named by the `request_id` argument, or the call's request | `from` |
 | `prompts` | `relation = "message"`: the prompt that opened the run; `"assembled"`: the assembled prompt of the run named by `from` (default `args.run`, then `latest_run`) | `relation` (required); `from` for `assembled` |
 | `inbox` | unread notifications, each with its first comment as `body`: of the project, or of the call's work with `from = ["work"]` | `from` |

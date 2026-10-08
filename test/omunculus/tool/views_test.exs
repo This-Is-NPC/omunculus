@@ -119,6 +119,15 @@ defmodule Omunculus.Tool.ViewsTest do
              hydrate(conn, views, %{work_id: middle, args: %{"work_id" => root}})
   end
 
+  test "events with the cause relation read the event that made the run due", %{conn: conn} do
+    cause = Fixtures.insert(conn, :events, %{type: "continue", sequence: 1})
+    run = Fixtures.insert(conn, :runs, %{cause_id: cause})
+    views = %{"cause" => %{"source" => "events", "relation" => "cause"}}
+
+    assert {:ok, %{"cause" => %{id: ^cause, type: "continue"}}} =
+             hydrate(conn, views, %{run_id: run})
+  end
+
   test "a view whose anchors are all absent is left out", %{conn: conn} do
     views = %{"comments" => %{"source" => "comments"}, "work" => %{"source" => "works"}}
     assert {:ok, %{}} == hydrate(conn, views, %{})

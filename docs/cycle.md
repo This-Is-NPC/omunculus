@@ -83,6 +83,9 @@ run does not reread the old assembled prompt; assemble runs again.
 
 `via` on the run is the `name` of the tool or hook that opened it
 (`send`, `continue`, `delegate`, `reply`, `on-request`, …), or `retry`.
+`cause_id` is the event that made it due — the `prompt`, the child's
+`continue` or `break`, the `request`, the `reply` — and stays empty for a
+retry.
 
 ## Runs at once
 

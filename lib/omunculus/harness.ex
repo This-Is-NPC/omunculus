@@ -830,7 +830,8 @@ defmodule Omunculus.Harness do
       project,
       Map.merge(opening, %{
         origin_issuer: Map.get(event, :origin_issuer),
-        origin_subject: Map.get(event, :origin_subject)
+        origin_subject: Map.get(event, :origin_subject),
+        cause_id: event.id
       })
     )
   end
