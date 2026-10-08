@@ -192,29 +192,27 @@ defmodule Omunculus.Config do
   @spec model_fun(t, String.t()) :: {:ok, fun} | {:error, term}
   def model_fun(%__MODULE__{} = config, agent_name) do
     case Map.fetch(config.agents, agent_name) do
-      {:ok, %{model: name}} ->
-        spec = Map.fetch!(config.models, name)
-        input = spec.input
+      {:ok, %{model: name}} -> model(config, name)
+      :error -> {:error, {:no_agent, agent_name}}
+    end
+  end
 
-        case Map.get(input, "provider") do
-          nil ->
-            {:ok, spec.module.new(input)}
+  @doc "The adapter fun of the model `name`, with its provider's credential."
+  @spec model(t, String.t()) :: {:ok, fun} | {:error, term}
+  def model(%__MODULE__{} = config, name) do
+    spec = Map.fetch!(config.models, name)
+    input = spec.input
 
-          provider_id ->
-            case Auth.credential(config, provider_id) do
-              {:ok, nil} ->
-                {:ok, spec.module.new(input)}
+    case Map.get(input, "provider") do
+      nil ->
+        {:ok, spec.module.new(input)}
 
-              {:ok, credential} ->
-                {:ok, spec.module.new(Map.put(input, "credential", credential))}
-
-              {:error, reason} ->
-                {:error, reason}
-            end
+      provider_id ->
+        case Auth.credential(config, provider_id) do
+          {:ok, nil} -> {:ok, spec.module.new(input)}
+          {:ok, credential} -> {:ok, spec.module.new(Map.put(input, "credential", credential))}
+          {:error, reason} -> {:error, reason}
         end
-
-      :error ->
-        {:error, {:no_agent, agent_name}}
     end
   end
 
@@ -346,14 +344,32 @@ defmodule Omunculus.Config do
     :global.trans({{__MODULE__, path}, self()}, fn ->
       with {:ok, text} <- read_text(path),
            :ok <- current(text, revision),
-           {:ok, keys} <- item_keys(item, from),
-           :ok <- editable(value),
-           {:ok, data} <- Toml.decode(text),
-           data = put_item(data, keys, value, from),
-           {:ok, _config} <- parse(data, path, true) do
+           {:ok, data, _config} <- with_item(text, path, item, value, from) do
         replace(path, data)
       end
     end)
+  end
+
+  @doc """
+  The config the TOML at `path` loads as once one item is `value`, as
+  `edit/5` would write it; the file stays as it is.
+  """
+  @spec try_item(String.t(), tuple, map | nil) :: {:ok, t} | {:error, term}
+  def try_item(path, item, value) do
+    with {:ok, text} <- read_text(path),
+         {:ok, _data, config} <- with_item(text, path, item, value, nil) do
+      {:ok, config}
+    end
+  end
+
+  defp with_item(text, path, item, value, from) do
+    with {:ok, keys} <- item_keys(item, from),
+         :ok <- editable(value),
+         {:ok, data} <- Toml.decode(text),
+         data = put_item(data, keys, value, from),
+         {:ok, config} <- parse(data, path, true) do
+      {:ok, data, config}
+    end
   end
 
   defp current(text, revision) do

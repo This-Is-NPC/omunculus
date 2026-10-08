@@ -155,6 +155,19 @@ temporary file, in the same form as a permanent grant writes it: keys in
 order, text over several lines as multi-line strings. Like every tool
 not scoped to a conversation, it needs `project.manage_config`.
 
+## `omunculus model_test`
+
+- **Usage:** `omunculus model_test --name <model> [--value <json>]`
+- **Effect:** one model request
+
+Send one short prompt, without tools, to the model `name` and print
+`{"reply", "ms"}`: what it answered and how long it took. With `value`,
+the model is that JSON table, as `configure` would write it, and the file
+stays as it is: a model is tested before it is saved. The provider's
+credential resolves as a run's does. A failure prints the reason, and a
+model the config lacks is `no model <name>`. A `command` model runs in the
+sandbox an agent's ceiling makes, so only a run tests it.
+
 ## `omunculus omapass`
 
 - **Usage:** `omunculus omapass`

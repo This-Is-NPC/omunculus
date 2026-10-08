@@ -91,6 +91,11 @@ defmodule Omunculus.CLI do
 
   def format_error({:tool_failed, output}), do: output
 
+  def format_error({:model_test, :unknown, name}), do: "no model #{name}"
+
+  def format_error({:model_test, :command}),
+    do: "a command model runs in the sandbox of an agent's ceiling; a run tests it"
+
   def format_error({:execution, :missing, keys}) do
     "omunculus.toml is missing [execution]; required keys: #{Enum.join(keys, ", ")}"
   end

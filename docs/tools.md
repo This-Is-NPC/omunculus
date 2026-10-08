@@ -307,7 +307,7 @@ store     = comment, request_access, reply, grant, notify, read_work
 sandbox   = request_sandbox
 sequence  = work, delegate, continue, break, end, done, cancel
 catalog   = tool_search
-cli       = send, inbox, inbox_read, prompt, config, configure, omapass, login, logout, cursor_login, preset
+cli       = send, inbox, inbox_read, prompt, config, configure, model_test, omapass, login, logout, cursor_login, preset
 bench     = counter, counter_decrement
 prompt    = assemble
 ```
