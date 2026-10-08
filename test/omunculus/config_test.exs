@@ -162,23 +162,23 @@ defmodule Omunculus.ConfigTest do
     assert ceiling.granted == ["break", "comment", "continue", "done", "end", "fs.read", "notify"]
   end
 
-  test "the default preset's worker asks for sandbox.write" do
+  test "the default preset's worker asks the person for sandbox.write" do
     assert {:ok, %Config{agents: agents}} = Config.load(default_preset())
 
     assert %{"worker" => %{ceiling: ceiling}} = agents
     assert "request_sandbox" in ceiling.granted
     refute "sandbox.write" in ceiling.granted
-    assert ceiling.negotiable == ["sandbox.write"]
+    assert ceiling.human == ["sandbox.write"]
   end
 
-  test "codex-like and pi-like presets keep sandbox.write negotiable" do
+  test "codex-like and pi-like presets leave sandbox.write to the person" do
     for {preset, agent} <- [{"codex-like", "codex"}, {"pi-like", "pi"}] do
       path = Application.app_dir(:omunculus, "priv/presets/#{preset}/omunculus.toml")
       assert {:ok, %Config{agents: agents}} = Config.load(path)
       ceiling = agents[agent].ceiling
       assert "request_sandbox" in ceiling.granted
       refute "sandbox.write" in ceiling.granted
-      assert "sandbox.write" in ceiling.negotiable
+      assert "sandbox.write" in ceiling.human
     end
   end
 

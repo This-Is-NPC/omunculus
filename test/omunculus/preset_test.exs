@@ -95,6 +95,47 @@ defmodule Omunculus.PresetTest do
 
       Project.close(project)
     end
+
+    test "a worker's request for sandbox.write goes to the person, not the concierge",
+         %{dir: dir} do
+      Fixtures.install_default(dir)
+
+      model = fn assembled, _tools, call ->
+        cond do
+          assembled =~ "You are the worker." ->
+            call.("request_sandbox", %{
+              "report" => "blocked on writing",
+              "name" => "sandbox.write",
+              "reason" => "need to write the file"
+            })
+
+          assembled =~ "## Last comment\nopened" ->
+            call.("work", %{
+              "report" => "delegated",
+              "works" => [%{"title" => "Write", "goal" => "Write the file", "agent" => "worker"}]
+            })
+
+          true ->
+            call.("work", %{
+              "report" => "opened",
+              "works" => [%{"title" => "Root", "goal" => "Root"}]
+            })
+        end
+
+        {:ok, "unused"}
+      end
+
+      Fixtures.use_model(dir, model)
+
+      assert {:ok, ""} = CLI.run(["send", "write the file"], dir)
+
+      project = open_project(dir)
+
+      assert {:ok, [%{arbiter: "human", status: "waiting_human"}]} =
+               Query.all(project.conn, "SELECT * FROM requests")
+
+      Project.close(project)
+    end
   end
 
   describe "custom permission kind" do

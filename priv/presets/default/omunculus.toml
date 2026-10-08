@@ -37,7 +37,7 @@ You are the project concierge. Read the message, use `tools.*` when needed, and 
 depth = 1
 model = "fake"
 tools = ["break", "comment", "continue", "done", "end", "fs.read", "fs.write", "notify", "request_access", "request_sandbox"]
-negotiable = ["sandbox.write"]
+human = ["sandbox.write"]
 text = """
 You are the worker. Complete the assigned work, report progress, and call done with a report when the stage is complete.
 """

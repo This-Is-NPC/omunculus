@@ -15,7 +15,7 @@ defmodule Omunculus.Tools.ConfigTest do
 
     assert [%{"name" => "concierge", "depth" => 0, "model" => "fake"} | _] = described["agents"]
 
-    assert %{"name" => "worker", "depth" => 1, "negotiable" => ["sandbox.write"]} =
+    assert %{"name" => "worker", "depth" => 1, "human" => ["sandbox.write"]} =
              Enum.find(described["agents"], &(&1["name"] == "worker"))
 
     assert [%{"name" => "fake", "api" => "module", "provider" => nil, "model" => nil}] =

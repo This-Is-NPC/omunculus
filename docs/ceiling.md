@@ -109,7 +109,8 @@ lists `deny = ["counter"]`.
 `sandbox.write` and `sandbox.network` are ceiling resources. They are
 separate from the right to *call* a tool of a similar name. The worker in
 the default preset has `request_sandbox` in `tools` and `sandbox.write` in
-`negotiable`: it may ask, it may not write the workspace until a grant.
+`human`: it may ask, the request goes to the person, and it may not write
+the workspace until a grant.
 
 | Resource state | What the executor does |
 | --- | --- |

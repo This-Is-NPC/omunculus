@@ -13,7 +13,7 @@ required table is still a refusal, not an implied default.
 ## 1. One agent, no work
 
 A single depth-0 agent. `send` opens a run; there is no work below it and
-no workflow. The model reads and edits, and asks when `sandbox.write` is not have.
+no workflow. The model reads and edits, and asks you when `sandbox.write` is not have.
 This is the `pi-like` preset, minus the Anthropic login.
 
 ```mermaid
@@ -38,7 +38,7 @@ module = "Omunculus.Model.Fake"
 depth = 0
 model = "fake"
 tools = ["catalog", "fs.read", "fs.write", "request_sandbox", "sequence", "store"]
-negotiable = ["sandbox.write"]
+human = ["sandbox.write"]
 text = """
 You are a Pi-style agent: compact, direct, and without shell access.
 """
@@ -103,7 +103,7 @@ You are the project concierge. Read the message and call work with a report and 
 depth = 1
 model = "fake"
 tools = ["break", "comment", "continue", "done", "end", "fs.read", "fs.write", "notify", "request_access", "request_sandbox"]
-negotiable = ["sandbox.write"]
+human = ["sandbox.write"]
 text = """
 You are the worker. Complete the assigned work and call done with a report when the stage is complete.
 """

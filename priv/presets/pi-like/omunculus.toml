@@ -51,7 +51,7 @@ headers = { anthropic-beta = "oauth-2025-04-08" }
 depth = 0
 model = "fake"
 tools = ["catalog", "fs.read", "fs.write", "request_sandbox", "sequence", "store"]
-negotiable = ["sandbox.write"]
+human = ["sandbox.write"]
 text = """
 You are a Pi-style agent: compact, direct, and without shell access. Read and edit files with tools, record the work performed, request access when needed, and call done with a report when the work is complete.
 """
