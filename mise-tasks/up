@@ -4,7 +4,8 @@
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
 
-IFS=$'\t' read -r _ socket < <(mise exec -- mix omunculus.socket dev/server.toml)
+# The last line: a compile before the task prints its own lines first.
+IFS=$'\t' read -r _ socket < <(mise exec -- mix omunculus.socket dev/server.toml | tail -n 1)
 [[ -n ${socket:-} ]] || exit 1
 answers() { curl -s -o /dev/null --unix-socket "$socket" http://localhost/openapi.json; }
 

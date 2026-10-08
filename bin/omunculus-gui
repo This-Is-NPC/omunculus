@@ -30,7 +30,8 @@ if [[ -z ${WAYLAND_DISPLAY:-} ]]; then
 fi
 [[ -n ${WAYLAND_DISPLAY:-} ]] || { printf 'omunculus-gui: no Wayland session found\n' >&2; exit 1; }
 
-IFS=$'\t' read -r id socket < <(cd "$root" && mise exec -- mix omunculus.socket "$config" "${project[@]}")
+# The last line: a compile before the task prints its own lines first.
+IFS=$'\t' read -r id socket < <(cd "$root" && mise exec -- mix omunculus.socket "$config" "${project[@]}" | tail -n 1)
 [[ -n ${socket:-} ]] || exit 1
 [[ -S $socket ]] || { printf 'omunculus-gui: no socket at %s; start `omunculus serve` first\n' "$socket" >&2; exit 1; }
 
