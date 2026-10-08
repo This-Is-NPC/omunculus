@@ -51,6 +51,26 @@ defmodule Omunculus.Tools.AssembleTest do
     assert output =~ "## Agents\n- worker: also write, edit\n- reader\n\n## Tools"
   end
 
+  test "results list each closed child with its report, and the report of a child that broke" do
+    view = %{
+      "results" => [
+        %{title: "Answer", assignee: "worker", state: "done", last_comment: %{body: "said hi"}},
+        %{title: "Skip", assignee: "worker", state: "cancelled", last_comment: nil}
+      ],
+      "cause" => %{type: "break", actor_id: "worker", body: ~s({"body":"no access"})}
+    }
+
+    output = Assemble.run(%{@input | view: view})["output"]
+
+    assert output =~
+             "## Results\n- Answer (worker, done): said hi\n- Skip (worker, cancelled)\n- worker broke its work: no access"
+  end
+
+  test "no results, no section" do
+    output = Assemble.run(%{@input | view: %{"results" => [], "cause" => %{type: "continue"}}})
+    refute output["output"] =~ "## Results"
+  end
+
   test "without pinned every catalog card is listed even past 12" do
     cards =
       for i <- 1..13 do

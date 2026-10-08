@@ -117,6 +117,44 @@ defmodule Omunculus.CLITest do
     Project.close(project)
   end
 
+  test "a parent woken by its child reads the child's report and closes", %{dir: dir} do
+    test_pid = self()
+
+    model = fn assembled, _tools, call ->
+      cond do
+        assembled =~ "You are the worker." ->
+          call.("done", %{"report" => "said hello back"})
+
+        assembled =~ "## Results" ->
+          send(test_pid, {:results, assembled})
+          call.("done", %{"report" => "the worker said hello back"})
+
+        assembled =~ "## Last comment\nopened" ->
+          delegate_one(call, "Answer", "answer the greeting")
+
+        true ->
+          create_root(call, "Root")
+      end
+
+      {:ok, "unused"}
+    end
+
+    Fixtures.use_model(dir, model)
+    assert {:ok, ""} = CLI.run(["send", "Alo"], dir)
+
+    assert_received {:results, assembled}
+    assert assembled =~ "## Results\n- Answer (worker, done): said hello back"
+
+    project = open_project(dir)
+    {:ok, runs} = Query.all(project.conn, "SELECT agent FROM runs ORDER BY started_at")
+    assert Enum.map(runs, & &1.agent) == ["concierge", "concierge", "worker", "concierge"]
+
+    {:ok, [root]} = Query.all(project.conn, "SELECT * FROM works WHERE parent_id IS NULL")
+    assert root.state == "done"
+
+    Project.close(project)
+  end
+
   test "the --message form works", %{dir: dir} do
     assert {:ok, ""} = CLI.run(["send", "--message", "hello"], dir)
 

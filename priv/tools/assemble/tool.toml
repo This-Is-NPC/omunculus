@@ -34,6 +34,17 @@ from = ["work"]
 source = "runs"
 relation = "last_closed"
 
+[views.results]
+source = "works"
+relation = "children"
+state = ["done", "cancelled"]
+since = "last_run"
+include = ["last_comment"]
+
+[views.cause]
+source = "events"
+relation = "cause"
+
 [views.opener]
 source = "runs"
 relation = "opener"

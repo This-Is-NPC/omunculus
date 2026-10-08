@@ -12,7 +12,10 @@ defmodule Omunculus.Tools.Assemble do
   call with its args, status and output, and each store action it
   emitted. With `last_run_output_bytes` in the args, each call's output
   keeps that many bytes, cut on a character boundary, and a line says how
-  many bytes were cut. A run with a request gets the request's requester,
+  many bytes were cut. Then, under `## Results`, what the works handed down
+  from the run's work came back with since its last closed run: each child
+  closed or cancelled since, with its last comment, and, when the run was
+  opened by a child's `break`, that child's report. A run with a request gets the request's requester,
   its options with their tool calls, and its comments. Inbox is included
   only when the opening carried `inbox_id`. The message of the opening
   comes last.
@@ -34,6 +37,7 @@ defmodule Omunculus.Tools.Assemble do
         work_section(view["work"]) ++
         comment_section(view["comments"]) ++
         last_run_section(view["last_run"] || view["opener"], name, args) ++
+        results_section(view["results"] || [], view["cause"]) ++
         request_section(view["request"], view["request_comments"]) ++
         inbox_section(view, args) ++
         message_section(view["message"])
@@ -89,6 +93,24 @@ defmodule Omunculus.Tools.Assemble do
       output -> head <> "\n" <> Out.cut(Jason.encode!(output), limit)
     end
   end
+
+  # What the works handed down from this one came back with since its last
+  # run: each closed child's last comment, its report, and the report of
+  # the child whose break woke it.
+  defp results_section(children, cause) do
+    lines =
+      Enum.map(children, fn child ->
+        report = if child.last_comment, do: ": " <> child.last_comment.body, else: ""
+        "- #{child.title} (#{child.assignee}, #{child.state})#{report}"
+      end) ++ broken(cause)
+
+    if lines == [], do: [], else: ["## Results\n" <> Enum.join(lines, "\n")]
+  end
+
+  defp broken(%{type: "break", actor_id: agent, body: body}),
+    do: ["- #{agent} broke its work: #{Jason.decode!(body)["body"]}"]
+
+  defp broken(_cause), do: []
 
   defp message_section(nil), do: []
   defp message_section(message), do: ["## Message\n#{message.body}"]

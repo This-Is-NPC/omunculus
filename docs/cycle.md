@@ -156,6 +156,10 @@ agent text
   the model's messages as recorded but their `usage`, each tool call
   with its args, status and output (cut to `[policy]
   last_run_output_bytes` when set), and each store action it emitted
+→ under `## Results`, what the works handed down from this one came back
+  with since its last closed run: each child closed or cancelled since,
+  with its last comment, and, when a child's `break` opened this run,
+  that child's report
 → if there is a request: header, its options with their tool calls, and
   the comments with that request_id
 → if the opening carried inbox_id: comments with that inbox_id
