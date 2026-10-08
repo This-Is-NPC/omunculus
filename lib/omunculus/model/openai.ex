@@ -2,7 +2,7 @@ defmodule Omunculus.Model.OpenAI do
   @moduledoc """
   Factory for an OpenAI-compatible model of the contract of spec §8.6:
   `new/1` takes the `[models.<name>]` spec (`url`, `model`, `timeout_ms`,
-  optional `temperature`, `headers`, `prompt_cache_key`, `credential`) and
+  optional `temperature`, `headers`, `body`, `prompt_cache_key`, `credential`) and
   returns a 6-arity
   `(assembled, tools, call, record, delta, execution)` fun. Declares each of
   `tools` (the run's effective tools, as `%{name, description,
@@ -20,7 +20,7 @@ defmodule Omunculus.Model.OpenAI do
   arrives, and `stream_options.include_usage` asks for the `usage` chunk.
   """
 
-  alias Omunculus.Model.EventStream
+  alias Omunculus.Model.{Body, EventStream}
 
   @spec new(map) ::
           (String.t(),
@@ -38,7 +38,8 @@ defmodule Omunculus.Model.OpenAI do
       headers: request_headers(spec),
       temperature: spec["temperature"],
       stream: spec["stream"] == true,
-      prompt_cache_key: spec["prompt_cache_key"]
+      prompt_cache_key: spec["prompt_cache_key"],
+      body: spec["body"] || %{}
     }
 
     fn assembled, tools, call, record, delta, execution ->
@@ -134,6 +135,7 @@ defmodule Omunculus.Model.OpenAI do
     |> maybe_put(:prompt_cache_key, client.prompt_cache_key)
     |> maybe_put(:stream, client.stream || nil)
     |> maybe_put(:stream_options, if(client.stream, do: %{include_usage: true}))
+    |> Body.merge(client.body)
   end
 
   defp maybe_put(map, _key, nil), do: map

@@ -1709,6 +1709,17 @@ defmodule Omunculus.ConfigTest do
       write_http_model(dir, "anthropic-messages", "prompt_cache_key = \"worker\"")
       assert {:error, {:models, "local", {:unknown_key, "prompt_cache_key"}}} = load(dir)
     end
+
+    test "body is an optional table of the HTTP adapters", %{dir: dir} do
+      for api <- ["openai-completions", "openai-responses", "anthropic-messages"] do
+        write_http_model(dir, api, "body = { reasoning = { effort = \"high\" } }")
+        assert {:ok, config} = load(dir)
+        assert config.models["local"].input["body"] == %{"reasoning" => %{"effort" => "high"}}
+
+        write_http_model(dir, api, "body = \"high\"")
+        assert {:error, {:models, "local", {:invalid, :body}}} = load(dir)
+      end
+    end
   end
 
   describe "store" do

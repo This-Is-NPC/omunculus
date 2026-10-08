@@ -2,7 +2,7 @@ defmodule Omunculus.Model.OpenAIResponses do
   @moduledoc """
   Factory for an OpenAI Responses model of the contract of spec §8.6:
   `new/1` takes the `[models.<name>]` spec (`url`, `model`, `timeout_ms`,
-  optional `temperature`, `headers`, `prompt_cache_key`, `credential`) and
+  optional `temperature`, `headers`, `body`, `prompt_cache_key`, `credential`) and
   returns a 6-arity
   `(assembled, tools, call, record, delta, execution)` fun. Posts the assembled
   as `input` to `<url>/responses` with tools as `function` items, runs
@@ -16,7 +16,7 @@ defmodule Omunculus.Model.OpenAIResponses do
   module names a host.
   """
 
-  alias Omunculus.Model.EventStream
+  alias Omunculus.Model.{Body, EventStream}
 
   @spec new(map) ::
           (String.t(),
@@ -34,7 +34,8 @@ defmodule Omunculus.Model.OpenAIResponses do
       headers: Omunculus.Model.OpenAI.request_headers(spec),
       temperature: spec["temperature"],
       stream: spec["stream"] == true,
-      prompt_cache_key: spec["prompt_cache_key"]
+      prompt_cache_key: spec["prompt_cache_key"],
+      body: spec["body"] || %{}
     }
 
     fn assembled, tools, call, record, delta, execution ->
@@ -103,6 +104,7 @@ defmodule Omunculus.Model.OpenAIResponses do
     |> maybe_put(:temperature, client.temperature)
     |> maybe_put(:prompt_cache_key, client.prompt_cache_key)
     |> maybe_put(:stream, client.stream || nil)
+    |> Body.merge(client.body)
   end
 
   defp maybe_put(map, _key, nil), do: map

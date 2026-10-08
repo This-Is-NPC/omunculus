@@ -2,7 +2,7 @@ defmodule Omunculus.Model.AnthropicMessages do
   @moduledoc """
   Factory for an Anthropic Messages model of the contract of spec §8.6:
   `new/1` takes the `[models.<name>]` spec (`url`, `model`, `timeout_ms`,
-  optional `temperature`, `headers`, `credential`) and returns a 6-arity
+  optional `temperature`, `headers`, `body`, `credential`) and returns a 6-arity
   `(assembled, tools, call, record, delta, execution)` fun. Posts the assembled
   as `system` to `<url>/messages` with tools as Anthropic `input_schema`
   items, runs each `tool_use` through `call.(name, args)`, appends a
@@ -14,7 +14,7 @@ defmodule Omunculus.Model.AnthropicMessages do
   host.
   """
 
-  alias Omunculus.Model.EventStream
+  alias Omunculus.Model.{Body, EventStream}
 
   @spec new(map) ::
           (String.t(),
@@ -31,7 +31,8 @@ defmodule Omunculus.Model.AnthropicMessages do
       timeout: spec["timeout_ms"],
       headers: request_headers(spec),
       temperature: spec["temperature"],
-      stream: spec["stream"] == true
+      stream: spec["stream"] == true,
+      body: spec["body"] || %{}
     }
 
     fn assembled, tools, call, record, delta, execution ->
@@ -133,6 +134,7 @@ defmodule Omunculus.Model.AnthropicMessages do
     }
     |> maybe_put(:temperature, client.temperature)
     |> maybe_put(:stream, client.stream || nil)
+    |> Body.merge(client.body)
   end
 
   defp maybe_put(map, _key, nil), do: map

@@ -1,0 +1,92 @@
+defmodule Omunculus.Model.BodyTest do
+  use ExUnit.Case, async: true
+
+  alias Omunculus.ExecutionPolicyFixtures
+  alias Omunculus.Model.{AnthropicMessages, Body, OpenAI, OpenAIResponses}
+
+  test "a body key replaces the request's key of the same name, and tables merge" do
+    request = %{model: "stub", stream_options: %{include_usage: true}, max_tokens: 8192}
+
+    body = %{
+      "max_tokens" => 16_000,
+      "stream_options" => %{"extra" => 1},
+      "reasoning" => %{"effort" => "high"}
+    }
+
+    assert Body.merge(request, body) == %{
+             :model => "stub",
+             "max_tokens" => 16_000,
+             "stream_options" => %{:include_usage => true, "extra" => 1},
+             "reasoning" => %{"effort" => "high"}
+           }
+  end
+
+  test "an empty body leaves the request as it is" do
+    assert Body.merge(%{model: "stub"}, %{}) == %{model: "stub"}
+  end
+
+  for {module, own} <- [
+        {OpenAI, "messages"},
+        {OpenAIResponses, "input"},
+        {AnthropicMessages, "messages"}
+      ] do
+    test "#{inspect(module)} sends its body over the request it builds" do
+      port = capture()
+
+      spec = %{
+        "url" => "http://127.0.0.1:#{port}/v1",
+        "model" => "stub",
+        "timeout_ms" => 5_000,
+        "body" => %{"max_tokens" => 7, "reasoning" => %{"effort" => "high"}}
+      }
+
+      unquote(module).new(spec).(
+        "ping",
+        [],
+        fn _name, _args -> {:ok, ""} end,
+        fn _message -> :ok end,
+        fn _text -> :ok end,
+        ExecutionPolicyFixtures.policy(Application.app_dir(:omunculus, "priv"), network: "none")
+      )
+
+      assert_receive {:request, request}, 5_000
+      assert request["max_tokens"] == 7
+      assert request["reasoning"] == %{"effort" => "high"}
+      assert request["model"] == "stub"
+      assert Map.has_key?(request, unquote(own))
+    end
+  end
+
+  # A server that takes one request, sends its JSON body to the test and
+  # answers 500, which ends the adapter's call.
+  defp capture do
+    test = self()
+
+    {:ok, listen} =
+      :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true, ip: {127, 0, 0, 1}])
+
+    {:ok, port} = :inet.port(listen)
+
+    spawn_link(fn ->
+      {:ok, socket} = :gen_tcp.accept(listen, 5_000)
+      send(test, {:request, read_body(socket, "")})
+      :gen_tcp.send(socket, "HTTP/1.1 500 Internal Server Error\r\ncontent-length: 0\r\n\r\n")
+      :gen_tcp.close(socket)
+    end)
+
+    port
+  end
+
+  defp read_body(socket, received) do
+    {:ok, packet} = :gen_tcp.recv(socket, 0, 5_000)
+    received = received <> packet
+
+    with [head, body] <- String.split(received, "\r\n\r\n", parts: 2),
+         [_, length] <- Regex.run(~r/content-length: (\d+)/i, head),
+         true <- byte_size(body) >= String.to_integer(length) do
+      Jason.decode!(body)
+    else
+      _incomplete -> read_body(socket, received)
+    end
+  end
+end

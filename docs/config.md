@@ -106,6 +106,18 @@ tokens); streamed, `openai-completions` asks for it with
 the prompt's prefix to route requests to the server holding that prefix
 in cache.
 
+Every HTTP adapter takes an optional `body` table, merged over the
+request body it builds: a key of `body` replaces the request's key of the
+same name, and two tables merge key by key. It sets what the adapters
+have no key for, and replaces what they send, such as the
+`anthropic-messages` `max_tokens`:
+
+```toml
+[models.luna.body]
+reasoning = { effort = "high" }
+max_tokens = 16000
+```
+
 ```toml
 [auth]
 store = ".omunculus/auth.json"

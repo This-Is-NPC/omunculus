@@ -135,7 +135,7 @@ defmodule Omunculus.Config do
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
   @policy_extra_keys ~w(depth workflow workspace assemble max_retries last_run_output_bytes tool_output_bytes)
   @agent_extra_keys ~w(depth text workflow_only model assemble)
-  @http_model_keys ~w(api url model timeout_ms temperature headers provider stream)
+  @http_model_keys ~w(api url model timeout_ms temperature headers body provider stream)
   @openai_model_keys @http_model_keys ++ ~w(prompt_cache_key)
   @module_model_keys ~w(api module params)
   @command_model_keys ~w(api command model provider params)
@@ -1637,6 +1637,7 @@ defmodule Omunculus.Config do
              {:ok, timeout_ms} <- model_timeout(data),
              {:ok, temperature} <- model_temperature(data),
              {:ok, headers} <- model_headers(data),
+             {:ok, body} <- model_body(data),
              {:ok, stream} <- model_stream(data),
              {:ok, prompt_cache_key} <- model_optional_string(data, "prompt_cache_key"),
              {:ok, provider} <- model_optional_string(data, "provider"),
@@ -1650,6 +1651,7 @@ defmodule Omunculus.Config do
             }
             |> maybe_put_model("temperature", temperature)
             |> maybe_put_model("headers", headers)
+            |> maybe_put_model("body", body)
             |> maybe_put_model("stream", stream)
             |> maybe_put_model("prompt_cache_key", prompt_cache_key)
             |> maybe_put_model("provider", provider)
@@ -1757,6 +1759,14 @@ defmodule Omunculus.Config do
       :error -> {:ok, nil}
       {:ok, value} when is_binary(value) and value != "" -> {:ok, value}
       _ -> {:error, {:invalid, String.to_atom(key)}}
+    end
+  end
+
+  defp model_body(data) do
+    case Map.fetch(data, "body") do
+      :error -> {:ok, nil}
+      {:ok, body} when is_map(body) -> {:ok, body}
+      _ -> {:error, {:invalid, :body}}
     end
   end
 
