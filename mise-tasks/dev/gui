@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Open the window on the dev project of a running server"
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+
+exec bin/omunculus-gui --config dev/server.toml

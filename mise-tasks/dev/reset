@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Delete the dev project's store and workspace"
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+
+exec rm -rf dev/.omunculus dev/workspace

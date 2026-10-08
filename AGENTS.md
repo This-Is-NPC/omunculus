@@ -79,7 +79,8 @@ test/omunculus/      mirrors lib/; matrix_test.exs and spec_regression_test.exs 
 test/support/        fixtures, store case, scripted model, chain tool, execution policy
                      fixtures, command model bridge, MCP server, Rust OpenAI stub
 bench/               resident capacity benchmark
-mise-tasks/          validate/regular, validate/sandbox, pre-commit, pre-push, benchmark/*
+mise-tasks/          validate/regular, validate/sandbox, pre-commit, pre-push, up, dev/*, benchmark/*
+dev/                 the development environment: server registry and project config
 ```
 
 ## Commands
@@ -96,11 +97,26 @@ bin/omunculus preset default --from priv/presets/default
 bin/omunculus send "text"
 bin/omunculus serve --config server.toml
 bin/omunculus-gui --config server.toml [--project <id>]
+mise run up                     # dev server and window; the server stops with the window
 ```
 
 ### The window
 
 `gui/` is a client of the server, like any other: it never opens the store or the TOML. The `Omunculus` singleton holds the project as the window sees it and makes every request through `curl` on the project's local socket; the conversation's event stream is `curl` on its WebSocket, whose frames it splits into events. It folds the events into threads: the main one, yours with the root agent, and one per work handed down, where its agent's runs show; a run at depth 0 belongs to the main thread, a deeper one to its work's. Requests and unread notes are not in threads: they hang from the work that made them on the orchestration map. It reads the snapshot again after each event. Views only bind that singleton. The controls and the theme are a copy of eco's overlay, Omarchy's voice session app. It needs Quickshell, `curl` with WebSocket support and a Wayland session; `bin/omunculus-gui` takes the server registry and a project id, which may be left out when the registry holds one project; `mix omunculus.socket` resolves the project's socket, and the launcher passes both as `OMUNCULUS_GUI_SOCKET` and `OMUNCULUS_GUI_PROJECT`.
+
+### The development environment
+
+`dev/` holds a server registry with one project, `dev`, whose config is the default preset's agents on `openai/gpt-6-luna` through OpenRouter, with `[access]` roles; its root is `dev/workspace` and its store `dev/.omunculus/`, both ignored by git. Its tools and sandbox script are the checkout's `priv/`, and the server runs from the checkout, so the environment runs the current code. `config_test.exs` loads both files, so a change to the config format updates them in the same commit. The tasks are atomic:
+
+| Task | Does |
+| --- | --- |
+| `dev:bootstrap` | creates `dev/workspace` and seeds the local administrator while the store does not exist |
+| `dev:serve` | runs the server on `dev/server.toml`, with the variables of `.env` (`OPENROUTER_API_KEY`) in its environment |
+| `dev:gui` | opens the window on the `dev` project of a running server |
+| `dev:reset` | deletes the store and the workspace |
+| `up` | `dev:bootstrap`, then `dev:serve` in the background unless a server already answers, then `dev:gui`; a server it started stops when the window closes |
+
+While the dev server runs, `bin/omunculus --config dev/omunculus.toml <command>` goes to it through the socket.
 
 The CLI reads no environment variables. The config file, and with it the model of every agent, comes from `--config <path>` or `./omunculus.toml`.
 

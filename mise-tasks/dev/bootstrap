@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#MISE description="Seed the dev project's local administrator once"
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+
+mkdir -p dev/workspace
+[[ -f dev/.omunculus/store.sqlite3 ]] && exit 0
+exec bin/omunculus --config dev/omunculus.toml access bootstrap --issuer local --subject "$(id -u)"

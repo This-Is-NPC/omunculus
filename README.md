@@ -79,6 +79,11 @@ bin/omunculus-gui --config server.toml --project demo
 
 `--project` may be left out when the registry holds one project.
 
+From a checkout, `mise run up` starts the development server on `dev/`,
+whose agents use `openai/gpt-6-luna` through OpenRouter with the
+`OPENROUTER_API_KEY` of `.env`, and opens its window; the server stops when
+the window closes. `mise run dev:reset` starts that project over.
+
 It lists the conversations and follows the open one live as a chat between
 you and the root agent: what each of you said and, on a line below each run,
 what the agent did. A map shows the agents at work, each work handed down

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#MISE description="Start the dev server, open its window, and stop the server when the window closes"
+#MISE depends=["dev:bootstrap"]
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+
+IFS=$'\t' read -r _ socket < <(mise exec -- mix omunculus.socket dev/server.toml)
+[[ -n ${socket:-} ]] || exit 1
+answers() { curl -s -o /dev/null --unix-socket "$socket" http://localhost/openapi.json; }
+
+if answers; then
+  exec mise-tasks/dev/gui
+fi
+
+setsid mise-tasks/dev/serve &
+server=$!
+trap 'kill -- -"$server" 2>/dev/null; wait "$server" 2>/dev/null || true' EXIT
+until answers; do
+  kill -0 "$server" 2>/dev/null || { printf 'up: the server stopped\n' >&2; exit 1; }
+  sleep 0.2
+done
+mise-tasks/dev/gui

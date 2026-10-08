@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Run the server on the dev registry, with OPENROUTER_API_KEY from .env"
+#MISE depends=["dev:bootstrap"]
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+
+if [[ -f .env ]]; then
+  set -a
+  source .env
+  set +a
+fi
+exec bin/omunculus serve --config dev/server.toml

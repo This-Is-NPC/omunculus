@@ -69,6 +69,12 @@ defmodule Omunculus.ConfigTest do
     assert Config.workflow_for(config, 0) == :off
   end
 
+  test "the dev environment's registry and project files load" do
+    assert {:ok, %{projects: %{"dev" => path}}} = Omunculus.Server.Config.load("dev/server.toml")
+    assert {:ok, %Config{access: access}} = Config.load(path)
+    assert access != nil
+  end
+
   test "the default preset names assemble on policy" do
     assert {:ok, %Config{assemble: "assemble"}} = Config.load(default_preset())
   end
