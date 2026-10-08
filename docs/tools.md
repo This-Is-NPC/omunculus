@@ -181,7 +181,7 @@ argument of the call.
 Every read stays in the call's conversation and goes only through these
 relations. The harness computes `catalog`, `workspaces`, `agents`,
 `paths` and `grant_scopes` only for a call that declares them. `assemble` renders `agents` under `## Agents` when the run has
-the `work` card.
+the `work` card, each with the tools it has that the run has not.
 
 ## Actions
 

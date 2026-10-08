@@ -3,7 +3,7 @@ defmodule Omunculus.Tools.Assemble do
   Builtin `assemble` tool: builds the assembled prompt of a run from
   the hydrated views. After the agent's text come the agents the
   `agents` view says a new work may name when the run has the `work`
-  card, and the cards, which follow `pinned` on the catalog view. Then
+  card, each with the tools it has that this run has not, and the cards, which follow `pinned` on the catalog view. Then
   the work's title and goal, its last comment, and its last closed run
   (`last_run`), or, without a work, the run that opened the run's request
   (`opener`): the message that opened that run and every
@@ -110,9 +110,20 @@ defmodule Omunculus.Tools.Assemble do
   defp agents_section([], _cards), do: []
 
   defp agents_section(agents, cards) do
-    if Enum.any?(cards, &(&1.name == "work")),
-      do: ["## Agents\n" <> Enum.map_join(agents, "\n", &"- #{&1}")],
-      else: []
+    if Enum.any?(cards, &(&1.name == "work")) do
+      own = MapSet.new(cards, & &1.name)
+      ["## Agents\n" <> Enum.map_join(agents, "\n", &agent_line(&1, own))]
+    else
+      []
+    end
+  end
+
+  # What an agent can do that this run cannot is why to hand it a work.
+  defp agent_line(%{name: name, tools: tools}, own) do
+    case Enum.reject(tools, &MapSet.member?(own, &1)) do
+      [] -> "- #{name}"
+      beyond -> "- #{name}: also #{Enum.join(beyond, ", ")}"
+    end
   end
 
   defp request_section(nil, _comments), do: []

@@ -146,7 +146,8 @@ The default `assemble` tool joins, in this order:
 
 ```text
 agent text
-→ if the run has the work card: the agents a new work may name
+→ if the run has the work card: the agents a new work may name, each
+  with the tools it has that this run has not
 → cards of the tools in tools.*
 → if there is a work: title + goal + last comment, then, under
   `## Last run`, the work's last closed run; without a work, the run that

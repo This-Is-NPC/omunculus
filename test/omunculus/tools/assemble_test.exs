@@ -34,6 +34,23 @@ defmodule Omunculus.Tools.AssembleTest do
     assert output =~ "- break: Stops the stage. [tags: sequence, work]"
   end
 
+  test "with the work card, each agent comes with the tools it has that this run has not" do
+    cards =
+      for name <- ["work", "read"],
+          do: %{name: name, description: name, tags: [], groups: [], pinned: true}
+
+    view = %{
+      "catalog" => cards,
+      "agents" => [
+        %{name: "worker", tools: ["read", "write", "edit"]},
+        %{name: "reader", tools: ["read"]}
+      ]
+    }
+
+    output = Assemble.run(%{@input | view: view})["output"]
+    assert output =~ "## Agents\n- worker: also write, edit\n- reader\n\n## Tools"
+  end
+
   test "without pinned every catalog card is listed even past 12" do
     cards =
       for i <- 1..13 do

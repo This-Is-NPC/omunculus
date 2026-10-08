@@ -528,7 +528,7 @@ defmodule Omunculus.Tools.WorkTest do
       assert_received {:assembled, "lead", without_work}
       assert without_work =~ "## Agents\n- lead\n\n## Tools"
       assert_received {:assembled, "lead", with_work}
-      assert with_work =~ "## Agents\n- alpha\n- beta\n\n## Tools"
+      assert with_work =~ "## Agents\n- alpha\n- beta: also break\n\n## Tools"
       assert_received {:assembled, "beta", without_card}
       refute without_card =~ "## Agents"
     end

@@ -51,6 +51,7 @@ from = ["inbox"]
 
 [views.agents]
 source = "agents"
+include = ["tools"]
 
 [views.catalog]
 source = "catalog"
