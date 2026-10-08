@@ -120,8 +120,8 @@ park a work.
 - **Usage:** `omunculus config`
 - **Effect:** read-only
 
-Print the project's setup as one JSON object, for a client to show:
-`agents` (name, depth, model, `workflow_only` and the `granted`,
+Print the project's setup as one JSON object, for a client to show: its
+`root`, `agents` (name, depth, model, `workflow_only` and the `granted`,
 `negotiable`, `human` and `deny` lists of its own layer), `models` (name,
 `api`, `provider`, `model`, and nothing else of their tables),
 `workspaces` (name, root), the default `workspace`, and `workflows` with

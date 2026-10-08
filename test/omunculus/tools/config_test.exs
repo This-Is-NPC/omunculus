@@ -73,6 +73,7 @@ defmodule Omunculus.Tools.ConfigTest do
 
     described = describe(Fixtures.config_path(dir))
 
+    assert described["root"] == dir
     assert described["workspaces"] == [%{"name" => "site", "root" => root}]
     assert described["workspace"] == "site"
 

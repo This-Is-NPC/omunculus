@@ -1,10 +1,10 @@
 defmodule Omunculus.Tools.Config do
   @moduledoc """
   Builtin `config` tool: the project's setup as a client shows it, in
-  JSON. Agents with their depth, model and ceiling lists, the models by
-  name with their api, provider and model id and nothing else of their
-  table, the workspaces with their roots and the default one, and each
-  workflow's steps. It loads the TOML in the harness's own process, since
+  JSON. The project root, agents with their depth, model and ceiling
+  lists, the models by name with their api, provider and model id and
+  nothing else of their table, the workspaces with their roots and the
+  default one, and each workflow's steps. It loads the TOML in the harness's own process, since
   the sandbox hides the file from external tools.
   """
 
@@ -23,6 +23,7 @@ defmodule Omunculus.Tools.Config do
 
   defp describe(config) do
     %{
+      root: config.root,
       agents:
         config.agents
         |> Enum.sort_by(fn {name, agent} -> {agent.depth, name} end)
