@@ -223,6 +223,10 @@ defmodule Omunculus.CLITest do
     assert CLI.format_error({:unknown_run, "missing"}) == "unknown run missing"
   end
 
+  test "a failed tool's error is its own output", _ctx do
+    assert CLI.format_error({:tool_failed, "message required"}) == "message required"
+  end
+
   test "an override that does not fit its manifest is a clear error" do
     assert CLI.format_error({:overrides, "done", {:not_chainable, "work"}}) ==
              "overrides.done.chains names work, which the done manifest does not chain"

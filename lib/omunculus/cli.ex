@@ -81,6 +81,8 @@ defmodule Omunculus.CLI do
     "no config at #{path}; run `omunculus preset <name> --from <dir>`"
   end
 
+  def format_error({:tool_failed, output}), do: output
+
   def format_error({:execution, :missing, keys}) do
     "omunculus.toml is missing [execution]; required keys: #{Enum.join(keys, ", ")}"
   end
