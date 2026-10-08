@@ -2,13 +2,16 @@ import QtQuick
 
 // Chip is a quiet button: a hairline box whose text lights on hover, with an
 // accent underline that grows from the left; it gives a little when pressed
-// and takes the accent, with a faint wash, when on.
+// and takes the accent, with a faint wash, when on. With a `reason` it is off:
+// it reads disabled and does nothing, but says why on hover.
 Rectangle {
   id: chip
 
   property string text
   // Optional icon before the text, from Icon's set.
   property string icon
+  // Optional colour before the text, as a small square, as a person's.
+  property color swatch: "transparent"
   // Room kept on the right for something drawn over the chip, like a chevron.
   property real trailing: 0
   // A chip that leads to another view slides right as the view leaves left.
@@ -17,17 +20,20 @@ Rectangle {
   property bool dim: false
   property color accent: Theme.primary
   property string tip
-  readonly property bool hovered: mouse.containsMouse
+  // Why it cannot be pressed now; empty while it can.
+  property string reason
+  readonly property bool off: !enabled || reason !== ""
+  readonly property bool hovered: mouse.containsMouse && reason === ""
 
   signal clicked()
 
   implicitWidth: content.implicitWidth + 20 + trailing
   implicitHeight: 26
-  activeFocusOnTab: true
+  activeFocusOnTab: !off
   color: checked ? Qt.alpha(accent, 0.12) : (hovered ? Qt.alpha(accent, 0.05) : "transparent")
   border.color: checked ? accent : (hovered ? Theme.dim : Theme.line)
-  opacity: !enabled ? 0.35 : (dim && !hovered ? 0.6 : 1)
-  scale: mouse.pressed ? 0.96 : 1
+  opacity: off ? 0.35 : (dim && !hovered ? 0.6 : 1)
+  scale: mouse.pressed && !off ? 0.96 : 1
   transform: Translate { id: nudge }
 
   Behavior on color { ColorAnimation { duration: 140 } }
@@ -45,7 +51,14 @@ Rectangle {
     id: content
     anchors.centerIn: parent
     anchors.horizontalCenterOffset: -chip.trailing / 2
-    spacing: chip.icon && chip.text ? 8 : 0
+    spacing: (chip.icon || chip.swatch.a > 0) && chip.text ? 8 : 0
+    Rectangle {
+      anchors.verticalCenter: parent.verticalCenter
+      visible: chip.swatch.a > 0
+      width: 6
+      height: 6
+      color: chip.swatch
+    }
     Icon {
       anchors.verticalCenter: parent.verticalCenter
       visible: chip.icon.length > 0
@@ -74,13 +87,13 @@ Rectangle {
     id: mouse
     anchors.fill: parent
     hoverEnabled: true
-    cursorShape: Qt.PointingHandCursor
+    cursorShape: chip.off ? Qt.ArrowCursor : Qt.PointingHandCursor
     onClicked: chip.press()
   }
 
   // Run the chip as if clicked: keys reuse it so they move the same way.
   function press() {
-    if (!chip.enabled)
+    if (chip.off)
       return
     if (chip.departs)
       depart.restart()
@@ -97,7 +110,7 @@ Rectangle {
   FocusRing {}
 
   Hint {
-    visible: (chip.hovered || chip.activeFocus) && chip.tip.length > 0
-    text: chip.tip
+    visible: (mouse.containsMouse || chip.activeFocus) && text.length > 0
+    text: chip.reason || chip.tip
   }
 }

@@ -3,16 +3,23 @@ import QtQuick.Controls.Basic as C
 
 // ModalDialog is the frame every eco dialog shares: centred in the window
 // wherever it is declared, at most `maxWidth` wide, over a dimmed window,
-// fading and settling in. It takes the keyboard — Esc closes it — and gives it
+// fading and settling in. Its top edge stays where it opened while it grows or
+// shrinks, unless it would leave the window. It takes the keyboard — Esc closes it — and gives it
 // back to what had it.
 C.Popup {
   id: modal
   property int maxWidth: 520
   property color edge: Theme.line
 
+  // Where the top edge opened, or -1 before it opens.
+  property real openedTop: -1
+
   parent: C.Overlay.overlay
-  anchors.centerIn: parent
+  x: Math.round((parent.width - width) / 2)
+  y: Math.round(Math.max(24, Math.min(openedTop < 0 ? (parent.height - height) / 2 : openedTop, parent.height - height - 24)))
   width: Math.min(parent.width - 48, maxWidth)
+  onAboutToShow: openedTop = -1
+  onOpened: openedTop = y
   modal: true
   focus: true
   FocusKeeper { popup: modal }

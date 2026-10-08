@@ -8,6 +8,8 @@ Rectangle {
   property string tip
   property color tone: Theme.primary
   property bool highlighted: false
+  // A count waiting behind the button, on a badge at its corner; none hides it.
+  property int count: 0
   readonly property bool hovered: pointer.containsMouse
 
   signal clicked()
@@ -42,6 +44,22 @@ Rectangle {
     height: 2
     color: button.tone
     Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+  }
+
+  Rectangle {
+    visible: button.count > 0
+    anchors { right: parent.right; top: parent.top; margins: -5 }
+    width: Math.max(height, tally.implicitWidth + 6)
+    height: 13
+    color: button.tone
+    Label {
+      id: tally
+      anchors.centerIn: parent
+      text: button.count
+      color: Theme.badgeForeground
+      font.pixelSize: 9
+      font.bold: true
+    }
   }
 
   SequentialAnimation {

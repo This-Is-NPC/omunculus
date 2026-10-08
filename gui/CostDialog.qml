@@ -10,7 +10,6 @@ ModalDialog {
   id: dialog
 
   maxWidth: 560
-  onOpened: closeButton.forceActiveFocus()
 
   readonly property var agents: Object.keys(Omunculus.usage.agents).sort()
 
@@ -77,10 +76,9 @@ ModalDialog {
         }
       }
 
-      RowLayout {
-        Layout.fillWidth: true
-        Item { Layout.fillWidth: true }
-        Chip { id: closeButton; text: "CLOSE"; tip: "esc"; onClicked: dialog.close() }
+      DialogFooter {
+        cancelText: "CLOSE"
+        onCancelled: dialog.close()
       }
     }
   }

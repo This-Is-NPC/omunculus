@@ -308,6 +308,20 @@ Singleton {
     return ""
   }
 
+  // Streamed Markdown with its open marks closed — a fence, bold, inline
+  // code — or dropped when nothing follows them yet.
+  function closed(text) {
+    if ((text.match(/^```/gm) || []).length % 2)
+      return text + "\n```"
+    let shown = text.replace(/\s+$/, "")
+    const open = ["**", "`"].filter(mark => shown.split(mark).length % 2 === 0)
+      .map(mark => ({ mark: mark, at: shown.lastIndexOf(mark) }))
+      .sort((a, b) => b.at - a.at)
+    for (const left of open)
+      shown = shown.slice(left.at + left.mark.length).trim() === "" ? shown.slice(0, left.at).replace(/\s+$/, "") : shown + left.mark
+    return shown
+  }
+
   // Text as Markdown should show it: without inline code marks, which would
   // set it in a larger font, and with each line break kept.
   function inline(text) {

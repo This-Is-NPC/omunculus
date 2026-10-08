@@ -12,7 +12,6 @@ Item {
   required property bool mine
   required property string stamp
   property bool continued: false
-  property bool recent: true
 
   readonly property color tone: Omunculus.toneOf(who)
   // At most this wide: the whole width on a narrow window, about three quarters otherwise.
@@ -50,11 +49,10 @@ Item {
         horizontalAlignment: turn.mine ? Text.AlignRight : Text.AlignLeft
         text: turn.mine ? turn.text : Omunculus.inline(turn.text)
         textFormat: turn.mine ? Text.PlainText : Text.MarkdownText
-        color: turn.recent ? Theme.foreground : Theme.dim
+        color: Theme.foreground
         font.pixelSize: 12
         lineHeight: 1.2
         wrapMode: Text.Wrap
-        Behavior on color { ColorAnimation { duration: 400 } }
       }
     }
   }

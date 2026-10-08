@@ -2,8 +2,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 
 // AgentTurn is one run of an agent in the conversation, said like a line of
-// chat: on the left, in the agent's colour, its words decoding in as they
-// stream. Below them, one dim line says what it did — the calls it made,
+// chat: on the left, in the agent's colour, its words drawn as they stream.
+// Below them, one dim line says what it did — the calls it made,
 // which failed, the work it closed or the access it granted; clicking it lists
 // the calls in place, with why a failed one failed. Until the agent says or
 // does anything, that line is the loading trace and how long it has worked.
@@ -20,7 +20,6 @@ Item {
   required property real at
   required property string stamp
   property bool continued: false
-  property bool recent: true
   property bool callsOpen: false
 
   readonly property var lines: JSON.parse(steps)
@@ -76,23 +75,19 @@ Item {
       width: Math.min(turn.widest, line.implicitWidth + 2 * turn.inset)
       height: line.implicitHeight + 14
       color: Qt.tint(Theme.background, Qt.alpha(turn.tone, 0.1))
-      DecodeLabel {
+      Label {
         id: line
         anchors.verticalCenter: parent.verticalCenter
         x: turn.inset
         width: Math.min(implicitWidth, turn.widest - 2 * turn.inset)
-        // What it says decodes in as it streams; one read back appears as it is.
-        value: Omunculus.inline(turn.said)
-        soft: true
-        appending: true
-        autoPlay: turn.streaming
-        revealOnStage: false
+        // Drawn as it is while it streams, with its open marks closed, so the
+        // words already read never move.
+        text: Omunculus.inline(turn.streaming ? Omunculus.closed(turn.said) : turn.said)
         textFormat: Text.MarkdownText
-        color: turn.recent ? Theme.foreground : Theme.dim
+        color: Theme.foreground
         font.pixelSize: 12
         lineHeight: 1.2
         wrapMode: Text.Wrap
-        Behavior on color { ColorAnimation { duration: 400 } }
       }
     }
 

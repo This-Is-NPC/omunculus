@@ -1,5 +1,10 @@
 import QtQuick
 
+// TraceButton is a view's button. Its role says what pressing it does:
+// "navigation" leaves for another view and slides away; "primary" is the
+// view's main action, outlined and washed in the accent; "guarded" takes the
+// error tone; any other ("progress", "action") stays in place. `key`, when
+// set, shows the key that presses it.
 Rectangle {
   id: button
 
@@ -12,19 +17,23 @@ Rectangle {
   property bool busy: false
   property bool allowClickWhileBusy: false
   property color tone: role === "guarded" ? Theme.error : Theme.primary
+  readonly property bool primary: role === "primary"
   readonly property bool running: busy
   readonly property bool hovered: pointer.containsMouse
   readonly property color ink: armed ? Theme.readable(Theme.background, tone, Theme.foreground) : tone
 
   signal clicked()
 
-  implicitWidth: Math.max(dense ? 72 : 150, content.implicitWidth + (dense ? 20 : 28))
+  // Room on each side of the centred content.
+  readonly property real side: dense ? 10 : 14
+  readonly property real iconRoom: icon ? (dense ? 12 : 14) + content.spacing : 0
+  implicitWidth: Math.max(dense ? 72 : 150, iconRoom + caption.implicitWidth + 2 * side)
   implicitHeight: dense ? 28 : 44
   activeFocusOnTab: true
   clip: true
   opacity: enabled ? 1 : 0.35
-  color: armed ? tone : "transparent"
-  border.color: Theme.line
+  color: armed ? tone : (primary ? Qt.alpha(tone, 0.08) : "transparent")
+  border.color: primary ? tone : Theme.line
   scale: pointer.pressed ? 0.97 : 1
   transform: Translate { id: departure }
 
@@ -81,7 +90,11 @@ Rectangle {
       color: button.ink
     }
     DecodeLabel {
+      id: caption
       anchors.verticalCenter: parent.verticalCenter
+      // Elided before it reaches the key or the edges.
+      width: Math.min(implicitWidth, button.width - 2 * button.side - button.iconRoom)
+      elide: Text.ElideRight
       value: button.text
       soft: true
       color: button.ink
