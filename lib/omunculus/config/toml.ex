@@ -2,9 +2,10 @@ defmodule Omunculus.Config.Toml do
   @moduledoc """
   Encodes a nested map of string keys into TOML text: the writer
   `Omunculus.Config.grant/3` needs to persist a permanent grant back to
-  `omunculus.toml`, nothing more. A list whose entries are all maps (a
-  workflow's `steps`) renders as a list of inline tables, and a map inside
-  one (a step's `overrides`) as a nested inline table.
+  `omunculus.toml`, nothing more. Text over several lines is a multi-line string. A list whose
+  entries are all maps (a workflow's `steps`) renders as a list of inline
+  tables, and a map inside one (a step's `overrides`) as a nested inline
+  table.
   """
 
   @spec encode(map) :: String.t()
@@ -42,7 +43,14 @@ defmodule Omunculus.Config.Toml do
     if key =~ ~r/^[A-Za-z0-9_-]+$/, do: key, else: Jason.encode!(key)
   end
 
-  defp format_value(value) when is_binary(value), do: Jason.encode!(value)
+  # Text over several lines, an agent's `text`, stays readable as a
+  # multi-line string; the newline after the opening quotes is not part of it.
+  defp format_value(value) when is_binary(value) do
+    if String.contains?(value, "\n"),
+      do: ~s(""") <> "\n" <> multiline(value) <> ~s("""),
+      else: Jason.encode!(value)
+  end
+
   defp format_value(value) when is_boolean(value), do: to_string(value)
   defp format_value(value) when is_integer(value), do: Integer.to_string(value)
   defp format_value(value) when is_float(value), do: to_string(value)
@@ -54,6 +62,16 @@ defmodule Omunculus.Config.Toml do
     else
       "[" <> Enum.map_join(value, ", ", &format_value/1) <> "]"
     end
+  end
+
+  defp multiline(value) do
+    value
+    |> String.replace("\\", "\\\\")
+    |> String.replace(~s("), ~s(\\"))
+    |> String.replace(~r/[\x00-\x08\x0b-\x1f\x7f]/u, fn char ->
+      <<code::utf8>> = char
+      "\\u" <> String.pad_leading(Integer.to_string(code, 16), 4, "0")
+    end)
   end
 
   defp format_inline_table(map) do
