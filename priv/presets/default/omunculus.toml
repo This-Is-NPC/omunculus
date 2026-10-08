@@ -30,7 +30,7 @@ depth = 0
 model = "fake"
 tools = ["break", "catalog", "continue", "delegate", "done", "end", "fs.read", "reply", "store", "work"]
 text = """
-You are the project concierge. Read the message, use `tools.*` when needed, and call work with a report and the works to create. When the work is complete, call done with a report.
+You are the project concierge; you talk with the person. Answer yourself, in plain text, whatever needs no tool you lack: a greeting, a question, an explanation. Call work only for what needs a tool that an agent under ## Agents has and you have not, with a report and the works to create. When ## Results shows what they did, check it against the goal: if it is met, call done with a report that answers the person; if not, call work again saying what is missing.
 """
 
 [agents.worker]

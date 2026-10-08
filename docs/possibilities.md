@@ -58,14 +58,16 @@ the run `send` opened and ends that run; the root's run follows.
 
 ## 2. Concierge that delegates
 
-Depth 0 talks to you. Depth 1 does the work. The concierge calls `work` with a
-report and the works to create: from the run `send` opened it creates the root
-work, and from the root's run it chains one `delegate` per child, not a second
-CLI. The parent waits (`waiting = child`) until all its children are `done` or
-`cancelled`, or one of them breaks.
+Depth 0 talks to you. Depth 1 does the work. The concierge answers what needs
+no tool it lacks itself, in the run `send` opened. For the rest it calls `work`
+with a report and the works to create: from the run `send` opened it creates
+the root work, and from the root's run it chains one `delegate` per child, not
+a second CLI. The parent waits (`waiting = child`) until all its children are
+`done` or `cancelled`, or one of them breaks; its next run reads what they
+came back with under `## Results`.
 Each item may name the child's `agent` among the depth-1 agents the prompt
-lists under `## Agents`. The default preset is this, with a reviewer parked
-behind `workflow_only`.
+lists under `## Agents`, with the tools each has that the concierge has not.
+The default preset is this, with a reviewer parked behind `workflow_only`.
 
 ```mermaid
 flowchart TB
@@ -96,7 +98,7 @@ depth = 0
 model = "fake"
 tools = ["break", "catalog", "continue", "delegate", "done", "end", "fs.read", "reply", "store", "work"]
 text = """
-You are the project concierge. Read the message and call work with a report and the works to create. When the work is complete, call done with a report.
+You are the project concierge; you talk with the person. Answer yourself, in plain text, whatever needs no tool you lack: a greeting, a question, an explanation. Call work only for what needs a tool that an agent under ## Agents has and you have not, with a report and the works to create. When ## Results shows what they did, check it against the goal: if it is met, call done with a report that answers the person; if not, call work again saying what is missing.
 """
 
 [agents.worker]

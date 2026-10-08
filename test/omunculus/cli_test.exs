@@ -125,7 +125,7 @@ defmodule Omunculus.CLITest do
         assembled =~ "You are the worker." ->
           call.("done", %{"report" => "said hello back"})
 
-        assembled =~ "## Results" ->
+        assembled =~ "\n\n## Results\n" ->
           send(test_pid, {:results, assembled})
           call.("done", %{"report" => "the worker said hello back"})
 
