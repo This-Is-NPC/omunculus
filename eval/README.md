@@ -103,14 +103,15 @@ claims `done`.
 
 ```sh
 mise run eval:selftest                       # checks and scoring
-mise run eval:run -- --model luna --k 2 --label pilot
+mise run eval:run -- --model luna --k 2 --jobs 6 --label pilot
 mise run eval:run -- --model luna --task brief --configuration negotiated
 mise run eval:compare -- eval/results/<before> eval/results/<now>
 mix run eval/run.exs score eval/results/<run>    # score an old run again
 ```
 
-`eval:run` loads `.env` for the provider's key. Each execution gets a fresh
-project; the instruction goes through the CLI, which returns once every run
+`eval:run` loads `.env` for the provider's key. `--jobs` executions run at
+once (one by default): each has a project of its own, so they share nothing
+but the provider's rate limits. Each execution gets a fresh project; the instruction goes through the CLI, which returns once every run
 has finished; then the runner plays the person, answering what waits on them
 as the task says, a few rounds at most.
 

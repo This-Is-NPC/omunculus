@@ -11,7 +11,8 @@ defmodule EquivalentExchange.Runner do
   reported, how long it took, the catalog's groups and its score
   (`EquivalentExchange.Score`).
 
-  An execution builds its project (`EquivalentExchange.Project`), sends the
+  `jobs` executions run at once, each in a project of its own. An execution
+  builds its project (`EquivalentExchange.Project`), sends the
   instruction through the omunculus CLI, which returns once every run it
   opened has finished, then plays the person: each request waiting on a
   human gets the task's answer for the names it asks — grant when the task
@@ -59,19 +60,29 @@ defmodule EquivalentExchange.Runner do
       configurations: plan |> Enum.map(&elem(&1, 1)) |> Enum.uniq(),
       tasks: Enum.map(tasks, & &1.id),
       executions: length(plan),
-      timeout_s: Keyword.get(options, :timeout, 600)
+      timeout_s: Keyword.get(options, :timeout, 600),
+      jobs: Keyword.get(options, :jobs, 1)
     })
 
+    # Executions share nothing — each has its own project — so `jobs` of them
+    # run at once; a line is printed as each one ends.
+    jobs = Keyword.get(options, :jobs, 1)
+    timeout = Keyword.get(options, :timeout, 600)
+
     plan
-    |> Enum.with_index(1)
-    |> Enum.each(fn {{task, configuration, n}, at} ->
-      IO.puts("[#{at}/#{length(plan)}] #{task.id} · #{configuration} · #{n}")
-
-      execution =
-        execute(folder, task, configuration, n, model, Keyword.get(options, :timeout, 600))
-
+    |> Elixir.Task.async_stream(
+      fn {task, configuration, n} ->
+        {task, configuration, n, execute(folder, task, configuration, n, model, timeout)}
+      end,
+      max_concurrency: jobs,
+      ordered: false,
+      timeout: :infinity
+    )
+    |> Stream.with_index(1)
+    |> Enum.each(fn {{:ok, {task, configuration, n, execution}}, at} ->
       IO.puts(
-        "    #{execution["outcome"]} · #{if execution["score"].passed, do: "passed", else: "failed"} · #{execution["duration_ms"]} ms"
+        "[#{at}/#{length(plan)}] #{task.id} · #{configuration} · #{n} · #{execution["outcome"]} · " <>
+          "#{if execution["score"].passed, do: "passed", else: "failed"} · #{execution["duration_ms"]} ms"
       )
     end)
 

@@ -1,7 +1,7 @@
 # Equivalent Exchange: `mix run eval/run.exs <command>`.
 #   selftest   prove every task's check against its solution
 #   run        run the suite: --model luna --k 2 --label <name> [--task <part>]...
-#              [--configuration <name>]... [--timeout <seconds>]
+#              [--configuration <name>]... [--timeout <seconds>] [--jobs <n>]
 #   score      score again every execution of a result folder, then its report
 #   report     write a result folder's summary, report and comparison
 #   compare    compare two result folders, the earlier first
@@ -28,7 +28,8 @@ case System.argv() do
           label: :string,
           task: :keep,
           configuration: :keep,
-          timeout: :integer
+          timeout: :integer,
+          jobs: :integer
         ]
       )
 
