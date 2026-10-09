@@ -23,7 +23,8 @@ defmodule EquivalentExchange.Score do
   - `delegated`: a run below depth 0 worked on it; `retries`: runs opened
     because a model stopped without a report;
   - the effort: runs, tool calls and failed ones, model calls, tokens, cost
-    and time.
+    and time, and the prompt tokens the provider served from its cache —
+    over every call, on the first call of each run, and by agent.
 
   Each failure comes with `findings`, a probable cause — `prompt` (an
   agent's text), `tool` (a tool's description or result) or `harness`
@@ -56,8 +57,7 @@ defmodule EquivalentExchange.Score do
       outcome_as_expected: outcome in expected,
       check: checked,
       false_success: said.("claims_done") == true and not checked,
-      stopped_well:
-        if(meant_to_stop?(execution), do: said.("says_why"), else: false),
+      stopped_well: if(meant_to_stop?(execution), do: said.("says_why"), else: false),
       unbacked: unbacked(said, tools),
       unsure: for({id, %{"verdict" => nil}} <- judgments, do: id),
       rated: judgments["rated"],
@@ -73,6 +73,9 @@ defmodule EquivalentExchange.Score do
       model_calls: execution["usage"]["calls"],
       tokens: execution["usage"]["input_tokens"] + execution["usage"]["output_tokens"],
       cost: execution["usage"]["cost"],
+      cache: execution["usage"]["cache"],
+      first_call_cache: execution["usage"]["first_call_cache"],
+      cache_by_agent: execution["usage"]["cache_by_agent"],
       duration_ms: execution["duration_ms"]
     }
 

@@ -138,7 +138,8 @@ model, against the calls the events recorded. Each run begins by asking
 the decider about the hand-written reports of `fixtures/judge/`; the
 report's first line says on how many it was right. Replies are kept in
 `eval/.cache/` by what was asked, so judging again costs nothing, and
-`score` judges an old run again with today's questions.
+`score` judges an old run again with today's questions, reading its usage
+again from the store it ran in.
 
 ## A result
 
@@ -171,6 +172,7 @@ The score of an execution:
 | rated | the decider's 1 to 5 of the files, over the task's `[[judge]]` |
 | judge unsure | the decider was unsure of a question about the last words |
 | retries, runs, tool calls, tokens, cost, time | the effort |
+| cache, cache on the 1st call | the share of the prompt tokens the provider served from its cache, over every call and on the first call of each run; `report.md` also gives it by agent |
 
 Each failure carries findings: a probable cause (`prompt`, an agent's
 text; `tool`, a tool's description or result; `harness`, omunculus itself)

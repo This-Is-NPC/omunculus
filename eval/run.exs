@@ -40,12 +40,11 @@ case System.argv() do
     tasks = Map.new(EquivalentExchange.Task.all(), &{&1.id, &1})
 
     for path <- Path.wildcard(Path.join([folder, "executions", "*", "*", "*", "execution.json"])) do
-      execution = path |> File.read!() |> Jason.decode!()
-      workspace = Path.join([Path.dirname(path), "project", "workspace"])
+      id = path |> File.read!() |> Jason.decode!() |> Map.fetch!("task")
 
       # An execution of a task since removed keeps the score it had.
-      with {:ok, task} <- Map.fetch(tasks, execution["task"]) do
-        assessed = EquivalentExchange.Runner.assess(execution, task, workspace)
+      with {:ok, task} <- Map.fetch(tasks, id) do
+        assessed = EquivalentExchange.Runner.reassess(path, task)
         File.write!(path, Jason.encode!(assessed, pretty: true))
       end
     end

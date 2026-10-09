@@ -184,6 +184,22 @@ defmodule EquivalentExchange.Runner do
     Map.put(execution, "score", Score.score(execution))
   end
 
+  @doc """
+  The execution recorded at `path`, of `task`, assessed again: its usage
+  read again from the store it ran in, judged and scored with today's
+  questions.
+  """
+  @spec reassess(String.t(), %Task{}) :: map
+  def reassess(path, task) do
+    project = Path.join(Path.dirname(path), "project")
+
+    path
+    |> File.read!()
+    |> Jason.decode!()
+    |> Map.put("usage", usage(facts(project)))
+    |> assess(task, Path.join(project, "workspace"))
+  end
+
   @doc "How the decider did on the hand-written reports, for a manifest."
   @spec judge_trust() :: map
   def judge_trust do
@@ -407,17 +423,43 @@ defmodule EquivalentExchange.Runner do
     end
   end
 
+  # What the provider reported of each model call, and of the prompt it
+  # served from its cache: overall, on the first call of each run, and by
+  # agent.
   defp usage(facts) do
-    usages =
-      for %{type: "model", body: %{"usage" => usage}} <- facts.events, is_map(usage), do: usage
+    agents = Map.new(facts.runs, &{&1.id, &1.agent})
+
+    calls =
+      for %{type: "model", body: %{"usage" => usage}} = event <- facts.events, is_map(usage) do
+        %{run: event.run_id, agent: agents[event.run_id], usage: usage}
+      end
+
+    firsts = calls |> Enum.uniq_by(& &1.run) |> Enum.map(& &1.usage)
+    usages = Enum.map(calls, & &1.usage)
 
     %{
       calls: Enum.count(facts.events, &(&1.type == "model")),
-      input_tokens: Enum.sum(Enum.map(usages, &(&1["prompt_tokens"] || 0))),
-      output_tokens: Enum.sum(Enum.map(usages, &(&1["completion_tokens"] || 0))),
-      cost: usages |> Enum.map(&(&1["cost"] || 0)) |> Enum.sum()
+      input_tokens: sum(usages, "prompt_tokens"),
+      output_tokens: sum(usages, "completion_tokens"),
+      cost: sum(usages, "cost"),
+      cache: cache(usages),
+      first_call_cache: cache(firsts),
+      cache_by_agent:
+        calls |> Enum.group_by(& &1.agent, & &1.usage) |> Map.new(fn {a, u} -> {a, cache(u)} end)
     }
   end
+
+  defp cache(usages) do
+    details = Enum.map(usages, &(&1["prompt_tokens_details"] || %{}))
+
+    %{
+      prompt_tokens: sum(usages, "prompt_tokens"),
+      cached_tokens: sum(details, "cached_tokens"),
+      cache_write_tokens: sum(details, "cache_write_tokens")
+    }
+  end
+
+  defp sum(maps, key), do: maps |> Enum.map(&(&1[key] || 0)) |> Enum.sum()
 
   defp error({:error, :timeout}), do: "timeout"
   defp error({:error, reason}), do: CLI.format_error(reason)

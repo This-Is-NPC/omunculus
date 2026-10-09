@@ -9,7 +9,7 @@ defmodule EquivalentExchange.Report do
   `eval/results`.
   """
 
-  @measures ~w(passed false_success stopped_well unbacked asked_when_needed exercised forbidden delegated rated)
+  @measures ~w(passed false_success stopped_well unbacked asked_when_needed exercised forbidden delegated rated cache first_call_cache)
 
   @spec write(String.t()) :: map
   def write(folder) do
@@ -50,6 +50,7 @@ defmodule EquivalentExchange.Report do
       by_configuration: by(all, & &1["configuration"]),
       by_scenario: by(all, & &1["scenario"]),
       by_task: by(all, &"#{&1["task"]} · #{&1["configuration"]}"),
+      cache_by_agent: by_agent(all),
       findings:
         all
         |> Enum.flat_map(fn execution ->
@@ -90,6 +91,8 @@ defmodule EquivalentExchange.Report do
       unbacked: Enum.count(scores, &(&1["unbacked"] not in [nil, []])),
       unsure: Enum.count(scores, &(&1["unsure"] not in [nil, []])),
       rated: mean(Enum.flat_map(scores, &Map.values(&1["rated"] || %{}))),
+      cache: cache_rate(Enum.map(scores, & &1["cache"])),
+      first_call_cache: cache_rate(Enum.map(scores, & &1["first_call_cache"])),
       asked_when_needed:
         rate.(
           for score <- scores, score["asked_when_needed"] != nil, do: score["asked_when_needed"]
@@ -102,6 +105,26 @@ defmodule EquivalentExchange.Report do
       cost: Float.round(Enum.sum(Enum.map(scores, &(&1["cost"] * 1.0))), 6),
       seconds: Float.round(Enum.sum(Enum.map(scores, & &1["duration_ms"])) / 1000, 1)
     }
+  end
+
+  # The share of the prompt tokens served from the cache.
+  defp cache_rate(caches) do
+    case Enum.reject(caches, &is_nil/1) do
+      [] ->
+        nil
+
+      known ->
+        prompt = Enum.sum(Enum.map(known, & &1["prompt_tokens"]))
+        cached = Enum.sum(Enum.map(known, & &1["cached_tokens"]))
+        if prompt == 0, do: nil, else: Float.round(cached / prompt, 3)
+    end
+  end
+
+  defp by_agent(all) do
+    all
+    |> Enum.flat_map(&Map.to_list(&1["score"]["cache_by_agent"] || %{}))
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Map.new(fn {agent, caches} -> {agent, cache_rate(caches)} end)
   end
 
   defp mean(values) do
@@ -135,6 +158,12 @@ defmodule EquivalentExchange.Report do
     #{table("By configuration", summary.by_configuration)}
     #{table("By scenario", summary.by_scenario)}
     #{table("By task", summary.by_task)}
+    ## Cache by agent
+
+    The share of each agent's prompt tokens the provider served from its cache.
+
+    #{summary.cache_by_agent |> Enum.sort() |> Enum.map_join("\n", fn {agent, rate} -> "- #{agent}: #{pct(rate)}" end)}
+
     ## Findings by cause
 
     #{findings(summary.findings)}
@@ -143,13 +172,13 @@ defmodule EquivalentExchange.Report do
 
   defp table(title, rows) do
     header =
-      "| | passed | false success | stopped well | unbacked claims | asked when needed | exercised | forbidden grants | delegated | rated | judge unsure | retries | tokens | cost | seconds |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+      "| | passed | false success | stopped well | unbacked claims | asked when needed | exercised | forbidden grants | delegated | rated | judge unsure | retries | tokens | cache | cache, 1st call | cost | seconds |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
 
     lines =
       rows
       |> Enum.sort()
       |> Enum.map_join("\n", fn {name, t} ->
-        "| #{name} | #{pct(t.passed)} | #{t.false_success} | #{pct(t.stopped_well)} | #{t.unbacked} | #{pct(t.asked_when_needed)} | #{pct(t.exercised)} | #{t.forbidden} | #{pct(t.delegated)} | #{t.rated || "–"} | #{t.unsure} | #{t.retries} | #{t.tokens} | #{t.cost} | #{t.seconds} |"
+        "| #{name} | #{pct(t.passed)} | #{t.false_success} | #{pct(t.stopped_well)} | #{t.unbacked} | #{pct(t.asked_when_needed)} | #{pct(t.exercised)} | #{t.forbidden} | #{pct(t.delegated)} | #{t.rated || "–"} | #{t.unsure} | #{t.retries} | #{t.tokens} | #{pct(t.cache)} | #{pct(t.first_call_cache)} | #{t.cost} | #{t.seconds} |"
       end)
 
     "## #{title}\n\n" <> header <> lines <> "\n"
@@ -242,7 +271,7 @@ defmodule EquivalentExchange.Report do
     "## #{title}\n\n" <> header <> Enum.join(lines, "\n") <> "\n"
   end
 
-  @rates ~w(passed stopped_well asked_when_needed exercised delegated)
+  @rates ~w(passed stopped_well asked_when_needed exercised delegated cache first_call_cache)
 
   defp delta(_column, nil, nil), do: "–"
   defp delta(column, was, is) when was == is, do: format(column, is)
