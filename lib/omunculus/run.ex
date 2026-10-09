@@ -401,9 +401,20 @@ defmodule Omunculus.Run do
           {:error, _reason} = error -> error
         end
       else
-        {:error, Out.not_yours(name)}
+        refuse(project, run, name, args)
       end
     end
+  end
+
+  # A call to a tool not its own is recorded, failed, with what the model is
+  # told, so the run's record holds every call it made.
+  defp refuse(project, run, name, args) do
+    refused = Out.not_yours(name)
+    call = %{name: name, args: args, ok: false, output: refused}
+    ctx = %{run_id: run.id, work_id: run.work_id, author: "agent", agent: run.agent}
+
+    with {:ok, _events} <- Store.record_tools(project.conn, run.id, [{call, []}], ctx),
+         do: {:error, refused}
   end
 
   # The run's events since the last call: with `end` among them the run

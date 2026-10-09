@@ -137,7 +137,15 @@ defmodule Omunculus.McpTest do
         events |> Enum.filter(&(&1.type == "tool")) |> Enum.map(&Jason.decode!(&1.body)["name"])
 
       assert "echo" in tool_names
-      refute "shout" in tool_names
+
+      # The denied call is recorded, failed, with what the model was told.
+      assert %{"ok" => false, "output" => refused} =
+               events
+               |> Enum.filter(&(&1.type == "tool"))
+               |> Enum.map(&Jason.decode!(&1.body))
+               |> Enum.find(&(&1["name"] == "shout"))
+
+      assert refused == Out.not_yours("shout")
       Project.close(project)
     end
 

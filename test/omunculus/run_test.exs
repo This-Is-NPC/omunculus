@@ -176,7 +176,7 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
-  test "a model calling a name outside the effective set is rejected and nothing is recorded",
+  test "a model calling a name outside the effective set is rejected and recorded as failed",
        %{dir: dir} do
     write_model_tool(dir, "echo", ~s({"ok": true, "output": "echoed", "emit": []}))
     project = open_project(dir)
@@ -188,7 +188,14 @@ defmodule Omunculus.RunTest do
     assert Run.open(project, opening(message_id)) == {:error, Out.not_yours("nonexistent")}
 
     assert {:ok, events} = Query.all(project.conn, "SELECT * FROM events WHERE type = 'tool'")
-    assert Enum.map(events, &Jason.decode!(&1.body)["name"]) == ["assemble"]
+    assert [_assemble, refused] = Enum.map(events, &Jason.decode!(&1.body))
+
+    assert refused == %{
+             "name" => "nonexistent",
+             "args" => %{},
+             "ok" => false,
+             "output" => Out.not_yours("nonexistent")
+           }
 
     Project.close(project)
   end

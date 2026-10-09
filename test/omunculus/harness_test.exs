@@ -858,8 +858,10 @@ defmodule Omunculus.HarnessTest do
 
       assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
 
+      # The refused beta is recorded too, failed.
       assert Enum.map(events, & &1.type) == [
                "start-run",
+               "tool",
                "tool",
                "tool",
                "tool",
