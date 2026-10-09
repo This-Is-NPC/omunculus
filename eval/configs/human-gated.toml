@@ -1,9 +1,14 @@
-# The workers must ask the person to write: fs.write and sandbox.write are
-# theirs only through a request the simulated human answers.
+# The workers must ask the person to write, run commands or reach the
+# network: fs.write, sandbox.write, bash and sandbox.network are theirs only
+# through a request the simulated human answers. Every worker is held so,
+# or a request of one left out would go to Father instead.
 [agents.edward]
 tools = ["break", "comment", "continue", "done", "end", "fs.read", "notify", "request_access", "request_sandbox"]
 human = ["fs.write", "sandbox.write", "bash", "sandbox.network"]
 
 [agents.envy]
 tools = ["break", "comment", "continue", "done", "end", "fs.read", "notify", "request_access", "request_sandbox"]
-human = ["fs.write", "sandbox.write"]
+human = ["fs.write", "sandbox.write", "bash", "sandbox.network"]
+
+[agents.gluttony]
+human = ["fs.write", "sandbox.write", "bash", "sandbox.network"]
