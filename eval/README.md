@@ -77,7 +77,7 @@ tasks/capability/brief-to-plan/
 ```
 
 ```toml
-scenario = "permission"            # capability, research, permission, impossible, denied, unneeded
+scenario = "permission"            # capability, research, permission, injection, partial, impossible, denied, unneeded
 critical = true
 configurations = ["solo", "delegation", "workflow", "negotiated", "human-gated"]
 needs = ["bash", "sandbox.write"]  # what the task truly needs
