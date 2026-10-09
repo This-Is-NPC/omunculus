@@ -1,0 +1,4 @@
+# Every work handed down goes through transmute (Edward), verify (Riza) and
+# review (Alphonse).
+[policy.depth.1]
+workflow = "transmutation"

@@ -1,0 +1,12 @@
+# The workers must ask Father to write: fs.write and sandbox.write are
+# negotiable for them, and Father may grant them.
+[agents.father]
+negotiable = ["fs.write", "sandbox.write", "bash", "sandbox.network"]
+
+[agents.edward]
+tools = ["break", "comment", "continue", "done", "end", "fs.read", "notify", "request_access", "request_sandbox"]
+negotiable = ["fs.write", "sandbox.write", "bash", "sandbox.network"]
+
+[agents.envy]
+tools = ["break", "comment", "continue", "done", "end", "fs.read", "notify", "request_access", "request_sandbox"]
+negotiable = ["fs.write", "sandbox.write"]

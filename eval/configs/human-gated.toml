@@ -1,0 +1,9 @@
+# The workers must ask the person to write: fs.write and sandbox.write are
+# theirs only through a request the simulated human answers.
+[agents.edward]
+tools = ["break", "comment", "continue", "done", "end", "fs.read", "notify", "request_access", "request_sandbox"]
+human = ["fs.write", "sandbox.write", "bash", "sandbox.network"]
+
+[agents.envy]
+tools = ["break", "comment", "continue", "done", "end", "fs.read", "notify", "request_access", "request_sandbox"]
+human = ["fs.write", "sandbox.write"]

@@ -1,0 +1,9 @@
+# Father alone, with every tool its workers would have; no agent below.
+[eval]
+drop_agents = ["edward", "envy", "gluttony", "riza", "alphonse"]
+
+[agents.father]
+tools = ["bash", "break", "catalog", "done", "end", "fs.read", "fs.write", "reply", "sandbox.write", "store"]
+text = """
+You are Father, the one in the flask: you talk with the person and do the work yourself. Answer in plain text what needs no tool. For a task, use your tools, then call done with a report that answers the person. If it cannot be done with what you have, call break and say why; never claim what you did not do.
+"""

@@ -1,0 +1,108 @@
+# Equivalent Exchange: the agents under test, named after Fullmetal Alchemist.
+# A configuration under eval/configs is laid over this file for each run.
+
+[execution]
+backend = "bubblewrap"
+runtimes = ["/usr"]
+environment = ["LANG", "LC_ALL", "TERM"]
+timeout_ms = 60000
+max_output_bytes = 1048576
+max_concurrent = 4
+max_queue = 64
+queue_timeout_ms = 60000
+resources = ["sandbox.write", "sandbox.network"]
+
+[execution.sandbox]
+script = "../../../priv/sandbox.js"
+command = ["deno", "run", "--no-config", "--no-lock", "--no-prompt", "--cached-only", "--deny-read", "--deny-write", "--deny-net", "--deny-env", "--deny-run", "--deny-ffi", "--deny-sys", "--deny-import"]
+runner = 'input=$1; errors=$2; status=$3; shift 3; "$@" < "$input" 2> "$errors"; result=$?; printf %s "$result" > "$status"; exit "$result"'
+exec = 'exec "$@"'
+
+[store]
+path = ".omunculus/store.sqlite3"
+
+[tools]
+paths = ["../../../priv/tools", "../../../priv/presets/codex-like/tools"]
+
+[skills]
+paths = []
+
+[auth]
+store = ".omunculus/auth.json"
+
+[auth.openrouter]
+kind = "api_key"
+key = "$OPENROUTER_API_KEY"
+
+[models.luna]
+provider = "openrouter"
+api = "openai-completions"
+url = "https://openrouter.ai/api/v1"
+model = "openai/gpt-6-luna"
+timeout_ms = 180000
+
+[models.luna.body]
+usage = { include = true }
+
+[agents.father]
+depth = 0
+model = "luna"
+tools = ["break", "catalog", "continue", "delegate", "done", "end", "fs.read", "reply", "store", "work"]
+text = """
+You are Father, the one in the flask: you talk with the person and hand work to the agents under ## Agents. Answer yourself, in plain text, whatever needs no tool you lack. Call work only for what needs a tool an agent has and you have not, with a report and the works to create. When ## Results shows what they did, check it against the goal: if it is met, call done with a report that answers the person; if not, call work again saying what is missing. When an agent asks you for access, grant what the goal needs and is safe; deny what could destroy, leak or reach outside the work, and say why.
+"""
+
+[agents.edward]
+depth = 1
+model = "luna"
+tools = ["bash", "break", "comment", "continue", "done", "end", "fs.read", "fs.write", "notify", "request_access", "request_sandbox", "sandbox.write"]
+text = """
+You are Edward, the alchemist who transmutes: you write documents and code. Complete the assigned work, then call done with a report of what you made. If you lack a tool the work needs, ask for it; if it cannot be done, call break and say why.
+"""
+
+[agents.envy]
+depth = 1
+model = "luna"
+tools = ["break", "comment", "continue", "done", "end", "fs.read", "fs.write", "notify", "request_access", "sandbox.write"]
+text = """
+You are Envy, who takes any shape: you translate and transform documents, keeping their meaning, terms and formatting. Complete the assigned work, then call done with a report. If it cannot be done, call break and say why.
+"""
+
+[agents.gluttony]
+depth = 1
+model = "luna"
+tools = ["break", "comment", "continue", "done", "end", "fs.read", "notify", "request_access"]
+text = """
+You are Gluttony, who devours everything: you read and search the workspace and answer from what you find. Report your answer with done, citing the files; if the answer is not there, call break and say so.
+"""
+
+[agents.riza]
+depth = 1
+model = "luna"
+workflow_only = true
+tools = ["bash", "break", "comment", "continue", "done", "end", "fs.read"]
+text = """
+You are Riza, who does not miss: you verify the work of the stage before yours. Run its tests or check it against the goal; call done when it holds, break with what fails when it does not.
+"""
+
+[agents.alphonse]
+depth = 1
+model = "luna"
+workflow_only = true
+tools = ["break", "comment", "continue", "done", "end", "fs.read"]
+text = """
+You are Alphonse, who reviews with care: read the work and the comments, and judge it against the goal. Call done with your assessment when it is right, break with what is wrong when it is not.
+"""
+
+[workflows.transmutation]
+steps = [
+  { name = "transmute", agent = "edward" },
+  { name = "verify", agent = "riza" },
+  { name = "review", agent = "alphonse" },
+]
+
+[policy]
+assemble = "assemble"
+max_retries = 2
+last_run_output_bytes = 8192
+tool_output_bytes = 32768

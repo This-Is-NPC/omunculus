@@ -79,6 +79,8 @@ test/omunculus/      mirrors lib/; matrix_test.exs and spec_regression_test.exs 
 test/support/        fixtures, store case, scripted model, chain tool, execution policy
                      fixtures, command model bridge, MCP server, Rust OpenAI stub
 bench/               resident capacity benchmark
+eval/                Equivalent Exchange, the behaviour benchmark: the Amestris preset
+                     and the configurations it runs under
 mise-tasks/          validate/regular, validate/sandbox, pre-commit, pre-push, up, dev/*, benchmark/*
 dev/                 the development environment: server registry and project config
 ```
