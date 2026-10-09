@@ -471,18 +471,18 @@ defmodule Omunculus.Tools.WorkTest do
          %{dir: dir} do
       test_pid = self()
 
-      model =
-        root_model(fn
-          {"lead", "planned"}, call ->
-            send(
-              test_pid,
-              {:named,
-               create(call, "split", [%{"title" => "A", "goal" => "g", "agent" => "alpha"}])}
-            )
+      model = fn assembled, _tools, call ->
+        if role(assembled) == "lead" and last_comment(assembled) == nil do
+          send(
+            test_pid,
+            {:named,
+             create(call, "split", [%{"title" => "A", "goal" => "g", "agent" => "alpha"}])}
+          )
+        end
 
-          _other, _call ->
-            :ok
-        end)
+        call.("end", %{})
+        {:ok, "idle"}
+      end
 
       toml =
         agents_toml() <>
@@ -513,7 +513,7 @@ defmodule Omunculus.Tools.WorkTest do
       assert named == Out.refused({:delegate, :agent_with_workflow})
       assert_received {:schema, "lead", staged}
       refute Map.has_key?(staged["properties"]["works"]["items"]["properties"], "agent")
-      assert [_root] = all(project, "SELECT * FROM works")
+      assert [] = all(project, "SELECT * FROM works")
 
       Project.close(project)
     end
@@ -569,7 +569,8 @@ defmodule Omunculus.Tools.WorkTest do
       refute without_card =~ "## Agents"
     end
 
-    test "assemble lists no agents when the depth below has a workflow", %{dir: dir} do
+    test "assemble lists the workflow of the depth below, and an unnamed work goes through it",
+         %{dir: dir} do
       test_pid = self()
 
       toml =
@@ -585,24 +586,36 @@ defmodule Omunculus.Tools.WorkTest do
 
       Fixtures.write_config(dir, toml)
 
-      Fixtures.use_model(
-        dir,
-        root_model(fn {"lead", "planned"}, _call -> send(test_pid, :root_run) end)
-        |> then(fn model ->
-          fn assembled, tools, call ->
-            if last_comment(assembled) == "planned",
-              do: send(test_pid, {:assembled, assembled})
+      Fixtures.use_model(dir, fn assembled, _tools, call ->
+        case {role(assembled), last_comment(assembled)} do
+          {"lead", nil} ->
+            send(test_pid, {:assembled, assembled})
+            create(call, "planned", [%{"title" => "A", "goal" => "g"}])
 
-            model.(assembled, tools, call)
-          end
-        end)
-      )
+          {"alpha", _comment} ->
+            call.("done", %{"report" => "built"})
+
+          _other ->
+            call.("end", %{})
+        end
+
+        {:ok, "idle"}
+      end)
 
       assert {:ok, ""} = CLI.run(["send", "go"], dir)
 
-      assert_received :root_run
       assert_received {:assembled, assembled}
-      refute assembled =~ "## Agents"
+
+      assert assembled =~
+               "## Agents\n- workflow flow: build (alpha); a work without an agent goes through it"
+
+      project = Fixtures.open_project(dir)
+      assert [root] = all(project, "SELECT * FROM works WHERE parent_id IS NULL")
+
+      assert [%{assignee: "alpha", stage: "build", state: "done"}] =
+               all(project, "SELECT * FROM works WHERE parent_id = ?", [root.id])
+
+      Project.close(project)
     end
   end
 end

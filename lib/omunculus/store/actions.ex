@@ -6,8 +6,10 @@ defmodule Omunculus.Store.Actions do
   work with the `report` as its first comment and links the run to it when
   the run has no work yet. Of its `works`, one unnamed or naming an agent
   of depth 0 is the root itself, marked to start; when each names an agent
-  of depth 1, the root is held by the run's agent and each is delegated
-  below it, so the root's run opens once they are back. `work` and
+  of depth 1, or, with a workflow at depth 1 and none at depth 0, none
+  names one, the root is
+  held by the run's agent and each is delegated below it, so the root's
+  run opens once they are back. `work` and
   `delegate` may name the new work's `agent`: one of the TOML's agents at
   its depth that is not `workflow_only`, refused when that depth has a
   workflow; unnamed, it is the first stage's agent or the depth's first
@@ -197,10 +199,8 @@ defmodule Omunculus.Store.Actions do
   defp work(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:work, body, "report"),
          {:ok, items} <- work_items(body["works"]) do
-      children = Config.agents_at_depth(ctx.config, 1) |> Enum.map(&elem(&1, 0))
-
       cond do
-        Enum.all?(items, &(&1["agent"] in children)) ->
+        down?(ctx.config, items) ->
           hand_down(conn, body["report"], items, ctx)
 
         match?([_], items) ->
@@ -209,6 +209,23 @@ defmodule Omunculus.Store.Actions do
         true ->
           {:error, {:work, :one_root}}
       end
+    end
+  end
+
+  # Works go to depth 1 when each names one of its agents, or, when only
+  # depth 1 has a workflow, when none names an agent of another depth: its
+  # first stage takes them, and delegating refuses a named one. With a
+  # workflow at depth 0 an unnamed work is the root, staged.
+  defp down?(config, items) do
+    case {Config.workflow_for(config, 0), Config.workflow_for(config, 1)} do
+      {:off, {:ok, _steps}} ->
+        children = config.agents |> Enum.filter(fn {_name, a} -> a.depth == 1 end)
+        children = Enum.map(children, &elem(&1, 0))
+        Enum.all?(items, &(is_nil(&1["agent"]) or &1["agent"] in children))
+
+      _otherwise ->
+        children = config |> Config.agents_at_depth(1) |> Enum.map(&elem(&1, 0))
+        Enum.all?(items, &(&1["agent"] in children))
     end
   end
 

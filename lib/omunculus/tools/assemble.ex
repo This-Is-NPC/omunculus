@@ -115,6 +115,11 @@ defmodule Omunculus.Tools.Assemble do
     end
   end
 
+  defp agent_line(%{workflow: workflow, stages: stages}, _own) do
+    path = Enum.map_join(stages, " → ", &"#{&1.name} (#{&1.agent})")
+    "- workflow #{workflow}: #{path}; a work without an agent goes through it"
+  end
+
   # What an agent can do that this run cannot is why to hand it a work.
   defp agent_line(%{name: name, tools: tools}, own) do
     case Enum.reject(tools, &MapSet.member?(own, &1)) do

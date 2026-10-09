@@ -1317,6 +1317,9 @@ defmodule Omunculus.CLITest do
               call.(unquote(tool), unquote(Macro.escape(args)))
               {:ok, "unused"}
 
+            assembled =~ "## Results" ->
+              call.("end", %{})
+
             assembled =~ "## Last comment\nopened" ->
               delegate_one(call, "Sub task", "do this")
               {:ok, "unused"}
@@ -1343,8 +1346,11 @@ defmodule Omunculus.CLITest do
         assert parent.waiting == nil
         assert child.state == unquote(child_state)
 
-        assert {:ok, [_creation, _run1, run2, run3]} =
-                 Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+        # With a workflow only at depth 1 the creation hands the work down
+        # itself; without one, the root's own run delegates it.
+        assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+        assert length(runs) == if(unquote(workflow?), do: 3, else: 4)
+        [run2, run3] = Enum.take(runs, -2)
 
         assert run2.work_id == child.id
         assert run3.work_id == parent.id
@@ -1385,24 +1391,23 @@ defmodule Omunculus.CLITest do
       workflow = "delivery"
       """)
 
+      # Only depth 1 has a workflow, so the unnamed work goes straight to
+      # its first stage, below a root the concierge holds.
       model = fn assembled, _tools, call ->
         cond do
           assembled =~ "I am the worker." ->
             call.("done", %{"report" => "built"})
             {:ok, "unused"}
 
-          assembled =~ "## Work\nSub task2" ->
+          assembled =~ "## Last comment\nbuilt" ->
             call.("done", %{"report" => "reviewed"})
             {:ok, "unused"}
 
-          assembled =~ "## Last comment\nopened" ->
-            delegate_one(call, "Sub task2", "do this 2")
-            {:ok, "unused"}
-
-          assembled =~ "## Work" ->
+          assembled =~ "## Results" ->
             call.("end", %{})
 
           true ->
+            assert assembled =~ "- workflow delivery: to_do (worker) → review (concierge)"
             create_root(call, "Big task2")
             {:ok, "unused"}
         end
@@ -1421,13 +1426,13 @@ defmodule Omunculus.CLITest do
       assert child.stage == "review"
 
       assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
-      assert length(runs) == 5
-      [_creation, run1, run2, run3, run4] = runs
+      assert length(runs) == 4
+      [creation, run1, run2, run3] = runs
 
-      assert run1.agent == "concierge" and run1.depth == "0"
-      assert run2.agent == "worker" and run2.depth == "1"
-      assert run3.agent == "concierge" and run3.depth == "1"
-      assert run4.agent == "concierge" and run4.depth == "0"
+      assert creation.agent == "concierge" and creation.depth == "0"
+      assert run1.agent == "worker" and run1.depth == "1"
+      assert run2.agent == "concierge" and run2.depth == "1"
+      assert run3.agent == "concierge" and run3.depth == "0"
 
       Project.close(project)
     end
@@ -2031,10 +2036,6 @@ defmodule Omunculus.CLITest do
 
           assembled =~ "I am the worker." ->
             call.("done", %{"report" => "done"})
-            {:ok, "unused"}
-
-          assembled =~ "## Last comment\nopened" ->
-            delegate_one(call, "Sub task", "do this")
             {:ok, "unused"}
 
           assembled =~ "## Work" ->

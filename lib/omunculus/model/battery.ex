@@ -2,13 +2,13 @@ defmodule Omunculus.Model.Battery do
   @moduledoc """
   The bench model of spec §6, the "count to 5" scenario: decides only
   from what it can see in the assembled prompt — the cards under
-  `## Tools`, the presence of `## Work`, the text under `## Last
-  comment` and the agent's own first line — opening the work with `work`
+  `## Tools`, the presence of `## Work` and `## Results`, the text under
+  `## Last comment` and the agent's own first line — opening the work with `work`
   when there is none, counting to 5 with `counter` when it can,
   delegating one floor down with `work` when it still cannot count and
   has not already (marked by its own "delegated" report, so a later
   reopening of the same work does not delegate again), reviewing a
-  finished count or a delegated work that came back on the next opening,
+  finished count or works that came back (`## Results`) on the next opening,
   and reacting as an observer when addressed as one. It concludes a count
   or a review with `done` when it has the card; without it, it comments a
   count with `comment`.
@@ -73,9 +73,9 @@ defmodule Omunculus.Model.Battery do
     end
   end
 
-  defp review(%{last_comment: comment, cards: cards} = parsed, call) do
+  defp review(%{last_comment: comment, cards: cards, results: results} = parsed, call) do
     cond do
-      reviewable?(comment, cards) ->
+      reviewable?(comment, cards) or (results and MapSet.member?(cards, "done")) ->
         call.("done", %{"report" => "reviewed"})
         {:ok, "reviewed"}
 
@@ -108,6 +108,7 @@ defmodule Omunculus.Model.Battery do
     %{
       cards: MapSet.new(tools, & &1.name),
       work: String.contains?(assembled, "## Work"),
+      results: String.contains?(assembled, "## Results"),
       last_comment: last_comment(assembled),
       agent_line: assembled |> String.split("\n", parts: 2) |> List.first() || ""
     }
