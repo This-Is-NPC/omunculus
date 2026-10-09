@@ -175,11 +175,11 @@ defmodule EquivalentExchange.Runner do
   """
   @spec assess(map, %Task{}, String.t()) :: map
   def assess(execution, task, workspace) do
+    # As JSON first: an execution just built has atom keys, one read from disk string keys.
+    execution = execution |> Jason.encode!() |> Jason.decode!()
+
     execution =
-      execution
-      |> Map.put("judgments", Judge.judge(task, execution["report"] || "", workspace))
-      |> Jason.encode!()
-      |> Jason.decode!()
+      Map.put(execution, "judgments", Judge.judge(task, execution["report"], workspace))
 
     Map.put(execution, "score", Score.score(execution))
   end
