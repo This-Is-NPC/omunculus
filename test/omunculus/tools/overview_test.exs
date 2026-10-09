@@ -41,6 +41,15 @@ defmodule Omunculus.Tools.OverviewTest do
       })
 
     File.write!(path, ConfigToml.encode(data))
+
+    skill = Path.join([dir, ".agents", "skills", "review"])
+    File.mkdir_p!(skill)
+
+    File.write!(
+      Path.join(skill, "SKILL.md"),
+      "---\nname: review\ndescription: Reviews code.\nallowed-tools: Read fs.write\n---\n"
+    )
+
     %{path: path}
   end
 
@@ -95,6 +104,24 @@ defmodule Omunculus.Tools.OverviewTest do
     assert agent["key"] == %{"provider" => "gh", "source" => "omapass · dev/github"}
     assert tool(agent, "fs.write")["state"] == "sealed"
     assert tool(agent, "notify")["secrets"] == %{"NOTIFY_TOKEN" => "gh"}
+  end
+
+  test "an agent's skills come apart from its tools, each with the tools it uses", %{path: path} do
+    worker = path |> overview() |> place("site") |> depth(1) |> Map.fetch!("stages") |> hd()
+    agent = worker["agent"]
+
+    assert agent["skills"] == [
+             %{
+               "name" => "review",
+               "description" => "Reviews code.",
+               "uses" => ["read", "fs.write"],
+               "state" => "have"
+             }
+           ]
+
+    names = Enum.map(agent["tools"], & &1["name"])
+    assert "skill" in names
+    refute "skills" in names
   end
 
   test "the builtin catalog discovers overview with triggers == [\"cli\"]" do

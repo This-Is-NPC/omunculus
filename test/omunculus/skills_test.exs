@@ -40,6 +40,18 @@ defmodule Omunculus.SkillsTest do
     assert %{"skill.notes" => %{description: "Takes notes in a file."}} = Skills.discover([root])
   end
 
+  test "allowed-tools names the tools a skill uses, each in lowercase without its pattern" do
+    root = Fixtures.tmp_dir()
+
+    skill(
+      root,
+      "release",
+      "name: release\ndescription: Releases.\nallowed-tools: Bash(git status:*) Read fs.write Read\n"
+    )
+
+    assert %{"skill.release" => %{uses: ["bash", "read", "fs.write"]}} = Skills.discover([root])
+  end
+
   test "a folder that breaks the format is skipped and logged" do
     root = Fixtures.tmp_dir()
     skill(root, "Upper", "name: Upper\ndescription: x\n")

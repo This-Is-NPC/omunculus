@@ -11,11 +11,12 @@ defmodule Omunculus.Tools.Overview do
   changed it), where its provider's key comes from, and the names its
   layer lists, each classified by the run's ceiling there (`have`,
   `askable`, `sealed`, `blocked`), a group with its members, a tool with
-  the secrets the config binds to it. Workflows no place runs are listed
-  apart. It loads the TOML in the harness's process.
+  the secrets the config binds to it; and, apart from them, the skills it
+  has there, each with its description, state and the tools its
+  `allowed-tools` names. Workflows no place runs are listed apart. It loads the TOML in the harness's process.
   """
 
-  alias Omunculus.{Ceiling, Config}
+  alias Omunculus.{Ceiling, Config, Skills}
   alias Omunculus.Path, as: FilesystemPath
   alias Omunculus.Tool.Catalog
   alias Omunculus.Tools.Out
@@ -31,11 +32,12 @@ defmodule Omunculus.Tools.Overview do
   def run(_input), do: Out.fail("config_path required")
 
   defp overview(config) do
-    groups = config.tools |> Catalog.discover() |> Catalog.groups()
+    catalog = Catalog.discover(config.tools)
+    known = %{groups: Catalog.groups(catalog), skills: skills(catalog)}
 
     places =
       for name <- places(config), {:ok, here} <- [Config.for_workspace(config, name)] do
-        place(config, here, name, groups)
+        place(config, here, name, known)
       end
 
     run = places |> Enum.flat_map(& &1.depths) |> Enum.map(& &1.workflow) |> MapSet.new()
@@ -53,7 +55,11 @@ defmodule Omunculus.Tools.Overview do
     if config.policy_workspace, do: names, else: [nil | names]
   end
 
-  defp place(base, here, name, groups) do
+  defp skills(catalog) do
+    for {_name, %{kind: "skill"} = skill} <- catalog, do: skill
+  end
+
+  defp place(base, here, name, known) do
     workspace = name && Map.fetch!(base.workspaces, name)
     layer = workspace && workspace.ceiling
 
@@ -70,7 +76,7 @@ defmodule Omunculus.Tools.Overview do
         |> Enum.map(& &1.depth)
         |> Enum.uniq()
         |> Enum.sort()
-        |> Enum.map(&depth(base, here, layer, &1, groups))
+        |> Enum.map(&depth(base, here, layer, &1, known))
     }
   end
 
@@ -79,7 +85,7 @@ defmodule Omunculus.Tools.Overview do
     if workspace.config, do: overlaid ++ ["config file"], else: overlaid
   end
 
-  defp depth(base, here, layer, depth, groups) do
+  defp depth(base, here, layer, depth, known) do
     workflow = Config.workflow_name_for(here, depth)
     steps = if workflow, do: Map.fetch!(here.workflows, workflow), else: []
     staged = Enum.map(steps, & &1.agent)
@@ -93,7 +99,7 @@ defmodule Omunculus.Tools.Overview do
           %{
             name: step.name,
             deny: step.ceiling.deny,
-            agent: agent(base, here, layer, step.agent, depth, step.ceiling, groups)
+            agent: agent(base, here, layer, step.agent, depth, step.ceiling, known)
           }
         end),
       agents:
@@ -101,14 +107,14 @@ defmodule Omunculus.Tools.Overview do
         |> Enum.filter(fn {name, agent} -> agent.depth == depth and name not in staged end)
         |> Enum.sort_by(fn {name, _agent} -> name end)
         |> Enum.map(fn {name, _agent} ->
-          agent(base, here, layer, name, depth, nil, groups)
+          agent(base, here, layer, name, depth, nil, known)
           # A workflow-only agent runs in no stage of this depth here.
           |> then(&Map.put(&1, :idle, &1.workflow_only))
         end)
     }
   end
 
-  defp agent(base, here, layer, name, depth, stage, groups) do
+  defp agent(base, here, layer, name, depth, stage, known) do
     agent = Map.fetch!(here.agents, name)
     model = Map.fetch!(here.models, agent.model)
     base_model = base.agents |> Map.get(name, %{}) |> Map.get(:model)
@@ -118,12 +124,21 @@ defmodule Omunculus.Tools.Overview do
       depth: depth,
       grants: [],
       stage: stage,
-      groups: groups,
+      groups: known.groups,
       workspace: layer
     }
 
-    listed = layer_names(agent.ceiling) ++ ((layer && layer.human) || [])
-    snapshot = Ceiling.mount(here, context, listed)
+    # Skills show apart, as cards: the names the layers list stay tools.
+    listed =
+      (layer_names(agent.ceiling) ++ ((layer && layer.human) || []))
+      |> Enum.reject(&(&1 == "skills" or String.starts_with?(&1, "skill.")))
+
+    snapshot = Ceiling.mount(here, context, listed ++ Enum.map(known.skills, & &1.name))
+
+    reader =
+      if "skill" not in listed and Ceiling.classify(snapshot, "skill") == "have",
+        do: ["skill"],
+        else: []
 
     %{
       name: name,
@@ -138,7 +153,19 @@ defmodule Omunculus.Tools.Overview do
         changed: agent.model != base_model
       },
       key: key(here, model.input["provider"]),
-      tools: listed |> Enum.uniq() |> Enum.map(&tool(here, snapshot, &1, groups))
+      tools:
+        (listed ++ reader) |> Enum.uniq() |> Enum.map(&tool(here, snapshot, &1, known.groups)),
+      skills:
+        for skill <- Enum.sort_by(known.skills, & &1.name),
+            state = Ceiling.classify(snapshot, skill.name),
+            state != "blocked" do
+          %{
+            name: Skills.short_name(skill.name),
+            description: skill.description,
+            uses: skill.uses,
+            state: state
+          }
+        end
     }
   end
 

@@ -6,8 +6,11 @@ defmodule Omunculus.Skills do
   at most 64, equal to the folder's name — and a `description` of 1 to
   1024 characters. A skill becomes the catalog entry `skill.<name>`, of
   kind `skill`, in the group `skills`, so the ceiling governs it like a
-  tool. A folder that breaks those rules is skipped and logged. Paths are
-  walked in order; the last skill of a name wins.
+  tool. Its `uses` are the tools its `allowed-tools` names — space
+  separated, each entry's name before any `(…)`, in lowercase — which a
+  client draws; they grant nothing, the ceiling decides. A folder that
+  breaks those rules is skipped and logged. Paths are walked in order; the
+  last skill of a name wins.
   """
 
   require Logger
@@ -53,6 +56,7 @@ defmodule Omunculus.Skills do
          description: description,
          tags: ["skill"],
          groups: [@group],
+         uses: uses(front),
          dir: folder
        }}
     end
@@ -94,4 +98,13 @@ defmodule Omunculus.Skills do
   end
 
   defp description(_front), do: {:error, :description}
+
+  defp uses(%{"allowed-tools" => tools}) when is_binary(tools) do
+    tools
+    |> String.split(~r/\s+(?![^(]*\))/, trim: true)
+    |> Enum.map(&(&1 |> String.replace(~r/\(.*\)$/, "") |> String.downcase()))
+    |> Enum.uniq()
+  end
+
+  defp uses(_front), do: []
 end

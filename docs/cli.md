@@ -175,7 +175,9 @@ its `model` (name, id, api, `body`, whether the place `changed` it), the
 file`, never the value), and the names its layer lists, each with its
 `state` under the ceiling there (`have`, `askable`, `sealed`,
 `blocked`), a group's `members`, and the `secrets` the config binds to
-it. `unused_workflows` are those no place runs.
+it — the skills apart, as `skills`, each with its `description`, `state`
+and the tools its `allowed-tools` names (`uses`). `unused_workflows` are
+those no place runs.
 
 ## `omunculus model_test`
 
@@ -198,7 +200,7 @@ sandbox an agent's ceiling makes, so only a run tests it.
 Print the project's catalog as JSON, for a client to list: under
 `tools`, each tool, hook and skill with its `name`, `kind`,
 `description`, `triggers`, `groups`, the `secrets` it declares and the
-`binding` `[secrets.<tool>]` gives them, its `source` (`folder`,
+`binding` `[secrets.<tool>]` gives them, a skill's `uses`, its `source` (`folder`,
 `inline` or `skill`) and `dir`; under `mcp`, each `[[mcp.servers]]`
 with its `command` and `secrets`, since a server's tools are known only
 once a run starts it.

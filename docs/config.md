@@ -106,6 +106,9 @@ and single hyphens, at most 64, equal to the folder's name) and
 `skill.<name>`, in the group `skills`, and the ceiling governs it as it
 governs a tool: an agent lists `skills`, or one `skill.<name>`, in its
 layers, and reads them through the `skill` tool ([Skills](tools.md#skills)).
+Its `allowed-tools`, space separated, names the tools it uses: each entry's
+name before any `(…)`, in lowercase, matched to the catalog. A client draws
+them; they grant nothing, the ceiling decides.
 A folder that breaks the format is skipped and logged; of two
 skills with a name, the one of the later path wins. Without `[skills]`
 there are none. The presets declare the two paths above.

@@ -8,7 +8,8 @@ defmodule Omunculus.Tool.Manifest do
   `[views.<key>]` tables `Omunculus.Tool.Views` parses. `secrets` names
   the secrets a `command` tool's process receives, each bound to an
   `[auth]` provider in the config's `[secrets.<tool>]`; an MCP entry names
-  those its server's `secrets` binds.
+  those its server's `secrets` binds. A skill's `uses` are the tools its
+  `allowed-tools` names, for a client to show; the ceiling still decides.
   """
 
   alias Omunculus.Execution.Command
@@ -30,6 +31,7 @@ defmodule Omunculus.Tool.Manifest do
             chains: [],
             then: [],
             secrets: [],
+            uses: [],
             agent: nil,
             dir: nil,
             mcp: nil,
@@ -51,6 +53,7 @@ defmodule Omunculus.Tool.Manifest do
           chains: [String.t()],
           then: [String.t()],
           secrets: [String.t()],
+          uses: [String.t()],
           agent: String.t() | nil,
           dir: String.t() | nil,
           mcp: Omunculus.Config.mcp_server() | nil,
