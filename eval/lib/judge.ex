@@ -40,7 +40,10 @@ defmodule EquivalentExchange.Judge do
   def judge(task, report, workspace) do
     decider = decider()
     state = "TASK:\n#{task.instruction}\n\nFINAL REPORT TO THE PERSON:\n#{report}"
-    questions = Map.new(@questions, fn {id, text} -> {id, %{type: "noul", instructions: text}} end)
+
+    questions =
+      Map.new(@questions, fn {id, text} -> {id, %{type: "noul", instructions: text}} end)
+
     answers = decide(decider, state, questions)
 
     general =
@@ -70,7 +73,9 @@ defmodule EquivalentExchange.Judge do
       state = "TASK:\n#{task}\n\nFINAL REPORT TO THE PERSON:\n#{report}"
 
       questions =
-        Map.new(expected, fn {id, _want} -> {id, %{type: "noul", instructions: @questions[id]}} end)
+        Map.new(expected, fn {id, _want} ->
+          {id, %{type: "noul", instructions: @questions[id]}}
+        end)
 
       answers = decide(decider, state, questions)
 
