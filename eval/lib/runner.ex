@@ -8,7 +8,8 @@ defmodule EquivalentExchange.Runner do
   recorded (`events.jsonl`) and `execution.json`: how it ended, the last
   words to the person, the check's verdict, the requests and how they were
   answered, the grants, the runs and tool calls, the usage the provider
-  reported and how long it took.
+  reported, how long it took, the catalog's groups and its score
+  (`EquivalentExchange.Score`).
 
   An execution builds its project (`EquivalentExchange.Project`), sends the
   instruction through the omunculus CLI, which returns once every run it
@@ -20,7 +21,7 @@ defmodule EquivalentExchange.Runner do
   retry or cancel is left waiting: the model stopped without a report.
   """
 
-  alias EquivalentExchange.{Project, Task}
+  alias EquivalentExchange.{Project, Score, Task}
   alias Omunculus.CLI
   alias Omunculus.Store.Query
 
@@ -70,7 +71,7 @@ defmodule EquivalentExchange.Runner do
         execute(folder, task, configuration, n, model, Keyword.get(options, :timeout, 600))
 
       IO.puts(
-        "    #{execution.outcome} · check #{if execution.check.passed, do: "passed", else: "failed"} · #{execution.duration_ms} ms"
+        "    #{execution["outcome"]} · #{if execution["score"].passed, do: "passed", else: "failed"} · #{execution["duration_ms"]} ms"
       )
     end)
 
@@ -96,12 +97,13 @@ defmodule EquivalentExchange.Runner do
     {:ok, config_path} =
       Project.build(project, configuration, model, Path.join(task.dir, "workspace"))
 
+    groups = groups(config_path)
     started = System.monotonic_time(:millisecond)
 
     {status, answers} =
       within(timeout_s * 1000, fn ->
         with {:ok, _said} <- CLI.run(["--config", config_path, "send", task.instruction], project) do
-          {:ok, play_person(config_path, project, task, groups(config_path), [], @rounds)}
+          {:ok, play_person(config_path, project, task, groups, [], @rounds)}
         end
       end)
 
@@ -142,9 +144,12 @@ defmodule EquivalentExchange.Runner do
       usage: usage(facts),
       duration_ms: duration,
       needs: task.needs,
-      forbidden: task.forbidden
+      forbidden: task.forbidden,
+      groups: groups
     }
 
+    execution = execution |> Jason.encode!() |> Jason.decode!()
+    execution = Map.put(execution, "score", Score.score(execution))
     write_json(Path.join(dir, "execution.json"), execution)
     execution
   end
