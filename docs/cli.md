@@ -156,6 +156,27 @@ temporary file, in the same form as a permanent grant writes it: keys in
 order, text over several lines as multi-line strings. Like every tool
 not scoped to a conversation, it needs `project.manage_config`.
 
+## `omunculus overview`
+
+- **Usage:** `omunculus overview`
+- **Effect:** read-only
+
+Print, as JSON, the project as it runs in each place a work can run, for
+a client to draw. `places` holds each workspace, and the project root
+while no workspace is the default; a place has its `root`, whether it is
+the `default` and whether it lies `outside` the project, its own ceiling
+lists (`layer`), what it overlays (`changes`), and its `depths`. A depth
+has its `workflow` as the config reads there, whether the place
+`changed` it, its `stages` (name, `deny`, agent) and the `agents` a work
+goes to without a stage, an `idle` one being workflow-only. An agent has
+its `model` (name, id, api, `body`, whether the place `changed` it), the
+`key` of its provider (the provider and where its value comes from:
+`$VAR`, `omapass · <account>`, `command`, `stored login` or `in the
+file`, never the value), and the names its layer lists, each with its
+`state` under the ceiling there (`have`, `askable`, `sealed`,
+`blocked`), a group's `members`, and the `secrets` the config binds to
+it. `unused_workflows` are those no place runs.
+
 ## `omunculus model_test`
 
 - **Usage:** `omunculus model_test --name <model> [--value <json>]`
