@@ -430,7 +430,8 @@ defmodule Omunculus.Tools.WorkTest do
 
       project = setup_project(dir, agents_toml(~w(comment end)), model)
 
-      assert_received {:work, {:error, {:not_allowed, "work"}}}
+      assert_received {:work, {:error, refused}}
+      assert refused == Out.not_yours("work")
       assert [] = all(project, "SELECT * FROM works")
 
       Project.close(project)

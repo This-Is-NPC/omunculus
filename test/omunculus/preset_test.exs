@@ -81,7 +81,7 @@ defmodule Omunculus.PresetTest do
       Fixtures.install_default(dir)
 
       model = fn _assembled, _tools, call ->
-        assert {:error, {:not_allowed, "bash"}} = call.("bash", %{"command" => "echo hi"})
+        assert call.("bash", %{"command" => "echo hi"}) == {:error, Out.not_yours("bash")}
         {:ok, "ok"}
       end
 

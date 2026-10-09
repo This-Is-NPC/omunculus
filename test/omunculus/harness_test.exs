@@ -847,7 +847,8 @@ defmodule Omunculus.HarnessTest do
 
       assert_received {:cards, cards}
       assert cards == ["alpha", "comment", "delta", "end", "omega"]
-      assert_received {:beta, {:error, {:not_allowed, "beta"}}}
+      assert_received {:beta, {:error, refused}}
+      assert refused == Out.not_yours("beta")
       assert_received {:gamma, {:ok, gamma_output}}
       assert gamma_output == Out.chain_failed("gamma", :not_have)
       assert_received {:chained, {:ok, "alpha"}}

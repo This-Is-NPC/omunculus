@@ -686,7 +686,7 @@ defmodule Omunculus.SpecRegressionTest do
 
     Fixtures.use_model(p, fn _, tools, call ->
       refute Enum.any?(tools, &(&1.name == "write"))
-      assert {:error, {:not_allowed, "write"}} = call.("write", %{})
+      assert call.("write", %{}) == {:error, Out.not_yours("write")}
       {:ok, "done"}
     end)
 

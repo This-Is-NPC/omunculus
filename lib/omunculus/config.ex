@@ -8,7 +8,9 @@ defmodule Omunculus.Config do
   `[workspaces.<name>]` — each a directory `root` (resolved against the
   project root) plus a ceiling layer — the `[policy] workspace`
   default, the required `[policy] max_retries`, the optional `[policy]
-  last_run_output_bytes` and `tool_output_bytes`, each agent's ceiling layer, the named `[models.<name>]`
+  last_run_output_bytes` and `tool_output_bytes`, the optional `[policy]
+  send_catalog` (send every run the catalog's model tools, not only its
+  own, so all agents share the start of their requests), each agent's ceiling layer, the named `[models.<name>]`
   adapters, the named workflows under `[workflows.<name>]` (spec §3.4),
   the MCP servers under `[[mcp.servers]]` (spec §8.7), the `[auth]`
   providers (spec §11.1), the `[secrets.<tool>]` binding each secret a
@@ -39,6 +41,7 @@ defmodule Omunculus.Config do
     :max_retries,
     :last_run_output_bytes,
     :tool_output_bytes,
+    :send_catalog,
     :policy_workflow,
     :policy_workspace,
     :depth_workflows,
@@ -108,6 +111,7 @@ defmodule Omunculus.Config do
           max_retries: non_neg_integer,
           last_run_output_bytes: pos_integer | nil,
           tool_output_bytes: pos_integer | nil,
+          send_catalog: boolean,
           policy_workflow: String.t() | nil,
           policy_workspace: String.t() | nil,
           depth_workflows: %{non_neg_integer => String.t()},
@@ -146,7 +150,7 @@ defmodule Omunculus.Config do
   @mcp_server_keys ~w(name command protocol_version secrets)
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
-  @policy_extra_keys ~w(depth workflow workspace assemble max_retries last_run_output_bytes tool_output_bytes)
+  @policy_extra_keys ~w(depth workflow workspace assemble max_retries last_run_output_bytes tool_output_bytes send_catalog)
   @agent_extra_keys ~w(depth text workflow_only model assemble)
   @http_model_keys ~w(api url model timeout_ms temperature headers body provider stream)
   @openai_model_keys @http_model_keys ++ ~w(prompt_cache_key)
@@ -581,8 +585,8 @@ defmodule Omunculus.Config do
              {:ok, agents} <- parse_agents(Map.get(data, "agents", %{}), models),
              {:ok, workflows} <- parse_workflows(Map.get(data, "workflows", %{}), agents),
              {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows, assemble,
-              max_retries, last_run_output_bytes,
-              tool_output_bytes} <-
+              max_retries, last_run_output_bytes, tool_output_bytes,
+              send_catalog} <-
                parse_policy(Map.get(data, "policy", %{}), workflows, workspaces),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{}), auth),
              {:ok, secrets} <- parse_secrets(Map.get(data, "secrets", %{}), auth),
@@ -604,6 +608,7 @@ defmodule Omunculus.Config do
               max_retries: max_retries,
               last_run_output_bytes: last_run_output_bytes,
               tool_output_bytes: tool_output_bytes,
+              send_catalog: send_catalog,
               policy_workflow: policy_workflow,
               policy_workspace: policy_workspace,
               depth_workflows: depth_workflows,
@@ -1081,9 +1086,10 @@ defmodule Omunculus.Config do
              {:ok, assemble} <- tag_error(fetch_assemble(assemble_data), :policy),
              {:ok, max_retries} <- fetch_max_retries(data),
              {:ok, last_run_output_bytes} <- fetch_bytes(data, :last_run_output_bytes),
-             {:ok, tool_output_bytes} <- fetch_bytes(data, :tool_output_bytes) do
+             {:ok, tool_output_bytes} <- fetch_bytes(data, :tool_output_bytes),
+             {:ok, send_catalog} <- fetch_send_catalog(data) do
           {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows, assemble,
-           max_retries, last_run_output_bytes, tool_output_bytes}
+           max_retries, last_run_output_bytes, tool_output_bytes, send_catalog}
         end
     end
   end
@@ -1099,6 +1105,15 @@ defmodule Omunculus.Config do
 
   defp fetch_max_retries(%{"max_retries" => n}) when is_integer(n) and n >= 0, do: {:ok, n}
   defp fetch_max_retries(_data), do: {:error, {:policy, {:invalid, :max_retries}}}
+
+  # Absent, a run is sent its own tools only.
+  defp fetch_send_catalog(data) do
+    case Map.get(data, "send_catalog") do
+      nil -> {:ok, false}
+      flag when is_boolean(flag) -> {:ok, flag}
+      _invalid -> {:error, {:policy, {:invalid, :send_catalog}}}
+    end
+  end
 
   defp fetch_bytes(data, key) do
     case Map.get(data, Atom.to_string(key)) do

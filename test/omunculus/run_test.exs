@@ -185,7 +185,7 @@ defmodule Omunculus.RunTest do
     model = fn _assembled, _tools, call -> call.("nonexistent", %{}) end
     Fixtures.use_model(project, model)
 
-    assert {:error, {:not_allowed, "nonexistent"}} = Run.open(project, opening(message_id))
+    assert Run.open(project, opening(message_id)) == {:error, Out.not_yours("nonexistent")}
 
     assert {:ok, events} = Query.all(project.conn, "SELECT * FROM events WHERE type = 'tool'")
     assert Enum.map(events, &Jason.decode!(&1.body)["name"]) == ["assemble"]
@@ -242,7 +242,8 @@ defmodule Omunculus.RunTest do
     assert assembled =~ "- one:"
     refute assembled =~ "- two:"
 
-    assert_received {:two, {:error, {:not_allowed, "two"}}}
+    assert_received {:two, {:error, refused}}
+    assert refused == Out.not_yours("two")
 
     Project.close(project)
   end
@@ -854,7 +855,8 @@ defmodule Omunculus.RunTest do
     refute "continue" in names
     refute assembled =~ "- continue:"
     assert "done" in names
-    assert_received {:continue, {:error, {:not_allowed, "continue"}}}
+    assert_received {:continue, {:error, refused}}
+    assert refused == Out.not_yours("continue")
 
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
     refute "continue" in Enum.map(events, & &1.type)
@@ -1210,6 +1212,29 @@ defmodule Omunculus.RunTest do
       assert_received {:assembled, _first}
       assert_received {:assembled, assembled}
       assert assembled =~ ~r/- tool comment \{\} failed\n.{2}\n\(\d+ bytes cut\)\n/
+
+      Project.close(project)
+    end
+
+    test "[policy] send_catalog sends every agent the same tools and refuses those not its own",
+         %{dir: dir} do
+      retry_config(dir, "max_retries = 0\nsend_catalog = true")
+      project = open_project(dir)
+      test_pid = self()
+
+      Fixtures.use_model(project, fn _assembled, tools, call ->
+        send(test_pid, {:sent, Enum.map(tools, & &1.name)})
+        send(test_pid, {:write, call.("write", %{"path" => "x", "content" => "y"})})
+        {:ok, "done"}
+      end)
+
+      assert {:ok, run} = Run.open(project, opening(message(project.conn)))
+
+      assert_received {:sent, sent}
+      assert "write" in sent and "work" in sent and sent == Enum.sort(sent)
+      assert Jason.decode!(run.tools) == ["comment", "end"]
+      assert_received {:write, {:error, refused}}
+      assert refused == Out.not_yours("write")
 
       Project.close(project)
     end

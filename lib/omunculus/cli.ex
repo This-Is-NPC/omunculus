@@ -121,6 +121,10 @@ defmodule Omunculus.CLI do
     "omunculus.toml [policy] #{key} must be a positive integer"
   end
 
+  def format_error({:policy, {:invalid, :send_catalog}}) do
+    "omunculus.toml [policy] send_catalog must be true or false"
+  end
+
   def format_error({:execution, {:sandbox, :missing}}) do
     "omunculus.toml is missing [execution.sandbox]"
   end

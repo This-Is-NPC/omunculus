@@ -136,6 +136,23 @@ defmodule Omunculus.ConfigTest do
     end
   end
 
+  test "[policy] send_catalog is an optional boolean", %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """
+
+    write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\n")
+    assert {:ok, %Config{send_catalog: false}} = load(dir)
+
+    write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\nsend_catalog = true\n")
+    assert {:ok, %Config{send_catalog: true}} = load(dir)
+
+    write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\nsend_catalog = \"yes\"\n")
+    assert {:error, {:policy, {:invalid, :send_catalog}}} = load(dir)
+  end
+
   test "pinned is a layer list and is absent on the default preset" do
     assert {:ok, %Config{policy: policy, agents: agents}} = Config.load(default_preset())
     assert policy.pinned == []

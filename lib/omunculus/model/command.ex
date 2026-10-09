@@ -159,10 +159,10 @@ defmodule Omunculus.Model.Command do
       if MapSet.member?(allowed, name) do
         case call.(name, args) do
           {:ok, output} -> %{ok: true, output: output}
-          {:error, reason} -> %{ok: false, output: inspect(reason)}
+          {:error, reason} -> %{ok: false, output: Omunculus.Tools.Out.failure(reason)}
         end
       else
-        %{ok: false, output: inspect({:not_allowed, name})}
+        %{ok: false, output: Omunculus.Tools.Out.not_yours(name)}
       end
 
     case Map.get(message, "id") do

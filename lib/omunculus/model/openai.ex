@@ -272,7 +272,7 @@ defmodule Omunculus.Model.OpenAI do
     do: %{role: "tool", tool_call_id: id, content: output}
 
   defp tool_result_message(id, {:error, reason}),
-    do: %{role: "tool", tool_call_id: id, content: inspect(reason)}
+    do: %{role: "tool", tool_call_id: id, content: Omunculus.Tools.Out.failure(reason)}
 
   defp strip_message(message), do: Map.take(message, ["role", "content", "tool_calls"])
 end

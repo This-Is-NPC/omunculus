@@ -15,7 +15,9 @@ defmodule Omunculus.Tools.Out do
   end
 
   @spec tools_preamble() :: String.t()
-  def tools_preamble, do: "The tools are in `tools.*`."
+  def tools_preamble,
+    do:
+      "The tools are in `tools.*`. Only those listed here are yours; ask for another with request_access."
 
   @spec skills_preamble() :: String.t()
   def skills_preamble, do: "Read a skill with the skill tool before you follow it."
@@ -96,6 +98,16 @@ defmodule Omunculus.Tools.Out do
   @spec request_inbox(String.t(), String.t(), [String.t()]) :: String.t()
   def request_inbox(request_id, reason, options),
     do: "#{reason} Reply to request #{request_id} with #{Enum.join(options, " or ")}."
+
+  @spec not_yours(String.t()) :: String.t()
+  def not_yours(name),
+    do:
+      "refused: #{name} is not one of your tools; ask for it with request_access if the work needs it"
+
+  @doc "What a model reads of a call that failed: a text as it is, anything else inspected."
+  @spec failure(term) :: String.t()
+  def failure(reason) when is_binary(reason), do: reason
+  def failure(reason), do: inspect(reason)
 
   @spec refused(term) :: String.t()
   def refused({:request, {:blocked, name}}),

@@ -149,7 +149,7 @@ defmodule Omunculus.Run do
          {:ok, catalog} <- Overrides.apply(catalog, snapshot.overrides),
          model_catalog = Catalog.with_trigger(catalog, "model"),
          names = effective_names(snapshot, model_catalog),
-         tools = effective_tools(names, model_catalog),
+         tools = effective_tools(sent(config, names, model_catalog), model_catalog),
          {:ok, execution} <-
            Policy.build(
              config,
@@ -344,6 +344,12 @@ defmodule Omunculus.Run do
     snapshot.have |> Enum.filter(&Map.has_key?(catalog, &1)) |> Enum.sort()
   end
 
+  # With `send_catalog` every run is sent the same tools, the catalog's
+  # model tools, so all agents' requests start alike; it may still call
+  # only its own, `names`.
+  defp sent(%{send_catalog: true}, _names, catalog), do: catalog |> Map.keys() |> Enum.sort()
+  defp sent(_config, names, _catalog), do: names
+
   defp effective_tools(names, catalog) do
     Enum.map(names, fn name ->
       manifest = Map.fetch!(catalog, name)
@@ -373,7 +379,7 @@ defmodule Omunculus.Run do
           {:error, _reason} = error -> error
         end
       else
-        {:error, {:not_allowed, name}}
+        {:error, Out.not_yours(name)}
       end
     end
   end

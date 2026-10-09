@@ -327,5 +327,5 @@ defmodule Omunculus.Model.AnthropicMessages do
     do: %{type: "tool_result", tool_use_id: id, content: output}
 
   defp tool_result(id, {:error, reason}),
-    do: %{type: "tool_result", tool_use_id: id, content: inspect(reason)}
+    do: %{type: "tool_result", tool_use_id: id, content: Omunculus.Tools.Out.failure(reason)}
 end

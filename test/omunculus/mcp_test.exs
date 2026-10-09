@@ -1,6 +1,7 @@
 defmodule Omunculus.McpTest do
   use ExUnit.Case, async: true
 
+  alias Omunculus.Tools.Out
   alias Omunculus.{CLI, ExecutionPolicyFixtures, Fixtures, Mcp, Project}
   alias Omunculus.Tool.Catalog
 
@@ -114,8 +115,8 @@ defmodule Omunculus.McpTest do
       model = fn assembled, _tools, call ->
         send(test_pid, {:assembled, assembled})
         assert {:ok, "hi"} = call.("echo", %{"text" => "hi"})
-        assert {:error, {:not_allowed, "shout"}} = call.("shout", %{"text" => "hi"})
-        assert {:error, {:not_allowed, "whisper"}} = call.("whisper", %{})
+        assert call.("shout", %{"text" => "hi"}) == {:error, Out.not_yours("shout")}
+        assert call.("whisper", %{}) == {:error, Out.not_yours("whisper")}
         {:ok, "done"}
       end
 

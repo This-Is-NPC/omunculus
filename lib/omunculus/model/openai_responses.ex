@@ -221,5 +221,5 @@ defmodule Omunculus.Model.OpenAIResponses do
     do: %{type: "function_call_output", call_id: id, output: output}
 
   defp function_call_output(id, {:error, reason}),
-    do: %{type: "function_call_output", call_id: id, output: inspect(reason)}
+    do: %{type: "function_call_output", call_id: id, output: Omunculus.Tools.Out.failure(reason)}
 end
