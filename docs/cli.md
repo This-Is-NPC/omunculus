@@ -190,6 +190,19 @@ credential resolves as a run's does. A failure prints the reason, and a
 model the config lacks is `no model <name>`. A `command` model runs in the
 sandbox an agent's ceiling makes, so only a run tests it.
 
+## `omunculus tools`
+
+- **Usage:** `omunculus tools`
+- **Effect:** read-only
+
+Print the project's catalog as JSON, for a client to list: under
+`tools`, each tool, hook and skill with its `name`, `kind`,
+`description`, `triggers`, `groups`, the `secrets` it declares and the
+`binding` `[secrets.<tool>]` gives them, its `source` (`folder`,
+`inline` or `skill`) and `dir`; under `mcp`, each `[[mcp.servers]]`
+with its `command` and `secrets`, since a server's tools are known only
+once a run starts it.
+
 ## `omunculus omapass`
 
 - **Usage:** `omunculus omapass`

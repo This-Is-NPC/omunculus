@@ -1,0 +1,10 @@
+name = "tools"
+kind = "tool"
+triggers = ["cli"]
+description = "Prints the project's catalog as JSON: each tool and skill with where it comes from, what it is for and the secrets it declares."
+tags = ["cli", "config"]
+groups = ["cli"]
+module = "Omunculus.Tools.Tools"
+
+[parameters]
+type = "object"

@@ -340,7 +340,7 @@ sandbox   = request_sandbox
 sequence  = work, delegate, continue, break, end, done, cancel
 catalog   = tool_search
 skills    = skill, and every skill.<name> of [skills] paths
-cli       = send, inbox, inbox_read, prompt, config, configure, model_test, omapass, overview, login, logout, cursor_login, preset
+cli       = send, inbox, inbox_read, prompt, config, configure, model_test, omapass, overview, tools, login, logout, cursor_login, preset
 bench     = counter, counter_decrement
 prompt    = assemble
 ```
