@@ -21,6 +21,9 @@ path = ".omunculus/store.sqlite3"
 [tools]
 paths = ["../../tools"]
 
+[skills]
+paths = ["~/.agents/skills", ".agents/skills"]
+
 [models.fake]
 api = "module"
 module = "Omunculus.Model.Fake"

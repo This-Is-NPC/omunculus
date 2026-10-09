@@ -356,6 +356,10 @@ defmodule Omunculus.Fixtures do
   @spec grant(String.t(), Config.grant_layer(), String.t()) :: :ok | {:error, term}
   def grant(dir, layer, name), do: Config.grant(config_path(dir), layer, name)
 
+  @doc """
+  Installs the default preset into `dir`, its skills read from `dir`'s own
+  `.agents/skills` alone, so no test sees the skills of the machine.
+  """
   @spec install_default(String.t()) :: :ok
   def install_default(dir) do
     %{"ok" => true} =
@@ -364,6 +368,8 @@ defmodule Omunculus.Fixtures do
         config_path: config_path(dir)
       })
 
-    :ok
+    path = config_path(dir)
+    data = path |> Toml.decode_file!() |> put_in(["skills", "paths"], [".agents/skills"])
+    File.write!(path, Config.Toml.encode(data))
   end
 end

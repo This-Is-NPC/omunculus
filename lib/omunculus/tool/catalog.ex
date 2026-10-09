@@ -1,26 +1,27 @@
 defmodule Omunculus.Tool.Catalog do
   @moduledoc """
-  Discovers tool/hook folders and MCP servers' tools, per spec §8.4 and
-  §8.7. Discovery walks `tools.paths` in order, then `[[mcp.servers]]`,
-  then inline `[tools.<name>]` tables; the last declaration of a `name`
-  wins. Also derives the group map of spec §9.5 from the manifests'
+  Discovers tool/hook folders, Agent Skills and MCP servers' tools, per
+  spec §8.4 and §8.7. Discovery walks `tools.paths` in order, then the
+  skills of `tools.skills` (`Omunculus.Skills`, named `skill.<name>`), then
+  `[[mcp.servers]]`, then inline `[tools.<name>]` tables; the last
+  declaration of a `name` wins. Also derives the group map of spec §9.5 from the manifests'
   own `groups` field.
   """
 
   require Logger
 
-  alias Omunculus.{Mcp, Secrets}
+  alias Omunculus.{Mcp, Secrets, Skills}
   alias Omunculus.Tool.Manifest
 
   alias Omunculus.Execution.Policy
 
-  @type tools :: %{paths: [String.t()], inline: %{String.t() => Manifest.t()}}
+  @type tools :: Omunculus.Config.tools()
 
   @spec unconfigured() :: %{String.t() => Manifest.t()}
   def unconfigured do
     case Application.get_env(:omunculus, :package_tools) do
       path when is_binary(path) and path != "" ->
-        discover(%{paths: [path], inline: %{}}, [], nil)
+        discover(%{paths: [path], inline: %{}, skills: []}, [], nil)
 
       _missing ->
         %{}
@@ -38,10 +39,11 @@ defmodule Omunculus.Tool.Catalog do
           %{String.t() => Manifest.t()}
   def discover(tools, servers \\ [], policy \\ nil, secrets \\ nil)
 
-  def discover(%{paths: paths, inline: inline}, servers, policy, secrets)
+  def discover(%{paths: paths, inline: inline, skills: skills}, servers, policy, secrets)
       when is_list(paths) and is_map(inline) do
     %{}
     |> discover_folders(paths)
+    |> Map.merge(Skills.discover(skills))
     |> discover_mcp(servers, policy, secrets)
     |> Map.merge(inline)
   end

@@ -72,7 +72,8 @@ description = "…"
 module = "Omunculus.Tools.Read"
 ```
 
-Discovery walks `paths` in order, then `[[mcp.servers]]`, then inline
+Discovery walks `paths` in order, then the skills of `[skills] paths`
+([Skills](#skills)), then `[[mcp.servers]]`, then inline
 `[tools.<name>]` tables. The last declaration of a `name` wins. There is
 no magical `priv/tools`, `~/.omunculus/tools` or `<project>/tools` outside
 what `paths` lists, with one exception: a name the command line or the
@@ -88,6 +89,25 @@ The version goes on `initialize`. There is no global protocol constant.
 MCP discovery runs in a restricted sandbox; a server that fails to list,
 or whose secrets do not resolve, is skipped and logged, not fatal to the
 run.
+
+## Skills
+
+```toml
+[skills]
+paths = ["~/.agents/skills", ".agents/skills"]
+```
+
+Each path, relative to the config file's directory with `~` the home, holds
+Agent Skills in the agentskills.io format, the one `~/.agents/skills` and a
+repository's `.agents/skills` hold for other agents: a folder with a
+`SKILL.md` whose YAML frontmatter has `name` (lowercase letters, digits
+and single hyphens, at most 64, equal to the folder's name) and
+`description` (1 to 1024 characters). A skill joins the catalog as
+`skill.<name>`, in the group `skills`, and the ceiling governs it as it
+governs a tool: an agent lists `skills`, or one `skill.<name>`, in its
+layers. A folder that breaks the format is skipped and logged; of two
+skills with a name, the one of the later path wins. Without `[skills]`
+there are none. The presets declare the two paths above.
 
 ## Tool secrets
 

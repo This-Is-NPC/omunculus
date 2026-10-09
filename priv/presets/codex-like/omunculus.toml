@@ -21,6 +21,9 @@ path = ".omunculus/store.sqlite3"
 [tools]
 paths = ["../../tools", "./tools"]
 
+[skills]
+paths = ["~/.agents/skills", ".agents/skills"]
+
 [auth]
 store = ".omunculus/auth.json"
 

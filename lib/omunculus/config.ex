@@ -123,7 +123,11 @@ defmodule Omunculus.Config do
           data: map
         }
 
-  @type tools :: %{paths: [String.t()], inline: %{String.t() => Manifest.t()}}
+  @type tools :: %{
+          paths: [String.t()],
+          inline: %{String.t() => Manifest.t()},
+          skills: [String.t()]
+        }
 
   @layer_keys ~w(mode granted tools negotiable human deny pinned overrides)
   @execution_keys ~w(
@@ -557,7 +561,8 @@ defmodule Omunculus.Config do
              "store",
              "auth",
              "access",
-             "secrets"
+             "secrets",
+             "skills"
            ] do
       [key | _] ->
         {:error, {:unknown_key, key}}
@@ -581,7 +586,10 @@ defmodule Omunculus.Config do
                parse_policy(Map.get(data, "policy", %{}), workflows, workspaces),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{}), auth),
              {:ok, secrets} <- parse_secrets(Map.get(data, "secrets", %{}), auth),
-             {:ok, tools} <- parse_tools(Map.get(data, "tools"), config_dir) do
+             {:ok, tools} <- parse_tools(Map.get(data, "tools"), config_dir),
+             {:ok, skills} <- parse_skills(Map.get(data, "skills"), config_dir) do
+          tools = Map.put(tools, :skills, skills)
+
           if map_size(agents) == 0 do
             {:error, :no_agents}
           else
@@ -727,26 +735,47 @@ defmodule Omunculus.Config do
 
   defp parse_tools(_data, _config_dir), do: {:error, {:tools, {:invalid, :table}}}
 
-  defp parse_tool_paths(paths, config_dir) when is_list(paths) do
+  defp parse_tool_paths(paths, config_dir) do
+    case expand_paths(paths, config_dir) do
+      {:ok, expanded} -> {:ok, expanded}
+      :error -> {:error, {:tools, {:invalid, :paths}}}
+    end
+  end
+
+  # `[skills] paths`: folders of Agent Skills, as `[tools] paths` are of tools.
+  defp parse_skills(nil, _config_dir), do: {:ok, []}
+
+  defp parse_skills(data, config_dir) when is_map(data) do
+    with [] <- Map.keys(data) -- ["paths"],
+         {:ok, paths} <- expand_paths(Map.get(data, "paths", []), config_dir) do
+      {:ok, paths}
+    else
+      [key | _] -> {:error, {:skills, {:unknown_key, key}}}
+      :error -> {:error, {:skills, {:invalid, :paths}}}
+    end
+  end
+
+  defp parse_skills(_data, _config_dir), do: {:error, {:skills, {:invalid, :table}}}
+
+  # Each path relative to the config file's directory, `~` to the home.
+  defp expand_paths(paths, config_dir) when is_list(paths) do
     Enum.reduce_while(paths, {:ok, []}, fn path, {:ok, acc} ->
-      case expand_tool_path(path, config_dir) do
+      case expand_path(path, config_dir) do
         {:ok, expanded} -> {:cont, {:ok, acc ++ [expanded]}}
-        {:error, _reason} = error -> {:halt, error}
+        :error -> {:halt, :error}
       end
     end)
   end
 
-  defp parse_tool_paths(_paths, _config_dir), do: {:error, {:tools, {:invalid, :paths}}}
+  defp expand_paths(_paths, _config_dir), do: :error
 
-  defp expand_tool_path("~" <> _rest = path, _config_dir) when path != "~" do
-    {:ok, Path.expand(path)}
-  end
+  defp expand_path("~" <> _rest = path, _config_dir) when path != "~",
+    do: {:ok, Path.expand(path)}
 
-  defp expand_tool_path(path, config_dir) when is_binary(path) and path != "" do
-    {:ok, Path.expand(path, config_dir)}
-  end
+  defp expand_path(path, config_dir) when is_binary(path) and path != "",
+    do: {:ok, Path.expand(path, config_dir)}
 
-  defp expand_tool_path(_path, _config_dir), do: {:error, {:tools, {:invalid, :paths}}}
+  defp expand_path(_path, _config_dir), do: :error
 
   defp parse_inline_tools(data, config_dir) do
     Enum.reduce_while(data, {:ok, %{}}, fn {name, value}, {:ok, acc} ->
@@ -1356,7 +1385,7 @@ defmodule Omunculus.Config do
             paths when is_list(paths) ->
               expanded =
                 Enum.map(paths, fn path ->
-                  {:ok, expanded} = expand_tool_path(path, file_dir)
+                  {:ok, expanded} = expand_path(path, file_dir)
                   expanded
                 end)
 

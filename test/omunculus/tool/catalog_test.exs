@@ -11,7 +11,7 @@ defmodule Omunculus.Tool.CatalogTest do
   end
 
   defp tools(paths, inline \\ %{}) do
-    %{paths: List.wrap(paths), inline: inline}
+    %{paths: List.wrap(paths), inline: inline, skills: []}
   end
 
   defp write_tool(root, name, filename \\ "tool.toml", content) do
