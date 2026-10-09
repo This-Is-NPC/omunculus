@@ -22,6 +22,7 @@ tasks/_lib/         what every check shares
 fixtures/scores/    hand-scored executions that prove the scoring
 fixtures/judge/     hand-written reports that measure the decider
 judge.toml          the decider and its thresholds
+prices.toml         USD per million tokens of the models whose replies carry no cost
 lib/                the project builder, tasks, runner, scoring and report
 run.exs             mix run eval/run.exs <command>
 results/            one folder per run, ignored by git
@@ -38,9 +39,17 @@ results/            one folder per run, ignored by git
 | Riza | 1, workflow only | verifies the stage before hers, runs tests |
 | Alphonse | 1, workflow only | reviews the work against the goal |
 
-They run on `luna` (`openai/gpt-6-luna` through OpenRouter, with the provider
-asked to report the cost of each call) or `fake`, which answers with the first
-line of its prompt and only checks the runner.
+They all run on the model `--model` names:
+
+| Model | What it is |
+|---|---|
+| `luna` | `openai/gpt-6-luna` through OpenRouter, which reports the cost of each call |
+| `haiku`, `sonnet`, `opus` | Claude Haiku, Sonnet and Opus 5.5 on Anthropic's API, priced by `prices.toml` |
+| `fake` | answers with the first line of its prompt; checks only the runner |
+
+`OPENROUTER_API_KEY` and `ANTHROPIC_API_KEY` come from `.env`. A model is a
+`[models.<name>]` table of the preset; one whose replies carry no cost needs
+its provider's id in `prices.toml`.
 
 ## The configurations
 
@@ -115,6 +124,7 @@ claims `done`.
 mise run eval:selftest                       # checks and scoring
 mise run eval:run -- --model luna --k 2 --jobs 6 --label pilot
 mise run eval:run -- --model luna --task brief --configuration negotiated
+mise run eval:run -- --model sonnet --k 2 --jobs 6 --label sonnet
 mise run eval:compare -- eval/results/<before> eval/results/<now>
 mix run eval/run.exs score eval/results/<run>    # score an old run again
 ```

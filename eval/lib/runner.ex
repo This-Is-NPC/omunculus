@@ -157,7 +157,7 @@ defmodule EquivalentExchange.Runner do
       grants: grants(facts, project),
       runs: Enum.map(facts.runs, &%{agent: &1.agent, depth: &1.depth, via: &1.via}),
       tool_calls: tool_calls(facts),
-      usage: usage(facts),
+      usage: usage(facts, price(project, model)),
       duration_ms: duration,
       needs: task.needs,
       forbidden: task.forbidden,
@@ -208,7 +208,7 @@ defmodule EquivalentExchange.Runner do
     |> Map.merge(%{
       "report" => report,
       "check" => %{"passed" => passed, "said" => said},
-      "usage" => usage(facts)
+      "usage" => usage(facts, price(project, execution["model"]))
     })
     |> assess(task, workspace)
   end
@@ -439,12 +439,12 @@ defmodule EquivalentExchange.Runner do
   # What the provider reported of each model call, and of the prompt it
   # served from its cache: overall, on the first call of each run, and by
   # agent.
-  defp usage(facts) do
+  defp usage(facts, price) do
     agents = Map.new(facts.runs, &{&1.id, &1.agent})
 
     calls =
       for %{type: "model", body: %{"usage" => usage}} = event <- facts.events, is_map(usage) do
-        %{run: event.run_id, agent: agents[event.run_id], usage: usage}
+        %{run: event.run_id, agent: agents[event.run_id], usage: tokens(usage, price)}
       end
 
     firsts = calls |> Enum.uniq_by(& &1.run) |> Enum.map(& &1.usage)
@@ -452,9 +452,9 @@ defmodule EquivalentExchange.Runner do
 
     %{
       calls: Enum.count(facts.events, &(&1.type == "model")),
-      input_tokens: sum(usages, "prompt_tokens"),
-      output_tokens: sum(usages, "completion_tokens"),
-      cost: sum(usages, "cost"),
+      input_tokens: sum(usages, :prompt),
+      output_tokens: sum(usages, :output),
+      cost: sum(usages, :cost),
       cache: cache(usages),
       first_call_cache: cache(firsts),
       cache_by_agent:
@@ -462,13 +462,50 @@ defmodule EquivalentExchange.Runner do
     }
   end
 
-  defp cache(usages) do
-    details = Enum.map(usages, &(&1["prompt_tokens_details"] || %{}))
+  # One call's tokens in one shape. OpenRouter sends the OpenAI fields and
+  # the cost; Anthropic sends its own, with the cache apart from the
+  # input, and no cost, which its price per million tokens gives.
+  defp tokens(%{"input_tokens" => input} = usage, price) do
+    write = usage["cache_creation_input_tokens"] || 0
+    read = usage["cache_read_input_tokens"] || 0
+    output = usage["output_tokens"] || 0
 
     %{
-      prompt_tokens: sum(usages, "prompt_tokens"),
-      cached_tokens: sum(details, "cached_tokens"),
-      cache_write_tokens: sum(details, "cache_write_tokens")
+      prompt: input + write + read,
+      cached: read,
+      write: write,
+      output: output,
+      cost:
+        (input * price["input"] + write * price["cache_write"] + read * price["cache_read"] +
+           output * price["output"]) / 1_000_000
+    }
+  end
+
+  defp tokens(usage, _price) do
+    details = usage["prompt_tokens_details"] || %{}
+
+    %{
+      prompt: usage["prompt_tokens"] || 0,
+      cached: details["cached_tokens"] || 0,
+      write: details["cache_write_tokens"] || 0,
+      output: usage["completion_tokens"] || 0,
+      cost: usage["cost"] || 0
+    }
+  end
+
+  # The price of the model a run named, from eval/prices.toml by the
+  # provider's model id; nil for one whose replies carry their cost.
+  defp price(project, model) do
+    {:ok, config} = Omunculus.Config.load(Path.join(project, "omunculus.toml"))
+    id = config.models |> Map.fetch!(model) |> get_in([:input, "model"])
+    @eval |> Path.join("prices.toml") |> Toml.decode_file!() |> Map.get(id)
+  end
+
+  defp cache(usages) do
+    %{
+      prompt_tokens: sum(usages, :prompt),
+      cached_tokens: sum(usages, :cached),
+      cache_write_tokens: sum(usages, :write)
     }
   end
 
