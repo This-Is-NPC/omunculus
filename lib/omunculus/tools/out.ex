@@ -99,6 +99,9 @@ defmodule Omunculus.Tools.Out do
   def request_inbox(request_id, reason, options),
     do: "#{reason} Reply to request #{request_id} with #{Enum.join(options, " or ")}."
 
+  @spec answered() :: String.t()
+  def answered, do: "answered: the reply is below"
+
   @spec not_yours(String.t()) :: String.t()
   def not_yours(name),
     do:

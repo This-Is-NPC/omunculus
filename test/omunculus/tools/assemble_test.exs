@@ -266,6 +266,7 @@ defmodule Omunculus.Tools.AssembleTest do
       "request" => %{
         id: "req_1",
         agent: "worker",
+        status: "waiting_agent",
         options:
           ~s({"grant":[{"name":"grant","args":{"kind":"tool","name":"write"}}],"grant_agent":[{"name":"grant","args":{"kind":"tool","name":"write","scope":"agent"}}],"deny":[]})
       },
@@ -306,6 +307,24 @@ defmodule Omunculus.Tools.AssembleTest do
     assert %{"assemble" => manifest} = catalog
     assert manifest.triggers == ["harness"]
     assert Enum.any?(manifest.views, &(&1.key == "catalog" and &1.source == "catalog"))
+  end
+
+  test "an answered request shows its reply, not its options" do
+    view = %{
+      "request" => %{
+        id: "req_1",
+        agent: "worker",
+        status: "closed",
+        options: ~s({"grant":[{"name":"grant","args":{"kind":"tool","name":"write"}}],"deny":[]})
+      },
+      "request_comments" => [%{body: "granted, go on"}],
+      "catalog" => []
+    }
+
+    assert whole(%{@input | view: view}) =~
+             "## Request\nreq_1 requested by worker, #{Out.answered()}\ngranted, go on"
+
+    refute whole(%{@input | view: view}) =~ "- grant"
   end
 
   test "the manifest wiring yields the same output as calling the module directly" do

@@ -16,9 +16,9 @@ defmodule Omunculus.Tools.Assemble do
   with since its last closed run: each child closed or cancelled since,
   with its last comment, and, when the run was opened by a child's
   `break`, that child's report. A run with a request gets the request's
-  requester, the options an agent may pick with their tool calls — not
-  those granting with a `scope`, which only a person may — and its
-  comments. Inbox is
+  requester, while it waits the options an agent may pick with their tool
+  calls — not those granting with a `scope`, which only a person may —
+  and its comments, the reply among them once it is answered. Inbox is
   included only when the opening carried `inbox_id`. The message of the
   opening comes last.
   """
@@ -134,16 +134,22 @@ defmodule Omunculus.Tools.Assemble do
 
   defp request_section(request, comments) do
     header = "#{request.id} #{Out.requested_by(request.agent)}"
-
-    options =
-      request.options
-      |> Jason.decode!()
-      |> Enum.reject(fn {_name, calls} -> Enum.any?(calls, &Map.has_key?(&1["args"], "scope")) end)
-      |> Enum.sort()
-      |> Enum.map(&option_line/1)
-
     comments = Enum.map(comments || [], & &1.body)
-    ["## Request\n" <> Enum.join([header | options] ++ comments, "\n")]
+
+    if request.status == "closed" do
+      ["## Request\n" <> Enum.join([header <> ", " <> Out.answered() | comments], "\n")]
+    else
+      ["## Request\n" <> Enum.join([header | waiting_options(request)] ++ comments, "\n")]
+    end
+  end
+
+  # The options of a waiting request an agent may pick.
+  defp waiting_options(request) do
+    request.options
+    |> Jason.decode!()
+    |> Enum.reject(fn {_name, calls} -> Enum.any?(calls, &Map.has_key?(&1["args"], "scope")) end)
+    |> Enum.sort()
+    |> Enum.map(&option_line/1)
   end
 
   defp option_line({name, []}), do: "- #{name}"
