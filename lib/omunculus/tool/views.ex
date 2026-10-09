@@ -31,10 +31,12 @@ defmodule Omunculus.Tool.Views do
   - `inbox`: the unread inbox of the project, or of the call's work with
     `from = ["work"]`.
   - `counter`: the bench counter of the project.
-  - `catalog`, `workspaces`, `agents`, `paths`, `grant_scopes`: computed
-    by the harness for the call, each only when a view asks for it, through
-    a function of the view in `computed`. `agents` takes `include =
-    ["tools"]`, which gives each agent with the model tools it has.
+  - `catalog`, `workspaces`, `agents`, `paths`, `grant_scopes`, `skills`:
+    computed by the harness for the call, each only when a view asks for
+    it, through a function of the view in `computed`. `agents` takes
+    `include = ["tools"]`, which gives each agent with the model tools it
+    has. `skills` are the Agent Skills the call's run has, each its `name`,
+    `description` and `dir`.
 
   Every read is of the call's conversation, through those relations only;
   tools never open the store.
@@ -53,7 +55,7 @@ defmodule Omunculus.Tool.Views do
           within: String.t() | nil
         }
 
-  @computed ~w(catalog workspaces agents paths grant_scopes)
+  @computed ~w(catalog workspaces agents paths grant_scopes skills)
   @work_states ~w(open waiting done cancelled)
   @work_includes %{"last_comment" => :last_comment, "comments" => :comments, "runs" => :runs}
   @comment_targets %{"work" => :work, "request" => :request, "inbox" => :inbox}

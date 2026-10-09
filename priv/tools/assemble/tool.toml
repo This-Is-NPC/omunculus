@@ -66,3 +66,6 @@ include = ["tools"]
 
 [views.catalog]
 source = "catalog"
+
+[views.skills]
+source = "skills"

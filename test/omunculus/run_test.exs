@@ -468,13 +468,13 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
-  test "the default concierge ceiling has 14 model tools and lists every card when nothing is pinned",
+  test "the default concierge ceiling has 15 model tools and lists every card when nothing is pinned",
        %{dir: dir} do
     write_config(dir, """
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["break", "catalog", "continue", "delegate", "done", "end", "fs.read", "reply", "store", "work"]
+    tools = ["break", "catalog", "continue", "delegate", "done", "end", "fs.read", "reply", "skills", "store", "work"]
     """)
 
     project = open_project(dir)
@@ -488,8 +488,9 @@ defmodule Omunculus.RunTest do
     Fixtures.use_model(project, model)
 
     assert {:ok, run} = Run.open(project, opening(message(project.conn)))
-    assert length(Jason.decode!(run.tools)) == 14
+    assert length(Jason.decode!(run.tools)) == 15
     assert "read_work" in Jason.decode!(run.tools)
+    assert "skill" in Jason.decode!(run.tools)
     refute "continue" in Jason.decode!(run.tools)
 
     assert_received {:assembled, assembled}

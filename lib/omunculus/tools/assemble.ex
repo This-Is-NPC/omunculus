@@ -3,8 +3,9 @@ defmodule Omunculus.Tools.Assemble do
   Builtin `assemble` tool: builds the assembled prompt of a run from
   the hydrated views. After the agent's text come the agents the
   `agents` view says a new work may name when the run has the `work`
-  card, each with the tools it has that this run has not, and the cards,
-  which follow `pinned` on the catalog view. Then the work's title and
+  card, each with the tools it has that this run has not, the cards,
+  which follow `pinned` on the catalog view, and, under `## Skills`, the
+  name and description of each skill the run has. Then the work's title and
   goal, its last comment, and its last closed run (`last_run`), or,
   without a work, the run that opened the run's request (`opener`), as
   `Omunculus.Tools.Record` lines without this tool's calls, each call's
@@ -31,6 +32,7 @@ defmodule Omunculus.Tools.Assemble do
       [String.trim(text)] ++
         agents_section(view["agents"] || [], view["catalog"] || []) ++
         [tools_section(view["catalog"] || [])] ++
+        skills_section(view["skills"] || []) ++
         work_section(view["work"]) ++
         comment_section(view["comments"]) ++
         last_run_section(view["last_run"] || view["opener"], name, args) ++
@@ -85,6 +87,16 @@ defmodule Omunculus.Tools.Assemble do
       _other ->
         []
     end
+  end
+
+  # Only a skill's name and description: its text comes through the skill tool.
+  defp skills_section([]), do: []
+
+  defp skills_section(skills) do
+    lines = Enum.map(skills, &"- #{&1.name}: #{&1.description}")
+    ["## Skills
+" <> Enum.join([Out.skills_preamble() | lines], "
+")]
   end
 
   defp agents_section([], _cards), do: []

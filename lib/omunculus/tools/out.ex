@@ -17,6 +17,9 @@ defmodule Omunculus.Tools.Out do
   @spec tools_preamble() :: String.t()
   def tools_preamble, do: "The tools are in `tools.*`."
 
+  @spec skills_preamble() :: String.t()
+  def skills_preamble, do: "Read a skill with the skill tool before you follow it."
+
   @spec more_tools(non_neg_integer()) :: String.t()
   def more_tools(count), do: "#{count} more tools: search with tool_search."
 

@@ -149,6 +149,7 @@ agent text
 → if the run has the work card: the agents a new work may name, each
   with the tools it has that this run has not
 → cards of the tools in tools.*
+→ under `## Skills`, the name and description of each skill the run has
 → if there is a work: title + goal + last comment, then, under
   `## Last run`, the work's last closed run; without a work, the run that
   opened this run's request: the message that opened it and every event

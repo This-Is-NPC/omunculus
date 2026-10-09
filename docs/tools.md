@@ -194,11 +194,26 @@ argument of the call.
 | `agents` | the agents a new work may name, below the run's work (depth 0 without one), not `workflow_only`, none when that depth has a workflow | `include = ["tools"]` gives each as `{name, tools}`, with the model tools its own ceiling has at that depth |
 | `paths` | the path permissions of the run's ceiling | |
 | `grant_scopes` | the scopes a permanent `grant` may name (`agent`, `depth`, `stage`, `workspace`) | |
+| `skills` | the Agent Skills the run's ceiling has, each its `name`, `description` and `dir` | |
 
 Every read stays in the call's conversation and goes only through these
 relations. The harness computes `catalog`, `workspaces`, `agents`,
-`paths` and `grant_scopes` only for a call that declares them. `assemble` renders `agents` under `## Agents` when the run has
-the `work` card, each with the tools it has that the run has not.
+`paths`, `grant_scopes` and `skills` only for a call that declares them. `assemble` renders `agents` under `## Agents` when the run has
+the `work` card, each with the tools it has that the run has not, and
+`skills` under `## Skills`, a line `name: description` each.
+
+## Skills
+
+A skill ([Skills](config.md#skills)) reaches the model in two steps. The
+assembled prompt names each skill the run has, with its description,
+under `## Skills`. The `skill` tool gives one: with `name`, its
+`SKILL.md` and the files of its folder; with `file` too, that file of
+the folder, read through links and refused when it leads outside. Both
+`skill` and every skill are in the group `skills`, so an agent that
+lists `skills` has the tool and all of them; one that lists
+`skill.<name>` has that skill alone, and needs `skill` to read it. The
+tool reads in the harness's process, since a skill's folder is outside
+the sandbox; the scripts a skill ships are not run.
 
 ## Actions
 
@@ -324,6 +339,7 @@ store     = comment, request_access, reply, grant, notify, read_work
 sandbox   = request_sandbox
 sequence  = work, delegate, continue, break, end, done, cancel
 catalog   = tool_search
+skills    = skill, and every skill.<name> of [skills] paths
 cli       = send, inbox, inbox_read, prompt, config, configure, model_test, omapass, overview, login, logout, cursor_login, preset
 bench     = counter, counter_decrement
 prompt    = assemble

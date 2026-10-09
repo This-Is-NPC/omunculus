@@ -29,7 +29,7 @@ defmodule Omunculus.Harness do
   request.
   """
 
-  alias Omunculus.{Ceiling, Config, Cycle, Project, Secrets, Store}
+  alias Omunculus.{Ceiling, Config, Cycle, Project, Secrets, Skills, Store}
   alias Omunculus.Execution.Policy
   alias Omunculus.Store.Actions.Requests
   alias Omunculus.Tool.{Catalog, Invoke, Manifest, Overrides, Views}
@@ -172,8 +172,8 @@ defmodule Omunculus.Harness do
   end
 
   # What a call's views read that the harness computes rather than the
-  # store — the catalog, workspaces, agents, paths and grant scopes of the
-  # run, each computed only when a view asks for it — plus the request and
+  # store — the catalog, workspaces, agents, paths, grant scopes and skills
+  # of the run, each computed only when a view asks for it — plus the request and
   # inbox ids `ids` names, which anchor its views.
   defp views(project, run, work, config, catalog, workspace, ids) do
     Map.put(ids, :computed, %{
@@ -181,8 +181,18 @@ defmodule Omunculus.Harness do
       "workspaces" => fn _spec -> workspaces_view(config, workspace.name) end,
       "agents" => fn spec -> agents_view(project, config, work, catalog, workspace, spec) end,
       "paths" => fn _spec -> path_permissions(project, run, workspace) end,
-      "grant_scopes" => fn _spec -> Requests.scopes() end
+      "grant_scopes" => fn _spec -> Requests.scopes() end,
+      "skills" => fn _spec -> skills_view(project, run, catalog) end
     })
+  end
+
+  # The skills the run has, among the names its mounted ceiling has.
+  defp skills_view(project, run, catalog) do
+    names = (run_ceiling(project, run) || %{}) |> Map.get("have", []) |> Enum.sort()
+
+    for name <- names, %Manifest{kind: "skill"} = skill <- [Map.get(catalog, name)] do
+      %{name: Skills.short_name(name), description: skill.description, dir: skill.dir}
+    end
   end
 
   defp start_event(_project, nil), do: nil

@@ -31,7 +31,7 @@ module = "Omunculus.Model.Fake"
 [agents.concierge]
 depth = 0
 model = "fake"
-tools = ["break", "catalog", "continue", "delegate", "done", "end", "fs.read", "reply", "store", "work"]
+tools = ["break", "catalog", "continue", "delegate", "done", "end", "fs.read", "reply", "skills", "store", "work"]
 text = """
 You are the project concierge; you talk with the person. Answer yourself, in plain text, whatever needs no tool you lack: a greeting, a question, an explanation. Call work only for what needs a tool that an agent under ## Agents has and you have not, with a report and the works to create. When ## Results shows what they did, check it against the goal: if it is met, call done with a report that answers the person; if not, call work again saying what is missing.
 """
@@ -39,7 +39,7 @@ You are the project concierge; you talk with the person. Answer yourself, in pla
 [agents.worker]
 depth = 1
 model = "fake"
-tools = ["break", "comment", "continue", "done", "end", "fs.read", "fs.write", "notify", "request_access", "request_sandbox"]
+tools = ["break", "comment", "continue", "done", "end", "fs.read", "fs.write", "notify", "request_access", "request_sandbox", "skills"]
 human = ["sandbox.write"]
 text = """
 You are the worker. Complete the assigned work, report progress, and call done with a report when the stage is complete.

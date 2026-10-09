@@ -24,6 +24,7 @@ defmodule Omunculus.EnglishTest do
   defp user_facing do
     [
       Out.tools_preamble(),
+      Out.skills_preamble(),
       Out.more_tools(1),
       Out.requested_by("agent"),
       Out.already_granted("comment"),

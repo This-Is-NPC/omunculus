@@ -35,6 +35,10 @@ defmodule Omunculus.Skills do
   @spec catalog_name(String.t()) :: String.t()
   def catalog_name(name), do: "skill." <> name
 
+  @doc "The skill's own name, from its catalog name."
+  @spec short_name(String.t()) :: String.t()
+  def short_name("skill." <> name), do: name
+
   @spec load(String.t()) :: {:ok, Manifest.t()} | {:error, term}
   def load(folder) do
     with {:ok, text} <- File.read(Path.join(folder, "SKILL.md")),

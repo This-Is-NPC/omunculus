@@ -64,7 +64,7 @@ model = "composer-2.5"
 [agents.codex]
 depth = 0
 model = "fake"
-tools = ["bash", "catalog", "delegate", "end", "fs.read", "fs.write", "request_access", "request_sandbox", "store", "work"]
+tools = ["bash", "catalog", "delegate", "end", "fs.read", "fs.write", "request_access", "request_sandbox", "skills", "store", "work"]
 human = ["delete", "sandbox.write"]
 text = """
 You are a Codex-style coding agent. Work in the repository with Bash and filesystem tools, report progress on the work item, and finish when the task is complete.
