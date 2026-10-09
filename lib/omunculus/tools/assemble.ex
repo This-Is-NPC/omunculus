@@ -16,7 +16,9 @@ defmodule Omunculus.Tools.Assemble do
   with since its last closed run: each child closed or cancelled since,
   with its last comment, and, when the run was opened by a child's
   `break`, that child's report. A run with a request gets the request's
-  requester, its options with their tool calls, and its comments. Inbox is
+  requester, the options an agent may pick with their tool calls — not
+  those granting with a `scope`, which only a person may — and its
+  comments. Inbox is
   included only when the opening carried `inbox_id`. The message of the
   opening comes last.
   """
@@ -132,7 +134,14 @@ defmodule Omunculus.Tools.Assemble do
 
   defp request_section(request, comments) do
     header = "#{request.id} #{Out.requested_by(request.agent)}"
-    options = request.options |> Jason.decode!() |> Enum.sort() |> Enum.map(&option_line/1)
+
+    options =
+      request.options
+      |> Jason.decode!()
+      |> Enum.reject(fn {_name, calls} -> Enum.any?(calls, &Map.has_key?(&1["args"], "scope")) end)
+      |> Enum.sort()
+      |> Enum.map(&option_line/1)
+
     comments = Enum.map(comments || [], & &1.body)
     ["## Request\n" <> Enum.join([header | options] ++ comments, "\n")]
   end

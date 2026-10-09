@@ -266,7 +266,8 @@ defmodule Omunculus.Tools.AssembleTest do
       "request" => %{
         id: "req_1",
         agent: "worker",
-        options: ~s({"grant":[{"name":"grant","args":{"kind":"tool","name":"write"}}],"deny":[]})
+        options:
+          ~s({"grant":[{"name":"grant","args":{"kind":"tool","name":"write"}}],"grant_agent":[{"name":"grant","args":{"kind":"tool","name":"write","scope":"agent"}}],"deny":[]})
       },
       "request_comments" => [%{body: "please look"}],
       "inbox_comments" => [%{body: "standalone notice"}],
@@ -292,6 +293,8 @@ defmodule Omunculus.Tools.AssembleTest do
                ~s(- grant: grant {"kind":"tool","name":"write"}\nplease look)
 
     refute with_inbox =~ "should not appear"
+    # Only a person may grant with a scope, so an agent is not offered it.
+    refute with_inbox =~ "grant_agent"
 
     headers = ["Tools", "Work", "Goal", "Last comment", "Request", "Inbox", "Message"]
     at = Enum.map(headers, &(:binary.match(with_inbox, "## " <> &1) |> elem(0)))
