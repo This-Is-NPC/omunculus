@@ -7,7 +7,7 @@ defmodule Omunculus.Model.CommandTest do
   alias Omunculus.Model.Command
 
   @bridge Path.expand("test/support/command_bridge.py", Path.join([__DIR__, "..", "..", ".."]))
-  @assembled "You are the worker."
+  @prompt %Omunculus.Prompt{instructions: "You are the worker.", context: ""}
   @tools [%{name: "counter", description: "increments", parameters: %{}}]
 
   defp recorder do
@@ -49,7 +49,7 @@ defmodule Omunculus.Model.CommandTest do
       :ok
     end
 
-    assert {:ok, "benchmark complete"} = model.(@assembled, @tools, call, record, delta, policy)
+    assert {:ok, "benchmark complete"} = model.(@prompt, @tools, call, record, delta, policy)
     assert calls(agent) == [{"counter", %{}}]
     messages = Agent.get(recorded, & &1)
     assert Enum.map(messages, & &1["type"]) == ["call", "text"]
