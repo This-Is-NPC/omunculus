@@ -51,14 +51,14 @@ defmodule Omunculus.Model.BodyTest do
     assert %{"instructions" => "steady", "input" => [%{"role" => "user", "content" => "ping"}]} =
              request(OpenAIResponses, %{})
 
-    assert %{"system" => [block], "messages" => [%{"role" => "user", "content" => "ping"}]} =
+    # Anthropic caches up to marked blocks: the instructions, for the next run,
+    # and the last turn, for the next call of this one.
+    assert %{"system" => [block], "messages" => [%{"role" => "user", "content" => [turn]}]} =
              request(AnthropicMessages, %{})
 
-    assert block == %{
-             "type" => "text",
-             "text" => "steady",
-             "cache_control" => %{"type" => "ephemeral"}
-           }
+    cache = %{"cache_control" => %{"type" => "ephemeral"}}
+    assert block == Map.merge(%{"type" => "text", "text" => "steady"}, cache)
+    assert turn == Map.merge(%{"type" => "text", "text" => "ping"}, cache)
   end
 
   defp request(module, body) do

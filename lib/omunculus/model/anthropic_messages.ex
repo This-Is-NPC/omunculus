@@ -4,10 +4,13 @@ defmodule Omunculus.Model.AnthropicMessages do
   `new/1` takes the `[models.<name>]` spec (`url`, `model`, `timeout_ms`,
   optional `temperature`, `headers`, `body`, `credential`) and returns a 6-arity
   `(prompt, tools, call, record, delta, execution)` fun. Posts the prompt's
-  instructions as `system`, marked for the server's cache, and its context
-  as the first user turn to `<url>/messages` with tools as Anthropic `input_schema`
-  items, runs each `tool_use` through `call.(name, args)`, appends a
-  `tool_result` user turn, and loops until a reply has none.
+  instructions as `system` and its context as the first user turn to
+  `<url>/messages` with tools as Anthropic `input_schema` items, runs each
+  `tool_use` through `call.(name, args)`, appends a `tool_result` user
+  turn, and loops until a reply has none. Two cache breakpoints mark each
+  request: the end of the instructions, which the next run of the agent
+  reuses, and the end of the last turn, which the next call of the run
+  reuses. Each reply is recorded with its `usage`.
   `__omunculus_execute` is the same sandbox bridge as `Model.OpenAI`.
   With `stream = true` the reply is read as server-sent events and put
   back together from its content blocks, each `text_delta` going to
@@ -54,10 +57,12 @@ defmodule Omunculus.Model.AnthropicMessages do
   end
 
   # Anthropic caches only up to a marked block: the instructions end in one.
+  @cache %{type: "ephemeral"}
+
   defp system(""), do: nil
 
   defp system(instructions),
-    do: [%{type: "text", text: instructions, cache_control: %{type: "ephemeral"}}]
+    do: [%{type: "text", text: instructions, cache_control: @cache}]
 
   defp request_headers(spec) do
     base = [
@@ -136,13 +141,27 @@ defmodule Omunculus.Model.AnthropicMessages do
     %{
       model: client.model,
       max_tokens: 8192,
-      messages: messages,
+      messages: mark_last(messages),
       tools: tools
     }
     |> maybe_put(:system, system)
     |> maybe_put(:temperature, client.temperature)
     |> maybe_put(:stream, client.stream || nil)
     |> Body.merge(client.body)
+  end
+
+  # The last block of the last turn ends the prefix the next call shares.
+  defp mark_last(messages) do
+    {last, earlier} = List.pop_at(messages, -1)
+
+    blocks =
+      case last.content do
+        text when is_binary(text) -> [%{type: "text", text: text}]
+        blocks -> blocks
+      end
+
+    {block, before} = List.pop_at(blocks, -1)
+    earlier ++ [%{last | content: before ++ [Map.put(block, :cache_control, @cache)]}]
   end
 
   defp maybe_put(map, _key, nil), do: map
@@ -218,9 +237,17 @@ defmodule Omunculus.Model.AnthropicMessages do
     end
   end
 
-  defp event(%{"type" => "message_delta", "delta" => delta}, %{message: message} = reply, _)
-       when is_map(message),
-       do: %{reply | message: Map.merge(message, delta)}
+  # The delta carries the stop reason and the output's usage, which
+  # completes the usage message_start began.
+  defp event(
+         %{"type" => "message_delta", "delta" => delta} = data,
+         %{message: message} = reply,
+         _
+       )
+       when is_map(message) do
+    usage = Map.merge(message["usage"] || %{}, data["usage"] || %{})
+    %{reply | message: message |> Map.merge(delta) |> Map.put("usage", usage)}
+  end
 
   defp event(_other, reply, _client), do: reply
 
@@ -236,7 +263,8 @@ defmodule Omunculus.Model.AnthropicMessages do
     end)
   end
 
-  defp strip_message(message), do: Map.take(message, ["role", "content", "stop_reason"])
+  defp strip_message(message),
+    do: Map.take(message, ["role", "content", "stop_reason", "usage"])
 
   defp assistant_turn(message) do
     %{role: "assistant", content: Map.get(message, "content", [])}
