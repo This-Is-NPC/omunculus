@@ -1,6 +1,10 @@
 defmodule Omunculus.Execution.Bubblewrap do
   @moduledoc """
   Runs commands in a Bubblewrap namespace with only the policy's mounts.
+  Each process gets a temporary directory of its own (mode 0700) for its
+  pipes; a secret of its command is written there (mode 0400) before the
+  process starts, bound read-only at `/run/secrets/<NAME>` with
+  `<NAME>_FILE` naming it, and removed with the directory.
   """
 
   @behaviour Omunculus.Execution.Backend
@@ -35,7 +39,8 @@ defmodule Omunculus.Execution.Bubblewrap do
   end
 
   defp start_in_temp(bwrap, command, policy, temp_dir) do
-    with {:ok, created_hidden} <- prepare_hidden(policy, temp_dir) do
+    with :ok <- write_secrets(temp_dir, command.secrets),
+         {:ok, created_hidden} <- prepare_hidden(policy, temp_dir) do
       case start_process(bwrap, command, policy, temp_dir, created_hidden) do
         {:ok, _handle} = result ->
           result
@@ -115,6 +120,7 @@ defmodule Omunculus.Execution.Bubblewrap do
       mount_args(mounts) ++
       hidden_args(policy.hidden, mounts, temp_dir) ++
       environment_args(policy, mounts) ++
+      secret_args(command.secrets, temp_dir) ++
       ["--chdir", command.cwd, "--", "/usr/bin/sh", "-c", policy.sandbox.runner, "omunculus-exec"] ++
       [
         Path.join(temp_dir, "input"),
@@ -409,6 +415,46 @@ defmodule Omunculus.Execution.Bubblewrap do
       (policy.environment
        |> Enum.sort_by(fn {name, _value} -> name end)
        |> Enum.flat_map(fn {name, value} -> ["--setenv", name, value] end))
+  end
+
+  @secrets "/run/secrets"
+
+  defp write_secrets(_temp_dir, secrets) when map_size(secrets) == 0, do: :ok
+
+  defp write_secrets(temp_dir, secrets) do
+    directory = Path.join(temp_dir, "secrets")
+
+    with :ok <- File.mkdir(directory), :ok <- File.chmod(directory, 0o700) do
+      Enum.reduce_while(secrets, :ok, fn {name, value}, :ok ->
+        path = Path.join(directory, name)
+
+        case File.write(path, value) do
+          :ok -> {:cont, File.chmod(path, 0o400)}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+    end
+  end
+
+  defp secret_args(secrets, _temp_dir) when map_size(secrets) == 0, do: []
+
+  defp secret_args(secrets, temp_dir) do
+    ["--dir", "/run", "--dir", @secrets] ++
+      (secrets
+       |> Map.keys()
+       |> Enum.sort()
+       |> Enum.flat_map(fn name ->
+         inside = Path.join(@secrets, name)
+
+         [
+           "--ro-bind",
+           Path.join([temp_dir, "secrets", name]),
+           inside,
+           "--setenv",
+           name <> "_FILE",
+           inside
+         ]
+       end))
   end
 
   defp mount_directories(path, include_self?) do

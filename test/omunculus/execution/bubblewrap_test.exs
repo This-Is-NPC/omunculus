@@ -71,6 +71,35 @@ defmodule Omunculus.Execution.BubblewrapTest do
     assert {:ok, %{stdout: "unset"}} = Omunculus.Execution.run(command, policy(workspace))
   end
 
+  test "hands a secret to its process alone, as a read-only file named by <NAME>_FILE", %{
+    workspace: workspace
+  } do
+    script =
+      ~s{printf "%s|%s|" "$GH_TOKEN_FILE" "$(cat "$GH_TOKEN_FILE")"; } <>
+        ~s{stat -c %a "$GH_TOKEN_FILE"; ! printf x > "$GH_TOKEN_FILE"}
+
+    {:ok, command} =
+      Command.new("/usr/bin/sh", ["-c", script], secrets: %{"GH_TOKEN" => "token-value"})
+
+    assert {:ok, %{stdout: "/run/secrets/GH_TOKEN|token-value|400\n", status: 0}} =
+             Omunculus.Execution.run(command, policy(workspace))
+
+    {:ok, other} = Command.new("/usr/bin/sh", ["-c", "test ! -e /run/secrets && printf none"])
+    assert {:ok, %{stdout: "none"}} = Omunculus.Execution.run(other, policy(workspace))
+
+    assert Path.wildcard(Path.join(System.tmp_dir!(), "omunculus-execution-*/secrets")) == []
+  end
+
+  test "never shows a command's secrets when it is inspected" do
+    {:ok, command} = Command.new("/usr/bin/true", [], secrets: %{"GH_TOKEN" => "token-value"})
+    refute inspect(command) =~ "token-value"
+  end
+
+  test "refuses a secret whose name is not a variable's" do
+    assert {:error, :invalid_command} =
+             Command.new("/usr/bin/true", [], secrets: %{"GH-TOKEN" => "token-value"})
+  end
+
   test "cancels the Bubblewrap process tree on timeout", %{workspace: workspace} do
     marker = Path.join(workspace, "late-marker")
     {:ok, command} = Command.new("/usr/bin/sh", ["-c", "sleep 1; touch #{marker}"])
