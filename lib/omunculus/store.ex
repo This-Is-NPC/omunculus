@@ -58,5 +58,6 @@ defmodule Omunculus.Store do
   defdelegate record_tools(conn, run_id, calls, ctx), to: Runs
   defdelegate close_run(conn, run_id), to: Runs, as: :close
   defdelegate unreported(conn, run, max_retries, reason_text, inbox_text), to: Runs
+  defdelegate unanswered(conn, run, inbox_text), to: Runs
   defdelegate open_runs(conn), to: Runs
 end

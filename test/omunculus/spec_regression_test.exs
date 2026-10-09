@@ -191,7 +191,14 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} = Run.open(p, Fixtures.opening(nil, parent, %{request_id: request}))
-    assert {:ok, %{status: "waiting_agent"}} = Store.view(p.conn, "request", request)
+    # Its run closed without a reply, so the request is the person's now.
+    assert {:ok, %{status: "waiting_human", arbiter: "human"}} =
+             Store.view(p.conn, "request", request)
+
+    assert {:ok, events} = Store.replay(p.conn, :project)
+    assert %{body: body} = Enum.find(events, &(&1.type == "escalate"))
+    assert Jason.decode!(body) == %{"from" => "concierge"}
+    assert Enum.any?(events, &(&1.type == "notify"))
     assert {:ok, %{state: "waiting", grants: nil}} = Store.view(p.conn, "work", child)
     {:ok, config} = Config.load(p.config_path)
     refute "write" in config.agents["worker"].ceiling.granted
@@ -211,7 +218,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} = Run.open(p, Fixtures.opening(nil, parent, %{request_id: request}))
-    assert {:ok, %{status: "waiting_agent"}} = Store.view(p.conn, "request", request)
+    assert {:ok, %{status: "waiting_human"}} = Store.view(p.conn, "request", request)
     assert {:ok, %{state: "waiting"}} = Store.view(p.conn, "work", child)
   end
 

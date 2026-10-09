@@ -139,7 +139,8 @@ defmodule Omunculus.Tools.Assemble do
     if request.status == "closed" do
       ["## Request\n" <> Enum.join([header <> ", " <> Out.answered() | comments], "\n")]
     else
-      ["## Request\n" <> Enum.join([header | waiting_options(request)] ++ comments, "\n")]
+      lines = [header, Out.answer_request() | waiting_options(request)] ++ comments
+      ["## Request\n" <> Enum.join(lines, "\n")]
     end
   end
 

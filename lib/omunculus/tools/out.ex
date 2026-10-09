@@ -99,6 +99,15 @@ defmodule Omunculus.Tools.Out do
   def request_inbox(request_id, reason, options),
     do: "#{reason} Reply to request #{request_id} with #{Enum.join(options, " or ")}."
 
+  @spec unanswered(String.t(), String.t()) :: String.t()
+  def unanswered(request_id, agent),
+    do:
+      "#{agent} ended its run without answering request #{request_id}; it is yours to answer with"
+
+  @spec answer_request() :: String.t()
+  def answer_request,
+    do: "This run is for answering it: call reply with one of these options before anything else."
+
   @spec answered() :: String.t()
   def answered, do: "answered: the reply is below"
 

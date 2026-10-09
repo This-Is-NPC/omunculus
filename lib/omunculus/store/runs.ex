@@ -13,6 +13,9 @@ defmodule Omunculus.Store.Runs do
   `max_retries`; past it, a `break` with the given text for a child,
   or, for a root, a request by the harness with the options `retry` and
   `cancel` and an inbox entry whose text names the new request.
+  `unanswered/3` hands a request to the human when the run its agent
+  arbiter opened to answer it closed without a reply: an `escalate` event
+  and an inbox entry whose text names it.
   """
 
   alias Omunculus.Id
@@ -138,6 +141,52 @@ defmodule Omunculus.Store.Runs do
         end
       end
     end)
+  end
+
+  @spec unanswered(Connection.t(), map, (String.t(), String.t() -> String.t())) ::
+          {:ok, [map]} | {:error, term}
+  def unanswered(_conn, %{request_id: nil}, _inbox_text), do: {:ok, []}
+
+  def unanswered(conn, run, inbox_text) do
+    Query.transaction(conn, fn ->
+      case Query.one(conn, "SELECT * FROM requests WHERE id = ?", [run.request_id]) do
+        {:ok, %{status: "waiting_agent", arbiter: arbiter} = request} when arbiter == run.agent ->
+          escalate(conn, run, request, inbox_text)
+
+        {:ok, _answered_or_not_its} ->
+          {:ok, []}
+
+        {:error, _reason} = error ->
+          error
+      end
+    end)
+  end
+
+  defp escalate(conn, run, request, inbox_text) do
+    ctx = %{run_id: run.id, work_id: request.work_id, author: "harness", agent: run.agent}
+
+    with :ok <-
+           Query.exec(
+             conn,
+             "UPDATE requests SET arbiter = 'human', status = 'waiting_human' WHERE id = ?",
+             [request.id]
+           ),
+         {:ok, event} <-
+           Events.append(conn, %{
+             type: "escalate",
+             run_id: run.id,
+             work_id: request.work_id,
+             request_id: request.id,
+             body: Jason.encode!(%{from: run.agent})
+           }),
+         options = request.options |> Jason.decode!() |> Map.keys(),
+         notify = %{
+           "body" => inbox_text.(request.id, run.agent) <> " " <> Enum.join(options, ", ") <> ".",
+           "work_id" => request.work_id
+         },
+         {:ok, inbox} <- Actions.run(conn, [%{"type" => "notify", "body" => notify}], ctx) do
+      {:ok, [event | inbox]}
+    end
   end
 
   defp stop_work(conn, run, %{parent_id: nil}, text, inbox_text) do

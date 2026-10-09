@@ -290,7 +290,7 @@ defmodule Omunculus.Tools.AssembleTest do
     assert with_inbox =~ "## Inbox\ninb_1\nstandalone notice"
 
     assert with_inbox =~
-             "## Request\nreq_1 requested by worker\n- deny\n" <>
+             "## Request\nreq_1 requested by worker\n#{Out.answer_request()}\n- deny\n" <>
                ~s(- grant: grant {"kind":"tool","name":"write"}\nplease look)
 
     refute with_inbox =~ "should not appear"

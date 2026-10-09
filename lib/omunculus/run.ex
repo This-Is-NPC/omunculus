@@ -490,8 +490,18 @@ defmodule Omunculus.Run do
     {opened, events} = split_followed(project, state.run, :atomics.get(state.cursor, 1))
 
     with :ok <- Harness.follow_up(project, events, opened),
-         :ok <- unreported(project, state, work, stopped?) do
+         :ok <- unreported(project, state, work, stopped?),
+         :ok <- unanswered(project, state) do
       {:ok, state.run}
+    end
+  end
+
+  # An arbiter's run that closed without a reply leaves the request to the
+  # person, or nothing would answer it.
+  defp unanswered(project, state) do
+    with {:ok, events} <- Store.unanswered(project.conn, state.run, &Out.unanswered/2),
+         {:ok, _hooks} <- Harness.react(project, events, [], state.execution) do
+      Harness.follow_up(project, events)
     end
   end
 
