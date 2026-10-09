@@ -185,19 +185,32 @@ defmodule EquivalentExchange.Runner do
   end
 
   @doc """
-  The execution recorded at `path`, of `task`, assessed again: its usage
-  read again from the store it ran in, judged and scored with today's
-  questions.
+  The execution recorded at `path`, of `task`, assessed again: its last
+  words and usage read again from the store it ran in, its check run again
+  on the workspace it left, then judged and scored with today's questions.
   """
   @spec reassess(String.t(), %Task{}) :: map
   def reassess(path, task) do
     project = Path.join(Path.dirname(path), "project")
+    workspace = Path.join(project, "workspace")
+    facts = facts(project)
+    execution = path |> File.read!() |> Jason.decode!()
+    report = report(facts)
 
-    path
-    |> File.read!()
-    |> Jason.decode!()
-    |> Map.put("usage", usage(facts(project)))
-    |> assess(task, Path.join(project, "workspace"))
+    {passed, said} =
+      Task.check(task, workspace, %{
+        outcome: execution["outcome"],
+        report: report,
+        configuration: execution["configuration"]
+      })
+
+    execution
+    |> Map.merge(%{
+      "report" => report,
+      "check" => %{"passed" => passed, "said" => said},
+      "usage" => usage(facts)
+    })
+    |> assess(task, workspace)
   end
 
   @doc "How the decider did on the hand-written reports, for a manifest."
@@ -366,8 +379,8 @@ defmodule EquivalentExchange.Runner do
             event.actor_kind == "agent" ->
           [event.body["body"]]
 
-        event.type in ["break", "done"] and is_map(event.body) and is_binary(event.body["report"]) ->
-          [event.body["report"]]
+        event.type == "break" and is_map(event.body) and is_binary(event.body["body"]) ->
+          [event.body["body"]]
 
         true ->
           []
