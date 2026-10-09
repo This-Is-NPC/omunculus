@@ -440,8 +440,11 @@ defmodule Omunculus.Store.ActionsTest do
   end
 
   describe "work action" do
-    defp work_emit(body),
-      do: %{"type" => "work", "body" => Map.merge(%{"goal" => "g", "report" => "r"}, body)}
+    defp work_emit(item, report \\ "r"),
+      do: %{
+        "type" => "work",
+        "body" => %{"report" => report, "works" => [Map.merge(%{"goal" => "g"}, item)]}
+      }
 
     test "creates a root work with the report as its first comment and marks it to start", %{
       conn: conn
@@ -452,7 +455,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, [_tool_event, event]} =
                record_tool(
                  conn,
-                 [work_emit(%{"title" => "Ship the store", "report" => "planned"})],
+                 [work_emit(%{"title" => "Ship the store"}, "planned")],
                  ctx
                )
 
@@ -494,12 +497,14 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "without a title, a goal or a report it is rejected and writes nothing", %{conn: conn} do
-      for {body, reason} <- [
-            {%{}, :no_title},
-            {%{"title" => "t", "goal" => ""}, :no_goal},
-            {%{"title" => "t", "report" => ""}, :no_report}
+      for {emit, reason} <- [
+            {work_emit(%{}), {:invalid, "works"}},
+            {work_emit(%{"title" => "t", "goal" => ""}), {:invalid, "works"}},
+            {work_emit(%{"title" => "t"}, ""), :no_report},
+            {%{"type" => "work", "body" => %{"report" => "r", "works" => []}},
+             {:invalid, "works"}}
           ] do
-        assert {:error, {:work, ^reason}} = record_tool(conn, [work_emit(body)], @ctx)
+        assert {:error, {:work, ^reason}} = record_tool(conn, [emit], @ctx)
       end
 
       assert count(conn, "works") == 0
@@ -507,16 +512,18 @@ defmodule Omunculus.Store.ActionsTest do
       assert count(conn, "events") == 0
     end
 
-    test "is rejected when the body carries stage or model", %{conn: conn} do
-      for key <- ["stage", "model"] do
+    test "is rejected when the body carries stage, agent or model", %{conn: conn} do
+      for key <- ["stage", "agent", "model"] do
+        emit = work_emit(%{"title" => "x"})
+
         assert {:error, {:work, {:forbidden, ^key}}} =
-                 record_tool(conn, [work_emit(%{"title" => "x", key => "v"})], @ctx)
+                 record_tool(conn, [put_in(emit, ["body", key], "v")], @ctx)
       end
 
       assert count(conn, "works") == 0
     end
 
-    test "a named agent must be one of depth 0 outside workflows", %{conn: conn} do
+    test "a named agent must be one of depth 0 or 1 outside workflows", %{conn: conn} do
       config = Fixtures.config(arbiter_toml())
 
       assert {:ok, [_tool_event, event]} =
@@ -529,10 +536,10 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, %{assignee: "concierge"}} =
                Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
 
-      assert {:error, {:work, {:agent_not_allowed, "worker"}}} =
+      assert {:error, {:work, {:agent_not_allowed, "ghost"}}} =
                record_tool(
                  conn,
-                 [work_emit(%{"title" => "x", "agent" => "worker"})],
+                 [work_emit(%{"title" => "x", "agent" => "ghost"})],
                  %{@ctx | config: config}
                )
 
@@ -544,6 +551,46 @@ defmodule Omunculus.Store.ActionsTest do
                )
 
       assert count(conn, "works") == 1
+    end
+
+    test "works naming agents of depth 1 go below a root the run's agent holds", %{conn: conn} do
+      run_id = Fixtures.insert(conn, :runs, %{work_id: nil})
+      ctx = %{@ctx | run_id: run_id, config: Fixtures.config(arbiter_toml())}
+
+      emit = %{
+        "type" => "work",
+        "body" => %{
+          "report" => "two parts",
+          "works" => [
+            %{"title" => "a", "goal" => "do a", "agent" => "worker"},
+            %{"title" => "b", "goal" => "do b", "agent" => "worker"}
+          ]
+        }
+      }
+
+      assert {:ok, [_tool_event, root_event, first, second]} = record_tool(conn, [emit], ctx)
+      assert Jason.decode!(root_event.body)["start"] == false
+      assert {first.type, second.type} == {"delegate", "delegate"}
+
+      assert {:ok, root} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [root_event.work_id])
+
+      assert {root.title, root.goal, root.assignee} == {"a; b", "do a\n\ndo b", "concierge"}
+      assert {root.state, root.waiting} == {"waiting", "child"}
+
+      assert {:ok, children} =
+               Query.all(conn, "SELECT * FROM works WHERE parent_id = ? ORDER BY title", [root.id])
+
+      assert Enum.map(children, &{&1.title, &1.assignee}) == [{"a", "worker"}, {"b", "worker"}]
+
+      assert {:ok, %{work_id: work_id}} =
+               Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id])
+
+      assert work_id == root.id
+
+      mixed = put_in(emit, ["body", "works", Access.at(1), "agent"], "concierge")
+
+      assert {:error, {:work, :one_root}} = record_tool(conn, [mixed], ctx)
     end
 
     test "with workflow on sets the first stage and its agent", %{conn: conn} do

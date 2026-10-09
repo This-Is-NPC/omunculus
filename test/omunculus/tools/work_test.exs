@@ -31,15 +31,9 @@ defmodule Omunculus.Tools.WorkTest do
                "ok" => true,
                "output" => "",
                "emit" => [
-                 %{"type" => "work", "body" => Map.put(@item, "report", "planned")}
+                 %{"type" => "work", "body" => %{"report" => "planned", "works" => [@item]}}
                ]
              }
-    end
-
-    test "without a work, two items fail" do
-      input = without_work(%{"report" => "planned", "works" => [@item, @item]})
-
-      assert Work.run(input) == Out.fail("a run without a work creates one work")
     end
 
     test "with a work, chains a comment with the report and one delegate per item" do
@@ -197,6 +191,44 @@ defmodule Omunculus.Tools.WorkTest do
 
       {:ok, events} = Store.replay(project.conn, {:run, first.id})
       assert events |> Enum.map(& &1.type) |> Enum.take(-2) == ["end", "end-run"]
+
+      Project.close(project)
+    end
+
+    test "without a work, works naming agents of depth 1 run before the root's first run",
+         %{dir: dir} do
+      model = fn assembled, _tools, call ->
+        case {role(assembled), last_comment(assembled)} do
+          {"lead", nil} ->
+            create(call, "handed down", [
+              %{"title" => "A", "goal" => "Goal A", "agent" => "alpha"},
+              %{"title" => "B", "goal" => "Goal B", "agent" => "beta"}
+            ])
+
+          {"lead", _comment} ->
+            call.("done", %{"report" => "both back"})
+
+          {_child, _comment} ->
+            call.("done", %{"report" => "finished"})
+        end
+
+        {:ok, "idle"}
+      end
+
+      project = setup_project(dir, agents_toml(), model)
+
+      assert [root] = all(project, "SELECT * FROM works WHERE parent_id IS NULL")
+      assert %{title: "A; B", assignee: "lead", state: "done"} = root
+
+      assert [%{assignee: "alpha", state: "done"}, %{assignee: "beta", state: "done"}] =
+               all(project, "SELECT * FROM works WHERE parent_id = ? ORDER BY title", [root.id])
+
+      assert [first, child_one, child_two, last] = runs_in_order(project)
+
+      assert {first.agent, first.work_id, last.agent, last.work_id} ==
+               {"lead", root.id, "lead", root.id}
+
+      assert Enum.sort([child_one.agent, child_two.agent]) == ["alpha", "beta"]
 
       Project.close(project)
     end
@@ -484,7 +516,8 @@ defmodule Omunculus.Tools.WorkTest do
       Project.close(project)
     end
 
-    test "without a work, two items or a missing goal fail and write nothing", %{dir: dir} do
+    test "without a work, two items not all for depth 1 or a missing goal fail and write nothing",
+         %{dir: dir} do
       test_pid = self()
 
       model = fn _assembled, _tools, call ->
@@ -495,7 +528,7 @@ defmodule Omunculus.Tools.WorkTest do
 
       project = setup_project(dir, agents_toml(), model)
 
-      assert_received {:two, {:ok, "a run without a work creates one work"}}
+      assert_received {:two, {:error, {:work, :one_root}}}
       assert_received {:no_goal, {:ok, "works[0]: goal required"}}
       assert [] = all(project, "SELECT * FROM works")
       assert [_run] = all(project, "SELECT * FROM runs")
@@ -526,7 +559,7 @@ defmodule Omunculus.Tools.WorkTest do
       assert {:ok, ""} = CLI.run(["send", "go"], dir)
 
       assert_received {:assembled, "lead", without_work}
-      assert without_work =~ "## Agents\n- lead\n\n## Tools"
+      assert without_work =~ "## Agents\n- alpha\n- beta: also break\n\n## Tools"
       assert_received {:assembled, "lead", with_work}
       assert with_work =~ "## Agents\n- alpha\n- beta: also break\n\n## Tools"
       assert_received {:assembled, "beta", without_card}

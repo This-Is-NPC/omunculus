@@ -3,9 +3,11 @@ defmodule Omunculus.Tools.Work do
   Builtin `work` tool: takes a `report` and the `works` to create, each
   with a `title`, a `goal` and optionally an `agent` and a `workspace`.
   In a run with a work it chains `comment` with the report on that work
-  and one `delegate` per item. In a run without a work it takes exactly
-  one item and emits the `work` action, which creates the root work with
-  the report as its first comment. Its manifest's `then` appends `end`.
+  and one `delegate` per item. In a run without a work it emits the `work`
+  action with the report and the items, which creates the root work with
+  the report as its first comment: the one item itself, or, when each
+  names an agent of depth 1, a root that hands them down. Its manifest's
+  `then` appends `end`.
   """
 
   alias Omunculus.Tools.{Args, Out}
@@ -48,10 +50,8 @@ defmodule Omunculus.Tools.Work do
 
   defp item(_item), do: {:error, "object required"}
 
-  defp create(nil, report, [work]),
-    do: Out.ok("", [%{"type" => "work", "body" => Map.put(work, "report", report)}])
-
-  defp create(nil, _report, _works), do: Out.fail("a run without a work creates one work")
+  defp create(nil, report, works),
+    do: Out.ok("", [%{"type" => "work", "body" => %{"report" => report, "works" => works}}])
 
   defp create(_work_id, report, works) do
     Out.ok("")

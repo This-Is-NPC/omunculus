@@ -6,7 +6,7 @@ defmodule Omunculus.Store.Actions.Contract do
   @fields %{
     "comment" => ~w(body work_id request_id inbox_id),
     "prompt" => ~w(message work_id),
-    "work" => ~w(title goal report agent workspace),
+    "work" => ~w(report works),
     "request" => ~w(reason options),
     "reply" => ~w(request_id option body),
     "grant" => ~w(request_id name kind scope),
@@ -50,10 +50,11 @@ defmodule Omunculus.Store.Actions.Contract do
     end
   end
 
-  # A body never names the stage, agent or model the TOML decides; `work`
-  # and `delegate` may name the new work's agent, checked against the TOML.
+  # A body never names the stage, agent or model the TOML decides; a
+  # `delegate`, and each of the `works` of a `work`, may name the new work's
+  # agent, checked against the TOML.
   defp forbidden(type, body) when type in ~w(work continue break delegate) do
-    keys = if type in ~w(work delegate), do: @forbidden -- ["agent"], else: @forbidden
+    keys = if type == "delegate", do: @forbidden -- ["agent"], else: @forbidden
 
     case Enum.find(keys, &Map.has_key?(body, &1)) do
       nil -> :ok
@@ -66,5 +67,6 @@ defmodule Omunculus.Store.Actions.Contract do
   defp valid_value?(_key, nil), do: true
   defp valid_value?("ids", ids), do: is_list(ids) and Enum.all?(ids, &is_binary/1)
   defp valid_value?("options", options), do: is_map(options)
+  defp valid_value?("works", works), do: is_list(works)
   defp valid_value?(_key, value), do: is_binary(value)
 end

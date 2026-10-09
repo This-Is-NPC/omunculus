@@ -346,11 +346,12 @@ defmodule Omunculus.Harness do
     end)
   end
 
-  # The agents a new work may name: those at the depth of the works the
-  # call would create, none when that depth has a workflow. With `tools`,
-  # each comes with the model tools its own ceiling has at that depth.
+  # The agents a new work may name: those of the depth below the call's
+  # run, to which a run without a work hands its works down too; none when
+  # that depth has a workflow. With `tools`, each comes with the model
+  # tools its own ceiling has at that depth.
   defp agents_view(project, config, work, catalog, workspace, spec) do
-    depth = if work, do: Store.work_depth(project.conn, work) + 1, else: 0
+    depth = if work, do: Store.work_depth(project.conn, work) + 1, else: 1
 
     case Config.workflow_for(config, depth) do
       :off ->

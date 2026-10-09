@@ -3,18 +3,22 @@ defmodule Omunculus.Store.Actions do
   Write side of the store: `run/3` applies the emits from a tool's
   `out.emit` in order, inside whatever transaction the caller holds — the
   whole batch commits or nothing does (spec §8.3). `work` creates a root
-  work with the `report` as its first comment, links the run to it when
-  the run has no work yet, and marks it to start. `work` and `delegate`
-  may name the new work's `agent`: one of the TOML's agents at its depth
-  that is not `workflow_only`, refused when that depth has a workflow;
-  unnamed, it is the first stage's agent or the depth's first agent.
+  work with the `report` as its first comment and links the run to it when
+  the run has no work yet. Of its `works`, one unnamed or naming an agent
+  of depth 0 is the root itself, marked to start; when each names an agent
+  of depth 1, the root is held by the run's agent and each is delegated
+  below it, so the root's run opens once they are back. `work` and
+  `delegate` may name the new work's `agent`: one of the TOML's agents at
+  its depth that is not `workflow_only`, refused when that depth has a
+  workflow; unnamed, it is the first stage's agent or the depth's first
+  agent.
   `continue`, `break`, `delegate`, `cancel` and `end` are
   dispatched to `Actions.Sequence`; `request`, `reply` and `grant` to
   `Actions.Requests`; `notify` and `inbox.read` to `Actions.Inbox`;
   `compact` and `comment.delete` to `Actions.Comments`.
   """
 
-  alias Omunculus.Id
+  alias Omunculus.{Config, Id}
   alias Omunculus.Store.Actions.{Comments, Contract, Helpers, Inbox, Requests, Sequence}
   alias Omunculus.Store.{Events, Query}
 
@@ -191,22 +195,77 @@ defmodule Omunculus.Store.Actions do
   end
 
   defp work(conn, body, ctx) do
-    with :ok <- Helpers.ensure_text(:work, body, "title"),
-         :ok <- Helpers.ensure_text(:work, body, "goal"),
-         :ok <- Helpers.ensure_text(:work, body, "report"),
-         {:ok, {stage, assignee}} <-
-           Helpers.tag_error(
-             :work,
-             Helpers.stage_and_assignee(ctx.config, 0, body["agent"])
-           ),
-         {:ok, workspace} <-
-           Helpers.tag_error(:work, Helpers.resolve_workspace(ctx.config, body["workspace"], nil)) do
-      create_root(conn, body, ctx, stage, assignee, workspace)
+    with :ok <- Helpers.ensure_text(:work, body, "report"),
+         {:ok, items} <- work_items(body["works"]) do
+      children = Config.agents_at_depth(ctx.config, 1) |> Enum.map(&elem(&1, 0))
+
+      cond do
+        Enum.all?(items, &(&1["agent"] in children)) ->
+          hand_down(conn, body["report"], items, ctx)
+
+        match?([_], items) ->
+          own_root(conn, body["report"], hd(items), ctx)
+
+        true ->
+          {:error, {:work, :one_root}}
+      end
     end
   end
 
-  # The root's run opens once the run that created it has ended.
-  defp create_root(conn, body, ctx, stage, assignee, workspace) do
+  defp work_items([_ | _] = items) do
+    if Enum.all?(items, &item?/1),
+      do: {:ok, items},
+      else: {:error, {:work, {:invalid, "works"}}}
+  end
+
+  defp work_items(_items), do: {:error, {:work, {:invalid, "works"}}}
+
+  defp item?(item) when is_map(item) do
+    Enum.all?(item, fn {key, value} ->
+      key in ~w(title goal agent workspace) and is_binary(value)
+    end) and Enum.all?(~w(title goal), &(Map.get(item, &1, "") != ""))
+  end
+
+  defp item?(_item), do: false
+
+  # One work for an agent of depth 0, or the depth's own, starts as the root.
+  defp own_root(conn, report, item, ctx) do
+    with {:ok, {stage, assignee}} <-
+           Helpers.tag_error(:work, Helpers.stage_and_assignee(ctx.config, 0, item["agent"])),
+         {:ok, workspace} <-
+           Helpers.tag_error(:work, Helpers.resolve_workspace(ctx.config, item["workspace"], nil)) do
+      create_root(conn, Map.put(item, "report", report), ctx, stage, assignee, workspace, true)
+    end
+  end
+
+  # Works for agents of depth 1 go below a root the run's agent holds, which
+  # does not start: its run opens once they are back.
+  defp hand_down(conn, report, items, ctx) do
+    held_by = if Config.workflow_for(ctx.config, 0) == :off, do: Map.get(ctx, :agent)
+
+    root = %{
+      "title" => Enum.map_join(items, "; ", & &1["title"]),
+      "goal" => Enum.map_join(items, "\n\n", & &1["goal"]),
+      "report" => report
+    }
+
+    with {:ok, {stage, assignee}} <-
+           Helpers.tag_error(:work, Helpers.stage_and_assignee(ctx.config, 0, held_by)),
+         {:ok, workspace} <-
+           Helpers.tag_error(:work, Helpers.resolve_workspace(ctx.config, nil, nil)),
+         {:ok, event} <- create_root(conn, root, ctx, stage, assignee, workspace, false) do
+      items
+      |> Enum.reduce_while({:ok, [event]}, fn item, {:ok, events} ->
+        case Sequence.delegate(conn, item, Map.put(ctx, :work_id, event.work_id)) do
+          {:ok, delegated} -> {:cont, {:ok, events ++ [delegated]}}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+    end
+  end
+
+  # A root marked to start runs once the run that created it has ended.
+  defp create_root(conn, body, ctx, stage, assignee, workspace, start) do
     work_id = Id.new()
     comment_id = Id.new()
 
@@ -216,7 +275,7 @@ defmodule Omunculus.Store.Actions do
              work_id: work_id,
              run_id: ctx.run_id,
              comment_id: comment_id,
-             body: Jason.encode!(Map.put(body, "start", true))
+             body: Jason.encode!(Map.put(body, "start", start))
            }),
          :ok <-
            Helpers.insert_work(conn, %{
