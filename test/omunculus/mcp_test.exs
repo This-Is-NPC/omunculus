@@ -10,7 +10,8 @@ defmodule Omunculus.McpTest do
   @server %{
     name: "fake",
     command: [Path.expand("test/support/mcp_server")],
-    protocol_version: @protocol_version
+    protocol_version: @protocol_version,
+    secrets: %{}
   }
 
   defp server(overrides), do: Map.merge(@server, overrides)
@@ -24,9 +25,9 @@ defmodule Omunculus.McpTest do
     )
   end
 
-  describe "list_tools/2" do
+  describe "list_tools/3" do
     test "returns the fixture's two tools with description and parameters" do
-      assert {:ok, tools} = Mcp.list_tools(@server, policy())
+      assert {:ok, tools} = Mcp.list_tools(@server, policy(), %{})
       assert Enum.map(tools, & &1.name) |> Enum.sort() == ["echo", "shout"]
 
       echo = Enum.find(tools, &(&1.name == "echo"))
@@ -35,35 +36,39 @@ defmodule Omunculus.McpTest do
     end
 
     test "an executable that does not exist is :not_found" do
-      assert Mcp.list_tools(server(%{command: ["definitely-not-a-real-binary-xyz"]}), policy()) ==
+      assert Mcp.list_tools(
+               server(%{command: ["definitely-not-a-real-binary-xyz"]}),
+               policy(),
+               %{}
+             ) ==
                {:error, {:mcp, "fake", :not_found}}
     end
 
     test "a server that exits before answering reports its exit status" do
-      assert Mcp.list_tools(server(%{command: ["sh", "-c", "exit 3"]}), policy()) ==
+      assert Mcp.list_tools(server(%{command: ["sh", "-c", "exit 3"]}), policy(), %{}) ==
                {:error, {:mcp, "fake", {:exit, 3}}}
     end
   end
 
-  describe "call/4" do
+  describe "call/5" do
     test "echo returns the given text" do
       assert {:ok, %{ok: true, output: "hi", emit: []}} =
-               Mcp.call(@server, "echo", %{"text" => "hi"}, policy())
+               Mcp.call(@server, "echo", %{"text" => "hi"}, policy(), %{})
     end
 
     test "shout upper-cases the given text" do
       assert {:ok, %{ok: true, output: "HI", emit: []}} =
-               Mcp.call(@server, "shout", %{"text" => "hi"}, policy())
+               Mcp.call(@server, "shout", %{"text" => "hi"}, policy(), %{})
     end
 
     test "an unknown tool answers ok: false" do
       assert {:ok, %{ok: false, output: "unknown tool"}} =
-               Mcp.call(@server, "nope", %{}, policy())
+               Mcp.call(@server, "nope", %{}, policy(), %{})
     end
 
     test "initialize sends the server's protocol_version" do
       assert {:ok, tools} =
-               Mcp.list_tools(server(%{protocol_version: "1999-01-01"}), policy())
+               Mcp.list_tools(server(%{protocol_version: "1999-01-01"}), policy(), %{})
 
       assert Enum.map(tools, & &1.name) |> Enum.sort() == ["echo", "shout"]
     end
@@ -73,7 +78,8 @@ defmodule Omunculus.McpTest do
                server(%{command: ["definitely-not-a-real-binary-xyz"]}),
                "echo",
                %{},
-               policy()
+               policy(),
+               %{}
              ) ==
                {:error, {:mcp, "fake", :not_found}}
     end

@@ -86,7 +86,7 @@ defmodule Omunculus.CLI do
 
   def format_error({:config, :invalid_item}),
     do:
-      "the item is not agents, models, workflows, workspaces or auth .<name>, policy or access, " <>
+      "the item is not agents, models, workflows, workspaces, auth or secrets .<name>, policy or access, " <>
         "with a JSON table or null"
 
   def format_error({:tool_failed, output}), do: output

@@ -2,7 +2,8 @@ defmodule Omunculus.Tools.Configure do
   @moduledoc """
   Builtin `configure` tool: writes one item of the project's TOML through
   `Omunculus.Config.edit/5`. `item` is `<section>.<name>` (`agents`,
-  `models`, `workflows`, `workspaces`, `auth`) or `policy` / `access`;
+  `models`, `workflows`, `workspaces`, `auth`, `secrets`) or `policy` /
+  `access`;
   `value` is its table in JSON, or `null` to remove it; `from`, an item
   of the same section renamed to it. The file must still be at
   `revision`, the one `config` printed, and the result must load;

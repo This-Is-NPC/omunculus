@@ -122,7 +122,9 @@ the workspace until a grant.
 A grant does not change the policy of a run already open; only the
 next run receives the new policy. Network access does not provide credentials, host environment
 variables, home directories, SSH agents, desktop sockets, or write access
-outside the workspace.
+outside the workspace. A tool's own credentials come only from the
+secrets the config binds to it ([Tool secrets](config.md#tool-secrets)),
+and only its process receives them.
 
 The JavaScript coordinator has no direct workspace, network, environment
 or process access. It can only call the tools authorized for this run.

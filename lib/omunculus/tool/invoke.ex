@@ -23,17 +23,25 @@ defmodule Omunculus.Tool.Invoke do
   @spec call(Manifest.t(), map) :: {:ok, out} | {:error, term}
   def call(manifest, input), do: call(manifest, input, nil)
 
-  @spec call(Manifest.t(), map, Policy.t() | nil) :: {:ok, out} | {:error, term}
-  def call(%Manifest{mcp: mcp} = manifest, input, %Policy{} = execution) when not is_nil(mcp) do
-    with {:ok, result} <- Mcp.call(mcp, manifest.name, input.args, execution) do
+  @doc """
+  Calls the tool `manifest` with `input`. A `command` tool or an MCP
+  server runs under `execution`, and its process alone receives `secrets`.
+  """
+  @spec call(Manifest.t(), map, Policy.t() | nil, %{String.t() => String.t()}) ::
+          {:ok, out} | {:error, term}
+  def call(manifest, input, execution, secrets \\ %{})
+
+  def call(%Manifest{mcp: mcp} = manifest, input, %Policy{} = execution, secrets)
+      when not is_nil(mcp) do
+    with {:ok, result} <- Mcp.call(mcp, manifest.name, input.args, execution, secrets) do
       validate(%{"ok" => result.ok, "output" => result.output, "emit" => result.emit})
     end
   end
 
-  def call(%Manifest{mcp: mcp}, _input, nil) when not is_nil(mcp),
+  def call(%Manifest{mcp: mcp}, _input, nil, _secrets) when not is_nil(mcp),
     do: {:error, :execution_context_required}
 
-  def call(%Manifest{module: module}, input, execution) when is_binary(module) do
+  def call(%Manifest{module: module}, input, execution, _secrets) when is_binary(module) do
     with {:ok, mod} <- resolve_module(module) do
       case run_module(mod, input, execution) do
         {:error, _reason} = error -> error
@@ -42,9 +50,9 @@ defmodule Omunculus.Tool.Invoke do
     end
   end
 
-  def call(%Manifest{command: command} = manifest, input, %Policy{} = execution)
+  def call(%Manifest{command: command} = manifest, input, %Policy{} = execution, secrets)
       when is_list(command) do
-    with {:ok, command} <- external_command(manifest, command, execution) do
+    with {:ok, command} <- external_command(manifest, command, execution, secrets) do
       case Execution.run(command, execution, Jason.encode!(input)) do
         {:ok, %{stdout: stdout}} -> decode(stdout)
         {:error, {:exit, status, _stdout, stderr}} -> {:error, {:exit, status, stderr}}
@@ -53,7 +61,7 @@ defmodule Omunculus.Tool.Invoke do
     end
   end
 
-  def call(%Manifest{command: command}, _input, nil) when is_list(command),
+  def call(%Manifest{command: command}, _input, nil, _secrets) when is_list(command),
     do: {:error, :execution_context_required}
 
   defp run_module(module, input, %Policy{} = execution) do
@@ -81,13 +89,14 @@ defmodule Omunculus.Tool.Invoke do
     ArgumentError -> {:error, {:no_module, module}}
   end
 
-  defp external_command(%Manifest{dir: dir}, [program | args], policy) do
+  defp external_command(%Manifest{dir: dir}, [program | args], policy, secrets) do
     with {:ok, executable} <- executable(dir, program, policy),
          {:ok, command} <-
            Command.new(
              "/usr/bin/sh",
              ["-c", policy.sandbox.exec, "omunculus-tool", executable | args],
-             cwd: dir
+             cwd: dir,
+             secrets: secrets
            ) do
       {:ok, command}
     end

@@ -29,7 +29,7 @@ defmodule Omunculus.Harness do
   request.
   """
 
-  alias Omunculus.{Ceiling, Config, Cycle, Project, Store}
+  alias Omunculus.{Ceiling, Config, Cycle, Project, Secrets, Store}
   alias Omunculus.Execution.Policy
   alias Omunculus.Store.Actions.Requests
   alias Omunculus.Tool.{Catalog, Invoke, Manifest, Overrides, Views}
@@ -208,7 +208,7 @@ defmodule Omunculus.Harness do
   # snapshot; outside a run only the policy and workspace layers apply.
   defp catalog(project, run, config, workspace, execution) do
     config.tools
-    |> Catalog.discover(config.mcp, execution)
+    |> Catalog.discover(config.mcp, execution, &Secrets.resolve(config, &1.secrets))
     |> Overrides.apply(run_overrides(project, run, config, workspace))
   end
 
@@ -544,7 +544,12 @@ defmodule Omunculus.Harness do
         config_path: env.project.config_path
       }
 
-      Invoke.call(manifest, input, execution)
+      # A secret goes to the tool's process alone, and out of what it returns.
+      with {:ok, secrets} <- Secrets.for_tool(env.config, manifest) do
+        manifest
+        |> Invoke.call(input, execution, secrets)
+        |> Secrets.mask(secrets)
+      end
     end
   end
 

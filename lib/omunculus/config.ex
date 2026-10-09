@@ -11,7 +11,8 @@ defmodule Omunculus.Config do
   last_run_output_bytes` and `tool_output_bytes`, each agent's ceiling layer, the named `[models.<name>]`
   adapters, the named workflows under `[workflows.<name>]` (spec §3.4),
   the MCP servers under `[[mcp.servers]]` (spec §8.7), the `[auth]`
-  providers (spec §11.1), the required `[execution]` and `[store]`
+  providers (spec §11.1), the `[secrets.<tool>]` binding each secret a
+  tool's process receives to one of those providers, the required `[execution]` and `[store]`
   tables. Every ceiling layer, and a workflow, may carry per-tool
   `overrides` (`Omunculus.Tool.Overrides`); a workflow's fold into each
   of its steps beneath the step's own. It also grants a permanent ceiling
@@ -49,6 +50,7 @@ defmodule Omunculus.Config do
     :store,
     :auth,
     :access,
+    :secrets,
     :data
   ]
   defstruct @enforce_keys
@@ -70,7 +72,12 @@ defmodule Omunculus.Config do
           overlay: map,
           resolved: t() | nil
         }
-  @type mcp_server :: %{name: String.t(), command: [String.t()], protocol_version: String.t()}
+  @type mcp_server :: %{
+          name: String.t(),
+          command: [String.t()],
+          protocol_version: String.t(),
+          secrets: %{String.t() => String.t()}
+        }
   @type sandbox :: %{
           script: String.t(),
           command: [String.t()],
@@ -112,6 +119,7 @@ defmodule Omunculus.Config do
           store: %{path: String.t()},
           auth: %{store: String.t() | nil, providers: %{String.t() => map}},
           access: map | nil,
+          secrets: %{String.t() => %{String.t() => String.t()}},
           data: map
         }
 
@@ -131,7 +139,7 @@ defmodule Omunculus.Config do
   )
   @known_execution_resources ~w(sandbox.write sandbox.network)
   @sandbox_keys ~w(script command runner exec)
-  @mcp_server_keys ~w(name command protocol_version)
+  @mcp_server_keys ~w(name command protocol_version secrets)
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
   @policy_extra_keys ~w(depth workflow workspace assemble max_retries last_run_output_bytes tool_output_bytes)
@@ -143,7 +151,7 @@ defmodule Omunculus.Config do
   @step_extra_keys ~w(name agent)
   # What a client edits, item by item; the process's own tables (project,
   # execution, store, tools, mcp) and `[auth] store` stay in the file alone.
-  @named_items ~w(agents models workflows workspaces auth)
+  @named_items ~w(agents models workflows workspaces auth secrets)
   @single_items ~w(policy access)
 
   @spec load(String.t()) :: {:ok, t} | {:error, term}
@@ -303,8 +311,8 @@ defmodule Omunculus.Config do
 
   @doc """
   What a client edits of the TOML at `path`: `document`, its `agents`,
-  `models`, `workflows`, `workspaces` and `auth` providers by name and
-  its `policy` and `access` tables, as the file writes them but for the
+  `models`, `workflows`, `workspaces`, `auth` providers and tool
+  `secrets` by name and its `policy` and `access` tables, as the file writes them but for the
   key a provider writes literally, which stays in the file and is named in
   `literal_keys`; and `revision`, the SHA-256 of the file's bytes, in hex.
   """
@@ -548,7 +556,8 @@ defmodule Omunculus.Config do
              "models",
              "store",
              "auth",
-             "access"
+             "access",
+             "secrets"
            ] do
       [key | _] ->
         {:error, {:unknown_key, key}}
@@ -570,7 +579,8 @@ defmodule Omunculus.Config do
               max_retries, last_run_output_bytes,
               tool_output_bytes} <-
                parse_policy(Map.get(data, "policy", %{}), workflows, workspaces),
-             {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{})),
+             {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{}), auth),
+             {:ok, secrets} <- parse_secrets(Map.get(data, "secrets", %{}), auth),
              {:ok, tools} <- parse_tools(Map.get(data, "tools"), config_dir) do
           if map_size(agents) == 0 do
             {:error, :no_agents}
@@ -597,6 +607,7 @@ defmodule Omunculus.Config do
               store: store,
               auth: auth,
               access: access,
+              secrets: secrets,
               data: data
             }
 
@@ -917,27 +928,27 @@ defmodule Omunculus.Config do
     end
   end
 
-  defp parse_mcp(data) when is_map(data) do
+  defp parse_mcp(data, auth) when is_map(data) do
     case Map.keys(data) -- ["servers"] do
       [key | _] -> {:error, {:mcp, {:unknown_key, key}}}
-      [] -> parse_mcp_servers(Map.get(data, "servers", []))
+      [] -> parse_mcp_servers(Map.get(data, "servers", []), auth)
     end
   end
 
-  defp parse_mcp(_data), do: {:error, {:mcp, {:invalid, :servers}}}
+  defp parse_mcp(_data, _auth), do: {:error, {:mcp, {:invalid, :servers}}}
 
-  defp parse_mcp_servers(servers) when is_list(servers) do
+  defp parse_mcp_servers(servers, auth) when is_list(servers) do
     Enum.reduce_while(servers, {:ok, []}, fn server, {:ok, acc} ->
-      case parse_mcp_server(server, acc) do
+      case parse_mcp_server(server, acc, auth) do
         {:ok, server} -> {:cont, {:ok, acc ++ [server]}}
         {:error, _reason} = error -> {:halt, error}
       end
     end)
   end
 
-  defp parse_mcp_servers(_servers), do: {:error, {:mcp, {:invalid, :servers}}}
+  defp parse_mcp_servers(_servers, _auth), do: {:error, {:mcp, {:invalid, :servers}}}
 
-  defp parse_mcp_server(data, acc) when is_map(data) do
+  defp parse_mcp_server(data, acc, auth) when is_map(data) do
     case Map.keys(data) -- @mcp_server_keys do
       [key | _] ->
         {:error, {:mcp, {:unknown_key, key}}}
@@ -946,13 +957,53 @@ defmodule Omunculus.Config do
         with {:ok, name} <- mcp_string(data, "name"),
              :ok <- check_unique_mcp_name(acc, name),
              {:ok, command} <- mcp_command(data),
-             {:ok, protocol_version} <- mcp_string(data, "protocol_version") do
-          {:ok, %{name: name, command: command, protocol_version: protocol_version}}
+             {:ok, protocol_version} <- mcp_string(data, "protocol_version"),
+             {:ok, secrets} <- secret_binding(Map.get(data, "secrets", %{}), auth) do
+          {:ok,
+           %{name: name, command: command, protocol_version: protocol_version, secrets: secrets}}
+        else
+          {:error, {:mcp, _reason}} = error -> error
+          {:error, reason} -> {:error, {:mcp, name_of(data), reason}}
         end
     end
   end
 
-  defp parse_mcp_server(_data, _acc), do: {:error, {:mcp, {:invalid, :servers}}}
+  defp parse_mcp_server(_data, _acc, _auth), do: {:error, {:mcp, {:invalid, :servers}}}
+
+  defp name_of(data), do: Map.get(data, "name")
+
+  # `[secrets.<tool>]`: each name a tool's process receives, bound to the
+  # `[auth]` provider whose credential it is.
+  defp parse_secrets(data, auth) when is_map(data) do
+    Enum.reduce_while(data, {:ok, %{}}, fn {tool, binding}, {:ok, acc} ->
+      case secret_binding(binding, auth) do
+        {:ok, binding} -> {:cont, {:ok, Map.put(acc, tool, binding)}}
+        {:error, reason} -> {:halt, {:error, {:secrets, tool, reason}}}
+      end
+    end)
+  end
+
+  defp parse_secrets(_data, _auth), do: {:error, {:secrets, {:invalid, :table}}}
+
+  defp secret_binding(binding, auth) when is_map(binding) do
+    Enum.reduce_while(binding, {:ok, %{}}, fn {name, provider}, {:ok, acc} ->
+      cond do
+        not Omunculus.Execution.Command.secret_name?(name) ->
+          {:halt, {:error, {:invalid_secret_name, name}}}
+
+        not is_binary(provider) ->
+          {:halt, {:error, {:invalid, :secrets}}}
+
+        true ->
+          case validate_model_provider(provider, auth) do
+            :ok -> {:cont, {:ok, Map.put(acc, name, provider)}}
+            {:error, _reason} = error -> {:halt, error}
+          end
+      end
+    end)
+  end
+
+  defp secret_binding(_binding, _auth), do: {:error, {:invalid, :secrets}}
 
   defp check_unique_mcp_name(acc, name) do
     if Enum.any?(acc, &(&1.name == name)),

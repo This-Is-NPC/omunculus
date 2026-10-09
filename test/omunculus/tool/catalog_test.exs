@@ -269,7 +269,8 @@ defmodule Omunculus.Tool.CatalogTest do
     @mcp_server %{
       name: "fake",
       command: [Path.expand("test/support/mcp_server")],
-      protocol_version: "2025-03-26"
+      protocol_version: "2025-03-26",
+      secrets: %{}
     }
 
     test "a server's tools/list becomes names in the catalog, tagged and carrying the server", %{
@@ -283,6 +284,20 @@ defmodule Omunculus.Tool.CatalogTest do
       assert echo.mcp == @mcp_server
       assert echo.dir == nil
       assert shout.description == "Upper-cases text"
+    end
+
+    test "a server that binds secrets is asked with what they resolve to, and skipped without", %{
+      project_dir: project_dir
+    } do
+      keyed = Map.put(@mcp_server, :secrets, %{"GITHUB_TOKEN" => "gh"})
+      resolve = fn server -> {:ok, Map.new(server.secrets, fn {name, _gh} -> {name, "v"} end)} end
+
+      assert %{"echo" => echo} =
+               Catalog.discover(tools(project_dir), [keyed], mcp_policy(), resolve)
+
+      assert echo.secrets == ["GITHUB_TOKEN"]
+
+      refute Map.has_key?(Catalog.discover(tools(project_dir), [keyed], mcp_policy()), "echo")
     end
 
     test "an MCP tool wins over a path tool of the same name", %{project_dir: project_dir} do
@@ -319,7 +334,8 @@ defmodule Omunculus.Tool.CatalogTest do
       broken = %{
         name: "broken",
         command: ["definitely-not-a-real-binary-xyz"],
-        protocol_version: "2025-03-26"
+        protocol_version: "2025-03-26",
+        secrets: %{}
       }
 
       write_tool(project_dir, "read", """

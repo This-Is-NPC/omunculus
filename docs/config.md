@@ -81,10 +81,43 @@ is looked up among the package's own `priv/tools` folders, and used when
 its `triggers` include that trigger. A name in the ceiling that is not in
 the catalog is blocked.
 
-`[[mcp.servers]]` is `name`, `command` and `protocol_version` per server.
+`[[mcp.servers]]` is `name`, `command` and `protocol_version` per server,
+and an optional `secrets` table binding the variables its process
+receives to `[auth]` providers, as `[secrets.<tool>]` does for a tool.
 The version goes on `initialize`. There is no global protocol constant.
-MCP discovery runs in a restricted sandbox; a server that fails to list
-is skipped and logged, not fatal to the run.
+MCP discovery runs in a restricted sandbox; a server that fails to list,
+or whose secrets do not resolve, is skipped and logged, not fatal to the
+run.
+
+## Tool secrets
+
+A `command` tool's manifest declares the secrets its process needs
+(`secrets = ["GH_TOKEN"]`); the config binds each to the `[auth]`
+provider whose credential it is:
+
+```toml
+[auth.github]
+kind = "api_key"
+key = "!omapass get -- dev/github"
+
+[secrets.gh]
+GH_TOKEN = "github"
+
+[[mcp.servers]]
+name = "github"
+command = ["github-mcp-server", "stdio"]
+protocol_version = "2025-03-26"
+secrets = { GITHUB_PERSONAL_ACCESS_TOKEN = "github" }
+```
+
+A provider resolves as a model's does: `$VAR`, `!cmd`, a literal, or a
+stored login. A provider `[auth]` lacks does not load. A declared name
+left unbound, or a bound name the tool does not declare, refuses the
+call. The value reaches only that tool's process, as the read-only file
+`/run/secrets/<NAME>` named by `<NAME>_FILE`, removed when the process
+ends; it never enters the execution policy, the store or the events,
+and what the call returns has it masked as `***`. `[execution]
+environment` stays what every process of a run receives.
 
 ## Models and auth
 

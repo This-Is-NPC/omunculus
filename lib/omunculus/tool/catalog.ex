@@ -9,7 +9,7 @@ defmodule Omunculus.Tool.Catalog do
 
   require Logger
 
-  alias Omunculus.Mcp
+  alias Omunculus.{Mcp, Secrets}
   alias Omunculus.Tool.Manifest
 
   alias Omunculus.Execution.Policy
@@ -27,15 +27,22 @@ defmodule Omunculus.Tool.Catalog do
     end
   end
 
-  @spec discover(tools, [Omunculus.Config.mcp_server()], Policy.t() | nil) ::
+  @doc """
+  The catalog: the tool folders under `paths`, the tools each MCP server
+  lists, then the inline tools. A server is asked only with an execution
+  `policy`, and with the values `secrets` resolves for it: a fun from the
+  server to `{:ok, values}` or `{:error, reason}`; without one, a server
+  that binds secrets is skipped.
+  """
+  @spec discover(tools, [Omunculus.Config.mcp_server()], Policy.t() | nil, fun | nil) ::
           %{String.t() => Manifest.t()}
-  def discover(tools, servers \\ [], policy \\ nil)
+  def discover(tools, servers \\ [], policy \\ nil, secrets \\ nil)
 
-  def discover(%{paths: paths, inline: inline}, servers, policy)
+  def discover(%{paths: paths, inline: inline}, servers, policy, secrets)
       when is_list(paths) and is_map(inline) do
     %{}
     |> discover_folders(paths)
-    |> discover_mcp(servers, policy)
+    |> discover_mcp(servers, policy, secrets)
     |> Map.merge(inline)
   end
 
@@ -49,20 +56,34 @@ defmodule Omunculus.Tool.Catalog do
     end)
   end
 
-  defp discover_mcp(acc, [], _policy), do: acc
+  defp discover_mcp(acc, [], _policy, _secrets), do: acc
 
-  defp discover_mcp(acc, servers, %Policy{} = policy) do
+  defp discover_mcp(acc, servers, %Policy{} = policy, secrets) do
     Enum.reduce(servers, acc, fn server, acc ->
-      case Mcp.list_tools(server, policy) do
-        {:ok, tools} -> Enum.reduce(tools, acc, &Map.put(&2, &1.name, to_manifest(&1, server)))
+      with {:ok, values} <- server_secrets(server, secrets),
+           {:ok, tools} <- listed(server, policy, values) do
+        Enum.reduce(tools, acc, &Map.put(&2, &1.name, to_manifest(&1, server)))
+      else
         {:error, reason} -> log_skip_mcp(server.name, reason) && acc
       end
     end)
   end
 
-  defp discover_mcp(acc, servers, nil) do
+  defp discover_mcp(acc, servers, nil, _secrets) do
     Enum.each(servers, &log_skip_mcp(&1.name, :execution_context_required))
     acc
+  end
+
+  defp server_secrets(%{secrets: binding}, _secrets) when map_size(binding) == 0, do: {:ok, %{}}
+  defp server_secrets(_server, nil), do: {:error, :secrets_unresolved}
+  defp server_secrets(server, secrets), do: secrets.(server)
+
+  # What fails is logged; a secret the server printed is not.
+  defp listed(server, policy, values) do
+    case Mcp.list_tools(server, policy, values) do
+      {:ok, tools} -> {:ok, tools}
+      {:error, reason} -> {:error, Secrets.mask(reason, values)}
+    end
   end
 
   defp to_manifest(tool, server) do
@@ -77,6 +98,7 @@ defmodule Omunculus.Tool.Catalog do
       command: nil,
       module: nil,
       dir: nil,
+      secrets: Map.keys(server.secrets),
       mcp: server
     }
   end

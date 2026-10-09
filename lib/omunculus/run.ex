@@ -32,7 +32,7 @@ defmodule Omunculus.Run do
   (no named agent) does not open once its work is no longer open.
   """
 
-  alias Omunculus.{Ceiling, Config, Cycle, Harness, Mcp, Project, Store}
+  alias Omunculus.{Ceiling, Config, Cycle, Harness, Mcp, Project, Secrets, Store}
   alias Omunculus.Execution.{Limiter, Policy}
   alias Omunculus.Tool.{Catalog, Overrides}
   alias Omunculus.Tools.Out
@@ -132,7 +132,13 @@ defmodule Omunculus.Run do
          mcp_roots = Mcp.implementation_roots(config.mcp),
          {:ok, discovery} <-
            Policy.discovery(config, discovery_snapshot, workspace, project.dir, mcp_roots),
-         catalog = Catalog.discover(config.tools, config.mcp, discovery),
+         catalog =
+           Catalog.discover(
+             config.tools,
+             config.mcp,
+             discovery,
+             &Secrets.resolve(config, &1.secrets)
+           ),
          snapshot =
            Ceiling.mount(
              config,

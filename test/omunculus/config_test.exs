@@ -1345,7 +1345,8 @@ defmodule Omunculus.ConfigTest do
                %{
                  name: "github",
                  command: ["npx", "-y", "@modelcontextprotocol/server-github"],
-                 protocol_version: "2025-03-26"
+                 protocol_version: "2025-03-26",
+                 secrets: %{}
                }
              ]
     end

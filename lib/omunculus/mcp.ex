@@ -1,29 +1,31 @@
 defmodule Omunculus.Mcp do
   @moduledoc """
   Exchanges JSON-RPC messages with one MCP server through the execution
-  transport. Every discovery and call owns a short-lived sandboxed session.
+  transport. Every discovery and call owns a short-lived sandboxed session,
+  whose process alone receives the server's resolved secrets.
   """
 
   alias Omunculus.Execution
   alias Omunculus.Execution.{Command, Policy}
   alias Omunculus.Path, as: FilesystemPath
 
-  @type server :: %{name: String.t(), command: [String.t()], protocol_version: String.t()}
+  @type server :: Omunculus.Config.mcp_server()
+  @type secrets :: %{String.t() => String.t()}
 
-  @spec list_tools(server, Policy.t()) ::
+  @spec list_tools(server, Policy.t(), secrets) ::
           {:ok, [%{name: String.t(), description: String.t(), parameters: map}]} | {:error, term}
-  def list_tools(server, %Policy{} = policy) do
-    with_session(server, policy, fn state ->
+  def list_tools(server, %Policy{} = policy, secrets) do
+    with_session(server, policy, secrets, fn state ->
       with {:ok, result, _state} <- request(state, "tools/list", %{}) do
         {:ok, result |> Map.get("tools", []) |> Enum.map(&to_tool/1)}
       end
     end)
   end
 
-  @spec call(server, String.t(), map, Policy.t()) ::
+  @spec call(server, String.t(), map, Policy.t(), secrets) ::
           {:ok, %{ok: boolean, output: String.t(), emit: []}} | {:error, term}
-  def call(server, name, args, %Policy{} = policy) do
-    with_session(server, policy, fn state ->
+  def call(server, name, args, %Policy{} = policy, secrets) do
+    with_session(server, policy, secrets, fn state ->
       with {:ok, result, _state} <- request(state, "tools/call", %{name: name, arguments: args}) do
         {:ok, to_call_result(result)}
       end
@@ -38,8 +40,8 @@ defmodule Omunculus.Mcp do
     |> Enum.sort()
   end
 
-  defp with_session(server, policy, fun) do
-    with {:ok, command} <- command(server, policy) do
+  defp with_session(server, policy, secrets, fun) do
+    with {:ok, command} <- command(server, policy, secrets) do
       case Execution.start(command, policy) do
         {:ok, handle} ->
           try do
@@ -59,19 +61,20 @@ defmodule Omunculus.Mcp do
     end
   end
 
-  defp command(%{command: [program | args]}, policy) do
+  defp command(%{command: [program | args]}, policy, secrets) do
     with {:ok, executable} <- executable(program, policy),
          {:ok, command} <-
            Command.new(
              "/usr/bin/sh",
              ["-c", policy.sandbox.exec, "omunculus-mcp", executable | args],
-             cwd: Path.dirname(executable)
+             cwd: Path.dirname(executable),
+             secrets: secrets
            ) do
       {:ok, command}
     end
   end
 
-  defp command(_server, _policy), do: {:error, :invalid_command}
+  defp command(_server, _policy, _secrets), do: {:error, :invalid_command}
 
   defp initialize(state) do
     with {:ok, _result, state} <-

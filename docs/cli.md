@@ -126,8 +126,8 @@ Print the project's setup as one JSON object, for a client to show: its
 `api`, `provider`, `model`, and nothing else of their tables),
 `workspaces` (name, root), the default `workspace`, and `workflows` with
 their steps. For an editor it adds `document`: the `agents`, `models`,
-`workflows`, `workspaces` and `auth` providers by name and the `policy`
-and `access` tables, as the file writes them, but for a provider's
+`workflows`, `workspaces`, `auth` providers and tool `secrets` by name
+and the `policy` and `access` tables, as the file writes them, but for a provider's
 literal `key`, which stays in the file; `literal_keys` names the
 providers that have one. It adds `revision`, the SHA-256 of the file's
 bytes, and `names`, what a ceiling list may hold: the model tools, their
@@ -141,7 +141,8 @@ socket runs it through `POST /v1/cli`.
 - **Effect:** rewrites `omunculus.toml`
 
 Write one item: `agents.<name>`, `models.<name>`, `workflows.<name>`,
-`workspaces.<name>` or `auth.<name>` as the JSON table `value`, or
+`workspaces.<name>`, `auth.<name>` or `secrets.<tool>` as the JSON table
+`value`, or
 `policy` / `access` whole; `null` removes it. `from` names an item of the
 same section removed in the same write, which renames it. A provider
 written without a `key` keeps the literal key the file holds for it.

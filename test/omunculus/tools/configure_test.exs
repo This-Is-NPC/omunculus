@@ -95,6 +95,17 @@ defmodule Omunculus.Tools.ConfigureTest do
     assert Toml.decode_file!(ctx.path)["auth"]["remote"]["key"] == "!pass"
   end
 
+  test "binds a tool's secrets to a provider", ctx do
+    File.write!(ctx.path, "\n[auth]\nstore = \"auth.json\"\n", [:append])
+    assert {:ok, ""} = configure(ctx.dir, "auth.gh", %{"kind" => "api_key", "key" => "$GH_TOKEN"})
+    assert {:ok, ""} = configure(ctx.dir, "secrets.github", %{"GH_TOKEN" => "gh"})
+    assert Toml.decode_file!(ctx.path)["secrets"] == %{"github" => %{"GH_TOKEN" => "gh"}}
+    assert read(ctx.dir)["document"]["secrets"] == %{"github" => %{"GH_TOKEN" => "gh"}}
+
+    assert {:error, {:tool_failed, _unknown_provider}} =
+             configure(ctx.dir, "secrets.github", %{"GH_TOKEN" => "missing"})
+  end
+
   test "refuses a file changed since it was read", ctx do
     revision = read(ctx.dir)["revision"]
     File.write!(ctx.path, File.read!(ctx.path) <> "\n")
@@ -119,7 +130,7 @@ defmodule Omunculus.Tools.ConfigureTest do
   test "refuses an item it does not edit, a null inside a table and text that is not JSON",
        ctx do
     message =
-      "the item is not agents, models, workflows, workspaces or auth .<name>, policy or access, " <>
+      "the item is not agents, models, workflows, workspaces, auth or secrets .<name>, policy or access, " <>
         "with a JSON table or null"
 
     for {item, value} <- [

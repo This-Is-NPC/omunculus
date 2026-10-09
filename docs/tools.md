@@ -96,6 +96,23 @@ whichever schema the model saw.
 The next run that walks `[tools] paths` sees the folder. Builtin tools
 may be an Elixir `module` returning the same `out`.
 
+A `command` tool that authenticates declares the secrets its process
+needs, by the name of a variable:
+
+```toml
+secrets = ["GH_TOKEN"]
+```
+
+The config binds each to an `[auth]` provider in `[secrets.<tool>]`
+([Tool secrets](config.md#tool-secrets)). Before the process starts the
+harness resolves the value and the sandbox hands it to that process alone,
+as the read-only file `/run/secrets/GH_TOKEN`, which `GH_TOKEN_FILE`
+names; a tool whose program wants a variable reads the file in its own
+`run` script (`GH_TOKEN=$(cat "$GH_TOKEN_FILE") exec gh …`). The value is
+masked as `***` in what the call returns, its emits and its errors before
+anything is recorded, so the model never reads it. A module tool runs
+inside the harness and declares none.
+
 A tool that works in steps, like `compact_comments` (`load` then
 `commit`), takes the step as an argument of its own schema. The harness
 sees two calls of the same `name`.

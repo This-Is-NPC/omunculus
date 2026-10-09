@@ -5,9 +5,13 @@ defmodule Omunculus.Tool.Manifest do
   going through `load/1`. `chains` lists the tools this one may chain and
   `then` the ones chained after its `out.chain`; every name in `then` is in
   `chains` and `end`, when present, is the last of `then`. `views` are the
-  `[views.<key>]` tables `Omunculus.Tool.Views` parses.
+  `[views.<key>]` tables `Omunculus.Tool.Views` parses. `secrets` names
+  the secrets a `command` tool's process receives, each bound to an
+  `[auth]` provider in the config's `[secrets.<tool>]`; an MCP entry names
+  those its server's `secrets` binds.
   """
 
+  alias Omunculus.Execution.Command
   alias Omunculus.Tool.Views
 
   @enforce_keys [:name, :kind, :dir]
@@ -25,6 +29,7 @@ defmodule Omunculus.Tool.Manifest do
             events: [],
             chains: [],
             then: [],
+            secrets: [],
             agent: nil,
             dir: nil,
             mcp: nil,
@@ -45,13 +50,14 @@ defmodule Omunculus.Tool.Manifest do
           events: [String.t()],
           chains: [String.t()],
           then: [String.t()],
+          secrets: [String.t()],
           agent: String.t() | nil,
           dir: String.t() | nil,
           mcp: Omunculus.Config.mcp_server() | nil,
           config: boolean
         }
 
-  @known_keys ~w(name kind triggers description tags groups command module parameters schemas views events chains then agent config)
+  @known_keys ~w(name kind triggers description tags groups command module parameters schemas views events chains then secrets agent config)
 
   @spec load(String.t()) :: {:ok, t} | {:error, term}
   def load(path) do
@@ -112,6 +118,7 @@ defmodule Omunculus.Tool.Manifest do
          {:ok, chains} <- optional_string_list(raw, "chains", []),
          {:ok, then} <- optional_string_list(raw, "then", []),
          :ok <- validate_then(then, chains),
+         {:ok, secrets} <- secrets(raw, command),
          {:ok, {triggers, events, agent}} <- kind_fields(raw, kind),
          {:ok, config} <- optional_bool(raw, "config", true),
          :ok <- check_config_flag(name, kind, triggers, config) do
@@ -131,10 +138,23 @@ defmodule Omunculus.Tool.Manifest do
          events: events,
          chains: chains,
          then: then,
+         secrets: secrets,
          agent: agent,
          dir: dir,
          config: config
        }}
+    end
+  end
+
+  # Only an external command runs as a process a secret can be handed to.
+  defp secrets(raw, command) do
+    with {:ok, names} <- optional_string_list(raw, "secrets", []) do
+      cond do
+        names == [] -> {:ok, []}
+        is_nil(command) -> {:error, {:invalid, :secrets}}
+        Enum.all?(names, &Command.secret_name?/1) -> {:ok, Enum.uniq(names)}
+        true -> {:error, {:invalid, :secrets}}
+      end
     end
   end
 
