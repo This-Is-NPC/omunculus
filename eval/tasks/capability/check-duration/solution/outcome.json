@@ -1,0 +1,5 @@
+{
+  "outcome": "done",
+  "report": "parse_duration counted a minute as 3600 seconds; it is 60 now, and the three cases hold.",
+  "delete": []
+}
