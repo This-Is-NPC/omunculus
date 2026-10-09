@@ -75,6 +75,7 @@ defmodule EquivalentExchange.Runner do
       )
     end)
 
+    EquivalentExchange.Report.write(folder)
     {:ok, folder}
   end
 

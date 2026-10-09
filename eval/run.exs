@@ -2,8 +2,10 @@
 #   selftest   prove every task's check against its solution
 #   run        run the suite: --model luna --k 2 --label <name> [--task <part>]...
 #              [--configuration <name>]... [--timeout <seconds>]
-#   score      score again every execution of a result folder
-for file <- ~w(project task score selftest runner),
+#   score      score again every execution of a result folder, then its report
+#   report     write a result folder's summary, report and comparison
+#   compare    compare two result folders, the earlier first
+for file <- ~w(project task score report selftest runner),
     do: Code.require_file("lib/#{file}.ex", __DIR__)
 
 case System.argv() do
@@ -40,9 +42,20 @@ case System.argv() do
       File.write!(path, Jason.encode!(scored, pretty: true))
     end
 
+    EquivalentExchange.Report.write(folder)
     IO.puts(folder)
 
+  ["report", folder] ->
+    EquivalentExchange.Report.write(folder)
+    IO.puts(Path.join(folder, "report.md"))
+
+  ["compare", before, now] ->
+    IO.puts(EquivalentExchange.Report.compare_folders(before, now))
+
   _other ->
-    IO.puts("usage: mix run eval/run.exs selftest | run [options] | score <folder>")
+    IO.puts(
+      "usage: mix run eval/run.exs selftest | run [options] | score <folder> | report <folder> | compare <before> <now>"
+    )
+
     System.halt(1)
 end

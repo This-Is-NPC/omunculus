@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Equivalent Exchange: compare two result folders (mise run eval:compare -- <before> <now>)"
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+exec mix run eval/run.exs compare "$@"
