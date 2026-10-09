@@ -3,8 +3,9 @@ defmodule Omunculus.Model.AnthropicMessages do
   Factory for an Anthropic Messages model of the contract of spec §8.6:
   `new/1` takes the `[models.<name>]` spec (`url`, `model`, `timeout_ms`,
   optional `temperature`, `headers`, `body`, `credential`) and returns a 6-arity
-  `(assembled, tools, call, record, delta, execution)` fun. Posts the assembled
-  as `system` to `<url>/messages` with tools as Anthropic `input_schema`
+  `(prompt, tools, call, record, delta, execution)` fun. Posts the prompt's
+  instructions as `system`, marked for the server's cache, and its context
+  as the first user turn to `<url>/messages` with tools as Anthropic `input_schema`
   items, runs each `tool_use` through `call.(name, args)`, appends a
   `tool_result` user turn, and loops until a reply has none.
   `__omunculus_execute` is the same sandbox bridge as `Model.OpenAI`.
@@ -15,9 +16,10 @@ defmodule Omunculus.Model.AnthropicMessages do
   """
 
   alias Omunculus.Model.{Body, EventStream}
+  alias Omunculus.Prompt
 
   @spec new(map) ::
-          (String.t(),
+          (Prompt.t(),
            [map],
            (String.t(), map -> {:ok, String.t()} | {:error, term}),
            (map -> :ok | {:error, term}),
@@ -35,14 +37,14 @@ defmodule Omunculus.Model.AnthropicMessages do
       body: spec["body"] || %{}
     }
 
-    fn assembled, tools, call, record, delta, execution ->
+    fn %Prompt{} = prompt, tools, call, record, delta, execution ->
       function_tools = Enum.map(tools, &anthropic_tool/1) ++ [executor_tool()]
 
       loop(
         Map.put(client, :delta, delta),
-        assembled,
+        system(prompt.instructions),
         function_tools,
-        [%{role: "user", content: "Proceed."}],
+        [%{role: "user", content: prompt.context}],
         call,
         record,
         tools,
@@ -50,6 +52,12 @@ defmodule Omunculus.Model.AnthropicMessages do
       )
     end
   end
+
+  # Anthropic caches only up to a marked block: the instructions end in one.
+  defp system(""), do: nil
+
+  defp system(instructions),
+    do: [%{type: "text", text: instructions, cache_control: %{type: "ephemeral"}}]
 
   defp request_headers(spec) do
     base = [
@@ -128,10 +136,10 @@ defmodule Omunculus.Model.AnthropicMessages do
     %{
       model: client.model,
       max_tokens: 8192,
-      system: system,
       messages: messages,
       tools: tools
     }
+    |> maybe_put(:system, system)
     |> maybe_put(:temperature, client.temperature)
     |> maybe_put(:stream, client.stream || nil)
     |> Body.merge(client.body)

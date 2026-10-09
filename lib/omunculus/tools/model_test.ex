@@ -11,7 +11,10 @@ defmodule Omunculus.Tools.ModelTest do
   alias Omunculus.{CLI, Config}
   alias Omunculus.Tools.Out
 
-  @prompt "This is a connection test. Reply with the single word: ok"
+  @prompt %Omunculus.Prompt{
+    instructions: "",
+    context: "This is a connection test. Reply with the single word: ok"
+  }
 
   @spec run(map) :: map
   def run(%{config_path: path, args: %{"name" => name} = args})

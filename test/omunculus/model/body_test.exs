@@ -1,7 +1,7 @@
 defmodule Omunculus.Model.BodyTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.ExecutionPolicyFixtures
+  alias Omunculus.{ExecutionPolicyFixtures, Prompt}
   alias Omunculus.Model.{AnthropicMessages, Body, OpenAI, OpenAIResponses}
 
   test "a body key replaces the request's key of the same name, and tables merge" do
@@ -31,30 +31,57 @@ defmodule Omunculus.Model.BodyTest do
         {AnthropicMessages, "messages"}
       ] do
     test "#{inspect(module)} sends its body over the request it builds" do
-      port = capture()
+      request =
+        request(unquote(module), %{"max_tokens" => 7, "reasoning" => %{"effort" => "high"}})
 
-      spec = %{
-        "url" => "http://127.0.0.1:#{port}/v1",
-        "model" => "stub",
-        "timeout_ms" => 5_000,
-        "body" => %{"max_tokens" => 7, "reasoning" => %{"effort" => "high"}}
-      }
-
-      unquote(module).new(spec).(
-        "ping",
-        [],
-        fn _name, _args -> {:ok, ""} end,
-        fn _message -> :ok end,
-        fn _text -> :ok end,
-        ExecutionPolicyFixtures.policy(Application.app_dir(:omunculus, "priv"), network: "none")
-      )
-
-      assert_receive {:request, request}, 5_000
       assert request["max_tokens"] == 7
       assert request["reasoning"] == %{"effort" => "high"}
       assert request["model"] == "stub"
       assert Map.has_key?(request, unquote(own))
     end
+  end
+
+  # A provider caches whole messages, so the instructions travel apart from
+  # the context that changes from run to run.
+  test "each adapter sends the instructions apart from the context" do
+    assert %{"messages" => [system, user]} = request(OpenAI, %{})
+    assert system == %{"role" => "system", "content" => "steady"}
+    assert user == %{"role" => "user", "content" => "ping"}
+
+    assert %{"instructions" => "steady", "input" => [%{"role" => "user", "content" => "ping"}]} =
+             request(OpenAIResponses, %{})
+
+    assert %{"system" => [block], "messages" => [%{"role" => "user", "content" => "ping"}]} =
+             request(AnthropicMessages, %{})
+
+    assert block == %{
+             "type" => "text",
+             "text" => "steady",
+             "cache_control" => %{"type" => "ephemeral"}
+           }
+  end
+
+  defp request(module, body) do
+    port = capture()
+
+    spec = %{
+      "url" => "http://127.0.0.1:#{port}/v1",
+      "model" => "stub",
+      "timeout_ms" => 5_000,
+      "body" => body
+    }
+
+    module.new(spec).(
+      %Prompt{instructions: "steady", context: "ping"},
+      [],
+      fn _name, _args -> {:ok, ""} end,
+      fn _message -> :ok end,
+      fn _text -> :ok end,
+      ExecutionPolicyFixtures.policy(Application.app_dir(:omunculus, "priv"), network: "none")
+    )
+
+    assert_receive {:request, request}, 5_000
+    request
   end
 
   # A server that takes one request, sends its JSON body to the test and

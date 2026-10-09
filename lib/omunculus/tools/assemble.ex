@@ -1,11 +1,13 @@
 defmodule Omunculus.Tools.Assemble do
   @moduledoc """
   Builtin `assemble` tool: builds the assembled prompt of a run from
-  the hydrated views. After the agent's text come the agents the
+  the hydrated views. Its `instructions` are what stays the same across
+  an agent's runs: the agent's text, the agents the
   `agents` view says a new work may name when the run has the `work`
   card, each with the tools it has that this run has not, the cards,
   which follow `pinned` on the catalog view, and, under `## Skills`, the
-  name and description of each skill the run has. Then the work's title and
+  name and description of each skill the run has. Its `output`, the
+  context, is the rest: the work's title and
   goal, its last comment, and its last closed run (`last_run`), or,
   without a work, the run that opened the run's request (`opener`), as
   `Omunculus.Tools.Record` lines without this tool's calls, each call's
@@ -26,14 +28,14 @@ defmodule Omunculus.Tools.Assemble do
   def run(%{name: name, args: args, view: view}) do
     text = Map.get(args, "text", "")
 
-    # What stays the same across an agent's runs comes first, so a server
-    # that caches the prefix of a prompt reuses it from one run to the next.
-    sections =
+    instructions =
       [String.trim(text)] ++
         agents_section(view["agents"] || [], view["catalog"] || []) ++
         [tools_section(view["catalog"] || [])] ++
-        skills_section(view["skills"] || []) ++
-        work_section(view["work"]) ++
+        skills_section(view["skills"] || [])
+
+    context =
+      work_section(view["work"]) ++
         comment_section(view["comments"]) ++
         last_run_section(view["last_run"] || view["opener"], name, args) ++
         results_section(view["results"] || [], view["cause"]) ++
@@ -41,7 +43,10 @@ defmodule Omunculus.Tools.Assemble do
         inbox_section(view, args) ++
         message_section(view["message"])
 
-    Out.ok(Enum.join(sections, "\n\n"))
+    context
+    |> Enum.join("\n\n")
+    |> Out.ok()
+    |> Map.put("instructions", Enum.join(instructions, "\n\n"))
   end
 
   defp comment_section(nil), do: []

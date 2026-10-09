@@ -37,11 +37,11 @@ defmodule Omunculus.Tool.InvokeTest do
     File.chmod!(path, 0o755)
   end
 
-  test "happy path returns ok, output and emit", %{dir: dir} do
+  test "happy path returns ok, output, emit and instructions", %{dir: dir} do
     write_run!(dir, """
     #!/bin/sh
     cat <<'JSON'
-    {"ok": true, "output": "done", "emit": [{"type": "prompt", "body": {"message": "hi"}}]}
+    {"ok": true, "output": "done", "instructions": "steady", "emit": [{"type": "prompt", "body": {"message": "hi"}}]}
     JSON
     """)
 
@@ -51,7 +51,8 @@ defmodule Omunculus.Tool.InvokeTest do
              ok: true,
              output: "done",
              emit: [%{"type" => "prompt", "body" => %{"message" => "hi"}}],
-             chain: []
+             chain: [],
+             instructions: "steady"
            }
   end
 
@@ -162,7 +163,8 @@ defmodule Omunculus.Tool.InvokeTest do
                ok: true,
                output: "",
                emit: [%{"type" => "prompt", "body" => %{"message" => "hi"}}],
-               chain: []
+               chain: [],
+               instructions: ""
              }
     end
 

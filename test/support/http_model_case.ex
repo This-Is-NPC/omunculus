@@ -101,15 +101,18 @@ defmodule Omunculus.HttpModelCase do
     %{stub: stub, base_url: stub.base_url <> "/v1"}
   end
 
-  @spec assembled() :: String.t()
+  @spec assembled() :: Omunculus.Prompt.t()
   def assembled do
-    """
-    You are the worker.
+    %Omunculus.Prompt{
+      instructions: """
+      You are the worker.
 
-    ## Tools
-    #{Out.tools_preamble()}
-    - counter: increments and returns the total
-    """
+      ## Tools
+      #{Out.tools_preamble()}
+      - counter: increments and returns the total
+      """,
+      context: "## Message\ncount"
+    }
   end
 
   @spec tools() :: [map]

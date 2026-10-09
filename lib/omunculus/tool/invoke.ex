@@ -4,7 +4,9 @@ defmodule Omunculus.Tool.Invoke do
   stdin, JSON `out` on stdout for a `command`; a `tools/call` to the MCP
   server for a manifest with `mcp` set. Either way the result goes through
   the same `validate/1`. The optional `chain` of `out` is a list of
-  `{name, args}` steps; `args` defaults to an empty map.
+  `{name, args}` steps; `args` defaults to an empty map. The optional
+  `instructions` of `out`, empty by default, is the part of a prompt the
+  tool assembles that stays the same from run to run.
   """
 
   alias Omunculus.Execution
@@ -17,7 +19,8 @@ defmodule Omunculus.Tool.Invoke do
           ok: boolean,
           output: String.t(),
           emit: [map],
-          chain: [%{name: String.t(), args: map}]
+          chain: [%{name: String.t(), args: map}],
+          instructions: String.t()
         }
 
   @spec call(Manifest.t(), map) :: {:ok, out} | {:error, term}
@@ -163,8 +166,9 @@ defmodule Omunculus.Tool.Invoke do
     with {:ok, ok} <- fetch_bool(decoded, "ok"),
          {:ok, output} <- fetch_string(decoded, "output", ""),
          {:ok, emit} <- fetch_emit(decoded),
-         {:ok, chain} <- fetch_chain(decoded) do
-      {:ok, %{ok: ok, output: output, emit: emit, chain: chain}}
+         {:ok, chain} <- fetch_chain(decoded),
+         {:ok, instructions} <- fetch_string(decoded, "instructions", "") do
+      {:ok, %{ok: ok, output: output, emit: emit, chain: chain, instructions: instructions}}
     end
   end
 

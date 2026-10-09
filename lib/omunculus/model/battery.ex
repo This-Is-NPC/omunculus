@@ -20,7 +20,7 @@ defmodule Omunculus.Model.Battery do
   @count_work %{"title" => "Count to 5", "goal" => "count with counter to 5"}
 
   @spec new(map) ::
-          (String.t(),
+          (Omunculus.Prompt.t(),
            [map],
            (String.t(), map -> {:ok, String.t()} | {:error, term}),
            (map -> :ok | {:error, term}),
@@ -28,8 +28,8 @@ defmodule Omunculus.Model.Battery do
            term ->
              {:ok, String.t()})
   def new(_spec) do
-    fn assembled, tools, call, record, _delta, _execution ->
-      with {:ok, text} <- assembled |> parse(tools) |> decide(call) do
+    fn prompt, tools, call, record, _delta, _execution ->
+      with {:ok, text} <- prompt |> Omunculus.Prompt.text() |> parse(tools) |> decide(call) do
         :ok = record.(text)
         {:ok, text}
       end

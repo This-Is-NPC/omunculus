@@ -3,9 +3,9 @@ defmodule Omunculus.Model.Command do
   Factory for a `command` model of the contract of spec §8.6: `new/1`
   takes the `[models.<name>]` spec (`command`, `model`, optional
   `params`, `credential`) and returns a 6-arity
-  `(assembled, tools, call, record, delta, execution)` fun. Starts `command`
+  `(prompt, tools, call, record, delta, execution)` fun. Starts `command`
   through `Execution` under the run's policy, writes one JSON line
-  `{assembled, tools, credential, model, params}`, then speaks the
+  `{instructions, context, tools, credential, model, params}`, then speaks the
   sandbox NDJSON protocol: the program emits `{type: call, name, args}`
   lines (optional `id`, as in `priv/sandbox.js`); each is answered and
   recorded; `{type: delta, text}` passes partial text to `delta`
@@ -16,9 +16,10 @@ defmodule Omunculus.Model.Command do
   alias Omunculus.Execution
   alias Omunculus.Execution.{Command, Policy}
   alias Omunculus.Path, as: FilesystemPath
+  alias Omunculus.Prompt
 
   @spec new(map) ::
-          (String.t(),
+          (Prompt.t(),
            [map],
            (String.t(), map -> {:ok, String.t()} | {:error, term}),
            (map -> :ok | {:error, term}),
@@ -26,12 +27,12 @@ defmodule Omunculus.Model.Command do
            Policy.t() ->
              {:ok, String.t()} | {:error, term})
   def new(spec) when is_map(spec) do
-    fn assembled, tools, call, record, delta, execution ->
-      run(spec, assembled, tools, %{call: call, record: record, delta: delta}, execution)
+    fn %Prompt{} = prompt, tools, call, record, delta, execution ->
+      run(spec, prompt, tools, %{call: call, record: record, delta: delta}, execution)
     end
   end
 
-  defp run(spec, assembled, tools, turn, %Policy{} = execution) do
+  defp run(spec, prompt, tools, turn, %Policy{} = execution) do
     argv = spec["command"]
 
     with {:ok, command} <- external_command(argv, execution) do
@@ -42,7 +43,8 @@ defmodule Omunculus.Model.Command do
           try do
             payload =
               Jason.encode!(%{
-                assembled: assembled,
+                instructions: prompt.instructions,
+                context: prompt.context,
                 tools: tools,
                 credential: credential(spec),
                 model: spec["model"],

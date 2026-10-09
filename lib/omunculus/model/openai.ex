@@ -4,11 +4,12 @@ defmodule Omunculus.Model.OpenAI do
   `new/1` takes the `[models.<name>]` spec (`url`, `model`, `timeout_ms`,
   optional `temperature`, `headers`, `body`, `prompt_cache_key`, `credential`) and
   returns a 6-arity
-  `(assembled, tools, call, record, delta, execution)` fun. Declares each of
+  `(prompt, tools, call, record, delta, execution)` fun. Declares each of
   `tools` (the run's effective tools, as `%{name, description,
   parameters}`) as a function with its real `parameters` schema — an
   empty schema becomes `%{type: "object", properties: %{}}` so servers
-  accept it — posts the assembled as the user turn to
+  accept it — posts the prompt's instructions as a `system` message and
+  its context as the user turn to
   `<url>/chat/completions`, and for every `tool_calls` entry in the
   reply runs `call.(name, args)` and feeds the output back as a `tool`
   message, looping until a reply carries no tool call. Every reply is
@@ -21,9 +22,10 @@ defmodule Omunculus.Model.OpenAI do
   """
 
   alias Omunculus.Model.{Body, EventStream}
+  alias Omunculus.Prompt
 
   @spec new(map) ::
-          (String.t(),
+          (Prompt.t(),
            [map],
            (String.t(), map -> {:ok, String.t()} | {:error, term}),
            (map -> :ok | {:error, term}),
@@ -42,13 +44,13 @@ defmodule Omunculus.Model.OpenAI do
       body: spec["body"] || %{}
     }
 
-    fn assembled, tools, call, record, delta, execution ->
+    fn prompt, tools, call, record, delta, execution ->
       function_tools = Enum.map(tools, &function_tool/1) ++ [executor_tool()]
 
       loop(
         Map.put(client, :delta, delta),
         function_tools,
-        [%{role: "user", content: assembled}],
+        messages(prompt),
         call,
         record,
         tools,
@@ -78,6 +80,14 @@ defmodule Omunculus.Model.OpenAI do
 
   defp headers_list(headers) when is_map(headers),
     do: Enum.map(headers, fn {key, value} -> {key, value} end)
+
+  # The instructions are a message of their own: a server caches whole
+  # messages, so the next run's request reuses them though its context differs.
+  defp messages(%Prompt{instructions: "", context: context}),
+    do: [%{role: "user", content: context}]
+
+  defp messages(%Prompt{instructions: instructions, context: context}),
+    do: [%{role: "system", content: instructions}, %{role: "user", content: context}]
 
   defp executor_tool do
     function_tool(%{

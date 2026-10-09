@@ -10,8 +10,9 @@ defmodule Omunculus.Run do
   runs with its stage's agent, or without a stage with its assignee. A
   named reaction agent still obeys the work's stage and workflow-only
   flags. The agent's `model` from config is constructed via `new/1`. The
-  assembled prompt is the `output` of the tool named by
-  `agents.<x>.assemble` or `[policy] assemble`. Streaming adapters
+  assembled prompt (`Omunculus.Prompt`) is the `instructions` and the
+  `output` of the tool named by `agents.<x>.assemble` or
+  `[policy] assemble`; `PROMPTS(assembled)` keeps its whole text. Streaming adapters
   record each message before tools. The run's `overrides` apply to its
   catalog before the model sees it, so the model gets each tool's
   resolved schema; an invalid override keeps the run from opening. With
@@ -32,7 +33,7 @@ defmodule Omunculus.Run do
   (no named agent) does not open once its work is no longer open.
   """
 
-  alias Omunculus.{Ceiling, Config, Cycle, Harness, Mcp, Project, Secrets, Store}
+  alias Omunculus.{Ceiling, Config, Cycle, Harness, Mcp, Project, Prompt, Secrets, Store}
   alias Omunculus.Execution.{Limiter, Policy}
   alias Omunculus.Tool.{Catalog, Overrides}
   alias Omunculus.Tools.Out
@@ -317,9 +318,11 @@ defmodule Omunculus.Run do
 
     case Harness.dispatch(project, name, args, ctx) do
       {:ok, out, _events} ->
-        with :ok <- assembled_output(out),
-             {:ok, run} <- Store.attach_assembled(project.conn, run.id, out.output) do
-          {:ok, run, out.output}
+        prompt = %Prompt{instructions: out.instructions, context: out.output}
+
+        with :ok <- assembled_output(out.ok, Prompt.text(prompt)),
+             {:ok, run} <- Store.attach_assembled(project.conn, run.id, Prompt.text(prompt)) do
+          {:ok, run, prompt}
         else
           error -> fail_run(project, run, error)
         end
@@ -329,10 +332,8 @@ defmodule Omunculus.Run do
     end
   end
 
-  defp assembled_output(%{ok: true, output: output}) when is_binary(output) and output != "",
-    do: :ok
-
-  defp assembled_output(_out), do: {:error, {:assemble, :empty}}
+  defp assembled_output(true, text) when text != "", do: :ok
+  defp assembled_output(_ok, _text), do: {:error, {:assemble, :empty}}
 
   defp fail_run(project, run, reason) do
     _ = Store.close_run(project.conn, run.id)

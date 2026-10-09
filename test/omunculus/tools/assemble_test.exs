@@ -1,6 +1,7 @@
 defmodule Omunculus.Tools.AssembleTest do
   use ExUnit.Case, async: true
 
+  alias Omunculus.Prompt
   alias Omunculus.Tool.{Catalog, Invoke}
   alias Omunculus.Tools.{Assemble, Out}
 
@@ -13,6 +14,33 @@ defmodule Omunculus.Tools.AssembleTest do
     workspace: nil,
     roots: []
   }
+
+  # The prompt as the run stores it: the instructions, then the context.
+  defp whole(input) do
+    out = Assemble.run(input)
+    Prompt.text(%Prompt{instructions: out["instructions"], context: out["output"]})
+  end
+
+  test "the instructions hold what stays across runs, the output the run's context" do
+    view = fn work, message ->
+      %{
+        "work" => %{title: work, goal: "g"},
+        "message" => %{body: message},
+        "agents" => [%{name: "worker", tools: ["write"]}],
+        "catalog" => [%{name: "work", description: "Hands work down.", tags: [], groups: []}]
+      }
+    end
+
+    first = Assemble.run(%{@input | view: view.("A", "one")})
+    second = Assemble.run(%{@input | view: view.("B", "two")})
+
+    assert first["instructions"] == second["instructions"]
+    assert first["instructions"] =~ "You are the concierge.\n\n## Agents\n- worker: also write"
+    refute first["instructions"] =~ "## Work"
+    assert first["output"] =~ "## Work\nA"
+    assert first["output"] =~ "## Message\none"
+    refute first["output"] =~ "concierge"
+  end
 
   test "joins agent text, message and every catalog card" do
     view = %{
@@ -27,7 +55,7 @@ defmodule Omunculus.Tools.AssembleTest do
       ]
     }
 
-    output = Assemble.run(%{@input | view: view})["output"]
+    output = whole(%{@input | view: view})
     assert output =~ "You are the concierge."
     assert output =~ "## Message\ncount to 5"
     assert output =~ Out.tools_preamble()
@@ -47,7 +75,7 @@ defmodule Omunculus.Tools.AssembleTest do
       ]
     }
 
-    output = Assemble.run(%{@input | view: view})["output"]
+    output = whole(%{@input | view: view})
     assert output =~ "## Agents\n- worker: also write, edit\n- reader\n\n## Tools"
   end
 
@@ -66,7 +94,7 @@ defmodule Omunculus.Tools.AssembleTest do
       "cause" => %{type: "break", actor_id: "worker", body: ~s({"body":"no access"})}
     }
 
-    output = Assemble.run(%{@input | view: view})["output"]
+    output = whole(%{@input | view: view})
 
     assert output =~
              "## Results\n- Answer (worker, done, work w1): said hi\n- Skip (worker, cancelled, work w2)\n- worker broke its work: no access"
@@ -84,7 +112,7 @@ defmodule Omunculus.Tools.AssembleTest do
         %{name: name, description: name, tags: [], groups: [], pinned: true}
       end
 
-    output = Assemble.run(%{@input | view: %{"catalog" => cards}})["output"]
+    output = whole(%{@input | view: %{"catalog" => cards}})
     assert output =~ "- tool_search:"
     assert output =~ "- t4:"
     assert output =~ "- t13:"
@@ -98,7 +126,7 @@ defmodule Omunculus.Tools.AssembleTest do
       %{name: "read", description: "read", tags: [], groups: ["fs.read"], pinned: false}
     ]
 
-    output = Assemble.run(%{@input | view: %{"catalog" => cards}})["output"]
+    output = whole(%{@input | view: %{"catalog" => cards}})
     assert output =~ "- tool_search:"
     assert output =~ "- comment:"
     refute output =~ "- read:"
@@ -107,7 +135,7 @@ defmodule Omunculus.Tools.AssembleTest do
 
   test "cards without tags have no [tags:] suffix" do
     cards = [%{name: "break", description: "Stops the stage.", tags: [], groups: ["sequence"]}]
-    output = Assemble.run(%{@input | view: %{"catalog" => cards}})["output"]
+    output = whole(%{@input | view: %{"catalog" => cards}})
     assert output =~ "- break: Stops the stage."
     refute output =~ "[tags:"
   end
@@ -118,7 +146,7 @@ defmodule Omunculus.Tools.AssembleTest do
       %{name: "read", description: "read", tags: [], groups: ["fs.read"], pinned: false}
     ]
 
-    output = Assemble.run(%{@input | view: %{"catalog" => cards}})["output"]
+    output = whole(%{@input | view: %{"catalog" => cards}})
     assert output =~ "- comment:"
     assert output =~ "- read:"
     refute output =~ "more tools"
@@ -131,7 +159,7 @@ defmodule Omunculus.Tools.AssembleTest do
       "catalog" => []
     }
 
-    output = Assemble.run(%{@input | view: view})["output"]
+    output = whole(%{@input | view: view})
 
     assert output =~
              "## Work\nFix the parser\n\n## Goal\nthe parser accepts trailing commas\n\n## Last comment\nlast note"
@@ -161,7 +189,7 @@ defmodule Omunculus.Tools.AssembleTest do
       "catalog" => []
     }
 
-    output = Assemble.run(%{@input | view: view})["output"]
+    output = whole(%{@input | view: view})
 
     assert String.ends_with?(
              output <> "\n",
@@ -200,7 +228,7 @@ defmodule Omunculus.Tools.AssembleTest do
     }
 
     args = Map.put(@input.args, "last_run_output_bytes", 3)
-    output = Assemble.run(%{@input | args: args, view: view})["output"]
+    output = whole(%{@input | args: args, view: view})
 
     assert output =~
              """
@@ -214,7 +242,7 @@ defmodule Omunculus.Tools.AssembleTest do
              abc\
              """
 
-    assert Assemble.run(%{@input | view: view})["output"] =~ "abcdef\n- tool read {} ok\nab€"
+    assert whole(%{@input | view: view}) =~ "abcdef\n- tool read {} ok\nab€"
   end
 
   test "without a work, the last run is the one that opened the run's request" do
@@ -226,7 +254,7 @@ defmodule Omunculus.Tools.AssembleTest do
       "catalog" => []
     }
 
-    output = Assemble.run(%{@input | view: view})["output"]
+    output = whole(%{@input | view: view})
     assert output =~ "## Last run\n- model asked for write"
   end
 
@@ -246,18 +274,16 @@ defmodule Omunculus.Tools.AssembleTest do
       "catalog" => []
     }
 
-    without = Assemble.run(%{@input | view: view})["output"]
+    without = whole(%{@input | view: view})
     refute without =~ "## Inbox"
     refute without =~ "should not appear"
 
     with_inbox =
-      Assemble.run(%{
+      whole(%{
         @input
         | args: %{"text" => "You are the concierge.", "inbox_id" => "inb_1"},
           view: view
-      })[
-        "output"
-      ]
+      })
 
     assert with_inbox =~ "## Inbox\ninb_1\nstandalone notice"
 
@@ -284,5 +310,6 @@ defmodule Omunculus.Tools.AssembleTest do
     manifest = Map.fetch!(catalog, "assemble")
     assert {:ok, result} = Invoke.call(manifest, @input)
     assert result.output == Assemble.run(@input)["output"]
+    assert result.instructions == Assemble.run(@input)["instructions"]
   end
 end

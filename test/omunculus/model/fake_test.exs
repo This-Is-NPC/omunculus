@@ -6,7 +6,14 @@ defmodule Omunculus.Model.FakeTest do
   defp never_call, do: fn _name, _args -> raise "call must never be invoked" end
 
   defp complete(assembled, tools \\ [], call \\ never_call()) do
-    Fake.new(%{}).(assembled, tools, call, fn _text -> :ok end, fn _text -> :ok end, nil)
+    Fake.new(%{}).(
+      %Omunculus.Prompt{instructions: "", context: assembled},
+      tools,
+      call,
+      fn _text -> :ok end,
+      fn _text -> :ok end,
+      nil
+    )
   end
 
   test "returns the first non-empty line" do

@@ -12,8 +12,9 @@ defmodule Omunculus.Test.ScriptedModel do
   def new(spec) when is_map(spec) do
     id = spec["params"]["script"]
 
-    fn assembled, tools, call, record, delta, execution ->
-      invoke(fetch!(id), assembled, tools, call, record, delta, execution)
+    # Scripts read the prompt as the text the run stores.
+    fn prompt, tools, call, record, delta, execution ->
+      invoke(fetch!(id), Omunculus.Prompt.text(prompt), tools, call, record, delta, execution)
     end
   end
 

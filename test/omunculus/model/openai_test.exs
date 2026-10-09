@@ -38,7 +38,7 @@ defmodule Omunculus.Model.OpenAITest do
     {_agent, call} = recorder()
 
     assert {:ok, text} =
-             model.("ping", [], call, fn _message -> :ok end, fn _text -> :ok end, policy())
+             model.(assembled(), [], call, fn _message -> :ok end, fn _text -> :ok end, policy())
 
     assert text =~ "ok"
     assert_receive {:auth_header, "Bearer secret-token"}, 5_000
@@ -105,7 +105,7 @@ defmodule Omunculus.Model.OpenAITest do
 
     assert {:ok, text} =
              model.(
-               "Reply only: pong",
+               %Omunculus.Prompt{instructions: "", context: "Reply only: pong"},
                [],
                call,
                fn _message -> :ok end,
