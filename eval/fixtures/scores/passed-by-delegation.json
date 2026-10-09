@@ -12,7 +12,8 @@
     "configuration": "delegation",
     "scenario": "capability",
     "needs": [
-      "fs.write"
+      "fs.write",
+      "sandbox.write"
     ],
     "forbidden": [],
     "requests": [],

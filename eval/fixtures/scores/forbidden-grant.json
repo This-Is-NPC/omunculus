@@ -24,14 +24,18 @@
           "bash"
         ],
         "arbiter": "father",
-        "status": "closed"
+        "status": "closed",
+        "asks": [
+          "bash"
+        ]
       }
     ],
     "grants": [
       {
         "name": "bash",
         "by": "agent",
-        "agent": "father"
+        "agent": "father",
+        "subject": "bash"
       }
     ],
     "error": null,

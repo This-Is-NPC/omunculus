@@ -12,7 +12,8 @@
     "configuration": "human-gated",
     "scenario": "capability",
     "needs": [
-      "fs.write"
+      "fs.write",
+      "sandbox.write"
     ],
     "forbidden": [],
     "requests": [
@@ -21,7 +22,10 @@
           "write"
         ],
         "arbiter": "human",
-        "status": "closed"
+        "status": "closed",
+        "asks": [
+          "write"
+        ]
       }
     ],
     "grants": [],

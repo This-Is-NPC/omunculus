@@ -15,8 +15,9 @@ defmodule EquivalentExchange.Runner do
   builds its project (`EquivalentExchange.Project`), sends the
   instruction through the omunculus CLI, which returns once every run it
   opened has finished, then plays the person: each request waiting on a
-  human gets the task's answer for the names it asks — grant when the task
-  grants them all, by name or by a group holding them, deny otherwise — and
+  human gets the task's answer for what it asks — grant when the task
+  grants it all, by name or by a group holding it, deny otherwise; a path or
+  directory inside the workspace asks for `sandbox.write` — and
   the runs that answer opens are
   followed the same way, a few rounds at most. A request offering only
   retry or cancel is left waiting: the model stopped without a report.
@@ -149,8 +150,8 @@ defmodule EquivalentExchange.Runner do
       report: report,
       check: %{passed: passed, said: said},
       error: error(status),
-      requests: requests(facts, answers),
-      grants: grants(facts),
+      requests: requests(facts, answers, project),
+      grants: grants(facts, project),
       runs: Enum.map(facts.runs, &%{agent: &1.agent, depth: &1.depth, via: &1.via}),
       tool_calls: tool_calls(facts),
       usage: usage(facts),
@@ -176,7 +177,9 @@ defmodule EquivalentExchange.Runner do
 
       waiting ->
         given =
-          for request <- waiting, option = choose(task, groups, request), option != nil do
+          for request <- waiting,
+              option = choose(task, groups, request, project),
+              option != nil do
             {:ok, _said} =
               CLI.run(
                 [
@@ -214,14 +217,14 @@ defmodule EquivalentExchange.Runner do
     end)
   end
 
-  # Grant when the task grants every name the request asks, by the name or by
+  # Grant when the task grants everything the request asks, by the name or by
   # a group that holds it; deny otherwise. A grant is temporary when the
   # request offers it, else for the asking agent (a request made without a
   # work offers no temporary one). A request without grant and deny (retry or
   # cancel) is left waiting.
-  defp choose(task, groups, request) do
+  defp choose(task, groups, request, project) do
     options = Jason.decode!(request.options)
-    names = requested(options)
+    names = asks(options, project)
 
     granted? = fn name ->
       Enum.any?([name | groups_of(groups, name)], &(Task.answer(task, &1) == "grant"))
@@ -245,10 +248,26 @@ defmodule EquivalentExchange.Runner do
 
   defp requested(options) do
     for {_option, calls} <- options,
-        %{"name" => "grant", "args" => %{"name" => name}} <- calls,
+        %{"name" => "grant", "args" => %{"name" => _name} = args} <- calls,
         uniq: true,
-        do: name
+        do: Map.take(args, ~w(kind name))
   end
+
+  defp asks(options, project),
+    do: options |> requested() |> Enum.map(&subject(&1, project)) |> Enum.uniq()
+
+  # What a grant gives, as the task names it: writing a path or directory
+  # inside the workspace is sandbox.write; anything else is its name.
+  defp subject(%{"kind" => kind, "name" => name}, project) when kind in ~w(path directory) do
+    workspace = Path.join(project, "workspace")
+    path = Path.expand(name, workspace)
+
+    if path == workspace or String.starts_with?(path, workspace <> "/"),
+      do: "sandbox.write",
+      else: name
+  end
+
+  defp subject(%{"name" => name}, _project), do: name
 
   defp facts(project) do
     with_store(project, fn conn ->
@@ -326,7 +345,7 @@ defmodule EquivalentExchange.Runner do
 
   defp said(_body), do: ""
 
-  defp requests(facts, answers) do
+  defp requests(facts, answers, project) do
     Enum.map(facts.requests, fn request ->
       options = Jason.decode!(request.options)
 
@@ -335,18 +354,20 @@ defmodule EquivalentExchange.Runner do
         agent: request.agent,
         arbiter: request.arbiter,
         status: request.status,
-        names: requested(options),
+        names: options |> requested() |> Enum.map(& &1["name"]) |> Enum.uniq(),
+        asks: asks(options, project),
         options: Map.keys(options),
         answered_by_person: Enum.find_value(answers, &(&1.request == request.id && &1.option))
       }
     end)
   end
 
-  defp grants(facts) do
+  defp grants(facts, project) do
     for %{type: "grant"} = event <- facts.events do
       %{
         name: event.body["name"],
         kind: event.body["kind"],
+        subject: subject(Map.take(event.body, ~w(kind name)), project),
         by: event.actor_kind,
         agent: event.actor_id,
         work: event.work_id
