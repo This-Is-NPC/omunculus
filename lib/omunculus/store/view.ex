@@ -237,8 +237,15 @@ defmodule Omunculus.Store.View do
   defp with_record(conn, run) do
     with {:ok, message} <-
            Query.one(conn, "SELECT * FROM prompts WHERE run_id = ? AND kind = 'message'", [run.id]),
+         {:ok, assembled} <-
+           Query.one(conn, "SELECT * FROM prompts WHERE id = ?", [run.prompt_id]),
          {:ok, events} <- replay(conn, {:run, run.id}) do
-      {:ok, Map.merge(run, %{message: message, events: events})}
+      {:ok,
+       Map.merge(run, %{
+         message: message,
+         assembled: assembled && assembled.body,
+         events: events
+       })}
     end
   end
 

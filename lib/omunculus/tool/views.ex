@@ -17,11 +17,12 @@ defmodule Omunculus.Tool.Views do
     "descendants"` and then reads only a work below the call's own.
     Children take `state` (a list) and `since = "last_run"` (changed after
     the work's last closed run finished). `include` adds to each work its
-    `last_comment`, its `comments` or its closed `runs` with their record.
+    `last_comment`, its `comments` or its closed `runs` with their record:
+    the opening message, the assembled prompt and the events.
   - `comments`: of the first of `from` among `work`, `request`, `inbox`
     (default all three, in that order).
   - `runs`: `relation` `last_closed` (from `work`) or `opener` (the run
-    that opened the call's `request`), with its opening message and events.
+    that opened the call's `request`), with its record.
   - `events`: `relation` `run`, the events of the call's run so far, or
     `cause`, the event that made the call's run due.
   - `requests`: from `args.request_id` then `request` (default).
