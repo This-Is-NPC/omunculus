@@ -142,3 +142,5 @@ assemble = "assemble"
 max_retries = 2
 last_run_output_bytes = 8192
 tool_output_bytes = 32768
+# Every agent is sent the same tools, so their requests share the cache.
+send_catalog = true
