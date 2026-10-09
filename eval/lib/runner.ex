@@ -52,6 +52,7 @@ defmodule EquivalentExchange.Runner do
           n <- 1..k,
           do: {task, configuration, n}
 
+    against = against(options)
     File.mkdir_p!(folder)
 
     write_json(Path.join(folder, "manifest.json"), %{
@@ -65,7 +66,8 @@ defmodule EquivalentExchange.Runner do
       executions: length(plan),
       timeout_s: Keyword.get(options, :timeout, 600),
       jobs: Keyword.get(options, :jobs, 1),
-      judge: judge_trust()
+      judge: judge_trust(),
+      against: against
     })
 
     # Executions share nothing — each has its own project — so `jobs` of them
@@ -211,6 +213,27 @@ defmodule EquivalentExchange.Runner do
       "usage" => usage(facts, price(project, execution["model"]))
     })
     |> assess(task, workspace)
+  end
+
+  @doc """
+  The result folder `--against` names, which the run is compared with;
+  nil without one. A folder without a manifest is refused before anything
+  runs.
+  """
+  @spec against(keyword) :: String.t() | nil
+  def against(options) do
+    case Keyword.get(options, :against) do
+      nil ->
+        nil
+
+      path ->
+        folder = Path.expand(path)
+
+        unless File.regular?(Path.join(folder, "manifest.json")),
+          do: raise(ArgumentError, "--against #{path}: no result folder there")
+
+        folder
+    end
   end
 
   @doc "How the decider did on the hand-written reports, for a manifest."

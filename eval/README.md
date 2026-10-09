@@ -6,7 +6,7 @@ given setup — handed the work down, asked for what it lacked and nothing
 more, refused what no agent may grant, stopped honestly when the work could
 not be done — and what that cost. Each run shows where agent texts, tool
 descriptions, ceilings or the harness need work, and compares itself with the
-run before it.
+run `--against` names.
 
 Everything lives here; the core does not change. The runner uses omunculus as
 a library: the CLI to send and reply, the store to read what happened.
@@ -125,11 +125,15 @@ mise run eval:selftest                       # checks and scoring
 mise run eval:run -- --model luna --k 2 --jobs 6 --label pilot
 mise run eval:run -- --model luna --task brief --configuration negotiated
 mise run eval:run -- --model sonnet --k 2 --jobs 6 --label sonnet
+mise run eval:run -- --model haiku --k 2 --jobs 6 --against eval/results/<before>
 mise run eval:compare -- eval/results/<before> eval/results/<now>
+mix run eval/run.exs report eval/results/<run> --against eval/results/<before>
 mix run eval/run.exs score eval/results/<run>    # score an old run again
 ```
 
-`eval:run` loads `.env` for the provider's key. `--jobs` executions run at
+`eval:run` loads `.env` for the provider's key. Runs are isolated, so several
+may run at once, each on its own model; a run is compared only with the folder
+`--against` names, and with none without it. `--jobs` executions run at
 once (one by default): each has a project of its own, so they share nothing
 but the provider's rate limits. Each execution gets a fresh project; the instruction goes through the CLI, which returns once every run
 has finished; then the runner plays the person, answering what waits on them
@@ -158,7 +162,7 @@ results/<time>-<label>/
   manifest.json      when, commit, model, configurations, repetitions, tasks
   summary.json       the measures, overall and by configuration, scenario, task
   report.md          the same as tables, then the findings by cause
-  comparison.md      against the run before it
+  comparison.md      against the run --against named, kept in the manifest
   executions/<task>/<configuration>/<n>/
     execution.json   outcome, last words, check, requests, grants, runs,
                      tool calls, usage, time, groups, score

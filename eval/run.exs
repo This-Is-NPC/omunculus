@@ -2,8 +2,10 @@
 #   selftest   prove every task's check against its solution
 #   run        run the suite: --model luna --k 2 --label <name> [--task <part>]...
 #              [--configuration <name>]... [--timeout <seconds>] [--jobs <n>]
+#              [--against <result folder>]
 #   score      judge and score again every execution of a result folder, then its report
-#   report     write a result folder's summary, report and comparison
+#   report     write a result folder's summary, report and comparison; --against
+#              <result folder> sets what it is compared with
 #   compare    compare two result folders, the earlier first
 for file <- ~w(project task judge score report selftest runner),
     do: Code.require_file("lib/#{file}.ex", __DIR__)
@@ -29,7 +31,8 @@ case System.argv() do
           task: :keep,
           configuration: :keep,
           timeout: :integer,
-          jobs: :integer
+          jobs: :integer,
+          against: :string
         ]
       )
 
@@ -61,7 +64,20 @@ case System.argv() do
     EquivalentExchange.Report.write(folder)
     IO.puts(folder)
 
-  ["report", folder] ->
+  ["report", folder | argv] ->
+    {options, _rest, _invalid} = OptionParser.parse(argv, strict: [against: :string])
+
+    with against when not is_nil(against) <- EquivalentExchange.Runner.against(options) do
+      manifest = Path.join(folder, "manifest.json")
+
+      manifest
+      |> File.read!()
+      |> Jason.decode!()
+      |> Map.put("against", against)
+      |> Jason.encode!(pretty: true)
+      |> then(&File.write!(manifest, &1))
+    end
+
     EquivalentExchange.Report.write(folder)
     IO.puts(Path.join(folder, "report.md"))
 
@@ -70,7 +86,7 @@ case System.argv() do
 
   _other ->
     IO.puts(
-      "usage: mix run eval/run.exs selftest | run [options] | score <folder> | report <folder> | compare <before> <now>"
+      "usage: mix run eval/run.exs selftest | run [options] | score <folder> | report <folder> [--against <folder>] | compare <before> <now>"
     )
 
     System.halt(1)

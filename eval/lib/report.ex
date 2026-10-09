@@ -5,8 +5,8 @@ defmodule EquivalentExchange.Report do
   and the findings grouped by cause with where each happened; and, against
   an earlier run, `comparison.md`: what passes now that failed, what fails
   now that passed, and how each measure moved, overall and by
-  configuration. A run compares itself with the run before it in
-  `eval/results`.
+  configuration. A run is compared with the result folder its manifest
+  names under `against`, and with none when it names none.
   """
 
   @measures ~w(passed false_success stopped_well unbacked asked_when_needed exercised forbidden delegated rated cache first_call_cache)
@@ -17,12 +17,11 @@ defmodule EquivalentExchange.Report do
     File.write!(Path.join(folder, "summary.json"), Jason.encode!(summary, pretty: true))
     File.write!(Path.join(folder, "report.md"), markdown(summary))
 
-    case previous(folder) do
-      nil ->
-        :ok
+    comparison = Path.join(folder, "comparison.md")
 
-      before ->
-        File.write!(Path.join(folder, "comparison.md"), compare(summarize(before), summary))
+    case summary.manifest["against"] do
+      nil -> File.rm(comparison)
+      before -> File.write!(comparison, compare(summarize(before), summary))
     end
 
     summary
@@ -132,18 +131,6 @@ defmodule EquivalentExchange.Report do
       [] -> nil
       known -> Float.round(Enum.sum(known) / length(known), 2)
     end
-  end
-
-  defp previous(folder) do
-    root = Path.dirname(folder)
-    name = Path.basename(folder)
-
-    root
-    |> File.ls!()
-    |> Enum.filter(&(&1 < name and File.regular?(Path.join([root, &1, "manifest.json"]))))
-    |> Enum.sort()
-    |> List.last()
-    |> then(&(&1 && Path.join(root, &1)))
   end
 
   defp markdown(summary) do
