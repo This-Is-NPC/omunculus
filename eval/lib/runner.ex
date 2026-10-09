@@ -386,7 +386,7 @@ defmodule EquivalentExchange.Runner do
           []
       end
     end)
-    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.reject(&(is_nil(&1) or String.trim(&1) == ""))
     |> List.last() || ""
   end
 
