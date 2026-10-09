@@ -6,7 +6,8 @@ defmodule Omunculus.Tool.Invoke do
   the same `validate/1`. The optional `chain` of `out` is a list of
   `{name, args}` steps; `args` defaults to an empty map. The optional
   `instructions` of `out`, empty by default, is the part of a prompt the
-  tool assembles that stays the same from run to run.
+  tool assembles that stays the same from run to run, and its optional
+  `session` the session the run continues (`Omunculus.Tools.Session`).
   """
 
   alias Omunculus.Execution
@@ -20,7 +21,8 @@ defmodule Omunculus.Tool.Invoke do
           output: String.t(),
           emit: [map],
           chain: [%{name: String.t(), args: map}],
-          instructions: String.t()
+          instructions: String.t(),
+          session: map | nil
         }
 
   @spec call(Manifest.t(), map) :: {:ok, out} | {:error, term}
@@ -167,8 +169,17 @@ defmodule Omunculus.Tool.Invoke do
          {:ok, output} <- fetch_string(decoded, "output", ""),
          {:ok, emit} <- fetch_emit(decoded),
          {:ok, chain} <- fetch_chain(decoded),
-         {:ok, instructions} <- fetch_string(decoded, "instructions", "") do
-      {:ok, %{ok: ok, output: output, emit: emit, chain: chain, instructions: instructions}}
+         {:ok, instructions} <- fetch_string(decoded, "instructions", ""),
+         {:ok, session} <- fetch_session(decoded) do
+      {:ok,
+       %{
+         ok: ok,
+         output: output,
+         emit: emit,
+         chain: chain,
+         instructions: instructions,
+         session: session
+       }}
     end
   end
 
@@ -178,6 +189,20 @@ defmodule Omunculus.Tool.Invoke do
     case Map.fetch(decoded, key) do
       {:ok, value} when is_boolean(value) -> {:ok, value}
       _ -> {:error, {:invalid_output, decoded}}
+    end
+  end
+
+  defp fetch_session(decoded) do
+    case Map.get(decoded, "session") do
+      nil ->
+        {:ok, nil}
+
+      %{"continues" => id, "since" => since, "history" => history} = session
+      when is_binary(id) and is_binary(since) and is_list(history) ->
+        {:ok, session}
+
+      _invalid ->
+        {:error, {:invalid_output, decoded}}
     end
   end
 

@@ -19,6 +19,21 @@ type = "string"
 type = "integer"
 minimum = 1
 
+[parameters.properties.agent]
+type = "string"
+
+[parameters.properties.tool_output_bytes]
+type = "integer"
+minimum = 1
+
+[parameters.properties.session_ttl_ms]
+type = "integer"
+minimum = 1
+
+[parameters.properties.session_max_bytes]
+type = "integer"
+minimum = 1
+
 [views.message]
 source = "prompts"
 relation = "message"
@@ -33,6 +48,10 @@ from = ["work"]
 [views.last_run]
 source = "runs"
 relation = "last_closed"
+
+[views.session]
+source = "works"
+include = ["runs"]
 
 [views.results]
 source = "works"

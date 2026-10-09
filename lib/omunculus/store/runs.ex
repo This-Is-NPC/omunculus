@@ -13,6 +13,8 @@ defmodule Omunculus.Store.Runs do
   `max_retries`; past it, a `break` with the given text for a child,
   or, for a root, a request by the harness with the options `retry` and
   `cancel` and an inbox entry whose text names the new request.
+  `continues/3` records the `session` event of a run that continues its
+  agent's session: the run it continues and what it was told had happened.
   `unanswered/3` hands a request to the human when the run its agent
   arbiter opened to answer it closed without a reply: an `escalate` event
   and an inbox entry whose text names it.
@@ -141,6 +143,13 @@ defmodule Omunculus.Store.Runs do
         end
       end
     end)
+  end
+
+  @spec continues(Connection.t(), String.t(), map) :: :ok | {:error, term}
+  def continues(conn, run_id, body) do
+    with {:ok, _event} <-
+           Events.append(conn, %{type: "session", run_id: run_id, body: Jason.encode!(body)}),
+         do: :ok
   end
 
   @spec unanswered(Connection.t(), map, (String.t(), String.t() -> String.t())) ::

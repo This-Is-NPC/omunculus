@@ -52,7 +52,8 @@ defmodule Omunculus.Tool.InvokeTest do
              output: "done",
              emit: [%{"type" => "prompt", "body" => %{"message" => "hi"}}],
              chain: [],
-             instructions: "steady"
+             instructions: "steady",
+             session: nil
            }
   end
 
@@ -164,7 +165,8 @@ defmodule Omunculus.Tool.InvokeTest do
                output: "",
                emit: [%{"type" => "prompt", "body" => %{"message" => "hi"}}],
                chain: [],
-               instructions: ""
+               instructions: "",
+               session: nil
              }
     end
 

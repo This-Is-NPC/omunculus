@@ -9,7 +9,8 @@ defmodule Omunculus.Model.OpenAI do
   parameters}`) as a function with its real `parameters` schema — an
   empty schema becomes `%{type: "object", properties: %{}}` so servers
   accept it — posts the prompt's instructions as a `system` message and
-  its context as the user turn to
+  its context as the user turn, or, continuing a session, the session's
+  messages as they were and what happened since, to
   `<url>/chat/completions`, and for every `tool_calls` entry in the
   reply runs `call.(name, args)` and feeds the output back as a `tool`
   message, looping until a reply carries no tool call. Every reply is
@@ -83,11 +84,28 @@ defmodule Omunculus.Model.OpenAI do
 
   # The instructions are a message of their own: a server caches whole
   # messages, so the next run's request reuses them though its context differs.
-  defp messages(%Prompt{instructions: "", context: context}),
+  defp messages(%Prompt{instructions: instructions} = prompt),
+    do: system(instructions) ++ conversation(prompt)
+
+  defp system(""), do: []
+  defp system(instructions), do: [%{role: "system", content: instructions}]
+
+  # A run continuing its session sends the session as it was: the same
+  # messages the provider has in its cache, then what happened since.
+  defp conversation(%Prompt{history: nil, context: context}),
     do: [%{role: "user", content: context}]
 
-  defp messages(%Prompt{instructions: instructions, context: context}),
-    do: [%{role: "system", content: instructions}, %{role: "user", content: context}]
+  defp conversation(%Prompt{history: history}), do: Enum.flat_map(history, &turn/1)
+
+  defp turn(%{"user" => text}), do: [%{role: "user", content: text}]
+
+  defp turn(%{"model" => reply, "outputs" => outputs}) do
+    calls = Enum.zip(reply["tool_calls"] || [], outputs)
+    [strip_message(reply) | Enum.map(calls, &tool_message/1)]
+  end
+
+  defp tool_message({%{"id" => id}, output}),
+    do: %{role: "tool", tool_call_id: id, content: output}
 
   defp executor_tool do
     function_tool(%{

@@ -21,34 +21,99 @@ defmodule Omunculus.Tools.Assemble do
   and its comments, the reply among them once it is answered. Inbox is
   included only when the opening carried `inbox_id`. The message of the
   opening comes last.
+
+  With `session_ttl_ms` and `session_max_bytes` in the args, and the
+  `session` view (the work with its closed runs), the run may continue its
+  `agent`'s paused session (`Omunculus.Tools.Session`): the output's
+  `session` then carries the history and `since`, what happened since the
+  pause — the results, the request, the inbox and the message, or that
+  the work goes on — and the run keeps the instructions the session started
+  with; when its own differ, `since` adds its `## Tools`.
   """
 
   alias Omunculus.Tool.Manifest
-  alias Omunculus.Tools.{Out, Record}
+  alias Omunculus.Tools.{Out, Record, Session}
+
+  # The sections that begin the context of an assembled prompt.
+  @context_start ~r/\n\n(?=## (Work|Last comment|Last run|Results|Request|Inbox|Message)\n)/
 
   @spec run(map) :: map
   def run(%{name: name, args: args, view: view}) do
     text = Map.get(args, "text", "")
+    cards = view["catalog"] || []
 
     instructions =
       [String.trim(text)] ++
-        agents_section(view["agents"] || [], view["catalog"] || []) ++
-        [tools_section(view["catalog"] || [])] ++
+        agents_section(view["agents"] || [], cards) ++
+        [tools_section(cards)] ++
         skills_section(view["skills"] || [])
+
+    # What happened since a pause, which a continued session is told.
+    news =
+      results_section(view["results"] || [], view["cause"]) ++
+        request_section(view["request"], view["request_comments"]) ++
+        inbox_section(view, args) ++
+        message_section(view["message"])
 
     context =
       work_section(view["work"]) ++
         comment_section(view["comments"]) ++
         last_run_section(view["last_run"] || view["opener"], name, args) ++
-        results_section(view["results"] || [], view["cause"]) ++
-        request_section(view["request"], view["request_comments"]) ++
-        inbox_section(view, args) ++
-        message_section(view["message"])
+        news
 
     context
     |> Enum.join("\n\n")
     |> Out.ok()
-    |> Map.put("instructions", Enum.join(instructions, "\n\n"))
+    |> put_session(session(view["session"], args, news), Enum.join(instructions, "\n\n"), cards)
+  end
+
+  defp session(
+         %{runs: runs},
+         %{"session_ttl_ms" => ttl_ms, "session_max_bytes" => max_bytes} = args,
+         news
+       ) do
+    Session.history(runs, %{
+      agent: args["agent"],
+      now: DateTime.utc_now(),
+      ttl_ms: ttl_ms,
+      max_bytes: max_bytes,
+      split: &split/1,
+      tool_output_bytes: args["tool_output_bytes"],
+      since: if(news == [], do: Out.resume(), else: Enum.join(news, "\n\n"))
+    })
+  end
+
+  defp session(_work, _args, _news), do: nil
+
+  # An assembled prompt parted into its instructions and its context.
+  defp split(assembled) when is_binary(assembled) do
+    case Regex.split(@context_start, assembled, parts: 2) do
+      [instructions, context] -> {:ok, instructions, context}
+      [_no_context] -> :error
+    end
+  end
+
+  defp split(_assembled), do: :error
+
+  defp put_session(out, nil, instructions, _cards), do: Map.put(out, "instructions", instructions)
+
+  # The session goes on under the instructions it started with; tools gained
+  # since are in what the run is told.
+  defp put_session(out, session, instructions, cards) do
+    {history, [%{"user" => since}]} = Enum.split(session["history"], -1)
+
+    since =
+      if session["instructions"] == instructions,
+        do: since,
+        else: since <> "\n\n" <> tools_section(cards)
+
+    out
+    |> Map.put("instructions", session["instructions"])
+    |> Map.put("session", %{
+      "continues" => session["continues"],
+      "since" => since,
+      "history" => history ++ [%{"user" => since}]
+    })
   end
 
   defp comment_section(nil), do: []

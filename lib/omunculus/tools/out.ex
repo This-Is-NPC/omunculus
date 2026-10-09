@@ -108,6 +108,9 @@ defmodule Omunculus.Tools.Out do
   def answer_request,
     do: "This run is for answering it: call reply with one of these options before anything else."
 
+  @spec resume() :: String.t()
+  def resume, do: "Go on with the work."
+
   @spec answered() :: String.t()
   def answered, do: "answered: the reply is below"
 

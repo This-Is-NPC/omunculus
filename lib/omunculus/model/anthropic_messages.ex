@@ -4,7 +4,9 @@ defmodule Omunculus.Model.AnthropicMessages do
   `new/1` takes the `[models.<name>]` spec (`url`, `model`, `timeout_ms`,
   optional `temperature`, `headers`, `body`, `credential`) and returns a 6-arity
   `(prompt, tools, call, record, delta, execution)` fun. Posts the prompt's
-  instructions as `system` and its context as the first user turn to
+  instructions as `system` and its context as the first user turn, or,
+  continuing a session, the session's turns as they were and what
+  happened since, to
   `<url>/messages` with tools as Anthropic `input_schema` items, runs each
   `tool_use` through `call.(name, args)`, appends a `tool_result` user
   turn, and loops until a reply has none. Two cache breakpoints mark each
@@ -47,7 +49,7 @@ defmodule Omunculus.Model.AnthropicMessages do
         Map.put(client, :delta, delta),
         system(prompt.instructions),
         function_tools,
-        [%{role: "user", content: prompt.context}],
+        conversation(prompt),
         call,
         record,
         tools,
@@ -149,6 +151,33 @@ defmodule Omunculus.Model.AnthropicMessages do
     |> maybe_put(:stream, client.stream || nil)
     |> Body.merge(client.body)
   end
+
+  # A run continuing its session sends the session as it was, then what
+  # happened since; turns of the same role are one.
+  defp conversation(%Prompt{history: nil, context: context}),
+    do: [%{role: "user", content: context}]
+
+  defp conversation(%Prompt{history: history}) do
+    history
+    |> Enum.flat_map(&turn/1)
+    |> Enum.chunk_by(& &1.role)
+    |> Enum.map(fn
+      [single] -> single
+      [first | _] = same -> %{role: first.role, content: Enum.flat_map(same, &blocks(&1.content))}
+    end)
+  end
+
+  defp turn(%{"user" => text}), do: [%{role: "user", content: text}]
+
+  defp turn(%{"model" => reply, "outputs" => outputs}) do
+    uses = for %{"type" => "tool_use"} = use <- reply["content"], do: use
+    results = Enum.zip_with(uses, outputs, fn use, out -> tool_result(use["id"], {:ok, out}) end)
+    answer = %{role: "assistant", content: reply["content"]}
+    if results == [], do: [answer], else: [answer, %{role: "user", content: results}]
+  end
+
+  defp blocks(text) when is_binary(text), do: [%{type: "text", text: text}]
+  defp blocks(blocks), do: blocks
 
   # The last block of the last turn ends the prefix the next call shares.
   defp mark_last(messages) do

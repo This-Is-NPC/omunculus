@@ -121,6 +121,15 @@ defmodule Omunculus.CLI do
     "omunculus.toml [policy] #{key} must be a positive integer"
   end
 
+  def format_error({:policy, {:invalid, key}})
+      when key in [:session_ttl_ms, :session_max_bytes] do
+    "omunculus.toml [policy] #{key} must be a positive integer"
+  end
+
+  def format_error({:policy, {:invalid, :session}}) do
+    "omunculus.toml [policy] session_ttl_ms and session_max_bytes go together"
+  end
+
   def format_error({:policy, {:invalid, :send_catalog}}) do
     "omunculus.toml [policy] send_catalog must be true or false"
   end

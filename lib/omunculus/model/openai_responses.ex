@@ -5,7 +5,9 @@ defmodule Omunculus.Model.OpenAIResponses do
   optional `temperature`, `headers`, `body`, `prompt_cache_key`, `credential`) and
   returns a 6-arity
   `(prompt, tools, call, record, delta, execution)` fun. Posts the prompt's
-  instructions as `instructions` and its context as `input` to `<url>/responses` with tools as `function` items, runs
+  instructions as `instructions` and its context as `input`, or, continuing
+  a session, the session's items as they were and what happened since, to
+  `<url>/responses` with tools as `function` items, runs
   each `function_call` through `call.(name, args)`, appends
   `function_call_output`, and loops until a reply has none. Each reply is
   recorded as its `output` and, when the server sends one, its `usage`.
@@ -45,13 +47,27 @@ defmodule Omunculus.Model.OpenAIResponses do
       loop(
         Map.merge(client, %{delta: delta, instructions: prompt.instructions}),
         function_tools,
-        [%{role: "user", content: prompt.context}],
+        input(prompt),
         call,
         record,
         tools,
         execution
       )
     end
+  end
+
+  # A run continuing its session sends the session as it was, then what
+  # happened since.
+  defp input(%Prompt{history: nil, context: context}), do: [%{role: "user", content: context}]
+  defp input(%Prompt{history: history}), do: Enum.flat_map(history, &turn/1)
+
+  defp turn(%{"user" => text}), do: [%{role: "user", content: text}]
+
+  defp turn(%{"model" => %{"output" => output}, "outputs" => outputs}) do
+    calls = Enum.zip(function_calls(output), outputs)
+
+    output ++
+      Enum.map(calls, fn {call, out} -> function_call_output(call["call_id"], {:ok, out}) end)
   end
 
   defp executor_tool do

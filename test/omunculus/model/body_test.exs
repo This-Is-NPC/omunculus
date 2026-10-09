@@ -61,7 +61,71 @@ defmodule Omunculus.Model.BodyTest do
     assert turn == Map.merge(%{"type" => "text", "text" => "ping"}, cache)
   end
 
-  defp request(module, body) do
+  # A session's turns, as the tool rebuilds them, go out as each provider had them.
+  test "each adapter sends a session's history as the conversation it was" do
+    openai = %{
+      "role" => "assistant",
+      "content" => nil,
+      "tool_calls" => [
+        %{
+          "id" => "c1",
+          "type" => "function",
+          "function" => %{"name" => "read", "arguments" => "{}"}
+        }
+      ]
+    }
+
+    assert %{"messages" => messages} =
+             request(OpenAI, %{}, [
+               %{"user" => "ping"},
+               %{"model" => openai, "outputs" => ["body"]},
+               %{"user" => "since"}
+             ])
+
+    assert messages == [
+             %{"role" => "system", "content" => "steady"},
+             %{"role" => "user", "content" => "ping"},
+             openai,
+             %{"role" => "tool", "tool_call_id" => "c1", "content" => "body"},
+             %{"role" => "user", "content" => "since"}
+           ]
+
+    use = %{"type" => "tool_use", "id" => "u1", "name" => "read", "input" => %{}}
+
+    assert %{"messages" => [first, answer, results]} =
+             request(AnthropicMessages, %{}, [
+               %{"user" => "ping"},
+               %{"model" => %{"role" => "assistant", "content" => [use]}, "outputs" => ["body"]},
+               %{"user" => "since"}
+             ])
+
+    assert first == %{"role" => "user", "content" => "ping"}
+    assert answer == %{"role" => "assistant", "content" => [use]}
+
+    # The tool results and what happened since are one user turn.
+    assert [%{"type" => "tool_result", "tool_use_id" => "u1", "content" => "body"}, since] =
+             results["content"]
+
+    assert since["text"] == "since" and since["cache_control"] == %{"type" => "ephemeral"}
+
+    item = %{"type" => "function_call", "call_id" => "f1", "name" => "read", "arguments" => "{}"}
+
+    assert %{"input" => input} =
+             request(OpenAIResponses, %{}, [
+               %{"user" => "ping"},
+               %{"model" => %{"output" => [item]}, "outputs" => ["body"]},
+               %{"user" => "since"}
+             ])
+
+    assert input == [
+             %{"role" => "user", "content" => "ping"},
+             item,
+             %{"type" => "function_call_output", "call_id" => "f1", "output" => "body"},
+             %{"role" => "user", "content" => "since"}
+           ]
+  end
+
+  defp request(module, body, history \\ nil) do
     port = capture()
 
     spec = %{
@@ -72,7 +136,7 @@ defmodule Omunculus.Model.BodyTest do
     }
 
     module.new(spec).(
-      %Prompt{instructions: "steady", context: "ping"},
+      %Prompt{instructions: "steady", context: "ping", history: history},
       [],
       fn _name, _args -> {:ok, ""} end,
       fn _message -> :ok end,

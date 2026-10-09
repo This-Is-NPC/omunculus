@@ -186,7 +186,7 @@ defmodule Omunculus.Run do
              project,
              run,
              assemble_name,
-             assemble_args(config, text, Map.get(opening, :inbox_id)),
+             assemble_args(config, name, text, Map.get(opening, :inbox_id)),
              message_prompt_id,
              Map.get(opening, :inbox_id),
              execution
@@ -297,11 +297,17 @@ defmodule Omunculus.Run do
     end
   end
 
-  defp assemble_args(config, text, inbox_id) do
-    [{"inbox_id", inbox_id}, {"last_run_output_bytes", config.last_run_output_bytes}]
+  defp assemble_args(config, agent, text, inbox_id) do
+    [
+      {"inbox_id", inbox_id},
+      {"last_run_output_bytes", config.last_run_output_bytes},
+      {"tool_output_bytes", config.tool_output_bytes},
+      {"session_ttl_ms", config.session_ttl_ms},
+      {"session_max_bytes", config.session_max_bytes}
+    ]
     |> Enum.reject(fn {_key, value} -> is_nil(value) end)
     |> Map.new()
-    |> Map.put("text", text)
+    |> Map.merge(%{"text" => text, "agent" => agent})
   end
 
   defp invoke_assemble(project, run, name, args, prompt_id, inbox_id, execution) do
@@ -318,10 +324,15 @@ defmodule Omunculus.Run do
 
     case Harness.dispatch(project, name, args, ctx) do
       {:ok, out, _events} ->
-        prompt = %Prompt{instructions: out.instructions, context: out.output}
+        prompt = %Prompt{
+          instructions: out.instructions,
+          context: out.output,
+          history: out.session && out.session["history"]
+        }
 
         with :ok <- assembled_output(out.ok, Prompt.text(prompt)),
-             {:ok, run} <- Store.attach_assembled(project.conn, run.id, Prompt.text(prompt)) do
+             {:ok, run} <- Store.attach_assembled(project.conn, run.id, Prompt.text(prompt)),
+             :ok <- continues(project, run, out.session) do
           {:ok, run, prompt}
         else
           error -> fail_run(project, run, error)
@@ -330,6 +341,17 @@ defmodule Omunculus.Run do
       {:error, _reason} = error ->
         fail_run(project, run, error)
     end
+  end
+
+  # A run that continues its agent's session says which run it continues
+  # and what it was told had happened since, so the next can rebuild it.
+  defp continues(_project, _run, nil), do: :ok
+
+  defp continues(project, run, session) do
+    Store.continues(project.conn, run.id, %{
+      continues: session["continues"],
+      since: session["since"]
+    })
   end
 
   defp assembled_output(true, text) when text != "", do: :ok

@@ -153,6 +153,28 @@ defmodule Omunculus.ConfigTest do
     assert {:error, {:policy, {:invalid, :send_catalog}}} = load(dir)
   end
 
+  test "[policy] session_ttl_ms and session_max_bytes go together", %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """
+
+    policy = fn lines -> write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\n" <> lines) end
+
+    policy.("")
+    assert {:ok, %Config{session_ttl_ms: nil, session_max_bytes: nil}} = load(dir)
+
+    policy.("session_ttl_ms = 300000\nsession_max_bytes = 200000\n")
+    assert {:ok, %Config{session_ttl_ms: 300_000, session_max_bytes: 200_000}} = load(dir)
+
+    policy.("session_ttl_ms = 300000\n")
+    assert {:error, {:policy, {:invalid, :session}}} = load(dir)
+
+    policy.("session_ttl_ms = 0\nsession_max_bytes = 200000\n")
+    assert {:error, {:policy, {:invalid, :session_ttl_ms}}} = load(dir)
+  end
+
   test "pinned is a layer list and is absent on the default preset" do
     assert {:ok, %Config{policy: policy, agents: agents}} = Config.load(default_preset())
     assert policy.pinned == []

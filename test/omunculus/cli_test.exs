@@ -590,6 +590,80 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
+    test "with [policy] sessions, the run a reply opens continues the paused session",
+         %{dir: dir} do
+      config = Path.join(dir, "omunculus.toml")
+
+      File.write!(
+        config,
+        String.replace(
+          File.read!(config),
+          "[policy]\n",
+          "[policy]\nsession_ttl_ms = 600000\nsession_max_bytes = 1000000\n",
+          global: false
+        )
+      )
+
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
+      Project.close(project)
+
+      # The reply a provider sends, recorded as an adapter records it.
+      asking = fn _assembled, _tools, call, record, _delta, _execution ->
+        :ok =
+          record.(%{
+            "role" => "assistant",
+            "content" => nil,
+            "tool_calls" => [
+              %{
+                "id" => "c1",
+                "type" => "function",
+                "function" => %{"name" => "request_access", "arguments" => "{}"}
+              }
+            ]
+          })
+
+        call.("request_access", %{
+          "report" => "blocked on write",
+          "kind" => "tool",
+          "name" => "write",
+          "reason" => "need to write"
+        })
+
+        {:ok, "unused"}
+      end
+
+      Fixtures.use_model(dir, asking)
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "save this"], dir)
+
+      project = open_project(dir)
+      assert {:ok, [paused]} = Query.all(project.conn, "SELECT * FROM runs")
+      assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
+      Project.close(project)
+
+      Fixtures.use_model(dir, fn _assembled, _tools, call -> call.("end", %{}) end)
+
+      assert {:ok, ""} =
+               CLI.run(["reply", "--request_id", request.id, "--option", "grant", "ok"], dir)
+
+      project = open_project(dir)
+
+      assert {:ok, runs} =
+               Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
+
+      continued = Enum.find(runs, &(&1.id != paused.id))
+      assert {:ok, events} = Store.replay(project.conn, {:run, continued.id})
+
+      assert %{body: body} = Enum.find(events, &(&1.type == "session"))
+      assert %{"continues" => continues, "since" => since} = Jason.decode!(body)
+      assert continues == paused.id
+      assert since =~ "## Request"
+      # The session keeps its instructions; the tool the reply granted is in what changed.
+      assert since =~ "## Tools" and since =~ "- write"
+
+      Project.close(project)
+    end
+
     test "reply grant with scope agent writes the permanent grant to the project's omunculus.toml, leaves works.grants untouched, and a fresh work also gets the tool",
          %{dir: dir} do
       project = open_project(dir)
