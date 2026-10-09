@@ -18,19 +18,14 @@ defmodule Omunculus.Tools.Edit do
   end
 
   defp edit(roots, path, old, new, permissions, policy) do
-    case Omunculus.Tools.Path.resolve(roots, path, permissions, policy) do
-      {:ok, absolute} ->
-        if Policy.writable?(policy, absolute) do
-          case File.read(absolute) do
-            {:ok, content} -> apply_edit(absolute, content, old, new)
-            {:error, _reason} -> Out.fail("no such file: #{path}")
-          end
-        else
-          Out.fail("path is not writable: #{path}")
-        end
-
-      {:error, message} ->
-        Out.fail(message)
+    with {:ok, absolute} <- Omunculus.Tools.Path.resolve(roots, path, permissions, policy),
+         :ok <- Omunculus.Tools.Path.writable(policy, absolute, path) do
+      case File.read(absolute) do
+        {:ok, content} -> apply_edit(absolute, content, old, new)
+        {:error, _reason} -> Out.fail("no such file: #{path}")
+      end
+    else
+      {:error, message} -> Out.fail(message)
     end
   end
 

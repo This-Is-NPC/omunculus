@@ -1,7 +1,7 @@
 name = "edit"
 kind = "tool"
 triggers = ["model"]
-description = "Replaces an exact span in a file."
+description = "Replaces an exact span in a file. Needs sandbox.write."
 tags = ["fs"]
 groups = ["fs.write"]
 module = "Omunculus.Tools.Edit"

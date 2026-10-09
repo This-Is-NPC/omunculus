@@ -18,18 +18,13 @@ defmodule Omunculus.Tools.Write do
   end
 
   defp write(roots, path, content, permissions, policy) do
-    case Omunculus.Tools.Path.resolve(roots, path, permissions, policy) do
-      {:ok, absolute} ->
-        if Policy.writable?(policy, absolute) do
-          File.mkdir_p!(Path.dirname(absolute))
-          File.write!(absolute, content)
-          Out.ok()
-        else
-          Out.fail("path is not writable: #{path}")
-        end
-
-      {:error, message} ->
-        Out.fail(message)
+    with {:ok, absolute} <- Omunculus.Tools.Path.resolve(roots, path, permissions, policy),
+         :ok <- Omunculus.Tools.Path.writable(policy, absolute, path) do
+      File.mkdir_p!(Path.dirname(absolute))
+      File.write!(absolute, content)
+      Out.ok()
+    else
+      {:error, message} -> Out.fail(message)
     end
   end
 end

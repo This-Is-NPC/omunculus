@@ -32,6 +32,21 @@ defmodule Omunculus.Tools.Path do
     end
   end
 
+  @doc "Whether the policy lets a tool write the resolved `absolute`, named `path` in the error."
+  @spec writable(Policy.t(), String.t(), String.t()) :: :ok | {:error, String.t()}
+  def writable(%Policy{} = policy, absolute, path) do
+    cond do
+      Policy.writable?(policy, absolute) ->
+        :ok
+
+      policy.read_write == [] ->
+        {:error, "path is not writable: #{path}; writing needs sandbox.write"}
+
+      true ->
+        {:error, "path is not writable: #{path}"}
+    end
+  end
+
   defp permitted?(path, roots, permissions) do
     allowed = Enum.any?(Map.get(permissions, "allowed", []), &FilesystemPath.within?(&1, path))
     denied = Enum.any?(Map.get(permissions, "denied", []), &FilesystemPath.within?(&1, path))
