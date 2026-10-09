@@ -291,14 +291,14 @@ defmodule Omunculus.SpecRegressionTest do
     Fixtures.use_model(p, fn _, tools, call ->
       refute Enum.any?(tools, &(&1.name == "missing_tool"))
 
-      call.("request_access", %{
-        "report" => "blocked",
-        "kind" => "tool",
-        "name" => "missing_tool",
-        "reason" => "test"
-      })
+      assert call.("request_access", %{
+               "report" => "blocked",
+               "kind" => "tool",
+               "name" => "missing_tool",
+               "reason" => "test"
+             }) == {:ok, Out.refused({:request, {:blocked, "missing_tool"}})}
 
-      flunk("request_access must end the run")
+      {:ok, "went on"}
     end)
 
     assert {:ok, run} =
@@ -306,8 +306,6 @@ defmodule Omunculus.SpecRegressionTest do
 
     refute "missing_tool" in Jason.decode!(run.tools)
     assert {:ok, []} = Query.all(p.conn, "SELECT * FROM requests")
-    assert {:ok, events} = Store.replay(p.conn, {:run, run.id})
-    assert Enum.any?(events, &(&1.type == "deny"))
   end
 
   test "permanent grant clears human and negotiable in the chosen layer", %{project: p} do

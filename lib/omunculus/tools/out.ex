@@ -98,6 +98,10 @@ defmodule Omunculus.Tools.Out do
     do: "#{reason} Reply to request #{request_id} with #{Enum.join(options, " or ")}."
 
   @spec refused(term) :: String.t()
+  def refused({:request, {:blocked, name}}),
+    do:
+      "refused: no one can grant #{name} to this run: it is not in the catalog, or the configuration denies it"
+
   def refused(reason), do: "refused: #{inspect(reason)}"
 
   @spec chain_failed(String.t(), term) :: String.t()

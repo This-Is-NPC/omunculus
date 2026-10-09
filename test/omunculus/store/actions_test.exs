@@ -1188,21 +1188,15 @@ defmodule Omunculus.Store.ActionsTest do
       assert count(conn, "events") == 2
     end
 
-    test "a blocked grant appends a deny event and opens no request", %{conn: conn} do
+    test "a blocked grant refuses the request and writes nothing", %{conn: conn} do
       run = Fixtures.open_run(conn, %{ceiling: @ceiling})
+      before = count(conn, "events")
 
-      assert {:ok, [_tool_event, event]} =
+      assert {:error, {:request, {:blocked, "delete"}}} =
                record_tool(conn, [access_request("tool", "delete")], request_ctx(run))
 
-      assert event.type == "deny"
-
-      assert Jason.decode!(event.body) == %{
-               "kind" => "tool",
-               "name" => "delete",
-               "reason" => "why"
-             }
-
       assert count(conn, "requests") == 0
+      assert count(conn, "events") == before
     end
 
     test "stores the options, comments the reason and parks the work on the request", %{

@@ -5,7 +5,8 @@ defmodule Omunculus.Store.Actions.Requests do
   requester's work on it (`waiting = request`); a work waiting on its
   children cannot request. The names the options'
   `grant` calls give are classified against the requester's run ceiling:
-  one blocked refuses the request with a `deny` event and no row; options
+  one blocked — outside the catalog, or denied to the run — refuses the
+  request as an error, so a model's call that asked for it fails; options
   made only of `grant` calls whose names are all have open nothing. The
   arbiter is the human for a request the harness opened or one granting a
   sealed name; otherwise the parent work's agent when every tool of every
@@ -145,12 +146,7 @@ defmodule Omunculus.Store.Actions.Requests do
 
     case List.keyfind(classified, "blocked", 1) do
       {grant, "blocked"} ->
-        Events.append(conn, %{
-          type: "deny",
-          run_id: ctx.run_id,
-          work_id: ctx.work_id,
-          body: Jason.encode!(%{name: grant.name, kind: grant.kind, reason: reason})
-        })
+        {:error, {:request, {:blocked, grant.name}}}
 
       nil ->
         if access_only?(options) and Enum.all?(classes, &(&1 == "have")) do

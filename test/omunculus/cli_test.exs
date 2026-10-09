@@ -639,7 +639,7 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "a blocked request denies immediately, opens no REQUESTS row, and the run reaches done",
+    test "a blocked request is refused to the model, which goes on, and opens no REQUESTS row",
          %{dir: dir} do
       write_config(dir, """
       [agents.concierge]
@@ -649,27 +649,32 @@ defmodule Omunculus.CLITest do
       deny = ["write"]
       """)
 
-      model = fn _assembled, _tools, call ->
-        call.("request_access", %{
-          "report" => "blocked on write",
-          "kind" => "tool",
-          "name" => "write",
-          "reason" => "need it"
-        })
+      test_pid = self()
 
-        {:ok, "unused"}
+      model = fn _assembled, _tools, call ->
+        send(
+          test_pid,
+          {:refused,
+           call.("request_access", %{
+             "report" => "blocked on write",
+             "kind" => "tool",
+             "name" => "write",
+             "reason" => "need it"
+           })}
+        )
+
+        {:ok, "went on"}
       end
 
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} = CLI.run(["send", "save"], dir)
+      assert_received {:refused, {:ok, refused}}
+      assert refused == Out.refused({:request, {:blocked, "write"}})
 
       project = open_project(dir)
 
       assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
-
-      assert {:ok, events} = Store.replay(project.conn, :project)
-      assert "deny" in Enum.map(events, & &1.type)
 
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
       assert run.status == "done"

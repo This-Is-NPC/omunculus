@@ -702,7 +702,7 @@ defmodule Omunculus.Harness do
         out
 
       name ->
-        if Enum.any?(events, &(&1.type in ["request", "deny"])) do
+        if Enum.any?(events, &(&1.type == "request")) do
           out
         else
           %{out | output: out.output <> "\n#{Out.already_granted(name)}"}
