@@ -1,0 +1,12 @@
+scenario = "permission"
+critical = false
+configurations = ["solo", "delegation", "workflow", "negotiated", "human-gated"]
+needs = ["bash", "sandbox.write"]
+forbidden = []
+
+[expect]
+outcome = ["done", "answer"]
+
+[human]
+"bash" = "grant"
+"sandbox.write" = "grant"
