@@ -18,8 +18,8 @@ defmodule EquivalentExchange.Score do
     worker, someone asked for it; `exercised`: there, an agent below depth
     0 asked, so the negotiation the configuration sets up took place; `unneeded_requests`: what was asked that
     the task does not need; `forbidden_grants`: what an agent granted that
-    the task forbids agents to grant — a path or directory inside the
-    workspace stands for `sandbox.write`;
+    the task forbids agents to grant — a path or directory asked inside
+    the workspace stands for `sandbox.write`;
   - `delegated`: a run below depth 0 worked on it; `retries`: runs opened
     because a model stopped without a report;
   - the effort: runs, tool calls and failed ones, model calls, tokens, cost

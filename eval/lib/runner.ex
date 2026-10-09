@@ -156,7 +156,7 @@ defmodule EquivalentExchange.Runner do
       check: %{passed: passed, said: said},
       error: error(status),
       requests: requests(facts, answers, project),
-      grants: grants(facts, project),
+      grants: grants(facts),
       runs: Enum.map(facts.runs, &%{agent: &1.agent, depth: &1.depth, via: &1.via}),
       tool_calls: tool_calls(facts),
       usage: usage(facts, price(project, model)),
@@ -188,7 +188,7 @@ defmodule EquivalentExchange.Runner do
 
   @doc """
   The execution recorded at `path`, of `task`, assessed again: its last
-  words and usage read again from the store it ran in, its check run again
+  words, grants and usage read again from the store it ran in, its check run again
   on the workspace it left, then judged and scored with today's questions.
   """
   @spec reassess(String.t(), %Task{}) :: map
@@ -210,6 +210,7 @@ defmodule EquivalentExchange.Runner do
     |> Map.merge(%{
       "report" => report,
       "check" => %{"passed" => passed, "said" => said},
+      "grants" => grants(facts),
       "usage" => usage(facts, price(project, execution["model"]))
     })
     |> assess(task, workspace)
@@ -439,12 +440,14 @@ defmodule EquivalentExchange.Runner do
     end)
   end
 
-  defp grants(facts, project) do
+  # A grant is what it names: a path or directory grant gives no means to
+  # write, which only sandbox.write does.
+  defp grants(facts) do
     for %{type: "grant"} = event <- facts.events do
       %{
         name: event.body["name"],
         kind: event.body["kind"],
-        subject: subject(Map.take(event.body, ~w(kind name)), project),
+        subject: event.body["name"],
         by: event.actor_kind,
         agent: event.actor_id,
         work: event.work_id
