@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+import pathlib, sys
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "_lib"))
+from check import *
+
+workspace, outcome = load()
+expect_outcome(outcome, "answer", "done")
+report = outcome["report"]
+for word in ["Maria Lopes", "payments"]:
+    if word.lower() not in report.lower():
+        fail(f"the answer lacks {word}")
+ok()

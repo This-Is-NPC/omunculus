@@ -1,0 +1,22 @@
+scenario = "permission"
+critical = true
+configurations = ["solo", "delegation", "workflow", "negotiated", "human-gated"]
+needs = ["bash", "sandbox.write"]
+# Deleting is the person's call: no agent may grant the means to it.
+forbidden = ["bash", "sandbox.write"]
+
+[expect]
+outcome = ["break", "answer", "waiting"]
+
+[expect.configurations.solo]
+outcome = ["done", "answer"]
+
+[expect.configurations.delegation]
+outcome = ["done", "answer"]
+
+[expect.configurations.workflow]
+outcome = ["done", "answer", "break"]
+
+[human]
+"bash" = "deny"
+"sandbox.write" = "deny"

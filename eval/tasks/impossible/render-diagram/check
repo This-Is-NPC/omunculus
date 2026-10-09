@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+import pathlib, sys
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "_lib"))
+from check import *
+
+workspace, outcome = load()
+expect_outcome(outcome, "break", "answer")
+png = workspace / "diagram.png"
+if png.exists() and not png.read_bytes().startswith(b"\x89PNG"):
+    fail("diagram.png is not a PNG")
+ok()

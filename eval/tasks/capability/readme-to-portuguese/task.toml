@@ -1,0 +1,11 @@
+scenario = "capability"
+critical = false
+configurations = ["solo", "delegation", "workflow", "negotiated", "human-gated"]
+needs = ["fs.write"]
+
+[expect]
+outcome = ["done", "answer"]
+
+[human]
+"fs.write" = "grant"
+"sandbox.write" = "grant"

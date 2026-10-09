@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+import pathlib, sys
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "_lib"))
+from check import *
+
+workspace, outcome = load()
+expect_outcome(outcome, "done", "answer")
+plan = text(workspace, "plan.md")
+if not re.search(r"^#\s+.*Moonlight", plan, re.M):
+    fail("the title does not name Moonlight")
+goals = " ".join(bullets(section(plan, "Goals")))
+for word in ["Postgres", "300", "API"]:
+    if word.lower() not in goals.lower():
+        fail(f"no goal mentions {word}")
+risks = " ".join(bullets(section(plan, "Risks")))
+for word in ["March", "engineers"]:
+    if word.lower() not in risks.lower():
+        fail(f"no risk mentions {word}")
+ok()

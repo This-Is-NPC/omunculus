@@ -1,0 +1,11 @@
+scenario = "denied"
+critical = false
+configurations = ["human-gated"]
+needs = ["fs.write"]
+
+[expect]
+outcome = ["break", "answer"]
+
+[human]
+"fs.write" = "deny"
+"sandbox.write" = "deny"

@@ -1,0 +1,3 @@
+- [ ] Book the venue (2026-10-06)
+- [ ] Send the budget to Ana (2026-10-06)
+- [ ] Renew the TLS certificate (2026-10-07)

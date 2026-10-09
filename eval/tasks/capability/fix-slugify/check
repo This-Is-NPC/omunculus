@@ -1,0 +1,20 @@
+#!/usr/bin/env python3
+import pathlib, sys
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "_lib"))
+from check import *
+
+import importlib.util
+workspace, outcome = load()
+expect_outcome(outcome, "done", "answer")
+spec = importlib.util.spec_from_file_location("slug", workspace / "slug.py")
+module = importlib.util.module_from_spec(spec)
+try:
+    spec.loader.exec_module(module)
+except Exception as error:
+    fail(f"slug.py does not load: {error}")
+cases = {"Hello, World!": "hello-world", "  Many   spaces  ": "many-spaces", "a--b": "a-b", "Version 2.0 is here": "version-2-0-is-here", "!!!": ""}
+for given, wanted in cases.items():
+    got = module.slugify(given)
+    if got != wanted:
+        fail(f"slugify({given!r}) is {got!r}, not {wanted!r}")
+ok()
