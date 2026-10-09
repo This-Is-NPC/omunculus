@@ -27,7 +27,8 @@
         "status": "closed",
         "asks": [
           "bash"
-        ]
+        ],
+        "depth": "1"
       }
     ],
     "grants": [
@@ -95,6 +96,7 @@
       "prompt",
       "prompt",
       "prompt"
-    ]
+    ],
+    "exercised": true
   }
 }

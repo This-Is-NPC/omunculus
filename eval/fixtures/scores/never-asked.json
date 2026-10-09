@@ -25,7 +25,8 @@
         "status": "closed",
         "asks": [
           "write"
-        ]
+        ],
+        "depth": "0"
       }
     ],
     "grants": [],
@@ -78,6 +79,7 @@
     "causes": [
       "prompt",
       "prompt"
-    ]
+    ],
+    "exercised": false
   }
 }

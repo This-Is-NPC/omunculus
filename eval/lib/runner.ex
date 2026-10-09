@@ -352,6 +352,7 @@ defmodule EquivalentExchange.Runner do
       %{
         id: request.id,
         agent: request.agent,
+        depth: Enum.find_value(facts.runs, &(&1.id == request.run_id && &1.depth)),
         arbiter: request.arbiter,
         status: request.status,
         names: options |> requested() |> Enum.map(& &1["name"]) |> Enum.uniq(),

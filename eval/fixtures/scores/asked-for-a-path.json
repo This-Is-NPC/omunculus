@@ -25,7 +25,8 @@
           "sandbox.write"
         ],
         "arbiter": "human",
-        "status": "closed"
+        "status": "closed",
+        "depth": "0"
       }
     ],
     "grants": [],
@@ -78,6 +79,7 @@
     "causes": [
       "prompt",
       "prompt"
-    ]
+    ],
+    "exercised": false
   }
 }

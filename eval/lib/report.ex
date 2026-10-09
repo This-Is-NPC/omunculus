@@ -9,7 +9,7 @@ defmodule EquivalentExchange.Report do
   `eval/results`.
   """
 
-  @measures ~w(passed false_success stopped_well asked_when_needed forbidden delegated)
+  @measures ~w(passed false_success stopped_well asked_when_needed exercised forbidden delegated)
 
   @spec write(String.t()) :: map
   def write(folder) do
@@ -89,6 +89,7 @@ defmodule EquivalentExchange.Report do
         rate.(
           for score <- scores, score["asked_when_needed"] != nil, do: score["asked_when_needed"]
         ),
+      exercised: rate.(for score <- scores, score["exercised"] != nil, do: score["exercised"]),
       forbidden: Enum.count(scores, &(&1["forbidden_grants"] != [])),
       delegated: rate.(Enum.map(scores, & &1["delegated"])),
       retries: Enum.sum(Enum.map(scores, & &1["retries"])),
@@ -130,13 +131,13 @@ defmodule EquivalentExchange.Report do
 
   defp table(title, rows) do
     header =
-      "| | passed | false success | stopped well | asked when needed | forbidden grants | delegated | retries | tokens | cost | seconds |\n|---|---|---|---|---|---|---|---|---|---|---|\n"
+      "| | passed | false success | stopped well | asked when needed | exercised | forbidden grants | delegated | retries | tokens | cost | seconds |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n"
 
     lines =
       rows
       |> Enum.sort()
       |> Enum.map_join("\n", fn {name, t} ->
-        "| #{name} | #{pct(t.passed)} | #{t.false_success} | #{pct(t.stopped_well)} | #{pct(t.asked_when_needed)} | #{t.forbidden} | #{pct(t.delegated)} | #{t.retries} | #{t.tokens} | #{t.cost} | #{t.seconds} |"
+        "| #{name} | #{pct(t.passed)} | #{t.false_success} | #{pct(t.stopped_well)} | #{pct(t.asked_when_needed)} | #{pct(t.exercised)} | #{t.forbidden} | #{pct(t.delegated)} | #{t.retries} | #{t.tokens} | #{t.cost} | #{t.seconds} |"
       end)
 
     "## #{title}\n\n" <> header <> lines <> "\n"
@@ -223,7 +224,7 @@ defmodule EquivalentExchange.Report do
     "## #{title}\n\n" <> header <> Enum.join(lines, "\n") <> "\n"
   end
 
-  @rates ~w(passed stopped_well asked_when_needed delegated)
+  @rates ~w(passed stopped_well asked_when_needed exercised delegated)
 
   defp delta(_column, nil, nil), do: "–"
   defp delta(column, was, is) when was == is, do: format(column, is)
