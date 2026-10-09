@@ -170,6 +170,14 @@ defmodule Omunculus.Tool.InvokeTest do
              }
     end
 
+    test "an output that is not valid UTF-8 has its invalid bytes replaced", %{dir: dir} do
+      manifest = manifest(dir, %{command: nil, module: "Omunculus.Test.ChainTool"})
+
+      # ChainTool prints its own name.
+      assert {:ok, %{output: output}} = Invoke.call(manifest, %{@input | name: <<"a", 255, "b">>})
+      assert output == "a\uFFFDb"
+    end
+
     test "a chain in out is parsed into name and args steps", %{dir: dir} do
       manifest = manifest(dir, %{command: nil, module: "Omunculus.Test.ChainTool"})
 

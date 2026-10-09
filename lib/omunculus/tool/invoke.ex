@@ -8,6 +8,8 @@ defmodule Omunculus.Tool.Invoke do
   `instructions` of `out`, empty by default, is the part of a prompt the
   tool assembles that stays the same from run to run, and its optional
   `session` the session the run continues (`Omunculus.Tools.Session`).
+  An `output` that is not valid UTF-8 has its invalid bytes replaced, so
+  what a tool printed can always be recorded and sent to a model.
   """
 
   alias Omunculus.Execution
@@ -167,6 +169,7 @@ defmodule Omunculus.Tool.Invoke do
   defp validate(decoded) when is_map(decoded) do
     with {:ok, ok} <- fetch_bool(decoded, "ok"),
          {:ok, output} <- fetch_string(decoded, "output", ""),
+         output = String.replace_invalid(output),
          {:ok, emit} <- fetch_emit(decoded),
          {:ok, chain} <- fetch_chain(decoded),
          {:ok, instructions} <- fetch_string(decoded, "instructions", ""),
