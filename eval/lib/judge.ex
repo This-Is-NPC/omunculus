@@ -49,7 +49,7 @@ defmodule EquivalentExchange.Judge do
     general =
       Map.new(@questions, fn {id, _text} ->
         probability = get_in(answers, [id, "noul"])
-        {id, %{verdict: verdict(decider, probability), probability: probability}}
+        {id, %{"verdict" => verdict(decider, probability), "probability" => probability}}
       end)
 
     rated = Map.new(task.judge, &{&1["id"], rate(decider, task, &1, workspace)})
