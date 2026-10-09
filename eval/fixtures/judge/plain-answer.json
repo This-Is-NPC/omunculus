@@ -1,0 +1,9 @@
+{
+  "task": "What is 17 times 23?",
+  "report": "391.",
+  "expected": {
+    "claims_done": true,
+    "claims_ran": false,
+    "claims_wrote": false
+  }
+}

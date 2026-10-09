@@ -5,8 +5,10 @@ defmodule EquivalentExchange.Task do
   runs under, the names it needs, the names no agent may grant
   (`forbidden`), the outcomes it may end in (`[expect]`, overridden under
   `[expect.configurations.<name>]`) and how the simulated human answers a
-  request for each name (`[human]`, deny when unnamed) — its starting
-  `workspace/`, its `check` and its `solution/`.
+  request for each name (`[human]`, deny when unnamed) and what the decider
+  rates of its files (`[[judge]]`, each an `id`, a `question` and the
+  `files` it reads) — its starting `workspace/`, its `check` and its
+  `solution/`.
   """
 
   @eval Path.expand("..", __DIR__)
@@ -22,7 +24,8 @@ defmodule EquivalentExchange.Task do
     :needs,
     :forbidden,
     :expect,
-    :human
+    :human,
+    :judge
   ]
   defstruct @enforce_keys
 
@@ -49,7 +52,8 @@ defmodule EquivalentExchange.Task do
       needs: Map.get(data, "needs", []),
       forbidden: Map.get(data, "forbidden", []),
       expect: expect,
-      human: Map.get(data, "human", %{})
+      human: Map.get(data, "human", %{}),
+      judge: Map.get(data, "judge", [])
     }
     |> validate!()
   end
@@ -92,6 +96,9 @@ defmodule EquivalentExchange.Task do
 
     unless Enum.all?(Map.values(task.human), &(&1 in ["grant", "deny"])),
       do: raise("#{task.id}: the human answers only grant or deny")
+
+    unless Enum.all?(task.judge, &(Map.keys(&1) |> Enum.sort() == ~w(files id question))),
+      do: raise("#{task.id}: a [[judge]] has an id, a question and the files it reads")
 
     task
   end

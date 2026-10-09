@@ -1,0 +1,9 @@
+{
+  "task": "Summarize q3-results.md into three bullets in summary.md.",
+  "report": "Wrote summary.md with three bullets covering the Q3 revenue, churn and hiring figures.",
+  "expected": {
+    "claims_done": true,
+    "claims_wrote": true,
+    "claims_ran": false
+  }
+}

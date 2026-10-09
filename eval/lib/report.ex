@@ -9,7 +9,7 @@ defmodule EquivalentExchange.Report do
   `eval/results`.
   """
 
-  @measures ~w(passed false_success stopped_well asked_when_needed exercised forbidden delegated)
+  @measures ~w(passed false_success stopped_well unbacked asked_when_needed exercised forbidden delegated rated)
 
   @spec write(String.t()) :: map
   def write(folder) do
@@ -83,8 +83,13 @@ defmodule EquivalentExchange.Report do
         rate.(
           for {execution, score} <- Enum.zip(group, scores),
               Enum.all?(execution["expected"], &(&1 != "done")),
+              score["stopped_well"] != nil,
               do: score["stopped_well"]
         ),
+      # A score from before the decider, kept by a task since removed, has none of these.
+      unbacked: Enum.count(scores, &(&1["unbacked"] not in [nil, []])),
+      unsure: Enum.count(scores, &(&1["unsure"] not in [nil, []])),
+      rated: mean(Enum.flat_map(scores, &Map.values(&1["rated"] || %{}))),
       asked_when_needed:
         rate.(
           for score <- scores, score["asked_when_needed"] != nil, do: score["asked_when_needed"]
@@ -97,6 +102,13 @@ defmodule EquivalentExchange.Report do
       cost: Float.round(Enum.sum(Enum.map(scores, &(&1["cost"] * 1.0))), 6),
       seconds: Float.round(Enum.sum(Enum.map(scores, & &1["duration_ms"])) / 1000, 1)
     }
+  end
+
+  defp mean(values) do
+    case Enum.reject(values, &is_nil/1) do
+      [] -> nil
+      known -> Float.round(Enum.sum(known) / length(known), 2)
+    end
   end
 
   defp previous(folder) do
@@ -117,7 +129,7 @@ defmodule EquivalentExchange.Report do
     """
     # Equivalent Exchange · #{summary.run}
 
-    Model `#{manifest["model"]}` · commit `#{manifest["commit"]}` · #{manifest["repetitions"]} repetition(s) · #{summary.totals.executions} executions
+    Model `#{manifest["model"]}` · commit `#{manifest["commit"]}` · #{manifest["repetitions"]} repetition(s) · #{summary.totals.executions} executions · #{trust(manifest["judge"])}
 
     #{table("Totals", %{"all" => summary.totals})}
     #{table("By configuration", summary.by_configuration)}
@@ -131,17 +143,23 @@ defmodule EquivalentExchange.Report do
 
   defp table(title, rows) do
     header =
-      "| | passed | false success | stopped well | asked when needed | exercised | forbidden grants | delegated | retries | tokens | cost | seconds |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+      "| | passed | false success | stopped well | unbacked claims | asked when needed | exercised | forbidden grants | delegated | rated | judge unsure | retries | tokens | cost | seconds |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
 
     lines =
       rows
       |> Enum.sort()
       |> Enum.map_join("\n", fn {name, t} ->
-        "| #{name} | #{pct(t.passed)} | #{t.false_success} | #{pct(t.stopped_well)} | #{pct(t.asked_when_needed)} | #{pct(t.exercised)} | #{t.forbidden} | #{pct(t.delegated)} | #{t.retries} | #{t.tokens} | #{t.cost} | #{t.seconds} |"
+        "| #{name} | #{pct(t.passed)} | #{t.false_success} | #{pct(t.stopped_well)} | #{t.unbacked} | #{pct(t.asked_when_needed)} | #{pct(t.exercised)} | #{t.forbidden} | #{pct(t.delegated)} | #{t.rated || "–"} | #{t.unsure} | #{t.retries} | #{t.tokens} | #{t.cost} | #{t.seconds} |"
       end)
 
     "## #{title}\n\n" <> header <> lines <> "\n"
   end
+
+  # How far the decider was trusted on the hand-written reports.
+  defp trust(%{"right" => right, "asked" => asked}),
+    do: "judge right on #{right} of #{asked} hand-written answers"
+
+  defp trust(nil), do: "no judge"
 
   defp findings(by_cause) when map_size(by_cause) == 0, do: "None.\n"
 

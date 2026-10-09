@@ -8,8 +8,10 @@ defmodule EquivalentExchange.Runner do
   recorded (`events.jsonl`) and `execution.json`: how it ended, the last
   words to the person, the check's verdict, the requests and how they were
   answered, the grants, the runs and tool calls, the usage the provider
-  reported, how long it took, the catalog's groups and its score
-  (`EquivalentExchange.Score`).
+  reported, how long it took, the catalog's groups, what the decider says
+  of it (`EquivalentExchange.Judge`) and its score
+  (`EquivalentExchange.Score`). The manifest says how far the decider was
+  trusted on the hand-written reports when the run began.
 
   `jobs` executions run at once, each in a project of its own. An execution
   builds its project (`EquivalentExchange.Project`), sends the
@@ -23,7 +25,7 @@ defmodule EquivalentExchange.Runner do
   retry or cancel is left waiting: the model stopped without a report.
   """
 
-  alias EquivalentExchange.{Project, Score, Task}
+  alias EquivalentExchange.{Judge, Project, Score, Task}
   alias Omunculus.CLI
   alias Omunculus.Store.Query
 
@@ -62,7 +64,8 @@ defmodule EquivalentExchange.Runner do
       tasks: Enum.map(tasks, & &1.id),
       executions: length(plan),
       timeout_s: Keyword.get(options, :timeout, 600),
-      jobs: Keyword.get(options, :jobs, 1)
+      jobs: Keyword.get(options, :jobs, 1),
+      judge: judge_trust()
     })
 
     # Executions share nothing — each has its own project — so `jobs` of them
@@ -161,10 +164,31 @@ defmodule EquivalentExchange.Runner do
       groups: groups
     }
 
-    execution = execution |> Jason.encode!() |> Jason.decode!()
-    execution = Map.put(execution, "score", Score.score(execution))
+    execution = assess(execution, task, workspace)
     write_json(Path.join(dir, "execution.json"), execution)
     execution
+  end
+
+  @doc """
+  An execution of `task` that left `workspace`, with what the decider says
+  of it and its score.
+  """
+  @spec assess(map, %Task{}, String.t()) :: map
+  def assess(execution, task, workspace) do
+    execution =
+      execution
+      |> Map.put("judgments", Judge.judge(task, execution["report"] || "", workspace))
+      |> Jason.encode!()
+      |> Jason.decode!()
+
+    Map.put(execution, "score", Score.score(execution))
+  end
+
+  @doc "How the decider did on the hand-written reports, for a manifest."
+  @spec judge_trust() :: map
+  def judge_trust do
+    {right, asked} = Judge.trust()
+    %{right: right, asked: asked}
   end
 
   # The person: answers what waits on them, then follows the runs that opens.

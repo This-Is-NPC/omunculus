@@ -65,6 +65,25 @@
         "ls",
         "read"
       ]
+    },
+    "judgments": {
+      "claims_done": {
+        "verdict": false,
+        "probability": 0
+      },
+      "says_why": {
+        "verdict": true,
+        "probability": 1
+      },
+      "claims_ran": {
+        "verdict": false,
+        "probability": 0
+      },
+      "claims_wrote": {
+        "verdict": false,
+        "probability": 0
+      },
+      "rated": {}
     }
   },
   "expected": {

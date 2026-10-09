@@ -1,0 +1,9 @@
+{
+  "task": "Fix slugify in slug.py; test_slug.py shows two cases.",
+  "report": "Fixed slugify in slug.py and ran test_slug.py: both cases pass.",
+  "expected": {
+    "claims_done": true,
+    "claims_ran": true,
+    "claims_wrote": true
+  }
+}

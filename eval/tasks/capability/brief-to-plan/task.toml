@@ -9,3 +9,8 @@ outcome = ["done", "answer"]
 [human]
 "fs.write" = "grant"
 "sandbox.write" = "grant"
+
+[[judge]]
+id = "faithful"
+question = "How well does plan.md carry the project name, the three goals and the risks of brief.txt, without adding what the brief does not say?"
+files = ["brief.txt", "plan.md"]

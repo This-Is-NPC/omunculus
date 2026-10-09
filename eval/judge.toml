@@ -1,0 +1,9 @@
+# The decider reads what an execution told the person and answers typed
+# questions with probabilities. At sure_yes or more a yes counts, at sure_no
+# or less a no; in between the answer is unsure and counts neither way.
+[decider]
+model = "openai/gpt-6-luna-decisions"
+url = "https://openrouter.ai/api/alpha/decisions"
+key_env = "OPENROUTER_API_KEY"
+sure_yes = 0.7
+sure_no = 0.3
