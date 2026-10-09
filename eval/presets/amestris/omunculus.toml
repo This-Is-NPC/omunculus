@@ -145,3 +145,7 @@ last_run_output_bytes = 8192
 tool_output_bytes = 32768
 # Every agent is sent the same tools, so their requests share the cache.
 send_catalog = true
+# A run continues its agent's paused session for five minutes, as long as
+# a provider keeps its cache, up to 200 KB of conversation.
+session_ttl_ms = 300000
+session_max_bytes = 200000
