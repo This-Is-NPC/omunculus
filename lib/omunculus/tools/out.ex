@@ -97,6 +97,9 @@ defmodule Omunculus.Tools.Out do
   def request_inbox(request_id, reason, options),
     do: "#{reason} Reply to request #{request_id} with #{Enum.join(options, " or ")}."
 
+  @spec refused(term) :: String.t()
+  def refused(reason), do: "refused: #{inspect(reason)}"
+
   @spec chain_failed(String.t(), term) :: String.t()
   def chain_failed(name, reason), do: "chain failed at #{name}: #{chain_reason(reason)}"
 

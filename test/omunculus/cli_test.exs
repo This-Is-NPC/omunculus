@@ -1061,7 +1061,8 @@ defmodule Omunculus.CLITest do
         unless assembled =~ "## Work",
           do: create_root(call, "Ship it")
 
-        assert {:error, {:continue, {:forbidden, "stage"}}} = call.("bad_continue", %{})
+        assert call.("bad_continue", %{}) ==
+                 {:ok, Out.refused({:continue, {:forbidden, "stage"}})}
 
         {:ok, "continuing"}
       end
@@ -1972,7 +1973,7 @@ defmodule Omunculus.CLITest do
       )
 
       model = fn _assembled, _tools, call ->
-        assert {:error, {:compact, :foreign_work}} = call.("foreign_compact", %{})
+        assert call.("foreign_compact", %{}) == {:ok, Out.refused({:compact, :foreign_work})}
         {:ok, "ok"}
       end
 

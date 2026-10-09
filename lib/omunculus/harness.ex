@@ -521,14 +521,24 @@ defmodule Omunculus.Harness do
             {failed, [call_entry(manifest, args, failed, nil)]}
         end
 
-      with {:ok, events} <-
-             Store.record_tools(
-               project.conn,
-               ctx.run_id,
-               calls,
-               store_ctx(ctx, work_id, config, catalog)
-             ) do
-        {:ok, out, events}
+      store_ctx = store_ctx(ctx, work_id, config, catalog)
+
+      case Store.record_tools(project.conn, ctx.run_id, calls, store_ctx) do
+        {:ok, events} ->
+          {:ok, out, events}
+
+        # A model's call the store refuses is recorded as failed, with why,
+        # and writes none of its emits: the model reads why and goes on.
+        {:error, reason} when ctx.trigger == "model" ->
+          refused = %{out | ok: false, output: Out.refused(reason)}
+          entry = call_entry(manifest, args, refused, nil)
+
+          with {:ok, events} <- Store.record_tools(project.conn, ctx.run_id, [entry], store_ctx) do
+            {:ok, refused, events}
+          end
+
+        {:error, _reason} = error ->
+          error
       end
     end
   end

@@ -1,6 +1,7 @@
 defmodule Omunculus.SpecRegressionTest do
   use ExUnit.Case, async: true
 
+  alias Omunculus.Tools.Out
   alias Omunculus.{Ceiling, CLI, Config, Fixtures, Id, Project, Run, Store}
   alias Omunculus.Store.Query
 
@@ -158,7 +159,7 @@ defmodule Omunculus.SpecRegressionTest do
     Fixtures.use_model(p, fn _, _, call ->
       for option <- ["grant", "deny"] do
         args = %{"request_id" => request, "option" => option, "body" => "approve"}
-        assert {:error, {:reply, :not_arbiter}} = call.("reply", args)
+        assert call.("reply", args) == {:ok, Out.refused({:reply, :not_arbiter})}
       end
 
       {:ok, "done"}
@@ -185,7 +186,7 @@ defmodule Omunculus.SpecRegressionTest do
 
     Fixtures.use_model(p, fn _, _, call ->
       args = %{"request_id" => request, "option" => "grant_agent", "body" => "forever"}
-      assert {:error, {:grant, :not_human}} = call.("reply", args)
+      assert call.("reply", args) == {:ok, Out.refused({:grant, :not_human})}
       {:ok, "done"}
     end)
 

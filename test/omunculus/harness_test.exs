@@ -55,7 +55,8 @@ defmodule Omunculus.HarnessTest do
     Project.close(project)
   end
 
-  test "an emit outside the catalogue fails and leaves the events table empty", %{dir: dir} do
+  test "a model's call whose emit is outside the catalogue is recorded as refused, with no emit",
+       %{dir: dir} do
     write_tool(
       dir,
       "boom",
@@ -74,8 +75,12 @@ defmodule Omunculus.HarnessTest do
     project = open_project(dir)
     ctx = %{trigger: "model", run_id: nil, author: "agent", agent: nil, execution: execution(dir)}
 
-    assert {:error, {:unknown_action, "nope"}} = Harness.dispatch(project, "boom", %{}, ctx)
-    assert {:ok, []} = Query.all(project.conn, "SELECT * FROM events")
+    assert {:ok, %{ok: false, output: output}, [event]} =
+             Harness.dispatch(project, "boom", %{}, ctx)
+
+    assert output == Out.refused({:unknown_action, "nope"})
+    assert {:ok, [%{type: "tool"}]} = Query.all(project.conn, "SELECT * FROM events")
+    assert %{"ok" => false, "output" => ^output} = Jason.decode!(event.body)
 
     Project.close(project)
   end
@@ -792,7 +797,7 @@ defmodule Omunculus.HarnessTest do
       end
     end
 
-    test "a step emit that fails to apply rolls back the tool and every step", %{
+    test "a step emit that fails to apply leaves only the refused call recorded", %{
       project: project,
       work_id: work_id
     } do
@@ -804,10 +809,11 @@ defmodule Omunculus.HarnessTest do
         ]
       }
 
-      assert {:error, {:comment, {:missing, :works, "nope"}}} =
+      assert {:ok, %{ok: false, output: output}, _events} =
                Harness.dispatch(project, "alpha", args, outside_run())
 
-      assert {:ok, []} = Query.all(project.conn, "SELECT * FROM events")
+      assert output == Out.refused({:comment, {:missing, :works, "nope"}})
+      assert {:ok, [%{type: "tool"}]} = Query.all(project.conn, "SELECT * FROM events")
       assert comment_bodies(project.conn) == []
     end
 

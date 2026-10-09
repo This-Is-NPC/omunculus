@@ -457,7 +457,8 @@ defmodule Omunculus.Tools.WorkTest do
       project = setup_project(dir, agents_toml(), model)
 
       for agent <- ["gamma", "checker", "ghost"] do
-        assert_received {^agent, {:error, {:delegate, {:agent_not_allowed, ^agent}}}}
+        assert_received {^agent, {:ok, refused}}
+        assert refused == Out.refused({:delegate, {:agent_not_allowed, agent}})
       end
 
       assert [_root] = all(project, "SELECT * FROM works")
@@ -508,7 +509,8 @@ defmodule Omunculus.Tools.WorkTest do
       assert {:ok, ""} = CLI.run(["send", "go"], dir)
       project = Fixtures.open_project(dir)
 
-      assert_received {:named, {:error, {:delegate, :agent_with_workflow}}}
+      assert_received {:named, {:ok, named}}
+      assert named == Out.refused({:delegate, :agent_with_workflow})
       assert_received {:schema, "lead", staged}
       refute Map.has_key?(staged["properties"]["works"]["items"]["properties"], "agent")
       assert [_root] = all(project, "SELECT * FROM works")
@@ -528,7 +530,8 @@ defmodule Omunculus.Tools.WorkTest do
 
       project = setup_project(dir, agents_toml(), model)
 
-      assert_received {:two, {:error, {:work, :one_root}}}
+      assert_received {:two, {:ok, two}}
+      assert two == Out.refused({:work, :one_root})
       assert_received {:no_goal, {:ok, "works[0]: goal required"}}
       assert [] = all(project, "SELECT * FROM works")
       assert [_run] = all(project, "SELECT * FROM runs")
