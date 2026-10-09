@@ -18,9 +18,8 @@ defmodule EquivalentExchange.Score do
     and time.
 
   Each failure comes with `findings`, a probable cause — `prompt` (an
-  agent's text), `tool` (a tool's description or result), `ceiling` (the
-  configuration), `harness` (omunculus itself) or `task` (the benchmark) —
-  and what points to it.
+  agent's text), `tool` (a tool's description or result) or `harness`
+  (omunculus itself) — and what points to it.
   """
 
   @asking ~w(negotiated human-gated)
