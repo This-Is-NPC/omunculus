@@ -44,6 +44,11 @@ timeout_ms = 180000
 [models.luna.body]
 usage = { include = true }
 
+# Answers with the first line of its prompt: checks the runner without a provider.
+[models.fake]
+api = "module"
+module = "Omunculus.Model.Fake"
+
 [agents.father]
 depth = 0
 model = "luna"

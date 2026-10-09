@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Equivalent Exchange: run the behaviour benchmark (mise run eval:run -- --model luna --k 2)"
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+
+# The providers' keys come from .env, as the dev server's do.
+if [[ -f .env ]]; then
+  set -a
+  source .env
+  set +a
+fi
+exec mix run eval/run.exs run "$@"

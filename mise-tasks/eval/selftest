@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Equivalent Exchange: prove every task's check against its solution"
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+exec mix run eval/run.exs selftest

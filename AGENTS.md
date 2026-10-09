@@ -80,8 +80,9 @@ test/support/        fixtures, store case, scripted model, chain tool, execution
                      fixtures, command model bridge, MCP server, Rust OpenAI stub
 bench/               resident capacity benchmark
 eval/                Equivalent Exchange, the behaviour benchmark: the Amestris preset,
-                     the configurations it runs under and its tasks (mix run eval/run.exs)
-mise-tasks/          validate/regular, validate/sandbox, pre-commit, pre-push, up, dev/*, benchmark/*
+                     its configurations, tasks and runner (mise run eval:run); each run
+                     writes eval/results/<time>-<label>/, ignored by git
+mise-tasks/          validate/regular, validate/sandbox, pre-commit, pre-push, up, dev/*, benchmark/*, eval/*
 dev/                 the development environment: server registry and project config
 ```
 
