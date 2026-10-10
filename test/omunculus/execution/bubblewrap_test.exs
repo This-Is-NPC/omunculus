@@ -153,6 +153,11 @@ defmodule Omunculus.Execution.BubblewrapTest do
 
     refute Enum.chunk_every(host_args, 3, 1, :discard)
            |> Enum.any?(&(&1 == ["--ro-bind", "/", "/"]))
+
+    # With the network, a process can name hosts and trust certificates.
+    resolver = ["--ro-bind-try", "/etc/resolv.conf", "/etc/resolv.conf"]
+    assert resolver in Enum.chunk_every(host_args, 3, 1, :discard)
+    refute resolver in Enum.chunk_every(none_args, 3, 1, :discard)
   end
 
   test "uses the runner from the policy", %{workspace: workspace} do

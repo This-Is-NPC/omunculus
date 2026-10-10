@@ -117,6 +117,7 @@ defmodule Omunculus.Execution.Bubblewrap do
       network_args(policy.network) ++
       ["--die-with-parent", "--new-session", "--clearenv", "--tmpfs", "/"] ++
       base_filesystem_args(policy.scratch) ++
+      network_files(policy.network) ++
       mount_args(mounts) ++
       hidden_args(policy.hidden, mounts, temp_dir) ++
       environment_args(policy, mounts) ++
@@ -283,6 +284,15 @@ defmodule Omunculus.Execution.Bubblewrap do
 
   defp network_args("host"), do: ["--share-net"]
   defp network_args("none"), do: []
+
+  # A network a process can use names hosts and trusts certificates: the
+  # host's resolver, hosts and TLS anchors, read-only, where it has them.
+  @network_files ~w(/etc/resolv.conf /etc/hosts /etc/nsswitch.conf /etc/ssl /etc/ca-certificates /etc/pki)
+
+  defp network_files("host"),
+    do: Enum.flat_map(@network_files, &["--ro-bind-try", &1, &1])
+
+  defp network_files("none"), do: []
 
   # A run's scratch is its /tmp, home included, kept from one command to
   # the next; a command outside a run gets an empty one.
