@@ -59,9 +59,9 @@ defmodule EquivalentExchange.Selftest do
     File.rm_rf!(untouched)
 
     case {passed, claimed} do
-      {{true, _}, {false, _}} -> []
-      {{false, said}, _} -> ["the solution fails: " <> said]
-      {_, {true, _}} -> ["an untouched workspace claimed done passes"]
+      {{true, _, _}, {false, _, _}} -> []
+      {{false, said, _}, _} -> ["the solution fails: " <> said]
+      {_, {true, _, _}} -> ["an untouched workspace claimed done passes"]
     end
   end
 

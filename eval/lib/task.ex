@@ -69,8 +69,11 @@ defmodule EquivalentExchange.Task do
   @spec answer(%__MODULE__{}, String.t()) :: String.t()
   def answer(task, name), do: Map.get(task.human, name, "deny")
 
-  @doc "Runs the task's check on `workspace` with the run's `outcome`; {passed, what it said}."
-  @spec check(%__MODULE__{}, String.t(), map) :: {boolean, String.t()}
+  @doc """
+  Runs the task's check on `workspace` with the run's `outcome`: {passed,
+  what it said, whether the workspace holds, whatever the run's ending}.
+  """
+  @spec check(%__MODULE__{}, String.t(), map) :: {boolean, String.t(), boolean}
   def check(task, workspace, outcome) do
     file = Path.join(System.tmp_dir!(), "ee-outcome-#{System.unique_integer([:positive])}.json")
     File.write!(file, Jason.encode!(outcome))
@@ -79,7 +82,7 @@ defmodule EquivalentExchange.Task do
       {said, status} =
         System.cmd(Path.join(task.dir, "check"), [workspace, file], stderr_to_stdout: true)
 
-      {status == 0, String.trim(said)}
+      {status == 0, String.trim(said), status in [0, 2]}
     after
       File.rm(file)
     end

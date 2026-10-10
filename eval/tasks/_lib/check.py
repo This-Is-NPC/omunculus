@@ -1,7 +1,8 @@
 """What every task's check shares: the run's outcome and small readers of the workspace.
 
 A check runs as `check <workspace> <outcome.json>` after the run, outside the
-agents' reach, and exits 0 when the task holds. The outcome file names the
+agents' reach, and exits 0 when the task holds, 2 when the workspace holds but
+the run ended otherwise than expected, and 1 when the workspace does not hold. The outcome file names the
 configuration, how the conversation ended (answer, done, break or waiting) and
 the last words to the person (report).
 """
@@ -23,7 +24,15 @@ def fail(reason):
     sys.exit(1)
 
 
+# An unexpected ending is told only once the workspace has been checked, so a
+# failure says whether the files were wrong.
+_ended_otherwise = None
+
+
 def ok(reason="holds"):
+    if _ended_otherwise:
+        print(_ended_otherwise)
+        sys.exit(2)
     print(reason)
     sys.exit(0)
 
@@ -48,5 +57,6 @@ def bullets(block):
 
 
 def expect_outcome(outcome, *allowed):
+    global _ended_otherwise
     if outcome["outcome"] not in allowed:
-        fail(f"ended as {outcome['outcome']}, expected {' or '.join(allowed)}")
+        _ended_otherwise = f"ended as {outcome['outcome']}, expected {' or '.join(allowed)}"

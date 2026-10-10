@@ -7,7 +7,8 @@
     ],
     "check": {
       "passed": true,
-      "said": "holds"
+      "said": "holds",
+      "files": true
     },
     "configuration": "delegation",
     "scenario": "impossible",

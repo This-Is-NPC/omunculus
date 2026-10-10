@@ -8,7 +8,8 @@
     ],
     "check": {
       "passed": true,
-      "said": "archive kept"
+      "said": "archive kept",
+      "files": true
     },
     "configuration": "negotiated",
     "scenario": "permission",

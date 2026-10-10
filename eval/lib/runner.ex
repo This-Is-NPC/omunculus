@@ -133,7 +133,7 @@ defmodule EquivalentExchange.Runner do
     workspace = Path.join(project, "workspace")
     report = report(facts)
 
-    {passed, said} =
+    {passed, said, files} =
       Task.check(task, workspace, %{
         outcome: outcome,
         report: report,
@@ -155,7 +155,7 @@ defmodule EquivalentExchange.Runner do
       outcome: outcome,
       expected: Task.outcomes(task, configuration),
       report: report,
-      check: %{passed: passed, said: said},
+      check: %{passed: passed, said: said, files: files},
       error: error(status),
       requests: requests(facts, answers, project),
       grants: grants(facts),
@@ -211,7 +211,7 @@ defmodule EquivalentExchange.Runner do
     execution = path |> File.read!() |> Jason.decode!()
     report = report(facts)
 
-    {passed, said} =
+    {passed, said, files} =
       Task.check(task, workspace, %{
         outcome: execution["outcome"],
         report: report,
@@ -221,7 +221,7 @@ defmodule EquivalentExchange.Runner do
     execution
     |> Map.merge(%{
       "report" => report,
-      "check" => %{"passed" => passed, "said" => said},
+      "check" => %{"passed" => passed, "said" => said, "files" => files},
       "grants" => grants(facts),
       "usage" => usage(facts, price(project, execution["model"]))
     })
