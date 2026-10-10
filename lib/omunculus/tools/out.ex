@@ -125,6 +125,12 @@ defmodule Omunculus.Tools.Out do
     do:
       "refused: #{name} is not one of your tools; if the work needs it, ask with one request_access for it and everything else the work lacks"
 
+  @doc "What a model reads of done or break in a run without a work."
+  @spec no_work() :: String.t()
+  def no_work,
+    do:
+      "refused: this run has no work to close: answer the person in plain text, or hand the work down with work"
+
   @doc "What a model reads of a call whose arguments were not a JSON object."
   @spec invalid_arguments() :: String.t()
   def invalid_arguments,

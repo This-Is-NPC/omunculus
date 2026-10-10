@@ -37,6 +37,7 @@ defmodule Omunculus.EnglishTest do
       Out.refused({:reply, {:unknown_option, "grant: grant", ["deny", "grant"]}}),
       Out.read_only_workspace(),
       Out.invalid_arguments(),
+      Out.no_work(),
       Out.preset_applied("default"),
       Out.no_tools_found(),
       Out.no_comments(),

@@ -2,17 +2,22 @@ defmodule Omunculus.Tools.BreakTest do
   use ExUnit.Case, async: true
 
   alias Omunculus.Tool.{Catalog, Invoke}
-  alias Omunculus.Tools.Break
+  alias Omunculus.Tools.{Break, Out}
 
   @input %{
     name: "break",
     args: %{},
     view: %{},
     run_id: nil,
-    work_id: nil,
+    work_id: "w1",
     workspace: nil,
     roots: []
   }
+
+  test "a run without a work is told to answer instead" do
+    input = %{@input | work_id: nil, args: %{"report" => "stuck"}}
+    assert Break.run(input) == %{"ok" => false, "output" => Out.no_work(), "emit" => []}
+  end
 
   test "emits break with the report as its comment body" do
     input = %{@input | args: %{"report" => "waiting on design review"}}
