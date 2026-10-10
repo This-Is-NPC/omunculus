@@ -137,7 +137,9 @@ may run at once, each on its own model; a run is compared only with the folder
 once (one by default): each has a project of its own, so they share nothing
 but the provider's rate limits, which each model's `retries` rides out. Each execution gets a fresh project; the instruction goes through the CLI, which returns once every run
 has finished; then the runner plays the person, answering what waits on them
-as the task says, a few rounds at most.
+as the task says, a few rounds at most. It grants a request only when the
+task grants everything asked; denying, it says what it would not grant and
+what it would.
 
 ## The decider
 

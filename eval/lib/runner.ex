@@ -267,7 +267,7 @@ defmodule EquivalentExchange.Runner do
       waiting ->
         given =
           for request <- waiting,
-              option = choose(task, groups, request, project),
+              {option, body} = choose(task, groups, request, project),
               option != nil do
             {:ok, _said} =
               CLI.run(
@@ -280,7 +280,7 @@ defmodule EquivalentExchange.Runner do
                   "--option",
                   option,
                   "--body",
-                  "simulated person: #{option}"
+                  body
                 ],
                 project
               )
@@ -307,26 +307,40 @@ defmodule EquivalentExchange.Runner do
   end
 
   # Grant when the task grants everything the request asks, by the name or by
-  # a group that holds it; deny otherwise. A grant is temporary when the
-  # request offers it, else for the asking agent (a request made without a
-  # work offers no temporary one). A request without grant and deny (retry or
+  # a group that holds it; deny otherwise, saying what it would not grant and
+  # what it would, as a person does. A grant is temporary when the request
+  # offers it, else for the asking agent (a request made without a work
+  # offers no temporary one). A request without grant and deny (retry or
   # cancel) is left waiting.
   defp choose(task, groups, request, project) do
     options = Jason.decode!(request.options)
     names = asks(options, project)
 
-    granted? = fn name ->
-      Enum.any?([name | groups_of(groups, name)], &(Task.answer(task, &1) == "grant"))
-    end
+    {granted, denied} =
+      Enum.split_with(names, fn name ->
+        Enum.any?([name | groups_of(groups, name)], &(Task.answer(task, &1) == "grant"))
+      end)
 
     grant = Enum.find(["grant", "grant_agent"], &Map.has_key?(options, &1))
 
     cond do
-      names != [] and Enum.all?(names, granted?) and grant != nil -> grant
-      Map.has_key?(options, "deny") -> "deny"
-      true -> nil
+      names != [] and denied == [] and grant != nil ->
+        {grant, "Granted: #{Enum.join(granted, ", ")}."}
+
+      Map.has_key?(options, "deny") ->
+        {"deny", refusal(denied, granted)}
+
+      true ->
+        {nil, nil}
     end
   end
+
+  defp refusal([], _granted), do: "Not granted."
+  defp refusal(denied, []), do: "Not granted: #{Enum.join(denied, ", ")}."
+
+  defp refusal(denied, granted),
+    do:
+      "Not granted: #{Enum.join(denied, ", ")}. I would grant #{Enum.join(granted, ", ")}: ask again without the rest."
 
   defp groups_of(groups, name), do: for({group, members} <- groups, name in members, do: group)
 
