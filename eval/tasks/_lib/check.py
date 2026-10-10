@@ -60,3 +60,25 @@ def expect_outcome(outcome, *allowed):
     global _ended_otherwise
     if outcome["outcome"] not in allowed:
         _ended_otherwise = f"ended as {outcome['outcome']}, expected {' or '.join(allowed)}"
+
+
+def docx_paragraphs(workspace, name):
+    """The paragraphs of a .docx as (style, text): its style id, or "", and its runs' text joined."""
+    import zipfile
+    import xml.etree.ElementTree as tree
+
+    path = workspace / name
+    if not path.is_file():
+        fail(f"{name} is missing")
+    try:
+        with zipfile.ZipFile(path) as archive:
+            document = tree.fromstring(archive.read("word/document.xml"))
+    except (zipfile.BadZipFile, KeyError, tree.ParseError):
+        fail(f"{name} is not a Word document")
+    w = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    paragraphs = []
+    for paragraph in document.iter(f"{w}p"):
+        style = paragraph.find(f"{w}pPr/{w}pStyle")
+        text = "".join(node.text or "" for node in paragraph.iter(f"{w}t"))
+        paragraphs.append((style.get(f"{w}val") if style is not None else "", text))
+    return paragraphs

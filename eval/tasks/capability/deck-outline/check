@@ -1,0 +1,21 @@
+#!/usr/bin/env python3
+import pathlib, sys
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "_lib"))
+from check import *
+
+# The slides after the title one, in order, each its title and its points.
+workspace, outcome = load()
+expect_outcome(outcome, "done", "answer")
+outline = text(workspace, "outline.md")
+slides = {
+    "Billing": ["Migrate to Postgres 17", "Export invoices to PDF"],
+    "Checkout": ["Latency under 300 ms", "Retry failed payments"],
+    "Docs": ["Publish the public API reference"],
+}
+titles = re.findall(r"^##\s+(.+?)\s*$", outline, re.M)
+if titles != list(slides):
+    fail(f"the headings are {titles}, not {list(slides)}")
+for title, points in slides.items():
+    if bullets(section(outline, title)) != points:
+        fail(f"## {title} does not list {points}")
+ok()
