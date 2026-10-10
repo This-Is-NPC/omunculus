@@ -109,6 +109,11 @@ defmodule Omunculus.Tools.Out do
   def read_only_workspace,
     do: "The workspace is read-only in this run: writing, moving or deleting needs sandbox.write."
 
+  @spec closed_network() :: String.t()
+  def closed_network,
+    do:
+      "The network is closed in this run: downloading or reaching any host needs sandbox.network, which request_access can ask for."
+
   @spec not_text(String.t(), non_neg_integer) :: String.t()
   def not_text(path, bytes), do: "#{path} is not a text file (#{bytes} bytes)"
 

@@ -22,10 +22,14 @@ defmodule Omunculus.Tools.Bash do
     with {:ok, command} <- Command.new("/usr/bin/sh", ["-c", source], cwd: policy.workspace.root),
          {:ok, result} <- Execution.run(command, policy) do
       output = result.stdout <> result.stderr
-      Out.ok(output <> refused_write(policy, output))
+      Out.ok(output <> refused_write(policy, output) <> closed_network(policy, output))
     else
       {:error, {:exit, status, stdout, stderr}} ->
-        Out.fail(stdout <> stderr <> "\n(exit #{status})" <> read_only(policy))
+        output = stdout <> stderr
+
+        Out.fail(
+          output <> "\n(exit #{status})" <> read_only(policy) <> closed_network(policy, output)
+        )
 
       {:error, reason} ->
         Out.fail("execution failed: #{inspect(reason)}")
@@ -34,6 +38,15 @@ defmodule Omunculus.Tools.Bash do
 
   defp read_only(%Policy{read_write: []}), do: "\n" <> Out.read_only_workspace()
   defp read_only(_policy), do: ""
+
+  # What a command prints when it reaches for a network the run does not
+  # have: no name resolves, no connection opens.
+  @offline ~r/name resolution|Could not resolve|Network is unreachable|Failed to establish a new connection|Temporary failure|getaddrinfo|No address associated/i
+
+  defp closed_network(%Policy{network: "none"}, output),
+    do: if(Regex.match?(@offline, output), do: "\n" <> Out.closed_network(), else: "")
+
+  defp closed_network(_policy, _output), do: ""
 
   # A command that went on after a write the sandbox refused still exits 0.
   defp refused_write(policy, output),
