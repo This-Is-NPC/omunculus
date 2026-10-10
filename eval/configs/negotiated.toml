@@ -5,11 +5,11 @@
 negotiable = ["fs.write", "sandbox.write", "bash", "sandbox.network"]
 
 [agents.edward]
-tools = ["break", "comment", "continue", "directory", "done", "end", "fs.read", "notify", "request_access", "request_sandbox"]
+tools = ["break", "comment", "continue", "directory", "done", "end", "fs.read", "notify", "request_access"]
 negotiable = ["fs.write", "sandbox.write", "bash", "sandbox.network"]
 
 [agents.envy]
-tools = ["break", "comment", "continue", "directory", "done", "end", "fs.read", "notify", "request_access", "request_sandbox"]
+tools = ["break", "comment", "continue", "directory", "done", "end", "fs.read", "notify", "request_access"]
 negotiable = ["fs.write", "sandbox.write", "bash", "sandbox.network"]
 
 [agents.gluttony]

@@ -135,8 +135,7 @@ defmodule Omunculus.SpecRegressionTest do
     Fixtures.use_model(p, fn _, _, call ->
       call.("request_access", %{
         "report" => "blocked",
-        "kind" => "tool",
-        "name" => "write",
+        "access" => [%{"kind" => "tool", "name" => "write"}],
         "reason" => "write report"
       })
 
@@ -300,8 +299,7 @@ defmodule Omunculus.SpecRegressionTest do
 
       assert call.("request_access", %{
                "report" => "blocked",
-               "kind" => "tool",
-               "name" => "missing_tool",
+               "access" => [%{"kind" => "tool", "name" => "missing_tool"}],
                "reason" => "test"
              }) == {:ok, Out.refused({:request, {:blocked, "missing_tool"}})}
 
@@ -726,8 +724,7 @@ defmodule Omunculus.SpecRegressionTest do
 
       call.("request_access", %{
         "report" => "blocked",
-        "kind" => "path",
-        "name" => "./secret",
+        "access" => [%{"kind" => "path", "name" => "./secret"}],
         "reason" => "read report"
       })
 

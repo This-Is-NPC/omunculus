@@ -711,8 +711,7 @@ defmodule Omunculus.RunTest do
 
       call.("request_access", %{
         "report" => "x",
-        "kind" => "tool",
-        "name" => "other",
+        "access" => [%{"kind" => "tool", "name" => "other"}],
         "reason" => "x"
       })
 
@@ -741,8 +740,7 @@ defmodule Omunculus.RunTest do
     model = fn _assembled, _tools, call ->
       call.("request_access", %{
         "report" => "blocked",
-        "kind" => "path",
-        "name" => "./secret",
+        "access" => [%{"kind" => "path", "name" => "./secret"}],
         "reason" => "need it"
       })
 
@@ -764,20 +762,20 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
-  test "request_sandbox with sandbox.write opens a REQUESTS row", %{dir: dir} do
+  test "request_access for sandbox.write opens a REQUESTS row", %{dir: dir} do
     write_config(dir, """
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["end", "request_sandbox"]
+    tools = ["end", "request_access"]
     """)
 
     project = open_project(dir)
 
     model = fn _assembled, _tools, call ->
-      call.("request_sandbox", %{
+      call.("request_access", %{
         "report" => "blocked on write",
-        "name" => "sandbox.write",
+        "access" => [%{"kind" => "resource", "name" => "sandbox.write"}],
         "reason" => "need to write"
       })
 
@@ -799,22 +797,22 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
-  test "request_sandbox in a run with a work comments the report on it before the request and ends the run",
+  test "request_access in a run with a work comments the report on it before the request and ends the run",
        %{dir: dir} do
     write_config(dir, """
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["comment", "end", "request_sandbox"]
+    tools = ["comment", "end", "request_access"]
     """)
 
     project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works)
 
     model = fn _assembled, _tools, call ->
-      call.("request_sandbox", %{
+      call.("request_access", %{
         "report" => "blocked on write",
-        "name" => "sandbox.write",
+        "access" => [%{"kind" => "resource", "name" => "sandbox.write"}],
         "reason" => "need to write"
       })
 
@@ -906,9 +904,9 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
 
     model = fn _assembled, _tools, call ->
-      call.("request_sandbox", %{
+      call.("request_access", %{
         "report" => "blocked on write",
-        "name" => "sandbox.write",
+        "access" => [%{"kind" => "resource", "name" => "sandbox.write"}],
         "reason" => "need to write"
       })
 

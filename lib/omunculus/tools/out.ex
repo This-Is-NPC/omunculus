@@ -123,7 +123,7 @@ defmodule Omunculus.Tools.Out do
   @spec not_yours(String.t()) :: String.t()
   def not_yours(name),
     do:
-      "refused: #{name} is not one of your tools; ask for it with request_access if the work needs it"
+      "refused: #{name} is not one of your tools; if the work needs it, ask with one request_access for it and everything else the work lacks"
 
   @doc "What a model reads of a call that failed: a text as it is, anything else inspected."
   @spec failure(term) :: String.t()

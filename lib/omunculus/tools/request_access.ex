@@ -1,38 +1,59 @@
 defmodule Omunculus.Tools.RequestAccess do
   @moduledoc """
-  Builtin `request_access` tool, per spec §3.5: emits a `request` for a
-  tool, path, or directory. Sandbox capabilities go through `request_sandbox`.
-  The options are one `grant_<scope>` per scope of the `grant_scopes`
-  view, each a permanent `grant` call, `deny`, with no call, and, in a run
-  with a work, `grant`, which grants on that work. In a run with a work, a
-  `comment` with the `report` on that work comes first. Its manifest's
-  `then` appends `end`.
+  Builtin `request_access` tool, per spec §3.5: emits one `request` for
+  everything in `access`, each a `{kind, name}`: a tool, a path, a
+  directory, or a sandbox capability (`resource`) named in `[execution]
+  resources`. Each option grants all of them: one `grant_<scope>` per
+  scope of the `grant_scopes` view, permanent; `deny`, with no call; and,
+  in a run with a work, `grant`, which grants on that work. In a run with
+  a work, a `comment` with the `report` on that work comes first. Its
+  manifest's `then` appends `end`.
   """
 
+  alias Omunculus.Config
   alias Omunculus.Tools.{Args, Out}
 
-  @required ~w(report kind name reason)
-  @kinds ~w(tool path directory)
+  @required ~w(report reason)
+  @kinds ~w(tool resource path directory)
 
   @spec run(map) :: map
   def run(%{args: args} = input) do
-    case Args.missing(args, @required) do
-      nil -> validate(input)
+    with nil <- Args.missing(args, @required),
+         {:ok, access} <- access(args["access"]) do
+      emit(input, access)
+    else
+      {:error, message} -> Out.fail(message)
       message -> Out.fail(message)
     end
   end
 
-  defp validate(%{args: %{"kind" => kind, "name" => name}} = input) when kind in @kinds,
-    do: emit(input, kind, name)
+  defp access([_ | _] = access) do
+    Enum.reduce_while(access, {:ok, []}, fn item, {:ok, acc} ->
+      case item(item) do
+        {:ok, grant} -> {:cont, {:ok, acc ++ [grant]}}
+        {:error, _message} = error -> {:halt, error}
+      end
+    end)
+  end
 
-  defp validate(%{args: %{"kind" => kind}}), do: Out.fail("unsupported access kind: #{kind}")
+  defp access(_access), do: {:error, "access required: a list of {kind, name}"}
 
-  @doc """
-  The emits of a request tool: the `report` as a comment on the run's
-  work, when it has one, then the `request` for `name` of `kind`.
-  """
-  @spec emit(map, String.t(), String.t()) :: map
-  def emit(%{args: %{"report" => report, "reason" => reason}} = input, kind, name) do
+  defp item(%{"kind" => "resource", "name" => name}) when is_binary(name) do
+    if name in Config.known_resources(),
+      do: {:ok, %{"kind" => "resource", "name" => name}},
+      else: {:error, "unsupported resource: #{name}"}
+  end
+
+  defp item(%{"kind" => kind, "name" => name})
+       when kind in @kinds and is_binary(name) and name != "",
+       do: {:ok, %{"kind" => kind, "name" => name}}
+
+  defp item(%{"kind" => kind}) when is_binary(kind) and kind not in @kinds,
+    do: {:error, "unsupported access kind: #{kind}"}
+
+  defp item(_item), do: {:error, "each access needs a kind and a name"}
+
+  defp emit(%{args: %{"report" => report, "reason" => reason}} = input, access) do
     work_id = input.work_id
 
     comment =
@@ -40,19 +61,20 @@ defmodule Omunculus.Tools.RequestAccess do
         do: [%{"type" => "comment", "body" => %{"work_id" => work_id, "body" => report}}],
         else: []
 
-    options = options(input.view["grant_scopes"], kind, name, work_id)
+    options = options(input.view["grant_scopes"], access, work_id)
     request = %{"reason" => reason, "options" => options}
     Out.ok("", comment ++ [%{"type" => "request", "body" => request}])
   end
 
-  defp options(scopes, kind, name, work_id) do
-    grant = %{"name" => name, "kind" => kind}
+  defp options(scopes, access, work_id) do
+    permanent =
+      scopes
+      |> Map.new(&{"grant_#{&1}", grant_calls(access, %{"scope" => &1})})
+      |> Map.put("deny", [])
 
-    scopes
-    |> Map.new(&{"grant_#{&1}", [grant_call(Map.put(grant, "scope", &1))]})
-    |> Map.put("deny", [])
-    |> then(&if(work_id, do: Map.put(&1, "grant", [grant_call(grant)]), else: &1))
+    if work_id, do: Map.put(permanent, "grant", grant_calls(access, %{})), else: permanent
   end
 
-  defp grant_call(args), do: %{"name" => "grant", "args" => args}
+  defp grant_calls(access, extra),
+    do: Enum.map(access, &%{"name" => "grant", "args" => Map.merge(&1, extra)})
 end

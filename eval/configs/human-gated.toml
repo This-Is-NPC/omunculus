@@ -3,11 +3,11 @@
 # through a request the simulated human answers. Every worker is held so,
 # or a request of one left out would go to Father instead.
 [agents.edward]
-tools = ["break", "comment", "continue", "directory", "done", "end", "fs.read", "notify", "request_access", "request_sandbox"]
+tools = ["break", "comment", "continue", "directory", "done", "end", "fs.read", "notify", "request_access"]
 human = ["fs.write", "sandbox.write", "bash", "sandbox.network"]
 
 [agents.envy]
-tools = ["break", "comment", "continue", "directory", "done", "end", "fs.read", "notify", "request_access", "request_sandbox"]
+tools = ["break", "comment", "continue", "directory", "done", "end", "fs.read", "notify", "request_access"]
 human = ["fs.write", "sandbox.write", "bash", "sandbox.network"]
 
 [agents.gluttony]

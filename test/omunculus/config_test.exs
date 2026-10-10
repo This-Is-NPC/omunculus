@@ -237,7 +237,7 @@ defmodule Omunculus.ConfigTest do
     assert {:ok, %Config{agents: agents}} = Config.load(default_preset())
 
     assert %{"worker" => %{ceiling: ceiling}} = agents
-    assert "request_sandbox" in ceiling.granted
+    assert "request_access" in ceiling.granted
     refute "sandbox.write" in ceiling.granted
     assert ceiling.human == ["sandbox.write"]
   end
@@ -247,7 +247,7 @@ defmodule Omunculus.ConfigTest do
       path = Application.app_dir(:omunculus, "priv/presets/#{preset}/omunculus.toml")
       assert {:ok, %Config{agents: agents}} = Config.load(path)
       ceiling = agents[agent].ceiling
-      assert "request_sandbox" in ceiling.granted
+      assert "request_access" in ceiling.granted
       refute "sandbox.write" in ceiling.granted
       assert "sandbox.write" in ceiling.human
     end

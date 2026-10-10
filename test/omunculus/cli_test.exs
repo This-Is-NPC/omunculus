@@ -483,8 +483,7 @@ defmodule Omunculus.CLITest do
       model = fn _assembled, _tools, call ->
         call.("request_access", %{
           "report" => "blocked on write",
-          "kind" => "tool",
-          "name" => "write",
+          "access" => [%{"kind" => "tool", "name" => "write"}],
           "reason" => "need to write"
         })
 
@@ -635,8 +634,7 @@ defmodule Omunculus.CLITest do
 
         call.("request_access", %{
           "report" => "blocked on write",
-          "kind" => "tool",
-          "name" => "write",
+          "access" => [%{"kind" => "tool", "name" => "write"}],
           "reason" => "need to write"
         })
 
@@ -741,8 +739,7 @@ defmodule Omunculus.CLITest do
           {:refused,
            call.("request_access", %{
              "report" => "blocked on write",
-             "kind" => "tool",
-             "name" => "write",
+             "access" => [%{"kind" => "tool", "name" => "write"}],
              "reason" => "need it"
            })}
         )
@@ -776,8 +773,7 @@ defmodule Omunculus.CLITest do
           {:asked,
            call.("request_access", %{
              "report" => "checking comment",
-             "kind" => "tool",
-             "name" => "comment",
+             "access" => [%{"kind" => "tool", "name" => "comment"}],
              "reason" => "just checking"
            })}
         )
@@ -1544,8 +1540,7 @@ defmodule Omunculus.CLITest do
               0 ->
                 call.("request_access", %{
                   "report" => "blocked on write",
-                  "kind" => "tool",
-                  "name" => "write",
+                  "access" => [%{"kind" => "tool", "name" => "write"}],
                   "reason" => "need to write"
                 })
 

@@ -274,8 +274,7 @@ defmodule Omunculus.WorkspaceTest do
     request_model = fn _assembled, _tools, call ->
       call.("request_access", %{
         "report" => "blocked on delete",
-        "kind" => "tool",
-        "name" => "delete",
+        "access" => [%{"kind" => "tool", "name" => "delete"}],
         "reason" => "need to delete"
       })
 
@@ -361,8 +360,7 @@ defmodule Omunculus.WorkspaceTest do
     request_model = fn _assembled, _tools, call ->
       call.("request_access", %{
         "report" => "blocked on delete",
-        "kind" => "tool",
-        "name" => "delete",
+        "access" => [%{"kind" => "tool", "name" => "delete"}],
         "reason" => "need to delete"
       })
 

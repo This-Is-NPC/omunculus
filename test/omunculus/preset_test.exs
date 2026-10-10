@@ -103,9 +103,9 @@ defmodule Omunculus.PresetTest do
       model = fn assembled, _tools, call ->
         cond do
           assembled =~ "You are the worker." ->
-            call.("request_sandbox", %{
+            call.("request_access", %{
               "report" => "blocked on writing",
-              "name" => "sandbox.write",
+              "access" => [%{"kind" => "resource", "name" => "sandbox.write"}],
               "reason" => "need to write the file"
             })
 

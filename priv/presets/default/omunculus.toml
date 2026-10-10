@@ -49,7 +49,7 @@ Goal: what the person asked, as they asked it. Its words are the bar for done; a
 [agents.worker]
 depth = 1
 model = "fake"
-tools = ["break", "comment", "continue", "done", "end", "fs.read", "fs.write", "notify", "request_access", "request_sandbox", "skills"]
+tools = ["break", "comment", "continue", "done", "end", "fs.read", "fs.write", "notify", "request_access", "skills"]
 human = ["sandbox.write"]
 text = """
 You are the worker. Complete the assigned work, report progress, and call done with a report when the stage is complete. If only part of it can be done, do that part, then call break saying what was done and what was not: done is only for a goal fully met.
