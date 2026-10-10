@@ -25,7 +25,7 @@ defmodule EquivalentExchange.Runner do
   retry or cancel is left waiting: the model stopped without a report.
   """
 
-  alias EquivalentExchange.{Judge, Project, Score, Task}
+  alias EquivalentExchange.{Judge, Project, Resources, Score, Task}
   alias Omunculus.CLI
   alias Omunculus.Store.Query
 
@@ -74,6 +74,7 @@ defmodule EquivalentExchange.Runner do
     # run at once; a line is printed as each one ends.
     jobs = Keyword.get(options, :jobs, 1)
     timeout = Keyword.get(options, :timeout, 600)
+    sampler = Resources.start()
 
     plan
     |> Elixir.Task.async_stream(
@@ -92,6 +93,7 @@ defmodule EquivalentExchange.Runner do
       )
     end)
 
+    write_json(Path.join(folder, "resources.json"), Resources.stop(sampler))
     EquivalentExchange.Report.write(folder)
     {:ok, folder}
   end
@@ -157,7 +159,17 @@ defmodule EquivalentExchange.Runner do
       error: error(status),
       requests: requests(facts, answers, project),
       grants: grants(facts),
-      runs: Enum.map(facts.runs, &%{agent: &1.agent, depth: &1.depth, via: &1.via}),
+      runs:
+        Enum.map(
+          facts.runs,
+          &%{
+            agent: &1.agent,
+            depth: &1.depth,
+            via: &1.via,
+            started_at: &1.started_at,
+            finished_at: &1.finished_at
+          }
+        ),
       tool_calls: tool_calls(facts),
       usage: usage(facts, price(project, model)),
       duration_ms: duration,

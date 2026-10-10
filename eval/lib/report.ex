@@ -9,6 +9,8 @@ defmodule EquivalentExchange.Report do
   names under `against`, and with none when it names none.
   """
 
+  alias EquivalentExchange.Resources
+
   @measures ~w(passed false_success stopped_well unbacked asked_when_needed exercised forbidden delegated rated cache first_call_cache)
 
   @spec write(String.t()) :: map
@@ -50,6 +52,7 @@ defmodule EquivalentExchange.Report do
       by_scenario: by(all, & &1["scenario"]),
       by_task: by(all, &"#{&1["task"]} · #{&1["configuration"]}"),
       cache_by_agent: by_agent(all),
+      resources: resources(folder, all),
       findings:
         all
         |> Enum.flat_map(fn execution ->
@@ -126,6 +129,61 @@ defmodule EquivalentExchange.Report do
     |> Map.new(fn {agent, caches} -> {agent, cache_rate(caches)} end)
   end
 
+  # What the run took from the machine, overall and by agent, when it was
+  # sampled; each agent also with its runs and how long they were open.
+  defp resources(folder, all) do
+    path = Path.join(folder, "resources.json")
+
+    if File.regular?(path) do
+      samples = path |> File.read!() |> Jason.decode!()
+      hardware = Resources.by_agent(samples, all)
+
+      runs =
+        for execution <- all, run <- execution["runs"], run["finished_at"], reduce: %{} do
+          acc ->
+            seconds = seconds_between(run["started_at"], run["finished_at"])
+            Map.update(acc, run["agent"], {1, seconds}, fn {n, s} -> {n + 1, s + seconds} end)
+        end
+
+      by_agent =
+        Map.new(Enum.uniq(Map.keys(runs) ++ Map.keys(hardware)), fn agent ->
+          {n, seconds} = Map.get(runs, agent, {0, 0.0})
+
+          {agent,
+           Map.merge(Map.get(hardware, agent, %{}), %{
+             "runs" => n,
+             "run_s" => Float.round(seconds, 1)
+           })}
+        end)
+
+      %{overall: Resources.overall(samples), by_agent: by_agent}
+    end
+  end
+
+  defp seconds_between(from, to) do
+    {:ok, a, _} = DateTime.from_iso8601(from)
+    {:ok, b, _} = DateTime.from_iso8601(to)
+    DateTime.diff(b, a, :millisecond) / 1000
+  end
+
+  defp hardware(nil), do: "Not sampled.\n"
+
+  defp hardware(%{overall: overall, by_agent: by_agent}) do
+    head =
+      "BEAM and its processes: CPU median #{overall["cpu_percent_median"]}% and peak #{overall["cpu_percent_peak"]}% of one core; memory peak #{overall["rss_mb_peak"]} MB.\n\n" <>
+        "The BEAM's CPU is shared among the runs open at each moment, so its split is an estimate; sandboxed processes count to the run that started them.\n\n" <>
+        "| agent | runs | run time s | BEAM CPU s (est.) | sandbox CPU s | sandbox peak MB |\n|---|---|---|---|---|---|\n"
+
+    rows =
+      by_agent
+      |> Enum.sort()
+      |> Enum.map_join("\n", fn {agent, h} ->
+        "| #{agent} | #{h["runs"]} | #{h["run_s"]} | #{h["beam_cpu_s"] || 0} | #{h["sandbox_cpu_s"] || 0} | #{h["sandbox_peak_rss_mb"] || 0} |"
+      end)
+
+    head <> rows <> "\n"
+  end
+
   defp mean(values) do
     case Enum.reject(values, &is_nil/1) do
       [] -> nil
@@ -151,6 +209,9 @@ defmodule EquivalentExchange.Report do
 
     #{summary.cache_by_agent |> Enum.sort() |> Enum.map_join("\n", fn {agent, rate} -> "- #{agent}: #{pct(rate)}" end)}
 
+    ## Hardware by agent
+
+    #{hardware(summary.resources)}
     ## Findings by cause
 
     #{findings(summary.findings)}
@@ -233,8 +294,25 @@ defmodule EquivalentExchange.Report do
 
     #{delta_table("Overall", %{"all" => before.totals}, %{"all" => now.totals})}
     #{delta_table("By configuration", before.by_configuration, now.by_configuration)}
+    ## Hardware
+
+    #{hardware_delta(before.resources, now.resources)}
     """
   end
+
+  defp hardware_delta(%{overall: was}, %{overall: is}) do
+    Enum.map_join(
+      [
+        {"CPU median %", "cpu_percent_median"},
+        {"CPU peak %", "cpu_percent_peak"},
+        {"memory peak MB", "rss_mb_peak"}
+      ],
+      "\n",
+      fn {label, key} -> "- #{label}: #{was[key]} → #{is[key]}" end
+    )
+  end
+
+  defp hardware_delta(_before, _now), do: "Not sampled in both."
 
   defp delta_table(title, before, now) do
     columns = @measures ++ ~w(tokens cost seconds)

@@ -163,6 +163,8 @@ results/<time>-<label>/
   summary.json       the measures, overall and by configuration, scenario, task
   report.md          the same as tables, then the findings by cause
   comparison.md      against the run --against named, kept in the manifest
+  resources.json     the BEAM's CPU and memory every 250 ms, and each
+                     sandboxed process: its execution, CPU and peak memory
   executions/<task>/<configuration>/<n>/
     execution.json   outcome, last words, check, requests, grants, runs,
                      tool calls, usage, time, groups, score
@@ -193,3 +195,9 @@ text; `tool`, a tool's description or result; `harness`, omunculus itself)
 and what points to it. `report.md` groups them,
 so the most frequent cause is the first thing to fix; `comparison.md` says
 whether the next run fixed it.
+
+`report.md` ends with the hardware by agent: the BEAM's median and peak
+CPU and its peak memory over the run, then for each agent its runs, their
+time, the BEAM CPU of the intervals they were open (shared evenly among
+the runs open then, an estimate), and the CPU and peak memory of the
+sandboxed processes its runs started.
