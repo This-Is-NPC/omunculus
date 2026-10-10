@@ -53,6 +53,7 @@ defmodule EquivalentExchange.Report do
       by_task: by(all, &"#{&1["task"]} · #{&1["configuration"]}"),
       cache_by_agent: by_agent(all),
       teamwork: all |> Enum.group_by(& &1["configuration"]) |> Map.new(fn {name, group} -> {name, teamwork(group)} end),
+      uses: uses(all),
       resources: resources(folder, all),
       findings:
         all
@@ -87,6 +88,30 @@ defmodule EquivalentExchange.Report do
       network_asked_at: network |> Enum.map(& &1["depth"]) |> Enum.frequencies(),
       network_to_person: Enum.count(network, &(&1["arbiter"] == "human"))
     }
+  end
+
+  # For each task about a skill, an MCP tool or a project's own tool: how
+  # often it was used, and how often the task passed with it and without.
+  defp uses(all) do
+    all
+    |> Enum.filter(&(&1["score"]["used"] != nil))
+    |> Enum.group_by(& &1["task"])
+    |> Map.new(fn {task, group} ->
+      {used, unused} = Enum.split_with(group, & &1["score"]["used"])
+      passed = fn list -> if list == [], do: nil, else: Float.round(Enum.count(list, &(&1["score"]["passed"] == true)) / length(list), 3) end
+      {task, %{uses: hd(group)["uses"], executions: length(group), used: length(used), passed_used: passed.(used), passed_unused: passed.(unused)}}
+    end)
+  end
+
+  defp uses_table(uses) when map_size(uses) == 0, do: "No task here is about one.\n"
+
+  defp uses_table(uses) do
+    "| task | about | executions | used | passed when used | passed when not |\n|---|---|---|---|---|---|\n" <>
+      (uses
+       |> Enum.sort()
+       |> Enum.map_join("\n", fn {task, u} ->
+         "| #{task} | #{Enum.join(u.uses, ", ")} | #{u.executions} | #{u.used} | #{pct(u.passed_used)} | #{pct(u.passed_unused)} |"
+       end)) <> "\n"
   end
 
   defp teamwork_table(teamwork) do
@@ -248,6 +273,9 @@ defmodule EquivalentExchange.Report do
 
     #{teamwork_table(summary.teamwork)}
 
+    ## Skills, MCP tools and project tools
+
+    #{uses_table(summary.uses)}
     ## What the agents said of their own work
 
     Apart from what reached the person, which counts above: #{summary.totals.unbacked} execution(s) whose last words claim a command or a file no call backs, and #{summary.totals.unreported} whose last words leave out a text file a call changed.

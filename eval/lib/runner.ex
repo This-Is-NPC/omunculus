@@ -190,6 +190,7 @@ defmodule EquivalentExchange.Runner do
       duration_ms: duration,
       needs: task.needs,
       forbidden: task.forbidden,
+      uses: task.uses,
       groups: groups
     }
 
@@ -508,7 +509,8 @@ defmodule EquivalentExchange.Runner do
           for(
             file <- get_in(body, ["changes", "files"]) || [],
             do: Map.take(file, ~w(path op added))
-          )
+          ),
+        command: if(name == "bash", do: get_in(body, ["args", "command"]))
       }
     end
   end

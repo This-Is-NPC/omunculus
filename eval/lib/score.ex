@@ -20,6 +20,8 @@ defmodule EquivalentExchange.Score do
     `missed`: the root closed done on a wrong state — a parent took work
     that is not as asked; `sent_back`: how often a parent sent work back
     down after a child called it done;
+  - `used`: whether a call used what the task is about (its `uses`), nil
+    for a task about nothing in particular;
   - `unrecorded`: what changed in the workspace that no call's recorded
     changes name — the harness's own record, which must miss nothing;
   - what the agents said, apart: `unbacked`, what the last words say was
@@ -81,6 +83,7 @@ defmodule EquivalentExchange.Score do
       missed: delegated and outcome == "done" and not state_ok,
       sent_back: execution["sent_back"],
       unrecorded: if(execution["changed"], do: execution["changed"] -- recorded),
+      used: used(execution["uses"] || [], tools),
       unbacked: unbacked(said, tools, changed),
       unreported: unreported(changed, execution["report"] || ""),
       unsure: if(judgments["unavailable"], do: [], else: for({id, %{"verdict" => nil}} <- judgments, do: id)),
@@ -104,6 +107,17 @@ defmodule EquivalentExchange.Score do
     }
 
     Map.put(score, :findings, findings(execution, score))
+  end
+
+  # Whether a call used what the task is about: a tool by its name, or a
+  # command holding the given text. Nil for a task about none.
+  defp used([], _tools), do: nil
+
+  defp used(uses, tools) do
+    Enum.all?(uses, fn
+      "bash:" <> text -> Enum.any?(tools, &(&1["name"] == "bash" and String.contains?(&1["command"] || "", text)))
+      name -> Enum.any?(tools, &(&1["name"] == name))
+    end)
   end
 
   # What the last words claim that no recorded call did. A command that

@@ -5,8 +5,9 @@ defmodule EquivalentExchange.Project do
   it — its tables merged into the preset's, a list replacing a list — the
   agents its `[eval] drop_agents` names removed with the workflows that
   needed them, every agent put on the model the run names — with
-  `code_mode` on when the run asks for it — and the task's starting files
-  copied into the project root.
+  `code_mode` on when the run asks for it —, the bench's skills
+  (`eval/skills`) and ticket system (`eval/mcp/tickets`, an MCP server)
+  declared, and the task's starting files copied into the project root.
   """
 
   alias Omunculus.Config.Toml, as: ConfigToml
@@ -48,6 +49,8 @@ defmodule EquivalentExchange.Project do
         |> then(&if(code_mode, do: put_in(&1, ["models", model, "code_mode"], true), else: &1))
         |> drop_orphan_workflows()
         |> Map.put("project", %{"root" => "workspace"})
+        |> Map.put("skills", %{"paths" => [Path.join(@eval, "skills")]})
+        |> Map.put("mcp", %{"servers" => [tickets()]})
 
       File.write!(path, ConfigToml.encode(data))
       root = Path.join(dir, "workspace")
@@ -59,6 +62,14 @@ defmodule EquivalentExchange.Project do
       {:error, _reason} = error -> error
     end
   end
+
+  # The bench's ticket system: the MCP server whose data no workspace has.
+  defp tickets,
+    do: %{
+      "name" => "tickets",
+      "command" => [Path.join([@eval, "mcp", "tickets"])],
+      "protocol_version" => "2025-03-26"
+    }
 
   # A workflow one of whose stages names an agent no longer there goes too.
   defp drop_orphan_workflows(data) do

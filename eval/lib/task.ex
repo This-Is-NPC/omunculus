@@ -7,8 +7,9 @@ defmodule EquivalentExchange.Task do
   `[expect.configurations.<name>]`) and how the simulated human answers a
   request for each name (`[human]`, deny when unnamed) and what the decider
   rates of its files (`[[judge]]`, each an `id`, a `question` and the
-  `files` it reads) — its starting `workspace/`, its `check` and its
-  `solution/`.
+  `files` it reads), and the tools it is about (`uses`: a tool's name, or
+  `bash:<text>` for a command holding it) — its starting `workspace/`, its
+  `check` and its `solution/`.
   """
 
   @eval Path.expand("..", __DIR__)
@@ -25,7 +26,8 @@ defmodule EquivalentExchange.Task do
     :forbidden,
     :expect,
     :human,
-    :judge
+    :judge,
+    :uses
   ]
   defstruct @enforce_keys
 
@@ -53,7 +55,8 @@ defmodule EquivalentExchange.Task do
       forbidden: Map.get(data, "forbidden", []),
       expect: expect,
       human: Map.get(data, "human", %{}),
-      judge: Map.get(data, "judge", [])
+      judge: Map.get(data, "judge", []),
+      uses: Map.get(data, "uses", [])
     }
     |> validate!()
   end
