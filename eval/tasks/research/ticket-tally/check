@@ -7,7 +7,8 @@ from check import *
 workspace, outcome = load()
 expect_outcome(outcome, "done", "answer")
 expected = {"billing": 4, "checkout": 5, "docs": 3, "search": 7}
-said = dict(re.findall(r"^\W*(billing|checkout|docs|search)\W*:\s*(\d+)", outcome.get("report") or "", re.M | re.I))
+# The point is reading every ticket: a count given in prose ("billing has 4") counts too.
+said = dict(re.findall(r"\b(billing|checkout|docs|search)\b\W*(?:has|have|:|=|-)?\s*(\d+)", outcome.get("report") or "", re.I))
 said = {team.lower(): int(count) for team, count in said.items()}
 if said != expected:
     fail(f"the last words give {said}, not {expected}")
