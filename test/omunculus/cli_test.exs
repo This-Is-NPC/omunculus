@@ -766,37 +766,35 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "request_access for a name the run already has opens no REQUESTS and still ends the run",
+    test "request_access for a name the run already has is refused, so the model goes on",
          %{dir: dir} do
       test_pid = self()
 
       model = fn _assembled, _tools, call ->
-        call.("request_access", %{
-          "report" => "checking comment",
-          "kind" => "tool",
-          "name" => "comment",
-          "reason" => "just checking"
-        })
+        send(
+          test_pid,
+          {:asked,
+           call.("request_access", %{
+             "report" => "checking comment",
+             "kind" => "tool",
+             "name" => "comment",
+             "reason" => "just checking"
+           })}
+        )
 
-        send(test_pid, :reached_after_request)
-        {:ok, "unused"}
+        {:ok, "went on"}
       end
 
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
-      refute_received :reached_after_request
+      assert_received {:asked, {:ok, refused}}
+      assert refused == Out.refused({:request, {:already_have, "comment"}})
 
       project = open_project(dir)
       assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
+      # The refused call wrote none of its emits: no report, and the run did not end there.
       assert {:ok, []} = Query.all(project.conn, "SELECT * FROM comments")
-
-      assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
-      assert run.status == "done"
-
-      assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
-      assert "end" in Enum.map(events, & &1.type)
-
       Project.close(project)
     end
 
@@ -828,7 +826,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
       assert_received {:output, output}
-      assert output =~ Out.already_granted("comment")
+      assert output == Out.refused({:request, {:already_have, "comment"}})
 
       project = open_project(dir)
       assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")

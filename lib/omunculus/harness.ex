@@ -115,7 +115,7 @@ defmodule Omunculus.Harness do
            call(project, manifest, args, work_id, ctx, config, catalog, views, workspace),
          {:ok, hook_events} <-
            maybe_react(project, events, [], Map.get(ctx, :execution)) do
-      {:ok, augment(out, events), events ++ hook_events}
+      {:ok, out, events ++ hook_events}
     end
   end
 
@@ -701,35 +701,6 @@ defmodule Omunculus.Harness do
   end
 
   defp stringify(event), do: Map.new(event, fn {key, value} -> {to_string(key), value} end)
-
-  defp augment(%{ok: true, emit: emits} = out, events) do
-    case request_emit_name(emits) do
-      nil ->
-        out
-
-      name ->
-        if Enum.any?(events, &(&1.type == "request")) do
-          out
-        else
-          %{out | output: out.output <> "\n#{Out.already_granted(name)}"}
-        end
-    end
-  end
-
-  defp augment(out, _events), do: out
-
-  defp request_emit_name(emits) do
-    Enum.find_value(emits, fn
-      %{"type" => "request", "body" => %{"options" => options}} ->
-        case Requests.grant_names(options) do
-          [] -> nil
-          names -> Enum.join(names, ", ")
-        end
-
-      _other ->
-        nil
-    end)
-  end
 
   defp advance(project, catalog, %{type: "tool", body: body} = event, _via, :hooks) do
     name = Jason.decode!(body)["name"]

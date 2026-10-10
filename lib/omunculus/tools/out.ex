@@ -54,9 +54,6 @@ defmodule Omunculus.Tools.Out do
   @spec requested_by(String.t()) :: String.t()
   def requested_by(agent), do: "requested by #{agent}"
 
-  @spec already_granted(String.t()) :: String.t()
-  def already_granted(name), do: "already granted: #{name}"
-
   @spec preset_applied(String.t()) :: String.t()
   def preset_applied(name), do: "preset #{name} applied"
 
@@ -133,6 +130,9 @@ defmodule Omunculus.Tools.Out do
   def refused({:request, {:blocked, name}}),
     do:
       "refused: no one can grant #{name} to this run: it is not in the catalog, or the configuration denies it"
+
+  def refused({:request, {:already_have, names}}),
+    do: "refused: you already have #{names}; use it rather than asking"
 
   def refused(reason), do: "refused: #{inspect(reason)}"
 

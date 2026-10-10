@@ -7,7 +7,8 @@ defmodule Omunculus.Store.Actions.Requests do
   `grant` calls give are classified against the requester's run ceiling:
   one blocked — outside the catalog, or denied to the run — refuses the
   request as an error, so a model's call that asked for it fails; options
-  made only of `grant` calls whose names are all have open nothing. The
+  made only of `grant` calls whose names are all have refuse it the same
+  way, saying the run has them. The
   arbiter is the human for a request the harness opened or one granting a
   sealed name; otherwise the parent work's agent when every tool of every
   option is have for it and every granted name have or askable, else the
@@ -88,15 +89,6 @@ defmodule Omunculus.Store.Actions.Requests do
   @spec scopes() :: [String.t()]
   def scopes, do: @scopes
 
-  @doc "The names the `grant` calls of a request's `options` would give."
-  @spec grant_names(term) :: [String.t()]
-  def grant_names(raw) do
-    case options(raw) do
-      {:ok, options} -> options |> grants() |> Enum.map(& &1.name) |> Enum.uniq()
-      {:error, _reason} -> []
-    end
-  end
-
   defp options(raw) when is_map(raw) and map_size(raw) > 0 do
     Enum.reduce_while(raw, {:ok, %{}}, fn {name, calls}, {:ok, acc} ->
       case option_calls(name, calls) do
@@ -150,7 +142,8 @@ defmodule Omunculus.Store.Actions.Requests do
 
       nil ->
         if access_only?(options) and Enum.all?(classes, &(&1 == "have")) do
-          {:ok, nil}
+          names = classified |> Enum.map(fn {grant, _class} -> grant.name end) |> Enum.uniq()
+          {:error, {:request, {:already_have, Enum.join(names, ", ")}}}
         else
           with {:ok, arbiter} <- resolve_arbiter(conn, ctx, options, "sealed" in classes) do
             open_request(conn, ctx, run, reason, options, arbiter_info(arbiter))

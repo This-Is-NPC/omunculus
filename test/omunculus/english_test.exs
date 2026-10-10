@@ -27,7 +27,7 @@ defmodule Omunculus.EnglishTest do
       Out.skills_preamble(),
       Out.more_tools(1),
       Out.requested_by("agent"),
-      Out.already_granted("comment"),
+      Out.refused({:request, {:already_have, "comment"}}),
       Out.preset_applied("default"),
       Out.no_tools_found(),
       Out.no_comments(),

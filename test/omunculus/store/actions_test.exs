@@ -1186,14 +1186,17 @@ defmodule Omunculus.Store.ActionsTest do
   end
 
   describe "request action" do
-    test "have on every grant of an access request opens no request", %{conn: conn} do
+    test "have on every grant of an access request refuses it, saying the run has them", %{
+      conn: conn
+    } do
       run = Fixtures.open_run(conn, %{ceiling: @ceiling})
+      before = count(conn, "events")
 
-      assert {:ok, [_tool_event]} =
+      assert {:error, {:request, {:already_have, "comment"}}} =
                record_tool(conn, [access_request("tool", "comment")], request_ctx(run))
 
       assert count(conn, "requests") == 0
-      assert count(conn, "events") == 2
+      assert count(conn, "events") == before
     end
 
     test "a blocked grant refuses the request and writes nothing", %{conn: conn} do
