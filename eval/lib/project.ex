@@ -4,9 +4,9 @@ defmodule EquivalentExchange.Project do
   omunculus's own `preset` tool, a configuration of `eval/configs` laid over
   it — its tables merged into the preset's, a list replacing a list — the
   agents its `[eval] drop_agents` names removed with the workflows that
-  needed them, every agent put on the
-  model the run names, and the task's starting files copied into the
-  project root.
+  needed them, every agent put on the model the run names — with
+  `code_mode` on when the run asks for it — and the task's starting files
+  copied into the project root.
   """
 
   alias Omunculus.Config.Toml, as: ConfigToml
@@ -23,9 +23,9 @@ defmodule EquivalentExchange.Project do
   end
 
   @doc "Builds the project in `dir` and returns the path of its omunculus.toml."
-  @spec build(String.t(), String.t(), String.t(), String.t() | nil) ::
+  @spec build(String.t(), String.t(), {String.t(), boolean}, String.t() | nil) ::
           {:ok, String.t()} | {:error, term}
-  def build(dir, configuration, model, workspace) do
+  def build(dir, configuration, {model, code_mode}, workspace) do
     path = Path.join(dir, "omunculus.toml")
 
     with %{"ok" => true} <-
@@ -45,6 +45,7 @@ defmodule EquivalentExchange.Project do
         |> Map.update!("agents", fn agents ->
           Map.new(agents, fn {name, agent} -> {name, Map.put(agent, "model", model)} end)
         end)
+        |> then(&if(code_mode, do: put_in(&1, ["models", model, "code_mode"], true), else: &1))
         |> drop_orphan_workflows()
         |> Map.put("project", %{"root" => "workspace"})
 

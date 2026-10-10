@@ -2,7 +2,7 @@
 #   selftest   prove every task's check against its solution
 #   run        run the suite: --model luna --k 2 --label <name> [--task <part>]...
 #              [--configuration <name>]... [--timeout <seconds>] [--jobs <n>]
-#              [--against <result folder>]
+#              [--against <result folder>] [--code-mode]
 #   score      judge and score again every execution of a result folder, then its report
 #   report     write a result folder's summary, report and comparison; --against
 #              <result folder> sets what it is compared with
@@ -32,7 +32,8 @@ case System.argv() do
           configuration: :keep,
           timeout: :integer,
           jobs: :integer,
-          against: :string
+          against: :string,
+          code_mode: :boolean
         ]
       )
 

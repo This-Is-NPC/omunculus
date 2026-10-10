@@ -35,6 +35,7 @@ defmodule EquivalentExchange.Runner do
   @spec run(keyword) :: {:ok, String.t()}
   def run(options) do
     model = Keyword.get(options, :model, "luna")
+    code_mode = Keyword.get(options, :code_mode, false)
     k = Keyword.get(options, :k, 1)
     started = DateTime.utc_now()
     label = Keyword.get(options, :label, model)
@@ -60,6 +61,7 @@ defmodule EquivalentExchange.Runner do
       label: label,
       commit: commit(),
       model: model,
+      code_mode: code_mode,
       repetitions: k,
       configurations: plan |> Enum.map(&elem(&1, 1)) |> Enum.uniq(),
       tasks: Enum.map(tasks, & &1.id),
@@ -79,7 +81,7 @@ defmodule EquivalentExchange.Runner do
     plan
     |> Elixir.Task.async_stream(
       fn {task, configuration, n} ->
-        {task, configuration, n, execute(folder, task, configuration, n, model, timeout)}
+        {task, configuration, n, execute(folder, task, configuration, n, {model, code_mode}, timeout)}
       end,
       max_concurrency: jobs,
       ordered: false,
@@ -101,7 +103,7 @@ defmodule EquivalentExchange.Runner do
   defp wanted?(_id, []), do: true
   defp wanted?(id, filters), do: Enum.any?(filters, &String.contains?(id, &1))
 
-  defp execute(folder, task, configuration, n, model, timeout_s) do
+  defp execute(folder, task, configuration, n, {model, code_mode}, timeout_s) do
     dir =
       Path.join([
         folder,
@@ -115,7 +117,7 @@ defmodule EquivalentExchange.Runner do
     File.mkdir_p!(project)
 
     {:ok, config_path} =
-      Project.build(project, configuration, model, Path.join(task.dir, "workspace"))
+      Project.build(project, configuration, {model, code_mode}, Path.join(task.dir, "workspace"))
 
     groups = groups(config_path)
     started = System.monotonic_time(:millisecond)

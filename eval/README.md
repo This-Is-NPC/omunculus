@@ -127,10 +127,14 @@ mise run eval:run -- --model luna --k 3 --jobs 48 --label pilot
 mise run eval:run -- --model luna --task brief --configuration negotiated
 mise run eval:run -- --model sonnet --k 3 --jobs 24 --label sonnet
 mise run eval:run -- --model haiku --k 3 --jobs 24 --against eval/results/<before>
+mise run eval:run -- --model haiku --task ticket-tally --code-mode --label haiku-code
 mise run eval:compare -- eval/results/<before> eval/results/<now>
 mix run eval/run.exs report eval/results/<run> --against eval/results/<before>
 mix run eval/run.exs score eval/results/<run>    # score an old run again
 ```
+
+`--code-mode` turns on the model's `code_mode`, so the same tasks can be
+measured with and without the sandbox code bridge.
 
 `eval:run` loads `.env` for the provider's key. Runs are isolated, so several
 may run at once, each on its own model; a run is compared only with the folder
