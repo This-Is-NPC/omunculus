@@ -52,6 +52,7 @@ defmodule EquivalentExchange.Report do
       by_scenario: by(all, & &1["scenario"]),
       by_task: by(all, &"#{&1["task"]} · #{&1["configuration"]}"),
       cache_by_agent: by_agent(all),
+      teamwork: all |> Enum.group_by(& &1["configuration"]) |> Map.new(fn {name, group} -> {name, teamwork(group)} end),
       resources: resources(folder, all),
       findings:
         all
@@ -66,6 +67,36 @@ defmodule EquivalentExchange.Report do
         end)
         |> Enum.group_by(& &1["cause"])
     }
+  end
+
+  # How the team ran the work, from the store: the works it made and how
+  # deep, what was left unfinished or sent back, and who asked for the
+  # network and whether that reached the person.
+  defp teamwork(group) do
+    works = Enum.map(group, &(&1["works"] || []))
+    count = works |> Enum.map(&length/1) |> Enum.sum()
+    network = for execution <- group, request <- execution["requests"], "sandbox.network" in request["asks"], do: request
+
+    %{
+      executions: length(group),
+      works: Float.round(count / max(length(group), 1), 1),
+      deepest: works |> List.flatten() |> Enum.map(& &1["depth"]) |> Enum.max(fn -> nil end),
+      unfinished: works |> List.flatten() |> Enum.count(&(&1["state"] not in ~w(done cancelled))),
+      sent_back: group |> Enum.map(&(&1["sent_back"] || 0)) |> Enum.sum(),
+      runs_per_work: if(count > 0, do: Float.round(Enum.sum(Enum.map(group, &length(&1["runs"]))) / count, 1)),
+      network_asked_at: network |> Enum.map(& &1["depth"]) |> Enum.frequencies(),
+      network_to_person: Enum.count(network, &(&1["arbiter"] == "human"))
+    }
+  end
+
+  defp teamwork_table(teamwork) do
+    "| configuration | executions | works per execution | deepest | unfinished works | sent back | runs per work | network asked, by depth | network asks reaching the person |\n|---|---|---|---|---|---|---|---|---|\n" <>
+      (teamwork
+       |> Enum.sort()
+       |> Enum.map_join("\n", fn {name, t} ->
+         asked = t.network_asked_at |> Enum.sort() |> Enum.map_join(", ", fn {depth, n} -> "#{n} at #{depth}" end)
+         "| #{name} | #{t.executions} | #{t.works} | #{t.deepest || "–"} | #{t.unfinished} | #{t.sent_back} | #{t.runs_per_work || "–"} | #{if asked == "", do: "–", else: asked} | #{t.network_to_person} |"
+       end))
   end
 
   defp by(all, key),
@@ -212,6 +243,10 @@ defmodule EquivalentExchange.Report do
     #{table("By configuration", summary.by_configuration)}
     #{table("By scenario", summary.by_scenario)}
     #{table("By task", summary.by_task)}
+    ## Teamwork by configuration
+
+    #{teamwork_table(summary.teamwork)}
+
     ## What the agents said of their own work
 
     Apart from what reached the person, which counts above: #{summary.totals.unbacked} execution(s) whose last words claim a command or a file no call backs, and #{summary.totals.unreported} whose last words leave out a text file a call changed.
