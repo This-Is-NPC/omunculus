@@ -6,8 +6,10 @@ defmodule Omunculus.Store.Actions.Sequence do
   comment, and is refused while the work waits on its children. A
   `break` reopens a parent
   waiting on its children at once; `reopen` sends a child that broke back
-  to work with the parent's instructions as its comment, and parks the
-  parent on its children again; closing or cancelling a work reopens
+  to work — to its agent, or to another named at its depth — with the
+  parent's instructions as its comment, and parks the parent on its
+  children again; `delegate` is refused while a child that broke waits on
+  the parent's decision; closing or cancelling a work reopens
   it once each of its children is done or cancelled; each names
   the reopened parent as `parent_id` in its event. `delegate` opens a
   child with its title and goal and parks the parent on its children,
@@ -50,6 +52,7 @@ defmodule Omunculus.Store.Actions.Sequence do
          :ok <- Helpers.ensure_text(:delegate, body, "title"),
          :ok <- Helpers.ensure_text(:delegate, body, "goal"),
          {:ok, parent} <- fetch_work(:delegate, conn, ctx.work_id),
+         :ok <- no_broken_child(conn, parent),
          child_depth = View.work_depth(conn, parent) + 1,
          {:ok, {stage, assignee}} <-
            Helpers.tag_error(
@@ -65,15 +68,43 @@ defmodule Omunculus.Store.Actions.Sequence do
     end
   end
 
+  # A broken child calls its parent to decide: until it reopens or breaks,
+  # handing out more work would leave the broken one parked for good.
+  defp no_broken_child(conn, parent) do
+    case Query.one(
+           conn,
+           "SELECT id FROM works WHERE parent_id = ? AND state = 'waiting' AND waiting IS NULL LIMIT 1",
+           [parent.id]
+         ) do
+      {:ok, nil} -> :ok
+      {:ok, %{id: id}} -> {:error, {:delegate, {:broken_child, id}}}
+      {:error, _reason} = error -> error
+    end
+  end
+
   @spec reopen(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def reopen(conn, body, ctx) do
     with :ok <- ensure_context(:reopen, ctx),
          :ok <- Helpers.ensure_text(:reopen, body, "body"),
          {:ok, parent} <- fetch_work(:reopen, conn, ctx.work_id),
          {:ok, child} <- fetch_work(:reopen, conn, body["work_id"]),
-         :ok <- broken_child(child, parent) do
-      apply_reopen(conn, ctx, body, child, parent)
+         :ok <- broken_child(child, parent),
+         {:ok, assignee} <- reopen_assignee(conn, ctx.config, child, body["agent"]) do
+      apply_reopen(conn, ctx, body, child, parent, assignee)
     end
+  end
+
+  # The broken work goes back to its agent, or to another the parent names
+  # at that depth.
+  defp reopen_assignee(_conn, _config, child, nil), do: {:ok, child.assignee}
+
+  defp reopen_assignee(conn, config, child, agent) do
+    with {:ok, {_stage, assignee}} <-
+           Helpers.tag_error(
+             :reopen,
+             Helpers.stage_and_assignee(config, View.work_depth(conn, child), agent)
+           ),
+         do: {:ok, assignee}
   end
 
   # A work a parent may reopen is its own child, parked by a break.
@@ -85,7 +116,7 @@ defmodule Omunculus.Store.Actions.Sequence do
 
   defp broken_child(_child, _parent), do: {:error, {:reopen, :not_a_child}}
 
-  defp apply_reopen(conn, ctx, body, child, parent) do
+  defp apply_reopen(conn, ctx, body, child, parent, assignee) do
     comment_id = Id.new()
 
     with {:ok, event} <-
@@ -99,10 +130,11 @@ defmodule Omunculus.Store.Actions.Sequence do
          :ok <-
            Helpers.insert_comment(conn, comment_id, %{works: child.id}, body["body"], event, ctx),
          :ok <-
-           Query.exec(conn, "UPDATE works SET state = 'open', updated_at = ? WHERE id = ?", [
-             Events.now(),
-             child.id
-           ]),
+           Query.exec(
+             conn,
+             "UPDATE works SET state = 'open', assignee = ?, updated_at = ? WHERE id = ?",
+             [assignee, Events.now(), child.id]
+           ),
          :ok <-
            Query.exec(
              conn,

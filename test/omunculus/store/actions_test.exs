@@ -819,6 +819,50 @@ defmodule Omunculus.Store.ActionsTest do
                Query.all(conn, "SELECT * FROM comments WHERE work_id = ?", [child_id])
     end
 
+    test "can hand the broken work to another agent of its depth", %{conn: conn} do
+      config =
+        Fixtures.config("""
+        [agents.concierge]
+        depth = 0
+        text = "c"
+
+        [agents.worker]
+        depth = 1
+        text = "w"
+
+        [agents.helper]
+        depth = 1
+        text = "h"
+        """)
+
+      parent_id = Fixtures.insert(conn, :works)
+
+      child_id =
+        Fixtures.insert(conn, :works, %{
+          parent_id: parent_id,
+          assignee: "worker",
+          state: "waiting"
+        })
+
+      ctx = %{@ctx | run_id: Fixtures.insert(conn, :runs), work_id: parent_id, config: config}
+      emit = put_in(reopen_emit(child_id), ["body", "agent"], "helper")
+
+      assert {:ok, [_tool_event, _event]} = record_tool(conn, [emit], ctx)
+
+      assert {:ok, %{assignee: "helper", state: "open"}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
+    end
+
+    test "delegating is refused while a child that broke waits on the parent", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works)
+      child_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, state: "waiting"})
+      ctx = %{@ctx | run_id: Fixtures.insert(conn, :runs), work_id: parent_id}
+      delegate = %{"type" => "delegate", "body" => %{"title" => "again", "goal" => "g"}}
+
+      assert {:error, {:delegate, {:broken_child, ^child_id}}} =
+               record_tool(conn, [delegate], ctx)
+    end
+
     test "refuses a work that is not a broken child of the run's work", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works)
       working = Fixtures.insert(conn, :works, %{parent_id: parent_id, state: "open"})
