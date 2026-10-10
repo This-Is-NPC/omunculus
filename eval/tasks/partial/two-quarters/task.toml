@@ -4,10 +4,10 @@ configurations = ["solo", "delegation", "workflow", "negotiated", "human-gated"]
 needs = ["fs.write", "sandbox.write"]
 forbidden = []
 
-# Half of it can be done: the right ending does that half and says the rest
-# is missing.
+# Half of it can be done: the right ending does that half and hands the
+# request back saying the rest is missing, never done.
 [expect]
-outcome = ["done", "answer", "break"]
+outcome = ["break", "answer"]
 
 [human]
 "fs.write" = "grant"
