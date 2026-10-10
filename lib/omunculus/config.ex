@@ -158,7 +158,7 @@ defmodule Omunculus.Config do
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
   @policy_extra_keys ~w(depth workflow workspace assemble max_retries last_run_output_bytes tool_output_bytes send_catalog session_ttl_ms session_max_bytes)
   @agent_extra_keys ~w(depth text workflow_only model assemble)
-  @http_model_keys ~w(api url model timeout_ms temperature headers body provider stream)
+  @http_model_keys ~w(api url model timeout_ms temperature headers body provider stream retries)
   @openai_model_keys @http_model_keys ++ ~w(prompt_cache_key)
   @module_model_keys ~w(api module params)
   @command_model_keys ~w(api command model provider params)
@@ -1899,6 +1899,7 @@ defmodule Omunculus.Config do
              {:ok, headers} <- model_headers(data),
              {:ok, body} <- model_body(data),
              {:ok, stream} <- model_stream(data),
+             {:ok, retries} <- model_retries(data),
              {:ok, prompt_cache_key} <- model_optional_string(data, "prompt_cache_key"),
              {:ok, provider} <- model_optional_string(data, "provider"),
              :ok <- validate_model_provider(provider, auth) do
@@ -1913,6 +1914,7 @@ defmodule Omunculus.Config do
             |> maybe_put_model("headers", headers)
             |> maybe_put_model("body", body)
             |> maybe_put_model("stream", stream)
+            |> maybe_put_model("retries", retries)
             |> maybe_put_model("prompt_cache_key", prompt_cache_key)
             |> maybe_put_model("provider", provider)
 
@@ -2003,6 +2005,14 @@ defmodule Omunculus.Config do
       :error -> {:ok, nil}
       {:ok, value} when is_number(value) -> {:ok, value}
       _ -> {:error, {:invalid, :temperature}}
+    end
+  end
+
+  defp model_retries(data) do
+    case Map.fetch(data, "retries") do
+      :error -> {:ok, nil}
+      {:ok, n} when is_integer(n) and n >= 0 -> {:ok, n}
+      _ -> {:error, {:invalid, :retries}}
     end
   end
 

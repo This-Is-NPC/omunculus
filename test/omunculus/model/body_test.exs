@@ -148,6 +148,65 @@ defmodule Omunculus.Model.BodyTest do
     request
   end
 
+  test "with retries, a rate-limited request is sent again after Retry-After" do
+    reply = ~s({"choices":[{"message":{"role":"assistant","content":"ok"}}]})
+    limited = "HTTP/1.1 429 Too Many Requests\r\nretry-after: 0\r\ncontent-length: 0\r\n\r\n"
+
+    answered =
+      "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: #{byte_size(reply)}\r\n\r\n" <>
+        reply
+
+    prompt = %Prompt{instructions: "", context: "ping"}
+
+    policy =
+      ExecutionPolicyFixtures.policy(Application.app_dir(:omunculus, "priv"), network: "none")
+
+    spec = fn port, extra ->
+      Map.merge(
+        %{"url" => "http://127.0.0.1:#{port}/v1", "model" => "stub", "timeout_ms" => 5_000},
+        extra
+      )
+    end
+
+    call = fn spec ->
+      OpenAI.new(spec).(
+        prompt,
+        [],
+        fn _, _ -> {:ok, ""} end,
+        fn _ -> :ok end,
+        fn _ -> :ok end,
+        policy
+      )
+    end
+
+    assert {:ok, "ok"} = call.(spec.(serve([limited, answered]), %{"retries" => 2}))
+    assert {:error, _limited} = call.(spec.(serve([limited, answered]), %{}))
+  end
+
+  # A server that answers its requests with `responses`, one each, in order.
+  defp serve(responses) do
+    {:ok, listen} =
+      :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true, ip: {127, 0, 0, 1}])
+
+    {:ok, port} = :inet.port(listen)
+
+    spawn_link(fn ->
+      for response <- responses do
+        case :gen_tcp.accept(listen, 5_000) do
+          {:ok, socket} ->
+            read_body(socket, "")
+            :gen_tcp.send(socket, response)
+            :gen_tcp.close(socket)
+
+          {:error, :timeout} ->
+            :ok
+        end
+      end
+    end)
+
+    port
+  end
+
   # A server that takes one request, sends its JSON body to the test and
   # answers 500, which ends the adapter's call.
   defp capture do

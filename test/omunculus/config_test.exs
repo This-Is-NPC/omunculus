@@ -180,6 +180,33 @@ defmodule Omunculus.ConfigTest do
     assert "sandbox.network" in agents["concierge"].ceiling.human
   end
 
+  test "an HTTP model takes optional retries, a non-negative integer", %{dir: dir} do
+    model = fn retries ->
+      """
+      [models.m]
+      api = "openai-completions"
+      url = "http://localhost/v1"
+      model = "x"
+      timeout_ms = 1000
+      #{retries}
+
+      [agents.concierge]
+      depth = 0
+      model = "m"
+      text = "hi"
+
+      [policy]
+      max_retries = 0
+      """
+    end
+
+    write_toml(dir, model.("retries = 3"))
+    assert {:ok, %Config{models: %{"m" => %{input: %{"retries" => 3}}}}} = load(dir)
+
+    write_toml(dir, model.("retries = -1"))
+    assert {:error, {:models, "m", {:invalid, :retries}}} = load(dir)
+  end
+
   test "pinned is a layer list and is absent on the default preset" do
     assert {:ok, %Config{policy: policy, agents: agents}} = Config.load(default_preset())
     assert policy.pinned == []

@@ -38,6 +38,7 @@ defmodule Omunculus.Model.OpenAI do
       url: spec["url"] <> "/chat/completions",
       model: spec["model"],
       timeout: spec["timeout_ms"],
+      retries: spec["retries"],
       headers: request_headers(spec),
       temperature: spec["temperature"],
       stream: spec["stream"] == true,
@@ -179,10 +180,10 @@ defmodule Omunculus.Model.OpenAI do
   end
 
   defp post(client, body) do
-    case Req.post(client.url,
-           json: body,
-           headers: client.headers,
-           receive_timeout: client.timeout
+    case Req.post(
+           client.url,
+           [json: body, headers: client.headers, receive_timeout: client.timeout] ++
+             Omunculus.Model.Retry.options(client.retries)
          ) do
       {:ok, %Req.Response{status: status, body: response_body}} when status in 200..299 ->
         extract_message(response_body)

@@ -18,12 +18,15 @@ defmodule Omunculus.Model.EventStream do
        {req, Req.Response.put_private(resp, @state, consume(buffer <> data, acc, resp, fold))}}
     end
 
-    case Req.post(client.url,
-           json: body,
-           headers: client.headers,
-           receive_timeout: client.timeout,
-           compressed: false,
-           into: into
+    case Req.post(
+           client.url,
+           [
+             json: body,
+             headers: client.headers,
+             receive_timeout: client.timeout,
+             compressed: false,
+             into: into
+           ] ++ Omunculus.Model.Retry.options(client.retries)
          ) do
       {:ok, %Req.Response{status: status} = resp} when status in 200..299 ->
         {rest, acc} = Req.Response.get_private(resp, @state, {"", acc})
