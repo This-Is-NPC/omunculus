@@ -112,7 +112,9 @@ defmodule Omunculus.Tools.Out do
   def not_text(path, bytes), do: "#{path} is not a text file (#{bytes} bytes)"
 
   @spec resume() :: String.t()
-  def resume, do: "Go on with the work."
+  def resume,
+    do:
+      "Your last run ended without done, work or break: go on with the work and end it with one of them."
 
   @spec answered() :: String.t()
   def answered, do: "answered: the reply is below"

@@ -2,7 +2,8 @@ defmodule Omunculus.Tools.Session do
   @moduledoc """
   The conversation an agent's run continues. A session is one agent's turn
   on a work: its runs pause (a request, children working, a retry) until
-  one hands the work on with `continue` or `break`. `history/2` rebuilds
+  one hands the work on with `continue` or `break`, or opens a root of its
+  own. `history/2` rebuilds
   the session the work's last closed run belongs to, from what the store
   recorded, when the call's run may continue it: that run is the agent's,
   paused, closed within `ttl_ms`, and every model call of the session has
@@ -50,8 +51,13 @@ defmodule Omunculus.Tools.Session do
     end
   end
 
-  # A run that continued `continue` or `break` handed the work on.
-  defp paused?(run), do: not Enum.any?(run.events, &(&1.type in ["continue", "break"]))
+  # A run handed the work on with `continue` or `break`, or by opening a
+  # root of its own, which its own run starts anew.
+  defp paused?(run), do: not Enum.any?(run.events, &handed_on?/1)
+
+  defp handed_on?(%{type: type}) when type in ["continue", "break"], do: true
+  defp handed_on?(%{type: "work", body: body}), do: Jason.decode!(body)["start"] == true
+  defp handed_on?(_event), do: false
 
   defp recent?(%{finished_at: finished}, now, ttl_ms) when is_binary(finished) do
     {:ok, at, _offset} = DateTime.from_iso8601(finished)

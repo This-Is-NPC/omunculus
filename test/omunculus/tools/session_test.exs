@@ -126,6 +126,8 @@ defmodule Omunculus.Tools.SessionTest do
           {"too large", runs.(%{}), given(%{max_bytes: 10})},
           {"a prompt without a context", runs.(%{assembled: @instructions}), given()},
           {"handed on", [paused("r1", [event("continue", %{})])], given()},
+          {"opened a root of its own", [paused("r1", [event("work", %{"start" => true})])],
+           given()},
           {"a call without its result", [paused("r1", [event("model", reply([{"c1", "read"}]))])],
            given()},
           {"a call through the sandbox bridge",
