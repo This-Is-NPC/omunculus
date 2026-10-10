@@ -484,7 +484,17 @@ defmodule EquivalentExchange.Runner do
   defp tool_calls(facts) do
     for %{type: "tool", body: %{"name" => name} = body} = event <- facts.events,
         name != "assemble" do
-      %{name: name, ok: body["ok"], via: body["via"], run: event.run_id}
+      %{
+        name: name,
+        ok: body["ok"],
+        via: body["via"],
+        run: event.run_id,
+        changed:
+          for(
+            file <- get_in(body, ["changes", "files"]) || [],
+            do: Map.take(file, ~w(path op added))
+          )
+      }
     end
   end
 

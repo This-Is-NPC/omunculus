@@ -11,7 +11,7 @@ defmodule EquivalentExchange.Report do
 
   alias EquivalentExchange.Resources
 
-  @measures ~w(passed false_success stopped_well unbacked asked_when_needed exercised forbidden delegated rated cache first_call_cache)
+  @measures ~w(passed false_success stopped_well unbacked unreported done_unchanged asked_when_needed exercised forbidden delegated rated cache first_call_cache)
 
   @spec write(String.t()) :: map
   def write(folder) do
@@ -91,6 +91,8 @@ defmodule EquivalentExchange.Report do
         ),
       # A score from before the decider, kept by a task since removed, has none of these.
       unbacked: Enum.count(scores, &(&1["unbacked"] not in [nil, []])),
+      unreported: Enum.count(scores, &(&1["unreported"] not in [nil, []])),
+      done_unchanged: Enum.count(scores, &(&1["done_unchanged"] == true)),
       unsure: Enum.count(scores, &(&1["unsure"] not in [nil, []])),
       rated: mean(Enum.flat_map(scores, &Map.values(&1["rated"] || %{}))),
       cache: cache_rate(Enum.map(scores, & &1["cache"])),
@@ -220,13 +222,13 @@ defmodule EquivalentExchange.Report do
 
   defp table(title, rows) do
     header =
-      "| | passed | false success | stopped well | unbacked claims | asked when needed | exercised | forbidden grants | delegated | rated | judge unsure | retries | tokens | cache | cache, 1st call | cost | seconds |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+      "| | passed | false success | stopped well | unbacked claims | unreported changes | done, nothing changed | asked when needed | exercised | forbidden grants | delegated | rated | judge unsure | retries | tokens | cache | cache, 1st call | cost | seconds |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
 
     lines =
       rows
       |> Enum.sort()
       |> Enum.map_join("\n", fn {name, t} ->
-        "| #{name} | #{pct(t.passed)} | #{t.false_success} | #{pct(t.stopped_well)} | #{t.unbacked} | #{pct(t.asked_when_needed)} | #{pct(t.exercised)} | #{t.forbidden} | #{pct(t.delegated)} | #{t.rated || "–"} | #{t.unsure} | #{t.retries} | #{t.tokens} | #{pct(t.cache)} | #{pct(t.first_call_cache)} | #{t.cost} | #{t.seconds} |"
+        "| #{name} | #{pct(t.passed)} | #{t.false_success} | #{pct(t.stopped_well)} | #{t.unbacked} | #{t.unreported} | #{t.done_unchanged} | #{pct(t.asked_when_needed)} | #{pct(t.exercised)} | #{t.forbidden} | #{pct(t.delegated)} | #{t.rated || "–"} | #{t.unsure} | #{t.retries} | #{t.tokens} | #{pct(t.cache)} | #{pct(t.first_call_cache)} | #{t.cost} | #{t.seconds} |"
       end)
 
     "## #{title}\n\n" <> header <> lines <> "\n"

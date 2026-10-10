@@ -20,6 +20,8 @@ exec = 'exec "$@"'
 
 [store]
 path = ".omunculus/store.sqlite3"
+# The files each call changed, which the score checks the last words against.
+changes = ".omunculus/changes"
 
 [tools]
 paths = ["../../../priv/tools", "../../../priv/presets/codex-like/tools"]

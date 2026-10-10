@@ -44,13 +44,20 @@
         "name": "send",
         "ok": true,
         "run": null,
-        "via": null
+        "via": null,
+        "changed": []
       },
       {
         "name": "write",
         "ok": true,
         "run": "r2",
-        "via": null
+        "via": null,
+        "changed": [
+          {
+            "path": "plan.md",
+            "op": "A"
+          }
+        ]
       }
     ],
     "usage": {
@@ -90,7 +97,8 @@
         "probability": 0
       },
       "rated": {}
-    }
+    },
+    "report": "Wrote plan.md."
   },
   "expected": {
     "passed": false,

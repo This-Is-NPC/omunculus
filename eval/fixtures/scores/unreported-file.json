@@ -1,0 +1,114 @@
+{
+  "execution": {
+    "outcome": "done",
+    "expected": [
+      "done",
+      "answer"
+    ],
+    "check": {
+      "passed": true,
+      "said": "holds",
+      "files": true
+    },
+    "configuration": "delegation",
+    "scenario": "capability",
+    "needs": [
+      "fs.write",
+      "sandbox.write"
+    ],
+    "forbidden": [],
+    "requests": [],
+    "grants": [],
+    "error": null,
+    "runs": [
+      {
+        "agent": "father",
+        "depth": "0",
+        "via": "send"
+      },
+      {
+        "agent": "edward",
+        "depth": "1",
+        "via": "delegate"
+      }
+    ],
+    "tool_calls": [
+      {
+        "name": "send",
+        "ok": true,
+        "run": null,
+        "via": null,
+        "changed": []
+      },
+      {
+        "name": "write",
+        "ok": true,
+        "run": "r2",
+        "via": null,
+        "changed": [
+          {
+            "path": "plan.md",
+            "op": "A",
+            "added": 3
+          },
+          {
+            "path": "notes/extra.md",
+            "op": "A",
+            "added": 1
+          },
+          {
+            "path": "__pycache__/x.pyc",
+            "op": "A",
+            "added": null
+          }
+        ]
+      }
+    ],
+    "usage": {
+      "calls": 3,
+      "input_tokens": 100,
+      "output_tokens": 20,
+      "cost": 0.001
+    },
+    "duration_ms": 1000,
+    "groups": {
+      "fs.write": [
+        "edit",
+        "write"
+      ],
+      "fs.read": [
+        "find",
+        "grep",
+        "ls",
+        "read"
+      ]
+    },
+    "judgments": {
+      "claims_done": {
+        "verdict": true,
+        "probability": 1
+      },
+      "says_why": {
+        "verdict": true,
+        "probability": 1
+      },
+      "claims_ran": {
+        "verdict": false,
+        "probability": 0
+      },
+      "claims_wrote": {
+        "verdict": true,
+        "probability": 1
+      },
+      "rated": {}
+    },
+    "report": "Wrote plan.md."
+  },
+  "expected": {
+    "unbacked": [],
+    "done_unchanged": false,
+    "unreported": [
+      "notes/extra.md"
+    ]
+  }
+}
