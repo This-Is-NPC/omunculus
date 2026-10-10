@@ -8,7 +8,8 @@ defmodule Omunculus.Store.Actions.Sequence do
   waiting on its children at once; `reopen` sends a child that broke back
   to work — to its agent, or to another named at its depth — with the
   parent's instructions as its comment, and parks the parent on its
-  children again; `delegate` is refused while a child that broke waits on
+  children again, giving the work the names it lists in `grant` that its
+  agent lacks and the parent could grant it on a request; `delegate` is refused while a child that broke waits on
   the parent's decision; closing or cancelling a work reopens
   it once each of its children is done or cancelled; each names
   the reopened parent as `parent_id` in its event. `delegate` opens a
@@ -21,9 +22,9 @@ defmodule Omunculus.Store.Actions.Sequence do
   `cancelled`, unless it is already done or cancelled.
   """
 
-  alias Omunculus.Config
+  alias Omunculus.{Ceiling, Config}
   alias Omunculus.Id
-  alias Omunculus.Store.Actions.Helpers
+  alias Omunculus.Store.Actions.{Helpers, Requests}
   alias Omunculus.Store.{Events, Query, View}
 
   @spec continue(Omunculus.Store.Connection.t(), map) :: {:ok, map} | {:error, term}
@@ -82,16 +83,50 @@ defmodule Omunculus.Store.Actions.Sequence do
     end
   end
 
-  @spec reopen(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
+  @spec reopen(Omunculus.Store.Connection.t(), map, map) :: {:ok, [map]} | {:error, term}
   def reopen(conn, body, ctx) do
     with :ok <- ensure_context(:reopen, ctx),
          :ok <- Helpers.ensure_text(:reopen, body, "body"),
          {:ok, parent} <- fetch_work(:reopen, conn, ctx.work_id),
          {:ok, child} <- fetch_work(:reopen, conn, body["work_id"]),
          :ok <- broken_child(child, parent),
-         {:ok, assignee} <- reopen_assignee(conn, ctx.config, child, body["agent"]) do
-      apply_reopen(conn, ctx, body, child, parent, assignee)
+         {:ok, assignee} <- reopen_assignee(conn, ctx.config, child, body["agent"]),
+         {:ok, grants} <- reopen_grants(conn, ctx, child, parent, assignee, body["grant"]),
+         {:ok, event} <- apply_reopen(conn, ctx, body, child, parent, assignee) do
+      give_all(conn, ctx, child, assignee, grants, event)
     end
+  end
+
+  # What the parent gives with the reopen: names the agent lacks on the work
+  # and the parent could grant it on a request, so never one only the person
+  # grants.
+  defp reopen_grants(_conn, _ctx, _child, _parent, _assignee, nil), do: {:ok, []}
+
+  defp reopen_grants(conn, ctx, child, parent, assignee, grants) do
+    names = Enum.map(grants, & &1["name"])
+
+    with {:ok, own} <- Requests.work_ceiling(conn, ctx, child, assignee, names),
+         {:ok, giver} <- Requests.work_ceiling(conn, ctx, parent, ctx.agent, names) do
+      Enum.reduce_while(grants, {:ok, []}, fn %{"kind" => kind, "name" => name} = grant,
+                                              {:ok, acc} ->
+        case {Ceiling.classify(own, name, kind), Ceiling.classify(giver, name, kind)} do
+          {"have", _giver} -> {:cont, {:ok, acc}}
+          {"askable", class} when class in ~w(have askable) -> {:cont, {:ok, acc ++ [grant]}}
+          {"askable", _giver} -> {:halt, {:error, {:reopen, {:cannot_grant, name}}}}
+          {"sealed", _giver} -> {:halt, {:error, {:reopen, {:only_person, name}}}}
+          {"blocked", _giver} -> {:halt, {:error, {:reopen, {:blocked, name}}}}
+        end
+      end)
+    end
+  end
+
+  defp give_all(conn, ctx, child, assignee, grants, event) do
+    Enum.reduce_while(grants, {:ok, [event]}, fn grant, {:ok, events} ->
+      case Requests.give(conn, ctx, child, assignee, grant) do
+        {:ok, given} -> {:cont, {:ok, events ++ [given]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
   end
 
   # The broken work goes back to its agent, or to another the parent names

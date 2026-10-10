@@ -853,6 +853,53 @@ defmodule Omunculus.Store.ActionsTest do
                Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
     end
 
+    test "gives the work what the parent could grant it on a request", %{conn: conn} do
+      worker = fn extra -> arbiter_toml() <> extra end
+
+      for {toml, result} <- [
+            {worker.(""), :ok},
+            {worker.(~s(human = ["write"]\n)), {:reopen, {:only_person, "write"}}},
+            {deny_write_toml(), {:reopen, {:cannot_grant, "write"}}}
+          ] do
+        parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+
+        child_id =
+          Fixtures.insert(conn, :works, %{
+            parent_id: parent_id,
+            assignee: "worker",
+            state: "waiting"
+          })
+
+        ctx = %{
+          @ctx
+          | run_id: Fixtures.insert(conn, :runs),
+            work_id: parent_id,
+            config: Fixtures.config(toml)
+        }
+
+        emit =
+          put_in(reopen_emit(child_id), ["body", "grant"], [
+            %{"kind" => "tool", "name" => "write"}
+          ])
+
+        case result do
+          :ok ->
+            assert {:ok, [_tool_event, %{type: "reopen"}, grant]} =
+                     record_tool(conn, [emit], ctx)
+
+            assert grant.type == "grant"
+            assert grant.request_id == nil
+            assert %{"agent" => "worker", "name" => "write"} = Jason.decode!(grant.body)
+
+            assert {:ok, %{grants: ~s(["write"])}} =
+                     Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
+
+          error ->
+            assert {:error, ^error} = record_tool(conn, [emit], ctx)
+        end
+      end
+    end
+
     test "delegating is refused while a child that broke waits on the parent", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works)
       child_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, state: "waiting"})

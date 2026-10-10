@@ -157,6 +157,18 @@ defmodule Omunculus.Tools.Out do
     do:
       "refused: #{inspect(option)} is not an option of this request; give option as one of: #{Enum.join(options, ", ")}"
 
+  def refused({:reopen, {:only_person, name}}),
+    do:
+      "refused: only the person may grant #{name}: reopen without granting it and have the agent ask for it with request_access"
+
+  def refused({:reopen, {:cannot_grant, name}}),
+    do:
+      "refused: you cannot grant #{name}: reopen without granting it and have the agent ask for it with request_access"
+
+  def refused({:reopen, {:blocked, name}}),
+    do:
+      "refused: no one can grant #{name} to that agent: it is not in the catalog, or the configuration denies it"
+
   def refused(reason), do: "refused: #{inspect(reason)}"
 
   @spec chain_failed(String.t(), term) :: String.t()

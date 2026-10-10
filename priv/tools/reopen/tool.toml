@@ -1,7 +1,7 @@
 name = "reopen"
 kind = "tool"
 triggers = ["model"]
-description = "Sends a work below yours that broke back to its agent, or to another agent you name, with instructions on how to go on, and ends the run."
+description = "Sends a work below yours that broke back to its agent, or to another agent you name, with instructions on how to go on, granting it on that work what you list in grant, and ends the run."
 tags = ["sequence", "work"]
 groups = ["sequence"]
 module = "Omunculus.Tools.Reopen"
@@ -19,4 +19,18 @@ type = "string"
 type = "string"
 
 [parameters.properties.agent]
+type = "string"
+
+[parameters.properties.grant]
+type = "array"
+
+[parameters.properties.grant.items]
+type = "object"
+required = ["kind", "name"]
+
+[parameters.properties.grant.items.properties.kind]
+type = "string"
+enum = ["tool", "resource", "path", "directory"]
+
+[parameters.properties.grant.items.properties.name]
 type = "string"

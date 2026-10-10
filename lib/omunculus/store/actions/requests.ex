@@ -65,23 +65,76 @@ defmodule Omunculus.Store.Actions.Requests do
          {:ok, depth} <- run_depth(conn, request.run_id),
          {:ok, work} <- Helpers.fetch_work(conn, request.work_id),
          :ok <- grant_work(conn, work, body["name"], body["scope"]) do
-      Events.append(conn, %{
-        type: "grant",
-        run_id: ctx.run_id,
-        request_id: request.id,
-        work_id: request.work_id,
-        body:
-          Jason.encode!(%{
-            name: body["name"],
-            kind: body["kind"],
-            agent: request.agent,
-            depth: depth,
-            scope: body["scope"],
+      grant_event(conn, ctx, work, request.id, %{
+        name: body["name"],
+        kind: body["kind"],
+        agent: request.agent,
+        depth: depth,
+        scope: body["scope"]
+      })
+    end
+  end
+
+  @doc """
+  Gives `work` a name (`%{"kind", "name"}`) for its `agent`, outside any
+  request, and records the `grant`.
+  """
+  @spec give(Omunculus.Store.Connection.t(), map, map, String.t(), map) ::
+          {:ok, map} | {:error, term}
+  def give(conn, ctx, work, agent, %{"kind" => kind, "name" => name}) do
+    with :ok <- append_grant(conn, work, name) do
+      grant_event(conn, ctx, work, nil, %{
+        name: name,
+        kind: kind,
+        agent: agent,
+        depth: View.work_depth(conn, work),
+        scope: nil
+      })
+    end
+  end
+
+  defp grant_event(conn, ctx, work, request_id, fields) do
+    Events.append(conn, %{
+      type: "grant",
+      run_id: ctx.run_id,
+      request_id: request_id,
+      work_id: work && work.id,
+      body:
+        Jason.encode!(
+          Map.merge(fields, %{
             workflow: work && Config.workflow_name_for(ctx.config, View.work_depth(conn, work)),
             stage: work && work.stage,
             workspace: work && work.workspace
           })
-      })
+        )
+    })
+  end
+
+  @doc """
+  The ceiling `agent` has on `work`, mounted for `names`: what a grant on
+  that work is checked against.
+  """
+  @spec work_ceiling(Omunculus.Store.Connection.t(), map, map, String.t(), [String.t()]) ::
+          {:ok, map} | {:error, term}
+  def work_ceiling(conn, ctx, work, agent, names) do
+    depth = View.work_depth(conn, work)
+
+    with {:ok, grants} <- Helpers.grants(conn, work) do
+      workspace_name = Config.effective_workspace(ctx.config, work)
+
+      {:ok,
+       Ceiling.mount(
+         ctx.config,
+         %{
+           agent: agent,
+           depth: depth,
+           grants: grants,
+           stage: stage_layer(ctx.config, depth, work.stage),
+           workspace: Config.workspace_ceiling(ctx.config, workspace_name),
+           groups: ctx.groups
+         },
+         names
+       )}
     end
   end
 
@@ -166,27 +219,11 @@ defmodule Omunculus.Store.Actions.Requests do
   defp agent_arbiter(_conn, _ctx, %{assignee: nil}, _options), do: {:ok, :human}
 
   defp agent_arbiter(conn, ctx, parent, options) do
-    depth = View.work_depth(conn, parent)
     tools = options |> Map.values() |> List.flatten() |> Enum.map(& &1.name) |> Enum.uniq()
     grants = grants(options)
 
-    with {:ok, parent_grants} <- Helpers.grants(conn, parent) do
-      workspace_name = Config.effective_workspace(ctx.config, parent)
-
-      snapshot =
-        Ceiling.mount(
-          ctx.config,
-          %{
-            agent: parent.assignee,
-            depth: depth,
-            grants: parent_grants,
-            stage: stage_layer(ctx.config, depth, parent.stage),
-            workspace: Config.workspace_ceiling(ctx.config, workspace_name),
-            groups: ctx.groups
-          },
-          tools ++ Enum.map(grants, & &1.name)
-        )
-
+    with {:ok, snapshot} <-
+           work_ceiling(conn, ctx, parent, parent.assignee, tools ++ Enum.map(grants, & &1.name)) do
       if Enum.all?(tools, &(Ceiling.classify(snapshot, &1, "tool") == "have")) and
            Enum.all?(grants, &(Ceiling.classify(snapshot, &1.name, &1.kind) in ~w(have askable))),
          do: {:ok, {:agent, parent.assignee, parent.id}},

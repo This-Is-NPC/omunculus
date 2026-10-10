@@ -14,7 +14,7 @@ defmodule Omunculus.Store.Actions.Contract do
     "continue" => [],
     "end" => [],
     "break" => ~w(body),
-    "reopen" => ~w(work_id body agent),
+    "reopen" => ~w(work_id body agent grant),
     "delegate" => ~w(title goal agent workspace),
     "notify" => ~w(body work_id),
     "inbox.read" => ~w(inbox_id),
@@ -69,5 +69,14 @@ defmodule Omunculus.Store.Actions.Contract do
   defp valid_value?("ids", ids), do: is_list(ids) and Enum.all?(ids, &is_binary/1)
   defp valid_value?("options", options), do: is_map(options)
   defp valid_value?("works", works), do: is_list(works)
+
+  defp valid_value?("grant", grant),
+    do:
+      is_list(grant) and
+        Enum.all?(
+          grant,
+          &match?(%{"kind" => k, "name" => n} when is_binary(k) and is_binary(n), &1)
+        )
+
   defp valid_value?(_key, value), do: is_binary(value)
 end
