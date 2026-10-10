@@ -3,32 +3,45 @@ import pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "_lib"))
 from check import *
 
-import json, socket, subprocess, time, urllib.request
-# The API runs from the environment set up in the workspace, on the real
-# FastAPI, and does what was asked.
+import json, os, shutil, socket, subprocess, tempfile, time, urllib.request
+# As whoever gets the folder: a clean copy of it (no .venv, which it
+# ignores), its environment set up from what it declares with mise, then
+# the API run and called. mise keeps what it installs under eval/.cache.
 workspace, outcome = load()
 expect_outcome(outcome, "done", "answer")
-python = workspace / ".venv" / "bin" / "python"
-if not python.exists():
-    fail("no Python environment in the workspace (.venv)")
 for fake in ["fastapi.py", "fastapi"]:
     if (workspace / fake).exists():
         fail(f"the workspace holds a {fake} of its own")
-found = subprocess.run([str(python), "-c", "import fastapi; print(fastapi.__file__)"], capture_output=True, text=True)
-if found.returncode != 0 or "site-packages" not in found.stdout:
-    fail("FastAPI is not installed in .venv")
 text(workspace, "app.py")
+if not (workspace / "mise.toml").is_file():
+    fail("nothing declares the environment: no mise.toml")
 
+cache = pathlib.Path(__file__).resolve().parents[3] / ".cache" / "mise"
+env = dict(os.environ, **{f"MISE_{d.upper()}_DIR": str(cache / d) for d in ["data", "cache", "config", "state"]})
+copy = pathlib.Path(tempfile.mkdtemp())
+shutil.copytree(workspace, copy, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".venv", "__pycache__"))
+
+def mise(*args):
+    return subprocess.run(["mise", *args], cwd=copy, env=env, capture_output=True, text=True, timeout=600)
+
+steps = [("trust", "-q"), ("install",)]
+if "[tasks.setup]" in (copy / "mise.toml").read_text():
+    steps.append(("run", "setup"))
+elif (copy / "requirements.txt").is_file():
+    # A venv mise makes with uv has no pip of its own until asked.
+    steps.append(("exec", "--", "python", "-m", "ensurepip"))
+    steps.append(("exec", "--", "python", "-m", "pip", "install", "-q", "-r", "requirements.txt"))
+for step in steps:
+    done = mise(*step)
+    if done.returncode != 0:
+        shutil.rmtree(copy)
+        fail(f"mise {' '.join(step)} fails: {(done.stderr or done.stdout).strip().splitlines()[-1:]}")
+
+items = json.loads((copy / "items.json").read_text())
 with socket.socket() as probe:
     probe.bind(("127.0.0.1", 0))
     port = probe.getsockname()[1]
-# On a copy, so the check changes nothing and holds whatever items the
-# agent added while it tried its own API.
-import shutil, tempfile
-copy = pathlib.Path(tempfile.mkdtemp())
-shutil.copytree(workspace, copy, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".venv"))
-items = json.loads((copy / "items.json").read_text())
-server = subprocess.Popen([str(python), "-m", "uvicorn", "app:app", "--port", str(port)], cwd=copy, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+server = subprocess.Popen(["mise", "exec", "--", "python", "-m", "uvicorn", "app:app", "--port", str(port)], cwd=copy, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def call(method, path, body=None):
     request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", method=method, data=json.dumps(body).encode() if body is not None else None, headers={"content-type": "application/json"})
