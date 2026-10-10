@@ -1,13 +1,24 @@
 [execution]
 backend = "bubblewrap"
 runtimes = ["/usr"]
-environment = ["LANG", "LC_ALL", "TERM"]
+environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH"]
 timeout_ms = 30000
 max_output_bytes = 1048576
 max_concurrent = 4
 max_queue = 64
 queue_timeout_ms = 30000
 resources = ["sandbox.write", "sandbox.network"]
+# A command sees the machine as the person does, read-only: their tools,
+# versions and settings, so what it builds runs for them. What follows it
+# may not read: keys, logins, credentials and browser profiles.
+host = true
+deny_read = [
+  "~/.ssh", "~/.gnupg", "~/.aws", "~/.azure", "~/.config/gcloud", "~/.kube",
+  "~/.docker", "~/.netrc", "~/.git-credentials", "~/.config/gh", "~/.npmrc",
+  "~/.pypirc", "~/.password-store", "~/.local/share/keyrings", "~/.mozilla",
+  "~/.config/google-chrome", "~/.config/chromium", "~/.config/BraveSoftware",
+  "~/.codex", "~/.claude",
+]
 
 [execution.sandbox]
 script = "../../sandbox.js"
