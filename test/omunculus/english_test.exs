@@ -28,6 +28,8 @@ defmodule Omunculus.EnglishTest do
       Out.more_tools(1),
       Out.requested_by("agent"),
       Out.refused({:request, {:already_have, "comment"}}),
+      Out.refused({:delegate, {:broken_child, "w1"}}),
+      Out.read_only_workspace(),
       Out.preset_applied("default"),
       Out.no_tools_found(),
       Out.no_comments(),

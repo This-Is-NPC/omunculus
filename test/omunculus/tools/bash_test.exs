@@ -4,7 +4,7 @@ defmodule Omunculus.Tools.BashTest do
   alias Omunculus.Execution.Policy
   alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Tool.{Catalog, Invoke, Manifest}
-  alias Omunculus.Tools.Bash
+  alias Omunculus.Tools.{Bash, Out}
 
   setup do
     root = Omunculus.Fixtures.tmp_dir()
@@ -49,7 +49,11 @@ defmodule Omunculus.Tools.BashTest do
     target = Path.join(root, "target")
     input = %{@input | args: %{"command" => "touch #{target}"}, roots: [root]}
 
-    assert %{"ok" => false} = Bash.run(input, policy(root, read_only: [root], read_write: []))
+    assert %{"ok" => false, "output" => output} =
+             Bash.run(input, policy(root, read_only: [root], read_write: []))
+
+    # The model learns why, and what would let it.
+    assert String.ends_with?(output, Out.read_only_workspace())
     refute File.exists?(target)
   end
 

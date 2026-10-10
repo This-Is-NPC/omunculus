@@ -1,7 +1,7 @@
 name = "bash"
 kind = "tool"
 triggers = ["model"]
-description = "Runs a shell command in the workspace."
+description = "Runs a shell command in the workspace: the way to list, move or delete files and to run programs and tests."
 tags = ["shell"]
 module = "Omunculus.Tools.Bash"
 

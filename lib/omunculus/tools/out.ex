@@ -105,6 +105,10 @@ defmodule Omunculus.Tools.Out do
   def answer_request,
     do: "This run is for answering it: call reply with one of these options before anything else."
 
+  @spec read_only_workspace() :: String.t()
+  def read_only_workspace,
+    do: "The workspace is read-only in this run: writing, moving or deleting needs sandbox.write."
+
   @spec not_text(String.t(), non_neg_integer) :: String.t()
   def not_text(path, bytes), do: "#{path} is not a text file (#{bytes} bytes)"
 
