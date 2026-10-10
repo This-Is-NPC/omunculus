@@ -126,7 +126,7 @@ defmodule Omunculus.Config do
           tools: tools,
           models: %{String.t() => model},
           path: String.t(),
-          store: %{path: String.t()},
+          store: %{path: String.t(), changes: String.t() | nil},
           auth: %{store: String.t() | nil, providers: %{String.t() => map}},
           access: map | nil,
           secrets: %{String.t() => %{String.t() => String.t()}},
@@ -713,22 +713,35 @@ defmodule Omunculus.Config do
   defp parse_store(nil, _config_dir), do: {:error, {:store, :missing}}
 
   defp parse_store(data, config_dir) when is_map(data) do
-    case Map.keys(data) -- ["path"] do
+    case Map.keys(data) -- ["path", "changes"] do
       [key | _] ->
         {:error, {:store, {:unknown_key, key}}}
 
       [] ->
-        case Map.fetch(data, "path") do
-          {:ok, path} when is_binary(path) and path != "" ->
-            {:ok, %{path: expand_store_path(path, config_dir)}}
-
-          _ ->
-            {:error, {:store, {:invalid, :path}}}
+        with {:ok, path} <- store_path(data, "path", config_dir),
+             {:ok, changes} <- store_path(data, "changes", config_dir) do
+          if is_nil(path),
+            do: {:error, {:store, {:invalid, :path}}},
+            else: {:ok, %{path: path, changes: changes}}
         end
     end
   end
 
   defp parse_store(_data, _config_dir), do: {:error, {:store, {:invalid, :table}}}
+
+  # `changes`, optional, is where the files each call changed are kept.
+  defp store_path(data, key, config_dir) do
+    case Map.fetch(data, key) do
+      {:ok, path} when is_binary(path) and path != "" ->
+        {:ok, expand_store_path(path, config_dir)}
+
+      :error ->
+        {:ok, nil}
+
+      _invalid ->
+        {:error, {:store, {:invalid, String.to_atom(key)}}}
+    end
+  end
 
   defp expand_store_path("~" <> _rest = path, _config_dir) when path != "~",
     do: Path.expand(path)

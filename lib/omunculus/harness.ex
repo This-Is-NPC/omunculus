@@ -29,7 +29,7 @@ defmodule Omunculus.Harness do
   request.
   """
 
-  alias Omunculus.{Ceiling, Config, Cycle, Project, Secrets, Skills, Store}
+  alias Omunculus.{Ceiling, Changes, Config, Cycle, Project, Secrets, Skills, Store}
   alias Omunculus.Execution.Policy
   alias Omunculus.Store.Actions.Requests
   alias Omunculus.Tool.{Catalog, Invoke, Manifest, Overrides, Views}
@@ -547,7 +547,8 @@ defmodule Omunculus.Harness do
       workspace: workspace
     }
 
-    with {:ok, out} <- invoke(env, manifest, args) do
+    with {:ok, before} <- snapshot(env),
+         {:ok, out} <- invoke(env, manifest, args) do
       {out, calls} =
         case chain(env, manifest, out, [manifest.name], [call_entry(manifest, args, out, nil)]) do
           {:ok, calls} ->
@@ -560,25 +561,75 @@ defmodule Omunculus.Harness do
 
       store_ctx = store_ctx(ctx, work_id, config, catalog)
 
-      case Store.record_tools(project.conn, ctx.run_id, calls, store_ctx) do
-        {:ok, events} ->
-          {:ok, out, events}
+      with {:ok, changes} <- changed(env, before) do
+        case Store.record_tools(project.conn, ctx.run_id, with_changes(calls, changes), store_ctx) do
+          {:ok, events} ->
+            {:ok, out, events}
 
-        # A model's call the store refuses is recorded as failed, with why,
-        # and writes none of its emits: the model reads why and goes on.
-        {:error, reason} when ctx.trigger == "model" ->
-          refused = %{out | ok: false, output: Out.refused(reason)}
-          entry = call_entry(manifest, args, refused, nil)
+          # A model's call the store refuses is recorded as failed, with why,
+          # and writes none of its emits: the model reads why and goes on.
+          {:error, reason} when ctx.trigger == "model" ->
+            refused = %{out | ok: false, output: Out.refused(reason)}
+            entry = call_entry(manifest, args, refused, nil)
 
-          with {:ok, events} <- Store.record_tools(project.conn, ctx.run_id, [entry], store_ctx) do
-            {:ok, refused, events}
-          end
+            with {:ok, events} <-
+                   Store.record_tools(
+                     project.conn,
+                     ctx.run_id,
+                     with_changes([entry], changes),
+                     store_ctx
+                   ) do
+              {:ok, refused, events}
+            end
 
-        {:error, _reason} = error ->
-          error
+          {:error, _reason} = error ->
+            error
+        end
       end
     end
   end
+
+  # A model's call in a run that may write its workspace is told apart by
+  # the workspace's tree before and after it, when `[store] changes` keeps
+  # them; the files it changed go with the call's event.
+  defp snapshot(%{config: %{store: %{changes: dir}} = config, ctx: ctx} = env)
+       when is_binary(dir) and ctx.trigger == "model" do
+    root = env.workspace.root || env.project.dir
+
+    case ctx do
+      %{execution: %Policy{} = policy} ->
+        if Policy.writable?(policy, root),
+          do:
+            with(
+              {:ok, tree} <- Changes.snapshot(dir, root, [config.store.path, dir]),
+              do: {:ok, {root, tree}}
+            ),
+          else: {:ok, nil}
+
+      _no_run ->
+        {:ok, nil}
+    end
+  end
+
+  defp snapshot(_env), do: {:ok, nil}
+
+  defp changed(_env, nil), do: {:ok, nil}
+
+  defp changed(env, {root, before}) do
+    dir = env.config.store.changes
+
+    with {:ok, after_} <- Changes.snapshot(dir, root, [env.config.store.path, dir]),
+         {:ok, files} <- Changes.files(dir, before, after_) do
+      if files == [],
+        do: {:ok, nil},
+        else: {:ok, %{before: before, after: after_, files: files}}
+    end
+  end
+
+  defp with_changes(calls, nil), do: calls
+
+  defp with_changes([{call, emits} | steps], changes),
+    do: [{Map.put(call, :changes, changes), emits} | steps]
 
   defp invoke(env, manifest, args) do
     with {:ok, execution} <-

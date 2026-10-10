@@ -1828,6 +1828,33 @@ defmodule Omunculus.ConfigTest do
 
       assert {:ok, config} = load(dir)
       assert config.store.path == Path.join(dir, "data/alt.sqlite3")
+      assert config.store.changes == nil
+    end
+
+    test "changes, when given, is resolved against the config file", %{dir: dir} do
+      store = fn changes ->
+        write_toml(dir, """
+        [store]
+        path = "data/alt.sqlite3"
+        changes = #{changes}
+
+        [models.fake]
+        api = "module"
+        module = "Omunculus.Model.Fake"
+
+        [agents.concierge]
+        depth = 0
+        model = "fake"
+        text = "hi"
+        """)
+
+        load(dir)
+      end
+
+      assert {:ok, config} = store.(~s("data/changes"))
+      assert config.store.changes == Path.join(dir, "data/changes")
+      assert {:error, {:store, {:invalid, :changes}}} = store.(~s(""))
+      assert {:error, {:store, {:invalid, :changes}}} = store.("true")
     end
 
     test "two configs in one directory can use different stores", %{dir: dir} do

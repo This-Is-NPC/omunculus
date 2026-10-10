@@ -104,6 +104,8 @@ Wayland session.
 - A project `omunculus.toml` with `[execution]`, `[execution.sandbox]`,
   `[store]`, `[models]` and `[policy] max_retries`, every agent naming a
   model, and an assemble tool named in `[policy]` or on the agent
+- `git`, only with `[store] changes`, which records the files each model call
+  changed in a workspace it may write
 
 The executor does not install Bubblewrap or language runtimes. A runtime root
 in `[execution] runtimes` is read-only inside the sandbox and exposes the

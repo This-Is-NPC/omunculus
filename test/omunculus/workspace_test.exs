@@ -112,6 +112,53 @@ defmodule Omunculus.WorkspaceTest do
     refute File.exists?(Path.join(dir, "note.txt"))
   end
 
+  test "with [store] changes, a call that wrote records the files it changed", %{
+    dir: dir,
+    one: one,
+    two: two,
+    three: three
+  } do
+    File.write!(Path.join(one, "kept.txt"), "kept\n")
+
+    write_config(
+      dir,
+      base_toml(one, two, three) <>
+        """
+
+        [store]
+        path = ".omunculus/store.sqlite3"
+        changes = ".omunculus/changes"
+        """
+    )
+
+    model = fn _assembled, _tools, call ->
+      assert {:ok, ""} = call.("write", %{"path" => "note.txt", "content" => "hi\n"})
+      assert {:ok, _listing} = call.("directory", %{})
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(dir, model)
+    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+
+    project = open_project(dir)
+    {:ok, events} = Query.all(project.conn, "SELECT body FROM events WHERE type = 'tool'")
+    calls = Map.new(events, &{Jason.decode!(&1.body)["name"], Jason.decode!(&1.body)})
+
+    assert %{"files" => [%{"path" => "note.txt", "op" => "A", "added" => 1, "deleted" => 0}]} =
+             changes = calls["write"]["changes"]
+
+    refute Map.has_key?(calls["directory"], "changes")
+
+    assert {:ok, patch} =
+             Omunculus.Changes.patch(
+               Path.join(dir, ".omunculus/changes"),
+               changes["before"],
+               changes["after"]
+             )
+
+    assert patch =~ "+hi"
+  end
+
   test "a work created with workspace two has write absent from the run's tools", %{
     dir: dir,
     one: one,
