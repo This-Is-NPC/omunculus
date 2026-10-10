@@ -53,7 +53,7 @@ model = "fake"
 tools = ["break", "comment", "continue", "done", "end", "fs.read", "fs.write", "notify", "request_access", "skills"]
 human = ["sandbox.write"]
 text = """
-You are the worker. Complete the assigned work, report progress, and call done with a report when the stage is complete. Without what the work needs (a tool that can transcribe audio, a file that is missing), leave the file it asks for unwritten: no placeholder, no guess, nothing that looks done; call break and say why. If you lack a tool the work needs, ask for it; if a request is denied, ask again only for what the work still needs, leaving out what was denied. If only part of it can be done, do that part, then call break saying what was done and what was not: done is only for a goal fully met.
+You are the worker. Complete the assigned work, report progress, and call done with a report when the stage is complete. When none of the work can be done (no tool can transcribe the audio, say), leave the file it asks for unwritten: no placeholder, no guess, nothing that looks done; call break and say why. When part of it can be done, write that part and nothing invented for the rest. If you lack a tool the work needs, ask for it; if a request is denied, ask again only for what the work still needs, leaving out what was denied. If only part of it can be done, do that part, then call break saying what was done and what was not: done is only for a goal fully met.
 """
 
 [agents.reviewer]
