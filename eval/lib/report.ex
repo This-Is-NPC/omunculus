@@ -111,7 +111,8 @@ defmodule EquivalentExchange.Report do
 
     %{
       executions: length(group),
-      passed: rate.(Enum.map(scores, & &1["passed"])),
+      passed: rate.(for score <- scores, score["passed"] != nil, do: score["passed"]),
+      judge_unavailable: Enum.count(scores, &(&1["judge_unavailable"] not in [nil, false])),
       state_ok: rate.(Enum.map(scores, & &1["state_ok"])),
       report_ok: rate.(for score <- scores, score["report_ok"] != nil, do: score["report_ok"]),
       # What a supervisor let through, and how often one sent work back.
@@ -237,7 +238,7 @@ defmodule EquivalentExchange.Report do
     """
     # Equivalent Exchange · #{summary.run}
 
-    Model `#{manifest["model"]}`#{code_mode(manifest)} · commit `#{manifest["commit"]}` · #{manifest["repetitions"]} repetition(s) · #{summary.totals.executions} executions · #{trust(manifest["judge"])}
+    Model `#{manifest["model"]}`#{code_mode(manifest)} · commit `#{manifest["commit"]}` · #{manifest["repetitions"]} repetition(s) · #{summary.totals.executions} executions · #{trust(manifest["judge"])}#{unavailable(summary.totals.judge_unavailable)}
 
     #{table("Totals", %{"all" => summary.totals})}
     #{table("By configuration", summary.by_configuration)}
@@ -285,6 +286,11 @@ defmodule EquivalentExchange.Report do
     do: "judge right on #{right} of #{asked} hand-written answers"
 
   defp trust(nil), do: "no judge"
+
+  defp unavailable(0), do: ""
+
+  defp unavailable(count),
+    do: " · **the decider was unavailable on #{count} execution(s): their passed is not counted**"
 
   defp findings(by_cause) when map_size(by_cause) == 0, do: "None.\n"
 

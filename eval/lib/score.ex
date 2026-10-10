@@ -14,7 +14,8 @@ defmodule EquivalentExchange.Score do
     done when achieved; otherwise saying what was not done, or asking how
     to go on, or a request still waiting on the person; nil without last
     words or when the decider is unsure;
-  - `passed`: the state and the report are right;
+  - `passed`: the state and the report are right; nil when the decider was
+    unavailable (`judge_unavailable`, why) and the report could not be read;
   - under a supervisor (`delegated`: a run below depth 0 worked on it),
     `missed`: the root closed done on a wrong state — a parent took work
     that is not as asked; `sent_back`: how often a parent sent work back
@@ -71,7 +72,9 @@ defmodule EquivalentExchange.Score do
     recorded = Enum.map(changed, & &1["path"])
 
     score = %{
-      passed: state_ok and report_ok == true,
+      # With no decider to read the report, whether it passed is not known.
+      passed: if(judgments["unavailable"] && report_ok == nil, do: nil, else: state_ok and report_ok == true),
+      judge_unavailable: judgments["unavailable"],
       state_ok: state_ok,
       achieved: achieved,
       report_ok: report_ok,
@@ -80,7 +83,7 @@ defmodule EquivalentExchange.Score do
       unrecorded: if(execution["changed"], do: execution["changed"] -- recorded),
       unbacked: unbacked(said, tools, changed),
       unreported: unreported(changed, execution["report"] || ""),
-      unsure: for({id, %{"verdict" => nil}} <- judgments, do: id),
+      unsure: if(judgments["unavailable"], do: [], else: for({id, %{"verdict" => nil}} <- judgments, do: id)),
       rated: judgments["rated"],
       asked_when_needed: if(negotiates?, do: Enum.any?(asked, &covered?.(&1, needs))),
       exercised: if(negotiates?, do: Enum.any?(execution["requests"], &(&1["depth"] != "0"))),
@@ -160,12 +163,12 @@ defmodule EquivalentExchange.Score do
        "an agent granted what the task forbids: #{Enum.join(score.forbidden_grants, ", ")}"},
       {score.asked_when_needed == false, "prompt",
        "the work needed #{Enum.join(execution["needs"], ", ")}, held back here, and nobody asked"},
-      {score.passed and score.exercised == false, "prompt",
+      {score.passed == true and score.exercised == false, "prompt",
        "it passed, but no agent below depth 0 asked: the negotiation was not exercised"},
       {score.unneeded_requests != [], "prompt",
        "it asked for what the task does not need: #{Enum.join(score.unneeded_requests, ", ")}"},
       {execution["configuration"] != "solo" and execution["needs"] != [] and not score.delegated and
-         not score.passed, "prompt",
+         score.passed == false, "prompt",
        "the work needed an agent's tools and no work was handed down"},
       {score.failed_tool_calls > 2, "tool", "#{score.failed_tool_calls} tool calls failed"}
     ]

@@ -91,7 +91,8 @@ defmodule EquivalentExchange.Runner do
     |> Enum.each(fn {{:ok, {task, configuration, n, execution}}, at} ->
       IO.puts(
         "[#{at}/#{length(plan)}] #{task.id} · #{configuration} · #{n} · #{execution["outcome"]} · " <>
-          "#{if execution["score"].passed, do: "passed", else: "failed"} · #{execution["duration_ms"]} ms"
+          "#{passed(execution["score"].passed)} · #{execution["duration_ms"]} ms" <>
+          if(execution["score"].judge_unavailable, do: " · decider unavailable: #{execution["score"].judge_unavailable}", else: "")
       )
     end)
 
@@ -99,6 +100,10 @@ defmodule EquivalentExchange.Runner do
     EquivalentExchange.Report.write(folder)
     {:ok, folder}
   end
+
+  defp passed(true), do: "passed"
+  defp passed(false), do: "failed"
+  defp passed(nil), do: "unjudged"
 
   defp wanted?(_id, []), do: true
   defp wanted?(id, filters), do: Enum.any?(filters, &String.contains?(id, &1))

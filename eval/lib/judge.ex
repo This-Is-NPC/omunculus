@@ -40,7 +40,10 @@ defmodule EquivalentExchange.Judge do
     "5: ready to use as is: complete, faithful and clear"
   ]
 
-  @doc "The judgments of an execution of `task` that left `workspace`."
+  @doc """
+  The judgments of an execution of `task` that left `workspace`; with
+  `"unavailable"`, why the decider gave none.
+  """
   @spec judge(%EquivalentExchange.Task{}, String.t(), String.t()) :: map
   def judge(task, report, workspace) do
     decider = decider()
@@ -49,7 +52,11 @@ defmodule EquivalentExchange.Judge do
     questions =
       Map.new(@questions, fn {id, text} -> {id, %{type: "noul", instructions: text}} end)
 
-    answers = decide(decider, state, questions)
+    {answers, unavailable} =
+      case decide(decider, state, questions) do
+        {:ok, answers} -> {answers, nil}
+        {:error, reason} -> {%{}, reason}
+      end
 
     general =
       Map.new(@questions, fn {id, _text} ->
@@ -58,7 +65,8 @@ defmodule EquivalentExchange.Judge do
       end)
 
     rated = Map.new(task.judge, &{&1["id"], rate(decider, task, &1, workspace)})
-    Map.put(general, "rated", rated)
+    general = Map.put(general, "rated", rated)
+    if unavailable, do: Map.put(general, "unavailable", unavailable), else: general
   end
 
   @doc """
@@ -82,7 +90,7 @@ defmodule EquivalentExchange.Judge do
           {id, %{type: "noul", instructions: @questions[id]}}
         end)
 
-      answers = decide(decider, state, questions)
+      {_ok, answers} = with({:error, _reason} <- decide(decider, state, questions), do: {:error, %{}})
 
       for {id, want} <- expected,
           do: verdict(decider, get_in(answers, [id, "noul"])) == want
@@ -105,9 +113,11 @@ defmodule EquivalentExchange.Judge do
       "score" => %{type: "score", criteria: @rubric, instructions: judge["question"]}
     }
 
-    case get_in(decide(decider, state, questions), ["score", "score"]) do
-      nil -> nil
-      score -> Float.round(score + 1.0, 2)
+    with {:ok, answers} <- decide(decider, state, questions),
+         score when is_number(score) <- get_in(answers, ["score", "score"]) do
+      Float.round(score + 1.0, 2)
+    else
+      _unrated -> nil
     end
   end
 
@@ -125,16 +135,19 @@ defmodule EquivalentExchange.Judge do
 
     case cached(key) do
       nil ->
-        answers = post(decider, %{model: decider["model"], state: state, questions: questions})
-        if answers != %{}, do: keep(key, answers)
-        answers
+        with {:ok, answers} <-
+               post(decider, %{model: decider["model"], state: state, questions: questions}) do
+          keep(key, answers)
+          {:ok, answers}
+        end
 
       answers ->
-        answers
+        {:ok, answers}
     end
   end
 
-  # A call that keeps failing comes back with no answers: every verdict unsure.
+  # A call that keeps failing says why: the decider was unavailable, which
+  # is no verdict either way.
   defp post(decider, body, attempt \\ 1) do
     case Req.post(decider["url"],
            json: body,
@@ -143,14 +156,17 @@ defmodule EquivalentExchange.Judge do
            retry: false
          ) do
       {:ok, %Req.Response{status: 200, body: %{"answers" => answers}}} ->
-        answers
+        {:ok, answers}
 
       _failed when attempt < 5 ->
         Process.sleep(1000 * Integer.pow(2, attempt))
         post(decider, body, attempt + 1)
 
-      _failed ->
-        %{}
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, "HTTP #{status}: #{body |> inspect() |> String.slice(0, 200)}"}
+
+      {:error, reason} ->
+        {:error, inspect(reason)}
     end
   end
 
