@@ -122,10 +122,10 @@ claims `done`.
 
 ```sh
 mise run eval:selftest                       # checks and scoring
-mise run eval:run -- --model luna --k 3 --jobs 12 --label pilot
+mise run eval:run -- --model luna --k 3 --jobs 24 --label pilot
 mise run eval:run -- --model luna --task brief --configuration negotiated
-mise run eval:run -- --model sonnet --k 3 --jobs 12 --label sonnet
-mise run eval:run -- --model haiku --k 3 --jobs 12 --against eval/results/<before>
+mise run eval:run -- --model sonnet --k 3 --jobs 24 --label sonnet
+mise run eval:run -- --model haiku --k 3 --jobs 24 --against eval/results/<before>
 mise run eval:compare -- eval/results/<before> eval/results/<now>
 mix run eval/run.exs report eval/results/<run> --against eval/results/<before>
 mix run eval/run.exs score eval/results/<run>    # score an old run again
