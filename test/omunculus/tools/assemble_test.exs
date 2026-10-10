@@ -91,13 +91,18 @@ defmodule Omunculus.Tools.AssembleTest do
         },
         %{id: "w2", title: "Skip", assignee: "worker", state: "cancelled", last_comment: nil}
       ],
-      "cause" => %{type: "break", actor_id: "worker", body: ~s({"body":"no access"})}
+      "cause" => %{
+        type: "break",
+        actor_id: "worker",
+        work_id: "w3",
+        body: ~s({"body":"no access"})
+      }
     }
 
     output = whole(%{@input | view: view})
 
     assert output =~
-             "## Results\n- Answer (worker, done, work w1): said hi\n- Skip (worker, cancelled, work w2)\n- worker broke its work: no access"
+             "## Results\n- Answer (worker, done, work w1): said hi\n- Skip (worker, cancelled, work w2)\n- worker broke its work w3: no access"
   end
 
   test "no results, no section" do

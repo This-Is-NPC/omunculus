@@ -13,7 +13,7 @@ defmodule Omunculus.Store.Actions do
   its depth that is not `workflow_only`, refused when that depth has a
   workflow; unnamed, it is the first stage's agent or the depth's first
   agent.
-  `continue`, `break`, `delegate`, `cancel` and `end` are
+  `continue`, `break`, `reopen`, `delegate`, `cancel` and `end` are
   dispatched to `Actions.Sequence`; `request`, `reply` and `grant` to
   `Actions.Requests`; `notify` and `inbox.read` to `Actions.Inbox`;
   `compact` and `comment.delete` to `Actions.Comments`.
@@ -70,6 +70,9 @@ defmodule Omunculus.Store.Actions do
 
   defp dispatch(conn, %{"type" => "break"} = emit, ctx),
     do: Sequence.break(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "reopen"} = emit, ctx),
+    do: Sequence.reopen(conn, Map.get(emit, "body", %{}), ctx)
 
   defp dispatch(conn, %{"type" => "delegate"} = emit, ctx),
     do: Sequence.delegate(conn, Map.get(emit, "body", %{}), ctx)

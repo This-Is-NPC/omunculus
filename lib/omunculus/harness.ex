@@ -732,7 +732,8 @@ defmodule Omunculus.Harness do
     with :ok <- open_sequence_run(project, event, via), do: {:ok, via}
   end
 
-  defp advance(project, _catalog, %{type: "delegate"} = event, via, :actions) do
+  defp advance(project, _catalog, %{type: type} = event, via, :actions)
+       when type in ["delegate", "reopen"] do
     with :ok <- due(project, event, %{work_id: event.work_id, via: via}), do: {:ok, via}
   end
 

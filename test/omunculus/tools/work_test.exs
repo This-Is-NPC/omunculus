@@ -108,7 +108,7 @@ defmodule Omunculus.Tools.WorkTest do
       %{dir: dir}
     end
 
-    @creator ~w(comment continue delegate done end work)
+    @creator ~w(comment continue delegate done end reopen work)
 
     defp agents_toml(lead_tools \\ @creator) do
       """
@@ -353,6 +353,57 @@ defmodule Omunculus.Tools.WorkTest do
       [reopened] = Enum.filter(rest, &(&1.work_id == root.id))
       [reopened_start] = all(project, "SELECT * FROM events WHERE id = ?", [reopened.event_id])
       assert break.sequence < reopened_start.sequence
+
+      Project.close(project)
+    end
+
+    test "a parent woken by a child's break reopens its work with instructions, and the child goes on",
+         %{dir: dir} do
+      test_pid = self()
+
+      model =
+        root_model(fn
+          {"lead", "planned"}, call ->
+            create(call, "split", [%{"title" => "A", "goal" => "Goal A", "agent" => "beta"}])
+
+          {"lead", "split"}, call ->
+            # The parent woken by the break reads which work broke and sends it back.
+            case Regex.run(~r/beta broke its work (\w+): stuck/, Process.get(:assembled)) do
+              [_, work_id] ->
+                send(test_pid, :woken)
+                call.("reopen", %{"work_id" => work_id, "instructions" => "use the other file"})
+
+              nil ->
+                :ok
+            end
+
+          {"beta", "use the other file"}, call ->
+            call.("done", %{"report" => "finished"})
+
+          {"beta", _first}, call ->
+            call.("break", %{"report" => "stuck"})
+
+          _other, _call ->
+            :ok
+        end)
+
+      project =
+        setup_project(dir, agents_toml(), fn assembled, tools, call ->
+          Process.put(:assembled, assembled)
+          model.(assembled, tools, call)
+        end)
+
+      assert_received :woken
+      assert [root] = all(project, "SELECT * FROM works WHERE parent_id IS NULL")
+      assert [child] = all(project, "SELECT * FROM works WHERE parent_id = ?", [root.id])
+      assert child.state == "done"
+
+      assert ["stuck", "use the other file", "finished"] =
+               project
+               |> all("SELECT body FROM comments WHERE work_id = ? ORDER BY created_at, id", [
+                 child.id
+               ])
+               |> Enum.map(& &1.body)
 
       Project.close(project)
     end

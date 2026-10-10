@@ -1,0 +1,19 @@
+name = "reopen"
+kind = "tool"
+triggers = ["model"]
+description = "Sends a work below yours that broke back to its agent, with instructions on how to go on, and ends the run."
+tags = ["sequence", "work"]
+groups = ["sequence"]
+module = "Omunculus.Tools.Reopen"
+chains = ["end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+required = ["work_id", "instructions"]
+
+[parameters.properties.work_id]
+type = "string"
+
+[parameters.properties.instructions]
+type = "string"

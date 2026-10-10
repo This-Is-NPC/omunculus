@@ -5,7 +5,9 @@ defmodule Omunculus.Store.Actions.Sequence do
   workflow, and is refused while the work waits; `break` parks it with a
   comment, and is refused while the work waits on its children. A
   `break` reopens a parent
-  waiting on its children at once; closing or cancelling a work reopens
+  waiting on its children at once; `reopen` sends a child that broke back
+  to work with the parent's instructions as its comment, and parks the
+  parent on its children again; closing or cancelling a work reopens
   it once each of its children is done or cancelled; each names
   the reopened parent as `parent_id` in its event. `delegate` opens a
   child with its title and goal and parks the parent on its children,
@@ -60,6 +62,54 @@ defmodule Omunculus.Store.Actions.Sequence do
              Helpers.resolve_workspace(ctx.config, body["workspace"], parent)
            ) do
       apply_delegate(conn, ctx, body, parent, stage, assignee, workspace)
+    end
+  end
+
+  @spec reopen(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
+  def reopen(conn, body, ctx) do
+    with :ok <- ensure_context(:reopen, ctx),
+         :ok <- Helpers.ensure_text(:reopen, body, "body"),
+         {:ok, parent} <- fetch_work(:reopen, conn, ctx.work_id),
+         {:ok, child} <- fetch_work(:reopen, conn, body["work_id"]),
+         :ok <- broken_child(child, parent) do
+      apply_reopen(conn, ctx, body, child, parent)
+    end
+  end
+
+  # A work a parent may reopen is its own child, parked by a break.
+  defp broken_child(%{parent_id: parent_id, state: "waiting", waiting: nil}, %{id: parent_id}),
+    do: :ok
+
+  defp broken_child(%{parent_id: parent_id}, %{id: parent_id}),
+    do: {:error, {:reopen, :not_broken}}
+
+  defp broken_child(_child, _parent), do: {:error, {:reopen, :not_a_child}}
+
+  defp apply_reopen(conn, ctx, body, child, parent) do
+    comment_id = Id.new()
+
+    with {:ok, event} <-
+           Events.append(conn, %{
+             type: "reopen",
+             run_id: ctx.run_id,
+             work_id: child.id,
+             comment_id: comment_id,
+             body: Jason.encode!(%{parent_id: parent.id})
+           }),
+         :ok <-
+           Helpers.insert_comment(conn, comment_id, %{works: child.id}, body["body"], event, ctx),
+         :ok <-
+           Query.exec(conn, "UPDATE works SET state = 'open', updated_at = ? WHERE id = ?", [
+             Events.now(),
+             child.id
+           ]),
+         :ok <-
+           Query.exec(
+             conn,
+             "UPDATE works SET state = 'waiting', waiting = 'child', waiting_from = ?, updated_at = ? WHERE id = ?",
+             [ctx.agent, Events.now(), parent.id]
+           ) do
+      {:ok, event}
     end
   end
 

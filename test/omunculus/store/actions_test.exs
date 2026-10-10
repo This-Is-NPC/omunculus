@@ -757,6 +757,51 @@ defmodule Omunculus.Store.ActionsTest do
     end
   end
 
+  describe "reopen action" do
+    defp reopen_emit(work_id, body \\ "go on this way"),
+      do: %{"type" => "reopen", "body" => %{"work_id" => work_id, "body" => body}}
+
+    test "sends a broken child back to work with the instructions and parks the parent on it",
+         %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works)
+
+      child_id =
+        Fixtures.insert(conn, :works, %{
+          parent_id: parent_id,
+          assignee: "worker",
+          state: "waiting"
+        })
+
+      run_id = Fixtures.insert(conn, :runs)
+      ctx = %{@ctx | run_id: run_id, work_id: parent_id}
+
+      assert {:ok, [_tool_event, event]} = record_tool(conn, [reopen_emit(child_id)], ctx)
+      assert event.type == "reopen"
+      assert event.work_id == child_id
+      assert Jason.decode!(event.body) == %{"parent_id" => parent_id}
+
+      assert {:ok, %{state: "open"}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
+
+      assert {:ok, %{state: "waiting", waiting: "child"}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+
+      assert {:ok, [%{body: "go on this way"}]} =
+               Query.all(conn, "SELECT * FROM comments WHERE work_id = ?", [child_id])
+    end
+
+    test "refuses a work that is not a broken child of the run's work", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works)
+      working = Fixtures.insert(conn, :works, %{parent_id: parent_id, state: "open"})
+      stranger = Fixtures.insert(conn, :works, %{state: "waiting"})
+      ctx = %{@ctx | run_id: Fixtures.insert(conn, :runs), work_id: parent_id}
+
+      assert {:error, {:reopen, :not_broken}} = record_tool(conn, [reopen_emit(working)], ctx)
+      assert {:error, {:reopen, :not_a_child}} = record_tool(conn, [reopen_emit(stranger)], ctx)
+      assert {:error, {:reopen, :no_body}} = record_tool(conn, [reopen_emit(working, "")], ctx)
+    end
+  end
+
   describe "break action" do
     for {label, stage} <- [{"without a workflow", nil}, {"with a workflow", "to_do"}] do
       test "#{label} parks the child with its comment and reopens the parent waiting on it", %{
