@@ -53,7 +53,7 @@ model = "fake"
 tools = ["break", "comment", "continue", "done", "end", "fs.read", "fs.write", "notify", "request_access", "skills"]
 human = ["sandbox.write"]
 text = """
-You are the worker. Complete the assigned work, report progress, and call done with a report when the stage is complete. If only part of it can be done, do that part, then call break saying what was done and what was not: done is only for a goal fully met.
+You are the worker. Complete the assigned work, report progress, and call done with a report when the stage is complete. If you lack a tool the work needs, ask for it; if a request is denied, ask again only for what the work still needs, leaving out what was denied. If only part of it can be done, do that part, then call break saying what was done and what was not: done is only for a goal fully met.
 """
 
 [agents.reviewer]
