@@ -17,7 +17,7 @@ defmodule Omunculus.Execution.Bubblewrap do
 
   defmodule Handle do
     @moduledoc false
-    @enforce_keys [:port, :input, :stderr_reader, :temp_dir, :created_hidden]
+    @enforce_keys [:port, :input, :input_pid, :stderr_reader, :temp_dir, :created_hidden]
     defstruct @enforce_keys
   end
 
@@ -60,6 +60,7 @@ defmodule Omunculus.Execution.Bubblewrap do
        %Handle{
          port: port,
          input: input,
+         input_pid: os_pid(input),
          stderr_reader: stderr_reader,
          temp_dir: temp_dir,
          created_hidden: created_hidden
@@ -85,7 +86,7 @@ defmodule Omunculus.Execution.Bubblewrap do
 
   @impl true
   def stop(%Handle{} = handle, _reason) do
-    kill_port(handle.input)
+    kill_input(handle)
     kill_port(handle.port)
     kill_port(handle.stderr_reader)
     cleanup_hidden(handle.created_hidden)
@@ -94,7 +95,7 @@ defmodule Omunculus.Execution.Bubblewrap do
 
   @impl true
   def cleanup(%Handle{} = handle) do
-    kill_port(handle.input)
+    kill_input(handle)
     kill_port(handle.stderr_reader)
     cleanup_hidden(handle.created_hidden)
     File.rm_rf(handle.temp_dir)
@@ -486,6 +487,32 @@ defmodule Omunculus.Execution.Bubblewrap do
   defp cleanup_hidden(paths) do
     Enum.each(paths, &File.rm/1)
   end
+
+  # The writer of a command's input waits for the command to open it: one
+  # that never starts leaves it waiting, its port closed, so it is killed
+  # by the process id it had.
+  defp kill_input(handle) do
+    kill_port(handle.input)
+    if handle.input_pid && writing?(handle.input_pid, handle.temp_dir), do: kill(handle.input_pid)
+  end
+
+  # Still this command's writer, not a process that took its id since.
+  defp writing?(pid, temp_dir) do
+    case File.read("/proc/#{pid}/cmdline") do
+      {:ok, cmdline} -> String.contains?(cmdline, Path.join(temp_dir, "input"))
+      {:error, _gone} -> false
+    end
+  end
+
+  defp os_pid(port) do
+    case Port.info(port, :os_pid) do
+      {:os_pid, pid} -> pid
+      nil -> nil
+    end
+  end
+
+  defp kill(pid),
+    do: System.cmd("kill", ["-KILL", Integer.to_string(pid)], stderr_to_stdout: true)
 
   defp kill_port(port) do
     case Port.info(port, :os_pid) do

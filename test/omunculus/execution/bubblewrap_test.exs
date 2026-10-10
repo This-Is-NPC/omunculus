@@ -43,6 +43,22 @@ defmodule Omunculus.Execution.BubblewrapTest do
              )
   end
 
+  test "a sandbox that cannot start says so and leaves no process waiting on its input", %{
+    workspace: workspace
+  } do
+    writers = fn ->
+      {said, _status} = System.cmd("pgrep", ["-f", "omunculus-input"])
+      said |> String.split() |> length()
+    end
+
+    before = writers.()
+    {:ok, command} = Command.new("/usr/bin/sh", ["-c", "true"], cwd: workspace)
+    policy = policy(workspace, read_only: ["/nonexistent-omunculus-path"])
+
+    assert {:error, {:bubblewrap, :setup_failed}} = Omunculus.Execution.run(command, policy)
+    assert writers.() <= before
+  end
+
   test "runs Python from the declared runtime", %{workspace: workspace} do
     {:ok, command} = Command.new("/usr/bin/python3", ["-c", "print('python')"])
 
@@ -184,6 +200,7 @@ defmodule Omunculus.Execution.BubblewrapTest do
     handle = %Bubblewrap.Handle{
       port: nil,
       input: nil,
+      input_pid: nil,
       stderr_reader: nil,
       temp_dir: temp_dir,
       created_hidden: []
@@ -196,7 +213,7 @@ defmodule Omunculus.Execution.BubblewrapTest do
     %Policy{
       id: "test-policy",
       workspace: %{name: nil, root: workspace},
-      read_only: [],
+      read_only: Keyword.get(overrides, :read_only, []),
       read_write: [workspace],
       hidden: Keyword.get(overrides, :hidden, []),
       runtimes: ["/usr"],
