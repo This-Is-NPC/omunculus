@@ -146,6 +146,17 @@ defmodule Omunculus.Tools.Out do
     do:
       "refused: this run cannot delegate, so it cannot hand a work to an agent below; a work naming no agent stays yours"
 
+  def refused({tag, {:agent_not_allowed, agent}}) when tag in [:work, :delegate],
+    do:
+      "refused: #{agent} is not an agent a work can go to: name one under ## Agents as it is written there, or leave agent out when ## Agents shows a workflow"
+
+  def refused({tag, :agent_with_workflow}) when tag in [:work, :delegate],
+    do: "refused: works at that depth go through the workflow ## Agents shows: leave agent out"
+
+  def refused({:reply, {:unknown_option, option, options}}),
+    do:
+      "refused: #{inspect(option)} is not an option of this request; give option as one of: #{Enum.join(options, ", ")}"
+
   def refused(reason), do: "refused: #{inspect(reason)}"
 
   @spec chain_failed(String.t(), term) :: String.t()

@@ -1584,7 +1584,7 @@ defmodule Omunculus.Store.ActionsTest do
       work_id = Fixtures.insert(conn, :works)
       {_run, request_id} = open_request(conn, @ceiling, work_id)
 
-      assert {:error, {:reply, {:unknown_option, "maybe"}}} =
+      assert {:error, {:reply, {:unknown_option, "maybe", ["deny" | _]}}} =
                record_tool(conn, [reply_emit(request_id, "maybe", "ok")], human_ctx())
     end
 

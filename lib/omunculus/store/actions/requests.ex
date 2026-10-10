@@ -261,9 +261,11 @@ defmodule Omunculus.Store.Actions.Requests do
   defp ensure_open(_request), do: {:error, {:reply, :closed}}
 
   defp ensure_option(request, option) do
-    if is_binary(option) and Map.has_key?(Jason.decode!(request.options), option),
+    options = Jason.decode!(request.options)
+
+    if is_binary(option) and Map.has_key?(options, option),
       do: :ok,
-      else: {:error, {:reply, {:unknown_option, option}}}
+      else: {:error, {:reply, {:unknown_option, option, options |> Map.keys() |> Enum.sort()}}}
   end
 
   defp authorize_reply(_request, %{author: "human"}), do: :ok
