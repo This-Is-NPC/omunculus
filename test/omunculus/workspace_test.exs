@@ -38,7 +38,7 @@ defmodule Omunculus.WorkspaceTest do
     [agents.concierge]
     depth = 0
     text = "concierge"
-    tools = ["work", "delegate", "end", "directory", "workspaces", "read", "write", "changes", "request_access", "reply", "comment", "peek", "sandbox.write", "sandbox.network"]
+    tools = ["work", "delegate", "end", "directory", "workspaces", "read", "write", "changes", "revert", "request_access", "reply", "comment", "peek", "sandbox.write", "sandbox.network"]
 
     [agents.worker]
     depth = 1
@@ -160,6 +160,47 @@ defmodule Omunculus.WorkspaceTest do
              )
 
     assert patch =~ "+hi"
+  end
+
+  test "revert puts back what the run's calls changed, unless a file moved on since", %{
+    dir: dir,
+    one: one,
+    two: two,
+    three: three
+  } do
+    kept = Path.join(one, "kept.txt")
+    File.write!(kept, "kept\n")
+
+    write_config(
+      dir,
+      base_toml(one, two, three) <>
+        """
+
+        [store]
+        path = ".omunculus/store.sqlite3"
+        changes = ".omunculus/changes"
+        """
+    )
+
+    model = fn _assembled, _tools, call ->
+      assert {:ok, ""} = call.("write", %{"path" => "note.txt", "content" => "hi\n"})
+      assert {:ok, ""} = call.("write", %{"path" => "kept.txt", "content" => "changed\n"})
+      File.write!(kept, "moved on\n")
+
+      assert {:ok, "refused: kept.txt changed after the work's last change; nothing was restored"} =
+               call.("revert", %{})
+
+      assert File.exists?(Path.join(one, "note.txt"))
+      File.write!(kept, "changed\n")
+      assert {:ok, "Restored: kept.txt\nRemoved: note.txt"} = call.("revert", %{})
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(dir, model)
+    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+
+    assert File.read!(kept) == "kept\n"
+    refute File.exists?(Path.join(one, "note.txt"))
   end
 
   test "a work created with workspace two has write absent from the run's tools", %{

@@ -23,13 +23,19 @@ defmodule Omunculus.Tools.Changes do
     end
   end
 
-  defp calls(%{"work_id" => _named}, %{"target" => work}) when is_map(work),
+  @doc """
+  The calls that changed files, oldest first, each `%{agent, name,
+  changes}`: of the work `work_id` names (the `target` view), or of the
+  run's own work and this run so far (`own` and `run`).
+  """
+  @spec calls(map, map) :: {:ok, [map]} | {:error, String.t()}
+  def calls(%{"work_id" => _named}, %{"target" => work}) when is_map(work),
     do: {:ok, work_calls(work)}
 
-  defp calls(%{"work_id" => _named}, _view),
+  def calls(%{"work_id" => _named}, _view),
     do: {:error, "work_id must name a work below this run's"}
 
-  defp calls(_args, view),
+  def calls(_args, view),
     do: {:ok, work_calls(view["own"]) ++ changed(view["run"] || [], nil)}
 
   defp work_calls(nil), do: []

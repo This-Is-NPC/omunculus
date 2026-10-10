@@ -8,7 +8,8 @@ defmodule Omunculus.Changes do
   out the paths given, and what starts with them (the store and its
   sidecar files, when they lie inside the root). `files/3`
   lists what differs between two trees, and `patch/4` is their unified
-  diff. git runs on the harness side, outside the sandbox, with no user or
+  diff; `object/3`, `hash/2` and `content/2` read a file of a tree and
+  of the workspace, to put one back. git runs on the harness side, outside the sandbox, with no user or
   system configuration; snapshots of one root take turns.
   """
 
@@ -52,6 +53,32 @@ defmodule Omunculus.Changes do
           {:ok, String.t()} | {:error, term}
   def patch(dir, before, after_, paths \\ []),
     do: git(dir, nil, ["diff-tree", "-p", "--no-color", before, after_, "--" | paths])
+
+  @doc "The object of `path` in `tree`, or nil when the tree has no such file."
+  @spec object(String.t(), String.t(), String.t()) :: {:ok, String.t() | nil} | {:error, term}
+  def object(dir, tree, path) do
+    case git(dir, nil, ["ls-tree", "-z", tree, "--", path]) do
+      {:ok, ""} -> {:ok, nil}
+      {:ok, entry} -> {:ok, entry |> String.split([" ", "\t"]) |> Enum.at(2)}
+      error -> error
+    end
+  end
+
+  @doc "The object the file at `absolute` would be, or nil when there is none."
+  @spec hash(String.t(), String.t()) :: {:ok, String.t() | nil} | {:error, term}
+  def hash(dir, absolute) do
+    if File.regular?(absolute),
+      do:
+        with(
+          {:ok, sha} <- git(dir, nil, ["hash-object", "--no-filters", absolute]),
+          do: {:ok, String.trim(sha)}
+        ),
+      else: {:ok, nil}
+  end
+
+  @doc "The content of an object."
+  @spec content(String.t(), String.t()) :: {:ok, binary} | {:error, term}
+  def content(dir, object), do: git(dir, nil, ["cat-file", "blob", object])
 
   defp ensure(dir) do
     if File.dir?(dir) do
