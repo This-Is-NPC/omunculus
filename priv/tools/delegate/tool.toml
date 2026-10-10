@@ -21,3 +21,4 @@ type = "string"
 
 [parameters.properties.workspace]
 type = "string"
+description = "The name of another workspace the project configures; leave it out to work where you are."
