@@ -1,0 +1,14 @@
+scenario = "capability"
+critical = false
+configurations = ["solo", "delegation", "workflow", "negotiated", "human-gated"]
+# The official format is whatever the project's own tool, bin/inv, writes.
+needs = ["bash", "sandbox.write"]
+uses = ["bash:bin/inv"]
+
+[expect]
+outcome = ["done", "answer"]
+
+[human]
+"fs.write" = "grant"
+"sandbox.write" = "grant"
+"bash" = "grant"

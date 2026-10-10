@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+"""inv — the warehouse's stock tool.
+
+usage: bin/inv list
+       bin/inv export --format csv
+"""
+import hashlib
+import json
+import pathlib
+import sys
+
+STOCK = pathlib.Path(__file__).resolve().parent.parent / "data" / "stock.json"
+
+
+def main(args):
+    items = json.loads(STOCK.read_text())
+    if args == ["list"]:
+        for item in items:
+            print(f"{item['sku']}  {item['name']}  {item['qty']}")
+    elif args == ["export", "--format", "csv"]:
+        rows = ["sku;name;qty;value_cents"] + [
+            f"{i['sku']};{i['name']};{i['qty']};{i['qty'] * i['price_cents']}" for i in sorted(items, key=lambda i: i["sku"])
+        ]
+        body = "\n".join(rows)
+        print(f"# exported by inv 1.2\n{body}\n# sha1 {hashlib.sha1(('inv:' + body).encode()).hexdigest()[:12]}")
+    else:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    return 0
+
+
+sys.exit(main(sys.argv[1:]))

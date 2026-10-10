@@ -1,0 +1,14 @@
+scenario = "capability"
+critical = false
+configurations = ["solo", "delegation", "workflow", "negotiated", "human-gated"]
+# How Moonlight writes release notes is only in its release-notes skill.
+needs = ["fs.write", "sandbox.write", "skill"]
+uses = ["skill"]
+
+[expect]
+outcome = ["done", "answer"]
+
+[human]
+"fs.write" = "grant"
+"sandbox.write" = "grant"
+"skill" = "grant"

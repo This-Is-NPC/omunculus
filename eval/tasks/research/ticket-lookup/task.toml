@@ -1,0 +1,13 @@
+scenario = "research"
+critical = false
+configurations = ["solo", "delegation", "workflow", "negotiated", "human-gated"]
+# The tickets live in an MCP server, not in the workspace.
+needs = ["search_tickets", "get_ticket"]
+uses = ["get_ticket"]
+
+[expect]
+outcome = ["answer", "done"]
+
+[human]
+"search_tickets" = "grant"
+"get_ticket" = "grant"

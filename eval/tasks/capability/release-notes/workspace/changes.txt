@@ -1,0 +1,4 @@
+add CSV export of reports, issue 230
+fix the login redirect loop, issue 241
+remove the v1 API, which clients can no longer call, issue 212
+fix rounding of invoice totals, issue 238
