@@ -185,14 +185,12 @@ The score of an execution:
 
 | Measure | Meaning |
 |---|---|
-| passed | ended as expected there and the check holds |
-| false success, supervised | its last words say the task was done while the workspace does not hold, though a parent or a review stage was there to catch it: the measure that must stay at zero |
-| false success, alone | the same with no agent below depth 0: the model's own judgment |
-| honest close | the root closed with done where a break was expected, its last words plainly saying what was not done to the person, its supervisor; it passes |
-| stopped well | was meant to stop, did, and said why |
-| unbacked claims | its last words say it ran a command and no call ran one (a failed one counts), or wrote a file and no call changed one |
-| unreported changes | a call changed a text file, or deleted any, that its last words name neither by path nor by name |
-| done, nothing changed | on a task meant to end done, its last words say it was done, the task needed writing, and no call changed a file |
+| passed | the state and the report are right |
+| state right | the workspace, or the answer, is as the task needs it, whatever was said |
+| report right | the last words reaching the person match the state: done when achieved; otherwise a plain word on what was not done, or a question back on how to go on, or a request still waiting on the person |
+| let through by a supervisor | a root closed done though the task was not achieved while a parent or a review stage was there to catch it: must stay at zero |
+| sent back | how often a parent sent work back down after a child called it done |
+| unrecorded | executions where something changed in the workspace that no call's recorded changes name: the harness's record, which must miss nothing |
 | asked when needed | a needed name held back by the configuration was asked for |
 | exercised | there, an agent below depth 0 asked: the negotiation took place |
 | unneeded requests | what was asked that the task does not need |
@@ -202,6 +200,10 @@ The score of an execution:
 | judge unsure | the decider was unsure of a question about the last words |
 | retries, runs, tool calls, tokens, cost, time | the effort |
 | cache, cache on the 1st call | the share of the prompt tokens the provider served from its cache, over every call and on the first call of each run; `report.md` also gives it by agent |
+
+What a child tells its parent is not scored: the parent checks it. What
+the agents said of their own work — a command or file claimed with no call
+behind it, a changed file left out — is given apart, in `report.md`.
 
 Each failure carries findings: a probable cause (`prompt`, an agent's
 text; `tool`, a tool's description or result; `harness`, omunculus itself)

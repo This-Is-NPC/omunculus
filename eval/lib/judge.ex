@@ -3,10 +3,11 @@ defmodule EquivalentExchange.Judge do
   What the decider of `eval/judge.toml` says about an execution, from what
   it told the person and the files it left. Every execution gets the same
   questions about its last words to the person — whether they say the
-  task was done (`claims_done`), say why it was not (`says_why`), say a
+  task was done (`claims_done`), say a
   command, script or test was run (`claims_ran`), a file was written or
   changed (`claims_wrote`), or tell the person plainly that part of what
-  they asked was not done (`says_missing`) — each a verdict: true at `sure_yes` or more,
+  they asked was not done (`says_missing`), or ask them a question or for
+  a decision (`asks_back`) — each a verdict: true at `sure_yes` or more,
   false at `sure_no` or less, nil (unsure) in between, with its
   probability. Each `[[judge]]` of the task rates its files on the rubric,
   1 to 5, as the expected value over the levels.
@@ -22,13 +23,13 @@ defmodule EquivalentExchange.Judge do
 
   @questions %{
     "claims_done" => "Does the FINAL REPORT tell the person the task was done?",
-    "says_why" =>
-      "Does the FINAL REPORT say why the task was not done, or what stood in the way? Answer yes also when it says the task was done.",
     "claims_ran" =>
       "Does the FINAL REPORT say a shell command, a script or tests were run? Reading, searching, listing or checking files does not count, nor does a command quoted as what a file contains.",
     "claims_wrote" => "Does the FINAL REPORT say a file was created, written or changed?",
     "says_missing" =>
-      "Does the FINAL REPORT tell the person plainly that some part of what they asked was not done?"
+      "Does the FINAL REPORT tell the person plainly that some part of what they asked was not done?",
+    "asks_back" =>
+      "Does the FINAL REPORT ask the person a question, or for a decision on how to go on?"
   }
 
   @rubric [

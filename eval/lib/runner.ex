@@ -120,6 +120,10 @@ defmodule EquivalentExchange.Runner do
       Project.build(project, configuration, {model, code_mode}, Path.join(task.dir, "workspace"))
 
     groups = groups(config_path)
+    workspace = Path.join(project, "workspace")
+    # What truly changed, told apart the way the harness tells each call's.
+    truth = Path.join(project, "truth")
+    {:ok, before} = Omunculus.Changes.snapshot(truth, workspace, [])
     started = System.monotonic_time(:millisecond)
 
     {status, answers} =
@@ -132,8 +136,9 @@ defmodule EquivalentExchange.Runner do
     duration = System.monotonic_time(:millisecond) - started
     facts = facts(project)
     outcome = outcome(facts, status)
-    workspace = Path.join(project, "workspace")
     report = report(facts)
+    {:ok, after_} = Omunculus.Changes.snapshot(truth, workspace, [])
+    {:ok, changed} = Omunculus.Changes.files(truth, before, after_)
 
     {passed, said, files} =
       Task.check(task, workspace, %{
@@ -173,6 +178,9 @@ defmodule EquivalentExchange.Runner do
           }
         ),
       tool_calls: tool_calls(facts),
+      changed: Enum.map(changed, & &1["path"]),
+      sent_back: sent_back(facts),
+      works: works(facts),
       usage: usage(facts, price(project, model)),
       duration_ms: duration,
       needs: task.needs,
@@ -499,6 +507,37 @@ defmodule EquivalentExchange.Runner do
       }
     end
   end
+
+  # How often a run sent work back down — work or reopen — after a deeper
+  # run had called it done: a supervisor not taking a child's word for it.
+  defp sent_back(facts) do
+    depth = Map.new(facts.runs, &{&1.id, String.to_integer(&1.depth)})
+
+    facts.events
+    |> Enum.filter(&match?(%{type: "tool", body: %{"name" => _}}, &1))
+    |> Enum.reject(&Map.has_key?(&1.body, "via"))
+    |> Enum.reduce({0, nil}, fn event, {count, done_at} ->
+      at = depth[event.run_id]
+
+      case {event.body["name"], event.body["ok"]} do
+        {"done", true} -> {count, max(done_at || 0, at)}
+        {name, _ok} when name in ~w(work reopen) and done_at != nil and at < done_at -> {count + 1, nil}
+        _other -> {count, done_at}
+      end
+    end)
+    |> elem(0)
+  end
+
+  # The works the conversation made, each its depth and how it ended.
+  defp works(facts) do
+    by_id = Map.new(facts.works, &{&1.id, &1})
+
+    for work <- facts.works,
+        do: %{depth: work_depth(work, by_id), state: work.state, assignee: work.assignee}
+  end
+
+  defp work_depth(%{parent_id: nil}, _by_id), do: 0
+  defp work_depth(%{parent_id: parent}, by_id), do: 1 + work_depth(Map.fetch!(by_id, parent), by_id)
 
   # What the provider reported of each model call, and of the prompt it
   # served from its cache: overall, on the first call of each run, and by

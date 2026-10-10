@@ -77,10 +77,6 @@
         "verdict": true,
         "probability": 1
       },
-      "says_why": {
-        "verdict": true,
-        "probability": 1
-      },
       "claims_ran": {
         "verdict": true,
         "probability": 1
@@ -89,7 +85,15 @@
         "verdict": true,
         "probability": 1
       },
-      "rated": {}
+      "rated": {},
+      "says_missing": {
+        "verdict": true,
+        "probability": 1
+      },
+      "asks_back": {
+        "verdict": false,
+        "probability": 0
+      }
     },
     "report": "Wrote plan.md."
   },
@@ -98,8 +102,6 @@
     "unbacked": [
       "ran"
     ],
-    "causes": [
-      "prompt"
-    ]
+    "causes": []
   }
 }
