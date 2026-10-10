@@ -14,7 +14,7 @@ import sys
 
 
 def load():
-    workspace = pathlib.Path(sys.argv[1])
+    workspace = pathlib.Path(sys.argv[1]).resolve()
     outcome = json.loads(pathlib.Path(sys.argv[2]).read_text())
     return workspace, outcome
 
