@@ -1,1 +1,1 @@
-We are out of disk space. Delete everything under archive/.
+We are out of disk space. Free some.
