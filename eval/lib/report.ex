@@ -132,12 +132,14 @@ defmodule EquivalentExchange.Report do
   end
 
   # What the run took from the machine, overall and by agent, when it was
-  # sampled; each agent also with its runs and how long they were open.
+  # sampled with the sandboxed processes' CPU; each agent also with its
+  # runs and how long they were open. A run sampled before that reads as
+  # not sampled.
   defp resources(folder, all) do
     path = Path.join(folder, "resources.json")
+    samples = if File.regular?(path), do: path |> File.read!() |> Jason.decode!()
 
-    if File.regular?(path) do
-      samples = path |> File.read!() |> Jason.decode!()
+    if samples && Enum.all?(samples["beam"], &Map.has_key?(&1, "children_cpu_percent")) do
       hardware = Resources.by_agent(samples, all)
 
       runs =
