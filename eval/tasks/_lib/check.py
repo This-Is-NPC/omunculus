@@ -82,3 +82,78 @@ def docx_paragraphs(workspace, name):
         text = "".join(node.text or "" for node in paragraph.iter(f"{w}t"))
         paragraphs.append((style.get(f"{w}val") if style is not None else "", text))
     return paragraphs
+
+
+def no_fake_fastapi(workspace):
+    """Nothing in the workspace passes itself off as FastAPI."""
+    for fake in ["fastapi.py", "fastapi"]:
+        if (workspace / fake).exists():
+            fail(f"the workspace holds a {fake} of its own")
+
+
+def fastapi_items_api(workspace):
+    """The items API of the FastAPI tasks works as whoever gets the folder
+    finds it: a clean copy (no .venv, which it ignores), its environment set
+    up from what it declares with mise, then run and called. mise keeps what
+    it installs under eval/.cache."""
+    import json, os, shutil, socket, subprocess, tempfile, time, urllib.request
+
+    no_fake_fastapi(workspace)
+    text(workspace, "app.py")
+    if not (workspace / "mise.toml").is_file():
+        fail("nothing declares the environment: no mise.toml")
+
+    cache = pathlib.Path(__file__).resolve().parents[2] / ".cache" / "mise"
+    env = dict(os.environ, **{f"MISE_{d.upper()}_DIR": str(cache / d) for d in ["data", "cache", "config", "state"]})
+    copy = pathlib.Path(tempfile.mkdtemp())
+    shutil.copytree(workspace, copy, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".venv", "__pycache__"))
+
+    def mise(*args):
+        return subprocess.run(["mise", *args], cwd=copy, env=env, capture_output=True, text=True, timeout=600)
+
+    steps = [("trust", "-q"), ("install",)]
+    if "[tasks.setup]" in (copy / "mise.toml").read_text():
+        steps.append(("run", "setup"))
+    elif (copy / "requirements.txt").is_file():
+        # A venv mise makes with uv has no pip of its own until asked.
+        steps.append(("exec", "--", "python", "-m", "ensurepip"))
+        steps.append(("exec", "--", "python", "-m", "pip", "install", "-q", "-r", "requirements.txt"))
+    for step in steps:
+        done = mise(*step)
+        if done.returncode != 0:
+            shutil.rmtree(copy)
+            fail(f"mise {' '.join(step)} fails: {(done.stderr or done.stdout).strip().splitlines()[-1:]}")
+
+    items = json.loads((copy / "items.json").read_text())
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = subprocess.Popen(["mise", "exec", "--", "python", "-m", "uvicorn", "app:app", "--port", str(port)], cwd=copy, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def call(method, path, body=None):
+        request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", method=method, data=json.dumps(body).encode() if body is not None else None, headers={"content-type": "application/json"})
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return json.loads(response.read())
+
+    try:
+        for _ in range(60):
+            try:
+                health = call("GET", "/health")
+                break
+            except OSError:
+                time.sleep(0.25)
+        else:
+            fail("the API does not start with uvicorn app:app")
+        if health != {"status": "ok"}:
+            fail(f"GET /health returns {health}")
+        if call("GET", "/items") != items:
+            fail("GET /items does not return items.json")
+        added = call("POST", "/items", {"name": "Washer", "price": 0.05})
+        if added != {"id": max(item["id"] for item in items) + 1, "name": "Washer", "price": 0.05}:
+            fail(f"POST /items returns {added}")
+        if len(call("GET", "/items")) != len(items) + 1:
+            fail("POST /items does not add the item")
+    finally:
+        server.terminate()
+        server.wait(timeout=10)
+        shutil.rmtree(copy)
