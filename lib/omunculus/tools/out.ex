@@ -134,6 +134,10 @@ defmodule Omunculus.Tools.Out do
   def refused({:request, {:already_have, names}}),
     do: "refused: you already have #{names}; use it rather than asking"
 
+  def refused({:work, :no_delegate}),
+    do:
+      "refused: this run cannot delegate, so it cannot hand a work to an agent below; a work naming no agent stays yours"
+
   def refused(reason), do: "refused: #{inspect(reason)}"
 
   @spec chain_failed(String.t(), term) :: String.t()

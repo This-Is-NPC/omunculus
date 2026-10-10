@@ -8,7 +8,9 @@ defmodule Omunculus.Store.Actions do
   — or unnamed, when depth 0 has a workflow or depth 1 no agent — is the
   root itself, marked to start; when each names an agent of depth 1 or
   none, the root is held by the run's agent and each is delegated below
-  it, so the root's run opens once they are back. `work` and
+  it, so the root's run opens once they are back — only for a run whose
+  ceiling has `delegate`: without it, an unnamed work is the root itself
+  and naming an agent of depth 1 is refused. `work` and
   `delegate` may name the new work's `agent`: one of the TOML's agents at
   its depth that is not `workflow_only`, refused when that depth has a
   workflow; unnamed, it is the first stage's agent or the depth's first
@@ -19,7 +21,7 @@ defmodule Omunculus.Store.Actions do
   `compact` and `comment.delete` to `Actions.Comments`.
   """
 
-  alias Omunculus.{Config, Id}
+  alias Omunculus.{Ceiling, Config, Id}
   alias Omunculus.Store.Actions.{Comments, Contract, Helpers, Inbox, Requests, Sequence}
   alias Omunculus.Store.{Events, Query}
 
@@ -200,10 +202,14 @@ defmodule Omunculus.Store.Actions do
 
   defp work(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:work, body, "report"),
-         {:ok, items} <- work_items(body["works"]) do
+         {:ok, items} <- work_items(body["works"]),
+         {:ok, delegates?} <- delegates?(conn, ctx.run_id) do
       cond do
-        down?(ctx.config, items) ->
+        delegates? and down?(ctx.config, items) ->
           hand_down(conn, body["report"], items, ctx)
+
+        not delegates? and Enum.any?(items, &(&1["agent"] in children(ctx.config))) ->
+          {:error, {:work, :no_delegate}}
 
         match?([_], items) ->
           own_root(conn, body["report"], hd(items), ctx)
@@ -214,13 +220,30 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
+  # Handing works down is delegating: a run whose ceiling lacks delegate
+  # keeps the root for itself, as a chained delegate would be refused.
+  defp delegates?(_conn, nil), do: {:ok, true}
+
+  defp delegates?(conn, run_id) do
+    with {:ok, run} <- Query.one(conn, "SELECT event_id FROM runs WHERE id = ?", [run_id]),
+         {:ok, start} <-
+           Query.one(conn, "SELECT body FROM events WHERE id = ?", [run && run.event_id]) do
+      case start && Jason.decode!(start.body)["ceiling"] do
+        nil -> {:ok, true}
+        ceiling -> {:ok, Ceiling.classify(ceiling, "delegate", "tool") == "have"}
+      end
+    end
+  end
+
+  defp children(config), do: for({name, %{depth: 1}} <- config.agents, do: name)
+
   # Works go to depth 1 when each names one of its agents or names none:
   # an unnamed work goes to the depth's first stage or first agent. Only a
   # work naming an agent of depth 0, or an unnamed one when depth 0 has a
   # workflow (its first stage takes the root) or depth 1 has no agent, is
   # the root itself.
   defp down?(config, items) do
-    children = for {name, %{depth: 1}} <- config.agents, do: name
+    children = children(config)
 
     unnamed_down? =
       Config.workflow_for(config, 0) == :off and

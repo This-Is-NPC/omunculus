@@ -596,6 +596,35 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:error, {:work, :one_root}} = record_tool(conn, [mixed], ctx)
     end
 
+    test "a run without delegate keeps an unnamed work as its own root and cannot name a child",
+         %{conn: conn} do
+      # A root agent that edits but may not delegate, with an agent below it.
+      ceiling = %{
+        have: ["edit", "end", "work"],
+        askable: [],
+        sealed: [],
+        blocked: [],
+        uncited: "blocked"
+      }
+
+      run = Fixtures.open_run(conn, %{work_id: nil, ceiling: ceiling})
+      ctx = %{@ctx | run_id: run.id, config: Fixtures.config(arbiter_toml())}
+
+      unnamed = %{
+        "type" => "work",
+        "body" => %{"report" => "r", "works" => [%{"title" => "x", "goal" => "g"}]}
+      }
+
+      assert {:ok, [_tool_event, event]} = record_tool(conn, [unnamed], ctx)
+      assert Jason.decode!(event.body)["start"] == true
+
+      assert {:ok, [%{assignee: "concierge", parent_id: nil}]} =
+               Query.all(conn, "SELECT * FROM works")
+
+      named = put_in(unnamed, ["body", "works", Access.at(0), "agent"], "worker")
+      assert {:error, {:work, :no_delegate}} = record_tool(conn, [named], ctx)
+    end
+
     test "with workflow on sets the first stage and its agent", %{conn: conn} do
       ctx = %{@ctx | config: Fixtures.config(delivery_toml())}
 
