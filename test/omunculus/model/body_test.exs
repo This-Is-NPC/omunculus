@@ -41,6 +41,20 @@ defmodule Omunculus.Model.BodyTest do
     end
   end
 
+  for module <- [OpenAI, OpenAIResponses, AnthropicMessages] do
+    test "#{inspect(module)} offers the sandbox bridge only with code_mode" do
+      named = fn request ->
+        for tool <- request["tools"] || [], do: tool["name"] || get_in(tool, ["function", "name"])
+      end
+
+      refute "__omunculus_execute" in named.(request(unquote(module), %{}))
+
+      assert "__omunculus_execute" in named.(
+               request(unquote(module), %{}, nil, %{"code_mode" => true})
+             )
+    end
+  end
+
   # A provider caches whole messages, so the instructions travel apart from
   # the context that changes from run to run.
   test "each adapter sends the instructions apart from the context" do
@@ -125,15 +139,19 @@ defmodule Omunculus.Model.BodyTest do
            ]
   end
 
-  defp request(module, body, history \\ nil) do
+  defp request(module, body, history \\ nil, extra \\ %{}) do
     port = capture()
 
-    spec = %{
-      "url" => "http://127.0.0.1:#{port}/v1",
-      "model" => "stub",
-      "timeout_ms" => 5_000,
-      "body" => body
-    }
+    spec =
+      Map.merge(
+        %{
+          "url" => "http://127.0.0.1:#{port}/v1",
+          "model" => "stub",
+          "timeout_ms" => 5_000,
+          "body" => body
+        },
+        extra
+      )
 
     module.new(spec).(
       %Prompt{instructions: "steady", context: "ping", history: history},

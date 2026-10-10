@@ -13,7 +13,8 @@ defmodule Omunculus.Model.AnthropicMessages do
   request: the end of the instructions, which the next run of the agent
   reuses, and the end of the last turn, which the next call of the run
   reuses. Each reply is recorded with its `usage`.
-  `__omunculus_execute` is the same sandbox bridge as `Model.OpenAI`.
+  With `code_mode`, `__omunculus_execute` is the same sandbox bridge as
+  `Model.OpenAI`.
   With `stream = true` the reply is read as server-sent events and put
   back together from its content blocks, each `text_delta` going to
   `delta`. The `url` is always the spec's; nothing in this module names a
@@ -37,6 +38,7 @@ defmodule Omunculus.Model.AnthropicMessages do
       model: spec["model"],
       timeout: spec["timeout_ms"],
       retries: spec["retries"],
+      code_mode: spec["code_mode"] == true,
       headers: request_headers(spec),
       temperature: spec["temperature"],
       stream: spec["stream"] == true,
@@ -44,7 +46,9 @@ defmodule Omunculus.Model.AnthropicMessages do
     }
 
     fn %Prompt{} = prompt, tools, call, record, delta, execution ->
-      function_tools = Enum.map(tools, &anthropic_tool/1) ++ [executor_tool()]
+      function_tools =
+        Enum.map(tools, &anthropic_tool/1) ++
+          if(client.code_mode, do: [executor_tool()], else: [])
 
       loop(
         Map.put(client, :delta, delta),

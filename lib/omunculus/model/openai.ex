@@ -16,8 +16,9 @@ defmodule Omunculus.Model.OpenAI do
   message, looping until a reply carries no tool call. Every reply is
   recorded before dispatch, with the reply's `usage` when the server
   sends one; the next request carries the reply without it.
-  `__omunculus_execute` runs JavaScript in the sandbox and uses the same
-  authorized call callback as native tool calls. With `stream = true` the
+  With `code_mode`, the model is also offered `__omunculus_execute`, which
+  runs JavaScript in the sandbox through the same authorized call
+  callback as native tool calls. With `stream = true` the
   reply is read as server-sent events, its text passed to `delta` as it
   arrives, and `stream_options.include_usage` asks for the `usage` chunk.
   """
@@ -39,6 +40,7 @@ defmodule Omunculus.Model.OpenAI do
       model: spec["model"],
       timeout: spec["timeout_ms"],
       retries: spec["retries"],
+      code_mode: spec["code_mode"] == true,
       headers: request_headers(spec),
       temperature: spec["temperature"],
       stream: spec["stream"] == true,
@@ -47,7 +49,8 @@ defmodule Omunculus.Model.OpenAI do
     }
 
     fn prompt, tools, call, record, delta, execution ->
-      function_tools = Enum.map(tools, &function_tool/1) ++ [executor_tool()]
+      function_tools =
+        Enum.map(tools, &function_tool/1) ++ if(client.code_mode, do: [executor_tool()], else: [])
 
       loop(
         Map.put(client, :delta, delta),

@@ -207,6 +207,37 @@ defmodule Omunculus.ConfigTest do
     assert {:error, {:models, "m", {:invalid, :retries}}} = load(dir)
   end
 
+  test "an HTTP model offers code mode only with code_mode = true", %{dir: dir} do
+    model = fn line ->
+      """
+      [models.m]
+      api = "anthropic-messages"
+      url = "http://localhost/v1"
+      model = "x"
+      timeout_ms = 1000
+      #{line}
+
+      [agents.concierge]
+      depth = 0
+      model = "m"
+      text = "hi"
+
+      [policy]
+      max_retries = 0
+      """
+    end
+
+    write_toml(dir, model.("code_mode = true"))
+    assert {:ok, %Config{models: %{"m" => %{input: %{"code_mode" => true}}}}} = load(dir)
+
+    write_toml(dir, model.(""))
+    assert {:ok, %Config{models: %{"m" => %{input: input}}}} = load(dir)
+    refute Map.has_key?(input, "code_mode")
+
+    write_toml(dir, model.(~s(code_mode = "yes")))
+    assert {:error, {:models, "m", {:invalid, :code_mode}}} = load(dir)
+  end
+
   test "pinned is a layer list and is absent on the default preset" do
     assert {:ok, %Config{policy: policy, agents: agents}} = Config.load(default_preset())
     assert policy.pinned == []

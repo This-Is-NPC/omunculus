@@ -11,7 +11,8 @@ defmodule Omunculus.Model.OpenAIResponses do
   each `function_call` through `call.(name, args)`, appends
   `function_call_output`, and loops until a reply has none. Each reply is
   recorded as its `output` and, when the server sends one, its `usage`.
-  `__omunculus_execute` is the same sandbox bridge as `Model.OpenAI`.
+  With `code_mode`, `__omunculus_execute` is the same sandbox bridge as
+  `Model.OpenAI`.
   With `stream = true` the reply is read as server-sent events: each
   `response.output_text.delta` goes to `delta`, and `response.completed`
   carries the response. The `url` is always the spec's; nothing in this
@@ -35,6 +36,7 @@ defmodule Omunculus.Model.OpenAIResponses do
       model: spec["model"],
       timeout: spec["timeout_ms"],
       retries: spec["retries"],
+      code_mode: spec["code_mode"] == true,
       headers: Omunculus.Model.OpenAI.request_headers(spec),
       temperature: spec["temperature"],
       stream: spec["stream"] == true,
@@ -43,7 +45,8 @@ defmodule Omunculus.Model.OpenAIResponses do
     }
 
     fn %Prompt{} = prompt, tools, call, record, delta, execution ->
-      function_tools = Enum.map(tools, &function_tool/1) ++ [executor_tool()]
+      function_tools =
+        Enum.map(tools, &function_tool/1) ++ if(client.code_mode, do: [executor_tool()], else: [])
 
       loop(
         Map.merge(client, %{delta: delta, instructions: prompt.instructions}),
