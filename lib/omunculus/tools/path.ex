@@ -47,6 +47,26 @@ defmodule Omunculus.Tools.Path do
     end
   end
 
+  @doc """
+  Writes `content` to `absolute` whole or not at all: into a file beside
+  it first, then renamed over it, so no reader sees half a file.
+  """
+  @spec write_atomic(String.t(), iodata) :: :ok | {:error, String.t()}
+  def write_atomic(absolute, content) do
+    staged =
+      Path.join(Path.dirname(absolute), ".#{Path.basename(absolute)}.#{Omunculus.Id.new()}")
+
+    with :ok <- File.mkdir_p(Path.dirname(absolute)),
+         :ok <- File.write(staged, content),
+         :ok <- File.rename(staged, absolute) do
+      :ok
+    else
+      {:error, reason} ->
+        File.rm(staged)
+        {:error, "could not write #{Path.basename(absolute)}: #{:file.format_error(reason)}"}
+    end
+  end
+
   defp permitted?(path, roots, permissions) do
     allowed = Enum.any?(Map.get(permissions, "allowed", []), &FilesystemPath.within?(&1, path))
     denied = Enum.any?(Map.get(permissions, "denied", []), &FilesystemPath.within?(&1, path))
