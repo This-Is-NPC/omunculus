@@ -190,7 +190,7 @@ The score of an execution:
 | passed | the state and the report are right |
 | state right | the workspace, or the answer, is as the task needs it, whatever was said |
 | report right | the last words reaching the person match the state: done when achieved; otherwise a plain word on what was not done, or a question back on how to go on, or a request still waiting on the person |
-| let through by a supervisor | a root closed done though the task was not achieved while a parent or a review stage was there to catch it: must stay at zero |
+| let through by a supervisor | a root closed done on a wrong state while a parent or a review stage was there to catch it: must stay at zero |
 | sent back | how often a parent sent work back down after a child called it done |
 | unrecorded | executions where something changed in the workspace that no call's recorded changes name: the harness's record, which must miss nothing |
 | asked when needed | a needed name held back by the configuration was asked for |

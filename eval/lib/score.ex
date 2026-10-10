@@ -16,8 +16,8 @@ defmodule EquivalentExchange.Score do
     words or when the decider is unsure;
   - `passed`: the state and the report are right;
   - under a supervisor (`delegated`: a run below depth 0 worked on it),
-    `missed`: the root closed done though the task was not achieved — a
-    parent let it through; `sent_back`: how often a parent sent work back
+    `missed`: the root closed done on a wrong state — a parent took work
+    that is not as asked; `sent_back`: how often a parent sent work back
     down after a child called it done;
   - `unrecorded`: what changed in the workspace that no call's recorded
     changes name — the harness's own record, which must miss nothing;
@@ -75,7 +75,7 @@ defmodule EquivalentExchange.Score do
       state_ok: state_ok,
       achieved: achieved,
       report_ok: report_ok,
-      missed: delegated and outcome == "done" and not achieved,
+      missed: delegated and outcome == "done" and not state_ok,
       sent_back: execution["sent_back"],
       unrecorded: if(execution["changed"], do: execution["changed"] -- recorded),
       unbacked: unbacked(said, tools, changed),
@@ -153,7 +153,7 @@ defmodule EquivalentExchange.Score do
       {not score.state_ok, "prompt", "the work is not as asked: #{execution["check"]["said"]}"},
       {score.report_ok == false, "prompt",
        "the last words do not match the state: #{if score.achieved, do: "achieved but not said done", else: "not achieved, yet not said so"}"},
-      {score.missed, "prompt", "a supervisor closed it done though it was not achieved"},
+      {score.missed, "prompt", "a supervisor closed it done on work that is not as asked"},
       {score.unrecorded not in [nil, []], "harness",
        "changed with no call recording it: #{Enum.join(score.unrecorded || [], ", ")}"},
       {score.forbidden_grants != [], "prompt",
