@@ -21,7 +21,8 @@ defmodule Omunculus.Tools.Bash do
   defp exec(policy, source) do
     with {:ok, command} <- Command.new("/usr/bin/sh", ["-c", source], cwd: policy.workspace.root),
          {:ok, result} <- Execution.run(command, policy) do
-      Out.ok(result.stdout <> result.stderr)
+      output = result.stdout <> result.stderr
+      Out.ok(output <> refused_write(policy, output))
     else
       {:error, {:exit, status, stdout, stderr}} ->
         Out.fail(stdout <> stderr <> "\n(exit #{status})" <> read_only(policy))
@@ -33,4 +34,8 @@ defmodule Omunculus.Tools.Bash do
 
   defp read_only(%Policy{read_write: []}), do: "\n" <> Out.read_only_workspace()
   defp read_only(_policy), do: ""
+
+  # A command that went on after a write the sandbox refused still exits 0.
+  defp refused_write(policy, output),
+    do: if(String.contains?(output, "Read-only file system"), do: read_only(policy), else: "")
 end

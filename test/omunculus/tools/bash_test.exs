@@ -57,6 +57,16 @@ defmodule Omunculus.Tools.BashTest do
     refute File.exists?(target)
   end
 
+  test "says why a write failed even when the command exits 0", %{root: root} do
+    target = Path.join(root, "target")
+    input = %{@input | args: %{"command" => "touch #{target}; ls"}, roots: [root]}
+
+    assert %{"ok" => true, "output" => output} =
+             Bash.run(input, policy(root, read_only: [root], read_write: []))
+
+    assert String.ends_with?(output, Out.read_only_workspace())
+  end
+
   test "refuses without a command", %{root: root} do
     input = %{@input | args: %{}, roots: [root]}
 
