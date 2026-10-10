@@ -21,7 +21,7 @@ defmodule Omunculus.Execution.Policy do
     :tools,
     :sandbox
   ]
-  defstruct @enforce_keys ++ [scratch: nil]
+  defstruct @enforce_keys ++ [scratch: nil, host: false]
 
   @type t :: %__MODULE__{
           id: String.t(),
@@ -42,6 +42,7 @@ defmodule Omunculus.Execution.Policy do
           },
           tools: [String.t()],
           scratch: String.t() | nil,
+          host: boolean,
           sandbox: %{
             script: String.t(),
             command: [String.t()],
@@ -100,6 +101,7 @@ defmodule Omunculus.Execution.Policy do
         read_only: implementation_roots,
         read_write: [],
         hidden: protected_paths(config),
+        host: config.execution.host,
         runtimes: runtimes,
         backend: config.execution.backend,
         environment: environment(config.execution.environment),
@@ -146,6 +148,7 @@ defmodule Omunculus.Execution.Policy do
     %{
       "id" => policy.id,
       "scratch" => policy.scratch,
+      "host" => policy.host,
       "workspace" => %{"name" => policy.workspace.name, "root" => policy.workspace.root},
       "read_only" => policy.read_only,
       "read_write" => policy.read_write,
@@ -210,7 +213,7 @@ defmodule Omunculus.Execution.Policy do
       |> Kernel.++(implementation_roots)
       |> unique()
 
-    read_write = if write?, do: [workspace_root], else: []
+    read_write = if write?, do: [workspace_root | writable(config)], else: []
 
     policy = %__MODULE__{
       id: "",
@@ -224,6 +227,7 @@ defmodule Omunculus.Execution.Policy do
       network: network,
       limits: limits(config),
       tools: Enum.sort(tools),
+      host: config.execution.host,
       sandbox: config.execution.sandbox
     }
 
@@ -335,7 +339,21 @@ defmodule Omunculus.Execution.Policy do
         store
       end
 
-    [store_hidden, Path.expand(config.path)]
+    # Seeing the machine, a command must not read what the person keeps
+    # from it, nor omunculus's own logins.
+    host_hidden =
+      if config.execution.host,
+        do: config.execution.deny_read ++ List.wrap(config.auth.store),
+        else: []
+
+    [store_hidden, Path.expand(config.path) | host_hidden]
+  end
+
+  # The other paths a writing command may write, those that exist.
+  defp writable(config) do
+    for path <- config.execution.write,
+        {:ok, canonical} <- [FilesystemPath.canonical(path)],
+        do: canonical
   end
 
   defp protected?(policy, path),

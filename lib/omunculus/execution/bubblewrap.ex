@@ -116,11 +116,11 @@ defmodule Omunculus.Execution.Bubblewrap do
 
     ["--unshare-all", "--unshare-user"] ++
       network_args(policy.network) ++
-      ["--die-with-parent", "--new-session", "--clearenv", "--tmpfs", "/"] ++
-      base_filesystem_args(policy.scratch) ++
-      network_files(policy.network) ++
+      ["--die-with-parent", "--new-session", "--clearenv"] ++
+      filesystem_args(policy) ++
+      network_files(policy) ++
       mount_args(mounts) ++
-      hidden_args(policy.hidden, mounts, temp_dir) ++
+      hidden_args(policy, mounts, temp_dir) ++
       environment_args(policy, mounts) ++
       secret_args(command.secrets, temp_dir) ++
       ["--chdir", command.cwd, "--", "/usr/bin/sh", "-c", policy.sandbox.runner, "omunculus-exec"] ++
@@ -287,13 +287,45 @@ defmodule Omunculus.Execution.Bubblewrap do
   defp network_args("none"), do: []
 
   # A network a process can use names hosts and trusts certificates: the
-  # host's resolver, hosts and TLS anchors, read-only, where it has them.
+  # host's resolver, hosts and TLS anchors, read-only, where it has them —
+  # already there for a command that sees the host.
   @network_files ~w(/etc/resolv.conf /etc/hosts /etc/nsswitch.conf /etc/ssl /etc/ca-certificates /etc/pki)
 
-  defp network_files("host"),
+  defp network_files(%Policy{host: true}), do: []
+
+  defp network_files(%Policy{network: "host"}),
     do: Enum.flat_map(@network_files, &["--ro-bind-try", &1, &1])
 
-  defp network_files("none"), do: []
+  defp network_files(_policy), do: []
+
+  # Seeing the host, a command reads the machine as the person does, and
+  # writes only where its mounts let it: its home is the person's, its
+  # writes kept in the run's scratch; /run, with the sockets of the
+  # machine's services, is not there, but for the resolver.
+  defp filesystem_args(%Policy{host: true} = policy) do
+    home = System.user_home!()
+
+    overlay =
+      if policy.scratch do
+        upper = Path.join(policy.scratch, ".home")
+        work = Path.join(policy.scratch, ".home-work")
+        File.mkdir_p!(upper)
+        File.mkdir_p!(work)
+        ["--overlay-src", home, "--overlay", upper, work, home]
+      else
+        []
+      end
+
+    tmp = if policy.scratch, do: ["--bind", policy.scratch, "/tmp"], else: ["--tmpfs", "/tmp"]
+
+    ["--ro-bind", "/", "/"] ++
+      overlay ++
+      tmp ++
+      ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/run"] ++
+      ["--ro-bind-try", "/run/systemd/resolve", "/run/systemd/resolve"]
+  end
+
+  defp filesystem_args(policy), do: ["--tmpfs", "/"] ++ base_filesystem_args(policy.scratch)
 
   # A run's scratch is its /tmp, home included, kept from one command to
   # the next; a command outside a run gets an empty one.
@@ -364,15 +396,9 @@ defmodule Omunculus.Execution.Bubblewrap do
     (directory_args ++ Enum.reverse(binds)) |> List.flatten()
   end
 
-  defp hidden_args(hidden, mounts, temp_dir) do
-    visible = fn hidden_path ->
-      Enum.any?(mounts, fn {_mode, _source, destination} ->
-        FilesystemPath.within?(destination, hidden_path)
-      end)
-    end
-
-    hidden
-    |> Enum.filter(visible)
+  defp hidden_args(policy, mounts, temp_dir) do
+    policy
+    |> visible_hidden(mounts)
     |> Enum.sort_by(&{path_depth(&1), &1})
     |> Enum.flat_map(fn path ->
       if File.dir?(path) do
@@ -383,16 +409,25 @@ defmodule Omunculus.Execution.Bubblewrap do
     end)
   end
 
+  # The hidden paths a command would see: under the host, those that exist
+  # (one that does not has nothing to hide); else those within its mounts.
+  defp visible_hidden(%Policy{host: true, hidden: hidden}, _mounts),
+    do: Enum.filter(hidden, &File.exists?/1)
+
+  defp visible_hidden(%Policy{hidden: hidden}, mounts) do
+    Enum.filter(hidden, fn hidden_path ->
+      Enum.any?(mounts, fn {_mode, _source, destination} ->
+        FilesystemPath.within?(destination, hidden_path)
+      end)
+    end)
+  end
+
   defp prepare_hidden(policy, temp_dir) do
     mounts = mounts(policy, temp_dir)
 
     result =
-      policy.hidden
-      |> Enum.filter(fn hidden ->
-        Enum.any?(mounts, fn {_mode, _source, destination} ->
-          FilesystemPath.within?(destination, hidden)
-        end)
-      end)
+      policy
+      |> visible_hidden(mounts)
       |> Enum.reduce_while([], fn path, created ->
         if File.exists?(path) do
           {:cont, created}

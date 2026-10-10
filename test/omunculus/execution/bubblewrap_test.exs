@@ -43,6 +43,55 @@ defmodule Omunculus.Execution.BubblewrapTest do
              )
   end
 
+  test "a command that sees the host reads it as the person does and writes only where let",
+       %{workspace: workspace} do
+    home = System.user_home!()
+    mark = Path.join(home, ".omunculus-host-test-#{System.unique_integer([:positive])}")
+    secret = mark <> "-secret"
+    File.write!(mark, "seen\n")
+    File.write!(secret, "kept\n")
+    on_exit(fn -> File.rm(mark) && File.rm(secret) end)
+
+    scratch = Omunculus.Fixtures.tmp_dir()
+
+    host = fn overrides ->
+      Policy.with_scratch(policy(workspace, [host: true] ++ overrides), scratch)
+    end
+
+    run = fn policy, script ->
+      Omunculus.Execution.run(elem(Command.new("/usr/bin/sh", ["-c", script]), 1), policy)
+    end
+
+    # The person's files read as they are; their home takes writes that stay
+    # in the run's scratch.
+    writing = host.(hidden: [secret])
+    assert {:ok, %{stdout: "seen\n"}} = run.(writing, "cat #{mark}")
+
+    assert {:ok, %{stdout: "home\n"}} =
+             run.(writing, "echo home > #{mark}-new && cat #{mark}-new")
+
+    refute File.exists?(mark <> "-new")
+    assert File.exists?(Path.join([scratch, ".home", Path.basename(mark) <> "-new"]))
+
+    # Elsewhere nothing is written, a denied path is not there, nor /run.
+    assert {:ok, %{stdout: "refused\n"}} =
+             run.(writing, "touch /etc/omunculus-test 2>/dev/null || echo refused")
+
+    assert {:ok, %{stdout: "gone\n"}} =
+             run.(writing, "cat #{secret} 2>/dev/null | grep -q kept || echo gone")
+
+    assert {:ok, %{stdout: "\n"}} = run.(writing, "ls /run | grep -v systemd; echo")
+
+    # Without sandbox.write the workspace stays read-only, under the home too.
+    reading = host.(read_only: [workspace], read_write: [])
+
+    assert {:ok, %{stdout: "refused\n"}} =
+             run.(reading, "touch #{workspace}/x 2>/dev/null || echo refused")
+
+    assert {:ok, %{stdout: "written\n"}} = run.(writing, "touch #{workspace}/x && echo written")
+    assert File.exists?(Path.join(workspace, "x"))
+  end
+
   test "a sandbox that cannot start says so and leaves no process waiting on its input", %{
     workspace: workspace
   } do
@@ -214,8 +263,9 @@ defmodule Omunculus.Execution.BubblewrapTest do
       id: "test-policy",
       workspace: %{name: nil, root: workspace},
       read_only: Keyword.get(overrides, :read_only, []),
-      read_write: [workspace],
+      read_write: Keyword.get(overrides, :read_write, [workspace]),
       hidden: Keyword.get(overrides, :hidden, []),
+      host: Keyword.get(overrides, :host, false),
       runtimes: ["/usr"],
       backend: "bubblewrap",
       environment: %{"LANG" => "C"},

@@ -101,6 +101,9 @@ defmodule Omunculus.Config do
           max_queue: pos_integer,
           queue_timeout_ms: pos_integer,
           resources: [String.t()],
+          host: boolean,
+          deny_read: [String.t()],
+          write: [String.t()],
           sandbox: sandbox
         }
 
@@ -151,6 +154,7 @@ defmodule Omunculus.Config do
     queue_timeout_ms
     resources
   )
+  @execution_optional_keys ~w(host deny_read write)
   @known_execution_resources ~w(sandbox.write sandbox.network)
   @sandbox_keys ~w(script command runner exec)
   @mcp_server_keys ~w(name command protocol_version secrets)
@@ -843,7 +847,7 @@ defmodule Omunculus.Config do
   defp parse_execution(data, config_dir) when is_map(data) do
     {sandbox_data, rest} = Map.pop(data, "sandbox")
 
-    case Map.keys(rest) -- @execution_keys do
+    case Map.keys(rest) -- (@execution_keys ++ @execution_optional_keys) do
       [key | _] ->
         {:error, {:execution, {:unknown_key, key}}}
 
@@ -857,6 +861,9 @@ defmodule Omunculus.Config do
              {:ok, max_queue} <- execution_positive_integer(rest, "max_queue"),
              {:ok, queue_timeout_ms} <- execution_positive_integer(rest, "queue_timeout_ms"),
              {:ok, resources} <- execution_resources(rest),
+             {:ok, host} <- execution_host(rest),
+             {:ok, deny_read} <- execution_paths(rest, "deny_read"),
+             {:ok, write} <- execution_paths(rest, "write"),
              {:ok, sandbox} <- parse_sandbox(sandbox_data, config_dir) do
           {:ok,
            %{
@@ -869,6 +876,9 @@ defmodule Omunculus.Config do
              max_queue: max_queue,
              queue_timeout_ms: queue_timeout_ms,
              resources: resources,
+             host: host,
+             deny_read: deny_read,
+             write: write,
              sandbox: sandbox
            }}
         end
@@ -954,6 +964,28 @@ defmodule Omunculus.Config do
   end
 
   defp execution_environment(_data), do: {:error, {:execution, {:invalid, :environment}}}
+
+  # `host`, optional, shows the machine to a command, read-only, as the
+  # person sees it; without it a command sees only the runtimes.
+  defp execution_host(data) do
+    case Map.get(data, "host", false) do
+      value when is_boolean(value) -> {:ok, value}
+      _invalid -> {:error, {:execution, {:invalid, :host}}}
+    end
+  end
+
+  # Paths a command may not read (`deny_read`) or may also write (`write`),
+  # absolute or under `~`.
+  defp execution_paths(data, key) do
+    paths = Map.get(data, key, [])
+
+    if is_list(paths) and Enum.all?(paths, &host_path?/1),
+      do: {:ok, Enum.map(paths, &Path.expand/1)},
+      else: {:error, {:execution, {:invalid, String.to_atom(key)}}}
+  end
+
+  defp host_path?("~/" <> rest), do: rest != ""
+  defp host_path?(path), do: is_binary(path) and Path.type(path) == :absolute
 
   defp execution_resources(%{"resources" => resources}) when is_list(resources) do
     cond do

@@ -207,6 +207,33 @@ defmodule Omunculus.ConfigTest do
     assert {:error, {:models, "m", {:invalid, :retries}}} = load(dir)
   end
 
+  test "a command may see the host, kept from what deny_read names", %{dir: dir} do
+    load_with = fn keys ->
+      write_toml(dir, "[agents.concierge]\ndepth = 0\ntext = \"hi\"\n")
+      {:ok, data} = Toml.decode_file(toml(dir))
+
+      File.write!(
+        toml(dir),
+        Config.Toml.encode(update_in(data, ["execution"], &Map.merge(&1, keys)))
+      )
+
+      load(dir)
+    end
+
+    assert {:ok, config} =
+             load_with.(%{"host" => true, "deny_read" => ["~/.ssh"], "write" => ["/srv/data"]})
+
+    assert config.execution.host
+    assert config.execution.deny_read == [Path.expand("~/.ssh")]
+    assert config.execution.write == ["/srv/data"]
+
+    assert {:ok, %{execution: %{host: false, deny_read: [], write: []}}} = load_with.(%{})
+    assert {:error, {:execution, {:invalid, :host}}} = load_with.(%{"host" => "yes"})
+
+    assert {:error, {:execution, {:invalid, :deny_read}}} =
+             load_with.(%{"deny_read" => ["relative"]})
+  end
+
   test "an HTTP model offers code mode only with code_mode = true", %{dir: dir} do
     model = fn line ->
       """
