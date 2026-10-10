@@ -30,8 +30,15 @@ defmodule Omunculus.Execution.Process do
   @spec close_input(pid) :: :ok | {:error, term}
   def close_input(pid), do: GenServer.call(pid, :close_input)
 
+  # Stopping waits for the process, busy as it may be with output, however
+  # long: its stop only kills and cleans up. One that already ended is
+  # stopped.
   @spec stop(pid, term) :: :ok | {:error, term}
-  def stop(pid, reason), do: GenServer.call(pid, {:stop, reason})
+  def stop(pid, reason) do
+    GenServer.call(pid, {:stop, reason}, :infinity)
+  catch
+    :exit, {reason, _call} when reason in [:noproc, :normal] -> :ok
+  end
 
   @impl true
   def init({command, policy, owner, ref, backend, lease, class}) do
