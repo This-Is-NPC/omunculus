@@ -122,10 +122,10 @@ claims `done`.
 
 ```sh
 mise run eval:selftest                       # checks and scoring
-mise run eval:run -- --model luna --k 2 --jobs 6 --label pilot
+mise run eval:run -- --model luna --k 3 --jobs 12 --label pilot
 mise run eval:run -- --model luna --task brief --configuration negotiated
-mise run eval:run -- --model sonnet --k 2 --jobs 6 --label sonnet
-mise run eval:run -- --model haiku --k 2 --jobs 6 --against eval/results/<before>
+mise run eval:run -- --model sonnet --k 3 --jobs 12 --label sonnet
+mise run eval:run -- --model haiku --k 3 --jobs 12 --against eval/results/<before>
 mise run eval:compare -- eval/results/<before> eval/results/<now>
 mix run eval/run.exs report eval/results/<run> --against eval/results/<before>
 mix run eval/run.exs score eval/results/<run>    # score an old run again
@@ -135,7 +135,7 @@ mix run eval/run.exs score eval/results/<run>    # score an old run again
 may run at once, each on its own model; a run is compared only with the folder
 `--against` names, and with none without it. `--jobs` executions run at
 once (one by default): each has a project of its own, so they share nothing
-but the provider's rate limits. Each execution gets a fresh project; the instruction goes through the CLI, which returns once every run
+but the provider's rate limits, which each model's `retries` rides out. Each execution gets a fresh project; the instruction goes through the CLI, which returns once every run
 has finished; then the runner plays the person, answering what waits on them
 as the task says, a few rounds at most.
 

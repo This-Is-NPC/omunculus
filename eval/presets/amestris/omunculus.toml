@@ -38,12 +38,14 @@ key = "$OPENROUTER_API_KEY"
 kind = "api_key"
 key = "$ANTHROPIC_API_KEY"
 
+# A rate limit or a failed request is tried again, three times at most.
 [models.luna]
 provider = "openrouter"
 api = "openai-completions"
 url = "https://openrouter.ai/api/v1"
 model = "openai/gpt-6-luna"
 timeout_ms = 180000
+retries = 3
 
 [models.luna.body]
 usage = { include = true }
@@ -55,6 +57,7 @@ api = "anthropic-messages"
 url = "https://api.anthropic.com/v1"
 model = "claude-haiku-5-5"
 timeout_ms = 180000
+retries = 3
 
 [models.sonnet]
 provider = "anthropic"
@@ -62,6 +65,7 @@ api = "anthropic-messages"
 url = "https://api.anthropic.com/v1"
 model = "claude-sonnet-5-5"
 timeout_ms = 180000
+retries = 3
 
 [models.opus]
 provider = "anthropic"
@@ -69,6 +73,7 @@ api = "anthropic-messages"
 url = "https://api.anthropic.com/v1"
 model = "claude-opus-5-5"
 timeout_ms = 180000
+retries = 3
 
 # Answers with the first line of its prompt: checks the runner without a provider.
 [models.fake]
