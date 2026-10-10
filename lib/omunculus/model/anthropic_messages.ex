@@ -20,7 +20,7 @@ defmodule Omunculus.Model.AnthropicMessages do
   host.
   """
 
-  alias Omunculus.Model.{Body, EventStream}
+  alias Omunculus.Model.{Arguments, Body, EventStream}
   alias Omunculus.Prompt
 
   @spec new(map) ::
@@ -124,18 +124,18 @@ defmodule Omunculus.Model.AnthropicMessages do
           {:ok, output_text(message)}
 
         uses ->
-          with {:ok, results} <- run_tool_uses(uses, call, catalog, execution) do
-            loop(
-              client,
-              system,
-              tools,
-              messages ++ [assistant_turn(message), %{role: "user", content: results}],
-              call,
-              record,
-              catalog,
-              execution
-            )
-          end
+          results = Enum.map(uses, &run_tool_use(&1, call, catalog, execution))
+
+          loop(
+            client,
+            system,
+            tools,
+            messages ++ [assistant_turn(message), %{role: "user", content: results}],
+            call,
+            record,
+            catalog,
+            execution
+          )
       end
     end
   end
@@ -321,19 +321,12 @@ defmodule Omunculus.Model.AnthropicMessages do
   defp text_chunks(%{"text" => text}) when is_binary(text), do: [text]
   defp text_chunks(_item), do: []
 
-  defp run_tool_uses(uses, call, catalog, execution) do
-    Enum.reduce_while(uses, {:ok, []}, fn use, {:ok, acc} ->
-      case run_tool_use(use, call, catalog, execution) do
-        {:ok, result} -> {:cont, {:ok, acc ++ [result]}}
-        {:error, reason} -> {:halt, {:error, {:anthropic, reason}}}
-      end
-    end)
-  end
-
   defp run_tool_use(%{"id" => id, "name" => name, "input" => input}, call, catalog, execution) do
-    with {:ok, args} <- decode_input(input) do
-      {:ok, tool_result(id, invoke(name, args, call, catalog, execution))}
-    end
+    result =
+      with {:ok, args} <- Arguments.decode(input),
+           do: invoke(name, args, call, catalog, execution)
+
+    tool_result(id, result)
   end
 
   defp invoke("__omunculus_execute", %{"code" => code}, call, catalog, execution)
@@ -341,17 +334,6 @@ defmodule Omunculus.Model.AnthropicMessages do
        do: Omunculus.Sandbox.run(code, catalog, call, execution)
 
   defp invoke(name, args, call, _catalog, _execution), do: call.(name, args)
-
-  defp decode_input(input) when is_map(input), do: {:ok, input}
-
-  defp decode_input(input) when is_binary(input) do
-    case Jason.decode(input) do
-      {:ok, decoded} -> {:ok, decoded}
-      {:error, reason} -> {:error, {:invalid_arguments, reason}}
-    end
-  end
-
-  defp decode_input(_input), do: {:ok, %{}}
 
   defp tool_result(id, {:ok, output}),
     do: %{type: "tool_result", tool_use_id: id, content: output}

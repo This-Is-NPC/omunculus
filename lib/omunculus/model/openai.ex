@@ -22,7 +22,7 @@ defmodule Omunculus.Model.OpenAI do
   arrives, and `stream_options.include_usage` asks for the `usage` chunk.
   """
 
-  alias Omunculus.Model.{Body, EventStream}
+  alias Omunculus.Model.{Arguments, Body, EventStream}
   alias Omunculus.Prompt
 
   @spec new(map) ::
@@ -140,17 +140,17 @@ defmodule Omunculus.Model.OpenAI do
          :ok <- record.(maybe_put(strip_message(message), "usage", message["usage"])) do
       case message do
         %{"tool_calls" => [_ | _] = tool_calls} ->
-          with {:ok, tool_messages} <- run_tool_calls(tool_calls, call, catalog, execution) do
-            loop(
-              client,
-              tools,
-              messages ++ [strip_message(message) | tool_messages],
-              call,
-              record,
-              catalog,
-              execution
-            )
-          end
+          tool_messages = Enum.map(tool_calls, &run_tool_call(&1, call, catalog, execution))
+
+          loop(
+            client,
+            tools,
+            messages ++ [strip_message(message) | tool_messages],
+            call,
+            record,
+            catalog,
+            execution
+          )
 
         _final ->
           {:ok, message["content"] || ""}
@@ -252,24 +252,17 @@ defmodule Omunculus.Model.OpenAI do
     end
   end
 
-  defp run_tool_calls(tool_calls, call, catalog, execution) do
-    Enum.reduce_while(tool_calls, {:ok, []}, fn tool_call, {:ok, acc} ->
-      case run_tool_call(tool_call, call, catalog, execution) do
-        {:ok, tool_message} -> {:cont, {:ok, acc ++ [tool_message]}}
-        {:error, reason} -> {:halt, {:error, {:openai, reason}}}
-      end
-    end)
-  end
-
   defp run_tool_call(
          %{"id" => id, "function" => %{"name" => name, "arguments" => arguments}},
          call,
          catalog,
          execution
        ) do
-    with {:ok, args} <- decode_arguments(arguments) do
-      {:ok, tool_result_message(id, invoke(name, args, call, catalog, execution))}
-    end
+    result =
+      with {:ok, args} <- Arguments.decode(arguments),
+           do: invoke(name, args, call, catalog, execution)
+
+    tool_result_message(id, result)
   end
 
   defp invoke("__omunculus_execute", %{"code" => code}, call, catalog, execution)
@@ -277,15 +270,6 @@ defmodule Omunculus.Model.OpenAI do
        do: Omunculus.Sandbox.run(code, catalog, call, execution)
 
   defp invoke(name, args, call, _catalog, _execution), do: call.(name, args)
-
-  defp decode_arguments(""), do: {:ok, %{}}
-
-  defp decode_arguments(arguments) do
-    case Jason.decode(arguments) do
-      {:ok, decoded} -> {:ok, decoded}
-      {:error, reason} -> {:error, {:invalid_arguments, reason}}
-    end
-  end
 
   defp tool_result_message(id, {:ok, output}),
     do: %{role: "tool", tool_call_id: id, content: output}

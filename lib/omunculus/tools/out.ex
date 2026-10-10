@@ -125,6 +125,11 @@ defmodule Omunculus.Tools.Out do
     do:
       "refused: #{name} is not one of your tools; if the work needs it, ask with one request_access for it and everything else the work lacks"
 
+  @doc "What a model reads of a call whose arguments were not a JSON object."
+  @spec invalid_arguments() :: String.t()
+  def invalid_arguments,
+    do: "refused: the arguments are not a JSON object; call the tool again with them as one"
+
   @doc "What a model reads of a call that failed: a text as it is, anything else inspected."
   @spec failure(term) :: String.t()
   def failure(reason) when is_binary(reason), do: reason

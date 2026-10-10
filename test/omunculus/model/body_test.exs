@@ -183,6 +183,54 @@ defmodule Omunculus.Model.BodyTest do
     assert {:error, _limited} = call.(spec.(serve([limited, answered]), %{}))
   end
 
+  test "arguments that are not JSON go back to the model as the call's result" do
+    garbled =
+      Jason.encode!(%{
+        "choices" => [
+          %{
+            "message" => %{
+              "role" => "assistant",
+              "content" => nil,
+              "tool_calls" => [
+                %{
+                  "id" => "c1",
+                  "type" => "function",
+                  "function" => %{"name" => "read", "arguments" => "\nરસ to=functions.read"}
+                }
+              ]
+            }
+          }
+        ]
+      })
+
+    answered = ~s({"choices":[{"message":{"role":"assistant","content":"ok"}}]})
+
+    ok = fn body ->
+      "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: #{byte_size(body)}\r\n\r\n" <>
+        body
+    end
+
+    port = serve([ok.(garbled), ok.(answered)])
+
+    policy =
+      ExecutionPolicyFixtures.policy(Application.app_dir(:omunculus, "priv"), network: "none")
+
+    spec = %{"url" => "http://127.0.0.1:#{port}/v1", "model" => "stub", "timeout_ms" => 5_000}
+    test = self()
+
+    assert {:ok, "ok"} =
+             OpenAI.new(spec).(
+               %Prompt{instructions: "", context: "ping"},
+               [],
+               fn name, _args -> send(test, {:called, name}) end,
+               fn _ -> :ok end,
+               fn _ -> :ok end,
+               policy
+             )
+
+    refute_received {:called, _name}
+  end
+
   # A server that answers its requests with `responses`, one each, in order.
   defp serve(responses) do
     {:ok, listen} =

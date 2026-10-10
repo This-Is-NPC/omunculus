@@ -18,7 +18,7 @@ defmodule Omunculus.Model.OpenAIResponses do
   module names a host.
   """
 
-  alias Omunculus.Model.{Body, EventStream}
+  alias Omunculus.Model.{Arguments, Body, EventStream}
   alias Omunculus.Prompt
 
   @spec new(map) ::
@@ -102,17 +102,8 @@ defmodule Omunculus.Model.OpenAIResponses do
           {:ok, output_text(output)}
 
         calls ->
-          with {:ok, results} <- run_tool_calls(calls, call, catalog, execution) do
-            loop(
-              client,
-              tools,
-              input ++ output ++ results,
-              call,
-              record,
-              catalog,
-              execution
-            )
-          end
+          results = Enum.map(calls, &run_tool_call(&1, call, catalog, execution))
+          loop(client, tools, input ++ output ++ results, call, record, catalog, execution)
       end
     end
   end
@@ -197,24 +188,17 @@ defmodule Omunculus.Model.OpenAIResponses do
   defp text_chunks(%{"text" => text}) when is_binary(text), do: [text]
   defp text_chunks(_item), do: []
 
-  defp run_tool_calls(tool_calls, call, catalog, execution) do
-    Enum.reduce_while(tool_calls, {:ok, []}, fn tool_call, {:ok, acc} ->
-      case run_tool_call(tool_call, call, catalog, execution) do
-        {:ok, result} -> {:cont, {:ok, acc ++ [result]}}
-        {:error, reason} -> {:halt, {:error, {:openai, reason}}}
-      end
-    end)
-  end
-
   defp run_tool_call(
          %{"call_id" => id, "name" => name, "arguments" => arguments},
          call,
          catalog,
          execution
        ) do
-    with {:ok, args} <- decode_arguments(arguments) do
-      {:ok, function_call_output(id, invoke(name, args, call, catalog, execution))}
-    end
+    result =
+      with {:ok, args} <- Arguments.decode(arguments),
+           do: invoke(name, args, call, catalog, execution)
+
+    function_call_output(id, result)
   end
 
   defp invoke("__omunculus_execute", %{"code" => code}, call, catalog, execution)
@@ -222,17 +206,6 @@ defmodule Omunculus.Model.OpenAIResponses do
        do: Omunculus.Sandbox.run(code, catalog, call, execution)
 
   defp invoke(name, args, call, _catalog, _execution), do: call.(name, args)
-
-  defp decode_arguments(""), do: {:ok, %{}}
-
-  defp decode_arguments(arguments) when is_binary(arguments) do
-    case Jason.decode(arguments) do
-      {:ok, decoded} -> {:ok, decoded}
-      {:error, reason} -> {:error, {:invalid_arguments, reason}}
-    end
-  end
-
-  defp decode_arguments(arguments) when is_map(arguments), do: {:ok, arguments}
 
   defp function_call_output(id, {:ok, output}),
     do: %{type: "function_call_output", call_id: id, output: output}
