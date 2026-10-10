@@ -144,7 +144,7 @@ defmodule Omunculus.Tools.Out do
   @spec refused(term) :: String.t()
   def refused({:request, {:blocked, name}}),
     do:
-      "refused: no one can grant #{name} to this run: it is not in the catalog, or the configuration denies it"
+      "refused: no one can grant #{name} to this run: it is not in the catalog, or the configuration denies it; name a tool as your tool list writes it, with no prefix (bash, not functions.bash)"
 
   def refused({:request, {:already_have, names}}),
     do: "refused: you already have #{names}; use it rather than asking"
