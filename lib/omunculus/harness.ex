@@ -101,9 +101,8 @@ defmodule Omunculus.Harness do
     with {:ok, run} <- resolve_run(project, ctx.run_id),
          work_id = run_work_id(run),
          {:ok, work} <- fetch_work(project, work_id),
-         {:ok, config} <- resolved_config(project, work),
+         {:ok, config, catalog} <- prepared(project, run, work, ctx),
          workspace = workspace_context(config, work),
-         {:ok, catalog} <- catalog(project, run, config, workspace, Map.get(ctx, :execution)),
          {:ok, manifest} <- fetch_dispatch_manifest(catalog, name, ctx.trigger),
          :ok <- check_trigger(manifest, name, ctx.trigger),
          views =
@@ -114,61 +113,87 @@ defmodule Omunculus.Harness do
          {:ok, out, events} <-
            call(project, manifest, args, work_id, ctx, config, catalog, views, workspace),
          {:ok, hook_events} <-
-           maybe_react(project, events, [], Map.get(ctx, :execution)) do
+           maybe_react(project, events, [], Map.get(ctx, :execution), Map.get(ctx, :prepared)) do
       {:ok, out, events ++ hook_events}
     end
   end
 
-  @doc "Dispatches reactions to committed events, including the run lifecycle."
-  def react(project, events, active \\ [], execution \\ nil) do
-    with {:ok, base} <- Config.load(project.config_path) do
-      Enum.reduce_while(events, {:ok, []}, fn event, {:ok, acc} ->
-        with {:ok, run} <- resolve_run(project, event.run_id),
-             {:ok, work} <- fetch_work(project, event.work_id),
-             {:ok, config} <-
-               Config.for_workspace(base, Config.effective_workspace(base, work)),
-             workspace = workspace_context(config, work),
-             {:ok, catalog} <- catalog(project, run, config, workspace, execution) do
-          ctx = %{
-            run_id: event.run_id,
-            author: if(run, do: "agent", else: "human"),
-            agent: run && run.agent,
-            issuer: Map.get(event, :actor_issuer),
-            subject: Map.get(event, :actor_subject),
-            origin_issuer: Map.get(event, :origin_issuer),
-            origin_subject: Map.get(event, :origin_subject),
-            conversation_id: Map.get(event, :conversation_id),
+  @doc """
+  What a run prepared when it opened — its config, for its workspace, and
+  its catalog — for the calls and reactions of that run, which then do not
+  load the config or discover the catalog again.
+  """
+  @spec prepared(String.t(), Config.t(), map) :: map
+  def prepared(run_id, config, catalog), do: %{run_id: run_id, config: config, catalog: catalog}
+
+  # The run's own calls use what it prepared; any other loads them.
+  defp prepared(_project, %{id: run_id}, _work, %{prepared: %{run_id: run_id} = prepared}),
+    do: {:ok, prepared.config, prepared.catalog}
+
+  defp prepared(project, run, work, ctx) do
+    with {:ok, config} <- resolved_config(project, work),
+         {:ok, catalog} <-
+           catalog(
+             project,
+             run,
+             config,
+             workspace_context(config, work),
+             Map.get(ctx, :execution)
+           ),
+         do: {:ok, config, catalog}
+  end
+
+  @doc """
+  Dispatches reactions to committed events, including the run lifecycle;
+  events of the run `prepared` is for react with what it prepared.
+  """
+  def react(project, events, active \\ [], execution \\ nil, prepared \\ nil) do
+    Enum.reduce_while(events, {:ok, []}, fn event, {:ok, acc} ->
+      with {:ok, run} <- resolve_run(project, event.run_id),
+           {:ok, work} <- fetch_work(project, event.work_id),
+           {:ok, config, catalog} <-
+             prepared(project, run, work, %{execution: execution, prepared: prepared}),
+           workspace = workspace_context(config, work) do
+        ctx = %{
+          run_id: event.run_id,
+          author: if(run, do: "agent", else: "human"),
+          agent: run && run.agent,
+          issuer: Map.get(event, :actor_issuer),
+          subject: Map.get(event, :actor_subject),
+          origin_issuer: Map.get(event, :origin_issuer),
+          origin_subject: Map.get(event, :origin_subject),
+          conversation_id: Map.get(event, :conversation_id),
+          request_id: event.request_id,
+          inbox_id: event.inbox_id,
+          via: run && run.via,
+          execution: execution,
+          prepared: prepared
+        }
+
+        views =
+          views(project, run, work, config, catalog, workspace, %{
             request_id: event.request_id,
-            inbox_id: event.inbox_id,
-            via: run && run.via,
-            execution: execution
-          }
+            inbox_id: event.inbox_id
+          })
 
-          views =
-            views(project, run, work, config, catalog, workspace, %{
-              request_id: event.request_id,
-              inbox_id: event.inbox_id
-            })
-
-          case run_hooks_for(
-                 project,
-                 catalog,
-                 event,
-                 event.work_id,
-                 ctx,
-                 config,
-                 views,
-                 workspace,
-                 active
-               ) do
-            {:ok, result} -> {:cont, {:ok, acc ++ result}}
-            error -> {:halt, error}
-          end
-        else
+        case run_hooks_for(
+               project,
+               catalog,
+               event,
+               event.work_id,
+               ctx,
+               config,
+               views,
+               workspace,
+               active
+             ) do
+          {:ok, result} -> {:cont, {:ok, acc ++ result}}
           error -> {:halt, error}
         end
-      end)
-    end
+      else
+        error -> {:halt, error}
+      end
+    end)
   end
 
   # What a call's views read that the harness computes rather than the
@@ -477,7 +502,13 @@ defmodule Omunculus.Harness do
     |> Enum.reduce_while({:ok, []}, fn hook, {:ok, acc} ->
       case invoke_hook(project, hook, event, work_id, ctx, config, catalog, views, workspace) do
         {:ok, hook_events} ->
-          case maybe_react(project, hook_events, [hook.name | active], ctx.execution) do
+          case maybe_react(
+                 project,
+                 hook_events,
+                 [hook.name | active],
+                 ctx.execution,
+                 Map.get(ctx, :prepared)
+               ) do
             {:ok, reactions} -> {:cont, {:ok, acc ++ hook_events ++ reactions}}
             error -> {:halt, error}
           end
@@ -649,8 +680,8 @@ defmodule Omunculus.Harness do
     Ceiling.classify(run_ceiling(env.project, run), name, "tool") == "have"
   end
 
-  defp maybe_react(project, events, active, execution) do
-    react(project, Enum.reject(events, &ending_event?/1), active, execution)
+  defp maybe_react(project, events, active, execution, prepared) do
+    react(project, Enum.reject(events, &ending_event?/1), active, execution, prepared)
   end
 
   @spec ending_event?(map) :: boolean

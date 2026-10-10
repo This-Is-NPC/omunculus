@@ -192,10 +192,11 @@ defmodule Omunculus.Run do
              execution
            ),
          cursor = :atomics.new(1, []),
-         call = build_call(project, run, names, config, execution, cursor) do
+         prepared = Harness.prepared(run.id, config, catalog),
+         call = build_call(project, run, names, config, prepared, execution, cursor) do
       run_model(
         project,
-        %{run: run, config: config, execution: execution, cursor: cursor},
+        %{run: run, config: config, prepared: prepared, execution: execution, cursor: cursor},
         if(agent, do: nil, else: work),
         assembled,
         tools,
@@ -379,7 +380,7 @@ defmodule Omunculus.Run do
     end)
   end
 
-  defp build_call(project, run, names, config, execution, cursor) do
+  defp build_call(project, run, names, config, prepared, execution, cursor) do
     allowed = MapSet.new(names)
 
     fn name, args ->
@@ -389,7 +390,8 @@ defmodule Omunculus.Run do
           run_id: run.id,
           author: "agent",
           agent: run.agent,
-          execution: execution
+          execution: execution,
+          prepared: prepared
         }
 
         result = Harness.dispatch(project, name, args, ctx)
@@ -450,11 +452,11 @@ defmodule Omunculus.Run do
     Enum.split_with(events, &(&1.sequence <= seen))
   end
 
-  defp record_model(project, run, execution, text) do
+  defp record_model(project, state, text) do
     body = if is_binary(text), do: text, else: Jason.encode!(text)
 
-    with {:ok, event} <- Store.record_model(project.conn, run.id, body),
-         {:ok, _hooks} <- Harness.react(project, [event], [], execution),
+    with {:ok, event} <- Store.record_model(project.conn, state.run.id, body),
+         {:ok, _hooks} <- Harness.react(project, [event], [], state.execution, state.prepared),
          do: :ok
   end
 
@@ -471,9 +473,9 @@ defmodule Omunculus.Run do
     )
   end
 
-  defp close_run(project, run, execution) do
-    with {:ok, event} <- Store.close_run(project.conn, run.id),
-         {:ok, _hooks} <- Harness.react(project, [event], [], execution),
+  defp close_run(project, state) do
+    with {:ok, event} <- Store.close_run(project.conn, state.run.id),
+         {:ok, _hooks} <- Harness.react(project, [event], [], state.execution, state.prepared),
          do: :ok
   end
 
@@ -486,12 +488,12 @@ defmodule Omunculus.Run do
         {:ok, events} = Store.replay(project.conn, {:run, run.id})
         start = Enum.filter(events, &(&1.type == "start-run"))
 
-        with {:ok, _hooks} <- Harness.react(project, start, [], execution) do
+        with {:ok, _hooks} <- Harness.react(project, start, [], execution, state.prepared) do
           model.(
             assembled,
             tools,
             call,
-            &record_model(project, run, execution, &1),
+            &record_model(project, state, &1),
             &publish_delta(project, run, &1),
             execution
           )
@@ -504,7 +506,7 @@ defmodule Omunculus.Run do
         kind, reason -> {:error, {:model_crashed, {kind, reason}}}
       end
 
-    with :ok <- close_run(project, run, execution) do
+    with :ok <- close_run(project, state) do
       case result do
         {:ok, _text} ->
           follow_up(project, state, work, true)
@@ -533,7 +535,8 @@ defmodule Omunculus.Run do
   # person, or nothing would answer it.
   defp unanswered(project, state) do
     with {:ok, events} <- Store.unanswered(project.conn, state.run, &Out.unanswered/2),
-         {:ok, _hooks} <- Harness.react(project, events, [], state.execution) do
+         {:ok, _hooks} <-
+           Harness.react(project, events, [], state.execution, Map.get(state, :prepared)) do
       Harness.follow_up(project, events)
     end
   end
@@ -561,7 +564,8 @@ defmodule Omunculus.Run do
         })
 
       {:ok, {:stopped, events}} ->
-        with {:ok, _hooks} <- Harness.react(project, events, [], state.execution) do
+        with {:ok, _hooks} <-
+               Harness.react(project, events, [], state.execution, Map.get(state, :prepared)) do
           Harness.follow_up(project, events)
         end
 
