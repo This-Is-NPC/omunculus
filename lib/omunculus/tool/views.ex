@@ -14,7 +14,8 @@ defmodule Omunculus.Tool.Views do
 
   - `works`: `relation` `self` (default), `parent` or `children`; from
     `work` (default) or `args.<name>`, which needs `within =
-    "descendants"` and then reads only a work below the call's own.
+    "descendants"` and then reads only a work below the call's own, or,
+    for a call outside any run and work, any work of its conversation.
     Children take `state` (a list) and `since = "last_run"` (changed after
     the work's last closed run finished). `include` adds to each work its
     `last_comment`, its `comments` or its closed `runs` with their record:
@@ -372,6 +373,12 @@ defmodule Omunculus.Tool.Views do
   end
 
   defp inside(_conn, %{within: nil}, _anchor, _id, _scope), do: :ok
+
+  # A call outside any run and work is a person's or a client's, whose
+  # access to the work's conversation was checked before it: it reads any
+  # work there.
+  defp inside(_conn, %{within: "descendants"}, _anchor, _id, %{run_id: nil, work_id: nil}),
+    do: :ok
 
   defp inside(conn, %{within: "descendants"}, _anchor, id, scope) do
     if is_binary(scope.work_id) and Store.descends?(conn, id, scope.work_id),

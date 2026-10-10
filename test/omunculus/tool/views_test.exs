@@ -117,6 +117,10 @@ defmodule Omunculus.Tool.ViewsTest do
 
     assert {:error, {:outside, ^root}} =
              hydrate(conn, views, %{work_id: middle, args: %{"work_id" => root}})
+
+    # A person's call, outside any run and work, reads the work it names.
+    assert {:ok, %{"target" => %{title: "elsewhere"}}} =
+             hydrate(conn, views, %{work_id: nil, args: %{"work_id" => other}})
   end
 
   test "events with the cause relation read the event that made the run due", %{conn: conn} do

@@ -162,6 +162,39 @@ defmodule Omunculus.WorkspaceTest do
     assert patch =~ "+hi"
   end
 
+  test "from the command line, changes lists what a named work's calls changed", %{
+    dir: dir,
+    one: one,
+    two: two,
+    three: three
+  } do
+    write_config(
+      dir,
+      base_toml(one, two, three) <>
+        """
+
+        [store]
+        path = ".omunculus/store.sqlite3"
+        changes = ".omunculus/changes"
+        """
+    )
+
+    project = open_project(dir)
+    work_id = Fixtures.insert(project.conn, :works, %{title: "Note", assignee: "concierge"})
+    Project.close(project)
+
+    model = fn _assembled, _tools, call ->
+      assert {:ok, ""} = call.("write", %{"path" => "note.txt", "content" => "hi\n"})
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(dir, model)
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+
+    assert {:ok, "- write (concierge)\n  A note.txt (+1 -0)"} =
+             CLI.run(["changes", "--work_id", work_id], dir)
+  end
+
   test "revert puts back what the run's calls changed, unless a file moved on since", %{
     dir: dir,
     one: one,

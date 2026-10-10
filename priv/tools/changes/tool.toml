@@ -1,7 +1,7 @@
 name = "changes"
 kind = "tool"
-triggers = ["model"]
-description = "Lists the files the calls of a work changed, call by call, or with patch their unified diff: of this run's work, or of a work below it."
+triggers = ["model", "cli"]
+description = "Lists the files the calls of a work changed, call by call, or with patch their unified diff: of this run's work, or of a work below it; from the command line, of the work named."
 tags = ["files", "diff"]
 module = "Omunculus.Tools.Changes"
 

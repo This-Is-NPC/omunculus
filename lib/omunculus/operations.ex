@@ -100,6 +100,9 @@ defmodule Omunculus.Operations do
     end
   end
 
+  defp operation(project, _config, "changes", %{"work_id" => id}, _actor, _principal),
+    do: scoped(project, :work, id, "conversation.read")
+
   defp operation(project, _config, "prompt", %{"run" => id}, _actor, _principal),
     do: scoped(project, :run, id, "conversation.read")
 
