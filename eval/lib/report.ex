@@ -158,7 +158,7 @@ defmodule EquivalentExchange.Report do
            })}
         end)
 
-      %{overall: Resources.overall(samples), by_agent: by_agent}
+      %{overall: Resources.overall(samples, all), by_agent: by_agent}
     end
   end
 
@@ -172,7 +172,8 @@ defmodule EquivalentExchange.Report do
 
   defp hardware(%{overall: overall, by_agent: by_agent}) do
     head =
-      "BEAM and its processes: CPU median #{overall["cpu_percent_median"]}% and peak #{overall["cpu_percent_peak"]}% of one core; memory peak #{overall["rss_mb_peak"]} MB.\n\n" <>
+      "The BEAM and the sandboxed processes together: CPU median #{whole(overall["cpu_percent_median"])}% and peak #{whole(overall["cpu_percent_peak"])}% of one core; memory peak #{whole(overall["rss_mb_peak"])} MB.\n\n" <>
+        "Most runs open at once: #{overall["runs_open_peak"]}, at #{overall["runs_open_peak_at"]}, taking #{whole(overall["runs_open_peak_cpu_percent"])}% of one core and #{whole(overall["runs_open_peak_rss_mb"])} MB.\n\n" <>
         "The BEAM's CPU is shared among the runs open at each moment, so its split is an estimate; sandboxed processes count to the run that started them.\n\n" <>
         "| agent | runs | run time s | BEAM CPU s (est.) | sandbox CPU s | sandbox peak MB |\n|---|---|---|---|---|---|\n"
 
@@ -185,6 +186,10 @@ defmodule EquivalentExchange.Report do
 
     head <> rows <> "\n"
   end
+
+  # A measure of the machine as a whole number: 1300.0 reads 1300, not 1.3e3.
+  defp whole(nil), do: "–"
+  defp whole(value), do: value |> round() |> Integer.to_string()
 
   defp mean(values) do
     case Enum.reject(values, &is_nil/1) do
@@ -307,10 +312,11 @@ defmodule EquivalentExchange.Report do
       [
         {"CPU median %", "cpu_percent_median"},
         {"CPU peak %", "cpu_percent_peak"},
+        {"runs open at once", "runs_open_peak"},
         {"memory peak MB", "rss_mb_peak"}
       ],
       "\n",
-      fn {label, key} -> "- #{label}: #{was[key]} → #{is[key]}" end
+      fn {label, key} -> "- #{label}: #{whole(was[key])} → #{whole(is[key])}" end
     )
   end
 

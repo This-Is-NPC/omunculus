@@ -166,8 +166,9 @@ results/<time>-<label>/
   summary.json       the measures, overall and by configuration, scenario, task
   report.md          the same as tables, then the findings by cause
   comparison.md      against the run --against named, kept in the manifest
-  resources.json     the BEAM's CPU and memory every 250 ms, and each
-                     sandboxed process: its execution, CPU and peak memory
+  resources.json     the CPU and memory of the BEAM and of the sandboxed
+                     processes every 250 ms, and each such process: its
+                     execution, CPU and peak memory
   executions/<task>/<configuration>/<n>/
     execution.json   outcome, last words, check, requests, grants, runs,
                      tool calls with the files each changed, usage, time,
@@ -202,8 +203,9 @@ and what points to it. `report.md` groups them,
 so the most frequent cause is the first thing to fix; `comparison.md` says
 whether the next run fixed it.
 
-`report.md` ends with the hardware by agent: the BEAM's median and peak
-CPU and its peak memory over the run, then for each agent its runs, their
+`report.md` ends with the hardware: the CPU and memory of the BEAM and
+the sandboxed processes together, median and peak; the most runs open at
+once, when, and what they took then; then for each agent its runs, their
 time, the BEAM CPU of the intervals they were open (shared evenly among
 the runs open then, an estimate), and the CPU and peak memory of the
 sandboxed processes its runs started.

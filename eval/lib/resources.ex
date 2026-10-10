@@ -2,8 +2,9 @@ defmodule EquivalentExchange.Resources do
   @moduledoc """
   What a run took from the machine, sampled from `/proc` every
   `@interval` ms while it runs: the CPU and memory of the BEAM that runs
-  every execution, and each sandboxed process it starts — a process is the
-  execution whose workspace its `--chdir` names. `start/0` begins sampling,
+  every execution and, together, of the sandboxed processes it starts,
+  and each of those processes — a process is the execution whose
+  workspace its `--chdir` names. `start/0` begins sampling,
   `stop/1` ends it and returns `%{"beam" => [sample], "processes" =>
   [process]}`, and `by_agent/2` attributes it to the agents of the
   executions: a process to the last run of its execution started before it
@@ -40,10 +41,19 @@ defmodule EquivalentExchange.Resources do
         ticks = ticks(beam)
         children = sandboxed(beam)
 
+        # A process first seen now ran within this interval, all of it.
+        children_cpu_s =
+          children
+          |> Enum.map(fn child ->
+            seen = get_in(acc.processes, [child.pid, "cpu_s"]) || 0.0
+            max(child.cpu_s - seen, 0.0)
+          end)
+          |> Enum.reduce(0.0, &+/2)
+
         sample = %{
           "at" => DateTime.to_iso8601(now),
-          "cpu_percent" =>
-            Float.round((ticks - last) / clock_ticks() / (@interval / 1000) * 100, 1),
+          "cpu_percent" => percent((ticks - last) / clock_ticks()),
+          "children_cpu_percent" => percent(children_cpu_s),
           "rss_mb" => rss(beam),
           "children_rss_mb" =>
             children |> Enum.map(& &1.rss_mb) |> Enum.reduce(0.0, &+/2) |> Float.round(1)
@@ -71,6 +81,8 @@ defmodule EquivalentExchange.Resources do
         loop(beam, ticks, %{beam: [sample | acc.beam], processes: processes})
     end
   end
+
+  defp percent(cpu_s), do: Float.round(cpu_s / (@interval / 1000) * 100, 1)
 
   defp finish(acc),
     do: %{"beam" => Enum.reverse(acc.beam), "processes" => Map.values(acc.processes)}
@@ -205,20 +217,36 @@ defmodule EquivalentExchange.Resources do
     end)
   end
 
-  @doc "The BEAM's CPU (percent of one core) and memory over the run: median and peak."
-  @spec overall(map) :: map
-  def overall(%{"beam" => []}), do: %{}
+  @doc """
+  What the machine gave the run, the BEAM and its sandboxed processes
+  together: CPU (percent of one core) and memory, median and peak, and
+  the moment the most runs were open at once, with how many and what
+  they took then.
+  """
+  @spec overall(map, [map]) :: map
+  def overall(%{"beam" => []}, _executions), do: %{}
 
-  def overall(%{"beam" => beam}) do
-    cpu = beam |> Enum.map(& &1["cpu_percent"]) |> Enum.sort()
-    rss = Enum.map(beam, &(&1["rss_mb"] + &1["children_rss_mb"]))
+  def overall(%{"beam" => beam}, executions) do
+    runs = for execution <- executions, run <- execution["runs"], run["started_at"], do: run
+    cpu = Enum.map(beam, &total_cpu/1)
+    sorted = Enum.sort(cpu)
+    busiest = Enum.max_by(beam, fn sample -> Enum.count(runs, &open?(&1, sample["at"])) end)
 
     %{
-      "cpu_percent_median" => Enum.at(cpu, div(length(cpu), 2)),
-      "cpu_percent_peak" => List.last(cpu),
-      "rss_mb_peak" => Float.round(Enum.max(rss), 1)
+      "cpu_percent_median" => Enum.at(sorted, div(length(sorted), 2)),
+      "cpu_percent_peak" => List.last(sorted),
+      "rss_mb_peak" => beam |> Enum.map(&total_rss/1) |> Enum.max() |> Float.round(1),
+      "runs_open_peak" => Enum.count(runs, &open?(&1, busiest["at"])),
+      "runs_open_peak_at" => busiest["at"],
+      "runs_open_peak_cpu_percent" => total_cpu(busiest),
+      "runs_open_peak_rss_mb" => Float.round(total_rss(busiest), 1)
     }
   end
+
+  defp total_cpu(sample),
+    do: Float.round(sample["cpu_percent"] + sample["children_cpu_percent"], 1)
+
+  defp total_rss(sample), do: sample["rss_mb"] + sample["children_rss_mb"]
 
   defp execution_dir(execution),
     do:
