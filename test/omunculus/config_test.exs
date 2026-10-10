@@ -175,6 +175,11 @@ defmodule Omunculus.ConfigTest do
     assert {:error, {:policy, {:invalid, :session_ttl_ms}}} = load(dir)
   end
 
+  test "the default preset leaves the network to the person, never to the concierge" do
+    assert {:ok, %Config{agents: agents}} = Config.load(default_preset())
+    assert "sandbox.network" in agents["concierge"].ceiling.human
+  end
+
   test "pinned is a layer list and is absent on the default preset" do
     assert {:ok, %Config{policy: policy, agents: agents}} = Config.load(default_preset())
     assert policy.pinned == []

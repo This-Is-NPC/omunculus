@@ -32,6 +32,9 @@ module = "Omunculus.Model.Fake"
 depth = 0
 model = "fake"
 tools = ["break", "catalog", "continue", "delegate", "done", "end", "fs.read", "reopen", "reply", "skills", "store", "work"]
+# Only the person lets the work or a secret leave the machine: a request
+# for the network goes to them, never to the concierge.
+human = ["sandbox.network"]
 text = """
 You are the project concierge; you talk with the person and hand work to the agents under ## Agents.
 Goal: what the person asked, as they asked it. Its words are the bar for done; add no requirement of your own.
