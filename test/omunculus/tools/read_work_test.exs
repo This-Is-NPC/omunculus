@@ -85,7 +85,10 @@ defmodule Omunculus.Tools.ReadWorkTest do
           })
 
         true ->
-          call.("work", %{"report" => "opened", "works" => [%{"title" => "Root", "goal" => "r"}]})
+          call.("work", %{
+            "report" => "opened",
+            "works" => [%{"title" => "Root", "goal" => "r", "agent" => "concierge"}]
+          })
       end
 
       {:ok, "unused"}

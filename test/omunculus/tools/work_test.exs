@@ -162,11 +162,16 @@ defmodule Omunculus.Tools.WorkTest do
           "SELECT runs.* FROM runs JOIN events ON events.id = runs.event_id ORDER BY events.sequence"
         )
 
-    defp root_model(on_root) do
+    # The lead opens a root for itself: by naming itself, or, when depth 0
+    # has a workflow (`root`), by naming nobody.
+    defp root_model(on_root, root \\ %{"agent" => "lead"}) do
       fn assembled, _tools, call ->
         case {role(assembled), last_comment(assembled)} do
-          {"lead", nil} -> create(call, "planned", [%{"title" => "Root", "goal" => "Ship"}])
-          other -> on_root.(other, call)
+          {"lead", nil} ->
+            create(call, "planned", [Map.merge(%{"title" => "Root", "goal" => "Ship"}, root)])
+
+          other ->
+            on_root.(other, call)
         end
 
         # A run that did not end above ends here, so no work is retried.
@@ -249,7 +254,7 @@ defmodule Omunculus.Tools.WorkTest do
           schema = "staged"
           """
 
-      project = setup_project(dir, toml, root_model(fn _other, _call -> :ok end))
+      project = setup_project(dir, toml, root_model(fn _other, _call -> :ok end, %{}))
 
       assert [%{stage: "plan", assignee: "lead"} = root] = all(project, "SELECT * FROM works")
       assert [_first, second] = runs_in_order(project)
@@ -524,7 +529,7 @@ defmodule Omunculus.Tools.WorkTest do
       test_pid = self()
 
       model = fn _assembled, _tools, call ->
-        send(test_pid, {:two, create(call, "r", [@item, @item])})
+        send(test_pid, {:two, create(call, "r", [Map.put(@item, "agent", "lead"), @item])})
         send(test_pid, {:no_goal, create(call, "r", [%{"title" => "t"}])})
         {:ok, "idle"}
       end

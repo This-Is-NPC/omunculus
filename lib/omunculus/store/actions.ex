@@ -4,12 +4,11 @@ defmodule Omunculus.Store.Actions do
   `out.emit` in order, inside whatever transaction the caller holds — the
   whole batch commits or nothing does (spec §8.3). `work` creates a root
   work with the `report` as its first comment and links the run to it when
-  the run has no work yet. Of its `works`, one unnamed or naming an agent
-  of depth 0 is the root itself, marked to start; when each names an agent
-  of depth 1, or, with a workflow at depth 1 and none at depth 0, none
-  names one, the root is
-  held by the run's agent and each is delegated below it, so the root's
-  run opens once they are back. `work` and
+  the run has no work yet. Of its `works`, one naming an agent of depth 0
+  — or unnamed, when depth 0 has a workflow or depth 1 no agent — is the
+  root itself, marked to start; when each names an agent of depth 1 or
+  none, the root is held by the run's agent and each is delegated below
+  it, so the root's run opens once they are back. `work` and
   `delegate` may name the new work's `agent`: one of the TOML's agents at
   its depth that is not `workflow_only`, refused when that depth has a
   workflow; unnamed, it is the first stage's agent or the depth's first
@@ -212,21 +211,19 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
-  # Works go to depth 1 when each names one of its agents, or, when only
-  # depth 1 has a workflow, when none names an agent of another depth: its
-  # first stage takes them, and delegating refuses a named one. With a
-  # workflow at depth 0 an unnamed work is the root, staged.
+  # Works go to depth 1 when each names one of its agents or names none:
+  # an unnamed work goes to the depth's first stage or first agent. Only a
+  # work naming an agent of depth 0, or an unnamed one when depth 0 has a
+  # workflow (its first stage takes the root) or depth 1 has no agent, is
+  # the root itself.
   defp down?(config, items) do
-    case {Config.workflow_for(config, 0), Config.workflow_for(config, 1)} do
-      {:off, {:ok, _steps}} ->
-        children = config.agents |> Enum.filter(fn {_name, a} -> a.depth == 1 end)
-        children = Enum.map(children, &elem(&1, 0))
-        Enum.all?(items, &(is_nil(&1["agent"]) or &1["agent"] in children))
+    children = for {name, %{depth: 1}} <- config.agents, do: name
 
-      _otherwise ->
-        children = config |> Config.agents_at_depth(1) |> Enum.map(&elem(&1, 0))
-        Enum.all?(items, &(&1["agent"] in children))
-    end
+    unnamed_down? =
+      Config.workflow_for(config, 0) == :off and
+        (Config.agents_at_depth(config, 1) != [] or Config.workflow_for(config, 1) != :off)
+
+    Enum.all?(items, &((is_nil(&1["agent"]) and unnamed_down?) or &1["agent"] in children))
   end
 
   defp work_items([_ | _] = items) do

@@ -443,7 +443,10 @@ defmodule Omunculus.Store.ActionsTest do
     defp work_emit(item, report \\ "r"),
       do: %{
         "type" => "work",
-        "body" => %{"report" => report, "works" => [Map.merge(%{"goal" => "g"}, item)]}
+        "body" => %{
+          "report" => report,
+          "works" => [Map.merge(%{"goal" => "g", "agent" => "concierge"}, item)]
+        }
       }
 
     test "creates a root work with the report as its first comment and marks it to start", %{
@@ -596,8 +599,13 @@ defmodule Omunculus.Store.ActionsTest do
     test "with workflow on sets the first stage and its agent", %{conn: conn} do
       ctx = %{@ctx | config: Fixtures.config(delivery_toml())}
 
-      assert {:ok, [_tool_event, event]} =
-               record_tool(conn, [work_emit(%{"title" => "Ship it"})], ctx)
+      # With a workflow at depth 0 an unnamed work is the root, staged.
+      unnamed =
+        update_in(work_emit(%{"title" => "Ship it"}), ["body", "works"], fn [item] ->
+          [Map.delete(item, "agent")]
+        end)
+
+      assert {:ok, [_tool_event, event]} = record_tool(conn, [unnamed], ctx)
 
       assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
       assert work.stage == "to_do"

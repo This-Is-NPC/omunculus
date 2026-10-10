@@ -48,7 +48,7 @@ defmodule Omunculus.CycleTest do
         {"lead", nil} ->
           call.("work", %{
             "report" => "planned",
-            "works" => [%{"title" => "Root", "goal" => "Ship"}]
+            "works" => [%{"title" => "Root", "goal" => "Ship", "agent" => "lead"}]
           })
 
         {"lead", "planned"} ->
@@ -214,7 +214,7 @@ defmodule Omunculus.CycleTest do
           assert {:ok, _} =
                    call.("work", %{
                      "report" => "planned",
-                     "works" => [%{"title" => "Root", "goal" => "Ship"}]
+                     "works" => [%{"title" => "Root", "goal" => "Ship", "agent" => "lead"}]
                    })
 
           # Without the root's turn, the root's run would open meanwhile.

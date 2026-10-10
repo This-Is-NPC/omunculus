@@ -20,8 +20,18 @@ defmodule Omunculus.CLITest do
     %{dir: dir}
   end
 
-  defp create_root(call, title),
+  # A work naming nobody: the root itself when depth 0 has a workflow, else
+  # handed down to depth 1.
+  defp create_unnamed(call, title),
     do: call.("work", %{"report" => "opened", "works" => [%{"title" => title, "goal" => title}]})
+
+  # The concierge opens a root for itself by naming itself.
+  defp create_root(call, title),
+    do:
+      call.("work", %{
+        "report" => "opened",
+        "works" => [%{"title" => title, "goal" => title, "agent" => "concierge"}]
+      })
 
   defp delegate_one(call, title, goal),
     do:
@@ -1025,7 +1035,7 @@ defmodule Omunculus.CLITest do
           assembled =~ "I am the concierge." ->
             if assembled =~ "## Work",
               do: call.("done", %{"report" => "built"}),
-              else: create_root(call, "Ship it")
+              else: create_unnamed(call, "Ship it")
 
             {:ok, "unused"}
 
@@ -1138,7 +1148,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         unless assembled =~ "## Work",
-          do: create_root(call, "Ship it")
+          do: create_unnamed(call, "Ship it")
 
         assert call.("bad_continue", %{}) ==
                  {:ok, Out.refused({:continue, {:forbidden, "stage"}})}
@@ -1231,7 +1241,7 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         if assembled =~ "## Work",
           do: call.("break", %{"report" => "need to pause"}),
-          else: create_root(call, "Needs help")
+          else: create_unnamed(call, "Needs help")
 
         {:ok, "unused"}
       end
@@ -1402,7 +1412,7 @@ defmodule Omunculus.CLITest do
               call.("end", %{})
 
             true ->
-              create_root(call, "Big task")
+              create_unnamed(call, "Big task")
               {:ok, "unused"}
           end
         end
@@ -1420,10 +1430,10 @@ defmodule Omunculus.CLITest do
         assert parent.waiting == nil
         assert child.state == unquote(child_state)
 
-        # With a workflow only at depth 1 the creation hands the work down
-        # itself; without one, the root's own run delegates it.
+        # The unnamed work goes down at once, so the root's own run comes
+        # only when the child is back.
         assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
-        assert length(runs) == if(unquote(workflow?), do: 3, else: 4)
+        assert length(runs) == 3
         [run2, run3] = Enum.take(runs, -2)
 
         assert run2.work_id == child.id
@@ -1482,7 +1492,7 @@ defmodule Omunculus.CLITest do
 
           true ->
             assert assembled =~ "- workflow delivery: to_do (worker) → review (concierge)"
-            create_root(call, "Big task2")
+            create_unnamed(call, "Big task2")
             {:ok, "unused"}
         end
       end
@@ -1761,7 +1771,7 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         if assembled =~ "## Work",
           do: call.("done", %{"report" => "shipped"}),
-          else: create_root(call, "Ship it")
+          else: create_unnamed(call, "Ship it")
 
         {:ok, "unused"}
       end
@@ -1809,7 +1819,7 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         if assembled =~ "## Work",
           do: call.("break", %{"report" => "need to pause"}),
-          else: create_root(call, "Needs help")
+          else: create_unnamed(call, "Needs help")
 
         {:ok, "unused"}
       end
@@ -2116,7 +2126,11 @@ defmodule Omunculus.CLITest do
             call.("end", %{})
 
           true ->
-            create_root(call, "Ship it")
+            call.("work", %{
+              "report" => "opened",
+              "works" => [%{"title" => "Ship it", "goal" => "Ship it"}]
+            })
+
             {:ok, "unused"}
         end
       end
