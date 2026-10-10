@@ -1,0 +1,5 @@
+{
+  "outcome": "break",
+  "report": "FastAPI is not installed and the network to install it was refused, so app.py was not built. We can open the network, or build it on http.server.",
+  "delete": []
+}

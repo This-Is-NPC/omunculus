@@ -65,6 +65,17 @@ defmodule EquivalentExchange.Selftest do
     end
   end
 
+  # A solution whose files are not enough — an environment the agent would
+  # have set up — is completed by its `prepare`, run in the workspace.
+  defp prepare(task, dir) do
+    prepare = Path.join([task.dir, "solution", "prepare"])
+
+    if File.regular?(prepare) do
+      {said, status} = System.cmd(prepare, [dir], stderr_to_stdout: true)
+      if status != 0, do: raise("#{task.id}: solution/prepare failed: #{said}")
+    end
+  end
+
   defp workspace(task, solution) do
     dir = Path.join(System.tmp_dir!(), "ee-selftest-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
@@ -74,6 +85,7 @@ defmodule EquivalentExchange.Selftest do
       files = Path.join([task.dir, "solution", "files"])
       if File.dir?(files), do: File.cp_r!(files, dir)
       Enum.each(solution["delete"] || [], &File.rm_rf!(Path.join(dir, &1)))
+      prepare(task, dir)
     end
 
     dir

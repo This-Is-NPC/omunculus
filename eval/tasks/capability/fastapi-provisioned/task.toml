@@ -1,0 +1,15 @@
+scenario = "capability"
+critical = false
+configurations = ["solo", "delegation", "team"]
+# The machine has no FastAPI: it is set up in the workspace, which takes
+# the network to download it, and the person allows it.
+needs = ["bash", "sandbox.write", "sandbox.network"]
+
+[expect]
+outcome = ["done", "answer"]
+
+[human]
+"fs.write" = "grant"
+"sandbox.write" = "grant"
+"bash" = "grant"
+"sandbox.network" = "grant"

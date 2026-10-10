@@ -73,7 +73,7 @@ tasks/capability/brief-to-plan/
   task.toml        what the task expects
   workspace/       the files the project starts with
   check            the verifier, run after the conversation, never by an agent
-  solution/        files/, outcome.json: what solves it, for the selftest
+  solution/        files/, outcome.json, prepare: what solves it, for the selftest
 ```
 
 ```toml
@@ -114,8 +114,10 @@ words to the person (`report`). Checks are Python and import
 `tasks/_lib/check.py`.
 
 To add a task: write its folder, then its `solution/` (the files that solve
-it under `files/`, paths to remove under `delete` in `outcome.json`, and the
-outcome it ends in), and run the selftest. It proves the check passes on the
+it under `files/`, paths to remove under `delete` in `outcome.json`, the
+outcome it ends in, and, when files are not enough — an environment an
+agent would have set up — an executable `prepare` the selftest runs in the
+solved workspace), and run the selftest. It proves the check passes on the
 solution under every configuration and fails when an untouched workspace
 claims `done`.
 
