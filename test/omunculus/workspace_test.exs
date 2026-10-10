@@ -38,7 +38,7 @@ defmodule Omunculus.WorkspaceTest do
     [agents.concierge]
     depth = 0
     text = "concierge"
-    tools = ["work", "delegate", "end", "directory", "workspaces", "read", "write", "request_access", "reply", "comment", "peek", "sandbox.write", "sandbox.network"]
+    tools = ["work", "delegate", "end", "directory", "workspaces", "read", "write", "changes", "request_access", "reply", "comment", "peek", "sandbox.write", "sandbox.network"]
 
     [agents.worker]
     depth = 1
@@ -134,6 +134,9 @@ defmodule Omunculus.WorkspaceTest do
     model = fn _assembled, _tools, call ->
       assert {:ok, ""} = call.("write", %{"path" => "note.txt", "content" => "hi\n"})
       assert {:ok, _listing} = call.("directory", %{})
+      assert {:ok, "- write (this run)\n  A note.txt (+1 -0)"} = call.("changes", %{})
+      assert {:ok, patch} = call.("changes", %{"patch" => true})
+      assert patch =~ "+hi"
       {:ok, "done"}
     end
 
