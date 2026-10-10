@@ -4,12 +4,13 @@ defmodule Omunculus.Store.ConnectionTest do
   alias Omunculus.Store
   alias Omunculus.Store.{Connection, Events, Query}
 
-  test "transactions from many processes apply one after another", %{conn: conn} do
+  test "appends from many processes, in a transaction or not, apply one after another",
+       %{conn: conn} do
+    append = fn -> Events.append(conn, %{type: "comment", body: "{}"}) end
+
     1..20
-    |> Enum.map(fn _ ->
-      Task.async(fn ->
-        Query.transaction(conn, fn -> Events.append(conn, %{type: "comment", body: "{}"}) end)
-      end)
+    |> Enum.map(fn n ->
+      Task.async(fn -> if rem(n, 2) == 0, do: Query.transaction(conn, append), else: append.() end)
     end)
     |> Task.await_many()
 

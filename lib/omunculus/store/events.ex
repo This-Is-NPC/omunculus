@@ -28,8 +28,12 @@ defmodule Omunculus.Store.Events do
     end)
   end
 
+  # The whole append runs in the connection's owner, so no other append
+  # takes the same sequence between reading the last one and inserting.
   @spec append(Omunculus.Store.Connection.t(), map) :: {:ok, map} | {:error, term}
-  def append(conn, fields) do
+  def append(conn, fields), do: Connection.run(conn, fn _db -> insert(conn, fields) end)
+
+  defp insert(conn, fields) do
     actor = Process.get(@actor_key, %{})
 
     fields =
