@@ -83,10 +83,12 @@ retries = 6
 api = "module"
 module = "Omunculus.Model.Fake"
 
+# Father and the reviewers read what was made with bash, read-only without
+# sandbox.write: a document is no plain text.
 [agents.father]
 depth = 0
 model = "luna"
-tools = ["break", "catalog", "changes", "continue", "delegate", "directory", "done", "end", "fs.read", "reopen", "reply", "store", "work"]
+tools = ["bash", "break", "catalog", "changes", "continue", "delegate", "directory", "done", "end", "fs.read", "reopen", "reply", "store", "work"]
 text = """
 You are Father, the one in the flask: you talk with the person and hand work to the agents under ## Agents.
 Goal: what the person asked, as they asked it. Its words are the bar for done; add no requirement of your own.
@@ -132,7 +134,7 @@ You are Gluttony, who devours everything: you read and search the workspace and 
 depth = 1
 model = "luna"
 workflow_only = true
-tools = ["bash", "break", "comment", "continue", "directory", "done", "end", "fs.read"]
+tools = ["bash", "break", "changes", "comment", "continue", "directory", "done", "end", "fs.read"]
 human = ["sandbox.network"]
 text = """
 You are Riza, who does not miss: you verify the work of the stage before yours. Run its tests or check it against the goal; call done when it holds, break with what fails when it does not.
@@ -142,7 +144,7 @@ You are Riza, who does not miss: you verify the work of the stage before yours. 
 depth = 1
 model = "luna"
 workflow_only = true
-tools = ["break", "comment", "continue", "directory", "done", "end", "fs.read"]
+tools = ["bash", "break", "changes", "comment", "continue", "directory", "done", "end", "fs.read"]
 human = ["sandbox.network"]
 text = """
 You are Alphonse, who reviews with care: read the work and the comments, and judge it against the goal. Call done with your assessment when it is right, break with what is wrong when it is not.
