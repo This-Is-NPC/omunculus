@@ -82,9 +82,12 @@ defmodule Omunculus.Run do
 
       try do
         with {:ok, lease} <- Limiter.acquire(local_limits, self(), :run) do
+          scratch = scratch(config)
+
           try do
-            start(project, config, opening)
+            start(project, config, opening, scratch)
           after
+            File.rm_rf(scratch)
             Limiter.release(local_limits, lease, :run)
           end
         end
@@ -92,6 +95,16 @@ defmodule Omunculus.Run do
         if global_lease, do: Limiter.release(project.global_limits, global_lease, :run)
       end
     end
+  end
+
+  @doc "Where the scratch of a run of the project at `config` goes: beside its store."
+  @spec scratch_root(Config.t()) :: String.t()
+  def scratch_root(config), do: config.store.path <> ".scratch"
+
+  defp scratch(config) do
+    dir = Path.join(scratch_root(config), Omunculus.Id.new())
+    File.mkdir_p!(dir)
+    dir
   end
 
   defp acquire_global(nil), do: {:ok, nil}
@@ -106,7 +119,8 @@ defmodule Omunculus.Run do
            request_id: request_id,
            via: via,
            agent: agent
-         } = opening
+         } = opening,
+         scratch
        ) do
     with {:ok, work} <- fetch_work(project.conn, work_id),
          {:ok, config} <-
@@ -159,6 +173,7 @@ defmodule Omunculus.Run do
              names,
              Catalog.implementation_roots(catalog) ++ mcp_roots
            ),
+         execution = Policy.with_scratch(execution, scratch),
          {:ok, assemble_name} <- assemble_tool(config, name),
          {:ok, run} <-
            Store.begin_run(project.conn, %{

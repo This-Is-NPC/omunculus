@@ -30,6 +30,10 @@ defmodule Omunculus.Project do
 
     with :ok <- File.mkdir_p(Path.dirname(store)),
          {:ok, lock} <- maybe_lock(store, opts) do
+      # Holding the project alone, no run of it is open: any scratch left is
+      # of a run that ended without cleaning up.
+      if lock, do: File.rm_rf(Omunculus.Run.scratch_root(config))
+
       case Store.open(store) do
         {:ok, conn} ->
           {:ok, %__MODULE__{dir: config.root, conn: conn, config_path: config.path, lock: lock}}

@@ -21,7 +21,7 @@ defmodule Omunculus.Execution.Policy do
     :tools,
     :sandbox
   ]
-  defstruct @enforce_keys
+  defstruct @enforce_keys ++ [scratch: nil]
 
   @type t :: %__MODULE__{
           id: String.t(),
@@ -41,6 +41,7 @@ defmodule Omunculus.Execution.Policy do
             queue_timeout_ms: pos_integer
           },
           tools: [String.t()],
+          scratch: String.t() | nil,
           sandbox: %{
             script: String.t(),
             command: [String.t()],
@@ -73,6 +74,17 @@ defmodule Omunculus.Execution.Policy do
            ) do
       {:ok, policy}
     end
+  end
+
+  @doc """
+  The policy with `dir` as the run's scratch: every command of the run
+  sees it as `/tmp`, its home within, so what one leaves there the next
+  finds, outside the workspace.
+  """
+  @spec with_scratch(t, String.t()) :: t
+  def with_scratch(%__MODULE__{} = policy, dir) do
+    policy = %{policy | scratch: dir}
+    %{policy | id: policy_id(policy)}
   end
 
   @spec restricted(Config.t(), map, String.t(), [String.t()]) :: {:ok, t} | {:error, term}
@@ -133,6 +145,7 @@ defmodule Omunculus.Execution.Policy do
   def serializable(%__MODULE__{} = policy) do
     %{
       "id" => policy.id,
+      "scratch" => policy.scratch,
       "workspace" => %{"name" => policy.workspace.name, "root" => policy.workspace.root},
       "read_only" => policy.read_only,
       "read_write" => policy.read_write,

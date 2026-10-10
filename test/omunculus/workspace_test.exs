@@ -203,6 +203,29 @@ defmodule Omunculus.WorkspaceTest do
     refute File.exists?(Path.join(one, "note.txt"))
   end
 
+  test "a run's scratch goes when it ends, and what a run left is swept when the project opens",
+       %{dir: dir, one: one, two: two, three: three} do
+    write_config(dir, base_toml(one, two, three))
+    {:ok, config} = Config.load(Path.join(dir, "omunculus.toml"))
+    root = Omunculus.Run.scratch_root(config)
+    test = self()
+
+    model = fn _assembled, _tools, _call ->
+      send(test, {:scratch, File.ls!(root)})
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(dir, model)
+    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+    assert_received {:scratch, [_one_run]}
+    assert File.ls!(root) == []
+
+    File.mkdir_p!(Path.join(root, "left-by-a-crash"))
+    {:ok, project} = Project.open(config, lock: true)
+    Project.close(project)
+    refute File.exists?(root)
+  end
+
   test "a work created with workspace two has write absent from the run's tools", %{
     dir: dir,
     one: one,

@@ -22,6 +22,27 @@ defmodule Omunculus.Execution.BubblewrapTest do
              Omunculus.Execution.run(command, policy(workspace), "hello\n")
   end
 
+  test "a run's scratch is the /tmp and home every command of it shares, outside the workspace",
+       %{workspace: workspace} do
+    scratch = Omunculus.Fixtures.tmp_dir()
+    policy = Policy.with_scratch(policy(workspace), scratch)
+
+    run = fn script ->
+      Omunculus.Execution.run(elem(Command.new("/usr/bin/sh", ["-c", script]), 1), policy)
+    end
+
+    assert {:ok, %{status: 0}} = run.("echo kept > /tmp/note && echo home > $HOME/profile")
+    assert {:ok, %{stdout: "kept\nhome\n"}} = run.("cat /tmp/note $HOME/profile")
+    assert File.read!(Path.join(scratch, "note")) == "kept\n"
+    assert File.ls!(workspace) == []
+
+    assert {:ok, %{stdout: ""}} =
+             Omunculus.Execution.run(
+               elem(Command.new("/usr/bin/sh", ["-c", "ls /tmp | grep note || true"]), 1),
+               policy(workspace)
+             )
+  end
+
   test "runs Python from the declared runtime", %{workspace: workspace} do
     {:ok, command} = Command.new("/usr/bin/python3", ["-c", "print('python')"])
 

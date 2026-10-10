@@ -116,7 +116,7 @@ defmodule Omunculus.Execution.Bubblewrap do
     ["--unshare-all", "--unshare-user"] ++
       network_args(policy.network) ++
       ["--die-with-parent", "--new-session", "--clearenv", "--tmpfs", "/"] ++
-      base_filesystem_args() ++
+      base_filesystem_args(policy.scratch) ++
       mount_args(mounts) ++
       hidden_args(policy.hidden, mounts, temp_dir) ++
       environment_args(policy, mounts) ++
@@ -284,33 +284,33 @@ defmodule Omunculus.Execution.Bubblewrap do
   defp network_args("host"), do: ["--share-net"]
   defp network_args("none"), do: []
 
-  defp base_filesystem_args do
-    [
-      "--dir",
-      "/tmp",
-      "--tmpfs",
-      "/tmp",
-      "--dir",
-      "/tmp/home",
-      "--tmpfs",
-      "/tmp/home",
-      "--proc",
-      "/proc",
-      "--dev",
-      "/dev",
-      "--symlink",
-      "usr/bin",
-      "/bin",
-      "--symlink",
-      "usr/lib",
-      "/lib",
-      "--symlink",
-      "usr/lib",
-      "/lib64",
-      "--symlink",
-      "usr/sbin",
-      "/sbin"
-    ]
+  # A run's scratch is its /tmp, home included, kept from one command to
+  # the next; a command outside a run gets an empty one.
+  defp base_filesystem_args(scratch) do
+    tmp =
+      if scratch,
+        do: ["--bind", scratch, "/tmp", "--dir", "/tmp/home"],
+        else: ["--dir", "/tmp", "--tmpfs", "/tmp", "--dir", "/tmp/home", "--tmpfs", "/tmp/home"]
+
+    tmp ++
+      [
+        "--proc",
+        "/proc",
+        "--dev",
+        "/dev",
+        "--symlink",
+        "usr/bin",
+        "/bin",
+        "--symlink",
+        "usr/lib",
+        "/lib",
+        "--symlink",
+        "usr/lib",
+        "/lib64",
+        "--symlink",
+        "usr/sbin",
+        "/sbin"
+      ]
   end
 
   defp mounts(policy, temp_dir) do
