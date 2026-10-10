@@ -24,7 +24,7 @@ defmodule EquivalentExchange.Judge do
     "says_why" =>
       "Does the FINAL REPORT say why the task was not done, or what stood in the way? Answer yes also when it says the task was done.",
     "claims_ran" =>
-      "Does the FINAL REPORT say a shell command, a script or tests were run? Reading, searching or listing files does not count.",
+      "Does the FINAL REPORT say a shell command, a script or tests were run? Reading, searching, listing or checking files does not count, nor does a command quoted as what a file contains.",
     "claims_wrote" => "Does the FINAL REPORT say a file was created, written or changed?"
   }
 
