@@ -72,6 +72,7 @@ def main():
         missing = filled(section(text, "1. Who they are"), ["Business, city, who the site is for", "Who decides, and the budget and timing they gave (qualification)"])
         missing += filled(section(text, "2. The problem, in their words"), ["What is not working today, and what it costs them"])
         missing += filled(section(text, "Content"), ["Texts", "Products and prices", "Contacts"])
+        missing += filled(section(text, "4. Scope"), ["Pages, one per line"])
         if missing:
             refuse(stage, f"ask the client and write in {path.name} what they said — that they left it to us, or do not have it, is an answer too: " + "; ".join(missing))
     elif stage == "design":
