@@ -41,8 +41,9 @@ defmodule Omunculus.Tool.Views do
     computed by the harness for the call, each only when a view asks for
     it, through a function of the view in `computed`. `agents` takes
     `include = ["tools"]`, which gives each agent with the model tools it
-    has; when the depth below has a workflow, it is that workflow, its
-    `stages` each a `name` and an `agent`. `skills` are the Agent Skills the call's run has, each its `name`,
+    has; the workflows a work there may go through come with them, each
+    its `stages`, a `name` and an `agent` each, and whether it is
+    `required`, in which case they come alone. `skills` are the Agent Skills the call's run has, each its `name`,
     `description` and `dir`.
 
   Every read is of the call's conversation, through those relations only;
