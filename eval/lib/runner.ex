@@ -170,14 +170,11 @@ defmodule EquivalentExchange.Runner do
     {:ok, changed} = Omunculus.Changes.files(truth, before, after_)
 
     {passed, said, files} =
-      Task.check(task, workspace, %{
+      check(task, workspace, facts, %{
         outcome: outcome,
-        report: report,
         configuration: configuration,
-        works: roots(facts),
         conversation: conversation,
-        first_run_made_work: first_run_made_work(facts),
-        published: hosting && Path.join([dir, "prod", "site"])
+        dir: dir
       })
 
     File.write!(
@@ -257,10 +254,11 @@ defmodule EquivalentExchange.Runner do
     report = report(facts)
 
     {passed, said, files} =
-      Task.check(task, workspace, %{
+      check(task, workspace, facts, %{
         outcome: execution["outcome"],
-        report: report,
-        configuration: execution["configuration"]
+        configuration: execution["configuration"],
+        conversation: execution["conversation"] || [],
+        dir: Path.dirname(path)
       })
 
     execution
@@ -353,7 +351,8 @@ defmodule EquivalentExchange.Runner do
   # asked nothing, sends their next follow-up.
   # Last words the agent already said are not said again: it asked nothing.
   defp converse({config_path, project, groups, person} = at, played, follow_ups) do
-    said = report(facts(project))
+    facts = facts(project)
+    said = last_words(facts, facts.events)
 
     new? =
       String.trim(said) != "" and
@@ -411,6 +410,22 @@ defmodule EquivalentExchange.Runner do
     {:os_pid, pid} = Port.info(port, :os_pid)
     System.cmd("kill", [Integer.to_string(pid)])
     Port.close(port)
+  end
+
+  # The task's check on what the execution left: its workspace, its works,
+  # what was said and, for a task that publishes, the published copy.
+  defp check(task, workspace, facts, execution) do
+    published = Path.expand(Path.join([execution.dir, "prod", "site"]))
+
+    Task.check(task, workspace, %{
+      outcome: execution.outcome,
+      report: report(facts),
+      configuration: execution.configuration,
+      works: roots(facts),
+      conversation: execution.conversation,
+      first_run_made_work: first_run_made_work(facts),
+      published: if(task.prod, do: published)
+    })
   end
 
   # Whether the person's first message became a work at once.
@@ -547,13 +562,30 @@ defmodule EquivalentExchange.Runner do
     end
   end
 
+  # The report judged: the last words up to the root work's close, so what
+  # the person and the agent say after it is not taken for the report.
+  defp report(facts) do
+    root = Enum.find(facts.works, &is_nil(&1.parent_id))
+
+    closed =
+      Enum.find_index(Enum.reverse(facts.events), fn event ->
+        root != nil and event.work_id == root.id and event.type == "continue" and
+          is_map(event.body) and is_nil(event.body["to"])
+      end)
+
+    events =
+      if closed, do: Enum.drop(facts.events, -closed), else: facts.events
+
+    last_words(facts, events)
+  end
+
   # The last words to the person: what a depth-0 run said, or the last
   # comment an agent wrote on the root work.
-  defp report(facts) do
+  defp last_words(facts, events) do
     root = Enum.find(facts.works, &is_nil(&1.parent_id))
     top = facts.runs |> Enum.filter(&(&1.depth == "0")) |> MapSet.new(& &1.id)
 
-    facts.events
+    events
     |> Enum.flat_map(fn event ->
       cond do
         event.type == "model" and MapSet.member?(top, event.run_id) ->
