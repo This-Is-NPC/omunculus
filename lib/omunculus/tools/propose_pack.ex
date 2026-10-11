@@ -7,13 +7,14 @@ defmodule Omunculus.Tools.ProposePack do
   import, and whose `deny` calls nothing; its reason gives the agent's
   `reason`, each of the pack's agents at the depth and on the model it
   would run, and what the pack's `environment/` holds, which the person
-  runs. An import that does not load fails here, with why. Its manifest's
+  runs. An import that does not load fails here, with why, and so does one
+  whose agents lack a step their tools chain (`Omunculus.Tools.Steps`). Its manifest's
   `then` appends `end`.
   """
 
   alias Omunculus.Config
   alias Omunculus.Config.Packs
-  alias Omunculus.Tools.{Args, Out}
+  alias Omunculus.Tools.{Args, Out, Steps}
 
   @spec run(map) :: map
   def run(%{args: args, config_path: path, roots: roots}) when is_binary(path) do
@@ -23,10 +24,12 @@ defmodule Omunculus.Tools.ProposePack do
          true <- is_map(args["models"]) || "models required: each role and the model it runs on",
          {:ok, pack} <- Packs.read(dir),
          entry = entry(dir, args),
-         {:ok, config} <- Config.try_pack(path, entry) do
+         {:ok, config} <- Config.try_pack(path, entry),
+         [] <- Steps.missing(config, Map.keys(Map.get(pack, "agents", %{}))) do
       Out.ok("", [%{"type" => "request", "body" => request(args, dir, pack, entry, config)}])
     else
       {:error, reason} -> Out.fail("the config would not load with it: #{inspect(reason)}")
+      [_ | _] = missing -> Out.fail("its agents would be refused:\n" <> Enum.join(missing, "\n"))
       message -> Out.fail(message)
     end
   end
