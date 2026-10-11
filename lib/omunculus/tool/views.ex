@@ -23,7 +23,9 @@ defmodule Omunculus.Tool.Views do
   - `comments`: of the first of `from` among `work`, `request`, `inbox`
     (default all three, in that order).
   - `runs`: `relation` `last_closed` (from `work`) or `opener` (the run
-    that opened the call's `request`), with its record.
+    that opened the call's `request`), with its record, or `conversation`
+    (from `run`), for a run without a work the closed runs of its
+    conversation that had none, oldest first, each with its record.
   - `events`: `relation` `run`, the events of the call's run so far, or
     `cause`, the event that made the call's run due.
   - `requests`: from `args.request_id` then `request` (default).
@@ -125,9 +127,14 @@ defmodule Omunculus.Tool.Views do
 
   defp source_spec("runs", table, spec) do
     with :ok <- only_keys(table, ~w(relation)),
-         {:ok, relation} <- one_of(table, "relation", ~w(last_closed opener), nil),
+         {:ok, relation} <- one_of(table, "relation", ~w(last_closed opener conversation), nil),
          :ok <- required(relation, :relation) do
-      from = if relation == "last_closed", do: ["work"], else: ["request"]
+      from =
+        Map.fetch!(
+          %{"last_closed" => ["work"], "opener" => ["request"], "conversation" => ["run"]},
+          relation
+        )
+
       {:ok, %{spec | from: from, relation: relation}}
     end
   end
@@ -316,6 +323,17 @@ defmodule Omunculus.Tool.Views do
 
   defp read_from(conn, %{source: "runs", relation: "opener"}, _anchor, id, _scope),
     do: Store.opener_run(conn, id)
+
+  defp read_from(_conn, %{source: "runs", relation: "conversation"}, _anchor, _id, %{
+         work_id: work_id
+       })
+       when is_binary(work_id),
+       do: :skip
+
+  defp read_from(conn, %{source: "runs", relation: "conversation"}, _anchor, id, _scope) do
+    with {:ok, run} <- Store.view(conn, "run", id),
+         do: Store.conversation_runs(conn, run.conversation_id)
+  end
 
   defp read_from(conn, %{source: "events", relation: "run"}, _anchor, id, _scope),
     do: Store.replay(conn, {:run, id})

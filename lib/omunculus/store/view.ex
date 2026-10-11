@@ -110,14 +110,36 @@ defmodule Omunculus.Store.View do
   @spec closed_runs(Omunculus.Store.Connection.t(), String.t()) :: {:ok, [map]}
   def closed_runs(conn, work_id) do
     with {:ok, runs} <-
-           Query.all(conn, "SELECT runs.* #{@closed_runs} ORDER BY start.sequence", [work_id]) do
-      Enum.reduce_while(runs, {:ok, []}, fn run, {:ok, acc} ->
-        case with_record(conn, run) do
-          {:ok, recorded} -> {:cont, {:ok, acc ++ [recorded]}}
-          error -> {:halt, error}
-        end
-      end)
-    end
+           Query.all(conn, "SELECT runs.* #{@closed_runs} ORDER BY start.sequence", [work_id]),
+         do: with_records(conn, runs)
+  end
+
+  @doc """
+  The closed runs of a conversation that had no work, oldest first, each
+  with its record; a nil conversation is that of the calls outside one.
+  """
+  @spec conversation_runs(Omunculus.Store.Connection.t(), String.t() | nil) :: {:ok, [map]}
+  def conversation_runs(conn, conversation_id) do
+    with {:ok, runs} <-
+           Query.all(
+             conn,
+             """
+             SELECT runs.* FROM runs JOIN events AS start ON start.id = runs.event_id
+             WHERE runs.work_id IS NULL AND runs.conversation_id IS ? AND runs.status = 'done'
+             ORDER BY start.sequence
+             """,
+             [conversation_id]
+           ),
+         do: with_records(conn, runs)
+  end
+
+  defp with_records(conn, runs) do
+    Enum.reduce_while(runs, {:ok, []}, fn run, {:ok, acc} ->
+      case with_record(conn, run) do
+        {:ok, recorded} -> {:cont, {:ok, acc ++ [recorded]}}
+        error -> {:halt, error}
+      end
+    end)
   end
 
   @doc "The run that opened a request, with its record."

@@ -672,6 +672,45 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
+    test "with [policy] sessions, a message without a work continues the conversation",
+         %{dir: dir} do
+      config = Path.join(dir, "omunculus.toml")
+
+      File.write!(
+        config,
+        String.replace(
+          File.read!(config),
+          "[policy]\n",
+          "[policy]\nsession_ttl_ms = 600000\nsession_max_bytes = 1000000\n",
+          global: false
+        )
+      )
+
+      # Asks back in plain text, as a provider's reply is recorded.
+      asking = fn _assembled, _tools, _call, record, _delta, _execution ->
+        :ok = record.(%{"role" => "assistant", "content" => "Which shop is it for?"})
+        {:ok, "Which shop is it for?"}
+      end
+
+      Fixtures.use_model(dir, asking)
+      assert {:ok, _said} = CLI.run(["send", "I want a website"], dir)
+      assert {:ok, _said} = CLI.run(["send", "Doce Ana, a bakery"], dir)
+
+      project = open_project(dir)
+
+      assert {:ok, [asked, answered]} =
+               Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+
+      assert {:ok, events} = Store.replay(project.conn, {:run, answered.id})
+
+      assert %{body: body} = Enum.find(events, &(&1.type == "session"))
+      assert %{"continues" => continues, "since" => since} = Jason.decode!(body)
+      assert continues == asked.id
+      assert since == "## Message\nDoce Ana, a bakery"
+
+      Project.close(project)
+    end
+
     test "reply grant with scope agent writes the permanent grant to the project's omunculus.toml, leaves works.grants untouched, and a fresh work also gets the tool",
          %{dir: dir} do
       project = open_project(dir)

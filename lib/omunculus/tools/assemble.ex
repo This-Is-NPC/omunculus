@@ -25,7 +25,9 @@ defmodule Omunculus.Tools.Assemble do
   opening comes last.
 
   With `session_ttl_ms` and `session_max_bytes` in the args, and the
-  `session` view (the work with its closed runs), the run may continue its
+  `session` view (the work with its closed runs) or, for a run without a
+  work, the `chat` view (its conversation's closed runs that had none),
+  the run may continue its
   `agent`'s paused session (`Omunculus.Tools.Session`): the output's
   `session` then carries the history and `since`, what happened since the
   pause — the results, the request, the inbox and the message, or that
@@ -67,14 +69,25 @@ defmodule Omunculus.Tools.Assemble do
     context
     |> Enum.join("\n\n")
     |> Out.ok()
-    |> put_session(session(view["session"], args, news), Enum.join(instructions, "\n\n"), cards)
+    |> put_session(
+      session(session_runs(view), args, news),
+      Enum.join(instructions, "\n\n"),
+      cards
+    )
   end
 
+  # A run with a work goes on with the work's runs; one without, with its
+  # conversation's.
+  defp session_runs(%{"session" => %{runs: runs}}), do: runs
+  defp session_runs(%{"chat" => runs}), do: runs
+  defp session_runs(_view), do: nil
+
   defp session(
-         %{runs: runs},
+         runs,
          %{"session_ttl_ms" => ttl_ms, "session_max_bytes" => max_bytes} = args,
          news
-       ) do
+       )
+       when is_list(runs) do
     Session.history(runs, %{
       agent: args["agent"],
       now: DateTime.utc_now(),
@@ -86,7 +99,7 @@ defmodule Omunculus.Tools.Assemble do
     })
   end
 
-  defp session(_work, _args, _news), do: nil
+  defp session(_runs, _args, _news), do: nil
 
   # An assembled prompt parted into its instructions and its context.
   defp split(assembled) when is_binary(assembled) do

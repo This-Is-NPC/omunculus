@@ -1,10 +1,11 @@
 defmodule Omunculus.Tools.Session do
   @moduledoc """
   The conversation an agent's run continues. A session is one agent's turn
-  on a work: its runs pause (a request, children working, a retry) until
-  one hands the work on with `continue` or `break`, or opens a root of its
-  own. `history/2` rebuilds
-  the session the work's last closed run belongs to, from what the store
+  on a work, or, without a work, in a conversation: its runs pause (an
+  answer, a request, children working, a retry) until one hands the work
+  on with `continue` or `break`, or opens a root of its own. `history/2`
+  rebuilds the session the last of the work's or the conversation's closed
+  runs belongs to, from what the store
   recorded, when the call's run may continue it: that run is the agent's,
   paused, closed within `ttl_ms`, and every model call of the session has
   its recorded result. It starts at the session's first run — the context
@@ -25,7 +26,7 @@ defmodule Omunculus.Tools.Session do
   @type item :: %{String.t() => term}
 
   @doc """
-  The session the work's closed `runs` (oldest first, with their record)
+  The session the closed `runs` (oldest first, with their record)
   end in, as `%{"continues" => run_id, "instructions" => text, "history" =>
   [item]}`, or nil: the session goes on under the instructions it started
   with, so its requests keep the same start.

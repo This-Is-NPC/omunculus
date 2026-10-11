@@ -53,6 +53,10 @@ relation = "last_closed"
 source = "works"
 include = ["runs"]
 
+[views.chat]
+source = "runs"
+relation = "conversation"
+
 [views.results]
 source = "works"
 relation = "children"
