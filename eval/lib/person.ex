@@ -41,7 +41,7 @@ defmodule EquivalentExchange.Person do
          ) do
       {:ok, %Req.Response{status: 200, body: %{"content" => content}}} ->
         said = Omunculus.Tools.Record.said(%{"content" => content}) |> String.trim()
-        {:ok, if(said == "NOTHING", do: :nothing, else: said)}
+        {:ok, if(said in ["", "NOTHING"], do: :nothing, else: said)}
 
       {:ok, %Req.Response{status: status, body: body}} ->
         {:error, {:person, status, body}}

@@ -354,7 +354,10 @@ defmodule EquivalentExchange.Runner do
   # Last words the agent already said are not said again: it asked nothing.
   defp converse({config_path, project, groups, person} = at, played, follow_ups) do
     said = report(facts(project))
-    new? = said not in for({"agent", earlier} <- played.conversation, do: earlier)
+
+    new? =
+      String.trim(said) != "" and
+        said not in for({"agent", earlier} <- played.conversation, do: earlier)
 
     conversation =
       if new?, do: played.conversation ++ [{"agent", said}], else: played.conversation
