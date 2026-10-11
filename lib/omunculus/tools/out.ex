@@ -126,7 +126,7 @@ defmodule Omunculus.Tools.Out do
   @spec closed_network() :: String.t()
   def closed_network,
     do:
-      "The network is closed in this run: downloading or reaching any host needs sandbox.network, which request_access can ask for."
+      "The network is closed in this run, also to this machine: localhost and 127.0.0.1 are the sandbox's own, so nothing listening outside it answers there. Downloading or reaching any host, local or not, needs sandbox.network, which request_access can ask for."
 
   @spec not_text(String.t(), non_neg_integer) :: String.t()
   def not_text(path, bytes), do: "#{path} is not a text file (#{bytes} bytes)"

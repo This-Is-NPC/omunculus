@@ -82,14 +82,19 @@ defmodule Omunculus.Tools.BashTest do
     assert String.ends_with?(output, Out.read_only_workspace())
   end
 
-  test "says the network is closed when a command cannot reach a host", %{root: root} do
-    script = ~s|python3 -c "import socket; socket.gethostbyname('pypi.org')"|
-    input = %{@input | args: %{"command" => script}, roots: [root]}
+  test "says the network is closed when a command cannot reach a host, even this machine",
+       %{root: root} do
+    for script <- [
+          ~s|python3 -c "import socket; socket.gethostbyname('pypi.org')"|,
+          ~s|python3 -c "import socket; socket.create_connection(('127.0.0.1', 9))"|
+        ] do
+      input = %{@input | args: %{"command" => script}, roots: [root]}
 
-    assert %{"ok" => false, "output" => output} =
-             Bash.run(input, policy(root, network: "none"))
+      assert %{"ok" => false, "output" => output} =
+               Bash.run(input, policy(root, network: "none"))
 
-    assert String.ends_with?(output, Out.closed_network())
+      assert String.ends_with?(output, Out.closed_network()), script
+    end
   end
 
   test "refuses without a command", %{root: root} do

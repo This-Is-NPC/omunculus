@@ -56,8 +56,8 @@ defmodule Omunculus.Tools.Bash do
   defp read_only(_policy), do: ""
 
   # What a command prints when it reaches for a network the run does not
-  # have: no name resolves, no connection opens.
-  @offline ~r/name resolution|Could not resolve|Network is unreachable|Failed to establish a new connection|Temporary failure|getaddrinfo|No address associated/i
+  # have: no name resolves, no connection opens, not even to localhost.
+  @offline ~r/name resolution|Could not resolve|Network is unreachable|Failed to establish a new connection|Temporary failure|getaddrinfo|No address associated|Connection refused|Failed to connect|Could not connect/i
 
   defp closed_network(%Policy{network: "none"}, output),
     do: if(Regex.match?(@offline, output), do: "\n" <> Out.closed_network(), else: "")
