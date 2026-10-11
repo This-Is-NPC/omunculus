@@ -3,7 +3,9 @@
 Specification for Omakiten plan `generic-requests`, task 3277. This document
 records the current implementation and a proposed contract for approval.
 The proposed contract is not implemented by this documentation commit.
-Tasks 3278–3282 remain gated on the user's approval of this specification.
+The user authorized implementation after clarifying participant-neutral
+routing, multiple requests in the existing inbox, and pause/resume semantics.
+The implementation tasks record which parts of this contract are delivered.
 
 ## Current implementation
 
@@ -36,31 +38,50 @@ neither a linked request nor a route back through intermediate agents.
 
 ## Proposed request contract
 
-A request is anything one agent needs another participant to answer before
-its work can continue. Questions, decisions, permissions and release approval
-share the same store actions, authorization, comments, events and reply path.
-Their tools supply different question and option content.
+A request is anything one participant needs another participant to answer
+before proceeding. A participant may be a human or an agent, as requester,
+receiver, intermediary or final answerer. Questions, decisions, permissions
+and release approval share the same store actions, authorization, comments,
+events and reply path. Tools and human command interfaces supply the question
+and option content through that same contract.
+
+**The requester does not need to know whether a request will pass through
+humans, agents or both.** Creating a request states the need and its origin;
+it does not require choosing a recipient type, naming every intermediary or
+knowing the eventual answerer. A receiver sees a pending request it can answer
+or escalate through the same contract. Human-to-human, human-to-agent,
+agent-to-human and agent-to-agent requests are all valid compositions.
+
+Identity and authority remain explicit internally for authentication, access
+checks, effect authorization and audit. They do not select different request
+protocols. Delivery activates an agent run or presents an item to a human;
+that is the system's responsibility, not a distinction the requester must
+manage. Human input is delivered through the command interface and requires
+no synthetic agent run.
 
 | Component | Contract |
 | --- | --- |
 | Question | Nonempty text, stored as `reason` and the opening request comment. It says what is needed and why. |
 | Options | An immutable map from answer names to ordered `{name, args}` calls. An empty map means a free-text question. An option with no calls is a named decision. |
-| Answerer | A resolved agent arbiter and its work when applicable, or the human. Resolution follows the work's parent chain; depth alone never selects an agent. |
+| Answerer | A participant resolved by the configured workflow routing, with a work when applicable. Its human or agent identity is internal authorization and delivery metadata. |
 | Effect | A nonempty reply `body`, optionally a chosen option whose calls execute. Text alone executes no calls and confers no permission. |
-| Origin | The requesting run, agent, conversation and optional work, plus workflow and stage at the moment of asking. Escalated requests retain links to their immediate origins. |
+| Origin | The authenticated requesting participant, conversation and optional run/work, plus workflow and stage at the moment of asking when applicable. Escalated requests retain links to their immediate origins. |
 
 The stored origin identifies the asker even if its work later advances to
-another stage or is assigned to another agent. Capture workflow and stage in
-the immutable opening event, alongside the existing IDs. Do not infer the
-historical stage from a work's current stage. A workless request has a run and
-conversation, with no invented work or stage.
+another stage or is assigned to another participant. Capture workflow and
+stage in the immutable opening event, alongside the existing IDs. Do not
+infer the historical stage from a work's current stage. A request without a
+work has a conversation and participant, with no invented work or stage. A
+human-origin request requires no `run_id` or agent identity: use the
+verified principal, never a client-supplied claim of authorship.
 
 `ask` is the question/decision form: `question` is required; `options` is
 optional, and when supplied names distinct answers with empty call lists.
 `request_access` is the permission form: it builds the existing grant and deny
 options for tools, paths, directories and sandbox resources. Both emit the
-same `request` action and end the asking run. There is no second request
-engine or request-kind-specific lifecycle.
+same `request` action and end the asking run when invoked by a model.
+Human creation uses the same store contract through authorized CLI/HTTP
+commands. There is no second request engine or participant-specific lifecycle.
 
 `reply` takes `request_id`, a nonempty `body` and an optional `option`. An
 omitted option answers with text alone, including when the request offers
@@ -78,43 +99,54 @@ TOML layer before dependent runs become due.
 
 ### Routing and authority
 
-An ordinary question goes first to the parent work's agent, or to the human
-when there is no parent. A receiver answers what it knows and escalates what
-it cannot answer. The depth-0 agent handling the client's conversation is
-the generalist for that conversation; there is no new globally hardcoded
-agent named generalist.
+The user's TOML defines workflow routing and the participants responsible
+for its decisions. The system resolves the next receiver from that routing
+and the request's context. A parent-work route remains useful for agent work,
+but it is not the universal route: a pipeline may place humans between
+agents, agents between humans, or several participants of either kind in
+sequence. Depth alone never identifies a receiver. No receiver or fallback
+to a human is silently invented when routing cannot resolve one; refuse with
+the missing routing context. Routing configuration remains in TOML.
 
-A permission request also travels through the parent chain. An intermediate
-agent can answer only with options it is authorized to execute for the
-original requester. A human-only capability, including `promote` in the dream
-team, still requires a human's selected grant option. Its presence does not
-skip the intervening agents. An agent unable to grant it can collect the
-context and escalate it. Blocked capabilities remain refusals, not escalations.
+A receiver answers what it knows and escalates what it cannot answer. The
+requester receives its answer through the original request, independently of
+how many human or agent intermediaries were involved. The generalist is a
+configured responsibility for collecting a client's questions, not a new
+hardcoded agent or a requirement that every pipeline ends at a human.
 
-Explicit `to = person` and harness retry/cancel requests retain their human
-endpoint. Owner and client describe people in the pack's question and
-conversation context. The existing membership and command authorization
-checks decide which human principal may answer; this plan introduces no new
-owner/client identity tables or automatic claim that any client can authorize
-project changes. Packs must distinguish an owner's approval from a client's
-content answer. If separate owner/client principal routing is required beyond
-the current access model, that needs a separately approved contract.
+Permissions follow the same route. The system authorizes each selected
+option for its original target using the answering participant's identity
+and applicable ceiling/access rules. Existing human-only capabilities,
+including `promote` in the dream team, still require an authorized human's
+selected grant option. That constraint is enforced internally; it neither
+requires the requester to locate a human nor skips configured intermediaries.
+Text cannot substitute for a grant. Blocked capabilities remain refusals.
+
+Owner and client are workflow responsibilities, not different request
+protocols. A client's content response does not authorize an owner's release
+decision unless that principal has the required authority. A human receiver
+can answer, merge or escalate through the same authorized actions as an agent.
+An explicit logical destination may identify a workflow responsibility when
+needed; callers do not choose a transport or a human/agent branch. The current
+`to = person` shortcut is replaced by configured routing rather than retained
+as a required decision by the requester. Harness retry/cancel requests also
+use the configured responsible participant with their existing effect checks.
 
 ### States
 
 | State | Meaning and permitted progress |
 | --- | --- |
-| `waiting_agent` | Its agent arbiter may reply or escalate; an authorized human may reply. |
-| `waiting_human` | An authorized human may reply with text or an allowed option. |
+| `pending` | Awaiting its resolved receiver, who may reply or escalate. The same state applies whether requester and receiver are humans or agents. |
 | `escalated` | It is unresolved and linked into one upstream request. Its original work stays parked; answers return through that link. It is not offered as a second independent inbox item. |
 | `closed` | One reply and its effects committed. Further replies or escalation are refused. |
 
-Opening a normal request parks its work. Escalating an incoming request does
-not break or finish the origin's work. A denial closes the request and
+Opening a normal request parks its work when it has one. A human requester
+without a work receives updates and its answer on the request itself.
+Escalating an incoming request does not break or finish the origin's work. A denial closes the request and
 returns its reason; its caller decides what to do next. Selecting a cancel
 option cancels the work under the existing cancellation rules.
 
-An escalated origin returns to `waiting_agent` when its upstream answer is
+An escalated origin returns to `pending` when its upstream answer is
 available for its arbiter to distribute, or closes in the same transaction
 when a validated named part answers it. An upstream text answer without named
 parts closes only the upstream request; its linked origins remain unresolved
@@ -123,29 +155,34 @@ merely because another request mentions it.
 
 ## Escalation and return
 
-The model-facing `escalate` tool emits an `escalate` action and ends its run.
-Its inputs identify one or more received request IDs and a merged question.
-Each origin gets a distinct, stable part name in the new request. Escalation
-creates a new request by the receiving agent, resolves its next parent arbiter
-(or the human at the top), and records immutable links to the origins.
+The model-facing `escalate` tool and the human CLI/HTTP command emit the same
+`escalate` action; the tool ends its run. Inputs identify one or more received
+request IDs and a merged question. Each origin gets a distinct, stable part
+name in the new request. Escalation creates a new request by the receiving
+participant, resolves its next receiver from the configured workflow route,
+and records immutable links to the origins. Neither caller specifies whether
+the next hop is human or agent.
 
 Only the current arbiter can escalate a received request. The store requires
 all origins to be unresolved, addressed to that arbiter and in the same
 conversation. Already escalated origins, duplicate origins, self-links,
 cycles and cross-conversation merging are refused. A new request is linked
-only upward through the actual parent chain, including workflow assignees.
+along the configured escalation route, including workflow assignees and
+human responsibilities. An escalation with no valid next receiver is refused
+and leaves the original request pending with its receiver.
 One upstream request can itself be escalated at the next level.
 
 The merged question contains the context needed to answer and identifies
 which part belongs to which origin. It does not flatten origin option calls
-into new grants on the escalating agent. Permission targets remain the
-original request IDs, agents, works and scopes.
+into new grants on the escalating participant. Permission targets remain
+the original request IDs, participants, works and scopes.
 
 There are two ways to return an answer:
 
-1. **Agent distribution.** The upstream reply reopens a run of the escalating
-   arbiter with its answer and origin links. That agent replies to each origin
-   with only its relevant text and, where authorized, an option. It can answer
+1. **Receiver distribution.** The upstream reply delivers its answer and
+   origin links to the escalating participant, opening a run for an agent or
+   making the reply available to a human. That participant replies to each
+   origin with only its relevant text and, where authorized, an option. It can answer
    some and escalate the still-unanswered ones in a new round.
 2. **Named parts.** A reply may supply `parts`, a map from the upstream
    request's part names to `{body, option?, parts?}`. Nested `parts` addresses
@@ -153,31 +190,36 @@ There are two ways to return an answer:
    its target and its authorization, then applies the upstream reply and those
    origin replies through the same reply implementation in one transaction.
    Unknown parts, empty bodies, invalid options or unauthorized effects refuse
-   the entire call. Missing parts stay unresolved for agent distribution.
+   the entire call. Missing parts stay unresolved for receiver distribution.
    Deliver each resulting reply once; a later distribution cannot repeat an
    option effect already committed by a named part.
 
 A named part answers one immediate origin; nested escalation repeats this
 rule at each level, recursively using explicit nested parts. An upstream
 request with permission-bearing origins must expose their original options
-and targets so a human can select the grant on the leaf request explicitly. Free text is never parsed by the store to guess which
+and targets so an authorized participant can select the grant on the leaf
+request explicitly. Free text is never parsed by the store to guess which
 answer or permission belongs to a child. A human-authorized option can be
 applied to an origin through named parts with the human's identity retained
-in events. An agent distributing text cannot turn that text into a human
-permission or impersonate the upstream answerer.
+in events. No intermediary, human or agent, can turn an upstream text answer
+into another participant's permission or impersonate the upstream answerer.
 
 An arbiter may receive a request while its own work waits on children.
 Escalation must preserve that existing wait: it must not overwrite the
 parent's `waiting_for` with the new request or require a `break` to proceed.
-The upstream reply makes an arbiter run due even while that work still waits
-on the original children. Replying to those children lets their ordinary work
+For an agent receiver, the upstream reply makes an arbiter run due even
+while that work still waits on the original children. Replying to those children lets their ordinary work
 runs resume; the parent's own work resumes when the existing child-wait rule
-allows it. A workless arbiter resumes in its original conversation.
+allows it. A workless agent arbiter resumes in its original conversation.
+A human arbiter receives the same answer and origin links without opening a
+run; a later reply uses the same authorization and state checks.
 
 Closing an arbiter run after it explicitly escalated must not trigger today's
 `unanswered` shortcut to the human. Replace that shortcut with the same linked
-single-origin escalation path for an unanswered request; no parallel in-place
-arbiter rewrite remains. Request and reply events remain the causes of the
+single-origin escalation path along the configured route for an unanswered
+agent-run request; no parallel in-place arbiter rewrite remains. A pending
+human request does not imply a model run or model retry policy; closing an
+unrelated agent run cannot escalate it automatically. Request and reply events remain the causes of the
 runs they open. The harness schedules and applies; tools build the merged
 question, filter requests and format the model's context.
 
@@ -200,13 +242,35 @@ and to the tone origin with the tone answer. Both works resume. Alternatively,
 explicit named parts produce the same origin replies without an extra
 interpretation run. Neither worker receives the other worker's answer.
 
+### Mixed participant edge cases
+
+| Pipeline or event | Required behavior |
+| --- | --- |
+| Human → agent → human → agent | The initiating human creates one request without knowing the hop types. Each receiver answers or escalates; the answer returns through recorded origins to that human. |
+| Agent → human → human | The first human may merge/escalate to the next configured responsibility. The agent sees a pending request and eventually its answer, with no human-specific procedure. |
+| Human → human | Creation, partial replies, escalation and closure use the same actions; no synthetic agent or run is introduced. |
+| One merged request contains agent and human origins | Merge only when the same authorized receiver and conversation apply. Return each part to its own origin, using a run or human interface internally as appropriate. |
+| A content answer and a privileged approval arrive together | Authorize each selected effect against the actual answering identity and original target. Participant-neutral routing does not grant authority or turn content into approval. |
+| No route exists, or a route loops | Refuse creation/escalation without mutating the origin. Do not guess a human fallback or leave a request with no responsible receiver. |
+| A human and an agent try to answer the same request | The first authorized valid transition commits. Reject the later transition without repeating effects. |
+
 ## Store schema change
 
-**The only database change in this plan is the request escalation schema
-change in task 3279.** Task 3278 uses the existing options, comments and events
-for free-text replies; task 3280 adds a view, not another inbox table.
+**The only database change in this plan is the participant-neutral request
+and escalation schema revision in task 3279.** Task 3278 uses the existing
+options, comments and events for free-text replies; task 3280 evolves the existing inbox, not another inbox table or source.
 
-Extend `requests.status` to accept `escalated`. Add one relation:
+Within this single schema revision, replace the participant-dependent
+`waiting_agent` / `waiting_human` statuses with `pending`, keeping `escalated`
+and `closed`. Replace `requests.agent` with a required immutable `requester`
+identity and make `arbiter` a required resolved participant identity. Store
+these as JSON: an agent identity names its configured agent; a human identity
+contains the authenticated issuer and subject. These identities are internal
+metadata, not request arguments that let a caller impersonate a participant.
+`run_id` and `work_id` remain nullable, so human requests need no invented run.
+No old column or status remains as a compatibility alias.
+
+Add one relation:
 
 ```sql
 CREATE TABLE request_escalations (
@@ -222,9 +286,9 @@ CREATE TABLE request_escalations (
 
 The composite primary key prevents duplicate links. Each upstream request
 may have many origins. An origin can be escalated again after its upstream
-answer returns it to `waiting_agent`; keep the earlier link as history. Only
+answer returns it to `pending`; keep the earlier link as history. Only
 one upstream request may own an origin at a time: validate that the origin
-is `waiting_agent`, then insert its link and set it to `escalated` in one
+is `pending`, then insert its link and set it to `escalated` in one
 transaction. The relation is append-only; enforce that with database triggers
 like those on events. Its unique index supports reading a request's parts.
 Cycle, same-conversation and arbiter checks belong in the same store action.
@@ -238,32 +302,57 @@ and schemas. No separate answers, grants, human-role or client-inbox table is
 needed, and no configuration moves into SQLite.
 
 The schema compatibility check must reject an existing store without the new
-relation and status constraint with `store_requires_recreation`. Recreate
-stores explicitly; there is no migration, dual schema, silent upgrade or
-fallback. This specification commit changes no database and recreates no
+participant columns, relation and status constraint with
+`store_requires_recreation`. Recreate stores explicitly; there is no
+migration, dual schema, silent upgrade or fallback. This specification commit changes no database and recreates no
 user or development store.
 
-## Generalist request view
+## Inbox and multiple requests
 
-A declared view source exposes every unresolved request currently addressed
-to the run's agent, grouped by conversation, with question, origin agent,
-work, captured workflow/stage, allowed options and escalation parts. It
-includes multiple works' requests even when only one request caused the run.
-Escalated origins appear as provenance under the upstream request, not as
-duplicate questions for the generalist to answer independently.
+Use the existing inbox as the participant's communication entry point. It
+can present multiple independent requests and other communications. Each
+request remains the canonical record of its question, options, origins,
+answer and lifecycle. Inbox delivery references that request; it must not
+copy its state into a second source of truth or introduce a parallel inbox
+source or pending-count implementation.
 
-Preserve the existing conversation scope of tool hydration and membership
-checks. In a conversation-scoped run the client group is that conversation;
-the source must not expose other clients' conversations merely because the
-agent name matches. A broader caller must already have the corresponding
-read access. Grouping introduces no new permission to read across clients.
+A receiver can answer requests individually, answer some and escalate others,
+or merge several into one linked escalation. Resolving one request never
+resolves unrelated requests in the same inbox. Reading an inbox communication
+is distinct from answering a request: read status must not hide an unresolved
+request or release the requesting work. An escalated origin remains visible
+as provenance without becoming a duplicate independently actionable request.
 
-`assemble` renders this view as a section and tells the generalist to collect
-the unresolved questions into one client message per round. The view and tool
-do the selection and formatting. There is no new harness batching timer,
-message sender, configuration default or scheduling policy. A round consists
-of the pending questions visible when the agent composes its message; later
-arrivals belong to the next round.
+Evolve the existing inbox view, tool and authorized API reads to include
+request references, questions, origins, applicable options and escalation
+parts. A model's `assemble` consumes that inbox context; a human's interface
+presents the same pending requests. Neither caller needs to discover whether
+any requester, intermediary or next receiver is human or agent. Reuse the
+existing request detail view for the canonical request and its comments.
+
+Preserve conversation scoping and membership checks. Requests from multiple
+works of one conversation may be grouped; requests from different clients
+must not be combined or exposed solely because an agent name matches. The
+generalist composes one client message from the requests visible in its inbox
+at that turn. Later arrivals remain pending for a subsequent round. Selection
+and formatting belong to tools; there is no harness batching timer.
+
+## Pause and resume
+
+Opening a request through an asking tool ends the requester's current run
+through its `end` chain. The work remains waiting on that specific request;
+there is no model process or execution slot held while an answer is pending.
+Multiple requesters can therefore have pending requests in the same inbox
+without keeping their runs alive.
+
+An authorized reply resolves its request and makes a new run due for its
+requester when the work may proceed. That run receives the answer and may
+continue a rebuildable session under the configured session policy. A reply
+cannot revive a cancelled or finished work or resume a different requester
+merely because its request shares an inbox. For human requesters, delivery
+makes the answer available without inventing a model run. Escalation ends
+the intermediary's model run and preserves the origins' waits until their
+respective answers are returned.
 
 ## Mapping existing paths and gaps
 
@@ -274,37 +363,46 @@ arrivals belong to the next round.
 | `request_sandbox` | Sandbox permissions are `request_access` entries with `kind = resource`, e.g. `sandbox.write`. | No such builtin module or manifest exists at this commit. Older references in `docs/tools.md`, `docs/cycle.md`, `docs/cli.md`, `docs/ceiling.md` and `docs/possibilities.md` are stale. Correct those references when folding paths in; introduce no alias or second sandbox request tool. |
 | `reply` → `grant` / `cancel` | A selected answer applies the origin's ordered calls transactionally. | Requires an option today. Make it optional for text, expose answer text, and apply named parts through the same authorized reply path. Keep grant/cancel chain-only. |
 | Questions carried by `break`, then `reopen` | A resumable question is a request; escalation carries it upward and reply resumes it. | Design lead, designer and administrator instructions use stopping reports for missing information. Replace those question instructions with requests. Keep `break` and `reopen` for actual failed/stopped work and correction. |
-| `promote` approval | A permission request for the clerk's production tool travels through administrator/seller/generalist to the responsible human. | Dream-team seals `promote` as human-only and its clerk requests it with `request_access`, which currently jumps to the human. Preserve the human grant boundary while linking every escalation. `promote` itself remains the deployment tool and publishes only after the grant; a text approval cannot run it. |
-| `propose_config`, `propose_pack` | Decision requests with `apply` calling `configure` or `pack`, and `deny` calling nothing. | Keep validated proposals, revision checks and human authorization on the shared path. Free text records advice without applying a proposal. |
-| Harness retry / cancel | Human decision request after root retry exhaustion. | Keep named effect options and text replies; a text-only reply reopens the requester without cancelling it. Child exhaustion remains a genuine break. |
+| `promote` approval | A permission request for the clerk's production tool follows the configured decision route, regardless of intermediary type. | Dream-team seals `promote` as human-only and its clerk requests it with `request_access`, which currently jumps to the human. Preserve the human grant boundary internally while linking every escalation; the requester does not choose a human endpoint. `promote` itself remains the deployment tool and publishes only after the grant; a text approval cannot run it. |
+| `propose_config`, `propose_pack` | Decision requests with `apply` calling `configure` or `pack`, and `deny` calling nothing. | Keep validated proposals, revision checks and human authorization on the shared path. Free text records advice without applying a proposal. Resolve the configured responsibility without requiring the asker to identify its participant type. |
+| Harness retry / cancel | Decision request to the configured responsible participant after root retry exhaustion. | Keep named effect options and text replies; a text-only reply reopens the requester without cancelling it. Child exhaustion remains a genuine break. |
 | Unanswered arbiter run | Single-origin linked escalation. | Today it rewrites the arbiter to human in place. Remove that shortcut in favor of the common escalation path; an explicitly escalated origin must not escalate twice. |
+| Human-origin requests | The same request contract with an authenticated human requester and optional work, without a model run. | The current schema requires an agent requester. Replace that assumption in the single schema revision, expose authorized creation/escalation commands, and use the same delivery, reply and effect rules. |
 | Seller comments and front-desk forwarding | Generalist asks the client a combined request and routes each answer back to its origin. | Sales currently forwards every message and the seller comments its own questions; it has no shared request inbox. Update pack tools, stage ceilings and instructions so questions use requests and client replies resolve them. Preserve ordinary messages and work creation. |
 
 ## Acceptance boundary
 
 Task 3277 delivers this specification and source-grounded mapping only.
-Approval is required before implementing the following checks:
+Implementation is verified by the following checks:
 
 - **3278:** Store, tool and HTTP/CLI contracts accept text replies to both an
   agent arbiter and the human; comments and assembled context carry the answer;
   invalid options still fail and text executes no option calls.
-- **3279:** Three-level escalation merges two origins, returns each answer to
-  its own work, preserves a parent's child wait and retains human authority on
+- **3279:** Apply the single participant-neutral schema revision. Three-level
+  escalation merges two origins, returns each answer to its own work, preserves a parent's child wait and retains human authority on
   grants. Cover duplicate/closed origins, cross-conversation attempts, partial
-  named answers, rollback and store recreation. Remove in-place escalation.
-- **3280:** View and assemble tests show two pending requests from different
-  works of one conversation together, with origin and question, without leaking
-  another conversation or duplicating escalated origins.
+  named answers, rollback and store recreation. Exercise mixed participant
+  origins and receivers, including requests with no originating run. Remove
+  in-place escalation and participant-dependent waiting statuses.
+- **3280:** Existing inbox view, tool/API and assemble tests show two pending
+  requests from different works of one conversation together. Each references
+  its canonical request with origin and question. Reading does not resolve
+  requests; answering one does not resolve another. Do not leak another
+  conversation, duplicate escalated origins or add a parallel pending source.
 - **3281:** Question and permission forms use the same request/reply/escalation
   implementation. Production approval climbs the chain and is granted only by
   the authorized human. Remove replaced code and stale tool references; update
-  AGENTS.md and runtime docs to the behavior on that commit.
+  AGENTS.md and runtime docs to the behavior on that commit. Human CLI/HTTP
+  creation and escalation use the same actions as model tools. Verify human →
+  human, human → agent → human and agent → human → agent routes without the
+  requester supplying recipient types. Resolve routing from TOML and verify
+  missing routes are refused without a hardcoded fallback.
 - **3282:** Update agency packs and record a passing `design-to-build` eval
   execution, its result path and measured client question messages per round.
   Questions from seller, design lead and administrator are batched into one
   client message per round and their answers resume the original works.
 
 Before each commit, run `mise run pre-commit`, `mise run validate:regular` and
-`mix compile --warnings-as-errors` in the isolated worktree. No push. Task 3277
-stays in review until the user approves this document; later tasks stay in
-backlog during that review.
+`mix compile --warnings-as-errors` in the isolated worktree. No push. Task 3283 records the pause/resume contract and focused lifecycle coverage.
+Work proceeds through the approved implementation tasks; record commits,
+validation and review evidence on the board.
