@@ -579,7 +579,8 @@ defmodule EquivalentExchange.Runner do
       Enum.any?(waiting, &(requested(Jason.decode!(&1.options)) != [])) -> "waiting"
       waiting != [] -> "stalled"
       broke or (root && root.state == "cancelled") -> "break"
-      is_nil(root) -> "answer"
+      # Open and waiting on no one: its agent answered and waits for the person.
+      is_nil(root) or root.state == "open" -> "answer"
       true -> "stalled"
     end
   end
