@@ -30,8 +30,8 @@ defmodule EquivalentExchange.Runner do
   nothing; then each of the task's `follow_ups` is sent the same way. Only
   the execution's timeout bounds how long it goes on. A task with `deploy`
   publishes to the deploy environment (`EquivalentExchange.Deploy`); what
-  production serves for the app it published is copied for the check, then
-  the app is removed.
+  production serves for the app it promoted is copied for the check, then
+  every app it published is removed.
   """
 
   alias EquivalentExchange.{Deploy, Judge, Person, Project, Resources, Score, Task}
@@ -168,9 +168,15 @@ defmodule EquivalentExchange.Runner do
     duration = System.monotonic_time(:millisecond) - started
     facts = facts(project)
 
-    if app = task.deploy && Deploy.published(facts.events) do
-      Deploy.mirror(app, Path.join([dir, "prod", "site"]))
-      Deploy.destroy(app)
+    if task.deploy do
+      case Deploy.published(facts.events) do
+        [] ->
+          :ok
+
+        [app | _others] = apps ->
+          Deploy.mirror(app, Path.join([dir, "prod", "site"]))
+          Enum.each(apps, &Deploy.destroy/1)
+      end
     end
 
     outcome = outcome(facts, status)

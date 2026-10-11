@@ -4,9 +4,10 @@ defmodule EquivalentExchange.Deploy do
   publish (`deploy`): two Dokku instances, homologation and production,
   whose sockets and keys `environment/0` hands to the deploy tools through
   the variables the dream team's config reads. The tools name each project's
-  apps apart; `published/1` finds, in an execution's events, the app it
-  published, `mirror/2` copies what production serves for it, for the
-  check, and `destroy/1` removes it from both.
+  apps apart; `published/1` finds, in an execution's events, the apps
+  it published, the one it promoted first, `mirror/2` copies what
+  production serves for an app, for the check, and `destroy/1` removes it
+  from both.
   """
 
   @deploy Path.expand("../../packs/dream-team/environment/.state", __DIR__)
@@ -28,23 +29,25 @@ defmodule EquivalentExchange.Deploy do
     end
   end
 
-  @doc "The app an execution's deploy tools published, from what they answered."
-  @spec published([map]) :: String.t() | nil
+  @doc """
+  The apps an execution's deploy tools published, from what they answered:
+  the last one promoted to production first, then the others.
+  """
+  @spec published([map]) :: [String.t()]
   def published(events) do
-    Enum.find_value(events, fn
-      %{type: "tool", body: %{"name" => name, "ok" => true, "output" => output}}
-      when name in ["deploy_preview", "promote"] ->
-        case Regex.run(
-               ~r"http://([a-z0-9-]+?)(?:-hml)?\.(?:homologation|production)\.localhost",
-               output
-             ) do
-          [_, app] -> app
-          nil -> nil
-        end
+    apps =
+      for %{type: "tool", body: %{"name" => name, "ok" => true, "output" => output}} <- events,
+          name in ["deploy_preview", "promote"],
+          [_, app] <- [
+            Regex.run(
+              ~r"http://([a-z0-9-]+?)(?:-hml)?\.(?:homologation|production)\.localhost",
+              output
+            )
+          ],
+          do: {name, app}
 
-      _other ->
-        nil
-    end)
+    promoted = for {"promote", app} <- Enum.reverse(apps), do: app
+    Enum.uniq(promoted ++ Enum.map(apps, &elem(&1, 1)))
   end
 
   @doc "Copies the pages and files production serves for `app`, reached from its index, into `dir`."
