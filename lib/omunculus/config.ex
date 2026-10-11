@@ -323,6 +323,27 @@ defmodule Omunculus.Config do
     end)
   end
 
+  @doc """
+  Writes `entry` — a pack's `path`, with its `models` and `auth` maps — to
+  the `[[packs]]` of the TOML at `path`, in place of an entry for the same
+  folder, when the config then loads.
+  """
+  @spec import_pack(String.t(), map) :: {:ok, t} | {:error, term}
+  def import_pack(path, %{"path" => folder} = entry) do
+    :global.trans({{__MODULE__, path}, self()}, fn ->
+      dir = Path.dirname(Path.expand(path))
+      same = &(Path.expand(&1["path"] || "", dir) == Path.expand(folder, dir))
+
+      with {:ok, data} <- read(path),
+           packs = Enum.reject(Map.get(data, "packs", []), same) ++ [entry],
+           data = Map.put(data, "packs", packs),
+           {:ok, config} <- parse(data, path, true),
+           :ok <- replace(path, data) do
+        {:ok, config}
+      end
+    end)
+  end
+
   defp replace(path, data) do
     temporary = "#{path}.#{Omunculus.Id.new()}"
 

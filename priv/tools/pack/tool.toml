@@ -1,0 +1,23 @@
+name = "pack"
+kind = "tool"
+triggers = ["cli"]
+description = "Imports the pack in path into the project: writes it to [[packs]] with the models its roles run on and the logins its providers stand for, and copies its workspace/ files where none are; without them, says what it needs."
+tags = ["cli", "pack"]
+groups = ["cli"]
+module = "Omunculus.Tools.Pack"
+
+[parameters]
+type = "object"
+required = ["path"]
+
+[parameters.properties.path]
+type = "string"
+description = "The pack's folder, relative to the config's directory."
+
+[parameters.properties.models]
+type = "string"
+description = "role=model pairs, comma separated: the config's model each role runs on."
+
+[parameters.properties.auth]
+type = "string"
+description = "provider=login pairs, comma separated: the config's [auth] provider each of the pack's stands for."

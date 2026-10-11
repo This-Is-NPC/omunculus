@@ -93,6 +93,75 @@ defmodule Omunculus.Fixtures do
     apply_defaults(dir, opts)
   end
 
+  @doc """
+  A pack named `team` in `dir/team`: two agents on its role `lead`, a
+  workflow, a tool secret on its provider `vault`, a depth layer, an empty
+  `tools/`, an `AGENTS.md` for the workspace and an environment script.
+  """
+  @spec pack(String.t()) :: String.t()
+  def pack(dir) do
+    pack = Path.join(dir, "team")
+    File.mkdir_p!(Path.join(pack, "tools"))
+    File.mkdir_p!(Path.join(pack, "workspace"))
+    File.mkdir_p!(Path.join(pack, "environment"))
+    File.write!(Path.join([pack, "workspace", "AGENTS.md"]), "# Team rules\n")
+    File.write!(Path.join([pack, "environment", "up"]), "#!/bin/sh\n")
+
+    File.write!(Path.join(pack, "pack.toml"), """
+    [pack]
+    name = "team"
+    roles = ["lead"]
+    auth = ["vault"]
+
+    [agents.chief]
+    depth = 0
+    model = "lead"
+    text = "chief"
+    tools = ["end"]
+
+    [agents.hand]
+    depth = 1
+    model = "lead"
+    text = "hand"
+    tools = ["end"]
+
+    [workflows.line]
+    steps = [{ name = "make", agent = "hand" }]
+
+    [secrets.deploy]
+    KEY = "vault"
+
+    [policy.depth.1]
+    workflow = "line"
+    """)
+
+    pack
+  end
+
+  @doc """
+  Writes, in `dir`, a config with what a pack's roles and providers map to —
+  the model `fast` and the login `mine` — then `toml`; returns its path.
+  """
+  @spec write_pack_config(String.t(), String.t()) :: String.t()
+  def write_pack_config(dir, toml \\ "") do
+    write_config(dir, """
+    [models.fast]
+    api = "module"
+    module = "Omunculus.Model.Fake"
+
+    [auth]
+    store = "auth.json"
+
+    [auth.mine]
+    kind = "api_key"
+    key = "secret"
+
+    #{toml}
+    """)
+
+    config_path(dir)
+  end
+
   @doc "A fresh directory under the system temp dir, removed when the test exits."
   @spec tmp_dir() :: String.t()
   def tmp_dir do

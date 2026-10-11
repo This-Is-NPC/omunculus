@@ -5,58 +5,10 @@ defmodule Omunculus.Config.PacksTest do
 
   setup do
     dir = Fixtures.tmp_dir()
-    pack = Path.join(dir, "team")
-    File.mkdir_p!(Path.join(pack, "tools"))
-
-    File.write!(Path.join(pack, "pack.toml"), """
-    [pack]
-    name = "team"
-    roles = ["lead"]
-    auth = ["vault"]
-
-    [agents.chief]
-    depth = 0
-    model = "lead"
-    text = "chief"
-    tools = ["end"]
-
-    [agents.hand]
-    depth = 1
-    model = "lead"
-    text = "hand"
-    tools = ["end"]
-
-    [workflows.line]
-    steps = [{ name = "make", agent = "hand" }]
-
-    [secrets.deploy]
-    KEY = "vault"
-
-    [policy.depth.1]
-    workflow = "line"
-    """)
-
-    %{dir: dir, pack: pack}
+    %{dir: dir, pack: Fixtures.pack(dir)}
   end
 
-  defp load(dir, toml) do
-    Fixtures.write_config(dir, """
-    [models.fast]
-    api = "module"
-    module = "Omunculus.Model.Fake"
-
-    [auth]
-    store = "auth.json"
-
-    [auth.mine]
-    kind = "api_key"
-    key = "secret"
-
-    #{toml}
-    """)
-
-    Config.load(Fixtures.config_path(dir))
-  end
+  defp load(dir, toml), do: Config.load(Fixtures.write_pack_config(dir, toml))
 
   @imports ~s([[packs]]\npath = "team"\nmodels = { lead = "fast" }\nauth = { vault = "mine" }\n)
 
