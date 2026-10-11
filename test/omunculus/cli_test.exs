@@ -387,7 +387,9 @@ defmodule Omunculus.CLITest do
     test "the concierge creates the work, a follow-up comments on it, and a third opening sees the last comment",
          %{dir: dir} do
       model = fn assembled, _tools, call ->
-        if assembled =~ "## Work", do: call.("end", %{}), else: create_root(call, "Count to five")
+        if assembled =~ "## Work\n",
+          do: call.("end", %{}),
+          else: create_root(call, "Count to five")
       end
 
       Fixtures.use_model(dir, model)
@@ -431,7 +433,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "keep going"], dir)
 
       assert_received {:second_assembled, second_assembled}
-      assert second_assembled =~ "## Work"
+      assert second_assembled =~ "## Work\n"
       assert second_assembled =~ work.title
       assert second_assembled =~ "## Message\nkeep going"
       refute second_assembled =~ "Count to 5"
@@ -593,7 +595,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, new_assembled} =
                Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [new_run.prompt_id])
 
-      assert new_assembled.body =~ "## Work"
+      assert new_assembled.body =~ "## Work\n"
       refute new_assembled.body =~ "## Message"
 
       Project.close(project)
@@ -1066,7 +1068,7 @@ defmodule Omunculus.CLITest do
       model = fn assembled, _tools, call ->
         cond do
           assembled =~ "I am the concierge." ->
-            if assembled =~ "## Work",
+            if assembled =~ "## Work\n",
               do: call.("done", %{"report" => "built"}),
               else: create_unnamed(call, "Ship it")
 
@@ -1112,7 +1114,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, assembled2} =
                Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [run2.prompt_id])
 
-      assert assembled2.body =~ "## Work"
+      assert assembled2.body =~ "## Work\n"
       refute assembled2.body =~ "- work:"
 
       Project.close(project)
@@ -1127,7 +1129,7 @@ defmodule Omunculus.CLITest do
       """)
 
       model = fn assembled, _tools, call ->
-        if assembled =~ "## Work",
+        if assembled =~ "## Work\n",
           do: call.("done", %{"report" => "closed"}),
           else: create_root(call, "No sequence")
 
@@ -1180,7 +1182,7 @@ defmodule Omunculus.CLITest do
       )
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work",
+        unless assembled =~ "## Work\n",
           do: create_unnamed(call, "Ship it")
 
         assert call.("bad_continue", %{}) ==
@@ -1272,7 +1274,7 @@ defmodule Omunculus.CLITest do
       """)
 
       model = fn assembled, _tools, call ->
-        if assembled =~ "## Work",
+        if assembled =~ "## Work\n",
           do: call.("break", %{"report" => "need to pause"}),
           else: create_unnamed(call, "Needs help")
 
@@ -1342,7 +1344,7 @@ defmodule Omunculus.CLITest do
             delegate_one(call, "Sub task", "do this")
             {:ok, "unused"}
 
-          assembled =~ "## Work" ->
+          assembled =~ "## Work\n" ->
             call.("end", %{})
 
           true ->
@@ -1441,7 +1443,7 @@ defmodule Omunculus.CLITest do
               delegate_one(call, "Sub task", "do this")
               {:ok, "unused"}
 
-            assembled =~ "## Work" ->
+            assembled =~ "## Work\n" ->
               call.("end", %{})
 
             true ->
@@ -1609,7 +1611,7 @@ defmodule Omunculus.CLITest do
             delegate_one(call, "Sub task3", "write this")
             {:ok, "unused"}
 
-          assembled =~ "## Work" ->
+          assembled =~ "## Work\n" ->
             call.("end", %{})
 
           true ->
@@ -1663,7 +1665,7 @@ defmodule Omunculus.CLITest do
     test "notify mid-run leaves an unread inbox row, the run keeps going and closes done, the work stays open, and CLI reads it",
          %{dir: dir} do
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work", do: create_root(call, "Help")
+        unless assembled =~ "## Work\n", do: create_root(call, "Help")
         assert {:ok, ""} = call.("notify", %{"body" => "need help"})
         call.("end", %{})
       end
@@ -1801,7 +1803,7 @@ defmodule Omunculus.CLITest do
       """)
 
       model = fn assembled, _tools, call ->
-        if assembled =~ "## Work",
+        if assembled =~ "## Work\n",
           do: call.("done", %{"report" => "shipped"}),
           else: create_unnamed(call, "Ship it")
 
@@ -1849,7 +1851,7 @@ defmodule Omunculus.CLITest do
       """)
 
       model = fn assembled, _tools, call ->
-        if assembled =~ "## Work",
+        if assembled =~ "## Work\n",
           do: call.("break", %{"report" => "need to pause"}),
           else: create_unnamed(call, "Needs help")
 
@@ -1969,7 +1971,7 @@ defmodule Omunculus.CLITest do
       )
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work", do: create_root(call, "Ship it")
+        unless assembled =~ "## Work\n", do: create_root(call, "Ship it")
         call.("notify", %{"body" => "notice"})
         {:ok, "unused"}
       end
@@ -2001,7 +2003,7 @@ defmodule Omunculus.CLITest do
       """)
 
       model1 = fn assembled, _tools, call ->
-        unless assembled =~ "## Work", do: create_root(call, "Tally")
+        unless assembled =~ "## Work\n", do: create_root(call, "Tally")
         assert {:ok, ""} = call.("comment", %{"body" => "one"})
         assert {:ok, ""} = call.("comment", %{"body" => "two"})
         assert {:ok, ""} = call.("comment", %{"body" => "three"})
@@ -2154,7 +2156,7 @@ defmodule Omunculus.CLITest do
             call.("done", %{"report" => "done"})
             {:ok, "unused"}
 
-          assembled =~ "## Work" ->
+          assembled =~ "## Work\n" ->
             call.("end", %{})
 
           true ->
@@ -2229,7 +2231,7 @@ defmodule Omunculus.CLITest do
             delegate_one(call, "Sub task", "do this")
             {:ok, "unused"}
 
-          assembled =~ "## Work" ->
+          assembled =~ "## Work\n" ->
             call.("end", %{})
 
           true ->

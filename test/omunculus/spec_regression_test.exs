@@ -639,7 +639,7 @@ defmodule Omunculus.SpecRegressionTest do
     )
 
     Fixtures.use_model(p, fn assembled, tools, call ->
-      if assembled =~ "## Work" do
+      if assembled =~ "## Work\n" do
         assert String.starts_with?(assembled, "worker")
         refute assembled =~ "## Message"
         refute Enum.any?(tools, &(&1.name == "write"))

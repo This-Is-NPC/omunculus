@@ -216,7 +216,7 @@ defmodule Omunculus.HarnessTest do
     message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
 
     model = fn assembled, _tools, call ->
-      unless assembled =~ "## Work",
+      unless assembled =~ "## Work\n",
         do:
           call.("work", %{
             "report" => "opened",

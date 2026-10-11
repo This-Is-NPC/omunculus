@@ -107,7 +107,7 @@ defmodule Omunculus.Model.Battery do
   defp parse(assembled, tools) do
     %{
       cards: MapSet.new(tools, & &1.name),
-      work: String.contains?(assembled, "## Work"),
+      work: String.contains?(assembled, "## Work\n"),
       results: String.contains?(assembled, "## Results"),
       last_comment: last_comment(assembled),
       agent_line: assembled |> String.split("\n", parts: 2) |> List.first() || ""
