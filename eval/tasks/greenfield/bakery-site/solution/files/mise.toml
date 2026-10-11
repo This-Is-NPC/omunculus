@@ -1,0 +1,3 @@
+[tasks.check]
+description = "Check the site"
+run = "scripts/check"

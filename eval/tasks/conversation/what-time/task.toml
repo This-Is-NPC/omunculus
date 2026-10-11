@@ -1,0 +1,9 @@
+scenario = "conversation"
+critical = false
+configurations = ["dream-team"]
+
+[expect]
+outcome = ["answer"]
+
+[person]
+facts = "You are at home and only want to know the time."

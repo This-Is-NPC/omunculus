@@ -4,7 +4,11 @@ A check runs as `check <workspace> <outcome.json>` after the run, outside the
 agents' reach, and exits 0 when the task holds, 2 when the workspace holds but
 the run ended otherwise than expected, and 1 when the workspace does not hold. The outcome file names the
 configuration, how the conversation ended (answer, done, break or waiting) and
-the last words to the person (report).
+the last words to the person (report); a conversation task's also has the root
+works (works), what was said (conversation, [who, text] pairs), whether the
+first message became a work at once (first_run_made_work) and, for a task that
+publishes, the published copy (published: a directory, relative to the
+workspace in a solution).
 """
 
 import json
@@ -157,3 +161,15 @@ def fastapi_items_api(workspace):
         server.terminate()
         server.wait(timeout=10)
         shutil.rmtree(copy)
+
+
+def published(workspace, outcome):
+    where = outcome.get("published")
+    site = (workspace / where).resolve() if where else None
+    if not site or not site.is_dir():
+        fail("nothing was published")
+    return site
+
+
+def works(outcome):
+    return outcome.get("works") or []

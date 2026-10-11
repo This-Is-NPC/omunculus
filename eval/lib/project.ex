@@ -1,13 +1,15 @@
 defmodule EquivalentExchange.Project do
   @moduledoc """
-  Builds the project one execution runs in: the Amestris preset applied by
-  omunculus's own `preset` tool, a configuration of `eval/configs` laid over
-  it — its tables merged into the preset's, a list replacing a list — the
+  Builds the project one execution runs in: the preset of `eval/presets`
+  the configuration's `[eval] preset` names, Amestris without one, applied
+  by omunculus's own `preset` tool, the configuration of `eval/configs` laid
+  over it — its tables merged into the preset's, a list replacing a list — the
   agents its `[eval] drop_agents` names removed with the workflows that
   needed them, every agent put on the model the run names — with
   `code_mode` on when the run asks for it —, the bench's skills
   (`eval/skills`) and ticket system (`eval/mcp/tickets`, an MCP server)
-  declared, and the task's starting files copied into the project root.
+  declared, and the preset's `workspace/` files, then the task's starting
+  files, copied into the workspace.
   """
 
   alias Omunculus.Config.Toml, as: ConfigToml
@@ -29,15 +31,15 @@ defmodule EquivalentExchange.Project do
   def build(dir, configuration, {model, code_mode}, workspace) do
     path = Path.join(dir, "omunculus.toml")
 
-    with %{"ok" => true} <-
+    with {:ok, overlay} <-
+           Toml.decode_file(Path.join([@eval, "configs", configuration <> ".toml"])),
+         {eval, overlay} = Map.pop(overlay, "eval", %{}),
+         preset = Path.join([@eval, "presets", Map.get(eval, "preset", "amestris")]),
+         %{"ok" => true} <-
            Preset.run(%{
-             args: %{"name" => "amestris", "from" => Path.join([@eval, "presets", "amestris"])},
+             args: %{"name" => Path.basename(preset), "from" => preset},
              config_path: path
-           }),
-         {:ok, overlay} <-
-           Toml.decode_file(Path.join([@eval, "configs", configuration <> ".toml"])) do
-      {eval, overlay} = Map.pop(overlay, "eval", %{})
-
+           }) do
       data =
         path
         |> Toml.decode_file!()
@@ -55,7 +57,11 @@ defmodule EquivalentExchange.Project do
       File.write!(path, ConfigToml.encode(data))
       root = Path.join(dir, "workspace")
       File.mkdir_p!(root)
-      if workspace && File.dir?(workspace), do: File.cp_r!(workspace, root)
+
+      for files <- [Path.join(preset, "workspace"), workspace],
+          files && File.dir?(files),
+          do: File.cp_r!(files, root)
+
       {:ok, path}
     else
       %{"ok" => false, "output" => reason} -> {:error, {:preset, reason}}

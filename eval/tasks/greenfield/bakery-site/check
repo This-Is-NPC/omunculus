@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+import pathlib, sys
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "_lib"))
+from check import *
+
+workspace, outcome = load()
+expect_outcome(outcome, "done")
+
+# Asked before building, and carried what the person said into the work.
+if outcome.get("first_run_made_work"):
+    fail("the first message became a work before anything was asked")
+goals = " ".join(w["goal"] or "" for w in works(outcome))
+for fact in ["Doce Ana", "85", "99876-5432"]:
+    if fact not in goals:
+        fail(f"no work's goal carries {fact}")
+
+# Published, with what the person asked for.
+site = published(workspace, outcome)
+pages = list(site.rglob("*.html"))
+if len(pages) < 4:
+    fail(f"{len(pages)} pages published, not the four asked for")
+html = " ".join(p.read_text(errors="replace") for p in pages)
+# The person left the language to the team: English or Portuguese.
+for fact in ["Doce Ana", "brigadeiro", "carrot|cenoura", "85", "60", "36", "2009"]:
+    if not re.search(fact, html, re.I):
+        fail(f"the published site does not show {fact}")
+if not re.search(r"wa\.me/(55)?19998765432|99876-?5432", html):
+    fail("the published site has no WhatsApp contact")
+
+# Built as the workspace's AGENTS.md says.
+for name in ["mise.toml", "README.md"]:
+    if not (workspace / name).is_file():
+        fail(f"{name} is missing")
+if not any(p.is_file() for p in (workspace / "scripts").glob("*")):
+    fail("no script under scripts/")
+if not (workspace / "docs").is_dir():
+    fail("docs/ is missing")
+ok()

@@ -1,0 +1,5 @@
+# Brooks's surgical team, from its own preset: the administrator talks with
+# the person, the surgeon builds with the helpers below, the copilot reviews
+# and the clerk publishes.
+[eval]
+preset = "dream-team"

@@ -8,8 +8,12 @@ defmodule EquivalentExchange.Task do
   request for each name (`[human]`, deny when unnamed) and what the decider
   rates of its files (`[[judge]]`, each an `id`, a `question` and the
   `files` it reads), and the tools it is about (`uses`: a tool's name, or
-  `bash:<text>` for a command holding it) — its starting `workspace/`, its
-  `check` and its `solution/`.
+  `bash:<text>` for a command holding it), the person it simulates in
+  conversation (`[person]`: the `facts` they answer the agent's questions
+  with, and the `follow_ups` they send, in order, once the agent asks
+  nothing more), and whether it publishes to the bench's hosting (`prod`),
+  whose address replaces `{prod}` in the instruction and the facts — its
+  starting `workspace/`, its `check` and its `solution/`.
   """
 
   @eval Path.expand("..", __DIR__)
@@ -27,7 +31,9 @@ defmodule EquivalentExchange.Task do
     :expect,
     :human,
     :judge,
-    :uses
+    :uses,
+    :person,
+    :prod
   ]
   defstruct @enforce_keys
 
@@ -56,7 +62,9 @@ defmodule EquivalentExchange.Task do
       expect: expect,
       human: Map.get(data, "human", %{}),
       judge: Map.get(data, "judge", []),
-      uses: Map.get(data, "uses", [])
+      uses: Map.get(data, "uses", []),
+      person: Map.get(data, "person"),
+      prod: Map.get(data, "prod", false)
     }
     |> validate!()
   end
@@ -105,6 +113,11 @@ defmodule EquivalentExchange.Task do
 
     unless Enum.all?(task.judge, &(Map.keys(&1) |> Enum.sort() == ~w(files id question))),
       do: raise("#{task.id}: a [[judge]] has an id, a question and the files it reads")
+
+    unless is_nil(task.person) or
+             (is_binary(task.person["facts"]) and
+                Map.keys(task.person) -- ~w(facts follow_ups) == []),
+           do: raise("#{task.id}: [person] has facts and, optionally, follow_ups")
 
     task
   end

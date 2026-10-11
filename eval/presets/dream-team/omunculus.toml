@@ -1,0 +1,211 @@
+# The dream team: Brooks's surgical team (The Mythical Man-Month, ch. 3) as
+# agents. One surgeon designs and writes what matters; the others free them
+# of everything else. Its workspace brings the rules every agent follows.
+
+[execution]
+backend = "bubblewrap"
+runtimes = ["/usr"]
+environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH"]
+timeout_ms = 60000
+max_output_bytes = 1048576
+max_concurrent = 4
+max_queue = 64
+queue_timeout_ms = 60000
+resources = ["sandbox.write", "sandbox.network"]
+# A command sees the machine as the person does, read-only: their tools,
+# versions and settings, so what it builds runs for them. What follows it
+# may not read: keys, logins, credentials and browser profiles.
+host = true
+deny_read = [
+  "~/.ssh", "~/.gnupg", "~/.aws", "~/.azure", "~/.config/gcloud", "~/.kube",
+  "~/.docker", "~/.netrc", "~/.git-credentials", "~/.config/gh", "~/.npmrc",
+  "~/.pypirc", "~/.password-store", "~/.local/share/keyrings", "~/.mozilla",
+  "~/.config/google-chrome", "~/.config/chromium", "~/.config/BraveSoftware",
+  "~/.codex", "~/.claude",
+]
+
+[execution.sandbox]
+script = "../../../priv/sandbox.js"
+command = ["deno", "run", "--no-config", "--no-lock", "--no-prompt", "--cached-only", "--deny-read", "--deny-write", "--deny-net", "--deny-env", "--deny-run", "--deny-ffi", "--deny-sys", "--deny-import"]
+runner = 'input=$1; errors=$2; status=$3; shift 3; "$@" < "$input" 2> "$errors"; result=$?; printf %s "$result" > "$status"; exit "$result"'
+exec = 'exec "$@"'
+
+[store]
+path = ".omunculus/store.sqlite3"
+# The files each call changed, which the score checks the last words against.
+changes = ".omunculus/changes"
+
+[tools]
+paths = ["../../../priv/tools", "../../../priv/presets/codex-like/tools"]
+
+[skills]
+paths = []
+
+[auth]
+store = ".omunculus/auth.json"
+
+[auth.openrouter]
+kind = "api_key"
+key = "$OPENROUTER_API_KEY"
+
+[auth.anthropic]
+kind = "api_key"
+key = "$ANTHROPIC_API_KEY"
+
+# A rate limit or a failed request is tried again, three times at most, six
+# for Anthropic, whose limit on concurrent requests waits on the others.
+[models.luna]
+provider = "openrouter"
+api = "openai-completions"
+url = "https://openrouter.ai/api/v1"
+model = "openai/gpt-6-luna"
+timeout_ms = 180000
+retries = 3
+
+[models.luna.body]
+usage = { include = true }
+
+# Anthropic's API sends no cost: eval/prices.toml prices its tokens.
+[models.haiku]
+provider = "anthropic"
+api = "anthropic-messages"
+url = "https://api.anthropic.com/v1"
+model = "claude-haiku-5-5"
+timeout_ms = 180000
+retries = 6
+
+[models.sonnet]
+provider = "anthropic"
+api = "anthropic-messages"
+url = "https://api.anthropic.com/v1"
+model = "claude-sonnet-5-5"
+timeout_ms = 180000
+retries = 6
+
+[models.opus]
+provider = "anthropic"
+api = "anthropic-messages"
+url = "https://api.anthropic.com/v1"
+model = "claude-opus-5-5"
+timeout_ms = 180000
+retries = 6
+
+# Answers with the first line of its prompt: checks the runner without a provider.
+[models.fake]
+api = "module"
+module = "Omunculus.Model.Fake"
+
+# Talks with the person, holds what was agreed and hands it to the surgeon.
+[agents.administrator]
+depth = 0
+model = "haiku"
+tools = ["bash", "break", "catalog", "changes", "continue", "delegate", "done", "end", "forward", "fs.read", "reopen", "reply", "skills", "store", "work"]
+human = ["sandbox.network"]
+text = """
+You are the administrator of a surgical team: you talk with the person, keep what was agreed and hand the work to the team under ## Agents; you write no code.
+Goal: what the person asked, as they asked it. Its words are the bar for done; add no requirement of your own.
+- What needs no tool you lack — a greeting, a question, the time, an explanation — answer yourself in plain text; it is not a work. Creating or changing a file, publishing or anything to check later is a work.
+- Before handing anything down, know what is wanted: what it is for, what it must do and contain, who it is for, where it goes and how it is published. Ask the person for what is missing, as many questions as it takes, never again for what they already said; hand the work down only when nothing that changes the result is still unknown. What the person leaves to you, decide and say so.
+- The work's goal is all that was agreed, in full, the person's own words for names, prices and contacts: the team has not seen the conversation. Say in it that the workspace's AGENTS.md is the rule for how the work is built, documented and committed.
+- When the person speaks of a work under ## Works, go on with it rather than starting another: forward what they said to it while it is open; when it is done or cancelled, call work with a new work whose goal names the earlier one (its title and id) and says what changes. When it is unclear which work they mean, ask.
+- When ## Results comes back, check the request, not the report: find each thing the person asked for in the files; that the published copy answers you read in the release's report, the output of its check at the address, as you have no network of your own. If something is missing or wrong, reopen the work saying so; call done only when all of it holds, with a report that tells the person what was made, where it is and how to run it; otherwise break with what was done and what was not.
+- The network is not yours to give: when something needs it, ask the person you are talking with, saying what for.
+"""
+
+# Designs and writes what matters; hands the rest to the helpers below.
+[agents.surgeon]
+depth = 1
+model = "haiku"
+tools = ["bash", "break", "changes", "comment", "continue", "delegate", "directory", "done", "end", "fs.read", "fs.write", "reopen", "request_access", "sandbox.write", "skills", "store", "work"]
+human = ["sandbox.network"]
+text = """
+You are the surgeon of the team: you decide how the work is built and write the code that matters yourself, so the whole holds one design. Follow the workspace's AGENTS.md: its premises, its mise tooling with scripts under scripts/, its documentation and its commits.
+- Hand down to the agents under ## Agents only parts that stand on their own, each with what it must produce: the toolsmith sets up mise, scripts and the means to publish; the tester writes and runs the tests; the editor writes README.md and docs/ as AGENTS.md says; the language lawyer finds how a library, framework or version is meant to be used. Check what comes back in the files; reopen what does not hold.
+- What you deliver must work from the folder for whoever gets it: mise install, then mise run check, pass in a fresh shell. Run them before you call done.
+- You build; you do not publish: publishing is the release stage after review. Call done with a report of what was made, the commands that set it up, check it and run it, and how it is to be published.
+- When it cannot be done, break with what is missing and the ways to go on.
+"""
+
+# The surgeon's alter ego: knows the code, argues the design, decides nothing.
+[agents.copilot]
+depth = 1
+model = "haiku"
+workflow_only = true
+tools = ["bash", "break", "changes", "comment", "continue", "directory", "done", "end", "fs.read", "skills"]
+human = ["sandbox.network"]
+text = """
+You are the copilot of the team: you review what the surgeon built against the work's goal and the workspace's AGENTS.md before anything is published.
+- Check the goal, not the report: find each thing it names in the files as written there. Run, in a fresh shell, mise install and mise run check and whatever the report says runs it; reading is not enough.
+- Check AGENTS.md holds: scripts under scripts/ that mise tasks run, README.md and docs/ as it describes, no secret in the files, versions pinned.
+- Call done with what you checked when all of it holds; otherwise break with each thing that fails and where.
+"""
+
+# Keeps the records and runs the build: here, publishes what passed review.
+[agents.clerk]
+depth = 1
+model = "haiku"
+workflow_only = true
+tools = ["bash", "break", "changes", "comment", "continue", "directory", "done", "end", "fs.read", "fs.write", "request_access", "sandbox.write", "skills"]
+human = ["sandbox.network"]
+text = """
+You are the program clerk of the team: you publish what passed review, as the work's goal says to publish it, and keep the record of it.
+- Publish through the project's own mise tasks, adding a deploy task under scripts/ if there is none, as AGENTS.md says. Reaching the place it is published to needs the network: ask for sandbox.network with request_access, saying where it goes and why.
+- After publishing, check the published copy answers at its address (curl it) and shows what the goal asks.
+- Call done with where it was published and how you checked it; if publishing fails or is not allowed, break with what happened.
+"""
+
+[agents.toolsmith]
+depth = 2
+model = "haiku"
+tools = ["bash", "break", "comment", "continue", "directory", "done", "end", "fs.read", "fs.write", "request_access", "sandbox.write", "skills"]
+human = ["sandbox.network"]
+text = """
+You are the toolsmith of the team: you build the tools the surgeon asks for — mise.toml, the scripts under scripts/ its tasks run, the means to check and publish — as the workspace's AGENTS.md says. Set up what is missing in the workspace with mise, never in the system. Run what you made, then call done with how to use it; break with what is missing when it cannot be done.
+"""
+
+[agents.tester]
+depth = 2
+model = "haiku"
+tools = ["bash", "break", "comment", "continue", "directory", "done", "end", "fs.read", "fs.write", "request_access", "sandbox.write", "skills"]
+human = ["sandbox.network"]
+text = """
+You are the tester of the team: you write the tests the work needs and run them through the project's mise tasks, as the workspace's AGENTS.md says. Report what passes and what fails, with the output; call done when they run, break with what stops them.
+"""
+
+[agents.editor]
+depth = 2
+model = "haiku"
+tools = ["bash", "break", "comment", "continue", "directory", "done", "end", "fs.read", "fs.write", "request_access", "sandbox.write", "skills"]
+human = ["sandbox.network"]
+text = """
+You are the editor of the team: you write README.md and docs/ as the workspace's AGENTS.md describes them, from what the code does and from running it, never from what it was meant to do. Call done with the pages you wrote.
+"""
+
+[agents.language_lawyer]
+depth = 2
+model = "haiku"
+tools = ["bash", "break", "comment", "continue", "directory", "done", "end", "fs.read", "request_access", "skills"]
+human = ["sandbox.network"]
+text = """
+You are the language lawyer of the team: you find how a language, library, framework or tool is meant to be used here — what this machine has (which, --help, the installed versions) and what its documentation says. You change no file. Call done with the answer and where it comes from.
+"""
+
+[workflows.surgery]
+steps = [
+  { name = "build", agent = "surgeon" },
+  { name = "review", agent = "copilot" },
+  { name = "release", agent = "clerk" },
+]
+
+[policy]
+assemble = "assemble"
+max_retries = 2
+last_run_output_bytes = 8192
+tool_output_bytes = 32768
+conversation_bytes = 16384
+send_catalog = true
+session_ttl_ms = 300000
+session_max_bytes = 200000
+
+[policy.depth.1]
+workflow = "surgery"

@@ -7,7 +7,7 @@
 #   report     write a result folder's summary, report and comparison; --against
 #              <result folder> sets what it is compared with
 #   compare    compare two result folders, the earlier first
-for file <- ~w(project task judge score resources report selftest runner),
+for file <- ~w(project task judge person score resources report selftest runner),
     do: Code.require_file("lib/#{file}.ex", __DIR__)
 
 case System.argv() do

@@ -23,9 +23,17 @@ defmodule EquivalentExchange.Runner do
   the runs that answer opens are
   followed the same way, a few rounds at most. A request offering only
   retry or cancel is left waiting: the model stopped without a report.
+
+  A task with `[person]` goes on as a conversation: once the runs settle,
+  `EquivalentExchange.Person` reads what the agent last said and answers
+  what it asks, which is sent as the person's next message, until it asks
+  nothing; then each of the task's `follow_ups` is sent the same way. Only
+  the execution's timeout bounds how long it goes on. A task with `prod`
+  gets the bench's hosting (`eval/prod/serve`) for the execution, its
+  address in the instruction and the facts.
   """
 
-  alias EquivalentExchange.{Judge, Project, Resources, Score, Task}
+  alias EquivalentExchange.{Judge, Person, Project, Resources, Score, Task}
   alias Omunculus.CLI
   alias Omunculus.Store.Query
 
@@ -133,15 +141,27 @@ defmodule EquivalentExchange.Runner do
     # What truly changed, told apart the way the harness tells each call's.
     truth = Path.join(project, "truth")
     {:ok, before} = Omunculus.Changes.snapshot(truth, workspace, [])
+    hosting = if task.prod, do: host(Path.join(dir, "prod"))
+    address = hosting && hosting.address
+    person = %{facts: task.person && placed(task.person["facts"], address), task: task}
+    instruction = placed(task.instruction, address)
     started = System.monotonic_time(:millisecond)
 
-    {status, answers} =
+    {status, played} =
       within(timeout_s * 1000, fn ->
-        with {:ok, _said} <- CLI.run(["--config", config_path, "send", task.instruction], project) do
-          play_person(config_path, project, task, groups, [], @rounds)
+        with {:ok, _said} <- CLI.run(["--config", config_path, "send", instruction], project),
+             {:ok, answers} <- play_person(config_path, project, task, groups, [], @rounds) do
+          converse(
+            {config_path, project, groups, person},
+            %{answers: answers, conversation: [{"person", instruction}]},
+            (task.person && task.person["follow_ups"]) || []
+          )
         end
       end)
 
+    if hosting, do: stop_hosting(hosting)
+    answers = (played && played.answers) || []
+    conversation = Enum.map((played && played.conversation) || [], &Tuple.to_list/1)
     duration = System.monotonic_time(:millisecond) - started
     facts = facts(project)
     outcome = outcome(facts, status)
@@ -153,7 +173,11 @@ defmodule EquivalentExchange.Runner do
       Task.check(task, workspace, %{
         outcome: outcome,
         report: report,
-        configuration: configuration
+        configuration: configuration,
+        works: roots(facts),
+        conversation: conversation,
+        first_run_made_work: first_run_made_work(facts),
+        published: hosting && Path.join([dir, "prod", "site"])
       })
 
     File.write!(
@@ -171,6 +195,7 @@ defmodule EquivalentExchange.Runner do
       outcome: outcome,
       expected: Task.outcomes(task, configuration),
       report: report,
+      conversation: conversation,
       check: %{passed: passed, said: said, files: files},
       error: error(status),
       requests: requests(facts, answers, project),
@@ -322,6 +347,82 @@ defmodule EquivalentExchange.Runner do
             error
         end
     end
+  end
+
+  # Once the runs settle, the person answers what the agent last said, or,
+  # asked nothing, sends their next follow-up.
+  # Last words the agent already said are not said again: it asked nothing.
+  defp converse({config_path, project, groups, person} = at, played, follow_ups) do
+    said = report(facts(project))
+    new? = said not in for({"agent", earlier} <- played.conversation, do: earlier)
+
+    conversation =
+      if new?, do: played.conversation ++ [{"agent", said}], else: played.conversation
+
+    reply =
+      if person.facts && new?,
+        do: Person.reply(person.facts, conversation),
+        else: {:ok, :nothing}
+
+    message =
+      case {reply, follow_ups} do
+        {{:ok, :nothing}, []} -> :done
+        {{:ok, :nothing}, [next | rest]} -> {:ok, next, rest}
+        {{:ok, text}, _follow_ups} -> {:ok, text, follow_ups}
+        {{:error, _reason} = error, _follow_ups} -> error
+      end
+
+    with {:ok, text, follow_ups} <- message,
+         {:ok, _said} <- CLI.run(["--config", config_path, "send", text], project),
+         {:ok, given} <- play_person(config_path, project, person.task, groups, [], @rounds) do
+      converse(
+        at,
+        %{answers: played.answers ++ given, conversation: conversation ++ [{"person", text}]},
+        follow_ups
+      )
+    else
+      :done -> {:ok, %{played | conversation: conversation}}
+      error -> error
+    end
+  end
+
+  defp placed(text, nil), do: text
+  defp placed(text, address), do: String.replace(text, "{prod}", address)
+
+  # The bench's hosting for one execution, listening on a port of its own.
+  defp host(dir) do
+    File.mkdir_p!(dir)
+
+    port =
+      Port.open({:spawn_executable, Path.join([@eval, "prod", "serve"])}, [:binary, args: [dir]])
+
+    file = Path.join(dir, "port")
+
+    Stream.repeatedly(fn -> File.read(file) end)
+    |> Enum.find(&match?({:ok, <<_, _::binary>>}, &1))
+
+    %{port: port, address: "http://127.0.0.1:" <> File.read!(file)}
+  end
+
+  defp stop_hosting(%{port: port}) do
+    {:os_pid, pid} = Port.info(port, :os_pid)
+    System.cmd("kill", [Integer.to_string(pid)])
+    Port.close(port)
+  end
+
+  # Whether the person's first message became a work at once.
+  defp first_run_made_work(facts) do
+    case Enum.find(facts.runs, &(&1.depth == "0")) do
+      nil -> false
+      first -> Enum.any?(facts.events, &(&1.run_id == first.id and &1.type == "work"))
+    end
+  end
+
+  # The root works, as the person's requests became them.
+  defp roots(facts) do
+    for work <- facts.works,
+        is_nil(work.parent_id),
+        do: %{id: work.id, title: work.title, goal: work.goal, state: work.state}
   end
 
   defp waiting_on_person(project) do
@@ -643,9 +744,9 @@ defmodule EquivalentExchange.Runner do
     work = Elixir.Task.async(fn -> fun.() end)
 
     case Elixir.Task.yield(work, ms) || Elixir.Task.shutdown(work, :brutal_kill) do
-      {:ok, {:ok, answers}} -> {{:ok, answers}, answers}
-      {:ok, {:error, reason}} -> {{:error, reason}, []}
-      nil -> {{:error, :timeout}, []}
+      {:ok, {:ok, played}} -> {{:ok, played}, played}
+      {:ok, {:error, reason}} -> {{:error, reason}, nil}
+      nil -> {{:error, :timeout}, nil}
     end
   end
 
