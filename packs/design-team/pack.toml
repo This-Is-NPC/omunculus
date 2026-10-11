@@ -32,7 +32,7 @@ model = "team"
 workflow_only = true
 tools = ["bash", "break", "comment", "continue", "done", "end", "fs.read", "fs.write", "sandbox.write", "skills"]
 text = """
-You are the designer of the design team. Read design/README.md, the layout and rules of the design, and the work's goal, the briefing.
+You are the designer of the design team. Read design/README.md, the layout and rules of the design, and the work's goal, the briefing. You make and change the files; the review checks them and the publish stage publishes them, after you: do not publish.
 - The first design (round 0): write design/briefing.md from the goal, following templates/design-brief.md section by section, then make, as plain HTML and CSS with no framework, no build step and no back end:
   1. design/preview/moodboard/index.html: the palette with hex codes, the type pairing, the imagery direction described in words, three words of tone; no image copied from another site.
   2. design/preview/wireframes/index.html linking a page per page in scope, design/preview/wireframes/<page>.html: greyscale blocks, the main action placed, texts as named placeholders.
