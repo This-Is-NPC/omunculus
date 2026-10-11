@@ -272,12 +272,32 @@ defmodule Omunculus.Execution.Bubblewrap do
     end
   end
 
+  # On a filesystem such as btrfs, an overlay goes on being in use a few
+  # milliseconds after the last process of the sandbox that mounted it has
+  # gone, so the run's next command may find its home overlay busy. bwrap
+  # then fails before the runner starts, with the input and stderr fifos not
+  # yet opened, so starting it again is safe. bwrap's own messages, apart
+  # from the command's stderr, tell that case apart.
+  @setup ~S"""
+  setup=$1; shift; tries=100
+  while :; do
+    "$@" 2> "$setup"; status=$?
+    if [ "$status" -ne 0 ] && [ "$tries" -gt 0 ] &&
+      /usr/bin/grep -q "Can't make overlay mount.*Device or resource busy" "$setup"; then
+      tries=$((tries - 1)); /usr/bin/sleep 0.01; continue
+    fi
+    /usr/bin/cat "$setup" >&2; exit "$status"
+  done
+  """
+
   defp open_port(bwrap, command, policy, temp_dir) do
     {:ok,
-     Port.open({:spawn_executable, bwrap}, [
+     Port.open({:spawn_executable, "/usr/bin/sh"}, [
        :binary,
        :exit_status,
-       args: arguments(command, policy, temp_dir)
+       args:
+         ["-c", @setup, "omunculus-bwrap", Path.join(temp_dir, "setup"), bwrap] ++
+           arguments(command, policy, temp_dir)
      ])}
   rescue
     error in ArgumentError -> {:error, {:bubblewrap, Exception.message(error)}}
@@ -562,10 +582,9 @@ defmodule Omunculus.Execution.Bubblewrap do
     ArgumentError -> :ok
   end
 
-  # Killed alone, bwrap leaves what runs inside it to die after it, and its
-  # mounts with them: the next command of the run would find the run's home
-  # overlay still in use. Every process of the sandbox is killed, and gone,
-  # before the command is over.
+  # Killed alone, the shell that starts bwrap leaves what runs inside it to
+  # die after it, and its mounts with them. Every process of the sandbox is
+  # killed, and gone, before the command is over.
   defp kill_sandbox(port) do
     case Port.info(port, :os_pid) do
       {:os_pid, pid} ->

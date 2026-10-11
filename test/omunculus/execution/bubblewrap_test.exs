@@ -43,6 +43,23 @@ defmodule Omunculus.Execution.BubblewrapTest do
              )
   end
 
+  test "a command whose run's home overlay is still in use waits for it", %{workspace: workspace} do
+    policy =
+      Policy.with_scratch(
+        policy(workspace, host: true, max_concurrent: 2),
+        Omunculus.Fixtures.tmp_dir()
+      )
+
+    {:ok, holding} = Command.new("/usr/bin/sh", ["-c", "sleep 0.3"])
+    {:ok, next} = Command.new("/usr/bin/sh", ["-c", "echo mounted"])
+
+    held = Elixir.Task.async(fn -> Omunculus.Execution.run(holding, policy) end)
+    Process.sleep(100)
+
+    assert {:ok, %{stdout: "mounted\n"}} = Omunculus.Execution.run(next, policy)
+    assert {:ok, %{status: 0}} = Elixir.Task.await(held)
+  end
+
   test "a command that sees the host reads it as the person does and writes only where let",
        %{workspace: workspace} do
     home = System.user_home!()
@@ -273,7 +290,7 @@ defmodule Omunculus.Execution.BubblewrapTest do
       limits: %{
         timeout_ms: Keyword.get(overrides, :timeout_ms, 2_000),
         max_output_bytes: 1_024,
-        max_concurrent: 1,
+        max_concurrent: Keyword.get(overrides, :max_concurrent, 1),
         max_queue: 1,
         queue_timeout_ms: 100
       },
