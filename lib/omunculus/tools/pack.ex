@@ -3,7 +3,8 @@ defmodule Omunculus.Tools.Pack do
   `pack` tool: imports the pack at `path` (`Omunculus.Config.Packs`) into
   the config at `config_path`, its team `depth` depths below its own when
   given. Given every role a model (`models`) and every provider of the pack
-  a login of the config (`auth`), it writes the
+  a login of the config (`auth`), and with every tool the pack `requires`
+  in the project's catalog once it is imported, it writes the
   pack to `[[packs]]` and copies the pack's `workspace/` into the default
   workspace, keeping every file already there; either way it says what the
   pack needs and what its `environment/` holds, which it does not run.
@@ -64,17 +65,31 @@ defmodule Omunculus.Tools.Pack do
     needs = needs(pack, entry)
 
     if needs == [] do
-      case Config.import_pack(config_path, entry) do
-        {:ok, config} ->
-          Out.ok(Enum.join([imported(pack) | copied(dir, config)] ++ environment(dir), "\n"))
-
-        {:error, reason} ->
-          Out.fail("cannot import #{entry["path"]}: #{inspect(reason)}")
+      with {:ok, config} <- Config.try_pack(config_path, entry),
+           [] <- unmet(config, pack),
+           {:ok, config} <- Config.import_pack(config_path, entry) do
+        Out.ok(Enum.join([imported(pack) | copied(dir, config)] ++ environment(dir), "\n"))
+      else
+        [_ | _] = unmet -> Out.fail(requires(unmet))
+        {:error, reason} -> Out.fail("cannot import #{entry["path"]}: #{inspect(reason)}")
       end
     else
       Out.fail(Enum.join(needs ++ environment(dir), "\n"))
     end
   end
+
+  @doc "The tools `pack` requires that `config`'s catalog lacks."
+  @spec unmet(Config.t(), map) :: [String.t()]
+  def unmet(config, pack) do
+    catalog = Omunculus.Tool.Catalog.discover(config.tools)
+    (get_in(pack, ["pack", "requires"]) || []) -- Map.keys(catalog)
+  end
+
+  @doc "What to say of the tools a pack requires that the project lacks."
+  @spec requires([String.t()]) :: String.t()
+  def requires(unmet),
+    do:
+      "it requires tools the project lacks: #{Enum.join(unmet, ", ")}; import the pack that brings them first"
 
   # What the pack names that the import does not map.
   defp needs(pack, entry) do

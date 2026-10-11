@@ -8,7 +8,8 @@ defmodule Omunculus.Config.Packs do
   depth layer of the pack moves down that many.
 
   A pack is a folder with a `pack.toml`: `[pack]` gives its `name`, its
-  `roles` and the `auth` providers its secrets name, and it may hold
+  `roles`, the `auth` providers its secrets name and the tools of other
+  packs it `requires`, which importing it checks, and it may hold
   `[agents.<name>]`, each on one of its roles, `[workflows.<name>]`,
   `[secrets.<tool>]`, `[[mcp.servers]]` and `[policy.depth.<n>]`. Beside it,
   `tools/` and `skills/` are its tools and skills, `workspace/` the files a

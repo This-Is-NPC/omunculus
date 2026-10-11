@@ -25,11 +25,13 @@ defmodule Omunculus.Tools.ProposePack do
          {:ok, pack} <- Packs.read(dir),
          entry = entry(dir, args),
          {:ok, config} <- Config.try_pack(path, entry),
-         [] <- Steps.missing(config, Map.keys(Map.get(pack, "agents", %{}))) do
+         [] <- Steps.missing(config, Map.keys(Map.get(pack, "agents", %{}))),
+         {:unmet, []} <- {:unmet, Omunculus.Tools.Pack.unmet(config, pack)} do
       Out.ok("", [%{"type" => "request", "body" => request(args, dir, pack, entry, config)}])
     else
       {:error, reason} -> Out.fail("the config would not load with it: #{inspect(reason)}")
       [_ | _] = missing -> Out.fail("its agents would be refused:\n" <> Enum.join(missing, "\n"))
+      {:unmet, unmet} -> Out.fail(Omunculus.Tools.Pack.requires(unmet))
       message -> Out.fail(message)
     end
   end

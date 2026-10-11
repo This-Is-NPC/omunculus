@@ -47,6 +47,38 @@ defmodule Omunculus.Tools.PackTest do
     assert [%{"path" => "team"}] = Toml.decode_file!(config_path)["packs"]
   end
 
+  test "refuses a pack whose required tools the project lacks", %{
+    dir: dir,
+    config_path: config_path
+  } do
+    toml = Path.join([dir, "team", "pack.toml"])
+    original = File.read!(toml)
+
+    File.write!(
+      toml,
+      String.replace(
+        original,
+        ~s(roles = ["lead"]),
+        ~s(roles = ["lead"]\nrequires = ["deploy_preview"])
+      )
+    )
+
+    assert %{
+             "ok" => false,
+             "output" => "it requires tools the project lacks: deploy_preview" <> _
+           } =
+             pack(config_path, %{"models" => "lead=fast", "auth" => "vault=mine"})
+
+    refute Map.has_key?(Toml.decode_file!(config_path), "packs")
+
+    File.write!(
+      toml,
+      String.replace(original, ~s(roles = ["lead"]), ~s(roles = ["lead"]\nrequires = ["end"]))
+    )
+
+    assert %{"ok" => true} = pack(config_path, %{"models" => "lead=fast", "auth" => "vault=mine"})
+  end
+
   test "the builtin catalog discovers pack for the command line and a reply's chain" do
     assert %{"pack" => %{triggers: ["cli", "chain"]}} = Omunculus.Tool.Catalog.unconfigured()
   end
