@@ -73,6 +73,12 @@ def preview(call, app, root):
         return run(["git", "-C", root, "push", "--force", f"dokku@homologation:{app}-hml", "HEAD:refs/heads/main"], env)
 
     status, said = with_agent(push)
+    # A push cut short leaves the app's deploy lock behind; each project
+    # publishes its own app, one release at a time, so the lock is stale.
+    if status != 0 and "deploy lock in place" in said:
+        unlock = ssh_command("homologation") + ["dokku@homologation", "apps:unlock", f"{app}-hml"]
+        with_agent(lambda env: run(unlock, env))
+        status, said = with_agent(push)
     if status != 0:
         answer(False, f"publishing to homologation failed:\n{tail(said)}")
     url = f"http://{app}-hml.homologation.localhost:{PORTS['homologation']}"
@@ -107,7 +113,10 @@ def main():
     root = (call.get("roots") or [None])[0]
     if not root:
         answer(False, "no workspace to publish from")
-    app = app + "-" + hashlib.sha256(root.encode()).hexdigest()[:6]
+    suffix = "-" + hashlib.sha256(root.encode()).hexdigest()[:6]
+    # The name as the tools answered it, with the project's suffix or the
+    # homologation one, is the same app.
+    app = re.sub(rf"{suffix}(-hml)?$", "", app) + suffix
     {"preview": preview, "promote": promote}[sys.argv[1]](call, app, root)
 
 
