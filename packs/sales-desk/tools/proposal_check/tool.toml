@@ -1,0 +1,20 @@
+name = "proposal_check"
+kind = "tool"
+triggers = ["chain"]
+description = "Refuses to move a sale on until the stage it is in holds: the proposal in quotes/ that names the work has what the stage asks, and the owner approved before the build."
+tags = ["sales"]
+command = ["./run"]
+
+[parameters]
+type = "object"
+
+[views.work]
+source = "works"
+
+[views.cause]
+source = "events"
+relation = "cause"
+
+[views.children]
+source = "works"
+relation = "children"

@@ -1,10 +1,16 @@
 # Proposal: <client name> (<business>)
 
-<!-- The proposal the sales desk writes for each client, in
+<!-- The proposal the seller writes for each client, in
 quotes/<client-slug>.md: labels in English, the client's words and the
-proposal's text in Portuguese. Change this file to change the proposal. -->
+proposal's text in Portuguese. Each stage of the sale checks its part of
+it before the work moves on. Status is one of discovery, to be confirmed,
+sent, accepted, awaiting owner, approved, lost. Under Content, what the
+client gave, or "owed: " and what they said; under Design, the
+homologation address and "approved", or "not wanted". Change this file to
+change the proposal. -->
 
-Status: discovery | to be confirmed | sent | accepted, awaiting owner | approved | lost
+Work:
+Status: discovery
 Updated: YYYY-MM-DD
 
 ## 1. Who they are
@@ -14,13 +20,20 @@ Updated: YYYY-MM-DD
 ## 2. The problem, in their words
 - What is not working today, and what it costs them:
 
+## Content
+- Texts:
+- Products and prices:
+- Contacts:
+
+## Design
+- Preview:
+
 ## 3. What we propose
 - The site and what it does for them:
 
 ## 4. Scope
 - Pages, one per line:
 - Features, one per line:
-- What the client still owes (texts, photos, logo):
 - Not included:
 
 ## 5. Timing
@@ -40,5 +53,5 @@ Updated: YYYY-MM-DD
 
 ## Builders' assessment
 - Work id:
-- Answer: yes | yes with conditions | no
+- Answer:
 - Conditions or alternative:

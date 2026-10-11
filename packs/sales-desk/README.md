@@ -8,7 +8,19 @@ project and adjusted by hand.
 
 | Agent | Depth | Role |
 |---|---|---|
-| sales | 0 | talks with the client, asks the builders for an assessment, quotes from the table |
+| sales | 0 | the front desk: opens each client's request as a work, and forwards to it what they say |
+| seller | 0, workflow only | works the request through the workflow `sale`, talking with the client on it |
+
+Each client's request is a work that goes through the stages of the
+workflow `sale`: qualify, design, assess, propose, owner, build. The
+seller answers the client with comments on the work and moves it on with
+`done`, which chains the pack's tool `proposal_check`: it refuses the
+move until the proposal in `quotes/` that names the work has what the
+stage asks — the client's content after qualify, an approved preview or
+"not wanted" after design, the builders' answer after assess, the
+client's acceptance after propose — and, after owner, until the run was
+opened by the owner's approval, and after build, until a build came back
+done.
 
 It expects a team below it whose front agent is `administrator` and
 answers a work that begins "Assessment only, build nothing:" without
@@ -22,11 +34,10 @@ omunculus pack --path packs/dream-team --models team=<model> \
 
 The client talks with it by name: `omunculus send --agent sales "…"`.
 
-It qualifies the client (need, who decides, budget, timing), finds out how
-the business works and what a site would change, and writes the proposal
-in `quotes/<client>.md` following `workspace/templates/proposal.md`, eight
-sections from the client's problem in their words to the next steps;
-change the template in the project to change the proposal. With the
+The proposal follows `workspace/templates/proposal.md`, from the
+client's problem in their words to the next steps; change the template
+in the project to change the proposal, keeping the parts the stages
+check. With the
 design team (`packs/design-team`) below it too, a client who wants to see
 the site first gets a preview in homologation, and the approved design's
 `design/handoff.md` goes to the builders.
