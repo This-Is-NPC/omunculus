@@ -60,11 +60,11 @@ defmodule Omunculus.Tools.ReplyTest do
     end
   end
 
-  test "the builtin manifest reads the request view and chains grant, cancel and configure" do
+  test "the builtin manifest reads the request view and chains grant, cancel, configure and pack" do
     assert %{"reply" => manifest} = Catalog.unconfigured()
     assert manifest.triggers == ["cli", "model"]
     assert Enum.map(manifest.views, &{&1.key, &1.source}) == [{"request", "requests"}]
-    assert manifest.chains == ["grant", "cancel", "configure"]
+    assert manifest.chains == ["grant", "cancel", "configure", "pack"]
     assert manifest.then == []
   end
 

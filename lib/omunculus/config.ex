@@ -333,19 +333,30 @@ defmodule Omunculus.Config do
   folder, when the config then loads.
   """
   @spec import_pack(String.t(), map) :: {:ok, t} | {:error, term}
-  def import_pack(path, %{"path" => folder} = entry) do
+  def import_pack(path, entry) do
     :global.trans({{__MODULE__, path}, self()}, fn ->
-      dir = Path.dirname(Path.expand(path))
-      same = &(Path.expand(&1["path"] || "", dir) == Path.expand(folder, dir))
-
       with {:ok, data} <- read(path),
-           packs = Enum.reject(Map.get(data, "packs", []), same) ++ [entry],
-           data = Map.put(data, "packs", packs),
-           {:ok, config} <- parse(data, path, true),
+           {:ok, data, config} <- with_pack(data, path, entry),
            :ok <- replace(path, data) do
         {:ok, config}
       end
     end)
+  end
+
+  @doc "The config the TOML at `path` loads as once `entry` is imported, as `import_pack/2` would write it; the file stays as it is."
+  @spec try_pack(String.t(), map) :: {:ok, t} | {:error, term}
+  def try_pack(path, entry) do
+    with {:ok, data} <- read(path),
+         {:ok, _data, config} <- with_pack(data, path, entry),
+         do: {:ok, config}
+  end
+
+  defp with_pack(data, path, %{"path" => folder} = entry) do
+    dir = Path.dirname(Path.expand(path))
+    same = &(Path.expand(&1["path"] || "", dir) == Path.expand(folder, dir))
+    data = Map.put(data, "packs", Enum.reject(Map.get(data, "packs", []), same) ++ [entry])
+
+    with {:ok, config} <- parse(data, path, true), do: {:ok, data, config}
   end
 
   defp replace(path, data) do

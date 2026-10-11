@@ -737,6 +737,61 @@ defmodule Omunculus.CLITest do
                Toml.decode_file!(Path.join(dir, "omunculus.toml"))["agents"]["helper"]
     end
 
+    test "a pack an agent proposes to import is loaded first, then the person's to apply",
+         %{dir: dir} do
+      Fixtures.pack(dir)
+
+      config =
+        Fixtures.write_pack_config(dir, """
+        [agents.keeper]
+        depth = 0
+        text = "I keep the project."
+        tools = ["propose_pack", "end"]
+        human = ["pack"]
+        """)
+
+      Fixtures.use_model(dir, fn assembled, _tools, call ->
+        if assembled =~ "## Request\n" do
+          call.("end", %{})
+        else
+          [_, message] = List.last(Regex.scan(~r/## Message\n(.*)/, assembled))
+          models = if message =~ "broken", do: %{}, else: %{"lead" => "fast"}
+
+          call.("propose_pack", %{
+            "path" => "team",
+            "models" => models,
+            "auth" => %{"vault" => "mine"},
+            "depth" => 1,
+            "reason" => "the team"
+          })
+        end
+      end)
+
+      assert {:ok, _said} = CLI.run(["send", "a broken import"], dir)
+      project = open_project(dir)
+      assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
+      Project.close(project)
+
+      assert {:ok, _said} = CLI.run(["send", "import the team"], dir)
+      project = open_project(dir)
+      assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
+
+      assert {:ok, %{body: body}} =
+               Query.one(project.conn, "SELECT body FROM events WHERE id = ?", [request.event_id])
+
+      Project.close(project)
+
+      assert Jason.decode!(body)["reason"] =~
+               "- chief: depth 1, model fast\n- hand: depth 2, model fast"
+
+      refute Map.has_key?(Toml.decode_file!(config), "packs")
+
+      assert {:ok, _said} =
+               CLI.run(["reply", "--request_id", request.id, "--option", "apply", "yes"], dir)
+
+      assert {:ok, %{agents: %{"chief" => %{depth: 1}}}} = Omunculus.Config.load(config)
+    end
+
     test "a message goes to the agent of depth 0 it names, then to the one its conversation began with",
          %{dir: dir} do
       write_config(dir, """

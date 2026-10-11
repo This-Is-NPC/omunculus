@@ -46,7 +46,7 @@ defmodule Omunculus.Tools.PackTest do
     assert [%{"path" => "team"}] = Toml.decode_file!(config_path)["packs"]
   end
 
-  test "the builtin catalog discovers pack for the command line" do
-    assert %{"pack" => %{triggers: ["cli"]}} = Omunculus.Tool.Catalog.unconfigured()
+  test "the builtin catalog discovers pack for the command line and a reply's chain" do
+    assert %{"pack" => %{triggers: ["cli", "chain"]}} = Omunculus.Tool.Catalog.unconfigured()
   end
 end

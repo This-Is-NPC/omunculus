@@ -1,0 +1,32 @@
+name = "propose_pack"
+kind = "tool"
+triggers = ["model"]
+description = "Proposes to the person to import the pack in path (relative to the workspace): models gives the config's model for each of its roles, auth the config's login for each provider it names, depth how many depths below its own the team works. The config it would make is loaded first: an import that does not load is refused here, with why. One that loads becomes a request saying what the team brings and where, and the run ends until the person applies or denies it."
+tags = ["config", "pack"]
+groups = ["config"]
+module = "Omunculus.Tools.ProposePack"
+chains = ["end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+required = ["path", "models", "reason"]
+
+[parameters.properties.path]
+type = "string"
+
+[parameters.properties.models]
+type = "object"
+description = "role: the config's model it runs on."
+
+[parameters.properties.auth]
+type = "object"
+description = "provider of the pack: the config's [auth] login that stands for it."
+
+[parameters.properties.depth]
+type = "integer"
+minimum = 0
+
+[parameters.properties.reason]
+type = "string"
+description = "Why, for the person deciding."
