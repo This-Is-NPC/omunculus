@@ -384,6 +384,32 @@ defmodule Omunculus.Store.ActionsTest do
     assert event.work_id == work_id
   end
 
+  test "a run's prompt reaches only a work of its own conversation", %{conn: conn} do
+    other = Omunculus.Id.new()
+
+    :ok =
+      Query.insert(conn, :conversations, %{
+        id: other,
+        created_issuer: "local",
+        created_subject: "person",
+        created_at: "2026-01-01T00:00:00Z"
+      })
+
+    elsewhere = Fixtures.insert(conn, :works, %{conversation_id: other})
+    here = Fixtures.insert(conn, :works)
+    run = Fixtures.insert(conn, :runs, %{})
+
+    prompt = fn work_id ->
+      [%{"type" => "prompt", "body" => %{"message" => "hi", "work_id" => work_id}}]
+    end
+
+    assert {:error, {:prompt, {:outside_conversation, ^elsewhere}}} =
+             record_tool(conn, prompt.(elsewhere), %{@ctx | run_id: run})
+
+    assert {:ok, [_tool_event, %{type: "prompt"}]} =
+             record_tool(conn, prompt.(here), %{@ctx | run_id: run})
+  end
+
   test "prompt with a non-existent work_id is rejected and writes nothing", %{conn: conn} do
     assert {:error, {:prompt, {:missing, :works, "nope"}}} =
              record_tool(

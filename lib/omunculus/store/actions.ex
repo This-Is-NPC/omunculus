@@ -162,7 +162,30 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
+  # A run may only message a work of its own conversation.
   defp write_prompt(conn, body, ctx) do
+    with :ok <- same_conversation(conn, body["work_id"], Map.get(ctx, :run_id)),
+         do: insert_prompt(conn, body, ctx)
+  end
+
+  defp same_conversation(_conn, nil, _run_id), do: :ok
+  defp same_conversation(_conn, _work_id, nil), do: :ok
+
+  defp same_conversation(conn, work_id, run_id) do
+    case Query.one(
+           conn,
+           """
+           SELECT 1 AS same FROM works, runs
+           WHERE works.id = ? AND runs.id = ? AND works.conversation_id IS runs.conversation_id
+           """,
+           [work_id, run_id]
+         ) do
+      {:ok, %{same: 1}} -> :ok
+      _other -> {:error, {:prompt, {:outside_conversation, work_id}}}
+    end
+  end
+
+  defp insert_prompt(conn, body, ctx) do
     prompt_id = Id.new()
 
     conversation_id =
