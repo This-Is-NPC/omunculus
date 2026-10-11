@@ -113,6 +113,30 @@ defmodule Omunculus.Tools.ConfigTest do
     assert %{"ok" => false, "output" => "config_path required"} = Config.run(%{})
   end
 
+  test "says which packs the project imports and what each brings" do
+    dir = Fixtures.tmp_dir()
+    pack = Fixtures.pack(dir)
+
+    path =
+      Fixtures.write_pack_config(
+        dir,
+        ~s([[packs]]\npath = "team"\nmodels = { lead = "fast" }\nauth = { vault = "mine" }\ndepth = 1\n)
+      )
+
+    assert %{"ok" => true, "output" => output} = Omunculus.Tools.Config.run(%{config_path: path})
+
+    assert [
+             %{
+               "name" => "team",
+               "path" => ^pack,
+               "depth" => 1,
+               "models" => %{"lead" => "fast"},
+               "agents" => ["chief", "hand"],
+               "workflows" => ["line"]
+             }
+           ] = Jason.decode!(output)["packs"]
+  end
+
   test "the builtin catalog discovers config for the command line and models" do
     assert %{"config" => manifest} = Catalog.unconfigured()
     assert manifest.triggers == ["cli", "model"]
