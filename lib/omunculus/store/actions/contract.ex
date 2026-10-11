@@ -5,7 +5,7 @@ defmodule Omunculus.Store.Actions.Contract do
 
   @fields %{
     "comment" => ~w(body work_id request_id inbox_id),
-    "prompt" => ~w(message work_id),
+    "prompt" => ~w(message work_id agent),
     "work" => ~w(report works),
     "request" => ~w(reason options),
     "reply" => ~w(request_id option body),

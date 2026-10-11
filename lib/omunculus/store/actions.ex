@@ -165,7 +165,51 @@ defmodule Omunculus.Store.Actions do
   # A run may only message a work of its own conversation.
   defp write_prompt(conn, body, ctx) do
     with :ok <- same_conversation(conn, body["work_id"], Map.get(ctx, :run_id)),
+         {:ok, body} <- addressed(conn, body, ctx),
          do: insert_prompt(conn, body, ctx)
+  end
+
+  # A message without a work goes to the agent of depth 0 it names, else to
+  # the one its conversation began with, else to the only one there; the
+  # event says which.
+  defp addressed(_conn, %{"work_id" => work_id, "agent" => _agent}, _ctx)
+       when is_binary(work_id),
+       do: {:error, {:prompt, :agent_with_work}}
+
+  defp addressed(_conn, %{"work_id" => work_id} = body, _ctx) when is_binary(work_id),
+    do: {:ok, body}
+
+  defp addressed(conn, body, ctx) do
+    front = ctx.config |> Config.agents_at_depth(0) |> Enum.map(&elem(&1, 0))
+
+    case Map.get(body, "agent") || conversation_agent(conn, Map.get(ctx, :conversation_id)) do
+      nil ->
+        case front do
+          [only] -> {:ok, Map.put(body, "agent", only)}
+          [] -> {:error, {:prompt, {:no_agent_at_depth, 0}}}
+          several -> {:error, {:prompt, {:agent_required, 0, several}}}
+        end
+
+      agent ->
+        if agent in front,
+          do: {:ok, Map.put(body, "agent", agent)},
+          else: {:error, {:prompt, {:not_at_depth_0, agent}}}
+    end
+  end
+
+  defp conversation_agent(conn, conversation_id) do
+    case Query.one(
+           conn,
+           """
+           SELECT agent FROM runs
+           WHERE work_id IS NULL AND depth = '0' AND conversation_id IS ?
+           ORDER BY started_at DESC, id DESC LIMIT 1
+           """,
+           [conversation_id]
+         ) do
+      {:ok, %{agent: agent}} -> agent
+      _none -> nil
+    end
   end
 
   defp same_conversation(_conn, nil, _run_id), do: :ok
@@ -291,10 +335,14 @@ defmodule Omunculus.Store.Actions do
 
   defp item?(_item), do: false
 
-  # One work for an agent of depth 0, or the depth's own, starts as the root.
+  # One work for an agent of depth 0, or the depth's own, starts as the root:
+  # unnamed, it is the creating run's agent's, unless a workflow's first
+  # stage takes it.
   defp own_root(conn, report, item, ctx) do
+    agent = item["agent"] || (Config.workflow_for(ctx.config, 0) == :off && ctx.agent) || nil
+
     with {:ok, {stage, assignee}} <-
-           Helpers.tag_error(:work, Helpers.stage_and_assignee(ctx.config, 0, item["agent"])),
+           Helpers.tag_error(:work, Helpers.stage_and_assignee(ctx.config, 0, agent)),
          {:ok, workspace} <-
            Helpers.tag_error(:work, Helpers.resolve_workspace(ctx.config, item["workspace"], nil)) do
       create_root(conn, Map.put(item, "report", report), ctx, stage, assignee, workspace, true)

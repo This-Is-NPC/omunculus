@@ -552,6 +552,44 @@ defmodule Omunculus.Store.ActionsTest do
       assert count(conn, "works") == 0
     end
 
+    test "with several agents at a depth, a work outside a run must name its agent", %{
+      conn: conn
+    } do
+      config =
+        Fixtures.config("""
+        [agents.front]
+        depth = 0
+        text = "front"
+
+        [agents.desk]
+        depth = 0
+        text = "desk"
+        """)
+
+      # The helper names concierge; this work names no one.
+      unnamed =
+        update_in(work_emit(%{"title" => "x"}), ["body", "works"], fn works ->
+          Enum.map(works, &Map.delete(&1, "agent"))
+        end)
+
+      assert {:error, {:work, {:agent_required, 0, ["desk", "front"]}}} =
+               record_tool(conn, [unnamed], %{
+                 @ctx
+                 | config: config,
+                   agent: nil
+               })
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(
+                 conn,
+                 [work_emit(%{"title" => "x", "agent" => "desk"})],
+                 %{@ctx | config: config, agent: nil}
+               )
+
+      assert {:ok, %{assignee: "desk"}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
+    end
+
     test "a named agent must be one of depth 0 or 1 outside workflows", %{conn: conn} do
       config = Fixtures.config(arbiter_toml())
 

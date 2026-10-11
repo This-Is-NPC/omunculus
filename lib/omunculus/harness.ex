@@ -800,9 +800,14 @@ defmodule Omunculus.Harness do
     do: {:ok, Jason.decode!(body)["name"]}
 
   defp advance(project, _catalog, %{type: "prompt"} = event, via, :actions) do
-    with :ok <-
-           due(project, event, %{prompt_id: event.prompt_id, work_id: event.work_id, via: via}),
-         do: {:ok, via}
+    opening = %{
+      prompt_id: event.prompt_id,
+      work_id: event.work_id,
+      via: via,
+      agent: Jason.decode!(event.body)["agent"]
+    }
+
+    with :ok <- due(project, event, opening), do: {:ok, via}
   end
 
   defp advance(project, _catalog, %{type: "reply"} = event, via, :actions) do

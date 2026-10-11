@@ -674,6 +674,37 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
+    test "a message goes to the agent of depth 0 it names, then to the one its conversation began with",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.front]
+      depth = 0
+      text = "I am front."
+      tools = ["end"]
+
+      [agents.desk]
+      depth = 0
+      text = "I am desk."
+      tools = ["end"]
+      """)
+
+      Fixtures.use_model(dir, fn _assembled, _tools, call -> call.("end", %{}) end)
+
+      assert {:error, {:prompt, {:agent_required, 0, ["desk", "front"]}}} =
+               CLI.run(["send", "hello"], dir)
+
+      assert {:error, {:prompt, {:not_at_depth_0, "ghost"}}} =
+               CLI.run(["send", "--agent", "ghost", "hello"], dir)
+
+      assert {:ok, ""} = CLI.run(["send", "--agent", "desk", "hello"], dir)
+      assert {:ok, ""} = CLI.run(["send", "and again"], dir)
+
+      project = open_project(dir)
+      assert {:ok, runs} = Query.all(project.conn, "SELECT agent FROM runs ORDER BY started_at")
+      assert Enum.map(runs, & &1.agent) == ["desk", "desk"]
+      Project.close(project)
+    end
+
     test "with [policy] sessions, a message without a work continues the conversation",
          %{dir: dir} do
       config = Path.join(dir, "omunculus.toml")
@@ -1052,6 +1083,7 @@ defmodule Omunculus.CLITest do
 
       [agents.reviewer]
       depth = 0
+      workflow_only = true
       text = "I am the reviewer."
       tools = ["work", "continue", "comment", "done", "end"]
 

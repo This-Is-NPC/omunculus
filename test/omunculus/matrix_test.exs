@@ -169,7 +169,8 @@ defmodule Omunculus.MatrixTest do
     write_config(dir, depth, workflow?)
     if hook?, do: add_observer_hook(dir)
 
-    assert {:ok, ""} = CLI.run(["send", "count to 5"], dir)
+    # The observer is at depth 0 too: the person says whom they talk to.
+    assert {:ok, ""} = CLI.run(["send", "--agent", "concierge", "count to 5"], dir)
   end
 
   defp counter_value(conn) do

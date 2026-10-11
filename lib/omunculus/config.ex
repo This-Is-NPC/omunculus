@@ -253,12 +253,16 @@ defmodule Omunculus.Config do
     |> Enum.sort_by(fn {name, _agent} -> name end)
   end
 
+  @doc "The agent of `depth` when it is the only one there; with several, one must be named."
   @spec agent_at_depth(t, non_neg_integer) ::
-          {:ok, {String.t(), agent}} | {:error, {:no_agent_at_depth, non_neg_integer}}
+          {:ok, {String.t(), agent}}
+          | {:error, {:no_agent_at_depth, non_neg_integer}}
+          | {:error, {:agent_required, non_neg_integer, [String.t()]}}
   def agent_at_depth(%__MODULE__{} = config, depth) do
     case agents_at_depth(config, depth) do
       [] -> {:error, {:no_agent_at_depth, depth}}
-      [first | _rest] -> {:ok, first}
+      [only] -> {:ok, only}
+      several -> {:error, {:agent_required, depth, Enum.map(several, &elem(&1, 0))}}
     end
   end
 

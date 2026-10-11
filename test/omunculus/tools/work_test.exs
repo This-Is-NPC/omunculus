@@ -269,8 +269,8 @@ defmodule Omunculus.Tools.WorkTest do
         root_model(fn
           {"lead", "planned"}, call ->
             create(call, "split", [
-              %{"title" => "A", "goal" => "Goal A"},
-              %{"title" => "B", "goal" => "Goal B"}
+              %{"title" => "A", "goal" => "Goal A", "agent" => "alpha"},
+              %{"title" => "B", "goal" => "Goal B", "agent" => "alpha"}
             ])
 
           {"alpha", _comment}, call ->
@@ -323,7 +323,7 @@ defmodule Omunculus.Tools.WorkTest do
           {"lead", "planned"}, call ->
             create(call, "split", [
               %{"title" => "A", "goal" => "Goal A", "agent" => "beta"},
-              %{"title" => "B", "goal" => "Goal B"}
+              %{"title" => "B", "goal" => "Goal B", "agent" => "alpha"}
             ])
 
           {"beta", _comment}, call ->
@@ -412,7 +412,7 @@ defmodule Omunculus.Tools.WorkTest do
       model =
         root_model(fn
           {"lead", "planned"}, call ->
-            create(call, "split", [%{"title" => "A", "goal" => "Goal A"}])
+            create(call, "split", [%{"title" => "A", "goal" => "Goal A", "agent" => "alpha"}])
 
           {"alpha", nil}, call ->
             create(call, "sub", [
