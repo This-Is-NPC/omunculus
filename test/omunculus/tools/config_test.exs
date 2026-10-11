@@ -113,8 +113,8 @@ defmodule Omunculus.Tools.ConfigTest do
     assert %{"ok" => false, "output" => "config_path required"} = Config.run(%{})
   end
 
-  test "the builtin catalog discovers config with triggers == [\"cli\"]" do
+  test "the builtin catalog discovers config for the command line and models" do
     assert %{"config" => manifest} = Catalog.unconfigured()
-    assert manifest.triggers == ["cli"]
+    assert manifest.triggers == ["cli", "model"]
   end
 end

@@ -1,9 +1,9 @@
 name = "overview"
 kind = "tool"
-triggers = ["cli"]
+triggers = ["cli", "model"]
 description = "Prints, as JSON, the project as it runs in each workspace: each depth's workflow, stages and agents, with their models, keys and classified tools."
 tags = ["cli", "config"]
-groups = ["cli"]
+groups = ["cli", "config"]
 module = "Omunculus.Tools.Overview"
 
 [parameters]

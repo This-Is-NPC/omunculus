@@ -124,8 +124,8 @@ defmodule Omunculus.Tools.OverviewTest do
     refute "skills" in names
   end
 
-  test "the builtin catalog discovers overview with triggers == [\"cli\"]" do
+  test "the builtin catalog discovers overview for the command line and models" do
     assert %{"overview" => manifest} = Catalog.unconfigured()
-    assert manifest.triggers == ["cli"]
+    assert manifest.triggers == ["cli", "model"]
   end
 end
