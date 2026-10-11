@@ -31,7 +31,7 @@ defmodule Omunculus.Config do
   """
 
   alias Omunculus.Auth
-  alias Omunculus.Config.Layer
+  alias Omunculus.Config.{Layer, Packs}
   alias Omunculus.Tool.{Manifest, Overrides}
 
   @enforce_keys [
@@ -565,6 +565,11 @@ defmodule Omunculus.Config do
   end
 
   defp parse(data, path, validate_overlays?) do
+    with {:ok, data} <- Packs.expand(data, Path.dirname(Path.expand(path))),
+         do: parse_expanded(data, path, validate_overlays?)
+  end
+
+  defp parse_expanded(data, path, validate_overlays?) do
     case Map.keys(data) --
            [
              "policy",
