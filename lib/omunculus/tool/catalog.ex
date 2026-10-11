@@ -71,10 +71,9 @@ defmodule Omunculus.Tool.Catalog do
     end)
   end
 
-  defp discover_mcp(acc, servers, nil, _secrets) do
-    Enum.each(servers, &log_skip_mcp(&1.name, :execution_context_required))
-    acc
-  end
+  # Outside a run there is no execution to start a server in: a call from
+  # the command line sees no MCP tool, as expected.
+  defp discover_mcp(acc, _servers, nil, _secrets), do: acc
 
   defp server_secrets(%{secrets: binding}, _secrets) when map_size(binding) == 0, do: {:ok, %{}}
   defp server_secrets(_server, nil), do: {:error, :secrets_unresolved}
