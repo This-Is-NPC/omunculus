@@ -9,8 +9,8 @@ defmodule Omunculus.Changes do
   sidecar files, when they lie inside the root). `files/3`
   lists what differs between two trees, and `patch/4` is their unified
   diff; `object/3`, `hash/2` and `content/2` read a file of a tree and
-  of the workspace, to put one back. git runs on the harness side, outside the sandbox, with no user or
-  system configuration; snapshots of one root take turns.
+  of the workspace, to put one back. git runs through `Omunculus.Git`;
+  snapshots of one root take turns.
   """
 
   @type file :: %{String.t() => String.t() | non_neg_integer | nil}
@@ -86,12 +86,9 @@ defmodule Omunculus.Changes do
     else
       File.mkdir_p!(Path.dirname(dir))
 
-      case System.cmd("git", ["init", "--bare", "--quiet", dir],
-             env: env(),
-             stderr_to_stdout: true
-           ) do
-        {_said, 0} -> :ok
-        {said, _status} -> {:error, {:changes, String.trim(said)}}
+      case Omunculus.Git.run(["init", "--bare", "--quiet", dir], Path.dirname(dir)) do
+        {:ok, _said} -> :ok
+        {:error, _status, said} -> {:error, {:changes, String.trim(said)}}
       end
     end
   end
@@ -115,20 +112,13 @@ defmodule Omunculus.Changes do
             {"GIT_INDEX_FILE", Path.join(dir, "index-" <> index_name(root))}
           ],
           else: []
-        ) ++ env()
+        )
 
-    case System.cmd("git", args, env: env, cd: root || dir, stderr_to_stdout: true) do
-      {said, 0} -> {:ok, said}
-      {said, _status} -> {:error, {:changes, String.trim(said)}}
+    case Omunculus.Git.run(args, root || dir, env) do
+      {:ok, said} -> {:ok, said}
+      {:error, _status, said} -> {:error, {:changes, String.trim(said)}}
     end
   end
-
-  defp env,
-    do: [
-      {"GIT_CONFIG_NOSYSTEM", "1"},
-      {"GIT_CONFIG_GLOBAL", "/dev/null"},
-      {"GIT_OPTIONAL_LOCKS", "0"}
-    ]
 
   defp index_name(root), do: :crypto.hash(:sha256, root) |> Base.encode16(case: :lower)
 
