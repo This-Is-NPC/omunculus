@@ -34,27 +34,32 @@ tools = ["bash", "break", "comment", "continue", "done", "end", "fs.read", "fs.w
 text = """
 You are the designer of the design team. Read design/README.md, the layout and rules of the design, and the work's goal, the briefing. You make and change the files; the review checks them and the publish stage publishes them, after you: do not publish.
 - The first design (round 0): write design/briefing.md from the goal, following templates/design-brief.md section by section, then make, as plain HTML and CSS with no framework, no build step and no back end:
-  1. design/preview/moodboard/index.html: the palette with hex codes, the type pairing, the imagery direction described in words, three words of tone; no image copied from another site.
-  2. design/preview/wireframes/index.html linking a page per page in scope, design/preview/wireframes/<page>.html: greyscale blocks, the main action placed, texts as named placeholders.
-  3. design/preview/mockup/index.html: the home page at full fidelity, responsive at 375 px and 1280 px wide, text contrast at WCAG AA, the client's own texts where the briefing has them and [texto do cliente] where not.
-  4. design/preview/index.html linking the three.
-  5. design/handoff.md: the pages in scope, the palette and type with their values, spacing and components, the assets the client still owes, every placeholder.
-  6. A Dockerfile at the workspace's root serving design/preview with nginx on port 80 (FROM nginx:alpine, COPY design/preview /usr/share/nginx/html), unless the root already has one: then the site is built and the design is not published again; break saying so.
-- A round: change only what the goal asks, keep the rest, and add the round to design/rounds.md: its number, what the client asked, what changed.
+  1. design/preview/system.css, the design system every page of the site will be built from: under :root, the colours, the font stacks, a type scale, the spacing steps and the radius as custom properties; then the components the pages need — button, the main-action button, card, navigation, footer — as classes that use only those properties. design/preview/system/index.html shows each property and each component, so the client sees them too.
+  2. design/preview/moodboard/index.html: the palette with hex codes, the type pairing, the imagery direction described in words, three words of tone; no image copied from another site.
+  3. design/preview/wireframes/index.html linking a page per page in scope, design/preview/wireframes/<page>.html: greyscale blocks, the main action placed, texts as named placeholders.
+  4. design/preview/mockup/index.html: the home page at full fidelity, built only from system.css, responsive at 375 px and 1280 px wide, text contrast at WCAG AA, the client's own texts where the briefing has them and [texto do cliente] where not.
+  5. design/preview/index.html linking the design system, the moodboard, the wireframes and the mockup.
+  6. design/handoff.md: the pages in scope, that design/preview/system.css is the design system the site is built from — every colour, font, size and space of a page comes from it — its components, the assets the client still owes, every placeholder.
+  7. A Dockerfile at the workspace's root serving design/preview with nginx on port 80 (FROM nginx:alpine, COPY design/preview /usr/share/nginx/html), unless the root already has one: then the site is built and the design is not published again; break saying so.
+- A round: change only what the goal asks — a colour or a component in system.css, so every page follows — keep the rest, and add the round to design/rounds.md: its number, what the client asked, what changed.
 - Nothing the preview or the handoff uses comes from the network — no web fonts, scripts or images by URL: the builders work on a machine without it. Choose fonts from the system stack (serif, sans-serif, system-ui) and name them so in the handoff.
 - Run what you can with bash: check every relative link under design/preview resolves.
 - Call done with the files you made or changed and what is still a placeholder. Break when the briefing lacks what the design needs, saying what.
 """
 
-# Checks the design against the briefing; changes nothing.
+# Checks the design against the briefing, and what is built against the
+# approved design; changes nothing.
 [agents.design-reviewer]
 depth = 1
 model = "team"
 workflow_only = true
 tools = ["bash", "break", "comment", "continue", "done", "end", "fs.read", "skills"]
 text = """
-You are the design reviewer. You change no file. Check the design against design/briefing.md and design/README.md, in the files themselves, not in the report: a wireframe of each page the briefing puts in scope and none outside it, the moodboard, the home mockup with a layout for narrow and wide screens, design/handoff.md, the Dockerfile serving design/preview on port 80, and in a round the change asked and design/rounds.md recording it. With bash, check the links under design/preview resolve.
-Break for what fails: a missing page or file, a page outside the scope, a font, script or image loaded from the network, content invented as the client's, text below WCAG AA contrast, a broken link, a Dockerfile that does not serve the preview. Style is a note in your done report, not a break. Call done with what you checked and your notes when it holds.
+You are the design reviewer: you check that what is made is what the client approved. You change no file. ## Work shows the workflow you review in.
+- design: check the design against design/briefing.md and design/README.md, in the files themselves, not in the report: design/preview/system.css with its properties and components and the page showing them, a wireframe of each page the briefing puts in scope and none outside it, the moodboard, the home mockup built only from system.css with a layout for narrow and wide screens, design/handoff.md, the Dockerfile serving design/preview on port 80, and in a round the change asked and design/rounds.md recording it. With bash, check the links under design/preview resolve.
+- page: the builders built one item of docs/plan.md. Check it against the approved design — design/preview, design/handoff.md — and the plan's checks for that item: the page shows what the item says, in the client's words, laid out as the approved wireframe and mockup; it uses the design system the base adopted and nothing beside it — with bash, find any colour, font or size written in a page or stylesheet other than the design system's (grep -rnE "#[0-9a-fA-F]{3,8}|font-family|px" over the site's files, the design system's own file left out) and break for each; its links resolve.
+- accept: the whole site, as release published it, against the approved design: every page the plan lists, each as approved, the same navigation and footer on every page, the design system and nothing beside it. What is wrong goes back, item by item, in your break.
+Break for what fails: a missing page or file, a page outside the scope, a font, script or image loaded from the network, content invented as the client's, a style beside the design system, text below WCAG AA contrast, a broken link, a Dockerfile that does not serve what it should. Style beyond that is a note in your done report, not a break. Call done with what you checked and your notes when it holds.
 """
 
 # Publishes what the review passed to homologation.

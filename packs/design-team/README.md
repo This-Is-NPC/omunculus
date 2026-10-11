@@ -1,16 +1,17 @@
 # design-team
 
-The design team makes the visual proposal a site starts from — a
-moodboard, the wireframes of the pages in scope and a mockup of the home
-page — and publishes it to homologation, where the sales desk shows it to
-the client before anything is built. It builds no site: once the client
+The design team makes the visual proposal a site starts from — a design
+system (`design/preview/system.css`: colours, fonts, type scale, spacing
+and components), a moodboard, the wireframes of the pages in scope and a
+mockup of the home page — and publishes it to homologation, where the
+sales desk shows it to the client before anything is built. It builds no site: once the client
 and the owner approve, the builders work from its `design/handoff.md`.
 
 | Agent | Depth | Does |
 | --- | --- | --- |
 | design-lead | 0 | answers the sales desk: briefing, rounds, assessments |
 | designer | 1, workflow only | makes the design in `design/` |
-| design-reviewer | 1, workflow only | checks it against the briefing |
+| design-reviewer | 1, workflow only | checks the design against the briefing, and, where a project composes it into the build, what is built against the approved design |
 | publisher | 1, workflow only | publishes it to homologation |
 
 Every design goes through the workflow `design`: design (designer), review
