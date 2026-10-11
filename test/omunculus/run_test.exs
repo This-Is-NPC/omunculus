@@ -1372,7 +1372,7 @@ defmodule Omunculus.RunTest do
       Project.close(project)
     end
 
-    test "replying retry to the root's request opens another run of it", %{dir: dir} do
+    test "replying with text to the root's request opens another run of it", %{dir: dir} do
       retry_config(dir, "max_retries = 0")
       project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works)
@@ -1381,11 +1381,14 @@ defmodule Omunculus.RunTest do
       request = root_request(project, work_id)
 
       assert {:ok, ""} =
-               CLI.run(["reply", "--request_id", request.id, "--option", "retry", "go on"], dir)
+               CLI.run(["reply", "--request_id", request.id, "go on"], dir)
 
       assert [_first, again] = runs_of(project, work_id)
       assert again.via == "reply"
       assert again.request_id == request.id
+      assert {:ok, %{body: prompt}} = Store.view(project.conn, "prompt", again.prompt_id)
+      assert prompt =~ "answered: the reply is below"
+      assert String.ends_with?(prompt, "\ngo on")
       assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", work_id)
 
       Project.close(project)

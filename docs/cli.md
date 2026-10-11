@@ -229,11 +229,12 @@ Mark one notification read. The next `inbox` listing leaves it out.
 
 ## `omunculus reply`
 
-- **Usage:** `omunculus reply <body> --request_id <id> --option <name>`
+- **Usage:** `omunculus reply <body> --request_id <id> [--option <name>]`
 - **Effect:** comment + the tool calls of that option
 
-Answer a request with one of its options. The request is closed, the body
-becomes a comment on it, and the calls the option lists run as steps
+Answer a request with text and optionally one of its options. The request
+is closed and the body becomes a comment on it. Without an option no calls
+run and no permissions are granted. With an option its calls run as steps
 chained by `reply`, with `request_id` in their args and no ceiling check
 from the command line. The requester's work, if it still waits on the
 request, is reopened; when it is open after the option's calls, the

@@ -96,7 +96,7 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `GET /conversations/{id}/events?after={cursor}` | Read up to 500 later events in sequence order. |
 | `GET /conversations/{id}/stream?after={cursor}` | Open a WebSocket of later events; see [Event stream](#event-stream). |
 | `POST /conversations/{id}/messages` | Send `{"message":"text"}` with optional `work_id`. |
-| `POST /conversations/{id}/requests/{request_id}/reply` | Send `{"option":"name","body":"text"}`. |
+| `POST /conversations/{id}/requests/{request_id}/reply` | Send `{"body":"text"}`, optionally with `"option":"name"` to execute that option's calls. |
 | `POST /conversations/{id}/comments` | Send `{"body":"text"}` and exactly one of `work_id`, `request_id` or `inbox_id`. |
 | `POST /conversations/{id}/inbox/{inbox_id}/read` | Mark an inbox item read. |
 | `POST /members`, `DELETE /members/{issuer}/{subject}` | Assign or revoke a project role. |

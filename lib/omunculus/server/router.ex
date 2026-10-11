@@ -138,13 +138,13 @@ defmodule Omunculus.Server.Router do
                 :reply_request do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, command_id} <- command_id(conn),
-         {:ok, option} <- required_string(conn.body_params, "option"),
-         {:ok, body} <- required_string(conn.body_params, "body"),
+         {:ok, _body} <- required_string(conn.body_params, "body"),
+         {:ok, _option} <- optional_string(conn.body_params, "option"),
          {:ok, result} <-
            Project.command(
              project_id,
              "reply",
-             %{"request_id" => request_id, "option" => option, "body" => body},
+             conn.body_params |> Map.take(~w(option body)) |> Map.put("request_id", request_id),
              principal,
              conversation_id,
              command_id
@@ -308,6 +308,10 @@ defmodule Omunculus.Server.Router do
   end
 
   defp required_string(_, _), do: {:error, :invalid}
+
+  defp optional_string(map, key) do
+    if Map.has_key?(map, key), do: required_string(map, key), else: {:ok, nil}
+  end
 
   defp target(body) do
     with {:ok, issuer} <- required_string(body, "issuer"),

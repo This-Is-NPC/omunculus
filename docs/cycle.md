@@ -233,9 +233,10 @@ reason the first comment on it; if a work is attached it becomes
 Both request tools end the asking run; an agent arbiter's run opens on
 the parent work after it closes.
 
-`reply` picks an option: the person always may, an agent only as the
-arbiter. The request closes, the reply's body is commented on it, and
-the option's calls run as steps `reply` chains — under the arbiter's
+`reply` answers with text and optionally picks an option: the person always
+may, an agent only as the arbiter. The request closes and the reply's body
+is commented on it. Without an option it executes no effects; with an option
+its calls run as steps `reply` chains — under the arbiter's
 ceiling, in the reply's transaction, each an `EVENTS(tool)` with
 `via = reply`. The builtin `reply` chains `grant` and `cancel`;
 a call outside that list fails the reply and writes nothing. The

@@ -33,6 +33,13 @@ defmodule Omunculus.Server.OpenAPITest do
     end
   end
 
+  test "reply requires text and offers an optional option" do
+    document = Router.openapi_routes() |> OpenAPI.document() |> Jason.encode!() |> Jason.decode!()
+    schema = document["components"]["schemas"]["ReplyRequest"]
+    assert schema["required"] == ["body"]
+    assert schema["properties"]["option"]["type"] == "string"
+  end
+
   defp local_references(%{"$ref" => "#/components/schemas/" <> name} = map),
     do: [name | nested_references(Map.delete(map, "$ref"))]
 

@@ -2,7 +2,8 @@
 
 Specification for Omakiten plan `generic-requests`, task 3277. This document
 records the current implementation and a proposed contract for approval.
-The proposed contract is not implemented by this documentation commit.
+The proposed contract is delivered incrementally; the current behavior is
+described below.
 The user authorized implementation after clarifying participant-neutral
 routing, multiple requests in the existing inbox, and pause/resume semantics.
 The implementation tasks record which parts of this contract are delivered.
@@ -23,8 +24,9 @@ only of grants the requester already has are refused.
 
 A request parks its work with `state = waiting`, `waiting = request` and
 `waiting_for = request_id`. A work waiting on children cannot open a request.
-`reply` requires both a named option and a nonempty comment. It chains that
-option's calls, adding the request ID to their arguments. The harness records
+`reply` requires a nonempty comment and accepts an optional named option.
+Text alone chains no calls and grants nothing. A selected option chains its
+calls, adding the request ID to their arguments. The harness records
 the call, reply and effects in one store transaction. A refused chain or emit
 applies none of them. An authorized human may reply; an agent must be the
 recorded arbiter. The reply closes the request and reopens a work still waiting
@@ -361,7 +363,7 @@ respective answers are returned.
 | `ask` | Question or decision; empty call lists for named answers. | Requires at least two options today. Allow no options and text replies through the common path; retain named decisions. |
 | `request_access` | Permission form; each grant option grants the entire requested set, or deny returns text. | Already emits one request. Use the common lifecycle and escalation while retaining blocked/already-have checks and human-only permanent scopes. |
 | `request_sandbox` | Sandbox permissions are `request_access` entries with `kind = resource`, e.g. `sandbox.write`. | No such builtin module or manifest exists at this commit. Older references in `docs/tools.md`, `docs/cycle.md`, `docs/cli.md`, `docs/ceiling.md` and `docs/possibilities.md` are stale. Correct those references when folding paths in; introduce no alias or second sandbox request tool. |
-| `reply` → `grant` / `cancel` | A selected answer applies the origin's ordered calls transactionally. | Requires an option today. Make it optional for text, expose answer text, and apply named parts through the same authorized reply path. Keep grant/cancel chain-only. |
+| `reply` → `grant` / `cancel` | A selected answer applies the origin's ordered calls transactionally. | Text-only replies and optional named options share the authorized reply path. Named parts remain to be implemented. Keep grant/cancel chain-only. |
 | Questions carried by `break`, then `reopen` | A resumable question is a request; escalation carries it upward and reply resumes it. | Design lead, designer and administrator instructions use stopping reports for missing information. Replace those question instructions with requests. Keep `break` and `reopen` for actual failed/stopped work and correction. |
 | `promote` approval | A permission request for the clerk's production tool follows the configured decision route, regardless of intermediary type. | Dream-team seals `promote` as human-only and its clerk requests it with `request_access`, which currently jumps to the human. Preserve the human grant boundary internally while linking every escalation; the requester does not choose a human endpoint. `promote` itself remains the deployment tool and publishes only after the grant; a text approval cannot run it. |
 | `propose_config`, `propose_pack` | Decision requests with `apply` calling `configure` or `pack`, and `deny` calling nothing. | Keep validated proposals, revision checks and human authorization on the shared path. Free text records advice without applying a proposal. Resolve the configured responsibility without requiring the asker to identify its participant type. |

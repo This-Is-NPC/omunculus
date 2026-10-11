@@ -117,7 +117,8 @@ defmodule Omunculus.Tools.Out do
 
   @spec answer_request() :: String.t()
   def answer_request,
-    do: "This run is for answering it: call reply with one of these options before anything else."
+    do:
+      "This run is for answering it: call reply with your answer in body, optionally choosing one of these options, before anything else."
 
   @spec read_only_workspace() :: String.t()
   def read_only_workspace,
@@ -137,6 +138,7 @@ defmodule Omunculus.Tools.Out do
       "Your last run ended without done, work or break: go on with the work and end it with one of them."
 
   @spec answered(String.t() | nil) :: String.t()
+  def answered(nil), do: "answered: the reply is below"
   def answered(option), do: "answered #{option}: the reply is below"
 
   @spec not_yours(String.t()) :: String.t()

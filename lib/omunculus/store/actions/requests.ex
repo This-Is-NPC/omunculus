@@ -13,7 +13,7 @@ defmodule Omunculus.Store.Actions.Requests do
   sealed name or calling a tool sealed for the requester, or one that
   says it is for the person (`to = "person"`); otherwise the parent work's agent when every tool of every
   option is have for it and every granted name have or askable, else the
-  human. `reply` picks one option — the human always may, an agent only
+  human. `reply` answers with text and optionally picks an option — the human always may, an agent only
   as the request's arbiter — closes the request, comments its body on it
   and reopens the requester's work if it still waits on the request.
   `grant` gives the request's work a name or, with a `scope` and only
@@ -70,7 +70,7 @@ defmodule Omunculus.Store.Actions.Requests do
   def reply(conn, body, ctx) do
     with {:ok, request} <- Helpers.fetch_request(:reply, conn, body["request_id"]),
          :ok <- ensure_open(request),
-         :ok <- ensure_option(request, body["option"]),
+         :ok <- ensure_option(request, body),
          :ok <- Helpers.ensure_text(:reply, body, "body"),
          :ok <- authorize_reply(request, ctx) do
       apply_reply(conn, ctx, request, body)
@@ -322,7 +322,9 @@ defmodule Omunculus.Store.Actions.Requests do
   defp ensure_open(%{status: status}) when status in ["waiting_human", "waiting_agent"], do: :ok
   defp ensure_open(_request), do: {:error, {:reply, :closed}}
 
-  defp ensure_option(request, option) do
+  defp ensure_option(_request, body) when not is_map_key(body, "option"), do: :ok
+
+  defp ensure_option(request, %{"option" => option}) do
     options = Jason.decode!(request.options)
 
     if is_binary(option) and Map.has_key?(options, option),

@@ -1,7 +1,7 @@
 name = "reply"
 kind = "tool"
 triggers = ["cli", "model"]
-description = "Answers a request: picks one of its options, whose tool calls run, with a comment."
+description = "Answers a request with text, optionally picking one of its options to run its tool calls."
 tags = ["store", "request"]
 groups = ["store"]
 module = "Omunculus.Tools.Reply"
@@ -9,7 +9,7 @@ chains = ["grant", "cancel", "configure", "pack"]
 
 [parameters]
 type = "object"
-required = ["body", "request_id", "option"]
+required = ["body", "request_id"]
 
 [parameters.properties.body]
 type = "string"

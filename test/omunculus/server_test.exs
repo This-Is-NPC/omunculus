@@ -370,6 +370,47 @@ defmodule Omunculus.ServerTest do
 
     assert sent.status == 202
 
+    conversation_id = created.body["id"]
+
+    [run | _] =
+      eventually(fn ->
+        local.(:get, "/v1/projects/solo/conversations/#{conversation_id}/runs", []).body["items"]
+        |> Enum.filter(&(&1["status"] == "done"))
+      end)
+
+    reader = Fixtures.open_project(dir)
+    request_id = Fixtures.insert(reader.conn, :requests, %{run_id: run["id"]})
+    reply_url = "/v1/projects/solo/conversations/#{conversation_id}/requests/#{request_id}/reply"
+
+    for option <- [nil, "", 12] do
+      assert local.(:post, reply_url,
+               headers: [{"idempotency-key", "invalid-option-#{inspect(option)}"}],
+               json: %{body: "Use blue.", option: option}
+             ).status == 400
+    end
+
+    reply_headers = [{"idempotency-key", "text-answer"}]
+    answered = local.(:post, reply_url, headers: reply_headers, json: %{body: "Use blue."})
+    assert answered.status == 202
+
+    assert local.(:post, reply_url, headers: reply_headers, json: %{body: "Use blue."}).body ==
+             answered.body
+
+    assert {:ok, %{status: "closed", answer: nil}} =
+             Store.view(reader.conn, "request", request_id)
+
+    assert {:ok, [%{body: "Use blue."}]} = Store.comments(reader.conn, :request, request_id)
+
+    assert {:ok, [%{body: reply_body}]} =
+             Omunculus.Store.Query.all(
+               reader.conn,
+               "SELECT body FROM events WHERE type = 'reply' AND request_id = ?",
+               [request_id]
+             )
+
+    assert Jason.decode!(reply_body) == %{"request_id" => request_id, "body" => "Use blue."}
+    Project.close(reader)
+
     local_stream =
       open_stream(
         {:local, socket},

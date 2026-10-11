@@ -1856,6 +1856,43 @@ defmodule Omunculus.Store.ActionsTest do
       assert work.grants == nil
     end
 
+    test "a human text-only reply reopens the requester without granting an option", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      {_run, request_id} = open_request(conn, @ceiling, work_id)
+      body = %{"request_id" => request_id, "body" => "Use the existing files."}
+
+      assert {:ok, [_tool, event]} =
+               record_tool(conn, [%{"type" => "reply", "body" => body}], human_ctx())
+
+      assert Jason.decode!(event.body) == body
+      assert {:ok, %{status: "closed", answer: nil}} = Store.view(conn, "request", request_id)
+      assert {:ok, %{state: "open", grants: nil}} = Store.view(conn, "work", work_id)
+      assert {:ok, comments} = Store.comments(conn, :request, request_id)
+      assert List.last(comments).body == body["body"]
+    end
+
+    test "a text-only reply still requires the arbiter", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling, agent: "worker"})
+      ctx = request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
+      {:ok, [_tool, request]} = record_tool(conn, [access_request("tool", "write")], ctx)
+
+      emit = %{
+        "type" => "reply",
+        "body" => %{"request_id" => request.request_id, "body" => "Use blue."}
+      }
+
+      assert {:error, {:reply, :not_arbiter}} = record_tool(conn, [emit], ctx)
+
+      assert {:ok, [_tool, event]} =
+               record_tool(conn, [emit], %{ctx | agent: "concierge", work_id: parent_id})
+
+      assert event.type == "reply"
+      assert {:ok, %{status: "closed"}} = Store.view(conn, "request", request.request_id)
+      assert {:ok, %{state: "open", grants: nil}} = Store.view(conn, "work", work_id)
+    end
+
     test "leaves alone a work that no longer waits on the request", %{conn: conn} do
       work_id = Fixtures.insert(conn, :works)
       {_run, request_id} = open_request(conn, @ceiling, work_id)
@@ -1886,8 +1923,18 @@ defmodule Omunculus.Store.ActionsTest do
       work_id = Fixtures.insert(conn, :works)
       {_run, request_id} = open_request(conn, @ceiling, work_id)
 
-      assert {:error, {:reply, {:unknown_option, "maybe", ["deny" | _]}}} =
-               record_tool(conn, [reply_emit(request_id, "maybe", "ok")], human_ctx())
+      for option <- ["maybe", "", nil] do
+        assert {:error, {:reply, {:unknown_option, ^option, ["deny" | _]}}} =
+                 record_tool(conn, [reply_emit(request_id, option, "ok")], human_ctx())
+      end
+    end
+
+    test "a non-string option is rejected", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      {_run, request_id} = open_request(conn, @ceiling, work_id)
+
+      assert {:error, {:invalid_emit, "reply", {:invalid, "option"}}} =
+               record_tool(conn, [reply_emit(request_id, 12, "ok")], human_ctx())
     end
 
     test "an empty reply body is rejected", %{conn: conn} do

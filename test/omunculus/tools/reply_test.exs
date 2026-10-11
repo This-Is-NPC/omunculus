@@ -39,6 +39,16 @@ defmodule Omunculus.Tools.ReplyTest do
            }
   end
 
+  test "a text-only answer emits no option and chains no effects" do
+    args = Map.delete(@args, "option")
+
+    assert %{
+             "ok" => true,
+             "emit" => [%{"type" => "reply", "body" => ^args}],
+             "chain" => []
+           } = Reply.run(%{@input | args: args})
+  end
+
   test "an empty option chains nothing" do
     assert %{"chain" => []} = Reply.run(%{@input | args: %{@args | "option" => "deny"}})
   end
@@ -50,8 +60,8 @@ defmodule Omunculus.Tools.ReplyTest do
     assert %{"ok" => true, "chain" => []} = Reply.run(%{@input | args: @args, view: %{}})
   end
 
-  test "refuses without a request_id, an option or a body" do
-    for key <- ["request_id", "option", "body"] do
+  test "refuses without a request_id or a body" do
+    for key <- ["request_id", "body"] do
       assert Reply.run(%{@input | args: Map.delete(@args, key)}) == %{
                "ok" => false,
                "output" => "#{key} required",
@@ -66,6 +76,7 @@ defmodule Omunculus.Tools.ReplyTest do
     assert Enum.map(manifest.views, &{&1.key, &1.source}) == [{"request", "requests"}]
     assert manifest.chains == ["grant", "cancel", "configure", "pack"]
     assert manifest.then == []
+    assert manifest.parameters["required"] == ["body", "request_id"]
   end
 
   test "the manifest wiring yields the same out as calling the module directly" do

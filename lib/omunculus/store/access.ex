@@ -170,7 +170,7 @@ defmodule Omunculus.Store.Access do
     )
   end
 
-  @spec reply_needs_project_config?(Project.t(), String.t(), String.t()) ::
+  @spec reply_needs_project_config?(Project.t(), String.t(), String.t() | nil) ::
           {:ok, boolean} | {:error, term}
   def reply_needs_project_config?(project, request_id, option_name) do
     with {:ok, request} <-

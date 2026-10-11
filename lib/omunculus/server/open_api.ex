@@ -272,7 +272,7 @@ defmodule Omunculus.Server.OpenAPI do
       "Membership" =>
         object(%{issuer: string(), subject: string(), role: string()}, ~w(issuer subject role)),
       "SendMessage" => object(%{message: string(), work_id: string()}, ["message"]),
-      "ReplyRequest" => object(%{option: string(), body: string()}, ~w(option body)),
+      "ReplyRequest" => object(%{option: string(), body: string()}, ~w(body)),
       "Comment" =>
         object(%{body: string(), work_id: string(), request_id: string(), inbox_id: string()}, [
           "body"

@@ -381,6 +381,17 @@ defmodule Omunculus.Tools.AssembleTest do
     refute whole(%{@input | view: view}) =~ "- grant"
   end
 
+  test "a closed text-only request shows its answer without an option label" do
+    view = %{
+      "request" => %{id: "req_1", agent: "worker", status: "closed", answer: nil, options: "{}"},
+      "request_comments" => [%{body: "Use the existing logo."}],
+      "catalog" => []
+    }
+
+    assert whole(%{@input | view: view}) =~
+             "## Request\nreq_1 requested by worker, answered: the reply is below\nUse the existing logo."
+  end
+
   test "the manifest wiring yields the same output as calling the module directly" do
     catalog = Catalog.unconfigured()
     manifest = Map.fetch!(catalog, "assemble")
