@@ -284,7 +284,10 @@ defmodule Omunculus.Tools.Assemble do
     comments = Enum.map(comments || [], & &1.body)
 
     if request.status == "closed" do
-      ["## Request\n" <> Enum.join([header <> ", " <> Out.answered() | comments], "\n")]
+      [
+        "## Request\n" <>
+          Enum.join([header <> ", " <> Out.answered(request.answer) | comments], "\n")
+      ]
     else
       lines = [header, Out.answer_request() | waiting_options(request)] ++ comments
       ["## Request\n" <> Enum.join(lines, "\n")]

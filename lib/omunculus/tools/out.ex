@@ -136,8 +136,8 @@ defmodule Omunculus.Tools.Out do
     do:
       "Your last run ended without done, work or break: go on with the work and end it with one of them."
 
-  @spec answered() :: String.t()
-  def answered, do: "answered: the reply is below"
+  @spec answered(String.t() | nil) :: String.t()
+  def answered(option), do: "answered #{option}: the reply is below"
 
   @spec not_yours(String.t()) :: String.t()
   def not_yours(name),

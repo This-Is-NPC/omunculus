@@ -40,8 +40,20 @@ defmodule Omunculus.Store.View do
   def view(conn, "work", id), do: Query.one(conn, "SELECT * FROM works WHERE id = ?", [id])
   def view(conn, "run", id), do: Query.one(conn, "SELECT * FROM runs WHERE id = ?", [id])
 
+  # A request, with the option its reply chose (`answer`), nil while it waits.
   def view(conn, "request", id),
-    do: Query.one(conn, "SELECT * FROM requests WHERE id = ?", [id])
+    do:
+      Query.one(
+        conn,
+        """
+        SELECT requests.*,
+          (SELECT json_extract(events.body, '$.option') FROM events
+           WHERE events.request_id = requests.id AND events.type = 'reply'
+           ORDER BY events.sequence DESC LIMIT 1) AS answer
+        FROM requests WHERE id = ?
+        """,
+        [id]
+      )
 
   def view(conn, "prompt", id), do: Query.one(conn, "SELECT * FROM prompts WHERE id = ?", [id])
   def view(_conn, name, _id), do: {:error, {:unknown_view, name}}

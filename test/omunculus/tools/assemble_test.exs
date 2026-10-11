@@ -362,6 +362,7 @@ defmodule Omunculus.Tools.AssembleTest do
         id: "req_1",
         agent: "worker",
         status: "closed",
+        answer: "grant",
         options: ~s({"grant":[{"name":"grant","args":{"kind":"tool","name":"write"}}],"deny":[]})
       },
       "request_comments" => [%{body: "granted, go on"}],
@@ -369,7 +370,7 @@ defmodule Omunculus.Tools.AssembleTest do
     }
 
     assert whole(%{@input | view: view}) =~
-             "## Request\nreq_1 requested by worker, #{Out.answered()}\ngranted, go on"
+             "## Request\nreq_1 requested by worker, answered grant: the reply is below\ngranted, go on"
 
     refute whole(%{@input | view: view}) =~ "- grant"
   end

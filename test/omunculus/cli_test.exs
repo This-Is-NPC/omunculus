@@ -735,6 +735,18 @@ defmodule Omunculus.CLITest do
 
       assert %{"text" => "I help."} =
                Toml.decode_file!(Path.join(dir, "omunculus.toml"))["agents"]["helper"]
+
+      # The run the answer opens is told which option the person chose.
+      project = open_project(dir)
+
+      assert {:ok, %{body: assembled}} =
+               Query.one(
+                 project.conn,
+                 "SELECT body FROM prompts WHERE kind = 'assembled' ORDER BY created_at DESC LIMIT 1"
+               )
+
+      Project.close(project)
+      assert assembled =~ "answered apply: the reply is below"
     end
 
     test "a pack an agent proposes to import is loaded first, then the person's to apply",
