@@ -83,7 +83,8 @@ bench/               resident capacity benchmark
 packs/               teams distributed as packs (Config.Packs), each with the eval tasks that
                      show it works: dream-team, which builds and publishes, with its tools,
                      workspace files and environment; sales-desk, which answers clients
-                     and works over the dream team
+                     and works over the dream team; design-team, which shows the client
+                     a preview of the site before it is built
 eval/                Equivalent Exchange, the behaviour benchmark: the Amestris preset,
                      its configurations, tasks and runner (mise run eval:run); each run
                      writes eval/results/<time>-<label>/, ignored by git
