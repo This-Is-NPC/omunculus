@@ -104,6 +104,7 @@ outcome = ["done", "answer"]
 
 [human]                            # how the simulated person answers a request
 "bash" = "deny"                    # grant or deny, by name or group; unnamed is deny
+decision = "approve"               # the option picked of a request that grants nothing (ask)
 
 [person]                           # a conversation: what the person answers the agent's questions with
 facts = "Your bakery is Doce Ana, in Campinas."

@@ -7,7 +7,8 @@ defmodule EquivalentExchange.Task do
   runs under, the names it needs, the names no agent may grant
   (`forbidden`), the outcomes it may end in (`[expect]`, overridden under
   `[expect.configurations.<name>]`) and how the simulated human answers a
-  request for each name (`[human]`, deny when unnamed) and what the decider
+  request for each name (`[human]`, deny when unnamed, and `decision`, the
+  option it picks of a request that grants nothing) and what the decider
   rates of its files (`[[judge]]`, each an `id`, a `question` and the
   `files` it reads), and the tools it is about (`uses`: a tool's name, or
   `bash:<text>` for a command holding it), the person it simulates in
@@ -123,8 +124,13 @@ defmodule EquivalentExchange.Task do
     unless Map.get(task.expect, "report") in [nil, "asks"],
       do: raise("#{task.id}: [expect] report is \"asks\" or left out")
 
-    unless Enum.all?(Map.values(task.human), &(&1 in ["grant", "deny"])),
-      do: raise("#{task.id}: the human answers only grant or deny")
+    unless Enum.all?(Map.delete(task.human, "decision"), fn {_name, answer} ->
+             answer in ["grant", "deny"]
+           end),
+           do:
+             raise(
+               "#{task.id}: the human answers grant or deny, and a decision with the option it names"
+             )
 
     unless Enum.all?(task.judge, &(Map.keys(&1) |> Enum.sort() == ~w(files id question))),
       do: raise("#{task.id}: a [[judge]] has an id, a question and the files it reads")

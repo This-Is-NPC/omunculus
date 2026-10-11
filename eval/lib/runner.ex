@@ -466,9 +466,10 @@ defmodule EquivalentExchange.Runner do
     end)
   end
 
-  # Grant when the task grants everything the request asks, by the name or by
-  # a group that holds it; deny otherwise, saying what it would not grant and
-  # what it would, as a person does. A grant is temporary when the request
+  # A decision — a request granting nothing — gets the option the task's
+  # `[human] decision` names. Grant when the task grants everything the
+  # request asks, by the name or by a group that holds it; deny otherwise,
+  # saying what it would not grant and what it would, as a person does. A grant is temporary when the request
   # offers it, else for the asking agent (a request made without a work
   # offers no temporary one). A request without grant and deny (retry or
   # cancel) is left waiting.
@@ -482,8 +483,12 @@ defmodule EquivalentExchange.Runner do
       end)
 
     grant = Enum.find(["grant", "grant_agent"], &Map.has_key?(options, &1))
+    decision = task.human["decision"]
 
     cond do
+      names == [] and Map.has_key?(options, decision) ->
+        {decision, "Decided: #{decision}."}
+
       names != [] and denied == [] and grant != nil ->
         {grant, "Granted: #{Enum.join(granted, ", ")}."}
 
