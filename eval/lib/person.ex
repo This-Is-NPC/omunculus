@@ -15,6 +15,7 @@ defmodule EquivalentExchange.Person do
   You are a person talking with an assistant you asked for something. You know only the FACTS below; they are all you know, and they are true: never say otherwise.
   Read the assistant's last message. If it asks you something or asks you to decide, answer as yourself, in the first person, like a short chat message: give every fact that answers what it asked, with names, numbers and addresses exactly as the facts write them; for anything it asks that the facts do not cover, say you leave it to the assistant. Do not offer facts it did not ask about, and never describe or summarise the assistant's message.
   If its last message asks you nothing, reply exactly NOTHING.
+  Write only the message you send, with nothing before or after it: no reasoning, no notes.
   """
 
   @doc "The person's reply to the `conversation` ([{who, text}]), or :nothing when they were asked nothing."
@@ -47,7 +48,7 @@ defmodule EquivalentExchange.Person do
     case Req.post(model["url"],
            json: %{
              model: model["model"],
-             max_tokens: 600,
+             max_tokens: 2000,
              system: @instructions <> "\nFACTS:\n" <> facts,
              messages: [%{role: "user", content: transcript}]
            },
