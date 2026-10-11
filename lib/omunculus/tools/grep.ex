@@ -2,8 +2,8 @@ defmodule Omunculus.Tools.Grep do
   @moduledoc """
   Builtin `grep` tool, per spec §9.2: searches regular files under `path`
   for a regex pattern, recursively, skipping files that are not valid
-  UTF-8. With `limit`, it keeps that many matches and a last line says
-  how many more there are.
+  UTF-8 and what `Omunculus.Tools.Ignore` leaves out. With `limit`, it
+  keeps that many matches and a last line says how many more there are.
   """
 
   alias Omunculus.Execution.Policy
@@ -33,19 +33,11 @@ defmodule Omunculus.Tools.Grep do
       )
       |> Enum.sort()
       |> Enum.flat_map(&matches(&1, absolute, regex))
-      |> kept(limit)
+      |> Out.listed(limit)
       |> Out.ok()
     else
       {:error, message} -> Out.fail(message)
     end
-  end
-
-  defp kept(matches, limit) when is_nil(limit) or length(matches) <= limit,
-    do: Enum.join(matches, "\n")
-
-  defp kept(matches, limit) do
-    {shown, rest} = Enum.split(matches, limit)
-    Enum.join(shown ++ [Out.more_matches(length(rest))], "\n")
   end
 
   defp compile(pattern) do
@@ -62,6 +54,7 @@ defmodule Omunculus.Tools.Grep do
       Path.join(absolute, "**/*")
       |> Path.wildcard(match_dot: true)
       |> Enum.filter(&File.regular?/1)
+      |> Omunculus.Tools.Ignore.reject(absolute)
     end
   end
 

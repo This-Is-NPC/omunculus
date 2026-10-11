@@ -48,8 +48,22 @@ defmodule Omunculus.Tools.Out do
   @spec lines_shown(pos_integer, non_neg_integer, non_neg_integer) :: String.t()
   def lines_shown(first, last, total), do: "(lines #{first}-#{last} of #{total})"
 
-  @spec more_matches(pos_integer) :: String.t()
-  def more_matches(count), do: "(#{count} more #{if count == 1, do: "match", else: "matches"})"
+  @doc """
+  Joins at most `limit` of `matches`, one per line, and a last line
+  saying how many more there are. A nil `limit` keeps them all.
+  """
+  @spec listed([String.t()], pos_integer | nil) :: String.t()
+  def listed(matches, limit) when is_nil(limit) or length(matches) <= limit,
+    do: Enum.join(matches, "\n")
+
+  def listed(matches, limit) do
+    {shown, rest} = Enum.split(matches, limit)
+    Enum.join(shown ++ [more_matches(length(rest))], "\n")
+  end
+
+  defp more_matches(count),
+    do:
+      "(#{count} more #{if count == 1, do: "match", else: "matches"}: narrow the path or pattern)"
 
   @spec requested_by(String.t()) :: String.t()
   def requested_by(agent), do: "requested by #{agent}"

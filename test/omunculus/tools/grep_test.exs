@@ -41,8 +41,11 @@ defmodule Omunculus.Tools.GrepTest do
       Grep.run(input, policy(input))["output"]
     end
 
-    assert grep.(1) == "a.txt:1:hello world\n(2 more matches)"
-    assert grep.(2) == "a.txt:1:hello world\na.txt:2:bye\n(1 more match)"
+    assert grep.(1) == "a.txt:1:hello world\n(2 more matches: narrow the path or pattern)"
+
+    assert grep.(2) ==
+             "a.txt:1:hello world\na.txt:2:bye\n(1 more match: narrow the path or pattern)"
+
     assert grep.(3) == "a.txt:1:hello world\na.txt:2:bye\nsub/b.txt:1:hello again"
     assert grep.(0) == "limit must be a positive integer"
   end
