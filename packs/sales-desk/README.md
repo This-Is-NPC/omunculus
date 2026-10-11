@@ -22,7 +22,13 @@ omunculus pack --path packs/dream-team --models team=<model> \
 
 The client talks with it by name: `omunculus send --agent sales "…"`.
 
+It qualifies the client (need, who decides, budget, timing), finds out how
+the business works and what a site would change, and writes the proposal
+in `quotes/<client>.md` following `workspace/templates/proposal.md`, eight
+sections from the client's problem in their words to the next steps;
+change the template in the project to change the proposal.
+
 Prices: a site of 4 pages is R$ 1.500, each page beyond 4 R$ 300, and
-the desk may give up to 10% off on its own. The owner decides larger
-discounts, scope the builders did not agree to, the contract, the payment
-and the start date.
+the desk may give up to 10% off on its own. A larger discount, and the
+contract with the payment and the start date once the client accepts, it
+asks the owner with `ask`; approved, it sends the builders the build.

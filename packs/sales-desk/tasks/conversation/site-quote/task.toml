@@ -18,5 +18,5 @@ facts = """
 Your bakery is Doce Ana, in Campinas, Brazil. You want a simple site with four pages: home, menu, about and contact, and a WhatsApp button.
 You have the texts and the prices; you have no logo and no photos yet.
 You have no deadline. Your WhatsApp is (19) 99876-5432.
-When you are given a price of R$ 1.500 or less for this, you accept it.
+When you are given the price, you say you will think about it and answer in a few days.
 """
