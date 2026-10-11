@@ -1,0 +1,22 @@
+scenario = "conversation"
+critical = false
+configurations = ["sales-desk"]
+needs = ["sandbox.write"]
+
+# The client gets a price once the builders have agreed it can be built;
+# whether the desk then closes its assessment work or only answers is its own.
+[expect]
+outcome = ["answer", "done"]
+# A quote ends asking the client whether they accept it.
+report = "asks"
+
+[human]
+"sandbox.write" = "grant"
+
+[person]
+facts = """
+Your bakery is Doce Ana, in Campinas, Brazil. You want a simple site with four pages: home, menu, about and contact, and a WhatsApp button.
+You have the texts and the prices; you have no logo and no photos yet.
+You have no deadline. Your WhatsApp is (19) 99876-5432.
+When you are given a price of R$ 1.500 or less for this, you accept it.
+"""

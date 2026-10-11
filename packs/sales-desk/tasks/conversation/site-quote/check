@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+from check import *
+
+workspace, outcome = load()
+expect_outcome(outcome, "answer", "done")
+
+# The builders assessed it, and built nothing.
+assessed = [w for w in team(outcome)
+            if w["assignee"] == "administrator" and "assessment" in (w["goal"] or "").lower()]
+if not assessed:
+    fail("the builders were not asked for an assessment")
+if not any(w["state"] == "done" for w in assessed):
+    fail("no assessment came back")
+builders = {"surgeon", "copilot", "clerk", "toolsmith", "tester", "editor", "language_lawyer"}
+built = [w for w in team(outcome) if w["assignee"] in builders]
+if built:
+    fail(f"the builders were asked to build: {built[0]['title']}")
+
+# The quote, from the table, written down and told.
+quotes = list((workspace / "quotes").glob("*.md"))
+quotes = [q for q in quotes if q.name != "README.md"]
+if not quotes:
+    fail("no quote was written in quotes/")
+if not any(re.search(r"1\.?500", q.read_text()) for q in quotes):
+    fail("the quote does not price four pages at R$ 1.500")
+if not any(re.search(r"1\.?500", text) for who, text in outcome.get("conversation", []) if who == "agent"):
+    fail("the client was not told the price")
+ok()

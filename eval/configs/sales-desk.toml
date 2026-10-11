@@ -1,0 +1,17 @@
+# The sales desk (packs/sales-desk) answering the client, with the dream
+# team (packs/dream-team) one depth below it, both imported by the pack
+# tool. What the packs leave to the project is as in dream-team.toml.
+[eval]
+packs = [{ name = "sales-desk" }, { name = "dream-team", depth = 1 }]
+
+[execution]
+environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH", "OMUNCULUS_DEPLOY"]
+timeout_ms = 300000
+
+[auth.homologation]
+kind = "api_key"
+key = "$OMUNCULUS_HOMOLOGATION_KEY"
+
+[auth.production]
+kind = "api_key"
+key = "$OMUNCULUS_PRODUCTION_KEY"

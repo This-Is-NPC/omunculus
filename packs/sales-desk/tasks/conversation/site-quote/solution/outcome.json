@@ -1,0 +1,12 @@
+{
+  "outcome": "answer",
+  "report": "O site de 4 páginas fica R$ 1.500. O dono vai confirmar o contrato, o pagamento e a data de início com você.",
+  "works": [{"title": "Doce Ana site", "goal": "Assessment only, build nothing: four pages", "state": "done"}],
+  "team": [
+    {"id": "w1", "parent_id": null, "title": "Doce Ana site", "goal": "Assessment only, build nothing: four pages", "assignee": "sales", "state": "done"},
+    {"id": "w2", "parent_id": "w1", "title": "Assess Doce Ana site", "goal": "Assessment only, build nothing: four pages, WhatsApp button", "assignee": "administrator", "state": "done"}
+  ],
+  "conversation": [["person", "Oi! Quero um site pra minha confeitaria. Quanto fica?"], ["agent", "Fica R$ 1.500 para 4 páginas."]],
+  "first_run_made_work": false,
+  "delete": []
+}

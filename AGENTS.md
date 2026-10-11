@@ -80,8 +80,10 @@ test/omunculus/      mirrors lib/; matrix_test.exs and spec_regression_test.exs 
 test/support/        fixtures, store case, scripted model, chain tool, execution policy
                      fixtures, command model bridge, MCP server, Rust OpenAI stub
 bench/               resident capacity benchmark
-packs/               teams distributed as packs (Config.Packs): dream-team, with its tools,
-                     workspace files, environment and the eval tasks that show it works
+packs/               teams distributed as packs (Config.Packs), each with the eval tasks that
+                     show it works: dream-team, which builds and publishes, with its tools,
+                     workspace files and environment; sales-desk, which answers clients
+                     and works over the dream team
 eval/                Equivalent Exchange, the behaviour benchmark: the Amestris preset,
                      its configurations, tasks and runner (mise run eval:run); each run
                      writes eval/results/<time>-<label>/, ignored by git
