@@ -43,7 +43,7 @@ defmodule Omunculus.Execution.PolicyTest do
     )
   end
 
-  test "builds a read-only, network-free policy for an ungranted run", %{dir: dir} do
+  test "builds a read-only, network-free policy for an ungranted run on the host", %{dir: dir} do
     {:ok, config} = Fixtures.load_config(dir)
 
     assert {:ok, policy} = policy(config, "concierge", dir)
@@ -52,11 +52,16 @@ defmodule Omunculus.Execution.PolicyTest do
     assert policy.read_only == [dir]
     assert policy.read_write == []
     assert policy.network == "none"
-    assert policy.hidden == [Path.join(dir, ".omunculus"), Path.join(dir, "omunculus.toml")]
+    # The preset shows the host, keeping its store, its config and what it
+    # denies reading out of sight.
+    assert policy.host
+    assert Path.join(dir, ".omunculus") in policy.hidden
+    assert Path.join(dir, "omunculus.toml") in policy.hidden
+    assert Enum.all?(config.execution.deny_read, &(&1 in policy.hidden))
 
     serializable = Policy.serializable(policy)
     assert serializable["backend"] == "bubblewrap"
-    assert serializable["environment"] == ["LANG", "LC_ALL", "TERM"]
+    assert serializable["environment"] == ["HOME", "LANG", "LC_ALL", "PATH", "TERM"]
     refute Map.has_key?(serializable, "environment_values")
     assert String.length(serializable["id"]) == 64
     assert policy.sandbox == config.execution.sandbox
