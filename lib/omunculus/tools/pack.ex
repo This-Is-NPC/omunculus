@@ -112,13 +112,18 @@ defmodule Omunculus.Tools.Pack do
   defp kept([]), do: ""
   defp kept(files), do: "; kept the project's #{Enum.join(files, ", ")}"
 
-  defp environment(dir) do
+  @doc "What the pack in `dir` holds in `environment/`, hidden files left out, as a line, or none."
+  @spec environment(String.t()) :: [String.t()]
+  def environment(dir) do
     from = Path.join(dir, "environment")
 
-    if File.dir?(from),
-      do: [
-        "environment, to run yourself: #{Enum.join(File.ls!(from) |> Enum.sort(), ", ")} in #{from}"
-      ],
-      else: []
+    files =
+      if File.dir?(from),
+        do: from |> File.ls!() |> Enum.reject(&String.starts_with?(&1, ".")),
+        else: []
+
+    if files == [],
+      do: [],
+      else: ["environment, to run yourself: #{Enum.join(Enum.sort(files), ", ")} in #{from}"]
   end
 end

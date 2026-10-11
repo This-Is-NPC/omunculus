@@ -44,15 +44,6 @@ defmodule Omunculus.Tools.ProposePack do
           agent = config.agents[name],
           do: "- #{name}: depth #{agent.depth}, model #{agent.model}"
 
-    environment = Path.join(dir, "environment")
-
-    held =
-      if File.dir?(environment),
-        do: [
-          "Its environment, which you run yourself: #{Enum.join(Enum.sort(File.ls!(environment)), ", ")} in #{environment}"
-        ],
-        else: []
-
     %{
       "reason" =>
         Enum.join(
@@ -60,8 +51,7 @@ defmodule Omunculus.Tools.ProposePack do
             args["reason"],
             "Import #{pack["pack"]["name"]} from #{dir}, its agents as they would run:\n" <>
               Enum.join(agents, "\n")
-          ] ++
-            held,
+          ] ++ Omunculus.Tools.Pack.environment(dir),
           "\n\n"
         ),
       "options" => %{

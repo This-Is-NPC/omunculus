@@ -13,10 +13,11 @@ defmodule Omunculus.Tools.PackTest do
   defp pack(config_path, args),
     do: Pack.run(%{args: Map.put(args, "path", "team"), config_path: config_path})
 
-  test "says what the pack needs before importing anything", %{config_path: config_path} do
+  test "says what the pack needs before importing anything", %{dir: dir, config_path: config_path} do
+    File.mkdir_p!(Path.join([dir, "team", "environment", ".state"]))
     assert %{"ok" => false, "output" => output} = pack(config_path, %{"models" => "lead=fast"})
     assert output =~ "auth needed for: vault"
-    assert output =~ "environment, to run yourself: up"
+    assert output =~ "environment, to run yourself: up in"
     refute Map.has_key?(Toml.decode_file!(config_path), "packs")
   end
 
