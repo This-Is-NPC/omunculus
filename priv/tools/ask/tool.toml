@@ -1,0 +1,27 @@
+name = "ask"
+kind = "tool"
+triggers = ["model"]
+description = "Asks for a decision: question says what is to be decided and why, options names each answer (approve, deny, revise, ...). With to = person it goes to the person, who answers through their inbox; without it, to the agent above you when there is one, else to the person. The run ends; the answer comes back as the option chosen and its comment."
+tags = ["request"]
+groups = ["sequence"]
+module = "Omunculus.Tools.Ask"
+chains = ["end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+required = ["question", "options"]
+
+[parameters.properties.question]
+type = "string"
+
+[parameters.properties.options]
+type = "array"
+minItems = 2
+
+[parameters.properties.options.items]
+type = "string"
+
+[parameters.properties.to]
+type = "string"
+enum = ["person"]

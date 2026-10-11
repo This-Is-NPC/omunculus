@@ -7,7 +7,7 @@ defmodule Omunculus.Store.Actions.Contract do
     "comment" => ~w(body work_id request_id inbox_id),
     "prompt" => ~w(message work_id agent),
     "work" => ~w(report works),
-    "request" => ~w(reason options),
+    "request" => ~w(reason options to),
     "reply" => ~w(request_id option body),
     "grant" => ~w(request_id name kind scope),
     "cancel" => ~w(request_id),

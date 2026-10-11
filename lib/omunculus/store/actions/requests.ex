@@ -9,8 +9,9 @@ defmodule Omunculus.Store.Actions.Requests do
   request as an error, so a model's call that asked for it fails; options
   made only of `grant` calls whose names are all have refuse it the same
   way, saying the run has them. The
-  arbiter is the human for a request the harness opened or one granting a
-  sealed name; otherwise the parent work's agent when every tool of every
+  arbiter is the human for a request the harness opened, one granting a
+  sealed name or calling a tool sealed for the requester, or one that
+  says it is for the person (`to = "person"`); otherwise the parent work's agent when every tool of every
   option is have for it and every granted name have or askable, else the
   human. `reply` picks one option — the human always may, an agent only
   as the request's arbiter — closes the request, comments its body on it
@@ -29,6 +30,11 @@ defmodule Omunculus.Store.Actions.Requests do
   @spec request(Omunculus.Store.Connection.t(), map, map) :: {:ok, map | nil} | {:error, term}
   def request(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:request, body, "reason"),
+         :ok <-
+           if(Map.get(body, "to") in [nil, "person"],
+             do: :ok,
+             else: {:error, {:request, {:invalid, "to"}}}
+           ),
          {:ok, options} <- options(body["options"]),
          {:ok, run} <- fetch_run(conn, ctx.run_id),
          {:ok, work} <- Helpers.fetch_work(conn, ctx.work_id),
@@ -48,7 +54,15 @@ defmodule Omunculus.Store.Actions.Requests do
         |> List.flatten()
         |> Enum.any?(&(Ceiling.classify(snapshot, &1.name, "tool") == "sealed"))
 
-      classify_request(conn, ctx, run, body["reason"], options, classified, sealed_calls?)
+      classify_request(
+        conn,
+        ctx,
+        run,
+        body["reason"],
+        options,
+        classified,
+        sealed_calls? or for_person?(body)
+      )
     end
   end
 
@@ -192,6 +206,9 @@ defmodule Omunculus.Store.Actions.Requests do
       other -> other
     end
   end
+
+  defp for_person?(%{"to" => "person"}), do: true
+  defp for_person?(_body), do: false
 
   defp classify_request(conn, ctx, run, reason, options, classified, sealed_calls?) do
     classes = Enum.map(classified, fn {_grant, class} -> class end)

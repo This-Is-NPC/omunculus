@@ -1645,6 +1645,48 @@ defmodule Omunculus.Store.ActionsTest do
       assert body["arbiter_work_id"] == parent_id
     end
 
+    test "a decision goes to the agent above, or to the person when it says so", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      config = Fixtures.config(arbiter_toml())
+
+      arbiter = fn extra ->
+        work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
+        run = Fixtures.open_run(conn, %{ceiling: @ceiling})
+
+        body =
+          Map.merge(%{"reason" => "ship it?", "options" => %{"yes" => [], "no" => []}}, extra)
+
+        {:ok, [_tool_event, event]} =
+          record_tool(
+            conn,
+            [%{"type" => "request", "body" => body}],
+            request_ctx(run, work_id, config)
+          )
+
+        {:ok, request} =
+          Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
+
+        request.arbiter
+      end
+
+      assert arbiter.(%{}) == "concierge"
+      assert arbiter.(%{"to" => "person"}) == "human"
+
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
+
+      assert {:error, {:request, {:invalid, "to"}}} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "request",
+                     "body" => %{"reason" => "r", "options" => %{"a" => []}, "to" => "nobody"}
+                   }
+                 ],
+                 request_ctx(run, nil, config)
+               )
+    end
+
     test "an option calling a tool only the person may give the requester goes to the person",
          %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
