@@ -43,7 +43,12 @@ tasks/         the tasks that show the team works
   `agent`) puts every work of a depth through the same stages — build,
   check, release — set on a depth with `[policy.depth.<n>] workflow`.
   Stage agents that only work in the workflow have `workflow_only = true`.
-- What only the person may give an agent goes in its `human` list.
+- What only the person may give an agent goes in its `human` list. A
+  decision that is the person's — a discount, a contract, an approval —
+  the agent asks for with `ask` and `to = "person"`; one the agent above
+  can take, with `ask` alone.
+- A tool the team uses that another pack brings goes in `[pack] requires`:
+  importing the pack is refused while the project lacks it.
 - A tool's secrets name providers (`[secrets.<tool>]`, each secret a
   provider listed in `[pack] auth`); the importer maps them to its logins.
   `[pack] auth` lists those providers and nothing else: the login a model
