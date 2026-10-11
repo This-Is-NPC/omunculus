@@ -18,11 +18,17 @@ description: Fit teams together in this project — import a pack at the depth i
    The request says where each agent would run; the person approves it.
 4. Adjust how the teams speak to each other with `propose_config`, an
    agent's item holding only what changes (its `text`, or its `tools`).
+   A team made to answer the person speaks of "the person": once it works
+   below another team, the one who asks is that team's agent, so its
+   front agent's text says so.
    The agent above hands work down with `work`, naming the agent below
    (`## Agents` lists them); the agent below stops with its questions or
    objections (break), and the one above answers by sending the work back
    (reopen). Write it so the team that answers the person does so only
    once the team below has agreed that what was asked can be done as
-   asked.
+   asked. Tell an assessment apart from a build in the work itself: a work
+   that asks only whether something can be done, what blocks it and what
+   could be done instead is answered without building anything; the build
+   is a work of its own, sent once what was assessed has been agreed.
 5. One proposal at a time. After each is applied, read the project again
    before the next.

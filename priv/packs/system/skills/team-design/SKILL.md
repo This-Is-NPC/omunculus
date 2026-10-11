@@ -41,6 +41,8 @@ tasks/         the tasks that show the team works
 - What only the person may give an agent goes in its `human` list.
 - A tool's secrets name providers (`[secrets.<tool>]`, each secret a
   provider listed in `[pack] auth`); the importer maps them to its logins.
+  `[pack] auth` lists those providers and nothing else: the login a model
+  runs on is the project's, never the pack's.
 
 ## Texts that work at any depth
 
@@ -51,6 +53,7 @@ the one above answers by sending the work back (reopen).
 
 ## Show that it works
 
-Under `tasks/<scenario>/<task>/`, in the eval's format: `instruction.md`,
-`task.toml`, `workspace/`, a `check` and its `solution/`. Cover what the
-team must do and what it must refuse or bring back to the person.
+A pack is not done without its tasks. Under `tasks/<scenario>/<task>/`, in
+the eval's format: `instruction.md` (what the person says), `task.toml`,
+`workspace/`, a `check` and its `solution/`. Cover what the team must do,
+and what it must refuse or bring back to the person.
