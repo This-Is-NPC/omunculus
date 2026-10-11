@@ -13,7 +13,10 @@ defmodule EquivalentExchange.Project do
   Amestris's agents and workflows go, and omunculus's own `pack` tool
   imports each, in order, every role on the run's model and each provider
   the pack names on the configuration's login of that name, copying the
-  pack's workspace files in before the task's.
+  pack's workspace files in before the task's. Such a configuration's own
+  `workflows` and `[policy.depth.<n>]` layers compose the teams — a
+  workflow whose stages are agents of different packs — so they are laid
+  over the project once the packs are imported, and it must load then.
   """
 
   alias Omunculus.Config.Toml, as: ConfigToml
@@ -45,6 +48,7 @@ defmodule EquivalentExchange.Project do
            Toml.decode_file(Path.join([@eval, "configs", configuration <> ".toml"])) do
       {eval, overlay} = Map.pop(overlay, "eval", %{})
       packs = Map.get(eval, "packs", [])
+      {composition, overlay} = if packs == [], do: {%{}, overlay}, else: composition(overlay)
 
       data =
         path
@@ -66,7 +70,8 @@ defmodule EquivalentExchange.Project do
       File.write!(path, ConfigToml.encode(data))
       File.mkdir_p!(Path.join(dir, "workspace"))
 
-      with :ok <- import_packs(packs, path, model) do
+      with :ok <- import_packs(packs, path, model),
+           :ok <- compose(path, composition) do
         if workspace && File.dir?(workspace),
           do: File.cp_r!(workspace, Path.join(dir, "workspace"))
 
@@ -103,6 +108,30 @@ defmodule EquivalentExchange.Project do
          }) do
       %{"ok" => true} -> :ok
       %{"output" => output} -> {:error, {:pack, output}}
+    end
+  end
+
+  # What composes the teams of the packs: it names their agents, so it is
+  # laid over the project only once they are imported.
+  defp composition(overlay) do
+    {workflows, overlay} = Map.pop(overlay, "workflows")
+    {depths, policy} = Map.pop(Map.get(overlay, "policy", %{}), "depth")
+
+    composition =
+      %{"workflows" => workflows, "policy" => depths && %{"depth" => depths}}
+      |> Map.reject(fn {_key, value} -> is_nil(value) end)
+
+    {composition, Map.put(overlay, "policy", policy)}
+  end
+
+  defp compose(_path, composition) when composition == %{}, do: :ok
+
+  defp compose(path, composition) do
+    File.write!(path, path |> Toml.decode_file!() |> merge(composition) |> ConfigToml.encode())
+
+    case Omunculus.Config.load(path) do
+      {:ok, _config} -> :ok
+      {:error, reason} -> {:error, {:compose, reason}}
     end
   end
 
