@@ -1,8 +1,9 @@
 defmodule Omunculus.Tools.Pack do
   @moduledoc """
   `pack` tool: imports the pack at `path` (`Omunculus.Config.Packs`) into
-  the config at `config_path`. Given every role a model (`models`) and
-  every provider of the pack a login of the config (`auth`), it writes the
+  the config at `config_path`, its team `depth` depths below its own when
+  given. Given every role a model (`models`) and every provider of the pack
+  a login of the config (`auth`), it writes the
   pack to `[[packs]]` and copies the pack's `workspace/` into the default
   workspace, keeping every file already there; either way it says what the
   pack needs and what its `environment/` holds, which it does not run.
@@ -19,8 +20,16 @@ defmodule Omunculus.Tools.Pack do
     with nil <- Args.missing(args, ~w(path)),
          {:ok, pack} <- Packs.read(dir),
          {:ok, models} <- pairs(args["models"], "models"),
-         {:ok, auth} <- pairs(args["auth"], "auth") do
-      import(config_path, dir, pack, %{"path" => args["path"], "models" => models, "auth" => auth})
+         {:ok, auth} <- pairs(args["auth"], "auth"),
+         {:ok, depth} <- depth(args["depth"]) do
+      entry = %{"path" => args["path"], "models" => models, "auth" => auth}
+
+      import(
+        config_path,
+        dir,
+        pack,
+        if(depth > 0, do: Map.put(entry, "depth", depth), else: entry)
+      )
     else
       {:error, reason} -> Out.fail("cannot import #{args["path"]}: #{inspect(reason)}")
       message -> Out.fail(message)
@@ -28,6 +37,15 @@ defmodule Omunculus.Tools.Pack do
   end
 
   def run(_input), do: Out.fail("config_path required")
+
+  defp depth(nil), do: {:ok, 0}
+
+  defp depth(text) do
+    case Integer.parse(to_string(text)) do
+      {depth, ""} when depth >= 0 -> {:ok, depth}
+      _invalid -> {:error, "depth takes a whole number of depths, 0 or more"}
+    end
+  end
 
   defp pairs(nil, _key), do: {:ok, %{}}
 

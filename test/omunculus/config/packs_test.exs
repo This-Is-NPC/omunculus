@@ -24,6 +24,20 @@ defmodule Omunculus.Config.PacksTest do
     assert hd(config.tools.paths) == Path.join(pack, "tools")
   end
 
+  test "a pack imported depths below its own moves its agents and depth layers down",
+       %{dir: dir} do
+    assert {:ok, config} =
+             load(
+               dir,
+               String.replace(@imports, "path = \"team\"\n", "path = \"team\"\ndepth = 1\n")
+             )
+
+    assert %{depth: 1} = config.agents["chief"]
+    assert %{depth: 2} = config.agents["hand"]
+    assert {:ok, [%{agent: "hand"}]} = Config.workflow_for(config, 2)
+    assert Config.workflow_for(config, 1) == :off
+  end
+
   test "an item of the config overrides the pack's key by key", %{dir: dir} do
     assert {:ok, config} = load(dir, @imports <> ~s([agents.hand]\ngranted = ["write"]\n))
 

@@ -1,7 +1,7 @@
 name = "pack"
 kind = "tool"
 triggers = ["cli"]
-description = "Imports the pack in path into the project: writes it to [[packs]] with the models its roles run on and the logins its providers stand for, and copies its workspace/ files where none are; without them, says what it needs."
+description = "Imports the pack in path into the project, depth depths below its own when given: writes it to [[packs]] with the models its roles run on and the logins its providers stand for, and copies its workspace/ files where none are; without them, says what it needs."
 tags = ["cli", "pack"]
 groups = ["cli"]
 module = "Omunculus.Tools.Pack"
@@ -21,3 +21,7 @@ description = "role=model pairs, comma separated: the config's model each role r
 [parameters.properties.auth]
 type = "string"
 description = "provider=login pairs, comma separated: the config's [auth] provider each of the pack's stands for."
+
+[parameters.properties.depth]
+type = "string"
+description = "How many depths below its own the team works: every agent and depth layer of the pack moves down that many."

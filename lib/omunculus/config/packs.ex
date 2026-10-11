@@ -2,8 +2,10 @@ defmodule Omunculus.Config.Packs do
   @moduledoc """
   The teams a config imports with `[[packs]]`, each a table naming the
   pack's folder (`path`, relative to the config's directory), the model of
-  the config each of its roles runs on (`models`) and the `[auth]`
-  provider of the config each provider it names stands for (`auth`).
+  the config each of its roles runs on (`models`), the `[auth]` provider
+  of the config each provider it names stands for (`auth`) and, optionally,
+  how many depths below its own the team works (`depth`): every agent and
+  depth layer of the pack moves down that many.
 
   A pack is a folder with a `pack.toml`: `[pack]` gives its `name`, its
   `roles` and the `auth` providers its secrets name, and it may hold
@@ -24,7 +26,7 @@ defmodule Omunculus.Config.Packs do
   """
 
   @pack_keys ~w(pack agents workflows secrets mcp policy)
-  @import_keys ~w(path models auth)
+  @import_keys ~w(path models auth depth)
 
   @spec expand(map, String.t()) :: {:ok, map} | {:error, term}
   def expand(data, config_dir) do
@@ -34,6 +36,7 @@ defmodule Omunculus.Config.Packs do
       Enum.reduce_while(packs, {:ok, data, %{}}, fn entry, {:ok, data, owners} ->
         with {:ok, dir, pack} <- load(entry, config_dir),
              {:ok, name} <- name(pack),
+             {:ok, pack} <- shift(name, pack, Map.get(entry, "depth", 0)),
              {:ok, pack} <- bind(name, pack, entry, dir),
              {:ok, data, owners} <- lay(name, pack, data, owners) do
           {:cont, {:ok, paths(data, dir), owners}}
@@ -79,6 +82,33 @@ defmodule Omunculus.Config.Packs do
 
   defp name(%{"pack" => %{"name" => name}}) when is_binary(name) and name != "", do: {:ok, name}
   defp name(_pack), do: {:error, {:invalid, :name}}
+
+  # The team below its own depths: each agent's depth and each depth layer.
+  defp shift(_name, pack, 0), do: {:ok, pack}
+
+  defp shift(name, pack, by) when is_integer(by) and by > 0 do
+    agents =
+      Map.new(Map.get(pack, "agents", %{}), fn {agent, table} ->
+        {agent, Map.update(table, "depth", nil, &(is_integer(&1) && &1 + by))}
+      end)
+
+    depths =
+      Enum.reduce_while(get_in(pack, ["policy", "depth"]) || %{}, {:ok, %{}}, fn {n, layer},
+                                                                                 {:ok, acc} ->
+        case Integer.parse(n) do
+          {depth, ""} -> {:cont, {:ok, Map.put(acc, Integer.to_string(depth + by), layer)}}
+          _invalid -> {:halt, {:error, {name, :policy, {:invalid, :depth}}}}
+        end
+      end)
+
+    with {:ok, depths} <- depths do
+      pack = Map.put(pack, "agents", agents)
+
+      {:ok, if(depths == %{}, do: pack, else: put_in(pack, ["policy", "depth"], depths))}
+    end
+  end
+
+  defp shift(name, _pack, _by), do: {:error, {name, :depth, :invalid}}
 
   # Each role becomes the config's model for it, each provider the config's.
   defp bind(name, pack, entry, dir) do

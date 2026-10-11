@@ -36,6 +36,11 @@ defmodule Omunculus.Tools.PackTest do
 
     assert {:ok, %{agents: %{"chief" => %{model: "fast"}}}} = Config.load(config_path)
 
+    assert %{"ok" => true} =
+             pack(config_path, %{"models" => "lead=fast", "auth" => "vault=mine", "depth" => "1"})
+
+    assert {:ok, %{agents: %{"chief" => %{depth: 1}}}} = Config.load(config_path)
+
     # Again, the entry for the same folder is replaced, not added.
     assert %{"ok" => true} = pack(config_path, %{"models" => "lead=fast", "auth" => "vault=mine"})
     assert [%{"path" => "team"}] = Toml.decode_file!(config_path)["packs"]
