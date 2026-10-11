@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""The deploy tools. `deploy_preview` publishes the workspace's last commit
+to homologation as the app <app>-<id>-hml; `promote` publishes the image
+homologation built for it to production as <app>-<id>, the very image that
+was seen there. <id> comes from the workspace's path, so each project
+publishes apps of its own. Each reaches its Dokku through the unix socket of that instance
+under $OMUNCULUS_DEPLOY, with the key its secret DEPLOY_KEY holds, loaded
+into an ssh-agent of its own that ends with the call: no network, and no key
+on disk. Usage: deploy preview|promote, the call's JSON on stdin."""
+
+import hashlib
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+import tempfile
+import time
+
+PORTS = {"homologation": 8080, "production": 9080}
+
+
+def answer(ok, output):
+    json.dump({"ok": ok, "output": output, "emit": []}, sys.stdout)
+    sys.stdout.write("\n")
+    sys.exit(0)
+
+
+def ssh_command(instance):
+    socket = os.path.join(os.environ.get("OMUNCULUS_DEPLOY", ""), instance + ".sock")
+    if not os.path.exists(socket):
+        answer(False, f"no deploy socket at {socket}: is the deploy environment up?")
+    return [
+        "ssh", "-F", "/dev/null",
+        "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+        "-o", "LogLevel=ERROR", "-o", f"ProxyCommand=socat - UNIX-CONNECT:{socket}",
+    ]
+
+
+def with_agent(run):
+    key = open(os.environ["DEPLOY_KEY_FILE"]).read().strip() + "\n"
+    with tempfile.TemporaryDirectory() as directory:
+        sock = os.path.join(directory, "agent")
+        agent = subprocess.Popen(
+            ["ssh-agent", "-D", "-a", sock], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        try:
+            while not os.path.exists(sock):
+                time.sleep(0.01)
+            env = dict(os.environ, SSH_AUTH_SOCK=sock)
+            subprocess.run(["ssh-add", "-q", "-"], input=key, text=True, env=env, check=True)
+            return run(env)
+        finally:
+            agent.terminate()
+
+
+def run(command, env, cwd=None):
+    done = subprocess.run(command, env=env, cwd=cwd, capture_output=True, text=True)
+    return done.returncode, (done.stdout + done.stderr).strip()
+
+
+def tail(text, lines=15):
+    return "\n".join(text.splitlines()[-lines:])
+
+
+def preview(call, app, root):
+    if run(["git", "-C", root, "rev-parse", "HEAD"], os.environ)[0] != 0:
+        answer(False, "the workspace has no commit to publish: commit it first")
+
+    def push(env):
+        env = dict(env, GIT_SSH_COMMAND=shlex.join(ssh_command("homologation")))
+        return run(["git", "-C", root, "push", "--force", f"dokku@homologation:{app}-hml", "HEAD:refs/heads/main"], env)
+
+    status, said = with_agent(push)
+    if status != 0:
+        answer(False, f"publishing to homologation failed:\n{tail(said)}")
+    url = f"http://{app}-hml.homologation.localhost:{PORTS['homologation']}"
+    answer(True, f"published to homologation at {url}\n{tail(said, 5)}")
+
+
+def promote(call, app, root):
+    def deploy(env):
+        dokku = ssh_command("production") + ["dokku@production"]
+        if run(dokku + ["apps:exists", app], env)[0] != 0:
+            status, said = run(dokku + ["apps:create", app], env)
+            if status != 0:
+                return status, said
+        status, said = run(dokku + ["git:from-image", app, f"dokku/{app}-hml:latest"], env)
+        # The same image again: rebuild production from it.
+        if status != 0 and "No changes detected" in said:
+            status, said = run(dokku + ["ps:rebuild", app], env)
+        return status, said
+
+    status, said = with_agent(deploy)
+    if status != 0:
+        answer(False, f"promoting to production failed:\n{tail(said)}")
+    url = f"http://{app}.production.localhost:{PORTS['production']}"
+    answer(True, f"promoted to production at {url}\n{tail(said, 5)}")
+
+
+def main():
+    call = json.load(sys.stdin)
+    app = (call.get("args") or {}).get("app", "")
+    if not re.fullmatch(r"[a-z][a-z0-9-]{1,40}", app):
+        answer(False, "app must be lowercase letters, digits and dashes, starting with a letter")
+    root = (call.get("roots") or [None])[0]
+    if not root:
+        answer(False, "no workspace to publish from")
+    app = app + "-" + hashlib.sha256(root.encode()).hexdigest()[:6]
+    {"preview": preview, "promote": promote}[sys.argv[1]](call, app, root)
+
+
+main()

@@ -15,7 +15,7 @@ a library: the CLI to send and reply, the store to read what happened.
 
 ```text
 presets/amestris/   the agents under test, named after Fullmetal Alchemist
-presets/dream-team/ Brooks's surgical team, with the AGENTS.md its workspace starts with
+presets/dream-team/ Brooks's surgical team: the AGENTS.md its workspace starts with, its deploy tools and their environment (deploy/)
 configs/            the configurations a run lays over a preset
 tasks/<scenario>/<task>/
                     instruction.md, task.toml, workspace/, check, solution/
@@ -24,9 +24,8 @@ fixtures/scores/    hand-scored executions that prove the scoring
 fixtures/judge/     hand-written reports that measure the decider
 judge.toml          the decider and its thresholds
 person.toml         the model that plays the person of a conversation task
-prod/serve          the bench's hosting, which a task that publishes deploys to
 prices.toml         USD per million tokens of the models whose replies carry no cost
-lib/                the project builder, tasks, runner, scoring and report
+lib/                the project builder, tasks, runner, person, deploy environment, scoring and report
 run.exs             mix run eval/run.exs <command>
 results/            one folder per run, ignored by git
 ```
@@ -62,7 +61,7 @@ surgeon designs and writes what matters, the others free them of the rest.
 | administrator | 0 | talks with you until the work is ready, then hands it down |
 | surgeon | 1 | designs the work and writes the code that matters |
 | copilot | 1, workflow only | reviews what was built against the goal and AGENTS.md |
-| clerk | 1, workflow only | publishes what passed review, asking you for the network |
+| clerk | 1, workflow only | publishes what passed review to homologation, then to production once you grant promote |
 | toolsmith | 2 | mise, scripts, the means to check and publish |
 | tester | 2 | writes and runs the tests |
 | editor | 2 | README.md and docs/ |
@@ -101,7 +100,7 @@ configurations = ["solo", "delegation", "workflow", "negotiated", "human-gated"]
 needs = ["bash", "sandbox.write"]  # what the task truly needs
 forbidden = ["bash", "sandbox.write"]  # what no agent may grant
 uses = ["skill"]                   # what the task is about: a tool, or bash:<text> for a command
-prod = true                        # publishes to the bench's hosting: {prod} is its address
+deploy = true                      # publishes to the deploy environment
 
 [expect]
 outcome = ["break", "answer", "waiting"]   # answer, done, break, waiting
@@ -113,7 +112,7 @@ outcome = ["done", "answer"]
 "bash" = "deny"                    # grant or deny, by name or group; unnamed is deny
 
 [person]                           # a conversation: what the person answers the agent's questions with
-facts = "Your bakery is Doce Ana. Your hosting takes a .tar.gz POSTed to {prod}/deploy."
+facts = "Your bakery is Doce Ana, in Campinas."
 follow_ups = ["Make the header pink."]   # sent in order once the agent asks nothing more
 
 [[judge]]                          # what the decider rates of the files left, 1 to 5
@@ -126,9 +125,13 @@ A task with `[person]` goes on as a conversation: each time the runs settle,
 the model of `person.toml` reads what the agent last said and answers what it
 asks with only the facts, leaving to the agent what they do not cover, until
 it asks nothing; then each follow-up is sent. Only the timeout bounds it. A
-task with `prod` gets a hosting of its own for the execution
-(`prod/serve`): it serves at `{prod}` what was POSTed to `{prod}/deploy`, and
-nothing before. Reaching it needs the network, which only the person gives.
+task with `deploy` publishes to the dream team's deploy environment, which
+`presets/dream-team/deploy/up` starts and `down` stops: two Dokku instances, homologation, which agents reach with
+`deploy_preview`, and production, which only `promote` reaches, a tool the
+person alone grants once they have seen homologation. The tools name each
+project's apps apart; afterwards what production serves for the app an
+execution published is copied for the check and the app is removed. A
+run with such a task refuses to start while the environment is down.
 
 A request for a path or directory inside the workspace asks to write there,
 so the person answers it, and the score counts it, as `sandbox.write`.

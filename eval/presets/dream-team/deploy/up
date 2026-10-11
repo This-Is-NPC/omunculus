@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Starts the dream team's deploy environment: the homologation and
+# production Dokku instances of compose.yml, each with a key of its own, and
+# a unix socket for each beside them. Run again, it changes nothing that is
+# already up. Its state — Dokku's data, the keys, the link to the sockets —
+# is under .state/ next to this script.
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+state="$here/.state"
+
+# A sandbox sees the person's home through an overlay, where a unix socket
+# refuses connections: the sockets live outside it, linked from .state.
+export DEPLOY_DATA="$state/data" DEPLOY_SOCKETS="/var/tmp/omunculus-deploy-$(id -u)"
+keys="$state/keys"
+mkdir -p "$DEPLOY_DATA/homologation" "$DEPLOY_DATA/production" "$DEPLOY_SOCKETS" "$keys"
+ln -sfn "$DEPLOY_SOCKETS" "$state/sockets"
+
+# One key per instance: agents get homologation's, promote production's.
+for instance in homologation production; do
+  [[ -f "$keys/$instance" ]] || ssh-keygen -q -t ed25519 -N "" -C "omunculus-$instance" -f "$keys/$instance"
+done
+
+docker compose -f "$here/compose.yml" -p omunculus-deploy up -d --wait
+
+for instance in homologation production; do
+  container="omunculus-dokku-$instance"
+  if ! docker exec "$container" dokku ssh-keys:list 2>/dev/null | grep -q 'NAME="omunculus"'; then
+    docker exec -i "$container" dokku ssh-keys:add omunculus < "$keys/$instance.pub"
+  fi
+done
+
+echo "sockets:      $state/sockets (OMUNCULUS_DEPLOY for the deploy tools)"
+echo "keys:         $keys (OMUNCULUS_HOMOLOGATION_KEY, OMUNCULUS_PRODUCTION_KEY)"
+echo "homologation: apps at http://<app>.homologation.localhost:8080"
+echo "production:   apps at http://<app>.production.localhost:9080"

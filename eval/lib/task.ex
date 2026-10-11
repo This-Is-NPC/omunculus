@@ -11,8 +11,8 @@ defmodule EquivalentExchange.Task do
   `bash:<text>` for a command holding it), the person it simulates in
   conversation (`[person]`: the `facts` they answer the agent's questions
   with, and the `follow_ups` they send, in order, once the agent asks
-  nothing more), and whether it publishes to the bench's hosting (`prod`),
-  whose address replaces `{prod}` in the instruction and the facts — its
+  nothing more), and whether it publishes to the deploy environment
+  (`deploy`) — its
   starting `workspace/`, its `check` and its `solution/`.
   """
 
@@ -33,7 +33,7 @@ defmodule EquivalentExchange.Task do
     :judge,
     :uses,
     :person,
-    :prod
+    :deploy
   ]
   defstruct @enforce_keys
 
@@ -64,7 +64,7 @@ defmodule EquivalentExchange.Task do
       judge: Map.get(data, "judge", []),
       uses: Map.get(data, "uses", []),
       person: Map.get(data, "person"),
-      prod: Map.get(data, "prod", false)
+      deploy: Map.get(data, "deploy", false)
     }
     |> validate!()
   end

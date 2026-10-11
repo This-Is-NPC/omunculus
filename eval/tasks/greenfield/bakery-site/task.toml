@@ -1,15 +1,15 @@
 scenario = "greenfield"
 critical = false
 configurations = ["dream-team"]
-prod = true
-needs = ["sandbox.write", "sandbox.network"]
+deploy = true
+needs = ["sandbox.write", "promote"]
 
 [expect]
 outcome = ["done"]
 
 [human]
 "sandbox.write" = "grant"
-"sandbox.network" = "grant"
+"promote" = "grant"
 
 [person]
 facts = """
@@ -18,5 +18,5 @@ Menu: brigadeiro cake R$ 85, carrot cake R$ 60, box of 12 brigadeiros R$ 36.
 About: Ana has baked since 2009; everything is made to order.
 Contact: WhatsApp (19) 99876-5432; orders at least two days ahead.
 The look: you leave it to them, as long as it feels warm.
-You already have hosting for the site: it takes a .tar.gz of the site POSTed to {prod}/deploy and then serves it at {prod}. You have no domain and want none for now.
+You want to see it before it goes to production, and you approve it if it shows what you asked for.
 """

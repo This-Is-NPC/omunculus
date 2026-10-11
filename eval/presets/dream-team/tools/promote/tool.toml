@@ -1,0 +1,14 @@
+name = "promote"
+kind = "tool"
+triggers = ["model"]
+description = "Publishes to production the very image homologation built for app, the one the person saw there, and gives its address."
+tags = ["deploy"]
+command = ["./run"]
+secrets = ["DEPLOY_KEY"]
+
+[parameters]
+type = "object"
+required = ["app"]
+
+[parameters.properties.app]
+type = "string"

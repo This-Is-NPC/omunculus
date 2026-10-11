@@ -28,12 +28,13 @@ defmodule EquivalentExchange.Runner do
   `EquivalentExchange.Person` reads what the agent last said and answers
   what it asks, which is sent as the person's next message, until it asks
   nothing; then each of the task's `follow_ups` is sent the same way. Only
-  the execution's timeout bounds how long it goes on. A task with `prod`
-  gets the bench's hosting (`eval/prod/serve`) for the execution, its
-  address in the instruction and the facts.
+  the execution's timeout bounds how long it goes on. A task with `deploy`
+  publishes to the deploy environment (`EquivalentExchange.Deploy`); what
+  production serves for the app it published is copied for the check, then
+  the app is removed.
   """
 
-  alias EquivalentExchange.{Judge, Person, Project, Resources, Score, Task}
+  alias EquivalentExchange.{Deploy, Judge, Person, Project, Resources, Score, Task}
   alias Omunculus.CLI
   alias Omunculus.Store.Query
 
@@ -62,6 +63,11 @@ defmodule EquivalentExchange.Runner do
           do: {task, configuration, n}
 
     against = against(options)
+
+    if Enum.any?(plan, fn {task, _configuration, _n} -> task.deploy end) do
+      with {:error, reason} <- Deploy.environment(), do: raise(reason)
+    end
+
     File.mkdir_p!(folder)
 
     write_json(Path.join(folder, "manifest.json"), %{
@@ -141,10 +147,8 @@ defmodule EquivalentExchange.Runner do
     # What truly changed, told apart the way the harness tells each call's.
     truth = Path.join(project, "truth")
     {:ok, before} = Omunculus.Changes.snapshot(truth, workspace, [])
-    hosting = if task.prod, do: host(Path.join(dir, "prod"))
-    address = hosting && hosting.address
-    person = %{facts: task.person && placed(task.person["facts"], address), task: task}
-    instruction = placed(task.instruction, address)
+    person = %{facts: task.person && task.person["facts"], task: task}
+    instruction = task.instruction
     started = System.monotonic_time(:millisecond)
 
     {status, played} =
@@ -159,11 +163,16 @@ defmodule EquivalentExchange.Runner do
         end
       end)
 
-    if hosting, do: stop_hosting(hosting)
     answers = (played && played.answers) || []
     conversation = Enum.map((played && played.conversation) || [], &Tuple.to_list/1)
     duration = System.monotonic_time(:millisecond) - started
     facts = facts(project)
+
+    if app = task.deploy && Deploy.published(facts.events) do
+      Deploy.mirror(app, Path.join([dir, "prod", "site"]))
+      Deploy.destroy(app)
+    end
+
     outcome = outcome(facts, status)
     report = report(facts)
     {:ok, after_} = Omunculus.Changes.snapshot(truth, workspace, [])
@@ -388,30 +397,6 @@ defmodule EquivalentExchange.Runner do
     end
   end
 
-  defp placed(text, nil), do: text
-  defp placed(text, address), do: String.replace(text, "{prod}", address)
-
-  # The bench's hosting for one execution, listening on a port of its own.
-  defp host(dir) do
-    File.mkdir_p!(dir)
-
-    port =
-      Port.open({:spawn_executable, Path.join([@eval, "prod", "serve"])}, [:binary, args: [dir]])
-
-    file = Path.join(dir, "port")
-
-    Stream.repeatedly(fn -> File.read(file) end)
-    |> Enum.find(&match?({:ok, <<_, _::binary>>}, &1))
-
-    %{port: port, address: "http://127.0.0.1:" <> File.read!(file)}
-  end
-
-  defp stop_hosting(%{port: port}) do
-    {:os_pid, pid} = Port.info(port, :os_pid)
-    System.cmd("kill", [Integer.to_string(pid)])
-    Port.close(port)
-  end
-
   # The task's check on what the execution left: its workspace, its works,
   # what was said and, for a task that publishes, the published copy.
   defp check(task, workspace, facts, execution) do
@@ -424,7 +409,7 @@ defmodule EquivalentExchange.Runner do
       works: roots(facts),
       conversation: execution.conversation,
       first_run_made_work: first_run_made_work(facts),
-      published: if(task.prod, do: published)
+      published: if(task.deploy, do: published)
     })
   end
 

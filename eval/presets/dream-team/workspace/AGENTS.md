@@ -212,3 +212,22 @@ this conversation.
 Bad: `feat: add filter and fix duplicate insert` (two intents).
 Good: `feat(filter): add priority option` then
 `fix(insert): prevent duplicates`.
+
+## Deploy
+
+An app reaches people in two steps, and the second is never an agent's
+alone.
+
+- **Homologation first.** Publish the last commit with `deploy_preview`,
+  named after what the app is (lowercase letters, digits, dashes). It
+  answers at `http://<app>-<id>-hml.homologation.localhost:8080`, where the
+  person looks at it.
+- **Production only through `promote`,** which only the person grants, once
+  they have seen homologation. It publishes the very image homologation
+  built, so production is what they saw. Ask for it with what they will
+  find at the homologation address.
+- **Publishable from the repository as it is:** a `Dockerfile` that serves
+  the app on port 80, or a project Dokku detects by its language. No step
+  outside the repository.
+- **No key, secret or production address in the repository.** The deploy
+  tools hold the keys; the repository holds only what builds the app.
