@@ -81,7 +81,8 @@ defmodule EquivalentExchange.Runner do
     plan
     |> Elixir.Task.async_stream(
       fn {task, configuration, n} ->
-        {task, configuration, n, execute(folder, task, configuration, n, {model, code_mode}, timeout)}
+        {task, configuration, n,
+         execute(folder, task, configuration, n, {model, code_mode}, timeout)}
       end,
       max_concurrency: jobs,
       ordered: false,
@@ -92,7 +93,10 @@ defmodule EquivalentExchange.Runner do
       IO.puts(
         "[#{at}/#{length(plan)}] #{task.id} · #{configuration} · #{n} · #{execution["outcome"]} · " <>
           "#{passed(execution["score"].passed)} · #{execution["duration_ms"]} ms" <>
-          if(execution["score"].judge_unavailable, do: " · decider unavailable: #{execution["score"].judge_unavailable}", else: "")
+          if(execution["score"].judge_unavailable,
+            do: " · decider unavailable: #{execution["score"].judge_unavailable}",
+            else: ""
+          )
       )
     end)
 
@@ -134,7 +138,7 @@ defmodule EquivalentExchange.Runner do
     {status, answers} =
       within(timeout_s * 1000, fn ->
         with {:ok, _said} <- CLI.run(["--config", config_path, "send", task.instruction], project) do
-          {:ok, play_person(config_path, project, task, groups, [], @rounds)}
+          play_person(config_path, project, task, groups, [], @rounds)
         end
       end)
 
@@ -273,40 +277,50 @@ defmodule EquivalentExchange.Runner do
   end
 
   # The person: answers what waits on them, then follows the runs that opens.
-  defp play_person(_config_path, _project, _task, _groups, answers, 0), do: answers
+  # A reply whose runs fail ends the execution with their error.
+  defp play_person(_config_path, _project, _task, _groups, answers, 0), do: {:ok, answers}
 
   defp play_person(config_path, project, task, groups, answers, rounds) do
     case waiting_on_person(project) do
       [] ->
-        answers
+        {:ok, answers}
 
       waiting ->
-        given =
+        replies =
           for request <- waiting,
               {option, body} = choose(task, groups, request, project),
-              option != nil do
-            {:ok, _said} =
-              CLI.run(
-                [
-                  "--config",
-                  config_path,
-                  "reply",
-                  "--request_id",
-                  request.id,
-                  "--option",
-                  option,
-                  "--body",
-                  body
-                ],
-                project
-              )
+              option != nil,
+              do: {request, option, body}
 
-            %{request: request.id, option: option}
+        Enum.reduce_while(replies, {:ok, []}, fn {request, option, body}, {:ok, given} ->
+          case CLI.run(
+                 [
+                   "--config",
+                   config_path,
+                   "reply",
+                   "--request_id",
+                   request.id,
+                   "--option",
+                   option,
+                   "--body",
+                   body
+                 ],
+                 project
+               ) do
+            {:ok, _said} -> {:cont, {:ok, given ++ [%{request: request.id, option: option}]}}
+            {:error, _reason} = error -> {:halt, error}
           end
+        end)
+        |> case do
+          {:ok, []} ->
+            {:ok, answers}
 
-        if given == [],
-          do: answers,
-          else: play_person(config_path, project, task, groups, answers ++ given, rounds - 1)
+          {:ok, given} ->
+            play_person(config_path, project, task, groups, answers ++ given, rounds - 1)
+
+          error ->
+            error
+        end
     end
   end
 
@@ -527,9 +541,14 @@ defmodule EquivalentExchange.Runner do
       at = depth[event.run_id]
 
       case {event.body["name"], event.body["ok"]} do
-        {"done", true} -> {count, max(done_at || 0, at)}
-        {name, _ok} when name in ~w(work reopen) and done_at != nil and at < done_at -> {count + 1, nil}
-        _other -> {count, done_at}
+        {"done", true} ->
+          {count, max(done_at || 0, at)}
+
+        {name, _ok} when name in ~w(work reopen) and done_at != nil and at < done_at ->
+          {count + 1, nil}
+
+        _other ->
+          {count, done_at}
       end
     end)
     |> elem(0)
@@ -544,7 +563,9 @@ defmodule EquivalentExchange.Runner do
   end
 
   defp work_depth(%{parent_id: nil}, _by_id), do: 0
-  defp work_depth(%{parent_id: parent}, by_id), do: 1 + work_depth(Map.fetch!(by_id, parent), by_id)
+
+  defp work_depth(%{parent_id: parent}, by_id),
+    do: 1 + work_depth(Map.fetch!(by_id, parent), by_id)
 
   # What the provider reported of each model call, and of the prompt it
   # served from its cache: overall, on the first call of each run, and by
