@@ -157,7 +157,7 @@ defmodule EquivalentExchange.Runner do
              {:ok, answers} <- play_person(config_path, project, task, groups, [], @rounds) do
           converse(
             {config_path, project, groups, person},
-            %{answers: answers, conversation: [{"person", instruction}]},
+            %{answers: answers, conversation: [{"person", instruction} | answered(answers)]},
             (task.person && task.person["follow_ups"]) || []
           )
         end
@@ -339,8 +339,11 @@ defmodule EquivalentExchange.Runner do
                  ],
                  project
                ) do
-            {:ok, _said} -> {:cont, {:ok, given ++ [%{request: request.id, option: option}]}}
-            {:error, _reason} = error -> {:halt, error}
+            {:ok, _said} ->
+              {:cont, {:ok, given ++ [%{request: request.id, option: option, body: body}]}}
+
+            {:error, _reason} = error ->
+              {:halt, error}
           end
         end)
         |> case do
@@ -388,7 +391,10 @@ defmodule EquivalentExchange.Runner do
          {:ok, given} <- play_person(config_path, project, person.task, groups, [], @rounds) do
       converse(
         at,
-        %{answers: played.answers ++ given, conversation: conversation ++ [{"person", text}]},
+        %{
+          answers: played.answers ++ given,
+          conversation: conversation ++ [{"person", text} | answered(given)]
+        },
         follow_ups
       )
     else
@@ -412,6 +418,10 @@ defmodule EquivalentExchange.Runner do
       published: if(task.deploy, do: published)
     })
   end
+
+  # What the person answered the team's requests is something they said.
+  defp answered(given),
+    do: for(%{body: body} <- given, do: {"person", "To the team's request I answered: " <> body})
 
   # Whether the person's first message became a work at once.
   defp first_run_made_work(facts) do

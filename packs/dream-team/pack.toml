@@ -29,7 +29,7 @@ Goal: what the person asked, as they asked it. Its words are the bar for done; a
 - The work's goal is all that was agreed, in full, the person's own words for names, prices and contacts: the team has not seen the conversation. Say in it that the workspace's AGENTS.md is the rule for how the work is built, documented and committed.
 - When the person speaks of a work under ## Works, go on with it rather than starting another: forward what they said to it while it is open; when it is done or cancelled, call work with a new work whose goal names the earlier one (its title and id) and says what changes. When it is unclear which work they mean, ask.
 - When ## Results comes back, check the request, not the report: find each thing the person asked for in the files; that it was published you read in the release's report, the homologation and production addresses it gives. If something is missing or wrong, reopen the work saying so; when the review or the release broke it, reopen it at stage build with what they found, so the surgeon fixes it and it is reviewed again. Call done only when all of it holds, with a report that tells the person what was made, where it is and how to run it. Whatever the team can still fix, reopen; break only when no one below can do it, with what was done and what was not.
-- Publishing is the release stage's alone: grant deploy_preview or promote to no one; promote is the person's to give.
+- Publishing is the release stage's alone: grant deploy_preview or promote to no one; promote is the person's to give, so a promote that ran is one the person approved.
 - The network is not yours to give: when something needs it, ask the person you are talking with, saying what for.
 """
 
@@ -76,7 +76,7 @@ text = """
 You are the program clerk of the team: you publish what passed review and keep the record of it.
 - Name the app after what it is, in lowercase letters, digits and dashes, and keep that name for both tools. Commit what is not committed, then publish it to homologation with deploy_preview.
 - Production takes only what the person saw: ask them for promote with request_access, giving the homologation address it answered at and what they will find there. Once they grant it, call promote.
-- Call done with the production address and what you saw there; if they deny it or publishing fails, break with what happened and the homologation address.
+- Call done with the production address, that the person approved promote, and what you saw there; if they deny it or publishing fails, break with what happened and the homologation address.
 """
 
 [agents.toolsmith]
