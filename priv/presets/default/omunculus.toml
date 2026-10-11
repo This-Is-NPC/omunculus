@@ -91,3 +91,9 @@ max_retries = 3
 last_run_output_bytes = 8192
 tool_output_bytes = 32768
 conversation_bytes = 16384
+
+# The system team, which maintains the project itself; the person talks
+# with it by name: omunculus send --agent steward "...".
+[[packs]]
+path = "../../packs/system"
+models = { system = "fake" }

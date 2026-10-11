@@ -56,7 +56,7 @@ omunculus send "text"
 
 ### Configuration
 
-All configuration is TOML. The project file is `./omunculus.toml`, or the path `--config` names; the project root is its directory, or `[project] root`. The optional server uses its own TOML registry of project config paths, run and stream limits, and an optional TCP listener with JWT verification. There is no package config: a missing project file is `` no config at <path>; run `omunculus preset <name> --from <dir>` ``. The presets under `priv/presets/` (`default`, `codex-like`, `pi-like`) are copied into the project by the `preset` tool, which finds the tools and packs a preset names from the preset's folder. A team distributed as a pack is imported by the `pack` tool (`omunculus pack --path <dir> --models role=model --auth provider=login [--depth n]`): given a model for each of its roles and a login for each of its providers, it writes the pack to `[[packs]]` and copies the pack's `workspace/` into the default workspace, keeping the files there; it lists the pack's `environment/`, which it does not run. Memberships are state in the store; role definitions are configuration.
+All configuration is TOML. The project file is `./omunculus.toml`, or the path `--config` names; the project root is its directory, or `[project] root`. The optional server uses its own TOML registry of project config paths, run and stream limits, and an optional TCP listener with JWT verification. There is no package config: a missing project file is `` no config at <path>; run `omunculus preset <name> --from <dir>` ``. The presets under `priv/presets/` (`default`, `codex-like`, `pi-like`) are copied into the project by the `preset` tool, which finds the tools and packs a preset names from the preset's folder. The default preset imports the system team (`priv/packs/system`): the `steward`, at depth 0 beside the concierge, which the person talks with by name to change the project itself — it reads the setup with `config` and `overview`, writes new teams as packs in the workspace, and proposes every change with `propose_config` or `propose_pack`. A team distributed as a pack is imported by the `pack` tool (`omunculus pack --path <dir> --models role=model --auth provider=login [--depth n]`): given a model for each of its roles and a login for each of its providers, it writes the pack to `[[packs]]` and copies the pack's `workspace/` into the default workspace, keeping the files there; it lists the pack's `environment/`, which it does not run. Memberships are state in the store; role definitions are configuration.
 
 ### Tools, hooks and presets
 
@@ -74,6 +74,7 @@ lib/omunculus/       core, config, server, tool, tools, hooks, models, execution
 lib/mix/tasks/       the omunculus, omunculus.presets and omunculus.socket mix tasks
 priv/tools/          builtin tool and hook manifests
 priv/presets/        default, codex-like, pi-like
+priv/packs/system/   the system team: the steward and its skills team-design, team-composition, configure
 priv/sandbox.js      tool-call bridge run by Omunculus.Sandbox
 test/omunculus/      mirrors lib/; matrix_test.exs and spec_regression_test.exs are the scenario suites
 test/support/        fixtures, store case, scripted model, chain tool, execution policy

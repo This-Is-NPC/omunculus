@@ -957,9 +957,12 @@ defmodule Omunculus.ConfigTest do
     assert {:error, {:policy, :no_default_workspace}} = load(dir)
   end
 
-  test "agent_at_depth found" do
+  test "agent_at_depth finds the only agent of a depth and asks for a name among several" do
     {:ok, config} = Config.load(default_preset())
-    assert {:ok, {"concierge", %{depth: 0}}} = Config.agent_at_depth(config, 0)
+    assert {:ok, {"worker", %{depth: 1}}} = Config.agent_at_depth(config, 1)
+
+    assert {:error, {:agent_required, 0, ["concierge", "steward"]}} =
+             Config.agent_at_depth(config, 0)
   end
 
   test "agent_at_depth not found" do

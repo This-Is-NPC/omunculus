@@ -76,6 +76,22 @@ defmodule Omunculus.Tools.PresetTest do
     refute File.exists?(Path.join(root, "omunculus.toml"))
   end
 
+  test "applying default brings the system team, the steward with its skills", %{root: root} do
+    path = Path.join(root, "omunculus.toml")
+
+    assert %{"ok" => true} =
+             Preset.run(%{
+               args: %{"name" => "default", "from" => from("default")},
+               config_path: path
+             })
+
+    assert {:ok, config} = Config.load(path)
+    assert %{depth: 0} = config.agents["steward"]
+
+    skills = config.tools.skills |> Omunculus.Skills.discover() |> Map.keys()
+    assert Enum.all?(~w(team-design team-composition configure), &(("skill." <> &1) in skills))
+  end
+
   test "a pack the preset imports is found from the preset's folder", %{root: root} do
     from = Path.join(root, "preset")
     File.mkdir_p!(from)

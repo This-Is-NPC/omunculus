@@ -1,0 +1,23 @@
+# The system team
+
+The agents that maintain an Omunculus project itself. It comes with
+Omunculus: the default preset imports it, and the person talks with it by
+name (`omunculus send --agent steward "…"`), apart from the teams that do
+the project's work.
+
+| Agent | Depth | Role |
+|---|---|---|
+| steward | 0 | keeps the project's structure: designs teams, fits them together, changes the config |
+
+Every change the steward makes goes to the person as a request: the
+config it would make is loaded first, so a change that would break the
+file never reaches them, and it applies only once they approve it and only
+while the file is as it was when proposed.
+
+Its skills:
+
+- `team-design`: a new team, written as a pack under `packs/<name>/` of
+  the workspace, with the tasks that show it works.
+- `team-composition`: teams fitted together — at which depth each works,
+  on which models, and what one tells another.
+- `configure`: any other change to the config, one item at a time.

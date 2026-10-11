@@ -438,7 +438,15 @@ defmodule Omunculus.Fixtures do
       })
 
     path = config_path(dir)
-    data = path |> Toml.decode_file!() |> put_in(["skills", "paths"], [".agents/skills"])
+
+    # The default preset's own agents alone: without the system team beside
+    # the concierge, a message names no agent.
+    data =
+      path
+      |> Toml.decode_file!()
+      |> put_in(["skills", "paths"], [".agents/skills"])
+      |> Map.delete("packs")
+
     File.write!(path, Config.Toml.encode(data))
   end
 end
