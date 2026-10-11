@@ -1,12 +1,12 @@
 defmodule Omunculus.Tools.Config do
   @moduledoc """
   Builtin `config` tool: the project's setup as a client shows it, in
-  JSON. The project root, agents with their depth, model and ceiling
-  lists, the models by name with their api, provider and model id and
+  JSON. The project root, agents with their depth, model, ceiling lists
+  and text, the models by name with their api, provider and model id and
   nothing else of their table, the workspaces with their roots and the
   default one, each workflow's steps, and the packs it imports, each with
-  its name, folder, depth, the models and logins it is bound to, and the
-  agents and workflows it brings. Then what an editor needs: the
+  its name, folder, depth, the models and logins it is bound to, the
+  agents and workflows it brings and the files it holds. Then what an editor needs: the
   items `configure` writes as the file holds them, but a provider's
   literal key, named in `literal_keys`; the file's revision; and the names
   a ceiling list may hold — the model tools, their groups and the sandbox
@@ -66,7 +66,14 @@ defmodule Omunculus.Tools.Config do
         models: Map.get(entry, "models", %{}),
         auth: Map.get(entry, "auth", %{}),
         agents: pack |> Map.get("agents", %{}) |> Map.keys() |> Enum.sort(),
-        workflows: pack |> Map.get("workflows", %{}) |> Map.keys() |> Enum.sort()
+        workflows: pack |> Map.get("workflows", %{}) |> Map.keys() |> Enum.sort(),
+        files:
+          for(
+            file <- Path.wildcard(Path.join(folder, "**/*")),
+            File.regular?(file),
+            do: Path.relative_to(file, folder)
+          )
+          |> Enum.sort()
       }
     end
   end
@@ -86,7 +93,8 @@ defmodule Omunculus.Tools.Config do
       granted: agent.ceiling.granted,
       negotiable: agent.ceiling.negotiable,
       human: agent.ceiling.human,
-      deny: agent.ceiling.deny
+      deny: agent.ceiling.deny,
+      text: agent.text
     }
   end
 

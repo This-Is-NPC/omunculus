@@ -132,9 +132,13 @@ defmodule Omunculus.Tools.ConfigTest do
                "depth" => 1,
                "models" => %{"lead" => "fast"},
                "agents" => ["chief", "hand"],
-               "workflows" => ["line"]
+               "workflows" => ["line"],
+               "files" => ["environment/up", "pack.toml", "workspace/AGENTS.md"]
              }
            ] = Jason.decode!(output)["packs"]
+
+    assert %{"text" => "chief"} =
+             Enum.find(Jason.decode!(output)["agents"], &(&1["name"] == "chief"))
   end
 
   test "the builtin catalog discovers config for the command line and models" do
