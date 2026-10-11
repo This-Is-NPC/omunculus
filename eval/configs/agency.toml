@@ -2,7 +2,8 @@
 # (packs/dream-team) and the design team (packs/design-team) one depth
 # below it, imported by the pack tool in that order, as the design team
 # requires the dream team's deploy_preview. What the packs leave to the
-# project is as in dream-team.toml.
+# project is as in dream-team.toml; the workflows below compose the two
+# teams.
 [eval]
 packs = [{ name = "sales-desk" }, { name = "dream-team", depth = 1 }, { name = "design-team", depth = 1 }]
 
@@ -17,3 +18,21 @@ key = "$OMUNCULUS_HOMOLOGATION_KEY"
 [auth.production]
 kind = "api_key"
 key = "$OMUNCULUS_PRODUCTION_KEY"
+
+# The design team checks what the builders built against the design the
+# client approved: each item of the plan, then the whole before promote.
+[workflows.page]
+steps = [
+  { name = "build", agent = "surgeon" },
+  { name = "review", agent = "design-reviewer" },
+]
+
+[workflows.release]
+steps = [
+  { name = "publish", agent = "clerk" },
+  { name = "accept", agent = "design-reviewer" },
+  { name = "promote", agent = "clerk" },
+]
+
+[policy.depth.2]
+workflows = ["design", "page", "release"]

@@ -18,6 +18,19 @@ rounds = workspace / "design" / "rounds.md"
 if not rounds.is_file() or not re.search(r"whatsapp", rounds.read_text(), re.I):
     fail("the round asking for a bigger WhatsApp button is not in design/rounds.md")
 
+# Built from a plan, base then each page, each reviewed by the design team.
+plan = workspace / "docs" / "plan.md"
+if not plan.is_file():
+    fail("docs/plan.md is missing")
+items = re.findall(r"^##\s+(.+)$", plan.read_text(), re.M)
+if len(items) < 5:
+    fail(f"docs/plan.md has {len(items)} items, not a base and the four pages")
+if not (workspace / "design" / "preview" / "system.css").is_file():
+    fail("design/preview/system.css, the design system, is missing")
+reviewed = [w for w in works_ if w["assignee"] == "design-reviewer" and w["state"] == "done"]
+if len(reviewed) < 5:
+    fail(f"{len(reviewed)} items reviewed by the design team, not a base and the four pages")
+
 # The builders assessed it before the price, then built it.
 administrator = [w for w in works_ if w["assignee"] == "administrator"]
 def assessment(work):
