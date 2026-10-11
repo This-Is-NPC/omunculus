@@ -200,6 +200,7 @@ defmodule EquivalentExchange.Runner do
       model: model,
       outcome: outcome,
       expected: Task.outcomes(task, configuration),
+      expected_report: task.expect["report"],
       report: report,
       conversation: conversation,
       check: %{passed: passed, said: said, files: files},
@@ -273,6 +274,7 @@ defmodule EquivalentExchange.Runner do
     execution
     |> Map.merge(%{
       "report" => report,
+      "expected_report" => task.expect["report"],
       "check" => %{"passed" => passed, "said" => said, "files" => files},
       "grants" => grants(facts),
       "usage" => usage(facts, price(project, execution["model"]))
@@ -413,6 +415,7 @@ defmodule EquivalentExchange.Runner do
       report: report(facts),
       configuration: execution.configuration,
       works: roots(facts),
+      team: team(facts),
       conversation: execution.conversation,
       first_run_made_work: first_run_made_work(facts),
       published: if(task.deploy, do: published)
@@ -429,6 +432,19 @@ defmodule EquivalentExchange.Runner do
       nil -> false
       first -> Enum.any?(facts.events, &(&1.run_id == first.id and &1.type == "work"))
     end
+  end
+
+  # Every work, with who it went to: which agents of the teams worked.
+  defp team(facts) do
+    for work <- facts.works,
+        do: %{
+          id: work.id,
+          parent_id: work.parent_id,
+          title: work.title,
+          goal: work.goal,
+          assignee: work.assignee,
+          state: work.state
+        }
   end
 
   # The root works, as the person's requests became them.

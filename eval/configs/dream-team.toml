@@ -3,7 +3,7 @@
 # logins of its deploy environment (packs/dream-team/environment/up), the
 # variable its deploy tools find the sockets by, and time for a build.
 [eval]
-pack = "dream-team"
+packs = [{ name = "dream-team" }]
 
 [execution]
 environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH", "OMUNCULUS_DEPLOY"]

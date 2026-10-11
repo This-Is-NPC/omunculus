@@ -97,6 +97,8 @@ deploy = true                      # publishes to the deploy environment
 [expect]
 outcome = ["break", "answer", "waiting"]   # answer, done, break, waiting
 
+report = "asks"                    # left out, the last words say it was done; "asks", they ask the person
+
 [expect.configurations.solo]       # where the configuration changes it
 outcome = ["done", "answer"]
 

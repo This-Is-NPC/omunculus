@@ -8,11 +8,12 @@ defmodule EquivalentExchange.Project do
   `code_mode` on when the run asks for it —, the bench's skills
   (`eval/skills`) and ticket system (`eval/mcp/tickets`, an MCP server)
   declared, and the task's starting files copied into the workspace. A
-  configuration whose `[eval] pack` names a pack of `packs/` runs that team
-  alone: Amestris's agents and workflows go, and omunculus's own `pack` tool
-  imports the pack, every role on the run's model and each provider the
-  pack names on the configuration's login of that name, copying the pack's
-  workspace files in before the task's.
+  configuration whose `[eval] packs` lists packs of `packs/` — each a `name`
+  and the `depth` its team works below its own — runs those teams alone:
+  Amestris's agents and workflows go, and omunculus's own `pack` tool
+  imports each, in order, every role on the run's model and each provider
+  the pack names on the configuration's login of that name, copying the
+  pack's workspace files in before the task's.
   """
 
   alias Omunculus.Config.Toml, as: ConfigToml
@@ -43,14 +44,16 @@ defmodule EquivalentExchange.Project do
          {:ok, overlay} <-
            Toml.decode_file(Path.join([@eval, "configs", configuration <> ".toml"])) do
       {eval, overlay} = Map.pop(overlay, "eval", %{})
-      pack = eval["pack"]
+      packs = Map.get(eval, "packs", [])
 
       data =
         path
         |> Toml.decode_file!()
         |> merge(overlay)
         |> Map.update!("agents", &Map.drop(&1, Map.get(eval, "drop_agents", [])))
-        |> then(&if(pack, do: Map.merge(&1, %{"agents" => %{}, "workflows" => %{}}), else: &1))
+        |> then(
+          &if(packs != [], do: Map.merge(&1, %{"agents" => %{}, "workflows" => %{}}), else: &1)
+        )
         |> Map.update!("agents", fn agents ->
           Map.new(agents, fn {name, agent} -> {name, Map.put(agent, "model", model)} end)
         end)
@@ -63,7 +66,7 @@ defmodule EquivalentExchange.Project do
       File.write!(path, ConfigToml.encode(data))
       File.mkdir_p!(Path.join(dir, "workspace"))
 
-      with :ok <- import_pack(pack, path, model) do
+      with :ok <- import_packs(packs, path, model) do
         if workspace && File.dir?(workspace),
           do: File.cp_r!(workspace, Path.join(dir, "workspace"))
 
@@ -75,9 +78,16 @@ defmodule EquivalentExchange.Project do
     end
   end
 
-  defp import_pack(nil, _path, _model), do: :ok
+  defp import_packs(packs, path, model) do
+    Enum.reduce_while(packs, :ok, fn pack, :ok ->
+      case import_pack(pack, path, model) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
+  end
 
-  defp import_pack(name, path, model) do
+  defp import_pack(%{"name" => name} = entry, path, model) do
     dir = Path.join(@packs, name)
     {:ok, pack} = Omunculus.Config.Packs.read(dir)
     pairs = fn names, to -> Enum.map_join(names || [], ",", &"#{&1}=#{to.(&1)}") end
@@ -86,7 +96,8 @@ defmodule EquivalentExchange.Project do
            args: %{
              "path" => dir,
              "models" => pairs.(pack["pack"]["roles"], fn _role -> model end),
-             "auth" => pairs.(pack["pack"]["auth"], & &1)
+             "auth" => pairs.(pack["pack"]["auth"], & &1),
+             "depth" => to_string(Map.get(entry, "depth", 0))
            },
            config_path: path
          }) do

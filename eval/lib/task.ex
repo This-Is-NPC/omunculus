@@ -120,6 +120,9 @@ defmodule EquivalentExchange.Task do
     unless Enum.all?(List.flatten(outcomes), &(&1 in @outcomes)),
       do: raise("#{task.id}: an expected outcome is not one of #{Enum.join(@outcomes, ", ")}")
 
+    unless Map.get(task.expect, "report") in [nil, "asks"],
+      do: raise("#{task.id}: [expect] report is \"asks\" or left out")
+
     unless Enum.all?(Map.values(task.human), &(&1 in ["grant", "deny"])),
       do: raise("#{task.id}: the human answers only grant or deny")
 

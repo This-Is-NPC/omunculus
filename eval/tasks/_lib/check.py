@@ -5,7 +5,7 @@ agents' reach, and exits 0 when the task holds, 2 when the workspace holds but
 the run ended otherwise than expected, and 1 when the workspace does not hold. The outcome file names the
 configuration, how the conversation ended (answer, done, break or waiting) and
 the last words to the person (report); a conversation task's also has the root
-works (works), what was said (conversation, [who, text] pairs), whether the
+works (works), every work with the agent it went to (team), what was said (conversation, [who, text] pairs), whether the
 first message became a work at once (first_run_made_work) and, for a task that
 publishes, the published copy (published: a directory, relative to the
 workspace in a solution).
@@ -173,3 +173,7 @@ def published(workspace, outcome):
 
 def works(outcome):
     return outcome.get("works") or []
+
+
+def team(outcome):
+    return outcome.get("team") or []
