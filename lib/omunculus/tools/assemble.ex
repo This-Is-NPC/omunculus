@@ -9,8 +9,8 @@ defmodule Omunculus.Tools.Assemble do
   name and description of each skill the run has. Its `output`, the
   context, is the rest: under `## Environment`, the workspace every
   command starts in, the person's home and the platform, which differ
-  from one workspace to another; the work's title and
-  goal, its last comment, and its last closed run (`last_run`), or,
+  from one workspace to another; the work's title, its id and, in a
+  workflow, the workflow and its stage, its goal, its last comment, and its last closed run (`last_run`), or,
   without a work, the run that opened the run's request (`opener`), as
   `Omunculus.Tools.Record` lines without this tool's calls, each call's
   output cut to `last_run_output_bytes` in the args when set. Then, under
@@ -217,7 +217,18 @@ defmodule Omunculus.Tools.Assemble do
   defp message_section(message), do: ["## Message\n#{message.body}"]
 
   defp work_section(nil), do: []
-  defp work_section(work), do: ["## Work\n#{work.title}", "## Goal\n#{work.goal}"]
+
+  defp work_section(work),
+    do: [
+      "## Work\n" <> Enum.join([work.title, "id: #{work.id}" | stage_line(work)], "\n"),
+      "## Goal\n#{work.goal}"
+    ]
+
+  # Where the work is in the workflow it goes through.
+  defp stage_line(%{workflow: workflow, stage: stage}) when is_binary(workflow),
+    do: ["workflow: #{workflow}, stage: #{stage}"]
+
+  defp stage_line(_work), do: []
 
   defp inbox_section(view, args) do
     case Map.get(args, "inbox_id") do

@@ -66,7 +66,7 @@ defmodule Omunculus.Tools.AssembleTest do
   test "the instructions hold what stays across runs, the output the run's context" do
     view = fn work, message ->
       %{
-        "work" => %{title: work, goal: "g"},
+        "work" => %{id: work, title: work, goal: "g"},
         "message" => %{body: message},
         "agents" => [%{name: "worker", tools: ["write"]}],
         "catalog" => [%{name: "work", description: "Hands work down.", tags: [], groups: []}]
@@ -199,9 +199,9 @@ defmodule Omunculus.Tools.AssembleTest do
     refute output =~ "more tools"
   end
 
-  test "renders the work title, its goal and the last comment, in that order" do
+  test "renders the work title, its id, its goal and the last comment, in that order" do
     view = %{
-      "work" => %{title: "Fix the parser", goal: "the parser accepts trailing commas"},
+      "work" => %{id: "w9", title: "Fix the parser", goal: "the parser accepts trailing commas"},
       "comments" => [%{body: "first note"}, %{body: "last note"}],
       "catalog" => []
     }
@@ -209,9 +209,15 @@ defmodule Omunculus.Tools.AssembleTest do
     output = whole(%{@input | view: view})
 
     assert output =~
-             "## Work\nFix the parser\n\n## Goal\nthe parser accepts trailing commas\n\n## Last comment\nlast note"
+             "## Work\nFix the parser\nid: w9\n\n## Goal\nthe parser accepts trailing commas\n\n## Last comment\nlast note"
 
     refute output =~ "first note"
+
+    staged =
+      put_in(view, ["work"], Map.merge(view["work"], %{workflow: "sale", stage: "qualify"}))
+
+    assert whole(%{@input | view: staged}) =~
+             "## Work\nFix the parser\nid: w9\nworkflow: sale, stage: qualify\n"
   end
 
   test "the last run lists every event but this tool's calls and the run's start and end" do
@@ -230,7 +236,7 @@ defmodule Omunculus.Tools.AssembleTest do
     ]
 
     view = %{
-      "work" => %{title: "Fix the parser", goal: "the parser accepts trailing commas"},
+      "work" => %{id: "w9", title: "Fix the parser", goal: "the parser accepts trailing commas"},
       "comments" => [%{body: "first note"}, %{body: "last note"}],
       "last_run" => %{message: %{body: "fix the parser"}, events: events},
       "catalog" => []
@@ -308,7 +314,7 @@ defmodule Omunculus.Tools.AssembleTest do
   test "inbox appears only when args carry inbox_id, and the sections go from what stays to what changes" do
     view = %{
       "message" => %{body: "hi"},
-      "work" => %{title: "Fix the parser", goal: "the parser accepts trailing commas"},
+      "work" => %{id: "w9", title: "Fix the parser", goal: "the parser accepts trailing commas"},
       "comments" => [%{body: "last note"}],
       "request" => %{
         id: "req_1",
