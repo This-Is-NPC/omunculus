@@ -49,6 +49,15 @@ defmodule Omunculus.Store.ConnectionTest do
     assert_receive {:store, ^owner, :events}
   end
 
+  test "a store on disk keeps a write-ahead log, synced at checkpoints" do
+    path = Path.join(Omunculus.Fixtures.tmp_dir(), "store.sqlite3")
+    {:ok, conn} = Store.open(path)
+
+    assert {:ok, [%{journal_mode: "wal"}]} = Query.all(conn, "PRAGMA journal_mode")
+    assert {:ok, [%{synchronous: 1}]} = Query.all(conn, "PRAGMA synchronous")
+    Store.close(conn)
+  end
+
   test "the owner stops when the process that opened it exits" do
     parent = self()
 

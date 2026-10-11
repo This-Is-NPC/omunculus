@@ -332,11 +332,12 @@ defmodule Omunculus.Execution.Policy do
     parent = Path.dirname(store)
     root = Path.expand(config.root)
 
+    # The store's own directory, or the store with its log beside it.
     store_hidden =
       if parent != root and FilesystemPath.within?(root, parent) do
-        parent
+        [parent]
       else
-        store
+        [store, store <> "-wal", store <> "-shm"]
       end
 
     # Seeing the machine, a command must not read what the person keeps
@@ -346,7 +347,7 @@ defmodule Omunculus.Execution.Policy do
         do: config.execution.deny_read ++ List.wrap(config.auth.store),
         else: []
 
-    [store_hidden, Path.expand(config.path) | host_hidden]
+    store_hidden ++ [Path.expand(config.path) | host_hidden]
   end
 
   # The other paths a writing command may write, those that exist.

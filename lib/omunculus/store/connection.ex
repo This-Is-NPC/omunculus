@@ -7,7 +7,8 @@ defmodule Omunculus.Store.Connection do
   A function already running in the owner, such as a transaction's
   body, runs directly. An exception raised in the owner is raised again
   in the caller. The owner closes the handle and stops when `close/1` is
-  called or when the process that opened it exits.
+  called or when the process that opened it exits. The store keeps a
+  write-ahead log and syncs it at checkpoints, not at every commit.
 
   Processes that `subscribe/1` receive `{:store, owner, message}` for
   each `publish/2`. `appended/1` publishes `:events` once the rows it
@@ -74,11 +75,12 @@ defmodule Omunculus.Store.Connection do
 
   @impl true
   def init({path, opener}) do
-    case Sqlite3.open(path) do
-      {:ok, db} ->
-        Process.monitor(opener)
-        {:ok, db}
-
+    with {:ok, db} <- Sqlite3.open(path),
+         :ok <- Sqlite3.execute(db, "PRAGMA journal_mode = WAL"),
+         :ok <- Sqlite3.execute(db, "PRAGMA synchronous = NORMAL") do
+      Process.monitor(opener)
+      {:ok, db}
+    else
       {:error, reason} ->
         {:stop, reason}
     end
