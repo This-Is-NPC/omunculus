@@ -3,25 +3,32 @@
 Takes a request from a conversation to a published app. It is the surgical
 team of *The Mythical Man-Month*, ch. 3: one surgeon designs and writes what
 matters, the others free them of the rest. The administrator asks until the
-request is clear, the surgeon builds with the helpers below, the copilot
-reviews, and the clerk publishes to homologation, then to production once
-the person grants `promote`.
+request is clear and plans it, the surgeon builds each item of the plan with
+the helpers below, the copilot reviews each, and the clerk publishes the
+whole to homologation, then to production once the person grants `promote`.
 
 | Agent | Depth | Role |
 |---|---|---|
-| administrator | 0 | talks with the person until the work is ready, then hands it down |
-| surgeon | 1 | designs the work and writes the code that matters |
-| copilot | 1, workflow only | reviews what was built against the goal and AGENTS.md |
-| clerk | 1, workflow only | publishes what passed review to homologation, then to production once the person grants promote |
+| administrator | 0 | talks with the person until the work is ready, plans it and hands down each item |
+| surgeon | 1 | builds each item of the plan, writing the code that matters |
+| copilot | 1, workflow only | reviews each item against its goal, the plan's checks and AGENTS.md |
+| clerk | 1, workflow only | publishes the whole to homologation, then to production once the person grants promote |
 | toolsmith | 2 | mise, scripts, the means to check and publish |
 | tester | 2 | writes and runs the tests |
 | editor | 2 | README.md and docs/ |
 | language_lawyer | 2 | how a language, library or version is meant to be used |
 
-Every work handed down goes through the workflow `surgery`: build
-(surgeon), review (copilot), release (clerk). The pack requires it at the
-surgeon's depth, and the administrator names it, so another team's
-workflow required at that depth sits beside it.
+The administrator first writes `docs/plan.md`: a `## base` item, the
+structure every page shares, then a `## page: <name>` item per page, each
+with what it shows and how to check it. Each item is a work of the
+workflow `page` — build (surgeon), review (copilot) — handed down one at a
+time, base first; then one work of the workflow `release` — publish, then
+promote (clerk) — takes the whole out. The pack's tool `deliver`, the
+administrator's way to conclude, refuses a build until every item and the
+release came back done. The pack requires both workflows at the surgeon's
+depth; a project that composes teams may change their stages in its own
+`[workflows.page]` and `[workflows.release]`, as long as it requires them
+there.
 
 ## What it holds
 
@@ -29,7 +36,8 @@ workflow required at that depth sits beside it.
 pack.toml       the agents, on the role `team`, the workflow, and the secrets
                 of the deploy tools, on the providers `homologation` and
                 `production`
-tools/          deploy_preview (homologation) and promote (production)
+tools/          deploy_preview (homologation), promote (production) and
+                deliver, the administrator's done
 workspace/      AGENTS.md, the rules every agent of the team follows
 environment/    up and down: the two Dokku instances the deploy tools reach
 tasks/          the tasks that show the team works, in the eval's format

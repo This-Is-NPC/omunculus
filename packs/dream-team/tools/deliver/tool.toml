@@ -1,0 +1,22 @@
+name = "deliver"
+kind = "tool"
+triggers = ["model"]
+description = "Concludes the administrator's work with a report: comments it on the work and continues it, ending the run. A build is refused until docs/plan.md lists its items, each item came back done from a work of the workflow page named after it, and a work of the workflow release came back done; an assessment is not refused."
+tags = ["sequence", "work"]
+command = ["./run"]
+chains = ["comment", "continue", "end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+required = ["report"]
+
+[parameters.properties.report]
+type = "string"
+
+[views.work]
+source = "works"
+
+[views.children]
+source = "works"
+relation = "children"
