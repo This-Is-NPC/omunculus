@@ -26,6 +26,10 @@ type = "string"
 type = "integer"
 minimum = 1
 
+[parameters.properties.conversation_bytes]
+type = "integer"
+minimum = 1
+
 [parameters.properties.session_ttl_ms]
 type = "integer"
 minimum = 1
@@ -56,6 +60,11 @@ include = ["runs"]
 [views.chat]
 source = "runs"
 relation = "conversation"
+
+[views.conversation_works]
+source = "works"
+relation = "conversation"
+include = ["last_comment"]
 
 [views.results]
 source = "works"

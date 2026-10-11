@@ -318,6 +318,7 @@ defmodule Omunculus.Run do
       {"inbox_id", inbox_id},
       {"last_run_output_bytes", config.last_run_output_bytes},
       {"tool_output_bytes", config.tool_output_bytes},
+      {"conversation_bytes", config.conversation_bytes},
       {"session_ttl_ms", config.session_ttl_ms},
       {"session_max_bytes", config.session_max_bytes}
     ]

@@ -133,6 +133,16 @@ defmodule Omunculus.Store.View do
          do: with_records(conn, runs)
   end
 
+  @doc "The root works of a conversation, oldest first; a nil conversation is that of the calls outside one."
+  @spec conversation_roots(Omunculus.Store.Connection.t(), String.t() | nil) :: {:ok, [map]}
+  def conversation_roots(conn, conversation_id) do
+    Query.all(
+      conn,
+      "SELECT * FROM works WHERE parent_id IS NULL AND conversation_id IS ? ORDER BY created_at, id",
+      [conversation_id]
+    )
+  end
+
   defp with_records(conn, runs) do
     Enum.reduce_while(runs, {:ok, []}, fn run, {:ok, acc} ->
       case with_record(conn, run) do

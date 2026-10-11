@@ -10,6 +10,30 @@ defmodule Omunculus.Tools.Record do
 
   alias Omunculus.Tools.Out
 
+  @doc "The text of a recorded model reply, its JSON or decoded, in each provider's shape."
+  @spec said(String.t() | map) :: String.t()
+  def said(body) when is_binary(body) do
+    case Jason.decode(body) do
+      {:ok, reply} when is_map(reply) -> said(reply)
+      _not_a_reply -> ""
+    end
+  end
+
+  def said(reply) when is_map(reply), do: reply |> texts() |> Enum.join("\n")
+
+  defp texts(%{"content" => text}) when is_binary(text), do: [text]
+
+  defp texts(%{"content" => blocks}) when is_list(blocks),
+    do: for(%{"type" => "text", "text" => text} <- blocks, do: text)
+
+  defp texts(%{"output" => items}) when is_list(items) do
+    for %{"type" => "message", "content" => parts} <- items,
+        %{"type" => "output_text", "text" => text} <- parts,
+        do: text
+  end
+
+  defp texts(_reply), do: []
+
   @spec lines(map, String.t(), pos_integer | nil) :: [String.t()]
   def lines(run, hidden, limit) do
     message = if run.message, do: ["- message #{run.message.body}"], else: []

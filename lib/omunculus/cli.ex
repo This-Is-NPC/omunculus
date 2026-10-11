@@ -117,7 +117,7 @@ defmodule Omunculus.CLI do
   end
 
   def format_error({:policy, {:invalid, key}})
-      when key in [:last_run_output_bytes, :tool_output_bytes] do
+      when key in [:last_run_output_bytes, :tool_output_bytes, :conversation_bytes] do
     "omunculus.toml [policy] #{key} must be a positive integer"
   end
 

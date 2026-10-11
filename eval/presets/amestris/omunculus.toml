@@ -174,6 +174,7 @@ assemble = "assemble"
 max_retries = 2
 last_run_output_bytes = 8192
 tool_output_bytes = 32768
+conversation_bytes = 16384
 # Every agent is sent the same tools, so their requests share the cache.
 send_catalog = true
 # A run continues its agent's paused session for five minutes, as long as

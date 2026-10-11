@@ -453,7 +453,7 @@ defmodule EquivalentExchange.Runner do
     |> Enum.flat_map(fn event ->
       cond do
         event.type == "model" and MapSet.member?(top, event.run_id) ->
-          [said(event.body)]
+          [Omunculus.Tools.Record.said(event.body)]
 
         event.type == "comment" and root != nil and event.work_id == root.id and
             event.actor_kind == "agent" ->
@@ -469,14 +469,6 @@ defmodule EquivalentExchange.Runner do
     |> Enum.reject(&(is_nil(&1) or String.trim(&1) == ""))
     |> List.last() || ""
   end
-
-  defp said(text) when is_binary(text), do: text
-  defp said(%{"content" => content}) when is_binary(content), do: content
-
-  defp said(%{"content" => parts}) when is_list(parts),
-    do: parts |> Enum.map(&(&1["text"] || "")) |> Enum.join("\n")
-
-  defp said(_body), do: ""
 
   defp requests(facts, answers, project) do
     Enum.map(facts.requests, fn request ->

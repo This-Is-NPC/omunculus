@@ -32,6 +32,37 @@ defmodule Omunculus.Tools.AssembleTest do
     refute Assemble.run(@input)["output"] =~ "## Environment"
   end
 
+  test "a run without a work is shown its conversation's works and what was said, newest within conversation_bytes" do
+    said = fn reply -> %{type: "model", body: Jason.encode!(reply)} end
+
+    view = %{
+      "catalog" => [],
+      "message" => %{body: "and the colours?"},
+      "conversation_works" => [
+        %{id: "w1", title: "Bakery site", state: "done", last_comment: %{body: "Published"}}
+      ],
+      "chat" => [
+        %{message: %{body: "I want a site"}, events: [said.(%{"content" => "Which shop?"})]},
+        %{
+          message: %{body: "Doce Ana"},
+          events: [said.(%{"content" => [%{"type" => "text", "text" => "Handing it down."}]})]
+        }
+      ]
+    }
+
+    output = Assemble.run(%{@input | view: view})["output"]
+
+    assert output =~ "## Works\n- Bakery site (work w1, done): Published"
+
+    assert output =~
+             "## Conversation\n- person: I want a site\n- you: Which shop?\n- person: Doce Ana\n- you: Handing it down."
+
+    cut = %{@input | view: view, args: Map.put(@input.args, "conversation_bytes", 50)}
+
+    assert Assemble.run(cut)["output"] =~
+             "## Conversation\n- person: Doce Ana\n- you: Handing it down.\n"
+  end
+
   test "the instructions hold what stays across runs, the output the run's context" do
     view = fn work, message ->
       %{

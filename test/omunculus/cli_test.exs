@@ -198,8 +198,8 @@ defmodule Omunculus.CLITest do
     assert {:ok, ""} = CLI.run(["send", "second message"], dir)
 
     assert {:ok, output} = CLI.run(["prompt"], dir)
-    assert output =~ "second message"
-    refute output =~ "first message"
+    assert output =~ "## Message\nsecond message"
+    refute output =~ "## Message\nfirst message"
 
     assert output =~
              "- read: Reads a file, or limit lines of it from line offset (from 1). [tags: fs]"

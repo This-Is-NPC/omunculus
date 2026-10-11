@@ -12,7 +12,9 @@ defmodule Omunculus.Tool.Views do
 
   Sources:
 
-  - `works`: `relation` `self` (default), `parent` or `children`; from
+  - `works`: `relation` `self` (default), `parent`, `children` or
+    `conversation` (from `run`: for a run without a work, the root works
+    of its conversation, oldest first); from
     `work` (default) or `args.<name>`, which needs `within =
     "descendants"` and then reads only a work below the call's own, or,
     for a call outside any run and work, any work of its conversation.
@@ -102,7 +104,8 @@ defmodule Omunculus.Tool.Views do
 
   defp source_spec("works", table, spec) do
     with :ok <- only_keys(table, ~w(from relation state since include within)),
-         {:ok, relation} <- one_of(table, "relation", ~w(self parent children), "self"),
+         {:ok, relation} <-
+           one_of(table, "relation", ~w(self parent children conversation), "self"),
          {:ok, states} <- subset(table, "state", @work_states),
          {:ok, since} <- one_of(table, "since", ["last_run"], nil),
          {:ok, include} <- subset(table, "include", Map.keys(@work_includes)),
@@ -111,7 +114,7 @@ defmodule Omunculus.Tool.Views do
       {:ok,
        %{
          spec
-         | from: ["work"],
+         | from: if(relation == "conversation", do: ["run"], else: ["work"]),
            relation: relation,
            states: states,
            since_last_run: since == "last_run",
@@ -182,6 +185,9 @@ defmodule Omunculus.Tool.Views do
   defp source_spec(source, _table, _spec), do: {:error, {:unknown_source, source}}
 
   # The anchors a source accepts once `from` is known.
+  defp check_anchors(%{source: "works", relation: "conversation", from: ["run"]} = spec),
+    do: {:ok, spec}
+
   defp check_anchors(%{source: "works", from: from, within: within} = spec) do
     cond do
       from == ["work"] and is_nil(within) -> {:ok, spec}
@@ -308,6 +314,10 @@ defmodule Omunculus.Tool.Views do
     end
   end
 
+  defp read_from(_conn, %{relation: "conversation"}, _anchor, _id, %{work_id: work_id})
+       when is_binary(work_id),
+       do: :skip
+
   defp read_from(conn, %{source: "works"} = spec, anchor, id, scope) do
     with :ok <- inside(conn, spec, anchor, id, scope),
          {:ok, works} <- works(conn, spec, id) do
@@ -323,12 +333,6 @@ defmodule Omunculus.Tool.Views do
 
   defp read_from(conn, %{source: "runs", relation: "opener"}, _anchor, id, _scope),
     do: Store.opener_run(conn, id)
-
-  defp read_from(_conn, %{source: "runs", relation: "conversation"}, _anchor, _id, %{
-         work_id: work_id
-       })
-       when is_binary(work_id),
-       do: :skip
 
   defp read_from(conn, %{source: "runs", relation: "conversation"}, _anchor, id, _scope) do
     with {:ok, run} <- Store.view(conn, "run", id),
@@ -405,6 +409,11 @@ defmodule Omunculus.Tool.Views do
   end
 
   defp works(conn, %{relation: "self"}, id), do: Store.view(conn, "work", id)
+
+  defp works(conn, %{relation: "conversation"}, id) do
+    with {:ok, run} <- Store.view(conn, "run", id),
+         do: Store.conversation_roots(conn, run.conversation_id)
+  end
 
   defp works(conn, %{relation: "parent"}, id) do
     with {:ok, work} <- Store.view(conn, "work", id) do

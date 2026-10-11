@@ -39,7 +39,7 @@ defmodule Omunculus.Tools.Assemble do
   alias Omunculus.Tools.{Out, Record, Session}
 
   # The sections that begin the context of an assembled prompt.
-  @context_start ~r/\n\n(?=## (Environment|Work|Last comment|Last run|Results|Request|Inbox|Message)\n)/
+  @context_start ~r/\n\n(?=## (Environment|Work|Works|Conversation|Last comment|Last run|Results|Request|Inbox|Message)\n)/
 
   @spec run(map) :: map
   def run(%{name: name, args: args, view: view} = input) do
@@ -52,28 +52,30 @@ defmodule Omunculus.Tools.Assemble do
         [tools_section(cards)] ++
         skills_section(view["skills"] || [])
 
+    limit = args["conversation_bytes"]
+
     # What happened since a pause, which a continued session is told.
     news =
-      results_section(view["results"] || [], view["cause"]) ++
+      works_section(view["conversation_works"], limit) ++
+        results_section(view["results"] || [], view["cause"]) ++
         request_section(view["request"], view["request_comments"]) ++
         inbox_section(view, args) ++
         message_section(view["message"])
+
+    session = session(session_runs(view), args, news)
 
     context =
       environment_section(Map.get(input, :roots, [])) ++
         work_section(view["work"]) ++
         comment_section(view["comments"]) ++
         last_run_section(view["last_run"] || view["opener"], name, args) ++
+        conversation_section(session, view["chat"], limit) ++
         news
 
     context
     |> Enum.join("\n\n")
     |> Out.ok()
-    |> put_session(
-      session(session_runs(view), args, news),
-      Enum.join(instructions, "\n\n"),
-      cards
-    )
+    |> put_session(session, Enum.join(instructions, "\n\n"), cards)
   end
 
   # A run with a work goes on with the work's runs; one without, with its
@@ -159,6 +161,57 @@ defmodule Omunculus.Tools.Assemble do
     do: ["- #{agent} broke its work #{work_id}: #{Jason.decode!(body)["body"]}"]
 
   defp broken(_cause), do: []
+
+  # The root works of the conversation of a run without a work, so a
+  # message about one finds it.
+  defp works_section(nil, _limit), do: []
+  defp works_section([], _limit), do: []
+
+  defp works_section(works, limit) do
+    lines =
+      Enum.map(works, fn work ->
+        comment = if work.last_comment, do: ": " <> work.last_comment.body, else: ""
+        "- #{work.title} (work #{work.id}, #{work.state})#{comment}"
+      end)
+
+    ["## Works\n" <> Enum.join(newest(lines, limit), "\n")]
+  end
+
+  # What the person and the agent said in the conversation, for a run
+  # without a work whose session starts over.
+  defp conversation_section(nil, [_ | _] = runs, limit) do
+    exchanges =
+      for run <- runs, run.message do
+        answer =
+          run.events
+          |> Enum.filter(&(&1.type == "model"))
+          |> Enum.map(&Record.said(&1.body))
+          |> Enum.reject(&(String.trim(&1) == ""))
+          |> List.last()
+
+        "- person: #{run.message.body}" <> if(answer, do: "\n- you: #{answer}", else: "")
+      end
+
+    case newest(exchanges, limit) do
+      [] -> []
+      kept -> ["## Conversation\n" <> Enum.join(kept, "\n")]
+    end
+  end
+
+  defp conversation_section(_session, _runs, _limit), do: []
+
+  # The last of `lines` that fit in `limit` bytes together; a nil limit keeps all.
+  defp newest(lines, nil), do: lines
+
+  defp newest(lines, limit) do
+    lines
+    |> Enum.reverse()
+    |> Enum.reduce_while({[], 0}, fn line, {kept, bytes} ->
+      bytes = bytes + byte_size(line) + 1
+      if bytes <= limit, do: {:cont, {[line | kept], bytes}}, else: {:halt, {kept, bytes}}
+    end)
+    |> elem(0)
+  end
 
   defp message_section(nil), do: []
   defp message_section(message), do: ["## Message\n#{message.body}"]

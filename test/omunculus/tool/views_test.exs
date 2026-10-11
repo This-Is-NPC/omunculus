@@ -132,6 +132,27 @@ defmodule Omunculus.Tool.ViewsTest do
              hydrate(conn, views, %{run_id: run})
   end
 
+  test "for a run without a work, conversation reads its conversation's root works", %{
+    conn: conn
+  } do
+    root = Fixtures.insert(conn, :works, %{title: "root"})
+    child(conn, root, "below", "open", "2026-01-01T00:00:01Z")
+    run = Fixtures.insert(conn, :runs, %{})
+
+    views = %{
+      "works" => %{
+        "source" => "works",
+        "relation" => "conversation",
+        "include" => ["last_comment"]
+      }
+    }
+
+    assert {:ok, %{"works" => [%{id: ^root, last_comment: nil}]}} =
+             hydrate(conn, views, %{run_id: run})
+
+    assert {:ok, %{}} == hydrate(conn, views, %{run_id: run, work_id: root})
+  end
+
   test "a view whose anchors are all absent is left out", %{conn: conn} do
     views = %{"comments" => %{"source" => "comments"}, "work" => %{"source" => "works"}}
     assert {:ok, %{}} == hydrate(conn, views, %{})
