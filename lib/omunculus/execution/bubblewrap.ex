@@ -87,7 +87,7 @@ defmodule Omunculus.Execution.Bubblewrap do
   @impl true
   def stop(%Handle{} = handle, _reason) do
     kill_input(handle)
-    kill_port(handle.port)
+    kill_sandbox(handle.port)
     kill_port(handle.stderr_reader)
     cleanup_hidden(handle.created_hidden)
     :ok
@@ -560,6 +560,59 @@ defmodule Omunculus.Execution.Bubblewrap do
     end
   rescue
     ArgumentError -> :ok
+  end
+
+  # Killed alone, bwrap leaves what runs inside it to die after it, and its
+  # mounts with them: the next command of the run would find the run's home
+  # overlay still in use. Every process of the sandbox is killed, and gone,
+  # before the command is over.
+  defp kill_sandbox(port) do
+    case Port.info(port, :os_pid) do
+      {:os_pid, pid} ->
+        pids = [pid | descendants(pid)]
+
+        _ =
+          System.cmd("kill", ["-KILL" | Enum.map(pids, &Integer.to_string/1)],
+            stderr_to_stdout: true
+          )
+
+        await_exit(pids)
+
+      nil ->
+        :ok
+    end
+  rescue
+    ArgumentError -> :ok
+  end
+
+  defp descendants(pid) do
+    case File.read("/proc/#{pid}/task/#{pid}/children") do
+      {:ok, children} ->
+        for child <- String.split(children),
+            child = String.to_integer(child),
+            descendant <- [child | descendants(child)],
+            do: descendant
+
+      {:error, _gone} ->
+        []
+    end
+  end
+
+  defp await_exit(pids) do
+    if Enum.any?(pids, &running?/1) do
+      Process.sleep(5)
+      await_exit(pids)
+    else
+      :ok
+    end
+  end
+
+  # A zombie has let go of its namespaces already.
+  defp running?(pid) do
+    case File.read("/proc/#{pid}/stat") do
+      {:ok, stat} -> not String.starts_with?(stat |> String.split(")") |> List.last(), " Z")
+      {:error, _gone} -> false
+    end
   end
 
   defp parse_exit_status(value) do
