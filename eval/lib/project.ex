@@ -1,21 +1,25 @@
 defmodule EquivalentExchange.Project do
   @moduledoc """
-  Builds the project one execution runs in: the preset of `eval/presets`
-  the configuration's `[eval] preset` names, Amestris without one, applied
-  by omunculus's own `preset` tool, the configuration of `eval/configs` laid
+  Builds the project one execution runs in: the Amestris preset applied by
+  omunculus's own `preset` tool, the configuration of `eval/configs` laid
   over it — its tables merged into the preset's, a list replacing a list — the
   agents its `[eval] drop_agents` names removed with the workflows that
   needed them, every agent put on the model the run names — with
   `code_mode` on when the run asks for it —, the bench's skills
   (`eval/skills`) and ticket system (`eval/mcp/tickets`, an MCP server)
-  declared, and the preset's `workspace/` files, then the task's starting
-  files, copied into the workspace.
+  declared, and the task's starting files copied into the workspace. A
+  configuration whose `[eval] pack` names a pack of `packs/` runs that team
+  alone: Amestris's agents and workflows go, and omunculus's own `pack` tool
+  imports the pack, every role on the run's model and each provider the
+  pack names on the configuration's login of that name, copying the pack's
+  workspace files in before the task's.
   """
 
   alias Omunculus.Config.Toml, as: ConfigToml
   alias Omunculus.Tools.Preset
 
   @eval Path.expand("..", __DIR__)
+  @packs Path.expand("../../packs", __DIR__)
 
   @spec configurations() :: [String.t()]
   def configurations do
@@ -31,20 +35,22 @@ defmodule EquivalentExchange.Project do
   def build(dir, configuration, {model, code_mode}, workspace) do
     path = Path.join(dir, "omunculus.toml")
 
-    with {:ok, overlay} <-
-           Toml.decode_file(Path.join([@eval, "configs", configuration <> ".toml"])),
-         {eval, overlay} = Map.pop(overlay, "eval", %{}),
-         preset = Path.join([@eval, "presets", Map.get(eval, "preset", "amestris")]),
-         %{"ok" => true} <-
+    with %{"ok" => true} <-
            Preset.run(%{
-             args: %{"name" => Path.basename(preset), "from" => preset},
+             args: %{"name" => "amestris", "from" => Path.join([@eval, "presets", "amestris"])},
              config_path: path
-           }) do
+           }),
+         {:ok, overlay} <-
+           Toml.decode_file(Path.join([@eval, "configs", configuration <> ".toml"])) do
+      {eval, overlay} = Map.pop(overlay, "eval", %{})
+      pack = eval["pack"]
+
       data =
         path
         |> Toml.decode_file!()
         |> merge(overlay)
         |> Map.update!("agents", &Map.drop(&1, Map.get(eval, "drop_agents", [])))
+        |> then(&if(pack, do: Map.merge(&1, %{"agents" => %{}, "workflows" => %{}}), else: &1))
         |> Map.update!("agents", fn agents ->
           Map.new(agents, fn {name, agent} -> {name, Map.put(agent, "model", model)} end)
         end)
@@ -55,17 +61,37 @@ defmodule EquivalentExchange.Project do
         |> Map.put("mcp", %{"servers" => [tickets()]})
 
       File.write!(path, ConfigToml.encode(data))
-      root = Path.join(dir, "workspace")
-      File.mkdir_p!(root)
+      File.mkdir_p!(Path.join(dir, "workspace"))
 
-      for files <- [Path.join(preset, "workspace"), workspace],
-          files && File.dir?(files),
-          do: File.cp_r!(files, root)
+      with :ok <- import_pack(pack, path, model) do
+        if workspace && File.dir?(workspace),
+          do: File.cp_r!(workspace, Path.join(dir, "workspace"))
 
-      {:ok, path}
+        {:ok, path}
+      end
     else
       %{"ok" => false, "output" => reason} -> {:error, {:preset, reason}}
       {:error, _reason} = error -> error
+    end
+  end
+
+  defp import_pack(nil, _path, _model), do: :ok
+
+  defp import_pack(name, path, model) do
+    dir = Path.join(@packs, name)
+    {:ok, pack} = Omunculus.Config.Packs.read(dir)
+    pairs = fn names, to -> Enum.map_join(names || [], ",", &"#{&1}=#{to.(&1)}") end
+
+    case Omunculus.Tools.Pack.run(%{
+           args: %{
+             "path" => dir,
+             "models" => pairs.(pack["pack"]["roles"], fn _role -> model end),
+             "auth" => pairs.(pack["pack"]["auth"], & &1)
+           },
+           config_path: path
+         }) do
+      %{"ok" => true} -> :ok
+      %{"output" => output} -> {:error, {:pack, output}}
     end
   end
 

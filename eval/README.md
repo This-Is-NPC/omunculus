@@ -15,7 +15,6 @@ a library: the CLI to send and reply, the store to read what happened.
 
 ```text
 presets/amestris/   the agents under test, named after Fullmetal Alchemist
-presets/dream-team/ Brooks's surgical team: the AGENTS.md its workspace starts with, its deploy tools and their environment (deploy/)
 configs/            the configurations a run lays over a preset
 tasks/<scenario>/<task>/
                     instruction.md, task.toml, workspace/, check, solution/
@@ -53,19 +52,8 @@ They all run on the model `--model` names:
 `[models.<name>]` table of the preset; one whose replies carry no cost needs
 its provider's id in `prices.toml`.
 
-The dream team is the surgical team of *The Mythical Man-Month*, ch. 3: one
-surgeon designs and writes what matters, the others free them of the rest.
-
-| Agent | Depth | Role |
-|---|---|---|
-| administrator | 0 | talks with you until the work is ready, then hands it down |
-| surgeon | 1 | designs the work and writes the code that matters |
-| copilot | 1, workflow only | reviews what was built against the goal and AGENTS.md |
-| clerk | 1, workflow only | publishes what passed review to homologation, then to production once you grant promote |
-| toolsmith | 2 | mise, scripts, the means to check and publish |
-| tester | 2 | writes and runs the tests |
-| editor | 2 | README.md and docs/ |
-| language_lawyer | 2 | how a language, library or version is meant to be used |
+A configuration may run a team of `packs/` instead: the dream team
+(`packs/dream-team`, see its README) is one.
 
 ## The configurations
 
@@ -76,11 +64,15 @@ surgeon designs and writes what matters, the others free them of the rest.
 | `workflow` | every work goes through transmute (Edward), verify (Riza), review (Alphonse) |
 | `negotiated` | the workers must ask Father for `fs.write`, `sandbox.write`, `bash`, `sandbox.network` |
 | `human-gated` | the workers must ask the person for them |
-| `dream-team` | the dream team: every work goes through build (surgeon), review (copilot), release (clerk) |
+| `dream-team` | the dream team of `packs/dream-team` alone, imported by the `pack` tool |
 
-A configuration is a TOML merged into a preset, Amestris unless its `[eval]
-preset` names another: tables merge, a list replaces a list. `[eval]
-drop_agents` removes agents, and the workflows that needed them go too.
+A configuration is a TOML merged into the Amestris preset: tables merge, a
+list replaces a list. `[eval] drop_agents` removes agents, and the
+workflows that needed them go too. `[eval] pack` names a pack of `packs/`
+whose team runs alone: Amestris's agents and workflows go, and the `pack`
+tool imports it, its roles on the run's model and each provider it names on
+the configuration's login of that name. A pack's `tasks/` run with the
+others, their ids led by the pack's name.
 
 ## A task
 
@@ -126,7 +118,7 @@ the model of `person.toml` reads what the agent last said and answers what it
 asks with only the facts, leaving to the agent what they do not cover, until
 it asks nothing; then each follow-up is sent. Only the timeout bounds it. A
 task with `deploy` publishes to the dream team's deploy environment, which
-`presets/dream-team/deploy/up` starts and `down` stops: two Dokku instances, homologation, which agents reach with
+`packs/dream-team/environment/up` starts and `down` stops: two Dokku instances, homologation, which agents reach with
 `deploy_preview`, and production, which only `promote` reaches, a tool the
 person alone grants once they have seen homologation. The tools name each
 project's apps apart; afterwards what production serves for the app an
@@ -148,8 +140,9 @@ and 1 when the workspace does not hold. The outcome file names the configuration
 words to the person (`report`); for a conversation, the root works (`works`),
 what was said (`conversation`) and whether the first message became a work at
 once (`first_run_made_work`), and for a task that publishes, the published
-copy (`published`). Checks are Python and import
-`tasks/_lib/check.py`.
+copy (`published`). Checks are Python and run with
+`tasks/_lib` on their `PYTHONPATH`: `from check import *` is all they import,
+wherever the task lives.
 
 To add a task: write its folder, then its `solution/` (the files that solve
 it under `files/`, paths to remove under `delete` in `outcome.json`, and the

@@ -1,6 +1,8 @@
 defmodule EquivalentExchange.Task do
   @moduledoc """
-  One task of `eval/tasks/<scenario>/<name>/`: its `instruction.md`, its
+  One task of `eval/tasks/<scenario>/<name>/`, or of a pack's
+  `packs/<pack>/tasks/<scenario>/<name>/`, its id then led by the pack's
+  name: its `instruction.md`, its
   `task.toml` — the scenario, whether it is critical, the configurations it
   runs under, the names it needs, the names no agent may grant
   (`forbidden`), the outcomes it may end in (`[expect]`, overridden under
@@ -17,6 +19,7 @@ defmodule EquivalentExchange.Task do
   """
 
   @eval Path.expand("..", __DIR__)
+  @packs Path.expand("../../packs", __DIR__)
   @outcomes ~w(answer done break waiting)
 
   @enforce_keys [
@@ -39,19 +42,25 @@ defmodule EquivalentExchange.Task do
 
   @spec all() :: [%__MODULE__{}]
   def all do
-    Path.join([@eval, "tasks", "*", "*", "task.toml"])
-    |> Path.wildcard()
+    own =
+      for file <- Path.wildcard(Path.join([@eval, "tasks", "*", "*", "task.toml"])),
+          do: {file, ""}
+
+    packs =
+      for file <- Path.wildcard(Path.join([@packs, "*", "tasks", "*", "*", "task.toml"])),
+          do: {file, Path.relative_to(file, @packs) |> Path.split() |> hd() |> Kernel.<>("/")}
+
+    (own ++ packs)
     |> Enum.sort()
-    |> Enum.map(&(&1 |> Path.dirname() |> load!()))
+    |> Enum.map(fn {file, lead} -> file |> Path.dirname() |> load!(lead) end)
   end
 
-  @spec load!(String.t()) :: %__MODULE__{}
-  def load!(dir) do
+  defp load!(dir, lead) do
     data = Toml.decode_file!(Path.join(dir, "task.toml"))
     expect = Map.get(data, "expect", %{})
 
     %__MODULE__{
-      id: Path.relative_to(dir, Path.join(@eval, "tasks")),
+      id: lead <> (dir |> Path.split() |> Enum.take(-2) |> Path.join()),
       dir: dir,
       instruction: dir |> Path.join("instruction.md") |> File.read!() |> String.trim(),
       scenario: Map.fetch!(data, "scenario"),
@@ -91,7 +100,10 @@ defmodule EquivalentExchange.Task do
 
     try do
       {said, status} =
-        System.cmd(Path.join(task.dir, "check"), [workspace, file], stderr_to_stdout: true)
+        System.cmd(Path.join(task.dir, "check"), [workspace, file],
+          env: [{"PYTHONPATH", Path.join([@eval, "tasks", "_lib"])}],
+          stderr_to_stdout: true
+        )
 
       {status == 0, String.trim(said), status in [0, 2]}
     after

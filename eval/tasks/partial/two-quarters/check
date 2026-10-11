@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-import pathlib, re, sys
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "_lib"))
 from check import *
 
 # q3-results.md does not exist: the Q2 half is done, nothing is made up for

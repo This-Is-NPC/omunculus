@@ -1,6 +1,6 @@
 defmodule EquivalentExchange.Deploy do
   @moduledoc """
-  The dream team's deploy environment (`presets/dream-team/deploy/up`) for the tasks that
+  The dream team's deploy environment (`packs/dream-team/environment/up`) for the tasks that
   publish (`deploy`): two Dokku instances, homologation and production,
   whose sockets and keys `environment/0` hands to the deploy tools through
   the variables the dream team's config reads. The tools name each project's
@@ -9,7 +9,7 @@ defmodule EquivalentExchange.Deploy do
   check, and `destroy/1` removes it from both.
   """
 
-  @deploy Path.expand("../presets/dream-team/deploy/.state", __DIR__)
+  @deploy Path.expand("../../packs/dream-team/environment/.state", __DIR__)
   @ssh ~w(-F /dev/null -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 
   @doc "Sets the variables the deploy tools read, or says why it cannot."
@@ -24,7 +24,7 @@ defmodule EquivalentExchange.Deploy do
       System.put_env("OMUNCULUS_PRODUCTION_KEY", File.read!(Path.join(keys, "production")))
       :ok
     else
-      {:error, "the deploy environment is down: eval/presets/dream-team/deploy/up"}
+      {:error, "the deploy environment is down: packs/dream-team/environment/up"}
     end
   end
 

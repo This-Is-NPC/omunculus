@@ -1,67 +1,13 @@
 # The dream team: Brooks's surgical team (The Mythical Man-Month, ch. 3) as
 # agents. One surgeon designs and writes what matters; the others free them
-# of everything else. Its workspace brings the rules every agent follows.
-
-[execution]
-backend = "bubblewrap"
-runtimes = ["/usr"]
-environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH", "OMUNCULUS_DEPLOY"]
-# A build in homologation takes minutes.
-timeout_ms = 300000
-max_output_bytes = 1048576
-max_concurrent = 4
-max_queue = 64
-queue_timeout_ms = 60000
-resources = ["sandbox.write", "sandbox.network"]
-# A command sees the machine as the person does, read-only: their tools,
-# versions and settings, so what it builds runs for them. What follows it
-# may not read: keys, logins, credentials and browser profiles.
-host = true
-deny_read = [
-  "~/.ssh", "~/.gnupg", "~/.aws", "~/.azure", "~/.config/gcloud", "~/.kube",
-  "~/.docker", "~/.netrc", "~/.git-credentials", "~/.config/gh", "~/.npmrc",
-  "~/.pypirc", "~/.password-store", "~/.local/share/keyrings", "~/.mozilla",
-  "~/.config/google-chrome", "~/.config/chromium", "~/.config/BraveSoftware",
-  "~/.codex", "~/.claude",
-]
-
-[execution.sandbox]
-script = "../../../priv/sandbox.js"
-command = ["deno", "run", "--no-config", "--no-lock", "--no-prompt", "--cached-only", "--deny-read", "--deny-write", "--deny-net", "--deny-env", "--deny-run", "--deny-ffi", "--deny-sys", "--deny-import"]
-runner = 'input=$1; errors=$2; status=$3; shift 3; "$@" < "$input" 2> "$errors"; result=$?; printf %s "$result" > "$status"; exit "$result"'
-exec = 'exec "$@"'
-
-[store]
-path = ".omunculus/store.sqlite3"
-# The files each call changed, which the score checks the last words against.
-changes = ".omunculus/changes"
-
-[tools]
-paths = ["../../../priv/tools", "../../../priv/presets/codex-like/tools", "tools"]
-
-[skills]
-paths = []
-
-[auth]
-store = ".omunculus/auth.json"
-
-[auth.openrouter]
-kind = "api_key"
-key = "$OPENROUTER_API_KEY"
-
-[auth.anthropic]
-kind = "api_key"
-key = "$ANTHROPIC_API_KEY"
-
-# The keys of the two Dokku instances (deploy/up): agents publish
-# to homologation; production takes only the key promote is given.
-[auth.homologation]
-kind = "api_key"
-key = "$OMUNCULUS_HOMOLOGATION_KEY"
-
-[auth.production]
-kind = "api_key"
-key = "$OMUNCULUS_PRODUCTION_KEY"
+# of everything else. Every agent runs on the role `team`; the deploy tools
+# take their keys from the providers `homologation` and `production`.
+[pack]
+name = "dream-team"
+version = "0.1.0"
+description = "Takes a request from a conversation to a published app: asks until it is clear, builds, reviews, publishes to homologation and, once the person approves, to production."
+roles = ["team"]
+auth = ["homologation", "production"]
 
 [secrets.deploy_preview]
 DEPLOY_KEY = "homologation"
@@ -69,53 +15,10 @@ DEPLOY_KEY = "homologation"
 [secrets.promote]
 DEPLOY_KEY = "production"
 
-# A rate limit or a failed request is tried again, three times at most, six
-# for Anthropic, whose limit on concurrent requests waits on the others.
-[models.luna]
-provider = "openrouter"
-api = "openai-completions"
-url = "https://openrouter.ai/api/v1"
-model = "openai/gpt-6-luna"
-timeout_ms = 180000
-retries = 3
-
-[models.luna.body]
-usage = { include = true }
-
-# Anthropic's API sends no cost: eval/prices.toml prices its tokens.
-[models.haiku]
-provider = "anthropic"
-api = "anthropic-messages"
-url = "https://api.anthropic.com/v1"
-model = "claude-haiku-5-5"
-timeout_ms = 180000
-retries = 6
-
-[models.sonnet]
-provider = "anthropic"
-api = "anthropic-messages"
-url = "https://api.anthropic.com/v1"
-model = "claude-sonnet-5-5"
-timeout_ms = 180000
-retries = 6
-
-[models.opus]
-provider = "anthropic"
-api = "anthropic-messages"
-url = "https://api.anthropic.com/v1"
-model = "claude-opus-5-5"
-timeout_ms = 180000
-retries = 6
-
-# Answers with the first line of its prompt: checks the runner without a provider.
-[models.fake]
-api = "module"
-module = "Omunculus.Model.Fake"
-
 # Talks with the person, holds what was agreed and hands it to the surgeon.
 [agents.administrator]
 depth = 0
-model = "haiku"
+model = "team"
 tools = ["bash", "break", "catalog", "changes", "continue", "delegate", "done", "end", "forward", "fs.read", "reopen", "reply", "skills", "store", "work"]
 human = ["sandbox.network"]
 text = """
@@ -133,7 +36,7 @@ Goal: what the person asked, as they asked it. Its words are the bar for done; a
 # Designs and writes what matters; hands the rest to the helpers below.
 [agents.surgeon]
 depth = 1
-model = "haiku"
+model = "team"
 tools = ["bash", "break", "changes", "comment", "continue", "delegate", "directory", "done", "end", "fs.read", "fs.write", "reopen", "request_access", "sandbox.write", "skills", "store", "work"]
 human = ["sandbox.network"]
 text = """
@@ -147,7 +50,7 @@ You are the surgeon of the team: you decide how the work is built and write the 
 # The surgeon's alter ego: knows the code, argues the design, decides nothing.
 [agents.copilot]
 depth = 1
-model = "haiku"
+model = "team"
 workflow_only = true
 tools = ["bash", "break", "changes", "comment", "continue", "directory", "done", "end", "fs.read", "sandbox.write", "skills"]
 human = ["sandbox.network"]
@@ -165,7 +68,7 @@ You are the copilot of the team: you review what the surgeon built against the w
 # Keeps the records and runs the build: here, publishes what passed review.
 [agents.clerk]
 depth = 1
-model = "haiku"
+model = "team"
 workflow_only = true
 tools = ["bash", "break", "changes", "comment", "continue", "deploy_preview", "directory", "done", "end", "fs.read", "fs.write", "request_access", "sandbox.write", "skills"]
 human = ["sandbox.network", "promote"]
@@ -178,7 +81,7 @@ You are the program clerk of the team: you publish what passed review and keep t
 
 [agents.toolsmith]
 depth = 2
-model = "haiku"
+model = "team"
 tools = ["bash", "break", "comment", "continue", "directory", "done", "end", "fs.read", "fs.write", "request_access", "sandbox.write", "skills"]
 human = ["sandbox.network"]
 text = """
@@ -187,7 +90,7 @@ You are the toolsmith of the team: you build the tools the surgeon asks for — 
 
 [agents.tester]
 depth = 2
-model = "haiku"
+model = "team"
 tools = ["bash", "break", "comment", "continue", "directory", "done", "end", "fs.read", "fs.write", "request_access", "sandbox.write", "skills"]
 human = ["sandbox.network"]
 text = """
@@ -196,7 +99,7 @@ You are the tester of the team: you write the tests the work needs and run them 
 
 [agents.editor]
 depth = 2
-model = "haiku"
+model = "team"
 tools = ["bash", "break", "comment", "continue", "directory", "done", "end", "fs.read", "fs.write", "request_access", "sandbox.write", "skills"]
 human = ["sandbox.network"]
 text = """
@@ -205,7 +108,7 @@ You are the editor of the team: you write README.md and docs/ as the workspace's
 
 [agents.language_lawyer]
 depth = 2
-model = "haiku"
+model = "team"
 tools = ["bash", "break", "comment", "continue", "directory", "done", "end", "fs.read", "request_access", "skills"]
 human = ["sandbox.network"]
 text = """
@@ -219,15 +122,6 @@ steps = [
   { name = "release", agent = "clerk" },
 ]
 
-[policy]
-assemble = "assemble"
-max_retries = 2
-last_run_output_bytes = 8192
-tool_output_bytes = 32768
-conversation_bytes = 16384
-send_catalog = true
-session_ttl_ms = 300000
-session_max_bytes = 200000
 
 [policy.depth.1]
 workflow = "surgery"
