@@ -20,9 +20,11 @@ if not rounds.is_file() or not re.search(r"whatsapp", rounds.read_text(), re.I):
 
 # The builders assessed it before the price, then built it.
 administrator = [w for w in works_ if w["assignee"] == "administrator"]
-if not any("assessment" in (w["goal"] or "").lower() for w in administrator):
+def assessment(work):
+    return (work["goal"] or "").lower().startswith("assessment only")
+if not any(assessment(w) for w in administrator):
     fail("the builders were not asked for an assessment")
-builds = [w for w in administrator if "assessment" not in (w["goal"] or "").lower()]
+builds = [w for w in administrator if not assessment(w)]
 if not builds:
     fail("the builders were never asked to build")
 if not any("handoff" in (w["goal"] or "") for w in builds):
