@@ -147,7 +147,6 @@ defmodule Omunculus.Model.AnthropicMessages do
   defp request_body(client, system, tools, messages) do
     %{
       model: client.model,
-      max_tokens: 8192,
       messages: mark_last(messages),
       tools: tools
     }

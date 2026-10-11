@@ -176,6 +176,7 @@ defmodule Omunculus.HttpModelCase do
     model = "stub"
     timeout_ms = 120000
     stream = #{stream}
+    #{if api == "anthropic-messages", do: "body = { max_tokens = 1024 }"}
 
     [agents.concierge]
     depth = 0

@@ -15,7 +15,12 @@ defmodule Omunculus.ConfigTest do
     Fixtures.write_config(dir, contents)
   end
 
+  # An anthropic-messages model needs its max_tokens, unless the line sets the body.
   defp write_http_model(dir, api, line) do
+    body =
+      if api == "anthropic-messages" and not String.starts_with?(line, "body"),
+        do: "body = { max_tokens = 1024 }"
+
     write_toml(dir, """
     [models.local]
     api = "#{api}"
@@ -23,6 +28,7 @@ defmodule Omunculus.ConfigTest do
     model = "local"
     timeout_ms = 120000
     #{line}
+    #{body}
 
     [agents.concierge]
     depth = 0
@@ -242,6 +248,7 @@ defmodule Omunculus.ConfigTest do
       url = "http://localhost/v1"
       model = "x"
       timeout_ms = 1000
+      body = { max_tokens = 1024 }
       #{line}
 
       [agents.concierge]
@@ -1854,13 +1861,31 @@ defmodule Omunculus.ConfigTest do
     end
 
     test "body is an optional table of the HTTP adapters", %{dir: dir} do
-      for api <- ["openai-completions", "openai-responses", "anthropic-messages"] do
+      for api <- ["openai-completions", "openai-responses"] do
         write_http_model(dir, api, "body = { reasoning = { effort = \"high\" } }")
         assert {:ok, config} = load(dir)
         assert config.models["local"].input["body"] == %{"reasoning" => %{"effort" => "high"}}
 
         write_http_model(dir, api, "body = \"high\"")
         assert {:error, {:models, "local", {:invalid, :body}}} = load(dir)
+      end
+    end
+
+    test "an anthropic-messages model sets the most tokens a reply takes in its body", %{
+      dir: dir
+    } do
+      write_http_model(
+        dir,
+        "anthropic-messages",
+        "body = { max_tokens = 32000, thinking = { type = \"adaptive\" } }"
+      )
+
+      assert {:ok, config} = load(dir)
+      assert config.models["local"].input["body"]["max_tokens"] == 32000
+
+      for line <- ["body = { thinking = { type = \"adaptive\" } }", "body = { max_tokens = 0 }"] do
+        write_http_model(dir, "anthropic-messages", line)
+        assert {:error, {:models, "local", {:invalid, :max_tokens}}} = load(dir)
       end
     end
   end
@@ -2746,6 +2771,7 @@ defmodule Omunculus.ConfigAuthTest do
     url = "http://localhost:8080/v1"
     model = "claude"
     timeout_ms = 120000
+    body = { max_tokens = 1024 }
 
     [agents.concierge]
     depth = 0

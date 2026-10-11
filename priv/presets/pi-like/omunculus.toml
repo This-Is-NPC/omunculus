@@ -60,6 +60,7 @@ url = "https://api.anthropic.com/v1"
 model = "claude-sonnet-4-5"
 timeout_ms = 120000
 headers = { anthropic-beta = "oauth-2025-04-08" }
+body = { max_tokens = 32000 }
 
 [agents.pi]
 depth = 0

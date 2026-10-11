@@ -2001,6 +2001,7 @@ defmodule Omunculus.Config do
              {:ok, temperature} <- model_temperature(data),
              {:ok, headers} <- model_headers(data),
              {:ok, body} <- model_body(data),
+             :ok <- max_tokens(api, body),
              {:ok, stream} <- model_boolean(data, "stream"),
              {:ok, code_mode} <- model_boolean(data, "code_mode"),
              {:ok, retries} <- model_retries(data),
@@ -2034,6 +2035,14 @@ defmodule Omunculus.Config do
         end
     end
   end
+
+  # Anthropic's API takes no reply without a ceiling on its length, which
+  # is the model's to set: thinking spends from it too.
+  defp max_tokens("anthropic-messages", %{"max_tokens" => n}) when is_integer(n) and n > 0,
+    do: :ok
+
+  defp max_tokens("anthropic-messages", _body), do: {:error, {:invalid, :max_tokens}}
+  defp max_tokens(_api, _body), do: :ok
 
   defp parse_command_model(name, data, auth, config_dir) do
     case Map.keys(data) -- @command_model_keys do
