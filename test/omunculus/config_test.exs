@@ -284,11 +284,21 @@ defmodule Omunculus.ConfigTest do
     assert agent.ceiling.pinned == ["store"]
   end
 
-  test "the default preset's reviewer is workflow_only with the §9.1 ceiling" do
+  test "the default preset's reviewer is workflow_only, with the skills to check against" do
     assert {:ok, %Config{agents: agents}} = Config.load(default_preset())
 
     assert %{"reviewer" => %{depth: 1, workflow_only: true, ceiling: ceiling}} = agents
-    assert ceiling.granted == ["break", "comment", "continue", "done", "end", "fs.read", "notify"]
+
+    assert ceiling.granted == [
+             "break",
+             "comment",
+             "continue",
+             "done",
+             "end",
+             "fs.read",
+             "notify",
+             "skills"
+           ]
   end
 
   test "the default preset's worker asks the person for sandbox.write" do
