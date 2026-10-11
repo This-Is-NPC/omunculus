@@ -5,11 +5,11 @@ defmodule Omunculus.Tools.Assemble do
   an agent's runs: the agent's text, the agents the
   `agents` view says a new work may name when the run has the `work`
   card, each with the tools it has that this run has not, the cards,
-  which follow `pinned` on the catalog view, under `## Skills`, the
-  name and description of each skill the run has, and, under
-  `## Environment`, the workspace every command starts in, the person's
-  home and the platform. Its `output`, the
-  context, is the rest: the work's title and
+  which follow `pinned` on the catalog view, and, under `## Skills`, the
+  name and description of each skill the run has. Its `output`, the
+  context, is the rest: under `## Environment`, the workspace every
+  command starts in, the person's home and the platform, which differ
+  from one workspace to another; the work's title and
   goal, its last comment, and its last closed run (`last_run`), or,
   without a work, the run that opened the run's request (`opener`), as
   `Omunculus.Tools.Record` lines without this tool's calls, each call's
@@ -37,7 +37,7 @@ defmodule Omunculus.Tools.Assemble do
   alias Omunculus.Tools.{Out, Record, Session}
 
   # The sections that begin the context of an assembled prompt.
-  @context_start ~r/\n\n(?=## (Work|Last comment|Last run|Results|Request|Inbox|Message)\n)/
+  @context_start ~r/\n\n(?=## (Environment|Work|Last comment|Last run|Results|Request|Inbox|Message)\n)/
 
   @spec run(map) :: map
   def run(%{name: name, args: args, view: view} = input) do
@@ -48,8 +48,7 @@ defmodule Omunculus.Tools.Assemble do
       [String.trim(text)] ++
         agents_section(view["agents"] || [], cards) ++
         [tools_section(cards)] ++
-        skills_section(view["skills"] || []) ++
-        environment_section(Map.get(input, :roots, []))
+        skills_section(view["skills"] || [])
 
     # What happened since a pause, which a continued session is told.
     news =
@@ -59,7 +58,8 @@ defmodule Omunculus.Tools.Assemble do
         message_section(view["message"])
 
     context =
-      work_section(view["work"]) ++
+      environment_section(Map.get(input, :roots, [])) ++
+        work_section(view["work"]) ++
         comment_section(view["comments"]) ++
         last_run_section(view["last_run"] || view["opener"], name, args) ++
         news
