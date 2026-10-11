@@ -19,7 +19,8 @@ defmodule Omunculus.Config.Packs do
   `expand/2` lays every pack under the config's own tables before they are
   parsed: an item of a pack is added, and an item of the config with its
   name overrides it key by key — a permanent grant written to the config, a
-  model changed; two packs with an item of one name are refused. Roles
+  model changed; two packs with an item of one name are refused, but for a
+  depth layer, where the workflows each requires add up. Roles
   become the models and providers the config maps them to, an MCP server's
   command is found from the pack's folder, and a pack's `tools/` and
   `skills/` come before the config's own paths, so the config's tools and
@@ -184,7 +185,7 @@ defmodule Omunculus.Config.Packs do
   end
 
   # The pack's items under the config's: the config's of a name overrides
-  # them key by key; two packs' of a name are refused.
+  # them key by key; two packs' of a name are refused, but depth layers.
   defp lay(name, bound, data, owners) do
     tables = [
       {["agents"], bound.agents},
@@ -214,6 +215,9 @@ defmodule Omunculus.Config.Packs do
         owner = Map.get(owners, {path, key})
 
         cond do
+          owner && path == ["policy", "depth"] ->
+            {:cont, {:ok, Map.put(merged, key, depth_layer(merged[key], item)), owners}}
+
           owner ->
             {:halt, {:error, {name, :conflict, {Enum.join(path, "."), key, owner}}}}
 
@@ -227,6 +231,15 @@ defmodule Omunculus.Config.Packs do
         error -> {:halt, error}
       end
     end)
+  end
+
+  # A depth layer two teams share: the workflows each requires there add
+  # up, as a work there goes through one of them; any other key is the
+  # first's.
+  defp depth_layer(layer, item) do
+    workflows = Enum.uniq(Map.get(layer, "workflows", []) ++ Map.get(item, "workflows", []))
+    layer = Map.merge(item, layer)
+    if workflows == [], do: layer, else: Map.put(layer, "workflows", workflows)
   end
 
   # `granted` is the config's name for tools added to a layer: written over

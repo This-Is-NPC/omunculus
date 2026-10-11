@@ -72,7 +72,8 @@ defmodule Omunculus.ConfigTest do
 
     assert %{"worker" => %{depth: 1}} = agents
     assert %{"delivery" => [%{name: "to_do"}, %{name: "review"}]} = workflows
-    assert Config.workflow_for(config, 0) == :off
+    assert Config.workflows_for(config, 1) == []
+    assert Config.workflows_at(config, 1) == ["delivery"]
   end
 
   test "the dev environment's registry and project files load" do
@@ -1292,7 +1293,7 @@ defmodule Omunculus.ConfigTest do
         workers_toml() <>
           """
           [policy]
-          workflow = "ghost"
+          workflows = ["ghost"]
           """
       )
 
@@ -1305,14 +1306,14 @@ defmodule Omunculus.ConfigTest do
         workers_toml() <>
           """
           [policy.depth.1]
-          workflow = "ghost"
+          workflows = ["ghost"]
           """
       )
 
       assert {:error, {:policy, {:depth, 1, {:unknown_workflow, "ghost"}}}} = load(dir)
     end
 
-    test "policy workflow names the default workflow", %{dir: dir} do
+    test "policy workflows are required at every depth", %{dir: dir} do
       write_toml(
         dir,
         workers_toml() <>
@@ -1324,16 +1325,16 @@ defmodule Omunculus.ConfigTest do
           ]
 
           [policy]
-          workflow = "delivery"
+          workflows = ["delivery"]
           """
       )
 
       assert {:ok, config} = load(dir)
-      assert {:ok, [%{name: "to_do"}, %{name: "review"}]} = Config.workflow_for(config, 0)
-      assert {:ok, [%{name: "to_do"}, %{name: "review"}]} = Config.workflow_for(config, 1)
+      assert Config.workflows_for(config, 0) == ["delivery"]
+      assert Config.workflows_at(config, 1) == ["delivery"]
     end
 
-    test "a depth workflow overrides the policy workflow at that depth", %{dir: dir} do
+    test "a depth's workflows override the policy's at that depth", %{dir: dir} do
       write_toml(
         dir,
         workers_toml() <>
@@ -1345,30 +1346,58 @@ defmodule Omunculus.ConfigTest do
           steps = [{ name = "only", agent = "reviewer" }]
 
           [policy]
-          workflow = "delivery"
+          workflows = ["delivery"]
 
           [policy.depth.1]
-          workflow = "solo"
+          workflows = ["solo"]
           """
       )
 
       assert {:ok, config} = load(dir)
-      assert {:ok, [%{name: "to_do"}]} = Config.workflow_for(config, 0)
-      assert {:ok, [%{name: "only"}]} = Config.workflow_for(config, 1)
+      assert Config.workflows_for(config, 0) == ["delivery"]
+      assert Config.workflows_for(config, 1) == ["solo"]
     end
 
-    test "no policy workflow and no depth workflow is off", %{dir: dir} do
+    test "where none is required, a depth offers the workflows whose stage agents are of it",
+         %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [agents.lead]
+          depth = 0
+          text = "lead"
+
+          [workflows.delivery]
+          steps = [{ name = "to_do", agent = "worker" }]
+
+          [workflows.mixed]
+          steps = [{ name = "plan", agent = "lead" }, { name = "do", agent = "worker" }]
+          """
+      )
+
+      assert {:ok, config} = load(dir)
+      assert Config.workflows_for(config, 1) == []
+      assert Config.workflows_at(config, 1) == ["delivery"]
+      assert Config.workflows_at(config, 0) == []
+      assert Config.workflow(config, nil) == :off
+      assert Config.workflow(config, "ghost") == {:error, {:unknown_workflow, "ghost"}}
+    end
+
+    test "a depth's workflows are a list", %{dir: dir} do
       write_toml(
         dir,
         workers_toml() <>
           """
           [workflows.delivery]
           steps = [{ name = "to_do", agent = "worker" }]
+
+          [policy.depth.1]
+          workflows = "delivery"
           """
       )
 
-      assert {:ok, config} = load(dir)
-      assert Config.workflow_for(config, 0) == :off
+      assert {:error, {:policy, {:depth, 1, {:invalid, :workflows}}}} = load(dir)
     end
 
     test "step_at finds a step by stage name", %{dir: dir} do
@@ -1383,12 +1412,12 @@ defmodule Omunculus.ConfigTest do
           ]
 
           [policy]
-          workflow = "delivery"
+          workflows = ["delivery"]
           """
       )
 
       assert {:ok, config} = load(dir)
-      assert {:ok, steps} = Config.workflow_for(config, 0)
+      assert {:ok, steps} = Config.workflow(config, "delivery")
       assert {:ok, %{name: "review", agent: "reviewer"}} = Config.step_at(steps, "review")
     end
 
@@ -1401,12 +1430,12 @@ defmodule Omunculus.ConfigTest do
           steps = [{ name = "to_do", agent = "worker" }]
 
           [policy]
-          workflow = "delivery"
+          workflows = ["delivery"]
           """
       )
 
       assert {:ok, config} = load(dir)
-      assert {:ok, steps} = Config.workflow_for(config, 0)
+      assert {:ok, steps} = Config.workflow(config, "delivery")
       assert {:error, :off_sequence} = Config.step_at(steps, "ghost")
     end
 
@@ -1422,12 +1451,12 @@ defmodule Omunculus.ConfigTest do
           ]
 
           [policy]
-          workflow = "delivery"
+          workflows = ["delivery"]
           """
       )
 
       assert {:ok, config} = load(dir)
-      assert {:ok, steps} = Config.workflow_for(config, 0)
+      assert {:ok, steps} = Config.workflow(config, "delivery")
       assert {:ok, %{name: "review"}} = Config.next_step(steps, "to_do")
     end
 
@@ -1443,12 +1472,12 @@ defmodule Omunculus.ConfigTest do
           ]
 
           [policy]
-          workflow = "delivery"
+          workflows = ["delivery"]
           """
       )
 
       assert {:ok, config} = load(dir)
-      assert {:ok, steps} = Config.workflow_for(config, 0)
+      assert {:ok, steps} = Config.workflow(config, "delivery")
       assert {:ok, nil} = Config.next_step(steps, "review")
     end
 
@@ -1461,12 +1490,12 @@ defmodule Omunculus.ConfigTest do
           steps = [{ name = "to_do", agent = "worker" }]
 
           [policy]
-          workflow = "delivery"
+          workflows = ["delivery"]
           """
       )
 
       assert {:ok, config} = load(dir)
-      assert {:ok, steps} = Config.workflow_for(config, 0)
+      assert {:ok, steps} = Config.workflow(config, "delivery")
       assert {:error, :off_sequence} = Config.next_step(steps, "ghost")
     end
   end

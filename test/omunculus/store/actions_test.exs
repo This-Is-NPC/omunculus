@@ -115,7 +115,12 @@ defmodule Omunculus.Store.ActionsTest do
     parent_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
 
     child_id =
-      Fixtures.insert(conn, :works, %{parent_id: parent_id, stage: stage, assignee: "worker"})
+      Fixtures.insert(conn, :works, %{
+        parent_id: parent_id,
+        workflow: stage && "delivery",
+        stage: stage,
+        assignee: "worker"
+      })
 
     {parent_id, child_id}
   end
@@ -137,7 +142,7 @@ defmodule Omunculus.Store.ActionsTest do
     ]
 
     [policy]
-    workflow = "delivery"
+    workflows = ["delivery"]
     """
   end
 
@@ -157,7 +162,7 @@ defmodule Omunculus.Store.ActionsTest do
     ]
 
     [policy.depth.1]
-    workflow = "delivery"
+    workflows = ["delivery"]
     """
   end
 
@@ -610,7 +615,7 @@ defmodule Omunculus.Store.ActionsTest do
                  %{@ctx | config: config}
                )
 
-      assert {:error, {:work, :agent_with_workflow}} =
+      assert {:error, {:work, {:workflow_required, ["delivery"]}}} =
                record_tool(
                  conn,
                  [work_emit(%{"title" => "x", "agent" => "concierge"})],
@@ -755,6 +760,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "waiting work does not advance", %{conn: conn} do
       work_id =
         Fixtures.insert(conn, :works, %{
+          workflow: "delivery",
           stage: "to_do",
           state: "waiting",
           waiting: "request",
@@ -774,7 +780,13 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "moves to the next stage and updates the assignee", %{conn: conn} do
-      work_id = Fixtures.insert(conn, :works, %{stage: "to_do", assignee: "concierge"})
+      work_id =
+        Fixtures.insert(conn, :works, %{
+          workflow: "delivery",
+          stage: "to_do",
+          assignee: "concierge"
+        })
+
       run_id = Fixtures.insert(conn, :runs)
       ctx = %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
 
@@ -791,7 +803,7 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "the last stage closes the work without a parent to reopen", %{conn: conn} do
-      work_id = Fixtures.insert(conn, :works, %{stage: "review"})
+      work_id = Fixtures.insert(conn, :works, %{workflow: "delivery", stage: "review"})
       run_id = Fixtures.insert(conn, :runs)
       ctx = %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
 
@@ -820,7 +832,7 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "an unknown stage is off_sequence", %{conn: conn} do
-      work_id = Fixtures.insert(conn, :works, %{stage: "ghost"})
+      work_id = Fixtures.insert(conn, :works, %{workflow: "delivery", stage: "ghost"})
       run_id = Fixtures.insert(conn, :runs)
       ctx = %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
 
@@ -837,7 +849,7 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "a body naming the stage is forbidden", %{conn: conn} do
-      work_id = Fixtures.insert(conn, :works, %{stage: "to_do"})
+      work_id = Fixtures.insert(conn, :works, %{workflow: "delivery", stage: "to_do"})
       run_id = Fixtures.insert(conn, :runs)
       ctx = %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
 
@@ -907,7 +919,7 @@ defmodule Omunculus.Store.ActionsTest do
         ]
 
         [policy.depth.1]
-        workflow = "delivery"
+        workflows = ["delivery"]
         """)
 
       parent_id = Fixtures.insert(conn, :works)
@@ -915,6 +927,7 @@ defmodule Omunculus.Store.ActionsTest do
       child = fn ->
         Fixtures.insert(conn, :works, %{
           parent_id: parent_id,
+          workflow: "delivery",
           stage: "review",
           assignee: "reviewer",
           state: "waiting"
@@ -1081,7 +1094,9 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "parks a root work with a comment and leaves the stage untouched", %{conn: conn} do
-      work_id = Fixtures.insert(conn, :works, %{stage: "to_do", state: "open"})
+      work_id =
+        Fixtures.insert(conn, :works, %{workflow: "delivery", stage: "to_do", state: "open"})
+
       run_id = Fixtures.insert(conn, :runs)
       ctx = %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
 
@@ -1110,7 +1125,7 @@ defmodule Omunculus.Store.ActionsTest do
     end
 
     test "no body is rejected", %{conn: conn} do
-      work_id = Fixtures.insert(conn, :works, %{stage: "to_do"})
+      work_id = Fixtures.insert(conn, :works, %{workflow: "delivery", stage: "to_do"})
       run_id = Fixtures.insert(conn, :runs)
       ctx = %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
 
@@ -1246,7 +1261,7 @@ defmodule Omunculus.Store.ActionsTest do
                  record_tool(conn, [delegate.(agent)], ctx)
       end
 
-      assert {:error, {:delegate, :agent_with_workflow}} =
+      assert {:error, {:delegate, {:workflow_required, ["delivery"]}}} =
                record_tool(
                  conn,
                  [delegate.("worker")],
@@ -1254,6 +1269,66 @@ defmodule Omunculus.Store.ActionsTest do
                )
 
       assert count(conn, "works") == 2
+    end
+
+    test "a child names a workflow its depth offers, and must where the depth requires several",
+         %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works)
+      ctx = %{@ctx | run_id: Fixtures.insert(conn, :runs), work_id: parent_id}
+
+      toml = """
+      [agents.concierge]
+      depth = 0
+      text = "concierge"
+
+      [agents.worker]
+      depth = 1
+      text = "worker"
+
+      [agents.smith]
+      depth = 1
+      workflow_only = true
+      text = "smith"
+
+      [workflows.delivery]
+      steps = [{ name = "to_do", agent = "worker" }]
+
+      [workflows.forge]
+      steps = [{ name = "shape", agent = "smith" }]
+
+      [workflows.mixed]
+      steps = [{ name = "plan", agent = "concierge" }, { name = "do", agent = "worker" }]
+      """
+
+      free = %{ctx | config: Fixtures.config(toml)}
+
+      required =
+        %{
+          ctx
+          | config:
+              Fixtures.config(toml <> ~s([policy.depth.1]\nworkflows = ["delivery", "forge"]\n))
+        }
+
+      delegate =
+        &%{"type" => "delegate", "body" => Map.merge(%{"title" => "t", "goal" => "b"}, &1)}
+
+      for c <- [free, required] do
+        assert {:ok, [_tool_event, event]} =
+                 record_tool(conn, [delegate.(%{"workflow" => "forge"})], c)
+
+        assert {:ok, %{workflow: "forge", stage: "shape", assignee: "smith"}} =
+                 Query.one(conn, "SELECT * FROM works WHERE id = ?", [event.work_id])
+      end
+
+      for {c, body, reason} <- [
+            {free, %{"workflow" => "mixed"},
+             {:workflow_not_allowed, "mixed", ["delivery", "forge"]}},
+            {free, %{"workflow" => "forge", "agent" => "worker"}, :agent_with_workflow},
+            {required, %{}, {:workflow_required, ["delivery", "forge"]}},
+            {required, %{"agent" => "worker"}, {:workflow_required, ["delivery", "forge"]}}
+          ] do
+        assert {:error, {:delegate, ^reason}} = record_tool(conn, [delegate.(body)], c)
+      end
     end
 
     test "the parent waits for all its children; a break wakes it at once", %{conn: conn} do
@@ -2478,7 +2553,12 @@ defmodule Omunculus.Store.ActionsTest do
       {parent_id, first} = waiting_parent_and_child(conn, "review")
 
       second =
-        Fixtures.insert(conn, :works, %{parent_id: parent_id, stage: "review", assignee: "worker"})
+        Fixtures.insert(conn, :works, %{
+          parent_id: parent_id,
+          workflow: "delivery",
+          stage: "review",
+          assignee: "worker"
+        })
 
       config = Fixtures.config(delivery_toml())
 

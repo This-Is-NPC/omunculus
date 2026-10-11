@@ -40,9 +40,13 @@ tasks/         the tasks that show the team works
 - Depths start at 0 for the agent the team answers through. A team made
   for depth 0 can be imported deeper: the importer moves it down.
 - A workflow (`[workflows.<name>]`, its `steps` each a `name` and an
-  `agent`) puts every work of a depth through the same stages — build,
-  check, release — set on a depth with `[policy.depth.<n>] workflow`.
-  Stage agents that only work in the workflow have `workflow_only = true`.
+  `agent`, all of one depth) puts a work through the same stages — build,
+  check, release. The agent that hands the work down names it (`workflow`
+  in `work`, in place of `agent`), and the agent's text says which; a
+  depth with `[policy.depth.<n>] workflows = [...]` takes works only
+  through those. Another team's workflow can share the depth: each team's
+  agent names its own. Stage agents that only work in the workflow have
+  `workflow_only = true`.
 - What only the person may give an agent goes in its `human` list. A
   decision that is the person's — a discount, a contract, an approval —
   the agent asks for with `ask` and `to = "person"`; one the agent above

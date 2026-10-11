@@ -470,7 +470,7 @@ defmodule Omunculus.WorkspaceTest do
 
     [policy]
     workspace = "one"
-    workflow = "delivery"
+    workflows = ["delivery"]
 
     [agents.concierge]
     depth = 0
@@ -498,6 +498,7 @@ defmodule Omunculus.WorkspaceTest do
     work_id =
       Fixtures.insert(project.conn, :works, %{
         workspace: "two",
+        workflow: "delivery",
         stage: "to_do",
         title: "In two"
       })

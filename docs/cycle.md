@@ -201,7 +201,7 @@ open → waiting:  break, request (waiting = request, waiting_for = the request)
 waiting → open:    reply to the request it waits on, all its children done or cancelled, or a child on break — same stage
 waiting → open:    send / prompt on a waiting work — reopened_by_prompt
 open → open:       continue (chained by done) — next stage, new run
-open → done:       continue on the last stage, or with no workflow at its depth
+open → done:       continue on the last stage, or on a work in no workflow
 open / waiting → cancelled: cancel, an option of a request
 ```
 

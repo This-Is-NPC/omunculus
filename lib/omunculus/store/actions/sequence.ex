@@ -57,17 +57,17 @@ defmodule Omunculus.Store.Actions.Sequence do
          {:ok, parent} <- fetch_work(:delegate, conn, ctx.work_id),
          :ok <- no_broken_child(conn, parent),
          child_depth = View.work_depth(conn, parent) + 1,
-         {:ok, {stage, assignee}} <-
+         {:ok, start} <-
            Helpers.tag_error(
              :delegate,
-             Helpers.stage_and_assignee(ctx.config, child_depth, body["agent"])
+             Helpers.stage_and_assignee(ctx.config, child_depth, body["agent"], body["workflow"])
            ),
          {:ok, workspace} <-
            Helpers.tag_error(
              :delegate,
              Helpers.resolve_workspace(ctx.config, body["workspace"], parent)
            ) do
-      apply_delegate(conn, ctx, body, parent, stage, assignee, workspace)
+      apply_delegate(conn, ctx, body, parent, start, workspace)
     end
   end
 
@@ -136,8 +136,8 @@ defmodule Omunculus.Store.Actions.Sequence do
   # that depth, or to the agent of a stage of its workflow up to its own.
   defp reopen_assignee(_conn, _config, child, nil, nil), do: {:ok, {child.stage, child.assignee}}
 
-  defp reopen_assignee(conn, config, child, nil, stage) when is_binary(stage) do
-    with {:ok, steps} <- reopen_steps(Config.workflow_for(config, View.work_depth(conn, child))) do
+  defp reopen_assignee(_conn, config, child, nil, stage) when is_binary(stage) do
+    with {:ok, steps} <- reopen_steps(Config.workflow(config, child.workflow)) do
       names = Enum.map(steps, & &1.name)
       at = Enum.find_index(names, &(&1 == stage))
 
@@ -157,20 +157,22 @@ defmodule Omunculus.Store.Actions.Sequence do
   defp reopen_assignee(_conn, _config, _child, nil, _stage),
     do: {:error, {:reopen, {:invalid, "stage"}}}
 
+  defp reopen_assignee(_conn, _config, %{workflow: workflow}, _agent, nil)
+       when is_binary(workflow),
+       do: {:error, {:reopen, :agent_with_workflow}}
+
   defp reopen_assignee(conn, config, child, agent, nil) do
-    with {:ok, {_stage, assignee}} <-
-           Helpers.tag_error(
-             :reopen,
-             Helpers.stage_and_assignee(config, View.work_depth(conn, child), agent)
-           ),
-         do: {:ok, {child.stage, assignee}}
+    if List.keymember?(Config.agents_at_depth(config, View.work_depth(conn, child)), agent, 0),
+      do: {:ok, {child.stage, agent}},
+      else: {:error, {:reopen, {:agent_not_allowed, agent}}}
   end
 
   defp reopen_assignee(_conn, _config, _child, _agent, _stage),
     do: {:error, {:reopen, :agent_and_stage}}
 
   defp reopen_steps({:ok, steps}), do: {:ok, steps}
-  defp reopen_steps(_off), do: {:error, {:reopen, :no_workflow}}
+  defp reopen_steps(:off), do: {:error, {:reopen, :no_workflow}}
+  defp reopen_steps({:error, reason}), do: {:error, {:reopen, reason}}
 
   # A work a parent may reopen is its own child, parked by a break.
   defp broken_child(%{parent_id: parent_id, state: "waiting", waiting: nil}, %{id: parent_id}),
@@ -275,10 +277,11 @@ defmodule Omunculus.Store.Actions.Sequence do
   defp ensure_open(tag, %{state: "waiting"}), do: {:error, {tag, :waiting}}
   defp ensure_open(tag, %{state: state}), do: {:error, {tag, {:not_open, state}}}
 
-  defp next_step(conn, config, work) do
-    case Config.workflow_for(config, View.work_depth(conn, work)) do
+  defp next_step(_conn, config, work) do
+    case Config.workflow(config, work.workflow) do
       {:ok, steps} -> Helpers.tag_error(:continue, Config.next_step(steps, work.stage))
       :off -> {:ok, nil}
+      {:error, _reason} = error -> Helpers.tag_error(:continue, error)
     end
   end
 
@@ -380,7 +383,7 @@ defmodule Omunculus.Store.Actions.Sequence do
     end
   end
 
-  defp apply_delegate(conn, ctx, body, parent, stage, assignee, workspace) do
+  defp apply_delegate(conn, ctx, body, parent, {workflow, stage, assignee}, workspace) do
     child_id = Id.new()
 
     with {:ok, event} <-
@@ -398,6 +401,7 @@ defmodule Omunculus.Store.Actions.Sequence do
              parent_id: parent.id,
              workspace: workspace,
              assignee: assignee,
+             workflow: workflow,
              stage: stage,
              title: body["title"],
              goal: body["goal"],

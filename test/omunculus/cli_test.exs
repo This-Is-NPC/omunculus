@@ -1224,7 +1224,7 @@ defmodule Omunculus.CLITest do
       ]
 
       [policy]
-      workflow = "delivery"
+      workflows = ["delivery"]
       """)
 
       model = fn assembled, _tools, call ->
@@ -1334,7 +1334,7 @@ defmodule Omunculus.CLITest do
       ]
 
       [policy]
-      workflow = "delivery"
+      workflows = ["delivery"]
       """)
 
       write_model_tool(
@@ -1378,7 +1378,7 @@ defmodule Omunculus.CLITest do
       ]
 
       [policy]
-      workflow = "delivery"
+      workflows = ["delivery"]
       """)
 
       write_model_tool(dir, "counter")
@@ -1387,6 +1387,7 @@ defmodule Omunculus.CLITest do
 
       work_id =
         Fixtures.insert(project.conn, :works, %{
+          workflow: "delivery",
           stage: "to_do",
           assignee: "concierge",
           grants: ~s(["counter"])
@@ -1432,7 +1433,7 @@ defmodule Omunculus.CLITest do
       steps = [{ name = "to_do", agent = "concierge" }]
 
       [policy]
-      workflow = "solo"
+      workflows = ["solo"]
       """)
 
       model = fn assembled, _tools, call ->
@@ -1573,7 +1574,7 @@ defmodule Omunculus.CLITest do
             steps = [{ name = "to_do", agent = "worker" }]
 
             [policy.depth.1]
-            workflow = "solo"
+            workflows = ["solo"]
             """,
             else: ""
 
@@ -1669,7 +1670,7 @@ defmodule Omunculus.CLITest do
       schema = "staged"
 
       [policy.depth.1]
-      workflow = "delivery"
+      workflows = ["delivery"]
       """)
 
       # Only depth 1 has a workflow, so the unnamed work goes straight to
@@ -1961,7 +1962,7 @@ defmodule Omunculus.CLITest do
       steps = [{ name = "to_do", agent = "concierge" }]
 
       [policy]
-      workflow = "solo"
+      workflows = ["solo"]
       """)
 
       model = fn assembled, _tools, call ->
@@ -2009,7 +2010,7 @@ defmodule Omunculus.CLITest do
       steps = [{ name = "to_do", agent = "concierge" }]
 
       [policy]
-      workflow = "solo"
+      workflows = ["solo"]
       """)
 
       model = fn assembled, _tools, call ->
@@ -2305,7 +2306,7 @@ defmodule Omunculus.CLITest do
       ]
 
       [policy.depth.1]
-      workflow = "delivery"
+      workflows = ["delivery"]
       """)
 
       model = fn assembled, _tools, call ->

@@ -191,7 +191,7 @@ argument of the call.
 | `counter` | the value the `counter` tools keep in `EVENTS` | |
 | `catalog` | the cards of the run's effective `model` tools, each marked `pinned` or not | |
 | `workspaces` | every configured workspace, its `root` and whether it is the call's | |
-| `agents` | the agents a new work may name, below the run's work (depth 0 without one), not `workflow_only`, none when that depth has a workflow | `include = ["tools"]` gives each as `{name, tools}`, with the model tools its own ceiling has at that depth |
+| `agents` | the agents and workflows a new work may name, below the run's work (depth 0 without one): the agents not `workflow_only`, none when that depth requires workflows, and each workflow as `{workflow, stages, required}` | `include = ["tools"]` gives each agent as `{name, tools}`, with the model tools its own ceiling has at that depth |
 | `paths` | the path permissions of the run's ceiling | |
 | `grant_scopes` | the scopes a permanent `grant` may name (`agent`, `depth`, `stage`, `workspace`) | |
 | `skills` | the Agent Skills the run's ceiling has, each its `name`, `description` and `dir` | |
@@ -230,10 +230,13 @@ person may give; `cancel` takes `request_id` and cancels the request's
 work. `end` is the only action that ends the run; it needs a
 run. `continue` does not name a stage. `EVENTS` is append-only.
 
-`work` and `delegate` may name the new work's `agent`: it must be one of
-the agents the `agents` view lists for that depth, and is refused when
-the depth has a workflow. Unnamed, the new work goes to the workflow's
-first stage, or to the depth's first agent in name order. A parent that
+`work` and `delegate` may name the new work's `agent` or its `workflow`,
+not both, each one the `agents` view lists for that depth. Where the
+depth requires workflows an agent is refused, and an unnamed work goes
+through the only one, or is refused when there are several. Elsewhere an
+unnamed work goes to the depth's only agent, and is refused when it has
+several. A work named into a workflow starts at its first stage and goes
+through its stages. A parent that
 delegated waits for all its children: a child that closes or is
 cancelled reopens it once each of its children is done or cancelled, a
 child that breaks reopens it at once.
@@ -241,8 +244,8 @@ child that breaks reopens it at once.
 ## Creating works
 
 The model creates works with the `work` tool: a `report` and the `works`
-to create, each with a `title`, a `goal`, and optionally an `agent` and a
-`workspace`.
+to create, each with a `title`, a `goal`, and optionally an `agent` or a
+`workflow`, and a `workspace`.
 
 - In a run on a work W it chains `comment` with the report on W, one
   `delegate` per item — children of W, one depth below — and `end`.
@@ -255,14 +258,14 @@ to create, each with a `title`, a `goal`, and optionally an `agent` and a
 with `work` needs `delegate`, `end` and `comment` as have too; the
 `sequence` group carries `work`, `delegate` and `end`. The manifest's
 `[schemas.staged]` drops `agent` from the items, for the layer whose new
-works land on a depth with a workflow:
+works land on a depth that requires one workflow:
 
 ```toml
 [policy.depth.0.overrides.work]
 schema = "staged"
 
 [policy.depth.1]
-workflow = "delivery"
+workflows = ["delivery"]
 ```
 
 ## Handing control away

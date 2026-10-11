@@ -166,9 +166,10 @@ a client to draw. `places` holds each workspace, and the project root
 while no workspace is the default; a place has its `root`, whether it is
 the `default` and whether it lies `outside` the project, its own ceiling
 lists (`layer`), what it overlays (`changes`), and its `depths`. A depth
-has its `workflow` as the config reads there, whether the place
-`changed` it, its `stages` (name, `deny`, agent) and the `agents` a work
-goes to without a stage, an `idle` one being workflow-only. An agent has
+has the `workflows` a work there may go through, each with its `name`,
+whether it is `required` there and its `stages` (name, `deny`, agent);
+whether the place `changed` them; and the `agents` a work goes to
+without a stage, an `idle` one being workflow-only. An agent has
 its `model` (name, id, api, `body`, whether the place `changed` it), the
 `key` of its provider (the provider and where its value comes from:
 `$VAR`, `omapass · <account>`, `command`, `stored login` or `in the

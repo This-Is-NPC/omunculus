@@ -34,8 +34,36 @@ defmodule Omunculus.Config.PacksTest do
 
     assert %{depth: 1} = config.agents["chief"]
     assert %{depth: 2} = config.agents["hand"]
-    assert {:ok, [%{agent: "hand"}]} = Config.workflow_for(config, 2)
-    assert Config.workflow_for(config, 1) == :off
+    assert Config.workflows_for(config, 2) == ["line"]
+    assert Config.workflows_for(config, 1) == []
+  end
+
+  test "two packs requiring workflows at one depth add them up", %{dir: dir} do
+    other = Path.join(dir, "other")
+    File.mkdir_p!(other)
+
+    File.write!(Path.join(other, "pack.toml"), """
+    [pack]
+    name = "other"
+    roles = ["lead"]
+
+    [agents.smith]
+    depth = 1
+    model = "lead"
+    text = "smith"
+    tools = ["end"]
+
+    [workflows.forge]
+    steps = [{ name = "shape", agent = "smith" }]
+
+    [policy.depth.1]
+    workflows = ["forge"]
+    """)
+
+    assert {:ok, config} =
+             load(dir, @imports <> ~s([[packs]]\npath = "other"\nmodels = { lead = "fast" }\n))
+
+    assert Config.workflows_for(config, 1) == ["line", "forge"]
   end
 
   test "an item of the config overrides the pack's key by key", %{dir: dir} do

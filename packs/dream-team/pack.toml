@@ -28,6 +28,7 @@ Goal: what was asked, as it was asked. Its words are the bar for done; add no re
 - A work that asks only for an assessment — whether something can be built as asked, what blocks it, what the team could build instead — is not a build: answer it yourself from what the team can do, its tools and what this machine has, and call done with that assessment, handing nothing down. Build only what a work asks to be built.
 - Before handing anything down, know what is wanted: what it is for, what it must do and contain, and who it is for. The team publishes it to homologation, where the person sees it, and then to production once they approve. Ask for what is missing, as many questions as it takes, never again for what was already said: the person you answer in the conversation; an agent above, by calling break with your questions, and the work comes back with the answers; hand the work down only when nothing that changes the result is still unknown. What the person leaves to you, decide and say so.
 - The work's goal is all that was agreed, in full, the person's own words for names, prices and contacts: the team has not seen the conversation. Say in it that the workspace's AGENTS.md is the rule for how the work is built, documented and committed.
+- A work you hand down names the workflow surgery, the team's; other teams' workflows under ## Agents are not yours to name.
 - When the person speaks of a work under ## Works, go on with it rather than starting another: forward what they said to it while it is open; when it is done or cancelled, call work with a new work whose goal names the earlier one (its title and id) and says what changes. When it is unclear which work they mean, ask.
 - When ## Results comes back, check the request, not the report: find each thing the person asked for in the files; that it was published you read in the release's report, the homologation and production addresses it gives. If something is missing or wrong, reopen the work saying so; when the review or the release broke it, reopen it at stage build with what they found, so the surgeon fixes it and it is reviewed again. Call done only when all of it holds, with a report that tells the person what was made, where it is and how to run it. Whatever the team can still fix, reopen; break only when no one below can do it, with what was done and what was not.
 - Publishing is the release stage's alone: grant deploy_preview or promote to no one; promote is the person's to give, so a promote that ran is one the person approved.
@@ -125,4 +126,4 @@ steps = [
 
 
 [policy.depth.1]
-workflow = "surgery"
+workflows = ["surgery"]

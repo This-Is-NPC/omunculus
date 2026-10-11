@@ -123,7 +123,7 @@ defmodule Omunculus.Store.Actions.Requests do
       body:
         Jason.encode!(
           Map.merge(fields, %{
-            workflow: work && Config.workflow_name_for(ctx.config, View.work_depth(conn, work)),
+            workflow: work && work.workflow,
             stage: work && work.stage,
             workspace: work && work.workspace
           })
@@ -150,7 +150,7 @@ defmodule Omunculus.Store.Actions.Requests do
            agent: agent,
            depth: depth,
            grants: grants,
-           stage: stage_layer(ctx.config, depth, work.stage),
+           stage: stage_layer(ctx.config, work),
            workspace: Config.workspace_ceiling(ctx.config, workspace_name),
            groups: ctx.groups
          },
@@ -256,11 +256,11 @@ defmodule Omunculus.Store.Actions.Requests do
     end
   end
 
-  defp stage_layer(_config, _depth, nil), do: nil
+  defp stage_layer(_config, %{stage: nil}), do: nil
 
-  defp stage_layer(config, depth, stage) do
-    with {:ok, steps} <- Config.workflow_for(config, depth),
-         {:ok, step} <- Config.step_at(steps, stage) do
+  defp stage_layer(config, work) do
+    with {:ok, steps} <- Config.workflow(config, work.workflow),
+         {:ok, step} <- Config.step_at(steps, work.stage) do
       step.ceiling
     else
       _off_or_off_sequence -> nil

@@ -258,19 +258,25 @@ defmodule Omunculus.Tools.Assemble do
   defp agents_section(agents, cards) do
     if Enum.any?(cards, &(&1.name == "work")) do
       own = MapSet.new(cards, & &1.name)
-      ["## Agents\n" <> Enum.map_join(agents, "\n", &agent_line(&1, own))]
+      required = Enum.count(agents, &match?(%{required: true}, &1))
+      ["## Agents\n" <> Enum.map_join(agents, "\n", &agent_line(&1, own, required))]
     else
       []
     end
   end
 
-  defp agent_line(%{workflow: workflow, stages: stages}, _own) do
+  defp agent_line(%{workflow: workflow, stages: stages}, _own, required) do
     path = Enum.map_join(stages, " → ", &"#{&1.name} (#{&1.agent})")
-    "- workflow #{workflow}: #{path}; a work without an agent goes through it"
+
+    case required do
+      1 -> "- workflow #{workflow}: #{path}; every work goes through it"
+      0 -> "- workflow #{workflow}: #{path}; a work naming it goes through it"
+      _several -> "- workflow #{workflow}: #{path}; a work names one of these workflows"
+    end
   end
 
   # What an agent can do that this run cannot is why to hand it a work.
-  defp agent_line(%{name: name, tools: tools}, own) do
+  defp agent_line(%{name: name, tools: tools}, own, _required) do
     case Enum.reject(tools, &MapSet.member?(own, &1)) do
       [] -> "- #{name}"
       beyond -> "- #{name}: also #{Enum.join(beyond, ", ")}"

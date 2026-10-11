@@ -16,7 +16,7 @@ defmodule Omunculus.Tools.OverviewTest do
       path
       |> Toml.decode_file!()
       |> put_in(["policy", "workspace"], "site")
-      |> put_in(["policy", "depth"], %{"1" => %{"workflow" => "delivery"}})
+      |> put_in(["policy", "depth"], %{"1" => %{"workflows" => ["delivery"]}})
       |> put_in(["workflows", "spare"], %{"steps" => [%{"name" => "only", "agent" => "worker"}]})
       |> Map.put("auth", %{
         "store" => "auth.json",
@@ -60,6 +60,7 @@ defmodule Omunculus.Tools.OverviewTest do
 
   defp place(overview, name), do: Enum.find(overview["places"], &(&1["workspace"] == name))
   defp depth(place, depth), do: Enum.find(place["depths"], &(&1["depth"] == depth))
+  defp first_stage(depth), do: depth["workflows"] |> hd() |> Map.fetch!("stages") |> hd()
   defp tool(agent, name), do: Enum.find(agent["tools"], &(&1["name"] == name))
 
   test "each workspace is a place; the root is not one while a workspace is the default", %{
@@ -76,10 +77,10 @@ defmodule Omunculus.Tools.OverviewTest do
     assert overview["unused_workflows"] == ["spare"]
   end
 
-  test "a depth shows its workflow's stages, each with its deny and its agent", %{path: path} do
+  test "a depth shows its workflows' stages, each with its deny and its agent", %{path: path} do
     site = path |> overview() |> place("site") |> depth(1)
-    assert %{"workflow" => "delivery", "changed" => false} = site
-    assert [to_do, review] = site["stages"]
+    assert %{"workflows" => [workflow], "changed" => false} = site
+    assert %{"name" => "delivery", "required" => true, "stages" => [to_do, review]} = workflow
     assert %{"name" => "to_do", "agent" => %{"name" => "worker"}} = to_do
     assert %{"name" => "review", "deny" => deny, "agent" => %{"name" => "reviewer"}} = review
     assert "fs.write" in deny
@@ -91,7 +92,7 @@ defmodule Omunculus.Tools.OverviewTest do
   test "an agent shows its model, its key's source and its tools as the place has them", %{
     path: path
   } do
-    worker = path |> overview() |> place("notes") |> depth(1) |> Map.fetch!("stages") |> hd()
+    worker = path |> overview() |> place("notes") |> depth(1) |> first_stage()
     agent = worker["agent"]
 
     assert %{
@@ -107,7 +108,7 @@ defmodule Omunculus.Tools.OverviewTest do
   end
 
   test "an agent's skills come apart from its tools, each with the tools it uses", %{path: path} do
-    worker = path |> overview() |> place("site") |> depth(1) |> Map.fetch!("stages") |> hd()
+    worker = path |> overview() |> place("site") |> depth(1) |> first_stage()
     agent = worker["agent"]
 
     assert agent["skills"] == [

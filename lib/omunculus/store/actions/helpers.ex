@@ -79,24 +79,53 @@ defmodule Omunculus.Store.Actions.Helpers do
     )
   end
 
-  @spec stage_and_assignee(Config.t(), non_neg_integer, String.t() | nil) ::
-          {:ok, {String.t() | nil, String.t()}} | {:error, term}
-  def stage_and_assignee(config, depth, agent) do
-    case {Config.workflow_for(config, depth), agent} do
-      {{:ok, [step | _rest]}, nil} ->
-        {:ok, {step.name, step.agent}}
+  @doc """
+  Where a work going to `depth` starts — `{workflow, stage, assignee}` — as
+  it names a `workflow` or an `agent`, or neither. A depth whose policy
+  requires workflows takes a work only through one of them, the only one
+  when it names none; elsewhere a work names its agent among the depth's,
+  the only one when it names none, or a workflow whose stage agents are
+  all of that depth.
+  """
+  @spec stage_and_assignee(Config.t(), non_neg_integer, String.t() | nil, String.t() | nil) ::
+          {:ok, {String.t() | nil, String.t() | nil, String.t()}} | {:error, term}
+  def stage_and_assignee(config, depth, agent, workflow) do
+    required = Config.workflows_for(config, depth)
 
-      {{:ok, _steps}, _agent} ->
+    case {workflow, agent, required} do
+      {workflow, agent, _required} when is_binary(workflow) and is_binary(agent) ->
         {:error, :agent_with_workflow}
 
-      {:off, nil} ->
-        with {:ok, {name, _agent}} <- Config.agent_at_depth(config, depth), do: {:ok, {nil, name}}
+      {nil, nil, [only]} ->
+        first_stage(config, only)
 
-      {:off, agent} ->
+      {nil, nil, [_ | _]} ->
+        {:error, {:workflow_required, required}}
+
+      {nil, agent, [_ | _]} when is_binary(agent) ->
+        {:error, {:workflow_required, required}}
+
+      {workflow, nil, _required} when is_binary(workflow) ->
+        allowed = Config.workflows_at(config, depth)
+
+        if workflow in allowed,
+          do: first_stage(config, workflow),
+          else: {:error, {:workflow_not_allowed, workflow, allowed}}
+
+      {nil, nil, []} ->
+        with {:ok, {name, _agent}} <- Config.agent_at_depth(config, depth),
+             do: {:ok, {nil, nil, name}}
+
+      {nil, agent, []} ->
         if List.keymember?(Config.agents_at_depth(config, depth), agent, 0),
-          do: {:ok, {nil, agent}},
+          do: {:ok, {nil, nil, agent}},
           else: {:error, {:agent_not_allowed, agent}}
     end
+  end
+
+  defp first_stage(config, workflow) do
+    with {:ok, [step | _rest]} <- Config.workflow(config, workflow),
+         do: {:ok, {workflow, step.name, step.agent}}
   end
 
   @spec insert_work(Omunculus.Store.Connection.t(), map) :: :ok | {:error, term}
@@ -110,6 +139,7 @@ defmodule Omunculus.Store.Actions.Helpers do
       assignee: work.assignee,
       title: work.title,
       goal: work.goal,
+      workflow: work.workflow,
       stage: work.stage,
       state: "open",
       created_at: work.at,

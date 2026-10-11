@@ -178,10 +178,21 @@ defmodule Omunculus.Tools.Out do
 
   def refused({tag, {:agent_not_allowed, agent}}) when tag in [:work, :delegate],
     do:
-      "refused: #{agent} is not an agent a work can go to: name one under ## Agents as it is written there, or leave agent out when ## Agents shows a workflow"
+      "refused: #{agent} is not an agent a work can go to: name one under ## Agents as it is written there, or a workflow it shows"
 
   def refused({tag, :agent_with_workflow}) when tag in [:work, :delegate],
-    do: "refused: works at that depth go through the workflow ## Agents shows: leave agent out"
+    do: "refused: a work names an agent or a workflow, not both"
+
+  def refused({tag, {:workflow_required, [only]}}) when tag in [:work, :delegate],
+    do: "refused: works at that depth go through the workflow #{only}: leave agent out"
+
+  def refused({tag, {:workflow_required, names}}) when tag in [:work, :delegate],
+    do:
+      "refused: works at that depth go through one of the workflows #{Enum.join(names, ", ")}: name one as workflow"
+
+  def refused({tag, {:workflow_not_allowed, name, names}}) when tag in [:work, :delegate],
+    do:
+      "refused: #{name} is not a workflow a work can go through there; name one of: #{Enum.join(names, ", ")}"
 
   def refused({:reply, {:unknown_option, option, options}}),
     do:

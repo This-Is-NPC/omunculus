@@ -221,12 +221,10 @@ defmodule Omunculus.Run do
     end
   end
 
-  defp resolve_agent(config, conn, work, agent) when not is_nil(agent) do
+  defp resolve_agent(config, _conn, work, agent) when not is_nil(agent) do
     case Map.fetch(config.agents, agent) do
       {:ok, agent_config} ->
-        depth = if work, do: Store.work_depth(conn, work), else: agent_config.depth
-
-        with {:ok, steps} <- workflow_steps(config, depth),
+        with {:ok, steps} <- workflow_steps(config, work),
              :ok <- workflow_agent(agent, agent_config, steps),
              {:ok, step} <- step_for(steps, work && work.stage) do
           {:ok, {agent, agent_config.text, agent_config.depth, step && step.ceiling}}
@@ -246,7 +244,7 @@ defmodule Omunculus.Run do
   defp resolve_agent(config, conn, work, nil) do
     depth = Store.work_depth(conn, work)
 
-    with {:ok, steps} <- workflow_steps(config, depth),
+    with {:ok, steps} <- workflow_steps(config, work),
          {:ok, step} <- step_for(steps, work.stage) do
       case step do
         nil -> assignee_agent(config, work.assignee, depth)
@@ -265,10 +263,13 @@ defmodule Omunculus.Run do
   defp workflow_agent(name, %{workflow_only: true}, nil), do: {:error, {:workflow_off, name}}
   defp workflow_agent(_name, _agent, _steps), do: :ok
 
-  defp workflow_steps(config, depth) do
-    case Config.workflow_for(config, depth) do
+  defp workflow_steps(_config, nil), do: {:ok, nil}
+
+  defp workflow_steps(config, work) do
+    case Config.workflow(config, work.workflow) do
       {:ok, steps} -> {:ok, steps}
       :off -> {:ok, nil}
+      {:error, _reason} = error -> error
     end
   end
 

@@ -248,7 +248,7 @@ defmodule Omunculus.Tools.WorkTest do
           steps = [{ name = "plan", agent = "lead" }]
 
           [policy]
-          workflow = "flow"
+          workflows = ["flow"]
 
           [policy.overrides.work]
           schema = "staged"
@@ -549,7 +549,7 @@ defmodule Omunculus.Tools.WorkTest do
           steps = [{ name = "build", agent = "alpha" }, { name = "check", agent = "checker" }]
 
           [policy.depth.1]
-          workflow = "flow"
+          workflows = ["flow"]
 
           [policy.depth.0.overrides.work]
           schema = "staged"
@@ -567,7 +567,7 @@ defmodule Omunculus.Tools.WorkTest do
       project = Fixtures.open_project(dir)
 
       assert_received {:named, {:ok, named}}
-      assert named == Out.refused({:delegate, :agent_with_workflow})
+      assert named == Out.refused({:delegate, {:workflow_required, ["flow"]}})
       assert_received {:schema, "lead", staged}
       refute Map.has_key?(staged["properties"]["works"]["items"]["properties"], "agent")
       assert [] = all(project, "SELECT * FROM works")
@@ -638,7 +638,7 @@ defmodule Omunculus.Tools.WorkTest do
           steps = [{ name = "build", agent = "alpha" }]
 
           [policy.depth.1]
-          workflow = "flow"
+          workflows = ["flow"]
           """
 
       Fixtures.write_config(dir, toml)
@@ -664,7 +664,7 @@ defmodule Omunculus.Tools.WorkTest do
       assert_received {:assembled, assembled}
 
       assert assembled =~
-               "## Agents\n- workflow flow: build (alpha); a work without an agent goes through it"
+               "## Agents\n- workflow flow: build (alpha); every work goes through it"
 
       project = Fixtures.open_project(dir)
       assert [root] = all(project, "SELECT * FROM works WHERE parent_id IS NULL")

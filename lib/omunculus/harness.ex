@@ -371,34 +371,36 @@ defmodule Omunculus.Harness do
     end)
   end
 
-  # The agents a new work may name: those of the depth below the call's
-  # run, to which a run without a work hands its works down too; when that
-  # depth has a workflow, the workflow and its stages instead. With
+  # The agents and workflows a new work may name: those of the depth below
+  # the call's run, to which a run without a work hands its works down too;
+  # where that depth requires workflows, only those, each `required`. With
   # `tools`, each agent comes with the model tools its own ceiling has at
   # that depth.
   defp agents_view(project, config, work, catalog, workspace, spec) do
     depth = if work, do: Store.work_depth(project.conn, work) + 1, else: 1
+    required = Config.workflows_for(config, depth) != []
 
-    case Config.workflow_for(config, depth) do
-      :off ->
-        names = config |> Config.agents_at_depth(depth) |> Enum.map(fn {name, _agent} -> name end)
+    workflows =
+      Enum.map(Config.workflows_at(config, depth), fn name ->
+        %{
+          workflow: name,
+          stages: Enum.map(config.workflows[name], &%{name: &1.name, agent: &1.agent}),
+          required: required
+        }
+      end)
 
-        if "tools" in spec.include,
-          do:
-            Enum.map(
-              names,
-              &%{name: &1, tools: agent_tools(config, &1, depth, catalog, workspace)}
-            ),
-          else: names
+    if required,
+      do: workflows,
+      else: agents_named(config, depth, catalog, workspace, spec) ++ workflows
+  end
 
-      {:ok, steps} ->
-        [
-          %{
-            workflow: Config.workflow_name_for(config, depth),
-            stages: Enum.map(steps, &%{name: &1.name, agent: &1.agent})
-          }
-        ]
-    end
+  defp agents_named(config, depth, catalog, workspace, spec) do
+    names = config |> Config.agents_at_depth(depth) |> Enum.map(fn {name, _agent} -> name end)
+
+    if "tools" in spec.include,
+      do:
+        Enum.map(names, &%{name: &1, tools: agent_tools(config, &1, depth, catalog, workspace)}),
+      else: names
   end
 
   defp agent_tools(config, agent, depth, catalog, workspace) do

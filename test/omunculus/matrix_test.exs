@@ -71,7 +71,7 @@ defmodule Omunculus.MatrixTest do
       ]
 
       [policy]
-      workflow = "delivery"
+      workflows = ["delivery"]
 
       [policy.overrides.work]
       schema = "staged"
@@ -95,7 +95,7 @@ defmodule Omunculus.MatrixTest do
       schema = "staged"
 
       [policy.depth.1]
-      workflow = "delivery"
+      workflows = ["delivery"]
       """
   end
 
@@ -121,7 +121,7 @@ defmodule Omunculus.MatrixTest do
       schema = "staged"
 
       [policy.depth.2]
-      workflow = "delivery"
+      workflows = ["delivery"]
       """
   end
 

@@ -434,14 +434,20 @@ defmodule Omunculus.SpecRegressionTest do
       @config <>
         """
         [policy]
-        workflow = "delivery"
+        workflows = ["delivery"]
         [workflows.delivery]
         steps = [{name = "first", agent = "concierge"}, {name = "second", agent = "concierge"}]
         """
     )
 
     hook(p, "on-notify", "notify", [%{type: "continue", body: %{}}])
-    work = Fixtures.insert(p.conn, :works, %{stage: "first", assignee: "concierge"})
+
+    work =
+      Fixtures.insert(p.conn, :works, %{
+        workflow: "delivery",
+        stage: "first",
+        assignee: "concierge"
+      })
 
     {:ok, n} = Agent.start_link(fn -> 0 end)
 
@@ -477,7 +483,7 @@ defmodule Omunculus.SpecRegressionTest do
       ) <>
         """
         [policy]
-        workflow = "delivery"
+        workflows = ["delivery"]
         [workflows.delivery]
         steps = [{name = "first", agent = "concierge"}, {name = "second", agent = "concierge"}]
         """
@@ -485,7 +491,13 @@ defmodule Omunculus.SpecRegressionTest do
 
     hook(p, "on-continue", "continue")
     hook(p, "on-end", "end")
-    work = Fixtures.insert(p.conn, :works, %{stage: "first", assignee: "concierge"})
+
+    work =
+      Fixtures.insert(p.conn, :works, %{
+        workflow: "delivery",
+        stage: "first",
+        assignee: "concierge"
+      })
 
     {:ok, n} = Agent.start_link(fn -> 0 end)
 
@@ -632,7 +644,7 @@ defmodule Omunculus.SpecRegressionTest do
       @config <>
         """
         [policy]
-        workflow = "delivery"
+        workflows = ["delivery"]
         [workflows.delivery]
         steps = [{name = "first", agent = "worker", deny = ["write"]}]
         """
@@ -683,11 +695,11 @@ defmodule Omunculus.SpecRegressionTest do
         [workflows.delivery]
         steps = [{name = "review", agent = "worker", deny = ["write"]}]
         [policy]
-        workflow = "delivery"
+        workflows = ["delivery"]
         """
     )
 
-    work = Fixtures.insert(p.conn, :works, %{stage: "review"})
+    work = Fixtures.insert(p.conn, :works, %{workflow: "delivery", stage: "review"})
 
     Fixtures.use_model(p, fn _, tools, call ->
       refute Enum.any?(tools, &(&1.name == "write"))

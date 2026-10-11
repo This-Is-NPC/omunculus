@@ -221,6 +221,18 @@ steps = [
 ]
 ```
 
+A work goes through a workflow when it names one (`work` and `delegate`
+take `workflow` beside `agent`), and keeps it: its stages are the
+workflow's. A work may name a workflow whose stage agents are all of its
+depth. `workflows = [...]` on `[policy]`, or on a `[policy.depth.<n>]`
+for that depth alone, requires them: a work there goes through one of
+them — the only one when it names none — and naming an agent is refused.
+
+```toml
+[policy.depth.1]
+workflows = ["delivery"]
+```
+
 Each of `workspace`, `depth`, a workflow step, an agent and `[policy]` is
 a ceiling layer: `mode`, `granted` / `tools`, `negotiable`, `human`,
 `deny`, `pinned`, and the per-tool `overrides` below. Intersected, not unioned. [The ceiling](ceiling.md) is

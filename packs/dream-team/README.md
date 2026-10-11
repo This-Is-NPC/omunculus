@@ -19,7 +19,9 @@ the person grants `promote`.
 | language_lawyer | 2 | how a language, library or version is meant to be used |
 
 Every work handed down goes through the workflow `surgery`: build
-(surgeon), review (copilot), release (clerk).
+(surgeon), review (copilot), release (clerk). The pack requires it at the
+surgeon's depth, and the administrator names it, so another team's
+workflow required at that depth sits beside it.
 
 ## What it holds
 

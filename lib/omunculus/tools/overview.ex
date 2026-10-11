@@ -5,9 +5,9 @@ defmodule Omunculus.Tools.Overview do
   project root while no workspace is the default. For each place: its
   folder, whether it is the default or outside the project, its own
   ceiling lists and what it overlays; then each depth as the config reads
-  there — its workflow, whether the place changed it, the stages with
-  their `deny` and their agent, and the agents a work can go to without a
-  stage. An agent comes with its model (id, api, `body`, whether the place
+  there — the workflows a work there may go through, whether it must, and
+  each one's stages with their `deny` and their agent; whether the place
+  changed them; and the agents a work can go to without a stage. An agent comes with its model (id, api, `body`, whether the place
   changed it), where its provider's key comes from, and the names its
   layer lists, each classified by the run's ceiling there (`have`,
   `askable`, `sealed`, `blocked`), a group with its members, a tool with
@@ -40,7 +40,11 @@ defmodule Omunculus.Tools.Overview do
         place(config, here, name, known)
       end
 
-    run = places |> Enum.flat_map(& &1.depths) |> Enum.map(& &1.workflow) |> MapSet.new()
+    run =
+      places
+      |> Enum.flat_map(& &1.depths)
+      |> Enum.flat_map(& &1.workflows)
+      |> MapSet.new(& &1.name)
 
     %{
       root: config.root,
@@ -86,20 +90,28 @@ defmodule Omunculus.Tools.Overview do
   end
 
   defp depth(base, here, layer, depth, known) do
-    workflow = Config.workflow_name_for(here, depth)
-    steps = if workflow, do: Map.fetch!(here.workflows, workflow), else: []
-    staged = Enum.map(steps, & &1.agent)
+    names = Config.workflows_at(here, depth)
+    required = Config.workflows_for(here, depth) != []
+    staged = Enum.flat_map(names, fn name -> Enum.map(here.workflows[name], & &1.agent) end)
 
     %{
       depth: depth,
-      workflow: workflow,
-      changed: workflow != Config.workflow_name_for(base, depth),
-      stages:
-        Enum.map(steps, fn step ->
+      changed:
+        {names, Config.workflows_for(here, depth)} !=
+          {Config.workflows_at(base, depth), Config.workflows_for(base, depth)},
+      workflows:
+        Enum.map(names, fn name ->
           %{
-            name: step.name,
-            deny: step.ceiling.deny,
-            agent: agent(base, here, layer, step.agent, depth, step.ceiling, known)
+            name: name,
+            required: required,
+            stages:
+              Enum.map(here.workflows[name], fn step ->
+                %{
+                  name: step.name,
+                  deny: step.ceiling.deny,
+                  agent: agent(base, here, layer, step.agent, depth, step.ceiling, known)
+                }
+              end)
           }
         end),
       agents:

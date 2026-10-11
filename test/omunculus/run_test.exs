@@ -572,7 +572,7 @@ defmodule Omunculus.RunTest do
   test "stage pinned intersects agent pinned", %{dir: dir} do
     write_config(dir, """
     [policy]
-    workflow = "delivery"
+    workflows = ["delivery"]
 
     [agents.concierge]
     depth = 0
@@ -585,7 +585,14 @@ defmodule Omunculus.RunTest do
     """)
 
     project = open_project(dir)
-    work = Fixtures.insert(project.conn, :works, %{stage: "first", assignee: "concierge"})
+
+    work =
+      Fixtures.insert(project.conn, :works, %{
+        workflow: "delivery",
+        stage: "first",
+        assignee: "concierge"
+      })
+
     test_pid = self()
 
     model = fn assembled, _tools, _call ->

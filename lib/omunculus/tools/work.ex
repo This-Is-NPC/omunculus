@@ -1,19 +1,20 @@
 defmodule Omunculus.Tools.Work do
   @moduledoc """
   Builtin `work` tool: takes a `report` and the `works` to create, each
-  with a `title`, a `goal` and optionally an `agent` and a `workspace`.
+  with a `title`, a `goal` and optionally an `agent` or a `workflow`, and
+  a `workspace`.
   In a run with a work it chains `comment` with the report on that work
   and one `delegate` per item. In a run without a work it emits the `work`
   action with the report and the items, which creates the root work with
   the report as its first comment: the one item itself, or, when each
-  names an agent of depth 1, a root that hands them down. Its manifest's
+  names an agent or a workflow of depth 1, a root that hands them down. Its manifest's
   `then` appends `end`.
   """
 
   alias Omunculus.Tools.{Args, Out}
 
   @required ~w(title goal)
-  @optional ~w(agent workspace)
+  @optional ~w(agent workflow workspace)
 
   @spec run(map) :: map
   def run(%{args: args, work_id: work_id}) do

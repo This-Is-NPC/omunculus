@@ -49,7 +49,7 @@ defmodule Omunculus.Config do
     :send_catalog,
     :session_ttl_ms,
     :session_max_bytes,
-    :policy_workflow,
+    :policy_workflows,
     :policy_workspace,
     :depth_workflows,
     :mcp,
@@ -125,9 +125,9 @@ defmodule Omunculus.Config do
           send_catalog: boolean,
           session_ttl_ms: pos_integer | nil,
           session_max_bytes: pos_integer | nil,
-          policy_workflow: String.t() | nil,
+          policy_workflows: [String.t()],
           policy_workspace: String.t() | nil,
-          depth_workflows: %{non_neg_integer => String.t()},
+          depth_workflows: %{non_neg_integer => [String.t()]},
           mcp: [mcp_server],
           execution: execution,
           tools: tools,
@@ -164,7 +164,7 @@ defmodule Omunculus.Config do
   @mcp_server_keys ~w(name command protocol_version secrets)
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
-  @policy_extra_keys ~w(depth workflow workspace assemble max_retries last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes)
+  @policy_extra_keys ~w(depth workflows workspace assemble max_retries last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes)
   @agent_extra_keys ~w(depth text workflow_only model assemble)
   @http_model_keys ~w(api url model timeout_ms temperature headers body provider stream retries code_mode)
   @openai_model_keys @http_model_keys ++ ~w(prompt_cache_key)
@@ -266,19 +266,44 @@ defmodule Omunculus.Config do
     end
   end
 
-  @spec workflow_for(t, non_neg_integer) :: {:ok, [step]} | :off
-  def workflow_for(%__MODULE__{} = config, depth) do
-    case workflow_name_for(config, depth) do
-      nil -> :off
-      name -> Map.fetch(config.workflows, name)
+  @doc """
+  The workflows a work at `depth` must go through one of: its depth
+  layer's `workflows`, else the policy's; none, and a work there may go to
+  an agent or through any workflow of `workflows_at/2`.
+  """
+  @spec workflows_for(t, non_neg_integer) :: [String.t()]
+  def workflows_for(%__MODULE__{} = config, depth),
+    do: Map.get(config.depth_workflows, depth, config.policy_workflows)
+
+  @doc """
+  The workflows a work at `depth` may name: those it must go through one
+  of, or, where none is required, every workflow whose stage agents are
+  all of that depth.
+  """
+  @spec workflows_at(t, non_neg_integer) :: [String.t()]
+  def workflows_at(%__MODULE__{} = config, depth) do
+    case workflows_for(config, depth) do
+      [] ->
+        config.workflows
+        |> Enum.filter(fn {_name, steps} ->
+          Enum.all?(steps, &(config.agents[&1.agent].depth == depth))
+        end)
+        |> Enum.map(fn {name, _steps} -> name end)
+        |> Enum.sort()
+
+      required ->
+        required
     end
   end
 
-  @spec workflow_name_for(t, non_neg_integer) :: String.t() | nil
-  def workflow_name_for(%__MODULE__{} = config, depth) do
-    case Map.get(config.depth_workflows, depth) || config.policy_workflow do
-      name when is_binary(name) -> name
-      _ -> nil
+  @doc "The steps of the workflow `name`; `:off` for a work in none."
+  @spec workflow(t, String.t() | nil) :: {:ok, [step]} | :off | {:error, term}
+  def workflow(_config, nil), do: :off
+
+  def workflow(%__MODULE__{} = config, name) do
+    case Map.fetch(config.workflows, name) do
+      {:ok, steps} -> {:ok, steps}
+      :error -> {:error, {:unknown_workflow, name}}
     end
   end
 
@@ -648,7 +673,7 @@ defmodule Omunculus.Config do
              {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), root),
              {:ok, agents} <- parse_agents(Map.get(data, "agents", %{}), models),
              {:ok, workflows} <- parse_workflows(Map.get(data, "workflows", %{}), agents),
-             {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows, assemble,
+             {:ok, policy, depths, policy_workflows, policy_workspace, depth_workflows, assemble,
               max_retries, last_run_output_bytes, tool_output_bytes, conversation_bytes,
               send_catalog,
               session} <-
@@ -677,7 +702,7 @@ defmodule Omunculus.Config do
               send_catalog: send_catalog,
               session_ttl_ms: session.ttl_ms,
               session_max_bytes: session.max_bytes,
-              policy_workflow: policy_workflow,
+              policy_workflows: policy_workflows,
               policy_workspace: policy_workspace,
               depth_workflows: depth_workflows,
               mcp: mcp,
@@ -1175,7 +1200,7 @@ defmodule Omunculus.Config do
 
   defp parse_policy(data, workflows, workspaces) when is_map(data) do
     depth_data = Map.get(data, "depth", %{})
-    workflow_data = Map.get(data, "workflow")
+    workflow_data = Map.get(data, "workflows")
     workspace_data = Map.get(data, "workspace")
     assemble_data = Map.get(data, "assemble")
     layer_data = Map.drop(data, @policy_extra_keys)
@@ -1186,8 +1211,8 @@ defmodule Omunculus.Config do
 
       [] ->
         with {:ok, policy} <- tag_error(parse_layer(layer_data, "auto"), :policy),
-             {:ok, policy_workflow} <-
-               tag_error(fetch_workflow(workflow_data, workflows), :policy),
+             {:ok, policy_workflows} <-
+               tag_error(fetch_workflows(workflow_data, workflows), :policy),
              {:ok, policy_workspace} <-
                tag_error(fetch_workspace(workspace_data, workspaces), :policy),
              :ok <- ensure_default_workspace(policy_workspace, workspaces),
@@ -1199,7 +1224,7 @@ defmodule Omunculus.Config do
              {:ok, conversation_bytes} <- fetch_positive(data, :conversation_bytes),
              {:ok, send_catalog} <- fetch_send_catalog(data),
              {:ok, session} <- fetch_session(data) do
-          {:ok, policy, depths, policy_workflow, policy_workspace, depth_workflows, assemble,
+          {:ok, policy, depths, policy_workflows, policy_workspace, depth_workflows, assemble,
            max_retries, last_run_output_bytes, tool_output_bytes, conversation_bytes,
            send_catalog, session}
         end
@@ -1246,17 +1271,22 @@ defmodule Omunculus.Config do
     end
   end
 
-  defp fetch_workflow(nil, _workflows), do: {:ok, nil}
+  defp fetch_workflows(nil, _workflows), do: {:ok, []}
 
-  defp fetch_workflow(name, workflows) when is_binary(name) do
-    if Map.has_key?(workflows, name) do
-      {:ok, name}
-    else
-      {:error, {:unknown_workflow, name}}
+  defp fetch_workflows(names, workflows) when is_list(names) do
+    cond do
+      not Enum.all?(names, &is_binary/1) ->
+        {:error, {:invalid, :workflows}}
+
+      unknown = Enum.find(names, &(not Map.has_key?(workflows, &1))) ->
+        {:error, {:unknown_workflow, unknown}}
+
+      true ->
+        {:ok, Enum.uniq(names)}
     end
   end
 
-  defp fetch_workflow(_invalid, _workflows), do: {:error, {:invalid, :workflow}}
+  defp fetch_workflows(_invalid, _workflows), do: {:error, {:invalid, :workflows}}
 
   defp fetch_workspace(nil, _workspaces), do: {:ok, nil}
 
@@ -1278,9 +1308,9 @@ defmodule Omunculus.Config do
   defp parse_depths(data, workflows) when is_map(data) do
     Enum.reduce_while(data, {:ok, %{}, %{}}, fn {key, value}, {:ok, layers, depth_workflows} ->
       case parse_depth_entry(key, value, workflows) do
-        {:ok, n, layer, workflow} ->
+        {:ok, n, layer, names} ->
           depth_workflows =
-            if workflow, do: Map.put(depth_workflows, n, workflow), else: depth_workflows
+            if names, do: Map.put(depth_workflows, n, names), else: depth_workflows
 
           {:cont, {:ok, Map.put(layers, n, layer), depth_workflows}}
 
@@ -1295,12 +1325,11 @@ defmodule Omunculus.Config do
   defp parse_depth_entry(key, value, workflows) do
     case Integer.parse(key) do
       {n, ""} when n >= 0 ->
-        workflow_data = Map.get(value, "workflow")
-        layer_data = Map.delete(value, "workflow")
+        layer_data = Map.delete(value, "workflows")
 
         with {:ok, layer} <- parse_layer(layer_data, nil),
-             {:ok, workflow} <- fetch_workflow(workflow_data, workflows) do
-          {:ok, n, layer, workflow}
+             {:ok, names} <- depth_workflow_names(value, workflows) do
+          {:ok, n, layer, names}
         else
           {:error, reason} -> {:error, {:policy, {:depth, n, reason}}}
         end
@@ -1309,6 +1338,12 @@ defmodule Omunculus.Config do
         {:error, {:policy, {:invalid, :depth}}}
     end
   end
+
+  # A depth layer's own `workflows`, even none, in place of the policy's.
+  defp depth_workflow_names(%{"workflows" => names}, workflows),
+    do: fetch_workflows(names, workflows)
+
+  defp depth_workflow_names(_value, _workflows), do: {:ok, nil}
 
   defp parse_workspaces(data, project_dir) when is_map(data) do
     Enum.reduce_while(data, {:ok, %{}}, fn {name, value}, {:ok, acc} ->

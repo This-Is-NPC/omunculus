@@ -132,7 +132,7 @@ defmodule Omunculus.Fixtures do
     KEY = "vault"
 
     [policy.depth.1]
-    workflow = "line"
+    workflows = ["line"]
     """)
 
     pack

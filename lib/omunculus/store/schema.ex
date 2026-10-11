@@ -130,6 +130,7 @@ defmodule Omunculus.Store.Schema do
       assignee TEXT,
       title TEXT NOT NULL,
       goal TEXT NOT NULL,
+      workflow TEXT,
       stage TEXT,
       state TEXT NOT NULL CHECK (state IN ('open', 'waiting', 'done', 'cancelled')),
       waiting TEXT,

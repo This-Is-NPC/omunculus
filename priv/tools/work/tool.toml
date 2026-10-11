@@ -1,7 +1,7 @@
 name = "work"
 kind = "tool"
 triggers = ["model"]
-description = "Creates works with a title and a goal: comments the report on the run's work, delegates each work below it and ends the run. Without a work, creates the root work with the report as its first comment and, when each work names an agent of the depth below, or none does and only that depth has a workflow, hands them down at once."
+description = "Creates works with a title and a goal: comments the report on the run's work, delegates each work below it and ends the run. Without a work, creates the root work with the report as its first comment and, when each work names an agent or a workflow of the depth below, or none does and that depth has one agent or requires one workflow, hands them down at once."
 tags = ["sequence", "work"]
 groups = ["sequence"]
 module = "Omunculus.Tools.Work"
@@ -31,6 +31,10 @@ type = "string"
 
 [parameters.properties.works.items.properties.agent]
 type = "string"
+
+[parameters.properties.works.items.properties.workflow]
+type = "string"
+description = "A workflow under ## Agents; name an agent or a workflow, not both."
 
 [parameters.properties.works.items.properties.workspace]
 type = "string"

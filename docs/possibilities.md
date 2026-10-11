@@ -115,10 +115,10 @@ assemble = "assemble"
 max_retries = 3
 ```
 
-A `workflow_only` agent is parsed and ignored until a step names it. Defining
-`[workflows.delivery]` without `[policy] workflow` (or a `[policy.depth.N]
-workflow`) leaves the sequence off: the table is inventory, not a running
-pipeline.
+A `workflow_only` agent is parsed and ignored until a step names it.
+`[workflows.delivery]` alone is a workflow a work may name: one handed
+down with `workflow = "delivery"` goes through its stages; one naming an
+agent does not.
 
 ## 3. A named sequence
 
@@ -164,26 +164,29 @@ steps = [
 [policy]
 assemble = "assemble"
 max_retries = 3
-workflow = "delivery"
+workflows = ["delivery"]
 ```
 
 A grant of `write` on the work in `to_do` is still on the row in `review`. The
 stage `deny` cuts it from the effective set. Back on `to_do` (if the sequence
 ever returned there) the grant would show again without a second reply.
 
-Depth can choose a different workflow than `[policy]`:
+A depth can require other workflows than `[policy]`:
 
 ```toml
 [policy.depth.1]
-workflow = "delivery"
+workflows = ["delivery"]
 
 [policy.depth.0.overrides.work]
 schema = "staged"
 ```
 
-Unnamed depths stay off the sequence. On a depth with a workflow the stages
-name the agents: the store refuses an `agent` on the works created there, and
-the `staged` schema of `work` lets the depth above leave it out.
+On a depth that requires workflows the stages name the agents: the store
+refuses an `agent` on the works created there, and, with one required,
+the `staged` schema of `work` lets the depth above leave it out. With
+several, each work names one. A depth that requires none takes an agent
+or any workflow whose stage agents are of it, so teams that share a depth
+each keep their own.
 
 ## 4. Three floors
 
