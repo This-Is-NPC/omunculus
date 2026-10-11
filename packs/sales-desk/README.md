@@ -14,8 +14,8 @@ project and adjusted by hand.
 Each client's request is a work that goes through the stages of the
 workflow `sale`: qualify, design, assess, propose, owner, build. The
 seller answers the client with comments on the work and moves it on with
-`done`, which chains the pack's tool `proposal_check`: it refuses the
-move until the proposal in `quotes/` that names the work has what the
+the pack's tool `next_stage`, in place of `done`: it refuses the move
+until the proposal in `quotes/` that names the work has what the
 stage asks — the client's content after qualify, an approved preview or
 "not wanted" after design, the builders' answer after assess, the
 client's acceptance after propose — and, after owner, until the run was

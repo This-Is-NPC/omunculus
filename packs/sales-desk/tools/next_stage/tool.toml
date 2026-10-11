@@ -1,0 +1,27 @@
+name = "next_stage"
+kind = "tool"
+triggers = ["model"]
+description = "Moves the client's request to its next stage of the workflow sale: comments the report on the work and continues it, ending the run. Refused until the stage holds — the proposal in quotes/ that names the work has what the stage asks, and the owner approved before the build — saying what is missing."
+tags = ["sales", "sequence"]
+command = ["./run"]
+chains = ["comment", "continue", "end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+required = ["report"]
+
+[parameters.properties.report]
+type = "string"
+description = "What you tell the client, in Portuguese: what was settled and what comes next."
+
+[views.work]
+source = "works"
+
+[views.cause]
+source = "events"
+relation = "cause"
+
+[views.children]
+source = "works"
+relation = "children"
