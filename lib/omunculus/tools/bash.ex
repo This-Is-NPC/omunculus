@@ -2,7 +2,8 @@ defmodule Omunculus.Tools.Bash do
   @moduledoc """
   `bash` tool, shipped only by the `codex-like` preset (spec §9.4): runs
   `command` through `sh -c` in the immutable run policy and returns the
-  captured output. A command that fails in a run without `sandbox.write`
+  captured output. It starts in `workdir`, relative to the workspace root,
+  or in that root without one. A command that fails in a run without `sandbox.write`
   is told the workspace is read-only there.
   """
 
@@ -12,14 +13,29 @@ defmodule Omunculus.Tools.Bash do
 
   @spec run(map, Policy.t()) :: map
   def run(%{args: args}, %Policy{} = policy) do
-    case Args.missing(args, ~w(command)) do
-      nil -> exec(policy, args["command"])
+    with nil <- Args.missing(args, ~w(command)),
+         {:ok, workdir} <- workdir(policy, args["workdir"]) do
+      exec(policy, args["command"], workdir)
+    else
+      {:error, message} -> Out.fail(message)
       message -> Out.fail(message)
     end
   end
 
-  defp exec(policy, source) do
-    with {:ok, command} <- Command.new("/usr/bin/sh", ["-c", source], cwd: policy.workspace.root),
+  defp workdir(policy, nil), do: {:ok, policy.workspace.root}
+
+  defp workdir(policy, path) when is_binary(path) do
+    absolute = Path.expand(path, policy.workspace.root)
+
+    if File.dir?(absolute) and Policy.readable?(policy, absolute),
+      do: {:ok, absolute},
+      else: {:error, "workdir is not a directory the run can read: #{path}"}
+  end
+
+  defp workdir(_policy, _path), do: {:error, "workdir must be a path"}
+
+  defp exec(policy, source, workdir) do
+    with {:ok, command} <- Command.new("/usr/bin/sh", ["-c", source], cwd: workdir),
          {:ok, result} <- Execution.run(command, policy) do
       output = result.stdout <> result.stderr
       Out.ok(output <> refused_write(policy, output) <> closed_network(policy, output))

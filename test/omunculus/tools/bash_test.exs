@@ -35,6 +35,21 @@ defmodule Omunculus.Tools.BashTest do
     assert output =~ "marker"
   end
 
+  test "starts in workdir, under the workspace root, and refuses one it cannot read", %{
+    root: root
+  } do
+    File.mkdir_p!(Path.join(root, "sub"))
+    input = %{@input | args: %{"command" => "pwd", "workdir" => "sub"}, roots: [root]}
+
+    assert %{"ok" => true, "output" => output} = Bash.run(input, policy(root))
+    assert String.trim(output) == Path.join(root, "sub")
+
+    for workdir <- ["missing", "/proc/1", 3] do
+      input = %{@input | args: %{"command" => "pwd", "workdir" => workdir}, roots: [root]}
+      assert %{"ok" => false, "output" => "workdir " <> _} = Bash.run(input, policy(root))
+    end
+  end
+
   test "a non-zero exit fails and appends the exit status", %{root: root} do
     input = %{@input | args: %{"command" => "exit 3"}, roots: [root]}
 
