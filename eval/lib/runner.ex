@@ -565,7 +565,7 @@ defmodule EquivalentExchange.Runner do
   defp outcome(_facts, {:error, _reason}), do: "error"
 
   defp outcome(facts, {:ok, _answers}) do
-    root = Enum.find(facts.works, &is_nil(&1.parent_id))
+    root = last_root(facts)
     waiting = Enum.filter(facts.requests, &(&1.status == "waiting_human"))
 
     broke =
@@ -587,7 +587,7 @@ defmodule EquivalentExchange.Runner do
   # The report judged: the last words up to the root work's close, so what
   # the person and the agent say after it is not taken for the report.
   defp report(facts) do
-    root = Enum.find(facts.works, &is_nil(&1.parent_id))
+    root = last_root(facts)
 
     closed =
       Enum.find_index(Enum.reverse(facts.events), fn event ->
@@ -601,10 +601,14 @@ defmodule EquivalentExchange.Runner do
     last_words(facts, events)
   end
 
+  # The conversation's latest root work: a later request of the person's
+  # may open one of its own.
+  defp last_root(facts), do: facts.works |> Enum.filter(&is_nil(&1.parent_id)) |> List.last()
+
   # The last words to the person: what a depth-0 run said, or the last
-  # comment an agent wrote on the root work.
+  # comment an agent wrote on a root work.
   defp last_words(facts, events) do
-    root = Enum.find(facts.works, &is_nil(&1.parent_id))
+    roots = for work <- facts.works, is_nil(work.parent_id), into: MapSet.new(), do: work.id
     top = facts.runs |> Enum.filter(&(&1.depth == "0")) |> MapSet.new(& &1.id)
 
     events
@@ -613,7 +617,7 @@ defmodule EquivalentExchange.Runner do
         event.type == "model" and MapSet.member?(top, event.run_id) ->
           [Omunculus.Tools.Record.said(event.body)]
 
-        event.type == "comment" and root != nil and event.work_id == root.id and
+        event.type == "comment" and MapSet.member?(roots, event.work_id) and
             event.actor_kind == "agent" ->
           [event.body["body"]]
 
