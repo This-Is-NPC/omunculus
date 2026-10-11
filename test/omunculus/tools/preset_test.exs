@@ -76,6 +76,19 @@ defmodule Omunculus.Tools.PresetTest do
     refute File.exists?(Path.join(root, "omunculus.toml"))
   end
 
+  test "a pack the preset imports is found from the preset's folder", %{root: root} do
+    from = Path.join(root, "preset")
+    File.mkdir_p!(from)
+    File.write!(Path.join(from, "omunculus.toml"), "[[packs]]\npath = \"packs/team\"\n")
+    path = Path.join(root, "omunculus.toml")
+
+    assert %{"ok" => true} =
+             Preset.run(%{args: %{"name" => "mine", "from" => from}, config_path: path})
+
+    assert [%{"path" => found}] = Toml.decode_file!(path)["packs"]
+    assert found == Path.join(from, "packs/team")
+  end
+
   test "an unknown preset fails and writes nothing", %{root: root} do
     assert Preset.run(input(root, %{"name" => "nope", "from" => Path.join(root, "missing")})) ==
              %{
