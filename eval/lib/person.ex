@@ -4,7 +4,9 @@ defmodule EquivalentExchange.Person do
   `eval/person.toml`: given the conversation so far, ending in what the
   agent last told them, it answers what the agent asks with only the
   task's `facts`, leaving to the agent what they do not cover and offering
-  nothing that was not asked, or says the agent asked nothing.
+  nothing that was not asked, or says the agent asked nothing. Saying so
+  of a last message with a question mark, it is asked once more, told the
+  message asks something.
   """
 
   @eval Path.expand("..", __DIR__)
@@ -19,10 +21,28 @@ defmodule EquivalentExchange.Person do
   @spec reply(String.t(), [{String.t(), String.t()}]) ::
           {:ok, String.t() | :nothing} | {:error, term}
   def reply(facts, conversation) do
-    model = Toml.decode_file!(Path.join(@eval, "person.toml"))["model"]
-
     transcript =
       Enum.map_join(conversation, "\n\n", fn {who, text} -> "#{String.upcase(who)}: #{text}" end)
+
+    {_who, last} = List.last(conversation)
+
+    case ask(facts, transcript) do
+      {:ok, :nothing} ->
+        if String.contains?(last, "?"),
+          do:
+            ask(
+              facts,
+              transcript <> "\n\n(The assistant's last message asks you something: answer it.)"
+            ),
+          else: {:ok, :nothing}
+
+      other ->
+        other
+    end
+  end
+
+  defp ask(facts, transcript) do
+    model = Toml.decode_file!(Path.join(@eval, "person.toml"))["model"]
 
     case Req.post(model["url"],
            json: %{
