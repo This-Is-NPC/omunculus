@@ -5,7 +5,7 @@ description = "Answers a request: picks one of its options, whose tool calls run
 tags = ["store", "request"]
 groups = ["store"]
 module = "Omunculus.Tools.Reply"
-chains = ["grant", "cancel"]
+chains = ["grant", "cancel", "configure"]
 
 [parameters]
 type = "object"

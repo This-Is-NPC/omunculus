@@ -152,8 +152,8 @@ defmodule Omunculus.Tools.ConfigureTest do
              )
   end
 
-  test "the builtin catalog discovers configure with triggers == [\"cli\"]" do
+  test "the builtin catalog discovers configure for the command line and a reply's chain" do
     assert %{"configure" => manifest} = Catalog.unconfigured()
-    assert manifest.triggers == ["cli"]
+    assert manifest.triggers == ["cli", "chain"]
   end
 end

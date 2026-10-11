@@ -674,6 +674,69 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
+    test "a change to the config an agent proposes is loaded first, then the person's to apply",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.keeper]
+      depth = 0
+      text = "I keep the project."
+      tools = ["propose_config", "end"]
+      human = ["configure"]
+      """)
+
+      config = Path.join(dir, "omunculus.toml")
+
+      # One model throughout: replacing it rewrites the file the proposal was read at.
+      Fixtures.use_model(dir, fn assembled, _tools, call ->
+        model = Toml.decode_file!(config)["agents"]["keeper"]["model"]
+
+        if assembled =~ "## Request\n" do
+          call.("end", %{})
+        else
+          [_, message] = List.last(Regex.scan(~r/## Message\n(.*)/, assembled))
+
+          value =
+            if message =~ "broken",
+              do: %{"text" => "no depth"},
+              else: %{"depth" => 1, "model" => model, "text" => "I help.", "tools" => ["end"]}
+
+          call.("propose_config", %{
+            "item" => "agents.helper",
+            "value" => value,
+            "reason" => "a helper"
+          })
+        end
+      end)
+
+      # A change the config would not load with is refused before anyone is asked.
+      assert {:ok, _said} = CLI.run(["send", "add a broken helper"], dir)
+      project = open_project(dir)
+      assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
+      Project.close(project)
+
+      assert {:ok, _said} = CLI.run(["send", "add a helper"], dir)
+
+      project = open_project(dir)
+      assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
+
+      assert {:ok, %{body: body}} =
+               Query.one(project.conn, "SELECT body FROM events WHERE id = ?", [request.event_id])
+
+      Project.close(project)
+
+      reason = Jason.decode!(body)["reason"]
+      assert request.status == "waiting_human"
+      assert reason =~ "agents.helper as it is:\n(none)"
+      assert reason =~ "agents.helper as it would be:\n"
+      refute Toml.decode_file!(config)["agents"]["helper"]
+
+      assert {:ok, _said} =
+               CLI.run(["reply", "--request_id", request.id, "--option", "apply", "yes"], dir)
+
+      assert %{"text" => "I help."} =
+               Toml.decode_file!(Path.join(dir, "omunculus.toml"))["agents"]["helper"]
+    end
+
     test "a message goes to the agent of depth 0 it names, then to the one its conversation began with",
          %{dir: dir} do
       write_config(dir, """

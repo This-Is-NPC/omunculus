@@ -20,7 +20,7 @@ defmodule Omunculus.Tools.Configure do
       })
       when is_binary(path) and is_binary(item) and is_binary(value) and is_binary(revision) do
     with {:ok, value} <- Jason.decode(value),
-         :ok <- Config.edit(path, revision, item(item), value, args["from"]) do
+         :ok <- Config.edit(path, revision, Config.item(item), value, args["from"]) do
       Out.ok()
     else
       {:error, %Jason.DecodeError{}} -> Out.fail(CLI.format_error({:config, :invalid_item}))
@@ -29,11 +29,4 @@ defmodule Omunculus.Tools.Configure do
   end
 
   def run(_input), do: Out.fail("config_path, item, value and revision required")
-
-  defp item(item) do
-    case String.split(item, ".", parts: 2) do
-      [section, name] -> {section, name}
-      [section] -> {section}
-    end
-  end
 end

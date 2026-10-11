@@ -356,6 +356,15 @@ defmodule Omunculus.Config do
     end
   end
 
+  @doc "The item `<section>.<name>`, or `policy` / `access`, as `edit/5` takes it."
+  @spec item(String.t()) :: tuple
+  def item(item) do
+    case String.split(item, ".", parts: 2) do
+      [section, name] -> {section, name}
+      [section] -> {section}
+    end
+  end
+
   @doc """
   What a client edits of the TOML at `path`: `document`, its `agents`,
   `models`, `workflows`, `workspaces`, `auth` providers and tool

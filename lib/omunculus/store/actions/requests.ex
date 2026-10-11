@@ -41,7 +41,14 @@ defmodule Omunculus.Store.Actions.Requests do
           {grant, Ceiling.classify(snapshot, grant.name, grant.kind)}
         end)
 
-      classify_request(conn, ctx, run, body["reason"], options, classified)
+      # An option calling a tool only the person may give is theirs to choose.
+      sealed_calls? =
+        options
+        |> Map.values()
+        |> List.flatten()
+        |> Enum.any?(&(Ceiling.classify(snapshot, &1.name, "tool") == "sealed"))
+
+      classify_request(conn, ctx, run, body["reason"], options, classified, sealed_calls?)
     end
   end
 
@@ -186,7 +193,7 @@ defmodule Omunculus.Store.Actions.Requests do
     end
   end
 
-  defp classify_request(conn, ctx, run, reason, options, classified) do
+  defp classify_request(conn, ctx, run, reason, options, classified, sealed_calls?) do
     classes = Enum.map(classified, fn {_grant, class} -> class end)
 
     case List.keyfind(classified, "blocked", 1) do
@@ -198,7 +205,8 @@ defmodule Omunculus.Store.Actions.Requests do
           names = classified |> Enum.map(fn {grant, _class} -> grant.name end) |> Enum.uniq()
           {:error, {:request, {:already_have, Enum.join(names, ", ")}}}
         else
-          with {:ok, arbiter} <- resolve_arbiter(conn, ctx, options, "sealed" in classes) do
+          with {:ok, arbiter} <-
+                 resolve_arbiter(conn, ctx, options, sealed_calls? or "sealed" in classes) do
             open_request(conn, ctx, run, reason, options, arbiter_info(arbiter))
           end
         end

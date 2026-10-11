@@ -1,6 +1,6 @@
 name = "configure"
 kind = "tool"
-triggers = ["cli"]
+triggers = ["cli", "chain"]
 description = "Writes one item of the config (agents.<name>, models.<name>, workflows.<name>, workspaces.<name>, auth.<name>, secrets.<tool>, policy or access) from a JSON table, or removes it for null, while the file is at the revision config printed."
 tags = ["cli", "config"]
 groups = ["cli"]

@@ -1645,6 +1645,20 @@ defmodule Omunculus.Store.ActionsTest do
       assert body["arbiter_work_id"] == parent_id
     end
 
+    test "an option calling a tool only the person may give the requester goes to the person",
+         %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
+      run = Fixtures.open_run(conn, %{ceiling: %{@ceiling | askable: [], sealed: ["write"]}})
+      ctx = request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
+      calling = request_emit(%{"apply" => [%{"name" => "write", "args" => %{}}], "deny" => []})
+
+      assert {:ok, [_tool_event, event]} = record_tool(conn, [calling], ctx)
+
+      assert {:ok, %{arbiter: "human", status: "waiting_human"}} =
+               Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
+    end
+
     test "an option tool the parent's agent does not have falls back to human", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
