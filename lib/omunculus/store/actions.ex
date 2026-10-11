@@ -255,8 +255,10 @@ defmodule Omunculus.Store.Actions do
              run_id: nil,
              created_at: Events.now()
            }) do
+      # A run's message is among its events, so its close opens the run it asks for.
       Events.append(conn, %{
         type: "prompt",
+        run_id: Map.get(ctx, :run_id),
         prompt_id: prompt_id,
         work_id: body["work_id"],
         conversation_id: conversation_id,
