@@ -2,9 +2,10 @@ defmodule Omunculus.Tools.Reopen do
   @moduledoc """
   Builtin `reopen` tool: emits `reopen` for `work_id`, a work below the
   run's own that broke, with `instructions` on how to go on, which reopens
-  it, comments them on it and runs its agent again, or the `agent` it
-  names at that depth, giving it on that work what `grant` lists, each a
-  `{kind, name}`. Its manifest's `then` appends `end`.
+  it, comments them on it and runs its agent again, the `agent` it names
+  at that depth, or, in a workflow, the agent of the `stage` it names,
+  giving it on that work what `grant` lists, each a `{kind, name}`. Its
+  manifest's `then` appends `end`.
   """
 
   alias Omunculus.Tools.{Args, Out}
@@ -16,6 +17,7 @@ defmodule Omunculus.Tools.Reopen do
          {:ok, body} <-
            %{"work_id" => work_id, "body" => instructions}
            |> Args.put_present("agent", args)
+           |> Args.put_present("stage", args)
            |> put_grant(args["grant"]) do
       Out.ok("", [%{"type" => "reopen", "body" => body}])
     else

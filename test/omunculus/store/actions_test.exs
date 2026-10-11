@@ -833,7 +833,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, [_tool_event, event]} = record_tool(conn, [reopen_emit(child_id)], ctx)
       assert event.type == "reopen"
       assert event.work_id == child_id
-      assert Jason.decode!(event.body) == %{"parent_id" => parent_id}
+      assert Jason.decode!(event.body) == %{"parent_id" => parent_id, "stage" => nil}
 
       assert {:ok, %{state: "open"}} =
                Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
@@ -843,6 +843,66 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert {:ok, [%{body: "go on this way"}]} =
                Query.all(conn, "SELECT * FROM comments WHERE work_id = ?", [child_id])
+    end
+
+    test "in a workflow, sends the broken work back to a stage up to its own", %{conn: conn} do
+      config =
+        Fixtures.config("""
+        [agents.concierge]
+        depth = 0
+        text = "c"
+
+        [agents.builder]
+        depth = 1
+        text = "b"
+
+        [agents.reviewer]
+        depth = 1
+        workflow_only = true
+        text = "r"
+
+        [workflows.delivery]
+        steps = [
+          { name = "build", agent = "builder" },
+          { name = "review", agent = "reviewer" },
+          { name = "ship", agent = "builder" },
+        ]
+
+        [policy.depth.1]
+        workflow = "delivery"
+        """)
+
+      parent_id = Fixtures.insert(conn, :works)
+
+      child = fn ->
+        Fixtures.insert(conn, :works, %{
+          parent_id: parent_id,
+          stage: "review",
+          assignee: "reviewer",
+          state: "waiting"
+        })
+      end
+
+      ctx = %{@ctx | run_id: Fixtures.insert(conn, :runs), work_id: parent_id, config: config}
+      staged = fn id, body -> update_in(reopen_emit(id), ["body"], &Map.merge(&1, body)) end
+
+      for {body, reason} <- [
+            {%{"stage" => "ship"}, {:stage_ahead, "ship"}},
+            {%{"stage" => "deploy"}, {:unknown_stage, "deploy"}},
+            {%{"stage" => "build", "agent" => "builder"}, :agent_and_stage}
+          ] do
+        assert {:error, {:reopen, ^reason}} = record_tool(conn, [staged.(child.(), body)], ctx)
+      end
+
+      back = child.()
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(conn, [staged.(back, %{"stage" => "build"})], ctx)
+
+      assert %{"stage" => "build"} = Jason.decode!(event.body)
+
+      assert {:ok, %{stage: "build", assignee: "builder", state: "open"}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [back])
     end
 
     test "can hand the broken work to another agent of its depth", %{conn: conn} do

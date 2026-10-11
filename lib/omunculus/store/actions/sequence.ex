@@ -6,7 +6,9 @@ defmodule Omunculus.Store.Actions.Sequence do
   comment, and is refused while the work waits on its children. A
   `break` reopens a parent
   waiting on its children at once; `reopen` sends a child that broke back
-  to work — to its agent, or to another named at its depth — with the
+  to work — to its agent, to another named at its depth, or, in a
+  workflow, to the agent of the stage it names, its own or one before it,
+  from which it goes through the stages after again — with the
   parent's instructions as its comment, and parks the parent on its
   children again, giving the work the names it lists in `grant` that its
   agent lacks and the parent could grant it on a request; `delegate` is refused while a child that broke waits on
@@ -90,9 +92,10 @@ defmodule Omunculus.Store.Actions.Sequence do
          {:ok, parent} <- fetch_work(:reopen, conn, ctx.work_id),
          {:ok, child} <- fetch_work(:reopen, conn, body["work_id"]),
          :ok <- broken_child(child, parent),
-         {:ok, assignee} <- reopen_assignee(conn, ctx.config, child, body["agent"]),
+         {:ok, {stage, assignee}} <-
+           reopen_assignee(conn, ctx.config, child, body["agent"], body["stage"]),
          {:ok, grants} <- reopen_grants(conn, ctx, child, parent, assignee, body["grant"]),
-         {:ok, event} <- apply_reopen(conn, ctx, body, child, parent, assignee) do
+         {:ok, event} <- apply_reopen(conn, ctx, body, child, parent, {stage, assignee}) do
       give_all(conn, ctx, child, assignee, grants, event)
     end
   end
@@ -129,18 +132,45 @@ defmodule Omunculus.Store.Actions.Sequence do
     end)
   end
 
-  # The broken work goes back to its agent, or to another the parent names
-  # at that depth.
-  defp reopen_assignee(_conn, _config, child, nil), do: {:ok, child.assignee}
+  # The broken work goes back to its agent, to another the parent names at
+  # that depth, or to the agent of a stage of its workflow up to its own.
+  defp reopen_assignee(_conn, _config, child, nil, nil), do: {:ok, {child.stage, child.assignee}}
 
-  defp reopen_assignee(conn, config, child, agent) do
+  defp reopen_assignee(conn, config, child, nil, stage) when is_binary(stage) do
+    with {:ok, steps} <- reopen_steps(Config.workflow_for(config, View.work_depth(conn, child))) do
+      names = Enum.map(steps, & &1.name)
+      at = Enum.find_index(names, &(&1 == stage))
+
+      cond do
+        is_nil(at) ->
+          {:error, {:reopen, {:unknown_stage, stage}}}
+
+        at > Enum.find_index(names, &(&1 == child.stage)) ->
+          {:error, {:reopen, {:stage_ahead, stage}}}
+
+        true ->
+          {:ok, {stage, Enum.at(steps, at).agent}}
+      end
+    end
+  end
+
+  defp reopen_assignee(_conn, _config, _child, nil, _stage),
+    do: {:error, {:reopen, {:invalid, "stage"}}}
+
+  defp reopen_assignee(conn, config, child, agent, nil) do
     with {:ok, {_stage, assignee}} <-
            Helpers.tag_error(
              :reopen,
              Helpers.stage_and_assignee(config, View.work_depth(conn, child), agent)
            ),
-         do: {:ok, assignee}
+         do: {:ok, {child.stage, assignee}}
   end
+
+  defp reopen_assignee(_conn, _config, _child, _agent, _stage),
+    do: {:error, {:reopen, :agent_and_stage}}
+
+  defp reopen_steps({:ok, steps}), do: {:ok, steps}
+  defp reopen_steps(_off), do: {:error, {:reopen, :no_workflow}}
 
   # A work a parent may reopen is its own child, parked by a break.
   defp broken_child(%{parent_id: parent_id, state: "waiting", waiting: nil}, %{id: parent_id}),
@@ -151,7 +181,7 @@ defmodule Omunculus.Store.Actions.Sequence do
 
   defp broken_child(_child, _parent), do: {:error, {:reopen, :not_a_child}}
 
-  defp apply_reopen(conn, ctx, body, child, parent, assignee) do
+  defp apply_reopen(conn, ctx, body, child, parent, {stage, assignee}) do
     comment_id = Id.new()
 
     with {:ok, event} <-
@@ -160,15 +190,15 @@ defmodule Omunculus.Store.Actions.Sequence do
              run_id: ctx.run_id,
              work_id: child.id,
              comment_id: comment_id,
-             body: Jason.encode!(%{parent_id: parent.id})
+             body: Jason.encode!(%{parent_id: parent.id, stage: stage})
            }),
          :ok <-
            Helpers.insert_comment(conn, comment_id, %{works: child.id}, body["body"], event, ctx),
          :ok <-
            Query.exec(
              conn,
-             "UPDATE works SET state = 'open', assignee = ?, updated_at = ? WHERE id = ?",
-             [assignee, Events.now(), child.id]
+             "UPDATE works SET state = 'open', stage = ?, assignee = ?, updated_at = ? WHERE id = ?",
+             [stage, assignee, Events.now(), child.id]
            ),
          :ok <-
            Query.exec(
