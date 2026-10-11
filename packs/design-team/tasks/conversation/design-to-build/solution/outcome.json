@@ -1,0 +1,19 @@
+{
+  "outcome": "answer",
+  "report": "O site da Doce Ana está no ar, com as quatro páginas e o botão do WhatsApp.",
+  "works": [
+    {"title": "Doce Ana site", "goal": "Design first, then the four-page site", "state": "done"}
+  ],
+  "team": [
+    {"id": "w1", "parent_id": null, "title": "Doce Ana site", "goal": "Design first, then the four-page site", "assignee": "sales", "state": "done"},
+    {"id": "w2", "parent_id": "w1", "title": "Doce Ana design", "goal": "Briefing: Doce Ana, Campinas; home, menu, about, contact", "assignee": "design-lead", "state": "done"},
+    {"id": "w3", "parent_id": "w2", "title": "Doce Ana design", "goal": "Round 0", "assignee": "publisher", "state": "done"},
+    {"id": "w4", "parent_id": "w1", "title": "Doce Ana design, round 1", "goal": "Round 1 of Doce Ana design (w2): the WhatsApp button bigger and green", "assignee": "design-lead", "state": "done"},
+    {"id": "w5", "parent_id": "w1", "title": "Assess Doce Ana site", "goal": "Assessment only, build nothing: four pages, WhatsApp button, from design/handoff.md", "assignee": "administrator", "state": "done"},
+    {"id": "w6", "parent_id": "w1", "title": "Build Doce Ana site", "goal": "Build the four pages from design/handoff.md: menu brigadeiro cake R$ 85; WhatsApp (19) 99876-5432", "assignee": "administrator", "state": "done"}
+  ],
+  "conversation": [["person", "Oi! Quero um site pra minha confeitaria, mas antes quero ver como ficaria."], ["agent", "O site está no ar."]],
+  "first_run_made_work": false,
+  "published": "published",
+  "delete": []
+}

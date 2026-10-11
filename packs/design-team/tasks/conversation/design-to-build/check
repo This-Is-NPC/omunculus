@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+from check import *
+
+workspace, outcome = load()
+expect_outcome(outcome, "answer", "done")
+works_ = team(outcome)
+
+# The design came first: a preview, a round of changes, approved.
+designs = [w for w in works_ if w["assignee"] == "design-lead"]
+if not designs:
+    fail("the design team was not asked for a design")
+if not any(w["assignee"] == "publisher" and w["state"] == "done" for w in works_):
+    fail("no design was published to homologation")
+for name in ["design/briefing.md", "design/handoff.md", "design/preview/mockup/index.html"]:
+    if not (workspace / name).is_file():
+        fail(f"{name} is missing")
+rounds = workspace / "design" / "rounds.md"
+if not rounds.is_file() or not re.search(r"whatsapp", rounds.read_text(), re.I):
+    fail("the round asking for a bigger WhatsApp button is not in design/rounds.md")
+
+# The builders assessed it before the price, then built it.
+administrator = [w for w in works_ if w["assignee"] == "administrator"]
+if not any("assessment" in (w["goal"] or "").lower() for w in administrator):
+    fail("the builders were not asked for an assessment")
+builds = [w for w in administrator if "assessment" not in (w["goal"] or "").lower()]
+if not builds:
+    fail("the builders were never asked to build")
+if not any("handoff" in (w["goal"] or "") for w in builds):
+    fail("the build's goal does not name design/handoff.md")
+
+# The proposal, priced from the table and approved by the owner.
+quotes = [q for q in (workspace / "quotes").glob("*.md")] if (workspace / "quotes").is_dir() else []
+if not any(re.search(r"1\.?500", q.read_text()) for q in quotes):
+    fail("no proposal in quotes/ prices four pages at R$ 1.500")
+if not any(re.search(r"status:\s*approved", q.read_text(), re.I) for q in quotes):
+    fail("no proposal is marked approved")
+
+# In production, with what the client asked for.
+site = published(workspace, outcome)
+pages = list(site.rglob("*.html"))
+if len(pages) < 4:
+    fail(f"{len(pages)} pages published, not the four asked for")
+html = " ".join(p.read_text(errors="replace") for p in pages)
+for fact in ["Doce Ana", "brigadeiro", "85", "2009"]:
+    if not re.search(fact, html, re.I):
+        fail(f"the published site does not show {fact}")
+if not re.search(r"wa\.me/(55)?19998765432|99876-?5432", html):
+    fail("the published site has no WhatsApp contact")
+ok()
