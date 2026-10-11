@@ -1,7 +1,7 @@
 name = "bash"
 kind = "tool"
 triggers = ["model"]
-description = "Runs a shell command in the workspace: the way to list, move or delete files and to run programs and tests."
+description = "Runs a shell command in the workspace: the way to list, move or delete files and to run programs and tests. Every call starts afresh in the workspace root, whatever an earlier call did with cd; ~ is the person's home, not the workspace, so look for the work's files from where the call starts, never across the machine."
 tags = ["shell"]
 module = "Omunculus.Tools.Bash"
 
