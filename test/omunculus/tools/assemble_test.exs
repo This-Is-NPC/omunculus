@@ -21,6 +21,16 @@ defmodule Omunculus.Tools.AssembleTest do
     Prompt.text(%Prompt{instructions: out["instructions"], context: out["output"]})
   end
 
+  test "the instructions say where the run is: its workspace, the home and the platform" do
+    out = Assemble.run(%{@input | roots: ["/srv/work"]})
+
+    assert out["instructions"] =~
+             "## Environment\nworkspace: /srv/work\nhome: #{System.user_home!()}\nplatform: "
+
+    assert out["instructions"] =~ "Every command starts in the workspace"
+    refute Assemble.run(@input)["instructions"] =~ "## Environment"
+  end
+
   test "the instructions hold what stays across runs, the output the run's context" do
     view = fn work, message ->
       %{

@@ -5,8 +5,10 @@ defmodule Omunculus.Tools.Assemble do
   an agent's runs: the agent's text, the agents the
   `agents` view says a new work may name when the run has the `work`
   card, each with the tools it has that this run has not, the cards,
-  which follow `pinned` on the catalog view, and, under `## Skills`, the
-  name and description of each skill the run has. Its `output`, the
+  which follow `pinned` on the catalog view, under `## Skills`, the
+  name and description of each skill the run has, and, under
+  `## Environment`, the workspace every command starts in, the person's
+  home and the platform. Its `output`, the
   context, is the rest: the work's title and
   goal, its last comment, and its last closed run (`last_run`), or,
   without a work, the run that opened the run's request (`opener`), as
@@ -38,7 +40,7 @@ defmodule Omunculus.Tools.Assemble do
   @context_start ~r/\n\n(?=## (Work|Last comment|Last run|Results|Request|Inbox|Message)\n)/
 
   @spec run(map) :: map
-  def run(%{name: name, args: args, view: view}) do
+  def run(%{name: name, args: args, view: view} = input) do
     text = Map.get(args, "text", "")
     cards = view["catalog"] || []
 
@@ -46,7 +48,8 @@ defmodule Omunculus.Tools.Assemble do
       [String.trim(text)] ++
         agents_section(view["agents"] || [], cards) ++
         [tools_section(cards)] ++
-        skills_section(view["skills"] || [])
+        skills_section(view["skills"] || []) ++
+        environment_section(Map.get(input, :roots, []))
 
     # What happened since a pause, which a continued session is told.
     news =
@@ -159,6 +162,19 @@ defmodule Omunculus.Tools.Assemble do
       _other ->
         []
     end
+  end
+
+  # Where the run is: its workspace, which every command starts in, and
+  # the person's home, which is not the workspace.
+  defp environment_section([]), do: []
+
+  defp environment_section([root | _]) do
+    {_family, os} = :os.type()
+
+    [
+      "## Environment\nworkspace: #{root}\nhome: #{System.user_home!()}\nplatform: #{os}\n" <>
+        "Every command starts in the workspace; look for the work's files there, not across the machine."
+    ]
   end
 
   # Only a skill's name and description: its text comes through the skill tool.
