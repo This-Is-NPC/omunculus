@@ -21,11 +21,13 @@ defmodule Omunculus.Tools.AskTest do
            }
   end
 
-  test "refuses fewer than two different answers, or no question" do
+  test "refuses fewer than two different answers, an answer that is not a short name, or no question" do
     for args <- [
           %{"question" => "q", "options" => ["only"]},
           %{"question" => "q", "options" => ["same", "same"]},
           %{"question" => "q", "options" => ["a", ""]},
+          %{"question" => "q", "options" => ["approve: start the build", "deny"]},
+          %{"question" => "q", "options" => ["Approve", "deny"]},
           %{"options" => ["a", "b"]}
         ] do
       assert %{"ok" => false} = Ask.run(%{args: args}), inspect(args)

@@ -1,7 +1,7 @@
 name = "ask"
 kind = "tool"
 triggers = ["model"]
-description = "Asks for a decision: question says what is to be decided and why, options names each answer (approve, deny, revise, ...). With to = person it goes to the person, who answers through their inbox; without it, to the agent above you when there is one, else to the person. The run ends; the answer comes back as the option chosen and its comment."
+description = "Asks for a decision: question says what is to be decided and why, options names each answer with a short name of lowercase letters, digits, dashes and underscores (approve, deny, revise, ...), what each means said in question. With to = person it goes to the person, who answers through their inbox; without it, to the agent above you when there is one, else to the person. The run ends; the answer comes back as the option chosen and its comment."
 tags = ["request"]
 groups = ["sequence"]
 module = "Omunculus.Tools.Ask"
@@ -21,6 +21,7 @@ minItems = 2
 
 [parameters.properties.options.items]
 type = "string"
+pattern = "^[a-z0-9][a-z0-9_-]*$"
 
 [parameters.properties.to]
 type = "string"

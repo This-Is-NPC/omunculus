@@ -1,7 +1,9 @@
 defmodule Omunculus.Tools.Ask do
   @moduledoc """
   Builtin `ask` tool: emits a `request` whose reason is `question` and
-  whose `options` are the names given, each calling nothing, so the answer
+  whose `options` are the names given — each a short name of lowercase
+  letters, digits, dashes and underscores, what it means said in the
+  question — each calling nothing, so the answer
   is the option chosen and its comment; with `to = "person"` the request is
   the person's to answer. Its manifest's `then` appends `end`.
   """
@@ -23,14 +25,16 @@ defmodule Omunculus.Tools.Ask do
     end
   end
 
-  defp options(options) when is_list(options) do
-    names = Enum.map(options, &(is_binary(&1) && String.trim(&1)))
+  @refused "options takes two or more different answers, each a short name of lowercase letters, digits, dashes and underscores, such as approve or deny; say what each means in question"
 
-    if length(names) >= 2 and Enum.all?(names, &(is_binary(&1) and &1 != "")) and
-         length(Enum.uniq(names)) == length(names),
-       do: {:ok, names},
-       else: {:error, "options takes two or more different answers, each a name"}
+  defp options(options) when is_list(options) do
+    if length(options) >= 2 and Enum.all?(options, &name?/1) and
+         length(Enum.uniq(options)) == length(options),
+       do: {:ok, options},
+       else: {:error, @refused}
   end
 
-  defp options(_options), do: {:error, "options takes two or more different answers, each a name"}
+  defp options(_options), do: {:error, @refused}
+
+  defp name?(option), do: is_binary(option) and option =~ ~r/^[a-z0-9][a-z0-9_-]*$/
 end
