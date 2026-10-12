@@ -116,6 +116,11 @@ defmodule Omunculus.Tools.Out do
     if reply_id, do: reason <> " Reply to linked request #{reply_id}.", else: reason
   end
 
+  @spec received_requests() :: String.t()
+  def received_requests,
+    do:
+      "These requests are pending for you in this conversation. Answer what you know with reply; combine questions you cannot answer into one escalate call with named origins. Return each answer to its original request."
+
   @spec answer_request() :: String.t()
   def answer_request,
     do:

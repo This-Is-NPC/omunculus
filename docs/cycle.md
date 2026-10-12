@@ -163,7 +163,10 @@ agent text
   that child's report
 → if there is a request: header, its options with their tool calls, and
   the comments with that request_id
-→ if the opening carried inbox_id: comments with that inbox_id
+→ under `## Inbox`, at depth 0: pending requests addressed to this agent
+  in this conversation, including linked origin questions and work/stage
+  context; a request already here is not repeated under `## Request`
+→ if the opening carried inbox_id: its comments join `## Inbox`
 → message of this opening, if any
 ```
 

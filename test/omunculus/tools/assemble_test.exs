@@ -405,4 +405,100 @@ defmodule Omunculus.Tools.AssembleTest do
     assert result.output == Assemble.run(@input)["output"]
     assert result.instructions == Assemble.run(@input)["instructions"]
   end
+
+  defp incoming(id, work, reason, requester \\ Omunculus.Participant.agent("worker")) do
+    %{
+      id: id,
+      requester: Jason.encode!(requester),
+      work_id: work,
+      workflow: "client-work",
+      stage: "design",
+      status: "pending",
+      reason: reason,
+      options: Jason.encode!(%{"answer" => []}),
+      origins: %{}
+    }
+  end
+
+  test "the inbox combines a conversation's questions, preserves origins and shows its cause once" do
+    first = incoming("logo", "design-work", "Which logo?")
+
+    second =
+      incoming("tone", "copy-work", "Which tone?", Omunculus.Participant.human("test", "client"))
+
+    merged = %{
+      incoming("merged", "lead-work", "Please answer the design questions.")
+      | options: "{}",
+        origins: %{"logo" => first, "tone" => second}
+    }
+
+    other = incoming("schedule", "schedule-work", "What is the opening date?")
+
+    view = %{
+      "inbox" => [%{conversation_id: "client-a", requests: [merged, other]}],
+      "request" => merged,
+      "request_comments" => [%{body: merged.reason}, %{body: "The existing logo is outdated."}],
+      "inbox_comments" => [%{body: "Client sent the assets"}],
+      "message" => %{body: "Here are the assets"}
+    }
+
+    out = Assemble.run(%{@input | view: view, args: Map.put(@input.args, "inbox_id", "notice")})
+    text = out["output"]
+    assert text =~ "## Inbox\n### Conversation client-a"
+
+    for question <- [first, second, merged, other] do
+      assert text =~ question.reason
+      assert text =~ question.work_id
+      assert length(String.split(text, question.id <> " requested by")) <= 2
+    end
+
+    assert text =~ "workflow client-work, stage design"
+    assert text =~ "requested by test:client"
+    assert text =~ "part logo: request logo"
+    assert text =~ "part tone: request tone"
+    assert text =~ "The existing logo is outdated."
+    assert text =~ "notice\nClient sent the assets"
+    assert length(String.split(text, "merged requested by")) == 2
+    assert length(String.split(text, "## Inbox")) == 2
+    refute text =~ "## Request\n"
+    refute out["instructions"] =~ "Which logo?"
+    assert :binary.match(text, "## Inbox") < :binary.match(text, "## Message")
+  end
+
+  test "received questions are included in the news of a continued session" do
+    first = incoming("logo", "design-work", "Which logo?")
+    second = incoming("tone", "copy-work", "Which tone?")
+    original = Assemble.run(@input)["instructions"]
+    model = %{"role" => "assistant", "content" => "Awaiting the client."}
+
+    paused = %{
+      id: "paused",
+      agent: "concierge",
+      finished_at: DateTime.utc_now() |> DateTime.to_iso8601(),
+      assembled: original <> "\n\n## Inbox\nEarlier question",
+      events: [%{type: "model", body: Jason.encode!(model)}]
+    }
+
+    args =
+      Map.merge(@input.args, %{
+        "agent" => "concierge",
+        "session_ttl_ms" => 60_000,
+        "session_max_bytes" => 100_000
+      })
+
+    view = %{
+      "catalog" => [],
+      "session" => %{runs: [paused]},
+      "inbox" => [%{conversation_id: "client-a", requests: [first, second]}]
+    }
+
+    out = Assemble.run(%{@input | args: args, view: view})
+    assert out["session"]["continues"] == "paused"
+    since = out["session"]["since"]
+    assert since =~ "## Inbox\n### Conversation client-a"
+    assert since =~ "Which logo?"
+    assert since =~ "Which tone?"
+    assert List.last(out["session"]["history"]) == %{"user" => since}
+    assert out["instructions"] == original
+  end
 end

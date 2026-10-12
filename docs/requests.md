@@ -74,7 +74,13 @@ agent in that conversation, grouped under `conversation_id`, with canonical
 questions, requesting identities, work/workflow/stage context and linked
 origins. Closed requests and escalated origins are not independently offered.
 Reading this view or marking a notification read changes no request state.
-The default inbox relation continues to read unread notifications.
+The default inbox relation continues to read unread notifications. The builtin
+`assemble` renders the received relation under `## Inbox`, including the
+original works, workflow/stage and linked questions, both on fresh runs and in
+a continued session's news. It offers one combined escalation for unanswered
+questions; tools and the store do not batch or answer them automatically.
+The request that opened a run appears once, keeping its comments when it is
+also in the inbox.
 
 ## Proposed request contract
 

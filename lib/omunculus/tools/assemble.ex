@@ -20,9 +20,12 @@ defmodule Omunculus.Tools.Assemble do
   `break`, that child's report. A run with a request gets the request's
   requester, while it waits the options an agent may pick with their tool
   calls — not those granting with a `scope`, which only a person may —
-  and its comments, the reply among them once it is answered. Inbox is
-  included only when the opening carried `inbox_id`. The message of the
-  opening comes last.
+  and its comments, the reply among them once it is answered. Under
+  `## Inbox`, a depth-0 run sees all pending requests addressed to its
+  agent in its conversation, with original questions and work/stage context.
+  A request already in that inbox is not repeated in `## Request`.
+  The opening's notification comments join that section when it carried
+  `inbox_id`. The message of the opening comes last.
 
   With `session_ttl_ms` and `session_max_bytes` in the args, and the
   `session` view (the work with its closed runs) or, for a run without a
@@ -58,7 +61,10 @@ defmodule Omunculus.Tools.Assemble do
     news =
       works_section(view["conversation_works"], limit) ++
         results_section(view["results"] || [], view["cause"]) ++
-        request_section(view["request"], view["request_comments"]) ++
+        request_section(
+          outside_inbox(view["request"], view["inbox"] || []),
+          view["request_comments"]
+        ) ++
         inbox_section(view, args) ++
         message_section(view["message"])
 
@@ -230,14 +236,42 @@ defmodule Omunculus.Tools.Assemble do
 
   defp stage_line(_work), do: []
 
-  defp inbox_section(view, args) do
-    case Map.get(args, "inbox_id") do
-      id when is_binary(id) and id != "" ->
-        comments = view["inbox_comments"] || []
-        ["## Inbox\n#{id}\n" <> Enum.map_join(comments, "\n", & &1.body)]
+  defp outside_inbox(nil, _groups), do: nil
 
-      _other ->
-        []
+  defp outside_inbox(request, groups) do
+    if Enum.any?(groups, fn group -> Enum.any?(group.requests, &(&1.id == request.id)) end),
+      do: nil,
+      else: request
+  end
+
+  defp inbox_section(view, args) do
+    received =
+      Enum.map(view["inbox"] || [], fn group ->
+        questions =
+          Enum.map_join(group.requests, "\n\n", fn request ->
+            comments =
+              if view["request"] && view["request"].id == request.id,
+                do: view["request_comments"] || [%{body: request.reason || ""}],
+                else: [%{body: request.reason || ""}]
+
+            Enum.join(request_lines(request, comments, false), "\n")
+          end)
+
+        "### Conversation #{group.conversation_id}\n#{Out.received_requests()}\n#{questions}"
+      end)
+
+    notice =
+      case Map.get(args, "inbox_id") do
+        id when is_binary(id) and id != "" ->
+          ["#{id}\n" <> Enum.map_join(view["inbox_comments"] || [], "\n", & &1.body)]
+
+        _other ->
+          []
+      end
+
+    case received ++ notice do
+      [] -> []
+      parts -> ["## Inbox\n" <> Enum.join(parts, "\n\n")]
     end
   end
 
@@ -296,34 +330,43 @@ defmodule Omunculus.Tools.Assemble do
 
   defp request_section(nil, _comments), do: []
 
-  defp request_section(request, comments) do
+  defp request_section(request, comments),
+    do: ["## Request\n" <> Enum.join(request_lines(request, comments, true), "\n")]
+
+  defp request_lines(request, comments, answer_instruction?) do
     header = "#{request.id} #{Out.requested_by(Omunculus.Participant.label(request.requester))}"
     comments = Enum.map(comments || [], & &1.body)
 
     if request.status == "closed" do
-      [
-        "## Request\n" <>
-          Enum.join(
-            [header <> ", " <> Out.answered(request.answer) | comments] ++
-              origin_lines(Map.get(request, :origins, %{})),
-            "\n"
-          )
-      ]
+      [header <> ", " <> Out.answered(request.answer)] ++
+        origin_context(request) ++
+        comments ++
+        origin_lines(Map.get(request, :origins, %{}))
     else
-      lines =
-        [header, Out.answer_request() | waiting_options(request)] ++
-          origin_lines(Map.get(request, :origins, %{})) ++ comments
-
-      ["## Request\n" <> Enum.join(lines, "\n")]
+      [header] ++
+        origin_context(request) ++
+        if(answer_instruction?, do: [Out.answer_request()], else: []) ++
+        waiting_options(request) ++ origin_lines(Map.get(request, :origins, %{})) ++ comments
     end
+  end
+
+  defp origin_context(request) do
+    fields =
+      for key <- [:work_id, :workflow, :stage],
+          value = Map.get(request, key),
+          is_binary(value),
+          do: "#{if key == :work_id, do: "work", else: key} #{value}"
+
+    if fields == [], do: [], else: ["origin: " <> Enum.join(fields, ", ")]
   end
 
   defp origin_lines(origins) do
     Enum.flat_map(Enum.sort(origins), fn {part, origin} ->
       [
-        "part #{part}: request #{origin.id} (#{origin.status})",
-        origin.reason || "" | waiting_options(origin)
+        "part #{part}: request #{origin.id} (#{origin.status}), #{Out.requested_by(Omunculus.Participant.label(origin.requester))}"
       ] ++
+        origin_context(origin) ++
+        [origin.reason || "" | waiting_options(origin)] ++
         origin_lines(origin.origins)
     end)
   end

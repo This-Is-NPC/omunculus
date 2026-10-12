@@ -247,7 +247,9 @@ defmodule Omunculus.Store.EscalationTest do
     assert request(conn, logo).status == "closed"
     assert request(conn, tone).status == "pending"
     assert work(conn, List.last(ctx.children)).state == "waiting"
+    assert {:ok, []} = Store.received_inbox(conn, ctx.root_ctx.run_id)
     again = escalate(conn, ctx.lead_ctx, %{"tone" => tone})
+    assert {:ok, [%{requests: [%{id: ^again}]}]} = Store.received_inbox(conn, ctx.root_ctx.run_id)
     assert request(conn, again).origins["tone"].id == tone
     assert count(conn, "request_escalations") == 3
   end
@@ -880,6 +882,14 @@ defmodule Omunculus.Store.EscalationTest do
     assert by_id[right].origins["tone"].reason == "Which tone?"
     assert before == {count(conn, "events"), count(conn, "comments")}
 
+    workless =
+      Fixtures.open_run(conn, %{agent: "root", depth: 0, conversation_id: ctx.conversation})
+
+    assert {:ok, %{"inbox" => [same]}} =
+             Omunculus.Tool.Views.hydrate(conn, specs, %{run_id: workless.id})
+
+    assert MapSet.new(same.requests, & &1.id) == MapSet.new([left, right])
+
     for fields <- [
           %{agent: "steward", depth: 0, conversation_id: ctx.conversation},
           %{agent: "root", depth: 1, conversation_id: ctx.conversation},
@@ -945,5 +955,36 @@ defmodule Omunculus.Store.EscalationTest do
     assert Enum.map(remaining.requests, & &1.id) == [agent_id]
     assert request(conn, origin).status == "escalated"
     assert work(conn, child.work_id).waiting == "request"
+  end
+
+  test "the builtin assemble hydrates both received requests from two works",
+       %{conn: conn} = ctx do
+    [first, second] = ctx.child_ctxs
+    logo = ask(conn, first, "Which logo?")
+    tone = ask(conn, second, "Which tone?")
+    left = escalate(conn, ctx.lead_ctx, %{"logo" => logo})
+    right = escalate(conn, ctx.lead_ctx, %{"tone" => tone})
+    project = %Omunculus.Project{conn: conn, dir: ctx.config.root, config_path: ctx.config.path}
+    actor = Map.put(ctx.root_ctx, :trigger, "harness")
+
+    assert {:ok, out, _events} =
+             Omunculus.Harness.dispatch(
+               project,
+               "assemble",
+               %{"text" => "Collect the client questions.", "agent" => "root"},
+               actor
+             )
+
+    assert out.ok
+    assert out.output =~ "## Inbox\n### Conversation #{ctx.conversation}"
+
+    for id <- [left, right, logo, tone, first.work_id, second.work_id] do
+      assert out.output =~ id
+    end
+
+    assert out.output =~ "Which logo?"
+    assert out.output =~ "Which tone?"
+    assert request(conn, left).status == "pending"
+    assert request(conn, right).status == "pending"
   end
 end
