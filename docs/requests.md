@@ -37,8 +37,8 @@ the original conversation. A cancelled work does not run again.
 
 A named decision is answered by choosing its `option`. Text alone supplies
 content and resumes a waiting requester, but records no decision. For example,
-the sales desk's `next_stage` owner gate requires a reply with
-`option = approve`; a text-only "approved" does not pass that gate.
+a workflow stage that requires the chosen option to be `approve` advances
+only on that decision; a text-only "approved" does not satisfy its condition.
 
 After root retry exhaustion, `retry` remains an explicit named decision with
 no tool calls. It keeps the retry/cancel choices in the exhaustion notification
