@@ -261,3 +261,5 @@ once, when, and what they took then; then for each agent its runs, their
 time, the BEAM CPU of the intervals they were open (shared evenly among
 the runs open then, an estimate), and the CPU and peak memory of the
 sandboxed processes its runs started.
+
+Requests that grant names follow the task’s `[human]` answers deterministically, including through nested escalation. The person model answers free-text questions; an envelope with grant provenance never falls back to it.

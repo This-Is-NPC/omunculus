@@ -304,6 +304,128 @@ defmodule Omunculus.EvalProjectTest do
     assert {:ok, %{grants: nil, waiting: "child"}} = Store.view(conn, "work", root)
   end
 
+  for option <- ~w(grant deny) do
+    test "agency promote follows the task human #{option} through nested escalation", %{
+      conn: conn
+    } do
+      dir = Fixtures.tmp_dir()
+      assert {:ok, path} = EquivalentExchange.Project.build(dir, "agency", {"fake", false}, nil)
+      assert {:ok, config} = Config.load(path)
+      conversation = conversation(conn)
+      project = %Omunculus.Project{conn: conn, dir: config.root, config_path: path}
+
+      seller_work =
+        Fixtures.insert(conn, :works, %{
+          assignee: "seller",
+          conversation_id: conversation,
+          workflow: "sale",
+          stage: "build",
+          state: "waiting",
+          waiting: "child"
+        })
+
+      admin_work =
+        Fixtures.insert(conn, :works, %{
+          assignee: "administrator",
+          parent_id: seller_work,
+          conversation_id: conversation,
+          state: "waiting",
+          waiting: "child"
+        })
+
+      release =
+        Fixtures.insert(conn, :works, %{
+          assignee: "clerk",
+          parent_id: admin_work,
+          conversation_id: conversation,
+          workflow: "release",
+          stage: "promote"
+        })
+
+      stage = Enum.find(config.workflows["release"], &(&1.name == "promote")).ceiling
+      clerk = configured_actor(conn, config, conversation, "clerk", release, 2, stage)
+
+      assert {:ok, %{ok: true}, events} =
+               Harness.dispatch(
+                 project,
+                 "request_access",
+                 %{
+                   "report" => "Preview ready",
+                   "reason" => "Approve production?",
+                   "access" => [%{"kind" => "tool", "name" => "promote"}]
+                 },
+                 clerk
+               )
+
+      origin = Enum.find(events, &(&1.type == "request")).request_id
+
+      upstream =
+        Enum.reduce(
+          [
+            {"administrator", admin_work, 1, nil},
+            {"seller", seller_work, 0,
+             Enum.find(config.workflows["sale"], &(&1.name == "build")).ceiling},
+            {"sales", nil, 0, nil}
+          ],
+          origin,
+          fn {agent, work, depth, ceiling}, id ->
+            actor = configured_actor(conn, config, conversation, agent, work, depth, ceiling)
+            assert {:ok, request} = Store.view(conn, "request", id)
+            assert Jason.decode!(request.arbiter) == Participant.agent(agent)
+
+            assert {:ok, %{ok: true}, events} =
+                     Harness.dispatch(
+                       project,
+                       "escalate",
+                       %{
+                         "reason" => "Production approval",
+                         "origins" => %{"production" => id}
+                       },
+                       actor
+                     )
+
+            Enum.find(events, &(&1.type == "request")).request_id
+          end
+        )
+
+      assert {:ok, request} = Store.view(conn, "request", upstream)
+      assert Jason.decode!(request.arbiter) == Participant.human("test", "owner")
+
+      task =
+        Enum.find(
+          EquivalentExchange.Task.all(),
+          &(&1.id == "design-team/conversation/design-to-build")
+        )
+
+      task = %{task | human: Map.put(task.human, "promote", unquote(option))}
+
+      assert {:ok, answer} =
+               EquivalentExchange.Requests.answer(task, %{}, request, dir, fn _ ->
+                 flunk("a permission decision must never reach the person model")
+               end)
+
+      assert {:ok, %{ok: true}, events} =
+               Harness.dispatch(
+                 project,
+                 "reply",
+                 Map.put(answer, "request_id", upstream),
+                 human(config, conversation)
+               )
+
+      assert {:ok, %{status: "closed", answer: chosen}} = Store.view(conn, "request", origin)
+      assert chosen == unquote(option)
+      grants = Enum.filter(events, &(&1.type == "grant"))
+
+      if unquote(option) == "grant" do
+        assert [%{work_id: ^release, actor_kind: "human"}] = grants
+        assert {:ok, %{grants: "[\"promote\"]"}} = Store.view(conn, "work", release)
+      else
+        assert grants == []
+        assert {:ok, %{grants: nil}} = Store.view(conn, "work", release)
+      end
+    end
+  end
+
   test "agency generalist batches received questions and distributes one client answer", %{
     conn: conn
   } do

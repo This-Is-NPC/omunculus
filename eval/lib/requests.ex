@@ -5,7 +5,7 @@ defmodule EquivalentExchange.Requests do
   def answer(task, groups, request, project, reply) do
     case choose(task, groups, request, project) do
       nil ->
-        if question?(request) do
+        if requirements(request) == [] and question?(request) do
           case reply.(request.reason) do
             {:ok, :nothing} -> {:ok, nil}
             {:ok, text} -> {:ok, %{"body" => text}}

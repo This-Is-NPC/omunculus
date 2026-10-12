@@ -51,6 +51,25 @@ defmodule Omunculus.EvalRequestsTest do
     refute Map.has_key?(answer["parts"], "question")
   end
 
+  test "an envelope with grant provenance cannot fall back to a person text decision" do
+    grant =
+      request("Approve production?", %{
+        "grant" => [%{"name" => "grant", "args" => %{"kind" => "tool", "name" => "promote"}}],
+        "deny" => []
+      })
+
+    merged =
+      request("Approve production and choose a logo?", %{}, %{
+        "production" => %{grant | status: "closed"},
+        "logo" => request("Which logo?")
+      })
+
+    assert {:ok, nil} =
+             Requests.answer(%{human: %{"promote" => "grant"}}, %{}, merged, "/tmp", fn _ ->
+               flunk("grant envelopes must not fall back to free-text permission decisions")
+             end)
+  end
+
   test "retry requests stay unanswered and person failures propagate" do
     retry = request("Retry?", %{"retry" => [], "cancel" => []})
 
