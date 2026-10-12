@@ -2,6 +2,31 @@ defmodule EquivalentExchange.Requests do
   @moduledoc "Answers eval requests through their linked named origins without changing permission targets."
   alias EquivalentExchange.Task
 
+  def answer(task, groups, request, project, reply) do
+    case choose(task, groups, request, project) do
+      nil ->
+        if question?(request) do
+          case reply.(request.reason) do
+            {:ok, :nothing} -> {:ok, nil}
+            {:ok, text} -> {:ok, %{"body" => text}}
+            {:error, _reason} = error -> error
+          end
+        else
+          {:ok, nil}
+        end
+
+      answer ->
+        {:ok, answer}
+    end
+  end
+
+  defp question?(request) do
+    origins = Map.get(request, :origins, %{})
+    if map_size(origins) == 0,
+      do: Jason.decode!(request.options) == %{},
+      else: Enum.any?(origins, fn {_part, origin} -> question?(origin) end)
+  end
+
   def choose(task, groups, request, project) do
     origins = Map.get(request, :origins, %{})
 

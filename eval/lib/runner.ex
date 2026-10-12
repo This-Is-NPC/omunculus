@@ -21,8 +21,10 @@ defmodule EquivalentExchange.Runner do
   grants it all, by name or by a group holding it, deny otherwise; a path or
   directory inside the workspace asks for `sandbox.write` — and
   the runs that answer opens are
-  followed the same way, a few rounds at most. A request offering only
-  retry or cancel is left waiting: the model stopped without a report.
+  followed the same way. Free-text questions use the task's simulated person,
+  once per received envelope, preserving the conversation and returning linked
+  origins to intermediaries for distribution. The execution timeout bounds the
+  response loop. A request offering only retry or cancel is left waiting.
 
   A task with `[person]` goes on as a conversation: once the runs settle,
   `EquivalentExchange.Person` reads what the agent last said and answers
@@ -39,7 +41,6 @@ defmodule EquivalentExchange.Runner do
   alias Omunculus.Store.Query
 
   @eval Path.expand("..", __DIR__)
-  @rounds 6
 
   @spec run(keyword) :: {:ok, String.t()}
   def run(options) do
@@ -154,10 +155,10 @@ defmodule EquivalentExchange.Runner do
     {status, played} =
       within(timeout_s * 1000, fn ->
         with {:ok, _said} <- CLI.run(["--config", config_path, "send", instruction], project),
-             {:ok, answers} <- play_person(config_path, project, task, groups, [], @rounds) do
+             {:ok, played} <- play_person(config_path, project, task, groups, %{answers: [], conversation: [{"person", instruction}]}) do
           converse(
             {config_path, project, groups, person},
-            %{answers: answers, conversation: [{"person", instruction} | answered(answers)]},
+            played,
             (task.person && task.person["follow_ups"]) || []
           )
         end
@@ -316,41 +317,39 @@ defmodule EquivalentExchange.Runner do
     %{right: right, asked: asked}
   end
 
-  # The person: answers what waits on them, then follows the runs that opens.
-  # A reply whose runs fail ends the execution with their error.
-  defp play_person(_config_path, _project, _task, _groups, answers, 0), do: {:ok, answers}
+  # Each received envelope is one client message, even when its answer
+  # records several named decisions. Text answers return origins for distribution.
+  defp play_person(config_path, project, task, groups, played) do
+    waiting_on_person(project)
+    |> Enum.reduce_while({:ok, played, 0}, fn request, {:ok, played, count} ->
+      conversation = played.conversation ++ [{"agent", request.reason}]
+      reply = fn _question ->
+        if task.person,
+          do: Person.reply(task.person["facts"], conversation),
+          else: {:ok, :nothing}
+      end
 
-  defp play_person(config_path, project, task, groups, answers, rounds) do
-    case waiting_on_person(project) do
-      [] ->
-        {:ok, answers}
-
-      waiting ->
-        replies =
-          for request <- waiting,
-              answer = Requests.choose(task, groups, request, project),
-              not is_nil(answer),
-              do: {request, answer}
-
-        Enum.reduce_while(replies, {:ok, []}, fn {request, answer}, {:ok, given} ->
+      with {:ok, answer} <- Requests.answer(task, groups, request, project, reply) do
+        if is_nil(answer) do
+          {:cont, {:ok, played, count}}
+        else
           case CLI.run(Requests.arguments(config_path, request.id, answer), project) do
             {:ok, _said} ->
-              {:cont, {:ok, given ++ Requests.answers(request, answer)}}
-
-            {:error, _reason} = error ->
-              {:halt, error}
+              {:cont, {:ok, %{
+                answers: played.answers ++ Requests.answers(request, answer),
+                conversation: conversation ++ [{"person", answer["body"]}]
+              }, count + 1}}
+            {:error, _reason} = error -> {:halt, error}
           end
-        end)
-        |> case do
-          {:ok, []} ->
-            {:ok, answers}
-
-          {:ok, given} ->
-            play_person(config_path, project, task, groups, answers ++ given, rounds - 1)
-
-          error ->
-            error
         end
+      else
+        error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, played, 0} -> {:ok, played}
+      {:ok, played, _count} -> play_person(config_path, project, task, groups, played)
+      error -> error
     end
   end
 
@@ -383,15 +382,10 @@ defmodule EquivalentExchange.Runner do
 
     with {:ok, text, follow_ups} <- message,
          {:ok, _said} <- CLI.run(["--config", config_path, "send", text], project),
-         {:ok, given} <- play_person(config_path, project, person.task, groups, [], @rounds) do
-      converse(
-        at,
-        %{
-          answers: played.answers ++ given,
-          conversation: conversation ++ [{"person", text} | answered(given)]
-        },
-        follow_ups
-      )
+         {:ok, played} <- play_person(config_path, project, person.task, groups, %{
+           played | conversation: conversation ++ [{"person", text}]
+         }) do
+      converse(at, played, follow_ups)
     else
       :done -> {:ok, %{played | conversation: conversation}}
       error -> error
@@ -414,10 +408,6 @@ defmodule EquivalentExchange.Runner do
       published: if(task.deploy, do: published)
     })
   end
-
-  # What the person answered the team's requests is something they said.
-  defp answered(given),
-    do: for(%{body: body} <- given, do: {"person", "To the team's request I answered: " <> body})
 
   # Whether the person's first message became a work at once.
   defp first_run_made_work(facts) do
