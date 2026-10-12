@@ -187,7 +187,7 @@ argument of the call.
 | `events` | `relation = "run"`: the events of the call's run so far; `"cause"`: the event that made the call's run due | `relation` (required) |
 | `requests` | the request named by the `request_id` argument, or the call's request | `from` |
 | `prompts` | `relation = "message"`: the prompt that opened the run; `"assembled"`: the assembled prompt of the run named by `from` (default `args.run`, then `latest_run`) | `relation` (required); `from` for `assembled` |
-| `inbox` | unread notifications, each with its first comment as `body`: of the project, or of the call's work with `from = ["work"]` | `from` |
+| `inbox` | unread notifications (default), or pending canonical requests received by the current depth-0 agent in its conversation, grouped by conversation | `relation = "unread"` with optional `from = ["work"]`; `relation = "received"` from `run` |
 | `counter` | the value the `counter` tools keep in `EVENTS` | |
 | `catalog` | the cards of the run's effective `model` tools, each marked `pinned` or not | |
 | `workspaces` | every configured workspace, its `root` and whether it is the call's | |

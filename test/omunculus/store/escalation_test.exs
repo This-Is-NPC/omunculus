@@ -854,4 +854,96 @@ defmodule Omunculus.Store.EscalationTest do
     assert work(conn, ctx.root).waiting == "child"
     assert work(conn, ctx.lead).waiting == "child"
   end
+
+  test "received inbox shows both root requests with canonical origins and isolates the run",
+       %{conn: conn} = ctx do
+    [first, second] = ctx.child_ctxs
+    logo = ask(conn, first, "Which logo?")
+    tone = ask(conn, second, "Which tone?")
+    left = escalate(conn, ctx.lead_ctx, %{"logo" => logo})
+    right = escalate(conn, ctx.lead_ctx, %{"tone" => tone})
+    views = %{"inbox" => %{"source" => "inbox", "relation" => "received"}}
+    {:ok, specs} = Omunculus.Tool.Views.parse(views)
+    scope = %{run_id: ctx.root_ctx.run_id}
+    before = {count(conn, "events"), count(conn, "comments")}
+
+    assert {:ok, %{"inbox" => [group]}} = Omunculus.Tool.Views.hydrate(conn, specs, scope)
+    assert group.conversation_id == ctx.conversation
+    assert MapSet.new(group.requests, & &1.id) == MapSet.new([left, right])
+    assert Enum.all?(group.requests, &(&1.status == "pending"))
+    by_id = Map.new(group.requests, &{&1.id, &1})
+    assert by_id[left].reason == "Answer these named questions."
+    assert by_id[left].work_id == ctx.lead
+    assert by_id[left].origins["logo"].id == logo
+    assert by_id[left].origins["logo"].work_id == first.work_id
+    assert by_id[left].origins["logo"].reason == "Which logo?"
+    assert by_id[right].origins["tone"].reason == "Which tone?"
+    assert before == {count(conn, "events"), count(conn, "comments")}
+
+    for fields <- [
+          %{agent: "steward", depth: 0, conversation_id: ctx.conversation},
+          %{agent: "root", depth: 1, conversation_id: ctx.conversation},
+          %{agent: "root", depth: 0, conversation_id: nil}
+        ] do
+      run = Fixtures.open_run(conn, fields)
+
+      assert {:ok, %{"inbox" => []}} =
+               Omunculus.Tool.Views.hydrate(conn, specs, %{run_id: run.id})
+    end
+
+    other = Id.new()
+
+    :ok =
+      Query.insert(conn, :conversations, %{
+        id: other,
+        created_issuer: "test",
+        created_subject: "other",
+        created_at: "2026-01-01"
+      })
+
+    run = Fixtures.open_run(conn, %{agent: "root", depth: 0, conversation_id: other})
+    assert {:ok, %{"inbox" => []}} = Omunculus.Tool.Views.hydrate(conn, specs, %{run_id: run.id})
+    assert {:ok, %{}} = Omunculus.Tool.Views.hydrate(conn, specs, %{run_id: nil})
+
+    assert {:ok, _} =
+             reply(conn, ctx.root_ctx, left, %{
+               "body" => "Logo attached",
+               "parts" => %{"logo" => %{"body" => "Use this logo"}}
+             })
+
+    assert {:ok, [remaining]} = Store.received_inbox(conn, ctx.root_ctx.run_id)
+    assert Enum.map(remaining.requests, & &1.id) == [right]
+    assert request(conn, tone).status == "escalated"
+    assert work(conn, second.work_id).waiting == "request"
+    _upstream = escalate(conn, ctx.root_ctx, %{"tone" => right})
+    assert {:ok, []} = Store.received_inbox(conn, ctx.root_ctx.run_id)
+  end
+
+  test "reading a notice does not hide independent requests, including a human origin",
+       %{conn: conn} = ctx do
+    human = human_origin(conn, ctx, "client")
+    human_id = ask(conn, human, "Is the schedule available?")
+    child = hd(ctx.child_ctxs)
+    origin = ask(conn, child, "Which logo?")
+    agent_id = escalate(conn, ctx.lead_ctx, %{"logo" => origin})
+
+    assert {:ok, events} =
+             apply_action(conn, "notify", %{"body" => "Questions ready"}, ctx.lead_ctx)
+
+    note = Enum.find(events, &(&1.type == "notify")).inbox_id
+    assert {:ok, _} = apply_action(conn, "inbox.read", %{"inbox_id" => note}, ctx.owner)
+    assert {:ok, []} = Store.unread_inbox(conn, ctx.lead)
+
+    assert {:ok, [group]} = Store.received_inbox(conn, ctx.root_ctx.run_id)
+    assert MapSet.new(group.requests, & &1.id) == MapSet.new([human_id, agent_id])
+    received = Enum.find(group.requests, &(&1.id == human_id))
+    assert received.run_id == nil
+    assert Jason.decode!(received.requester) == Participant.human("test", "client")
+    assert received.reason == "Is the schedule available?"
+    assert {:ok, _} = reply(conn, ctx.root_ctx, human_id, %{"body" => "Yes, it is available."})
+    assert {:ok, [remaining]} = Store.received_inbox(conn, ctx.root_ctx.run_id)
+    assert Enum.map(remaining.requests, & &1.id) == [agent_id]
+    assert request(conn, origin).status == "escalated"
+    assert work(conn, child.work_id).waiting == "request"
+  end
 end

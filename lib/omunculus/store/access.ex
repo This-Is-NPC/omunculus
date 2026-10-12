@@ -164,12 +164,7 @@ defmodule Omunculus.Store.Access do
   defp read_items(conn, kind, sql, conversation_id) do
     with {:ok, rows} <- Query.all(conn, sql, [conversation_id]) do
       if kind == :requests do
-        Enum.reduce_while(rows, {:ok, []}, fn row, {:ok, requests} ->
-          case Omunculus.Store.View.view(conn, "request", row.id) do
-            {:ok, request} -> {:cont, {:ok, requests ++ [request]}}
-            error -> {:halt, error}
-          end
-        end)
+        Omunculus.Store.View.request_views(conn, rows)
       else
         {:ok, rows}
       end

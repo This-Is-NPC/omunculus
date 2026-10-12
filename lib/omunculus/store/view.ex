@@ -7,7 +7,8 @@ defmodule Omunculus.Store.View do
   comments of a request or an inbox entry, a work's last closed run and
   the run that opened a request — each with the message that opened it and
   every event it recorded — the events of a run, the most recent run, the
-  unread inbox of the project or of a work, and the bench counter. Also how
+  unread inbox of the project or of a work, the pending requests received by
+  a depth-0 run in its conversation, and the bench counter. Also how
   many of a work's latest closed runs in a row lack `end`, the depth of a
   work by walking `parent_id`, whether a work descends from another, and
   replay of `events` for a project, run, work, request, inbox or
@@ -207,6 +208,57 @@ defmodule Omunculus.Store.View do
       """,
       [work_id]
     )
+  end
+
+  @doc "Pending requests addressed to a depth-0 run's agent, in that run's conversation."
+  @spec received_inbox(Omunculus.Store.Connection.t(), String.t()) :: {:ok, [map]}
+  def received_inbox(conn, run_id) do
+    Query.transaction(conn, fn ->
+      with {:ok, run} <- view(conn, "run", run_id) do
+        case run do
+          %{depth: "0", conversation_id: conversation_id} when is_binary(conversation_id) ->
+            with {:ok, rows} <-
+                   Query.all(
+                     conn,
+                     """
+                     SELECT requests.id FROM requests
+                     JOIN events opening ON opening.id = requests.event_id
+                     WHERE requests.status = 'pending'
+                       AND opening.conversation_id = ?
+                       AND json_extract(requests.arbiter, '$.kind') = 'agent'
+                       AND json_extract(requests.arbiter, '$.agent') = ?
+                     ORDER BY requests.created_at, requests.id
+                     """,
+                     [conversation_id, run.agent]
+                   ),
+                 {:ok, requests} <- request_views(conn, rows) do
+              {:ok,
+               if(requests == [],
+                 do: [],
+                 else: [%{conversation_id: conversation_id, requests: requests}]
+               )}
+            end
+
+          _other ->
+            {:ok, []}
+        end
+      end
+    end)
+  end
+
+  @doc "Hydrates request rows with their canonical question, historical context and linked origins."
+  @spec request_views(Omunculus.Store.Connection.t(), [map]) :: {:ok, [map]} | {:error, term}
+  def request_views(conn, rows) do
+    Enum.reduce_while(rows, {:ok, []}, fn row, {:ok, requests} ->
+      case view(conn, "request", row.id) do
+        {:ok, request} -> {:cont, {:ok, [request | requests]}}
+        error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, requests} -> {:ok, Enum.reverse(requests)}
+      error -> error
+    end
   end
 
   @doc "The bench counter: `counter` calls minus `counter_decrement` calls."

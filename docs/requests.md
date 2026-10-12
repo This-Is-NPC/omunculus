@@ -68,6 +68,14 @@ root. It records an inbox note naming the unresolved origin and pointing to the
 upstream request that a human can answer. Explicitly escalated origins are not escalated again, and neither
 requester nor arbiter identities are rewritten in place.
 
+The existing `inbox` view source accepts `relation = "received"`, anchored to
+its call's run. A depth-0 run receives all pending requests addressed to its
+agent in that conversation, grouped under `conversation_id`, with canonical
+questions, requesting identities, work/workflow/stage context and linked
+origins. Closed requests and escalated origins are not independently offered.
+Reading this view or marking a notification read changes no request state.
+The default inbox relation continues to read unread notifications.
+
 ## Proposed request contract
 
 A request is anything one participant needs another participant to answer

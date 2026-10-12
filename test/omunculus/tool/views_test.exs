@@ -157,4 +157,29 @@ defmodule Omunculus.Tool.ViewsTest do
     views = %{"comments" => %{"source" => "comments"}, "work" => %{"source" => "works"}}
     assert {:ok, %{}} == hydrate(conn, views, %{})
   end
+
+  test "received inbox is anchored only to the current run; unread notices keep their anchors", %{
+    conn: conn
+  } do
+    assert {:ok, [%{from: ["run"], relation: "received"}]} =
+             Views.parse(%{"inbox" => %{"source" => "inbox", "relation" => "received"}})
+
+    for from <- [["work"], ["args.run"], ["latest_run"]] do
+      assert {:error, _} =
+               Views.parse(%{
+                 "inbox" => %{"source" => "inbox", "relation" => "received", "from" => from}
+               })
+    end
+
+    assert {:error, _} =
+             Views.parse(%{"inbox" => %{"source" => "inbox", "relation" => "unknown"}})
+
+    work = Fixtures.insert(conn, :works)
+    note = Fixtures.insert(conn, :inbox, %{work_id: work})
+
+    assert {:ok, %{"inbox" => [%{id: ^note}]}} =
+             hydrate(conn, %{"inbox" => %{"source" => "inbox", "from" => ["work"]}}, %{
+               work_id: work
+             })
+  end
 end

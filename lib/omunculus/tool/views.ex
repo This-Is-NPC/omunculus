@@ -34,8 +34,11 @@ defmodule Omunculus.Tool.Views do
   - `prompts`: `relation` `message`, the prompt that opened the run, or
     `assembled`, the assembled prompt of the run named by `from` (default
     `args.run`, then `latest_run`).
-  - `inbox`: the unread inbox of the project, or of the call's work with
-    `from = ["work"]`.
+  - `inbox`: `relation = "unread"` (default) reads unread notifications of
+    the project, or of the call's work with `from = ["work"]`.
+    `relation = "received"`, from `run`, reads pending requests addressed
+    to that depth-0 agent in its conversation, grouped by conversation,
+    each with its canonical question and recursively linked origins.
   - `counter`: the bench counter of the project.
   - `catalog`, `workspaces`, `agents`, `paths`, `grant_scopes`, `skills`:
     computed by the harness for the call, each only when a view asks for
@@ -170,7 +173,10 @@ defmodule Omunculus.Tool.Views do
   end
 
   defp source_spec("inbox", table, spec) do
-    with :ok <- only_keys(table, ~w(from)), do: {:ok, spec}
+    with :ok <- only_keys(table, ~w(from relation)),
+         {:ok, relation} <- one_of(table, "relation", ~w(unread received), "unread") do
+      {:ok, %{spec | relation: relation, from: if(relation == "received", do: ["run"], else: [])}}
+    end
   end
 
   defp source_spec("agents", table, spec) do
@@ -211,6 +217,12 @@ defmodule Omunculus.Tool.Views do
       do: {:ok, spec},
       else: {:error, {:anchors, from}}
   end
+
+  defp check_anchors(%{source: "inbox", relation: "received", from: ["run"]} = spec),
+    do: {:ok, spec}
+
+  defp check_anchors(%{source: "inbox", relation: "received", from: from}),
+    do: {:error, {:anchors, from}}
 
   defp check_anchors(%{source: "inbox", from: from} = spec),
     do: anchors_within(spec, from, ["work"])
@@ -297,7 +309,9 @@ defmodule Omunculus.Tool.Views do
     do: {:ok, Map.fetch!(scope.computed, source).(spec)}
 
   defp read(conn, %{source: "counter"}, _scope), do: Store.counter(conn)
-  defp read(conn, %{source: "inbox", from: []}, _scope), do: Store.unread_inbox(conn, nil)
+
+  defp read(conn, %{source: "inbox", relation: "unread", from: []}, _scope),
+    do: Store.unread_inbox(conn, nil)
 
   defp read(conn, %{source: "prompts", relation: "assembled", from: from}, scope) do
     with {:ok, run} <- assembled_run(conn, from, scope) do
@@ -354,6 +368,9 @@ defmodule Omunculus.Tool.Views do
 
   defp read_from(conn, %{source: "prompts"}, _anchor, id, _scope),
     do: Store.view(conn, "prompt", id)
+
+  defp read_from(conn, %{source: "inbox", relation: "received"}, _anchor, id, _scope),
+    do: Store.received_inbox(conn, id)
 
   defp read_from(conn, %{source: "inbox"}, _anchor, id, _scope),
     do: Store.unread_inbox(conn, id)
