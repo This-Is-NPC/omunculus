@@ -316,8 +316,9 @@ Singleton {
     }
   }
 
+  // A text on one line, without its Markdown marks, cut short when long.
   function oneLine(value) {
-    const line = String(value || "").replace(/\s+/g, " ").trim()
+    const line = String(value || "").replace(/^\s*(?:[#>|-]+|\d+\.)\s*/gm, "").replace(/[*`|]/g, "").replace(/\s+/g, " ").trim()
     return line.length > 140 ? line.slice(0, 137) + "..." : line
   }
 
