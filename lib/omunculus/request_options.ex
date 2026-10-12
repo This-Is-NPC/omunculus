@@ -49,29 +49,37 @@ defmodule Omunculus.RequestOptions do
   def authorize(_request, _answer, true), do: :ok
 
   def authorize(request, answer, false) do
-    calls = Jason.decode!(request.options)[answer["option"]] || []
+    options = Jason.decode!(request.options)
+    calls = options[answer["option"]] || []
 
     snapshot =
       if request[:requester_ceiling], do: Jason.decode!(request.requester_ceiling), else: nil
 
-    refusal =
-      Enum.find_value(calls, fn call ->
+    sealed_grant =
+      options
+      |> Map.values()
+      |> List.flatten()
+      |> Enum.any?(fn call ->
         args = call["args"] || %{}
-
-        cond do
-          call["name"] == "grant" and not is_nil(args["scope"]) ->
-            {:grant, :not_human}
-
-          call["name"] == "grant" and sealed?(snapshot, args["name"], args["kind"]) ->
-            {:grant, :not_authorized}
-
-          sealed?(snapshot, call["name"], "tool") ->
-            {:reply, :not_authorized}
-
-          true ->
-            nil
-        end
+        call["name"] == "grant" and sealed?(snapshot, args["name"], args["kind"])
       end)
+
+    refusal =
+      if(sealed_grant, do: {:grant, :not_authorized}) ||
+        Enum.find_value(calls, fn call ->
+          args = call["args"] || %{}
+
+          cond do
+            call["name"] == "grant" and not is_nil(args["scope"]) ->
+              {:grant, :not_human}
+
+            sealed?(snapshot, call["name"], "tool") ->
+              {:reply, :not_authorized}
+
+            true ->
+              nil
+          end
+        end)
 
     if refusal do
       {:error, refusal}

@@ -600,6 +600,14 @@ defmodule Omunculus.Store.EscalationTest do
 
     origin = ask(conn, child, "Deploy permission", options)
     upstream = escalate(conn, ctx.lead_ctx, %{"permission" => origin})
+
+    assert {:error, {:grant, :not_authorized}} =
+             reply(conn, ctx.root_ctx, upstream, %{
+               "body" => "No",
+               "parts" => %{"permission" => %{"body" => "No"}}
+             })
+
+    assert request(conn, upstream).status == "pending"
     top = escalate(conn, ctx.root_ctx, %{"release" => upstream})
     assert Jason.decode!(request(conn, origin).arbiter) == Participant.agent("lead")
     assert Jason.decode!(request(conn, upstream).arbiter) == Participant.agent("root")

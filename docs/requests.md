@@ -81,7 +81,7 @@ responsibility; it can name a different participant from the conversation origin
 | `reply` | Nonempty body, optional selected option, optional recursive named parts. Chosen option calls execute transactionally through the common chain path. |
 | `grant`, `cancel` | Chain-only effects of a selected reply option, targeting the original request. |
 | `break`, `reopen` | Stop failed work and return it for correction. A resumable question uses a request rather than a break/reopen round trip. |
-| `promote` approval | The release agent requests permission with `request_access`; it follows the configured chain. The pack's `promote` tool publishes only once its grant makes it available. |
+| `promote` approval | The release agent requests permission with `request_access`; it follows the configured chain. Intermediaries must escalate: an agent cannot answer a request containing a sealed grant option, including with deny or text. Only the human decides; the pack's `promote` tool publishes once its grant makes it available. |
 | `propose_config`, `propose_pack` | Validated proposals whose apply option calls configure or pack with revision checks. A text reply records advice without applying the proposal. |
 | Harness retry/cancel | A routed request after root retry exhaustion. Retry is a named decision with no calls; cancel chains cancellation. Child retry exhaustion remains a stopping break. |
 | Unanswered receiver | Linked single-origin escalation through the same action and routing; an upstream human request gets an inbox notification. |
