@@ -202,6 +202,12 @@ defmodule Omunculus.Tools.Out do
     do:
       "refused: #{name} is not a workflow a work can go through there; name one of: #{Enum.join(names, ", ")}"
 
+  def refused({:request, {:unknown_route, name, names}}) do
+    configured = if names == [], do: "none", else: Enum.join(names, ", ")
+
+    "refused: #{inspect(name)} is not a configured request route; configured route names: #{configured}; omit to to follow the default request_routes route"
+  end
+
   def refused({:reply, {:unknown_option, option, options}}),
     do:
       "refused: #{inspect(option)} is not an option of this request; give option as one of: #{Enum.join(options, ", ")}"

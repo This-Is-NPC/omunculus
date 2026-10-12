@@ -1780,7 +1780,7 @@ defmodule Omunculus.Store.ActionsTest do
 
       run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
 
-      assert {:error, {:request, {:invalid, "to"}}} =
+      assert {:error, {:request, {:unknown_route, "nobody", ["owner"]}}} =
                record_tool(
                  conn,
                  [

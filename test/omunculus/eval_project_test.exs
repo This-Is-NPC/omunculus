@@ -465,6 +465,23 @@ defmodule Omunculus.EvalProjectTest do
     assert {:ok, [%{requests: received}]} = Store.received_inbox(conn, sales.run_id)
     assert MapSet.new(received, & &1.id) == MapSet.new(Map.values(origins))
 
+    for route <- ~w(client person sales) do
+      assert {:ok, %{ok: false, output: output}, _} =
+               Harness.dispatch(
+                 project,
+                 "escalate",
+                 %{
+                   "reason" => "Business details?",
+                   "origins" => origins,
+                   "to" => route
+                 },
+                 sales
+               )
+
+      assert output ==
+               ~s(refused: "#{route}" is not a configured request route; configured route names: owner; omit to to follow the default request_routes route)
+    end
+
     assert {:ok, %{ok: true}, events} =
              Harness.dispatch(
                project,

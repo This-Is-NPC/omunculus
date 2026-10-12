@@ -7,7 +7,14 @@ defmodule Omunculus.Store.RequestRoutes do
     routes = Enum.filter(ctx.config.request_routes, &(&1["name"] == name))
 
     if not is_nil(name) and routes == [] do
-      {:error, {:request, {:invalid, "to"}}}
+      names =
+        ctx.config.request_routes
+        |> Enum.map(& &1["name"])
+        |> Enum.reject(&is_nil/1)
+        |> Enum.uniq()
+        |> Enum.sort()
+
+      {:error, {:request, {:unknown_route, name, names}}}
     else
       resolve_routes(conn, ctx, run, work, participant, forbidden, routes)
     end

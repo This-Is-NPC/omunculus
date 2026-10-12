@@ -3,6 +3,30 @@ defmodule Omunculus.Store.RequestRoutesTest do
   alias Omunculus.{Fixtures, Id, Participant, Store}
   alias Omunculus.Store.Query
 
+  test "unknown route refusals list configured names and explain the default route", %{conn: conn} do
+    for {routes, names, label} <- [
+          {[%{"via" => ["origin"]}], [], "none"},
+          {[%{"name" => "owner"}, %{"name" => "legal"}, %{"name" => "owner"}, %{}],
+           ["legal", "owner"], "legal, owner"}
+        ] do
+      assert {:error, reason} =
+               Omunculus.Store.RequestRoutes.resolve(
+                 conn,
+                 %{config: %{request_routes: routes}},
+                 nil,
+                 nil,
+                 Participant.agent("sales"),
+                 "client",
+                 []
+               )
+
+      assert reason == {:request, {:unknown_route, "client", names}}
+
+      assert Omunculus.Tools.Out.refused(reason) ==
+               ~s(refused: "client" is not a configured request route; configured route names: #{label}; omit to to follow the default request_routes route)
+    end
+  end
+
   test "a workless route cannot deliver to a workflow-only agent", %{conn: conn} do
     config =
       Fixtures.config("""

@@ -71,7 +71,7 @@ defmodule Omunculus.CLITest do
     Project.close(project)
 
     for {destination, refusal} <- [
-          {["--to", "absent"], {:request, {:invalid, "to"}}},
+          {["--to", "absent"], {:request, {:unknown_route, "absent", []}}},
           {[], {:request, :no_route}}
         ] do
       assert {:error, ^refusal} =

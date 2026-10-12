@@ -1,7 +1,7 @@
 name = "ask"
 kind = "tool"
 triggers = ["model", "cli"]
-description = "Asks a question or decision through configured request routing. question says what is needed and why; optional options names the answers (approve, deny, revise, ...), with their meanings in question. Omit options for a free-text answer. Optional to names a configured logical route. The run ends and resumes when the request is answered."
+description = "Asks a question or decision through configured request routing. question says what is needed and why; optional options names the answers (approve, deny, revise, ...), with their meanings in question. Omit options for a free-text answer. Optional to names a route in the project's request_routes; omit to to follow the default route. The run ends and resumes when the request is answered."
 tags = ["request"]
 groups = ["sequence"]
 module = "Omunculus.Tools.Ask"
@@ -24,5 +24,6 @@ type = "string"
 pattern = "^[a-z0-9][a-z0-9_-]*$"
 
 [parameters.properties.to]
+description = "Optional name of a route in the project's request_routes. Omit to to follow the default route."
 type = "string"
 minLength = 1
