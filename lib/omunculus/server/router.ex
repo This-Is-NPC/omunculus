@@ -31,6 +31,20 @@ defmodule Omunculus.Server.Router do
     end
   end
 
+  # The local user sees every project of the registry, each with its
+  # socket; a user over HTTP, the projects they may read.
+  OpenAPI.route :get, "/v1/projects", :list_projects do
+    opts = Keyword.merge(opts, conn.assigns.server_opts)
+
+    with {:ok, principal} <- authenticate(conn, opts),
+         {:ok, items} <- projects(opts, principal) do
+      reply(conn, 200, %{items: items})
+    else
+      {:error, :unauthorized} -> reply(conn, 401, %{error: "unauthorized"})
+      error -> error_reply(conn, error)
+    end
+  end
+
   OpenAPI.route :post, "/v1/cli", :cli do
     with {:ok, project_id} <- Keyword.fetch(conn.assigns.server_opts, :local),
          %{"argv" => [_ | _] = argv} <- conn.body_params,
@@ -332,6 +346,33 @@ defmodule Omunculus.Server.Router do
       {{:ok, _project_id}, _header} -> {:ok, Operations.local_principal()}
       {:error, ["Bearer " <> token]} -> Auth.verify(Keyword.fetch!(opts, :auth), token)
       _ -> {:error, :unauthorized}
+    end
+  end
+
+  defp projects(opts, principal) do
+    case Keyword.fetch(opts, :local) do
+      {:ok, _id} ->
+        opts
+        |> Keyword.fetch!(:registry)
+        |> Enum.sort()
+        |> Enum.reduce_while({:ok, []}, fn id, {:ok, items} ->
+          case Project.socket(id) do
+            {:ok, socket} -> {:cont, {:ok, items ++ [%{id: id, socket: socket}]}}
+            error -> {:halt, error}
+          end
+        end)
+
+      :error ->
+        opts
+        |> Keyword.fetch!(:projects)
+        |> Enum.sort()
+        |> Enum.reduce_while({:ok, []}, fn id, {:ok, items} ->
+          case Project.visible?(id, principal) do
+            {:ok, true} -> {:cont, {:ok, items ++ [%{id: id}]}}
+            {:ok, false} -> {:cont, {:ok, items}}
+            error -> {:halt, error}
+          end
+        end)
     end
   end
 

@@ -136,6 +136,14 @@ defmodule Omunculus.ServerTest do
     assert Req.get!(base <> "/conversations", headers: auth(outsider)).body["items"] == []
     assert Req.get!(base <> "/conversations", headers: auth("invalid")).status == 401
 
+    projects_url = "http://127.0.0.1:#{port}/v1/projects"
+
+    assert Req.get!(projects_url, headers: auth(admin)).body ==
+             %{"items" => [%{"id" => "alpha"}, %{"id" => "beta"}]}
+
+    assert Req.get!(projects_url, headers: auth(outsider)).body == %{"items" => []}
+    assert Req.get!(projects_url, headers: auth("invalid")).status == 401
+
     assert Req.post!("http://127.0.0.1:#{port}/v1/cli",
              headers: auth(admin),
              json: %{argv: ["send", "x"]}
@@ -218,6 +226,10 @@ defmodule Omunculus.ServerTest do
       )
 
     assert member.status == 200
+
+    assert Req.get!(projects_url, headers: auth(outsider)).body == %{
+             "items" => [%{"id" => "alpha"}]
+           }
 
     events = Req.get!(base <> "/conversations/#{id}/events", headers: auth(outsider))
     assert events.status == 200
@@ -411,6 +423,9 @@ defmodule Omunculus.ServerTest do
     end
 
     assert local.(:get, "/v1/identity", []).body == %{"issuer" => "local", "subject" => uid}
+
+    assert local.(:get, "/v1/projects", []).body ==
+             %{"items" => [%{"id" => "solo", "socket" => socket}]}
 
     created =
       local.(:post, "/v1/projects/solo/conversations",

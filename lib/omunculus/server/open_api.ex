@@ -23,6 +23,11 @@ defmodule Omunculus.Server.OpenAPI do
       request: "CreateConversation",
       idempotent: true
     },
+    list_projects: %{
+      summary: "List the projects you see: on a local socket every project with its socket",
+      status: 200,
+      response: "Projects"
+    },
     list_conversations: %{
       summary: "List visible conversations",
       status: 200,
@@ -273,6 +278,8 @@ defmodule Omunculus.Server.OpenAPI do
       "CreatedConversation" => object(%{id: string(), cursor: string()}, ~w(id cursor)),
       "CreateConversation" => object(%{}),
       "Conversations" => object(%{items: array(ref("Conversation"))}, ["items"]),
+      "Projects" =>
+        object(%{items: array(object(%{id: string(), socket: string()}, ["id"]))}, ["items"]),
       "Accepted" =>
         object(
           %{status: %{type: "string", const: "accepted"}, cursor: %{type: ["string", "null"]}},

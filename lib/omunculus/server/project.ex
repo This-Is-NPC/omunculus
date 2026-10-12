@@ -27,6 +27,12 @@ defmodule Omunculus.Server.Project do
 
   def conversations(id, principal), do: GenServer.call(via(id), {:conversations, principal})
 
+  @doc "Whether `principal` sees the project."
+  def visible?(id, principal), do: GenServer.call(via(id), {:visible, principal})
+
+  @doc "The project's local socket."
+  def socket(id), do: GenServer.call(via(id), :socket)
+
   def conversation(id, principal, conversation_id),
     do: GenServer.call(via(id), {:conversation, principal, conversation_id})
 
@@ -93,6 +99,17 @@ defmodule Omunculus.Server.Project do
   end
 
   def handle_call(:project, _from, project), do: {:reply, project, project}
+
+  def handle_call({:visible, principal}, _from, project),
+    do: {:reply, Access.visible?(project, principal), project}
+
+  def handle_call(:socket, _from, project) do
+    reply =
+      with {:ok, config} <- Config.load(project.config_path),
+           do: {:ok, Omunculus.Server.Socket.path(config.store.path)}
+
+    {:reply, reply, project}
+  end
 
   def handle_call({:list, principal, id, kind}, _from, project) do
     {:reply, Access.list(project, principal, id, kind), project}

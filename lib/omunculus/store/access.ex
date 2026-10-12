@@ -81,6 +81,26 @@ defmodule Omunculus.Store.Access do
     end
   end
 
+  @doc """
+  Whether `principal` sees the project: it may read its conversations, or
+  is a member of one it may read.
+  """
+  @spec visible?(Project.t(), principal) :: {:ok, boolean} | {:error, term}
+  def visible?(project, principal) do
+    with {:ok, config} <- Config.load(project.config_path) do
+      case check(project.conn, config.access, principal, "conversation.read", nil) do
+        :ok ->
+          {:ok, true}
+
+        {:error, :forbidden} ->
+          with {:ok, rows} <- conversations(project, principal), do: {:ok, rows != []}
+
+        error ->
+          error
+      end
+    end
+  end
+
   @spec conversations(Project.t(), principal) :: {:ok, [map]} | {:error, term}
   def conversations(project, principal) do
     with {:ok, config} <- Config.load(project.config_path) do

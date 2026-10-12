@@ -18,7 +18,10 @@ defmodule Omunculus.Server do
           Enum.flat_map(config.projects, fn {id, project_path} ->
             [
               Supervisor.child_spec({Project, {id, project_path, limits}}, id: {:project, id}),
-              Supervisor.child_spec({Socket, {id, project_path, stream_key}}, id: {:socket, id})
+              Supervisor.child_spec(
+                {Socket, {id, project_path, stream_key, Map.keys(config.projects)}},
+                id: {:socket, id}
+              )
             ]
           end) ++ http
 
