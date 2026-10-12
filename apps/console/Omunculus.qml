@@ -13,8 +13,8 @@ import "Requests.js" as Requests
 Singleton {
   id: root
 
-  readonly property string socket: Quickshell.env("OMUNCULUS_GUI_SOCKET")
-  readonly property string project: Quickshell.env("OMUNCULUS_GUI_PROJECT")
+  readonly property string socket: Quickshell.env("OMUNCULUS_CONSOLE_SOCKET")
+  readonly property string project: Quickshell.env("OMUNCULUS_CONSOLE_PROJECT")
   readonly property string base: "/v1/projects/" + project
 
   property bool connected: false
@@ -80,7 +80,7 @@ Singleton {
 
   Component.onCompleted: {
     if (socket === "" || project === "")
-      tell("OMUNCULUS_GUI_SOCKET and OMUNCULUS_GUI_PROJECT are not set; start through bin/omunculus-gui", true)
+      tell("OMUNCULUS_CONSOLE_SOCKET and OMUNCULUS_CONSOLE_PROJECT are not set; start through apps/console/run", true)
     else
       check()
   }

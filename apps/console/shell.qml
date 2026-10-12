@@ -178,7 +178,7 @@ ShellRoot {
     }
   }
 
-  // `quickshell ipc --path gui call omunculus <function>`, e.g. from a shortcut.
+  // `quickshell ipc --path apps/console call omunculus <function>`, e.g. from a shortcut.
   IpcHandler {
     target: "omunculus"
     function newConversation(): void { Omunculus.createConversation() }

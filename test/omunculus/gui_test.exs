@@ -3,7 +3,7 @@ defmodule Omunculus.GuiTest do
 
   test "GUI request filtering and receiver labels use participant-neutral fields" do
     script =
-      File.read!(Path.expand("../../gui/Requests.js", __DIR__))
+      File.read!(Path.expand("../../apps/console/Requests.js", __DIR__))
       |> String.replace(".pragma library", "")
 
     assertions = """

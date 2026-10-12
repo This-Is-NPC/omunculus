@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Opens the omunculus window on a project of a running server's registry:
-#   bin/omunculus-gui --config <server.toml> [--project <id>]
+#   apps/console/run --config <server.toml> [--project <id>]
 set -euo pipefail
 
 usage() {
-  printf 'usage: omunculus-gui --config <server.toml> [--project <id>]\n' >&2
+  printf 'usage: apps/console/run --config <server.toml> [--project <id>]\n' >&2
   exit 1
 }
 
@@ -18,9 +18,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ -n $config ]] || usage
-[[ -f $config ]] || { printf 'omunculus-gui: no server registry at %s\n' "$config" >&2; exit 1; }
+[[ -f $config ]] || { printf 'console: no server registry at %s\n' "$config" >&2; exit 1; }
 config=$(realpath "$config")
-root=$(realpath "$(dirname "$(realpath "$0")")/..")
+app=$(dirname "$(realpath "$0")")
+root=$(realpath "$app/../..")
 
 XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$UID}
 if [[ -z ${WAYLAND_DISPLAY:-} ]]; then
@@ -28,12 +29,12 @@ if [[ -z ${WAYLAND_DISPLAY:-} ]]; then
     [[ -S $candidate ]] && WAYLAND_DISPLAY=${candidate##*/} && break
   done
 fi
-[[ -n ${WAYLAND_DISPLAY:-} ]] || { printf 'omunculus-gui: no Wayland session found\n' >&2; exit 1; }
+[[ -n ${WAYLAND_DISPLAY:-} ]] || { printf 'console: no Wayland session found\n' >&2; exit 1; }
 
 IFS=$'\t' read -r id socket < <(cd "$root" && mise exec -- mix omunculus.socket "$config" "${project[@]}")
 [[ -n ${socket:-} ]] || exit 1
-[[ -S $socket ]] || { printf 'omunculus-gui: no socket at %s; start `omunculus serve` first\n' "$socket" >&2; exit 1; }
+[[ -S $socket ]] || { printf 'console: no socket at %s; start `omunculus serve` first\n' "$socket" >&2; exit 1; }
 
 export XDG_RUNTIME_DIR WAYLAND_DISPLAY QT_QPA_PLATFORM=wayland
-export OMUNCULUS_GUI_SOCKET=$socket OMUNCULUS_GUI_PROJECT=$id
-exec quickshell --path "$root/gui"
+export OMUNCULUS_CONSOLE_SOCKET=$socket OMUNCULUS_CONSOLE_PROJECT=$id
+exec quickshell --path "$app"
