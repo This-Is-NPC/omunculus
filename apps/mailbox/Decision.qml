@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "gui"
 
 // Decision is a request that waits on you: who asks, what for, the questions
 // it gathers from below, its options as buttons, and a field for an answer in
@@ -57,11 +58,10 @@ SurfaceFrame {
       spacing: 6
       Repeater {
         model: card.request.options
-        delegate: Button {
+        delegate: TraceButton {
           required property string modelData
           dense: true
-          role: modelData === "deny" || modelData === "cancel" ? "action" : "primary"
-          tone: modelData === "deny" || modelData === "cancel" ? Theme.error : Theme.primary
+          role: modelData === "deny" || modelData === "cancel" ? "guarded" : "primary"
           text: modelData.replace(/_/g, " ").toUpperCase()
           tip: answer.text.trim() !== "" ? "with what you wrote" : ""
           onClicked: Mail.decide(card.mail, card.request.id, modelData, answer.text)
@@ -79,8 +79,9 @@ SurfaceFrame {
         placeholderText: card.request.options.length > 0 ? "a word with your choice, or an answer of your own" : "your answer"
         onSubmitted: Mail.decide(card.mail, card.request.id, "", answer.text)
       }
-      Button {
+      TraceButton {
         dense: true
+        role: "progress"
         icon: "send"
         text: "ANSWER"
         enabled: answer.text.trim() !== ""

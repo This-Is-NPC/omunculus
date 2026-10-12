@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "gui"
 
 // Folder is one entry of the sidebar: its icon, its name and how many mails
 // in it want you.

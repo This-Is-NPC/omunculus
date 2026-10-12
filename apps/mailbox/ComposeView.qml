@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "gui"
 
 // ComposeView writes a new mail: what you need, in as many lines as it takes.
 // Sending opens a conversation of its own and hands it to the root agent.
@@ -29,12 +30,12 @@ ColumnLayout {
     Layout.fillWidth: true
     spacing: 8
     Item { Layout.fillWidth: true }
-    Button {
-      role: "quiet"
+    TraceButton {
+      role: "progress"
       text: "DISCARD"
       onClicked: { body.text = ""; Mail.composing = false }
     }
-    Button {
+    TraceButton {
       role: "primary"
       icon: "send"
       text: "SEND"

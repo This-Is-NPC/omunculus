@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "gui"
 
 // MailRow is one mail in a list: its state, when it last moved, its subject,
 // and a line of what came back. Unread, it is bold behind an accent bar.

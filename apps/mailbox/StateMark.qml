@@ -1,4 +1,5 @@
 import QtQuick
+import "gui"
 
 // StateMark is a mail's state in a word: working (it breathes), your decision,
 // or answered.

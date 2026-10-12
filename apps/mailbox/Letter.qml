@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "gui"
 
 // Letter is one part of a mail as you read it: what you wrote, an answer the
 // agents sent back once they had finished, or a decision you made on the way.

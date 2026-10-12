@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic as C
+import "gui"
 
 // MailView reads one mail: its subject, what you wrote and what came back, in
 // order. Below, what the mail waits for: the agents, while they work; you, on
@@ -91,7 +92,7 @@ ColumnLayout {
       placeholderText: "reply, and the agents take it up again"
       onSubmitted: Mail.reply(view.mail.id, reply.take())
     }
-    Button {
+    TraceButton {
       Layout.alignment: Qt.AlignBottom
       role: "primary"
       icon: "send"

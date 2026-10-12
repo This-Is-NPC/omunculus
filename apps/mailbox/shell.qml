@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import QtQuick.Controls.Basic as C
 import Quickshell
 import Quickshell.Io
+import "gui"
 
 ShellRoot {
   // The mailbox: the folders on the left, the mails of the one picked in the
@@ -43,7 +44,7 @@ ShellRoot {
             Label { text: "MAIL"; color: Theme.dim; font.pixelSize: 10; font.letterSpacing: 3 }
           }
 
-          Button {
+          TraceButton {
             Layout.fillWidth: true
             Layout.leftMargin: 16
             Layout.rightMargin: 16
@@ -56,7 +57,7 @@ ShellRoot {
             onClicked: Mail.compose()
           }
 
-          Folder { Layout.fillWidth: true; name: "inbox"; icon: "inbox"; label: "Inbox"; count: Mail.unread; tone: Mail.deciding > 0 ? Theme.warning : Theme.primary }
+          Folder { Layout.fillWidth: true; name: "inbox"; icon: "import"; label: "Inbox"; count: Mail.unread; tone: Mail.deciding > 0 ? Theme.warning : Theme.primary }
           Folder { Layout.fillWidth: true; name: "sent"; icon: "send"; label: "Sent"; count: Mail.working; tone: Theme.dim }
 
           Item { Layout.fillHeight: true }

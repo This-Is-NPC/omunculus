@@ -2,7 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "Requests.js" as Requests
+import "gui/Requests.js" as Requests
 
 // Mail is the project as the mailbox sees it: each conversation is one mail,
 // what you wrote in it and the answers its root agent gave once the agents had
