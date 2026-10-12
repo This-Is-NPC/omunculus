@@ -551,7 +551,7 @@ defmodule Omunculus.Run do
   # A receiver that leaves a pending request uses the same linked escalation.
   defp unanswered(project, state) do
     with {:ok, events} <-
-           Store.unanswered(project.conn, state.run, state.config, &Out.unanswered/2),
+           Store.unanswered(project.conn, state.run, state.config, &Out.unanswered/3),
          {:ok, _hooks} <-
            Harness.react(project, events, [], state.execution, Map.get(state, :prepared)) do
       Harness.follow_up(project, events)

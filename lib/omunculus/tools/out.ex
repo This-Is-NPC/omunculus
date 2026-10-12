@@ -110,9 +110,11 @@ defmodule Omunculus.Tools.Out do
   def request_inbox(request_id, reason, options),
     do: "#{reason} Reply to request #{request_id} with #{Enum.join(options, " or ")}."
 
-  @spec unanswered(String.t(), String.t()) :: String.t()
-  def unanswered(request_id, agent),
-    do: "#{agent} left request #{request_id} unresolved; reply to its linked question."
+  @spec unanswered(String.t(), String.t(), String.t() | nil) :: String.t()
+  def unanswered(request_id, agent, reply_id) do
+    reason = "#{agent} left request #{request_id} unresolved."
+    if reply_id, do: reason <> " Reply to linked request #{reply_id}.", else: reason
+  end
 
   @spec answer_request() :: String.t()
   def answer_request,

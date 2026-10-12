@@ -152,7 +152,8 @@ defmodule Omunculus.Store.Runs do
          do: :ok
   end
 
-  @spec unanswered(Connection.t(), map, map, (String.t(), String.t() -> String.t())) ::
+  @spec unanswered(Connection.t(), map, map, (String.t(), String.t(), String.t() | nil ->
+                                                String.t())) ::
           {:ok, [map]} | {:error, term}
   def unanswered(_conn, %{request_id: nil}, _config, _reason_text), do: {:ok, []}
 
@@ -177,7 +178,7 @@ defmodule Omunculus.Store.Runs do
                      %{
                        "type" => "escalate",
                        "body" => %{
-                         "reason" => reason_text.(request.id, run.agent),
+                         "reason" => reason_text.(request.id, run.agent, nil),
                          "origins" => %{"answer" => request.id}
                        }
                      }
@@ -186,7 +187,8 @@ defmodule Omunculus.Store.Runs do
                  ),
                upstream = Enum.find(events, &(&1.type == "request")),
                {:ok, request} <- View.view(conn, "request", upstream.request_id),
-               {:ok, notified} <- notify_unanswered(conn, request, ctx, reason_text) do
+               {:ok, notified} <-
+                 notify_unanswered(conn, request, run.request_id, ctx, reason_text) do
             {:ok, events ++ notified}
           end
         else
@@ -196,14 +198,17 @@ defmodule Omunculus.Store.Runs do
     end)
   end
 
-  defp notify_unanswered(conn, request, ctx, text) do
+  defp notify_unanswered(conn, request, origin_id, ctx, text) do
     if Jason.decode!(request.arbiter)["kind"] == "human" do
       Actions.run(
         conn,
         [
           %{
             "type" => "notify",
-            "body" => %{"body" => text.(request.id, ctx.agent), "work_id" => request.work_id}
+            "body" => %{
+              "body" => text.(origin_id, ctx.agent, request.id),
+              "work_id" => request.work_id
+            }
           }
         ],
         ctx

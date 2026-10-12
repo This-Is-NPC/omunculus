@@ -64,8 +64,8 @@ commands and configurable routes are not exposed at this commit.
 `Store.Runs.unanswered/4` uses the same linked escalation action when an agent
 receiver closes without answering a pending request. The new request goes to
 the next parent receiver, or the authenticated conversation/run origin at the
-root. It records an inbox note naming an upstream request that reaches a
-human. Explicitly escalated origins are not escalated again, and neither
+root. It records an inbox note naming the unresolved origin and pointing to the
+upstream request that a human can answer. Explicitly escalated origins are not escalated again, and neither
 requester nor arbiter identities are rewritten in place.
 
 ## Proposed request contract

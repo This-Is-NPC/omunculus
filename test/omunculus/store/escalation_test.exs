@@ -822,7 +822,7 @@ defmodule Omunculus.Store.EscalationTest do
     lead_run = incoming.("lead", ctx.lead, 1, origin)
 
     assert {:ok, first_events} =
-             Store.unanswered(conn, lead_run, ctx.config, &Omunculus.Tools.Out.unanswered/2)
+             Store.unanswered(conn, lead_run, ctx.config, &Omunculus.Tools.Out.unanswered/3)
 
     merged = Enum.find(first_events, &(&1.type == "request")).request_id
     assert request(conn, origin).status == "escalated"
@@ -832,20 +832,22 @@ defmodule Omunculus.Store.EscalationTest do
     root_run = incoming.("root", ctx.root, 0, merged)
 
     assert {:ok, last_events} =
-             Store.unanswered(conn, root_run, ctx.config, &Omunculus.Tools.Out.unanswered/2)
+             Store.unanswered(conn, root_run, ctx.config, &Omunculus.Tools.Out.unanswered/3)
 
     upstream = Enum.find(last_events, &(&1.type == "request")).request_id
     assert Jason.decode!(request(conn, upstream).arbiter) == Participant.human("test", "owner")
     assert count(conn, "inbox") == 1
     assert Enum.any?(last_events, &(&1.type == "notify"))
     assert {:ok, [note]} = Query.all(conn, "SELECT body FROM comments WHERE inbox_id IS NOT NULL")
-    assert note.body =~ upstream
+
+    assert note.body ==
+             "root left request #{merged} unresolved. Reply to linked request #{upstream}."
 
     assert {:ok, []} =
-             Store.unanswered(conn, root_run, ctx.config, &Omunculus.Tools.Out.unanswered/2)
+             Store.unanswered(conn, root_run, ctx.config, &Omunculus.Tools.Out.unanswered/3)
 
     assert {:ok, []} =
-             Store.unanswered(conn, lead_run, ctx.config, &Omunculus.Tools.Out.unanswered/2)
+             Store.unanswered(conn, lead_run, ctx.config, &Omunculus.Tools.Out.unanswered/3)
 
     assert count(conn, "request_escalations") == 2
     assert count(conn, "inbox") == 1
