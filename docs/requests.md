@@ -35,6 +35,18 @@ recorded arbiter. The reply closes the request and reopens a work still waiting
 on that request. Follow-up opens its run, or a workless requester's agent in
 the original conversation. A cancelled work does not run again.
 
+A named decision is answered by choosing its `option`. Text alone supplies
+content and resumes a waiting requester, but records no decision. For example,
+the sales desk's `next_stage` owner gate requires a reply with
+`option = approve`; a text-only "approved" does not pass that gate.
+
+After root retry exhaustion, `retry` remains an explicit named decision with
+no tool calls. It keeps the retry/cancel choices in the exhaustion notification
+and records the selected intent in the reply event and request's `answer`.
+Both `retry` and text-only answers reuse the common reply/reopen path; there
+is no separate retry effect implementation. `cancel` is the effect-bearing
+option and cancels the work through its chained call.
+
 `Store.Runs.unanswered/3` currently changes an unanswered agent request's
 arbiter to `human` after the arbiter's run closes. It records an `escalate`
 event and an inbox note. This changes the same request in place; it creates
@@ -89,9 +101,10 @@ commands. There is no second request engine or participant-specific lifecycle.
 
 `reply` takes `request_id`, a nonempty `body` and an optional `option`. An
 omitted option answers with text alone, including when the request offers
-options. The reply tool treats a null or empty option as omitted; HTTP clients must
-omit the key for a text answer. A nonempty supplied option must exist; an
-unknown option must never be silently treated as a text answer. The request view exposes the reply text
+options. The reply tool treats a null or empty option as omitted; HTTP
+clients must omit the key for a text answer. A nonempty supplied option must
+exist; an unknown option must never be silently treated as a text answer.
+The request view exposes the reply text
 and optional selected option; `answer = nil` alone cannot distinguish an
 unanswered request from a closed text answer. Comments remain the durable
 text record, with the reply event identifying the answer.
@@ -370,7 +383,7 @@ respective answers are returned.
 | Questions carried by `break`, then `reopen` | A resumable question is a request; escalation carries it upward and reply resumes it. | Design lead, designer and administrator instructions use stopping reports for missing information. Replace those question instructions with requests. Keep `break` and `reopen` for actual failed/stopped work and correction. |
 | `promote` approval | A permission request for the clerk's production tool follows the configured decision route, regardless of intermediary type. | Dream-team seals `promote` as human-only and its clerk requests it with `request_access`, which currently jumps to the human. Preserve the human grant boundary internally while linking every escalation; the requester does not choose a human endpoint. `promote` itself remains the deployment tool and publishes only after the grant; a text approval cannot run it. |
 | `propose_config`, `propose_pack` | Decision requests with `apply` calling `configure` or `pack`, and `deny` calling nothing. | Keep validated proposals, revision checks and human authorization on the shared path. Free text records advice without applying a proposal. Resolve the configured responsibility without requiring the asker to identify its participant type. |
-| Harness retry / cancel | Decision request to the configured responsible participant after root retry exhaustion. | Keep named effect options and text replies; a text-only reply reopens the requester without cancelling it. Child exhaustion remains a genuine break. |
+| Harness retry / cancel | Decision request to the configured responsible participant after root retry exhaustion. | Keep `retry` as an explicit named decision and `cancel` as an effect-bearing option; a text-only reply reopens the requester without recording either decision. Child exhaustion remains a genuine break. |
 | Unanswered arbiter run | Single-origin linked escalation. | Today it rewrites the arbiter to human in place. Remove that shortcut in favor of the common escalation path; an explicitly escalated origin must not escalate twice. |
 | Human-origin requests | The same request contract with an authenticated human requester and optional work, without a model run. | The current schema requires an agent requester. Replace that assumption in the single schema revision, expose authorized creation/escalation commands, and use the same delivery, reply and effect rules. |
 | Seller comments and front-desk forwarding | Generalist asks the client a combined request and routes each answer back to its origin. | Sales currently forwards every message and the seller comments its own questions; it has no shared request inbox. Update pack tools, stage ceilings and instructions so questions use requests and client replies resolve them. Preserve ordinary messages and work creation. |
