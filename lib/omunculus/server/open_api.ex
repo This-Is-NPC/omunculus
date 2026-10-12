@@ -434,12 +434,8 @@ defmodule Omunculus.Server.OpenAPI do
             requester: %{type: "object"},
             work_id: nullable_string(),
             options: %{type: "object"},
-            origins: %{type: "object", additionalProperties: ref("Request")},
-            reason: nullable_string(),
-            workflow: nullable_string(),
-            stage: nullable_string(),
             arbiter: %{type: "object"},
-            status: %{type: "string", enum: ~w(pending escalated closed)},
+            status: %{type: "string", enum: ~w(pending closed)},
             created_at: string()
           },
           ["id", "options", "status"]

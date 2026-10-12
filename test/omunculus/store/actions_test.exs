@@ -2010,7 +2010,7 @@ defmodule Omunculus.Store.ActionsTest do
       end
 
       assert arbiter.(%{}) == @concierge
-      assert arbiter.(%{"to" => "owner"}) == @human
+      assert arbiter.(%{"to" => "person"}) == @human
 
       run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
 
@@ -2043,7 +2043,7 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert {:ok, [_tool_event, event]} = record_tool(conn, [calling], ctx)
 
-      assert {:ok, %{arbiter: @concierge, status: "pending"}} =
+      assert {:ok, %{arbiter: @human, status: "pending"}} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
     end
 
@@ -2060,7 +2060,7 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert {:ok, [_tool_event, event]} = record_tool(conn, [request_emit(options)], ctx)
 
-      assert {:ok, %{arbiter: @concierge}} =
+      assert {:ok, %{arbiter: @human}} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
     end
 
@@ -2076,9 +2076,9 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, request} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
 
-      assert request.arbiter == @concierge
+      assert request.arbiter == @human
       assert request.status == "pending"
-      assert Jason.decode!(event.body)["arbiter"]["kind"] == "agent"
+      assert Jason.decode!(event.body)["arbiter"]["kind"] == "human"
     end
 
     test "harness requests follow the configured route", %{conn: conn} do
@@ -2094,7 +2094,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, [_tool_event, event]} =
                record_tool(conn, [access_request("tool", "write")], ctx)
 
-      assert {:ok, %{arbiter: @concierge}} =
+      assert {:ok, %{arbiter: @human}} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
     end
   end

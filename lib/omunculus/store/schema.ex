@@ -152,7 +152,7 @@ defmodule Omunculus.Store.Schema do
       work_id TEXT REFERENCES works (id) DEFERRABLE INITIALLY DEFERRED,
       options TEXT NOT NULL,
       arbiter TEXT NOT NULL CHECK (json_valid(arbiter)),
-      status TEXT NOT NULL CHECK (status IN ('pending', 'escalated', 'closed')),
+      status TEXT NOT NULL CHECK (status IN ('pending', 'closed')),
       event_id TEXT REFERENCES events (id) DEFERRABLE INITIALLY DEFERRED,
       created_at TEXT NOT NULL
     )
@@ -211,7 +211,6 @@ defmodule Omunculus.Store.Schema do
     {"works", "created_at"},
     {"requests", "created_at"},
     {"requests", "requester"},
-    {"requests", "arbiter"},
     {"inbox", "created_at"}
   ]
 

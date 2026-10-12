@@ -271,11 +271,17 @@ defmodule Omunculus.Store.Runs do
 
   def unanswered(conn, run, config, reason_text) do
     Query.transaction(conn, fn ->
-      with {:ok, request} <- View.view(conn, "request", run.request_id) do
-        case left(request, Omunculus.Participant.agent(run.agent)) do
-          [] -> {:ok, []}
-          parts -> pass_on(conn, run, config, reason_text, parts)
-        end
+      case Query.one(conn, "SELECT * FROM requests WHERE id = ?", [run.request_id]) do
+        {:ok, %{status: "pending"} = request} ->
+          if Jason.decode!(request.arbiter) == Omunculus.Participant.agent(run.agent),
+            do: escalate(conn, run, request, inbox_text),
+            else: {:ok, []}
+
+        {:ok, _answered_or_not_its} ->
+          {:ok, []}
+
+        {:error, _reason} = error ->
+          error
       end
     end)
   end
@@ -288,39 +294,27 @@ defmodule Omunculus.Store.Runs do
       else: request.origins |> Enum.filter(fn {_part, origin} -> held?(origin, receiver) end)
   end
 
-  defp held?(request, receiver),
-    do: request.status == "pending" and Jason.decode!(request.arbiter) == receiver
-
-  defp pass_on(conn, run, config, reason_text, parts) do
-    ctx = %{
-      run_id: run.id,
-      work_id: run.work_id,
-      author: "harness",
-      agent: run.agent,
-      config: config,
-      groups: %{}
-    }
-
-    with {:ok, questions} <- questions(conn, parts),
-         text = &reason_text.(run.agent, questions, &1),
-         {:ok, events} <-
-           Actions.run(
-             conn,
-             [
-               %{
-                 "type" => "escalate",
-                 "body" => %{
-                   "reason" => text.(false),
-                   "origins" => Map.new(parts, fn {part, request} -> {part, request.id} end)
-                 }
-               }
-             ],
-             ctx
-           ),
-         upstream = Enum.find(events, &(&1.type == "request")),
-         {:ok, linked} <- View.view(conn, "request", upstream.request_id),
-         {:ok, notified} <- notify_unanswered(conn, linked, ctx, text.(true)) do
-      {:ok, events ++ notified}
+    with {:ok, human, nil} <- Omunculus.Store.Actions.Requests.human_arbiter(conn, ctx, run, nil),
+         :ok <-
+           Query.exec(conn, "UPDATE requests SET arbiter = ? WHERE id = ?", [
+             Jason.encode!(human),
+             request.id
+           ]),
+         {:ok, event} <-
+           Events.append(conn, %{
+             type: "escalate",
+             run_id: run.id,
+             work_id: request.work_id,
+             request_id: request.id,
+             body: Jason.encode!(%{from: run.agent})
+           }),
+         options = request.options |> Jason.decode!() |> Map.keys(),
+         notify = %{
+           "body" => inbox_text.(request.id, run.agent) <> " " <> Enum.join(options, ", ") <> ".",
+           "work_id" => request.work_id
+         },
+         {:ok, inbox} <- Actions.run(conn, [%{"type" => "notify", "body" => notify}], ctx) do
+      {:ok, [event | inbox]}
     end
   end
 

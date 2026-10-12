@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "Requests.js" as Requests
 
 // AgentNode is one agent at work on the orchestration map: its ring in the
 // agent's colour, which keeps leaving it while the agent runs, the work, and
@@ -20,7 +21,7 @@ SurfaceFrame {
   readonly property bool running: Omunculus.busy(key)
   readonly property var asks: Omunculus.asked(key)
   readonly property var notes: Omunculus.unreadFrom(key)
-  readonly property bool yours: asks.some(request => request.arbiter === "human") || notes.length > 0
+  readonly property bool yours: asks.some(request => Requests.human(request.arbiter)) || notes.length > 0
   readonly property string workState: work ? work.state : "open"
   readonly property color agentTone: Omunculus.toneOf(agent)
   // Clicking the node opens its thread.
@@ -132,7 +133,7 @@ SurfaceFrame {
       delegate: Rectangle {
         id: ask
         required property var modelData
-        readonly property bool toYou: modelData.arbiter === "human"
+        readonly property bool toYou: Requests.human(modelData.arbiter)
         Layout.fillWidth: true
         implicitHeight: asked.implicitHeight + 16
         color: toYou ? Qt.alpha(Theme.warning, 0.1) : Theme.highlight
@@ -147,8 +148,8 @@ SurfaceFrame {
             Icon { anchors.verticalCenter: parent.verticalCenter; name: "chevron-right"; size: 10; color: ask.toYou ? Theme.warning : Theme.dim }
             Label {
               anchors.verticalCenter: parent.verticalCenter
-              text: ask.toYou ? "YOU" : String(ask.modelData.arbiter).toUpperCase()
-              color: ask.toYou ? Theme.warning : Omunculus.toneOf(ask.modelData.arbiter)
+              text: ask.toYou ? "YOU" : Requests.label(ask.modelData.arbiter).toUpperCase()
+              color: ask.toYou ? Theme.warning : Omunculus.toneOf(ask.modelData.arbiter.agent)
               font.pixelSize: 9
               font.letterSpacing: 2
             }

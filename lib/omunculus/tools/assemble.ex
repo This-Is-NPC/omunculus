@@ -394,10 +394,7 @@ defmodule Omunculus.Tools.Assemble do
 
   defp request_section(nil, _comments), do: []
 
-  defp request_section(request, comments),
-    do: ["## Request\n" <> Enum.join(request_lines(request, comments, true), "\n")]
-
-  defp request_lines(request, comments, answer_instruction?) do
+  defp request_section(request, comments) do
     header = "#{request.id} #{Out.requested_by(Omunculus.Participant.label(request.requester))}"
     comments = Enum.map(comments || [], & &1.body)
 

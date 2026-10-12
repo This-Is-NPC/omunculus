@@ -10,7 +10,12 @@ they do not select different request protocols. Human commands have no synthetic
 agent run. An agent receiving a request gets a run; a human receives the request
 without one.
 
-## Stored model
+A request already has a question (`reason`), named options containing tool
+calls, a JSON `requester` identity, an `arbiter` identity, optional `run_id` and
+`work_id`, and `pending` or `closed` as its status. An agent identity names its
+agent; a human identity contains authenticated issuer and subject. Older
+stores without participant columns require explicit recreation. Its opening
+event and request comments hold the question. Options are immutable.
 
 | Field | Meaning |
 | --- | --- |

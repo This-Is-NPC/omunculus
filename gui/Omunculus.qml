@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "Requests.js" as Requests
 
 // Omunculus is the project as the window sees it: whether the server answers,
 // its conversations, and the one on screen folded into threads a person can
@@ -66,12 +67,12 @@ Singleton {
   property int noticeCount: 0
 
   readonly property var running: runs.filter(run => run.status === "open")
-  readonly property var waiting: requests.filter(request => String(request.status).startsWith("waiting") && request.arbiter === "human")
+  readonly property var waiting: requests.filter(request => Requests.pending(request) && Requests.human(request.arbiter))
   readonly property var unread: inbox.filter(item => !item.read_at)
   // What waits on you: requests to decide and notes to read.
   readonly property int pending: waiting.length + unread.length
   // Requests still waiting, on you or on an agent.
-  readonly property var asking: requests.filter(request => String(request.status).startsWith("waiting"))
+  readonly property var asking: requests.filter(request => Requests.pending(request))
 
 
   Component.onCompleted: {
@@ -130,7 +131,7 @@ Singleton {
     return {
       title: said ? String(said.body).replace(/\s+/g, " ") : "",
       running: data.runs.filter(run => run.status === "open").length,
-      waiting: data.requests.filter(request => String(request.status).startsWith("waiting") && request.arbiter === "human").length
+      waiting: data.requests.filter(request => Requests.pending(request) && Requests.human(request.arbiter)).length
     }
   }
 

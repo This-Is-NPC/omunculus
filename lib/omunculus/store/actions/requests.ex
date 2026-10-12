@@ -10,8 +10,8 @@ defmodule Omunculus.Store.Actions.Requests do
   """
 
   alias Omunculus.{Ceiling, Config, Id, Participant}
-  alias Omunculus.Store.Actions.{Contract, Helpers}
-  alias Omunculus.Store.{Events, Query, RequestRoutes, View}
+  alias Omunculus.Store.Actions.Helpers
+  alias Omunculus.Store.{Events, Query, View}
   alias Omunculus.Tool.Invoke
 
   @scopes ~w(agent depth stage workspace)
@@ -474,6 +474,65 @@ defmodule Omunculus.Store.Actions.Requests do
     calls != [] and Enum.all?(calls, &(&1.name == "grant"))
   end
 
+  defp fetch_run(_conn, nil), do: {:error, {:request, :no_run}}
+
+  defp fetch_run(conn, run_id) do
+    case View.view(conn, "run", run_id) do
+      {:ok, nil} -> {:error, {:request, {:missing, :runs, run_id}}}
+      other -> other
+    end
+  end
+
+  defp for_person?(%{"to" => "person"}), do: true
+  defp for_person?(_body), do: false
+
+  defp classify_request(conn, ctx, run, reason, options, classified, sealed_calls?) do
+    classes = Enum.map(classified, fn {_grant, class} -> class end)
+
+    case List.keyfind(classified, "blocked", 1) do
+      {grant, "blocked"} ->
+        {:error, {:request, {:blocked, grant.name}}}
+
+      nil ->
+        if access_only?(options) and Enum.all?(classes, &(&1 == "have")) do
+          names = classified |> Enum.map(fn {grant, _class} -> grant.name end) |> Enum.uniq()
+          {:error, {:request, {:already_have, Enum.join(names, ", ")}}}
+        else
+          with {:ok, arbiter} <-
+                 resolve_arbiter(conn, ctx, options, sealed_calls? or "sealed" in classes) do
+            with {:ok, identity, work_id} <- arbiter_info(conn, ctx, run, arbiter),
+                 do: open_request(conn, ctx, run, reason, options, identity, work_id)
+          end
+        end
+    end
+  end
+
+  defp resolve_arbiter(_conn, %{author: "harness"}, _options, _sealed?), do: {:ok, :human}
+  defp resolve_arbiter(_conn, _ctx, _options, true), do: {:ok, :human}
+
+  defp resolve_arbiter(conn, ctx, options, false) do
+    with {:ok, work} <- Helpers.fetch_work(conn, ctx.work_id),
+         {:ok, parent} <- Helpers.fetch_work(conn, work && work.parent_id) do
+      agent_arbiter(conn, ctx, parent, options)
+    end
+  end
+
+  defp agent_arbiter(_conn, _ctx, nil, _options), do: {:ok, :human}
+  defp agent_arbiter(_conn, _ctx, %{assignee: nil}, _options), do: {:ok, :human}
+
+  defp agent_arbiter(conn, ctx, parent, options) do
+    tools = options |> Map.values() |> List.flatten() |> Enum.map(& &1.name) |> Enum.uniq()
+    grants = grants(options)
+
+    with {:ok, snapshot} <-
+           work_ceiling(conn, ctx, parent, parent.assignee, tools ++ Enum.map(grants, & &1.name)) do
+      if Enum.all?(tools, &(Ceiling.classify(snapshot, &1, "tool") == "have")) and
+           Enum.all?(grants, &(Ceiling.classify(snapshot, &1.name, &1.kind) in ~w(have askable))),
+         do: {:ok, {:agent, parent.assignee, parent.id}},
+         else: {:ok, :human}
+    end
+  end
+
   defp stage_layer(_config, %{stage: nil}), do: nil
 
   defp stage_layer(config, work) do
@@ -482,6 +541,134 @@ defmodule Omunculus.Store.Actions.Requests do
       step.ceiling
     else
       _off_or_off_sequence -> nil
+    end
+  end
+
+  def human_arbiter(conn, ctx, run, work) do
+    conversation_id =
+      (run && run.conversation_id) || (work && work.conversation_id) ||
+        Map.get(ctx, :conversation_id)
+
+    with {:ok, conversation} <-
+           if(conversation_id,
+             do: Query.one(conn, "SELECT * FROM conversations WHERE id = ?", [conversation_id]),
+             else: {:ok, nil}
+           ) do
+      issuer =
+        (conversation && conversation.created_issuer) || (run && run.origin_issuer) ||
+          Map.get(ctx, :issuer)
+
+      subject =
+        (conversation && conversation.created_subject) || (run && run.origin_subject) ||
+          Map.get(ctx, :subject)
+
+      if is_binary(issuer) and is_binary(subject),
+        do: {:ok, Participant.human(issuer, subject), nil},
+        else: {:error, {:request, :missing_participant}}
+    end
+  end
+
+  defp arbiter_info(conn, ctx, run, :human), do: human_arbiter(conn, ctx, run, nil)
+
+  defp arbiter_info(_conn, _ctx, _run, {:agent, agent, work}),
+    do: {:ok, Participant.agent(agent), work}
+
+  defp open_request(conn, ctx, run, reason, options, arbiter, arbiter_work_id) do
+    request_id = Id.new()
+    comment_id = Id.new()
+
+    body = %{
+      reason: reason,
+      options: options,
+      requester: Participant.agent(run.agent),
+      arbiter: arbiter,
+      arbiter_work_id: arbiter_work_id
+    }
+
+    with {:ok, event} <-
+           Events.append(conn, %{
+             type: "request",
+             run_id: ctx.run_id,
+             work_id: ctx.work_id,
+             request_id: request_id,
+             comment_id: comment_id,
+             body: Jason.encode!(body)
+           }),
+         :ok <-
+           Query.insert(conn, :requests, %{
+             id: request_id,
+             run_id: ctx.run_id,
+             requester: Jason.encode!(Participant.agent(run.agent)),
+             work_id: ctx.work_id,
+             options: Jason.encode!(options),
+             arbiter: Jason.encode!(arbiter),
+             status: "pending",
+             event_id: event.id,
+             created_at: Events.now()
+           }),
+         :ok <-
+           Helpers.insert_comment(conn, comment_id, %{requests: request_id}, reason, event, ctx),
+         :ok <- mark_waiting(conn, ctx.work_id, request_id, run.agent) do
+      {:ok, event}
+    end
+  end
+
+  defp mark_waiting(_conn, nil, _request_id, _agent), do: :ok
+
+  defp mark_waiting(conn, work_id, request_id, agent) do
+    Query.exec(
+      conn,
+      "UPDATE works SET state = 'waiting', waiting = 'request', waiting_for = ?, waiting_from = ?, updated_at = ? WHERE id = ?",
+      [request_id, agent, Events.now(), work_id]
+    )
+  end
+
+  defp ensure_open(%{status: status}) when status == "pending", do: :ok
+  defp ensure_open(_request), do: {:error, {:reply, :closed}}
+
+  defp ensure_option(_request, body) when not is_map_key(body, "option"), do: :ok
+
+  defp ensure_option(request, %{"option" => option}) do
+    options = Jason.decode!(request.options)
+
+    if is_binary(option) and Map.has_key?(options, option),
+      do: :ok,
+      else: {:error, {:reply, {:unknown_option, option, options |> Map.keys() |> Enum.sort()}}}
+  end
+
+  defp authorize_reply(_request, %{author: "human"}), do: :ok
+
+  defp authorize_reply(request, ctx) do
+    if Jason.decode!(request.arbiter) == Participant.agent(ctx.agent),
+      do: :ok,
+      else: {:error, {:reply, :not_arbiter}}
+  end
+
+  defp apply_reply(conn, ctx, request, body) do
+    comment_id = Id.new()
+
+    with {:ok, event} <-
+           Events.append(conn, %{
+             type: "reply",
+             run_id: ctx.run_id,
+             request_id: request.id,
+             work_id: request.work_id,
+             comment_id: comment_id,
+             body: Jason.encode!(body)
+           }),
+         :ok <-
+           Helpers.insert_comment(
+             conn,
+             comment_id,
+             %{requests: request.id},
+             body["body"],
+             event,
+             ctx
+           ),
+         :ok <-
+           Query.exec(conn, "UPDATE requests SET status = 'closed' WHERE id = ?", [request.id]),
+         :ok <- reopen_requester(conn, request) do
+      {:ok, event}
     end
   end
 

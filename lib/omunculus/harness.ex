@@ -1042,8 +1042,15 @@ defmodule Omunculus.Harness do
     end
   end
 
-  defp request_openings(event, via) do
-    body = Jason.decode!(event.body)
+  defp open_request_run(project, event, via) do
+    case Jason.decode!(event.body) do
+      %{"arbiter" => %{"kind" => "agent", "agent" => arbiter}, "arbiter_work_id" => work_id} ->
+        due(project, event, %{
+          work_id: work_id,
+          request_id: event.request_id,
+          via: via,
+          agent: arbiter
+        })
 
     case body["arbiter"] do
       %{"kind" => "agent", "agent" => agent} ->

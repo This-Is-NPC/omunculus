@@ -488,12 +488,7 @@ defmodule EquivalentExchange.Runner do
 
   defp outcome(facts, {:ok, _answers}) do
     root = last_root(facts)
-
-    waiting =
-      Enum.filter(
-        facts.requests,
-        &(&1.status == "pending" and Jason.decode!(&1.arbiter)["kind"] == "human")
-      )
+    waiting = Enum.filter(facts.requests, &(&1.status == "pending" and Jason.decode!(&1.arbiter)["kind"] == "human"))
 
     broke =
       Enum.any?(
