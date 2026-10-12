@@ -95,7 +95,7 @@ packs/               teams distributed as packs (Config.Packs), each with the ev
 eval/                Equivalent Exchange, the behaviour benchmark: the Amestris preset,
                      its configurations, tasks and runner (mise run eval:run); each run
                      writes eval/results/<time>-<label>/, ignored by git
-mise-tasks/          validate/regular, validate/sandbox, pre-commit, pre-push, up, dev/*, benchmark/*, eval/*
+mise-tasks/          validate/regular, validate/sandbox, validate/boundaries, pre-commit, pre-push, up, dev/*, benchmark/*, eval/*
 dev/                 the development environment: server registry and project config
 ```
 
@@ -106,7 +106,7 @@ mise install                    # toolchain from mise.toml
 mix deps.get
 mise run validate:regular       # mix test --exclude cargo --exclude sandbox
 mise run validate:sandbox       # needs Linux with Bubblewrap namespaces
-mise run pre-commit             # mix format --check-formatted
+mise run pre-commit             # validate:boundaries, then mix format --check-formatted
 mise run pre-push               # validate:regular
 mix compile --warnings-as-errors
 bin/omunculus preset default --from priv/presets/default

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#MISE description="Check that the apps and the core share only the server's contract"
+set -euo pipefail
+
+project_root="${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+cd "$project_root"
+
+failed=0
+# Prints the tracked lines of `paths` that match `pattern`, under `rule`.
+refuse() {
+  local rule=$1 pattern=$2
+  shift 2
+  if git grep -nE "$pattern" -- "$@"; then
+    printf 'boundaries: %s\n' "$rule" >&2
+    failed=1
+  fi
+}
+
+refuse "an app reads the core's code, config or store" \
+  '(^|[^.[:alnum:]_])(lib|priv)/|omunculus\.toml|\.omunculus/' apps
+refuse "the core names an app" 'apps/' lib priv
+refuse "the kit imports an app" 'apps/(console|mailbox)|import "\.\./\.\.' apps/kit
+refuse "the kit's ui imports its client" 'import "\.\./client|kit/client' apps/kit/ui
+exit $failed
