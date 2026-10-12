@@ -73,6 +73,7 @@ A tool is a folder with `tool.toml` and either `module = "Elixir.Module"` or `co
 bin/omunculus        shell wrapper: mise exec -- mix omunculus
 bin/omunculus-gui    opens the window on a project of a running server's registry
 gui/                 the window: QML on Quickshell, a client of the server's local socket
+apps/mailbox/        the mailbox: a concept client on the same socket, launched by apps/mailbox/run
 lib/omunculus/       core, config, server, tool, tools, hooks, models, execution, store
 lib/mix/tasks/       the omunculus, omunculus.presets and omunculus.socket mix tasks
 priv/tools/          builtin tool and hook manifests
@@ -110,11 +111,16 @@ bin/omunculus send "text"
 bin/omunculus serve --config server.toml
 bin/omunculus-gui --config server.toml [--project <id>]
 mise run up                     # dev server and window; the server stops with the window
+apps/mailbox/run --config server.toml [--project <id>]
 ```
 
 ### The window
 
 `gui/` is a client of the server, like any other: it never opens the store or the TOML. The `Omunculus` singleton holds the project as the window sees it and makes every request through `curl` on the project's local socket; the conversation's event stream is `curl` on its WebSocket, whose frames it splits into events. It folds the events into threads: the main one, yours with the root agent, and one per work handed down, where its agent's runs show; a run at depth 0 belongs to the main thread, a deeper one to its work's. Requests with options have choice buttons; an escalated question with no top-level options has a text reply field, which omits `option` from the command. Requests and unread notes are not in threads: they hang from the work that made them on the orchestration map. It reads the snapshot again after each event. Views only bind that singleton. The controls and the theme are a copy of eco's overlay, Omarchy's voice session app. It needs Quickshell, `curl` with WebSocket support and a Wayland session; `bin/omunculus-gui` takes the server registry and a project id, which may be left out when the registry holds one project; `mix omunculus.socket` resolves the project's socket, and the launcher passes both as `OMUNCULUS_GUI_SOCKET` and `OMUNCULUS_GUI_PROJECT`.
+
+### The mailbox
+
+`apps/mailbox/` is a concept client apart from the window, sharing no file with `gui/`: its theme and controls are copies of the window's. Each conversation is one mail. You write a mail, which creates a conversation and sends the message to its root agent; the mail then says only that the agents work, until nothing does: no run open, no work open or waiting, and a run at depth 0 finished after your last message. What that run said, its model text and its comments, is the answer, and the mail moves to the inbox. A request whose arbiter is a person arrives before the end: the mail waits in the inbox with its options as buttons and a field for a text answer. Works, runs and what agents say on the way are not shown. The `Mail` singleton reads the conversations, each one's snapshot every few seconds and its events when the snapshot's cursor moved, all through `curl` on the project's local socket; which deliveries you opened is kept in Quickshell's state directory, and a delivery that arrives while another mail is open is announced with `notify-send`. `apps/mailbox/run` takes the server registry and a project id like `bin/omunculus-gui` and passes them as `OMUNCULUS_MAILBOX_SOCKET` and `OMUNCULUS_MAILBOX_PROJECT`.
 
 ### The development environment
 
@@ -125,6 +131,7 @@ mise run up                     # dev server and window; the server stops with t
 | `dev:bootstrap` | creates `dev/workspace` and seeds the local administrator while the store does not exist |
 | `dev:serve` | runs the server on `dev/server.toml`, with the variables of `.env` (`OPENROUTER_API_KEY`) in its environment |
 | `dev:gui` | opens the window on the `dev` project of a running server |
+| `dev:mailbox` | opens the mailbox on the `dev` project of a running server |
 | `dev:reset` | deletes the store and the workspace |
 | `up` | `dev:bootstrap`, then `dev:serve` in the background unless a server already answers, then `dev:gui`; a server it started stops when the window closes |
 
