@@ -1,7 +1,7 @@
 defmodule Omunculus.Tools.Ask do
   @moduledoc """
   Builtin `ask` tool: emits a `request` whose reason is `question` and
-  whose `options` are the names given — each a short name of lowercase
+  whose optional `options` are the names given — each a short name of lowercase
   letters, digits, dashes and underscores, what it means said in the
   question — each calling nothing, so the answer
   is the option chosen and its comment; with `to = "person"` the request is
@@ -26,6 +26,9 @@ defmodule Omunculus.Tools.Ask do
   end
 
   @refused "options takes two or more different answers, each a short name of lowercase letters, digits, dashes and underscores, such as approve or deny; say what each means in question"
+
+  defp options(nil), do: {:ok, []}
+  defp options([]), do: {:ok, []}
 
   defp options(options) when is_list(options) do
     if length(options) >= 2 and Enum.all?(options, &name?/1) and

@@ -11,6 +11,9 @@ The implementation tasks record which parts of this contract are delivered.
 
 ## Current implementation
 
+`ask` accepts a question with no options for a free-text answer, or named
+options for a decision. Both forms use the same request and reply actions.
+
 A request already has a question (`reason`), named options containing tool
 calls, a JSON `requester` identity, an `arbiter` identity, optional `run_id` and
 `work_id`, and `pending`, `escalated` or `closed` as its status. An agent identity names its

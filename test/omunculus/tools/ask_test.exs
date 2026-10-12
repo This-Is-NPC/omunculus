@@ -21,6 +21,15 @@ defmodule Omunculus.Tools.AskTest do
            }
   end
 
+  test "asks a free-text question without inventing decision options" do
+    for extra <- [%{}, %{"options" => []}] do
+      assert %{"ok" => true, "emit" => [%{"type" => "request", "body" => body}]} =
+               Ask.run(%{args: Map.merge(%{"question" => "Which logo?"}, extra)})
+
+      assert body == %{"reason" => "Which logo?", "options" => %{}}
+    end
+  end
+
   test "refuses fewer than two different answers, an answer that is not a short name, or no question" do
     for args <- [
           %{"question" => "q", "options" => ["only"]},

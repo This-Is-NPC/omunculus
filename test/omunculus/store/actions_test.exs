@@ -1651,11 +1651,40 @@ defmodule Omunculus.Store.ActionsTest do
       assert count(conn, "requests") == 1
     end
 
+    test "free-text requests use the same park and reply lifecycle", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works)
+      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
+
+      assert {:ok, [_tool, event]} =
+               record_tool(conn, [request_emit(%{})], request_ctx(run, work_id))
+
+      assert {:ok, %{state: "waiting", waiting_for: request_id}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+
+      assert request_id == event.request_id
+
+      assert {:ok, [_tool, reply]} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "reply",
+                     "body" => %{"request_id" => request_id, "body" => "Use the blue logo"}
+                   }
+                 ],
+                 human_ctx()
+               )
+
+      assert reply.type == "reply"
+
+      assert {:ok, %{state: "open"}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+    end
+
     test "malformed options are rejected and write nothing", %{conn: conn} do
       run = Fixtures.open_run(conn, %{ceiling: @ceiling})
 
       for options <- [
-            %{},
             %{"grant" => "grant"},
             %{"grant" => [%{"args" => %{}}]},
             %{"grant" => [%{"name" => "grant", "args" => %{"name" => "write"}}]}

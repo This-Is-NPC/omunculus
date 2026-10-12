@@ -493,7 +493,7 @@ defmodule Omunculus.Store.Actions.Requests do
   @spec scopes() :: [String.t()]
   def scopes, do: @scopes
 
-  defp options(raw) when is_map(raw) and map_size(raw) > 0 do
+  defp options(raw) when is_map(raw) do
     Enum.reduce_while(raw, {:ok, %{}}, fn {name, calls}, {:ok, acc} ->
       case option_calls(name, calls) do
         {:ok, steps} -> {:cont, {:ok, Map.put(acc, name, steps)}}
