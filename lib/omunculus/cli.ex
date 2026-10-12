@@ -112,6 +112,12 @@ defmodule Omunculus.CLI do
     "omunculus.toml is missing [store]"
   end
 
+  def format_error({:policy, {:required, :request_routes}}),
+    do: "omunculus.toml [policy] request_routes is required, a nonempty list of routes"
+
+  def format_error({:policy, {:invalid, :request_routes}}),
+    do: "omunculus.toml [policy] request_routes must be a nonempty list of valid routes"
+
   def format_error({:policy, {:invalid, :max_retries}}) do
     "omunculus.toml [policy] max_retries is required, a non-negative integer"
   end

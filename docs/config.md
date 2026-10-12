@@ -46,7 +46,8 @@ max_retries`, or `[policy] max_retries` in the workspace's `config` file,
 sets it for the works in that workspace.
 
 `[policy] request_routes` is mandatory and nonempty. Loading a config without
-it refuses with `{:policy, {:invalid, :request_routes}}`. Routes are parsed
+it refuses with `{:policy, {:required, :request_routes}}`. Malformed routes return
+`{:policy, {:invalid, :request_routes}}`. Routes are parsed
 once into `Config.request_routes`, including workspace overlays. For example:
 
 ```toml

@@ -45,6 +45,49 @@ defmodule Omunculus.CLITest do
     |> Enum.map(&Jason.decode!(&1.body)["name"])
   end
 
+  test "CLI refuses missing request routes explicitly", %{dir: dir} do
+    Fixtures.write_config(dir, "[agents.concierge]\ndepth = 0\ntext = \"root\"\n",
+      request_routes: false
+    )
+
+    assert {:error, reason} = CLI.run(["send", "hi"], dir)
+    assert reason == {:policy, {:required, :request_routes}}
+    assert CLI.format_error(reason) =~ "request_routes is required"
+  end
+
+  test "CLI refuses unknown and looping routes without creating a request", %{dir: dir} do
+    project = open_project(dir)
+    conversation = Omunculus.Id.new()
+    principal = Omunculus.Operations.local_principal()
+
+    :ok =
+      Query.insert(project.conn, :conversations, %{
+        id: conversation,
+        created_issuer: principal.issuer,
+        created_subject: principal.subject,
+        created_at: "2026-01-01"
+      })
+
+    Project.close(project)
+
+    for {destination, refusal} <- [
+          {["--to", "absent"], {:request, {:invalid, "to"}}},
+          {[], {:request, :no_route}}
+        ] do
+      assert {:error, ^refusal} =
+               CLI.run(
+                 ["ask", "--conversation_id", conversation, "--question", "Question"] ++
+                   destination,
+                 dir
+               )
+    end
+
+    project = open_project(dir)
+    assert {:ok, []} = Query.all(project.conn, "SELECT id FROM requests")
+    assert {:ok, []} = Query.all(project.conn, "SELECT id FROM comments")
+    Project.close(project)
+  end
+
   test "format_error for not_logged_in", _ctx do
     assert CLI.format_error({:auth, :not_logged_in, "openai"}) =~
              "omunculus login --provider openai"

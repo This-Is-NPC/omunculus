@@ -85,7 +85,7 @@ defmodule Omunculus.ConfigTest do
   test "request routes are required, validated once and retained on Config", %{dir: dir} do
     agents = "[agents.concierge]\ndepth = 0\ntext = \"root\"\n"
     Fixtures.write_config(dir, agents, request_routes: false)
-    assert {:error, {:policy, {:invalid, :request_routes}}} = load(dir)
+    assert {:error, {:policy, {:required, :request_routes}}} = load(dir)
 
     for routes <- [
           "[]",

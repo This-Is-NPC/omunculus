@@ -2,6 +2,8 @@ defmodule Omunculus.RequestRoutes do
   @moduledoc "Validates TOML request routes; the first matching rule selects its ordered destinations."
   alias Omunculus.Participant
 
+  def parse(nil, _agents, _workflows), do: {:error, {:policy, {:required, :request_routes}}}
+
   def parse(routes, agents, workflows) when is_list(routes) and routes != [] do
     if Enum.all?(routes, &valid_rule?(&1, agents, workflows)),
       do: {:ok, routes},

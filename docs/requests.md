@@ -32,7 +32,8 @@ hydrates origins recursively and is shared by tools and authorized API reads.
 ## Routing and authority
 
 `[policy] request_routes` is required and nonempty. A file without it is
-refused at load with `{:policy, {:invalid, :request_routes}}`; routes are parsed
+refused at load with `{:policy, {:required, :request_routes}}`. Malformed routes return
+`{:policy, {:invalid, :request_routes}}`; routes are parsed
 once into `Config.request_routes`, including workspace overlays. For example:
 
 ```toml
