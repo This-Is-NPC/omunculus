@@ -25,17 +25,25 @@ Singleton {
   // "project/conversation" -> its thread: {key, project, id, agent, subject,
   // working, waiting, at, heard, snippet, entries}.
   property var threads: ({})
+  // A thread with nothing in it, for a view whose thread has just gone.
+  readonly property var blank: ({ key: "", project: "", id: "", agent: "", subject: "", working: false,
+    waiting: [], at: "", heard: "", snippet: "", entries: [] })
   // Newest first.
   readonly property var all: Object.values(threads).sort((a, b) => b.at.localeCompare(a.at))
   // "all", "waiting" (a decision of yours) or "working" (a run open).
   property string folder: "all"
   // A project id, or "" for every project.
   property string project: ""
+  // What the search box asks for, lowercased; "" finds every thread.
+  property string query: ""
   readonly property var shown: all.filter(thread => (project === "" || thread.project === project)
-    && (folder === "all" || (folder === "waiting" ? thread.waiting.length > 0 : thread.working)))
+    && (folder === "all" || (folder === "waiting" ? thread.waiting.length > 0 : thread.working))
+    && matches(thread))
   property string selected: ""
   readonly property var thread: threads[selected] || null
-  property bool composing: false
+  // Asks the window for a new thread, and the thread on screen for a reply.
+  signal composeRequested()
+  signal replyRequested()
 
   // Thread key -> the time of the last word from its agent you read; kept
   // across sessions.
@@ -67,6 +75,28 @@ Singleton {
     messageIsError = isError
   }
 
+  // Whether a thread holds what the search asks for: in its subject, agent,
+  // project, any of its messages or the names of their files.
+  function matches(thread) {
+    if (query === "")
+      return true
+    const words = [thread.subject, thread.agent, thread.project]
+      .concat(thread.entries.map(entry => entry.text), thread.entries.reduce((names, entry) => names.concat(entry.files.map(file => file.name)), []))
+    return words.some(word => String(word).toLowerCase().includes(query))
+  }
+
+  // The day a thread belongs to in the list: today, yesterday or its date.
+  function day(at) {
+    const date = new Date(at)
+    if (isNaN(date))
+      return ""
+    const today = new Date()
+    const yesterday = new Date(today.getTime() - 86400000)
+    return date.toDateString() === today.toDateString() ? "today"
+      : date.toDateString() === yesterday.toDateString() ? "yesterday"
+      : Qt.formatDate(date, "d MMMM yyyy")
+  }
+
   function isUnread(thread) {
     return thread.heard !== "" && (seen[thread.key] || "") < thread.heard
   }
@@ -77,13 +107,11 @@ Singleton {
 
   function open(key) {
     selected = key
-    composing = false
     markSeen(key)
   }
 
   function close() {
     selected = ""
-    composing = false
   }
 
   function markSeen(key) {
@@ -98,8 +126,7 @@ Singleton {
   onThreadsChanged: if (selected !== "") markSeen(selected)
 
   function compose() {
-    composing = true
-    selected = ""
+    composeRequested()
   }
 
   // A new thread: a conversation in `project` and your first message to
@@ -112,7 +139,6 @@ Singleton {
     http.call(place.socket, "POST", "/v1/projects/" + project + "/conversations", {}, true, data => {
       post(place.socket, "/v1/projects/" + project + "/conversations/" + data.id + "/messages",
         { message: value, agent: agent }, files, () => {
-          composing = false
           selected = project + "/" + data.id
           tell("sent to " + agent, false)
           sweep()

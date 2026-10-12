@@ -3,8 +3,8 @@ import QtQuick
 import QtQuick.Dialogs
 import "kit/ui"
 
-// FilePicker holds the files a message will carry: a button that picks them
-// and a chip for each, which can be taken off.
+// FilePicker holds the files a message will carry: a chip that picks them
+// and a chip for each picked, which takes it off when chosen.
 Flow {
   id: picker
 
@@ -20,9 +20,7 @@ Flow {
 
   spacing: 6
 
-  TraceButton {
-    dense: true
-    role: "progress"
+  Chip {
     icon: "plus"
     text: "ATTACH"
     tip: "files to send with the message"
@@ -31,12 +29,14 @@ Flow {
 
   Repeater {
     model: picker.paths
-    delegate: FileChip {
+    delegate: Chip {
       required property string modelData
       required property int index
-      name: modelData.split("/").pop()
-      pending: true
-      onRemoved: picker.paths = picker.paths.filter((path, at) => at !== index)
+      checked: true
+      icon: "close"
+      text: modelData.split("/").pop()
+      tip: "take it off"
+      onClicked: picker.paths = picker.paths.filter((path, at) => at !== index)
     }
   }
 

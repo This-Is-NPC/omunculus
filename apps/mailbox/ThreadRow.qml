@@ -2,54 +2,56 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
 
-// ThreadRow is one thread in the list: its agent and project, when it last
-// moved, its subject, and its last message. Unread, it is bold behind an
-// accent bar.
+// ThreadRow is one thread in the list, as a row of eco's tables: a hairline
+// outline at rest, a faint wash under the pointer, and the highlight with an
+// accent outline when it is the thread on screen. A dot marks it unread; its
+// subject decodes when it arrives while the list is on screen.
 Rectangle {
   id: row
 
-  required property var modelData
-  readonly property var thread: modelData
+  property var thread
+  // Whether it arrived after the list was first filled.
+  property bool fresh: false
   readonly property bool current: Mail.selected === thread.key
   readonly property bool unread: Mail.isUnread(thread)
 
   signal chosen()
 
-  implicitHeight: content.implicitHeight + 22
-  color: current ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.foreground, 0.03) : "transparent"
+  implicitHeight: 70
+  color: current ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
+  border.color: current ? Theme.primary : Theme.line
   Behavior on color { ColorAnimation { duration: 120 } }
+  Behavior on border.color { ColorAnimation { duration: 120 } }
 
-  Rectangle {
-    anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
-    width: 2
-    color: row.thread.waiting.length > 0 ? Theme.warning : Theme.primary
-    visible: row.unread || row.current || row.thread.waiting.length > 0
-    opacity: row.unread || row.thread.waiting.length > 0 ? 1 : 0.5
-  }
+  Component.onCompleted: if (fresh) subject.replay()
 
   ColumnLayout {
-    id: content
-    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 16; rightMargin: 14 }
+    anchors { fill: parent; leftMargin: 14; rightMargin: 14; topMargin: 10; bottomMargin: 10 }
     spacing: 4
 
     RowLayout {
       Layout.fillWidth: true
       spacing: 8
+      Dot { tone: Theme.primary; opacity: row.unread ? 1 : 0; Behavior on opacity { NumberAnimation { duration: 140 } } }
       Label {
         Layout.fillWidth: true
         text: row.thread.agent || "—"
-        font.bold: row.unread
+        color: row.unread ? Theme.foreground : Theme.dim
         font.pixelSize: 12
+        font.bold: row.unread
         elide: Text.ElideRight
       }
       ProjectTag { name: row.thread.project }
-      Label { text: Mail.when(row.thread.at); color: row.unread ? Theme.foreground : Theme.dim; font.pixelSize: 10 }
+      Label { text: Mail.when(row.thread.at); color: row.unread ? Theme.primary : Theme.dim; font.pixelSize: 10 }
     }
-    Label {
+    DecodeLabel {
+      id: subject
       Layout.fillWidth: true
-      text: row.thread.subject
-      font.bold: row.unread
+      value: row.thread.subject
+      soft: true
+      revealOnStage: false
       font.pixelSize: 13
+      font.bold: row.unread
       elide: Text.ElideRight
     }
     RowLayout {
@@ -66,17 +68,11 @@ Rectangle {
     }
   }
 
-  Rectangle {
-    anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-    height: 1
-    color: Theme.line
-  }
-
   MouseArea {
     id: pointer
     anchors.fill: parent
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
-    onClicked: { Mail.open(row.thread.key); row.chosen() }
+    onClicked: row.chosen()
   }
 }

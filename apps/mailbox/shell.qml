@@ -1,212 +1,33 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Controls.Basic as C
 import Quickshell
 import Quickshell.Io
 import "kit/ui"
 
 ShellRoot {
-  // The mailbox: the folders, the threads of the one picked, and the thread
-  // open or the one being written. Wide, all three side by side; narrower, the
-  // folders become a rail of icons; narrow, one pane at a time, the folders
-  // in a bar on top.
+  // The mailbox, laid out as eco is: the masthead on top, whose notch sweeps
+  // when the section changes, then the folders, the threads of the one picked
+  // and the thread open. The folders fold to a rail and the threads fold away,
+  // each sliding to its width; a narrow window shows one pane at a time. A
+  // new thread is written in a dialog; a thread is answered only when asked.
   FloatingWindow {
     id: window
 
     title: "omunculus · mail"
-    implicitWidth: 1180
-    implicitHeight: 760
+    implicitWidth: 1240
+    implicitHeight: 780
     minimumSize: Qt.size(360, 420)
     color: Theme.background
 
     readonly property bool narrow: width < 760
-    readonly property bool rail: !narrow && width < 1100
-    // On a narrow window, the pane shown: the thread or new thread when there
-    // is one, else the list.
-    readonly property bool reading: Mail.composing || Mail.thread !== null
+    readonly property bool short: height < 560
+    // Whether you folded the folders to a rail, and the threads away.
+    property bool foldersFolded: width < 1100
+    property bool listFolded: false
+    readonly property bool reading: Mail.thread !== null
 
     onClosed: Qt.quit()
-
-    Rectangle {
-      anchors.fill: parent
-      color: Theme.background
-      border.color: Theme.line
-
-      ColumnLayout {
-        anchors.fill: parent
-        spacing: 0
-
-        // Narrow: the folders as a bar on top.
-        RowLayout {
-          Layout.fillWidth: true
-          Layout.margins: 10
-          visible: window.narrow && !window.reading
-          spacing: 6
-          Label { text: "MAIL"; font.bold: true; font.letterSpacing: 4; Layout.rightMargin: 6 }
-          Folder { rail: true; name: "all"; icon: "import"; label: "All threads"; count: Mail.unread }
-          Folder { rail: true; name: "waiting"; icon: "warning"; label: "Waiting for you"; count: Mail.waiting; tone: Theme.warning }
-          Folder { rail: true; name: "working"; icon: "spark"; label: "Working"; count: Mail.working; tone: Theme.dim }
-          Item { Layout.fillWidth: true }
-          IconButton { name: "plus"; tip: "new thread"; enabled: Mail.connected; onClicked: Mail.compose() }
-        }
-        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.line; visible: window.narrow && !window.reading }
-
-        RowLayout {
-          Layout.fillWidth: true
-          Layout.fillHeight: true
-          spacing: 0
-
-          // Wide: the folders with their names; narrower: a rail of icons.
-          ColumnLayout {
-            visible: !window.narrow
-            Layout.preferredWidth: window.rail ? 56 : 230
-            Layout.maximumWidth: Layout.preferredWidth
-            Layout.fillHeight: true
-            spacing: 2
-
-            RowLayout {
-              Layout.margins: 18
-              visible: !window.rail
-              spacing: 10
-              Label { text: "OMUNCULUS"; font.pixelSize: 14; font.bold: true; font.letterSpacing: 5 }
-              Label { text: "╱"; color: Theme.primary }
-              Label { text: "MAIL"; color: Theme.dim; font.pixelSize: 10; font.letterSpacing: 3 }
-            }
-            TraceButton {
-              visible: !window.rail
-              Layout.fillWidth: true
-              Layout.leftMargin: 14
-              Layout.rightMargin: 14
-              Layout.bottomMargin: 14
-              role: "primary"
-              icon: "plus"
-              text: "NEW THREAD"
-              tip: "ctrl+n"
-              enabled: Mail.connected
-              onClicked: Mail.compose()
-            }
-            IconButton {
-              visible: window.rail
-              Layout.alignment: Qt.AlignHCenter
-              Layout.topMargin: 14
-              Layout.bottomMargin: 14
-              name: "plus"
-              tip: "new thread"
-              enabled: Mail.connected
-              onClicked: Mail.compose()
-            }
-
-            Folder { Layout.fillWidth: true; rail: window.rail; name: "all"; icon: "import"; label: "All threads"; count: Mail.unread }
-            Folder { Layout.fillWidth: true; rail: window.rail; name: "waiting"; icon: "warning"; label: "Waiting for you"; count: Mail.waiting; tone: Theme.warning }
-            Folder { Layout.fillWidth: true; rail: window.rail; name: "working"; icon: "spark"; label: "Working"; count: Mail.working; tone: Theme.dim }
-
-            Item { Layout.fillHeight: true }
-
-            Label {
-              Layout.fillWidth: true
-              Layout.margins: 14
-              visible: !window.rail
-              text: Mail.message !== "" ? Mail.message : Mail.connected ? Mail.projects.length + " projects" : "the server does not answer"
-              color: Mail.messageIsError || !Mail.connected ? Theme.warning : Theme.dim
-              font.pixelSize: 10
-              wrapMode: Text.Wrap
-            }
-          }
-
-          Rectangle { visible: !window.narrow; Layout.fillHeight: true; implicitWidth: 1; color: Theme.line }
-
-          // The threads of the folder.
-          ColumnLayout {
-            visible: !window.narrow || !window.reading
-            Layout.fillWidth: window.narrow
-            Layout.preferredWidth: window.narrow ? -1 : Math.round(Math.min(400, Math.max(280, window.width * 0.32)))
-            Layout.maximumWidth: window.narrow ? Number.POSITIVE_INFINITY : Layout.preferredWidth
-            Layout.fillHeight: true
-            spacing: 0
-
-            ColumnLayout {
-              Layout.fillWidth: true
-              Layout.margins: 16
-              Layout.bottomMargin: 12
-              spacing: 10
-              Label {
-                text: ({ all: "ALL THREADS", waiting: "WAITING FOR YOU", working: "WORKING" })[Mail.folder]
-                color: Theme.dim
-                font.pixelSize: 10
-                font.letterSpacing: 3
-              }
-              ProjectFilter { Layout.fillWidth: true }
-            }
-            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.line }
-
-            ListView {
-              id: list
-              Layout.fillWidth: true
-              Layout.fillHeight: true
-              visible: Mail.shown.length > 0
-              clip: true
-              model: Mail.shown
-              boundsBehavior: Flickable.StopAtBounds
-              C.ScrollBar.vertical: C.ScrollBar {}
-              delegate: ThreadRow { width: list.width }
-            }
-
-            Label {
-              Layout.fillWidth: true
-              Layout.fillHeight: true
-              visible: Mail.shown.length === 0
-              horizontalAlignment: Text.AlignHCenter
-              verticalAlignment: Text.AlignVCenter
-              wrapMode: Text.Wrap
-              text: !Mail.connected ? "The server does not answer."
-                : Mail.folder === "waiting" ? "Nothing waits for you."
-                : Mail.folder === "working" ? "No agent is working."
-                : "No threads yet. Start one with an agent."
-              color: Theme.dim
-              font.pixelSize: 12
-            }
-          }
-
-          Rectangle { visible: !window.narrow; Layout.fillHeight: true; implicitWidth: 1; color: Theme.line }
-
-          // The thread open, or the one being written.
-          Item {
-            visible: !window.narrow || window.reading
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-
-            ComposeView {
-              id: compose
-              anchors { fill: parent; margins: window.narrow ? 12 : 22 }
-              visible: Mail.composing
-              back: window.narrow
-              onVisibleChanged: if (visible) Qt.callLater(compose.focusEntry)
-            }
-
-            Loader {
-              anchors { fill: parent; margins: window.narrow ? 12 : 22 }
-              active: !Mail.composing && Mail.thread !== null
-              sourceComponent: ThreadView { thread: Mail.thread; back: window.narrow }
-            }
-
-            Label {
-              anchors.centerIn: parent
-              visible: !Mail.composing && Mail.thread === null
-              text: "Pick a thread, or start a new one."
-              color: Theme.dim
-              font.pixelSize: 12
-            }
-          }
-        }
-      }
-
-      Shortcut { sequence: "Ctrl+N"; onActivated: Mail.compose() }
-      Shortcut { sequence: "Escape"; enabled: window.reading; onActivated: Mail.close() }
-      // The next and the previous thread of the list.
-      Shortcut { sequence: "Alt+Down"; onActivated: window.step(1) }
-      Shortcut { sequence: "Alt+Up"; onActivated: window.step(-1) }
-    }
 
     function step(by) {
       const shown = Mail.shown
@@ -215,6 +36,191 @@ ShellRoot {
       const at = shown.findIndex(thread => thread.key === Mail.selected)
       Mail.open(shown[Math.max(0, Math.min(shown.length - 1, at < 0 ? 0 : at + by))].key)
     }
+
+    function search() {
+      listFolded = false
+      Qt.callLater(() => searchBox.forceActiveFocus())
+    }
+
+    Connections {
+      target: Mail
+      function onComposeRequested() { compose.open() }
+    }
+
+    Rectangle {
+      anchors.fill: parent
+      color: Theme.background
+      border.color: Theme.line
+
+      ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: window.short ? 12 : 20
+        spacing: window.short ? 10 : 16
+
+        Masthead {
+          Layout.fillWidth: true
+          section: window.narrow && window.reading ? "thread"
+            : ({ all: "all threads", waiting: "waiting for you", working: "working" })[Mail.folder]
+          StatusNote { maxWidth: Math.max(0, window.width - 620) }
+          IconButton {
+            visible: !window.narrow
+            name: "list"
+            tip: (window.foldersFolded ? "unfold" : "fold") + " the folders  ctrl+b"
+            highlighted: !window.foldersFolded
+            onClicked: window.foldersFolded = !window.foldersFolded
+          }
+          IconButton {
+            visible: !window.narrow
+            name: window.listFolded ? "chevron-right" : "chevron-left"
+            tip: (window.listFolded ? "unfold" : "fold") + " the threads  ctrl+l"
+            highlighted: !window.listFolded
+            onClicked: window.listFolded = !window.listFolded
+          }
+          IconButton { name: "plus"; tip: "new thread  ctrl+n"; enabled: Mail.connected; onClicked: compose.open() }
+        }
+
+        RowLayout {
+          Layout.fillWidth: true
+          Layout.fillHeight: true
+          spacing: 0
+
+          // The folders, with their names, or folded to a rail of icons.
+          Item {
+            visible: !window.narrow
+            Layout.fillHeight: true
+            Layout.preferredWidth: window.foldersFolded ? 52 : 210
+            Behavior on Layout.preferredWidth { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            clip: true
+
+            ColumnLayout {
+              anchors { fill: parent; rightMargin: 12 }
+              spacing: 4
+
+              TraceButton {
+                visible: !window.foldersFolded
+                Layout.fillWidth: true
+                Layout.bottomMargin: 14
+                role: "primary"
+                icon: "plus"
+                text: "NEW THREAD"
+                tip: "ctrl+n"
+                enabled: Mail.connected
+                onClicked: compose.open()
+              }
+              Kicker { visible: !window.foldersFolded; Layout.fillWidth: true; text: "folders" }
+              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "all"; icon: "import"; label: "All threads"; count: Mail.unread }
+              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "waiting"; icon: "warning"; label: "Waiting for you"; count: Mail.waiting; tone: Theme.warning }
+              FolderTab { Layout.fillWidth: true; rail: window.foldersFolded; name: "working"; icon: "spark"; label: "Working"; count: Mail.working }
+              Item { Layout.fillHeight: true }
+              Label {
+                visible: !window.foldersFolded
+                text: Mail.projects.length + (Mail.projects.length === 1 ? " PROJECT" : " PROJECTS")
+                color: Theme.dim
+                font.pixelSize: 9
+                font.letterSpacing: 2
+              }
+            }
+          }
+
+          // The threads of the folder, found by the search and the projects.
+          Item {
+            visible: !window.narrow || !window.reading
+            Layout.fillHeight: true
+            Layout.fillWidth: window.narrow
+            Layout.preferredWidth: window.narrow ? -1 : window.listFolded ? 0 : Math.round(Math.min(420, Math.max(300, window.width * 0.32)))
+            Behavior on Layout.preferredWidth { enabled: !window.narrow; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            clip: true
+
+            ColumnLayout {
+              anchors { fill: parent; leftMargin: window.narrow ? 0 : 4; rightMargin: window.narrow ? 0 : 16 }
+              spacing: 10
+
+              RowLayout {
+                Layout.fillWidth: true
+                visible: window.narrow
+                spacing: 4
+                FolderTab { rail: true; name: "all"; icon: "import"; label: "All threads"; count: Mail.unread }
+                FolderTab { rail: true; name: "waiting"; icon: "warning"; label: "Waiting for you"; count: Mail.waiting; tone: Theme.warning }
+                FolderTab { rail: true; name: "working"; icon: "spark"; label: "Working"; count: Mail.working }
+              }
+              SearchBox {
+                id: searchBox
+                Layout.fillWidth: true
+                onLeave: threads.enter()
+              }
+              ProjectFilter { Layout.fillWidth: true }
+              ThreadList {
+                id: threads
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                onCleared: searchBox.text = ""
+              }
+            }
+          }
+
+          // The thread open, sliding in as a Stage does each time another opens.
+          Item {
+            visible: !window.narrow || window.reading
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
+
+            Repeater {
+              model: Mail.thread ? [Mail.selected] : []
+              delegate: Item {
+                id: page
+                required property string modelData
+                anchors.fill: parent
+                opacity: 0
+                transform: Translate { id: slide; x: 28 }
+                Component.onCompleted: enter.start()
+                ParallelAnimation {
+                  id: enter
+                  NumberAnimation { target: page; property: "opacity"; to: 1; duration: 220; easing.type: Easing.OutCubic }
+                  NumberAnimation { target: slide; property: "x"; to: 0; duration: 280; easing.type: Easing.OutCubic }
+                }
+                ThreadView {
+                  anchors { fill: parent; leftMargin: window.narrow ? 0 : 4 }
+                  thread: Mail.threads[page.modelData] || Mail.blank
+                  back: window.narrow
+                  escapes: !searchBox.activeFocus && !compose.opened
+                }
+              }
+            }
+
+            Column {
+              anchors.centerIn: parent
+              visible: Mail.thread === null
+              spacing: 14
+              DecodeLabel {
+                anchors.horizontalCenter: parent.horizontalCenter
+                value: "PICK A THREAD, OR START A NEW ONE"
+                soft: true
+                color: Theme.dim
+                font.pixelSize: 10
+                font.letterSpacing: 3
+              }
+              Label {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "/ SEARCH   ·   CTRL+N NEW   ·   ALT+↑↓ MOVE"
+                color: Theme.line
+                font.pixelSize: 10
+                font.letterSpacing: 2
+              }
+            }
+          }
+        }
+      }
+
+      ComposeDialog { id: compose }
+
+      Shortcut { sequence: "Ctrl+N"; onActivated: compose.open() }
+      Shortcut { sequence: "/"; onActivated: window.search() }
+      Shortcut { sequence: "Ctrl+B"; enabled: !window.narrow; onActivated: window.foldersFolded = !window.foldersFolded }
+      Shortcut { sequence: "Ctrl+L"; enabled: !window.narrow; onActivated: window.listFolded = !window.listFolded }
+      Shortcut { sequence: "Alt+Down"; onActivated: window.step(1) }
+      Shortcut { sequence: "Alt+Up"; onActivated: window.step(-1) }
+    }
   }
 
   // `quickshell ipc --path apps/mailbox call mailbox <function>`, e.g. from a shortcut.
@@ -222,5 +228,9 @@ ShellRoot {
     target: "mailbox"
     function newThread(): void { Mail.compose() }
     function open(key: string): void { Mail.open(key) }
+    function search(query: string): void { searchBox.text = query; window.search() }
+    // "folders" or "threads".
+    function fold(pane: string): void { if (pane === "folders") window.foldersFolded = !window.foldersFolded; else window.listFolded = !window.listFolded }
+    function reply(): void { Mail.replyRequested() }
   }
 }

@@ -1,13 +1,14 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
 
 // Entry is one message of a thread, as a mail shows it: who wrote to whom and
-// when, then the text and the files it carries. Folded, it is one line
-// with the start of the text.
-// A request for you is a message too:
-// its question, and, while it waits, the way to answer it.
-Rectangle {
+// when, then the text and the files it carries, each a chip that saves the
+// file to the downloads directory and opens it. Folded, it is one line with
+// the start of the text. A request for you is a message too: a filled card
+// with its question and, while it waits, the way to answer it.
+SurfaceFrame {
   id: card
 
   required property var entry
@@ -18,13 +19,18 @@ Rectangle {
   readonly property bool mine: entry.kind === "you"
   readonly property bool deciding: request && entry.open
 
-  implicitHeight: body.implicitHeight + 24
-  color: deciding ? Qt.alpha(Theme.warning, 0.06) : mine ? "transparent" : Qt.alpha(Theme.foreground, 0.02)
-  border.color: deciding ? Theme.warning : Theme.line
+  signal toggled()
+
+  implicitHeight: body.implicitHeight + (expanded ? 28 : 20)
+  variant: deciding ? "filled" : "outline"
+  tone: Theme.warning
+  active: deciding
+  clip: true
+  Behavior on implicitHeight { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
   ColumnLayout {
     id: body
-    anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12; leftMargin: 16; rightMargin: 16 }
+    anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14; topMargin: card.expanded ? 14 : 10 }
     spacing: 10
 
     // The head: from, to and when; folded, the start of the text beside it.
@@ -35,23 +41,17 @@ Rectangle {
         id: head
         anchors { left: parent.left; right: parent.right }
         spacing: 8
-        Icon { visible: card.request; name: "warning"; size: 11; color: card.deciding ? Theme.warning : Theme.dim }
+        Dot { visible: card.request; tone: card.deciding ? Theme.warning : Theme.dim }
         Label {
-          text: card.mine ? "You" : card.entry.from
+          text: card.mine ? "YOU" : card.entry.from.toUpperCase()
           color: card.deciding ? Theme.warning : card.mine ? Theme.dim : Theme.primary
-          font.bold: !card.mine
-          font.pixelSize: 12
+          font.pixelSize: 10
+          font.letterSpacing: 3
         }
         Label {
           visible: card.expanded
-          text: "to " + (card.mine ? card.entry.to : "you")
+          text: (card.mine ? "to " + card.entry.to : "to you") + (card.request ? (card.deciding ? " · asks you" : " · asked you") : "")
           color: Theme.dim
-          font.pixelSize: 11
-        }
-        Label {
-          visible: card.expanded && card.request
-          text: card.deciding ? "· asks you" : "· asked you"
-          color: card.deciding ? Theme.warning : Theme.dim
           font.pixelSize: 11
         }
         Label {
@@ -63,13 +63,20 @@ Rectangle {
           elide: Text.ElideRight
         }
         Item { Layout.fillWidth: true; visible: card.expanded }
-        Label {
+        LoadingTrace {
           visible: card.entry.open && card.entry.kind === "agent"
-          text: "writing"
-          color: Theme.primary
-          font.pixelSize: 10
+          width: 36
+          height: 10
+          running: visible
         }
         Label { text: Mail.when(card.entry.at); color: Theme.dim; font.pixelSize: 10 }
+      }
+      MouseArea {
+        anchors.fill: parent
+        anchors.margins: -6
+        cursorShape: Qt.PointingHandCursor
+        enabled: !card.deciding
+        onClicked: card.toggled()
       }
     }
 
@@ -78,10 +85,10 @@ Rectangle {
       visible: card.expanded && card.entry.text !== ""
       text: card.mine ? card.entry.text : Mail.markdown(card.entry.text)
       textFormat: card.mine ? Text.PlainText : Text.MarkdownText
-      linkColor: Theme.primary
       onLinkActivated: link => Qt.openUrlExternally(link)
+      color: card.mine ? Theme.dim : Theme.foreground
       font.pixelSize: 13
-      lineHeight: 1.2
+      lineHeight: 1.25
       wrapMode: Text.Wrap
     }
 
@@ -91,11 +98,12 @@ Rectangle {
       spacing: 6
       Repeater {
         model: card.entry.files
-        delegate: FileChip {
+        delegate: Chip {
           required property var modelData
-          name: modelData.name
-          detail: Mail.size(modelData.bytes)
-          onChosen: Mail.openAttachment(card.thread, modelData)
+          icon: "import"
+          text: modelData.name + "  ·  " + Mail.size(modelData.bytes)
+          tip: "save to downloads and open"
+          onClicked: Mail.openAttachment(card.thread, modelData)
         }
       }
     }
@@ -103,10 +111,11 @@ Rectangle {
     Label {
       Layout.fillWidth: true
       visible: card.expanded && card.request && !card.entry.open
-      text: !card.entry.answer ? "Closed without your answer."
-        : "You answered: " + [card.entry.answer.option, card.entry.answer.body !== card.entry.answer.option ? card.entry.answer.body : ""].filter(part => part).join(" — ")
+      text: !card.entry.answer ? "CLOSED WITHOUT YOUR ANSWER"
+        : "YOU ANSWERED  " + [card.entry.answer.option.toUpperCase(), card.entry.answer.body !== card.entry.answer.option ? card.entry.answer.body : ""].filter(part => part).join(" — ")
       color: Theme.dim
-      font.pixelSize: 12
+      font.pixelSize: 10
+      font.letterSpacing: 1.5
       wrapMode: Text.Wrap
     }
 

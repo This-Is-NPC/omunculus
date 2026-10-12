@@ -5,7 +5,7 @@ import "kit/ui"
 
 // Decision answers a request that waits on you: the questions it gathers from
 // below, its options as buttons, and a field for an answer in your own words,
-// which goes with an option or alone.
+// which goes with an option or alone. Deny and cancel ask to be pressed twice.
 ColumnLayout {
   id: decision
 
@@ -33,12 +33,23 @@ ColumnLayout {
     Repeater {
       model: decision.entry.options
       delegate: TraceButton {
+        id: option
         required property string modelData
+        readonly property bool guarded: modelData === "deny" || modelData === "cancel"
         dense: true
-        role: modelData === "deny" || modelData === "cancel" ? "guarded" : "primary"
-        text: modelData.replace(/_/g, " ").toUpperCase()
-        tip: answer.text.trim() !== "" ? "with what you wrote" : ""
-        onClicked: Mail.decide(decision.thread, decision.entry.key, modelData, answer.text)
+        role: guarded ? "guarded" : "primary"
+        text: armed ? "CONFIRM " + modelData.toUpperCase() : modelData.replace(/_/g, " ").toUpperCase()
+        tip: armed ? "press again to confirm" : answer.text.trim() !== "" ? "with what you wrote" : ""
+        // A guarded answer is armed by the first press and given by the second.
+        onClicked: {
+          if (guarded && !armed) {
+            armed = true
+            disarm.restart()
+          } else {
+            Mail.decide(decision.thread, decision.entry.key, modelData, answer.text)
+          }
+        }
+        Timer { id: disarm; interval: 3000; onTriggered: option.armed = false }
       }
     }
   }

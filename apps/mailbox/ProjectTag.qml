@@ -1,20 +1,11 @@
 import QtQuick
 import "kit/ui"
 
-// ProjectTag names the project a thread is in, as a small outlined tag.
-Rectangle {
-  id: tag
+// ProjectTag names the project a thread is in, as a tracked caption.
+Label {
   property string name
-  implicitWidth: label.implicitWidth + 12
-  implicitHeight: 16
-  color: "transparent"
-  border.color: Theme.line
-  Label {
-    id: label
-    anchors.centerIn: parent
-    text: tag.name.toUpperCase()
-    color: Theme.dim
-    font.pixelSize: 9
-    font.letterSpacing: 1.5
-  }
+  text: name.toUpperCase()
+  color: Theme.dim
+  font.pixelSize: 9
+  font.letterSpacing: 2
 }
