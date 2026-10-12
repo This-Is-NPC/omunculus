@@ -162,6 +162,24 @@ SurfaceFrame {
             font.pixelSize: 11
             wrapMode: Text.Wrap
           }
+          RowLayout {
+            Layout.fillWidth: true
+            visible: ask.toYou && Object.keys(ask.modelData.options || {}).length === 0
+            TextBox {
+              id: response
+              Layout.fillWidth: true
+              dense: true
+              placeholderText: "Answer the question"
+              onAccepted: { if (text.trim()) Omunculus.reply(ask.modelData.id, "", text.trim()) }
+            }
+            TraceButton {
+              dense: true
+              role: "progress"
+              text: "REPLY"
+              enabled: response.text.trim().length > 0
+              onClicked: Omunculus.reply(ask.modelData.id, "", response.text.trim())
+            }
+          }
           Flow {
             Layout.fillWidth: true
             visible: ask.toYou

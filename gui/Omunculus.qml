@@ -228,7 +228,7 @@ Singleton {
 
   function reply(requestId, option, body) {
     call("POST", base + "/conversations/" + conversationId + "/requests/" + requestId + "/reply",
-      { option: option, body: body || option }, true, () => tell("replied " + option, false))
+      Requests.answer(option, body), true, () => tell(option ? "replied " + option : "replied", false))
   }
 
   function markRead(inboxId) {

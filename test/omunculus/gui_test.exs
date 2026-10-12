@@ -15,6 +15,10 @@ defmodule Omunculus.GuiTest do
     ];
     if (requests.filter(pending).length !== 2) throw Error("pending requests missing");
     if (requests.filter(r => pending(r) && human(r.arbiter)).length !== 1) throw Error("human count");
+    if (JSON.stringify(answer("", "Logo attached")) !== JSON.stringify({body: "Logo attached"}))
+      throw Error("text replies must omit option");
+    if (JSON.stringify(answer("approve", "")) !== JSON.stringify({body: "approve", option: "approve"}))
+      throw Error("decision replies must retain option");
     if (label(agent) !== "worker" || label(owner) !== "local:1000") throw Error("participant label");
     """
 
