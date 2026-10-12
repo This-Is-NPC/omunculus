@@ -161,6 +161,116 @@ defmodule Omunculus.CycleTest do
     Project.close(project)
   end
 
+  for stopped_state <- ~w(done cancelled) do
+    test "pending requests release runs, resume independently, and leave #{stopped_state} work stopped",
+         %{dir: dir} do
+      write_config(dir, 1)
+      path = Fixtures.config_path(dir)
+
+      File.write!(
+        path,
+        path
+        |> File.read!()
+        |> String.replace(
+          ~s(tools = ["comment", "continue", "done", "end"]),
+          ~s(tools = ["ask", "comment", "continue", "done", "end"])
+        )
+      )
+
+      owner = self()
+
+      Fixtures.use_model(
+        dir,
+        model(fn assembled, call ->
+          goal = if String.contains?(assembled, "Goal A"), do: "Goal A", else: "Goal B"
+
+          if String.contains?(assembled, "## Request") do
+            send(owner, {:resumed, goal, assembled})
+            call.("done", %{"report" => "answered"})
+          else
+            send(owner, {:asked, goal, self()})
+
+            call.("ask", %{
+              "question" => "May I proceed with #{goal}?",
+              "options" => ["yes", "no"],
+              "to" => "person"
+            })
+          end
+        end)
+      )
+
+      assert {:ok, ""} = CLI.run(["send", "go"], dir)
+      assert_receive {:asked, "Goal A", first_pid}
+      assert_receive {:asked, "Goal B", second_pid}
+      refute Process.alive?(first_pid)
+      refute Process.alive?(second_pid)
+      refute_received {:resumed, _, _}
+
+      project = Fixtures.open_project(dir)
+      on_exit(fn -> Project.close(project) end)
+
+      [first, second] =
+        all(project, "SELECT * FROM works WHERE parent_id IS NOT NULL ORDER BY title")
+
+      [first_request] = all(project, "SELECT * FROM requests WHERE work_id = ?", [first.id])
+      [second_request] = all(project, "SELECT * FROM requests WHERE work_id = ?", [second.id])
+
+      for {work, request} <- [{first, first_request}, {second, second_request}] do
+        assert work.state == "waiting"
+        assert work.waiting == "request"
+        assert work.waiting_for == request.id
+        assert request.status == "waiting_human"
+      end
+
+      assert all(project, "SELECT * FROM runs WHERE status != 'done'") == []
+      {:ok, config} = Fixtures.load_config(dir)
+      limits = Map.put(config.execution, :scope, {:project, config.store.path})
+      assert {:ok, lease} = Omunculus.Execution.Limiter.acquire(limits, self(), :run)
+      assert :ok = Omunculus.Execution.Limiter.release(limits, lease, :run)
+
+      assert {:ok, ""} =
+               CLI.run(["reply", "--request_id", first_request.id, "Proceed with A."], dir)
+
+      assert_receive {:resumed, "Goal A", prompt}
+      assert prompt =~ "Proceed with A."
+      refute_received {:resumed, "Goal B", _}
+
+      [_original, resumed] =
+        all(project, "SELECT * FROM runs WHERE work_id = ? ORDER BY rowid", [first.id])
+
+      assert resumed.via == "reply"
+      assert resumed.request_id == first_request.id
+
+      [reply] =
+        all(project, "SELECT * FROM events WHERE type = 'reply' AND request_id = ?", [
+          first_request.id
+        ])
+
+      assert resumed.cause_id == reply.id
+      [still_waiting] = all(project, "SELECT * FROM works WHERE id = ?", [second.id])
+      assert still_waiting.state == "waiting"
+      assert still_waiting.waiting_for == second_request.id
+      assert [_original] = all(project, "SELECT * FROM runs WHERE work_id = ?", [second.id])
+      [pending] = all(project, "SELECT * FROM requests WHERE id = ?", [second_request.id])
+      assert pending.status == "waiting_human"
+
+      assert :ok =
+               Query.exec(project.conn, "UPDATE works SET state = ? WHERE id = ?", [
+                 unquote(stopped_state),
+                 second.id
+               ])
+
+      assert {:ok, ""} = CLI.run(["reply", "--request_id", second_request.id, "Too late."], dir)
+      refute_received {:resumed, "Goal B", _}
+      assert [_original] = all(project, "SELECT * FROM runs WHERE work_id = ?", [second.id])
+      [stopped] = all(project, "SELECT * FROM works WHERE id = ?", [second.id])
+      assert stopped.state == unquote(stopped_state)
+      [closed] = all(project, "SELECT * FROM requests WHERE id = ?", [second_request.id])
+      assert closed.status == "closed"
+      assert all(project, "SELECT * FROM runs WHERE status != 'done'") == []
+    end
+  end
+
   test "the command returns after every run it opened and fails with a child's error",
        %{dir: dir} do
     write_config(dir, 4)
