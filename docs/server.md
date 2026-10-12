@@ -96,13 +96,25 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `GET /conversations/{id}/events?after={cursor}` | Read up to 500 later events in sequence order. |
 | `GET /conversations/{id}/stream?after={cursor}` | Open a WebSocket of later events; see [Event stream](#event-stream). |
 | `POST /conversations/{id}/messages` | Send `{"message":"text"}` with optional `work_id`. |
-| `POST /conversations/{id}/requests/{request_id}/reply` | Send `{"body":"text"}`, optionally with `"option":"name"` to execute that option's calls. |
+| `POST /conversations/{id}/requests/{request_id}/reply` | Send `{"body":"text"}`, optionally with `"option":"name"` to execute that option's calls, and recursive `"parts":{"name":{"body":"text","option":"choice"}}` for linked origins. |
 | `POST /conversations/{id}/comments` | Send `{"body":"text"}` and exactly one of `work_id`, `request_id` or `inbox_id`. |
 | `POST /conversations/{id}/inbox/{inbox_id}/read` | Mark an inbox item read. |
 | `POST /members`, `DELETE /members/{issuer}/{subject}` | Assign or revoke a project role. |
 | `POST /conversations/{id}/members`, `DELETE /conversations/{id}/members/{issuer}/{subject}` | Assign or revoke a conversation role. |
 
 Membership `POST` bodies are `{"issuer":"my-idp","subject":"bob","role":"reader"}`. Create a conversation, then send a message with an idempotency key. Fetch its snapshot and resume with `/events?after=<snapshot.cursor>` or `/stream?after=<snapshot.cursor>`. Each event includes version `v`, `cursor`, `project`, `type`, `at`, `actor`, `origin`, resource IDs and `body`. A caller without access gets `404` for conversation resources.
+
+Request resources expose `requester` and `arbiter` as participant objects:
+`{"kind":"agent","agent":"name"}` or
+`{"kind":"human","issuer":"issuer","subject":"subject"}`. The former
+`agent` column and `waiting_agent` / `waiting_human` statuses are absent.
+Statuses are `pending`, `escalated` and `closed`; only pending requests can be
+answered directly. `run_id` and `work_id` may be null. `origins` recursively
+maps part names to their canonical requests, including the original `reason`,
+`workflow`, `stage` and options. Replies authorize each named effect for its
+original target and the actual authenticated answerer. Omit `option` for text;
+explicit null or empty values return `400`. There is no human escalation
+endpoint.
 
 ## Event stream
 
@@ -117,4 +129,6 @@ Each frame is a JSON text frame. The first frames are the events after `after` (
 | `1011 internal_error` | The server could not read the events. |
 | `1013 too_many_streams` | `max_connections` streams are already open. |
 
-An older store without conversation columns is rejected and must be recreated. The server closes runs left open by an interrupted process and applies the existing retry policy to their work. HTTP requests do not wait for a run to finish.
+An older store without conversation or participant request columns, escalation
+links or the current request status constraint is rejected and must be
+explicitly recreated. The server closes runs left open by an interrupted process and applies the existing retry policy to their work. HTTP requests do not wait for a run to finish.

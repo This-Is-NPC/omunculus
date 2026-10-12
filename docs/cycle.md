@@ -30,8 +30,8 @@ when the same call ends the run, once it has closed. A tool can chain `end`:
 run in one call; `work` comments its report on the run's work, delegates
 each new work below it and ends the run, or, in a run without a work,
 creates the root work and ends the run; `break` parks the work with its
-report and ends the run; `request_access` and `request_sandbox` comment
-their report on the run's work, open the request and end the run. The
+report and ends the run; `request_access` comments
+its report on the run's work, opens the request and ends the run. The
 model reaches `continue` only through `done`.
 
 A hook is a tool fired by an event: same contract, any `emit`. Who opens
@@ -219,10 +219,9 @@ parked or cancelled. A cancelled work never opens a run again.
 
 A decision goes through `REQUESTS`. A `request` carries a `reason` and
 named `options`, each a list of tool calls (`{name, args}`, the shape of
-a chain); an option may list none. The model calls `request_access`
-(`kind` = `tool` | `path` | `directory`) or `request_sandbox` (`kind` =
-`resource`, `name` = `sandbox.write` | `sandbox.network`), each with a
-`report`; both offer one `grant_<scope>` per permanent scope and `deny`,
+a chain); an option may list none. The model calls `request_access` with a list of entries (`kind` = `tool` |
+`path` | `directory` | `resource`, including `sandbox.write` and
+`sandbox.network`) and a `report`. Its choices offer one `grant_<scope>` per permanent scope and `deny`,
 and, in a run on a work, `grant`, which grants on that work. In a run on
 a work the report is commented on it first, then the request. Options made only of `grant` calls whose names are all have are
 not a request: no row opens, and a tool that emits `request` without
@@ -230,7 +229,7 @@ ending the run gets `already granted: <name>` in its output. A granted
 name that is blocked is `EVENTS(deny)`. Otherwise a request opens, its
 reason the first comment on it; if a work is attached it becomes
 `waiting = request`. [The ceiling](ceiling.md) says who the arbiter is.
-Both request tools end the asking run; an agent arbiter's run opens on
+The request tool ends the asking run; an agent arbiter's run opens on
 the parent work after it closes.
 
 `reply` answers with text and optionally picks an option: the person always
@@ -238,7 +237,7 @@ may, an agent only as the arbiter. The request closes and the reply's body
 is commented on it. Without an option it executes no effects; with an option
 its calls run as steps `reply` chains — under the arbiter's
 ceiling, in the reply's transaction, each an `EVENTS(tool)` with
-`via = reply`. The builtin `reply` chains `grant` and `cancel`;
+`via = reply`. The builtin `reply` chains `grant`, `cancel`, `configure` and `pack`;
 a call outside that list fails the reply and writes nothing. The
 requester's work, if it still waits on the request, is reopened; if it
 is open once the calls applied, its next run opens with the request
@@ -247,14 +246,31 @@ request from a run without a work has nowhere to wait: the reply opens
 a run of that run's agent in its conversation, with the request thread
 and the asking run in its prompt.
 
+`escalate` links received pending requests into one upstream request with
+named origins, then ends the model run. The original requests become
+`escalated`; their works keep waiting, and the intermediary's child wait is
+preserved. Recursive reply `parts` answer those origins through the same
+authorized reply action and transaction. Missing parts return to pending; a
+text-only answer resumes the intermediary for distribution even when its
+work still waits on children. A cancelled origin work never runs again.
+
+An agent receiver that closes without answering a pending request uses the
+same linked escalation action. At the root it reaches the authenticated
+human and writes an inbox notification naming that upstream request. An
+already escalated origin does not trigger a second escalation.
+
 `INBOX` notifies and does not wait. It does not park a run or a work.
 
 ## The tables
 
-Seven of them: `PROMPTS`, `EVENTS`, `RUNS`, `COMMENTS`, `WORKS`,
-`REQUESTS`, `INBOX`. `EVENTS.comment_id` is a weak pointer — no foreign
+Twelve: `PROMPTS`, `EVENTS`, `RUNS`, `COMMENTS`, `WORKS`, `REQUESTS`,
+`REQUEST_ESCALATIONS`, `INBOX`, `CONVERSATIONS`, `PROJECT_MEMBERS`,
+`CONVERSATION_MEMBERS` and `COMMAND_RECEIPTS`. `EVENTS.comment_id` is a weak pointer — no foreign
 key — so `compact` can delete comments without taking the event with it.
-`EVENTS` is append-only. `REQUESTS.options` does not change after create.
+`EVENTS` and `REQUEST_ESCALATIONS` are append-only. Request options and
+participant identities are immutable. Requests use `pending`, `escalated`
+and `closed`, with nullable run/work origins; old stores require explicit
+recreation.
 Tools never open SQLite; they `emit`, and the store applies or refuses
 the batch.
 

@@ -218,13 +218,16 @@ the sandbox; the scripts a skill ships are not run.
 ## Actions
 
 Actions the store will apply: `comment`, `request`, `notify`, `prompt`,
-`inbox.read`, `reply`, `grant`, `cancel`, `work`, `delegate`,
+`inbox.read`, `escalate`, `reply`, `grant`, `cancel`, `work`, `delegate`,
 `continue`, `break`, `end`, `compact`, `comment.delete`. A `request`
 carries a `reason` and `options`, a map from option name to a list of
 `{name, args}` tool calls. Options made only of `grant` calls whose
 names the run already has do not open a row — the output is
 `already granted: <name>`. A granted name that is blocked is `deny`.
-`reply` takes `request_id`, `option` and `body`; `grant` takes
+`escalate` takes `reason` and `origins`, a map of distinct part names to
+received request IDs. It creates a linked request without overwriting a
+parent's child wait. `reply` takes `request_id`, `body`, optional `option`
+and recursive named `parts`; `grant` takes
 `request_id`, `name`, `kind` and an optional `scope`, which only a
 person may give; `cancel` takes `request_id` and cancels the request's
 work. `end` is the only action that ends the run; it needs a
@@ -280,7 +283,6 @@ needs `end` as have too.
 | `done` | chains `comment` with the report and `continue` | `end` |
 | `break` | emits `break`, which parks the work with the report as its comment | `end` |
 | `request_access` | emits a `comment` with the report on the run's work, then `request` with the options `grant_agent`, `grant_depth`, `grant_stage`, `grant_workspace`, `deny` and, on a work, `grant` | `end` |
-| `request_sandbox` | the same, with `kind = resource` | `end` |
 
 `continue` is only a chain step (`triggers = ["chain"]`): the model
 concludes or advances a work with `done`, which needs `comment`,
@@ -301,11 +303,12 @@ id.
 
 ## Answering a request
 
-`reply` takes a `request_id`, an `option` and a `body`. It reads the
-`request` view, emits the `reply` action and chains the option's calls,
-each with the request's `request_id` added to its args. The steps run
+`reply` takes `request_id`, a nonempty `body`, optional `option` and
+recursive `parts`. It reads the canonical `request` view, including named
+`origins`, emits the `reply` action and chains the chosen options' calls,
+each with the request's `request_id` added to its args, using the origin ID for a named part. The steps run
 under the chain rules: the builtin `reply` has
-`chains = ["grant", "cancel"]`, the steps are checked against the replying agent's
+`chains = ["grant", "cancel", "configure", "pack"]`, the steps are checked against the replying agent's
 ceiling (from the command line, against none), and the reply with every
 step commits or none does.
 
@@ -317,8 +320,20 @@ step commits or none does.
 Both are chain-only (`triggers = ["chain"]`). An option with no call,
 such as `deny` or the harness's `retry`, only reopens the work, whose
 next run opens. A request may list any tool in its options, but the
-builtin `reply` only chains those two. To answer with other tools, ship your own `reply` folder with a
+builtin `reply` only chains the four tools listed above. To answer with other tools, ship your own `reply` folder with a
 wider `chains`; the most specific folder wins.
+
+Text alone chains nothing and grants nothing. A named decision requires its
+option; saying "approved" does not select `approve`. Parts are keyed by the
+escalated request's origin names and contain `body`, optional `option` and
+nested `parts`. Validation and authorization apply recursively; an invalid
+part refuses the entire reply. Omitted parts return to pending.
+
+The model-only `escalate` tool emits the common action and chains `end`. Its
+origins must be pending, addressed to the caller and in one conversation.
+The new request keeps immutable origin links and original effect targets.
+Its reply either answers named origins transactionally or resumes the
+intermediary for distribution, including while its work waits on children.
 
 ## What the model calls
 
@@ -339,7 +354,7 @@ the ceiling, run in their own sandboxed sessions.
 fs.read   = read, ls, grep, find
 fs.write  = write, edit
 store     = comment, request_access, reply, grant, notify, read_work
-sandbox   = request_sandbox
+sandbox   = request_access
 sequence  = work, delegate, continue, break, end, done, cancel
 catalog   = tool_search
 skills    = skill, and every skill.<name> of [skills] paths

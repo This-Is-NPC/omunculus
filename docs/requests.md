@@ -3,7 +3,8 @@
 Specification for Omakiten plan `generic-requests`, task 3277. This document
 records the current implementation and a proposed contract for approval.
 The proposed contract is delivered incrementally; the current behavior is
-described below.
+described below. Configured routing, human creation/escalation commands and
+sealed permission escalation remain in task 3281; they are not part of 3279.
 The user authorized implementation after clarifying participant-neutral
 routing, multiple requests in the existing inbox, and pause/resume semantics.
 The implementation tasks record which parts of this contract are delivered.
@@ -247,10 +248,10 @@ allows it. A workless agent arbiter resumes in its original conversation.
 A human arbiter receives the same answer and origin links without opening a
 run; a later reply uses the same authorization and state checks.
 
-Closing an arbiter run after it explicitly escalated must not trigger today's
-`unanswered` shortcut to the human. Replace that shortcut with the same linked
-single-origin escalation path along the configured route for an unanswered
-agent-run request; no parallel in-place arbiter rewrite remains. A pending
+Closing an arbiter run after it explicitly escalated does not trigger
+`unanswered` again. Unanswered pending requests use the same linked
+single-origin escalation action; no in-place arbiter rewrite remains.
+Configurable routing for that action is part of 3281. A pending
 human request does not imply a model run or model retry policy; closing an
 unrelated agent run cannot escalate it automatically. Request and reply events remain the causes of the
 runs they open. The harness schedules and applies; tools build the merged
@@ -293,17 +294,17 @@ interpretation run. Neither worker receives the other worker's answer.
 and escalation schema revision in task 3279.** Task 3278 uses the existing
 options, comments and events for free-text replies; task 3280 evolves the existing inbox, not another inbox table or source.
 
-Within this single schema revision, replace the participant-dependent
+The implemented schema revision replaces the participant-dependent
 `waiting_agent` / `waiting_human` statuses with `pending`, keeping `escalated`
-and `closed`. Replace `requests.agent` with a required immutable `requester`
-identity and make `arbiter` a required resolved participant identity. Store
-these as JSON: an agent identity names its configured agent; a human identity
+and `closed`. It replaces `requests.agent` with a required immutable `requester`
+identity and makes `arbiter` a required immutable resolved participant identity.
+Both are stored as JSON: an agent identity names its configured agent; a human identity
 contains the authenticated issuer and subject. These identities are internal
 metadata, not request arguments that let a caller impersonate a participant.
 `run_id` and `work_id` remain nullable, so human requests need no invented run.
 No old column or status remains as a compatibility alias.
 
-Add one relation:
+The added relation is:
 
 ```sql
 CREATE TABLE request_escalations (
@@ -334,11 +335,11 @@ and escalation causes. `runs`, `works`, `conversations`, membership tables,
 and schemas. No separate answers, grants, human-role or client-inbox table is
 needed, and no configuration moves into SQLite.
 
-The schema compatibility check must reject an existing store without the new
+The schema compatibility check rejects an existing store without the new
 participant columns, relation and status constraint with
 `store_requires_recreation`. Recreate stores explicitly; there is no
-migration, dual schema, silent upgrade or fallback. This specification commit changes no database and recreates no
-user or development store.
+migration, dual schema, silent upgrade or fallback. The implementation did not
+recreate any user or development store.
 
 ## Inbox and multiple requests
 
@@ -393,14 +394,14 @@ respective answers are returned.
 | --- | --- | --- |
 | `ask` | Question or decision; empty call lists for named answers. | Requires at least two options today. Allow no options and text replies through the common path; retain named decisions. |
 | `request_access` | Permission form; each grant option grants the entire requested set, or deny returns text. | Already emits one request. Use the common lifecycle and escalation while retaining blocked/already-have checks and human-only permanent scopes. |
-| `request_sandbox` | Sandbox permissions are `request_access` entries with `kind = resource`, e.g. `sandbox.write`. | No such builtin module or manifest exists at this commit. Older references in `docs/tools.md`, `docs/cycle.md`, `docs/cli.md`, `docs/ceiling.md` and `docs/possibilities.md` are stale. Correct those references when folding paths in; introduce no alias or second sandbox request tool. |
-| `reply` → `grant` / `cancel` | A selected answer applies the origin's ordered calls transactionally. | Text-only replies and optional named options share the authorized reply path. Named parts remain to be implemented. Keep grant/cancel chain-only. |
+| `request_sandbox` | Sandbox permissions are `request_access` entries with `kind = resource`, e.g. `sandbox.write`. | No such builtin module or manifest exists at this commit. Older references in `docs/ceiling.md` and `docs/possibilities.md` are stale. Correct those references when folding paths in; introduce no alias or second sandbox request tool. |
+| `reply` → `grant` / `cancel` | A selected answer applies the origin's ordered calls transactionally. | Text-only replies, optional named options and recursive named parts share the authorized reply path. Grant/cancel remain chain-only. |
 | Questions carried by `break`, then `reopen` | A resumable question is a request; escalation carries it upward and reply resumes it. | Design lead, designer and administrator instructions use stopping reports for missing information. Replace those question instructions with requests. Keep `break` and `reopen` for actual failed/stopped work and correction. |
 | `promote` approval | A permission request for the clerk's production tool follows the configured decision route, regardless of intermediary type. | Dream-team seals `promote` as human-only and its clerk requests it with `request_access`, which currently jumps to the human. Preserve the human grant boundary internally while linking every escalation; the requester does not choose a human endpoint. `promote` itself remains the deployment tool and publishes only after the grant; a text approval cannot run it. |
 | `propose_config`, `propose_pack` | Decision requests with `apply` calling `configure` or `pack`, and `deny` calling nothing. | Keep validated proposals, revision checks and human authorization on the shared path. Free text records advice without applying a proposal. Resolve the configured responsibility without requiring the asker to identify its participant type. |
 | Harness retry / cancel | Decision request to the configured responsible participant after root retry exhaustion. | Keep `retry` as an explicit named decision and `cancel` as an effect-bearing option; a text-only reply reopens the requester without recording either decision. Child exhaustion remains a genuine break. |
-| Unanswered arbiter run | Single-origin linked escalation. | Today it rewrites the arbiter to human in place. Remove that shortcut in favor of the common escalation path; an explicitly escalated origin must not escalate twice. |
-| Human-origin requests | The same request contract with an authenticated human requester and optional work, without a model run. | The current schema requires an agent requester. Replace that assumption in the single schema revision, expose authorized creation/escalation commands, and use the same delivery, reply and effect rules. |
+| Unanswered arbiter run | Single-origin linked escalation. | Uses the common linked escalation action and notifies the inbox when the next receiver is human. Explicitly escalated origins do not escalate twice. |
+| Human-origin requests | The same request contract with an authenticated human requester and optional work, without a model run. | The schema and store actions accept an authenticated human requester without a run. Authorized human creation/escalation commands and configurable delivery remain in 3281. |
 | Seller comments and front-desk forwarding | Generalist asks the client a combined request and routes each answer back to its origin. | Sales currently forwards every message and the seller comments its own questions; it has no shared request inbox. Update pack tools, stage ceilings and instructions so questions use requests and client replies resolve them. Preserve ordinary messages and work creation. |
 
 ## Acceptance boundary

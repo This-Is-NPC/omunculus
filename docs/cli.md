@@ -229,7 +229,7 @@ Mark one notification read. The next `inbox` listing leaves it out.
 
 ## `omunculus reply`
 
-- **Usage:** `omunculus reply <body> --request_id <id> [--option <name>]`
+- **Usage:** `omunculus reply <body> --request_id <id> [--option <name>] [--parts <json>]`
 - **Effect:** comment + the tool calls of that option
 
 Answer a request with text and optionally one of its options. The request
@@ -241,7 +241,14 @@ request, is reopened; when it is open after the option's calls, the
 harness opens its next run, on the same stage, with the request thread in
 its prompt. An option the request does not have is a refusal.
 
-A request from `request_access` or `request_sandbox` has the options
+For an escalated request, `--parts` accepts a JSON object keyed by origin
+part name, for example `'{"logo":{"body":"Use the attached logo"}}'`. Each
+part takes `body`, optional `option` and nested `parts`. All selected origin
+answers and effects commit together with the upstream answer, preserving the
+original permission targets. Omitted parts return to pending for distribution.
+Text alone resumes the intermediary without answering its origins.
+
+A request from `request_access` has the options
 `grant` (the name enters `WORKS.grants`), `grant_agent`, `grant_depth`,
 `grant_stage`, `grant_workspace` (a permanent ceiling change: the file is
 rewritten on that layer and `grants` is left alone; workspace scope writes
