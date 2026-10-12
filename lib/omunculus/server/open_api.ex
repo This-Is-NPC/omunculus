@@ -285,7 +285,12 @@ defmodule Omunculus.Server.OpenAPI do
       "Removed" => object(%{status: %{type: "string", const: "removed"}}, ["status"]),
       "Membership" =>
         object(%{issuer: string(), subject: string(), role: string()}, ~w(issuer subject role)),
-      "SendMessage" => object(%{message: string(), work_id: string()}, ["message"]),
+      "SendMessage" => %{
+        oneOf: [
+          object(%{message: string(), agent: string()}, ~w(message agent)),
+          object(%{message: string(), work_id: string()}, ~w(message work_id))
+        ]
+      },
       "CreateRequest" =>
         object(%{question: string(), options: array(string()), to: string()}, ~w(question)),
       "EscalateRequests" =>

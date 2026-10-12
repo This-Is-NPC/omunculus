@@ -95,7 +95,7 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `GET /conversations/{id}/{works,runs,prompts,requests,inbox}` | Read one resource list. |
 | `GET /conversations/{id}/events?after={cursor}` | Read up to 500 later events in sequence order. |
 | `GET /conversations/{id}/stream?after={cursor}` | Open a WebSocket of later events; see [Event stream](#event-stream). |
-| `POST /conversations/{id}/messages` | Send `{"message":"text"}` with optional `work_id`. |
+| `POST /conversations/{id}/messages` | Send `{"message":"text","agent":"name"}` to an agent of depth 0, or `{"message":"text","work_id":"id"}` to a work; one of the two, never both. A message the store refuses (an agent not at depth 0) is `422 message_refused`. |
 | `POST /conversations/{id}/requests/{request_id}/reply` | Send `{"body":"text"}`, optionally with `"option":"name"` to execute that option's calls, and recursive `"parts":{"name":{"body":"text","option":"choice"}}` for linked origins. |
 | `POST /conversations/{id}/comments` | Send `{"body":"text"}` and exactly one of `work_id`, `request_id` or `inbox_id`. |
 | `POST /conversations/{id}/inbox/{inbox_id}/read` | Mark an inbox item read. |

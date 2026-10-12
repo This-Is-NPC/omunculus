@@ -160,14 +160,48 @@ defmodule Omunculus.ServerTest do
     command_headers = auth(admin) ++ [{"idempotency-key", "message-1"}]
     message_url = base <> "/conversations/#{id}/messages"
 
-    first = Req.post!(message_url, headers: command_headers, json: %{message: "hello"})
+    for {key, body} <- [
+          {"no-agent", %{message: "hello"}},
+          {"agent-and-work", %{message: "hello", agent: "concierge", work_id: "w"}},
+          {"empty-agent", %{message: "hello", agent: ""}}
+        ] do
+      refused =
+        Req.post!(message_url, headers: auth(admin) ++ [{"idempotency-key", key}], json: body)
+
+      assert refused.status == 400, key
+    end
+
+    not_front =
+      Req.post!(message_url,
+        headers: auth(admin) ++ [{"idempotency-key", "not-front"}],
+        json: %{message: "hello", agent: "worker"}
+      )
+
+    assert not_front.status == 422
+
+    first =
+      Req.post!(message_url,
+        headers: command_headers,
+        json: %{message: "hello", agent: "concierge"}
+      )
+
     assert first.status == 202
 
-    repeated = Req.post!(message_url, headers: command_headers, json: %{message: "hello"})
+    repeated =
+      Req.post!(message_url,
+        headers: command_headers,
+        json: %{message: "hello", agent: "concierge"}
+      )
+
     assert repeated.status == 202
     assert repeated.body == first.body
 
-    conflict = Req.post!(message_url, headers: command_headers, json: %{message: "different"})
+    conflict =
+      Req.post!(message_url,
+        headers: command_headers,
+        json: %{message: "different", agent: "concierge"}
+      )
+
     assert conflict.status == 409
 
     runs =
@@ -222,7 +256,7 @@ defmodule Omunculus.ServerTest do
     denied =
       Req.post!(base <> "/conversations/#{id}/messages",
         headers: auth(outsider) ++ [{"idempotency-key", "denied"}],
-        json: %{message: "hello"}
+        json: %{message: "hello", agent: "concierge"}
       )
 
     assert denied.status == 404
@@ -255,7 +289,7 @@ defmodule Omunculus.ServerTest do
     second_message =
       Req.post!(message_url,
         headers: auth(outsider) ++ [{"idempotency-key", "message-2"}],
-        json: %{message: "from another participant"}
+        json: %{message: "from another participant", agent: "concierge"}
       )
 
     assert second_message.status == 202
@@ -294,7 +328,7 @@ defmodule Omunculus.ServerTest do
     streamed =
       Req.post!(message_url,
         headers: auth(admin) ++ [{"idempotency-key", "message-3"}],
-        json: %{message: "streamed"}
+        json: %{message: "streamed", agent: "concierge"}
       )
 
     assert streamed.status == 202
@@ -389,7 +423,7 @@ defmodule Omunculus.ServerTest do
     sent =
       local.(:post, "/v1/projects/solo/conversations/#{created.body["id"]}/messages",
         headers: [{"idempotency-key", "m1"}],
-        json: %{message: "hi"}
+        json: %{message: "hi", agent: "concierge"}
       )
 
     assert sent.status == 202
