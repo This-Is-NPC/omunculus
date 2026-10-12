@@ -66,9 +66,11 @@ A folder of your own is [a tool](docs/tools.md).
 
 The optional [server](docs/server.md) opens configured projects and exposes conversations, commands, snapshots, events and a WebSocket event stream to any HTTP client: to the local user on a Unix socket next to each store, and, when it has a TCP listener, to web apps with signed JWTs. It publishes its OpenAPI contract at `/openapi.json`. Each project keeps its own SQLite store. The server has no built-in chat page.
 
-## Window
+## Clients
 
-`apps/console/run` opens a window on a project of a running
+Any program that speaks the server's HTTP contract is a client; what it may
+rely on is in [clients](docs/clients.md). The repository's own are under
+`apps/`. `apps/console/run` opens a window on a project of a running
 [server](docs/server.md). It talks to the project's local socket, so it acts
 as the local user:
 
