@@ -62,6 +62,9 @@ Singleton {
   // Agent name -> its colour, in the order agents first appear.
   property var tones: ({})
 
+  // The agents of depth 0 a message can be for, as the project's config has them.
+  property var frontAgents: []
+
   property string message: ""
   property bool messageIsError: false
   property int noticeCount: 0
@@ -88,6 +91,7 @@ Singleton {
       if (!connected) {
         connected = true
         loadConversations()
+        loadFrontAgents()
       }
     }, () => connected = false)
   }
@@ -207,14 +211,38 @@ Singleton {
     })
   }
 
+  function loadFrontAgents() {
+    call("POST", "/v1/cli", { argv: ["config"] }, false, data => {
+      frontAgents = JSON.parse(data.output).agents
+        .filter(agent => agent.depth === 0 && !agent.workflow_only)
+        .map(agent => agent.name)
+    })
+  }
+
+  // The agent the conversation talks with: its last run of depth 0 without a
+  // work, or, before any, the project's only agent of depth 0.
+  function rootAgent() {
+    const own = runs.filter(run => !run.work_id && String(run.depth) === "0")
+    if (own.length > 0)
+      return own[own.length - 1].agent
+    return frontAgents.length === 1 ? frontAgents[0] : ""
+  }
+
   // A message to the root agent, or, with a work, to that work's agent.
   function send(text, work) {
     const value = text.trim()
     if (value === "" || conversationId === "")
       return
     const body = { message: value }
-    if (work)
+    if (work) {
       body.work_id = work
+    } else {
+      body.agent = rootAgent()
+      if (body.agent === "") {
+        tell("more than one agent of depth 0 can take this message; this window cannot choose one", true)
+        return
+      }
+    }
     call("POST", base + "/conversations/" + conversationId + "/messages", body, true, () => {})
   }
 

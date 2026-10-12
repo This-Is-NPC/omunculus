@@ -492,8 +492,7 @@ defmodule Omunculus.Server.Router do
   # A message names the agent of depth 0 it is for, or the work it goes to.
   defp send_args(body) when is_map(body) do
     with {:ok, message} <- required_string(body, "message"),
-         [] <- Map.keys(body) -- ~w(message agent work_id attachments),
-         {:ok, files} <- files(Map.get(body, "attachments", [])) do
+         [] <- Map.keys(body) -- ~w(message agent work_id) do
       case body do
         %{"work_id" => work_id}
         when is_map_key(body, "agent") or not is_binary(work_id) or
@@ -501,11 +500,11 @@ defmodule Omunculus.Server.Router do
           {:error, :invalid}
 
         %{"work_id" => work_id} ->
-          {:ok, %{"message" => message, "work_id" => work_id}, files}
+          {:ok, %{"message" => message, "work_id" => work_id}}
 
         _addressed ->
           with {:ok, agent} <- required_string(body, "agent"),
-               do: {:ok, %{"message" => message, "agent" => agent}, files}
+               do: {:ok, %{"message" => message, "agent" => agent}}
       end
     else
       _ -> {:error, :invalid}
@@ -585,9 +584,6 @@ defmodule Omunculus.Server.Router do
 
   defp error_reply(conn, {:error, {action, _reason}}) when action in [:request, :escalate],
     do: reply(conn, 422, %{error: "request_refused"})
-
-  defp error_reply(conn, {:error, {:attachment, reason}}),
-    do: reply(conn, 422, %{error: "attachment_refused", message: inspect(reason)})
 
   defp error_reply(conn, {:error, {:prompt, _reason}}),
     do: reply(conn, 422, %{error: "message_refused"})
