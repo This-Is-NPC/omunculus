@@ -88,6 +88,10 @@ source = "requests"
 source = "comments"
 from = ["request"]
 
+[views.attachments]
+source = "events"
+relation = "attachments"
+
 [views.inbox]
 source = "inbox"
 relation = "received"

@@ -25,7 +25,9 @@ defmodule Omunculus.Tools.Assemble do
   agent in its conversation, with original questions and work/stage context.
   A request already in that inbox is not repeated in `## Request`.
   The opening's notification comments join that section when it carried
-  `inbox_id`. The message of the opening comes last.
+  `inbox_id`. Under `## Attachments`, the files attached in the run's
+  conversation, each with its name, media type, size, who attached it and
+  its sha256. The message of the opening comes last.
 
   With `session_ttl_ms` and `session_max_bytes` in the args, and the
   `session` view (the work with its closed runs) or, for a run without a
@@ -42,7 +44,7 @@ defmodule Omunculus.Tools.Assemble do
   alias Omunculus.Tools.{Out, Record, Session}
 
   # The sections that begin the context of an assembled prompt.
-  @context_start ~r/\n\n(?=## (Environment|Work|Works|Conversation|Last comment|Last run|Results|Request|Inbox|Message)\n)/
+  @context_start ~r/\n\n(?=## (Environment|Work|Works|Conversation|Last comment|Last run|Results|Request|Inbox|Attachments|Message)\n)/
 
   @spec run(map) :: map
   def run(%{name: name, args: args, view: view} = input) do
@@ -66,6 +68,7 @@ defmodule Omunculus.Tools.Assemble do
           view["request_comments"]
         ) ++
         inbox_section(view, args) ++
+        attachments_section(view["attachments"]) ++
         message_section(view["message"])
 
     session = session(session_runs(view), args, news)
@@ -218,6 +221,17 @@ defmodule Omunculus.Tools.Assemble do
     end)
     |> elem(0)
   end
+
+  defp attachments_section([_ | _] = attachments) do
+    lines =
+      Enum.map(attachments, fn file ->
+        "- #{file["name"]} (#{file["media_type"]}, #{file["bytes"]} bytes) from #{file["by"]}, sha256 #{file["sha256"]}"
+      end)
+
+    ["## Attachments\n" <> Enum.join(lines, "\n")]
+  end
+
+  defp attachments_section(_attachments), do: []
 
   defp message_section(nil), do: []
   defp message_section(message), do: ["## Message\n#{message.body}"]

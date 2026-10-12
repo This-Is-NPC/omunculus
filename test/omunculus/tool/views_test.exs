@@ -132,6 +132,40 @@ defmodule Omunculus.Tool.ViewsTest do
              hydrate(conn, views, %{run_id: run})
   end
 
+  test "events with the attachments relation read the files of the run's conversation", %{
+    conn: conn
+  } do
+    conversation = Omunculus.Id.new()
+
+    :ok =
+      Omunculus.Store.Query.insert(conn, :conversations, %{
+        id: conversation,
+        created_at: "2026-01-01T00:00:00Z",
+        created_issuer: "local",
+        created_subject: "1000"
+      })
+
+    file = %{"name" => "a.txt", "media_type" => "text/plain", "bytes" => 1, "sha256" => "ab"}
+
+    prompt =
+      Fixtures.insert(conn, :events, %{
+        type: "prompt",
+        sequence: 1,
+        conversation_id: conversation,
+        actor_kind: "human",
+        body: Jason.encode!(%{"message" => "see", "attachments" => [file]})
+      })
+
+    Fixtures.insert(conn, :events, %{type: "prompt", sequence: 2, conversation_id: conversation})
+    run = Fixtures.insert(conn, :runs, %{conversation_id: conversation})
+    views = %{"files" => %{"source" => "events", "relation" => "attachments"}}
+
+    assert {:ok, %{"files" => [attached]}} = hydrate(conn, views, %{run_id: run})
+
+    assert attached ==
+             Map.merge(file, %{"event_id" => prompt, "at" => attached["at"], "by" => "person"})
+  end
+
   test "for a run without a work, conversation reads its conversation's root works", %{
     conn: conn
   } do

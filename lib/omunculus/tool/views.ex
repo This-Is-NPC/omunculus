@@ -28,8 +28,10 @@ defmodule Omunculus.Tool.Views do
     that opened the call's `request`), with its record, or `conversation`
     (from `run`), for a run without a work the closed runs of its
     conversation that had none, oldest first, each with its record.
-  - `events`: `relation` `run`, the events of the call's run so far, or
-    `cause`, the event that made the call's run due.
+  - `events`: `relation` `run`, the events of the call's run so far,
+    `cause`, the event that made the call's run due, or `attachments`, the
+    files attached in the run's conversation, oldest first, each as its
+    event describes it with `event_id`, `at` and `by`.
   - `requests`: from `args.request_id` then `request` (default).
   - `prompts`: `relation` `message`, the prompt that opened the run, or
     `assembled`, the assembled prompt of the run named by `from` (default
@@ -148,7 +150,7 @@ defmodule Omunculus.Tool.Views do
 
   defp source_spec("events", table, spec) do
     with :ok <- only_keys(table, ~w(relation)),
-         {:ok, relation} <- one_of(table, "relation", ~w(run cause), nil),
+         {:ok, relation} <- one_of(table, "relation", ~w(run cause attachments), nil),
          :ok <- required(relation, :relation) do
       {:ok, %{spec | from: ["run"], relation: relation}}
     end
@@ -360,6 +362,14 @@ defmodule Omunculus.Tool.Views do
   defp read_from(conn, %{source: "events", relation: "cause"}, _anchor, id, _scope) do
     with {:ok, run} <- Store.view(conn, "run", id) do
       if run && run.cause_id, do: Store.view(conn, "event", run.cause_id), else: {:ok, nil}
+    end
+  end
+
+  defp read_from(conn, %{source: "events", relation: "attachments"}, _anchor, id, _scope) do
+    with {:ok, run} <- Store.view(conn, "run", id) do
+      if run && run.conversation_id,
+        do: Store.attachments(conn, run.conversation_id),
+        else: {:ok, []}
     end
   end
 

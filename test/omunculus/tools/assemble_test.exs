@@ -104,6 +104,22 @@ defmodule Omunculus.Tools.AssembleTest do
     assert output =~ "- break: Stops the stage. [tags: sequence, work]"
   end
 
+  test "the files attached in the conversation come before the message" do
+    file = %{
+      "name" => "notes.txt",
+      "media_type" => "text/plain",
+      "bytes" => 5,
+      "sha256" => "2cf2",
+      "by" => "person"
+    }
+
+    output =
+      whole(%{@input | view: %{"message" => %{body: "see the notes"}, "attachments" => [file]}})
+
+    assert output =~
+             "## Attachments\n- notes.txt (text/plain, 5 bytes) from person, sha256 2cf2\n\n## Message\nsee the notes"
+  end
+
   test "with the work card, each agent comes with the tools it has that this run has not" do
     cards =
       for name <- ["work", "read"],

@@ -184,7 +184,7 @@ argument of the call.
 | `works` | the work (`relation = "self"`, the default), its `parent`, or its `children`, oldest first | `from` is `work` (default) or `args.<name>` with `within = "descendants"`, which reads only a work below the call's own; children take `state` (a list) and `since = "last_run"` (changed after the work's last closed run finished); `include` adds `last_comment`, `comments` or the closed `runs` with their record to each work |
 | `comments` | the comments of the first of `from` among `work`, `request`, `inbox`, oldest first | `from` (default all three, in that order) |
 | `runs` | `relation = "last_closed"`: the work's last closed run; `"opener"`: the run that opened the call's request — each with the message that opened it (`message`) and every event it recorded (`events`) | `relation` (required) |
-| `events` | `relation = "run"`: the events of the call's run so far; `"cause"`: the event that made the call's run due | `relation` (required) |
+| `events` | `relation = "run"`: the events of the call's run so far; `"cause"`: the event that made the call's run due; `"attachments"`: the files attached in the run's conversation, oldest first, each `{name, media_type, bytes, sha256}` with its `event_id`, `at` and `by` | `relation` (required) |
 | `requests` | the request named by the `request_id` argument, or the call's request | `from` |
 | `prompts` | `relation = "message"`: the prompt that opened the run; `"assembled"`: the assembled prompt of the run named by `from` (default `args.run`, then `latest_run`) | `relation` (required); `from` for `assembled` |
 | `inbox` | unread notifications (default), or pending canonical requests received by the current depth-0 agent in its conversation, grouped by conversation | `relation = "unread"` with optional `from = ["work"]`; `relation = "received"` from `run` |
@@ -215,10 +215,22 @@ lists `skills` has the tool and all of them; one that lists
 tool reads in the harness's process, since a skill's folder is outside
 the sandbox; the scripts a skill ships are not run.
 
+## Attachments
+
+With `[store] attachments` ([config](config.md)), a conversation keeps
+files: those a message carries ([server](server.md)) and those a run
+attaches. `assemble` lists them under `## Attachments`, each with its
+name, media type, size, who attached it and its `sha256`.
+`read_attachment` reads one by its `sha256`, refused when the file is not
+text or not attached in the run's conversation. `attach` keeps a file
+under the run's roots, read through the same checks as `read`, with the
+media type its name suggests and an optional `note`; the conversation
+keeps it as it was then, whatever the workspace does after.
+
 ## Actions
 
 Actions the store will apply: `comment`, `request`, `notify`, `prompt`,
-`inbox.read`, `escalate`, `reply`, `grant`, `cancel`, `work`, `delegate`,
+`attach`, `inbox.read`, `escalate`, `reply`, `grant`, `cancel`, `work`, `delegate`,
 `continue`, `break`, `end`, `compact`, `comment.delete`. A `request`
 carries a `reason` and `options`, a map from option name to a list of
 `{name, args}` tool calls. Options made only of `grant` calls whose
@@ -231,7 +243,9 @@ and recursive named `parts`; `grant` takes
 `request_id`, `name`, `kind` and an optional `scope`, which only a
 person may give; `cancel` takes `request_id` and cancels the request's
 work. `end` is the only action that ends the run; it needs a
-run. `continue` does not name a stage. `EVENTS` is append-only.
+run. `continue` does not name a stage. `prompt` and `attach` take
+`attachments`, each `{name, media_type, bytes, sha256}` checked against
+the file `Omunculus.Attachments` keeps; `attach` needs a run. `EVENTS` is append-only.
 
 `work` and `delegate` may name the new work's `agent` or its `workflow`,
 not both, each one the `agents` view lists for that depth. Where the
