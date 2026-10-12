@@ -3,4 +3,4 @@
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
 
-exec bin/omunculus-gui --config dev/server.toml
+exec apps/console/run --config dev/server.toml

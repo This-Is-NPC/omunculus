@@ -68,13 +68,13 @@ The optional [server](docs/server.md) opens configured projects and exposes conv
 
 ## Window
 
-`bin/omunculus-gui` opens a window on a project of a running
+`apps/console/run` opens a window on a project of a running
 [server](docs/server.md). It talks to the project's local socket, so it acts
 as the local user:
 
 ```bash
 bin/omunculus serve --config server.toml
-bin/omunculus-gui --config server.toml --project demo
+apps/console/run --config server.toml --project demo
 ```
 
 `--project` may be left out when the registry holds one project.
