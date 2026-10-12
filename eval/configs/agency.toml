@@ -36,3 +36,6 @@ steps = [
 
 [policy.depth.2]
 workflows = ["design", "page", "release"]
+
+[policy]
+request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", "origin"] }]

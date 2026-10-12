@@ -46,3 +46,16 @@ Prices: a site of 4 pages is R$ 1.500, each page beyond 4 R$ 300, and
 the desk may give up to 10% off on its own. A larger discount, and the
 contract with the payment and the start date once the client accepts, it
 asks the owner with `ask`; approved, it sends the builders the build.
+
+The project must configure the logical `owner` request route used by discounts
+and contract decisions. For the authenticated conversation origin:
+
+```toml
+[policy]
+request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", "origin"] }]
+```
+
+Replace its destination with the responsible configured participant when the
+owner and conversation origin differ. The agency and sales-desk eval overlays
+declare this route. Questions needing an answer use `ask`; received requests use
+`reply` or `escalate`. `break` remains a stopped-work report.

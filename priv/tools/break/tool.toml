@@ -1,7 +1,7 @@
 name = "break"
 kind = "tool"
 triggers = ["model"]
-description = "Parks the work with the report as a comment, hands it back to a parent waiting on it and ends the run. The sequence does not advance."
+description = "Stops failed work with the report as a comment, hands it back to a parent waiting on it and ends the run. The sequence does not advance. Use ask for a question that can resume with an answer."
 tags = ["sequence", "work"]
 groups = ["sequence"]
 module = "Omunculus.Tools.Break"

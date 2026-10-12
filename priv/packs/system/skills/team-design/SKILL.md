@@ -49,8 +49,11 @@ tasks/         the tasks that show the team works
   `workflow_only = true`.
 - What only the person may give an agent goes in its `human` list. A
   decision that is the person's — a discount, a contract, an approval —
-  the agent asks for with `ask` and `to = "person"`; one the agent above
-  can take, with `ask` alone.
+  the agent asks for with `ask`; the project's `[policy] request_routes`
+  resolves its receiver. Optional `to` names a logical responsibility
+  such as owner, which the project must configure. Permission requests
+  use `request_access`, including `kind = "resource"` for sandbox capabilities.
+  Receivers use `reply` or `escalate`; `break` only stops failed work.
 - A tool the team uses that another pack brings goes in `[pack] requires`:
   importing the pack is refused while the project lacks it.
 - A tool's secrets name providers (`[secrets.<tool>]`, each secret a

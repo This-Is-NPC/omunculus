@@ -37,13 +37,14 @@ module = "Omunculus.Model.Fake"
 [agents.pi]
 depth = 0
 model = "fake"
-tools = ["catalog", "fs.read", "fs.write", "request_sandbox", "sequence", "store"]
+tools = ["catalog", "fs.read", "fs.write", "request_access", "sequence", "store"]
 human = ["sandbox.write"]
 text = """
 You are a Pi-style agent: compact, direct, and without shell access.
 """
 
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 ```
@@ -104,13 +105,14 @@ You are the project concierge; you talk with the person. Answer yourself, in pla
 [agents.worker]
 depth = 1
 model = "fake"
-tools = ["break", "comment", "continue", "done", "end", "fs.read", "fs.write", "notify", "request_access", "request_sandbox"]
+tools = ["break", "comment", "continue", "done", "end", "fs.read", "fs.write", "notify", "request_access"]
 human = ["sandbox.write"]
 text = """
 You are the worker. Complete the assigned work and call done with a report when the stage is complete.
 """
 
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 ```
@@ -162,6 +164,7 @@ steps = [
 ]
 
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 workflows = ["delivery"]
@@ -229,10 +232,11 @@ tools = ["comment", "delegate", "end", "notify", "reply", "work"]
 [agents.worker]
 depth = 2
 model = "fake"
-tools = ["comment", "continue", "done", "end", "fs.read", "fs.write", "request_sandbox"]
+tools = ["comment", "continue", "done", "end", "fs.read", "fs.write", "request_access"]
 negotiable = ["sandbox.write"]
 
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 mode = "auto"
@@ -244,8 +248,8 @@ negotiable = ["fs.write", "sandbox.write"]
 ```
 
 `auto` on `[policy]` puts everything uncited in askable. The depth-2 allowlist
-then blocks whatever that floor did not name. Depth 0 has nobody above: a
-request from the concierge goes to the person.
+then blocks whatever that floor did not name. The declared route tries the
+parent work and then the authenticated origin; it does not change grant authority.
 
 ## 5. Two trees, one store
 
@@ -290,6 +294,7 @@ tools = ["catalog", "fs.read", "store"]
 text = "global"
 
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 workspace = "app"
@@ -357,6 +362,7 @@ tools = ["catalog", "fs.read", "fs.write"]
 negotiable = ["sandbox.write"]
 
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 mode = "allowlist"
@@ -375,10 +381,11 @@ flowchart TB
     call --> classify{ceiling}
     classify -->|have| granted["already granted"]
     classify -->|blocked| deny["EVENTS deny"]
-    classify -->|sealed or nobody above| human["REQUESTS arbiter = human"]
-    classify -->|askable + agent above| above["REQUESTS arbiter = that agent"]
-    human --> reply["reply grant / deny"]
-    above --> reply
+    classify -->|askable or sealed| route["configured request route"]
+    route --> receiver["resolved participant"]
+    receiver --> reply["reply text or selected option"]
+    receiver --> escalate["escalate with linked origins"]
+    escalate --> route
 ```
 
 **Allowlist** — only what was named is have. Everything else is blocked, not
@@ -386,6 +393,7 @@ asked:
 
 ```toml
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 mode = "allowlist"
@@ -404,7 +412,7 @@ human `reply`, not an agent above:
 [agents.codex]
 depth = 0
 model = "fake"
-tools = ["bash", "catalog", "end", "fs.read", "fs.write", "request_access", "request_sandbox", "store"]
+tools = ["bash", "catalog", "end", "fs.read", "fs.write", "request_access", "store"]
 negotiable = ["sandbox.write"]
 human = ["delete"]
 ```
@@ -417,7 +425,7 @@ Until a grant, the workspace is read-only for external commands.
 [agents.worker]
 depth = 1
 model = "fake"
-tools = ["end", "fs.read", "fs.write", "request_sandbox"]
+tools = ["end", "fs.read", "fs.write", "request_access"]
 negotiable = ["sandbox.write"]
 ```
 
@@ -582,6 +590,7 @@ An agent may name a different assemble tool than `[policy]`:
 
 ```toml
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 
