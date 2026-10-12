@@ -8,12 +8,12 @@ project and adjusted by hand.
 
 | Agent | Depth | Role |
 |---|---|---|
-| sales | 0 | the front desk: opens each client's request as a work, and forwards to it what they say |
+| sales | 0 | the generalist: opens and forwards work, batches received questions and distributes client replies |
 | seller | 0, workflow only | works the request through the workflow `sale`, talking with the client on it |
 
 Each client's request is a work that goes through the stages of the
 workflow `sale`: qualify, design, assess, propose, owner, build. The
-seller answers the client with comments on the work and moves it on with
+seller asks the client through requests, records progress with comments and moves it on with
 the pack's tool `next_stage`, in place of `done`: it refuses the move
 until the proposal in `quotes/` that names the work has what the
 stage asks — the client's content after qualify, an approved preview or
@@ -52,10 +52,9 @@ and contract decisions. For the authenticated conversation origin:
 
 ```toml
 [policy]
-request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", "origin"] }]
+request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", { kind = "agent", agent = "sales" }, "origin"] }]
 ```
 
 Replace its destination with the responsible configured participant when the
 owner and conversation origin differ. The agency and sales-desk eval overlays
-declare this route. Questions needing an answer use `ask`; received requests use
-`reply` or `escalate`. `break` remains a stopped-work report.
+declare these routes. Questions needing an answer use `ask`; a sender replies from known facts or escalates received origins. The depth-0 generalist collects every unresolved question in its conversation into one escalation to the client and distributes the returned text to those origins. `break` remains a stopped-work report.

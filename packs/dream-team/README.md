@@ -60,3 +60,5 @@ tasks/          the tasks that show the team works, in the eval's format
 
 `promote` is in every agent's `human` list: only the person grants it, once
 they have seen the app in homologation.
+
+Questions use `ask`. The lead answers received requests from the briefing or work goal and escalates all remaining questions together, preserving named origins; returned text is distributed with `reply`. Requests preserve waits on children. `break` stops failed work.

@@ -304,6 +304,94 @@ defmodule Omunculus.EvalProjectTest do
     assert {:ok, %{grants: nil, waiting: "child"}} = Store.view(conn, "work", root)
   end
 
+  test "agency generalist batches received questions and distributes one client answer", %{
+    conn: conn
+  } do
+    dir = Fixtures.tmp_dir()
+    assert {:ok, path} = EquivalentExchange.Project.build(dir, "agency", {"fake", false}, nil)
+    assert {:ok, config} = Config.load(path)
+    conversation = conversation(conn)
+    project = %Omunculus.Project{conn: conn, dir: config.root, config_path: path}
+    stage = Enum.find(config.workflows["sale"], &(&1.name == "qualify")).ceiling
+
+    origins =
+      for {part, question} <- [
+            {"identity", "What is the business name and city?"},
+            {"content", "Which menu and WhatsApp number?"}
+          ],
+          into: %{} do
+        work =
+          Fixtures.insert(conn, :works, %{
+            assignee: "seller",
+            conversation_id: conversation,
+            workflow: "sale",
+            stage: "qualify"
+          })
+
+        actor = configured_actor(conn, config, conversation, "seller", work, 0, stage)
+
+        assert {:ok, %{ok: true}, events} =
+                 Harness.dispatch(project, "ask", %{"question" => question}, actor)
+
+        id = Enum.find(events, &(&1.type == "request")).request_id
+        assert {:ok, row} = Store.view(conn, "request", id)
+        assert Jason.decode!(row.arbiter) == Participant.agent("sales")
+        {part, id}
+      end
+
+    sales = configured_actor(conn, config, conversation, "sales", nil, 0)
+    assert {:ok, [%{requests: received}]} = Store.received_inbox(conn, sales.run_id)
+    assert MapSet.new(received, & &1.id) == MapSet.new(Map.values(origins))
+
+    assert {:ok, %{ok: true}, events} =
+             Harness.dispatch(
+               project,
+               "escalate",
+               %{
+                 "reason" => "What are the business name, city, menu and WhatsApp number?",
+                 "origins" => origins
+               },
+               sales
+             )
+
+    upstream = Enum.find(events, &(&1.type == "request")).request_id
+    assert {:ok, request} = Store.view(conn, "request", upstream)
+    assert Jason.decode!(request.arbiter) == Participant.human("test", "owner")
+
+    assert {:ok, %{ok: true}, events} =
+             Harness.dispatch(
+               project,
+               "reply",
+               %{
+                 "request_id" => upstream,
+                 "body" => "Doce Ana, Campinas. Cake R$ 85. WhatsApp (19) 99876-5432."
+               },
+               human(config, conversation)
+             )
+
+    assert Enum.count(events, &(&1.type == "reply")) == 1
+
+    for id <- Map.values(origins) do
+      assert {:ok, %{status: "pending"}} = Store.view(conn, "request", id)
+
+      assert {:ok, %{ok: true}, _} =
+               Harness.dispatch(
+                 project,
+                 "reply",
+                 %{
+                   "request_id" => id,
+                   "body" => "Doce Ana, Campinas. Cake R$ 85. WhatsApp (19) 99876-5432."
+                 },
+                 sales
+               )
+
+      assert {:ok, %{status: "closed", work_id: work}} = Store.view(conn, "request", id)
+      assert {:ok, %{state: "open"}} = Store.view(conn, "work", work)
+    end
+
+    assert {:ok, []} = Store.received_inbox(conn, sales.run_id)
+  end
+
   defp configured_actor(conn, config, conversation, agent, work, depth, stage \\ nil) do
     ceiling =
       Ceiling.mount(
@@ -316,7 +404,16 @@ defmodule Omunculus.EvalProjectTest do
           workspace: Config.workspace_ceiling(config, nil),
           groups: %{}
         },
-        ["promote", "sandbox.network", "request_access", "reply", "escalate", "end", "grant"]
+        [
+          "ask",
+          "promote",
+          "sandbox.network",
+          "request_access",
+          "reply",
+          "escalate",
+          "end",
+          "grant"
+        ]
       )
 
     run =
