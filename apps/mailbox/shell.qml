@@ -75,7 +75,7 @@ ShellRoot {
           Item {
             visible: !window.narrow
             Layout.fillHeight: true
-            Layout.preferredWidth: window.foldersFolded ? 52 : 210
+            Layout.preferredWidth: window.foldersFolded ? 56 : 210
             Behavior on Layout.preferredWidth { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
             clip: true
 
