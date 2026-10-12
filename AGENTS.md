@@ -73,7 +73,7 @@ A tool is a folder with `tool.toml` and either `module = "Elixir.Module"` or `co
 bin/omunculus        shell wrapper: mise exec -- mix omunculus
 bin/omunculus-gui    opens the window on a project of a running server's registry
 gui/                 the window: QML on Quickshell, a client of the server's local socket
-apps/mailbox/        the mailbox: a concept client on the same socket, launched by apps/mailbox/run
+apps/mailbox/        the mailbox: a concept client on the window's controls, launched by apps/mailbox/run
 lib/omunculus/       core, config, server, tool, tools, hooks, models, execution, store
 lib/mix/tasks/       the omunculus, omunculus.presets and omunculus.socket mix tasks
 priv/tools/          builtin tool and hook manifests
@@ -120,7 +120,7 @@ apps/mailbox/run --config server.toml [--project <id>]
 
 ### The mailbox
 
-`apps/mailbox/` is a concept client apart from the window, sharing no file with `gui/`: its theme and controls are copies of the window's. Each conversation is one mail. You write a mail, which creates a conversation and sends the message to its root agent; the mail then says only that the agents work, until nothing does: no run open, no work open or waiting, and a run at depth 0 finished after your last message. What that run said, its model text and its comments, is the answer, and the mail moves to the inbox. A request whose arbiter is a person arrives before the end: the mail waits in the inbox with its options as buttons and a field for a text answer. Works, runs and what agents say on the way are not shown. The `Mail` singleton reads the conversations, each one's snapshot every few seconds and its events when the snapshot's cursor moved, all through `curl` on the project's local socket; which deliveries you opened is kept in Quickshell's state directory, and a delivery that arrives while another mail is open is announced with `notify-send`. `apps/mailbox/run` takes the server registry and a project id like `bin/omunculus-gui` and passes them as `OMUNCULUS_MAILBOX_SOCKET` and `OMUNCULUS_MAILBOX_PROJECT`.
+`apps/mailbox/` is a concept client beside the window, built on its controls: `apps/mailbox/gui` links to `gui/`, since Quickshell imports only from within the folder it runs, and the mailbox takes the window's theme, controls and `Requests.js` from there. Each conversation is one mail. You write a mail, which creates a conversation and sends the message to its root agent; the mail then says only that the agents work, until nothing does: no run open, no work open or waiting, and a run at depth 0 finished after your last message. What that run said, its model text and its comments, is the answer, and the mail moves to the inbox. A request whose arbiter is a person arrives before the end: the mail waits in the inbox with its options as buttons and a field for a text answer. Works, runs and what agents say on the way are not shown. The `Mail` singleton reads the conversations, each one's snapshot every few seconds and its events when the snapshot's cursor moved, all through `curl` on the project's local socket; which deliveries you opened is kept in Quickshell's state directory, and a delivery that arrives while another mail is open is announced with `notify-send`. `apps/mailbox/run` takes the server registry and a project id like `bin/omunculus-gui` and passes them as `OMUNCULUS_MAILBOX_SOCKET` and `OMUNCULUS_MAILBOX_PROJECT`.
 
 ### The development environment
 
