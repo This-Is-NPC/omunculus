@@ -52,10 +52,7 @@ defmodule EquivalentExchange.Report do
       by_scenario: by(all, & &1["scenario"]),
       by_task: by(all, &"#{&1["task"]} · #{&1["configuration"]}"),
       cache_by_agent: by_agent(all),
-      teamwork:
-        all
-        |> Enum.group_by(& &1["configuration"])
-        |> Map.new(fn {name, group} -> {name, teamwork(group)} end),
+      teamwork: all |> Enum.group_by(& &1["configuration"]) |> Map.new(fn {name, group} -> {name, teamwork(group)} end),
       uses: uses(all),
       resources: resources(folder, all),
       findings:
@@ -79,12 +76,7 @@ defmodule EquivalentExchange.Report do
   defp teamwork(group) do
     works = Enum.map(group, &(&1["works"] || []))
     count = works |> Enum.map(&length/1) |> Enum.sum()
-
-    network =
-      for execution <- group,
-          request <- execution["requests"],
-          "sandbox.network" in request["asks"],
-          do: request
+    network = for execution <- group, request <- execution["requests"], "sandbox.network" in request["asks"], do: request
 
     %{
       executions: length(group),
@@ -92,8 +84,7 @@ defmodule EquivalentExchange.Report do
       deepest: works |> List.flatten() |> Enum.map(& &1["depth"]) |> Enum.max(fn -> nil end),
       unfinished: works |> List.flatten() |> Enum.count(&(&1["state"] not in ~w(done cancelled))),
       sent_back: group |> Enum.map(&(&1["sent_back"] || 0)) |> Enum.sum(),
-      runs_per_work:
-        if(count > 0, do: Float.round(Enum.sum(Enum.map(group, &length(&1["runs"]))) / count, 1)),
+      runs_per_work: if(count > 0, do: Float.round(Enum.sum(Enum.map(group, &length(&1["runs"]))) / count, 1)),
       network_asked_at: network |> Enum.map(& &1["depth"]) |> Enum.frequencies(),
       network_to_person: Enum.count(network, &(get_in(&1, ["arbiter", "kind"]) == "human"))
     }
@@ -107,21 +98,8 @@ defmodule EquivalentExchange.Report do
     |> Enum.group_by(& &1["task"])
     |> Map.new(fn {task, group} ->
       {used, unused} = Enum.split_with(group, & &1["score"]["used"])
-
-      passed = fn list ->
-        if list == [],
-          do: nil,
-          else: Float.round(Enum.count(list, &(&1["score"]["passed"] == true)) / length(list), 3)
-      end
-
-      {task,
-       %{
-         uses: hd(group)["uses"],
-         executions: length(group),
-         used: length(used),
-         passed_used: passed.(used),
-         passed_unused: passed.(unused)
-       }}
+      passed = fn list -> if list == [], do: nil, else: Float.round(Enum.count(list, &(&1["score"]["passed"] == true)) / length(list), 3) end
+      {task, %{uses: hd(group)["uses"], executions: length(group), used: length(used), passed_used: passed.(used), passed_unused: passed.(unused)}}
     end)
   end
 
@@ -141,11 +119,7 @@ defmodule EquivalentExchange.Report do
       (teamwork
        |> Enum.sort()
        |> Enum.map_join("\n", fn {name, t} ->
-         asked =
-           t.network_asked_at
-           |> Enum.sort()
-           |> Enum.map_join(", ", fn {depth, n} -> "#{n} at #{depth}" end)
-
+         asked = t.network_asked_at |> Enum.sort() |> Enum.map_join(", ", fn {depth, n} -> "#{n} at #{depth}" end)
          "| #{name} | #{t.executions} | #{t.works} | #{t.deepest || "–"} | #{t.unfinished} | #{t.sent_back} | #{t.runs_per_work || "–"} | #{if asked == "", do: "–", else: asked} | #{t.network_to_person} |"
        end))
   end
