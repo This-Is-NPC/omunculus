@@ -34,7 +34,7 @@ defmodule EquivalentExchange.Runner do
   every app it published is removed.
   """
 
-  alias EquivalentExchange.{Deploy, Judge, Person, Project, Resources, Score, Task}
+  alias EquivalentExchange.{Deploy, Judge, Person, Project, Resources, Score, Task, Requests}
   alias Omunculus.CLI
   alias Omunculus.Store.Query
 
@@ -328,27 +328,14 @@ defmodule EquivalentExchange.Runner do
       waiting ->
         replies =
           for request <- waiting,
-              {option, body} = choose(task, groups, request, project),
-              option != nil,
-              do: {request, option, body}
+              answer = Requests.choose(task, groups, request, project),
+              not is_nil(answer),
+              do: {request, answer}
 
-        Enum.reduce_while(replies, {:ok, []}, fn {request, option, body}, {:ok, given} ->
-          case CLI.run(
-                 [
-                   "--config",
-                   config_path,
-                   "reply",
-                   "--request_id",
-                   request.id,
-                   "--option",
-                   option,
-                   "--body",
-                   body
-                 ],
-                 project
-               ) do
+        Enum.reduce_while(replies, {:ok, []}, fn {request, answer}, {:ok, given} ->
+          case CLI.run(Requests.arguments(config_path, request.id, answer), project) do
             {:ok, _said} ->
-              {:cont, {:ok, given ++ [%{request: request.id, option: option, body: body}]}}
+              {:cont, {:ok, given ++ Requests.answers(request, answer)}}
 
             {:error, _reason} = error ->
               {:halt, error}
@@ -468,88 +455,33 @@ defmodule EquivalentExchange.Runner do
           "SELECT id, options FROM requests WHERE status = 'pending' AND json_extract(arbiter, '$.kind') = 'human' ORDER BY created_at"
         )
 
-      rows
+      request_views(conn, rows)
     end)
   end
-
-  # A decision — a request granting nothing — gets the option the task's
-  # `[human] decision` names. Grant when the task grants everything the
-  # request asks, by the name or by a group that holds it; deny otherwise,
-  # saying what it would not grant and what it would, as a person does. A grant is temporary when the request
-  # offers it, else for the asking agent (a request made without a work
-  # offers no temporary one). A request without grant and deny (retry or
-  # cancel) is left waiting.
-  defp choose(task, groups, request, project) do
-    options = Jason.decode!(request.options)
-    names = asks(options, project)
-
-    {granted, denied} =
-      Enum.split_with(names, fn name ->
-        Enum.any?([name | groups_of(groups, name)], &(Task.answer(task, &1) == "grant"))
-      end)
-
-    grant = Enum.find(["grant", "grant_agent"], &Map.has_key?(options, &1))
-    decision = task.human["decision"]
-
-    cond do
-      names == [] and Map.has_key?(options, decision) ->
-        {decision, "Decided: #{decision}."}
-
-      names != [] and denied == [] and grant != nil ->
-        {grant, "Granted: #{Enum.join(granted, ", ")}."}
-
-      Map.has_key?(options, "deny") ->
-        {"deny", refusal(denied, granted)}
-
-      true ->
-        {nil, nil}
-    end
-  end
-
-  defp refusal([], _granted), do: "Not granted."
-  defp refusal(denied, []), do: "Not granted: #{Enum.join(denied, ", ")}."
-
-  defp refusal(denied, granted),
-    do:
-      "Not granted: #{Enum.join(denied, ", ")}. I would grant #{Enum.join(granted, ", ")}: ask again without the rest."
-
-  defp groups_of(groups, name), do: for({group, members} <- groups, name in members, do: group)
 
   defp groups(config_path) do
     {:ok, config} = Omunculus.Config.load(config_path)
     config.tools |> Omunculus.Tool.Catalog.discover() |> Omunculus.Tool.Catalog.groups()
   end
 
-  defp requested(options) do
-    for {_option, calls} <- options,
-        %{"name" => "grant", "args" => %{"name" => _name} = args} <- calls,
-        uniq: true,
-        do: Map.take(args, ~w(kind name))
-  end
-
-  defp asks(options, project),
-    do: options |> requested() |> Enum.map(&subject(&1, project)) |> Enum.uniq()
-
-  # What a grant gives, as the task names it: writing a path or directory
-  # inside the workspace is sandbox.write; anything else is its name.
-  defp subject(%{"kind" => kind, "name" => name}, project) when kind in ~w(path directory) do
-    workspace = Path.join(project, "workspace")
-    path = Path.expand(name, workspace)
-
-    if path == workspace or String.starts_with?(path, workspace <> "/"),
-      do: "sandbox.write",
-      else: name
-  end
-
-  defp subject(%{"name" => name}, _project), do: name
-
   defp facts(project) do
     with_store(project, fn conn ->
       {:ok, events} = Query.all(conn, "SELECT * FROM events ORDER BY rowid")
       {:ok, runs} = Query.all(conn, "SELECT * FROM runs ORDER BY started_at")
       {:ok, works} = Query.all(conn, "SELECT * FROM works ORDER BY created_at")
-      {:ok, requests} = Query.all(conn, "SELECT * FROM requests ORDER BY created_at")
+      {:ok, rows} = Query.all(conn, "SELECT id FROM requests ORDER BY created_at")
+
+      requests =
+        request_views(conn, rows)
+
       %{events: Enum.map(events, &decode_body/1), runs: runs, works: works, requests: requests}
+    end)
+  end
+
+  defp request_views(conn, rows) do
+    Enum.map(rows, fn row ->
+      {:ok, request} = Omunculus.Store.view(conn, "request", row.id)
+      request
     end)
   end
 
@@ -566,7 +498,12 @@ defmodule EquivalentExchange.Runner do
 
   defp outcome(facts, {:ok, _answers}) do
     root = last_root(facts)
-    waiting = Enum.filter(facts.requests, &(&1.status == "pending" and Jason.decode!(&1.arbiter)["kind"] == "human"))
+
+    waiting =
+      Enum.filter(
+        facts.requests,
+        &(&1.status == "pending" and Jason.decode!(&1.arbiter)["kind"] == "human")
+      )
 
     broke =
       Enum.any?(
@@ -576,7 +513,7 @@ defmodule EquivalentExchange.Runner do
 
     cond do
       root && root.state == "done" -> "done"
-      Enum.any?(waiting, &(requested(Jason.decode!(&1.options)) != [])) -> "waiting"
+      Enum.any?(waiting, &(Requests.requirements(&1) != [])) -> "waiting"
       waiting != [] -> "stalled"
       broke or (root && root.state == "cancelled") -> "break"
       # Open and waiting on no one: its agent answered and waits for the person.
@@ -641,10 +578,10 @@ defmodule EquivalentExchange.Runner do
         id: request.id,
         requester: Jason.decode!(request.requester),
         depth: Enum.find_value(facts.runs, &(&1.id == request.run_id && &1.depth)),
-        arbiter: request.arbiter,
+        arbiter: Jason.decode!(request.arbiter),
         status: request.status,
-        names: options |> requested() |> Enum.map(& &1["name"]) |> Enum.uniq(),
-        asks: asks(options, project),
+        names: options |> Requests.requested() |> Enum.map(& &1["name"]) |> Enum.uniq(),
+        asks: Requests.asks(options, project),
         options: Map.keys(options),
         answered_by_person: Enum.find_value(answers, &(&1.request == request.id && &1.option))
       }

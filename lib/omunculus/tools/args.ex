@@ -47,4 +47,21 @@ defmodule Omunculus.Tools.Args do
       end
     end)
   end
+
+  @doc "Reads an object argument, also accepting its JSON spelling on the CLI."
+  def object(args, key) do
+    case Map.get(args, key, %{}) do
+      value when is_map(value) ->
+        {:ok, value}
+
+      value when is_binary(value) ->
+        case Jason.decode(value) do
+          {:ok, object} when is_map(object) -> {:ok, object}
+          _ -> {:error, "#{key} must be an object"}
+        end
+
+      _ ->
+        {:error, "#{key} must be an object"}
+    end
+  end
 end

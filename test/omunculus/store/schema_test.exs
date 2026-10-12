@@ -12,7 +12,7 @@ defmodule Omunculus.Store.SchemaTest do
       )
 
     assert Enum.map(rows, & &1.name) ==
-             ~w(command_receipts comments conversation_members conversations events inbox project_members prompts requests runs works)
+             ~w(command_receipts comments conversation_members conversations events inbox project_members prompts request_escalations requests runs works)
   end
 
   test "foreign keys are enforced", %{conn: conn} do
@@ -109,7 +109,7 @@ defmodule Omunculus.Store.SchemaTest do
              )
   end
 
-  test "stores without participant identities require explicit recreation" do
+  test "rejects the previous request schema without silently upgrading it" do
     {:ok, conn} = Omunculus.Store.Connection.open(":memory:")
     on_exit(fn -> Omunculus.Store.Connection.close(conn) end)
 
@@ -123,5 +123,39 @@ defmodule Omunculus.Store.SchemaTest do
 
     assert {:ok, [%{name: "requests"}]} =
              Query.all(conn, "SELECT name FROM sqlite_master WHERE type = 'table'")
+  end
+
+  test "rejects missing escalation relation and keeps participant identities immutable", %{
+    conn: conn
+  } do
+    id = Fixtures.insert(conn, :requests)
+
+    for column <- ~w(requester) do
+      assert {:error, reason} =
+               Query.exec(conn, "UPDATE requests SET #{column} = '{}' WHERE id = ?", [id])
+
+      assert reason =~ "system column"
+    end
+
+    assert :ok = Query.exec(conn, "DROP TABLE request_escalations")
+    assert {:error, :store_requires_recreation} = Omunculus.Store.Schema.create(conn)
+  end
+
+  test "escalation links are distinct, append only and cannot refer to themselves", %{conn: conn} do
+    origin = Fixtures.insert(conn, :requests)
+    upstream = Fixtures.insert(conn, :requests)
+    event = Fixtures.insert(conn, :events, %{sequence: 1})
+    fields = %{origin_id: origin, escalated_id: upstream, part: "design", event_id: event}
+    assert :ok = Query.insert(conn, :request_escalations, fields)
+    assert {:error, _} = Query.insert(conn, :request_escalations, fields)
+    assert {:error, _} = Query.insert(conn, :request_escalations, %{fields | origin_id: upstream})
+
+    for sql <- [
+          "UPDATE request_escalations SET part = 'other'",
+          "DELETE FROM request_escalations"
+        ] do
+      assert {:error, reason} = Query.exec(conn, sql)
+      assert reason =~ "append only"
+    end
   end
 end

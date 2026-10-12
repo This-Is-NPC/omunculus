@@ -12,7 +12,7 @@ The implementation tasks record which parts of this contract are delivered.
 
 A request already has a question (`reason`), named options containing tool
 calls, a JSON `requester` identity, an `arbiter` identity, optional `run_id` and
-`work_id`, and `pending` or `closed` as its status. An agent identity names its
+`work_id`, and `pending`, `escalated` or `closed` as its status. An agent identity names its
 agent; a human identity contains authenticated issuer and subject. Older
 stores without participant columns require explicit recreation. Its opening
 event and request comments hold the question. Options are immutable.
@@ -48,6 +48,17 @@ and records the selected intent in the reply event and request's `answer`.
 Both `retry` and text-only answers reuse the common reply/reopen path; there
 is no separate retry effect implementation. `cancel` is the effect-bearing
 option and cancels the work through its chained call.
+
+The model-facing `escalate` form merges received pending requests into a new
+request, using distinct names in its `origins` map. Append-only links preserve
+each original question and permission target; the receiver's child wait is
+preserved. A reply may contain recursive `parts` keyed by those names. Each
+part closes only its origin through the same reply action, with the actual
+answerer's identity. Omitted parts return to pending; a text-only upstream
+answer resumes the intermediary for distribution even while it waits on
+children. The eval runner chooses answers recursively from those original
+options and records the original grant/decision selections. Human escalation
+commands and configurable routes are not exposed at this commit.
 
 `Store.Runs.unanswered/3` currently changes an unanswered agent request's
 arbiter to `human` after the arbiter's run closes. It records an `escalate`

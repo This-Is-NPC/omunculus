@@ -25,7 +25,9 @@ defmodule Omunculus.Harness do
   or hook in `via`. A `reply` opens a run of the requester's work when
   that work is open after the reply and its option's calls, and, for a
   request from a run without a work, a run of that run's agent in its
-  conversation. The `runs.request` view is the run that opened the run's
+  conversation. An upstream text answer resumes an intermediary with unresolved
+  origins even while its work waits on children; human requesters need no run.
+  The `runs.request` view is the run that opened the run's
   request.
   """
 
@@ -880,28 +882,45 @@ defmodule Omunculus.Harness do
   # The requester's work runs again when it is open once the reply and
   # the calls of its option are applied; without a work, its agent runs
   # again in the requesting run's conversation.
-  defp open_reply_run(project, %{work_id: nil, request_id: request_id} = event, via) do
-    with {:ok, request} <- Store.view(project.conn, "request", request_id),
-         {:ok, run} <- Store.view(project.conn, "run", request.run_id) do
-      due(project, event, %{
-        request_id: request_id,
-        via: via,
-        agent: run.agent,
-        conversation_id: run.conversation_id
-      })
-    end
-  end
+  defp open_reply_run(project, %{request_id: id} = event, via) do
+    with {:ok, request} <- Store.view(project.conn, "request", id),
+         {:ok, work} <- fetch_work(project, request.work_id) do
+      requester = Jason.decode!(request.requester)
+      unresolved = Enum.any?(request.origins, fn {_part, origin} -> origin.status != "closed" end)
 
-  defp open_reply_run(project, %{work_id: work_id, request_id: request_id} = event, via) do
-    case Store.view(project.conn, "work", work_id) do
-      {:ok, %{state: "open"}} ->
-        due(project, event, %{work_id: work_id, request_id: request_id, via: via})
+      cond do
+        requester["kind"] == "human" ->
+          :ok
 
-      {:ok, _not_open} ->
-        :ok
+        work && work.state in ~w(done cancelled) ->
+          :ok
 
-      {:error, _reason} = error ->
-        error
+        map_size(request.origins) > 0 and not unresolved ->
+          :ok
+
+        map_size(request.origins) > 0 ->
+          due(project, event, %{
+            work_id: request.work_id,
+            request_id: id,
+            via: via,
+            agent: requester["agent"],
+            conversation_id: request.conversation_id
+          })
+
+        is_nil(work) ->
+          due(project, event, %{
+            request_id: id,
+            via: via,
+            agent: requester["agent"],
+            conversation_id: request.conversation_id
+          })
+
+        work.state == "open" ->
+          due(project, event, %{work_id: work.id, request_id: id, via: via})
+
+        true ->
+          :ok
+      end
     end
   end
 
@@ -919,16 +938,19 @@ defmodule Omunculus.Harness do
   end
 
   defp open_request_run(project, event, via) do
-    case Jason.decode!(event.body) do
-      %{"arbiter" => %{"kind" => "agent", "agent" => arbiter}, "arbiter_work_id" => work_id} ->
+    body = Jason.decode!(event.body)
+
+    case body["arbiter"] do
+      %{"kind" => "agent", "agent" => agent} ->
         due(project, event, %{
-          work_id: work_id,
+          work_id: body["arbiter_work_id"],
           request_id: event.request_id,
           via: via,
-          agent: arbiter
+          agent: agent,
+          conversation_id: event.conversation_id
         })
 
-      _no_agent_arbiter ->
+      %{"kind" => "human"} ->
         :ok
     end
   end

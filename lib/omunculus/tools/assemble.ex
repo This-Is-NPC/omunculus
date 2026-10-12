@@ -303,12 +303,29 @@ defmodule Omunculus.Tools.Assemble do
     if request.status == "closed" do
       [
         "## Request\n" <>
-          Enum.join([header <> ", " <> Out.answered(request.answer) | comments], "\n")
+          Enum.join(
+            [header <> ", " <> Out.answered(request.answer) | comments] ++
+              origin_lines(Map.get(request, :origins, %{})),
+            "\n"
+          )
       ]
     else
-      lines = [header, Out.answer_request() | waiting_options(request)] ++ comments
+      lines =
+        [header, Out.answer_request() | waiting_options(request)] ++
+          origin_lines(Map.get(request, :origins, %{})) ++ comments
+
       ["## Request\n" <> Enum.join(lines, "\n")]
     end
+  end
+
+  defp origin_lines(origins) do
+    Enum.flat_map(Enum.sort(origins), fn {part, origin} ->
+      [
+        "part #{part}: request #{origin.id} (#{origin.status})",
+        origin.reason || "" | waiting_options(origin)
+      ] ++
+        origin_lines(origin.origins)
+    end)
   end
 
   # The options of a waiting request an agent may pick.

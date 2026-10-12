@@ -118,8 +118,13 @@ defmodule Omunculus.Operations do
   defp scoped(_project, _type, _id, _capability), do: {:error, :not_found}
 
   defp check_reply_option(project, config, "reply", args, principal) do
-    with {:ok, needed?} <-
-           Access.reply_needs_project_config?(project, args["request_id"], args["option"]) do
+    with {:ok, parts} <- Omunculus.Tools.Args.object(args, "parts"),
+         {:ok, needed?} <-
+           Access.reply_needs_project_config?(
+             project,
+             args["request_id"],
+             Map.put(args, "parts", parts)
+           ) do
       if needed?,
         do: Access.check(project.conn, config.access, principal, "project.manage_config", nil),
         else: :ok

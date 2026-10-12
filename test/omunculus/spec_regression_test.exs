@@ -236,13 +236,22 @@ defmodule Omunculus.SpecRegressionTest do
         waiting: "request"
       })
 
-    requester =
-      Fixtures.insert(p.conn, :runs, %{
+    requester_run =
+      Fixtures.open_run(p.conn, %{
         agent: "worker",
-        depth: "1",
+        depth: 1,
         work_id: child,
-        status: "done"
+        ceiling: %{
+          have: ["comment"],
+          askable: ["write"],
+          sealed: [],
+          blocked: [],
+          uncited: "askable"
+        }
       })
+
+    {:ok, _} = Store.close_run(p.conn, requester_run.id)
+    requester = requester_run.id
 
     default = Jason.decode!(Fixtures.defaults(:requests).options)
 

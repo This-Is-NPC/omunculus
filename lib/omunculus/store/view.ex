@@ -40,20 +40,23 @@ defmodule Omunculus.Store.View do
   def view(conn, "work", id), do: Query.one(conn, "SELECT * FROM works WHERE id = ?", [id])
   def view(conn, "run", id), do: Query.one(conn, "SELECT * FROM runs WHERE id = ?", [id])
 
-  # A request, with the option its reply chose (`answer`), nil while it waits.
-  def view(conn, "request", id),
-    do:
-      Query.one(
-        conn,
-        """
-        SELECT requests.*,
-          (SELECT json_extract(events.body, '$.option') FROM events
-           WHERE events.request_id = requests.id AND events.type = 'reply'
-           ORDER BY events.sequence DESC LIMIT 1) AS answer
-        FROM requests WHERE id = ?
-        """,
-        [id]
-      )
+  def view(conn, "request", id) do
+    with {:ok, request} <-
+           Query.one(
+             conn,
+             """
+             SELECT requests.*, json_extract(requester_start.body, '$.ceiling') AS requester_ceiling, json_extract(opening.body, '$.reason') AS reason, json_extract(opening.body, '$.workflow') AS workflow, json_extract(opening.body, '$.stage') AS stage, COALESCE(opening.conversation_id, works.conversation_id, runs.conversation_id) AS conversation_id,
+               (SELECT json_extract(body, '$.option') FROM events WHERE request_id = requests.id AND type = 'reply' ORDER BY sequence DESC LIMIT 1) AS answer
+             FROM requests LEFT JOIN events opening ON opening.id = requests.event_id
+             LEFT JOIN works ON works.id = requests.work_id LEFT JOIN runs ON runs.id = requests.run_id
+             LEFT JOIN events requester_start ON requester_start.id = runs.event_id
+             WHERE requests.id = ?
+             """,
+             [id]
+           ) do
+      request_origins(conn, request)
+    end
+  end
 
   def view(conn, "prompt", id), do: Query.one(conn, "SELECT * FROM prompts WHERE id = ?", [id])
   def view(_conn, name, _id), do: {:error, {:unknown_view, name}}
@@ -301,5 +304,26 @@ defmodule Omunculus.Store.View do
         _ -> value
       end
     end)
+  end
+
+  defp request_origins(_conn, nil), do: {:ok, nil}
+
+  defp request_origins(conn, request) do
+    with {:ok, links} <-
+           Query.all(
+             conn,
+             "SELECT origin_id, part FROM request_escalations WHERE escalated_id = ? ORDER BY part",
+             [request.id]
+           ) do
+      Enum.reduce_while(links, {:ok, Map.put(request, :origins, %{})}, fn link, {:ok, upstream} ->
+        case view(conn, "request", link.origin_id) do
+          {:ok, origin} ->
+            {:cont, {:ok, Map.update!(upstream, :origins, &Map.put(&1, link.part, origin))}}
+
+          error ->
+            {:halt, error}
+        end
+      end)
+    end
   end
 end

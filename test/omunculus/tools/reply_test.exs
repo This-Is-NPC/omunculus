@@ -55,7 +55,7 @@ defmodule Omunculus.Tools.ReplyTest do
     assert %{"chain" => []} = Reply.run(%{@input | args: %{@args | "option" => "deny"}})
   end
 
-  test "an option the request lacks, or a request not found, chains nothing" do
+  test "an unknown option fails before calls chain; a missing request chains nothing" do
     assert %{"ok" => true, "chain" => []} =
              Reply.run(%{@input | args: %{@args | "option" => "maybe"}})
 
@@ -88,5 +88,100 @@ defmodule Omunculus.Tools.ReplyTest do
     assert {:ok, result} = Invoke.call(manifest, input)
     assert result.emit == Reply.run(input)["emit"]
     assert result.chain == [%{name: "grant", args: hd(Reply.run(input)["chain"])["args"]}]
+  end
+
+  test "named parts recursively chain the original IDs and normalize empty options" do
+    middle = %{id: "merged", options: "{}", origins: %{"leaf" => @request}}
+    upstream = %{id: "upstream", options: "{}", origins: %{"design" => middle}}
+
+    args = %{
+      "request_id" => "upstream",
+      "body" => "Answers",
+      "parts" => %{
+        "design" => %{
+          "body" => "Design",
+          "option" => nil,
+          "parts" => %{
+            "leaf" => %{"body" => "Granted", "option" => "grant"}
+          }
+        }
+      }
+    }
+
+    assert %{"ok" => true, "chain" => [%{"args" => %{"request_id" => "req_1"}}], "emit" => [emit]} =
+             Reply.run(%{@input | args: args, view: %{"request" => upstream}})
+
+    refute Map.has_key?(emit["body"]["parts"]["design"], "option")
+  end
+
+  test "invalid named parts chain no calls and leave refusal to the store" do
+    request = %{id: "upstream", options: "{}", origins: %{"design" => @request}}
+
+    for parts <- [
+          %{"unknown" => %{"body" => "x"}},
+          %{"design" => %{"body" => "x", "request_id" => "spoof"}},
+          %{"design" => %{"body" => ""}},
+          %{"design" => %{"body" => "x", "option" => "unknown"}}
+        ] do
+      args = %{"request_id" => "upstream", "body" => "Answers", "parts" => parts}
+
+      assert %{"ok" => true, "chain" => []} =
+               Reply.run(%{@input | args: args, view: %{"request" => request}})
+    end
+  end
+
+  test "an agent cannot select a sealed or permanent grant through an upstream part" do
+    for args <- [
+          %{"kind" => "tool", "name" => "deploy"},
+          %{"kind" => "tool", "name" => "write", "scope" => "agent"}
+        ] do
+      leaf =
+        %{@request | options: Jason.encode!(%{"grant" => [%{"name" => "grant", "args" => args}]})}
+        |> Map.put(
+          :requester_ceiling,
+          Jason.encode!(%{
+            have: [],
+            askable: ["write"],
+            sealed: ["deploy"],
+            blocked: [],
+            uncited: "askable"
+          })
+        )
+
+      upstream = %{id: "upstream", options: "{}", origins: %{"design" => leaf}}
+
+      answer = %{
+        "request_id" => "upstream",
+        "body" => "Answers",
+        "parts" => %{"design" => %{"body" => "Yes", "option" => "grant"}}
+      }
+
+      input = %{@input | args: answer, view: %{"request" => upstream}, run_id: "agent_run"}
+      assert %{"ok" => false, "emit" => []} = Reply.run(input)
+      assert %{"ok" => true, "chain" => [_]} = Reply.run(%{input | run_id: nil})
+    end
+  end
+
+  test "closed or invalid upstream replies cannot chain otherwise valid named effects" do
+    upstream = %{
+      id: "upstream",
+      options: "{}",
+      origins: %{"design" => @request},
+      status: "pending"
+    }
+
+    args = %{
+      "request_id" => "upstream",
+      "body" => "Answer",
+      "parts" => %{"design" => %{"body" => "Yes", "option" => "grant"}}
+    }
+
+    for {request, answer} <- [
+          {%{upstream | status: "closed"}, args},
+          {upstream, Map.put(args, "option", "unknown")}
+        ] do
+      assert %{"ok" => true, "chain" => []} =
+               Reply.run(%{@input | args: answer, view: %{"request" => request}})
+    end
   end
 end

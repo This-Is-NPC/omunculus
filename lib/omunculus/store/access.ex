@@ -50,7 +50,7 @@ defmodule Omunculus.Store.Access do
           "SELECT conversation_id FROM prompts WHERE id = ?"
 
         :request ->
-          "SELECT COALESCE(works.conversation_id, runs.conversation_id) AS conversation_id FROM requests LEFT JOIN works ON works.id = requests.work_id LEFT JOIN runs ON runs.id = requests.run_id WHERE requests.id = ?"
+          "SELECT COALESCE(opening.conversation_id, works.conversation_id, runs.conversation_id) AS conversation_id FROM requests LEFT JOIN events opening ON opening.id = requests.event_id LEFT JOIN works ON works.id = requests.work_id LEFT JOIN runs ON runs.id = requests.run_id WHERE requests.id = ?"
 
         :inbox ->
           "SELECT COALESCE(works.conversation_id, runs.conversation_id) AS conversation_id FROM inbox LEFT JOIN works ON works.id = inbox.work_id LEFT JOIN runs ON runs.id = inbox.run_id WHERE inbox.id = ?"
@@ -124,7 +124,7 @@ defmodule Omunculus.Store.Access do
     runs: "SELECT * FROM runs WHERE conversation_id = ? ORDER BY started_at, id",
     prompts: "SELECT * FROM prompts WHERE conversation_id = ? ORDER BY created_at, id",
     requests:
-      "SELECT requests.* FROM requests LEFT JOIN works ON works.id = requests.work_id LEFT JOIN runs ON runs.id = requests.run_id WHERE COALESCE(works.conversation_id, runs.conversation_id) = ? ORDER BY requests.created_at, requests.id",
+      "SELECT requests.* FROM requests LEFT JOIN events opening ON opening.id = requests.event_id LEFT JOIN works ON works.id = requests.work_id LEFT JOIN runs ON runs.id = requests.run_id WHERE COALESCE(opening.conversation_id, works.conversation_id, runs.conversation_id) = ? ORDER BY requests.created_at, requests.id",
     inbox:
       "SELECT inbox.* FROM inbox LEFT JOIN works ON works.id = inbox.work_id LEFT JOIN runs ON runs.id = inbox.run_id WHERE COALESCE(works.conversation_id, runs.conversation_id) = ? ORDER BY inbox.created_at, inbox.id"
   }
@@ -132,7 +132,7 @@ defmodule Omunculus.Store.Access do
   @spec list(Project.t(), principal, String.t(), atom) :: {:ok, [map]} | {:error, term}
   def list(project, principal, conversation_id, kind) when is_map_key(@list_sql, kind) do
     with {:ok, _conversation} <- conversation(project, principal, conversation_id) do
-      Query.all(project.conn, Map.fetch!(@list_sql, kind), [conversation_id])
+      read_items(project.conn, kind, Map.fetch!(@list_sql, kind), conversation_id)
     end
   end
 
@@ -154,11 +154,26 @@ defmodule Omunculus.Store.Access do
 
   defp snapshot_items(project, conversation_id) do
     Enum.reduce_while(@list_sql, {:ok, %{}}, fn {kind, sql}, {:ok, acc} ->
-      case Query.all(project.conn, sql, [conversation_id]) do
+      case read_items(project.conn, kind, sql, conversation_id) do
         {:ok, rows} -> {:cont, {:ok, Map.put(acc, kind, rows)}}
         error -> {:halt, error}
       end
     end)
+  end
+
+  defp read_items(conn, kind, sql, conversation_id) do
+    with {:ok, rows} <- Query.all(conn, sql, [conversation_id]) do
+      if kind == :requests do
+        Enum.reduce_while(rows, {:ok, []}, fn row, {:ok, requests} ->
+          case Omunculus.Store.View.view(conn, "request", row.id) do
+            {:ok, request} -> {:cont, {:ok, requests ++ [request]}}
+            error -> {:halt, error}
+          end
+        end)
+      else
+        {:ok, rows}
+      end
+    end
   end
 
   @spec receipt(Project.t(), principal, String.t()) :: {:ok, map | nil} | {:error, term}
@@ -170,19 +185,24 @@ defmodule Omunculus.Store.Access do
     )
   end
 
-  @spec reply_needs_project_config?(Project.t(), String.t(), String.t() | nil) ::
+  @spec reply_needs_project_config?(Project.t(), String.t(), map) ::
           {:ok, boolean} | {:error, term}
-  def reply_needs_project_config?(project, request_id, option_name) do
-    with {:ok, request} <-
-           Query.one(project.conn, "SELECT options FROM requests WHERE id = ?", [request_id]) do
-      option = request && Jason.decode!(request.options)[option_name]
-
-      {:ok,
-       is_list(option) and
-         Enum.any?(option, fn call ->
-           call["name"] == "grant" and not is_nil(get_in(call, ["args", "scope"]))
-         end)}
+  def reply_needs_project_config?(project, request_id, answer) do
+    with {:ok, request} <- Omunculus.Store.View.view(project.conn, "request", request_id) do
+      {:ok, request && needs_config?(request, answer)}
     end
+  end
+
+  defp needs_config?(request, answer) do
+    calls = Jason.decode!(request.options)[answer["option"]] || []
+
+    Enum.any?(calls, fn call ->
+      call["name"] == "grant" and not is_nil(get_in(call, ["args", "scope"]))
+    end) or
+      Enum.any?(Map.get(answer, "parts", %{}), fn {part, value} ->
+        is_map(value) and Map.has_key?(request.origins, part) and
+          needs_config?(request.origins[part], value)
+      end)
   end
 
   @spec create_conversation(Project.t(), principal, String.t() | nil) ::

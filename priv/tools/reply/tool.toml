@@ -22,3 +22,19 @@ type = "string"
 
 [views.request]
 source = "requests"
+
+[parameters.properties.parts]
+type = "object"
+[parameters.properties.parts.additionalProperties]
+"$ref" = "#/$defs/answer"
+[parameters."$defs".answer]
+type = "object"
+required = ["body"]
+[parameters."$defs".answer.properties.body]
+type = "string"
+[parameters."$defs".answer.properties.option]
+type = "string"
+[parameters."$defs".answer.properties.parts]
+type = "object"
+[parameters."$defs".answer.properties.parts.additionalProperties]
+"$ref" = "#/$defs/answer"

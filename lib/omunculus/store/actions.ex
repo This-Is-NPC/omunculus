@@ -59,6 +59,9 @@ defmodule Omunculus.Store.Actions do
   defp dispatch(conn, %{"type" => "request"} = emit, ctx),
     do: Requests.request(conn, Map.get(emit, "body", %{}), ctx)
 
+  defp dispatch(conn, %{"type" => "escalate"} = emit, ctx),
+    do: Requests.escalate(conn, Map.get(emit, "body", %{}), ctx)
+
   defp dispatch(conn, %{"type" => "reply"} = emit, ctx),
     do: Requests.reply(conn, Map.get(emit, "body", %{}), ctx)
 

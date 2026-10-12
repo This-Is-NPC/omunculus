@@ -40,6 +40,19 @@ defmodule Omunculus.Server.OpenAPITest do
     assert schema["properties"]["option"]["type"] == "string"
   end
 
+  test "named replies recurse through neutral participants without exposing human escalation commands" do
+    document = Router.openapi_routes() |> OpenAPI.document() |> Jason.encode!() |> Jason.decode!()
+    schemas = document["components"]["schemas"]
+
+    assert schemas["ReplyRequest"]["properties"]["parts"]["additionalProperties"]["$ref"] ==
+             "#/components/schemas/ReplyRequest"
+
+    assert schemas["Request"]["properties"]["status"]["enum"] == ~w(pending escalated closed)
+    assert schemas["Request"]["properties"]["requester"]
+    refute schemas["Request"]["properties"]["agent"]
+    refute Enum.any?(Map.keys(document["paths"]), &String.ends_with?(&1, "/requests/escalate"))
+  end
+
   defp local_references(%{"$ref" => "#/components/schemas/" <> name} = map),
     do: [name | nested_references(Map.delete(map, "$ref"))]
 

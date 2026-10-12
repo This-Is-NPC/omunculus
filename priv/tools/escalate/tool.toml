@@ -1,0 +1,20 @@
+name = "escalate"
+kind = "tool"
+triggers = ["model"]
+description = "Raises received requests you cannot answer as one question. origins maps each distinct part name to its received request ID; reason explains the merged question and which answer each part needs. Routing chooses the next receiver. The run ends; the answer returns with the linked origins for distribution."
+tags = ["request"]
+groups = ["sequence"]
+module = "Omunculus.Tools.Escalate"
+chains = ["end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+required = ["reason", "origins"]
+[parameters.properties.reason]
+type = "string"
+[parameters.properties.origins]
+type = "object"
+minProperties = 1
+[parameters.properties.origins.additionalProperties]
+type = "string"

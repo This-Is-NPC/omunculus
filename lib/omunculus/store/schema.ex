@@ -1,8 +1,8 @@
 defmodule Omunculus.Store.Schema do
   @moduledoc """
-  DDL for prompts, events, runs, comments, works, requests, inbox,
+  DDL for prompts, events, runs, comments, works, requests, request escalations, inbox,
   conversations, memberships and command receipts. It also enforces the
-  store rules at the database level: events are append only, requests.options is immutable, and the
+  store rules at the database level: events and escalation links are append only, request options and requester identities are immutable, and the
   system columns of spec §8.3 — `runs.tools`, `runs.prompt_id`,
   `runs.started_at`, and `created_at` on prompts, comments, works,
   requests and inbox — refuse UPDATE.
@@ -151,9 +151,20 @@ defmodule Omunculus.Store.Schema do
       work_id TEXT REFERENCES works (id) DEFERRABLE INITIALLY DEFERRED,
       options TEXT NOT NULL,
       arbiter TEXT NOT NULL CHECK (json_valid(arbiter)),
-      status TEXT NOT NULL CHECK (status IN ('pending', 'closed')),
+      status TEXT NOT NULL CHECK (status IN ('pending', 'escalated', 'closed')),
       event_id TEXT REFERENCES events (id) DEFERRABLE INITIALLY DEFERRED,
       created_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS request_escalations (
+      origin_id TEXT NOT NULL REFERENCES requests (id),
+      escalated_id TEXT NOT NULL REFERENCES requests (id),
+      part TEXT NOT NULL CHECK (part <> ''),
+      event_id TEXT NOT NULL REFERENCES events (id),
+      PRIMARY KEY (origin_id, escalated_id),
+      CHECK (origin_id <> escalated_id),
+      UNIQUE (escalated_id, part)
     )
     """,
     """
@@ -204,8 +215,14 @@ defmodule Omunculus.Store.Schema do
 
   @spec create(Omunculus.Store.Connection.t()) :: :ok | {:error, term}
   def create(conn) do
-    with :ok <- compatible_existing(conn) do
-      statements = @statements ++ Enum.map(@system_columns, &system_column_trigger/1)
+    with :ok <- compatible_existing(conn),
+         :ok <- compatible_requests(conn) do
+      statements =
+        @statements ++
+          Enum.map(@system_columns, &system_column_trigger/1) ++
+          Enum.map(~w(UPDATE DELETE), fn operation ->
+            "CREATE TRIGGER IF NOT EXISTS request_escalations_no_#{String.downcase(operation)} BEFORE #{operation} ON request_escalations BEGIN SELECT RAISE(ABORT, 'request_escalations: append only'); END"
+          end)
 
       Enum.reduce_while(statements, :ok, fn statement, :ok ->
         case Query.exec(conn, statement) do
@@ -241,6 +258,24 @@ defmodule Omunculus.Store.Schema do
           {:halt, error}
       end
     end)
+  end
+
+  defp compatible_requests(conn) do
+    with {:ok, requests} <-
+           Query.one(
+             conn,
+             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'requests'"
+           ),
+         {:ok, links} <- Query.all(conn, "PRAGMA table_info(request_escalations)") do
+      if is_nil(requests) or
+           (String.contains?(requests.sql, "'pending', 'escalated', 'closed'") and
+              Enum.all?(
+                ~w(origin_id escalated_id part event_id),
+                &(&1 in Enum.map(links, fn column -> column.name end))
+              )),
+         do: :ok,
+         else: {:error, :store_requires_recreation}
+    end
   end
 
   defp system_column_trigger({"runs", "prompt_id"}) do

@@ -222,6 +222,7 @@ defmodule Omunculus.Store.Runs do
     run_id = Id.new()
 
     with :ok <- runnable(conn, params.work_id, Map.get(params, :own, false)),
+         :ok <- runnable_request(conn, params),
          {:ok, event} <-
            Events.append(conn, %{
              type: "start-run",
@@ -264,6 +265,20 @@ defmodule Omunculus.Store.Runs do
       View.view(conn, "run", run_id)
     end
   end
+
+  defp runnable_request(conn, %{cause_id: cause_id, request_id: request_id, agent: agent})
+       when is_binary(cause_id) and is_binary(request_id) do
+    with {:ok, cause} <- View.view(conn, "event", cause_id),
+         {:ok, request} <- View.view(conn, "request", request_id) do
+      if cause.type == "request" and
+           (request.status != "pending" or
+              Jason.decode!(request.arbiter) != Omunculus.Participant.agent(agent)),
+         do: {:error, {:not_open, request_id}},
+         else: :ok
+    end
+  end
+
+  defp runnable_request(_conn, _params), do: :ok
 
   # A cancelled work opens no run; a work's own run (no named agent)
   # opens only while the work is open.

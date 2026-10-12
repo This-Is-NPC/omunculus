@@ -28,7 +28,7 @@ and `exec`. The coordinator the model runs, the Deno (or other) flags, and
 the wrapper that feeds it stdin are here, not constants in the core.
 
 `[store] path` is mandatory, relative to the file. That is the SQLite
-database. Creating the file creates eleven tables. Stores made by earlier versions without conversations must be recreated before opening them with this version.
+database. Creating the file creates twelve tables. Stores made by earlier versions without conversations, participant columns or escalation links must be recreated before opening them with this version.
 
 `[access]` is optional for direct CLI use and required for a project exposed by the HTTP server. It names `creator_role`, `bootstrap_role` and `[access.roles.<name>]` tables, each with `scope = "project"` or `"conversation"` and a `capabilities` list. Memberships are project state in SQLite; role definitions stay in TOML. See [the server guide](server.md).
 

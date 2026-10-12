@@ -272,7 +272,15 @@ defmodule Omunculus.Server.OpenAPI do
       "Membership" =>
         object(%{issuer: string(), subject: string(), role: string()}, ~w(issuer subject role)),
       "SendMessage" => object(%{message: string(), work_id: string()}, ["message"]),
-      "ReplyRequest" => object(%{option: string(), body: string()}, ~w(body)),
+      "ReplyRequest" =>
+        object(
+          %{
+            option: string(),
+            body: string(),
+            parts: %{type: "object", additionalProperties: ref("ReplyRequest")}
+          },
+          ~w(body)
+        ),
       "Comment" =>
         object(%{body: string(), work_id: string(), request_id: string(), inbox_id: string()}, [
           "body"
@@ -332,8 +340,12 @@ defmodule Omunculus.Server.OpenAPI do
             requester: %{type: "object"},
             work_id: nullable_string(),
             options: %{type: "object"},
+            origins: %{type: "object", additionalProperties: ref("Request")},
+            reason: nullable_string(),
+            workflow: nullable_string(),
+            stage: nullable_string(),
             arbiter: %{type: "object"},
-            status: %{type: "string", enum: ~w(pending closed)},
+            status: %{type: "string", enum: ~w(pending escalated closed)},
             created_at: string()
           },
           ["id", "options", "status"]
