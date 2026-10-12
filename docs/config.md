@@ -64,7 +64,7 @@ Destinations are `parent` (the parent work's assignee), `origin` (the authentica
 conversation creator, or the run/command origin when there is no conversation),
 or an identity `{ kind = "agent", agent = "name" }` / `{ kind = "human",
 issuer = "issuer", subject = "subject" }`. A named agent must be an ancestor's
-assignee or a configured depth-0 agent. Missing contextual destinations and
+assignee or a configured depth-0 agent that can run without a workflow. Missing contextual destinations and
 participants already in the linked request's origins are skipped within that
 explicit list. If none resolves, the action refuses with `{:request, :no_route}`
 and changes nothing. There is no implicit human fallback. Routing does not

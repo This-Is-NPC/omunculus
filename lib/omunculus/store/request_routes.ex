@@ -59,7 +59,9 @@ defmodule Omunculus.Store.RequestRoutes do
 
   defp destination(conn, %{"kind" => "agent", "agent" => agent} = identity, ctx, _run, work) do
     with {:ok, work_id} <- ancestor(conn, work, agent) do
-      if work_id || ctx.config.agents[agent].depth == 0,
+      spec = ctx.config.agents[agent]
+
+      if work_id || (spec.depth == 0 and not spec.workflow_only),
         do: {:ok, identity, work_id},
         else: {:error, :absent}
     end
