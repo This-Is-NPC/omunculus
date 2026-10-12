@@ -4,52 +4,57 @@ import Quickshell
 import Quickshell.Io
 import "gui/Requests.js" as Requests
 
-// Mail is the project as the mailbox sees it: each conversation is one mail,
-// what you wrote in it and the answers its root agent gave once the agents had
-// finished. While they work, the mail says only that; what they do on the way
-// stays out. A request whose arbiter is a person is the one thing that arrives
-// before the end: it waits in the inbox for your decision. Every read and
-// command goes to the server's local socket through curl.
+// Mail is every project of the server as the mailbox sees it. A thread is a
+// conversation with one agent of depth 0: what you write goes to that agent,
+// and what it says comes back. Its questions and approvals for you, the
+// requests whose arbiter you are, show in the thread too. Every read and
+// command goes to a project's local socket through curl.
 Singleton {
   id: root
 
+  // The socket the mailbox was opened on; it lists every project.
   readonly property string socket: Quickshell.env("OMUNCULUS_MAILBOX_SOCKET")
-  readonly property string project: Quickshell.env("OMUNCULUS_MAILBOX_PROJECT")
-  readonly property string base: "/v1/projects/" + project
 
   property bool connected: false
-  // Conversation id -> its mail: {id, subject, state ("working", "decide" or
-  // "done"), at, delivered, snippet, letters, decisions}.
-  property var mails: ({})
+  // You, as the server knows you: {issuer, subject}.
+  property var me: null
+  // Every project, as {id, socket, agents}: the agents of depth 0 a thread
+  // can be with.
+  property var projects: []
+  // "project/conversation" -> its thread: {key, project, id, agent, subject,
+  // working, waiting, at, heard, snippet, entries}.
+  property var threads: ({})
   // Newest first.
-  readonly property var all: Object.values(mails).sort((a, b) => b.at.localeCompare(a.at))
-  // The inbox holds what was delivered: answers, and decisions to make.
-  readonly property var inbox: all.filter(mail => mail.state !== "working")
-  property string folder: "inbox"
-  readonly property var shown: folder === "inbox" ? inbox : all
+  readonly property var all: Object.values(threads).sort((a, b) => b.at.localeCompare(a.at))
+  // "all", "waiting" (a decision of yours) or "working" (a run open).
+  property string folder: "all"
+  // A project id, or "" for every project.
+  property string project: ""
+  readonly property var shown: all.filter(thread => (project === "" || thread.project === project)
+    && (folder === "all" || (folder === "waiting" ? thread.waiting.length > 0 : thread.working)))
   property string selected: ""
-  readonly property var mail: mails[selected] || null
+  readonly property var thread: threads[selected] || null
   property bool composing: false
 
-  // Conversation id -> the delivery last opened; kept across sessions.
+  // Thread key -> the time of the last word from its agent you read; kept
+  // across sessions.
   property var seen: ({})
-  readonly property int unread: inbox.filter(mail => isUnread(mail)).length
-  readonly property int deciding: all.filter(mail => mail.state === "decide").length
-  readonly property int working: all.filter(mail => mail.state === "working").length
+  readonly property int unread: all.filter(thread => isUnread(thread)).length
+  readonly property int waiting: all.filter(thread => thread.waiting.length > 0).length
+  readonly property int working: all.filter(thread => thread.working).length
 
   property string message: ""
   property bool messageIsError: false
 
-  // Conversation id -> {cursor, events, snapshot}: what the mail is built from.
+  // Thread key -> {cursor, events, snapshot}: what its thread is built from.
   property var cache: ({})
-  // A sweep reads the conversations and the snapshots that changed; one at a time.
   property bool sweeping: false
-  // After the first sweep, a new delivery is announced on the desktop.
+  // After the first sweep, a new word from an agent is announced on the desktop.
   property bool primed: false
 
   Component.onCompleted: {
-    if (socket === "" || project === "")
-      tell("OMUNCULUS_MAILBOX_SOCKET and OMUNCULUS_MAILBOX_PROJECT are not set; start through apps/mailbox/run", true)
+    if (socket === "")
+      tell("OMUNCULUS_MAILBOX_SOCKET is not set; start through apps/mailbox/run", true)
     else
       sweep()
   }
@@ -61,207 +66,253 @@ Singleton {
     messageIsError = isError
   }
 
-  function isUnread(mail) {
-    return mail.state !== "working" && seen[mail.id] !== mail.delivered
+  function isUnread(thread) {
+    return thread.heard !== "" && (seen[thread.key] || "") < thread.heard
   }
 
-  function open(id) {
-    selected = id
+  function projectOf(id) {
+    return projects.find(item => item.id === id) || null
+  }
+
+  function open(key) {
+    selected = key
     composing = false
-    const mail = mails[id]
-    if (mail && mail.state !== "working" && seen[id] !== mail.delivered) {
-      seen = Object.assign({}, seen, { [id]: mail.delivered })
-      seenFile.setText(JSON.stringify(seen))
-    }
+    markSeen(key)
   }
 
-  // The selected mail's delivery is read as it arrives while it is open.
-  onMailsChanged: {
-    const open = mails[selected]
-    if (open && open.state !== "working" && seen[selected] !== open.delivered)
-      root.open(selected)
+  function close() {
+    selected = ""
+    composing = false
   }
+
+  function markSeen(key) {
+    const thread = threads[key]
+    if (!thread || !isUnread(thread))
+      return
+    seen = Object.assign({}, seen, { [key]: thread.heard })
+    seenFile.setText(JSON.stringify(seen))
+  }
+
+  // What arrives in the thread on screen is read as it arrives.
+  onThreadsChanged: if (selected !== "") markSeen(selected)
 
   function compose() {
     composing = true
     selected = ""
   }
 
-  // A new mail: a conversation of its own, and your message in it.
-  function send(text) {
+  // A new thread: a conversation in `project` and your first message to `agent` there.
+  function send(project, agent, text) {
     const value = text.trim()
-    if (value === "")
+    const place = projectOf(project)
+    if (value === "" || !place || agent === "")
       return
-    call("POST", base + "/conversations", {}, true, data => {
-      call("POST", base + "/conversations/" + data.id + "/messages", { message: value }, true, () => {
-        composing = false
-        folder = "sent"
-        selected = data.id
-        tell("sent", false)
+    call(place.socket, "POST", "/v1/projects/" + project + "/conversations", {}, true, data => {
+      call(place.socket, "POST", "/v1/projects/" + project + "/conversations/" + data.id + "/messages",
+        { message: value, agent: agent }, true, () => {
+          composing = false
+          selected = project + "/" + data.id
+          tell("sent to " + agent, false)
+          sweep()
+        })
+    })
+  }
+
+  // Your next message in a thread, to its agent.
+  function reply(key, text) {
+    const thread = threads[key]
+    const value = text.trim()
+    if (!thread || value === "")
+      return
+    call(projectOf(thread.project).socket, "POST", "/v1/projects/" + thread.project + "/conversations/" + thread.id + "/messages",
+      { message: value, agent: thread.agent }, true, () => {
+        tell("sent to " + thread.agent, false)
         sweep()
       })
-    })
   }
 
-  // Writing again in a mail sends it back to its agents.
-  function reply(id, text) {
-    const value = text.trim()
-    if (value === "")
+  // Answers a request of a thread: an option it offers, text, or both.
+  function decide(key, requestId, option, body) {
+    const thread = threads[key]
+    if (!thread || (!option && body.trim() === ""))
       return
-    call("POST", base + "/conversations/" + id + "/messages", { message: value }, true, () => {
-      tell("sent", false)
-      sweep()
-    })
-  }
-
-  // Answers a request: an option it offers, text, or both.
-  function decide(id, requestId, option, body) {
-    if (!option && body.trim() === "")
-      return
-    call("POST", base + "/conversations/" + id + "/requests/" + requestId + "/reply",
+    call(projectOf(thread.project).socket, "POST",
+      "/v1/projects/" + thread.project + "/conversations/" + thread.id + "/requests/" + requestId + "/reply",
       Requests.answer(option, body.trim()), true, () => {
         tell(option ? "answered " + option : "answered", false)
         sweep()
       })
   }
 
+  // Reads who you are and the projects, then every project's conversations; a
+  // snapshot whose cursor moved brings its new events.
   function sweep() {
     if (sweeping)
       return
     sweeping = true
-    call("GET", base + "/conversations", null, false, data => {
-      connected = true
-      const ids = data.items.map(item => item.id)
-      for (const id of Object.keys(mails))
-        if (!ids.includes(id))
-          forget(id)
-      next(ids)
-    }, () => {
+    const failed = () => {
       connected = false
       sweeping = false
-    })
-  }
-
-  function forget(id) {
-    const left = Object.assign({}, mails)
-    delete left[id]
-    mails = left
-    delete cache[id]
-  }
-
-  // Reads each conversation's snapshot in turn, and its new events when it changed.
-  function next(ids) {
-    if (ids.length === 0) {
-      sweeping = false
-      primed = true
-      return
     }
+    call(socket, "GET", "/v1/identity", null, false, identity => {
+      me = identity
+      call(socket, "GET", "/v1/projects", null, false, data => {
+        connected = true
+        loadAgents(data.items)
+        const pending = data.items.slice()
+        const keys = []
+        const nextProject = () => {
+          if (pending.length === 0) {
+            for (const key of Object.keys(threads))
+              if (!keys.includes(key))
+                forget(key)
+            sweeping = false
+            primed = true
+            return
+          }
+          const place = pending.shift()
+          call(place.socket, "GET", "/v1/projects/" + place.id + "/conversations", null, false, list => {
+            const ids = list.items.map(item => item.id)
+            ids.forEach(id => keys.push(place.id + "/" + id))
+            readAll(place, ids, nextProject)
+          }, nextProject)
+        }
+        nextProject()
+      }, failed)
+    }, failed)
+  }
+
+  // The agents of depth 0 of each project not yet known, from its config.
+  function loadAgents(items) {
+    const known = projects.filter(item => items.some(other => other.id === item.id))
+    projects = items.map(item => known.find(other => other.id === item.id) || { id: item.id, socket: item.socket, agents: [] })
+    for (const item of items) {
+      if (known.some(other => other.id === item.id))
+        continue
+      call(item.socket, "POST", "/v1/cli", { argv: ["config"] }, false, data => {
+        const agents = JSON.parse(data.output).agents.filter(agent => agent.depth === 0 && !agent.workflow_only).map(agent => agent.name)
+        projects = projects.map(other => other.id === item.id ? Object.assign({}, other, { agents: agents }) : other)
+      })
+    }
+  }
+
+  function forget(key) {
+    const left = Object.assign({}, threads)
+    delete left[key]
+    threads = left
+    delete cache[key]
+  }
+
+  function readAll(place, ids, done) {
+    if (ids.length === 0)
+      return done()
     const id = ids[0]
-    const rest = () => next(ids.slice(1))
-    call("GET", base + "/conversations/" + id + "/snapshot", null, false, snapshot => {
-      const known = cache[id] || { cursor: "", events: [], snapshot: null }
+    const key = place.id + "/" + id
+    const rest = () => readAll(place, ids.slice(1), done)
+    const base = "/v1/projects/" + place.id + "/conversations/" + id
+    call(place.socket, "GET", base + "/snapshot", null, false, snapshot => {
+      const known = cache[key] || { cursor: "", events: [], snapshot: null }
       if (known.snapshot && known.snapshot.cursor === snapshot.cursor)
         return rest()
-      events(id, known.cursor, known.events, (cursor, all) => {
-        cache[id] = { cursor: cursor, events: all, snapshot: snapshot }
-        update(id, build(id, snapshot, all))
+      events(place.socket, base, known.cursor, known.events, (cursor, all) => {
+        cache[key] = { cursor: cursor, events: all, snapshot: snapshot }
+        update(key, build(place.id, id, snapshot, all))
         rest()
       }, rest)
     }, rest)
   }
 
   // Every event after `cursor`, a page of up to 500 at a time.
-  function events(id, cursor, read, done, failed) {
-    call("GET", base + "/conversations/" + id + "/events" + (cursor ? "?after=" + cursor : ""), null, false, data => {
+  function events(on, base, cursor, read, done, failed) {
+    call(on, "GET", base + "/events" + (cursor ? "?after=" + cursor : ""), null, false, data => {
       const all = read.concat(data.events)
       const last = data.events.length > 0 ? data.events[data.events.length - 1].cursor : cursor
       if (data.events.length === 500)
-        events(id, last, all, done, failed)
+        events(on, base, last, all, done, failed)
       else
         done(last, all)
     }, failed)
   }
 
-  function update(id, mail) {
-    const before = mails[id]
-    mails = Object.assign({}, mails, { [id]: mail })
-    if (primed && mail.state !== "working" && (!before || before.delivered !== mail.delivered) && selected !== id)
-      announce(mail)
+  function update(key, thread) {
+    const before = threads[key]
+    threads = Object.assign({}, threads, { [key]: thread })
+    if (primed && thread.heard !== "" && (!before || before.heard < thread.heard) && selected !== key)
+      announce(thread)
   }
 
-  function announce(mail) {
-    notifier.command = ["notify-send", "-a", "omunculus", mail.state === "decide" ? "Your decision is needed" : "Answered: " + mail.subject,
-      mail.snippet]
+  function announce(thread) {
+    notifier.command = ["notify-send", "-a", "omunculus",
+      thread.waiting.length > 0 ? thread.agent + " waits for you" : thread.agent + " · " + thread.subject, thread.snippet]
     notifier.startDetached()
   }
   Process { id: notifier }
 
-  // The mail a conversation's snapshot and events make.
-  function build(id, snapshot, events) {
-    const messages = snapshot.prompts.filter(prompt => prompt.kind === "message" && prompt.actor_issuer)
-      .sort((a, b) => a.created_at.localeCompare(b.created_at))
-    const rootRuns = snapshot.runs.filter(run => String(run.depth) === "0")
-    const said = {}
+  // Whether a participant is you.
+  function isMe(participant) {
+    return !!participant && !!me && Requests.human(participant) && participant.issuer === me.issuer && participant.subject === me.subject
+  }
+
+  // The thread a conversation's snapshot and events make. Its entries, in
+  // order: each message you wrote; each run of an agent of depth 0, as what it
+  // said; and each request whose arbiter is you.
+  function build(projectId, id, snapshot, events) {
+    const rootRuns = {}
+    for (const run of snapshot.runs)
+      if (String(run.depth) === "0")
+        rootRuns[run.id] = run
+    const entries = []
+    const spoken = {}
     const replies = {}
+    let agent = ""
     for (const event of events) {
-      if (event.type === "reply" && event.request_id)
-        replies[event.request_id] = { option: (event.body || {}).option || "", body: (event.body || {}).body || "" }
-      if (!rootRuns.some(run => run.id === event.run_id))
-        continue
-      const words = event.type === "model" ? text(event.body) : event.type === "comment" ? String((event.body || {}).body || "") : ""
-      if (words.trim() !== "")
-        (said[event.run_id] = said[event.run_id] || []).push(words.trim())
+      const body = event.body || {}
+      if (event.type === "prompt" && event.actor && event.actor.kind === "human") {
+        agent = agent || body.agent || ""
+        entries.push({ kind: "you", key: event.cursor, from: "you", to: body.agent || agent, text: body.message || "", at: event.at, open: false })
+      } else if (event.type === "reply" && event.request_id) {
+        replies[event.request_id] = { option: body.option || "", body: body.body || "" }
+      } else if (rootRuns[event.run_id] && (event.type === "model" || event.type === "comment")) {
+        const words = (event.type === "model" ? text(body) : String(body.body || "")).trim()
+        if (words === "")
+          continue
+        const run = rootRuns[event.run_id]
+        agent = agent || run.agent
+        if (spoken[run.id] === undefined) {
+          spoken[run.id] = entries.length
+          entries.push({ kind: "agent", key: run.id, from: run.agent, to: "you", text: words, at: event.at, open: run.status === "open" })
+        } else {
+          entries[spoken[run.id]].text += "\n\n" + words
+        }
+      }
     }
+    const asked = snapshot.requests.filter(request => isMe(request.arbiter))
+    for (const request of asked)
+      entries.push({
+        kind: "request", key: request.id, from: Requests.label(request.requester), to: "you",
+        text: request.reason || "", at: request.created_at, open: Requests.pending(request),
+        options: Object.keys(request.options || {}),
+        origins: Object.keys(request.origins || {}).map(part => ({ part: part, reason: request.origins[part].reason || "" })),
+        answer: replies[request.id] || null
+      })
+    entries.sort((a, b) => a.at.localeCompare(b.at))
 
-    const busy = snapshot.runs.some(run => run.status === "open")
-      || snapshot.works.some(work => work.state === "open" || work.state === "waiting")
-    const asked = snapshot.requests.filter(request => Requests.human(request.arbiter))
-    const pending = asked.filter(request => Requests.pending(request))
-
-    // Each message you wrote and the answer to it: what the last root run
-    // that finished before your next message said. The last one counts only
-    // once nothing works any more.
-    const letters = []
-    messages.forEach((prompt, index) => {
-      letters.push({ kind: "you", text: prompt.body, at: prompt.created_at })
-      const until = index + 1 < messages.length ? messages[index + 1].created_at : null
-      const closed = rootRuns.filter(run => run.finished_at && run.started_at >= prompt.created_at && (!until || run.started_at < until))
-        .sort((a, b) => a.finished_at.localeCompare(b.finished_at))
-      const last = index === messages.length - 1
-      if (closed.length === 0 || (last && (busy || pending.length > 0)))
-        return
-      const spoken = closed.filter(run => said[run.id])
-      const answer = spoken.length > 0 ? spoken[spoken.length - 1] : closed[closed.length - 1]
-      letters.push({ kind: "answer", text: (said[answer.id] || []).join("\n\n"), at: answer.finished_at, who: answer.agent })
-    })
-    for (const request of asked.filter(request => !Requests.pending(request)))
-      letters.push({ kind: "decided", text: request.reason, at: request.created_at, answer: replies[request.id] || null })
-    letters.sort((a, b) => a.at.localeCompare(b.at))
-
-    const decisions = pending.map(request => ({
-      id: request.id,
-      reason: request.reason,
-      asker: Requests.label(request.requester),
-      options: Object.keys(request.options || {}),
-      origins: Object.keys(request.origins || {}).map(part => ({ part: part, reason: request.origins[part].reason })),
-      at: request.created_at
-    }))
-
-    const answered = letters.length > 0 && letters[letters.length - 1].kind === "answer"
-    const state = decisions.length > 0 ? "decide" : busy || !answered ? "working" : "done"
-    const first = messages.length > 0 ? String(messages[0].body).trim().split("\n")[0] : ""
-    const latest = letters.length > 0 ? letters[letters.length - 1] : null
-    const delivered = state === "decide" ? decisions.map(item => item.id).join(",")
-      : state === "done" ? latest.at : ""
+    const first = entries.find(entry => entry.kind === "you")
+    const subject = first ? String(first.text).trim().split("\n")[0] : ""
+    const theirs = entries.filter(entry => entry.kind !== "you")
+    const latest = entries.length > 0 ? entries[entries.length - 1] : null
     return {
+      key: projectId + "/" + id,
+      project: projectId,
       id: id,
-      subject: first.length > 80 ? first.slice(0, 77) + "..." : first || "(no message)",
-      state: state,
-      at: [snapshot.conversation.created_at].concat(letters.map(item => item.at), decisions.map(item => item.at)).sort().pop(),
-      delivered: delivered,
-      snippet: oneLine(state === "decide" ? decisions[0].reason : state === "done" ? latest.text || "The agents finished without a word." : "Your agents are working on it."),
-      letters: letters,
-      decisions: decisions
+      agent: agent,
+      subject: subject.length > 90 ? subject.slice(0, 87) + "..." : subject || "(no message)",
+      working: snapshot.runs.some(run => run.status === "open"),
+      waiting: asked.filter(request => Requests.pending(request)).map(request => request.id),
+      at: latest ? latest.at : snapshot.conversation.created_at,
+      heard: theirs.length > 0 ? theirs[theirs.length - 1].at : "",
+      snippet: latest ? oneLine((latest.kind === "you" ? "you: " : "") + latest.text) : "",
+      entries: entries
     }
   }
 
@@ -302,7 +353,7 @@ Singleton {
 
   FileView {
     id: seenFile
-    path: Quickshell.statePath("seen-" + root.project + ".json")
+    path: Quickshell.statePath("seen.json")
     printErrors: false
     onLoaded: {
       try {
@@ -318,11 +369,11 @@ Singleton {
     return value
   }
 
-  // One HTTP request through curl; `done` gets the decoded JSON of a 2xx
-  // answer, and `failed`, when given, takes any other outcome instead of the
-  // status line.
-  function call(method, path, body, idempotent, done, failed) {
-    const args = ["curl", "-sS", "--unix-socket", socket, "-X", method, "-H", "accept: application/json"]
+  // One HTTP request through curl on the socket `on`; `done` gets the decoded
+  // JSON of a 2xx answer, and `failed`, when given, takes any other outcome
+  // instead of the status line.
+  function call(on, method, path, body, idempotent, done, failed) {
+    const args = ["curl", "-sS", "--unix-socket", on, "-X", method, "-H", "accept: application/json"]
     if (body !== null)
       args.push("-H", "content-type: application/json", "--data-binary", JSON.stringify(body))
     if (idempotent)
@@ -345,7 +396,7 @@ Singleton {
           if (status >= 200 && status < 300) {
             request.done(payload === "" ? {} : JSON.parse(payload))
           } else {
-            let reason = "the server does not answer on " + root.socket
+            let reason = "the server does not answer on " + request.command[3]
             try {
               const error = JSON.parse(payload)
               reason = error.message || error.error

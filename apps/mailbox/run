@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Opens the mailbox on a project of a running server's registry:
+# Opens the mailbox on a running server's registry; it shows every project,
+# reached first through the local socket of the one --project names:
 #   apps/mailbox/run --config <server.toml> [--project <id>]
 set -euo pipefail
 
@@ -32,10 +33,10 @@ fi
 [[ -n ${WAYLAND_DISPLAY:-} ]] || { printf 'mailbox: no Wayland session found\n' >&2; exit 1; }
 
 # The last line: a compile before the task prints its own lines first.
-IFS=$'\t' read -r id socket < <(cd "$root" && mise exec -- mix omunculus.socket "$config" "${project[@]}" | tail -n 1)
+IFS=$'\t' read -r _ socket < <(cd "$root" && mise exec -- mix omunculus.socket "$config" "${project[@]}" | tail -n 1)
 [[ -n ${socket:-} ]] || exit 1
 [[ -S $socket ]] || { printf 'mailbox: no socket at %s; start `omunculus serve` first\n' "$socket" >&2; exit 1; }
 
 export XDG_RUNTIME_DIR WAYLAND_DISPLAY QT_QPA_PLATFORM=wayland
-export OMUNCULUS_MAILBOX_SOCKET=$socket OMUNCULUS_MAILBOX_PROJECT=$id
+export OMUNCULUS_MAILBOX_SOCKET=$socket
 exec quickshell --path "$app"
