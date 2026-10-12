@@ -90,7 +90,7 @@ def main():
     elif stage == "owner":
         cause = view.get("cause") or {}
         if cause.get("type") != "reply" or body(cause).get("option") != "approve":
-            refuse(stage, "ask the owner with ask, to person, the options approve and deny; call next_stage in the run their approve opens")
+            refuse(stage, "ask the owner with ask, to owner, the options approve and deny; call next_stage in the run their approve opens")
     elif stage == "build":
         builds = [child for child in view.get("children") or []
                   if child.get("state") == "done" and not (child.get("goal") or "").lower().startswith("assessment only")]
