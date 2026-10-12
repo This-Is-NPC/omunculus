@@ -1,4 +1,5 @@
 import QtQuick
+import "kit/ui"
 
 // StatusLine is the readout: the last message, and a warning while the
 // server is unreachable. Information fades after a few seconds; errors stay

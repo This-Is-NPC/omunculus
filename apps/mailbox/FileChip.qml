@@ -1,5 +1,5 @@
 import QtQuick
-import "gui"
+import "kit/ui"
 
 // FileChip is one file of a message: its name and size. Attached, clicking
 // it saves it to the downloads directory and opens it; about to be sent,

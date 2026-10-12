@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import "kit/ui"
 
 ShellRoot {
   // The omunculus window. Without a conversation: start one, or read the

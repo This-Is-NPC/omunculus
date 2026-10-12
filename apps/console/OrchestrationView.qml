@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Shapes
+import "kit/ui"
 
 // OrchestrationView is the conversation's agents at work, as one map: the
 // root agent on the left and each work handed down to the right of the one it

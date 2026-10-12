@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import "gui"
+import "kit/ui"
 
 // Decision answers a request that waits on you: the questions it gathers from
 // below, its options as buttons, and a field for an answer in your own words,

@@ -1,4 +1,5 @@
 import QtQuick
+import "kit/ui"
 
 // NewPill points down to content that arrived out of view: a lit chip on an
 // opaque backing that counts it. It rises in when it has something to point

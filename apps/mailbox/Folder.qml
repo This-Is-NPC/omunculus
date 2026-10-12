@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import "gui"
+import "kit/ui"
 
 // Folder is one entry of the folders: its icon, its name and how many threads
 // in it want you. As a rail, only the icon, with the count on a badge.

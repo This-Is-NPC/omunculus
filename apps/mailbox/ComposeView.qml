@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import "gui"
+import "kit/ui"
 
 // ComposeView writes a new thread. To is required: one agent of depth 0 of one
 // project, which the thread keeps; then what you need, in as many lines as it

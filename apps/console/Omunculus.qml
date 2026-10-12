@@ -2,7 +2,9 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "Requests.js" as Requests
+import "kit/client"
+import "kit/client/Requests.js" as Requests
+import "kit/ui"
 
 // Omunculus is the project as the window sees it: whether the server answers,
 // its conversations, and the one on screen folded into threads a person can
@@ -610,53 +612,13 @@ Singleton {
     onTriggered: root.refresh()
   }
 
-  function key() {
-    let value = ""
-    for (let i = 0; i < 32; i++)
-      value += Math.floor(Math.random() * 16).toString(16)
-    return value
-  }
-
-  // One HTTP request through curl; `done` gets the decoded JSON of a 2xx
-  // answer, and `failed`, when given, takes any other outcome instead of the
-  // status line.
+  // One HTTP request on the project's socket, as `Http.call` makes it.
   function call(method, path, body, idempotent, done, failed) {
-    const args = ["curl", "-sS", "--unix-socket", socket, "-X", method, "-H", "accept: application/json"]
-    if (body !== null)
-      args.push("-H", "content-type: application/json", "--data-binary", JSON.stringify(body))
-    if (idempotent)
-      args.push("-H", "Idempotency-Key: " + key())
-    args.push("-w", "\n%{http_code}", "http://localhost" + path)
-    httpCall.createObject(root, { command: args, done: done, failed: failed || null })
+    http.call(socket, method, path, body, idempotent, done, failed)
   }
 
-  Component {
-    id: httpCall
-    Process {
-      id: request
-      property var done: null
-      property var failed: null
-      running: true
-      stdout: StdioCollector {
-        onStreamFinished: {
-          const split = text.lastIndexOf("\n")
-          const status = parseInt(text.slice(split + 1))
-          const payload = text.slice(0, split)
-          if (status >= 200 && status < 300) {
-            request.done(payload === "" ? {} : JSON.parse(payload))
-          } else if (request.failed) {
-            request.failed()
-          } else {
-            let reason = "the server did not answer on " + root.socket
-            try {
-              const error = JSON.parse(payload)
-              reason = error.message || error.error
-            } catch (e) {}
-            root.tell(reason, true)
-          }
-          Qt.callLater(() => request.destroy())
-        }
-      }
-    }
+  Http {
+    id: http
+    onRefused: reason => root.tell(reason, true)
   }
 }

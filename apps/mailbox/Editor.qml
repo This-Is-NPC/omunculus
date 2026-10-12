@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Controls.Basic as C
-import "gui"
+import "kit/ui"
 
 // Editor is where a mail is written: several lines in a frame that takes the
 // accent while it has the keyboard. Ctrl+Enter sends what it holds.

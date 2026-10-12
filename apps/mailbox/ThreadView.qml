@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic as C
-import "gui"
+import "kit/ui"
 
 // ThreadView reads one thread like a mail thread: its subject, its agent and
 // project, then its messages, the last ones open and the earlier ones folded

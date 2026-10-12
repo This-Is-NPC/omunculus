@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import QtQuick.Controls.Basic as C
 import Quickshell
 import Quickshell.Io
-import "gui"
+import "kit/ui"
 
 ShellRoot {
   // The mailbox: the folders, the threads of the one picked, and the thread

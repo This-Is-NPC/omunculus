@@ -1,4 +1,5 @@
 import QtQuick
+import "kit/ui"
 
 // SpeechTurn is one thing said in the conversation, in a box: yours on the
 // right, each agent's on the left tinted with its colour. A line that

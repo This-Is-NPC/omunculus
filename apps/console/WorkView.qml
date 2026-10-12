@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "kit/ui"
 
 // WorkView is one work on screen: what it is — its title, goal, agent,
 // workflow stage and state, and the work it was handed down from — then its

@@ -1,5 +1,5 @@
 import QtQuick
-import "gui"
+import "kit/ui"
 
 // ProjectTag names the project a thread is in, as a small outlined tag.
 Rectangle {

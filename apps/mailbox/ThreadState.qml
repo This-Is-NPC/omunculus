@@ -1,5 +1,5 @@
 import QtQuick
-import "gui"
+import "kit/ui"
 
 // ThreadState says what a thread waits for: your decision, or its agents,
 // who breathe while a run is open. A thread waiting for neither says nothing.

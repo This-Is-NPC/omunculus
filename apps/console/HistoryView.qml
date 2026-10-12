@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/ui"
 
 // HistoryView filters the project's conversations — those agents work in,
 // those waiting on you, and what was first said in them — and opens a selected

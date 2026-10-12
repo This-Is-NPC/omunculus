@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls.Basic as C
+import "kit/ui"
 
 // ModalDialog is the frame every eco dialog shares: centred in the window
 // wherever it is declared, at most `maxWidth` wide, over a dimmed window,

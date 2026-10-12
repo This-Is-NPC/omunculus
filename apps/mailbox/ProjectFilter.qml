@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import "gui"
+import "kit/ui"
 
 // ProjectFilter narrows the list to one project, or shows every project.
 Flow {

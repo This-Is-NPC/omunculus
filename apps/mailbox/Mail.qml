@@ -2,7 +2,8 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "gui/Requests.js" as Requests
+import "kit/client"
+import "kit/client/Requests.js" as Requests
 
 // Mail is every project of the server as the mailbox sees it. A thread is a
 // conversation with one agent of depth 0: what you write goes to that agent,
@@ -108,7 +109,7 @@ Singleton {
     const place = projectOf(project)
     if (value === "" || !place || agent === "")
       return
-    call(place.socket, "POST", "/v1/projects/" + project + "/conversations", {}, true, data => {
+    http.call(place.socket, "POST", "/v1/projects/" + project + "/conversations", {}, true, data => {
       post(place.socket, "/v1/projects/" + project + "/conversations/" + data.id + "/messages",
         { message: value, agent: agent }, files, () => {
           composing = false
@@ -154,7 +155,7 @@ Singleton {
     const thread = threads[key]
     if (!thread || (!option && body.trim() === ""))
       return
-    call(projectOf(thread.project).socket, "POST",
+    http.call(projectOf(thread.project).socket, "POST",
       "/v1/projects/" + thread.project + "/conversations/" + thread.id + "/requests/" + requestId + "/reply",
       Requests.answer(option, body.trim()), true, () => {
         tell(option ? "answered " + option : "answered", false)
@@ -172,9 +173,9 @@ Singleton {
       connected = false
       sweeping = false
     }
-    call(socket, "GET", "/v1/identity", null, false, identity => {
+    http.call(socket, "GET", "/v1/identity", null, false, identity => {
       me = identity
-      call(socket, "GET", "/v1/projects", null, false, data => {
+      http.call(socket, "GET", "/v1/projects", null, false, data => {
         connected = true
         loadAgents(data.items)
         const pending = data.items.slice()
@@ -189,7 +190,7 @@ Singleton {
             return
           }
           const place = pending.shift()
-          call(place.socket, "GET", "/v1/projects/" + place.id + "/conversations", null, false, list => {
+          http.call(place.socket, "GET", "/v1/projects/" + place.id + "/conversations", null, false, list => {
             const ids = list.items.map(item => item.id)
             ids.forEach(id => keys.push(place.id + "/" + id))
             readAll(place, ids, nextProject)
@@ -207,7 +208,7 @@ Singleton {
     for (const item of items) {
       if (known.some(other => other.id === item.id))
         continue
-      call(item.socket, "POST", "/v1/cli", { argv: ["config"] }, false, data => {
+      http.call(item.socket, "POST", "/v1/cli", { argv: ["config"] }, false, data => {
         const agents = JSON.parse(data.output).agents.filter(agent => agent.depth === 0 && !agent.workflow_only).map(agent => agent.name)
         projects = projects.map(other => other.id === item.id ? Object.assign({}, other, { agents: agents }) : other)
       })
@@ -228,7 +229,7 @@ Singleton {
     const key = place.id + "/" + id
     const rest = () => readAll(place, ids.slice(1), done)
     const base = "/v1/projects/" + place.id + "/conversations/" + id
-    call(place.socket, "GET", base + "/snapshot", null, false, snapshot => {
+    http.call(place.socket, "GET", base + "/snapshot", null, false, snapshot => {
       const known = cache[key] || { cursor: "", events: [], snapshot: null }
       if (known.snapshot && known.snapshot.cursor === snapshot.cursor)
         return rest()
@@ -242,7 +243,7 @@ Singleton {
 
   // Every event after `cursor`, a page of up to 500 at a time.
   function events(on, base, cursor, read, done, failed) {
-    call(on, "GET", base + "/events" + (cursor ? "?after=" + cursor : ""), null, false, data => {
+    http.call(on, "GET", base + "/events" + (cursor ? "?after=" + cursor : ""), null, false, data => {
       const all = read.concat(data.events)
       const last = data.events.length > 0 ? data.events[data.events.length - 1].cursor : cursor
       if (data.events.length === 500)
@@ -386,65 +387,16 @@ Singleton {
     }
   }
 
-  function key() {
-    let value = ""
-    for (let i = 0; i < 32; i++)
-      value += Math.floor(Math.random() * 16).toString(16)
-    return value
-  }
-
   // A POST of `body` through curl on the socket `on`, with the files at the
   // paths `files` lists attached when there are any.
   function post(on, path, body, files, done) {
     if (!files || files.length === 0)
-      return call(on, "POST", path, body, true, done)
-    httpCall.createObject(root, {
-      command: [Quickshell.shellPath("post-with-files"), on, path, key(), JSON.stringify(body)].concat(files),
-      on: on, done: done, failed: null
-    })
+      return http.call(on, "POST", path, body, true, done)
+    http.run([Quickshell.shellPath("post-with-files"), on, path, http.key(), JSON.stringify(body)].concat(files), on, done)
   }
 
-  // One HTTP request through curl on the socket `on`; `done` gets the decoded
-  // JSON of a 2xx answer, and `failed`, when given, takes any other outcome
-  // instead of the status line.
-  function call(on, method, path, body, idempotent, done, failed) {
-    const args = ["curl", "-sS", "--unix-socket", on, "-X", method, "-H", "accept: application/json"]
-    if (body !== null)
-      args.push("-H", "content-type: application/json", "--data-binary", JSON.stringify(body))
-    if (idempotent)
-      args.push("-H", "Idempotency-Key: " + key())
-    args.push("-w", "\n%{http_code}", "http://localhost" + path)
-    httpCall.createObject(root, { command: args, on: on, done: done, failed: failed || null })
-  }
-  Component {
-    id: httpCall
-    Process {
-      id: request
-      property string on
-      property var done: null
-      property var failed: null
-      running: true
-      stdout: StdioCollector {
-        onStreamFinished: {
-          const split = text.lastIndexOf("\n")
-          const status = parseInt(text.slice(split + 1))
-          const payload = text.slice(0, split)
-          if (status >= 200 && status < 300) {
-            request.done(payload === "" ? {} : JSON.parse(payload))
-          } else {
-            let reason = "the server does not answer on " + request.on
-            try {
-              const error = JSON.parse(payload)
-              reason = error.message || error.error
-            } catch (e) {}
-            if (request.failed)
-              request.failed(reason)
-            else
-              root.tell(reason, true)
-          }
-          Qt.callLater(() => request.destroy())
-        }
-      }
-    }
+  Http {
+    id: http
+    onRefused: reason => root.tell(reason, true)
   }
 }

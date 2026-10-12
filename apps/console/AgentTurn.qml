@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "kit/ui"
 
 // AgentTurn is one run of an agent in the conversation, said like a line of
 // chat: on the left, in the agent's colour, its words drawn as they stream.

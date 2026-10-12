@@ -1,4 +1,5 @@
 import QtQuick
+import "kit/ui"
 
 // Caption names a field: small, dim, tracked text above its input.
 Label {

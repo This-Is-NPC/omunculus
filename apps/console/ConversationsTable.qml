@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "kit/ui"
 
 // ConversationsTable lists conversations in the DataTable: what was first
 // said in each, when it began, and its state — toned only while agents work

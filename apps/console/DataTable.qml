@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "kit/ui"
 
 // DataTable lists records as rows of columns under a header; below 700 px each
 // row stacks its cells into lines instead. A row opens on click or Enter; ↑/↓

@@ -1,7 +1,8 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import "Requests.js" as Requests
+import "kit/client/Requests.js" as Requests
+import "kit/ui"
 
 // AgentNode is one agent at work on the orchestration map: its ring in the
 // agent's colour, which keeps leaving it while the agent runs, the work, and

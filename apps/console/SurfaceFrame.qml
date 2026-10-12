@@ -1,4 +1,5 @@
 import QtQuick
+import "kit/ui"
 
 Rectangle {
   id: surface

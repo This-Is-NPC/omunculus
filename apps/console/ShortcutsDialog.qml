@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/ui"
 
 // ShortcutsDialog lists every key the window answers to, by where it works;
 // ? or F1 opens it and the arrows or PgUp/PgDn scroll it.

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "kit/ui"
 
 // Composer is where you write: in the main thread, to the root agent; in a
 // work, to that work's agent, or a note its agents read without a new run.

@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/ui"
 
 // CostDialog is what the conversation on screen has used, opened only from its
 // masthead: the model calls, the tokens read, read from cache and written, and

@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import "gui"
+import "kit/ui"
 
 // Entry is one message of a thread, as a mail shows it: who wrote to whom and
 // when, then the text and the files it carries. Folded, it is one line

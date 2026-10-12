@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import "gui"
+import "kit/ui"
 
 // ThreadRow is one thread in the list: its agent and project, when it last
 // moved, its subject, and its last message. Unread, it is bold behind an
