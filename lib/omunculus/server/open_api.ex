@@ -331,38 +331,7 @@ defmodule Omunculus.Server.OpenAPI do
       "Removed" => object(%{status: %{type: "string", const: "removed"}}, ["status"]),
       "Membership" =>
         object(%{issuer: string(), subject: string(), role: string()}, ~w(issuer subject role)),
-      "SendMessage" => %{
-        oneOf: [
-          object(
-            %{message: string(), agent: string(), attachments: array(ref("Attachment"))},
-            ~w(message agent)
-          ),
-          object(
-            %{message: string(), work_id: string(), attachments: array(ref("Attachment"))},
-            ~w(message work_id)
-          )
-        ]
-      },
-      "Attachment" =>
-        object(
-          %{
-            name: string(),
-            media_type: string(),
-            data: %{type: "string", contentEncoding: "base64"}
-          },
-          ~w(name media_type data)
-        ),
-      "CreateRequest" =>
-        object(%{question: string(), options: array(string()), to: string()}, ~w(question)),
-      "EscalateRequests" =>
-        object(
-          %{
-            reason: string(),
-            origins: %{type: "object", minProperties: 1, additionalProperties: string()},
-            to: string()
-          },
-          ~w(reason origins)
-        ),
+      "SendMessage" => object(%{message: string(), work_id: string()}, ["message"]),
       "ReplyRequest" =>
         object(
           %{
@@ -434,8 +403,12 @@ defmodule Omunculus.Server.OpenAPI do
             requester: %{type: "object"},
             work_id: nullable_string(),
             options: %{type: "object"},
+            origins: %{type: "object", additionalProperties: ref("Request")},
+            reason: nullable_string(),
+            workflow: nullable_string(),
+            stage: nullable_string(),
             arbiter: %{type: "object"},
-            status: %{type: "string", enum: ~w(pending closed)},
+            status: %{type: "string", enum: ~w(pending escalated closed)},
             created_at: string()
           },
           ["id", "options", "status"]

@@ -12,12 +12,83 @@ without one.
 
 A request already has a question (`reason`), named options containing tool
 calls, a JSON `requester` identity, an `arbiter` identity, optional `run_id` and
-`work_id`, and `pending` or `closed` as its status. An agent identity names its
+`work_id`, and `pending`, `escalated` or `closed` as its status. An agent identity names its
 agent; a human identity contains authenticated issuer and subject. Older
 stores without participant columns require explicit recreation. Its opening
 event and request comments hold the question. Options are immutable.
 
-| Field | Meaning |
+`Store.Actions.Requests` validates and resolves the arbiter. A request from
+a child goes to the parent work's assignee if that agent can perform every
+option's calls and grant the requested names. Explicit `to = person`,
+sealed capabilities, an unsuitable parent, a root or a workless run, and
+harness requests go to the human. Blocked grants and requests consisting
+only of grants the requester already has are refused.
+
+A request parks its work with `state = waiting`, `waiting = request` and
+`waiting_for = request_id`. A work waiting on children cannot open a request.
+`reply` requires a nonempty comment and accepts an optional named option.
+The reply tool treats a null or empty option as omitted; the HTTP API refuses
+those explicit values with 400. A nonempty unknown option is refused.
+Text alone chains no calls and grants nothing. A selected option chains its
+calls, adding the request ID to their arguments. The harness records
+the call, reply and effects in one store transaction. A refused chain or emit
+applies none of them. An authorized human may reply; an agent must be the
+recorded arbiter. The reply closes the request and reopens a work still waiting
+on that request. Follow-up opens its run, or a workless requester's agent in
+the original conversation. A cancelled work does not run again.
+
+A named decision is answered by choosing its `option`. Text alone supplies
+content and resumes a waiting requester, but records no decision. For example,
+a workflow stage that requires the chosen option to be `approve` advances
+only on that decision; a text-only "approved" does not satisfy its condition.
+
+After root retry exhaustion, `retry` remains an explicit named decision with
+no tool calls. It keeps the retry/cancel choices in the exhaustion notification
+and records the selected intent in the reply event and request's `answer`.
+Both `retry` and text-only answers reuse the common reply/reopen path; there
+is no separate retry effect implementation. `cancel` is the effect-bearing
+option and cancels the work through its chained call.
+
+The model-facing `escalate` form merges received pending requests into a new
+request, using distinct names in its `origins` map. Append-only links preserve
+each original question and permission target; the receiver's child wait is
+preserved. A reply may contain recursive `parts` keyed by those names. Each
+part closes only its origin through the same reply action, with the actual
+answerer's identity. Omitted parts return to pending; a text-only upstream
+answer resumes the intermediary for distribution even while it waits on
+children. The eval runner chooses answers recursively from those original
+options and records the original grant/decision selections. Human escalation
+commands and configurable routes are not exposed at this commit.
+
+`Store.Runs.unanswered/3` currently changes an unanswered agent request's
+arbiter to `human` after the arbiter's run closes. It records an `escalate`
+event and an inbox note. This changes the same request in place; it creates
+neither a linked request nor a route back through intermediate agents.
+
+## Proposed request contract
+
+A request is anything one participant needs another participant to answer
+before proceeding. A participant may be a human or an agent, as requester,
+receiver, intermediary or final answerer. Questions, decisions, permissions
+and release approval share the same store actions, authorization, comments,
+events and reply path. Tools and human command interfaces supply the question
+and option content through that same contract.
+
+**The requester does not need to know whether a request will pass through
+humans, agents or both.** Creating a request states the need and its origin;
+it does not require choosing a recipient type, naming every intermediary or
+knowing the eventual answerer. A receiver sees a pending request it can answer
+or escalate through the same contract. Human-to-human, human-to-agent,
+agent-to-human and agent-to-agent requests are all valid compositions.
+
+Identity and authority remain explicit internally for authentication, access
+checks, effect authorization and audit. They do not select different request
+protocols. Delivery activates an agent run or presents an item to a human;
+that is the system's responsibility, not a distinction the requester must
+manage. Human input is delivered through the command interface and requires
+no synthetic agent run.
+
+| Component | Contract |
 | --- | --- |
 | `reason` | Nonempty question, kept in the opening event and request comments. It is shown to the receiver as written, so `ask` and `escalate` describe it as what the receiver is asked, in their language, without ids, stage names or notes for agents; the origins carry who asked and for which work. |
 | `options` | Immutable map from answer names to ordered tool calls. An empty map is a free-text question; an option with no calls is a named decision. |

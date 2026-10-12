@@ -396,7 +396,8 @@ defmodule Omunculus.Store.Runs do
   defp do_begin(conn, params) do
     run_id = Id.new()
 
-    with :ok <- runnable(conn, params),
+    with :ok <- runnable(conn, params.work_id, Map.get(params, :own, false)),
+         :ok <- runnable_request(conn, params),
          {:ok, event} <-
            Events.append(conn, %{
              type: "start-run",
@@ -439,12 +440,6 @@ defmodule Omunculus.Store.Runs do
          :ok <- link_message(conn, params.prompt_id, run_id) do
       View.view(conn, "run", run_id)
     end
-  end
-
-  @spec runnable(Connection.t(), map) :: :ok | {:error, term}
-  def runnable(conn, params) do
-    with :ok <- runnable_work(conn, params.work_id, Map.get(params, :own, false)),
-         do: runnable_request(conn, params)
   end
 
   defp runnable_request(conn, %{cause_id: cause_id, request_id: request_id, agent: agent})

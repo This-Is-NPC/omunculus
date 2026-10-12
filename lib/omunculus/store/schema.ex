@@ -2,8 +2,8 @@ defmodule Omunculus.Store.Schema do
   @moduledoc """
   DDL for prompts, events, runs, comments, works, requests, request escalations, inbox,
   conversations, memberships and command receipts. It also enforces the
-  store rules at the database level: events and escalation links are append only, request options and participant identities are immutable, and the
-  system columns — `runs.tools`, `runs.prompt_id`,
+  store rules at the database level: events and escalation links are append only, request options and requester identities are immutable, and the
+  system columns of spec §8.3 — `runs.tools`, `runs.prompt_id`,
   `runs.started_at`, and `created_at` on prompts, comments, works,
   requests and inbox — refuse UPDATE.
   """
@@ -152,7 +152,7 @@ defmodule Omunculus.Store.Schema do
       work_id TEXT REFERENCES works (id) DEFERRABLE INITIALLY DEFERRED,
       options TEXT NOT NULL,
       arbiter TEXT NOT NULL CHECK (json_valid(arbiter)),
-      status TEXT NOT NULL CHECK (status IN ('pending', 'closed')),
+      status TEXT NOT NULL CHECK (status IN ('pending', 'escalated', 'closed')),
       event_id TEXT REFERENCES events (id) DEFERRABLE INITIALLY DEFERRED,
       created_at TEXT NOT NULL
     )

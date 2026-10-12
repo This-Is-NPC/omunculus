@@ -221,7 +221,12 @@ defmodule Omunculus.Store.Access do
   defp read_items(conn, kind, sql, conversation_id) do
     with {:ok, rows} <- Query.all(conn, sql, [conversation_id]) do
       if kind == :requests do
-        Omunculus.Store.View.request_views(conn, rows)
+        Enum.reduce_while(rows, {:ok, []}, fn row, {:ok, requests} ->
+          case Omunculus.Store.View.view(conn, "request", row.id) do
+            {:ok, request} -> {:cont, {:ok, requests ++ [request]}}
+            error -> {:halt, error}
+          end
+        end)
       else
         {:ok, rows}
       end
@@ -246,13 +251,12 @@ defmodule Omunculus.Store.Access do
   end
 
   defp needs_config?(request, answer) do
-    parts = if is_map(answer["parts"]), do: answer["parts"], else: %{}
     calls = Jason.decode!(request.options)[answer["option"]] || []
 
     Enum.any?(calls, fn call ->
       call["name"] == "grant" and not is_nil(get_in(call, ["args", "scope"]))
     end) or
-      Enum.any?(parts, fn {part, value} ->
+      Enum.any?(Map.get(answer, "parts", %{}), fn {part, value} ->
         is_map(value) and Map.has_key?(request.origins, part) and
           needs_config?(request.origins[part], value)
       end)

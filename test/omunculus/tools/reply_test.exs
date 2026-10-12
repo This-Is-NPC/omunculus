@@ -55,7 +55,7 @@ defmodule Omunculus.Tools.ReplyTest do
     assert %{"chain" => []} = Reply.run(%{@input | args: %{@args | "option" => "deny"}})
   end
 
-  test "an unknown option or missing request selects no calls" do
+  test "an unknown option fails before calls chain; a missing request chains nothing" do
     assert %{"ok" => true, "chain" => []} =
              Reply.run(%{@input | args: %{@args | "option" => "maybe"}})
 
@@ -130,7 +130,39 @@ defmodule Omunculus.Tools.ReplyTest do
     end
   end
 
-  test "reply state and authorization are left to the store transaction" do
+  test "an agent cannot select a sealed or permanent grant through an upstream part" do
+    for args <- [
+          %{"kind" => "tool", "name" => "deploy"},
+          %{"kind" => "tool", "name" => "write", "scope" => "agent"}
+        ] do
+      leaf =
+        %{@request | options: Jason.encode!(%{"grant" => [%{"name" => "grant", "args" => args}]})}
+        |> Map.put(
+          :requester_ceiling,
+          Jason.encode!(%{
+            have: [],
+            askable: ["write"],
+            sealed: ["deploy"],
+            blocked: [],
+            uncited: "askable"
+          })
+        )
+
+      upstream = %{id: "upstream", options: "{}", origins: %{"design" => leaf}}
+
+      answer = %{
+        "request_id" => "upstream",
+        "body" => "Answers",
+        "parts" => %{"design" => %{"body" => "Yes", "option" => "grant"}}
+      }
+
+      input = %{@input | args: answer, view: %{"request" => upstream}, run_id: "agent_run"}
+      assert %{"ok" => false, "emit" => []} = Reply.run(input)
+      assert %{"ok" => true, "chain" => [_]} = Reply.run(%{input | run_id: nil})
+    end
+  end
+
+  test "closed or invalid upstream replies cannot chain otherwise valid named effects" do
     upstream = %{
       id: "upstream",
       options: "{}",
@@ -148,13 +180,8 @@ defmodule Omunculus.Tools.ReplyTest do
           {%{upstream | status: "closed"}, args},
           {upstream, Map.put(args, "option", "unknown")}
         ] do
-      assert %{"ok" => true, "chain" => [%{"name" => "grant"}]} =
-               Reply.run(%{
-                 @input
-                 | args: answer,
-                   view: %{"request" => request},
-                   run_id: "agent_run"
-               })
+      assert %{"ok" => true, "chain" => []} =
+               Reply.run(%{@input | args: answer, view: %{"request" => request}})
     end
   end
 end

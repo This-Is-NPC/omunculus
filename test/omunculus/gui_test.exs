@@ -11,7 +11,7 @@ defmodule Omunculus.GuiTest do
     const owner = {kind: "human", issuer: "local", subject: "1000"};
     const requests = [
       {status: "pending", arbiter: agent}, {status: "pending", arbiter: owner},
-      {status: "closed", arbiter: owner}
+      {status: "closed", arbiter: owner}, {status: "escalated", arbiter: agent}
     ];
     if (requests.filter(pending).length !== 2) throw Error("pending requests missing");
     if (requests.filter(r => pending(r) && human(r.arbiter)).length !== 1) throw Error("human count");

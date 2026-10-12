@@ -3,17 +3,13 @@ defmodule Omunculus.Tools.EscalateTest do
   alias Omunculus.Tools.Escalate
 
   test "the model form emits named origins and its manifest ends the run" do
-    args = %{
-      "reason" => "Choose both",
-      "origins" => %{"logo" => "r1", "tone" => "r2"},
-      "to" => "review"
-    }
+    args = %{"reason" => "Choose both", "origins" => %{"logo" => "r1", "tone" => "r2"}}
 
     assert %{"ok" => true, "emit" => [%{"type" => "escalate", "body" => ^args}]} =
              Escalate.run(%{args: args})
 
     manifest = Omunculus.Tool.Catalog.unconfigured()["escalate"]
-    assert manifest.triggers == ["model", "cli"]
+    assert manifest.triggers == ["model"]
     assert manifest.then == ["end"]
 
     for invalid <- [nil, %{}, [], "invalid"] do

@@ -1,6 +1,9 @@
 defmodule Omunculus.RequestOptions do
-  @moduledoc "Store validation of replies and permission-bearing choices against their immutable original targets."
+  @moduledoc "Checks permission-bearing choices against their immutable original target before calls run."
   alias Omunculus.Ceiling
+
+  def validate(request, answer, linked? \\ false)
+  def validate(nil, _answer, _linked?), do: :ok
 
   def validate(request, answer, linked?) do
     with :ok <- pending(request, linked?),
@@ -47,39 +50,32 @@ defmodule Omunculus.RequestOptions do
   end
 
   def authorize(_request, _answer, true), do: :ok
+  def authorize(nil, _answer, _human?), do: :ok
 
   def authorize(request, answer, false) do
-    options = Jason.decode!(request.options)
-    calls = options[answer["option"]] || []
+    calls = Jason.decode!(request.options)[answer["option"]] || []
 
     snapshot =
       if request[:requester_ceiling], do: Jason.decode!(request.requester_ceiling), else: nil
 
-    sealed_grant =
-      options
-      |> Map.values()
-      |> List.flatten()
-      |> Enum.any?(fn call ->
-        args = call["args"] || %{}
-        call["name"] == "grant" and sealed?(snapshot, args["name"], args["kind"])
-      end)
-
     refusal =
-      if(sealed_grant, do: {:grant, :not_authorized}) ||
-        Enum.find_value(calls, fn call ->
-          args = call["args"] || %{}
+      Enum.find_value(calls, fn call ->
+        args = call["args"] || %{}
 
-          cond do
-            call["name"] == "grant" and not is_nil(args["scope"]) ->
-              {:grant, :not_human}
+        cond do
+          call["name"] == "grant" and not is_nil(args["scope"]) ->
+            {:grant, :not_human}
 
-            sealed?(snapshot, call["name"], "tool") ->
-              {:reply, :not_authorized}
+          call["name"] == "grant" and sealed?(snapshot, args["name"], args["kind"]) ->
+            {:grant, :not_authorized}
 
-            true ->
-              nil
-          end
-        end)
+          sealed?(snapshot, call["name"], "tool") ->
+            {:reply, :not_authorized}
+
+          true ->
+            nil
+        end
+      end)
 
     if refusal do
       {:error, refusal}
