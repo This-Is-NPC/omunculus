@@ -3,37 +3,48 @@ import QtQuick
 import QtQuick.Layouts
 import "gui"
 
-// CommandBar is the mailbox's one row of commands, under the masthead, as a
-// mail client keeps them: the new thread first and always in its place; then
+// CommandBar is the mailbox's one row of actions, under the masthead, as a
+// mail client keeps them: the new thread first and always in its place, then
 // what fits where you are — the list's commands, or, with a thread open, the
-// ones that act on it — which slide in when the place changes; the search in
-// the middle; and last, apart, how the window shows the folders and the
-// threads. Wide, each command says its name beside its icon; narrower, only
-// the icon shows, its name in the tip.
+// ones that act on it — which slide in when the place changes, and the search
+// at the end. How the columns show is not here: each column folds from its
+// own head. Wide, each command says its name beside its icon; narrower, only
+// the icon shows, its name in the tip; narrow, only the essential commands
+// show and the rest wait behind "more".
 Item {
   id: bar
 
   // "list", or "thread" while a thread is open.
   property string place: "list"
-  property bool compact: false
-  property bool foldersShown: true
-  property bool threadsShown: true
-  // Whether the view's toggles show: not on a narrow window.
-  property bool toggles: true
+  // "wide", "compact" or "narrow".
+  property string fit: "wide"
   readonly property var thread: Mail.thread
-  readonly property alias search: searchBox
+  // Where the search box sits while the bar has room for it.
+  readonly property alias searchSlot: slot
 
   signal compose()
   signal reply()
   signal step(int by)
-  signal toggleFolders()
-  signal toggleThreads()
-  signal searchLeft()
 
   implicitHeight: 40
 
-  // A label, or none while compact.
-  function named(text) { return bar.compact ? "" : text }
+  // The commands of where you are, in order of importance: each its text,
+  // icon, role, tone, whether it shows only its icon, whether it stays when
+  // the bar is narrow, whether it can run, and what it runs.
+  readonly property var commands: place === "thread" ? [
+    { text: "REPLY", icon: "enter", role: "primary", tip: "reply to " + (thread ? thread.agent : "") + "  ctrl+r", essential: true, run: () => bar.reply() },
+    { text: "DECIDE", icon: "warning", tone: Theme.warning, tip: "what the thread waits on you for", essential: true,
+      shown: thread !== null && thread.waiting.length > 0, run: () => Mail.decisionRequested() },
+    { text: "MARK UNREAD", icon: "spark", tip: "mark unread and go back to the list", run: () => Mail.markUnread(Mail.selected) },
+    { text: "PREVIOUS", icon: "chevron-up", iconOnly: true, tip: "previous thread  alt+↑", run: () => bar.step(-1) },
+    { text: "NEXT", icon: "chevron-down", iconOnly: true, tip: "next thread  alt+↓", run: () => bar.step(1) },
+    { text: "CLOSE", icon: "close", iconOnly: true, tip: "close the thread  esc", run: () => Mail.close() }
+  ] : [
+    { text: "MARK ALL READ", icon: "check", tip: "mark every thread shown read", enabled: Mail.shown.some(thread => Mail.isUnread(thread)), run: () => Mail.markAllRead() }
+  ]
+  readonly property var present: commands.filter(command => command.shown !== false)
+  readonly property var inBar: fit === "narrow" ? present.filter(command => command.essential) : present
+  readonly property var behind: fit === "narrow" ? present.filter(command => !command.essential) : []
 
   RowLayout {
     anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
@@ -43,110 +54,69 @@ Item {
       dense: true
       role: "primary"
       icon: "plus"
-      text: bar.named("NEW THREAD")
-      Layout.preferredWidth: bar.compact ? 32 : implicitWidth
+      text: bar.fit === "wide" ? "NEW THREAD" : ""
+      Layout.preferredWidth: bar.fit === "wide" ? implicitWidth : 32
       tip: "new thread  ctrl+n"
       enabled: Mail.connected
       onClicked: bar.compose()
     }
 
-    Rule {}
+    Rectangle { Layout.preferredHeight: 18; Layout.leftMargin: 4; Layout.rightMargin: 4; implicitWidth: 1; color: Theme.line }
 
     // The commands of where you are; each place's slide in when it comes.
-    Item {
-      Layout.preferredWidth: contextual.implicitWidth
-      Layout.preferredHeight: 28
-      Row {
-        id: contextual
-        spacing: 6
-        transform: Translate { id: shift }
-        Component.onCompleted: arrive.start()
+    Row {
+      id: contextual
+      spacing: 6
+      transform: Translate { id: shift }
 
-        // The list's.
-        TraceButton {
-          visible: bar.place === "list"
+      Repeater {
+        model: bar.inBar
+        delegate: TraceButton {
+          required property var modelData
+          readonly property bool labelled: bar.fit === "wide" && !modelData.iconOnly
           dense: true
-          role: "progress"
-          icon: "check"
-          text: bar.named("MARK ALL READ")
-          width: bar.compact ? 32 : implicitWidth
-          tip: "mark every thread shown read"
-          enabled: Mail.shown.some(thread => Mail.isUnread(thread))
-          onClicked: Mail.markAllRead()
+          role: modelData.role || "progress"
+          tone: modelData.tone || (role === "guarded" ? Theme.error : Theme.primary)
+          icon: modelData.icon
+          text: labelled ? modelData.text : ""
+          width: labelled ? implicitWidth : 32
+          tip: modelData.tip
+          enabled: modelData.enabled !== false
+          onClicked: modelData.run()
         }
-
-        // The open thread's.
-        TraceButton {
-          visible: bar.place === "thread"
-          dense: true
-          role: "primary"
-          icon: "enter"
-          text: bar.named("REPLY")
-          width: bar.compact ? 32 : implicitWidth
-          tip: "reply to " + (bar.thread ? bar.thread.agent : "") + "  ctrl+r"
-          onClicked: bar.reply()
-        }
-        TraceButton {
-          visible: bar.place === "thread" && bar.thread !== null && bar.thread.waiting.length > 0
-          dense: true
-          role: "progress"
-          tone: Theme.warning
-          icon: "warning"
-          text: bar.named("DECIDE")
-          width: bar.compact ? 32 : implicitWidth
-          tip: "what the thread waits on you for"
-          onClicked: Mail.decisionRequested()
-        }
-        TraceButton {
-          visible: bar.place === "thread"
-          dense: true
-          role: "progress"
-          icon: "spark"
-          text: bar.named("MARK UNREAD")
-          width: bar.compact ? 32 : implicitWidth
-          tip: "mark unread and go back to the list"
-          onClicked: Mail.markUnread(Mail.selected)
-        }
-        IconButton { visible: bar.place === "thread"; name: "chevron-up"; tip: "previous thread  alt+↑"; onClicked: bar.step(-1) }
-        IconButton { visible: bar.place === "thread"; name: "chevron-down"; tip: "next thread  alt+↓"; onClicked: bar.step(1) }
-        IconButton { visible: bar.place === "thread"; name: "close"; tip: "close the thread  esc"; onClicked: Mail.close() }
       }
 
-      ParallelAnimation {
-        id: arrive
-        NumberAnimation { target: contextual; property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
-        NumberAnimation { target: shift; property: "x"; from: 12; to: 0; duration: 220; easing.type: Easing.OutCubic }
+      IconButton {
+        visible: bar.behind.length > 0
+        name: "more"
+        tip: "more"
+        onClicked: more.open()
+        MoreMenu {
+          id: more
+          entries: bar.behind
+          onPicked: index => bar.behind[index].run()
+        }
       }
-      Connections {
-        target: bar
-        function onPlaceChanged() { arrive.restart() }
-      }
+    }
+
+    ParallelAnimation {
+      id: arrive
+      NumberAnimation { target: contextual; property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
+      NumberAnimation { target: shift; property: "x"; from: 12; to: 0; duration: 220; easing.type: Easing.OutCubic }
+    }
+    Connections {
+      target: bar
+      function onPlaceChanged() { arrive.restart() }
     }
 
     Item { Layout.fillWidth: true }
 
-    SearchBox {
-      id: searchBox
-      Layout.preferredWidth: bar.compact ? 160 : 280
-      onLeave: bar.searchLeft()
-    }
-
-    Rule { visible: bar.toggles }
-
-    // How the window shows the folders and the threads.
-    IconButton {
-      visible: bar.toggles
-      name: "folder"
-      tip: (bar.foldersShown ? "fold" : "unfold") + " the folders  ctrl+b"
-      highlighted: bar.foldersShown
-      onClicked: bar.toggleFolders()
-    }
-    IconButton {
-      visible: bar.toggles
-      name: "list"
-      tip: (bar.threadsShown ? "hide" : "show") + " the threads  ctrl+l"
-      highlighted: bar.threadsShown
-      onClicked: bar.toggleThreads()
+    // The search, unless the window is narrow and keeps it over the list.
+    Item {
+      id: slot
+      visible: bar.fit !== "narrow"
+      Layout.preferredWidth: bar.fit === "wide" ? 280 : 200
+      Layout.preferredHeight: 30
     }
   }
 
@@ -159,14 +129,5 @@ Item {
       GradientStop { position: 0; color: Theme.line }
       GradientStop { position: 1; color: "transparent" }
     }
-  }
-
-  // A short upright hairline between the groups of commands.
-  component Rule: Rectangle {
-    Layout.preferredHeight: 18
-    Layout.leftMargin: 4
-    Layout.rightMargin: 4
-    implicitWidth: 1
-    color: Theme.line
   }
 }
