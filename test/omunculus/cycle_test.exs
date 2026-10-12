@@ -254,11 +254,28 @@ defmodule Omunculus.CycleTest do
       [pending] = all(project, "SELECT * FROM requests WHERE id = ?", [second_request.id])
       assert pending.status == "waiting_human"
 
-      assert :ok =
-               Query.exec(project.conn, "UPDATE works SET state = ? WHERE id = ?", [
-                 unquote(stopped_state),
-                 second.id
-               ])
+      if unquote(stopped_state) == "cancelled" do
+        args = %{"request_id" => second_request.id}
+        call = %{name: "cancel", args: args, ok: true, output: ""}
+        emit = %{"type" => "cancel", "body" => args}
+
+        ctx = %{
+          run_id: nil,
+          work_id: nil,
+          author: "human",
+          agent: nil,
+          config: config,
+          groups: %{}
+        }
+
+        assert {:ok, [_tool, %{type: "cancel"}]} =
+                 Omunculus.Store.record_tools(project.conn, nil, [{call, [emit]}], ctx)
+      else
+        assert :ok =
+                 Query.exec(project.conn, "UPDATE works SET state = 'done' WHERE id = ?", [
+                   second.id
+                 ])
+      end
 
       assert {:ok, ""} = CLI.run(["reply", "--request_id", second_request.id, "Too late."], dir)
       refute_received {:resumed, "Goal B", _}

@@ -1372,26 +1372,31 @@ defmodule Omunculus.RunTest do
       Project.close(project)
     end
 
-    test "replying with text to the root's request opens another run of it", %{dir: dir} do
-      retry_config(dir, "max_retries = 0")
-      project = open_project(dir)
-      work_id = Fixtures.insert(project.conn, :works)
-      scripted(project, [idle("idle"), ending()])
-      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
-      request = root_request(project, work_id)
+    for {answer, args, expected} <- [
+          {"retry", ["--option", "retry"], "answered retry: the reply is below"},
+          {"text", [], "answered: the reply is below"}
+        ] do
+      test "replying with #{answer} to the root's request opens another run of it", %{dir: dir} do
+        retry_config(dir, "max_retries = 0")
+        project = open_project(dir)
+        work_id = Fixtures.insert(project.conn, :works)
+        scripted(project, [idle("idle"), ending()])
+        assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+        request = root_request(project, work_id)
 
-      assert {:ok, ""} =
-               CLI.run(["reply", "--request_id", request.id, "go on"], dir)
+        assert {:ok, ""} =
+                 CLI.run(["reply", "--request_id", request.id] ++ unquote(args) ++ ["go on"], dir)
 
-      assert [_first, again] = runs_of(project, work_id)
-      assert again.via == "reply"
-      assert again.request_id == request.id
-      assert {:ok, %{body: prompt}} = Store.view(project.conn, "prompt", again.prompt_id)
-      assert prompt =~ "answered: the reply is below"
-      assert String.ends_with?(prompt, "\ngo on")
-      assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", work_id)
+        assert [_first, again] = runs_of(project, work_id)
+        assert again.via == "reply"
+        assert again.request_id == request.id
+        assert {:ok, %{body: prompt}} = Store.view(project.conn, "prompt", again.prompt_id)
+        assert prompt =~ unquote(expected)
+        assert String.ends_with?(prompt, "\ngo on")
+        assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", work_id)
 
-      Project.close(project)
+        Project.close(project)
+      end
     end
 
     test "replying cancel to the root's request cancels it and opens no run", %{dir: dir} do
