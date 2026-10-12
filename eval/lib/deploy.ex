@@ -6,7 +6,8 @@ defmodule EquivalentExchange.Deploy do
   the variables the dream team's config reads. The tools name each project's
   apps apart; `published/1` finds, in an execution's events, the apps
   it published, the one it promoted first, `mirror/2` copies what
-  production serves for an app, for the check, and `destroy/1` removes it
+  production serves for an app, saving extensionless paths as directory indexes
+  for the check, and `destroy/1` removes it
   from both.
   """
 
@@ -67,7 +68,7 @@ defmodule EquivalentExchange.Deploy do
            ) do
         {:ok, %Req.Response{status: 200, body: body}} ->
           file =
-            Path.join(dir, if(String.ends_with?(path, "/"), do: path <> "index.html", else: path))
+            Path.join(dir, if(Path.extname(path) == "", do: Path.join(path, "index.html"), else: path))
 
           File.mkdir_p!(Path.dirname(file))
           File.write!(file, body)
