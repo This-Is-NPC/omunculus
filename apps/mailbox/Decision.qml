@@ -65,7 +65,7 @@ ColumnLayout {
     Layout.alignment: Qt.AlignRight
     dense: true
     role: "progress"
-    icon: "send"
+    icon: "enter"
     text: "ANSWER"
     enabled: answer.text.trim() !== ""
     tip: "ctrl+enter"

@@ -202,7 +202,7 @@ Item {
       DialogFooter {
         FilePicker { id: files; Layout.fillWidth: true }
         primaryText: "SEND"
-        primaryIcon: "send"
+        primaryIcon: "enter"
         primaryEnabled: editor.text.trim() !== ""
         onCancelled: view.replying = false
         onAccepted: composer.send()

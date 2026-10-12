@@ -8,8 +8,9 @@ import "kit/ui"
 ShellRoot {
   // The mailbox, laid out as eco is: the masthead on top, whose notch sweeps
   // when the section changes, then the folders, the threads of the one picked
-  // and the thread open. The folders fold to a rail and the threads fold away,
-  // each sliding to its width; a narrow window shows one pane at a time. A
+  // and the thread open, parted by hairlines that fade downwards. The folders
+  // fold to a rail and the threads fold away, each by the arrow at its own top,
+  // sliding to its width; a narrow window shows one pane at a time. A
   // new thread is written in a dialog; a thread is answered only when asked.
   FloatingWindow {
     id: window
@@ -61,22 +62,8 @@ ShellRoot {
           Layout.fillWidth: true
           section: window.narrow && window.reading ? "thread"
             : ({ all: "all threads", waiting: "waiting for you", working: "working" })[Mail.folder]
-          StatusNote { maxWidth: Math.max(0, window.width - 620) }
-          IconButton {
-            visible: !window.narrow
-            name: "list"
-            tip: (window.foldersFolded ? "unfold" : "fold") + " the folders  ctrl+b"
-            highlighted: !window.foldersFolded
-            onClicked: window.foldersFolded = !window.foldersFolded
-          }
-          IconButton {
-            visible: !window.narrow
-            name: window.listFolded ? "chevron-right" : "chevron-left"
-            tip: (window.listFolded ? "unfold" : "fold") + " the threads  ctrl+l"
-            highlighted: !window.listFolded
-            onClicked: window.listFolded = !window.listFolded
-          }
-          IconButton { name: "plus"; tip: "new thread  ctrl+n"; enabled: Mail.connected; onClicked: compose.open() }
+          StatusNote { maxWidth: Math.max(0, window.width - 520) }
+          IconButton { visible: window.narrow; name: "plus"; tip: "new thread  ctrl+n"; enabled: Mail.connected; onClicked: compose.open() }
         }
 
         RowLayout {
@@ -96,14 +83,33 @@ ShellRoot {
               anchors { fill: parent; rightMargin: 12 }
               spacing: 4
 
-              TraceButton {
-                visible: !window.foldersFolded
-                Layout.fillWidth: true
-                Layout.bottomMargin: 14
-                role: "primary"
-                icon: "plus"
-                text: "NEW THREAD"
-                tip: "ctrl+n"
+              RowLayout {
+                Layout.fillWidth: !window.foldersFolded
+                Layout.alignment: Qt.AlignHCenter
+                Layout.bottomMargin: 10
+                spacing: 8
+                TraceButton {
+                  visible: !window.foldersFolded
+                  Layout.fillWidth: true
+                  role: "primary"
+                  icon: "plus"
+                  text: "NEW THREAD"
+                  tip: "ctrl+n"
+                  enabled: Mail.connected
+                  onClicked: compose.open()
+                }
+                IconButton {
+                  name: window.foldersFolded ? "chevron-right" : "chevron-left"
+                  tip: (window.foldersFolded ? "unfold" : "fold") + " the folders  ctrl+b"
+                  onClicked: window.foldersFolded = !window.foldersFolded
+                }
+              }
+              IconButton {
+                visible: window.foldersFolded
+                Layout.alignment: Qt.AlignHCenter
+                Layout.bottomMargin: 10
+                name: "plus"
+                tip: "new thread  ctrl+n"
                 enabled: Mail.connected
                 onClicked: compose.open()
               }
@@ -122,6 +128,8 @@ ShellRoot {
             }
           }
 
+          Divider { visible: !window.narrow }
+
           // The threads of the folder, found by the search and the projects.
           Item {
             visible: !window.narrow || !window.reading
@@ -132,7 +140,7 @@ ShellRoot {
             clip: true
 
             ColumnLayout {
-              anchors { fill: parent; leftMargin: window.narrow ? 0 : 4; rightMargin: window.narrow ? 0 : 16 }
+              anchors { fill: parent; leftMargin: window.narrow ? 0 : 16; rightMargin: window.narrow ? 0 : 16 }
               spacing: 10
 
               RowLayout {
@@ -143,10 +151,20 @@ ShellRoot {
                 FolderTab { rail: true; name: "waiting"; icon: "warning"; label: "Waiting for you"; count: Mail.waiting; tone: Theme.warning }
                 FolderTab { rail: true; name: "working"; icon: "spark"; label: "Working"; count: Mail.working }
               }
-              SearchBox {
-                id: searchBox
+              RowLayout {
                 Layout.fillWidth: true
-                onLeave: threads.enter()
+                spacing: 8
+                SearchBox {
+                  id: searchBox
+                  Layout.fillWidth: true
+                  onLeave: threads.enter()
+                }
+                IconButton {
+                  visible: !window.narrow
+                  name: "chevron-left"
+                  tip: "fold the threads  ctrl+l"
+                  onClicked: window.listFolded = true
+                }
               }
               ProjectFilter { Layout.fillWidth: true }
               ThreadList {
@@ -157,6 +175,21 @@ ShellRoot {
               }
             }
           }
+
+          // The threads folded away leave only the way to unfold them.
+          Item {
+            visible: !window.narrow && window.listFolded
+            Layout.fillHeight: true
+            Layout.preferredWidth: 40
+            IconButton {
+              anchors { top: parent.top; horizontalCenter: parent.horizontalCenter }
+              name: "chevron-right"
+              tip: "unfold the threads  ctrl+l"
+              onClicked: window.listFolded = false
+            }
+          }
+
+          Divider { visible: !window.narrow }
 
           // The thread open, sliding in as a Stage does each time another opens.
           Item {
@@ -180,7 +213,7 @@ ShellRoot {
                   NumberAnimation { target: slide; property: "x"; to: 0; duration: 280; easing.type: Easing.OutCubic }
                 }
                 ThreadView {
-                  anchors { fill: parent; leftMargin: window.narrow ? 0 : 4 }
+                  anchors { fill: parent; leftMargin: window.narrow ? 0 : 20 }
                   thread: Mail.threads[page.modelData] || Mail.blank
                   back: window.narrow
                   escapes: !searchBox.activeFocus && !compose.opened

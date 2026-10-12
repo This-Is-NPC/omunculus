@@ -80,7 +80,7 @@ ModalDialog {
       DialogFooter {
         FilePicker { id: files; Layout.fillWidth: true }
         primaryText: "SEND"
-        primaryIcon: "send"
+        primaryIcon: "enter"
         primaryEnabled: dialog.agent !== "" && body.text.trim() !== "" && Mail.connected
         primaryDim: dialog.agent === ""
         onCancelled: dialog.close()
