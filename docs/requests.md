@@ -25,6 +25,8 @@ only of grants the requester already has are refused.
 A request parks its work with `state = waiting`, `waiting = request` and
 `waiting_for = request_id`. A work waiting on children cannot open a request.
 `reply` requires a nonempty comment and accepts an optional named option.
+The reply tool treats a null or empty option as omitted; the HTTP API refuses
+those explicit values with 400. A nonempty unknown option is refused.
 Text alone chains no calls and grants nothing. A selected option chains its
 calls, adding the request ID to their arguments. The harness records
 the call, reply and effects in one store transaction. A refused chain or emit
@@ -87,8 +89,9 @@ commands. There is no second request engine or participant-specific lifecycle.
 
 `reply` takes `request_id`, a nonempty `body` and an optional `option`. An
 omitted option answers with text alone, including when the request offers
-options. A supplied option must exist; an invalid option must never be
-silently treated as a text answer. The request view exposes the reply text
+options. The reply tool treats a null or empty option as omitted; HTTP clients must
+omit the key for a text answer. A nonempty supplied option must exist; an
+unknown option must never be silently treated as a text answer. The request view exposes the reply text
 and optional selected option; `answer = nil` alone cannot distinguish an
 unanswered request from a closed text answer. Comments remain the durable
 text record, with the reply event identifying the answer.

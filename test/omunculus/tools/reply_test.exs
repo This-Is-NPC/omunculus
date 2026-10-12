@@ -39,14 +39,16 @@ defmodule Omunculus.Tools.ReplyTest do
            }
   end
 
-  test "a text-only answer emits no option and chains no effects" do
-    args = Map.delete(@args, "option")
+  test "a missing, null or empty option answers with text and chains no effects" do
+    expected = Map.delete(@args, "option")
 
-    assert %{
-             "ok" => true,
-             "emit" => [%{"type" => "reply", "body" => ^args}],
-             "chain" => []
-           } = Reply.run(%{@input | args: args})
+    for args <- [expected, Map.put(@args, "option", nil), Map.put(@args, "option", "")] do
+      assert %{
+               "ok" => true,
+               "emit" => [%{"type" => "reply", "body" => ^expected}],
+               "chain" => []
+             } = Reply.run(%{@input | args: args})
+    end
   end
 
   test "an empty option chains nothing" do
