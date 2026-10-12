@@ -367,6 +367,108 @@ defmodule Omunculus.ServerTest do
     assert_receive {:frame, ^stream, {:close, 1003, "unsupported"}}, 3_000
   end
 
+  test "a message carries files, which only its conversation gives back" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(project_path, File.read!(project_path) <> "\n" <> @access)
+    uid = Operations.local_principal().subject
+
+    data = Toml.decode_file!(project_path)
+
+    data =
+      update_in(
+        data,
+        ["store"],
+        &Map.merge(&1, %{"attachments" => "files", "attachment_bytes" => 8})
+      )
+
+    File.write!(project_path, Config.Toml.encode(data))
+
+    assert {:ok, "access bootstrapped"} =
+             CLI.run(
+               ["--config", project_path, "access", "bootstrap"] ++
+                 ["--issuer", "local", "--subject", uid],
+               dir
+             )
+
+    server_path = Path.join(dir, "server.toml")
+
+    File.write!(server_path, """
+    [server]
+    max_concurrent = 4
+    max_queue = 64
+    queue_timeout_ms = 30000
+    max_connections = 4
+
+    [projects.solo]
+    config = "omunculus.toml"
+    """)
+
+    {:ok, config} = Config.load(project_path)
+    socket = Socket.path(config.store.path)
+    {:ok, server} = Server.start_link(server_path)
+
+    local = fn method, path, opts ->
+      Req.request!(
+        [method: method, url: "http://localhost" <> path, unix_socket: socket, retry: false] ++
+          opts
+      )
+    end
+
+    conversation = fn key ->
+      local.(:post, "/v1/projects/solo/conversations",
+        headers: [{"idempotency-key", key}],
+        json: %{}
+      ).body["id"]
+    end
+
+    id = conversation.("c1")
+    other = conversation.("c2")
+    messages = "/v1/projects/solo/conversations/#{id}/messages"
+    file = %{name: "notes.txt", media_type: "text/plain", data: Base.encode64("hello")}
+
+    send = fn key, attachments ->
+      local.(:post, messages,
+        headers: [{"idempotency-key", key}],
+        json: %{message: "see the notes", agent: "concierge", attachments: attachments}
+      )
+    end
+
+    assert send.("bad-data", [%{file | data: "not base64!"}]).status == 400
+    assert send.("extra-key", [Map.put(file, :size, 5)]).status == 400
+
+    assert %{status: 422, body: %{"error" => "attachment_refused"}} =
+             send.("too-large", [%{file | data: Base.encode64("more than eight")}])
+
+    assert send.("m1", [file]).status == 202
+
+    sha256 = :crypto.hash(:sha256, "hello") |> Base.encode16(case: :lower)
+
+    meta = %{
+      "name" => "notes.txt",
+      "media_type" => "text/plain",
+      "bytes" => 5,
+      "sha256" => sha256
+    }
+
+    events = local.(:get, "/v1/projects/solo/conversations/#{id}/events", []).body["events"]
+    assert %{"body" => %{"attachments" => [^meta]}} = Enum.find(events, &(&1["type"] == "prompt"))
+
+    got = local.(:get, "/v1/projects/solo/conversations/#{id}/attachments/#{sha256}", [])
+    assert got.status == 200
+    assert got.body == "hello"
+    assert ["text/plain" <> _] = Req.Response.get_header(got, "content-type")
+
+    assert Req.Response.get_header(got, "content-disposition") ==
+             ["attachment; filename*=UTF-8''notes.txt"]
+
+    assert local.(:get, "/v1/projects/solo/conversations/#{other}/attachments/#{sha256}", []).status ==
+             404
+
+    :ok = Supervisor.stop(server)
+  end
+
   test "each project is served to the local user on a socket next to its store" do
     dir = Fixtures.tmp_dir()
     Fixtures.install_default(dir)

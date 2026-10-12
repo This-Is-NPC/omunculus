@@ -369,6 +369,60 @@ defmodule Omunculus.Store.ActionsTest do
     assert prompt.run_id == nil
   end
 
+  describe "attachments" do
+    setup do
+      dir = Fixtures.tmp_dir()
+      store = %{@ctx.config.store | attachments: dir, attachment_bytes: 16}
+      {:ok, meta} = Omunculus.Attachments.put(store, "notes.txt", "text/plain", "hello")
+      %{ctx: %{@ctx | config: %{@ctx.config | store: store}}, meta: meta}
+    end
+
+    test "a prompt carries the files kept for it", %{conn: conn, ctx: ctx, meta: meta} do
+      body = %{"message" => "see the notes", "attachments" => [meta]}
+
+      assert {:ok, [_tool_event, event]} =
+               record_tool(conn, [%{"type" => "prompt", "body" => body}], ctx)
+
+      assert Jason.decode!(event.body)["attachments"] == [meta]
+    end
+
+    test "a prompt naming a file not kept writes nothing", %{conn: conn, ctx: ctx, meta: meta} do
+      missing = %{meta | "sha256" => String.duplicate("0", 64)}
+      body = %{"message" => "see the notes", "attachments" => [missing]}
+
+      assert {:error, {:attachment, :not_found}} =
+               record_tool(conn, [%{"type" => "prompt", "body" => body}], ctx)
+
+      assert count(conn, "events") == 0
+    end
+
+    test "a run attaches files to its conversation", %{conn: conn, ctx: ctx, meta: meta} do
+      conversation_id = Omunculus.Id.new()
+
+      :ok =
+        Query.insert(conn, :conversations, %{
+          id: conversation_id,
+          created_at: "2026-01-01T00:00:00Z",
+          created_issuer: "local",
+          created_subject: "1000"
+        })
+
+      run_id = Fixtures.insert(conn, :runs, %{conversation_id: conversation_id})
+      emit = %{"type" => "attach", "body" => %{"attachments" => [meta], "note" => "the notes"}}
+
+      assert {:error, {:attach, :no_run}} = record_tool(conn, [emit], ctx)
+
+      assert {:ok, [_tool_event, event]} = record_tool(conn, [emit], %{ctx | run_id: run_id})
+      assert event.type == "attach"
+      assert event.conversation_id == conversation_id
+
+      assert {:ok, [attached]} = Store.attachments(conn, conversation_id)
+
+      assert attached ==
+               Map.merge(meta, %{"event_id" => event.id, "at" => event.at, "by" => "concierge"})
+    end
+  end
+
   test "prompt without a message is rejected and writes nothing", %{conn: conn} do
     assert {:error, {:prompt, :no_message}} =
              record_tool(conn, [%{"type" => "prompt", "body" => %{}}], @ctx)

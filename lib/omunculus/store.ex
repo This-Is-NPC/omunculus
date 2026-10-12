@@ -53,6 +53,7 @@ defmodule Omunculus.Store do
   defdelegate counter(conn), to: View
   defdelegate descends?(conn, work_id, ancestor_id), to: View
   defdelegate replay(conn, scope), to: View
+  defdelegate attachments(conn, conversation_id), to: View
   defdelegate work_depth(conn, work), to: View
   defdelegate grants(conn, work), to: Helpers
   defdelegate begin_run(conn, params), to: Runs, as: :begin

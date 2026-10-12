@@ -2009,6 +2009,40 @@ defmodule Omunculus.ConfigTest do
       assert {:error, {:store, {:invalid, :changes}}} = store.("true")
     end
 
+    test "attachments come with attachment_bytes, resolved against the config file", %{dir: dir} do
+      store = fn keys ->
+        write_toml(dir, """
+        [store]
+        path = "data/alt.sqlite3"
+        #{keys}
+
+        [models.fake]
+        api = "module"
+        module = "Omunculus.Model.Fake"
+
+        [agents.concierge]
+        depth = 0
+        model = "fake"
+        text = "hi"
+        """)
+
+        load(dir)
+      end
+
+      assert {:ok, config} = store.(~s(attachments = "data/files"\nattachment_bytes = 1024))
+      assert config.store.attachments == Path.join(dir, "data/files")
+      assert config.store.attachment_bytes == 1024
+      assert {:ok, %{store: %{attachments: nil, attachment_bytes: nil}}} = store.("")
+
+      assert {:error, {:store, {:required, :attachment_bytes}}} =
+               store.(~s(attachments = "data/files"))
+
+      assert {:error, {:store, {:required, :attachments}}} = store.("attachment_bytes = 1024")
+
+      assert {:error, {:store, {:invalid, :attachment_bytes}}} =
+               store.(~s(attachments = "data/files"\nattachment_bytes = 0))
+    end
+
     test "two configs in one directory can use different stores", %{dir: dir} do
       write_toml(dir, """
       [store]

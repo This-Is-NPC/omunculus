@@ -30,6 +30,8 @@ the wrapper that feeds it stdin are here, not constants in the core.
 `[store] path` is mandatory, relative to the file. That is the SQLite
 database. Creating the file creates twelve tables. Stores made by earlier versions without conversations, participant columns or escalation links must be recreated before opening them with this version.
 
+`[store] changes`, optional, is the directory where the files each model call changed are kept. `[store] attachments`, optional, is the directory where the files attached to conversations are kept, each under its SHA-256; it needs `[store] attachment_bytes`, the most one file may hold, and that key needs it. Without them a message or an agent can attach nothing.
+
 `[access]` is optional for direct CLI use and required for a project exposed by the HTTP server. It names `creator_role`, `bootstrap_role` and `[access.roles.<name>]` tables, each with `scope = "project"` or `"conversation"` and a `capabilities` list. Memberships are project state in SQLite; role definitions stay in TOML. See [the server guide](server.md).
 
 `[models.<name>]` needs `api`. Every `[agents.<x>]` needs `model`, pointing

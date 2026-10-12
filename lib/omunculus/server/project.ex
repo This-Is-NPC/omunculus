@@ -5,7 +5,7 @@ defmodule Omunculus.Server.Project do
 
   use GenServer
 
-  alias Omunculus.{CLI, Config, Cycle, Operations, Project, Run, Store}
+  alias Omunculus.{Attachments, CLI, Config, Cycle, Operations, Project, Run, Store}
   alias Omunculus.Store.Access
 
   def start_link({id, config_path, global_limits}) do
@@ -38,6 +38,17 @@ defmodule Omunculus.Server.Project do
 
   def events(id, principal, conversation_id, cursor),
     do: GenServer.call(via(id), {:events, principal, conversation_id, cursor})
+
+  @doc """
+  Keeps the files of a message `principal` may send to `conversation_id`,
+  each `{name, media_type, content}`, and gives what describes each.
+  """
+  def attach(id, principal, conversation_id, files),
+    do: GenServer.call(via(id), {:attach, principal, conversation_id, files})
+
+  @doc "The attachment of `sha256` in `conversation_id`, with the file kept for it."
+  def attachment(id, principal, conversation_id, sha256),
+    do: GenServer.call(via(id), {:attachment, principal, conversation_id, sha256})
 
   @doc "Subscribes the calling process to the project's store announcements."
   def subscribe(id), do: Store.subscribe(GenServer.call(via(id), :project).conn)
@@ -99,6 +110,34 @@ defmodule Omunculus.Server.Project do
   end
 
   def handle_call(:project, _from, project), do: {:reply, project, project}
+
+  def handle_call({:attach, principal, conversation_id, files}, _from, project) do
+    reply =
+      with :ok <- Access.check(project, principal, "conversation.send", conversation_id),
+           {:ok, config} <- Config.load(project.config_path) do
+        Enum.reduce_while(files, {:ok, []}, fn {name, media_type, content}, {:ok, kept} ->
+          case Attachments.put(config.store, name, media_type, content) do
+            {:ok, meta} -> {:cont, {:ok, kept ++ [meta]}}
+            error -> {:halt, error}
+          end
+        end)
+      end
+
+    {:reply, reply, project}
+  end
+
+  def handle_call({:attachment, principal, conversation_id, sha256}, _from, project) do
+    reply =
+      with :ok <- Access.check(project, principal, "conversation.read", conversation_id),
+           {:ok, attached} <- Store.attachments(project.conn, conversation_id),
+           %{} = meta <- Enum.find(attached, &(&1["sha256"] == sha256)) || {:error, :not_found},
+           {:ok, config} <- Config.load(project.config_path),
+           {:ok, path} <- Attachments.path(config.store, sha256) do
+        {:ok, meta, path}
+      end
+
+    {:reply, reply, project}
+  end
 
   def handle_call({:visible, principal}, _from, project),
     do: {:reply, Access.visible?(project, principal), project}

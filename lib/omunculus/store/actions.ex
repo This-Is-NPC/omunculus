@@ -14,14 +14,16 @@ defmodule Omunculus.Store.Actions do
   workflow of depth 1 is refused. `work` and `delegate` may name the new
   work's `agent` or its `workflow`, as `Helpers.stage_and_assignee/4`
   allows at its depth; the work keeps its workflow, whose stages it goes
-  through.
+  through. `attach` records the files a run attached to its conversation,
+  as `Omunculus.Attachments` kept them, in an `attach` event; outside a run
+  it is refused.
   `continue`, `break`, `reopen`, `delegate`, `cancel` and `end` are
   dispatched to `Actions.Sequence`; `request`, `reply` and `grant` to
   `Actions.Requests`; `notify` and `inbox.read` to `Actions.Inbox`;
   `compact` and `comment.delete` to `Actions.Comments`.
   """
 
-  alias Omunculus.{Ceiling, Config, Id}
+  alias Omunculus.{Attachments, Ceiling, Config, Id}
   alias Omunculus.Store.Actions.{Comments, Contract, Helpers, Inbox, Requests, Sequence}
   alias Omunculus.Store.{Events, Query}
 
@@ -52,6 +54,9 @@ defmodule Omunculus.Store.Actions do
 
   defp dispatch(conn, %{"type" => "prompt"} = emit, ctx),
     do: prompt(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "attach"} = emit, ctx),
+    do: attach(conn, Map.get(emit, "body", %{}), ctx)
 
   defp dispatch(conn, %{"type" => "work"} = emit, ctx),
     do: work(conn, Map.get(emit, "body", %{}), ctx)
@@ -135,10 +140,36 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
+  # A message's files, each one `Omunculus.Attachments` keeps.
+  defp prompt_attachments(%{"attachments" => list} = body, ctx) when list != [] do
+    with {:ok, checked} <- Attachments.check(ctx.config.store, list),
+         do: {:ok, Map.put(body, "attachments", checked)}
+  end
+
+  defp prompt_attachments(body, _ctx), do: {:ok, Map.delete(body, "attachments")}
+
+  # A run's files for its conversation, as `Omunculus.Attachments` kept them.
+  defp attach(conn, body, ctx) do
+    case {Map.get(ctx, :run_id), body} do
+      {nil, _body} ->
+        {:error, {:attach, :no_run}}
+
+      {run_id, %{"attachments" => [_ | _] = list}} ->
+        with {:ok, checked} <- Attachments.check(ctx.config.store, list) do
+          body = Map.put(body, "attachments", checked)
+          Events.append(conn, %{type: "attach", run_id: run_id, body: Jason.encode!(body)})
+        end
+
+      _invalid ->
+        {:error, {:attach, {:invalid, :attachments}}}
+    end
+  end
+
   defp prompt(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:prompt, body, "message"),
          :ok <-
            Helpers.tag_error(:prompt, Helpers.ensure_exist(conn, [{:works, body["work_id"]}])),
+         {:ok, body} <- prompt_attachments(body, ctx),
          {:ok, reopened} <- reopen_waiting_work(conn, body["work_id"]),
          {:ok, prompt_event} <- write_prompt(conn, body, ctx) do
       {:ok, Enum.reject([reopened, prompt_event], &is_nil/1)}

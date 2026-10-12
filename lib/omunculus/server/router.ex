@@ -131,7 +131,8 @@ defmodule Omunculus.Server.Router do
                 :send_message do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, command_id} <- command_id(conn),
-         {:ok, args} <- send_args(conn.body_params),
+         {:ok, args, files} <- send_args(conn.body_params),
+         {:ok, args} <- with_attachments(args, files, project_id, principal, conversation_id),
          {:ok, result} <-
            Project.command(
              project_id,
@@ -142,6 +143,23 @@ defmodule Omunculus.Server.Router do
              command_id
            ) do
       reply(conn, 202, Contract.accepted(result))
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  OpenAPI.route :get,
+                "/v1/projects/:project_id/conversations/:conversation_id/attachments/:sha256",
+                :get_attachment do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, meta, path} <- Project.attachment(project_id, principal, conversation_id, sha256) do
+      conn
+      |> put_resp_content_type(meta["media_type"], nil)
+      |> put_resp_header(
+        "content-disposition",
+        "attachment; filename*=UTF-8''" <> URI.encode(meta["name"], &URI.char_unreserved?/1)
+      )
+      |> send_file(200, path)
     else
       error -> error_reply(conn, error)
     end
@@ -431,7 +449,8 @@ defmodule Omunculus.Server.Router do
   # A message names the agent of depth 0 it is for, or the work it goes to.
   defp send_args(body) when is_map(body) do
     with {:ok, message} <- required_string(body, "message"),
-         [] <- Map.keys(body) -- ~w(message agent work_id) do
+         [] <- Map.keys(body) -- ~w(message agent work_id attachments),
+         {:ok, files} <- files(Map.get(body, "attachments", [])) do
       case body do
         %{"work_id" => work_id}
         when is_map_key(body, "agent") or not is_binary(work_id) or
@@ -439,11 +458,11 @@ defmodule Omunculus.Server.Router do
           {:error, :invalid}
 
         %{"work_id" => work_id} ->
-          {:ok, %{"message" => message, "work_id" => work_id}}
+          {:ok, %{"message" => message, "work_id" => work_id}, files}
 
         _addressed ->
           with {:ok, agent} <- required_string(body, "agent"),
-               do: {:ok, %{"message" => message, "agent" => agent}}
+               do: {:ok, %{"message" => message, "agent" => agent}, files}
       end
     else
       _ -> {:error, :invalid}
@@ -451,6 +470,30 @@ defmodule Omunculus.Server.Router do
   end
 
   defp send_args(_), do: {:error, :invalid}
+
+  # A message's files, each `{name, media_type, data}` with its content in base64.
+  defp files(list) when is_list(list) do
+    Enum.reduce_while(list, {:ok, []}, fn
+      %{"name" => name, "media_type" => type, "data" => data} = file, {:ok, files}
+      when map_size(file) == 3 and is_binary(name) and is_binary(type) and is_binary(data) ->
+        case Base.decode64(data) do
+          {:ok, content} -> {:cont, {:ok, files ++ [{name, type, content}]}}
+          :error -> {:halt, {:error, :invalid}}
+        end
+
+      _file, _acc ->
+        {:halt, {:error, :invalid}}
+    end)
+  end
+
+  defp files(_list), do: {:error, :invalid}
+
+  defp with_attachments(args, [], _project_id, _principal, _conversation_id), do: {:ok, args}
+
+  defp with_attachments(args, files, project_id, principal, conversation_id) do
+    with {:ok, kept} <- Project.attach(project_id, principal, conversation_id, files),
+         do: {:ok, Map.put(args, "attachments", kept)}
+  end
 
   defp list_kind("works"), do: {:ok, :works}
   defp list_kind("runs"), do: {:ok, :runs}
@@ -479,6 +522,9 @@ defmodule Omunculus.Server.Router do
 
   defp error_reply(conn, {:error, {action, _reason}}) when action in [:request, :escalate],
     do: reply(conn, 422, %{error: "request_refused"})
+
+  defp error_reply(conn, {:error, {:attachment, reason}}),
+    do: reply(conn, 422, %{error: "attachment_refused", message: inspect(reason)})
 
   defp error_reply(conn, {:error, {:prompt, _reason}}),
     do: reply(conn, 422, %{error: "message_refused"})

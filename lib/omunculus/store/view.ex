@@ -12,7 +12,7 @@ defmodule Omunculus.Store.View do
   many of a work's latest closed runs in a row lack `end`, the depth of a
   work by walking `parent_id`, whether a work descends from another, and
   replay of `events` for a project, run, work, request, inbox or
-  conversation scope. Never executes anything against the store.
+  conversation scope, and the files attached in a conversation. Never executes anything against the store.
   """
 
   alias Omunculus.Store.Query
@@ -305,6 +305,36 @@ defmodule Omunculus.Store.View do
       )
 
     Enum.count(Enum.take_while(runs, &(&1.ended == 0)))
+  end
+
+  @doc """
+  The files attached in a conversation, oldest first: each as the `prompt` or
+  `attach` event that carries it describes it, with that event's `event_id`,
+  its `at` and `by`, the agent that attached it or `person`.
+  """
+  @spec attachments(Omunculus.Store.Connection.t(), String.t()) :: {:ok, [map]}
+  def attachments(conn, conversation_id) do
+    with {:ok, events} <-
+           Query.all(
+             conn,
+             """
+             SELECT id, at, actor_kind, actor_id, body FROM events
+             WHERE conversation_id = ? AND type IN ('prompt', 'attach')
+               AND json_extract(body, '$.attachments') IS NOT NULL
+             ORDER BY sequence
+             """,
+             [conversation_id]
+           ) do
+      {:ok,
+       Enum.flat_map(events, fn event ->
+         by = if event.actor_kind == "agent", do: event.actor_id, else: "person"
+
+         event.body
+         |> Jason.decode!()
+         |> Map.fetch!("attachments")
+         |> Enum.map(&Map.merge(&1, %{"event_id" => event.id, "at" => event.at, "by" => by}))
+       end)}
+    end
   end
 
   @spec replay(

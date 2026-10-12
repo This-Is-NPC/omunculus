@@ -5,7 +5,8 @@ defmodule Omunculus.Store.Actions.Contract do
 
   @fields %{
     "comment" => ~w(body work_id request_id inbox_id),
-    "prompt" => ~w(message work_id agent),
+    "prompt" => ~w(message work_id agent attachments),
+    "attach" => ~w(attachments note),
     "work" => ~w(report works),
     "request" => ~w(reason options to),
     "reply" => ~w(request_id option body parts),
@@ -71,6 +72,7 @@ defmodule Omunculus.Store.Actions.Contract do
   defp valid_value?(key, value) when key in ~w(origins parts), do: is_map(value)
   defp valid_value?("options", options), do: is_map(options)
   defp valid_value?("works", works), do: is_list(works)
+  defp valid_value?("attachments", list), do: is_list(list) and Enum.all?(list, &is_map/1)
 
   defp valid_value?("grant", grant),
     do:

@@ -135,7 +135,12 @@ defmodule Omunculus.Config do
           tools: tools,
           models: %{String.t() => model},
           path: String.t(),
-          store: %{path: String.t(), changes: String.t() | nil},
+          store: %{
+            path: String.t(),
+            changes: String.t() | nil,
+            attachments: String.t() | nil,
+            attachment_bytes: pos_integer | nil
+          },
           auth: %{store: String.t() | nil, providers: %{String.t() => map}},
           access: map | nil,
           secrets: %{String.t() => %{String.t() => String.t()}},
@@ -807,23 +812,45 @@ defmodule Omunculus.Config do
   defp parse_store(nil, _config_dir), do: {:error, {:store, :missing}}
 
   defp parse_store(data, config_dir) when is_map(data) do
-    case Map.keys(data) -- ["path", "changes"] do
+    case Map.keys(data) -- ["path", "changes", "attachments", "attachment_bytes"] do
       [key | _] ->
         {:error, {:store, {:unknown_key, key}}}
 
       [] ->
         with {:ok, path} <- store_path(data, "path", config_dir),
-             {:ok, changes} <- store_path(data, "changes", config_dir) do
+             {:ok, changes} <- store_path(data, "changes", config_dir),
+             {:ok, attachments} <- store_path(data, "attachments", config_dir),
+             {:ok, attachment_bytes} <- attachment_bytes(data, attachments) do
           if is_nil(path),
             do: {:error, {:store, {:invalid, :path}}},
-            else: {:ok, %{path: path, changes: changes}}
+            else:
+              {:ok,
+               %{
+                 path: path,
+                 changes: changes,
+                 attachments: attachments,
+                 attachment_bytes: attachment_bytes
+               }}
         end
     end
   end
 
   defp parse_store(_data, _config_dir), do: {:error, {:store, {:invalid, :table}}}
 
-  # `changes`, optional, is where the files each call changed are kept.
+  # `attachment_bytes`, the most a file attached to a conversation may hold,
+  # comes with `attachments` and only with it.
+  defp attachment_bytes(data, attachments) do
+    case {Map.get(data, "attachment_bytes"), attachments} do
+      {nil, nil} -> {:ok, nil}
+      {nil, _dir} -> {:error, {:store, {:required, :attachment_bytes}}}
+      {_bytes, nil} -> {:error, {:store, {:required, :attachments}}}
+      {bytes, _dir} when is_integer(bytes) and bytes > 0 -> {:ok, bytes}
+      _invalid -> {:error, {:store, {:invalid, :attachment_bytes}}}
+    end
+  end
+
+  # `changes`, optional, is where the files each call changed are kept;
+  # `attachments`, optional, where the files attached to conversations are.
   defp store_path(data, key, config_dir) do
     case Map.fetch(data, key) do
       {:ok, path} when is_binary(path) and path != "" ->
