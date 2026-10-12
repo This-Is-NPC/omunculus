@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Posts a JSON body with files attached, as the server's messages endpoint
+# takes them, and prints the answer and its status as curl -w does:
+#   post-with-files <socket> <path> <idempotency-key> <json> <file>...
+# Each file goes as {name, media_type, data} with its content in base64;
+# the body is built in a temporary file, since it may be too large for an argument.
+set -euo pipefail
+
+socket=$1 path=$2 key=$3 json=$4
+shift 4
+
+body=$(mktemp)
+trap 'rm -f "$body" "$body.next"' EXIT
+printf '%s' "$json" > "$body"
+for file in "$@"; do
+  jq --arg name "$(basename "$file")" --arg type "$(file --mime-type -b "$file")" \
+    --rawfile data <(base64 -w0 "$file") \
+    '.attachments += [{name: $name, media_type: $type, data: $data}]' "$body" > "$body.next"
+  mv "$body.next" "$body"
+done
+
+curl -sS --unix-socket "$socket" -X POST -H 'accept: application/json' \
+  -H 'content-type: application/json' -H "Idempotency-Key: $key" \
+  --data-binary @"$body" -w '\n%{http_code}' "http://localhost$path"

@@ -126,6 +126,8 @@ ColumnLayout {
     }
   }
 
+  FilePicker { id: files; Layout.fillWidth: true }
+
   RowLayout {
     Layout.fillWidth: true
     spacing: 8
@@ -134,7 +136,7 @@ ColumnLayout {
       Layout.fillWidth: true
       Layout.preferredHeight: 72
       placeholderText: "reply to " + view.thread.agent
-      onSubmitted: Mail.reply(view.thread.key, reply.take())
+      onSubmitted: Mail.reply(view.thread.key, reply.take(), files.take())
     }
     TraceButton {
       Layout.alignment: Qt.AlignBottom
@@ -144,7 +146,7 @@ ColumnLayout {
       text: "SEND"
       enabled: reply.text.trim() !== ""
       tip: "ctrl+enter"
-      onClicked: Mail.reply(view.thread.key, reply.take())
+      onClicked: Mail.reply(view.thread.key, reply.take(), files.take())
     }
   }
 }

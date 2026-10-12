@@ -3,7 +3,8 @@ import QtQuick.Layouts
 import "gui"
 
 // Entry is one message of a thread, as a mail shows it: who wrote to whom and
-// when, then the text. Folded, it is one line with the start of the text.
+// when, then the text and the files it carries. Folded, it is one line
+// with the start of the text.
 // A request for you is a message too:
 // its question, and, while it waits, the way to answer it.
 Rectangle {
@@ -56,7 +57,7 @@ Rectangle {
         Label {
           Layout.fillWidth: true
           visible: !card.expanded
-          text: Mail.oneLine(card.entry.text)
+          text: Mail.oneLine(card.entry.text) + (card.entry.files.length > 0 ? "  [" + card.entry.files.length + (card.entry.files.length === 1 ? " file]" : " files]") : "")
           color: Theme.dim
           font.pixelSize: 12
           elide: Text.ElideRight
@@ -74,7 +75,7 @@ Rectangle {
 
     Label {
       Layout.fillWidth: true
-      visible: card.expanded
+      visible: card.expanded && card.entry.text !== ""
       text: card.mine ? card.entry.text : Mail.markdown(card.entry.text)
       textFormat: card.mine ? Text.PlainText : Text.MarkdownText
       linkColor: Theme.primary
@@ -82,6 +83,21 @@ Rectangle {
       font.pixelSize: 13
       lineHeight: 1.2
       wrapMode: Text.Wrap
+    }
+
+    Flow {
+      Layout.fillWidth: true
+      visible: card.expanded && card.entry.files.length > 0
+      spacing: 6
+      Repeater {
+        model: card.entry.files
+        delegate: FileChip {
+          required property var modelData
+          name: modelData.name
+          detail: Mail.size(modelData.bytes)
+          onChosen: Mail.openAttachment(card.thread, modelData)
+        }
+      }
     }
 
     Label {

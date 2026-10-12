@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Saves a file attached in a conversation to the downloads directory and
+# opens it; a different file of the same name already there is kept:
+#   open-attachment <socket> <path> <name> <sha256>
+set -euo pipefail
+
+socket=$1 path=$2 name=$3 sha256=$4
+
+dir=$(xdg-user-dir DOWNLOAD 2>/dev/null || printf '%s/Downloads' "$HOME")
+mkdir -p "$dir"
+out="$dir/$name"
+if [[ -e $out ]] && [[ $(sha256sum "$out" | cut -d' ' -f1) != "$sha256" ]]; then
+  out="$dir/${sha256:0:8}-$name"
+fi
+curl -sS --fail --unix-socket "$socket" -o "$out" "http://localhost$path"
+exec xdg-open "$out"

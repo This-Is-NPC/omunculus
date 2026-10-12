@@ -101,15 +101,16 @@ Singleton {
     selected = ""
   }
 
-  // A new thread: a conversation in `project` and your first message to `agent` there.
-  function send(project, agent, text) {
+  // A new thread: a conversation in `project` and your first message to
+  // `agent` there, with the files at the paths `files` lists.
+  function send(project, agent, text, files) {
     const value = text.trim()
     const place = projectOf(project)
     if (value === "" || !place || agent === "")
       return
     call(place.socket, "POST", "/v1/projects/" + project + "/conversations", {}, true, data => {
-      call(place.socket, "POST", "/v1/projects/" + project + "/conversations/" + data.id + "/messages",
-        { message: value, agent: agent }, true, () => {
+      post(place.socket, "/v1/projects/" + project + "/conversations/" + data.id + "/messages",
+        { message: value, agent: agent }, files, () => {
           composing = false
           selected = project + "/" + data.id
           tell("sent to " + agent, false)
@@ -118,17 +119,34 @@ Singleton {
     })
   }
 
-  // Your next message in a thread, to its agent.
-  function reply(key, text) {
+  // Your next message in a thread, to its agent, with the files at the paths `files` lists.
+  function reply(key, text, files) {
     const thread = threads[key]
     const value = text.trim()
     if (!thread || value === "")
       return
-    call(projectOf(thread.project).socket, "POST", "/v1/projects/" + thread.project + "/conversations/" + thread.id + "/messages",
-      { message: value, agent: thread.agent }, true, () => {
+    post(projectOf(thread.project).socket, "/v1/projects/" + thread.project + "/conversations/" + thread.id + "/messages",
+      { message: value, agent: thread.agent }, files, () => {
         tell("sent to " + thread.agent, false)
         sweep()
       })
+  }
+
+  // Saves a file attached in a thread to the downloads directory and opens it.
+  function openAttachment(key, file) {
+    const thread = threads[key]
+    if (!thread)
+      return
+    opener.command = [Quickshell.shellPath("open-attachment"), projectOf(thread.project).socket,
+      "/v1/projects/" + thread.project + "/conversations/" + thread.id + "/attachments/" + file.sha256, file.name, file.sha256]
+    opener.startDetached()
+    tell("opening " + file.name, false)
+  }
+  Process { id: opener }
+
+  // The size of a file, as a person reads it.
+  function size(bytes) {
+    return bytes < 1024 ? bytes + " B" : bytes < 1048576 ? (bytes / 1024).toFixed(1) + " KB" : (bytes / 1048576).toFixed(1) + " MB"
   }
 
   // Answers a request of a thread: an option it offers, text, or both.
@@ -269,20 +287,23 @@ Singleton {
       const body = event.body || {}
       if (event.type === "prompt" && event.actor && event.actor.kind === "human") {
         agent = agent || body.agent || ""
-        entries.push({ kind: "you", key: event.cursor, from: "you", to: body.agent || agent, text: body.message || "", at: event.at, open: false })
+        entries.push({ kind: "you", key: event.cursor, from: "you", to: body.agent || agent, text: body.message || "", at: event.at, open: false, files: body.attachments || [] })
       } else if (event.type === "reply" && event.request_id) {
         replies[event.request_id] = { option: body.option || "", body: body.body || "" }
-      } else if (rootRuns[event.run_id] && (event.type === "model" || event.type === "comment")) {
-        const words = (event.type === "model" ? text(body) : String(body.body || "")).trim()
-        if (words === "")
+      } else if (rootRuns[event.run_id] && ["model", "comment", "attach"].includes(event.type)) {
+        const words = (event.type === "model" ? text(body) : event.type === "comment" ? String(body.body || "") : String(body.note || "")).trim()
+        const files = event.type === "attach" ? body.attachments || [] : []
+        if (words === "" && files.length === 0)
           continue
         const run = rootRuns[event.run_id]
         agent = agent || run.agent
         if (spoken[run.id] === undefined) {
           spoken[run.id] = entries.length
-          entries.push({ kind: "agent", key: run.id, from: run.agent, to: "you", text: words, at: event.at, open: run.status === "open" })
+          entries.push({ kind: "agent", key: run.id, from: run.agent, to: "you", text: words, at: event.at, open: run.status === "open", files: files })
         } else {
-          entries[spoken[run.id]].text += "\n\n" + words
+          const entry = entries[spoken[run.id]]
+          entry.text = [entry.text, words].filter(part => part !== "").join("\n\n")
+          entry.files = entry.files.concat(files)
         }
       }
     }
@@ -291,6 +312,7 @@ Singleton {
       entries.push({
         kind: "request", key: request.id, from: Requests.label(request.requester), to: "you",
         text: request.reason || "", at: request.created_at, open: Requests.pending(request),
+        files: [],
         options: Object.keys(request.options || {}),
         origins: Object.keys(request.origins || {}).map(part => ({ part: part, reason: request.origins[part].reason || "" })),
         answer: replies[request.id] || null
@@ -311,7 +333,8 @@ Singleton {
       waiting: asked.filter(request => Requests.pending(request)).map(request => request.id),
       at: latest ? latest.at : snapshot.conversation.created_at,
       heard: theirs.length > 0 ? theirs[theirs.length - 1].at : "",
-      snippet: latest ? oneLine((latest.kind === "you" ? "you: " : "") + latest.text) : "",
+      snippet: latest ? oneLine((latest.kind === "you" ? "you: " : "") + latest.text
+        + (latest.files.length > 0 ? " [" + latest.files.map(file => file.name).join(", ") + "]" : "")) : "",
       entries: entries
     }
   }
@@ -370,6 +393,17 @@ Singleton {
     return value
   }
 
+  // A POST of `body` through curl on the socket `on`, with the files at the
+  // paths `files` lists attached when there are any.
+  function post(on, path, body, files, done) {
+    if (!files || files.length === 0)
+      return call(on, "POST", path, body, true, done)
+    httpCall.createObject(root, {
+      command: [Quickshell.shellPath("post-with-files"), on, path, key(), JSON.stringify(body)].concat(files),
+      on: on, done: done, failed: null
+    })
+  }
+
   // One HTTP request through curl on the socket `on`; `done` gets the decoded
   // JSON of a 2xx answer, and `failed`, when given, takes any other outcome
   // instead of the status line.
@@ -380,12 +414,13 @@ Singleton {
     if (idempotent)
       args.push("-H", "Idempotency-Key: " + key())
     args.push("-w", "\n%{http_code}", "http://localhost" + path)
-    httpCall.createObject(root, { command: args, done: done, failed: failed || null })
+    httpCall.createObject(root, { command: args, on: on, done: done, failed: failed || null })
   }
   Component {
     id: httpCall
     Process {
       id: request
+      property string on
       property var done: null
       property var failed: null
       running: true
@@ -397,7 +432,7 @@ Singleton {
           if (status >= 200 && status < 300) {
             request.done(payload === "" ? {} : JSON.parse(payload))
           } else {
-            let reason = "the server does not answer on " + request.command[3]
+            let reason = "the server does not answer on " + request.on
             try {
               const error = JSON.parse(payload)
               reason = error.message || error.error

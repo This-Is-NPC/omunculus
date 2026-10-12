@@ -5,7 +5,7 @@ import "gui"
 
 // ComposeView writes a new thread. To is required: one agent of depth 0 of one
 // project, which the thread keeps; then what you need, in as many lines as it
-// takes.
+// takes, and the files it needs.
 ColumnLayout {
   id: view
 
@@ -26,7 +26,7 @@ ColumnLayout {
   function submit() {
     if (agent === "" || body.text.trim() === "")
       return
-    Mail.send(project, agent, body.take())
+    Mail.send(project, agent, body.take(), files.take())
   }
 
   RowLayout {
@@ -96,6 +96,8 @@ ColumnLayout {
     onSubmitted: view.submit()
   }
 
+  FilePicker { id: files; Layout.fillWidth: true }
+
   RowLayout {
     Layout.fillWidth: true
     spacing: 8
@@ -104,7 +106,7 @@ ColumnLayout {
       dense: true
       role: "progress"
       text: "DISCARD"
-      onClicked: { body.text = ""; Mail.close() }
+      onClicked: { body.text = ""; files.take(); Mail.close() }
     }
     TraceButton {
       dense: true
