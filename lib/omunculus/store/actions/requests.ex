@@ -16,7 +16,6 @@ defmodule Omunculus.Store.Actions.Requests do
 
   def request(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:request, body, "reason"),
-         :ok <- valid_destination(body, ctx),
          {:ok, options} <- options(body["options"]),
          {:ok, run} <- fetch_run(conn, ctx.run_id),
          :ok <- ensure_actor_run(run, ctx),
@@ -43,7 +42,6 @@ defmodule Omunculus.Store.Actions.Requests do
 
   def escalate(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:escalate, body, "reason"),
-         :ok <- valid_destination(body, ctx),
          {:ok, participant} <- Participant.from_context(ctx),
          {:ok, run} <- fetch_run(conn, ctx.run_id),
          :ok <- ensure_actor_run(run, ctx),
@@ -93,14 +91,6 @@ defmodule Omunculus.Store.Actions.Requests do
          {:ok, returned} <- return_parts(conn, request, body, ctx) do
       {:ok, events ++ returned}
     end
-  end
-
-  defp valid_destination(body, ctx) do
-    routes = ctx.config.request_routes
-
-    if is_nil(body["to"]) or Enum.any?(routes, &(&1["name"] == body["to"])),
-      do: :ok,
-      else: {:error, {:request, {:invalid, "to"}}}
   end
 
   defp ensure_actor_run(nil, %{author: "human"}), do: :ok

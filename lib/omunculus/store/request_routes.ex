@@ -4,11 +4,19 @@ defmodule Omunculus.Store.RequestRoutes do
   alias Omunculus.Store.{Query, View}
 
   def resolve(conn, ctx, run, work, participant, name, forbidden) do
-    routes = ctx.config.request_routes
+    routes = Enum.filter(ctx.config.request_routes, &(&1["name"] == name))
 
+    if not is_nil(name) and routes == [] do
+      {:error, {:request, {:invalid, "to"}}}
+    else
+      resolve_routes(conn, ctx, run, work, participant, forbidden, routes)
+    end
+  end
+
+  defp resolve_routes(conn, ctx, run, work, participant, forbidden, routes) do
     rule =
       Enum.find(routes, fn rule ->
-        rule["name"] == name and (is_nil(rule["from"]) or rule["from"] == participant) and
+        (is_nil(rule["from"]) or rule["from"] == participant) and
           (is_nil(rule["workflow"]) or (work && work.workflow) == rule["workflow"]) and
           (is_nil(rule["stage"]) or (work && work.stage) == rule["stage"])
       end)
