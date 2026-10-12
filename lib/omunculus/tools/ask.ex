@@ -5,7 +5,7 @@ defmodule Omunculus.Tools.Ask do
   letters, digits, dashes and underscores, what it means said in the
   question — each calling nothing, so the answer
   is the option chosen and its comment. Optional `to` names a configured
-  logical route. Its manifest's `then` appends `end`.
+  logical route. CLI options also accept JSON. Its manifest's `then` appends `end`.
   """
 
   alias Omunculus.Tools.{Args, Out}
@@ -26,6 +26,13 @@ defmodule Omunculus.Tools.Ask do
   end
 
   @refused "options takes two or more different answers, each a short name of lowercase letters, digits, dashes and underscores, such as approve or deny; say what each means in question"
+
+  defp options(json) when is_binary(json) do
+    case Jason.decode(json) do
+      {:ok, values} when is_list(values) -> options(values)
+      _ -> {:error, @refused}
+    end
+  end
 
   defp options(nil), do: {:ok, []}
   defp options([]), do: {:ok, []}

@@ -50,6 +50,20 @@ defmodule Omunculus.Server.OpenAPI do
       request: "SendMessage",
       idempotent: true
     },
+    create_request: %{
+      summary: "Ask a question or decision",
+      status: 202,
+      response: "Accepted",
+      request: "CreateRequest",
+      idempotent: true
+    },
+    escalate_requests: %{
+      summary: "Escalate received requests",
+      status: 202,
+      response: "Accepted",
+      request: "EscalateRequests",
+      idempotent: true
+    },
     reply_request: %{
       summary: "Reply to a request",
       status: 202,
@@ -272,6 +286,17 @@ defmodule Omunculus.Server.OpenAPI do
       "Membership" =>
         object(%{issuer: string(), subject: string(), role: string()}, ~w(issuer subject role)),
       "SendMessage" => object(%{message: string(), work_id: string()}, ["message"]),
+      "CreateRequest" =>
+        object(%{question: string(), options: array(string()), to: string()}, ~w(question)),
+      "EscalateRequests" =>
+        object(
+          %{
+            reason: string(),
+            origins: %{type: "object", minProperties: 1, additionalProperties: string()},
+            to: string()
+          },
+          ~w(reason origins)
+        ),
       "ReplyRequest" =>
         object(
           %{

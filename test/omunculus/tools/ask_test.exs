@@ -44,6 +44,6 @@ defmodule Omunculus.Tools.AskTest do
   end
 
   test "the builtin catalog discovers ask for models, ending the run" do
-    assert %{"ask" => %{triggers: ["model"], then: ["end"]}} = Catalog.unconfigured()
+    assert %{"ask" => %{triggers: ["model", "cli"], then: ["end"]}} = Catalog.unconfigured()
   end
 end

@@ -134,6 +134,58 @@ defmodule Omunculus.Server.Router do
   end
 
   OpenAPI.route :post,
+                "/v1/projects/:project_id/conversations/:conversation_id/requests",
+                :create_request do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, command_id} <- command_id(conn),
+         {:ok, _question} <- required_string(conn.body_params, "question"),
+         {:ok, _to} <- optional_string(conn.body_params, "to"),
+         true <- Map.keys(conn.body_params) -- ~w(question options to) == [],
+         true <-
+           not Map.has_key?(conn.body_params, "options") or is_list(conn.body_params["options"]),
+         {:ok, result} <-
+           Project.command(
+             project_id,
+             "ask",
+             conn.body_params,
+             principal,
+             conversation_id,
+             command_id
+           ) do
+      reply(conn, 202, Contract.accepted(result))
+    else
+      false -> error_reply(conn, {:error, :invalid})
+      error -> error_reply(conn, error)
+    end
+  end
+
+  OpenAPI.route :post,
+                "/v1/projects/:project_id/conversations/:conversation_id/requests/escalate",
+                :escalate_requests do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, command_id} <- command_id(conn),
+         {:ok, _reason} <- required_string(conn.body_params, "reason"),
+         {:ok, _to} <- optional_string(conn.body_params, "to"),
+         true <- Map.keys(conn.body_params) -- ~w(reason origins to) == [],
+         true <-
+           is_map(conn.body_params["origins"]) and map_size(conn.body_params["origins"]) > 0,
+         {:ok, result} <-
+           Project.command(
+             project_id,
+             "escalate",
+             conn.body_params,
+             principal,
+             conversation_id,
+             command_id
+           ) do
+      reply(conn, 202, Contract.accepted(result))
+    else
+      false -> error_reply(conn, {:error, :invalid})
+      error -> error_reply(conn, error)
+    end
+  end
+
+  OpenAPI.route :post,
                 "/v1/projects/:project_id/conversations/:conversation_id/requests/:request_id/reply",
                 :reply_request do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
@@ -379,6 +431,9 @@ defmodule Omunculus.Server.Router do
 
   defp error_reply(conn, {:error, :last_administrator}),
     do: reply(conn, 409, %{error: "last_administrator"})
+
+  defp error_reply(conn, {:error, {action, _reason}}) when action in [:request, :escalate],
+    do: reply(conn, 422, %{error: "request_refused"})
 
   defp error_reply(conn, {:error, :tool_failed}), do: reply(conn, 422, %{error: "tool_failed"})
 

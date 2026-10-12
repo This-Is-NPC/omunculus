@@ -1,6 +1,6 @@
 name = "ask"
 kind = "tool"
-triggers = ["model"]
+triggers = ["model", "cli"]
 description = "Asks a question or decision through configured request routing. question says what is needed and why; optional options names the answers (approve, deny, revise, ...), with their meanings in question. Omit options for a free-text answer. Optional to names a configured logical route. The run ends and resumes when the request is answered."
 tags = ["request"]
 groups = ["sequence"]

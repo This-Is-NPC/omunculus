@@ -227,6 +227,16 @@ defmodule Omunculus.ServerTest do
 
     assert denied.status == 404
 
+    for {suffix, body} <- [
+          {"", %{question: "Private?"}},
+          {"/escalate", %{reason: "Private?", origins: %{q: "hidden"}}}
+        ] do
+      assert Req.post!(base <> "/conversations/#{id}/requests" <> suffix,
+               headers: auth(outsider) ++ [{"idempotency-key", "private-request-#{suffix}"}],
+               json: body
+             ).status == 404
+    end
+
     upgraded =
       Req.post!(base <> "/conversations/#{id}/members",
         headers: auth(admin),
@@ -325,6 +335,20 @@ defmodule Omunculus.ServerTest do
                dir
              )
 
+    local_identity = %{"kind" => "human", "issuer" => "local", "subject" => uid}
+    reviewer_identity = %{"kind" => "human", "issuer" => "test", "subject" => "reviewer"}
+    final_identity = %{"kind" => "human", "issuer" => "test", "subject" => "final"}
+    data = Toml.decode_file!(project_path)
+
+    data =
+      put_in(data, ["policy", "request_routes"], [
+        %{"from" => local_identity, "via" => [reviewer_identity, final_identity]},
+        %{"name" => "origin", "via" => ["origin"]},
+        %{"via" => ["parent", "origin"]}
+      ])
+
+    File.write!(project_path, Config.Toml.encode(data))
+
     server_path = Path.join(dir, "server.toml")
 
     File.write!(server_path, """
@@ -409,6 +433,155 @@ defmodule Omunculus.ServerTest do
              )
 
     assert Jason.decode!(reply_body) == %{"request_id" => request_id, "body" => "Use blue."}
+
+    eventually(fn ->
+      {:ok, runs} = Omunculus.Store.Query.all(reader.conn, "SELECT status FROM runs")
+      if length(runs) == 2 and Enum.all?(runs, &(&1.status == "done")), do: runs, else: []
+    end)
+
+    assert {:ok, [%{count: runs_before_requests}]} =
+             Omunculus.Store.Query.all(reader.conn, "SELECT COUNT(*) AS count FROM runs")
+
+    requests_url = "/v1/projects/solo/conversations/#{conversation_id}/requests"
+    headers = [{"idempotency-key", "human-question"}]
+
+    question =
+      local.(:post, requests_url, headers: headers, json: %{question: "What is the deadline?"})
+
+    assert question.status == 202
+
+    assert local.(:post, requests_url,
+             headers: [{"idempotency-key", "forged-requester"}],
+             json: %{
+               question: "Spoof?",
+               requester: %{kind: "human", issuer: "test", subject: "admin"}
+             }
+           ).status == 400
+
+    assert local.(:post, requests_url,
+             headers: headers,
+             json: %{question: "What is the deadline?"}
+           ).body == question.body
+
+    assert local.(:post, requests_url, headers: headers, json: %{question: "Changed?"}).status ==
+             409
+
+    assert local.(:post, requests_url,
+             headers: [{"idempotency-key", "empty-question"}],
+             json: %{question: ""}
+           ).status == 400
+
+    assert {:ok, [%{id: human_id}]} =
+             Omunculus.Store.Query.all(
+               reader.conn,
+               "SELECT id FROM requests WHERE status = 'pending'"
+             )
+
+    assert {:ok, human_request} = Store.view(reader.conn, "request", human_id)
+    assert Jason.decode!(human_request.requester) == local_identity
+    assert Jason.decode!(human_request.arbiter) == reviewer_identity
+    assert is_nil(human_request.run_id)
+    assert human_request.reason == "What is the deadline?"
+
+    assert {:ok, ""} =
+             CLI.run(
+               [
+                 "ask",
+                 "--conversation_id",
+                 conversation_id,
+                 "--question",
+                 "Pick a date",
+                 "--options",
+                 ~s(["today","tomorrow"])
+               ],
+               dir
+             )
+
+    assert local.(:post, requests_url <> "/escalate",
+             headers: [{"idempotency-key", "not-receiver"}],
+             json: %{reason: "Escalate", origins: %{deadline: human_id}}
+           ).status == 422
+
+    actor = %{issuer: "test", subject: "reviewer"}
+
+    assert :ok =
+             Omunculus.Store.Access.put_member(
+               reader,
+               Operations.local_principal(),
+               actor,
+               "participant",
+               conversation_id
+             )
+
+    assert {:ok, %{ok: true}, origin_events} =
+             Operations.call(
+               reader,
+               "ask",
+               %{"conversation_id" => conversation_id, "question" => "Budget?", "to" => "origin"},
+               %{principal: actor},
+               false
+             )
+
+    origin_id = Enum.find(origin_events, &(&1.type == "request")).request_id
+
+    assert {:ok, %{ok: true}, cli_origin_events} =
+             Operations.call(
+               reader,
+               "ask",
+               %{"conversation_id" => conversation_id, "question" => "Logo?", "to" => "origin"},
+               %{principal: actor},
+               false
+             )
+
+    cli_origin_id = Enum.find(cli_origin_events, &(&1.type == "request")).request_id
+
+    assert {:ok, ""} =
+             CLI.run(
+               [
+                 "escalate",
+                 "--reason",
+                 "Which logo?",
+                 "--origins",
+                 Jason.encode!(%{"logo" => cli_origin_id})
+               ],
+               dir
+             )
+
+    assert {:ok, %{status: "escalated"}} = Store.view(reader.conn, "request", cli_origin_id)
+    escalation_headers = [{"idempotency-key", "human-escalation"}]
+    escalation_body = %{reason: "Please answer the budget", origins: %{budget: origin_id}}
+
+    escalated =
+      local.(:post, requests_url <> "/escalate",
+        headers: escalation_headers,
+        json: escalation_body
+      )
+
+    assert escalated.status == 202
+
+    assert local.(:post, requests_url <> "/escalate",
+             headers: escalation_headers,
+             json: escalation_body
+           ).body == escalated.body
+
+    assert {:ok, %{status: "escalated"}} = Store.view(reader.conn, "request", origin_id)
+
+    assert {:ok, [%{id: top_id}]} =
+             Omunculus.Store.Query.all(
+               reader.conn,
+               "SELECT upstream.id FROM requests upstream JOIN request_escalations link ON link.escalated_id = upstream.id WHERE link.origin_id = ?",
+               [origin_id]
+             )
+
+    assert {:ok, top} = Store.view(reader.conn, "request", top_id)
+    assert is_nil(top.run_id)
+    assert top.origins["budget"].id == origin_id
+    assert Jason.decode!(top.requester) == local_identity
+
+    assert {:ok, [%{count: run_count}]} =
+             Omunculus.Store.Query.all(reader.conn, "SELECT COUNT(*) AS count FROM runs")
+
+    assert run_count == runs_before_requests
     Project.close(reader)
 
     local_stream =

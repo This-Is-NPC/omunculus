@@ -140,14 +140,30 @@ defmodule Omunculus.Server.Project do
     end
   end
 
+  defp capability("ask"), do: "conversation.send"
+  defp capability("escalate"), do: "conversation.reply"
   defp capability("send"), do: "conversation.send"
   defp capability("reply"), do: "conversation.reply"
   defp capability("comment"), do: "conversation.comment"
   defp capability("inbox_read"), do: "conversation.read"
 
+  defp ensure_target_conversation(project, "escalate", args, conversation_id) do
+    with {:ok, origins} <- Omunculus.Tools.Args.object(args, "origins") do
+      Enum.reduce_while(Map.values(origins), :ok, fn id, :ok ->
+        case target_conversation(project, :request, id, conversation_id) do
+          :ok -> {:cont, :ok}
+          error -> {:halt, error}
+        end
+      end)
+    end
+  end
+
   defp ensure_target_conversation(project, name, args, conversation_id) do
     target =
       case name do
+        "ask" ->
+          nil
+
         "send" ->
           if(args["work_id"], do: {:work, args["work_id"]})
 
@@ -170,10 +186,14 @@ defmodule Omunculus.Server.Project do
         :ok
 
       {type, id} ->
-        case Access.conversation_for(project, type, id) do
-          {:ok, ^conversation_id} -> :ok
-          _ -> {:error, :not_found}
-        end
+        target_conversation(project, type, id, conversation_id)
+    end
+  end
+
+  defp target_conversation(project, type, id, conversation_id) do
+    case Access.conversation_for(project, type, id) do
+      {:ok, ^conversation_id} -> :ok
+      _ -> {:error, :not_found}
     end
   end
 

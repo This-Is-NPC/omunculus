@@ -367,3 +367,13 @@ prompt    = assemble
 `preset` is CLI-only
 and `config = false`. A group name in an agent's `tools` list expands to
 those names at ceiling mount.
+
+`ask` and `escalate` have both model and CLI triggers. `ask` takes a question
+and optional named options (omit them for a free-text answer). The CLI supplies
+an existing `conversation_id` and may spell options as a JSON array.
+`escalate` takes reason and a JSON/object map of named origins. Optional `to`
+on `ask`, `request_access` or `escalate` names a configured logical route,
+never a recipient type. The same actions authenticate human authors from the
+command context and agent authors from their run. Their manifest `end` step
+ends model runs; with no run, that step emits nothing. Human request creation
+needs send access, escalation needs reply access and matching received origins.

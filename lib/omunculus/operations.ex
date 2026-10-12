@@ -43,6 +43,10 @@ defmodule Omunculus.Operations do
     end
   end
 
+  defp authorize_configured(project, %{access: nil} = config, name, args, actor, principal)
+       when name in ~w(ask escalate),
+       do: operation(project, config, name, args, actor, principal)
+
   defp authorize_configured(_project, %{access: nil}, _name, _args, _actor, _principal),
     do: {:ok, nil, nil}
 
@@ -75,6 +79,27 @@ defmodule Omunculus.Operations do
               {:ok, "conversation.send", id}
             end
         end
+    end
+  end
+
+  defp operation(project, _config, "ask", args, actor, principal) do
+    id = Map.get(actor, :conversation_id) || args["conversation_id"]
+
+    with true <- is_binary(id) and id != "",
+         {:ok, _conversation} <- Access.conversation(project, principal, id) do
+      {:ok, "conversation.send", id}
+    else
+      false -> {:error, :invalid}
+      error -> error
+    end
+  end
+
+  defp operation(project, _config, "escalate", args, _actor, _principal) do
+    with {:ok, origins} <- Omunculus.Tools.Args.object(args, "origins"),
+         [id | _] <- Map.values(origins) do
+      scoped(project, :request, id, "conversation.reply")
+    else
+      _ -> {:error, :invalid}
     end
   end
 

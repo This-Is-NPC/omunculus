@@ -82,6 +82,13 @@ defmodule Omunculus.Tools.RequestAccessTest do
     assert options["deny"] == []
   end
 
+  test "permission requests can name a logical route without selecting a participant type" do
+    args = Map.put(args(@write), "to", "release-approval")
+
+    assert [%{"body" => %{"to" => "release-approval", "options" => @permanent}}] =
+             RequestAccess.run(%{@input | args: args})["emit"]
+  end
+
   test "refuses what it cannot ask for" do
     for {access, output} <- [
           {nil, "access required: a list of {kind, name}"},

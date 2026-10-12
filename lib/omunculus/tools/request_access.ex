@@ -7,7 +7,7 @@ defmodule Omunculus.Tools.RequestAccess do
   scope of the `grant_scopes` view, permanent; `deny`, with no call; and,
   in a run with a work, `grant`, which grants on that work. In a run with
   a work, a `comment` with the `report` on that work comes first. Its
-  manifest's `then` appends `end`.
+  manifest's `then` appends `end`. Optional `to` names a logical route.
   """
 
   alias Omunculus.Config
@@ -62,7 +62,7 @@ defmodule Omunculus.Tools.RequestAccess do
         else: []
 
     options = options(input.view["grant_scopes"], access, work_id)
-    request = %{"reason" => reason, "options" => options}
+    request = %{"reason" => reason, "options" => options} |> Args.put_present("to", input.args)
     Out.ok("", comment ++ [%{"type" => "request", "body" => request}])
   end
 

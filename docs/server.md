@@ -132,3 +132,24 @@ Each frame is a JSON text frame. The first frames are the events after `after` (
 An older store without conversation or participant request columns, escalation
 links or the current request status constraint is rejected and must be
 explicitly recreated. The server closes runs left open by an interrupted process and applies the existing retry policy to their work. HTTP requests do not wait for a run to finish.
+
+## Human request commands
+
+`POST /v1/projects/:project_id/conversations/:conversation_id/requests` creates
+an authenticated human's question or decision using `ask`. Its JSON body is
+`{question, options?, to?}`; options is an array of named answers without effect
+calls. It requires conversation send access. `POST` at the same path followed
+by `/escalate` takes `{reason, origins, to?}`, where origins maps distinct part
+names to pending received request IDs. It requires conversation reply access;
+every origin must belong to the URL's conversation and its recorded arbiter
+must be the caller. Optional `to` names a configured logical route.
+
+Both commands require `Idempotency-Key`, return 202 with the accepted command
+receipt, and reuse the shared CLI/model tools, store actions and reply path.
+Replaying the same key and body returns its receipt; changing the body conflicts.
+The verified principal supplies authorship. Unknown body fields and malformed
+required fields return 400; hidden conversations or cross-conversation targets
+return 404; a request/escalation domain refusal returns 422. Human requests
+have no requester run. Configured agent receivers open runs, and human
+receivers get the request without a synthetic run. Snapshot request reads retain
+the original identities, questions and linked origins.

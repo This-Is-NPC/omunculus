@@ -8,7 +8,7 @@ defmodule Omunculus.Tools.EndTest do
     name: "end",
     args: %{},
     view: %{},
-    run_id: nil,
+    run_id: "r1",
     work_id: nil,
     workspace: nil,
     roots: []
@@ -20,6 +20,10 @@ defmodule Omunculus.Tools.EndTest do
              "output" => "",
              "emit" => [%{"type" => "end", "body" => %{}}]
            }
+  end
+
+  test "a human command has no run to end" do
+    assert End.run(%{@input | run_id: nil}) == %{"ok" => true, "output" => "", "emit" => []}
   end
 
   test "the builtin catalog discovers end in the sequence group with triggers == [\"model\", \"chain\"]" do

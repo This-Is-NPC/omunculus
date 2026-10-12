@@ -9,7 +9,7 @@ defmodule Omunculus.Store.Actions.Contract do
     "work" => ~w(report works),
     "request" => ~w(reason options to),
     "reply" => ~w(request_id option body parts),
-    "escalate" => ~w(reason origins),
+    "escalate" => ~w(reason origins to),
     "grant" => ~w(request_id name kind scope),
     "cancel" => ~w(request_id),
     "continue" => [],

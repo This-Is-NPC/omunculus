@@ -35,3 +35,7 @@ type = "string"
 
 [views.grant_scopes]
 source = "grant_scopes"
+
+[parameters.properties.to]
+type = "string"
+minLength = 1

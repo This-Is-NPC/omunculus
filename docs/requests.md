@@ -64,7 +64,10 @@ part closes only its origin through the same reply action, with the actual
 answerer's identity. Omitted parts return to pending; a text-only upstream
 answer resumes the intermediary for distribution even while it waits on
 children. The eval runner chooses answers recursively from those original
-options and records the original grant/decision selections. Human creation and escalation commands remain in task 3281. Configurable routes
+options and records the original grant/decision selections. Authorized human creation uses `ask` through the CLI or HTTP request command;
+human escalation uses `escalate` through the same interfaces. Human commands
+have no requester run, and authorship comes from the verified principal.
+Configurable routes
 apply to creation, escalation, unanswered receivers and harness retry exhaustion.
 
 `Store.Runs.unanswered/4` uses the same linked escalation action when an agent
@@ -419,7 +422,7 @@ respective answers are returned.
 | `propose_config`, `propose_pack` | Decision requests with `apply` calling `configure` or `pack`, and `deny` calling nothing. | Keep validated proposals, revision checks and human authorization on the shared path. Free text records advice without applying a proposal. Resolve the configured responsibility without requiring the asker to identify its participant type. |
 | Harness retry / cancel | Decision request to the configured responsible participant after root retry exhaustion. | Keep `retry` as an explicit named decision and `cancel` as an effect-bearing option; a text-only reply reopens the requester without recording either decision. Child exhaustion remains a genuine break. |
 | Unanswered arbiter run | Single-origin linked escalation. | Uses the common linked escalation action and notifies the inbox when the next receiver is human. Explicitly escalated origins do not escalate twice. |
-| Human-origin requests | The same request contract with an authenticated human requester and optional work, without a model run. | The schema and store actions accept an authenticated human requester without a run. Authorized human creation/escalation commands and configurable delivery remain in 3281. |
+| Human-origin requests | The same request contract with an authenticated human requester and optional work, without a model run. | Authenticated CLI/HTTP commands use the same actions without a requester run. |
 | Seller comments and front-desk forwarding | Generalist asks the client a combined request and routes each answer back to its origin. | Sales currently forwards every message and the seller comments its own questions; it has no shared request inbox. Update pack tools, stage ceilings and instructions so questions use requests and client replies resolve them. Preserve ordinary messages and work creation. |
 
 ## Acceptance boundary

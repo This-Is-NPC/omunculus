@@ -1,6 +1,6 @@
 name = "escalate"
 kind = "tool"
-triggers = ["model"]
+triggers = ["model", "cli"]
 description = "Raises received requests you cannot answer as one question. origins maps each distinct part name to its received request ID; reason explains the merged question and which answer each part needs. Routing chooses the next receiver. The run ends; the answer returns with the linked origins for distribution."
 tags = ["request"]
 groups = ["sequence"]
@@ -18,3 +18,7 @@ type = "object"
 minProperties = 1
 [parameters.properties.origins.additionalProperties]
 type = "string"
+
+[parameters.properties.to]
+type = "string"
+minLength = 1

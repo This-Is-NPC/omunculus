@@ -316,3 +316,22 @@ refuses to open:
 | `` not logged in to <id>; run `omunculus login --provider <id>` `` | credential missing |
 
 Anything else is `inspect` of the reason, or the tool's own `output`.
+
+## Human requests
+
+Create a question or decision in an existing conversation with `ask`:
+
+```sh
+omunculus ask --conversation_id <id> --question "Which deadline?"
+omunculus ask --conversation_id <id> --question "Approve the scope?" --options '["approve","deny"]'
+omunculus escalate --reason "Please answer these questions" --origins '{"deadline":"<request-id>"}'
+```
+
+`ask` needs conversation send access; `escalate` needs reply access and each
+origin must be pending, addressed to the authenticated caller and in the same
+conversation. `options` and `origins` accept JSON on the CLI. Optional `to` on
+either form names a logical route configured in TOML. The caller does not
+supply requester identity. Both use the model tools' store actions and reply
+path, without opening a synthetic requester run. Their `end` step has no run
+to end for a human command. An agent receiver opens a run normally; a human
+receiver does not. A route that resolves only to the requester is refused.

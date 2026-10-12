@@ -43,6 +43,7 @@ defmodule Omunculus.Store.Actions.Requests do
 
   def escalate(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:escalate, body, "reason"),
+         :ok <- valid_destination(body, ctx),
          {:ok, participant} <- Participant.from_context(ctx),
          {:ok, run} <- fetch_run(conn, ctx.run_id),
          :ok <- ensure_actor_run(run, ctx),
@@ -51,7 +52,7 @@ defmodule Omunculus.Store.Actions.Requests do
            origins(conn, body["origins"], participant, conversation(ctx, run, work)),
          forbidden = Enum.flat_map(origins, fn {_part, origin} -> requesters(origin) end),
          {:ok, arbiter, arbiter_work_id} <-
-           RequestRoutes.resolve(conn, ctx, run, work, participant, nil, forbidden),
+           RequestRoutes.resolve(conn, ctx, run, work, participant, body["to"], forbidden),
          {:ok, request} <-
            create(
              conn,
