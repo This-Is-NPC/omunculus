@@ -323,6 +323,7 @@ defmodule Omunculus.ConfigTest do
     assert %{"reviewer" => %{depth: 1, workflow_only: true, ceiling: ceiling}} = agents
 
     assert ceiling.granted == [
+             "ask",
              "break",
              "comment",
              "continue",
