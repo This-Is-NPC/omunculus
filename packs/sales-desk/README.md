@@ -57,4 +57,4 @@ request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", { kin
 
 Replace its destination with the responsible configured participant when the
 owner and conversation origin differ. The agency and sales-desk eval overlays
-declare these routes. Questions needing an answer use `ask`; a sender replies from known facts or escalates received origins. The depth-0 generalist collects every unresolved question in its conversation into one escalation to the client and distributes the returned text to those origins. `break` remains a stopped-work report.
+declare these routes. Questions needing an answer use `ask`; a sender replies from known facts or escalates received origins. The depth-0 generalist collects every unresolved question in its conversation into one escalation to the client and distributes the returned text to those origins. `break` remains a stopped-work report. The generalist ends on thanks, acknowledgements and promises of later material; a completed sale starts new work only for an explicit new request.
