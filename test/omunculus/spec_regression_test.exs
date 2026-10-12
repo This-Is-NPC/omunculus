@@ -192,13 +192,13 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} = Run.open(p, Fixtures.opening(nil, parent, %{request_id: request}))
-    # Its run closed without a reply, so the request is the person's now.
-    assert {:ok, %{status: "pending", arbiter: @human}} =
+    # Its run closed without a reply, so a linked request goes to the next receiver.
+    assert {:ok, %{status: "escalated", arbiter: @concierge}} =
              Store.view(p.conn, "request", request)
 
     assert {:ok, events} = Store.replay(p.conn, :project)
     assert %{body: body} = Enum.find(events, &(&1.type == "escalate"))
-    assert Jason.decode!(body) == %{"from" => "concierge"}
+    assert Jason.decode!(body) == %{"origins" => %{"answer" => request}}
     assert Enum.any?(events, &(&1.type == "notify"))
     assert {:ok, %{state: "waiting", grants: nil}} = Store.view(p.conn, "work", child)
     {:ok, config} = Config.load(p.config_path)
@@ -219,7 +219,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} = Run.open(p, Fixtures.opening(nil, parent, %{request_id: request}))
-    assert {:ok, %{status: "pending"}} = Store.view(p.conn, "request", request)
+    assert {:ok, %{status: "escalated"}} = Store.view(p.conn, "request", request)
     assert {:ok, %{state: "waiting"}} = Store.view(p.conn, "work", child)
   end
 

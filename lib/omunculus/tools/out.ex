@@ -112,8 +112,7 @@ defmodule Omunculus.Tools.Out do
 
   @spec unanswered(String.t(), String.t()) :: String.t()
   def unanswered(request_id, agent),
-    do:
-      "#{agent} ended its run without answering request #{request_id}; it is yours to answer with"
+    do: "#{agent} left request #{request_id} unresolved; reply to its linked question."
 
   @spec answer_request() :: String.t()
   def answer_request,

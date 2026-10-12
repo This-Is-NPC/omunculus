@@ -129,7 +129,7 @@ defmodule Omunculus.Store.Actions.Requests do
     end
   end
 
-  def human_arbiter(conn, ctx, run, work) do
+  defp human_arbiter(conn, ctx, run, work) do
     with {:ok, conversation} <-
            if(conversation(ctx, run, work),
              do:

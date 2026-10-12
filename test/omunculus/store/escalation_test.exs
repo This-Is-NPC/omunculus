@@ -785,4 +785,57 @@ defmodule Omunculus.Store.EscalationTest do
     assert Jason.decode!(request(conn, retry.request_id).options) |> Map.keys() |> Enum.sort() ==
              ~w(cancel retry)
   end
+
+  test "unanswered receivers escalate through parents and notify the human exactly once",
+       %{conn: conn} = ctx do
+    origin = ask(conn, hd(ctx.child_ctxs), "Logo?")
+
+    incoming = fn agent, work_id, depth, request_id ->
+      run =
+        Fixtures.open_run(conn, %{
+          agent: agent,
+          work_id: work_id,
+          depth: depth,
+          conversation_id: ctx.conversation,
+          request_id: request_id
+        })
+
+      {:ok, _} = Store.close_run(conn, run.id)
+      {:ok, closed} = Store.view(conn, "run", run.id)
+      closed
+    end
+
+    lead_run = incoming.("lead", ctx.lead, 1, origin)
+
+    assert {:ok, first_events} =
+             Store.unanswered(conn, lead_run, ctx.config, &Omunculus.Tools.Out.unanswered/2)
+
+    merged = Enum.find(first_events, &(&1.type == "request")).request_id
+    assert request(conn, origin).status == "escalated"
+    assert Jason.decode!(request(conn, origin).arbiter) == Participant.agent("lead")
+    assert Jason.decode!(request(conn, merged).arbiter) == Participant.agent("root")
+    assert count(conn, "inbox") == 0
+    root_run = incoming.("root", ctx.root, 0, merged)
+
+    assert {:ok, last_events} =
+             Store.unanswered(conn, root_run, ctx.config, &Omunculus.Tools.Out.unanswered/2)
+
+    upstream = Enum.find(last_events, &(&1.type == "request")).request_id
+    assert Jason.decode!(request(conn, upstream).arbiter) == Participant.human("test", "owner")
+    assert count(conn, "inbox") == 1
+    assert Enum.any?(last_events, &(&1.type == "notify"))
+    assert {:ok, [note]} = Query.all(conn, "SELECT body FROM comments WHERE inbox_id IS NOT NULL")
+    assert note.body =~ upstream
+
+    assert {:ok, []} =
+             Store.unanswered(conn, root_run, ctx.config, &Omunculus.Tools.Out.unanswered/2)
+
+    assert {:ok, []} =
+             Store.unanswered(conn, lead_run, ctx.config, &Omunculus.Tools.Out.unanswered/2)
+
+    assert count(conn, "request_escalations") == 2
+    assert count(conn, "inbox") == 1
+    assert work(conn, ctx.root).waiting == "child"
+    assert work(conn, ctx.lead).waiting == "child"
+  end
 end

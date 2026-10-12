@@ -548,10 +548,10 @@ defmodule Omunculus.Run do
     end
   end
 
-  # An arbiter's run that closed without a reply leaves the request to the
-  # person, or nothing would answer it.
+  # A receiver that leaves a pending request uses the same linked escalation.
   defp unanswered(project, state) do
-    with {:ok, events} <- Store.unanswered(project.conn, state.run, &Out.unanswered/2),
+    with {:ok, events} <-
+           Store.unanswered(project.conn, state.run, state.config, &Out.unanswered/2),
          {:ok, _hooks} <-
            Harness.react(project, events, [], state.execution, Map.get(state, :prepared)) do
       Harness.follow_up(project, events)

@@ -15,9 +15,9 @@ defmodule Omunculus.Store.Runs do
   `cancel` and an inbox entry whose text names the new request.
   `continues/3` records the `session` event of a run that continues its
   agent's session: the run it continues and what it was told had happened.
-  `unanswered/3` hands a request to the human when the run its agent
-  arbiter opened to answer it closed without a reply: an `escalate` event
-  and an inbox entry whose text names it.
+  `unanswered/4` uses the linked escalation action when an agent receiver
+  closes without answering. When its new request reaches a human it records
+  an inbox notification naming that upstream request, in the same transaction.
   """
 
   alias Omunculus.Id
@@ -152,51 +152,64 @@ defmodule Omunculus.Store.Runs do
          do: :ok
   end
 
-  @spec unanswered(Connection.t(), map, (String.t(), String.t() -> String.t())) ::
+  @spec unanswered(Connection.t(), map, map, (String.t(), String.t() -> String.t())) ::
           {:ok, [map]} | {:error, term}
-  def unanswered(_conn, %{request_id: nil}, _inbox_text), do: {:ok, []}
+  def unanswered(_conn, %{request_id: nil}, _config, _reason_text), do: {:ok, []}
 
-  def unanswered(conn, run, inbox_text) do
+  def unanswered(conn, run, config, reason_text) do
     Query.transaction(conn, fn ->
-      case Query.one(conn, "SELECT * FROM requests WHERE id = ?", [run.request_id]) do
-        {:ok, %{status: "pending"} = request} ->
-          if Jason.decode!(request.arbiter) == Omunculus.Participant.agent(run.agent),
-            do: escalate(conn, run, request, inbox_text),
-            else: {:ok, []}
+      with {:ok, request} <- View.view(conn, "request", run.request_id) do
+        if request.status == "pending" and
+             Jason.decode!(request.arbiter) == Omunculus.Participant.agent(run.agent) do
+          ctx = %{
+            run_id: run.id,
+            work_id: run.work_id,
+            author: "harness",
+            agent: run.agent,
+            config: config,
+            groups: %{}
+          }
 
-        {:ok, _answered_or_not_its} ->
+          with {:ok, events} <-
+                 Actions.run(
+                   conn,
+                   [
+                     %{
+                       "type" => "escalate",
+                       "body" => %{
+                         "reason" => reason_text.(request.id, run.agent),
+                         "origins" => %{"answer" => request.id}
+                       }
+                     }
+                   ],
+                   ctx
+                 ),
+               upstream = Enum.find(events, &(&1.type == "request")),
+               {:ok, request} <- View.view(conn, "request", upstream.request_id),
+               {:ok, notified} <- notify_unanswered(conn, request, ctx, reason_text) do
+            {:ok, events ++ notified}
+          end
+        else
           {:ok, []}
-
-        {:error, _reason} = error ->
-          error
+        end
       end
     end)
   end
 
-  defp escalate(conn, run, request, inbox_text) do
-    ctx = %{run_id: run.id, work_id: request.work_id, author: "harness", agent: run.agent}
-
-    with {:ok, human, nil} <- Omunculus.Store.Actions.Requests.human_arbiter(conn, ctx, run, nil),
-         :ok <-
-           Query.exec(conn, "UPDATE requests SET arbiter = ? WHERE id = ?", [
-             Jason.encode!(human),
-             request.id
-           ]),
-         {:ok, event} <-
-           Events.append(conn, %{
-             type: "escalate",
-             run_id: run.id,
-             work_id: request.work_id,
-             request_id: request.id,
-             body: Jason.encode!(%{from: run.agent})
-           }),
-         options = request.options |> Jason.decode!() |> Map.keys(),
-         notify = %{
-           "body" => inbox_text.(request.id, run.agent) <> " " <> Enum.join(options, ", ") <> ".",
-           "work_id" => request.work_id
-         },
-         {:ok, inbox} <- Actions.run(conn, [%{"type" => "notify", "body" => notify}], ctx) do
-      {:ok, [event | inbox]}
+  defp notify_unanswered(conn, request, ctx, text) do
+    if Jason.decode!(request.arbiter)["kind"] == "human" do
+      Actions.run(
+        conn,
+        [
+          %{
+            "type" => "notify",
+            "body" => %{"body" => text.(request.id, ctx.agent), "work_id" => request.work_id}
+          }
+        ],
+        ctx
+      )
+    else
+      {:ok, []}
     end
   end
 

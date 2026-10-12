@@ -60,10 +60,12 @@ children. The eval runner chooses answers recursively from those original
 options and records the original grant/decision selections. Human escalation
 commands and configurable routes are not exposed at this commit.
 
-`Store.Runs.unanswered/3` currently changes an unanswered agent request's
-arbiter to `human` after the arbiter's run closes. It records an `escalate`
-event and an inbox note. This changes the same request in place; it creates
-neither a linked request nor a route back through intermediate agents.
+`Store.Runs.unanswered/4` uses the same linked escalation action when an agent
+receiver closes without answering a pending request. The new request goes to
+the next parent receiver, or the authenticated conversation/run origin at the
+root. It records an inbox note naming an upstream request that reaches a
+human. Explicitly escalated origins are not escalated again, and neither
+requester nor arbiter identities are rewritten in place.
 
 ## Proposed request contract
 
