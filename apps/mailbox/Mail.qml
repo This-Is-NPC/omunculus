@@ -41,9 +41,11 @@ Singleton {
     && matches(thread))
   property string selected: ""
   readonly property var thread: threads[selected] || null
-  // Asks the window for a new thread, and the thread on screen for a reply.
+  // Asks the window for a new thread, and the thread on screen for a reply or
+  // for the decision it waits on.
   signal composeRequested()
   signal replyRequested()
+  signal decisionRequested()
 
   // Thread key -> the time of the last word from its agent you read; kept
   // across sessions.
@@ -112,6 +114,25 @@ Singleton {
 
   function close() {
     selected = ""
+  }
+
+  // Marks a thread unread, as a mail client does, and goes back to the list.
+  function markUnread(key) {
+    seen = Object.assign({}, seen, { [key]: "" })
+    seenFile.setText(JSON.stringify(seen))
+    if (selected === key)
+      close()
+  }
+
+  // Marks every thread shown read.
+  function markAllRead() {
+    const next = Object.assign({}, seen)
+    for (const thread of shown)
+      if (thread.heard !== "")
+        next[thread.key] = thread.heard
+    seen = next
+    seenFile.setText(JSON.stringify(seen))
+    tell("marked " + shown.length + " threads read", false)
   }
 
   function markSeen(key) {

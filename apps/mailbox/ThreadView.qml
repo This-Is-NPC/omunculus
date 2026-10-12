@@ -9,7 +9,7 @@ import "kit/ui"
 // ones open and the earlier ones folded to a line each; a long thread hides
 // its middle behind one fold. A message that arrives fades and rises in, and
 // one that arrives out of view is counted on a pill that leads to it. Nothing
-// is written until you reply: REPLY, or Ctrl+R, opens the reply under the
+// is written until you reply: the command bar's REPLY, or Ctrl+R, opens the reply under the
 // thread, and sending or Esc closes it; Esc then closes the thread.
 Item {
   id: view
@@ -98,15 +98,6 @@ Item {
           ProjectTag { name: "· " + view.thread.project }
           ThreadState { thread: view.thread }
         }
-      }
-      TraceButton {
-        visible: !view.replying
-        dense: true
-        role: "primary"
-        icon: "enter"
-        text: "REPLY"
-        tip: "ctrl+r"
-        onClicked: view.reply()
       }
     }
 
@@ -214,6 +205,7 @@ Item {
   Connections {
     target: Mail
     function onReplyRequested() { view.reply() }
+    function onDecisionRequested() { view.toEnd() }
   }
   Shortcut {
     sequence: "Escape"
