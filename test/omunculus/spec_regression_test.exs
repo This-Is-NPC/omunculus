@@ -1,4 +1,6 @@
 defmodule Omunculus.SpecRegressionTest do
+  @human Omunculus.Fixtures.defaults(:requests).arbiter
+  @concierge Jason.encode!(Omunculus.Participant.agent("concierge"))
   use ExUnit.Case, async: true
 
   alias Omunculus.Tools.Out
@@ -145,7 +147,7 @@ defmodule Omunculus.SpecRegressionTest do
     assert {:ok, _} =
              Run.open(p, Fixtures.opening(nil, child))
 
-    assert {:ok, [%{arbiter: "human", status: "waiting_human"}]} =
+    assert {:ok, [%{arbiter: @human, status: "pending"}]} =
              Query.all(p.conn, "SELECT * FROM requests")
 
     assert {:ok, [_]} = Query.all(p.conn, "SELECT * FROM runs")
@@ -167,7 +169,7 @@ defmodule Omunculus.SpecRegressionTest do
     assert {:ok, _} =
              Run.open(p, Fixtures.opening(nil))
 
-    assert {:ok, %{status: "waiting_human"}} = Store.view(p.conn, "request", request)
+    assert {:ok, %{status: "pending"}} = Store.view(p.conn, "request", request)
   end
 
   test "an arbiter agent cannot make a permanent grant and the reply writes nothing", %{
@@ -191,7 +193,7 @@ defmodule Omunculus.SpecRegressionTest do
 
     assert {:ok, _} = Run.open(p, Fixtures.opening(nil, parent, %{request_id: request}))
     # Its run closed without a reply, so the request is the person's now.
-    assert {:ok, %{status: "waiting_human", arbiter: "human"}} =
+    assert {:ok, %{status: "pending", arbiter: @human}} =
              Store.view(p.conn, "request", request)
 
     assert {:ok, events} = Store.replay(p.conn, :project)
@@ -217,7 +219,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} = Run.open(p, Fixtures.opening(nil, parent, %{request_id: request}))
-    assert {:ok, %{status: "waiting_human"}} = Store.view(p.conn, "request", request)
+    assert {:ok, %{status: "pending"}} = Store.view(p.conn, "request", request)
     assert {:ok, %{state: "waiting"}} = Store.view(p.conn, "work", child)
   end
 
@@ -246,11 +248,11 @@ defmodule Omunculus.SpecRegressionTest do
 
     request =
       Fixtures.insert(p.conn, :requests, %{
-        agent: "worker",
+        requester: Jason.encode!(Omunculus.Participant.agent("worker")),
         run_id: requester,
         work_id: child,
-        arbiter: "concierge",
-        status: "waiting_agent",
+        arbiter: @concierge,
+        status: "pending",
         options: Jason.encode!(Map.merge(default, options))
       })
 

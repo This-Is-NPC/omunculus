@@ -1,4 +1,6 @@
 defmodule Omunculus.Store.ActionsTest do
+  @human Omunculus.Fixtures.defaults(:requests).arbiter
+  @concierge Jason.encode!(Omunculus.Participant.agent("concierge"))
   use Omunculus.StoreCase, async: true
 
   alias Omunculus.Fixtures
@@ -1590,9 +1592,9 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, request} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
 
-      assert request.arbiter == "human"
-      assert request.status == "waiting_human"
-      assert request.agent == run.agent
+      assert request.arbiter == @human
+      assert request.status == "pending"
+      assert Jason.decode!(request.requester) == Omunculus.Participant.agent(run.agent)
       assert request.work_id == work_id
 
       assert Jason.decode!(request.options) == %{
@@ -1627,8 +1629,8 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, request} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
 
-      assert request.arbiter == "human"
-      assert request.status == "waiting_human"
+      assert request.arbiter == @human
+      assert request.status == "pending"
     end
 
     test "a name in no list follows the ceiling's uncited class", %{conn: conn} do
@@ -1712,11 +1714,11 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, request} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
 
-      assert request.arbiter == "concierge"
-      assert request.status == "waiting_agent"
+      assert request.arbiter == @concierge
+      assert request.status == "pending"
 
       body = Jason.decode!(event.body)
-      assert body["arbiter"] == "concierge"
+      assert body["arbiter"] == Omunculus.Participant.agent("concierge")
       assert body["arbiter_work_id"] == parent_id
     end
 
@@ -1744,8 +1746,8 @@ defmodule Omunculus.Store.ActionsTest do
         request.arbiter
       end
 
-      assert arbiter.(%{}) == "concierge"
-      assert arbiter.(%{"to" => "person"}) == "human"
+      assert arbiter.(%{}) == @concierge
+      assert arbiter.(%{"to" => "person"}) == @human
 
       run = Fixtures.open_run(conn, %{ceiling: @ceiling})
 
@@ -1772,7 +1774,7 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert {:ok, [_tool_event, event]} = record_tool(conn, [calling], ctx)
 
-      assert {:ok, %{arbiter: "human", status: "waiting_human"}} =
+      assert {:ok, %{arbiter: @human, status: "pending"}} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
     end
 
@@ -1789,7 +1791,7 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert {:ok, [_tool_event, event]} = record_tool(conn, [request_emit(options)], ctx)
 
-      assert {:ok, %{arbiter: "human"}} =
+      assert {:ok, %{arbiter: @human}} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
     end
 
@@ -1805,9 +1807,9 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, request} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
 
-      assert request.arbiter == "human"
-      assert request.status == "waiting_human"
-      refute Map.has_key?(Jason.decode!(event.body), "arbiter")
+      assert request.arbiter == @human
+      assert request.status == "pending"
+      assert Jason.decode!(event.body)["arbiter"]["kind"] == "human"
     end
 
     test "a request by the harness goes to the human", %{conn: conn} do
@@ -1823,7 +1825,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, [_tool_event, event]} =
                record_tool(conn, [access_request("tool", "write")], ctx)
 
-      assert {:ok, %{arbiter: "human"}} =
+      assert {:ok, %{arbiter: @human}} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
     end
   end
@@ -1952,7 +1954,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:error, {:reply, :not_arbiter}} =
                record_tool(conn, [reply_emit(request_id, "deny", "no")], request_ctx(run))
 
-      assert {:ok, %{status: "waiting_human"}} =
+      assert {:ok, %{status: "pending"}} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [request_id])
     end
 

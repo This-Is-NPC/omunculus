@@ -318,8 +318,8 @@ defmodule Omunculus.Tools.AssembleTest do
       "comments" => [%{body: "last note"}],
       "request" => %{
         id: "req_1",
-        agent: "worker",
-        status: "waiting_agent",
+        requester: Jason.encode!(Omunculus.Participant.agent("worker")),
+        status: "pending",
         options:
           ~s({"grant":[{"name":"grant","args":{"kind":"tool","name":"write"}}],"grant_agent":[{"name":"grant","args":{"kind":"tool","name":"write","scope":"agent"}}],"deny":[]})
       },
@@ -366,7 +366,7 @@ defmodule Omunculus.Tools.AssembleTest do
     view = %{
       "request" => %{
         id: "req_1",
-        agent: "worker",
+        requester: Jason.encode!(Omunculus.Participant.agent("worker")),
         status: "closed",
         answer: "grant",
         options: ~s({"grant":[{"name":"grant","args":{"kind":"tool","name":"write"}}],"deny":[]})
@@ -383,7 +383,13 @@ defmodule Omunculus.Tools.AssembleTest do
 
   test "a closed text-only request shows its answer without an option label" do
     view = %{
-      "request" => %{id: "req_1", agent: "worker", status: "closed", answer: nil, options: "{}"},
+      "request" => %{
+        id: "req_1",
+        requester: Jason.encode!(Omunculus.Participant.agent("worker")),
+        status: "closed",
+        answer: nil,
+        options: "{}"
+      },
       "request_comments" => [%{body: "Use the existing logo."}],
       "catalog" => []
     }

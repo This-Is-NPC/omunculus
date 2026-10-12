@@ -1,4 +1,5 @@
 defmodule Omunculus.RunTest do
+  @human Omunculus.Fixtures.defaults(:requests).arbiter
   use ExUnit.Case, async: true
 
   alias Omunculus.{CLI, Fixtures, Id, Project, Run, Store}
@@ -327,7 +328,13 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
     message_id = message(project.conn)
     work_id = Fixtures.insert(project.conn, :works, %{title: "Fix the parser"})
-    request_id = Fixtures.insert(project.conn, :requests, %{work_id: work_id, agent: "worker"})
+
+    request_id =
+      Fixtures.insert(project.conn, :requests, %{
+        work_id: work_id,
+        requester: Jason.encode!(Omunculus.Participant.agent("worker"))
+      })
+
     inbox_id = Fixtures.insert(project.conn, :inbox, %{work_id: work_id})
     Fixtures.insert(project.conn, :comments, %{inbox_id: inbox_id, body: "standalone notice"})
     Fixtures.insert(project.conn, :comments, %{request_id: request_id, body: "please look"})
@@ -940,7 +947,7 @@ defmodule Omunculus.RunTest do
 
     refute Map.has_key?(options, "grant")
 
-    assert request.status == "waiting_human"
+    assert request.status == "pending"
 
     Project.close(project)
   end
@@ -1319,8 +1326,8 @@ defmodule Omunculus.RunTest do
       assert breaks_of(project, work_id) == []
 
       request = root_request(project, work_id)
-      assert request.arbiter == "human"
-      assert request.status == "waiting_human"
+      assert request.arbiter == @human
+      assert request.status == "pending"
 
       assert Jason.decode!(request.options) == %{
                "retry" => [],

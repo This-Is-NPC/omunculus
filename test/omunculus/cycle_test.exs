@@ -219,7 +219,7 @@ defmodule Omunculus.CycleTest do
         assert work.state == "waiting"
         assert work.waiting == "request"
         assert work.waiting_for == request.id
-        assert request.status == "waiting_human"
+        assert request.status == "pending"
       end
 
       assert all(project, "SELECT * FROM runs WHERE status != 'done'") == []
@@ -252,7 +252,7 @@ defmodule Omunculus.CycleTest do
       assert still_waiting.waiting_for == second_request.id
       assert [_original] = all(project, "SELECT * FROM runs WHERE work_id = ?", [second.id])
       [pending] = all(project, "SELECT * FROM requests WHERE id = ?", [second_request.id])
-      assert pending.status == "waiting_human"
+      assert pending.status == "pending"
 
       if unquote(stopped_state) == "cancelled" do
         args = %{"request_id" => second_request.id}

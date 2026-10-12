@@ -27,9 +27,19 @@ defmodule Omunculus.Fixtures do
   """
 
   @defaults %{
-    prompts: %{kind: "message", body: "hi", created_at: @now},
+    prompts: %{
+      kind: "message",
+      body: "hi",
+      created_at: @now,
+      actor_issuer: "local",
+      actor_subject: Omunculus.Operations.local_principal().subject
+    },
     events: %{type: "comment", body: "{}", at: @now},
-    runs: %{agent: "concierge", depth: "0", status: "open"},
+    runs:
+      Map.merge(%{agent: "concierge", depth: "0", status: "open"}, %{
+        origin_issuer: "local",
+        origin_subject: Omunculus.Operations.local_principal().subject
+      }),
     comments: %{author: "agent", kind: "note", body: "note", created_at: @now},
     works: %{
       title: "a work",
@@ -39,10 +49,15 @@ defmodule Omunculus.Fixtures do
       created_at: @now
     },
     requests: %{
-      agent: "concierge",
+      requester: Jason.encode!(%{"kind" => "agent", "agent" => "concierge"}),
       options: ~s({"grant":[{"name":"grant","args":{"kind":"tool","name":"write"}}],"deny":[]}),
-      arbiter: "human",
-      status: "waiting_human",
+      arbiter:
+        Jason.encode!(%{
+          "kind" => "human",
+          "issuer" => "local",
+          "subject" => Omunculus.Operations.local_principal().subject
+        }),
+      status: "pending",
       created_at: @now
     },
     inbox: %{agent: "concierge", created_at: @now}
@@ -184,7 +199,9 @@ defmodule Omunculus.Fixtures do
           execution: %{"id" => "execution-policy"},
           work_id: nil,
           via: nil,
-          request_id: nil
+          request_id: nil,
+          origin_issuer: "local",
+          origin_subject: Omunculus.Operations.local_principal().subject
         },
         fields
       )
@@ -212,7 +229,15 @@ defmodule Omunculus.Fixtures do
   def opening(prompt_id, work_id \\ nil, fields \\ %{}),
     do:
       Map.merge(
-        %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: nil, agent: nil},
+        %{
+          prompt_id: prompt_id,
+          work_id: work_id,
+          request_id: nil,
+          via: nil,
+          agent: nil,
+          origin_issuer: "local",
+          origin_subject: Omunculus.Operations.local_principal().subject
+        },
         fields
       )
 
@@ -344,7 +369,10 @@ defmodule Omunculus.Fixtures do
     policy = if is_map(policy), do: policy, else: %{}
 
     policy =
-      [assemble: "assemble", max_retries: 0]
+      [
+        assemble: "assemble",
+        max_retries: 0
+      ]
       |> Enum.reject(fn {key, _value} -> Keyword.get(opts, key, true) == false end)
       |> Enum.reduce(policy, fn {key, value}, policy ->
         Map.put_new(policy, Atom.to_string(key), value)

@@ -147,11 +147,11 @@ defmodule Omunculus.Store.Schema do
     CREATE TABLE IF NOT EXISTS requests (
       id TEXT PRIMARY KEY,
       run_id TEXT REFERENCES runs (id) DEFERRABLE INITIALLY DEFERRED,
-      agent TEXT NOT NULL,
+      requester TEXT NOT NULL CHECK (json_valid(requester)),
       work_id TEXT REFERENCES works (id) DEFERRABLE INITIALLY DEFERRED,
       options TEXT NOT NULL,
-      arbiter TEXT,
-      status TEXT NOT NULL CHECK (status IN ('waiting_human', 'waiting_agent', 'closed')),
+      arbiter TEXT NOT NULL CHECK (json_valid(arbiter)),
+      status TEXT NOT NULL CHECK (status IN ('pending', 'closed')),
       event_id TEXT REFERENCES events (id) DEFERRABLE INITIALLY DEFERRED,
       created_at TEXT NOT NULL
     )
@@ -198,6 +198,7 @@ defmodule Omunculus.Store.Schema do
     {"comments", "created_at"},
     {"works", "created_at"},
     {"requests", "created_at"},
+    {"requests", "requester"},
     {"inbox", "created_at"}
   ]
 
@@ -220,7 +221,8 @@ defmodule Omunculus.Store.Schema do
       "events" => ~w(conversation_id actor_kind origin_issuer origin_subject),
       "prompts" => ~w(conversation_id actor_issuer actor_subject),
       "runs" => ~w(conversation_id origin_issuer origin_subject cause_id),
-      "works" => ~w(conversation_id)
+      "works" => ~w(conversation_id),
+      "requests" => ~w(requester arbiter)
     }
 
     Enum.reduce_while(required, :ok, fn {table, columns_required}, :ok ->

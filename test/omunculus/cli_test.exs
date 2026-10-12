@@ -1,4 +1,6 @@
 defmodule Omunculus.CLITest do
+  @human Omunculus.Fixtures.defaults(:requests).arbiter
+  @concierge Jason.encode!(Omunculus.Participant.agent("concierge"))
   use ExUnit.Case, async: true
 
   alias Omunculus.{CLI, Fixtures, Project, Store}
@@ -521,8 +523,8 @@ defmodule Omunculus.CLITest do
       assert {:ok, request} =
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
 
-      assert request.status == "waiting_human"
-      assert request.arbiter == "human"
+      assert request.status == "pending"
+      assert request.arbiter == @human
 
       assert %{"deny" => [], "grant" => [%{"name" => "grant"}]} =
                Jason.decode!(request.options)
@@ -725,7 +727,7 @@ defmodule Omunculus.CLITest do
       Project.close(project)
 
       reason = Jason.decode!(body)["reason"]
-      assert request.status == "waiting_human"
+      assert request.status == "pending"
       assert reason =~ "agents.helper as it is:\n(none)"
       assert reason =~ "agents.helper as it would be:\n"
       refute Toml.decode_file!(config)["agents"]["helper"]
@@ -1188,7 +1190,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, request} =
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
 
-      assert request.status == "waiting_human"
+      assert request.status == "pending"
 
       assert {:ok, [_inbox_row]} = Query.all(project.conn, "SELECT * FROM inbox")
 
@@ -1758,7 +1760,7 @@ defmodule Omunculus.CLITest do
             assert {:ok, [request]} =
                      Query.all(
                        reader.conn,
-                       "SELECT * FROM requests WHERE status = 'waiting_agent'"
+                       "SELECT * FROM requests WHERE status = 'pending'"
                      )
 
             assert {:ok, ""} =
@@ -1789,7 +1791,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, [request]} = Query.all(reader.conn, "SELECT * FROM requests")
       assert request.status == "closed"
-      assert request.arbiter == "concierge"
+      assert request.arbiter == @concierge
 
       assert {:ok, request_run} =
                Query.one(reader.conn, "SELECT * FROM runs WHERE request_id IS NOT NULL")
@@ -1917,7 +1919,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, request} =
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
 
-      assert request.status == "waiting_human"
+      assert request.status == "pending"
 
       Project.close(project)
     end

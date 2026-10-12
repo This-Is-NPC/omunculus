@@ -328,12 +328,12 @@ defmodule Omunculus.Server.OpenAPI do
         object(
           %{
             id: string(),
-            run_id: string(),
-            agent: string(),
+            run_id: nullable_string(),
+            requester: %{type: "object"},
             work_id: nullable_string(),
             options: %{type: "object"},
-            arbiter: nullable_string(),
-            status: string(),
+            arbiter: %{type: "object"},
+            status: %{type: "string", enum: ~w(pending closed)},
             created_at: string()
           },
           ["id", "options", "status"]

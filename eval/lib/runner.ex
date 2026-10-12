@@ -465,7 +465,7 @@ defmodule EquivalentExchange.Runner do
       {:ok, rows} =
         Query.all(
           conn,
-          "SELECT id, options FROM requests WHERE status = 'waiting_human' ORDER BY created_at"
+          "SELECT id, options FROM requests WHERE status = 'pending' AND json_extract(arbiter, '$.kind') = 'human' ORDER BY created_at"
         )
 
       rows
@@ -566,7 +566,7 @@ defmodule EquivalentExchange.Runner do
 
   defp outcome(facts, {:ok, _answers}) do
     root = last_root(facts)
-    waiting = Enum.filter(facts.requests, &(&1.status == "waiting_human"))
+    waiting = Enum.filter(facts.requests, &(&1.status == "pending" and Jason.decode!(&1.arbiter)["kind"] == "human"))
 
     broke =
       Enum.any?(
@@ -639,7 +639,7 @@ defmodule EquivalentExchange.Runner do
 
       %{
         id: request.id,
-        agent: request.agent,
+        requester: Jason.decode!(request.requester),
         depth: Enum.find_value(facts.runs, &(&1.id == request.run_id && &1.depth)),
         arbiter: request.arbiter,
         status: request.status,

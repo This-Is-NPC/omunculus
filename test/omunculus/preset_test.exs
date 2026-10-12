@@ -1,4 +1,5 @@
 defmodule Omunculus.PresetTest do
+  @human Omunculus.Fixtures.defaults(:requests).arbiter
   use ExUnit.Case, async: true
 
   alias Omunculus.{CLI, Fixtures, Project}
@@ -131,7 +132,7 @@ defmodule Omunculus.PresetTest do
 
       project = open_project(dir)
 
-      assert {:ok, [%{arbiter: "human", status: "waiting_human"}]} =
+      assert {:ok, [%{arbiter: @human, status: "pending"}]} =
                Query.all(project.conn, "SELECT * FROM requests")
 
       Project.close(project)
@@ -173,7 +174,7 @@ defmodule Omunculus.PresetTest do
 
       project = open_project(dir)
       assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
-      assert request.status == "waiting_human"
+      assert request.status == "pending"
 
       assert %{"grant" => [%{"args" => %{"kind" => "secret", "name" => "vault"}}]} =
                Jason.decode!(request.options)

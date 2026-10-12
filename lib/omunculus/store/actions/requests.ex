@@ -20,7 +20,7 @@ defmodule Omunculus.Store.Actions.Requests do
   from a human, the TOML layer the harness rewrites.
   """
 
-  alias Omunculus.{Ceiling, Config, Id}
+  alias Omunculus.{Ceiling, Config, Id, Participant}
   alias Omunculus.Store.Actions.Helpers
   alias Omunculus.Store.{Events, Query, View}
   alias Omunculus.Tool.Invoke
@@ -89,7 +89,7 @@ defmodule Omunculus.Store.Actions.Requests do
       grant_event(conn, ctx, work, request.id, %{
         name: body["name"],
         kind: body["kind"],
-        agent: request.agent,
+        agent: Jason.decode!(request.requester)["agent"],
         depth: depth,
         scope: body["scope"]
       })
@@ -224,7 +224,8 @@ defmodule Omunculus.Store.Actions.Requests do
         else
           with {:ok, arbiter} <-
                  resolve_arbiter(conn, ctx, options, sealed_calls? or "sealed" in classes) do
-            open_request(conn, ctx, run, reason, options, arbiter_info(arbiter))
+            with {:ok, identity, work_id} <- arbiter_info(conn, ctx, run, arbiter),
+                 do: open_request(conn, ctx, run, reason, options, identity, work_id)
           end
         end
     end
@@ -267,19 +268,46 @@ defmodule Omunculus.Store.Actions.Requests do
     end
   end
 
-  defp arbiter_info(:human), do: %{arbiter: "human", status: "waiting_human", body_extra: %{}}
+  def human_arbiter(conn, ctx, run, work) do
+    conversation_id =
+      (run && run.conversation_id) || (work && work.conversation_id) ||
+        Map.get(ctx, :conversation_id)
 
-  defp arbiter_info({:agent, arbiter, arbiter_work_id}),
-    do: %{
-      arbiter: arbiter,
-      status: "waiting_agent",
-      body_extra: %{arbiter: arbiter, arbiter_work_id: arbiter_work_id}
-    }
+    with {:ok, conversation} <-
+           if(conversation_id,
+             do: Query.one(conn, "SELECT * FROM conversations WHERE id = ?", [conversation_id]),
+             else: {:ok, nil}
+           ) do
+      issuer =
+        (conversation && conversation.created_issuer) || (run && run.origin_issuer) ||
+          Map.get(ctx, :issuer)
 
-  defp open_request(conn, ctx, run, reason, options, arbiter) do
+      subject =
+        (conversation && conversation.created_subject) || (run && run.origin_subject) ||
+          Map.get(ctx, :subject)
+
+      if is_binary(issuer) and is_binary(subject),
+        do: {:ok, Participant.human(issuer, subject), nil},
+        else: {:error, {:request, :missing_participant}}
+    end
+  end
+
+  defp arbiter_info(conn, ctx, run, :human), do: human_arbiter(conn, ctx, run, nil)
+
+  defp arbiter_info(_conn, _ctx, _run, {:agent, agent, work}),
+    do: {:ok, Participant.agent(agent), work}
+
+  defp open_request(conn, ctx, run, reason, options, arbiter, arbiter_work_id) do
     request_id = Id.new()
     comment_id = Id.new()
-    body = Map.merge(%{reason: reason, options: options}, arbiter.body_extra)
+
+    body = %{
+      reason: reason,
+      options: options,
+      requester: Participant.agent(run.agent),
+      arbiter: arbiter,
+      arbiter_work_id: arbiter_work_id
+    }
 
     with {:ok, event} <-
            Events.append(conn, %{
@@ -294,11 +322,11 @@ defmodule Omunculus.Store.Actions.Requests do
            Query.insert(conn, :requests, %{
              id: request_id,
              run_id: ctx.run_id,
-             agent: run.agent,
+             requester: Jason.encode!(Participant.agent(run.agent)),
              work_id: ctx.work_id,
              options: Jason.encode!(options),
-             arbiter: arbiter.arbiter,
-             status: arbiter.status,
+             arbiter: Jason.encode!(arbiter),
+             status: "pending",
              event_id: event.id,
              created_at: Events.now()
            }),
@@ -319,7 +347,7 @@ defmodule Omunculus.Store.Actions.Requests do
     )
   end
 
-  defp ensure_open(%{status: status}) when status in ["waiting_human", "waiting_agent"], do: :ok
+  defp ensure_open(%{status: status}) when status == "pending", do: :ok
   defp ensure_open(_request), do: {:error, {:reply, :closed}}
 
   defp ensure_option(_request, body) when not is_map_key(body, "option"), do: :ok
@@ -333,8 +361,12 @@ defmodule Omunculus.Store.Actions.Requests do
   end
 
   defp authorize_reply(_request, %{author: "human"}), do: :ok
-  defp authorize_reply(%{status: "waiting_agent", arbiter: arbiter}, %{agent: arbiter}), do: :ok
-  defp authorize_reply(_request, _ctx), do: {:error, {:reply, :not_arbiter}}
+
+  defp authorize_reply(request, ctx) do
+    if Jason.decode!(request.arbiter) == Participant.agent(ctx.agent),
+      do: :ok,
+      else: {:error, {:reply, :not_arbiter}}
+  end
 
   defp apply_reply(conn, ctx, request, body) do
     comment_id = Id.new()

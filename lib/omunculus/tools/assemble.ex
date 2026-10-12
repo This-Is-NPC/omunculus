@@ -297,7 +297,7 @@ defmodule Omunculus.Tools.Assemble do
   defp request_section(nil, _comments), do: []
 
   defp request_section(request, comments) do
-    header = "#{request.id} #{Out.requested_by(request.agent)}"
+    header = "#{request.id} #{Out.requested_by(Omunculus.Participant.label(request.requester))}"
     comments = Enum.map(comments || [], & &1.body)
 
     if request.status == "closed" do

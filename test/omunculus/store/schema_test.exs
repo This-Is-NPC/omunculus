@@ -108,4 +108,20 @@ defmodule Omunculus.Store.SchemaTest do
                ["c1", "agent", "note", "hi", "2026-09-15T00:00:00Z"]
              )
   end
+
+  test "stores without participant identities require explicit recreation" do
+    {:ok, conn} = Omunculus.Store.Connection.open(":memory:")
+    on_exit(fn -> Omunculus.Store.Connection.close(conn) end)
+
+    assert :ok =
+             Query.exec(
+               conn,
+               "CREATE TABLE requests (id TEXT PRIMARY KEY, agent TEXT, arbiter TEXT, status TEXT)"
+             )
+
+    assert {:error, :store_requires_recreation} = Omunculus.Store.Schema.create(conn)
+
+    assert {:ok, [%{name: "requests"}]} =
+             Query.all(conn, "SELECT name FROM sqlite_master WHERE type = 'table'")
+  end
 end

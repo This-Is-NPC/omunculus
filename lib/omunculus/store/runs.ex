@@ -159,8 +159,10 @@ defmodule Omunculus.Store.Runs do
   def unanswered(conn, run, inbox_text) do
     Query.transaction(conn, fn ->
       case Query.one(conn, "SELECT * FROM requests WHERE id = ?", [run.request_id]) do
-        {:ok, %{status: "waiting_agent", arbiter: arbiter} = request} when arbiter == run.agent ->
-          escalate(conn, run, request, inbox_text)
+        {:ok, %{status: "pending"} = request} ->
+          if Jason.decode!(request.arbiter) == Omunculus.Participant.agent(run.agent),
+            do: escalate(conn, run, request, inbox_text),
+            else: {:ok, []}
 
         {:ok, _answered_or_not_its} ->
           {:ok, []}
@@ -174,12 +176,12 @@ defmodule Omunculus.Store.Runs do
   defp escalate(conn, run, request, inbox_text) do
     ctx = %{run_id: run.id, work_id: request.work_id, author: "harness", agent: run.agent}
 
-    with :ok <-
-           Query.exec(
-             conn,
-             "UPDATE requests SET arbiter = 'human', status = 'waiting_human' WHERE id = ?",
-             [request.id]
-           ),
+    with {:ok, human, nil} <- Omunculus.Store.Actions.Requests.human_arbiter(conn, ctx, run, nil),
+         :ok <-
+           Query.exec(conn, "UPDATE requests SET arbiter = ? WHERE id = ?", [
+             Jason.encode!(human),
+             request.id
+           ]),
          {:ok, event} <-
            Events.append(conn, %{
              type: "escalate",

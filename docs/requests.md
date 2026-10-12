@@ -11,8 +11,10 @@ The implementation tasks record which parts of this contract are delivered.
 ## Current implementation
 
 A request already has a question (`reason`), named options containing tool
-calls, a requester (`agent`, `run_id`, optional `work_id`), an arbiter, and
-one of `waiting_agent`, `waiting_human` or `closed` as its status. Its opening
+calls, a JSON `requester` identity, an `arbiter` identity, optional `run_id` and
+`work_id`, and `pending` or `closed` as its status. An agent identity names its
+agent; a human identity contains authenticated issuer and subject. Older
+stores without participant columns require explicit recreation. Its opening
 event and request comments hold the question. Options are immutable.
 
 `Store.Actions.Requests` validates and resolves the arbiter. A request from
