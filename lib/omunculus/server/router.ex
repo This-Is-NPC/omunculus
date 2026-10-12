@@ -138,7 +138,8 @@ defmodule Omunculus.Server.Router do
                 :reply_request do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, command_id} <- command_id(conn),
-         :ok <- reply_answer(conn.body_params),
+         {:ok, _body} <- required_string(conn.body_params, "body"),
+         {:ok, _option} <- optional_string(conn.body_params, "option"),
          {:ok, result} <-
            Project.command(
              project_id,
@@ -309,26 +310,6 @@ defmodule Omunculus.Server.Router do
   end
 
   defp required_string(_, _), do: {:error, :invalid}
-
-  defp reply_answer(answer) when is_map(answer) do
-    with {:ok, _} <- required_string(answer, "body"),
-         {:ok, _} <- optional_string(answer, "option") do
-      case Map.get(answer, "parts", %{}) do
-        parts when is_map(parts) ->
-          Enum.reduce_while(parts, :ok, fn {_part, value}, :ok ->
-            case reply_answer(value) do
-              :ok -> {:cont, :ok}
-              error -> {:halt, error}
-            end
-          end)
-
-        _ ->
-          {:error, :invalid}
-      end
-    end
-  end
-
-  defp reply_answer(_answer), do: {:error, :invalid}
 
   defp optional_string(map, key) do
     if Map.has_key?(map, key), do: required_string(map, key), else: {:ok, nil}

@@ -262,8 +262,22 @@ defmodule Omunculus.Store.EscalationTest do
           %{"logo" => %{"body" => "Blue."}, "tone" => %{"body" => ""}},
           %{"logo" => %{"body" => "Blue.", "option" => "unknown"}},
           %{"logo" => %{"body" => "Blue.", "parts" => %{"nested" => %{"body" => "No."}}}},
+          %{"logo" => %{"body" => "Blue.", "parts" => nil}},
+          %{"logo" => %{"body" => "Blue.", "parts" => []}},
+          %{"logo" => %{"body" => "Blue.", "parts" => 42}},
           %{"logo" => %{"body" => "Blue.", "request_id" => tone}}
         ] do
+      assert {:ok, false} =
+               Omunculus.Store.Access.reply_needs_project_config?(
+                 %Omunculus.Project{
+                   conn: conn,
+                   dir: ctx.config.root,
+                   config_path: Path.join(ctx.config.root, "omunculus.toml")
+                 },
+                 merged,
+                 %{"body" => "Answers.", "parts" => parts}
+               )
+
       assert {:error, _} =
                reply(conn, ctx.root_ctx, merged, %{"body" => "Answers.", "parts" => parts})
 

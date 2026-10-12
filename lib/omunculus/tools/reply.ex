@@ -6,7 +6,7 @@ defmodule Omunculus.Tools.Reply do
   A text-only answer chains no calls. Emits
   `reply` and chains the chosen option's tool calls
   from the `request` view, each with the request's `request_id` in its
-  args. Invalid or closed replies chain no calls and are refused by the store. Triggered from both the CLI and a model.
+  args. The store validates and authorizes the reply and rolls back refused calls. Triggered from both the CLI and a model.
   """
 
   alias Omunculus.Tools.{Args, Out}
@@ -14,27 +14,16 @@ defmodule Omunculus.Tools.Reply do
   @required ~w(request_id body)
 
   @spec run(map) :: map
-  def run(%{args: args, view: view} = input) do
+  def run(%{args: args, view: view}) do
     with nil <- Args.missing(args, @required),
          {:ok, parts} <- Args.object(args, "parts") do
       args =
         normalize(if Map.has_key?(args, "parts"), do: Map.put(args, "parts", parts), else: args)
 
-      with :ok <- Omunculus.RequestOptions.authorize(view["request"], args, is_nil(input.run_id)) do
-        calls =
-          case Omunculus.RequestOptions.validate(view["request"], args) do
-            :ok -> option_calls(view["request"], args)
-            {:error, _reason} -> []
-          end
-
-        Out.ok("", [
-          %{"type" => "reply", "body" => Map.take(args, ["parts", "option" | @required])}
-        ])
-        |> Map.put("chain", calls)
-      else
-        {:error, reason} ->
-          Out.fail(Out.refused(reason))
-      end
+      Out.ok("", [
+        %{"type" => "reply", "body" => Map.take(args, ["parts", "option" | @required])}
+      ])
+      |> Map.put("chain", option_calls(view["request"], args))
     else
       {:error, message} -> Out.fail(message)
       message -> Out.fail(message)
@@ -71,8 +60,10 @@ defmodule Omunculus.Tools.Reply do
         end)
       )
 
+    parts = if is_map(args["parts"]), do: args["parts"], else: %{}
+
     own ++
-      for {part, answer} <- Map.get(args, "parts", %{}),
+      for {part, answer} <- parts,
           is_map(answer),
           origin = Map.get(Map.get(request, :origins, %{}), part),
           not is_nil(origin),

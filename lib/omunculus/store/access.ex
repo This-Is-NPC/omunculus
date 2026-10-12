@@ -194,12 +194,13 @@ defmodule Omunculus.Store.Access do
   end
 
   defp needs_config?(request, answer) do
+    parts = if is_map(answer["parts"]), do: answer["parts"], else: %{}
     calls = Jason.decode!(request.options)[answer["option"]] || []
 
     Enum.any?(calls, fn call ->
       call["name"] == "grant" and not is_nil(get_in(call, ["args", "scope"]))
     end) or
-      Enum.any?(Map.get(answer, "parts", %{}), fn {part, value} ->
+      Enum.any?(parts, fn {part, value} ->
         is_map(value) and Map.has_key?(request.origins, part) and
           needs_config?(request.origins[part], value)
       end)

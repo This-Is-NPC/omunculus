@@ -1,9 +1,6 @@
 defmodule Omunculus.RequestOptions do
-  @moduledoc "Checks permission-bearing choices against their immutable original target before calls run."
+  @moduledoc "Store validation of replies and permission-bearing choices against their immutable original targets."
   alias Omunculus.Ceiling
-
-  def validate(request, answer, linked? \\ false)
-  def validate(nil, _answer, _linked?), do: :ok
 
   def validate(request, answer, linked?) do
     with :ok <- pending(request, linked?),
@@ -50,7 +47,6 @@ defmodule Omunculus.RequestOptions do
   end
 
   def authorize(_request, _answer, true), do: :ok
-  def authorize(nil, _answer, _human?), do: :ok
 
   def authorize(request, answer, false) do
     calls = Jason.decode!(request.options)[answer["option"]] || []
