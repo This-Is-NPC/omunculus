@@ -72,7 +72,7 @@ defmodule EquivalentExchange.Report do
 
   # How the team ran the work, from the store: the works it made and how
   # deep, what was left unfinished or sent back, and who asked for the
-  # network and whether that reached the person.
+  # network and the request envelopes received by a human, including escalations.
   defp teamwork(group) do
     works = Enum.map(group, &(&1["works"] || []))
     count = works |> Enum.map(&length/1) |> Enum.sum()
@@ -115,7 +115,7 @@ defmodule EquivalentExchange.Report do
   end
 
   defp teamwork_table(teamwork) do
-    "| configuration | executions | works per execution | deepest | unfinished works | sent back | runs per work | network asked, by depth | network asks reaching the person |\n|---|---|---|---|---|---|---|---|---|\n" <>
+    "| configuration | executions | works per execution | deepest | unfinished works | sent back | runs per work | network asked, by depth | network requests received by the person |\n|---|---|---|---|---|---|---|---|---|\n" <>
       (teamwork
        |> Enum.sort()
        |> Enum.map_join("\n", fn {name, t} ->

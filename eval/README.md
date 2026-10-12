@@ -63,7 +63,7 @@ A configuration may run a team of `packs/` instead: the dream team
 | `delegation` | Father hands works down; the workers hold what they need |
 | `workflow` | every work goes through transmute (Edward), verify (Riza), review (Alphonse) |
 | `negotiated` | the workers must ask Father for `fs.write`, `sandbox.write`, `bash`, `sandbox.network` |
-| `human-gated` | the workers must ask the person for them |
+| `human-gated` | workers request them through Father, who escalates for the human decision |
 | `dream-team` | the dream team of `packs/dream-team` alone, imported by the `pack` tool |
 | `sales-desk` | the sales desk, with the dream team one depth below it |
 | `agency` | the sales desk, with the dream team and the design team one depth below it |
@@ -181,6 +181,12 @@ has finished; then the runner plays the person, answering what waits on them
 as the task says, a few rounds at most. It grants a request only when the
 task grants everything asked; denying, it says what it would not grant and
 what it would.
+
+The teamwork report's `network_to_person` counts request envelopes about
+`sandbox.network` addressed to a human, including linked escalations. In
+human-gated, the worker's original request goes to Father and is not counted
+there; the escalation received by the person is. It is not a count of original
+worker requests or distinct permissions granted.
 
 ## The decider
 

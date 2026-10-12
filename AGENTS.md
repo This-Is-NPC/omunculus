@@ -130,6 +130,8 @@ mise run up                     # dev server and window; the server stops with t
 
 While the dev server runs, `bin/omunculus --config dev/omunculus.toml <command>` goes to it through the socket.
 
+The eval human-gated workers request sealed permissions through Father, who escalates to the configured human. Its network_to_person metric counts request envelopes received by a human, including escalations.
+
 The CLI reads no environment variables. The config file, and with it the model of every agent, comes from `--config <path>` or `./omunculus.toml`.
 
 ## Premises

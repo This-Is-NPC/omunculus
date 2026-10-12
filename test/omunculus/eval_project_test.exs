@@ -1,4 +1,6 @@
 Code.require_file("../../eval/lib/project.ex", __DIR__)
+Code.require_file("../../eval/lib/task.ex", __DIR__)
+Code.require_file("../../eval/lib/requests.ex", __DIR__)
 
 defmodule Omunculus.EvalProjectTest do
   use Omunculus.StoreCase, async: true
@@ -24,15 +26,7 @@ defmodule Omunculus.EvalProjectTest do
           spec.depth == 0 and not spec.workflow_only
         end)
 
-      conversation_id = Id.new()
-
-      :ok =
-        Query.insert(conn, :conversations, %{
-          id: conversation_id,
-          created_issuer: "test",
-          created_subject: "owner",
-          created_at: "2026-01-01"
-        })
+      conversation_id = conversation(conn)
 
       decision = %{
         "type" => "request",
@@ -101,15 +95,7 @@ defmodule Omunculus.EvalProjectTest do
 
       assert {:ok, config} = Config.load(path)
 
-      conversation = Id.new()
-
-      :ok =
-        Query.insert(conn, :conversations, %{
-          id: conversation,
-          created_issuer: "test",
-          created_subject: "owner",
-          created_at: "2026-01-01"
-        })
+      conversation = conversation(conn)
 
       root =
         Fixtures.insert(conn, :works, %{
@@ -130,51 +116,18 @@ defmodule Omunculus.EvalProjectTest do
 
       project = %Omunculus.Project{conn: conn, dir: config.root, config_path: path}
 
-      actor = fn agent, work, depth, stage ->
-        ceiling =
-          Ceiling.mount(
-            config,
-            %{
-              agent: agent,
-              depth: depth,
-              grants: [],
-              stage: stage,
-              workspace: Config.workspace_ceiling(config, nil),
-              groups: %{}
-            },
-            ["promote", "request_access", "reply", "escalate", "end", "grant"]
-          )
-
-        run =
-          Fixtures.open_run(conn, %{
-            agent: agent,
-            work_id: work,
-            depth: depth,
-            conversation_id: conversation,
-            ceiling: ceiling
-          })
-
-        %{
-          run_id: run.id,
-          work_id: work,
-          agent: agent,
-          author: "agent",
-          config: config,
-          groups: %{},
-          conversation_id: conversation,
-          trigger: "model"
-        }
-      end
-
       clerk =
-        actor.(
+        configured_actor(
+          conn,
+          config,
+          conversation,
           "clerk",
           child,
           1,
           Enum.find(config.workflows["release"], &(&1.name == "promote")).ceiling
         )
 
-      admin = actor.("administrator", root, 0, nil)
+      admin = configured_actor(conn, config, conversation, "administrator", root, 0)
 
       assert {:ok, %{ok: true}, events} =
                Harness.dispatch(
@@ -220,18 +173,7 @@ defmodule Omunculus.EvalProjectTest do
       assert {:ok, request} = Store.view(conn, "request", upstream)
       assert Jason.decode!(request.arbiter) == Participant.human("test", "owner")
 
-      human = %{
-        run_id: nil,
-        work_id: nil,
-        author: "human",
-        agent: nil,
-        issuer: "test",
-        subject: "owner",
-        config: config,
-        groups: %{},
-        conversation_id: conversation,
-        trigger: "cli"
-      }
+      human = human(config, conversation)
 
       assert {:ok, %{ok: true}, events} =
                Harness.dispatch(
@@ -263,6 +205,168 @@ defmodule Omunculus.EvalProjectTest do
       assert {:ok, %{grants: nil, waiting: "child"}} = Store.view(conn, "work", root)
     end
   end
+
+  test "human-gated worker network request escalates through Father and the eval responder grants its origin",
+       %{conn: conn} do
+    dir = Fixtures.tmp_dir()
+
+    assert {:ok, path} =
+             EquivalentExchange.Project.build(dir, "human-gated", {"fake", false}, nil)
+
+    assert {:ok, config} = Config.load(path)
+    conversation = conversation(conn)
+
+    root =
+      Fixtures.insert(conn, :works, %{
+        assignee: "father",
+        conversation_id: conversation,
+        state: "waiting",
+        waiting: "child"
+      })
+
+    child =
+      Fixtures.insert(conn, :works, %{
+        assignee: "edward",
+        parent_id: root,
+        conversation_id: conversation
+      })
+
+    project = %Omunculus.Project{conn: conn, dir: config.root, config_path: path}
+    worker = configured_actor(conn, config, conversation, "edward", child, 1)
+    father = configured_actor(conn, config, conversation, "father", root, 0)
+
+    assert {:ok, %{ok: true}, events} =
+             Harness.dispatch(
+               project,
+               "request_access",
+               %{
+                 "report" => "Need a dependency",
+                 "reason" => "Download dependency",
+                 "access" => [%{"kind" => "resource", "name" => "sandbox.network"}]
+               },
+               worker
+             )
+
+    origin = Enum.find(events, &(&1.type == "request")).request_id
+    assert {:ok, request} = Store.view(conn, "request", origin)
+    assert Jason.decode!(request.arbiter) == Participant.agent("father")
+
+    assert {:ok, %{ok: false}, _} =
+             Harness.dispatch(
+               project,
+               "reply",
+               %{"request_id" => origin, "body" => "Denied", "option" => "deny"},
+               father
+             )
+
+    assert {:ok, %{ok: true}, events} =
+             Harness.dispatch(
+               project,
+               "escalate",
+               %{
+                 "reason" => "Network needs a human decision",
+                 "origins" => %{"network" => origin}
+               },
+               father
+             )
+
+    upstream = Enum.find(events, &(&1.type == "request")).request_id
+    assert {:ok, request} = Store.view(conn, "request", upstream)
+    assert Jason.decode!(request.arbiter) == Participant.human("test", "owner")
+
+    answer =
+      EquivalentExchange.Requests.choose(
+        %{human: %{"sandbox.network" => "grant"}},
+        %{},
+        request,
+        config.root
+      )
+
+    assert answer["parts"]["network"]["option"] == "grant"
+    arguments = EquivalentExchange.Requests.arguments(path, upstream, answer)
+    assert ["--parts", encoded] = Enum.take(arguments, -2)
+    human = human(config, conversation)
+
+    assert {:ok, %{ok: true}, events} =
+             Harness.dispatch(
+               project,
+               "reply",
+               %{"request_id" => upstream, "body" => answer["body"], "parts" => encoded},
+               human
+             )
+
+    assert [%{work_id: ^child, actor_kind: "human"}] = Enum.filter(events, &(&1.type == "grant"))
+    assert {:ok, %{status: "closed", answer: "grant"}} = Store.view(conn, "request", origin)
+
+    assert {:ok, %{state: "open", grants: "[\"sandbox.network\"]"}} =
+             Store.view(conn, "work", child)
+
+    assert {:ok, %{grants: nil, waiting: "child"}} = Store.view(conn, "work", root)
+  end
+
+  defp configured_actor(conn, config, conversation, agent, work, depth, stage \\ nil) do
+    ceiling =
+      Ceiling.mount(
+        config,
+        %{
+          agent: agent,
+          depth: depth,
+          grants: [],
+          stage: stage,
+          workspace: Config.workspace_ceiling(config, nil),
+          groups: %{}
+        },
+        ["promote", "sandbox.network", "request_access", "reply", "escalate", "end", "grant"]
+      )
+
+    run =
+      Fixtures.open_run(conn, %{
+        agent: agent,
+        work_id: work,
+        depth: depth,
+        conversation_id: conversation,
+        ceiling: ceiling
+      })
+
+    %{
+      run_id: run.id,
+      work_id: work,
+      agent: agent,
+      author: "agent",
+      config: config,
+      groups: %{},
+      conversation_id: conversation,
+      trigger: "model"
+    }
+  end
+
+  defp conversation(conn) do
+    id = Id.new()
+
+    :ok =
+      Query.insert(conn, :conversations, %{
+        id: id,
+        created_issuer: "test",
+        created_subject: "owner",
+        created_at: "2026-01-01"
+      })
+
+    id
+  end
+
+  defp human(config, conversation),
+    do: %{
+      run_id: nil,
+      work_id: nil,
+      author: "human",
+      agent: nil,
+      issuer: "test",
+      subject: "owner",
+      config: config,
+      groups: %{},
+      conversation_id: conversation,
+      trigger: "cli"
+    }
 
   defp opening(conn, config, agent, conversation) do
     work = Fixtures.insert(conn, :works, %{assignee: agent, conversation_id: conversation})
