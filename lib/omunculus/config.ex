@@ -7,7 +7,7 @@ defmodule Omunculus.Config do
   per-depth layers under `[policy.depth.N]`, the workspaces under
   `[workspaces.<name>]` — each a directory `root` (resolved against the
   project root) plus a ceiling layer — the `[policy] workspace`
-  default, the required `[policy] max_retries`, the optional `[policy]
+  default, the required `[policy] max_retries` and `request_routes`, the optional `[policy]
   last_run_output_bytes` and `tool_output_bytes`, the optional `[policy]
   conversation_bytes` (how much of its conversation's works and exchanges
   a run without a work is shown), the optional `[policy]
@@ -43,6 +43,7 @@ defmodule Omunculus.Config do
     :workflows,
     :assemble,
     :max_retries,
+    :request_routes,
     :last_run_output_bytes,
     :tool_output_bytes,
     :conversation_bytes,
@@ -119,6 +120,7 @@ defmodule Omunculus.Config do
           workflows: %{String.t() => [step]},
           assemble: String.t() | nil,
           max_retries: non_neg_integer,
+          request_routes: [map],
           last_run_output_bytes: pos_integer | nil,
           tool_output_bytes: pos_integer | nil,
           conversation_bytes: pos_integer | nil,
@@ -164,7 +166,7 @@ defmodule Omunculus.Config do
   @mcp_server_keys ~w(name command protocol_version secrets)
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
-  @policy_extra_keys ~w(depth workflows workspace assemble max_retries last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes)
+  @policy_extra_keys ~w(depth workflows workspace assemble max_retries last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes request_routes)
   @agent_extra_keys ~w(depth text workflow_only model assemble)
   @http_model_keys ~w(api url model timeout_ms temperature headers body provider stream retries code_mode)
   @openai_model_keys @http_model_keys ++ ~w(prompt_cache_key)
@@ -678,6 +680,12 @@ defmodule Omunculus.Config do
               send_catalog,
               session} <-
                parse_policy(Map.get(data, "policy", %{}), workflows, workspaces),
+             {:ok, request_routes} <-
+               Omunculus.RequestRoutes.parse(
+                 get_in(data, ["policy", "request_routes"]),
+                 agents,
+                 workflows
+               ),
              {:ok, mcp} <- parse_mcp(Map.get(data, "mcp", %{}), auth),
              {:ok, secrets} <- parse_secrets(Map.get(data, "secrets", %{}), auth),
              {:ok, tools} <- parse_tools(Map.get(data, "tools"), config_dir),
@@ -696,6 +704,7 @@ defmodule Omunculus.Config do
               workflows: workflows,
               assemble: assemble,
               max_retries: max_retries,
+              request_routes: request_routes,
               last_run_output_bytes: last_run_output_bytes,
               tool_output_bytes: tool_output_bytes,
               conversation_bytes: conversation_bytes,

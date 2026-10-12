@@ -193,7 +193,7 @@ defmodule Omunculus.CycleTest do
             call.("ask", %{
               "question" => "May I proceed with #{goal}?",
               "options" => ["yes", "no"],
-              "to" => "person"
+              "to" => "owner"
             })
           end
         end)

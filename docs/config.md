@@ -45,6 +45,34 @@ the harness breaks it ([the cycle](cycle.md)). `[workspaces.<w>.policy]
 max_retries`, or `[policy] max_retries` in the workspace's `config` file,
 sets it for the works in that workspace.
 
+`[policy] request_routes` is mandatory and nonempty. Loading a config without
+it refuses with `{:policy, {:invalid, :request_routes}}`. Routes are parsed
+once into `Config.request_routes`, including workspace overlays. For example:
+
+```toml
+[policy]
+request_routes = [
+  { name = "owner", via = ["origin"] },
+  { via = ["parent", "origin"] },
+]
+```
+
+The first rule matching the optional logical route name (`to`), authenticated
+`from` identity, `workflow` and `stage` selects its `via` list. Unnamed requests
+match unnamed rules. A stage filter requires its workflow; both must exist.
+Destinations are `parent` (the parent work's assignee), `origin` (the authenticated
+conversation creator, or the run/command origin when there is no conversation),
+or an identity `{ kind = "agent", agent = "name" }` / `{ kind = "human",
+issuer = "issuer", subject = "subject" }`. A named agent must be an ancestor's
+assignee or a configured depth-0 agent. Missing contextual destinations and
+participants already in the linked request's origins are skipped within that
+explicit list. If none resolves, the action refuses with `{:request, :no_route}`
+and changes nothing. There is no implicit human fallback. Routing does not
+authorize grants; sealed capabilities and permanent scopes still need a human's
+selected option on the original request. Escalation resolves a new route from
+the receiving participant's context. Presets, Amestris and the benchmark declare
+`parent` then `origin` in TOML; eval overlays inherit those routes.
+
 `[policy] last_run_output_bytes` is optional: a positive integer, how
 many bytes of each tool call's output the `## Last run` section of the
 assembled prompt keeps; the rest is cut and a line says how many bytes
@@ -205,6 +233,7 @@ names). Credentials are the JSON file, mode 0600, not the project SQLite.
 mode = "auto"
 assemble = "assemble"
 max_retries = 3
+request_routes = [{ via = ["parent", "origin"] }]
 
 [agents.concierge]
 depth = 0

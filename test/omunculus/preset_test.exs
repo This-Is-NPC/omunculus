@@ -97,12 +97,19 @@ defmodule Omunculus.PresetTest do
       Project.close(project)
     end
 
-    test "a worker's request for sandbox.write goes to the person, not the concierge",
+    test "a worker permission climbs through the concierge to the person",
          %{dir: dir} do
       Fixtures.install_default(dir)
 
+      turns = :atomics.new(1, [])
+
       model = fn assembled, _tools, call ->
+        assert :atomics.add_get(turns, 1, 1) <= 4, "unexpected extra model turn"
+
         cond do
+          assembled =~ "## Inbox" or assembled =~ "## Request" ->
+            call.("end", %{})
+
           assembled =~ "You are the worker." ->
             call.("request_access", %{
               "report" => "blocked on writing",
@@ -132,8 +139,13 @@ defmodule Omunculus.PresetTest do
 
       project = open_project(dir)
 
-      assert {:ok, [%{arbiter: @human, status: "pending"}]} =
-               Query.all(project.conn, "SELECT * FROM requests")
+      assert {:ok, requests} =
+               Query.all(project.conn, "SELECT * FROM requests ORDER BY created_at")
+
+      assert [%{status: "escalated", arbiter: arbiter}, %{status: "pending", arbiter: @human}] =
+               requests
+
+      assert Jason.decode!(arbiter) == Omunculus.Participant.agent("concierge")
 
       Project.close(project)
     end

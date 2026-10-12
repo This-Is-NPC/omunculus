@@ -48,19 +48,18 @@ a granted name blocked
             → deny; no REQUESTS row
 only grant calls, every name have
             → already granted: <name>; no REQUESTS row
-opened by the harness, or a granted name sealed
-            → REQUESTS arbiter = human
-every tool of every option have for the agent of the parent work,
-and every granted name have or askable for it
-            → REQUESTS arbiter = that agent
-otherwise   → REQUESTS arbiter = human
+otherwise   → resolve the configured request route
 ```
 
 `auto` only moves the unnamed bucket to askable. It does not skip
-`REQUESTS` and it does not write a grant on its own. Depth 0 has nobody
-above: the request goes to the person. The arbiter's `reply` runs the
-chosen option's calls under the arbiter's ceiling: an agent needs each
-of them as have in its run.
+`REQUESTS` and does not write a grant on its own. Routing follows the
+first matching `[policy] request_routes` rule, independently of whether
+the receiving participant can authorize the option. A receiver answers
+or escalates through the same linked request path. A sealed grant climbs
+that route; only an authorized human may choose its grant option on the
+original request, directly or through named reply parts. The arbiter's
+`reply` chains chosen option calls under its ceiling; an agent needs each
+of them as have in its run. See [request routing](config.md).
 
 `pinned` intersects the same way `granted` does: an empty list on a layer
 does not restrict. Tools in `pinned` ∩ effective become cards; the rest
@@ -108,8 +107,8 @@ lists `deny = ["counter"]`.
 
 `sandbox.write` and `sandbox.network` are ceiling resources. They are
 separate from the right to *call* a tool of a similar name. The worker in
-the default preset has `request_sandbox` in `tools` and `sandbox.write` in
-`human`: it may ask, the request goes to the person, and it may not write
+the default preset has `request_access` in `tools` and `sandbox.write` in
+`human`: it may ask through the configured route, and it may not write
 the workspace until a grant.
 
 | Resource state | What the executor does |

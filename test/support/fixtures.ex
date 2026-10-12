@@ -371,7 +371,11 @@ defmodule Omunculus.Fixtures do
     policy =
       [
         assemble: "assemble",
-        max_retries: 0
+        max_retries: 0,
+        request_routes: [
+          %{"via" => ["parent", "origin"]},
+          %{"name" => "owner", "via" => ["origin"]}
+        ]
       ]
       |> Enum.reject(fn {key, _value} -> Keyword.get(opts, key, true) == false end)
       |> Enum.reduce(policy, fn {key, value}, policy ->

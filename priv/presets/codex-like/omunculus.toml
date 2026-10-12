@@ -82,6 +82,7 @@ You are a Codex-style coding agent. Work in the repository with Bash and filesys
 """
 
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 last_run_output_bytes = 8192

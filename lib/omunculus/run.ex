@@ -26,7 +26,7 @@ defmodule Omunculus.Run do
   and the work is still open, the work gets another run with `via` =
   `retry`, until the latest runs of the work without `end` exceed
   `max_retries`; then the harness breaks a work that has a parent with a
-  comment saying so, and for a root work opens a request to the human,
+  comment saying so, and for a root work opens a request along the configured route,
   with that sentence as its reason, the options `retry` and `cancel`, and
   an inbox entry naming the request. A run opened for a named agent is
   not retried. A cancelled work does not open runs, and a work's own run
@@ -570,7 +570,8 @@ defmodule Omunculus.Run do
            state.run,
            state.config.max_retries,
            &Out.unreported/1,
-           &Out.request_inbox/3
+           &Out.request_inbox/3,
+           state.config
          ) do
       {:ok, :retry} ->
         Cycle.open(project, %{

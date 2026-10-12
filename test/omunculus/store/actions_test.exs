@@ -1731,10 +1731,10 @@ defmodule Omunculus.Store.ActionsTest do
       assert count(conn, "works") == 0
     end
 
-    test "every option tool have for the parent's agent routes to that agent", %{conn: conn} do
+    test "requests follow the configured parent route", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
-      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
+      run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
       ctx = request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
 
       assert {:ok, [_tool_event, event]} =
@@ -1751,13 +1751,13 @@ defmodule Omunculus.Store.ActionsTest do
       assert body["arbiter_work_id"] == parent_id
     end
 
-    test "a decision goes to the agent above, or to the person when it says so", %{conn: conn} do
+    test "a decision follows the default or named logical route", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       config = Fixtures.config(arbiter_toml())
 
       arbiter = fn extra ->
         work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
-        run = Fixtures.open_run(conn, %{ceiling: @ceiling})
+        run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
 
         body =
           Map.merge(%{"reason" => "ship it?", "options" => %{"yes" => [], "no" => []}}, extra)
@@ -1776,9 +1776,9 @@ defmodule Omunculus.Store.ActionsTest do
       end
 
       assert arbiter.(%{}) == @concierge
-      assert arbiter.(%{"to" => "person"}) == @human
+      assert arbiter.(%{"to" => "owner"}) == @human
 
-      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
+      run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
 
       assert {:error, {:request, {:invalid, "to"}}} =
                record_tool(
@@ -1793,24 +1793,30 @@ defmodule Omunculus.Store.ActionsTest do
                )
     end
 
-    test "an option calling a tool only the person may give the requester goes to the person",
+    test "sealed option effects still route through the parent",
          %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
-      run = Fixtures.open_run(conn, %{ceiling: %{@ceiling | askable: [], sealed: ["write"]}})
+
+      run =
+        Fixtures.open_run(conn, %{
+          agent: "worker",
+          ceiling: %{@ceiling | askable: [], sealed: ["write"]}
+        })
+
       ctx = request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
       calling = request_emit(%{"apply" => [%{"name" => "write", "args" => %{}}], "deny" => []})
 
       assert {:ok, [_tool_event, event]} = record_tool(conn, [calling], ctx)
 
-      assert {:ok, %{arbiter: @human, status: "pending"}} =
+      assert {:ok, %{arbiter: @concierge, status: "pending"}} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
     end
 
-    test "an option tool the parent's agent does not have falls back to human", %{conn: conn} do
+    test "unavailable option effects do not bypass the configured parent", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
-      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
+      run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
       ctx = request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
 
       options = %{
@@ -1820,14 +1826,14 @@ defmodule Omunculus.Store.ActionsTest do
 
       assert {:ok, [_tool_event, event]} = record_tool(conn, [request_emit(options)], ctx)
 
-      assert {:ok, %{arbiter: @human}} =
+      assert {:ok, %{arbiter: @concierge}} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
     end
 
-    test "a grant the parent's agent is denied falls back to human", %{conn: conn} do
+    test "denied parent grants still arrive for escalation", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
-      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
+      run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
       ctx = request_ctx(run, work_id, Fixtures.config(deny_write_toml()))
 
       assert {:ok, [_tool_event, event]} =
@@ -1836,15 +1842,15 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, request} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
 
-      assert request.arbiter == @human
+      assert request.arbiter == @concierge
       assert request.status == "pending"
-      assert Jason.decode!(event.body)["arbiter"]["kind"] == "human"
+      assert Jason.decode!(event.body)["arbiter"]["kind"] == "agent"
     end
 
-    test "a request by the harness goes to the human", %{conn: conn} do
+    test "harness requests follow the configured route", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
-      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
+      run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
 
       ctx = %{
         request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
@@ -1854,7 +1860,7 @@ defmodule Omunculus.Store.ActionsTest do
       assert {:ok, [_tool_event, event]} =
                record_tool(conn, [access_request("tool", "write")], ctx)
 
-      assert {:ok, %{arbiter: @human}} =
+      assert {:ok, %{arbiter: @concierge}} =
                Query.one(conn, "SELECT * FROM requests WHERE id = ?", [event.request_id])
     end
   end
@@ -1990,7 +1996,7 @@ defmodule Omunculus.Store.ActionsTest do
     test "the arbiter agent may reply", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
       work_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, assignee: "worker"})
-      run = Fixtures.open_run(conn, %{ceiling: @ceiling})
+      run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
       ctx = request_ctx(run, work_id, Fixtures.config(arbiter_toml()))
       {:ok, [_tool, request]} = record_tool(conn, [access_request("tool", "write")], ctx)
       arbiter_ctx = %{ctx | agent: "concierge", work_id: parent_id}

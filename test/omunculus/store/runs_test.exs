@@ -197,7 +197,8 @@ defmodule Omunculus.Store.RunsTest do
         run,
         max_retries,
         &"stopped after #{&1}",
-        &"#{&1} #{&2} #{Enum.join(&3, " ")}"
+        &"#{&1} #{&2} #{Enum.join(&3, " ")}",
+        Fixtures.config()
       )
 
   test "unreported retries a work while its runs without end are within max_retries",

@@ -19,7 +19,7 @@ event
     → reaction runs of hooks with an agent
     → if the model stopped by itself on a work still open: a retry run of
       that work, or, once max_retries is used up, a break (a child) or a
-      request to the person (a root)
+      request along the configured route (a root)
 ```
 
 `end` is the only action that ends a run. `delegate`, `request`,
@@ -73,7 +73,7 @@ close (end, or the model stopped)
     next runs the ending call's actions asked for, then hooks of end,
       then reaction runs of hooks with an agent
     the model stopped by itself on a work still open: retry, break, or a
-      request to the person
+      request along the configured route
 ```
 
 The TOML is read again at this opening. `RUNS.tools` is a snapshot of the
@@ -132,7 +132,7 @@ reach `max_retries` (`[policy]`, or the work's workspace), the harness
 does not open another run. A work with a parent gets `break` with the
 comment `The work stopped without a report after N runs.`, which parks it
 and wakes the parent waiting on it, whose run opens. A root work gets a
-request to the person instead, opened by the harness with that sentence
+request along the configured route instead, opened by the harness with that sentence
 as its reason and the options `retry` (no call) and `cancel`, and an
 inbox entry that names the request; the work waits on it. `reply --option retry`
 opens another run of the work; `reply --option cancel` cancels it. The
@@ -231,7 +231,7 @@ not a request: no row opens, and a tool that emits `request` without
 ending the run gets `already granted: <name>` in its output. A granted
 name that is blocked is `EVENTS(deny)`. Otherwise a request opens, its
 reason the first comment on it; if a work is attached it becomes
-`waiting = request`. [The ceiling](ceiling.md) says who the arbiter is.
+`waiting = request`. [Request routing](config.md) resolves its arbiter independently of grant authority.
 The request tool ends the asking run; an agent arbiter's run opens on
 the parent work after it closes.
 

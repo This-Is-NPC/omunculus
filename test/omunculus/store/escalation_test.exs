@@ -88,7 +88,7 @@ defmodule Omunculus.Store.EscalationTest do
         ceiling: %{
           have: ["ask", "reply", "escalate", "end", "grant"],
           askable: ["write"],
-          sealed: ["deploy"],
+          sealed: ["deploy", "promote"],
           blocked: [],
           uncited: "askable",
           overrides: %{}
@@ -409,6 +409,25 @@ defmodule Omunculus.Store.EscalationTest do
   end
 
   test "a human receiver can escalate to an agent without a synthetic run", %{conn: conn} = ctx do
+    config =
+      Fixtures.config(
+        @agents <>
+          """
+          [policy]
+          request_routes = [
+            { from = { kind = "agent", agent = "worker" }, via = ["origin"] },
+            { via = ["parent", "origin"] }
+          ]
+          """
+      )
+
+    ctx = %{
+      ctx
+      | config: config,
+        owner: %{ctx.owner | config: config},
+        child_ctxs: Enum.map(ctx.child_ctxs, &%{&1 | config: config})
+    }
+
     origin =
       ask(conn, hd(ctx.child_ctxs), "Deploy?", %{
         "grant" => [%{"name" => "grant", "args" => %{"kind" => "tool", "name" => "deploy"}}]
@@ -571,16 +590,20 @@ defmodule Omunculus.Store.EscalationTest do
     assert Enum.count(runs, &(&1.type == "reply")) == 4
   end
 
-  test "the harness grants a named part only to its original work, with human authority",
+  test "sealed promote climbs two receivers and grants only the original work with human authority",
        %{conn: conn} = ctx do
     [child | _] = ctx.child_ctxs
 
     options = %{
-      "grant" => [%{"name" => "grant", "args" => %{"name" => "deploy", "kind" => "tool"}}]
+      "grant" => [%{"name" => "grant", "args" => %{"name" => "promote", "kind" => "tool"}}]
     }
 
     origin = ask(conn, child, "Deploy permission", options)
-    upstream = escalate(conn, Map.put(ctx.owner, :work_id, ctx.lead), %{"permission" => origin})
+    upstream = escalate(conn, ctx.lead_ctx, %{"permission" => origin})
+    top = escalate(conn, ctx.root_ctx, %{"release" => upstream})
+    assert Jason.decode!(request(conn, origin).arbiter) == Participant.agent("lead")
+    assert Jason.decode!(request(conn, upstream).arbiter) == Participant.agent("root")
+    assert Jason.decode!(request(conn, top).arbiter) == Participant.human("test", "owner")
     project = %Omunculus.Project{conn: conn, dir: ctx.config.root, config_path: ctx.config.path}
 
     answer = %{
@@ -595,6 +618,12 @@ defmodule Omunculus.Store.EscalationTest do
     assert work(conn, child.work_id).grants == nil
     human = Map.put(ctx.owner, :trigger, "cli")
 
+    answer = %{
+      "request_id" => top,
+      "body" => "Production approved",
+      "parts" => %{"release" => Map.take(answer, ["body", "parts"])}
+    }
+
     assert {:ok, %{ok: true}, events} =
              Omunculus.Harness.dispatch(project, "reply", answer, human)
 
@@ -602,7 +631,7 @@ defmodule Omunculus.Store.EscalationTest do
     assert grant.work_id == child.work_id
     assert grant.request_id == origin
     assert grant.actor_kind == "human"
-    assert Jason.decode!(work(conn, child.work_id).grants) == ["deploy"]
+    assert Jason.decode!(work(conn, child.work_id).grants) == ["promote"]
     assert work(conn, ctx.lead).grants == nil
     assert work(conn, ctx.root).grants == nil
   end
@@ -742,13 +771,13 @@ defmodule Omunculus.Store.EscalationTest do
     assert work(conn, first.work_id).grants == nil
   end
 
-  test "amestris works without routes for decisions, permissions and root retry exhaustion", %{
+  test "amestris configures routes for decisions, permissions and root retry exhaustion", %{
     conn: conn
   } do
     {:ok, config} =
       Omunculus.Config.load(Path.expand("../../../eval/presets/amestris/omunculus.toml", __DIR__))
 
-    refute Map.has_key?(config.data["policy"], "request_routes")
+    assert config.request_routes == [%{"via" => ["parent", "origin"]}]
 
     run =
       Fixtures.open_run(conn, %{
@@ -793,7 +822,8 @@ defmodule Omunculus.Store.EscalationTest do
                stopped,
                0,
                &Omunculus.Tools.Out.unreported/1,
-               &Omunculus.Tools.Out.request_inbox/3
+               &Omunculus.Tools.Out.request_inbox/3,
+               config
              )
 
     assert request(conn, retry.request_id).status == "pending"

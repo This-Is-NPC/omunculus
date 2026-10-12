@@ -409,7 +409,7 @@ negotiable = ["sandbox.write"]
 human = ["delete"]
 ```
 
-**Ask the agent above** — `sandbox.write` is have for calling `request_sandbox`,
+**Ask the agent above** — `sandbox.write` is have for calling `request_access`,
 and negotiable as a resource. Have on the tool is not have on the resource.
 Until a grant, the workspace is read-only for external commands.
 

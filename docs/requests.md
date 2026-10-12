@@ -21,12 +21,15 @@ agent; a human identity contains authenticated issuer and subject. Older
 stores without participant columns require explicit recreation. Its opening
 event and request comments hold the question. Options are immutable.
 
-`Store.Actions.Requests` validates and resolves the arbiter. A request from
-a child goes to the parent work's assignee if that agent can perform every
-option's calls and grant the requested names. Explicit `to = person`,
-sealed capabilities, an unsuitable parent, a root or a workless run, and
-harness requests go to the human. Blocked grants and requests consisting
-only of grants the requester already has are refused.
+`Store.Actions.Requests` validates options and resolves the receiver through
+required TOML `request_routes`, parsed once into `Config.request_routes`.
+The first matching rule supplies ordered destinations: parent work, authenticated
+origin or a configured participant. Optional `to` names a logical route, not a
+participant type. Missing routing refuses explicitly; there is no implicit human
+fallback. Blocked grants and requests consisting only of grants the requester
+already has are refused. Sealed grants, including production promotion, follow
+the same route and may reach intermediaries that cannot grant them; selecting
+the grant still requires authorized human identity on the original target.
 
 A request parks its work with `state = waiting`, `waiting = request` and
 `waiting_for = request_id`. A work waiting on children cannot open a request.
@@ -61,13 +64,11 @@ part closes only its origin through the same reply action, with the actual
 answerer's identity. Omitted parts return to pending; a text-only upstream
 answer resumes the intermediary for distribution even while it waits on
 children. The eval runner chooses answers recursively from those original
-options and records the original grant/decision selections. Human escalation
-commands and configurable routes are not exposed at this commit.
+options and records the original grant/decision selections. Human creation and escalation commands remain in task 3281. Configurable routes
+apply to creation, escalation, unanswered receivers and harness retry exhaustion.
 
 `Store.Runs.unanswered/4` uses the same linked escalation action when an agent
-receiver closes without answering a pending request. The new request goes to
-the next parent receiver, or the authenticated conversation/run origin at the
-root. It records an inbox note naming the unresolved origin and pointing to the
+receiver closes without answering a pending request. The new request follows the configured route from its receiving participant. It records an inbox note naming the unresolved origin and pointing to the
 upstream request that a human can answer. Explicitly escalated origins are not escalated again, and neither
 requester nor arbiter identities are rewritten in place.
 
@@ -268,7 +269,7 @@ run; a later reply uses the same authorization and state checks.
 Closing an arbiter run after it explicitly escalated does not trigger
 `unanswered` again. Unanswered pending requests use the same linked
 single-origin escalation action; no in-place arbiter rewrite remains.
-Configurable routing for that action is part of 3281. A pending
+The same configured routing applies to that action. A pending
 human request does not imply a model run or model retry policy; closing an
 unrelated agent run cannot escalate it automatically. Request and reply events remain the causes of the
 runs they open. The harness schedules and applies; tools build the merged
@@ -409,12 +410,12 @@ respective answers are returned.
 
 | Current path | Placement in the model | Current gap / required change |
 | --- | --- | --- |
-| `ask` | Question or decision; empty call lists for named answers. | Requires at least two options today. Allow no options and text replies through the common path; retain named decisions. |
+| `ask` | Question or decision; empty call lists for named answers. | Options are optional; text replies and named decisions share the common path. |
 | `request_access` | Permission form; each grant option grants the entire requested set, or deny returns text. | Already emits one request. Use the common lifecycle and escalation while retaining blocked/already-have checks and human-only permanent scopes. |
-| `request_sandbox` | Sandbox permissions are `request_access` entries with `kind = resource`, e.g. `sandbox.write`. | No such builtin module or manifest exists at this commit. Older references in `docs/ceiling.md` and `docs/possibilities.md` are stale. Correct those references when folding paths in; introduce no alias or second sandbox request tool. |
+| `request_sandbox` | Sandbox permissions are `request_access` entries with `kind = resource`, e.g. `sandbox.write`. | No such builtin module or manifest exists at this commit. There is no alias or second sandbox request tool. |
 | `reply` → `grant` / `cancel` | A selected answer applies the origin's ordered calls transactionally. | Text-only replies, optional named options and recursive named parts share the authorized reply path. Grant/cancel remain chain-only. |
 | Questions carried by `break`, then `reopen` | A resumable question is a request; escalation carries it upward and reply resumes it. | Design lead, designer and administrator instructions use stopping reports for missing information. Replace those question instructions with requests. Keep `break` and `reopen` for actual failed/stopped work and correction. |
-| `promote` approval | A permission request for the clerk's production tool follows the configured decision route, regardless of intermediary type. | Dream-team seals `promote` as human-only and its clerk requests it with `request_access`, which currently jumps to the human. Preserve the human grant boundary internally while linking every escalation; the requester does not choose a human endpoint. `promote` itself remains the deployment tool and publishes only after the grant; a text approval cannot run it. |
+| `promote` approval | A permission request for the clerk's production tool follows the configured decision route, regardless of intermediary type. | Dream-team seals `promote` as human-only and its clerk requests it with `request_access`, which follows configured routing through intermediaries. Preserve the human grant boundary internally while linking every escalation; the requester does not choose a human endpoint. `promote` itself remains the deployment tool and publishes only after the grant; a text approval cannot run it. |
 | `propose_config`, `propose_pack` | Decision requests with `apply` calling `configure` or `pack`, and `deny` calling nothing. | Keep validated proposals, revision checks and human authorization on the shared path. Free text records advice without applying a proposal. Resolve the configured responsibility without requiring the asker to identify its participant type. |
 | Harness retry / cancel | Decision request to the configured responsible participant after root retry exhaustion. | Keep `retry` as an explicit named decision and `cancel` as an effect-bearing option; a text-only reply reopens the requester without recording either decision. Child exhaustion remains a genuine break. |
 | Unanswered arbiter run | Single-origin linked escalation. | Uses the common linked escalation action and notifies the inbox when the next receiver is human. Explicitly escalated origins do not escalate twice. |

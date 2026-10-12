@@ -4,8 +4,8 @@ defmodule Omunculus.Tools.Ask do
   whose optional `options` are the names given — each a short name of lowercase
   letters, digits, dashes and underscores, what it means said in the
   question — each calling nothing, so the answer
-  is the option chosen and its comment; with `to = "person"` the request is
-  the person's to answer. Its manifest's `then` appends `end`.
+  is the option chosen and its comment. Optional `to` names a configured
+  logical route. Its manifest's `then` appends `end`.
   """
 
   alias Omunculus.Tools.{Args, Out}

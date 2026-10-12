@@ -124,7 +124,7 @@ defmodule Omunculus.Tools.Out do
   @spec answer_request() :: String.t()
   def answer_request,
     do:
-      "This run is for answering it: call reply with your answer in body, optionally choosing one of these options, before anything else."
+      "This run is for this request: reply with your answer in body, optionally choosing an option, or escalate it if you cannot answer."
 
   @spec read_only_workspace() :: String.t()
   def read_only_workspace,

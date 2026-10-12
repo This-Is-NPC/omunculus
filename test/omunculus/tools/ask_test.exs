@@ -10,14 +10,14 @@ defmodule Omunculus.Tools.AskTest do
                args: %{
                  "question" => "Discount of 15%?",
                  "options" => ["approve", "deny"],
-                 "to" => "person"
+                 "to" => "owner"
                }
              })
 
     assert body == %{
              "reason" => "Discount of 15%?",
              "options" => %{"approve" => [], "deny" => []},
-             "to" => "person"
+             "to" => "owner"
            }
   end
 

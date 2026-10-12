@@ -82,6 +82,31 @@ defmodule Omunculus.ConfigTest do
     assert access != nil
   end
 
+  test "request routes are required, validated once and retained on Config", %{dir: dir} do
+    agents = "[agents.concierge]\ndepth = 0\ntext = \"root\"\n"
+    Fixtures.write_config(dir, agents, request_routes: false)
+    assert {:error, {:policy, {:invalid, :request_routes}}} = load(dir)
+
+    for routes <- [
+          "[]",
+          "42",
+          "[{ via = [] }]",
+          "[{ via = [\"person\"] }]",
+          "[{ via = [{ kind = \"agent\", agent = \"absent\" }] }]",
+          "[{ workflow = \"absent\", via = [\"origin\"] }]"
+        ] do
+      Fixtures.write_config(dir, agents <> "\n[policy]\nrequest_routes = #{routes}\n")
+      assert {:error, {:policy, {:invalid, :request_routes}}} = load(dir)
+    end
+
+    Fixtures.write_config(
+      dir,
+      agents <> "\n[policy]\nrequest_routes = [{ via = [\"parent\", \"origin\"] }]\n"
+    )
+
+    assert {:ok, %{request_routes: [%{"via" => ["parent", "origin"]}]}} = load(dir)
+  end
+
   test "the default preset names assemble on policy" do
     assert {:ok, %Config{assemble: "assemble"}} = Config.load(default_preset())
   end
@@ -1674,6 +1699,7 @@ defmodule Omunculus.ConfigTest do
 
       [policy]
       max_retries = 0
+      request_routes = [{ via = ["parent", "origin"] }]
 
       [models.fake]
       api = "module"

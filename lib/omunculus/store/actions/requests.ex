@@ -9,30 +9,23 @@ defmodule Omunculus.Store.Actions.Requests do
 
   alias Omunculus.{Ceiling, Config, Id, Participant}
   alias Omunculus.Store.Actions.{Contract, Helpers}
-  alias Omunculus.Store.{Events, Query, View}
+  alias Omunculus.Store.{Events, Query, RequestRoutes, View}
   alias Omunculus.Tool.Invoke
 
   @scopes ~w(agent depth stage workspace)
 
   def request(conn, body, ctx) do
     with :ok <- Helpers.ensure_text(:request, body, "reason"),
-         :ok <- valid_destination(body),
+         :ok <- valid_destination(body, ctx),
          {:ok, options} <- options(body["options"]),
          {:ok, run} <- fetch_run(conn, ctx.run_id),
          :ok <- ensure_actor_run(run, ctx),
          {:ok, work} <- Helpers.fetch_work(conn, ctx.work_id),
          :ok <- Helpers.ensure_not_waiting_children(:request, work),
          {:ok, participant} <- Participant.from_context(ctx),
-         {:ok, snapshot} <- classify_options(conn, run, options),
+         :ok <- classify_options(conn, run, options),
          {:ok, arbiter, arbiter_work_id} <-
-           resolve_arbiter(
-             conn,
-             ctx,
-             run,
-             work,
-             options,
-             for_person?(ctx, body, snapshot, options)
-           ) do
+           RequestRoutes.resolve(conn, ctx, run, work, participant, body["to"], []) do
       create(
         conn,
         ctx,
@@ -58,8 +51,7 @@ defmodule Omunculus.Store.Actions.Requests do
            origins(conn, body["origins"], participant, conversation(ctx, run, work)),
          forbidden = Enum.flat_map(origins, fn {_part, origin} -> requesters(origin) end),
          {:ok, arbiter, arbiter_work_id} <-
-           resolve_arbiter(conn, ctx, run, work, %{}, false),
-         :ok <- next_receiver(arbiter, participant, forbidden),
+           RequestRoutes.resolve(conn, ctx, run, work, participant, nil, forbidden),
          {:ok, request} <-
            create(
              conn,
@@ -102,74 +94,12 @@ defmodule Omunculus.Store.Actions.Requests do
     end
   end
 
-  defp valid_destination(body) do
-    if body["to"] in [nil, "person"], do: :ok, else: {:error, {:request, {:invalid, "to"}}}
-  end
+  defp valid_destination(body, ctx) do
+    routes = ctx.config.request_routes
 
-  defp for_person?(ctx, body, snapshot, options) do
-    ctx.author == "harness" or body["to"] == "person" or
-      (snapshot &&
-         (Enum.any?(grants(options), &(Ceiling.classify(snapshot, &1.name, &1.kind) == "sealed")) or
-            Enum.any?(
-              List.flatten(Map.values(options)),
-              &(Ceiling.classify(snapshot, &1.name, "tool") == "sealed")
-            )))
-  end
-
-  defp resolve_arbiter(conn, ctx, run, work, _options, true),
-    do: human_arbiter(conn, ctx, run, work)
-
-  defp resolve_arbiter(conn, ctx, run, work, options, _person?) do
-    with {:ok, parent} <- Helpers.fetch_work(conn, work && work.parent_id),
-         {:ok, arbiter} <- agent_arbiter(conn, ctx, parent, options) do
-      case arbiter do
-        :human -> human_arbiter(conn, ctx, run, work)
-        {:agent, name, work_id} -> {:ok, Participant.agent(name), work_id}
-      end
-    end
-  end
-
-  defp human_arbiter(conn, ctx, run, work) do
-    with {:ok, conversation} <-
-           if(conversation(ctx, run, work),
-             do:
-               Query.one(conn, "SELECT * FROM conversations WHERE id = ?", [
-                 conversation(ctx, run, work)
-               ]),
-             else: {:ok, nil}
-           ) do
-      issuer =
-        (conversation && conversation.created_issuer) || (run && run.origin_issuer) ||
-          Map.get(ctx, :issuer)
-
-      subject =
-        (conversation && conversation.created_subject) || (run && run.origin_subject) ||
-          Map.get(ctx, :subject)
-
-      if is_binary(issuer) and is_binary(subject),
-        do: {:ok, Participant.human(issuer, subject), nil},
-        else: {:error, {:request, :missing_participant}}
-    end
-  end
-
-  defp next_receiver(arbiter, participant, forbidden) do
-    if arbiter in [participant | forbidden], do: {:error, {:request, :no_route}}, else: :ok
-  end
-
-  defp agent_arbiter(_conn, _ctx, nil, _options), do: {:ok, :human}
-  defp agent_arbiter(_conn, _ctx, %{assignee: nil}, _options), do: {:ok, :human}
-
-  defp agent_arbiter(conn, ctx, parent, options) do
-    tools = options |> Map.values() |> List.flatten() |> Enum.map(& &1.name) |> Enum.uniq()
-    grants = grants(options)
-
-    with {:ok, snapshot} <-
-           work_ceiling(conn, ctx, parent, parent.assignee, tools ++ Enum.map(grants, & &1.name)) do
-      if Enum.all?(tools, &(Ceiling.classify(snapshot, &1, "tool") == "have")) and
-           Enum.all?(grants, &(Ceiling.classify(snapshot, &1.name, &1.kind) in ~w(have askable))),
-         do: {:ok, {:agent, parent.assignee, parent.id}},
-         else: {:ok, :human}
-    end
+    if is_nil(body["to"]) or Enum.any?(routes, &(&1["name"] == body["to"])),
+      do: :ok,
+      else: {:error, {:request, {:invalid, "to"}}}
   end
 
   defp ensure_actor_run(nil, %{author: "human"}), do: :ok
@@ -191,7 +121,7 @@ defmodule Omunculus.Store.Actions.Requests do
         Map.get(ctx, :conversation_id)
 
   defp classify_options(_conn, nil, options) do
-    if grants(options) == [], do: {:ok, nil}, else: {:error, {:request, :no_requester_run}}
+    if grants(options) == [], do: :ok, else: {:error, {:request, :no_requester_run}}
   end
 
   defp classify_options(conn, run, options) do
@@ -214,7 +144,7 @@ defmodule Omunculus.Store.Actions.Requests do
                   |> Enum.map(fn {grant, _} -> grant.name end)
                   |> Enum.uniq()
                   |> Enum.join(", ")}}},
-             else: {:ok, snapshot}
+             else: :ok
       end
     end
   end

@@ -65,19 +65,26 @@ defmodule Omunculus.SpecRegressionTest do
   end
 
   defp ensure_policy(body) do
-    Enum.reduce([{"assemble", ~s("assemble")}, {"max_retries", "0"}], body, fn {key, value},
-                                                                               body ->
-      cond do
-        String.contains?(body, key <> " =") ->
-          body
+    Enum.reduce(
+      [
+        {"assemble", ~s("assemble")},
+        {"max_retries", "0"},
+        {"request_routes", ~s([{ via = ["parent", "origin"] }])}
+      ],
+      body,
+      fn {key, value}, body ->
+        cond do
+          String.contains?(body, key <> " =") ->
+            body
 
-        String.contains?(body, "[policy]") ->
-          String.replace(body, "[policy]", "[policy]\n#{key} = #{value}", global: false)
+          String.contains?(body, "[policy]") ->
+            String.replace(body, "[policy]", "[policy]\n#{key} = #{value}", global: false)
 
-        true ->
-          body <> "\n[policy]\n#{key} = #{value}\n"
+          true ->
+            body <> "\n[policy]\n#{key} = #{value}\n"
+        end
       end
-    end)
+    )
   end
 
   defp write_config(project, text) do
@@ -130,27 +137,32 @@ defmodule Omunculus.SpecRegressionTest do
     assert {:ok, []} = Store.comments(p.conn, :work, work)
   end
 
-  test "sealed child request goes to the human even when the parent has authority", %{project: p} do
+  test "sealed child request reaches the parent without granting authority", %{project: p} do
     parent = Fixtures.insert(p.conn, :works, %{assignee: "concierge"})
     child = Fixtures.insert(p.conn, :works, %{assignee: "worker", parent_id: parent})
 
-    Fixtures.use_model(p, fn _, _, call ->
-      call.("request_access", %{
-        "report" => "blocked",
-        "access" => [%{"kind" => "tool", "name" => "write"}],
-        "reason" => "write report"
-      })
+    Fixtures.use_model(p, fn assembled, _, call ->
+      if assembled =~ "## Request" do
+        call.("end", %{})
+      else
+        call.("request_access", %{
+          "report" => "blocked",
+          "access" => [%{"kind" => "tool", "name" => "write"}],
+          "reason" => "write report"
+        })
 
-      flunk("request_access must end the run")
+        flunk("request_access must end the run")
+      end
     end)
 
     assert {:ok, _} =
              Run.open(p, Fixtures.opening(nil, child))
 
-    assert {:ok, [%{arbiter: @human, status: "pending"}]} =
-             Query.all(p.conn, "SELECT * FROM requests")
+    assert {:ok,
+            [%{arbiter: @concierge, status: "escalated"}, %{arbiter: @human, status: "pending"}]} =
+             Query.all(p.conn, "SELECT * FROM requests ORDER BY created_at")
 
-    assert {:ok, [_]} = Query.all(p.conn, "SELECT * FROM runs")
+    assert {:ok, [_, _]} = Query.all(p.conn, "SELECT * FROM runs")
   end
 
   test "an agent cannot reply to a human request", %{project: p} do

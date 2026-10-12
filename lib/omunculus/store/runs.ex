@@ -7,7 +7,7 @@ defmodule Omunculus.Store.Runs do
   chained, each followed by its emits, as one transaction so a failed
   emit leaves no stray `tool` event, `close/2` ends the run. `begin/2`
   refuses a run of a cancelled work, and a work's own run (`own`, no
-  named agent) of a work that is not open. `unreported/5` decides in one transaction what follows a
+  named agent) of a work that is not open. `unreported/6` decides in one transaction what follows a
   closed run whose model stopped without `end` on a work still open:
   another run while the work's latest runs without `end` are within
   `max_retries`; past it, a `break` with the given text for a child,
@@ -125,14 +125,16 @@ defmodule Omunculus.Store.Runs do
           map,
           non_neg_integer,
           (pos_integer -> String.t()),
-          (String.t(), String.t(), [String.t()] -> String.t())
+          (String.t(), String.t(), [String.t()] -> String.t()),
+          map
         ) :: {:ok, :retry | :none | {:stopped, [map]}} | {:error, term}
-  def unreported(conn, run, max_retries, reason_text, inbox_text) do
+  def unreported(conn, run, max_retries, reason_text, inbox_text, config) do
     Query.transaction(conn, fn ->
       with {:ok, work} <- Helpers.fetch_work(conn, run.work_id) do
         case {work.state, View.unended_runs(conn, work.id)} do
           {"open", runs} when runs > max_retries ->
-            with {:ok, events} <- stop_work(conn, run, work, reason_text.(runs), inbox_text),
+            with {:ok, events} <-
+                   stop_work(conn, run, work, reason_text.(runs), inbox_text, config),
                  do: {:ok, {:stopped, events}}
 
           {"open", runs} when runs > 0 ->
@@ -218,8 +220,16 @@ defmodule Omunculus.Store.Runs do
     end
   end
 
-  defp stop_work(conn, run, %{parent_id: nil}, text, inbox_text) do
-    ctx = %{run_id: run.id, work_id: run.work_id, author: "harness", agent: run.agent}
+  defp stop_work(conn, run, %{parent_id: nil}, text, inbox_text, config) do
+    ctx = %{
+      run_id: run.id,
+      work_id: run.work_id,
+      author: "harness",
+      agent: run.agent,
+      config: config,
+      groups: %{}
+    }
+
     options = %{"retry" => [], "cancel" => [%{"name" => "cancel"}]}
     body = %{"reason" => text, "options" => options}
 
@@ -231,7 +241,7 @@ defmodule Omunculus.Store.Runs do
     end
   end
 
-  defp stop_work(conn, run, _child, text, _inbox_text) do
+  defp stop_work(conn, run, _child, text, _inbox_text, _config) do
     ctx = %{run_id: run.id, work_id: run.work_id, author: "agent", agent: run.agent}
     Actions.run(conn, [%{"type" => "break", "body" => %{"body" => text}}], ctx)
   end

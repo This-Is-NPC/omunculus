@@ -42,9 +42,9 @@ module = "Omunculus.Model.Fake"
 [agents.concierge]
 depth = 0
 model = "fake"
-tools = ["break", "catalog", "continue", "delegate", "done", "end", "forward", "fs.read", "reopen", "reply", "skills", "store", "work"]
+tools = ["break", "catalog", "continue", "delegate", "done", "end", "escalate", "forward", "fs.read", "reopen", "reply", "skills", "store", "work"]
 # Only the person lets the work or a secret leave the machine: a request
-# for the network goes to them, never to the concierge.
+# for the network climbs through receivers until they can approve it.
 human = ["sandbox.network"]
 text = """
 You are the project concierge; you talk with the person and hand work to the agents under ## Agents.
@@ -86,6 +86,7 @@ steps = [
 ]
 
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 last_run_output_bytes = 8192
