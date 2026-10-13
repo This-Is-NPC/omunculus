@@ -1673,6 +1673,39 @@ defmodule Omunculus.RunTest do
       Project.close(project)
     end
 
+    test "done is refused while a child that broke waits on the run, leaving the work open",
+         %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      parent_id = Fixtures.insert(project.conn, :works)
+
+      child_id =
+        Fixtures.insert(project.conn, :works, %{
+          parent_id: parent_id,
+          assignee: "worker",
+          state: "waiting"
+        })
+
+      test_pid = self()
+
+      scripted(project, [
+        fn call ->
+          send(test_pid, {:done, call.("done", %{"report" => "finished"})})
+          call.("break", %{"report" => "passed up"})
+        end
+      ])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, parent_id))
+
+      assert_received {:done, {:ok, refused}}
+      assert refused == Out.refused({:continue, {:broken_child, child_id}})
+      assert breaks_of(project, parent_id) == ["passed up"]
+      assert {:ok, %{state: "waiting"}} = Store.view(project.conn, "work", parent_id)
+      assert {:ok, %{state: "waiting"}} = Store.view(project.conn, "work", child_id)
+
+      Project.close(project)
+    end
+
     test "end leaves a work open when a request of it is pending or a run of it is due, and on a named agent's run",
          %{dir: dir} do
       retry_config(dir, "max_retries = 1")

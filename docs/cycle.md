@@ -285,7 +285,11 @@ advance the sequence.
 parent waiting on its children: a `break` reopens the parent at once, a
 closing `continue` or a `cancel` once each of the parent's children is
 done or cancelled. The event that reopened the parent carries its
-`parent_id`, and the parent's next run opens. A message to a work waiting
+`parent_id`, and the parent's next run opens. A child that broke waits
+on that run to `reopen` it or `break` the parent: until one does, the
+store refuses the parent's `continue` (so `done`, or a move to the next
+stage), its `delegate` and its `end`, so the broken child is never left
+parked for good. A message to a work waiting
 on its children leaves it waiting: it opens a run of the work's agent,
 named, which may comment, delegate more and end but not `done`, `break`
 or request, and the last child back still wakes the work. A root work is only closed,

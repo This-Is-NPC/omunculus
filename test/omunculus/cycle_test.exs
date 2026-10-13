@@ -10,7 +10,7 @@ defmodule Omunculus.CycleTest do
   [agents.lead]
   depth = 0
   text = "lead"
-  tools = ["comment", "continue", "delegate", "done", "end", "work"]
+  tools = ["break", "comment", "continue", "delegate", "done", "end", "work"]
 
   [agents.alpha]
   depth = 1
@@ -41,7 +41,8 @@ defmodule Omunculus.CycleTest do
   end
 
   # The root is created by the run of send, splits into two children and
-  # is done when it runs again; each child runs `child`.
+  # is done when it runs again, or breaks when the store refuses done
+  # because a child broke; each child runs `child`.
   defp model(child) do
     fn assembled, _tools, call ->
       case {role(assembled), last_comment(assembled)} do
@@ -60,8 +61,11 @@ defmodule Omunculus.CycleTest do
             ]
           })
 
-        {"lead", _children_done} ->
-          call.("done", %{"report" => "shipped"})
+        {"lead", _children_back} ->
+          case call.("done", %{"report" => "shipped"}) do
+            {:ok, "refused: " <> _broken} -> call.("break", %{"report" => "A failed"})
+            done -> done
+          end
 
         {"alpha", _comment} ->
           child.(assembled, call)
@@ -306,14 +310,24 @@ defmodule Omunculus.CycleTest do
     project = Fixtures.open_project(dir)
     assert all(project, "SELECT * FROM runs WHERE status != 'done'") == []
 
-    # The failed child is broken, which wakes the root once B is done.
+    # The failed child is broken, which wakes the root once B is done; the
+    # root cannot be done while A waits on it, so it breaks too.
     [failed] = all(project, "SELECT * FROM works WHERE goal = 'Goal A'")
 
     assert [_break] =
              all(project, "SELECT * FROM events WHERE type = 'break' AND work_id = ?", [failed.id])
 
     {root, runs} = root_runs(project)
-    assert root.state == "done"
+    assert root.state == "waiting"
+
+    assert [] =
+             all(project, "SELECT * FROM events WHERE type = 'continue' AND work_id = ?", [
+               root.id
+             ])
+
+    assert [_break] =
+             all(project, "SELECT * FROM events WHERE type = 'break' AND work_id = ?", [root.id])
+
     assert length(runs) == 3
     Project.close(project)
   end

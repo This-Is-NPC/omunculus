@@ -287,13 +287,9 @@ defmodule Omunculus.Tools.Out do
   def refused({:request, {:already_have, names}}),
     do: "refused: you already have #{names}; use it rather than asking"
 
-  def refused({:delegate, {:broken_child, work_id}}),
+  def refused({tag, {:broken_child, work_id}}) when tag in [:delegate, :continue, :end],
     do:
-      "refused: work #{work_id} below yours broke and waits on you: reopen it with instructions, or break to pass it up"
-
-  def refused({:end, {:broken_child, work_id}}),
-    do:
-      "refused: work #{work_id} below yours broke and waits on you: reopen it with instructions, or break to pass it up, before ending"
+      "refused: work #{work_id} below yours broke and waits on you: reopen it with instructions, or break to pass it up, before you go on"
 
   def refused({:end, :work_open}),
     do:

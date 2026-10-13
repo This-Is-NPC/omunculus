@@ -2,7 +2,8 @@ defmodule Omunculus.Store.Actions.Sequence do
   @moduledoc """
   Sequence actions of spec §3.4: `continue` moves a work to the next
   workflow stage, or closes it on the last stage or when its depth has no
-  workflow, and is refused while the work waits; `break` parks it with a
+  workflow, and is refused while the work waits or a child that broke
+  waits on it; `break` parks it with a
   comment, and is refused while the work waits on its children. A
   `break` reopens a parent
   waiting on its children at once; `reopen` sends a child that broke back
@@ -37,6 +38,7 @@ defmodule Omunculus.Store.Actions.Sequence do
     with :ok <- ensure_context(:continue, ctx),
          {:ok, work} <- fetch_work(:continue, conn, ctx.work_id),
          :ok <- ensure_open(:continue, work),
+         :ok <- no_broken_child(:continue, conn, work.id),
          {:ok, next} <- next_step(conn, ctx.config, work) do
       apply_continue(conn, ctx, work, next)
     end
@@ -58,7 +60,7 @@ defmodule Omunculus.Store.Actions.Sequence do
          :ok <- Helpers.ensure_text(:delegate, body, "title"),
          :ok <- Helpers.ensure_text(:delegate, body, "goal"),
          {:ok, parent} <- fetch_work(:delegate, conn, ctx.work_id),
-         :ok <- no_broken_child(conn, parent),
+         :ok <- no_broken_child(:delegate, conn, parent.id),
          child_depth = View.work_depth(conn, parent) + 1,
          {:ok, start} <-
            Helpers.tag_error(
@@ -75,15 +77,16 @@ defmodule Omunculus.Store.Actions.Sequence do
   end
 
   # A broken child calls its parent to decide: until it reopens or breaks,
-  # handing out more work would leave the broken one parked for good.
-  defp no_broken_child(conn, parent) do
+  # handing out more work, handing the work on or ending the run would leave
+  # the broken one parked for good.
+  defp no_broken_child(tag, conn, parent_id) do
     case Query.one(
            conn,
            "SELECT id FROM works WHERE parent_id = ? AND state = 'waiting' AND waiting IS NULL LIMIT 1",
-           [parent.id]
+           [parent_id]
          ) do
       {:ok, nil} -> :ok
-      {:ok, %{id: id}} -> {:error, {:delegate, {:broken_child, id}}}
+      {:ok, %{id: id}} -> {:error, {tag, {:broken_child, id}}}
       {:error, _reason} = error -> error
     end
   end
@@ -262,9 +265,6 @@ defmodule Omunculus.Store.Actions.Sequence do
            conn,
            """
            SELECT works.state = 'open' AND json_extract(start.body, '$.own') AS open,
-             (SELECT child.id FROM works AS child
-              WHERE child.parent_id = works.id AND child.state = 'waiting' AND child.waiting IS NULL
-              LIMIT 1) AS broken,
              EXISTS (SELECT 1 FROM requests
                      WHERE requests.work_id = works.id AND requests.status IN ('pending', 'escalated'))
                OR EXISTS (SELECT 1 FROM events
@@ -283,11 +283,9 @@ defmodule Omunculus.Store.Actions.Sequence do
            """,
            [ctx.work_id, ctx.run_id]
          ) do
-      {:ok, %{open: 1, broken: broken}} when is_binary(broken) ->
-        {:error, {:end, {:broken_child, broken}}}
-
-      {:ok, %{open: 1, held: 0}} ->
-        {:error, {:end, :work_open}}
+      {:ok, %{open: 1, held: held}} ->
+        with :ok <- no_broken_child(:end, conn, ctx.work_id),
+             do: if(held == 0, do: {:error, {:end, :work_open}}, else: :ok)
 
       {:ok, _settled} ->
         :ok

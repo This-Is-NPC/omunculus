@@ -261,7 +261,11 @@ refusal tells the model to hand the work on — `done`, `ask`, `work` or
 `break` — and, when a child that broke waits on the run, to reopen it or
 break first. A run without a work, a named agent's run, and a call whose
 other actions leave the work waiting, done or cancelled end freely.
-`continue` does not name a stage. `prompt` and `attach` take
+`continue` does not name a stage. While a child that broke waits on the
+work, the store refuses `continue`, `delegate` and `end` alike, with one
+refusal telling the model to reopen the child or break the work: `done`,
+or a tool that moves the work to its next stage, cannot close or hand on
+a work and leave the broken child parked for good. `prompt` and `attach` take
 `attachments`, each `{name, media_type, bytes, sha256}` checked against
 the file `Omunculus.Attachments` keeps; `attach` needs a run. `EVENTS` is append-only.
 
