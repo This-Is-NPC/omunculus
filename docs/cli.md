@@ -8,12 +8,21 @@ The `omunculus` binary: `omunculus [--config <path>] <name> [--key value]`
 dispatches the tool `<name>` through `Omunculus.CLI.main/1`, and
 `omunculus serve --config <server.toml>` starts the HTTP server.
 
-### Dispatch
+For tools and `access bootstrap`, `--config <path>` is the only flag that belongs to the binary, and it must
+come first. Without it the file is `./omunculus.toml` in the working
+directory. `bin/omunculus` always passes that path unless the first argument
+is already `--config` or `serve`, and makes a relative `--config` absolute
+against the caller's directory. The project root is the directory of that file, or
+`[project] root` resolved against it. The SQLite store is `[store] path`,
+also resolved against the file.
 
-`omunculus send` is the `send` tool, `omunculus inbox` the `inbox` tool:
-the same `{name, args, view}` in and `{ok, output, emit, chain}` out the
-model uses, with the trigger `cli`. Replacing the folder named `send`
-replaces the command. A name the catalog does not hold is a refusal.
+The binary reads no environment variables: the config file, and with it the
+model of every agent, comes from `--config <path>` or `./omunculus.toml`.
+
+A missing file is `` no config at <path>; run `omunculus preset <name> --from <dir>` ``. There is no package config to fall back to.
+The one exception is a tool whose manifest set `config = false`, which is
+how `preset` can write the file every other verb then reads. `preset` still
+takes `--config` as the destination it writes to.
 
 `--config <path>` is the only flag of the binary itself, and it comes
 first. Without it the file is `./omunculus.toml` in the working directory;
@@ -56,14 +65,26 @@ held by another direct command is refused as in use.
 --subject <subject>` seeds the first project administrator; only the
 owner of the config file may, and only while the project has no member.
 
-`omunculus serve --config <server.toml>` starts the HTTP server on the
-projects its registry lists, until it is stopped.
+`<name>` is recorded in the receipt (`preset <name> applied`). `--from` is
+the directory that actually supplies the bytes: it must contain
+`omunculus.toml`, and if it contains `tools/` that tree is copied beside the
+file. `[tools] paths`, the `path` of each of its `[[packs]]` and
+`[execution.sandbox] script` are rewritten to
+absolute locations resolved against `--from`, and the `tools/` folder
+beside the written file is appended to `paths`, so a checkout of
+`priv/presets/default` keeps pointing at `priv/tools` and `priv/sandbox.js`
+after the copy.
 
 ## The commands
 
 Each command is a builtin tool whose manifest lists the `cli` trigger.
 
-### `omunculus ask`
+The default preset's reviewer uses `ask` to request execution output it
+lacks without stopping the work, and the default preset imports the
+[system team](packs.md#the-system-team).
+
+A `--from` that is not a directory, or that has no `omunculus.toml`, is
+`unknown preset: <name>`.
 
 ```text
 omunculus ask <question> [--options <options>] [--to <to>]
