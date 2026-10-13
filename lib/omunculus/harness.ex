@@ -27,6 +27,8 @@ defmodule Omunculus.Harness do
   request from a run without a work, a run of that run's agent in its
   conversation. An upstream text answer resumes an intermediary with unresolved
   origins even while its work waits on children; human requesters need no run.
+  A message to a work waiting on its children opens a run of the work's
+  agent, named, and leaves the work waiting.
   The `runs.request` view is the run that opened the run's
   request.
   """
@@ -804,14 +806,15 @@ defmodule Omunculus.Harness do
     do: {:ok, Jason.decode!(body)["name"]}
 
   defp advance(project, _catalog, %{type: "prompt"} = event, via, :actions) do
-    opening = %{
-      prompt_id: event.prompt_id,
-      work_id: event.work_id,
-      via: via,
-      agent: Jason.decode!(event.body)["agent"]
-    }
-
-    with :ok <- due(project, event, opening), do: {:ok, via}
+    with {:ok, agent} <- prompt_agent(project, event),
+         :ok <-
+           due(project, event, %{
+             prompt_id: event.prompt_id,
+             work_id: event.work_id,
+             via: via,
+             agent: agent
+           }),
+         do: {:ok, via}
   end
 
   defp advance(project, _catalog, %{type: "reply"} = event, via, :actions) do
@@ -837,6 +840,17 @@ defmodule Omunculus.Harness do
   end
 
   defp advance(_project, _catalog, _event, via, _phase), do: {:ok, via}
+
+  # A message to a work waiting on its children runs the work's agent by
+  # name, since the work's own run opens only once the work is open again.
+  defp prompt_agent(project, %{work_id: work_id} = event) do
+    with {:ok, work} <- fetch_work(project, work_id) do
+      case work do
+        %{state: "waiting", waiting: "child", assignee: assignee} -> {:ok, assignee}
+        _other -> {:ok, Jason.decode!(event.body)["agent"]}
+      end
+    end
+  end
 
   defp open_reaction_run(project, event, hook_name, agent) do
     due(project, event, %{

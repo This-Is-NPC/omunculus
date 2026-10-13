@@ -1734,6 +1734,58 @@ defmodule Omunculus.CLITest do
       end
     end
 
+    test "a message to a parent waiting on its child runs it without letting the child go, so the child's done wakes it",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "I am the concierge."
+      tools = ["work", "comment", "end"]
+
+      [agents.worker]
+      depth = 1
+      text = "I am the worker."
+      tools = ["comment", "continue", "done", "end"]
+      """)
+
+      project = open_project(dir)
+      parent = Fixtures.insert(project.conn, :works, %{state: "waiting", waiting: "child"})
+      child = Fixtures.insert(project.conn, :works, %{assignee: "worker", parent_id: parent})
+      Project.close(project)
+
+      Fixtures.use_model(dir, fn assembled, _tools, call ->
+        if assembled =~ "I am the worker.",
+          do: call.("done", %{"report" => "finished"}),
+          else: call.("end", %{})
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "--work_id", parent, "how is it going?"], dir)
+
+      project = open_project(dir)
+      assert {:ok, waiting} = Store.view(project.conn, "work", parent)
+      assert {waiting.state, waiting.waiting} == {"waiting", "child"}
+
+      assert {:ok, [%{agent: "concierge", via: "send"}]} =
+               Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [parent])
+
+      Project.close(project)
+
+      assert {:ok, ""} = CLI.run(["send", "--work_id", child, "finish it"], dir)
+
+      project = open_project(dir)
+      assert {:ok, %{state: "done"}} = Store.view(project.conn, "work", child)
+      assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", parent)
+
+      assert {:ok, [_message_run, %{agent: "concierge", via: "continue"}]} =
+               Query.all(
+                 project.conn,
+                 "SELECT * FROM runs WHERE work_id = ? ORDER BY started_at",
+                 [parent]
+               )
+
+      Project.close(project)
+    end
+
     test "D1-H0-W1: the child follows its own depth-scoped workflow through the parent's agents",
          %{dir: dir} do
       write_config(dir, """

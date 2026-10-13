@@ -220,7 +220,7 @@ The model's final text does not reach the terminal. It is `EVENTS(model)`.
 open:     action work (root) or delegate (child); stage = first of the TOML
 open → waiting:  break, request (waiting = request, waiting_for = the request), or delegate (waiting = child)
 waiting → open:    reply to the request it waits on, all its children done or cancelled, or a child on break — same stage
-waiting → open:    send / prompt on a waiting work — reopened_by_prompt
+waiting → open:    send / prompt on a work waiting on a request or parked by break — reopened_by_prompt
 open → open:       continue (chained by done) — next stage, new run
 open → done:       continue on the last stage, or on a work in no workflow
 open / waiting → cancelled: cancel, an option of a request
@@ -232,7 +232,10 @@ advance the sequence.
 parent waiting on its children: a `break` reopens the parent at once, a
 closing `continue` or a `cancel` once each of the parent's children is
 done or cancelled. The event that reopened the parent carries its
-`parent_id`, and the parent's next run opens. A root work is only closed,
+`parent_id`, and the parent's next run opens. A message to a work waiting
+on its children leaves it waiting: it opens a run of the work's agent,
+named, which may comment, delegate more and end but not `done`, `break`
+or request, and the last child back still wakes the work. A root work is only closed,
 parked or cancelled. A cancelled work never opens a run again.
 `continue` does not name a stage, an agent or a model — the TOML does.
 

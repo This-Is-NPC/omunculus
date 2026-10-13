@@ -95,11 +95,12 @@ A `--from` that is not a directory, or that has no `omunculus.toml`, is
 Deliver a message. It does not create a work and it does not copy the
 message onto a title. If the model wants a work, it calls `work`.
 
-`--work_id` aims the prompt at a work that already exists. A work in
-`waiting` is reopened (`state = open`, waiting fields cleared) and
+`--work_id` aims the prompt at a work that already exists. A work
+waiting on a request, or parked by `break`, is reopened (`state = open`, waiting fields cleared) and
 `EVENTS(work)` is written with `reason = reopened_by_prompt` before
-`EVENTS(prompt)`. That includes `waiting = child`: the parent walks on
-without the child.
+`EVENTS(prompt)`. A work with `waiting = child` stays waiting on its
+children: the message opens a run of its agent, named, and the last child
+back reopens the work.
 
 The stdout of a successful send is empty. The assembled prompt and the
 model's text are in the store; `prompt` prints the first of those.

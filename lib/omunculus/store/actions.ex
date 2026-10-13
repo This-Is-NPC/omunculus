@@ -178,10 +178,13 @@ defmodule Omunculus.Store.Actions do
 
   defp reopen_waiting_work(_conn, nil), do: {:ok, nil}
 
+  # A work waiting on its children keeps waiting: the message runs its
+  # agent while it waits, and the last child back still wakes it.
   defp reopen_waiting_work(conn, work_id) do
-    with {:ok, work} <- Query.one(conn, "SELECT state FROM works WHERE id = ?", [work_id]) do
+    with {:ok, work} <-
+           Query.one(conn, "SELECT state, waiting FROM works WHERE id = ?", [work_id]) do
       case work do
-        %{state: "waiting"} ->
+        %{state: "waiting", waiting: waiting} when waiting != "child" ->
           with :ok <- Helpers.reopen_work(conn, work_id) do
             Events.append(conn, %{
               type: "work",
