@@ -2,19 +2,21 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 
-// PageBar is the command bar beside a TabRail's head: the commands of the
-// page on screen, which slide in when the page changes, and at its end the
-// app's readout. When their names do not fit, each shows its short name, the
-// one an icon already says left out.
+// PageBar is the command bar beside a TabRail's head, which names the page:
+// the commands of the page on screen, which slide in when the page changes,
+// ranked, and at its end the app's readout. BACK stands first, apart; then
+// the page's main action, solid; then the others, outlined, those of one
+// `group` joined as one control whose `checked` one is lit; then, at the end,
+// its tools (`place: "end"`), each only an icon with its name in the tip.
+// When the names do not fit, each shows its short name.
 Rectangle {
   id: bar
 
-  // [{text, short, icon, tip, role, tone, enabled, run, shown}], in order.
+  // [{text, short, icon, tip, role, tone, group, checked, place, enabled,
+  // run, shown}], in order; role is "back", "primary", "guarded" or left out.
   property var commands: []
   // Changes when the page does, so the commands arrive again.
   property int section: 0
-  // The page's name, first in the bar, as the folded carousel shows only numbers.
-  property string title: ""
   // The readout: the app's last message, whether it is an error, whether the
   // server is unreachable, and how many messages it has given.
   property string message: ""
@@ -23,6 +25,18 @@ Rectangle {
   property int notices: 0
 
   readonly property var shown: commands.filter(command => command.shown !== false)
+  readonly property var back: shown.find(command => command.role === "back") || null
+  readonly property var tools: shown.filter(command => command.place === "end")
+  // The page's actions, each run of one group together: [[command]].
+  readonly property var actions: shown.filter(command => command.role !== "back" && command.place !== "end")
+    .reduce((runs, command) => {
+      const last = runs.length > 0 ? runs[runs.length - 1] : null
+      if (last && command.group && last[0].group === command.group)
+        last.push(command)
+      else
+        runs.push([command])
+      return runs
+    }, [])
   // Whether the names fit beside the readout's room.
   readonly property bool compact: measure.implicitWidth > width - 340
 
@@ -30,15 +44,15 @@ Rectangle {
   border.color: Theme.line
   clip: true
 
-  // The commands with their names, never drawn, to know how wide they are.
+  // The actions with their names, never drawn, to know how wide they are.
   Row {
     id: measure
     // Hidden by opacity: a row that is not visible lays out nothing to measure.
     opacity: 0
     enabled: false
-    spacing: 6
+    spacing: 10
     Repeater {
-      model: bar.shown
+      model: [].concat(...bar.actions)
       delegate: TraceButton {
         required property var modelData
         dense: true
@@ -52,36 +66,56 @@ Rectangle {
 
   RowLayout {
     anchors { fill: parent; leftMargin: 8; rightMargin: 12 }
-    spacing: 6
+    spacing: 10
 
-    DecodeLabel {
+    TraceButton {
       Layout.alignment: Qt.AlignVCenter
-      Layout.leftMargin: 6
-      Layout.rightMargin: 8
-      value: bar.title.toUpperCase()
-      color: Theme.primary
-      font.pixelSize: 12
-      font.letterSpacing: 4
+      visible: bar.back !== null
+      dense: true
+      role: "navigation"
+      icon: "chevron-left"
+      text: bar.back ? bar.back.text : ""
+      tip: bar.back ? bar.back.tip || "" : ""
+      tone: Theme.dim
+      onClicked: bar.back.run()
+    }
+    Rectangle {
+      visible: bar.back !== null && bar.actions.length > 0
+      Layout.alignment: Qt.AlignVCenter
+      implicitWidth: 1
+      implicitHeight: 20
+      color: Theme.line
     }
 
     Row {
       id: contextual
       Layout.alignment: Qt.AlignVCenter
-      spacing: 6
+      spacing: 10
       transform: Translate { id: shift }
 
       Repeater {
-        model: bar.shown
-        delegate: TraceButton {
+        model: bar.actions
+        // A run of commands: one alone, or a group joined edge to edge.
+        delegate: Row {
+          id: run
           required property var modelData
-          dense: true
-          role: modelData.role || "progress"
-          tone: modelData.tone || (role === "guarded" ? Theme.error : Theme.primary)
-          icon: modelData.icon || ""
-          text: bar.compact ? modelData.short || modelData.text : modelData.text
-          tip: modelData.tip || ""
-          enabled: modelData.enabled !== false
-          onClicked: modelData.run()
+          spacing: run.modelData.length > 1 ? -1 : 0
+          Repeater {
+            model: run.modelData
+            delegate: TraceButton {
+              required property var modelData
+              dense: true
+              role: modelData.group ? (modelData.checked ? "primary" : "action")
+                : modelData.role === "primary" || modelData.role === "guarded" ? modelData.role : "action"
+              filled: !modelData.group && modelData.role === "primary"
+              tone: modelData.tone || (role === "guarded" ? Theme.error : modelData.group && !modelData.checked ? Theme.dim : Theme.primary)
+              icon: modelData.icon || ""
+              text: bar.compact ? modelData.short || modelData.text : modelData.text
+              tip: modelData.tip || ""
+              enabled: modelData.enabled !== false
+              onClicked: modelData.run()
+            }
+          }
         }
       }
     }
@@ -100,7 +134,25 @@ Rectangle {
       error: bar.error
       offline: bar.offline
       count: bar.notices
-      maxWidth: Math.max(0, bar.width - contextual.width - 80)
+      maxWidth: Math.max(0, bar.width - contextual.width - toolRow.width - 140)
+    }
+
+    Row {
+      id: toolRow
+      Layout.alignment: Qt.AlignVCenter
+      spacing: 6
+      Repeater {
+        model: bar.tools
+        delegate: IconButton {
+          required property var modelData
+          name: modelData.icon || "more"
+          tip: modelData.tip || modelData.text
+          tone: modelData.tone || Theme.primary
+          enabled: modelData.enabled !== false
+          opacity: enabled ? 1 : 0.35
+          onClicked: modelData.run()
+        }
+      }
     }
   }
 }

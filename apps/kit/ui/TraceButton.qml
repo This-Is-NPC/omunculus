@@ -3,8 +3,8 @@ import QtQuick
 // TraceButton is a view's button. Its role says what pressing it does:
 // "navigation" leaves for another view and slides away; "primary" is the
 // view's main action, outlined and washed in the accent; "guarded" takes the
-// error tone; any other ("progress", "action") stays in place. `key`, when
-// set, shows the key that presses it.
+// error tone; any other ("progress", "action") stays in place. `filled`
+// draws it solid in its tone, as a bar's main action is.
 Rectangle {
   id: button
 
@@ -14,13 +14,14 @@ Rectangle {
   property string tip
   property bool dense: false
   property bool armed: false
+  property bool filled: false
   property bool busy: false
   property bool allowClickWhileBusy: false
   property color tone: role === "guarded" ? Theme.error : Theme.primary
   readonly property bool primary: role === "primary"
   readonly property bool running: busy
   readonly property bool hovered: pointer.containsMouse
-  readonly property color ink: armed ? Theme.readable(Theme.background, tone, Theme.foreground) : tone
+  readonly property color ink: armed || filled ? Theme.readable(Theme.background, tone, Theme.foreground) : tone
 
   signal clicked()
 
@@ -31,8 +32,8 @@ Rectangle {
   implicitHeight: dense ? 28 : 44
   activeFocusOnTab: true
   opacity: enabled ? 1 : 0.35
-  color: armed ? tone : (primary ? Qt.alpha(tone, 0.08) : "transparent")
-  border.color: primary ? tone : Theme.line
+  color: armed || filled ? tone : (primary ? Qt.alpha(tone, 0.08) : "transparent")
+  border.color: primary || filled ? tone : Theme.line
   scale: pointer.pressed ? 0.97 : 1
   transform: Translate { id: departure }
 

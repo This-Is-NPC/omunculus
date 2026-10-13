@@ -191,7 +191,6 @@ ShellRoot {
               height: rail.headHeight
               commands: pagesView.commands
               section: rail.current
-              title: pagesView.title
               message: Omunculus.message
               error: Omunculus.messageIsError
               offline: !Omunculus.connected

@@ -76,11 +76,11 @@ Item {
   readonly property var commands: (editing ? [
     { text: draft && draft.saving ? "SAVING" : "SAVE", icon: "enter", role: "primary", tip: draft && draft.conflict ? "the file changed: discard to read it again" : "write it into the project's config  ctrl+s",
       enabled: !!draft && draft.dirty && !draft.conflict && draft.nameIssue === "", run: () => draft.save() },
-    { text: "DISCARD", icon: "trash", tip: "back to what the file holds", shown: !!draft && draft.dirty && draft.stored !== null, run: () => draft.reset() },
+    { text: "DISCARD", icon: "trash", role: "guarded", tip: "back to what the file holds", shown: !!draft && draft.dirty && draft.stored !== null, run: () => draft.reset() },
     { text: "CANCEL", icon: "close", tip: "stop editing  esc", run: () => page.cancel() }
   ] : [
-    { text: "BACK", icon: "chevron-left", tip: "back to the list  esc", run: () => page.back() },
-    { text: "EDIT", icon: "edit", tip: "change it  ctrl+e", shown: editable, run: () => page.editing = true },
+    { text: "BACK", role: "back", tip: "back to the list  esc", run: () => page.back() },
+    { text: "EDIT", icon: "edit", role: "primary", tip: "change it  ctrl+e", shown: editable, run: () => page.editing = true },
     { text: "DELETE", icon: "trash", role: "guarded", tip: "remove it from the project's config", shown: editable && draft.stored !== null, run: () => page.removing() }
   ]).concat(extra)
 

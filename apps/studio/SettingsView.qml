@@ -16,6 +16,8 @@ Item {
   id: view
 
   property bool active: false
+  // The sections' names, in order, each heading its table.
+  property var headings: []
   // The section on screen: secrets, models, agents, workflows, tools,
   // skills or the project, 0 to 6.
   property int page: 0
@@ -274,7 +276,7 @@ Item {
     commands: () => {
       const row = section.rows().find(entry => entry.id === (picked[index] || "")) || null
       return [
-        { text: section.add, short: section.add.replace("ADD ", ""), icon: "plus", shown: section.add !== "", run: () => view.create(section.key) },
+        { text: section.add, short: section.add.replace("ADD ", ""), icon: "plus", role: "primary", shown: section.add !== "", run: () => view.create(section.key) },
         { text: "VIEW", icon: "enter", tip: "open it  enter", shown: row !== null, run: () => view.open(index, row.id, false) },
         { text: "DELETE", icon: "trash", role: "guarded", tip: "remove it from the project's config", shown: row !== null && row.editable && (section.key !== "workspaces" || !!row.removable),
           run: () => view.remove(section.key, row.name) }
@@ -305,6 +307,12 @@ Item {
           anchors.fill: parent
           visible: stage.open === ""
           spacing: 12
+          DecodeLabel {
+            value: (view.headings[stage.index] || "").toUpperCase()
+            color: Theme.primary
+            font.pixelSize: 16
+            font.letterSpacing: 4
+          }
           Note { value: stage.section.note }
           DataTable {
             id: table

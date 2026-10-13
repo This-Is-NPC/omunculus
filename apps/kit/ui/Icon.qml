@@ -19,6 +19,7 @@ Item {
     pause: "M5.5 3.5v9 M10.5 3.5v9",
     stop: "M4 4h8v8h-8z",
     list: "M3 4.5h10 M3 8h10 M3 11.5h10",
+    search: "M7 2.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9z M10.3 10.3l3.2 3.2",
     board: "M2.5 3h3v10h-3z M6.5 3h3v6h-3z M10.5 3h3v8h-3z",
     import: "M8 2.5v8 M4.5 7l3.5 3.5 3.5-3.5 M3 13.5h10",
     edit: "M3 4h6 M3 7h5 M3 10h6 M12 3.5v9 M10.5 3.5h3 M10.5 12.5h3",

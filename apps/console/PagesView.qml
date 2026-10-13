@@ -38,10 +38,10 @@ Item {
   property string page: "conversations"
   readonly property int tabIndex: pages.indexOf(page === "new" ? "conversations" : page === "work" ? "board" : page)
   readonly property string title: page === "new" ? "new conversation" : page
-  // What the masthead names: the page, or the project and the conversation
-  // open on it.
+  // What the masthead names: the board, or the project, then the
+  // conversation open and its page, or the page.
   readonly property string heading: page === "board" ? page
-    : Omunculus.project + "  ·  " + (inConversation.includes(page) ? Omunculus.title : title)
+    : Omunculus.project + "  ·  " + (inConversation.includes(page) ? Omunculus.title + "  ·  " + page : title)
   // Whether the page takes the digits alone, as the picker of a new
   // conversation does; Ctrl with them still chooses a page.
   readonly property bool digitsTaken: page === "new"
@@ -159,18 +159,19 @@ Item {
   // a `key` answer to it too.
   readonly property var commands: {
     const last = history.length > 0 ? history[history.length - 1] : null
-    const back = { text: "BACK", icon: "chevron-left", role: "navigation", tip: "back to the " + (last ? last.page : "start") + "  esc",
-      run: () => view.back() }
-    const fresh = { text: "NEW CONVERSATION", short: "NEW", icon: "plus", key: "N", tip: "start another conversation  n", run: () => view.newConversation() }
+    const back = { text: "BACK", role: "back", tip: "back to the " + (last ? last.page : "start") + "  esc", run: () => view.back() }
+    // A new conversation: the main action of the conversations, another on the chat.
+    const fresh = role => ({ text: "NEW CONVERSATION", short: "NEW", icon: "plus", role: role, key: "N", tip: "start another conversation  n",
+      run: () => view.newConversation() })
     if (page === "conversations")
-      return [back, fresh]
+      return [back, fresh("primary")]
     if (page === "new" || page === "cost")
       return [back]
     if (page === "work") {
       const waiting = Omunculus.asked(workKey).filter(request => Requests.human(request.arbiter))
       return [
         back,
-        { text: "REPLY", icon: "enter", tone: Theme.warning, key: "R", tip: "answer what it asked you  r",
+        { text: "REPLY", icon: "enter", role: "primary", tone: Theme.warning, key: "R", tip: "answer what it asked you  r",
           shown: waiting.length > 0, run: () => decision.show(waiting[0].id, false) },
         { text: "OPEN IN MAP", short: "MAP", icon: "map", key: "O", tip: "its conversation's map, the work picked  o",
           run: () => view.openWork({ id: workKey, project: Omunculus.project, conversation_id: Omunculus.conversationId }) }
@@ -179,46 +180,45 @@ Item {
     if (page === "map" && node !== null)
       return [
         back,
-        { text: "REPLY", icon: "enter", tone: askedOfYou.length > 0 ? Theme.warning : Theme.primary, key: "R",
+        { text: "REPLY", icon: "enter", role: "primary", tone: askedOfYou.length > 0 ? Theme.warning : Theme.primary, key: "R",
           tip: (askedOfYou.length > 0 ? "answer what it asked you" : "answer what it asked, instead of whoever decides") + "  r",
           shown: asked.length > 0, run: () => decision.show(asked[0].id, false) },
-        { text: "ESCALATE", icon: "chevron-up", key: "E", tip: "raise what it asked you to whoever decides above you  e",
-          shown: askedOfYou.length > 0, run: () => decision.show(askedOfYou[0].id, true) },
+        { text: "WRITE", icon: "edit", key: "W", tip: "write to its agent  w", run: () => agents.write(false) },
         { text: "COMMENT", icon: "plus", key: "C", tip: "a note for its agents, without a run  c",
           shown: node !== "", run: () => agents.write(true) },
+        { text: "ESCALATE", icon: "chevron-up", key: "E", tip: "raise what it asked you to whoever decides above you  e",
+          shown: askedOfYou.length > 0, run: () => decision.show(askedOfYou[0].id, true) },
         { text: "MARK READ", icon: "check", key: "M", tip: (notesHere.length > 1 ? "mark its " + notesHere.length + " notes read" : "mark its note read") + "  m",
-          shown: notesHere.length > 0, run: () => notesHere.forEach(note => Omunculus.markRead(note.id)) },
-        { text: "WRITE", icon: "edit", key: "W", tip: "write to its agent  w", run: () => agents.write(false) }
+          shown: notesHere.length > 0, run: () => notesHere.forEach(note => Omunculus.markRead(note.id)) }
       ]
     if (page === "map")
       return [
         back,
-        { text: "FIT", icon: "map", tip: "the whole map in view  f", run: () => agents.fit() },
-        { text: Omunculus.pending + " PENDING", short: String(Omunculus.pending), icon: "warning", tone: Theme.warning, tip: "pick what waits on you",
-          shown: Omunculus.pending > 0, run: () => agents.pickPending() }
+        { text: Omunculus.pending + " PENDING", short: String(Omunculus.pending), icon: "warning", role: "primary", tone: Theme.warning,
+          tip: "pick what waits on you", shown: Omunculus.pending > 0, run: () => agents.pickPending() },
+        { text: "FIT", icon: "map", place: "end", tip: "the whole map in view  f", run: () => agents.fit() }
       ]
     if (page === "board")
       return [
         back,
-
-        { text: "BY STATE", short: "STATE", icon: "board", key: "S", tone: board.group === "" ? Theme.primary : Theme.dim,
+        { text: "BY STATE", short: "STATE", icon: "board", key: "S", group: "view", checked: board.group === "",
           tip: "the works by state alone  s", run: () => board.group = "" },
-        { text: "BY AGENT", short: "AGENT", icon: "people", key: "A", tone: board.group === "agent" ? Theme.primary : Theme.dim,
+        { text: "BY AGENT", short: "AGENT", icon: "people", key: "A", group: "view", checked: board.group === "agent",
           tip: "a lane per agent  a", run: () => board.group = "agent" },
-        { text: "BY PROJECT", short: "PROJECT", icon: "folder", key: "P", tone: board.group === "project" ? Theme.primary : Theme.dim,
+        { text: "BY PROJECT", short: "PROJECT", icon: "folder", key: "P", group: "view", checked: board.group === "project",
           tip: "a lane per project  p", run: () => board.group = "project" },
-        { text: "FILTER", tip: "filter the works  /", run: () => board.focusFilter() }
+        { text: "FILTER", icon: "search", place: "end", tip: "filter the works  /", run: () => board.focusFilter() }
       ]
     if (page === "log")
       return [
         back,
-        { text: "FILTER", tip: "filter the events  /", run: () => log.focusFilter() },
-        { text: log.picked ? "COPY EVENT" : "COPY LOG", short: "COPY", icon: "copy", tip: log.picked ? "copy the event picked" : "copy the events shown",
+        { text: "FILTER", icon: "search", place: "end", tip: "filter the events  /", run: () => log.focusFilter() },
+        { text: log.picked ? "COPY EVENT" : "COPY LOG", icon: "copy", place: "end", tip: log.picked ? "copy the event picked" : "copy the events shown",
           enabled: log.picked !== null || log.rows.length > 0, run: () => log.copy() }
       ]
     return [
       back,
-      { text: "REPLY", icon: "enter", tone: Theme.warning, key: "R",
+      { text: "REPLY", icon: "enter", role: "primary", tone: Theme.warning, key: "R",
         tip: "answer the oldest request waiting on you" + (Omunculus.waiting.length > 1 ? ", of " + Omunculus.waiting.length : "") + "  r",
         shown: Omunculus.waiting.length > 0, run: () => {
           timeline.reveal(Omunculus.waiting[0].id)
@@ -230,9 +230,10 @@ Item {
           timeline.reveal(Omunculus.unread[0].id)
           Omunculus.markRead(Omunculus.unread[0].id)
         } },
-      fresh
+      fresh(undefined)
     ]
   }
+
 
   // Whether the decision of a request is open over the page.
   readonly property bool dialogOpen: decision.visible

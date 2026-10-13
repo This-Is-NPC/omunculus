@@ -47,13 +47,13 @@ ShellRoot {
       { name: "project" }
     ]
     // What can be added, each in its section, which it opens.
-    function adding(text, page, section) {
-      return { text: "ADD " + text, short: text, icon: "plus", run: () => { window.page = page; settings.create(section) } }
+    function adding(text, page, section, role) {
+      return { text: "ADD " + text, short: text, icon: "plus", role: role, run: () => { window.page = page; settings.create(section) } }
     }
     // The flow's commands: everything the project can be given. The other
     // sections' come from what is picked or open in them.
     readonly property var commands: page === 0
-      ? [adding("AGENT", 3, "agents"), adding("WORKFLOW", 4, "workflows"), adding("MODEL", 2, "models"), adding("PROVIDER", 1, "auth"), adding("WORKSPACE", 7, "workspaces")]
+      ? [adding("AGENT", 3, "agents", "primary"), adding("WORKFLOW", 4, "workflows"), adding("MODEL", 2, "models"), adding("PROVIDER", 1, "auth"), adding("WORKSPACE", 7, "workspaces")]
       : settings.commands
 
     // Chooses a section and gives it the keyboard, so the carousel folds
@@ -114,6 +114,7 @@ ShellRoot {
           anchors { fill: parent; margins: 20 }
           active: window.page !== 0
           page: Math.max(0, window.page - 1)
+          headings: window.sections.slice(1).map(section => section.name)
           onWanted: index => window.page = index + 1
         }
       }
@@ -136,7 +137,6 @@ ShellRoot {
         height: rail.headHeight
         commands: window.commands
         section: window.page
-        title: window.sections[window.page].name
         message: Studio.message
         error: Studio.messageIsError
         offline: !Studio.connected
