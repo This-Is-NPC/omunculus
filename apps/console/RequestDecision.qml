@@ -136,11 +136,10 @@ SurfaceFrame {
       wrapMode: Text.Wrap
     }
 
-    Label {
+    Prose {
       Layout.fillWidth: true
       visible: !!card.request && !!card.request.reason
-      text: card.request ? Omunculus.inline(String(card.request.reason || "")) : ""
-      textFormat: Text.MarkdownText
+      source: card.request ? Omunculus.inline(String(card.request.reason || "")) : ""
       color: Theme.dim
       font.pixelSize: 12
       wrapMode: Text.Wrap

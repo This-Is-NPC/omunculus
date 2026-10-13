@@ -31,11 +31,10 @@ ColumnLayout {
     font.pixelSize: 13
     wrapMode: Text.Wrap
   }
-  Label {
+  Prose {
     Layout.fillWidth: true
     visible: summary.whole && summary.work !== null && !!summary.work.goal && summary.work.goal !== summary.work.title
-    text: summary.work ? Omunculus.inline(String(summary.work.goal || "")) : ""
-    textFormat: Text.MarkdownText
+    source: summary.work ? Omunculus.inline(String(summary.work.goal || "")) : ""
     color: Theme.dim
     font.pixelSize: 12
     wrapMode: Text.Wrap
@@ -102,10 +101,9 @@ ColumnLayout {
         id: noted
         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; leftMargin: 12 }
         spacing: 8
-        Label {
+        Prose {
           Layout.fillWidth: true
-          text: Omunculus.inline(Omunculus.notes[note.modelData.id] || "")
-          textFormat: Text.MarkdownText
+          source: Omunculus.inline(Omunculus.notes[note.modelData.id] || "")
           font.pixelSize: 12
           wrapMode: Text.Wrap
         }

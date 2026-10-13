@@ -16,10 +16,10 @@ ColumnLayout {
 
   Repeater {
     model: decision.entry.origins
-    delegate: Label {
+    delegate: Prose {
       required property var modelData
       Layout.fillWidth: true
-      text: "· " + modelData.part + ": " + String(modelData.reason).replace(/\s+/g, " ")
+      source: "· " + modelData.part + ": " + String(modelData.reason).replace(/\s+/g, " ")
       color: Theme.dim
       font.pixelSize: 12
       wrapMode: Text.Wrap

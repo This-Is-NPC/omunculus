@@ -188,10 +188,9 @@ FocusScope {
             id: about
             width: described.width
             spacing: 12
-            Label {
+            Prose {
               Layout.fillWidth: true
-              text: view.work ? String(view.work.goal || "") : ""
-              textFormat: Text.MarkdownText
+              source: view.work ? String(view.work.goal || "") : ""
               font.pixelSize: 14
               lineHeight: 1.2
               wrapMode: Text.Wrap

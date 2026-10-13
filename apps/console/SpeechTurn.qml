@@ -46,14 +46,14 @@ Item {
       width: parent.width
       height: line.implicitHeight + 14
       color: turn.mine ? Theme.highlight : Qt.tint(Theme.background, Qt.alpha(turn.tone, 0.1))
-      Label {
+      Prose {
         id: line
         anchors.verticalCenter: parent.verticalCenter
         x: turn.inset
         width: parent.width - 2 * turn.inset
         horizontalAlignment: turn.mine ? Text.AlignRight : Text.AlignLeft
-        text: turn.mine ? turn.text : Omunculus.inline(turn.text)
-        textFormat: turn.mine ? Text.PlainText : Text.MarkdownText
+        plain: turn.mine
+        source: turn.mine ? turn.text : Omunculus.inline(turn.text)
         color: Theme.foreground
         font.pixelSize: 12
         lineHeight: 1.2

@@ -80,15 +80,14 @@ Item {
       width: Math.min(turn.widest, line.implicitWidth + 2 * turn.inset)
       height: line.implicitHeight + 14
       color: Qt.tint(Theme.background, Qt.alpha(turn.tone, 0.1))
-      Label {
+      Prose {
         id: line
         anchors.verticalCenter: parent.verticalCenter
         x: turn.inset
         width: Math.min(implicitWidth, turn.widest - 2 * turn.inset)
         // Drawn as it is while it streams, with its open marks closed, so the
         // words already read never move.
-        text: Omunculus.inline(turn.streaming ? Omunculus.closed(turn.said) : turn.said)
-        textFormat: Text.MarkdownText
+        source: Omunculus.inline(turn.streaming ? Omunculus.closed(turn.said) : turn.said)
         color: Theme.foreground
         font.pixelSize: 12
         lineHeight: 1.2

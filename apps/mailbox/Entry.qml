@@ -80,12 +80,11 @@ SurfaceFrame {
       }
     }
 
-    Label {
+    Prose {
       Layout.fillWidth: true
       visible: card.expanded && card.entry.text !== ""
-      text: card.mine ? card.entry.text : Mail.markdown(card.entry.text)
-      textFormat: card.mine ? Text.PlainText : Text.MarkdownText
-      onLinkActivated: link => Qt.openUrlExternally(link)
+      plain: card.mine
+      source: card.mine ? card.entry.text : Mail.markdown(card.entry.text)
       color: card.mine ? Theme.dim : Theme.foreground
       font.pixelSize: 13
       lineHeight: 1.25
