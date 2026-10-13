@@ -30,6 +30,13 @@ constraints of *this* tree live only under **This project**.
   traps, and "how this is meant to be used" go there — not in
   comments, not in commit messages as a substitute for a doc, and not
   in this file except as rules.
+- **Clean up after every run.** A test, run, evaluation or benchmark
+  ends by removing what it started, when it passes and when it fails:
+  stop the processes, servers and environments it brought up; remove the
+  containers, images, volumes and networks it created; delete the build
+  caches, temporary files and scratch folders it wrote. Keep only the
+  result it was meant to produce. Nothing it started is left using disk,
+  CPU or memory.
 - **English only.** Code, comments, commit messages, `docs/`,
   `README.md`, this file, mise task names and descriptions: English.
 
@@ -255,13 +262,6 @@ committing, `mise run pre-commit` and `mise run validate:regular` pass and
 needs Bubblewrap namespaces. `mise run up` starts the development server
 (`dev/`); `mise run dev:console`, `dev:studio` and `dev:mailbox` open the
 apps on it.
-
-Whoever starts a test, a run, an eval or a benchmark cleans up after it,
-when it ends and when it fails: stop the servers, apps and environments it
-started (the dream team's `packs/dream-team/environment/down` among them),
-remove the containers, volumes and networks it created, delete its scratch
-projects, stores and temporary folders, and leave only the result it was
-meant to keep. Nothing it started is left running or stopped on the machine.
 
 Guides: `docs/README.md` is the map of every page; `docs/design.md` (the
 model, each core module and the run cycle, in numbered sections), the
