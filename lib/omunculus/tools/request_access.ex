@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.RequestAccess do
   @moduledoc """
-  Builtin `request_access` tool, per spec §3.5: emits one `request` for
+  Builtin `request_access` tool: emits one `request` for
   everything in `access`, each a `{kind, name}`: a tool, a path, a
   directory, or a sandbox capability (`resource`) named in `[execution]
   resources`. Each option grants all of them: one `grant_<scope>` per

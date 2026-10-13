@@ -1,6 +1,6 @@
 defmodule Omunculus.Store.Actions.Sequence do
   @moduledoc """
-  Sequence actions of spec §3.4: `continue` moves a work to the next
+  Sequence actions: `continue` moves a work to the next
   workflow stage, or closes it on the last stage or when its depth has no
   workflow, and is refused while the work waits or a child that broke
   waits on it; `break` parks it with a

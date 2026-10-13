@@ -1,6 +1,6 @@
 defmodule Omunculus.Tool.Invoke do
   @moduledoc """
-  Runs a tool or hook's contract per spec §8.1 and §8.7: JSON `in` on
+  Runs a tool or hook's contract: JSON `in` on
   stdin, JSON `out` on stdout for a `command`; a `tools/call` to the MCP
   server for a manifest with `mcp` set. Either way the result goes through
   the same `validate/1`. The optional `chain` of `out` is a list of

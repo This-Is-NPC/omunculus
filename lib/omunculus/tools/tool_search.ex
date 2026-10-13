@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.ToolSearch do
   @moduledoc """
-  Builtin `tool_search` tool, per spec §8.4: searches this run's already
+  Builtin `tool_search` tool: searches this run's already
   authorized catalog by name, description or tag, without exposing schemas
   or reaching past the ceiling.
   """

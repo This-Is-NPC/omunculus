@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.Comment do
   @moduledoc """
-  Builtin `comment` tool, per spec §8.5: writes a comment on a work, request or inbox.
+  Builtin `comment` tool: writes a comment on a work, request or inbox.
   Without an explicit target, falls back to the run's work.
   """
 

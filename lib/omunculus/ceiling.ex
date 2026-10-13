@@ -1,9 +1,9 @@
 defmodule Omunculus.Ceiling do
   @moduledoc """
   Mounts the effective ceiling of a run from the policy, workspace, depth,
-  agent and workflow-step layers of spec §5, and classifies a name against
+  agent and workflow-step layers, and classifies a name against
   a mounted snapshot. Before classifying, every list of every applying
-  layer is expanded against the `groups` map of spec §9.5: an entry that
+  layer is expanded against the `groups` map: an entry that
   names a group becomes its member names, any other entry stays as it is.
   A layer's lists always apply; its mode, when it has one, classifies what
   the lists do not cite; the policy mode is the fallback for a name no

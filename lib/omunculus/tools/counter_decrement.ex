@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.CounterDecrement do
   @moduledoc """
-  Builtin `counter_decrement` tool, per spec §9.4: steps the shared bench
+  Builtin `counter_decrement` tool: steps the shared bench
   counter down by one.
   """
 

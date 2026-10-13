@@ -1,6 +1,6 @@
 defmodule Omunculus.Model.AnthropicMessages do
   @moduledoc """
-  Factory for an Anthropic Messages model of the contract of spec §8.6:
+  Factory for an Anthropic Messages model of the model contract:
   `new/1` takes the `[models.<name>]` spec (`url`, `model`, `timeout_ms`,
   optional `temperature`, `headers`, `body`, `credential`) and returns a 6-arity
   `(prompt, tools, call, record, delta, execution)` fun. Posts the prompt's

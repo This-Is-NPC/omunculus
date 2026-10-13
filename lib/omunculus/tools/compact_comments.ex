@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.CompactComments do
   @moduledoc """
-  Builtin `compact_comments` tool, per spec §8.2: composite tool that loads
+  Builtin `compact_comments` tool: composite tool that loads
   the `comments` view for the model to summarize, then commits the
   summary as a `compact` emit.
   """

@@ -1,6 +1,6 @@
 defmodule Omunculus.MatrixTest do
   @moduledoc """
-  Walks the twelve D0/D1/D2 × H0/H1 × W0/W1 cells of spec §6 through the
+  Walks the twelve D0/D1/D2 × H0/H1 × W0/W1 cells through the
   same "count to 5" task, driven by `Omunculus.Model.Battery`.
   """
 

@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.Write do
   @moduledoc """
-  Builtin `write` tool, per spec §9.2: creates parent directories and
+  Builtin `write` tool: creates parent directories and
   writes `content` to `path` under the run's roots, whole or not at all.
   """
 

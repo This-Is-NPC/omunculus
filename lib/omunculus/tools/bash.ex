@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.Bash do
   @moduledoc """
-  `bash` tool, shipped only by the `codex-like` preset (spec §9.4): runs
+  `bash` tool, shipped only by the `codex-like` preset: runs
   `command` through `sh -c` in the immutable run policy and returns the
   captured output. It starts in `workdir`, relative to the workspace root,
   or in that root without one. A command that fails in a run without `sandbox.write`

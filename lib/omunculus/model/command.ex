@@ -1,6 +1,6 @@
 defmodule Omunculus.Model.Command do
   @moduledoc """
-  Factory for a `command` model of the contract of spec §8.6: `new/1`
+  Factory for a `command` model of the model contract: `new/1`
   takes the `[models.<name>]` spec (`command`, `model`, optional
   `params`, `credential`) and returns a 6-arity
   `(prompt, tools, call, record, delta, execution)` fun. Starts `command`

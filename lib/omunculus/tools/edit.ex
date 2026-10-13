@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.Edit do
   @moduledoc """
-  Builtin `edit` tool, per spec §9.2: applies `edits`, each an exact `old`
+  Builtin `edit` tool: applies `edits`, each an exact `old`
   span and its `new` text, to the file at `path` under the run's roots.
   Every `old` is found in the file as it was before the call, once, and
   apart from the others; one that is missing, repeated or overlapping

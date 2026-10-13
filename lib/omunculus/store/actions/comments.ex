@@ -1,6 +1,6 @@
 defmodule Omunculus.Store.Actions.Comments do
   @moduledoc """
-  `compact` and `comment.delete` of spec §8.3: both act on exactly one of
+  `compact` and `comment.delete`: both act on exactly one of
   `work_id`, `request_id` or `inbox_id` — a run inside a work may only
   target that work. `compact` replaces every comment of the target (or
   only the ones named in `ids`) with a single summary comment; `EVENTS`

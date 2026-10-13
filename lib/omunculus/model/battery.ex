@@ -1,6 +1,6 @@
 defmodule Omunculus.Model.Battery do
   @moduledoc """
-  The bench model of spec §6, the "count to 5" scenario: decides only
+  The bench model, the "count to 5" scenario: decides only
   from what it can see in the assembled prompt — the cards under
   `## Tools`, the presence of `## Work` and `## Results`, the text under
   `## Last comment` and the agent's own first line — opening the work with `work`

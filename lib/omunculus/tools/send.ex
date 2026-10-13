@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.Send do
   @moduledoc """
-  Builtin `send` tool, per spec §8.5: delivers a message, aimed at an
+  Builtin `send` tool: delivers a message, aimed at an
   existing work when `work_id` is given, or else at the `agent` of depth 0
   it names, as a `prompt` emit, with the `attachments` it carries.
   """

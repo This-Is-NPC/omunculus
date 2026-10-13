@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.Directory do
   @moduledoc """
-  Builtin `directory` tool, per spec §9.4: lists every root of the run,
+  Builtin `directory` tool: lists every root of the run,
   each followed by its top-level entries indented, directories suffixed
   with `/`.
   """

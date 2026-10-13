@@ -1,6 +1,6 @@
 defmodule Omunculus.Config.Layer do
   @moduledoc """
-  One ceiling layer of spec §5: the mode for what the lists do not cite,
+  One ceiling layer: the mode for what the lists do not cite,
   the four class lists, `pinned` (names or groups that become cards in
   the assembled prompt when `tool_search` is effective), and the per-tool
   `overrides` of `Omunculus.Tool.Overrides`.

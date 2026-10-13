@@ -1,13 +1,13 @@
 defmodule Omunculus.Store.Actions.Helpers do
   @moduledoc """
   Shared machinery between the `Actions` modules: existence and
-  non-empty text checks and error tagging (spec §8.3), the `COMMENTS` insert every
+  non-empty text checks and error tagging, the `COMMENTS` insert every
   action that writes one reuses, reopening a waiting work, a new work's
   stage and assignee from the workflow, the named agent or the depth's
   first agent, resolving its `workspace` from a given name, its parent,
-  or the project's default (spec §9.1), inserting the `WORKS` row itself,
+  or the project's default, inserting the `WORKS` row itself,
   fetching a request by id, refusing to park a work that waits on its
-  children, and the ancestor grants walk of spec §5.
+  children, and the ancestor grants walk.
   """
 
   alias Omunculus.Config

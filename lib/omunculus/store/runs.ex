@@ -1,6 +1,6 @@
 defmodule Omunculus.Store.Runs do
   @moduledoc """
-  Harness-side writes of the run cycle (spec §3.2, §3.3, §8.7): `begin/2`
+  Harness-side writes of the run cycle: `begin/2`
   inserts the run and `start-run` without a prompt, `attach_assembled/3`
   stores `PROMPTS(assembled)` and fills `prompt_id` once, `record_model/3`
   logs a model turn, `record_tools/4` logs a call and the steps it

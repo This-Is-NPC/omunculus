@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.Workspaces do
   @moduledoc """
-  Builtin `workspaces` tool, per spec §9.4: lists every configured
+  Builtin `workspaces` tool: lists every configured
   workspace as `"<name> <root>"`, one per line, marking the run's own
   with `*`. Reads the `"workspaces"` view the harness provides.
   """

@@ -1,10 +1,10 @@
 defmodule Omunculus.Tool.Catalog do
   @moduledoc """
-  Discovers tool/hook folders, Agent Skills and MCP servers' tools, per
-  spec §8.4 and §8.7. Discovery walks `tools.paths` in order, then the
+  Discovers tool/hook folders, Agent Skills and MCP servers' tools.
+  Discovery walks `tools.paths` in order, then the
   skills of `tools.skills` (`Omunculus.Skills`, named `skill.<name>`), then
   `[[mcp.servers]]`, then inline `[tools.<name>]` tables; the last
-  declaration of a `name` wins. Also derives the group map of spec §9.5 from the manifests'
+  declaration of a `name` wins. Also derives the group map from the manifests'
   own `groups` field. A tool named as a group is refused, so that a name
   in a ceiling list is either a tool or a group.
   """

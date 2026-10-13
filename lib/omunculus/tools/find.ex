@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.Find do
   @moduledoc """
-  Builtin `find` tool, per spec §9.2: matches `pattern` as a wildcard
+  Builtin `find` tool: matches `pattern` as a wildcard
   under `path`, dropping results that escape the run's roots and what
   `Omunculus.Tools.Ignore` leaves out. With `limit`, it keeps that many
   paths and a last line says how many more there are.

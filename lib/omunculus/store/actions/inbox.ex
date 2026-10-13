@@ -1,6 +1,6 @@
 defmodule Omunculus.Store.Actions.Inbox do
   @moduledoc """
-  Inbox actions of spec §3.6: `notify` appends an `INBOX` row and its
+  Inbox actions: `notify` appends an `INBOX` row and its
   comment on top of `EVENTS(notify)` — the run keeps going and the work
   does not wait. `inbox.read` marks `INBOX.read_at`.
   """

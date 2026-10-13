@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.Grep do
   @moduledoc """
-  Builtin `grep` tool, per spec §9.2: searches regular files under `path`
+  Builtin `grep` tool: searches regular files under `path`
   for a regex pattern, recursively, skipping files that are not valid
   UTF-8 and what `Omunculus.Tools.Ignore` leaves out. With `limit`, it
   keeps that many matches and a last line says how many more there are.

@@ -5,7 +5,7 @@ defmodule Omunculus.Store do
   (`begin_run/2`, `attach_assembled/3`, `record_model/3`,
   `record_tools/4`, `close_run/3`, `unreported/5`) is written by the
   harness. Every emit a call and its chained steps produce is applied
-  inside that call's one transaction (spec §8.1, §8.7) — tools never
+  inside that call's one transaction — tools never
   touch SQL directly. One process owns the connection
   (`Store.Connection`), so the transactions of concurrent runs apply one
   after another.

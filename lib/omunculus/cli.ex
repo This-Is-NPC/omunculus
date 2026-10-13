@@ -1,6 +1,6 @@
 defmodule Omunculus.CLI do
   @moduledoc """
-  The binary's dispatch, per spec §7: `omunculus <name> [args]` resolves
+  The binary's dispatch: `omunculus <name> [args]` resolves
   `--config <path>` (default `./omunculus.toml` in the given cwd) and
   calls the same contract the model uses, with `trigger: "cli"`. The
   project root is the config file's directory, or `[project] root`

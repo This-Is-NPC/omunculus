@@ -1,6 +1,6 @@
 defmodule Omunculus.Store.Events do
   @moduledoc """
-  Appends rows to `events`, the spine of the store (spec §4): `sequence` is
+  Appends rows to `events`, the spine of the store: `sequence` is
   assigned as `MAX(sequence) + 1`, `id` is a fresh `Omunculus.Id`, `at` is
   the current UTC time.
   """

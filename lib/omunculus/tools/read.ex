@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.Read do
   @moduledoc """
-  Builtin `read` tool, per spec §9.2: reads a file's contents from under
+  Builtin `read` tool: reads a file's contents from under
   the run's roots. With `offset` (the first line, from 1) or `limit` (how
   many lines), it reads those lines and a last line says which lines of
   how many it shows. A file that is not text is refused with its size.

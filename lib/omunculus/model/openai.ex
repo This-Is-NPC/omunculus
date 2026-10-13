@@ -1,6 +1,6 @@
 defmodule Omunculus.Model.OpenAI do
   @moduledoc """
-  Factory for an OpenAI-compatible model of the contract of spec §8.6:
+  Factory for an OpenAI-compatible model of the model contract:
   `new/1` takes the `[models.<name>]` spec (`url`, `model`, `timeout_ms`,
   optional `temperature`, `headers`, `body`, `prompt_cache_key`, `credential`) and
   returns a 6-arity

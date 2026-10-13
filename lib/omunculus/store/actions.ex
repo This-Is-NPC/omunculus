@@ -2,7 +2,7 @@ defmodule Omunculus.Store.Actions do
   @moduledoc """
   Write side of the store: `run/3` applies the emits from a tool's
   `out.emit` in order, inside whatever transaction the caller holds — the
-  whole batch commits or nothing does (spec §8.3). `work` creates a root
+  whole batch commits or nothing does. `work` creates a root
   work with the `report` as its first comment and links the run to it when
   the run has no work yet. Of its `works`, one naming an agent or a
   workflow of depth 0 — or unnamed, when depth 0 requires a workflow or

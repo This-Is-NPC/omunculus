@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.Inbox do
   @moduledoc """
-  Builtin `inbox` tool, per spec §3.6: lists the unread `INBOX` entries from
+  Builtin `inbox` tool: lists the unread `INBOX` entries from
   the `inbox` view.
   """
 

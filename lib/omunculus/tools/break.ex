@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.Break do
   @moduledoc """
-  Builtin `break` tool, per spec §3.4: emits `break` with the `report`,
+  Builtin `break` tool: emits `break` with the `report`,
   which stops failed work with the report as its comment and hands it back
   to a parent waiting on it. The sequence does not advance. Its
   manifest's `then` appends `end`. Resumable questions use requests.

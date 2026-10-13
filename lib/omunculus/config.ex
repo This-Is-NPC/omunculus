@@ -19,9 +19,9 @@ defmodule Omunculus.Config do
   own, so all agents share the start of their requests), the optional
   `[policy] session_ttl_ms` and `session_max_bytes` (together, they let a
   run continue its agent's paused session on the work), each agent's ceiling layer, the named `[models.<name>]`
-  adapters, the named workflows under `[workflows.<name>]` (spec §3.4),
-  the MCP servers under `[[mcp.servers]]` (spec §8.7), the `[auth]`
-  providers (spec §11.1), the `[secrets.<tool>]` binding each secret a
+  adapters, the named workflows under `[workflows.<name>]`,
+  the MCP servers under `[[mcp.servers]]`, the `[auth]`
+  providers, the `[secrets.<tool>]` binding each secret a
   tool's process receives to one of those providers, the required `[execution]` and `[store]`
   tables. Every ceiling layer, and a workflow, may carry per-tool
   `overrides` (`Omunculus.Tool.Overrides`); a workflow's fold into each

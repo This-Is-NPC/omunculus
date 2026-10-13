@@ -1,7 +1,7 @@
 defmodule Omunculus.Tool.Manifest do
   @moduledoc """
-  Struct parsed from a `tool.toml` or `hook.toml`, per spec §8.5. An entry
-  built from an MCP server's `tools/list` (spec §8.7) sets `mcp` instead of
+  Struct parsed from a `tool.toml` or `hook.toml`. An entry
+  built from an MCP server's `tools/list` sets `mcp` instead of
   going through `load/1`. `chains` lists the tools this one may chain and
   `then` the ones chained after its `out.chain`; every name in `then` is in
   `chains` and `end`, when present, is the last of `then`. `views` are the

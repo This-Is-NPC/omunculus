@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.Continue do
   @moduledoc """
-  Builtin `continue` tool, per spec §3.4: emits "next". Only a chain step
+  Builtin `continue` tool: emits "next". Only a chain step
   (`done` chains it). Names no stage, agent or model — the workflow TOML
   decides the next step; without a workflow, or on the last stage, the
   work closes.

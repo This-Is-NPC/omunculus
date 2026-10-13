@@ -48,7 +48,7 @@ defmodule Omunculus.CeilingTest do
       assert snapshot.uncited == "askable"
     end
 
-    test "spec §5 example: agent granted list alone gives have under a default auto policy" do
+    test "agent granted list alone gives have under a default auto policy" do
       config =
         config(%{
           agents: %{"worker" => %{depth: 1, text: "", ceiling: policy(granted: ["counter"])}}
@@ -163,7 +163,7 @@ defmodule Omunculus.CeilingTest do
       assert snapshot.uncited == "askable"
     end
 
-    test "spec §5 table: a stage deny cuts an agent grant made in the same work" do
+    test "a stage deny cuts an agent grant made in the same work" do
       config =
         config(%{
           agents: %{"worker" => %{depth: 1, text: "", ceiling: policy(granted: ["counter"])}}

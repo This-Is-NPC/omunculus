@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.InboxRead do
   @moduledoc """
-  Builtin `inbox_read` tool, per spec §3.6: marks an `INBOX` entry as read.
+  Builtin `inbox_read` tool: marks an `INBOX` entry as read.
   """
 
   alias Omunculus.Tools.{Args, Out}
