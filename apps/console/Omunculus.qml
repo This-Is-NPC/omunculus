@@ -127,7 +127,13 @@ Singleton {
 
   // Reads the project's setup through the config tool on the local socket.
   function loadSetup() {
-    call("POST", "/v1/cli", { argv: ["config"] }, false, data => setup = JSON.parse(data.output))
+    cli(["config"], output => setup = JSON.parse(output))
+  }
+
+  // Runs a command line on the local socket, as `omunculus <argv>` would;
+  // `done` gets what it printed, and `failed`, when given, why it failed.
+  function cli(argv, done, failed) {
+    call("POST", "/v1/cli", { argv: argv }, false, data => done(data.output), failed)
   }
 
   // The model id an agent runs on, as configured, or "" before the setup.
@@ -476,6 +482,11 @@ Singleton {
   }
 
 
+
+  // A sum of money as the provider reported it, in US dollars.
+  function money(spent) {
+    return "US$ " + (spent < 0.01 ? spent.toFixed(4) : spent.toFixed(2))
+  }
 
   function tally() {
     return { calls: 0, input: 0, cached: 0, output: 0, cost: 0, priced: 0 }

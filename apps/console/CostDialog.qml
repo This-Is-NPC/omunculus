@@ -14,10 +14,6 @@ ModalDialog {
 
   readonly property var agents: Object.keys(Omunculus.usage.agents).sort()
 
-  function money(spent) {
-    return "US$ " + (spent < 0.01 ? spent.toFixed(4) : spent.toFixed(2))
-  }
-
   function tokens(count) {
     return count.toLocaleString(Qt.locale("en_US"), "f", 0)
   }
@@ -36,7 +32,7 @@ ModalDialog {
     Label { text: dialog.tokens(figures.used.output); font.pixelSize: 11 }
     Label { text: "cost"; color: Theme.dim; font.pixelSize: 11 }
     Label {
-      text: figures.used.priced === 0 ? "not reported" : dialog.money(figures.used.cost)
+      text: figures.used.priced === 0 ? "not reported" : Omunculus.money(figures.used.cost)
         + (figures.used.priced < figures.used.calls ? "  ·  " + figures.used.priced + " of " + figures.used.calls + " calls priced" : "")
       color: figures.used.priced === 0 ? Theme.dim : Theme.primary
       font.pixelSize: 11

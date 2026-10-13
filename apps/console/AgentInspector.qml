@@ -8,7 +8,9 @@ import "kit/ui"
 // long, the tool it called last; the work — where it stands in its workflow,
 // its goal, state, where it works and the work it came from; what it asked
 // and still waits for, to answer in place; the notes it left you; then what
-// it said and did, run by run, and a composer to write to it.
+// it said and did, run by run, and a composer to write to it. Beside the
+// work, its runs summed up and each call by call, the files it changed and
+// their diff, and the prompt a run was given.
 Rectangle {
   id: inspector
 
@@ -27,6 +29,12 @@ Rectangle {
   property real now: Date.now()
   Timer { interval: 1000; repeat: true; running: inspector.running !== null && inspector.visible; onTriggered: inspector.now = Date.now() }
   readonly property int seconds: running && running.started_at ? Math.max(0, Math.round((now - Date.parse(running.started_at)) / 1000)) : 0
+
+  // What it shows: "work", "runs", "changes" or "prompt".
+  property string section: "work"
+  // The run whose prompt shows, or "" for the work's last.
+  property string promptRun: ""
+  onKeyChanged: promptRun = ""
 
   function focusEntry() { composer.focusEntry() }
 
@@ -102,122 +110,179 @@ Rectangle {
       running: inspector.running !== null
     }
 
-    ScrollPage {
+    RowLayout {
       Layout.fillWidth: true
-      Layout.preferredHeight: Math.min(facts.implicitHeight, inspector.height * 0.55)
-      contentHeight: facts.implicitHeight
-
-      ColumnLayout {
-        id: facts
-        width: parent.width
-        spacing: 10
-
-        Label {
+      spacing: 6
+      Repeater {
+        model: [
+          { name: "work", tip: "the work, what it said and did" },
+          { name: "runs", tip: "its runs: how each ended, failures, cost" },
+          { name: "changes", tip: "the files it changed" },
+          { name: "prompt", tip: "the prompt a run was given" }
+        ]
+        delegate: TraceButton {
+          required property var modelData
           Layout.fillWidth: true
-          text: inspector.work ? inspector.work.title : Omunculus.title
-          font.pixelSize: 13
-          wrapMode: Text.Wrap
-        }
-        Label {
-          Layout.fillWidth: true
-          visible: inspector.work !== null && !!inspector.work.goal && inspector.work.goal !== inspector.work.title
-          text: inspector.work ? Omunculus.inline(String(inspector.work.goal || "")) : ""
-          textFormat: Text.MarkdownText
-          color: Theme.dim
-          font.pixelSize: 12
-          wrapMode: Text.Wrap
-        }
-
-        GridLayout {
-          Layout.fillWidth: true
-          columns: 2
-          columnSpacing: 12
-          rowSpacing: 6
-          Caption { text: "WORKSPACE" }
-          Label {
-            Layout.fillWidth: true
-            text: (inspector.place.name ? inspector.place.name + "  ·  " : "") + inspector.place.root
-            font.pixelSize: 11
-            elide: Text.ElideMiddle
-          }
-          Caption { visible: !!inspector.work && !!inspector.work.workflow; text: "WORKFLOW" }
-          Label {
-            visible: !!inspector.work && !!inspector.work.workflow
-            text: inspector.work && inspector.work.workflow ? inspector.work.workflow + "  ·  stage " + inspector.work.stage : ""
-            font.pixelSize: 11
-          }
-          Caption { visible: inspector.parentWork !== null; text: "FROM" }
-          Label {
-            visible: inspector.parentWork !== null
-            text: inspector.parentWork ? (inspector.parentWork.assignee || "").toUpperCase() + "  ·  " + inspector.parentWork.title : ""
-            color: from.containsMouse ? Theme.primary : Theme.foreground
-            font.pixelSize: 11
-            font.underline: from.containsMouse
-            elide: Text.ElideRight
-            Layout.fillWidth: true
-            MouseArea {
-              id: from
-              anchors.fill: parent
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: inspector.picked(inspector.parentWork.id)
-            }
-          }
-        }
-
-        Repeater {
-          model: Omunculus.asked(inspector.key)
-          delegate: RequestDecision {
-            required property var modelData
-            Layout.fillWidth: true
-            key: modelData.id
-            stamp: String(modelData.created_at).slice(11, 16)
-          }
-        }
-
-        Repeater {
-          model: Omunculus.unreadFrom(inspector.key)
-          delegate: SurfaceFrame {
-            id: note
-            required property var modelData
-            Layout.fillWidth: true
-            implicitHeight: noted.implicitHeight + 20
-            variant: "filled"
-            tone: Theme.warning
-            RowLayout {
-              id: noted
-              anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; leftMargin: 12 }
-              spacing: 8
-              Label {
-                Layout.fillWidth: true
-                text: Omunculus.inline(Omunculus.notes[note.modelData.id] || "")
-                textFormat: Text.MarkdownText
-                font.pixelSize: 12
-                wrapMode: Text.Wrap
-              }
-              IconButton { Layout.alignment: Qt.AlignTop; name: "check"; tip: "mark read"; onClicked: Omunculus.markRead(note.modelData.id) }
-            }
-          }
+          Layout.preferredWidth: 1
+          dense: true
+          role: inspector.section === modelData.name ? "primary" : "action"
+          text: modelData.name.toUpperCase()
+          tip: modelData.tip
+          onClicked: inspector.section = modelData.name
         }
       }
     }
 
-    Kicker { Layout.fillWidth: true; text: "its runs: what it said and did" }
-
-    TimelineView {
+    ColumnLayout {
       Layout.fillWidth: true
       Layout.fillHeight: true
-      thread: Omunculus.threadOf(inspector.key)
-      emptyText: "NOTHING SAID HERE YET"
-      requestsShown: false
+      visible: inspector.section === "work"
+      spacing: 12
+
+      ScrollPage {
+        Layout.fillWidth: true
+        Layout.preferredHeight: Math.min(facts.implicitHeight, inspector.height * 0.55)
+        contentHeight: facts.implicitHeight
+
+        ColumnLayout {
+          id: facts
+          width: parent.width
+          spacing: 10
+
+          Label {
+            Layout.fillWidth: true
+            text: inspector.work ? inspector.work.title : Omunculus.title
+            font.pixelSize: 13
+            wrapMode: Text.Wrap
+          }
+          Label {
+            Layout.fillWidth: true
+            visible: inspector.work !== null && !!inspector.work.goal && inspector.work.goal !== inspector.work.title
+            text: inspector.work ? Omunculus.inline(String(inspector.work.goal || "")) : ""
+            textFormat: Text.MarkdownText
+            color: Theme.dim
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+          }
+
+          GridLayout {
+            Layout.fillWidth: true
+            columns: 2
+            columnSpacing: 12
+            rowSpacing: 6
+            Caption { text: "WORKSPACE" }
+            Label {
+              Layout.fillWidth: true
+              text: (inspector.place.name ? inspector.place.name + "  ·  " : "") + inspector.place.root
+              font.pixelSize: 11
+              elide: Text.ElideMiddle
+            }
+            Caption { visible: !!inspector.work && !!inspector.work.workflow; text: "WORKFLOW" }
+            Label {
+              visible: !!inspector.work && !!inspector.work.workflow
+              text: inspector.work && inspector.work.workflow ? inspector.work.workflow + "  ·  stage " + inspector.work.stage : ""
+              font.pixelSize: 11
+            }
+            Caption { visible: inspector.parentWork !== null; text: "FROM" }
+            Label {
+              visible: inspector.parentWork !== null
+              text: inspector.parentWork ? (inspector.parentWork.assignee || "").toUpperCase() + "  ·  " + inspector.parentWork.title : ""
+              color: from.containsMouse ? Theme.primary : Theme.foreground
+              font.pixelSize: 11
+              font.underline: from.containsMouse
+              elide: Text.ElideRight
+              Layout.fillWidth: true
+              MouseArea {
+                id: from
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: inspector.picked(inspector.parentWork.id)
+              }
+            }
+          }
+
+          Repeater {
+            model: Omunculus.asked(inspector.key)
+            delegate: RequestDecision {
+              required property var modelData
+              Layout.fillWidth: true
+              key: modelData.id
+              stamp: String(modelData.created_at).slice(11, 16)
+            }
+          }
+
+          Repeater {
+            model: Omunculus.unreadFrom(inspector.key)
+            delegate: SurfaceFrame {
+              id: note
+              required property var modelData
+              Layout.fillWidth: true
+              implicitHeight: noted.implicitHeight + 20
+              variant: "filled"
+              tone: Theme.warning
+              RowLayout {
+                id: noted
+                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; leftMargin: 12 }
+                spacing: 8
+                Label {
+                  Layout.fillWidth: true
+                  text: Omunculus.inline(Omunculus.notes[note.modelData.id] || "")
+                  textFormat: Text.MarkdownText
+                  font.pixelSize: 12
+                  wrapMode: Text.Wrap
+                }
+                IconButton { Layout.alignment: Qt.AlignTop; name: "check"; tip: "mark read"; onClicked: Omunculus.markRead(note.modelData.id) }
+              }
+            }
+          }
+        }
+      }
+
+      Kicker { Layout.fillWidth: true; text: "its runs: what it said and did" }
+
+      TimelineView {
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        thread: Omunculus.threadOf(inspector.key)
+        emptyText: "NOTHING SAID HERE YET"
+        requestsShown: false
+      }
+
+      Composer {
+        id: composer
+        Layout.fillWidth: true
+        compact: true
+        pendingShown: false
+        work: inspector.key
+      }
     }
 
-    Composer {
-      id: composer
+    WorkRuns {
       Layout.fillWidth: true
-      compact: true
-      pendingShown: false
-      work: inspector.key
+      Layout.fillHeight: true
+      visible: inspector.section === "runs"
+      key: inspector.key
+      onPromptWanted: run => {
+        inspector.promptRun = run
+        inspector.section = "prompt"
+      }
+    }
+
+    WorkChanges {
+      Layout.fillWidth: true
+      Layout.fillHeight: true
+      visible: inspector.section === "changes"
+      key: inspector.key
+    }
+
+    WorkPrompt {
+      Layout.fillWidth: true
+      Layout.fillHeight: true
+      visible: inspector.section === "prompt"
+      key: inspector.key
+      run: inspector.promptRun
+      onLatestWanted: inspector.promptRun = ""
     }
   }
 }
