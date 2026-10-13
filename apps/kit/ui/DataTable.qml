@@ -1,9 +1,9 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import "kit/ui"
 
 // DataTable lists records as rows of columns under a header; below 700 px each
-// row stacks its cells into lines instead. A row opens on click or Enter; ↑/↓
+// row stacks its cells into lines instead. A row opens on click or Enter, or,
+// when the table `picks`, a click picks it and a double click opens it; ↑/↓
 // move, ↑ on the first asks to leave upward, Delete asks to remove it, Esc asks
 // to go back. Each row may carry tools on its right, from `tools` (its root gets
 // the row's record as `entry`): Tab reaches those of the selected row only. Rows
@@ -33,6 +33,8 @@ Item {
   property var dimmed: entry => false
   property var idOf: entry => entry.id
   property string selectedId: ""
+  // Whether a click picks a row rather than opening it.
+  property bool picks: false
   property string emptyText
   // What the empty list offers to do about it, or "".
   property string emptyAction
@@ -52,6 +54,7 @@ Item {
   property var listed: new Set()
 
   signal opened(var entry)
+  signal picked(var entry)
   signal removeRequested(var entry)
   signal backRequested()
   signal topLeft()
@@ -133,6 +136,8 @@ Item {
     onMovementEnded: atEnd = atYEnd
     onCountChanged: if (table.followsEnd && atEnd) Qt.callLater(positionViewAtEnd)
     onActiveFocusChanged: if (activeFocus && currentIndex < 0 && count > 0) currentIndex = 0
+    // Picking, the keyboard picks the row it moves to.
+    onCurrentIndexChanged: if (table.picks && currentItem && activeFocus) table.picked(currentItem.modelData)
     Keys.onReturnPressed: if (currentItem) currentItem.open()
     Keys.onDeletePressed: if (currentItem) table.removeRequested(currentItem.modelData)
     Keys.onEscapePressed: table.backRequested()
@@ -161,6 +166,11 @@ Item {
       function open() {
         list.currentIndex = index
         table.opened(modelData)
+      }
+      function pick() {
+        list.currentIndex = index
+        list.forceActiveFocus()
+        table.picked(modelData)
       }
 
       function color(column) {
@@ -260,7 +270,8 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: row.open()
+        onClicked: table.picks ? row.pick() : row.open()
+        onDoubleClicked: if (table.picks) row.open()
       }
 
       // Only the selected row's tools are Tab stops; the pointer reaches any.
