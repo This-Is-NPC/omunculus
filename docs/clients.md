@@ -41,8 +41,9 @@ project, given as `OMUNCULUS_PROJECT` and its local socket as
 
 All are QML on Quickshell and share `apps/kit`:
 
-- `apps/kit/ui`: the theme and the controls more than one app uses. It knows
-  nothing of Omunculus.
+- `apps/kit/ui`: the theme and the controls more than one app uses, among
+  them `FlowCanvas`, a canvas that moves, zooms and pinches, and its
+  `ZoomControl`. It knows nothing of Omunculus.
 - `apps/kit/client`: `Http`, which makes each request to a socket through
   `curl` or saves its answer into a file, `AgentImages`, which keeps the
   agents' images in Quickshell's cache, and `Requests.js`, the helpers
