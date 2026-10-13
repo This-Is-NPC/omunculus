@@ -9,8 +9,9 @@ here="$(cd "$(dirname "$0")" && pwd)"
 state="$here/.state"
 
 # A sandbox sees the person's home through an overlay, where a unix socket
-# refuses connections: the sockets live outside it, linked from .state.
-export DEPLOY_DATA="$state/data" DEPLOY_SOCKETS="/var/tmp/omunculus-deploy-$(id -u)"
+# refuses connections: the sockets live outside it, linked from .state, in
+# a folder of the same path on every machine, which a config can name.
+export DEPLOY_DATA="$state/data" DEPLOY_SOCKETS="/var/tmp/omunculus-deploy"
 keys="$state/keys"
 mkdir -p "$DEPLOY_DATA/homologation" "$DEPLOY_DATA/production" "$DEPLOY_SOCKETS" "$keys"
 ln -sfn "$DEPLOY_SOCKETS" "$state/sockets"
@@ -29,7 +30,7 @@ for instance in homologation production; do
   fi
 done
 
-echo "sockets:      $state/sockets (OMUNCULUS_DEPLOY for the deploy tools)"
+echo "sockets:      $DEPLOY_SOCKETS (OMUNCULUS_DEPLOY for the deploy tools, and in [execution] write)"
 echo "keys:         $keys (OMUNCULUS_HOMOLOGATION_KEY, OMUNCULUS_PRODUCTION_KEY)"
 echo "homologation: apps at http://<app>.homologation.localhost:8080"
 echo "production:   apps at http://<app>.production.localhost:9080"

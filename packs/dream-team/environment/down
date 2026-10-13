@@ -3,5 +3,5 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 
-DEPLOY_DATA="$here/.state/data" DEPLOY_SOCKETS="/var/tmp/omunculus-deploy-$(id -u)" \
+DEPLOY_DATA="$here/.state/data" DEPLOY_SOCKETS="/var/tmp/omunculus-deploy" \
   docker compose -f "$here/compose.yml" -p omunculus-deploy down

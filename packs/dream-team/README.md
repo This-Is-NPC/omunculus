@@ -49,13 +49,15 @@ images/         a portrait of each agent, <agent>.webp, 512 px square, its `imag
 
 1. Start its environment: `environment/up`. It needs Docker, starts the
    homologation and production Dokku instances on 127.0.0.1, gives each a
-   key of its own under `environment/.state/keys` and a unix socket under
-   `environment/.state/sockets`. `environment/down` stops them.
+   key of its own under `environment/.state/keys` and a unix socket in
+   `/var/tmp/omunculus-deploy`, which `environment/.state/sockets` links
+   to. `environment/down` stops them.
 2. In the project's `omunculus.toml`, give the deploy tools what they read:
-   `OMUNCULUS_DEPLOY` (the sockets folder) in `[execution] environment`,
-   the sockets folder itself in `[execution] write` unless `[execution]
-   host` shows commands the machine (without either, they cannot reach the
-   sockets),
+   `OMUNCULUS_DEPLOY` in `[execution] environment`, set to the sockets
+   folder itself, `/var/tmp/omunculus-deploy`, and that folder in
+   `[execution] write` unless `[execution] host` shows commands the machine
+   (a command sees only the folders it is given, so neither the link nor a
+   folder left out reaches the sockets),
    and two logins whose keys are the instances' private keys, for example
    `[auth.homologation]` with `key = "$OMUNCULUS_HOMOLOGATION_KEY"` and
    `[auth.production]` with `key = "$OMUNCULUS_PRODUCTION_KEY"`.
