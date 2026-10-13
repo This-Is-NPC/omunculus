@@ -162,6 +162,14 @@ defmodule Omunculus.Tools.OverviewTest do
              Overview.run(%{config_path: path, args: %{"agent" => "ghost"}})
   end
 
+  test "an agent in full names what its layer denies", %{path: path} do
+    data = path |> Toml.decode_file!() |> put_in(["agents", "worker", "deny"], ["propose_pack"])
+    File.write!(path, ConfigToml.encode(data))
+
+    assert %{"runs" => [%{"agent" => %{"deny" => ["propose_pack"]}} | _]} =
+             read(path, %{"agent" => "worker"})
+  end
+
   test "the builtin catalog discovers overview for the command line and models" do
     assert %{"overview" => manifest} = Catalog.unconfigured()
     assert manifest.triggers == ["cli", "model"]

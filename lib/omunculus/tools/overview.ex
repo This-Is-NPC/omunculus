@@ -11,9 +11,9 @@ defmodule Omunculus.Tools.Overview do
   changed it), where its provider's key comes from, and the names its
   layer lists, each classified by the run's ceiling there (`have`,
   `askable`, `sealed`, `blocked`), a group with its members, a tool with
-  the secrets the config binds to it; and, apart from them, the skills it
-  has there, each with its description, state and the tools its
-  `allowed-tools` names. Workflows no place runs are listed apart. That
+  the secrets the config binds to it; the names its layer denies; and,
+  apart from them, the skills it has there, each with its description,
+  state and the tools its `allowed-tools` names. Workflows no place runs are listed apart. That
   whole project is what `whole` prints, for a client.
 
   A model reads it in parts, since a real project's overview outgrows
@@ -265,6 +265,7 @@ defmodule Omunculus.Tools.Overview do
       key: key(here, model.input["provider"]),
       tools:
         (listed ++ reader) |> Enum.uniq() |> Enum.map(&tool(here, snapshot, &1, known.groups)),
+      deny: agent.ceiling.deny,
       skills:
         for skill <- Enum.sort_by(known.skills, & &1.name),
             state = Ceiling.classify(snapshot, skill.name),

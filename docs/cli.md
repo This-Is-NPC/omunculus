@@ -210,7 +210,8 @@ its `model` (name, id, api, `body`, whether the place `changed` it), the
 file`, never the value), and the names its layer lists, each with its
 `state` under the ceiling there (`have`, `askable`, `sealed`,
 `blocked`), a group's `members`, and the `secrets` the config binds to
-it — the skills apart, as `skills`, each with its `description`, `state`
+it; the names its layer denies (`deny`); and, apart, the skills, as
+`skills`, each with its `description`, `state`
 and the tools its `allowed-tools` names (`uses`). `unused_workflows` are
 those no place runs.
 
