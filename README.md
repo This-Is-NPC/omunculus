@@ -67,7 +67,7 @@ Every verb is in [the command line](docs/cli.md). The file the verbs read is
 is [the cycle](docs/cycle.md). Who may call what is [the ceiling](docs/ceiling.md).
 A folder of your own is [a tool](docs/tools.md). A team distributed as a folder is
 [a pack](docs/packs.md). How the code is laid out is
-[the architecture](docs/architecture.md).
+[the design](docs/design.md).
 
 ## HTTP server
 
