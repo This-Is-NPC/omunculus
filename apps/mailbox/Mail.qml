@@ -361,15 +361,17 @@ Singleton {
       }
     }
     const asked = snapshot.requests.filter(request => isMe(request.arbiter))
-    for (const request of asked)
+    for (const request of asked) {
+      const question = asking(request)
       entries.push({
         kind: "request", key: request.id, from: Requests.label(request.requester), to: "you",
-        text: request.reason || "", at: request.created_at, open: Requests.pending(request),
+        text: question.text, at: request.created_at, open: Requests.pending(request),
         files: [],
         options: Object.keys(request.options || {}),
-        origins: Object.keys(request.origins || {}).map(part => ({ part: part, reason: request.origins[part].reason || "" })),
+        origins: question.origins,
         answer: replies[request.id] || null
       })
+    }
     entries.sort((a, b) => a.at.localeCompare(b.at))
 
     const first = entries.find(entry => entry.kind === "you")
@@ -495,6 +497,18 @@ Singleton {
       : Array.isArray(body.output) ? body.output.filter(part => part.type === "function_call").map(part => part.name)
       : []
     return names.filter(name => !!name).map(name => name === "__omunculus_execute" ? "code" : name)
+  }
+
+  // What a request asks, each question once: a reason an origin's question
+  // holds gives way to that question, and an origin's question the text
+  // shown already holds is left out.
+  function asking(request) {
+    const plain = value => String(value || "").replace(/\s+/g, " ").trim().toLowerCase()
+    const origins = Object.keys(request.origins || {}).map(part => ({ part: part, reason: request.origins[part].reason || "" }))
+    const text = origins.map(origin => origin.reason)
+      .filter(reason => plain(reason).includes(plain(request.reason)))
+      .reduce((longest, reason) => reason.length > longest.length ? reason : longest, request.reason || "")
+    return { text: text, origins: origins.filter(origin => !plain(text).includes(plain(origin.reason))) }
   }
 
   // A text on one line, without its Markdown marks, cut short when long.

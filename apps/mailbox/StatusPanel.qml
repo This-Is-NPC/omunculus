@@ -57,8 +57,9 @@ Rectangle {
       Layout.alignment: Qt.AlignVCenter
       visible: panel.action !== ""
       dense: true
-      // Outlined: the bar's main action stays the one solid.
-      role: "primary"
+      // Secondary, outlined as the bar's other actions: the bar's main action
+      // stays the screen's one solid.
+      role: "action"
       tone: badge.tone
       icon: panel.status.state === "waiting" ? "warning" : "enter"
       text: panel.action
