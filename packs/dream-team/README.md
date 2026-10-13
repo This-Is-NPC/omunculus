@@ -76,7 +76,8 @@ images/         a portrait of each agent, <agent>.webp, 512 px square, its `imag
    `[[packs]]` and copies `workspace/AGENTS.md` into the project's workspace.
 
 `promote` is in every agent's `human` list: only the person grants it, once
-they have seen the app in homologation.
+they have seen the app in homologation. That grant is their approval of
+it, the only one: the administrator asks for none after the release.
 
 Questions use `ask`. What only the machine's operator can settle — a
 tool, a login or a setting the machine lacks, as git's author identity —
