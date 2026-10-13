@@ -7,9 +7,10 @@ import "kit/ui"
 // when, then the text and the files it carries, each a chip that saves the
 // file to the downloads directory and opens it. Folded, it is one line with
 // the start of the text. A request for you is a message too: a filled card
-// with its question and, while it waits, the way to answer it. A note the
-// harness wrote is no one's words: it reads NOTE, muted, where a speaker's
-// name would be.
+// with its question and, while it waits, the way to answer it. A question
+// the harness passed on is that of whoever asked it, the harness's sentence
+// under it in small print; a note the harness wrote that passes on none is no
+// one's words: it reads NOTE, muted, where a speaker's name would be.
 SurfaceFrame {
   id: card
 
@@ -91,6 +92,15 @@ SurfaceFrame {
       color: card.mine || card.note ? Theme.dim : Theme.foreground
       font.pixelSize: 13
       lineHeight: 1.25
+      wrapMode: Text.Wrap
+    }
+
+    Label {
+      Layout.fillWidth: true
+      visible: card.expanded && !!card.entry.fine
+      text: card.entry.fine || ""
+      color: Theme.dim
+      font.pixelSize: 10
       wrapMode: Text.Wrap
     }
 

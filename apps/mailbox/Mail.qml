@@ -328,8 +328,9 @@ Singleton {
 
   // The thread a conversation's snapshot and events make. Its entries, in
   // order: each message you wrote; each run of an agent of depth 0, as what it
-  // said; and each request whose arbiter is you, a note when the harness
-  // wrote it for the agent, as when the agent left a question unanswered.
+  // said; and each request whose arbiter is you, the question of whoever
+  // asked it when the harness passed it on, as when the agent left a question
+  // unanswered, with the harness's sentence as its fine print.
   function build(projectId, id, snapshot, events) {
     const rootRuns = {}
     for (const run of snapshot.runs)
@@ -366,11 +367,11 @@ Singleton {
     const notes = noted(events)
     const asked = snapshot.requests.filter(request => isMe(request.arbiter))
     for (const request of asked) {
-      const question = asking(request)
+      const question = asking(request, notes)
       entries.push({
-        kind: "request", key: request.id, from: notes[request.id] ? "note" : Requests.label(request.requester), to: "you",
-        note: !!notes[request.id],
-        text: question.text, at: request.created_at, open: Requests.pending(request),
+        kind: "request", key: request.id, from: question.from, to: "you",
+        note: question.note,
+        text: question.text, fine: question.fine, at: request.created_at, open: Requests.pending(request),
         files: [],
         choices: Requests.choices(request),
         origins: question.origins,
@@ -440,7 +441,8 @@ Singleton {
 
     if (pending.length > 0) {
       const request = pending[0]
-      const asks = (notes[request.id] ? "note: " : Requests.label(request.requester) + " asks: ") + oneLine(request.reason || "a decision")
+      const question = asking(request, notes)
+      const asks = (question.note ? "note: " : question.from + " asks: ") + oneLine(question.text || "a decision")
       return { state: "waiting", label: "WAITING ON YOU", brief: asks, line: asks + (pending.length > 1 ? "  (+" + (pending.length - 1) + " more)" : ""),
         next: "Nothing in this thread moves until you decide: DECIDE takes you to the question." }
     }
@@ -496,7 +498,7 @@ Singleton {
   function noted(events) {
     const notes = {}
     for (const event of events)
-      if (event.type === "request" && event.request_id && event.actor && event.actor.kind === "harness")
+      if (Requests.byHarness(event))
         notes[event.request_id] = true
     return notes
   }
@@ -515,16 +517,24 @@ Singleton {
     return names.filter(name => !!name).map(name => name === "__omunculus_execute" ? "code" : name)
   }
 
-  // What a request asks, each question once: a reason an origin's question
-  // holds gives way to that question, and an origin's question the text
-  // shown already holds is left out.
-  function asking(request) {
+  // What a request asks, as {from, text, fine, origins, note}, each question
+  // once: a reason an origin's question holds gives way to that question,
+  // and an origin's question the text shown already holds is left out. A
+  // request the harness opened, among `notes`, asks what it passes on, in
+  // the words of whoever asked it, its own sentence the fine print; passing
+  // on nothing, it is a note, its reason no one's words.
+  function asking(request, notes) {
+    const passed = notes[request.id] ? Requests.passedOn(request) : []
+    if (passed.length > 0)
+      return { from: Requests.label(passed[0].requester), text: passed.map(origin => origin.reason).join("\n\n"),
+        fine: request.reason || "", origins: [], note: false }
     const plain = value => String(value || "").replace(/\s+/g, " ").trim().toLowerCase()
     const origins = Object.keys(request.origins || {}).map(part => ({ part: part, reason: request.origins[part].reason || "" }))
     const text = origins.map(origin => origin.reason)
       .filter(reason => plain(reason).includes(plain(request.reason)))
       .reduce((longest, reason) => reason.length > longest.length ? reason : longest, request.reason || "")
-    return { text: text, origins: origins.filter(origin => !plain(text).includes(plain(origin.reason))) }
+    return { from: notes[request.id] ? "note" : Requests.label(request.requester), text: text, fine: "",
+      origins: origins.filter(origin => !plain(text).includes(plain(origin.reason))), note: !!notes[request.id] }
   }
 
   // A text on one line, without its Markdown marks, cut short when long.

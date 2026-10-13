@@ -48,3 +48,18 @@ function granted(request) {
         if (step.name === "grant") return step.args;
   return null;
 }
+
+// Whether an event is the harness opening a request, as when an agent left a
+// question unanswered and the harness passed it on to whoever is next: such
+// a request is no one's words.
+function byHarness(event) {
+  return event.type === "request" && !!event.request_id && !!event.actor && event.actor.kind === "harness";
+}
+
+// What a request the harness opened passes on: the origins it gathers that
+// ask something, each with its question and whoever asked it; the request's
+// own reason only says how it came to you.
+function passedOn(request) {
+  return Object.keys(request.origins || {}).map(part => request.origins[part])
+    .filter(origin => String(origin.reason || "").trim() !== "");
+}

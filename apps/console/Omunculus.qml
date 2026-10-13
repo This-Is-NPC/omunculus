@@ -59,6 +59,9 @@ Singleton {
   // was answered ({option, who, body}); the snapshot has neither.
   property var notes: ({})
   property var replies: ({})
+  // Request id -> true for each request the harness opened, passing on a
+  // question someone left unanswered; the snapshot does not say.
+  property var noted: ({})
   // The project's setup, as the config tool prints it: {root, agents, models,
   // workspaces, workspace, workflows, ...}; null until it answers.
   property var setup: null
@@ -358,6 +361,7 @@ Singleton {
     threads = {}
     notes = {}
     replies = {}
+    noted = {}
     tones = {}
     usage = { all: tally(), agents: {} }
     works = []
@@ -788,6 +792,8 @@ Singleton {
       step(event.run_id, { name: "grant", ok: true, text: "granted " + body.name + (body.scope ? " for the " + body.scope : " for this work"), output: "", outcome: true })
       break
     case "request":
+      if (Requests.byHarness(event))
+        keep("noted", event.request_id, true)
       append("", { kind: "request", key: event.request_id, who: who, stamp: stamp, at: at, work: work })
       break
     case "reply":

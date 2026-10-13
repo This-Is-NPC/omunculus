@@ -6,13 +6,15 @@ import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
 // RequestDecision is one request, wherever it shows: who asked, on which work,
-// what for and what that lets it do, and who decides — you, or the agent above,
-// whom you can always overrule. While it waits, the answers come grouped: for
-// this work only, always (each scope saying where it is written), or no, with a
-// reason, and so for each decision it gathers from below, under its part, an
-// option carrying the words written; or an answer in words, choosing none; or,
-// when it waits on you, the words go up to whoever decides above you.
-// Answered, it says what was chosen and by whom.
+// what for and what that lets it do, a question the harness passed on as its
+// asker wrote it, with the harness's sentence under it in small print; and who
+// decides, you, or the agent above, whom you can always overrule. While it
+// waits, the answers come grouped: for this work only, always (each scope
+// saying where it is written), or no, with a reason, and so for each decision
+// it gathers from below, under its part, an option carrying the words
+// written; or an answer in words, choosing none; or, when it waits on you,
+// the words go up to whoever decides above you. Answered, it says what was
+// chosen and by whom.
 SurfaceFrame {
   id: card
 
@@ -24,7 +26,10 @@ SurfaceFrame {
   readonly property bool open: request !== null && Requests.pending(request)
   readonly property bool yours: open && Requests.human(request.arbiter)
   readonly property var work: request ? Omunculus.work(request.work_id || "") : null
-  readonly property string asker: request ? Requests.label(request.requester) : ""
+  // The questions it passes on when the harness opened it, each its asker's;
+  // its own reason is then only how it came here.
+  readonly property var passed: request && Omunculus.noted[key] ? Requests.passedOn(request) : []
+  readonly property string asker: passed.length > 0 ? Requests.label(passed[0].requester) : request ? Requests.label(request.requester) : ""
   readonly property var options: request ? Object.keys(request.options || {}) : []
   // Its own options, then those of the decisions it gathers from below still
   // waiting, each {part, path, options, request}, as an escalation keeps a
@@ -140,9 +145,19 @@ SurfaceFrame {
     Prose {
       Layout.fillWidth: true
       visible: !!card.request && !!card.request.reason
-      source: card.request ? Omunculus.inline(String(card.request.reason || "")) : ""
+      source: card.passed.length > 0 ? Omunculus.inline(card.passed.map(origin => origin.reason).join("\n\n"))
+        : card.request ? Omunculus.inline(String(card.request.reason || "")) : ""
       color: Theme.dim
       font.pixelSize: 12
+      wrapMode: Text.Wrap
+    }
+
+    Label {
+      Layout.fillWidth: true
+      visible: card.passed.length > 0
+      text: card.request ? card.request.reason || "" : ""
+      color: Theme.dim
+      font.pixelSize: 10
       wrapMode: Text.Wrap
     }
 
