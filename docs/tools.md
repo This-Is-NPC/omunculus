@@ -393,7 +393,8 @@ and `config = false`. A group name in an agent's `tools` list expands to
 those names at ceiling mount.
 
 `ask` and `escalate` have both model and CLI triggers. `ask` takes a question
-and optional named options (omit them for a free-text answer). The CLI supplies
+and optional named options, the answers the receiver is to pick among, which
+an escalation keeps on its origin (omit them for a free-text answer). The CLI supplies
 an existing `conversation_id` and may spell options as a JSON array.
 `escalate` takes reason and a JSON/object map of named origins. Optional `to`
 on `ask`, `request_access` or `escalate` names a configured logical route,

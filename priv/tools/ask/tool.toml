@@ -1,7 +1,7 @@
 name = "ask"
 kind = "tool"
 triggers = ["model", "cli"]
-description = "Asks a question or decision through configured request routing. question says what is needed and why, written to the receiver in their language as it should reach them, without request or work IDs, stage names or notes for agents; optional options names the answers (approve, deny, revise, ...), with their meanings in question. Omit options for a free-text answer. Optional to names a route in the project's request_routes; omit to to follow the default route. The run ends and resumes when the request is answered."
+description = "Asks a question or decision through configured request routing. question says what is needed and why, written to the receiver in their language as it should reach them, without request or work IDs, stage names or notes for agents; when the receiver is to pick one of named answers, name each in options (approve, deny, revise, ...), in the receiver's language, and say what each means in question: they get them as choices, and may still answer in words; never list the choices only in question. Omit options for a free-text answer. Optional to names a route in the project's request_routes; omit to to follow the default route. The run ends and resumes when the request is answered."
 tags = ["request"]
 groups = ["sequence"]
 module = "Omunculus.Tools.Ask"
