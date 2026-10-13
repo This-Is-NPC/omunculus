@@ -302,7 +302,9 @@ to create, each with a `title`, a `goal`, and optionally an `agent` or a
   the root's run once this run has ended.
 
 `delegate` is only a chain step (`triggers = ["chain"]`), so an agent
-with `work` needs `delegate`, `end` and `comment` as have too; the
+with `work` needs `delegate`, `end` and `comment` as have too, but for
+one that never holds a work — at a depth that requires workflows, on none
+of their stages — whose `work` runs `end` alone; the
 `sequence` group carries `work`, `delegate` and `end`. The manifest's
 `[schemas.staged]` drops `agent` from the items, for the layer whose new
 works land on a depth that requires one workflow:
