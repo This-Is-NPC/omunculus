@@ -4,17 +4,13 @@ import "kit/ui"
 // FlowNode is one box of the flowchart: you, an agent a work goes to, or a
 // stage of a workflow with the agent that runs it. Its name decodes when it
 // comes into view; picked, it is outlined in the accent. An agent no stage
-// and no depth runs shows hollow. From far away it shows only its name, as
-// large as the box allows, so it still reads.
+// and no depth runs shows hollow.
 Item {
   id: node
 
   // {kind: "person" | "agent" | "stage", agent, stage, index, last, pack, ...}
   required property var spec
   property bool picked: false
-  // How near the canvas is: below half its size, the box keeps only its name.
-  property real zoom: 1
-  readonly property bool far: zoom < 0.5
   // Its place in the order the flow draws, so the nodes arrive one by one.
   property int order: 0
 
@@ -55,29 +51,11 @@ Item {
     anchors.fill: parent
     color: Qt.tint(Theme.background, Qt.alpha(node.tone, node.picked ? 0.12 : pointer.containsMouse ? 0.08 : 0.04))
     border.color: node.agent && node.agent.idle ? Theme.line : node.edge
-    // One pixel on screen at any zoom, so the outline stays whole from afar.
-    border.width: Math.max(1, 1 / node.zoom)
     Behavior on border.color { ColorAnimation { duration: 160 } }
 
-    // From far away: the name alone, filling the box.
-    DecodeLabel {
-      renderType: Text.CurveRendering
-      anchors { fill: parent; margins: 12 }
-      visible: node.far
-      value: node.person ? "YOU" : node.agent ? node.agent.name : ""
-      color: node.tone
-      fontSizeMode: Text.Fit
-      minimumPixelSize: 10
-      font.pixelSize: 72
-      font.letterSpacing: 1
-      horizontalAlignment: Text.AlignHCenter
-      verticalAlignment: Text.AlignVCenter
-    }
-
     Column {
-      anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 14; rightMargin: 12; topMargin: 10 }
-      visible: !node.far
-      spacing: 4
+      anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 16; rightMargin: 14; topMargin: 12 }
+      spacing: 6
 
       // What the node is: a stage's place in its workflow, an agent, or you.
       Row {
@@ -88,7 +66,7 @@ Item {
             : node.spec.kind === "stage" ? String(node.spec.index + 1).padStart(2, "0") + " · " + node.spec.stage.toUpperCase()
             : "AGENT"
           color: node.spec.kind === "stage" ? Theme.secondary : Theme.dim
-          font.pixelSize: 9
+          font.pixelSize: 12
           font.letterSpacing: 2.5
         }
         Label {
@@ -96,7 +74,7 @@ Item {
           visible: !!node.spec.pack
           text: "◆ " + (node.spec.pack || "").toUpperCase()
           color: Theme.magenta
-          font.pixelSize: 9
+          font.pixelSize: 12
           font.letterSpacing: 2
         }
       }
@@ -106,8 +84,8 @@ Item {
         width: parent.width
         value: node.person ? "YOU" : node.agent ? node.agent.name : ""
         color: node.tone
-        font.pixelSize: node.person ? 18 : 15
-        font.letterSpacing: node.person ? 6 : 1.5
+        font.pixelSize: node.person ? 26 : 22
+        font.letterSpacing: node.person ? 8 : 1.5
         elide: Text.ElideRight
       }
 
@@ -117,7 +95,7 @@ Item {
         visible: !node.person
         text: node.agent ? (node.agent.model.id || node.agent.model.name) : ""
         color: Theme.dim
-        font.pixelSize: 10
+        font.pixelSize: 14
         elide: Text.ElideMiddle
       }
 
@@ -126,24 +104,24 @@ Item {
         visible: node.person
         text: "talks with depth 0"
         color: Theme.dim
-        font.pixelSize: 10
+        font.pixelSize: 14
       }
 
       // What it has, what it must ask for, and its skills.
       Row {
         visible: !node.person
-        spacing: 12
-        Label { renderType: Text.CurveRendering; text: node.tools + " TOOLS"; color: Theme.foreground; opacity: 0.75; font.pixelSize: 9; font.letterSpacing: 1.5 }
-        Label { renderType: Text.CurveRendering; visible: node.asks > 0; text: node.asks + " ASK"; color: Theme.warning; font.pixelSize: 9; font.letterSpacing: 1.5 }
+        spacing: 14
+        Label { renderType: Text.CurveRendering; text: node.tools + " TOOLS"; color: Theme.foreground; opacity: 0.75; font.pixelSize: 12; font.letterSpacing: 1.5 }
+        Label { renderType: Text.CurveRendering; visible: node.asks > 0; text: node.asks + " ASK"; color: Theme.warning; font.pixelSize: 12; font.letterSpacing: 1.5 }
         Label {
           renderType: Text.CurveRendering
           visible: !!node.agent && node.agent.skills.length > 0
           text: (node.agent ? node.agent.skills.length : 0) + " SKILLS"
           color: Theme.secondary
-          font.pixelSize: 9
+          font.pixelSize: 12
           font.letterSpacing: 1.5
         }
-        Label { renderType: Text.CurveRendering; visible: !!node.agent && node.agent.idle; text: "IDLE"; color: Theme.warning; font.pixelSize: 9; font.letterSpacing: 1.5 }
+        Label { renderType: Text.CurveRendering; visible: !!node.agent && node.agent.idle; text: "IDLE"; color: Theme.warning; font.pixelSize: 12; font.letterSpacing: 1.5 }
       }
     }
 

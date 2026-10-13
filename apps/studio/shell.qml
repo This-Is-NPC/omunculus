@@ -91,7 +91,7 @@ ShellRoot {
         id: flow
         anchors.fill: parent
         visible: window.page === 0
-        leftInset: rail.x + rail.width
+        leftInset: rail.x + rail.foldedWidth
         topInset: bar.y + bar.height
         onAgentPicked: name => settings.reveal("agents", name)
       }
@@ -114,7 +114,7 @@ ShellRoot {
       }
 
       Rectangle {
-        anchors { left: rail.right; leftMargin: 20; right: parent.right; rightMargin: 20; top: bar.bottom; topMargin: 16; bottom: parent.bottom; bottomMargin: 20 }
+        anchors { left: parent.left; leftMargin: rail.x + rail.foldedWidth + 20; right: parent.right; rightMargin: 20; top: bar.bottom; topMargin: 16; bottom: parent.bottom; bottomMargin: 20 }
         visible: window.page !== 0
         color: Qt.alpha(Theme.background, 0.92)
         border.color: Theme.line
@@ -132,8 +132,8 @@ ShellRoot {
         id: rail
         x: 20
         y: 20
-        width: 260
-        height: parent.height - 40
+        // Over the bar and the canvas while it unfolds.
+        z: 1
         tabs: window.sections
         current: window.page
         onChosen: index => window.choose(index)
@@ -141,7 +141,7 @@ ShellRoot {
 
       CommandBar {
         id: bar
-        anchors { left: rail.right; leftMargin: 16; right: parent.right; rightMargin: 20 }
+        anchors { left: parent.left; leftMargin: rail.x + rail.foldedWidth + 16; right: parent.right; rightMargin: 20 }
         y: 20
         height: rail.headHeight
         commands: window.commands[window.page]

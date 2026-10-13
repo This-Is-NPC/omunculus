@@ -3,10 +3,12 @@ import QtQuick
 import "kit/ui"
 
 // TabRail is the studio's sections as a carousel down the left edge: the one
-// on screen sits at the top, stretched to the rail's width beside the command
-// bar, its name decoding; the others follow in order below it, the ones
-// before it coming round after the last. Choosing one turns the carousel
-// until it is at the top.
+// on screen sits at the top beside the command bar, the others follow in
+// order below it, the ones before it coming round after the last. Folded, it
+// takes only the width of the sections' numbers; under the pointer it
+// unfolds over what is beside it, each section naming itself, the one on
+// screen stretched and decoding. Choosing one turns the carousel until it is
+// at the top.
 Item {
   id: rail
 
@@ -20,8 +22,24 @@ Item {
 
   readonly property real tabHeight: 34
   readonly property real gap: 10
+  // The width it keeps folded, which what is beside it leaves room for.
+  readonly property real foldedWidth: 52
+  // Unfolded while the pointer is over it, and a moment after it leaves.
+  property bool unfolded: false
+  HoverHandler {
+    onHoveredChanged: {
+      if (hovered) {
+        fold.stop()
+        rail.unfolded = true
+      } else {
+        fold.restart()
+      }
+    }
+  }
+  Timer { id: fold; interval: 260; onTriggered: rail.unfolded = false }
 
-  implicitWidth: 260
+  width: unfolded ? 260 : foldedWidth
+  height: headHeight + gap + (tabs.length - 1) * (tabHeight + gap)
 
   Repeater {
     model: rail.tabs
@@ -35,7 +53,7 @@ Item {
       readonly property color tone: head ? Theme.primary : pointer.containsMouse ? Theme.foreground : Theme.dim
 
       y: head ? 0 : rail.headHeight + rail.gap + (slot - 1) * (rail.tabHeight + rail.gap)
-      width: head ? rail.width : 168
+      width: !rail.unfolded ? rail.foldedWidth : head ? 260 : 200
       height: head ? rail.headHeight : rail.tabHeight
       Behavior on y { NumberAnimation { duration: 360; easing.type: Easing.OutCubic } }
       Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
@@ -48,21 +66,32 @@ Item {
 
       onHeadChanged: if (head) title.replay()
 
+      clip: true
+      // Unfolding, each name decodes.
+      Connections {
+        target: rail
+        function onUnfoldedChanged() { if (rail.unfolded) title.replay() }
+      }
+
       Row {
-        anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: tab.head ? 16 : 12 }
+        anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: rail.unfolded ? (tab.head ? 16 : 12) : (rail.foldedWidth - digit.implicitWidth) / 2 }
+        Behavior on anchors.leftMargin { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
         spacing: 10
         opacity: tab.fade
         Behavior on opacity { NumberAnimation { duration: 300 } }
         Label {
+          id: digit
           anchors.verticalCenter: parent.verticalCenter
           text: String(tab.index + 1).padStart(2, "0")
-          color: tab.head ? Theme.primary : Theme.line
-          font.pixelSize: 10
+          color: tab.head ? Theme.primary : rail.unfolded ? Theme.line : tab.tone
+          font.pixelSize: tab.head && !rail.unfolded ? 13 : 10
           font.letterSpacing: 2
         }
         DecodeLabel {
           id: title
           anchors.verticalCenter: parent.verticalCenter
+          opacity: rail.unfolded ? 1 : 0
+          Behavior on opacity { NumberAnimation { duration: 200 } }
           value: tab.modelData.name.toUpperCase()
           color: tab.tone
           font.pixelSize: tab.head ? 13 : 10

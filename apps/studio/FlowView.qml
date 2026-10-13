@@ -27,12 +27,12 @@ Item {
 
   signal agentPicked(string name)
 
-  readonly property real nodeWidth: 236
-  readonly property real nodeHeight: 92
-  readonly property real stageGap: 56
-  readonly property real flowGap: 96
-  readonly property real rowGap: 128
-  readonly property real labelWidth: 210
+  readonly property real nodeWidth: 290
+  readonly property real nodeHeight: 132
+  readonly property real stageGap: 40
+  readonly property real flowGap: 72
+  readonly property real rowGap: 110
+  readonly property real labelWidth: 230
 
   // The pack each agent and workflow comes from.
   readonly property var origins: {
@@ -61,7 +61,7 @@ Item {
     for (const place of overview.places) {
       const key = place.workspace || "root"
       const zoneTop = y
-      y += 84
+      y += 104
       const you = add({ id: key + "/you", kind: "person", x: labelWidth, y: y, width: nodeWidth, height: nodeHeight })
       // What hands works down from the row above, and where they arrive in
       // this one: a free agent's box, or a whole workflow's frame.
@@ -90,7 +90,7 @@ Item {
             x += nodeWidth + stageGap
           })
           const group = {
-            id: id, x: start - 16, y: rowTop - 34, width: x - stageGap - start + 32, height: nodeHeight + 50,
+            id: id, x: start - 16, y: rowTop - 42, width: x - stageGap - start + 32, height: nodeHeight + 58,
             name: workflow.name, required: workflow.required, pack: origins.workflows[workflow.name] || "", handing: handing
           }
           chart.groups.push(group)
@@ -219,6 +219,13 @@ Item {
     transformOrigin: Item.TopLeft
     width: flow.chart.width
     height: flow.chart.height
+    // Below its actual size, the chart is drawn at that size and then
+    // reduced as an image is, through mipmaps, so its outlines, lines and
+    // text stay smooth instead of losing pixels; above it, it is drawn at
+    // the size it shows.
+    layer.enabled: scale < 1
+    layer.smooth: true
+    layer.mipmap: true
 
     // Each workspace's zone, with its strip: name, folder, its own lists.
     Repeater {
@@ -237,13 +244,13 @@ Item {
           border.color: Qt.alpha(Theme.success, 0.3)
         }
         Row {
-          x: 24
-          y: 22
-          spacing: 14
-          DecodeLabel { renderType: Text.CurveRendering; value: (zone.place.workspace || "project root").toUpperCase(); color: Theme.success; font.pixelSize: Math.min(36, 13 / Math.min(1, world.scale * 2)); font.letterSpacing: 5 }
-          Label { renderType: Text.CurveRendering; text: zone.place.root; color: Theme.dim; font.pixelSize: 10 }
-          Label { renderType: Text.CurveRendering; visible: zone.place.default; text: "DEFAULT"; color: Theme.success; font.pixelSize: 9; font.letterSpacing: 2 }
-          Label { renderType: Text.CurveRendering; visible: zone.place.outside; text: "OUTSIDE THE PROJECT"; color: Theme.warning; font.pixelSize: 9; font.letterSpacing: 2 }
+          x: 28
+          y: 26
+          spacing: 16
+          DecodeLabel { renderType: Text.CurveRendering; value: (zone.place.workspace || "project root").toUpperCase(); color: Theme.success; font.pixelSize: 18; font.letterSpacing: 5 }
+          Label { renderType: Text.CurveRendering; text: zone.place.root; color: Theme.dim; font.pixelSize: 13 }
+          Label { renderType: Text.CurveRendering; visible: zone.place.default; text: "DEFAULT"; color: Theme.success; font.pixelSize: 12; font.letterSpacing: 2 }
+          Label { renderType: Text.CurveRendering; visible: zone.place.outside; text: "OUTSIDE THE PROJECT"; color: Theme.warning; font.pixelSize: 12; font.letterSpacing: 2 }
           Repeater {
             model: zone.place.layer ? [].concat(
               zone.place.layer.mode ? [{ name: zone.place.layer.mode, state: "askable" }] : [],
@@ -266,17 +273,17 @@ Item {
       delegate: Column {
         required property var modelData
         x: 28
-        y: modelData.y + 14
-        spacing: 4
-        Label { renderType: Text.CurveRendering; text: "DEPTH"; color: Theme.dim; font.pixelSize: 9; font.letterSpacing: 3 }
-        DecodeLabel { renderType: Text.CurveRendering; value: String(modelData.depth).padStart(2, "0"); color: Theme.primary; font.pixelSize: 30; font.letterSpacing: 2 }
+        y: modelData.y + 10
+        spacing: 6
+        Label { renderType: Text.CurveRendering; text: "DEPTH"; color: Theme.dim; font.pixelSize: 12; font.letterSpacing: 3 }
+        DecodeLabel { renderType: Text.CurveRendering; value: String(modelData.depth).padStart(2, "0"); color: Theme.primary; font.pixelSize: 44; font.letterSpacing: 2 }
         Label {
           renderType: Text.CurveRendering
           text: modelData.depth === 0 ? "talks with you" : "handed down from " + (modelData.depth - 1)
           color: Theme.dim
-          font.pixelSize: 10
+          font.pixelSize: 13
         }
-        Label { renderType: Text.CurveRendering; visible: modelData.changed; text: "CHANGED HERE"; color: Theme.magenta; font.pixelSize: 9; font.letterSpacing: 2 }
+        Label { renderType: Text.CurveRendering; visible: modelData.changed; text: "CHANGED HERE"; color: Theme.magenta; font.pixelSize: 12; font.letterSpacing: 2 }
       }
     }
 
@@ -295,13 +302,13 @@ Item {
           border.color: Qt.alpha(Theme.secondary, 0.35)
         }
         Row {
-          x: 12
-          y: 8
-          spacing: 10
-          Label { renderType: Text.CurveRendering; text: "WORKFLOW"; color: Theme.dim; font.pixelSize: 9; font.letterSpacing: 2.5 }
-          DecodeLabel { renderType: Text.CurveRendering; value: modelData.name.toUpperCase(); color: Theme.secondary; font.pixelSize: Math.min(30, 10 / Math.min(1, world.scale * 2)); font.letterSpacing: 2.5 }
-          Label { renderType: Text.CurveRendering; visible: modelData.required; text: "REQUIRED"; color: Theme.warning; font.pixelSize: 9; font.letterSpacing: 2 }
-          Label { renderType: Text.CurveRendering; visible: modelData.pack !== ""; text: "◆ " + modelData.pack.toUpperCase(); color: Theme.magenta; font.pixelSize: 9; font.letterSpacing: 2 }
+          x: 14
+          y: 10
+          spacing: 12
+          Label { renderType: Text.CurveRendering; text: "WORKFLOW"; color: Theme.dim; font.pixelSize: 12; font.letterSpacing: 2.5 }
+          DecodeLabel { renderType: Text.CurveRendering; value: modelData.name.toUpperCase(); color: Theme.secondary; font.pixelSize: 14; font.letterSpacing: 2.5 }
+          Label { renderType: Text.CurveRendering; visible: modelData.required; text: "REQUIRED"; color: Theme.warning; font.pixelSize: 12; font.letterSpacing: 2 }
+          Label { renderType: Text.CurveRendering; visible: modelData.pack !== ""; text: "◆ " + modelData.pack.toUpperCase(); color: Theme.magenta; font.pixelSize: 12; font.letterSpacing: 2 }
         }
       }
     }
@@ -329,10 +336,10 @@ Item {
           id: path
           strokeColor: line.chain ? Qt.alpha(Theme.secondary, 0.8) : line.lit ? Theme.primary
             : line.modelData.kind === "talk" ? Qt.alpha(Theme.primary, 0.55) : Qt.alpha(Theme.foreground, 0.28)
-          strokeWidth: line.lit ? 2 : 1.2
+          strokeWidth: line.lit ? 3 : 2
           fillColor: "transparent"
           strokeStyle: line.chain ? ShapePath.SolidLine : ShapePath.DashLine
-          dashPattern: [4, 4]
+          dashPattern: [5, 4]
           startX: line.x1
           startY: line.y1
           PathCubic {
@@ -368,7 +375,6 @@ Item {
         spec: modelData
         order: modelData.order
         picked: flow.pickedId === modelData.id
-        zoom: world.scale
         onChosen: flow.pickedId = flow.pickedId === modelData.id ? "" : modelData.id
       }
     }
