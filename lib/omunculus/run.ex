@@ -44,14 +44,22 @@ defmodule Omunculus.Run do
   @spec recover(Project.t()) :: :ok | {:error, term}
   def recover(project) do
     with {:ok, runs} <- Store.open_runs(project.conn),
-         {:ok, config} <- Config.load(project.config_path) do
-      Enum.reduce_while(runs, :ok, fn run, :ok ->
-        case recover_one(project, config, run) do
-          :ok -> {:cont, :ok}
-          error -> {:halt, error}
-        end
-      end)
+         {:ok, config} <- Config.load(project.config_path),
+         :ok <- each(runs, &recover_one(project, config, &1)),
+         {:ok, left} <- Store.left(project.conn) do
+      # A process that stopped between a run's close and its follow-up
+      # left a request pending at an agent that no run will answer.
+      each(left, &unanswered(project, %{run: &1, config: config, execution: nil}))
     end
+  end
+
+  defp each(runs, fun) do
+    Enum.reduce_while(runs, :ok, fn run, :ok ->
+      case fun.(run) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
   end
 
   defp recover_one(project, config, run) do

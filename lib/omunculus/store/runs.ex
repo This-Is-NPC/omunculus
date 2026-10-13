@@ -16,6 +16,9 @@ defmodule Omunculus.Store.Runs do
   agent and the work's title.
   `continues/3` records the `session` event of a run that continues its
   agent's session: the run it continues and what it was told had happened.
+  `left/1` lists the closed runs that left a request pending at their
+  agent: each pending request's last run of its receiver opened for it or
+  for a request it was escalated into.
   `unanswered/4` uses the linked escalation action when an agent receiver
   closes without answering, or an intermediary resumed by a text answer
   closes leaving pending the origins it returned, its reason naming the agent and each question
@@ -31,6 +34,27 @@ defmodule Omunculus.Store.Runs do
   @spec open_runs(Connection.t()) :: {:ok, [map]} | {:error, term}
   def open_runs(conn),
     do: Query.all(conn, "SELECT * FROM runs WHERE status = 'open' ORDER BY started_at, id")
+
+  @spec left(Connection.t()) :: {:ok, [map]} | {:error, term}
+  def left(conn) do
+    Query.all(
+      conn,
+      """
+      SELECT DISTINCT runs.* FROM requests
+      JOIN runs ON runs.id = (
+        SELECT held.id FROM runs AS held
+        WHERE held.agent = json_extract(requests.arbiter, '$.agent')
+          AND (held.request_id = requests.id OR held.request_id IN (
+            SELECT escalated_id FROM request_escalations WHERE origin_id = requests.id))
+        ORDER BY held.started_at DESC, held.id DESC
+        LIMIT 1)
+      WHERE requests.status = 'pending'
+        AND json_extract(requests.arbiter, '$.kind') = 'agent'
+        AND runs.status = 'done'
+      ORDER BY runs.started_at, runs.id
+      """
+    )
+  end
 
   @spec begin(Connection.t(), map) :: {:ok, map} | {:error, term}
   def begin(conn, params) do

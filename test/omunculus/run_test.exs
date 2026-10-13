@@ -1573,4 +1573,121 @@ defmodule Omunculus.RunTest do
       Project.close(project)
     end
   end
+
+  describe "a request left at an agent" do
+    # The sales desk's shape: the seller asks, its request goes to the
+    # generalist, an agent of depth 0 without a work, then to the person.
+    defp desk_config(dir) do
+      write_config(dir, """
+      [agents.seller]
+      depth = 0
+      text = "seller"
+      tools = ["ask", "end"]
+
+      [agents.sales]
+      depth = 0
+      text = "sales"
+      tools = ["reply", "escalate", "end"]
+
+      [policy]
+      request_routes = [{ via = [{ kind = "agent", agent = "sales" }, "origin"] }]
+      """)
+    end
+
+    defp asked(project) do
+      {:ok, [request]} =
+        Query.all(project.conn, "SELECT * FROM requests WHERE requester LIKE '%seller%'")
+
+      request
+    end
+
+    defp passed_on(project, request) do
+      {:ok, linked} =
+        Query.all(
+          project.conn,
+          "SELECT requests.* FROM requests JOIN request_escalations ON escalated_id = requests.id WHERE origin_id = ?",
+          [request.id]
+        )
+
+      linked
+    end
+
+    test "a receiver whose run ends without answering passes the request on", %{dir: dir} do
+      desk_config(dir)
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works, %{assignee: "seller"})
+
+      Fixtures.use_model(project, fn assembled, _tools, call ->
+        if String.starts_with?(assembled, "seller"),
+          do: call.("ask", %{"question" => "Retry the deploy?", "options" => ["retry", "stop"]}),
+          else: call.("end", %{})
+      end)
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+      request = asked(project)
+      assert request.status == "escalated"
+      assert Jason.decode!(request.arbiter) == Omunculus.Participant.agent("sales")
+      assert [linked] = passed_on(project, request)
+      assert linked.arbiter == @human
+      assert {:ok, [_note]} = Query.all(project.conn, "SELECT * FROM inbox")
+
+      Project.close(project)
+    end
+
+    test "recovery passes on a request whose receiver's run closed without its follow-up", %{
+      dir: dir
+    } do
+      desk_config(dir)
+      {:ok, config} = Fixtures.load_config(dir)
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works, %{assignee: "seller"})
+      ceiling = %{have: ["ask", "end"], askable: [], sealed: [], blocked: [], overrides: %{}}
+
+      seller =
+        Fixtures.open_run(project.conn, %{agent: "seller", work_id: work_id, ceiling: ceiling})
+
+      ask = %{"reason" => "Retry the deploy?", "options" => %{"retry" => [], "stop" => []}}
+
+      {:ok, _events} =
+        Store.record_tools(
+          project.conn,
+          seller.id,
+          [
+            {%{name: "ask", args: ask, ok: true, output: ""},
+             [%{"type" => "request", "body" => ask}]}
+          ],
+          %{
+            run_id: seller.id,
+            work_id: work_id,
+            author: "agent",
+            agent: "seller",
+            config: config,
+            groups: %{}
+          }
+        )
+
+      {:ok, _closed} = Store.close_run(project.conn, seller.id)
+      request = asked(project)
+
+      sales =
+        Fixtures.open_run(project.conn, %{
+          agent: "sales",
+          request_id: request.id,
+          ceiling: ceiling
+        })
+
+      {:ok, _closed} = Store.close_run(project.conn, sales.id)
+
+      assert :ok = Run.recover(project)
+
+      assert {:ok, %{status: "escalated"}} = Store.view(project.conn, "request", request.id)
+      assert [linked] = passed_on(project, request)
+      assert linked.arbiter == @human
+      assert :ok = Run.recover(project)
+      assert [_linked] = passed_on(project, request)
+
+      Project.close(project)
+    end
+  end
 end

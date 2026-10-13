@@ -138,7 +138,7 @@ Each frame is a JSON text frame. The first frames are the events after `after` (
 
 An older store without conversation or participant request columns, escalation
 links or the current request status constraint is rejected and must be
-explicitly recreated. The server closes runs left open by an interrupted process and applies the existing retry policy to their work. HTTP requests do not wait for a run to finish.
+explicitly recreated. The server closes runs left open by an interrupted process and applies the existing retry policy to their work; then a request still pending at an agent whose last run for it has closed, its follow-up lost with the process, goes on along its route as an unanswered one does. HTTP requests do not wait for a run to finish.
 
 ## Human request commands
 

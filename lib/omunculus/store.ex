@@ -66,4 +66,5 @@ defmodule Omunculus.Store do
   defdelegate unanswered(conn, run, config, reason_text), to: Runs
   defdelegate continues(conn, run_id, body), to: Runs
   defdelegate open_runs(conn), to: Runs
+  defdelegate left(conn), to: Runs
 end

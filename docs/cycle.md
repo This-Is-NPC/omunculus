@@ -281,7 +281,9 @@ answer that closes leaving pending the origins the answer returned to it:
 they go on together, under the part names they had. At the root it reaches
 the authenticated human and writes an inbox notification naming that
 upstream request. An already escalated origin does not trigger a second
-escalation.
+escalation. The server, opening a project, does the same for every request
+still pending at an agent whose last run for it closed: the process that
+closed it stopped before its follow-up.
 
 `INBOX` notifies and does not wait. It does not park a run or a work.
 
