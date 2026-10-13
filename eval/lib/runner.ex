@@ -533,8 +533,8 @@ defmodule EquivalentExchange.Runner do
   # may open one of its own.
   defp last_root(facts), do: facts.works |> Enum.filter(&is_nil(&1.parent_id)) |> List.last()
 
-  # The last words to the person: what a depth-0 run said, or the last
-  # comment an agent wrote on a root work.
+  # The last words to the person: what a depth-0 run said in a reply that
+  # called no tool, or the last comment an agent wrote on a root work.
   defp last_words(facts, events) do
     roots = for work <- facts.works, is_nil(work.parent_id), into: MapSet.new(), do: work.id
     top = facts.runs |> Enum.filter(&(&1.depth == "0")) |> MapSet.new(& &1.id)
@@ -543,7 +543,7 @@ defmodule EquivalentExchange.Runner do
     |> Enum.flat_map(fn event ->
       cond do
         event.type == "model" and MapSet.member?(top, event.run_id) ->
-          [Omunculus.Tools.Record.said(event.body)]
+          [Omunculus.Tools.Record.answer(event.body)]
 
         event.type == "comment" and MapSet.member?(roots, event.work_id) and
             event.actor_kind == "agent" ->

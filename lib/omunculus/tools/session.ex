@@ -21,7 +21,7 @@ defmodule Omunculus.Tools.Session do
   "outputs" => [output]}`, the outputs in the order of the reply's calls.
   """
 
-  alias Omunculus.Tools.Out
+  alias Omunculus.Tools.{Out, Record}
 
   @type item :: %{String.t() => term}
 
@@ -143,24 +143,9 @@ defmodule Omunculus.Tools.Session do
     earlier ++ [Map.update!(last, "outputs", &(&1 ++ [output]))]
   end
 
-  # The names of a reply's calls, in each provider's shape. A call through
-  # the sandbox bridge leaves no result of its own to send back.
+  # A call through the sandbox bridge leaves no result of its own to send back.
   defp calls(reply) do
-    names =
-      case reply do
-        %{"tool_calls" => calls} when is_list(calls) ->
-          Enum.map(calls, &get_in(&1, ["function", "name"]))
-
-        %{"content" => blocks} when is_list(blocks) ->
-          for %{"type" => "tool_use", "name" => name} <- blocks, do: name
-
-        %{"output" => items} when is_list(items) ->
-          for %{"type" => "function_call", "name" => name} <- items, do: name
-
-        _text ->
-          []
-      end
-
+    names = Record.calls(reply)
     if "__omunculus_execute" in names, do: :error, else: {:ok, names}
   end
 end

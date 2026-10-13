@@ -45,7 +45,24 @@ defmodule Omunculus.Tools.AssembleTest do
         %{message: %{body: "I want a site"}, events: [said.(%{"content" => "Which shop?"})]},
         %{
           message: %{body: "Doce Ana"},
-          events: [said.(%{"content" => [%{"type" => "text", "text" => "Handing it down."}]})]
+          events: [
+            said.(%{
+              "content" => [
+                %{"type" => "text", "text" => "Checking its works first."},
+                %{"type" => "tool_use", "name" => "works"}
+              ]
+            }),
+            said.(%{"content" => [%{"type" => "text", "text" => "Handing it down."}]})
+          ]
+        },
+        %{
+          message: %{body: "thanks"},
+          events: [
+            said.(%{
+              "content" => "Nothing more to do.",
+              "tool_calls" => [%{"function" => %{"name" => "end"}}]
+            })
+          ]
         }
       ]
     }
@@ -55,12 +72,15 @@ defmodule Omunculus.Tools.AssembleTest do
     assert output =~ "## Works\n- Bakery site (work w1, done): Published"
 
     assert output =~
-             "## Conversation\n- person: I want a site\n- you: Which shop?\n- person: Doce Ana\n- you: Handing it down."
+             "## Conversation\n- person: I want a site\n- you: Which shop?\n- person: Doce Ana\n- you: Handing it down.\n- person: thanks\n"
 
-    cut = %{@input | view: view, args: Map.put(@input.args, "conversation_bytes", 50)}
+    refute output =~ "Checking its works first."
+    refute output =~ "Nothing more to do."
+
+    cut = %{@input | view: view, args: Map.put(@input.args, "conversation_bytes", 70)}
 
     assert Assemble.run(cut)["output"] =~
-             "## Conversation\n- person: Doce Ana\n- you: Handing it down.\n"
+             "## Conversation\n- person: Doce Ana\n- you: Handing it down.\n- person: thanks\n"
   end
 
   test "the instructions hold what stays across runs, the output the run's context" do

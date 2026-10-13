@@ -221,14 +221,15 @@ defmodule Omunculus.Tools.Assemble do
   end
 
   # What the person and the agent said in the conversation, for a run
-  # without a work whose session starts over.
+  # without a work whose session starts over: the agent's last reply that
+  # called no tool, not the notes it wrote beside its calls.
   defp conversation_section(nil, [_ | _] = runs, limit) do
     exchanges =
       for run <- runs, run.message do
         answer =
           run.events
           |> Enum.filter(&(&1.type == "model"))
-          |> Enum.map(&Record.said(&1.body))
+          |> Enum.map(&Record.answer(&1.body))
           |> Enum.reject(&(String.trim(&1) == ""))
           |> List.last()
 

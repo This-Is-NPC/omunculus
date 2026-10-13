@@ -34,6 +34,34 @@ defmodule Omunculus.Tools.Record do
 
   defp texts(_reply), do: []
 
+  @doc "The names of the tools a recorded model reply calls, in each provider's shape."
+  @spec calls(map) :: [String.t()]
+  def calls(%{"tool_calls" => calls}) when is_list(calls),
+    do: Enum.map(calls, &get_in(&1, ["function", "name"]))
+
+  def calls(%{"content" => blocks}) when is_list(blocks),
+    do: for(%{"type" => "tool_use", "name" => name} <- blocks, do: name)
+
+  def calls(%{"output" => items}) when is_list(items),
+    do: for(%{"type" => "function_call", "name" => name} <- items, do: name)
+
+  def calls(_reply), do: []
+
+  @doc """
+  What a recorded model reply says to whoever it answers: its text when it
+  calls no tool. A reply that calls one is the agent acting, and its text
+  narrates the call to itself.
+  """
+  @spec answer(String.t() | map) :: String.t()
+  def answer(body) when is_binary(body) do
+    case Jason.decode(body) do
+      {:ok, reply} when is_map(reply) -> answer(reply)
+      _not_a_reply -> ""
+    end
+  end
+
+  def answer(reply) when is_map(reply), do: if(calls(reply) == [], do: said(reply), else: "")
+
   @spec lines(map, String.t(), pos_integer | nil) :: [String.t()]
   def lines(run, hidden, limit) do
     message = if run.message, do: ["- message #{run.message.body}"], else: []

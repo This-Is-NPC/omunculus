@@ -119,8 +119,9 @@ files = ["README.md", "README.pt-BR.md"]
 ```
 
 A task with `[person]` goes on as a conversation: each time the runs settle,
-the model of `person.toml` reads what the agent last said and answers what it
-asks with only the facts, leaving to the agent what they do not cover, until
+the model of `person.toml` reads what the agent last said — a depth-0 run's
+reply that calls no tool, an agent's comment on a root work or a break, never
+the text a model writes beside its calls — and answers what it asks with only the facts, leaving to the agent what they do not cover, until
 it asks nothing; then each follow-up is sent. Only the timeout bounds it. A
 task with `deploy` publishes to the dream team's deploy environment, which
 `packs/dream-team/environment/up` starts and `down` stops: two Dokku instances, homologation, which agents reach with
