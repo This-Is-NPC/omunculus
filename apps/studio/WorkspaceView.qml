@@ -13,6 +13,10 @@ ItemPage {
 
   readonly property var table: item.draft
 
+  related: [
+    { title: "POLICY", items: Studio.setup && Studio.setup.workspace === name ? [settings.link(6, "policy", "policy, its default")] : [] }
+  ]
+
   kind: "workspace"
   draft: ItemDraft {
     id: item

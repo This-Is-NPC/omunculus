@@ -33,6 +33,16 @@ ItemPage {
     ["never has", (table.deny || []).join(", ")]
   ]
 
+  readonly property var modelTable: settings.stored("models", table.model || "")
+  related: [
+    { title: "MODEL", items: table.model ? [settings.link(1, table.model)] : [] },
+    { title: "PROVIDER", items: modelTable && modelTable.provider ? [settings.link(0, modelTable.provider)] : [] },
+    { title: "WORKFLOWS", items: (Studio.setup ? Studio.setup.workflows : []).filter(flow => flow.steps.some(step => step.agent === page.title))
+        .map(flow => settings.link(3, flow.name)) },
+    { title: "SKILLS", items: settings.skillsHeld(held).map(entry => settings.link(5, entry.name, entry.name.slice(6))) },
+    { title: "TOOLS", items: settings.toolsHeld(held).map(entry => settings.link(4, entry.name)) }
+  ]
+
   ItemDraft {
     id: item
     section: "agents"

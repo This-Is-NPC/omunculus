@@ -34,6 +34,11 @@ ItemPage {
   }
   onTableChanged: tested = ""
 
+  related: [
+    { title: "PROVIDER", items: table.provider ? [settings.link(0, table.provider)] : [] },
+    { title: "AGENTS", items: users.map(agent => settings.link(2, agent)) }
+  ]
+
   kind: "model"
   draft: ItemDraft {
     id: item

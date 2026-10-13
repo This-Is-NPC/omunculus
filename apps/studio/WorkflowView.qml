@@ -25,6 +25,10 @@ ItemPage {
     item.put(["steps"], next)
   }
 
+  related: [
+    { title: "AGENTS", items: [...new Set(steps.map(step => step.agent))].map(agent => settings.link(2, agent)) }
+  ]
+
   kind: "workflow"
   title: own ? item.newName : name
   origin: own ? "" : settings.originOf("workflows", name)

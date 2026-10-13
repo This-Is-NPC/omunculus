@@ -30,6 +30,12 @@ ItemPage {
   function unquoted(text) { return /^'.*'$/.test(text) ? text.slice(1, -1).replace(/'\\''/g, "'") : text }
   function fromOmapass(account) { return "!" + quoted(omapass.program) + " get -- " + quoted(account) }
 
+  related: [
+    { title: "MODELS", items: users.map(model => settings.link(1, model)) },
+    { title: "TOOLS", items: (settings.catalog ? settings.catalog.tools : [])
+        .filter(entry => Object.values(entry.binding || {}).includes(name)).map(entry => settings.link(4, entry.name)) }
+  ]
+
   kind: "provider"
   draft: ItemDraft {
     id: item

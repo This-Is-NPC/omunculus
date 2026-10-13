@@ -10,8 +10,16 @@ import "kit/ui"
 ItemPage {
   id: page
 
+  required property Item settings
   // The catalog's entry: {name, kind, description, dir, source, triggers, groups, secrets, binding}.
   required property var entry
+
+  related: [
+    { title: "AGENTS", items: (entry.triggers || []).includes("model") ? Studio.holders(entry.name).map(agent => settings.link(2, agent)) : [] },
+    { title: "PROVIDERS", items: [...new Set(Object.values(entry.binding || {}))].map(provider => settings.link(0, provider)) },
+    { title: "SKILLS THAT USE IT", items: (settings.catalog ? settings.catalog.tools : [])
+        .filter(skill => skill.kind === "skill" && (skill.uses || []).includes(entry.name)).map(skill => settings.link(5, skill.name, skill.name.slice(6))) }
+  ]
 
   kind: entry.kind
   title: entry.name

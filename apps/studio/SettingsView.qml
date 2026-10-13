@@ -116,6 +116,23 @@ Item {
     relist()
   }
 
+  // A link to the item `id` of the section `index`, as related items are.
+  function link(index, id, text) { return { section: index, id: id, text: text || id } }
+  // The catalog's tools (not skills) an agent's list holds, by name or by group.
+  function toolsHeld(held) {
+    return (catalog ? catalog.tools : []).filter(entry => entry.kind !== "skill"
+      && (held.includes(entry.name) || entry.groups.some(group => held.includes(group))))
+  }
+  // The skills an agent's list holds: all of them by the skills group, or each by name.
+  function skillsHeld(held) {
+    return (catalog ? catalog.tools : []).filter(entry => entry.kind === "skill" && (held.includes("skills") || held.includes(entry.name)))
+  }
+  // Opens a related item, in its own section.
+  function follow(index, id) {
+    wanted(index)
+    open(index, id, false)
+  }
+
   // Shows an item picked elsewhere, as on the flow, where it is read.
   function reveal(section, name) {
     const index = sections.findIndex(entry => entry.key === section)
@@ -316,6 +333,7 @@ Item {
             // The keyboard goes with the screen that opens.
             Qt.callLater(() => { if (screen.item) screen.item.takeFocus() })
             item.back.connect(() => view.close(stage.index))
+            item.followed.connect((section, id) => view.follow(section, id))
             item.removing.connect(() => view.remove(stage.section.key, row.name))
             // Saved under a new name, the screen follows it.
             if (item.draft && !item.draft.single)

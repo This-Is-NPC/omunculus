@@ -4,8 +4,10 @@ import QtQuick.Layouts
 import "kit/ui"
 
 // ItemPage is the screen of one item of the project: what kind it is, its
-// name, the pack it comes from, and, read, its `facts` and `details`; edited,
-// its `form`, the name first when it has one. Its commands, for the bar, go
+// name, the pack it comes from, and, read, three panels side by side — its
+// `facts`, its `details` and what is `related` to it, each related item
+// opening where it is shown — or one under the other on a narrow window;
+// edited, its `form`, the name first when it has one. Its commands, for the bar, go
 // back, edit, remove, save, discard and cancel as fit, then its own `extra`.
 // An item a pack brings, or one the config does not write, is only read.
 Item {
@@ -25,14 +27,40 @@ Item {
   // Commands of its own, as the bar takes them, after the usual ones.
   property var extra: []
   property alias details: detailsColumn.data
+  // [{title, items: [{text, section, id}]}]: what it uses and what uses it,
+  // each item by the section and row it opens.
+  property var related: []
   default property alias form: formColumn.data
+
+  // Wide enough for the panels side by side, which share the width 3 : 5 : 3.
+  readonly property bool wide: scroll.width >= 1000
+  function share(parts) { return wide ? (content.width - 32) * parts / 11 : content.width }
+
+  // A titled frame the read panels share; its fields stack inside.
+  component Panel: Rectangle {
+    id: panel
+    property string title
+    default property alias fields: inner.data
+    Layout.alignment: Qt.AlignTop
+    implicitHeight: inner.implicitHeight + 32
+    color: "transparent"
+    border.color: Theme.line
+    ColumnLayout {
+      id: inner
+      anchors { left: parent.left; right: parent.right; top: parent.top; margins: 16 }
+      spacing: 10
+      Caption { text: panel.title.toUpperCase() }
+    }
+  }
 
   // The row of its table it was opened from.
   property string loadedId: ""
 
-  // Back to the list; and asking to remove it, which the list confirms.
+  // Back to the list; asking to remove it, which the list confirms; and
+  // asking to open a related item.
   signal back()
   signal removing()
+  signal followed(int section, string id)
 
   readonly property var commands: (editing ? [
     { text: draft && draft.saving ? "SAVING" : "SAVE", icon: "enter", role: "primary", tip: draft && draft.conflict ? "the file changed: discard to read it again" : "write it into the project's config  ctrl+s",
@@ -90,8 +118,9 @@ Item {
 
     ColumnLayout {
       id: content
-      // A readable measure, centred when the room is wider.
-      width: Math.min(scroll.width, 880)
+      // Read, the panels take the room; edited, the form keeps a readable
+      // measure, centred.
+      width: Math.min(scroll.width, page.editing ? 880 : 1600)
       x: (scroll.width - width) / 2
       spacing: 14
 
@@ -122,32 +151,79 @@ Item {
         text: page.draft ? page.draft.issue : ""
       }
 
-      // Read: label and value, a line each.
+      // Read: the facts, the details and what is related, as panels.
       GridLayout {
         Layout.fillWidth: true
-        visible: !page.editing && page.facts.length > 0
-        columns: 2
-        columnSpacing: 24
-        rowSpacing: 8
-        Repeater {
-          model: page.editing ? [] : page.facts.reduce((cells, fact) => cells.concat([{ label: true, text: fact[0] }, { label: false, text: fact[1] }]), [])
-          delegate: DecodeLabel {
-            required property var modelData
-            Layout.fillWidth: !modelData.label
-            Layout.alignment: Qt.AlignTop
-            value: modelData.label ? modelData.text.toUpperCase() : (modelData.text === "" ? "—" : modelData.text)
-            color: modelData.label ? Theme.dim : Theme.foreground
-            font.pixelSize: modelData.label ? 10 : 13
-            font.letterSpacing: modelData.label ? 2 : 0
-            wrapMode: modelData.label ? Text.NoWrap : Text.Wrap
+        visible: !page.editing
+        columns: page.wide ? 3 : 1
+        columnSpacing: 16
+        rowSpacing: 16
+
+        Panel {
+          title: "about"
+          Layout.preferredWidth: page.share(3)
+          visible: page.facts.length > 0
+          GridLayout {
+            Layout.fillWidth: true
+            columns: 2
+            columnSpacing: 18
+            rowSpacing: 8
+            Repeater {
+              model: page.editing ? [] : page.facts.reduce((cells, fact) => cells.concat([{ label: true, text: fact[0] }, { label: false, text: fact[1] }]), [])
+              delegate: DecodeLabel {
+                required property var modelData
+                Layout.fillWidth: !modelData.label
+                Layout.alignment: Qt.AlignTop
+                value: modelData.label ? modelData.text.toUpperCase() : (modelData.text === "" ? "—" : modelData.text)
+                color: modelData.label ? Theme.dim : Theme.foreground
+                font.pixelSize: modelData.label ? 10 : 13
+                font.letterSpacing: modelData.label ? 2 : 0
+                wrapMode: modelData.label ? Text.NoWrap : Text.Wrap
+              }
+            }
           }
         }
-      }
-      ColumnLayout {
-        id: detailsColumn
-        Layout.fillWidth: true
-        visible: !page.editing
-        spacing: 12
+        Panel {
+          title: "description"
+          Layout.preferredWidth: page.share(5)
+          visible: detailsColumn.children.length > 0
+          ColumnLayout {
+            id: detailsColumn
+            Layout.fillWidth: true
+            spacing: 12
+          }
+        }
+        Panel {
+          title: "related"
+          Layout.preferredWidth: page.share(3)
+          Note {
+            visible: page.related.every(group => group.items.length === 0)
+            value: "Nothing else in the project names it."
+          }
+          Repeater {
+            model: page.related.filter(group => group.items.length > 0)
+            delegate: ColumnLayout {
+              id: group
+              required property var modelData
+              Layout.fillWidth: true
+              spacing: 4
+              Caption { text: group.modelData.title }
+              Flow {
+                Layout.fillWidth: true
+                spacing: 6
+                Repeater {
+                  model: group.modelData.items
+                  delegate: Chip {
+                    required property var modelData
+                    text: modelData.text
+                    tip: "open " + modelData.text
+                    onClicked: page.followed(modelData.section, modelData.id)
+                  }
+                }
+              }
+            }
+          }
+        }
       }
 
       // Edited: its name, then its own fields.

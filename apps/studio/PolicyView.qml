@@ -13,6 +13,11 @@ ItemPage {
 
   readonly property var table: item.draft
 
+  related: [
+    { title: "DEFAULT WORKSPACE", items: table.workspace ? [settings.link(6, "workspace:" + table.workspace, table.workspace)] : [] },
+    { title: "DEFAULT WORKFLOW", items: table.workflow ? [settings.link(3, table.workflow)] : [] }
+  ]
+
   kind: "policy"
   title: "policy"
   draft: ItemDraft {

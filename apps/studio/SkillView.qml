@@ -14,6 +14,11 @@ ItemPage {
   required property var entry
   readonly property string skill: entry.name.slice(6)
 
+  related: [
+    { title: "AGENTS", items: Studio.holders(entry.name).map(agent => settings.link(2, agent)) },
+    { title: "TOOLS IT USES", items: (entry.uses || []).map(tool => settings.link(4, tool)) }
+  ]
+
   kind: "skill"
   title: skill
   facts: [
