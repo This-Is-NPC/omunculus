@@ -76,8 +76,8 @@ defmodule Omunculus.EvalProjectTest do
                  conn,
                  run,
                  0,
-                 &Omunculus.Tools.Out.unreported/1,
-                 &Omunculus.Tools.Out.request_inbox/3,
+                 &Omunculus.Tools.Out.unreported/3,
+                 &Omunculus.Tools.Out.request_inbox/2,
                  config
                )
 

@@ -12,12 +12,14 @@ defmodule Omunculus.Store.Runs do
   another run while the work's latest runs without `end` are within
   `max_retries`; past it, a `break` with the given text for a child,
   or, for a root, a request by the harness with the options `retry` and
-  `cancel` and an inbox entry whose text names the new request.
+  `cancel` and an inbox note saying how to answer it; their texts name the
+  agent and the work's title.
   `continues/3` records the `session` event of a run that continues its
   agent's session: the run it continues and what it was told had happened.
   `unanswered/4` uses the linked escalation action when an agent receiver
-  closes without answering. When its new request reaches a human it records
-  an inbox notification naming that upstream request, in the same transaction.
+  closes without answering, its reason naming the agent and each question
+  it held, shortened, with who asked it and the title of their work. When the new request reaches a
+  human it records an inbox note saying so, in the same transaction.
   """
 
   alias Omunculus.Id
@@ -125,8 +127,8 @@ defmodule Omunculus.Store.Runs do
           Connection.t(),
           map,
           non_neg_integer,
-          (pos_integer -> String.t()),
-          (String.t(), String.t(), [String.t()] -> String.t()),
+          (pos_integer, String.t(), String.t() -> String.t()),
+          (String.t(), [String.t()] -> String.t()),
           map
         ) :: {:ok, :retry | :none | {:stopped, [map]}} | {:error, term}
   def unreported(conn, run, max_retries, reason_text, inbox_text, config) do
@@ -134,8 +136,9 @@ defmodule Omunculus.Store.Runs do
       with {:ok, work} <- Helpers.fetch_work(conn, run.work_id) do
         case {work.state, View.unended_runs(conn, work.id)} do
           {"open", runs} when runs > max_retries ->
-            with {:ok, events} <-
-                   stop_work(conn, run, work, reason_text.(runs), inbox_text, config),
+            text = reason_text.(runs, run.agent, work.title)
+
+            with {:ok, events} <- stop_work(conn, run, work, text, inbox_text, config),
                  do: {:ok, {:stopped, events}}
 
           {"open", runs} when runs > 0 ->
@@ -155,8 +158,7 @@ defmodule Omunculus.Store.Runs do
          do: :ok
   end
 
-  @spec unanswered(Connection.t(), map, map, (String.t(), String.t(), String.t() | nil ->
-                                                String.t())) ::
+  @spec unanswered(Connection.t(), map, map, (String.t(), [map], boolean -> String.t())) ::
           {:ok, [map]} | {:error, term}
   def unanswered(_conn, %{request_id: nil}, _config, _reason_text), do: {:ok, []}
 
@@ -174,14 +176,16 @@ defmodule Omunculus.Store.Runs do
             groups: %{}
           }
 
-          with {:ok, events} <-
+          with {:ok, questions} <- questions(conn, request),
+               text = &reason_text.(run.agent, questions, &1),
+               {:ok, events} <-
                  Actions.run(
                    conn,
                    [
                      %{
                        "type" => "escalate",
                        "body" => %{
-                         "reason" => reason_text.(request.id, run.agent, nil),
+                         "reason" => text.(false),
                          "origins" => %{"answer" => request.id}
                        }
                      }
@@ -189,9 +193,8 @@ defmodule Omunculus.Store.Runs do
                    ctx
                  ),
                upstream = Enum.find(events, &(&1.type == "request")),
-               {:ok, request} <- View.view(conn, "request", upstream.request_id),
-               {:ok, notified} <-
-                 notify_unanswered(conn, request, run.request_id, ctx, reason_text) do
+               {:ok, linked} <- View.view(conn, "request", upstream.request_id),
+               {:ok, notified} <- notify_unanswered(conn, linked, ctx, text.(true)) do
             {:ok, events ++ notified}
           end
         else
@@ -201,19 +204,39 @@ defmodule Omunculus.Store.Runs do
     end)
   end
 
-  defp notify_unanswered(conn, request, origin_id, ctx, text) do
+  # The questions a request holds: its own, or those of the requests it
+  # links, each with who asked it and the title of the asker's work.
+  defp questions(conn, request) do
+    request
+    |> asked()
+    |> Enum.reduce_while({:ok, []}, fn asked, {:ok, acc} ->
+      case title(conn, asked.work_id) do
+        {:ok, title} ->
+          question = %{requester: asked.requester, reason: asked.reason, title: title}
+          {:cont, {:ok, acc ++ [question]}}
+
+        error ->
+          {:halt, error}
+      end
+    end)
+  end
+
+  defp asked(%{origins: origins} = request) when map_size(origins) == 0, do: [request]
+
+  defp asked(%{origins: origins}),
+    do: origins |> Enum.sort() |> Enum.flat_map(fn {_part, origin} -> asked(origin) end)
+
+  defp title(_conn, nil), do: {:ok, nil}
+
+  defp title(conn, work_id) do
+    with {:ok, work} <- Helpers.fetch_work(conn, work_id), do: {:ok, work.title}
+  end
+
+  defp notify_unanswered(conn, request, ctx, note) do
     if Jason.decode!(request.arbiter)["kind"] == "human" do
       Actions.run(
         conn,
-        [
-          %{
-            "type" => "notify",
-            "body" => %{
-              "body" => text.(origin_id, ctx.agent, request.id),
-              "work_id" => request.work_id
-            }
-          }
-        ],
+        [%{"type" => "notify", "body" => %{"body" => note, "work_id" => request.work_id}}],
         ctx
       )
     else
@@ -235,7 +258,7 @@ defmodule Omunculus.Store.Runs do
     body = %{"reason" => text, "options" => options}
 
     with {:ok, [request]} <- Actions.run(conn, [%{"type" => "request", "body" => body}], ctx),
-         inbox = inbox_text.(request.request_id, text, Map.keys(options)),
+         inbox = inbox_text.(text, Map.keys(options)),
          notify = %{"body" => inbox, "work_id" => run.work_id},
          {:ok, inbox} <- Actions.run(conn, [%{"type" => "notify", "body" => notify}], ctx) do
       {:ok, [request | inbox]}

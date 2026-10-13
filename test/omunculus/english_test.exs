@@ -51,8 +51,13 @@ defmodule Omunculus.EnglishTest do
       Out.unknown_auth_kind("oauth"),
       Out.login_tool_failed(),
       Out.chain_failed("end", :after_end),
-      Out.unreported(2),
-      Out.request_inbox("id", Out.unreported(1), ["cancel", "retry"])
+      Out.unreported(2, "worker", "a work"),
+      Out.request_inbox(Out.unreported(1, "worker", "a work"), ["cancel", "retry"]),
+      Out.unanswered(
+        "lead",
+        [%{requester: ~s({"kind":"agent","agent":"worker"}), reason: "Logo?", title: nil}],
+        true
+      )
     ]
   end
 

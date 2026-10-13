@@ -1309,7 +1309,7 @@ defmodule Omunculus.RunTest do
       assert Enum.map(runs_of(project, child_id), & &1.via) == [nil, "retry", "retry"]
 
       assert breaks_of(project, child_id) == [
-               "The work stopped without a report after 3 runs."
+               ~s(worker stopped the work "a work" without a report after 3 runs.)
              ]
 
       assert {:ok, %{state: "waiting"}} = Store.view(project.conn, "work", child_id)
@@ -1344,7 +1344,7 @@ defmodule Omunculus.RunTest do
                  request.id
                ])
 
-      assert reason.body == Out.unreported(2)
+      assert reason.body == ~s(concierge stopped the work "a work" without a report after 2 runs.)
       assert reason.author == "harness"
 
       assert {:ok, [inbox]} = Query.all(project.conn, "SELECT * FROM inbox")
@@ -1353,7 +1353,7 @@ defmodule Omunculus.RunTest do
       assert {:ok, [%{body: body}]} =
                Query.all(project.conn, "SELECT * FROM comments WHERE inbox_id = ?", [inbox.id])
 
-      assert body == Out.request_inbox(request.id, Out.unreported(2), ["cancel", "retry"])
+      assert body == reason.body <> " Answer it with cancel or retry."
 
       assert {:ok, %{state: "waiting", waiting: "request", waiting_for: waiting_for}} =
                Store.view(project.conn, "work", work_id)
@@ -1410,7 +1410,7 @@ defmodule Omunculus.RunTest do
       assert end_run_errors(project, child_id) == List.duplicate("the model crashed: boom", 2)
 
       assert breaks_of(project, child_id) == [
-               "The work stopped without a report after 2 runs."
+               ~s(worker stopped the work "a work" without a report after 2 runs.)
              ]
 
       assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", parent_id)
@@ -1434,7 +1434,7 @@ defmodule Omunculus.RunTest do
                  request_id
                ])
 
-      assert body == Out.unreported(1)
+      assert body == ~s(concierge stopped the work "a work" without a report after 1 run.)
 
       Project.close(project)
     end

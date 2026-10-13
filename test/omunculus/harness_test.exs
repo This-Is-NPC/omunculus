@@ -854,7 +854,7 @@ defmodule Omunculus.HarnessTest do
       assert_received {:chained, {:ok, "alpha"}}
 
       assert [reason, _inbox] = comment_bodies(project.conn)
-      assert reason == Out.unreported(1)
+      assert reason =~ ~r/stopped the work ".+" without a report after 1 run\.$/
 
       assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
 

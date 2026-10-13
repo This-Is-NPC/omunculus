@@ -196,8 +196,8 @@ defmodule Omunculus.Store.RunsTest do
         conn,
         run,
         max_retries,
-        &"stopped after #{&1}",
-        &"#{&1} #{&2} #{Enum.join(&3, " ")}",
+        &"#{&2} stopped #{&3} after #{&1}",
+        &"#{&1} #{Enum.join(&2, " ")}",
         Fixtures.config()
       )
 
@@ -224,7 +224,11 @@ defmodule Omunculus.Store.RunsTest do
 
     assert event.type == "break"
     assert event.run_id == run.id
-    assert Jason.decode!(event.body) == %{"body" => "stopped after 1", "parent_id" => parent_id}
+
+    assert Jason.decode!(event.body) == %{
+             "body" => "concierge stopped a work after 1",
+             "parent_id" => parent_id
+           }
 
     assert {:ok, child} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
     assert child.state == "waiting"
@@ -233,14 +237,14 @@ defmodule Omunculus.Store.RunsTest do
     assert {:ok, [comment]} =
              Query.all(conn, "SELECT * FROM comments WHERE work_id = ?", [child_id])
 
-    assert comment.body == "stopped after 1"
+    assert comment.body == "concierge stopped a work after 1"
     assert comment.run_id == run.id
 
     assert {:ok, parent} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
     assert parent.state == "open"
   end
 
-  test "unreported past max_retries asks the human about a root, naming the request in the inbox",
+  test "unreported past max_retries asks the human about a root, with an inbox note",
        %{conn: conn} do
     work_id = Fixtures.insert(conn, :works)
     run = Fixtures.open_run(conn, %{work_id: work_id})
@@ -253,7 +257,7 @@ defmodule Omunculus.Store.RunsTest do
     assert {:ok, [comment]} =
              Query.all(conn, "SELECT * FROM comments WHERE inbox_id IS NOT NULL")
 
-    assert comment.body == "#{request.request_id} stopped after 1 cancel retry"
+    assert comment.body == "concierge stopped a work after 1 cancel retry"
   end
 
   test "begin refuses a cancelled work, and a work's own run on a work not open",

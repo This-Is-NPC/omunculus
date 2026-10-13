@@ -131,11 +131,12 @@ work are its most recent closed runs, in a row, without `end`, minus the
 first; a run that ends with `end` starts the count over. Once the retries
 reach `max_retries` (`[policy]`, or the work's workspace), the harness
 does not open another run. A work with a parent gets `break` with the
-comment `The work stopped without a report after N runs.`, which parks it
-and wakes the parent waiting on it, whose run opens. A root work gets a
-request along the configured route instead, opened by the harness with that sentence
-as its reason and the options `retry` (no call) and `cancel`, and an
-inbox entry that names the request; the work waits on it. `reply --option retry`
+comment `<agent> stopped the work "<title>" without a report after N
+runs.`, which parks it and wakes the parent waiting on it, whose run
+opens. A root work gets a request along the configured route instead,
+opened by the harness with that sentence as its reason and the options
+`retry` (no call) and `cancel`, and an inbox note, the sentence followed
+by `Answer it with cancel or retry.`; the work waits on it. `reply --option retry`
 opens another run of the work; `reply --option cancel` cancels it. The
 run opened by `send` has no work and is never retried; a run
 opened for a named agent (a hook's `agent`, a request's arbiter) is not

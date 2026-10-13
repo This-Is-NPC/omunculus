@@ -101,19 +101,74 @@ defmodule Omunculus.Tools.Out do
   @spec login_tool_failed() :: String.t()
   def login_tool_failed, do: "login tool failed"
 
-  @spec unreported(pos_integer) :: String.t()
-  def unreported(runs),
+  @doc """
+  What the harness says of `agent` stopping the work `title` without a
+  report after `runs` runs: to the parent's agent, in a break, or to a
+  person, in a request.
+  """
+  @spec unreported(pos_integer, String.t(), String.t()) :: String.t()
+  def unreported(runs, agent, title),
     do:
-      "The work stopped without a report after #{runs} #{if runs == 1, do: "run", else: "runs"}."
+      "#{agent} stopped the work \"#{title}\" without a report after #{runs} #{if runs == 1, do: "run", else: "runs"}."
 
-  @spec request_inbox(String.t(), String.t(), [String.t()]) :: String.t()
-  def request_inbox(request_id, reason, options),
-    do: "#{reason} Reply to request #{request_id} with #{Enum.join(options, " or ")}."
+  @doc "The inbox note of a request the harness opens with `reason` and `options`."
+  @spec request_inbox(String.t(), [String.t()]) :: String.t()
+  def request_inbox(reason, options),
+    do: "#{reason} Answer it with #{Enum.join(options, " or ")}."
 
-  @spec unanswered(String.t(), String.t(), String.t() | nil) :: String.t()
-  def unanswered(request_id, agent, reply_id) do
-    reason = "#{agent} left request #{request_id} unresolved."
-    if reply_id, do: reason <> " Reply to linked request #{reply_id}.", else: reason
+  @doc """
+  What the harness says of `agent` leaving a request unanswered: each
+  question it holds (`%{requester, reason, title}`, the title of the
+  asker's work, nil without one) with who asked it and on which work, the
+  question shortened. With `note`, it is the inbox note of the request it
+  links, which reached a person.
+  """
+  @spec unanswered(String.t(), [map], boolean) :: String.t()
+  def unanswered(agent, questions, note) do
+    text =
+      case questions do
+        [question] ->
+          "#{agent} left #{asker(question.requester)} question#{on(question.title)} unanswered#{quoted(question.reason)}"
+
+        questions ->
+          "#{agent} left #{length(questions)} questions unanswered: " <>
+            Enum.map_join(questions, "; ", fn question ->
+              "#{asker(question.requester)}#{on(question.title)}#{quoted(question.reason)}"
+            end)
+      end
+
+    if note, do: text <> " It is yours to answer now.", else: text
+  end
+
+  defp on(nil), do: ""
+  defp on(title), do: " on the work \"#{title}\""
+
+  defp quoted(nil), do: "."
+  defp quoted(reason), do: ": \"#{shortened(reason)}\""
+
+  defp asker(requester) do
+    case Jason.decode!(requester) do
+      %{"kind" => "agent", "agent" => name} -> "#{name}'s"
+      _human -> "a person's"
+    end
+  end
+
+  @shortened 160
+
+  # The first line of `text`, cut on a word within @shortened characters.
+  defp shortened(text) do
+    line = text |> String.trim() |> String.split("\n", parts: 2) |> hd() |> String.trim()
+
+    if String.length(line) <= @shortened do
+      line
+    else
+      kept = String.slice(line, 0, @shortened)
+
+      case String.split(kept, ~r/\s+\S*$/u, parts: 2) do
+        [words, _rest] when words != "" -> words <> "..."
+        _one_word -> kept <> "..."
+      end
+    end
   end
 
   @spec received_requests() :: String.t()

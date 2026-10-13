@@ -586,8 +586,8 @@ defmodule Omunculus.Run do
            project.conn,
            state.run,
            state.config.max_retries,
-           &Out.unreported/1,
-           &Out.request_inbox/3,
+           &Out.unreported/3,
+           &Out.request_inbox/2,
            state.config
          ) do
       {:ok, :retry} ->
