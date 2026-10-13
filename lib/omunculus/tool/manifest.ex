@@ -10,6 +10,8 @@ defmodule Omunculus.Tool.Manifest do
   `[auth]` provider in the config's `[secrets.<tool>]`; an MCP entry names
   those its server's `secrets` binds. A skill's `uses` are the tools its
   `allowed-tools` names, for a client to show; the ceiling still decides.
+  A tool found in a folder of `[tools] paths` has that folder as its
+  `root`, which its commands read with the folders beside its own.
   """
 
   alias Omunculus.Execution.Command
@@ -34,6 +36,7 @@ defmodule Omunculus.Tool.Manifest do
             uses: [],
             agent: nil,
             dir: nil,
+            root: nil,
             mcp: nil,
             config: true
 
@@ -56,6 +59,7 @@ defmodule Omunculus.Tool.Manifest do
           uses: [String.t()],
           agent: String.t() | nil,
           dir: String.t() | nil,
+          root: String.t() | nil,
           mcp: Omunculus.Config.mcp_server() | nil,
           config: boolean
         }

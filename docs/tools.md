@@ -99,6 +99,13 @@ whichever schema the model saw.
 The next run that walks `[tools] paths` sees the folder. Builtin tools
 may be an Elixir `module` returning the same `out`.
 
+Inside the sandbox a tool's command reads, read-only, the whole folder of
+`[tools] paths` its own folder was found in (a pack's `tools/`), so the
+tools of one path may share what lies beside them: a folder without a
+`tool.toml`, such as the dream team's `tools/_deploy`, which its
+`deploy_preview/run` and `promote/run` run as `$(dirname "$0")/../_deploy/deploy`.
+Nothing outside that folder comes with it.
+
 A `command` tool that authenticates declares the secrets its process
 needs, by the name of a variable:
 

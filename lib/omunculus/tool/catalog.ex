@@ -51,7 +51,7 @@ defmodule Omunculus.Tool.Catalog do
   defp discover_folders(acc, roots) do
     Enum.reduce(roots, acc, fn root, acc ->
       if File.dir?(root) do
-        root |> subfolders() |> Enum.reduce(acc, &load_into(&2, &1))
+        root |> subfolders() |> Enum.reduce(acc, &load_into(&2, &1, root))
       else
         acc
       end
@@ -128,11 +128,17 @@ defmodule Omunculus.Tool.Catalog do
     |> Map.new(fn {group, names} -> {group, Enum.sort(names)} end)
   end
 
+  @doc """
+  The folders a run's commands read the tools from: each folder of
+  `[tools] paths` a tool was found in, whole, and the folder of a tool
+  found elsewhere (a skill, an inline tool).
+  """
   @spec implementation_roots(%{String.t() => Manifest.t()}) :: [Path.t()]
   def implementation_roots(catalog) do
     catalog
     |> Map.values()
     |> Enum.flat_map(fn
+      %Manifest{root: root} when is_binary(root) -> [root]
       %Manifest{dir: dir} when is_binary(dir) -> [dir]
       _ -> []
     end)
@@ -147,11 +153,11 @@ defmodule Omunculus.Tool.Catalog do
     |> Enum.filter(&File.dir?/1)
   end
 
-  defp load_into(acc, dir) do
+  defp load_into(acc, dir, root) do
     case manifest_path(dir) do
       {:ok, path} ->
         case Manifest.load(path) do
-          {:ok, manifest} -> Map.put(acc, manifest.name, manifest)
+          {:ok, manifest} -> Map.put(acc, manifest.name, %{manifest | root: root})
           {:error, reason} -> log_skip(path, reason) && acc
         end
 

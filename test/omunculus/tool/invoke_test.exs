@@ -153,6 +153,41 @@ defmodule Omunculus.Tool.InvokeTest do
     refute File.exists?(Path.join(tool_dir, "changed"))
   end
 
+  test "a tool's command reaches the folders beside its own in its tools path", %{dir: dir} do
+    workspace = Path.join(dir, "workspace")
+    tools = Path.join(dir, "tools")
+    tool_dir = Path.join(tools, "fixture")
+    shared = Path.join(tools, "_shared")
+    File.mkdir_p!(workspace)
+    File.mkdir_p!(tool_dir)
+    File.mkdir_p!(shared)
+
+    File.write!(Path.join(tool_dir, "tool.toml"), """
+    name = "fixture"
+    kind = "tool"
+    command = ["./run"]
+    """)
+
+    write_run!(tool_dir, """
+    #!/bin/sh
+    exec "$(dirname "$0")/../_shared/run"
+    """)
+
+    write_run!(shared, """
+    #!/bin/sh
+    echo '{"ok": true, "output": "shared"}'
+    """)
+
+    catalog = Catalog.discover(%{paths: [tools], inline: %{}, skills: []})
+
+    policy =
+      ExecutionPolicyFixtures.policy(workspace,
+        read_only: [workspace | Catalog.implementation_roots(catalog)]
+      )
+
+    assert {:ok, %{output: "shared"}} = Invoke.call(catalog["fixture"], @input, policy)
+  end
+
   describe "module path" do
     test "happy path calls module.run/1 and validates its result", %{dir: dir} do
       manifest = manifest(dir, %{command: nil, module: "Omunculus.Tools.Send"})
