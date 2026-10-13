@@ -94,7 +94,11 @@ Item {
     if (section && (pending[section] || []).includes(id))
       drop(section, id)
     shown = setOf(shown, index, "")
+    // Back on the table, the keyboard is on its rows again.
+    Qt.callLater(() => tables[index] && tables[index].focusRows())
   }
+  // Section index -> its table, for the keyboard.
+  property var tables: ({})
 
   // Adds a new item of `section`, not saved yet, and opens it to be written.
   function create(section) {
@@ -124,6 +128,14 @@ Item {
     confirmRemove.open()
   }
 
+  // Gives the keyboard to the section on screen: its open item, or its rows.
+  function takeFocus() {
+    if (openPage)
+      openPage.takeFocus()
+    else if (tables[page])
+      tables[page].focusRows()
+  }
+
   function leave() {
     if (openPage)
       openPage.leave()
@@ -135,6 +147,7 @@ Item {
     {
       key: "auth", stem: "provider", add: "ADD PROVIDER",
       note: "Where each provider's key comes from. Models name their provider; the key itself is never shown here.",
+      stacked: [[0], [1, 2], [3]],
       columns: [{ title: "provider", weight: 0.25 }, { title: "kind", weight: 0.15 }, { title: "key from", weight: 0.35 }, { title: "models", weight: 0.25 }],
       rows: () => listed.auth.map(name => {
         const table = stored("auth", name) || {}
@@ -148,6 +161,7 @@ Item {
     {
       key: "models", stem: "model", add: "ADD MODEL",
       note: "What the agents run on: an api, the model's id and the options sent with every request. Test one before an agent runs on it.",
+      stacked: [[0], [1, 3], [2]],
       columns: [{ title: "model", weight: 0.2 }, { title: "api", weight: 0.2 }, { title: "model id", weight: 0.4 }, { title: "provider", weight: 0.2 }],
       rows: () => listed.models.map(name => {
         const table = stored("models", name) || {}
@@ -158,6 +172,7 @@ Item {
     {
       key: "agents", stem: "agent", add: "ADD AGENT",
       note: "Who works: each agent at its depth, on a model, with its text and what it may do. Depth 0 talks with you.",
+      stacked: [[0], [1, 2, 3], [4]],
       columns: [{ title: "agent", weight: 0.24 }, { title: "depth", weight: 0.1 }, { title: "model", weight: 0.18 }, { title: "has", weight: 0.14 }, { title: "from", weight: 0.34 }],
       rows: () => allAgents.map(name => {
         const agent = (Studio.setup ? Studio.setup.agents : []).find(entry => entry.name === name) || stored("agents", name) || {}
@@ -170,7 +185,8 @@ Item {
     {
       key: "workflows", stem: "workflow", add: "ADD WORKFLOW",
       note: "The stages a work goes through, in order, each run by its agent; what a stage never has is taken from its agent there.",
-      columns: [{ title: "workflow", weight: 0.2 }, { title: "stages", weight: 0.5 }, { title: "from", weight: 0.3 }],
+      stacked: [[0], [1], [2]],
+      columns: [{ title: "workflow", weight: 0.16 }, { title: "stages", weight: 0.6 }, { title: "from", weight: 0.24 }],
       rows: () => allWorkflows.map(name => {
         const flow = stored("workflows", name) || (Studio.setup ? Studio.setup.workflows : []).find(entry => entry.name === name) || {}
         const origin = originOf("workflows", name)
@@ -182,6 +198,7 @@ Item {
     {
       key: "", stem: "", add: "",
       note: "The catalog: the tools of [tools] paths and the package, and the MCP servers the config starts. Read here; a tool is a folder.",
+      stacked: [[0], [1, 2, 3], [4]],
       columns: [{ title: "tool", weight: 0.24 }, { title: "kind", weight: 0.12 }, { title: "groups", weight: 0.2 }, { title: "triggers", weight: 0.16 }, { title: "had by", weight: 0.28 }],
       rows: () => (catalog ? catalog.tools.filter(entry => entry.kind !== "skill").concat(catalog.mcp.map(server => ({
           name: server.name, kind: "mcp server", description: server.command.join(" "), triggers: [], groups: [],
@@ -193,6 +210,7 @@ Item {
     {
       key: "", stem: "", add: "",
       note: "Read from [skills] paths. An agent has them through the skills group, or one as skill.<name>, and reads one with the skill tool.",
+      stacked: [[0], [1], [2]],
       columns: [{ title: "skill", weight: 0.2 }, { title: "what it is for", weight: 0.55 }, { title: "had by", weight: 0.25 }],
       rows: () => (catalog ? catalog.tools.filter(entry => entry.kind === "skill") : [])
         .map(entry => ({ id: entry.name, entry: entry, editable: false, cells: [entry.name.slice(6), entry.description, Studio.holders(entry.name).join(", ")] })),
@@ -201,6 +219,7 @@ Item {
     {
       key: "workspaces", stem: "workspace", add: "ADD WORKSPACE",
       note: "The project's own: its policy, its workspaces — where the agents work, with the ceiling that holds there — and who may do what.",
+      stacked: [[0], [1, 2]],
       columns: [{ title: "item", weight: 0.25 }, { title: "kind", weight: 0.15 }, { title: "what it holds", weight: 0.6 }],
       rows: () => {
         if (!document)
@@ -228,8 +247,6 @@ Item {
     }
   }))
 
-  onActiveChanged: if (active) body.forceActiveFocus()
-
   // Esc that nothing inside took (an open list or dialog takes its own) goes back.
   Item {
     id: body
@@ -255,11 +272,14 @@ Item {
           spacing: 12
           Note { value: stage.section.note }
           DataTable {
+            id: table
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Component.onCompleted: view.tables[stage.index] = table
             picks: true
             active: stage.shown && stage.open === ""
             columns: stage.section.columns
+            stacked: stage.section.stacked
             rows: view.document === null ? [] : stage.section.rows()
             cells: row => row.cells
             tone: (row, column) => column === 0 && view.sections[stage.index].key === "agents" ? Studio.toneOf(row.name) : ""
@@ -293,6 +313,8 @@ Item {
           onLoaded: {
             item.loadedId = row.id
             item.editing = !!view.editing[stage.index]
+            // The keyboard goes with the screen that opens.
+            Qt.callLater(() => { if (screen.item) screen.item.takeFocus() })
             item.back.connect(() => view.close(stage.index))
             item.removing.connect(() => view.remove(stage.section.key, row.name))
             // Saved under a new name, the screen follows it.

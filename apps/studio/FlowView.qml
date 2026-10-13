@@ -20,6 +20,7 @@ Item {
   // Room the rail and the command bar take over the canvas, kept clear when it fits.
   property real leftInset: 0
   property real topInset: 0
+  property real bottomInset: 0
 
   readonly property real zoomLevel: world.scale
   readonly property var picked: chart.nodes.find(node => node.id === pickedId) || null
@@ -120,16 +121,45 @@ Item {
     return chart
   }
 
-  // Frames the whole chart in the room the rail and the bar leave.
+  // Frames the chart in the room the rail, the bar, the footer and an open
+  // inspector leave: whole, unless that would make it too small to read, in
+  // which case it starts from its top left at the smallest readable size.
   function fit() {
-    const room = Qt.size(width - leftInset - 40, height - topInset - 40)
+    const right = inspector.open ? inspector.width + 20 : 0
+    const room = Qt.size(width - leftInset - right - 40, height - topInset - bottomInset - 40)
     if (chart.width <= 0 || room.width <= 0 || room.height <= 0)
       return
-    const scale = Math.max(0.2, Math.min(1.2, room.width / chart.width, room.height / chart.height))
+    const scale = Math.max(readable, Math.min(1.2, room.width / chart.width, room.height / chart.height))
     world.scale = scale
-    world.x = leftInset + 20 + (room.width - chart.width * scale) / 2
+    world.x = leftInset + 20 + Math.max(0, (room.width - chart.width * scale) / 2)
     world.y = topInset + 20 + Math.max(0, (room.height - chart.height * scale) / 2)
+    moved = false
+    if (picked)
+      bringIntoView(picked)
   }
+  // The smallest scale fitting goes to: below it the cards no longer read.
+  readonly property real readable: 0.45
+  // Whether the canvas was moved or zoomed by hand since it was framed; until
+  // then it is framed again when the window changes size.
+  property bool moved: false
+  onWidthChanged: if (!moved) Qt.callLater(fit)
+  onHeightChanged: if (!moved) Qt.callLater(fit)
+
+  // Brings the node picked into the room left of the inspector.
+  function bringIntoView(node) {
+    const right = width - inspector.width - 40
+    const x = world.x + node.x * world.scale
+    const y = world.y + node.y * world.scale
+    if (x + node.width * world.scale > right)
+      world.x -= x + node.width * world.scale - right
+    if (x < leftInset + 20)
+      world.x += leftInset + 20 - x
+    if (y < topInset + 20)
+      world.y += topInset + 20 - y
+    if (y + node.height * world.scale > height - bottomInset - 20)
+      world.y -= y + node.height * world.scale - (height - bottomInset - 20)
+  }
+  onPickedChanged: if (picked) Qt.callLater(() => bringIntoView(picked))
 
   // Zooms by `factor` keeping the point (px, py) of the view where it is.
   function zoom(factor, px, py) {
@@ -138,6 +168,7 @@ Item {
     world.x = px - (px - world.x) * ratio
     world.y = py - (py - world.y) * ratio
     world.scale = scale
+    moved = true
   }
   function zoomIn() { zoom(1.2, width / 2, height / 2) }
   function zoomOut() { zoom(1 / 1.2, width / 2, height / 2) }
@@ -208,10 +239,32 @@ Item {
     onPositionChanged: mouse => {
       world.x += mouse.x - last.x
       world.y += mouse.y - last.y
+      flow.moved = true
       last = Qt.point(mouse.x, mouse.y)
     }
     onClicked: flow.pickedId = ""
-    onWheel: wheel => flow.zoom(Math.pow(1.0015, wheel.angleDelta.y), wheel.x, wheel.y)
+    // A wheel zooms; a touchpad's two fingers move the canvas, and zoom
+    // with Ctrl held.
+    onWheel: wheel => {
+      if (wheel.pixelDelta.x === 0 && wheel.pixelDelta.y === 0 || wheel.modifiers & Qt.ControlModifier) {
+        flow.zoom(Math.pow(1.0015, wheel.angleDelta.y), wheel.x, wheel.y)
+      } else {
+        world.x += wheel.pixelDelta.x
+        world.y += wheel.pixelDelta.y
+        flow.moved = true
+      }
+    }
+  }
+
+  // Two fingers pinch the canvas nearer or farther, around them.
+  PinchHandler {
+    target: null
+    property real last: 1
+    onActiveChanged: last = 1
+    onActiveScaleChanged: {
+      flow.zoom(activeScale / last, centroid.position.x, centroid.position.y)
+      last = activeScale
+    }
   }
 
   Item {
@@ -375,7 +428,11 @@ Item {
         spec: modelData
         order: modelData.order
         picked: flow.pickedId === modelData.id
-        onChosen: flow.pickedId = flow.pickedId === modelData.id ? "" : modelData.id
+        onActiveFocusChanged: if (activeFocus) flow.bringIntoView(modelData)
+        onChosen: {
+          forceActiveFocus()
+          flow.pickedId = flow.pickedId === modelData.id ? "" : modelData.id
+        }
       }
     }
   }
@@ -406,10 +463,13 @@ Item {
   Rectangle {
     id: inspector
     readonly property bool open: flow.picked !== null && !!flow.picked.agent
-    anchors { right: parent.right; top: parent.top; bottom: parent.bottom; topMargin: flow.topInset + 12; bottomMargin: 64; rightMargin: open ? 20 : -width - 20 }
+    anchors { right: parent.right; top: parent.top; bottom: parent.bottom; topMargin: flow.topInset + 12; bottomMargin: flow.bottomInset; rightMargin: open ? 20 : -width - 20 }
     Behavior on anchors.rightMargin { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-    width: Math.min(460, parent.width * 0.4)
-    color: Qt.alpha(Theme.background, 0.94)
+    // Away, it takes no keyboard.
+    visible: open || anchors.rightMargin > -width - 20
+    enabled: open
+    width: Math.min(460, Math.max(300, parent.width * 0.4))
+    color: Theme.background
     border.color: Theme.line
 
     ScrollPage {
@@ -420,7 +480,8 @@ Item {
         id: details
         width: scroll.width
         spacing: 12
-        Row {
+        Flow {
+          width: parent.width
           spacing: 10
           Label {
             text: inspector.open && flow.picked.kind === "stage" ? "STAGE " + flow.picked.stage.toUpperCase() + " OF " + flow.picked.workflow.toUpperCase() : "AGENT"
@@ -436,6 +497,26 @@ Item {
             font.letterSpacing: 2
           }
         }
+        // First, so it is in view on a short window.
+        Row {
+          spacing: 8
+          TraceButton {
+            visible: flow.projectId === Studio.project
+            dense: true
+            role: "action"
+            icon: inspector.open && flow.picked.pack ? "enter" : "edit"
+            text: inspector.open && flow.picked.pack ? "OPEN AGENT" : "EDIT AGENT"
+            onClicked: flow.agentPicked(flow.picked.agent.name)
+          }
+          TraceButton {
+            dense: true
+            role: "action"
+            icon: "close"
+            text: "CLOSE"
+            tip: "close  esc"
+            onClicked: flow.pickedId = ""
+          }
+        }
         Loader {
           width: parent.width
           active: inspector.open
@@ -443,15 +524,8 @@ Item {
             width: details.width
             agent: flow.picked.agent
             place: ""
+            onPicked: if (flow.projectId === Studio.project) flow.agentPicked(agent.name)
           }
-        }
-        TraceButton {
-          visible: flow.projectId === Studio.project
-          dense: true
-          role: "action"
-          icon: "edit"
-          text: "EDIT AGENT"
-          onClicked: flow.agentPicked(flow.picked.agent.name)
         }
       }
     }

@@ -29,6 +29,10 @@ ItemPage {
       wrapMode: Text.Wrap
     },
     Caption { text: "GIVE IT TO" },
+    Note {
+      visible: page.settings.keysOf("agents").length === 0
+      value: "The project has no agents of its own to give it to; those a pack brings take their skills from the pack."
+    },
     Flow {
       Layout.fillWidth: true
       spacing: 6

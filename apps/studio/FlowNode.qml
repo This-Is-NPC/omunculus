@@ -16,6 +16,11 @@ Item {
 
   signal chosen()
 
+  // The keyboard reaches each agent's box; Enter or Space picks it.
+  activeFocusOnTab: !person
+  Keys.onReturnPressed: chosen()
+  Keys.onSpacePressed: chosen()
+
   readonly property var agent: spec.agent || null
   readonly property bool person: spec.kind === "person"
   readonly property color tone: person ? Theme.primary : agent ? Studio.toneOf(agent.name) : Theme.dim
@@ -133,4 +138,6 @@ Item {
       onClicked: if (!node.person) node.chosen()
     }
   }
+
+  FocusRing { anchors.margins: -4 }
 }

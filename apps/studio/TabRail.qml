@@ -24,18 +24,22 @@ Item {
   readonly property real gap: 10
   // The width it keeps folded, which what is beside it leaves room for.
   readonly property real foldedWidth: 52
-  // Unfolded while the pointer is over it, and a moment after it leaves.
+  // Unfolded while the pointer is over it or the keyboard is in it, and a
+  // moment after; a tap on its head unfolds or folds it, for touch.
   property bool unfolded: false
-  HoverHandler {
-    onHoveredChanged: {
-      if (hovered) {
-        fold.stop()
-        rail.unfolded = true
-      } else {
-        fold.restart()
-      }
+  property bool pinned: false
+  readonly property bool wanted: hover.hovered || focusedTabs > 0 || pinned
+  // How many of its tabs hold the keyboard: one, or none.
+  property int focusedTabs: 0
+  onWantedChanged: {
+    if (wanted) {
+      fold.stop()
+      unfolded = true
+    } else {
+      fold.restart()
     }
   }
+  HoverHandler { id: hover }
   Timer { id: fold; interval: 260; onTriggered: rail.unfolded = false }
 
   width: unfolded ? 260 : foldedWidth
@@ -65,6 +69,13 @@ Item {
       readonly property real fade: head ? 1 : Math.max(0.4, 1 - (slot - 1) * 0.09)
 
       onHeadChanged: if (head) title.replay()
+
+      // The keyboard reaches each section; Enter or Space chooses it.
+      activeFocusOnTab: true
+      onActiveFocusChanged: rail.focusedTabs += activeFocus ? 1 : -1
+      Keys.onReturnPressed: rail.chosen(tab.index)
+      Keys.onSpacePressed: rail.chosen(tab.index)
+      FocusRing {}
 
       clip: true
       // Unfolding, each name decodes.
@@ -104,7 +115,15 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: rail.chosen(tab.index)
+        // A tap on the head of a folded rail unfolds it rather than choosing.
+        onClicked: {
+          if (tab.head && !rail.unfolded) {
+            rail.pinned = true
+            return
+          }
+          rail.pinned = false
+          rail.chosen(tab.index)
+        }
       }
     }
   }

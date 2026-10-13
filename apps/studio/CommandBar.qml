@@ -14,10 +14,12 @@ Rectangle {
   property var commands: []
   // Changes when the section does, so the commands arrive again.
   property int section: 0
+  // The section's name, first in the bar, as the folded carousel shows only numbers.
+  property string title: ""
 
   readonly property var shown: commands.filter(command => command.shown !== false)
   // Whether the names fit beside the readout's room.
-  readonly property bool compact: measure.implicitWidth > width - 220
+  readonly property bool compact: measure.implicitWidth > width - 340
 
   color: Qt.alpha(Theme.background, 0.9)
   border.color: Theme.line
@@ -46,6 +48,16 @@ Rectangle {
   RowLayout {
     anchors { fill: parent; leftMargin: 8; rightMargin: 12 }
     spacing: 6
+
+    DecodeLabel {
+      Layout.alignment: Qt.AlignVCenter
+      Layout.leftMargin: 6
+      Layout.rightMargin: 8
+      value: bar.title.toUpperCase()
+      color: Theme.primary
+      font.pixelSize: 12
+      font.letterSpacing: 4
+    }
 
     Row {
       id: contextual

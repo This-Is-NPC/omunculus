@@ -45,6 +45,20 @@ Item {
     { text: "DELETE", icon: "trash", role: "guarded", tip: "remove it from the project's config", shown: editable && draft.stored !== null, run: () => page.removing() }
   ]).concat(extra)
 
+  // Gives the keyboard to the screen: its first field when editing, else the
+  // screen itself, whose Esc goes back.
+  function takeFocus() {
+    if (!editing) {
+      page.forceActiveFocus()
+      return
+    }
+    const first = nameField.visible ? nameField.input : formColumn.nextItemInFocusChain(true)
+    if (first)
+      first.forceActiveFocus()
+  }
+  onEditingChanged: Qt.callLater(takeFocus)
+  activeFocusOnTab: false
+
   // Esc: out of editing, then back to the list. A new item left unsaved goes.
   function cancel() {
     if (draft && draft.stored === null) {
@@ -76,7 +90,9 @@ Item {
 
     ColumnLayout {
       id: content
-      width: scroll.width
+      // A readable measure, centred when the room is wider.
+      width: Math.min(scroll.width, 880)
+      x: (scroll.width - width) / 2
       spacing: 14
 
       // What it is, and where it comes from.
@@ -136,6 +152,7 @@ Item {
 
       // Edited: its name, then its own fields.
       Field {
+        id: nameField
         Layout.fillWidth: true
         visible: page.editing && !!page.draft && !page.draft.single
         label: "name"
