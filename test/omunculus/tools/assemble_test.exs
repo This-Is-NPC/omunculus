@@ -163,6 +163,37 @@ defmodule Omunculus.Tools.AssembleTest do
              "## Results\n- Answer (worker, done, work w1): said hi\n- Skip (worker, cancelled, work w2)\n- worker broke its work w3: no access"
   end
 
+  test "children list every work handed down as it stands, one that broke waiting on the run" do
+    child = fn attrs ->
+      Map.merge(
+        %{workflow: nil, stage: nil, waiting: nil, last_comment: nil, assignee: "worker"},
+        attrs
+      )
+    end
+
+    view = %{
+      "children" => [
+        child.(%{id: "w1", title: "Build", state: "done"}),
+        child.(%{id: "w2", title: "Plan", state: "waiting", waiting: "child"}),
+        child.(%{
+          id: "w3",
+          title: "Publish",
+          assignee: "publisher",
+          state: "waiting",
+          workflow: "design",
+          stage: "publish",
+          last_comment: %{body: "deploy failed"}
+        })
+      ]
+    }
+
+    assert whole(%{@input | view: view}) =~
+             "## Children\n- Build (worker, work w1): done\n" <>
+               "- Plan (worker, work w2): waiting on its own works\n" <>
+               "- Publish (publisher, work w3, workflow design, stage publish): " <>
+               "broke, waiting on you to reopen it or to break this work: deploy failed"
+  end
+
   test "no results, no section" do
     output = Assemble.run(%{@input | view: %{"results" => [], "cause" => %{type: "continue"}}})
     refute output["output"] =~ "## Results"

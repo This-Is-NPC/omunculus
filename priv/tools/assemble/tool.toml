@@ -66,6 +66,11 @@ source = "works"
 relation = "conversation"
 include = ["last_comment"]
 
+[views.children]
+source = "works"
+relation = "children"
+include = ["last_comment"]
+
 [views.results]
 source = "works"
 relation = "children"

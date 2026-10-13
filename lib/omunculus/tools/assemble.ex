@@ -14,7 +14,10 @@ defmodule Omunculus.Tools.Assemble do
   without a work, the run that opened the run's request (`opener`), as
   `Omunculus.Tools.Record` lines without this tool's calls, each call's
   output cut to `last_run_output_bytes` in the args when set. Then, under
-  `## Results`, what the works handed down from the run's work came back
+  `## Children`, every work handed down from the run's work as it stands:
+  its title, agent, id, workflow stage and state, a child that broke
+  marked as waiting on this run to reopen it or break the work, with its
+  last comment. Under `## Results`, what the works handed down from the run's work came back
   with since its last closed run: each child closed or cancelled since,
   with its last comment, and, when the run was opened by a child's
   `break`, that child's report. A run with a request gets the request's
@@ -35,7 +38,7 @@ defmodule Omunculus.Tools.Assemble do
   the run may continue its
   `agent`'s paused session (`Omunculus.Tools.Session`): the output's
   `session` then carries the history and `since`, what happened since the
-  pause — the results, the request, the inbox and the message, or that
+  pause — the children, the results, the request, the inbox and the message, or that
   the work goes on — and the run keeps the instructions the session started
   with; when its own differ, `since` adds its `## Tools`.
   """
@@ -44,7 +47,7 @@ defmodule Omunculus.Tools.Assemble do
   alias Omunculus.Tools.{Out, Record, Session}
 
   # The sections that begin the context of an assembled prompt.
-  @context_start ~r/\n\n(?=## (Environment|Work|Works|Conversation|Last comment|Last run|Results|Request|Inbox|Attachments|Message)\n)/
+  @context_start ~r/\n\n(?=## (Environment|Work|Works|Conversation|Last comment|Last run|Children|Results|Request|Inbox|Attachments|Message)\n)/
 
   @spec run(map) :: map
   def run(%{name: name, args: args, view: view} = input) do
@@ -62,6 +65,7 @@ defmodule Omunculus.Tools.Assemble do
     # What happened since a pause, which a continued session is told.
     news =
       works_section(view["conversation_works"], limit) ++
+        children_section(view["children"]) ++
         results_section(view["results"] || [], view["cause"]) ++
         request_section(
           outside_inbox(view["request"], view["inbox"] || []),
@@ -152,6 +156,36 @@ defmodule Omunculus.Tools.Assemble do
   defp last_run_section(run, name, args) do
     ["## Last run\n" <> Enum.join(Record.lines(run, name, args["last_run_output_bytes"]), "\n")]
   end
+
+  # Every work handed down from this one as it stands, so a run finds the
+  # id of a child to reopen however it was opened.
+  defp children_section(nil), do: []
+  defp children_section([]), do: []
+
+  defp children_section(children) do
+    lines =
+      Enum.map(children, fn child ->
+        "- #{child.title} (#{child.assignee}, work #{child.id}#{stage_of(child)}): " <>
+          child_state(child)
+      end)
+
+    ["## Children\n" <> Enum.join(lines, "\n")]
+  end
+
+  defp stage_of(%{workflow: workflow, stage: stage}) when is_binary(workflow),
+    do: ", workflow #{workflow}, stage #{stage}"
+
+  defp stage_of(_child), do: ""
+
+  # A waiting child with nothing to wait on broke and waits on its parent.
+  defp child_state(%{state: "waiting", waiting: nil} = child) do
+    report = if child.last_comment, do: ": " <> child.last_comment.body, else: ""
+    "broke, waiting on you to reopen it or to break this work" <> report
+  end
+
+  defp child_state(%{state: "waiting", waiting: "child"}), do: "waiting on its own works"
+  defp child_state(%{state: "waiting", waiting: "request"}), do: "waiting on a request"
+  defp child_state(%{state: state}), do: state
 
   # What the works handed down from this one came back with since its last
   # run: each closed child's last comment, its report, and the report of

@@ -646,6 +646,49 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
+    # A work whose child broke, waiting on it to reopen the child or break.
+    defp work_with_broken_child(dir) do
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
+
+      child_id =
+        Fixtures.insert(project.conn, :works, %{
+          title: "Publish it",
+          parent_id: work_id,
+          assignee: "worker",
+          state: "waiting"
+        })
+
+      Project.close(project)
+      {work_id, child_id}
+    end
+
+    defp broken_line(child_id),
+      do: "- Publish it (worker, work #{child_id}): broke, waiting on you to reopen it"
+
+    test "the run a reply opens on a work shows the child that broke with its id",
+         %{dir: dir} do
+      {work_id, child_id} = work_with_broken_child(dir)
+      request_id = open_write_request(dir, work_id)
+
+      Fixtures.use_model(dir, fn _assembled, _tools, call -> call.("end", %{}) end)
+
+      assert {:ok, ""} =
+               CLI.run(["reply", "--request_id", request_id, "--option", "deny", "no"], dir)
+
+      project = open_project(dir)
+
+      assert {:ok, %{body: assembled}} =
+               Query.one(
+                 project.conn,
+                 "SELECT prompts.body FROM runs JOIN prompts ON prompts.id = runs.prompt_id WHERE runs.request_id = ?",
+                 [request_id]
+               )
+
+      assert assembled =~ "## Children\n" <> broken_line(child_id)
+      Project.close(project)
+    end
+
     test "with [policy] sessions, the run a reply opens continues the paused session",
          %{dir: dir} do
       config = Path.join(dir, "omunculus.toml")
@@ -660,9 +703,7 @@ defmodule Omunculus.CLITest do
         )
       )
 
-      project = open_project(dir)
-      work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
-      Project.close(project)
+      {work_id, child_id} = work_with_broken_child(dir)
 
       # The reply a provider sends, recorded as an adapter records it.
       asking = fn _assembled, _tools, call, record, _delta, _execution ->
@@ -713,6 +754,7 @@ defmodule Omunculus.CLITest do
       assert %{"continues" => continues, "since" => since} = Jason.decode!(body)
       assert continues == paused.id
       assert since =~ "## Request"
+      assert since =~ "## Children\n" <> broken_line(child_id)
       # The session keeps its instructions; the tool the reply granted is in what changed.
       assert since =~ "## Tools" and since =~ "- write"
 

@@ -322,8 +322,8 @@ for a name the run already has opens no row and still ends the run.
 below the run's own; any other id refuses the call. It returns the work's
 title, agent, state, stage and goal, every comment on it, and the record
 of each of its closed runs as `## Last run` shows one, without the call
-that assembled each run's prompt. `## Results` names each child's work
-id.
+that assembled each run's prompt. `## Children` and `## Results` name
+each child's work id.
 
 ## Answering a request
 
