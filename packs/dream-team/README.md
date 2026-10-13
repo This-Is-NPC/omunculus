@@ -94,7 +94,11 @@ back for the build to be fixed.
 
 `promote` is in every agent's `human` list: only the person grants it, once
 they have seen the app in homologation. That grant is their approval of
-it, the only one: the administrator asks for none after the release.
+it, the only one: the administrator asks for none after the release. The
+clerk's request for it gives, written out, the homologation address
+`deploy_preview` gave, since those who pass it on know no other address of
+the built site; an answer in words without the grant is a question to the
+clerk, which asks again with the address.
 
 Questions use `ask`. What only the machine's operator can settle — a
 tool, a login or a setting the machine lacks, as git's author identity —
