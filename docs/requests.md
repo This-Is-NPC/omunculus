@@ -14,7 +14,7 @@ without one.
 
 | Field | Meaning |
 | --- | --- |
-| `reason` | Nonempty question, kept in the opening event and request comments. |
+| `reason` | Nonempty question, kept in the opening event and request comments. It is shown to the receiver as written, so `ask` and `escalate` describe it as what the receiver is asked, in their language, without ids, stage names or notes for agents; the origins carry who asked and for which work. |
 | `options` | Immutable map from answer names to ordered tool calls. An empty map is a free-text question; an option with no calls is a named decision. |
 | `requester`, `arbiter` | Authenticated participant identities: an agent name, or human issuer/subject. Clients cannot supply another participant's authorship. |
 | `run_id`, `work_id` | Optional origin. A human-origin request requires no run. |
