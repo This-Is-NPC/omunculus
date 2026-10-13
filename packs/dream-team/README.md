@@ -67,7 +67,9 @@ images/         a portrait of each agent, <agent>.webp, 512 px square, its `imag
    environment` and set them, in the server's environment or the
    command line's, to that person's name and email. Without
    `[execution] host` a command's home is the run's scratch, which holds
-   no `.gitconfig`, so git has no other identity.
+   no `.gitconfig`, so git has no other identity. The agents read it
+   with `git var GIT_AUTHOR_IDENT`, as a commit does, and never ask for
+   one.
 4. Its agents work through `bash`, which the pack `requires` and does not
    bring: add the codex-like preset's tools (`priv/presets/codex-like/tools`)
    to the project's `[tools] paths`.

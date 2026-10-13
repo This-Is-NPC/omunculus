@@ -181,10 +181,13 @@ There is nothing extra to fetch.
 
 A commit's author is the identity git is given where it runs: the
 project passes it to every command (`GIT_AUTHOR_NAME`,
-`GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`). Never
-set one (`git config user.*`, `--author`), never invent one and never ask
-anyone for one. When git has none, the commit cannot be made: say so,
-as a blocker of the machine, with what is missing.
+`GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`). See
+it with `git var GIT_AUTHOR_IDENT` and `git var GIT_COMMITTER_IDENT`,
+which read it as a commit does; `git config user.name` shows only a
+config file's, which may be empty while the environment gives one.
+Never set one (`git config user.*`, `--author`), never invent one and
+never ask anyone for one. When `git var` shows none, the commit cannot
+be made: say so, as a blocker of the machine, with what is missing.
 
 ### Message grammar
 
