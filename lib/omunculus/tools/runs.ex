@@ -146,7 +146,7 @@ defmodule Omunculus.Tools.Runs do
   end
 
   defp usage(events) do
-    replies = for event <- events, event.type == "model", do: Jason.decode!(event.body)
+    replies = for event <- events, event.type == "model", do: reply(event.body)
 
     totals =
       Enum.reduce(replies, %{input: 0, cached: 0, output: 0, cost: 0.0}, fn reply, acc ->
@@ -180,7 +180,19 @@ defmodule Omunculus.Tools.Runs do
     events
     |> Enum.filter(&(&1.type in ["model", "tool"]))
     |> Enum.with_index(1)
-    |> Enum.map(fn {event, at} -> "#{at}. " <> detail(event.type, Jason.decode!(event.body)) end)
+    |> Enum.map(fn {event, at} -> "#{at}. " <> detail(event.type, decoded(event)) end)
+  end
+
+  defp decoded(%{type: "model", body: body}), do: reply(body)
+  defp decoded(%{body: body}), do: Jason.decode!(body)
+
+  # A model event's body is the reply as JSON, or plain text, as the
+  # harness records a run the server's restart interrupted.
+  defp reply(body) do
+    case Jason.decode(body) do
+      {:ok, reply} when is_map(reply) -> reply
+      _text -> %{"content" => body}
+    end
   end
 
   defp detail("model", reply) do

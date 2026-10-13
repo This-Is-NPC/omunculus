@@ -135,4 +135,16 @@ defmodule Omunculus.Tools.RunsTest do
     assert {false, "no run zzz among the last 2 closed runs"} =
              call(%{"run" => "zzz"}, [ended(), stopped()])
   end
+
+  test "reads a model event recorded as plain text, as a restart records it" do
+    interrupted =
+      run("ccc333", "clerk", [%{type: "model", body: "Run interrupted by server restart."}], %{})
+
+    {true, output} = call(%{}, [interrupted])
+    assert output =~ "ended: stopped without end"
+    assert output =~ "model: 1 replies · 0 tokens in (0 cached) · 0 out"
+
+    {true, output} = call(%{"run" => "ccc"}, [interrupted])
+    assert output =~ "1. model: Run interrupted by server restart."
+  end
 end
