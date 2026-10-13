@@ -2,6 +2,7 @@ defmodule Omunculus.Server.Router do
   @moduledoc "The versioned HTTP entry for the Omunculus server."
 
   use Plug.Router
+  use Plug.ErrorHandler
   require Logger
 
   alias Omunculus.{CLI, Operations}
@@ -581,6 +582,10 @@ defmodule Omunculus.Server.Router do
     Logger.error("server request failed: #{inspect(reason)}")
     reply(conn, 500, %{error: "internal_error"})
   end
+
+  # A request that crashes still answers with the contract's error body.
+  @impl Plug.ErrorHandler
+  def handle_errors(conn, _failure), do: reply(conn, conn.status, %{error: "internal_error"})
 
   defp reply(conn, status, body) do
     conn

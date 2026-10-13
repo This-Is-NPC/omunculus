@@ -576,6 +576,7 @@ defmodule Omunculus.ServerTest do
     end
   end
 
+  @tag :capture_log
   test "a command held in its hooks keeps neither reads nor other commands waiting" do
     dir = Fixtures.tmp_dir()
     Fixtures.install_default(dir)
@@ -637,6 +638,17 @@ defmodule Omunculus.ServerTest do
     send(hook, :release)
     assert %{status: 202, body: body} = Task.await(held)
     assert %{status: 202, body: ^body} = Task.await(repeated)
+
+    # A request the server cannot serve still answers, with the contract's error.
+    :ok = Supervisor.terminate_child(server, {:project, "solo"})
+
+    failed =
+      quick.(:post, conversation <> "/messages",
+        headers: [{"idempotency-key", "m3"}],
+        json: %{message: "lost?", agent: "concierge"}
+      )
+
+    assert {failed.status, failed.body} == {500, %{"error" => "internal_error"}}
 
     :ok = Supervisor.stop(server)
   end
