@@ -5,8 +5,8 @@ import "kit/ui"
 
 // PagesView is the window's pages, one on screen at a time, in two levels.
 // The project's: its conversations, and the board, the works of every
-// project the window reaches, where a card opens its conversation's map with
-// the work picked; whom a new conversation is with is chosen on a screen of
+// project the window reaches, where a card opens its work on a page of its
+// own, from where its conversation's map opens; whom a new conversation is with is chosen on a screen of
 // the conversations. A conversation's, once one is open, in place of the
 // project's: its chat, yours with the root agent, where every request shows
 // where it was made; the map of its agents at work, where the node picked
@@ -36,7 +36,7 @@ Item {
   // The one on screen: a page, or "new", whom a new conversation is with,
   // a screen of the conversations.
   property string page: "conversations"
-  readonly property int tabIndex: pages.indexOf(page === "new" ? "conversations" : page)
+  readonly property int tabIndex: pages.indexOf(page === "new" ? "conversations" : page === "work" ? "board" : page)
   readonly property string title: page === "new" ? "new conversation" : page
   // What the masthead names: the page, or the project and the conversation
   // open on it.
@@ -51,7 +51,7 @@ Item {
   property var history: []
 
   function here() {
-    return { page: page, project: Omunculus.project, socket: Omunculus.socket, conversation: Omunculus.conversationId, picked: agents.picked }
+    return { page: page, project: Omunculus.project, socket: Omunculus.socket, conversation: Omunculus.conversationId, picked: agents.picked, work: workKey }
   }
   function remember() { history = history.concat([here()]).slice(-50) }
 
@@ -89,6 +89,7 @@ Item {
     }
     page = at.page
     agents.picked = at.picked
+    workKey = at.work
   }
 
   function openConversation(id) {
@@ -105,15 +106,37 @@ Item {
     page = "new"
   }
 
-  // Opens a work's conversation on its map, the work picked; a work of
-  // another project first turns the window to that project.
-  function openWork(work) {
-    remember()
+  // The work on the work page.
+  property string workKey: ""
+
+  // Reads a work's conversation, of its project, turning the window to that
+  // project first when it is another one.
+  function reach(work) {
     const place = Omunculus.boardProjects.find(item => item.id === work.project)
-    if (place)
+    if (place && place.id !== Omunculus.project)
       Omunculus.switchProject(place)
     if (Omunculus.conversationId !== work.conversation_id)
       Omunculus.open(work.conversation_id)
+  }
+
+  // Shows a work on its page.
+  function showWork(work) {
+    remember()
+    reach(work)
+    workKey = work.id
+    page = "work"
+  }
+
+  // Shows another work of the conversation open on the work page.
+  function showOther(key) {
+    remember()
+    workKey = key
+  }
+
+  // Opens a work's conversation on its map, the work picked.
+  function openWork(work) {
+    remember()
+    reach(work)
     page = "map"
     agents.pick(work.id)
   }
@@ -143,6 +166,16 @@ Item {
       return [back, fresh]
     if (page === "new" || page === "cost")
       return [back]
+    if (page === "work") {
+      const waiting = Omunculus.asked(workKey).filter(request => Requests.human(request.arbiter))
+      return [
+        back,
+        { text: "REPLY", icon: "enter", tone: Theme.warning, key: "R", tip: "answer what it asked you  r",
+          shown: waiting.length > 0, run: () => decision.show(waiting[0].id, false) },
+        { text: "OPEN IN MAP", short: "MAP", icon: "map", key: "O", tip: "its conversation's map, the work picked  o",
+          run: () => view.openWork({ id: workKey, project: Omunculus.project, conversation_id: Omunculus.conversationId }) }
+      ]
+    }
     if (page === "map" && node !== null)
       return [
         back,
@@ -167,6 +200,7 @@ Item {
     if (page === "board")
       return [
         back,
+
         { text: "BY STATE", short: "STATE", icon: "board", key: "S", tone: board.group === "" ? Theme.primary : Theme.dim,
           tip: "the works by state alone  s", run: () => board.group = "" },
         { text: "BY AGENT", short: "AGENT", icon: "people", key: "A", tone: board.group === "agent" ? Theme.primary : Theme.dim,
@@ -216,6 +250,8 @@ Item {
       log.forceActiveFocus()
     else if (page === "cost")
       cost.forceActiveFocus()
+    else if (page === "work")
+      workPage.forceActiveFocus()
     else
       mainComposer.focusEntry()
   }
@@ -334,7 +370,22 @@ Item {
       anchors.fill: parent
       focus: view.page === "board"
       onLeave: view.back()
-      onOpened: work => view.openWork(work)
+      onOpened: work => view.showWork(work)
+    }
+
+  }
+
+  Stage {
+    anchors.fill: parent
+    shown: view.page === "work"
+
+    WorkView {
+      id: workPage
+      anchors.fill: parent
+      focus: view.page === "work"
+      key: view.workKey
+      onLeave: view.back()
+      onPicked: key => view.showOther(key)
     }
   }
 

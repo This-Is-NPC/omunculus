@@ -267,6 +267,15 @@ ShellRoot {
         panel.enter(name)
     }
     function start(): void { panel.started = false }
+    // A work of the board, on its page.
+    function work(id: string): void {
+      const found = Omunculus.board.find(item => item.id === id)
+      if (!found)
+        return
+      if (!panel.started)
+        panel.enter("board")
+      pagesView.showWork(found)
+    }
     function agents(): void { page("map") }
     function log(): void { page("log") }
     function board(): void { page("board") }

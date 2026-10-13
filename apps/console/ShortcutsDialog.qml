@@ -50,9 +50,14 @@ ModalDialog {
       ["M", "mark its notes read"],
       ["W", "write to its agent"]
     ]],
+    ["work", [
+      ["R", "answer what it asked you"],
+      ["O", "its conversation's map, the work picked"],
+      ["Esc", "back"]
+    ]],
     ["board", [
       ["← · → · ↑ · ↓", "move between the works, across and down the columns"],
-      ["Enter · Space", "open the work on its conversation's map"],
+      ["Enter · Space", "open the work on its page"],
       ["S · A · P", "by state, a lane per agent, a lane per project"],
       ["/", "filter the works"],
       ["Esc", "empty the filter, then back to the works"]
