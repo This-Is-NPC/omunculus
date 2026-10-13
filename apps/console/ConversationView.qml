@@ -1,56 +1,49 @@
 import QtQuick
 import QtQuick.Layouts
 
-// ConversationView is a conversation on screen, in one of three places: the
-// chat, yours with the root agent; the map of its agents at work, where
-// everything that waits on you hangs from the agent that asked; or one work,
-// what its agent said and did. The composer's pending button and the
-// masthead lead to the map. Esc goes back from a work to the map, from the
-// map to the chat, and from the chat to the conversations.
+// ConversationView is a conversation on screen, in one of three panes: the
+// chat, yours with the root agent, where every request shows where it was
+// made; the map of its agents at work, where the node picked opens beside it;
+// or the log, every event a row. The composer's pending button opens the map
+// on what waits on you. Esc closes what is picked, leaves the map or the log
+// for the chat, and the chat for the conversations.
 Item {
   id: view
 
   property bool active: false
   property bool compact: false
   property bool short: false
-  property bool mapShown: false
-  signal mapChosen(bool shown)
+  // "chat", "map" or "log".
+  property string pane: "chat"
+  signal paneChosen(string pane)
 
   function focusEntry() {
-    if (Omunculus.workId !== "" && workStage.item)
-      workStage.item.focusEntry()
-    else if (!mapShown)
-      mainComposer.focusEntry()
+    if (pane === "map")
+      agents.forceActiveFocus()
+    else if (pane === "log")
+      log.forceActiveFocus()
     else
-      map.forceActiveFocus()
+      mainComposer.focusEntry()
   }
 
   // Opens the map on what waits on you.
   function showPending() {
-    Omunculus.workId = ""
-    mapChosen(true)
-    Qt.callLater(map.reveal)
+    paneChosen("map")
+    agents.pickPending()
   }
 
   focus: active
   onActiveChanged: if (active) focusEntry()
-  Keys.onEscapePressed: {
-    if (Omunculus.workId !== "")
-      Omunculus.workId = ""
-    else if (mapShown)
-      mapChosen(false)
-    else
-      Omunculus.leave()
-  }
+  Keys.onEscapePressed: Omunculus.leave()
+  onPaneChanged: Qt.callLater(focusEntry)
   Connections {
     target: Omunculus
-    function onWorkIdChanged() { Qt.callLater(view.focusEntry) }
+    function onConversationIdChanged() { agents.picked = null; log.picked = null }
   }
-  onMapShownChanged: Qt.callLater(focusEntry)
 
   Stage {
     anchors.fill: parent
-    shown: !view.mapShown && Omunculus.workId === ""
+    shown: view.pane === "chat"
 
     ColumnLayout {
       anchors.fill: parent
@@ -73,35 +66,25 @@ Item {
 
   Stage {
     anchors.fill: parent
-    shown: view.mapShown && Omunculus.workId === ""
+    shown: view.pane === "map"
 
-    OrchestrationView {
-      id: map
+    AgentsView {
+      id: agents
       anchors.fill: parent
-      onChosen: work => {
-        if (work === "")
-          view.mapChosen(false)
-        else
-          Omunculus.workId = work
-      }
+      focus: view.pane === "map"
+      onLeave: view.paneChosen("chat")
     }
   }
 
-  // The work opened, built anew for each one.
-  Loader {
-    id: workStage
+  Stage {
     anchors.fill: parent
-    active: Omunculus.workId !== ""
-    sourceComponent: Stage {
-      shown: true
-      function focusEntry() { opened.focusEntry() }
-      WorkView {
-        id: opened
-        anchors.fill: parent
-        work: Omunculus.workId
-        compact: view.compact
-        onPendingChosen: view.showPending()
-      }
+    shown: view.pane === "log"
+
+    LogView {
+      id: log
+      anchors.fill: parent
+      focus: view.pane === "log"
+      onLeave: view.paneChosen("chat")
     }
   }
 }

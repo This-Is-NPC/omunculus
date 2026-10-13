@@ -18,6 +18,10 @@ Singleton {
   readonly property string socket: Quickshell.env("OMUNCULUS_CONSOLE_SOCKET")
   readonly property string project: Quickshell.env("OMUNCULUS_CONSOLE_PROJECT")
   readonly property string base: "/v1/projects/" + project
+  // Every project of the server's registry, the one on screen among them, as
+  // {id, socket}.
+  // {id, socket}, as GET /v1/projects lists them on this socket.
+  property var projects: []
 
   property bool connected: false
   // "start", "history", or "" while a conversation is on screen.
@@ -34,17 +38,16 @@ Singleton {
   property var inbox: []
   // The latest event cursor of the open conversation; the stream resumes after it.
   property string cursor: ""
-  // The work on screen, or "" for the main thread.
-  property string workId: ""
   property bool streaming: false
   // While the history of the conversation opened is read in.
   property bool replaying: false
-  // Thread key ("" or a work id) -> its ListModel. Each entry: kind (speech or
-  // turn), key, who, text, mine, stamp, at (seconds), work, streaming, partial
-  // (the text its model is writing), steps (JSON), and fresh: it arrived while
-  // the conversation was open, rather than with its history. A turn is one run
-  // of an agent: what it said and what it did. Requests and notes are not in
-  // threads: they wait on the orchestration map, on the work they came from.
+  // Thread key ("" or a work id) -> its ListModel. Each entry: kind (speech,
+  // turn or request), key, who, text, mine, stamp, at (seconds), work,
+  // streaming, partial (the text its model is writing), steps (JSON), and
+  // fresh: it arrived while the conversation was open, rather than with its
+  // history. A turn is one run of an agent: what it said and what it did.
+  // Every request and every note to you also shows in the main thread, where
+  // it was made.
   property var threads: ({})
   // Run id -> {thread, row}.
   property var rows: ({})
@@ -53,19 +56,28 @@ Singleton {
   property var runThread: ({})
   // Work id ("" for runs without one) -> the tool its agent called last.
   property var calling: ({})
-  // Inbox id -> the text its notify event carried, and request id -> the
-  // reason its request event carried; the snapshot has neither.
+  // Inbox id -> the text its notify event carried, request id -> the reason
+  // its request event carried, and request id -> how it was answered
+  // ({option, who, body}); the snapshot has none of them.
   property var notes: ({})
   property var reasons: ({})
+  property var replies: ({})
+  // The project's setup, as the config tool prints it: {root, agents, models,
+  // workspaces, workspace, workflows}, and for the settings {document,
+  // literal_keys, revision, names}; null until it answers.
+  property var setup: null
   // What the open conversation's model calls used, as their providers reported
   // it: {calls, input, cached, output, cost, priced}, in all and by agent. Shown
   // only when asked for.
   property var usage: ({ all: tally(), agents: {} })
+  // Every event of the open conversation, oldest first, as a line of its log:
+  // {id, at, time, type, who, run, work, what, event}.
+  property var log: []
+  // The lines of the history while it is read in, given to `log` at once.
+  property var logBuffer: []
+
   // Agent name -> its colour, in the order agents first appear.
   property var tones: ({})
-
-  // The agents of depth 0 a message can be for, as the project's config has them.
-  property var frontAgents: []
 
   property string message: ""
   property bool messageIsError: false
@@ -93,7 +105,7 @@ Singleton {
       if (!connected) {
         connected = true
         loadConversations()
-        loadFrontAgents()
+        loadSetup()
       }
     }, () => connected = false)
   }
@@ -112,6 +124,152 @@ Singleton {
     tell("copied", false)
   }
   Process { id: clipboard }
+
+  // Reads the project's setup through the config tool on the local socket.
+  function loadSetup() {
+    call("POST", "/v1/cli", { argv: ["config"] }, false, data => setup = JSON.parse(data.output))
+  }
+
+  // Writes one item of the config through the configure tool ("agents.worker",
+  // "policy"), or removes it for a null value, renaming `from` when given; then
+  // reads the setup again. `failed` gets the server's reason.
+  function configure(item, value, from, done, failed) {
+    const argv = ["configure", "--item", item, "--value", JSON.stringify(value), "--revision", setup.revision]
+    if (from)
+      argv.push("--from", from)
+    call("POST", "/v1/cli", { argv: argv }, false, () => {
+      loadSetup()
+      loadOverviews()
+      done()
+    }, reason => {
+      loadSetup()
+      failed(reason)
+    })
+  }
+
+  // Sends one short prompt to the model `name` as `value` would make it, and
+  // hands its {reply, ms}, or the reason it failed.
+  function testModel(name, value, done, failed) {
+    call("POST", "/v1/cli", { argv: ["model_test", "--name", name, "--value", JSON.stringify(value)] }, false,
+      data => done(JSON.parse(data.output)), failed)
+  }
+
+  // Whether omapass is installed, its program and its passwords, as the omapass
+  // tool prints them; null until it answers.
+  property var omapass: null
+  function loadOmapass() {
+    call("POST", "/v1/cli", { argv: ["omapass"] }, false, data => omapass = JSON.parse(data.output))
+  }
+
+  // Whether the settings window is open.
+  property bool settingsOpen: false
+  function toggleSettings() {
+    if (settingsOpen)
+      settingsOpen = false
+    else
+      openSettings()
+  }
+
+  function openSettings() {
+    settingsOpen = true
+    loadSetup()
+    loadOmapass()
+    loadOverviews()
+    loadCatalog()
+  }
+
+  // The skills of the project on screen, by name, from its catalog.
+  readonly property var skillNames: catalog ? catalog.tools.filter(entry => entry.kind === "skill").map(entry => entry.name.slice(6)) : []
+
+  // The list of an agent's table that holds what it has: `granted`, or `tools`
+  // as the presets write it.
+  function hasKey(table) { return table.granted !== undefined ? "granted" : "tools" }
+
+  // Whether the agent table `table` has the skill `name`: by the skills group, or by its own entry.
+  function hasSkill(table, name) {
+    const list = table[hasKey(table)] || []
+    return list.includes("skills") || list.includes("skill." + name)
+  }
+
+  // `table` with the skill `name` given (`on`) or taken. A skill named on its
+  // own comes with the skill tool, which reads it; taking one of the skills
+  // group lists the others instead of the group.
+  function withSkill(table, name, on) {
+    const key = hasKey(table)
+    let list = (table[key] || []).slice()
+    if (on && !hasSkill(table, name))
+      list.push("skill." + name)
+    if (!on && list.includes("skills"))
+      list = list.filter(item => item !== "skills").concat(skillNames.filter(other => other !== name).map(other => "skill." + other))
+    if (!on)
+      list = list.filter(item => item !== "skill." + name)
+    const named = list.some(item => item.startsWith("skill."))
+    if (named && !list.includes("skill") && !list.includes("skills"))
+      list.push("skill")
+    if (!named && !list.includes("skills"))
+      list = list.filter(item => item !== "skill")
+    return Object.assign({}, table, { [key]: list })
+  }
+
+  // `table` with every skill by the skills group (`on`), or with none.
+  function withAllSkills(table, on) {
+    const key = hasKey(table)
+    const list = (table[key] || []).filter(item => item !== "skills" && item !== "skill" && !item.startsWith("skill."))
+    return Object.assign({}, table, { [key]: on ? list.concat(["skills"]) : list })
+  }
+
+  // The agents of the project on screen that have the tool or skill `name` in
+  // any of its places, by its overview.
+  function holders(name) {
+    const overview = overviews[project]
+    if (!overview || overview.error)
+      return []
+    const names = new Set()
+    for (const place of overview.places)
+      for (const entry of place.depths)
+        for (const agent of entry.stages.map(stage => stage.agent).concat(entry.agents))
+          if (agent.tools.some(tool => tool.state === "have" && (tool.name === name || (tool.members || []).includes(name))))
+            names.add(agent.name)
+    return [...names].sort()
+  }
+
+  // The project's catalog, as the tools tool prints it: {tools, mcp}; null
+  // until it answers.
+  property var catalog: null
+  function loadCatalog() {
+    call("POST", "/v1/cli", { argv: ["tools"] }, false, data => catalog = JSON.parse(data.output))
+  }
+
+  // Project id -> the project as it runs in each of its workspaces, as the
+  // overview tool prints it, read from that project's own socket.
+  property var overviews: ({})
+  function loadOverviews() {
+    call("GET", "/v1/projects", null, false, data => {
+      projects = data.items
+      for (const each of projects)
+        http.call(each.socket, "POST", "/v1/cli", { argv: ["overview"] }, false, data => {
+          overviews = Object.assign({}, overviews, { [each.id]: JSON.parse(data.output) })
+        }, reason => overviews = Object.assign({}, overviews, { [each.id]: { error: reason } }))
+    })
+  }
+
+  // The model id an agent runs on, as configured, or "" before the setup.
+  function modelOf(agent) {
+    if (!setup)
+      return ""
+    const configured = setup.agents.find(item => item.name === agent)
+    const model = configured ? setup.models.find(item => item.name === configured.model) : null
+    return model ? model.model || model.name : configured ? configured.model : ""
+  }
+
+  // A workspace by name, or the default one for "", as {name, root}; the
+  // project root when there is none.
+  function workspaceOf(name) {
+    if (!setup)
+      return { name: "", root: "" }
+    const wanted = name || setup.workspace
+    return setup.workspaces.find(item => item.name === wanted) || { name: "", root: setup.root }
+  }
 
   function loadConversations() {
     call("GET", base + "/conversations", null, false, data => {
@@ -157,7 +315,6 @@ Singleton {
     conversationId = id
     view = ""
     cursor = ""
-    workId = ""
     rows = {}
     parentOf = {}
     runThread = {}
@@ -165,12 +322,15 @@ Singleton {
     threads = {}
     notes = {}
     reasons = {}
+    replies = {}
     tones = {}
     usage = { all: tally(), agents: {} }
     works = []
     runs = []
     requests = []
     inbox = []
+    log = []
+    logBuffer = []
     streamLink.active = false
     // The history comes in one read, before the stream resumes after it.
     call("GET", base + "/conversations/" + id + "/events", null, false, data => {
@@ -179,6 +339,8 @@ Singleton {
       replaying = true
       data.events.forEach(handle)
       replaying = false
+      log = logBuffer
+      logBuffer = []
       refresh()
       connectStream()
     })
@@ -190,7 +352,6 @@ Singleton {
     streamGeneration++
     streamLink.active = false
     streaming = false
-    workId = ""
     threads = {}
     openHistory()
   }
@@ -213,38 +374,14 @@ Singleton {
     })
   }
 
-  function loadFrontAgents() {
-    call("POST", "/v1/cli", { argv: ["config"] }, false, data => {
-      frontAgents = JSON.parse(data.output).agents
-        .filter(agent => agent.depth === 0 && !agent.workflow_only)
-        .map(agent => agent.name)
-    })
-  }
-
-  // The agent the conversation talks with: its last run of depth 0 without a
-  // work, or, before any, the project's only agent of depth 0.
-  function rootAgent() {
-    const own = runs.filter(run => !run.work_id && String(run.depth) === "0")
-    if (own.length > 0)
-      return own[own.length - 1].agent
-    return frontAgents.length === 1 ? frontAgents[0] : ""
-  }
-
   // A message to the root agent, or, with a work, to that work's agent.
   function send(text, work) {
     const value = text.trim()
     if (value === "" || conversationId === "")
       return
     const body = { message: value }
-    if (work) {
+    if (work)
       body.work_id = work
-    } else {
-      body.agent = rootAgent()
-      if (body.agent === "") {
-        tell("more than one agent of depth 0 can take this message; this window cannot choose one", true)
-        return
-      }
-    }
     call("POST", base + "/conversations/" + conversationId + "/messages", body, true, () => {})
   }
 
@@ -368,6 +505,49 @@ Singleton {
     return line.length > 120 ? line.slice(0, 117) + "..." : line
   }
 
+  // The event as a line of the log; while the history is read in, kept aside.
+  function record(event) {
+    const body = event.body || {}
+    const line = {
+      id: event.cursor || event.at + event.type,
+      at: event.at,
+      time: event.at.slice(11, 23),
+      type: event.type,
+      who: event.type === "start-run" ? body.agent || "" : actorName(event.actor),
+      run: event.run_id || "",
+      work: event.work_id || "",
+      what: what(event.type, body),
+      event: event
+    }
+    if (replaying)
+      logBuffer.push(line)
+    else
+      log = log.concat([line])
+  }
+
+  // What an event says, on one line.
+  function what(type, body) {
+    const line = value => String(value === undefined || value === null ? "" : value).replace(/\s+/g, " ").trim()
+    const json = value => line(JSON.stringify(value))
+    switch (type) {
+    case "prompt":
+      return line(body.message)
+    case "comment":
+      return line(body.body)
+    case "model":
+      return line(text(body)) || json(body)
+    case "tool":
+      return (body.via ? body.via + " → " : "") + body.name + " " + json(body.args || {}) + (body.ok ? "  ok" : "  failed")
+        + (body.output ? "  ·  " + (typeof body.output === "string" ? line(body.output) : json(body.output)) : "")
+    case "start-run":
+      return (body.agent || "") + (body.depth !== undefined ? " at depth " + body.depth : "") + (body.via ? " via " + body.via : "")
+    case "end-run":
+      return ""
+    default:
+      return json(body)
+    }
+  }
+
   function actorName(actor) {
     if (!actor)
       return ""
@@ -453,6 +633,7 @@ Singleton {
     }
     if (event.cursor)
       cursor = event.cursor
+    record(event)
     const body = event.body || {}
     const who = actorName(event.actor)
     const stamp = event.at.slice(11, 16)
@@ -513,10 +694,15 @@ Singleton {
       break
     case "request":
       keep("reasons", event.request_id, body.reason || "")
+      append("", { kind: "request", key: event.request_id, who: who, stamp: stamp, at: at, work: work })
+      break
+    case "reply":
+      keep("replies", event.request_id, { option: body.option, who: who, body: body.body || "" })
       break
     case "notify":
       if (event.inbox_id)
         keep("notes", event.inbox_id, body.body || "")
+      append("", { who: who, text: body.body || "", stamp: stamp, at: at, work: work })
       break
     }
     if (!replaying)

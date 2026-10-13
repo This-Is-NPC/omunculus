@@ -39,6 +39,10 @@ Item {
   // Whether the records are still to come: the empty list shows it loads.
   property bool loading: false
   property bool active: false
+  // A row's height beside its columns, as a log's denser rows.
+  property int rowHeight: 52
+  // Whether the list keeps to its newest row while it is read at its end.
+  property bool followsEnd: false
   readonly property bool compact: width < 700
   // Below this a row shows its tools only when pointed at or selected, so its
   // text keeps the room.
@@ -124,6 +128,10 @@ Item {
     }
     keyNavigationEnabled: true
     activeFocusOnTab: true
+    // At the end when last moved, so a new row keeps it there.
+    property bool atEnd: true
+    onMovementEnded: atEnd = atYEnd
+    onCountChanged: if (table.followsEnd && atEnd) Qt.callLater(positionViewAtEnd)
     onActiveFocusChanged: if (activeFocus && currentIndex < 0 && count > 0) currentIndex = 0
     Keys.onReturnPressed: if (currentItem) currentItem.open()
     Keys.onDeletePressed: if (currentItem) table.removeRequested(currentItem.modelData)
@@ -169,7 +177,7 @@ Item {
       }
 
       width: list.width
-      height: table.compact ? 22 + lineCount * 20 : 52
+      height: table.compact ? 22 + lineCount * 20 : table.rowHeight
       opacity: table.dimmed(modelData) ? 0.4 : 1
       color: marked ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
       border.color: marked ? Theme.primary : Theme.line

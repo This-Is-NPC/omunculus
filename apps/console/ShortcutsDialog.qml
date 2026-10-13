@@ -24,6 +24,10 @@ ModalDialog {
       ["N", "new conversation"],
       ["H", "the conversations"]
     ]],
+    ["settings", [
+      ["Ctrl+1 … Ctrl+8", "choose a tab"],
+      ["Esc", "back to the agents, or close the settings"]
+    ]],
     ["conversations", [
       ["↑ · ↓", "choose"],
       ["Enter", "open"],

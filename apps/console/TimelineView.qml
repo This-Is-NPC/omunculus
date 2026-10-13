@@ -4,7 +4,8 @@ import "focus.js" as Focus
 import "kit/ui"
 
 // TimelineView is one thread of the conversation: what you and its agents
-// said, and what each run did on a line below its words, live or read back.
+// said, what each run did on a line below its words, and, in the main thread,
+// each request where it was made, live or read back.
 // Like a chat, it sits on the bottom and grows upwards, and it follows new
 // entries unless you scrolled up to read; then a pill counts what arrived out
 // of view and leads back to it. A turn streaming taller than the view is held
@@ -18,6 +19,9 @@ Item {
   property string thread: ""
   readonly property ListModel model: Omunculus.thread(thread)
   property string emptyText: "SAY WHAT YOU NEED"
+  // Whether requests show where they were made; beside the map they show on
+  // the node that asked instead.
+  property bool requestsShown: true
   // Counts changes to the entries, so each line knows again whether it
   // continues the turn before it.
   property int revision: 0
@@ -102,7 +106,8 @@ Item {
       return false
     const previous = timeline.model.get(index - 1)
     const current = timeline.model.get(index)
-    return previous.who === current.who && current.at - previous.at < root.pause
+    return previous.kind !== "request" && current.kind !== "request"
+      && previous.who === current.who && current.at - previous.at < root.pause
   }
 
   ListView {
@@ -183,19 +188,26 @@ Item {
       required property bool fresh
 
       width: timeline.width
-      sourceComponent: kind === "turn" ? turn : speech
+      sourceComponent: kind === "request" ? (root.requestsShown ? request : null) : kind === "turn" ? turn : speech
       readonly property bool selected: ListView.isCurrentItem && root.keyboard
 
       FocusRing { shown: entry.selected; anchors.margins: 0 }
 
-      // A new line slides in from its speaker's side. What the conversation
-      // held before it opened is just there.
+      // A new line slides in from its speaker's side, a request rises from
+      // below. What the conversation held before it opened is just there.
       transform: Translate { id: shift }
       ListView.onAdd: if (entry.fresh) arrive.start()
       ParallelAnimation {
         id: arrive
         NumberAnimation { target: entry; property: "opacity"; from: 0; to: 1; duration: 260; easing.type: Easing.OutCubic }
-        NumberAnimation { target: shift; property: "x"; from: entry.mine ? 28 : -28; to: 0; duration: 300; easing.type: Easing.OutCubic }
+        NumberAnimation {
+          target: shift
+          property: entry.kind === "request" ? "y" : "x"
+          from: entry.kind === "request" ? 16 : entry.mine ? 28 : -28
+          to: 0
+          duration: 300
+          easing.type: Easing.OutCubic
+        }
       }
 
       Component {
@@ -207,6 +219,15 @@ Item {
           mine: entry.mine
           stamp: entry.stamp
           continued: root.revision >= 0 && root.continues(entry.index)
+        }
+      }
+
+      Component {
+        id: request
+        RequestDecision {
+          width: entry.width
+          key: entry.key
+          stamp: entry.stamp
         }
       }
 

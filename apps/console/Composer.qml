@@ -4,16 +4,21 @@ import "kit/ui"
 
 // Composer is where you write: in the main thread, to the root agent; in a
 // work, to that work's agent, or a note its agents read without a new run.
-// Above the box, while agents run, who is working. In the box, while anything
-// waits on you, how much does, and the way to the map where it is answered.
+// Sending shows the trace while the agent you write to is working; the agents
+// below it never hold it. In the box, while anything waits on you, how much
+// does, and the way to the agents map where it is answered.
 ColumnLayout {
   id: composer
 
   property bool compact: false
   // The work written to, or "" for the main thread.
   property string work: ""
+  // Whether it leads to what waits on you; not where that is answered.
+  property bool pendingShown: true
 
-  readonly property bool busy: Omunculus.running.length > 0
+  // Whether the agent written to has a run open: the root agent's, at depth 0,
+  // in the main thread; the work's own in a work.
+  readonly property bool busy: work === "" ? Omunculus.running.some(run => String(run.depth) === "0") : Omunculus.busy(work)
 
   signal pendingChosen()
 
@@ -45,26 +50,6 @@ ColumnLayout {
       Omunculus.note(value, composer.work)
   }
 
-  // Who is working now, so the window needs no other sign of it.
-  Row {
-    visible: composer.busy
-    spacing: 10
-    LoadingTrace {
-      anchors.verticalCenter: parent.verticalCenter
-      width: 64
-      height: 12
-      running: composer.busy
-      tone: Omunculus.toneOf(Omunculus.running.length > 0 ? Omunculus.running[0].agent : "")
-    }
-    Label {
-      anchors.verticalCenter: parent.verticalCenter
-      text: Omunculus.running.map(run => run.agent).filter((name, index, all) => all.indexOf(name) === index).join(", ")
-        + (Omunculus.running.length > 1 ? " are" : " is") + " working…"
-      color: Theme.dim
-      font.pixelSize: 11
-    }
-  }
-
   Rectangle {
     Layout.fillWidth: true
     implicitHeight: 42
@@ -88,7 +73,7 @@ ColumnLayout {
         id: pendingButton
         dense: true
         role: "navigation"
-        visible: Omunculus.pending > 0
+        visible: composer.pendingShown && Omunculus.pending > 0
         tone: Theme.warning
         armed: true
         icon: "warning"
