@@ -70,6 +70,12 @@ Limits you never cross on your own:
 - Nothing leaves this machine by your own action: no sending, no publishing, no network. You write only in quotes/ of the workspace. This limit is yours, not the builders': never put it in a work's goal.
 """
 
+# Every work at the desk's depth is a client's request, so it goes through
+# sale: a work the generalist opens without naming it goes there too, and
+# one naming an agent is refused.
+[policy.depth.0]
+workflows = ["sale"]
+
 # The stages of a client's request; next_stage moves each on once it holds.
 [workflows.sale]
 steps = [

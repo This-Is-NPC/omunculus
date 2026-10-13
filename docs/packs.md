@@ -56,7 +56,13 @@ named origins while preserving child waits ([requests](requests.md)).
 Each of the sales desk's conversations is one client's: the project
 importing it sets `[project] conversations`, so no client's proposal,
 design or site is in another's reach, and the dream team's deploy tools
-name each conversation's apps apart.
+name each conversation's apps apart. Its depth layer requires the
+workflow `sale` at its depth, so every work there is a client's request
+the seller works through it: a work the generalist opens without naming
+it goes through `sale`, and one naming an agent is refused. The system
+team beside it opens no work, so the requirement leaves it as it is; a
+project whose other agents at that depth open works imports the desk a
+depth below them.
 
 The sales desk and its `next_stage` refusal name the logical `owner` route,
 which the project importing it configures, as do the dream team's
@@ -88,8 +94,8 @@ The default preset imports the system team (`priv/packs/system`):
   looped — and proposes, with the runs that show it, the change in the
   teams' texts, tools or workflows.
 
-The auditor and the refiner are granted the `config` group but denied its
-`propose_pack`: importing a pack is the steward's.
+The auditor and the refiner are granted `config`, `overview` and
+`propose_config` but not `propose_pack`: importing a pack is the steward's.
 
 Their proposals go on the logical `owner` route, which a project importing
 the team declares, as the default preset does with

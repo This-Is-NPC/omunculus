@@ -17,6 +17,11 @@ the seller as the creative director who pitches and closes.
 
 Each client's request is a work that goes through the stages of the
 workflow `sale`: qualify, design, assess, propose, owner, build. The
+pack's depth layer requires it at the desk's depth (`[policy.depth.0]
+workflows = ["sale"]`): a work the generalist opens goes through `sale`
+whether it names it or not, and one naming an agent — the generalist
+itself included — is refused, so the generalist never holds a work of its
+own. The
 seller asks the client through requests — a choice, as accepting the price,
 with named options the client gets as buttons — records progress with comments and moves it on with
 the pack's tool `next_stage`, in place of `done`: it refuses the move

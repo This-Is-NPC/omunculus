@@ -460,6 +460,44 @@ defmodule Omunculus.EvalProjectTest do
     end
   end
 
+  for configuration <- ~w(sales-desk agency) do
+    test "#{configuration} takes every work the generalist opens through sale", %{conn: conn} do
+      dir = Fixtures.tmp_dir()
+
+      assert {:ok, path} =
+               EquivalentExchange.Project.build(dir, unquote(configuration), {"fake", false}, nil)
+
+      assert {:ok, config} = Config.load(path)
+      conversation = conversation(conn)
+      project = %Omunculus.Project{conn: conn, dir: config.root, config_path: path}
+      item = %{"title" => "Padaria Sol: a site", "goal" => "Quero um site."}
+      sales = fn -> configured_actor(conn, config, conversation, "sales", nil, 0) end
+
+      assert {:ok, %{ok: false, output: refusal}, _events} =
+               Harness.dispatch(
+                 project,
+                 "work",
+                 %{"report" => "Opened.", "works" => [Map.put(item, "agent", "sales")]},
+                 sales.()
+               )
+
+      assert refusal =~ "works at that depth go through the workflow sale"
+
+      assert {:ok, %{ok: true}, events} =
+               Harness.dispatch(
+                 project,
+                 "work",
+                 %{"report" => "Opened.", "works" => [item]},
+                 sales.()
+               )
+
+      work_id = Enum.find(events, &(&1.type == "work")).work_id
+
+      assert {:ok, %{workflow: "sale", stage: "qualify", assignee: "seller"}} =
+               Store.view(conn, "work", work_id)
+    end
+  end
+
   test "agency generalist batches received questions and distributes one client answer", %{
     conn: conn
   } do
@@ -579,6 +617,7 @@ defmodule Omunculus.EvalProjectTest do
         },
         [
           "ask",
+          "work",
           "promote",
           "sandbox.network",
           "request_access",
