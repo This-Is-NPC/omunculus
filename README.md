@@ -5,7 +5,11 @@ A project is one `omunculus.toml` and one SQLite store: you send a message,
 a run opens, the model calls tools inside a Bubblewrap sandbox until it
 ends, every step is recorded as an event, and the store applies what those
 tools emit — works handed down to other agents, questions to you, grants.
-It runs from the command line or behind an optional HTTP server.
+It runs from the command line, or behind an optional HTTP server that the
+console, the mailbox and the studio apps open on.
+
+There are no pictures of it working yet; [the screens](docs/screens.md#pictures)
+say why and walk every screen in words.
 
 ## Install
 
@@ -47,58 +51,63 @@ answer resumes it. [Requests](docs/requests.md).
 and answering requests are tools, folders with a manifest, replaceable by
 name. [Tools](docs/tools.md).
 
-Every verb is in [the command line](docs/cli.md). The file the verbs read is
-[the TOML](docs/config.md). Shapes that file can take are
-[possibilities](docs/possibilities.md). What a send actually does to the store
-is [the cycle](docs/cycle.md). Who may call what is [the ceiling](docs/ceiling.md).
-A folder of your own is [a tool](docs/tools.md). A team distributed as a folder is
-[a pack](docs/packs.md). How the code is laid out is
-[the architecture](docs/architecture.md).
+**Teams come as packs.** A pack is a folder of agents, workflows, tools and
+workspace files, imported at a depth on your models.
+[Packs](docs/packs.md).
 
-**Clients use the server contract.** The server serves each project on a
+**The apps are clients of the server.** The server serves each project on a
 local socket, and on TCP with signed tokens, under a versioned `/v1`
-contract. [The server](docs/server.md), [clients](docs/clients.md).
+contract that the apps and any other client share.
+[The server](docs/server.md), [clients](docs/clients.md).
 
 ## The interface
 
 The command line is `omunculus <command> [--key value]`; every command is
 in [the command line](docs/cli.md).
 
-Any program that speaks the server's HTTP contract is a client; what it may
-rely on is in [clients](docs/clients.md). The repository's own are under
-`apps/`, each opened by `apps/kit/run <app>`. The console opens a window on a project of a running
-[server](docs/server.md). It talks to the project's local socket, so it acts
-as the local user:
+The console, the window on a project, takes these keys everywhere; each
+screen's own are in [the screens](docs/screens.md):
 
-```bash
-bin/omunculus serve --config server.toml
-apps/kit/run console --config server.toml --project demo
-```
+| Keys | What they do |
+| --- | --- |
+| 1 · 2 · … | the page of that number |
+| Ctrl+Tab · Ctrl+Shift+Tab | the next or the previous page |
+| Esc | let go of what the page holds, then back |
+| ? · F1 | every key, by where it works |
 
-`--project` may be left out when the registry holds one project.
+## What it does not do
 
-From a checkout, `mise run up` starts the development server on `dev/`,
-whose agents use `openai/gpt-6-luna` through OpenRouter with the
-`OPENROUTER_API_KEY` of `.env`, and the agency the packs under `packs/`
-make; with it running, `mise run dev:console`, `dev:studio` and
-`dev:mailbox` open the apps on it. `mise run dev:reset` starts both
-projects over; see [the development environment](docs/development.md).
+- It hosts no model: it calls a provider's API, a program or an Elixir
+  module ([the compatible providers](docs/config.md#compatible-providers)).
+- The server has no chat page of its own; the apps and other clients are
+  its interface.
+- It does not protect you from your own tools and hooks: it guarantees the
+  workflow sequence, the ceiling per stage and the store rules.
+- It installs neither Bubblewrap nor the runtimes commands use.
+- It does not migrate a store made by an older schema; such a store is
+  recreated.
 
-It lists the conversations and follows the open one live in three pages,
-chosen by number or from the tabs down the left, each with its commands in a
-bar. The conversation page is a chat between you and the root agent: what
-each of you said and, on a line below each run, what the agent did. The map
-shows the agents at work, each work handed down joined to the one it came
-from; whatever an agent asked and still waits for, and the notes it left
-you, hang from its node, with the options to answer. The composer counts
-what waits on you and leads to the map. Opening a node shows what that agent
-said and did, and writes to it. The log is every event, a row each. What the
-conversation cost opens from the conversation page's bar. `apps/kit/run studio` opens the project's
-settings, `apps/kit/run mailbox` a mailbox over every project; each is
-described in [console](docs/console.md), [studio](docs/studio.md) and
-[mailbox](docs/mailbox.md). They need
-[Quickshell](https://quickshell.org/), `curl` with WebSocket support and a
-Wayland session.
+## Known limitations
+
+- Linux only, with Bubblewrap: commands run in its namespaces.
+- A root in `[execution] runtimes` exposes every binary it holds; it is no
+  per-binary allowlist ([the TOML](docs/config.md#required-tables)).
+- A project's socket path must fit in 107 bytes, or the server does not
+  start ([how to run the server](docs/how-to-run-the-server.md)).
+- A provider's rate limits and limits on requests in flight bound how many
+  runs can call it at once.
+
+## What is broken
+
+Two defects are known; [what does not work](docs/what-does-not-work.md)
+says what to do meanwhile:
+
+1. Some refusals print as Elixir terms, as `send` without `--agent` in a
+   project with several agents at depth 0.
+2. The codex-like preset's `cursor` model names a program the preset does
+   not ship.
+
+Contributors start at [the design](docs/design.md).
 
 ## Requirements
 
@@ -108,6 +117,8 @@ Wayland session.
   OTP 27 and Deno 2.9.
 - `git`, only with `[store] changes`, which records the files each model
   call changed.
+- For the apps: [Quickshell](https://quickshell.org/), `curl` with
+  WebSocket support and a Wayland session.
 
 ## License
 
