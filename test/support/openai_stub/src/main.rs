@@ -712,6 +712,25 @@ struct MessagesTool {
     input_schema: Value,
 }
 
+// Every reply opens with a thinking block whose text is left out and whose
+// signature comes alone, as Claude's do; a later turn must send it back
+// signed, or the reply is refused as the API refuses it.
+const THINKING_SIGNATURE: &str = "stub-signature";
+
+fn unsigned_thinking(messages: &[Value]) -> bool {
+    messages
+        .iter()
+        .filter(|message| message.get("role").and_then(Value::as_str) == Some("assistant"))
+        .flat_map(|message| match message.get("content") {
+            Some(Value::Array(items)) => items.iter().collect::<Vec<_>>(),
+            _ => Vec::new(),
+        })
+        .any(|item| {
+            item.get("type").and_then(Value::as_str) == Some("thinking")
+                && item.get("signature").and_then(Value::as_str) != Some(THINKING_SIGNATURE)
+        })
+}
+
 fn count_tool_results(messages: &[Value]) -> u64 {
     messages
         .iter()
@@ -743,6 +762,11 @@ async fn messages(State(state): State<Arc<AppState>>, body: Bytes) -> Response {
         })
         .collect();
     state.set_last_tools(last_tools).await;
+
+    if unsigned_thinking(&request.messages) {
+        guard.finish(false);
+        return error_response(StatusCode::BAD_REQUEST, "a thinking block came back without its signature");
+    }
 
     let config = state.config().await;
     match state
@@ -826,12 +850,16 @@ async fn messages(State(state): State<Arc<AppState>>, body: Bytes) -> Response {
         };
         let mut events = vec![
             ("message_start", json!({"type": "message_start", "message": {"id": "benchmark", "type": "message", "role": "assistant", "content": [], "stop_reason": Value::Null}})),
-            ("content_block_start", json!({"type": "content_block_start", "index": 0, "content_block": start})),
+            ("content_block_start", json!({"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": "", "signature": ""}})),
+            ("content_block_delta", json!({"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": ""}})),
+            ("content_block_delta", json!({"type": "content_block_delta", "index": 0, "delta": {"type": "signature_delta", "signature": THINKING_SIGNATURE}})),
+            ("content_block_stop", json!({"type": "content_block_stop", "index": 0})),
+            ("content_block_start", json!({"type": "content_block_start", "index": 1, "content_block": start})),
         ];
         for delta in deltas {
-            events.push(("content_block_delta", json!({"type": "content_block_delta", "index": 0, "delta": delta})));
+            events.push(("content_block_delta", json!({"type": "content_block_delta", "index": 1, "delta": delta})));
         }
-        events.push(("content_block_stop", json!({"type": "content_block_stop", "index": 0})));
+        events.push(("content_block_stop", json!({"type": "content_block_stop", "index": 1})));
         events.push(("message_delta", json!({"type": "message_delta", "delta": {"stop_reason": stop_reason}})));
         events.push(("message_stop", json!({"type": "message_stop"})));
         return event_stream(
@@ -847,7 +875,7 @@ async fn messages(State(state): State<Arc<AppState>>, body: Bytes) -> Response {
             "id": "benchmark",
             "type": "message",
             "role": "assistant",
-            "content": content,
+            "content": [json!({"type": "thinking", "thinking": "", "signature": THINKING_SIGNATURE}), content[0].clone()],
             "stop_reason": stop_reason
         })),
     )

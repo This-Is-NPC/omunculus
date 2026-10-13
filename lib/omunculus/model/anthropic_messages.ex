@@ -265,6 +265,22 @@ defmodule Omunculus.Model.AnthropicMessages do
       %{"type" => "input_json_delta", "partial_json" => json} ->
         %{reply | json: Map.update(reply.json, index, json, &(&1 <> json))}
 
+      # A thinking block goes back as it came: its text, which may be left
+      # out, and the signature that vouches for it.
+      %{"type" => "thinking_delta", "thinking" => thinking} ->
+        %{
+          reply
+          | blocks:
+              Map.update!(
+                reply.blocks,
+                index,
+                &Map.update(&1, "thinking", thinking, fn prior -> prior <> thinking end)
+              )
+        }
+
+      %{"type" => "signature_delta", "signature" => signature} ->
+        %{reply | blocks: Map.update!(reply.blocks, index, &Map.put(&1, "signature", signature))}
+
       _other ->
         reply
     end
