@@ -10,8 +10,7 @@ Row {
 
   required property var thread
   readonly property var status: thread.status
-  readonly property color tone: ({ working: Theme.primary, waiting: Theme.warning, awaited: Theme.warning, stalled: Theme.warning,
-    failed: Theme.error, done: Theme.success })[status.state] || Theme.dim
+  readonly property color tone: Mail.toneOfState(status.state)
 
   visible: status.label !== ""
   spacing: 6

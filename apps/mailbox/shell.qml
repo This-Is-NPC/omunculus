@@ -156,17 +156,26 @@ ShellRoot {
             }
           }
 
-          // The threads folded away leave their head's arrow, to unfold them.
-          Item {
+          // The threads folded away leave their head's arrow, to unfold them,
+          // over a rail of the threads, to move between them.
+          ColumnLayout {
             visible: !window.narrow && window.listFolded
             Layout.fillHeight: true
+            Layout.fillWidth: false
             Layout.preferredWidth: 44
+            Layout.leftMargin: 6
+            Layout.rightMargin: 6
+            spacing: 10
             ColumnHead {
-              anchors { left: parent.left; right: parent.right; top: parent.top }
+              Layout.fillWidth: true
               title: "threads"
               folded: true
               shortcut: "ctrl+l"
               onToggle: window.listFolded = false
+            }
+            ThreadRail {
+              Layout.fillWidth: true
+              Layout.fillHeight: true
             }
           }
 

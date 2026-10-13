@@ -609,6 +609,14 @@ Singleton {
     return date.toDateString() === new Date().toDateString() ? Qt.formatTime(date, "HH:mm") : Qt.formatDate(date, "d MMM")
   }
 
+  // The tone of a thread's state: the accent while an agent works, the
+  // warning's when it waits on you or stalled, the error's when it failed,
+  // the success's when it is done.
+  function toneOfState(state) {
+    return ({ working: Theme.primary, waiting: Theme.warning, awaited: Theme.warning, stalled: Theme.warning,
+      failed: Theme.error, done: Theme.success })[state] || Theme.dim
+  }
+
   // Whether a name is of an agent of a project, rather than a person's.
   function isAgent(project, name) {
     return (rosters[project] || []).some(agent => agent.name === name)
