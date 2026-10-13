@@ -191,6 +191,7 @@ Item {
       required property string who
       required property string text
       required property bool mine
+      required property bool note
       required property string stamp
       required property real at
       required property bool streaming
@@ -229,6 +230,7 @@ Item {
           who: entry.who
           text: entry.text
           mine: entry.mine
+          note: entry.note
           stamp: entry.stamp
           files: entry.files
           continued: root.revision >= 0 && root.continues(entry.index)

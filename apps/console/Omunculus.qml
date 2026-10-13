@@ -530,7 +530,7 @@ Singleton {
 
   // Gives each agent its colour the first time the window meets it.
   function meet(names) {
-    const fresh = names.filter(name => name && name !== "you" && tones[name] === undefined)
+    const fresh = names.filter(name => name && name !== "you" && name !== "harness" && tones[name] === undefined)
     if (fresh.length === 0)
       return
     const next = Object.assign({}, tones)
@@ -627,10 +627,12 @@ Singleton {
     }
   }
 
+  // Who an event's actor is: an agent by its name, the harness as "harness",
+  // and any person as you.
   function actorName(actor) {
     if (!actor)
       return ""
-    return actor.kind === "agent" ? actor.id : "you"
+    return actor.kind === "agent" ? actor.id : actor.kind === "harness" ? "harness" : "you"
   }
 
   function append(key, entry) {
@@ -641,7 +643,7 @@ Singleton {
     }
     const model = threads[key]
     model.append(Object.assign({
-      kind: "speech", key: "", who: "", text: "", mine: false, stamp: "", at: 0, work: "",
+      kind: "speech", key: "", who: "", text: "", mine: false, note: false, stamp: "", at: 0, work: "",
       streaming: false, partial: "", steps: "[]", files: "[]",
       fresh: !replaying
     }, entry))
@@ -802,7 +804,8 @@ Singleton {
     case "notify":
       if (event.inbox_id)
         keep("notes", event.inbox_id, body.body || "")
-      append("", { key: event.inbox_id || "", who: who, text: body.body || "", stamp: stamp, at: at, work: work })
+      // A note the harness left is no one's words.
+      append("", { key: event.inbox_id || "", who: who, note: who === "harness", text: body.body || "", stamp: stamp, at: at, work: work })
       break
     }
     if (!replaying)

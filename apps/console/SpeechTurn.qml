@@ -3,7 +3,8 @@ import "kit/ui"
 
 // SpeechTurn is one thing said in the conversation, in a box, with the files
 // attached with it below: yours on the right, each agent's on the left tinted
-// with its colour, under its portrait. A line that continues the same
+// with its colour, under its portrait; a note the harness left, no one's
+// words, on the left too, muted, under NOTE where a name would be. A line that continues the same
 // speaker's turn drops the name and time and sits close to the one before.
 Item {
   id: turn
@@ -11,6 +12,7 @@ Item {
   required property string who
   required property string text
   required property bool mine
+  property bool note: false
   required property string stamp
   // The files attached with it, as JSON.
   required property string files
@@ -37,8 +39,8 @@ Item {
       spacing: 8
       x: turn.mine ? body.width - width : 0
       Rectangle { visible: turn.mine; width: 5; height: 5; anchors.verticalCenter: parent.verticalCenter; color: turn.tone }
-      Portrait { visible: !turn.mine && turn.who !== ""; width: 20; height: 20; anchors.verticalCenter: parent.verticalCenter; agent: turn.who }
-      Label { text: turn.who.toUpperCase(); color: turn.tone; font.pixelSize: 10; font.letterSpacing: 2.5 }
+      Portrait { visible: !turn.mine && !turn.note && turn.who !== ""; width: 20; height: 20; anchors.verticalCenter: parent.verticalCenter; agent: turn.who }
+      Label { text: turn.note ? "NOTE" : turn.who.toUpperCase(); color: turn.tone; font.pixelSize: 10; font.letterSpacing: 2.5 }
       Label { text: turn.stamp; color: Qt.alpha(turn.tone, 0.7); font.pixelSize: 9; font.letterSpacing: 1 }
     }
 
