@@ -45,9 +45,13 @@ All are QML on Quickshell and share `apps/kit`:
   them `FlowCanvas`, a canvas that moves, zooms and pinches, and its
   `ZoomControl`, and `TabRail`, an app's pages as a carousel down the left
   edge, with `PageBar`, the commands of the page on screen beside it and the
-  app's readout, which the app gives it. It knows nothing of Omunculus.
+  app's readout, which the app gives it, and `FilePicker` and `FileChip`,
+  the files a message carries and a file attached in a conversation. It
+  knows nothing of Omunculus.
 - `apps/kit/client`: `Http`, which makes each request to a socket through
-  `curl` or saves its answer into a file, `AgentImages`, which keeps the
+  `curl` or saves its answer into a file, posts a message with files through
+  `post-with-files` and saves and opens an attached file through
+  `open-attachment`, the scripts beside it, `AgentImages`, which keeps the
   agents' images in Quickshell's cache, and `Requests.js`, the helpers
   that read a request's status and participants and build a reply.
 
