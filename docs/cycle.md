@@ -157,8 +157,9 @@ reach `max_retries` (`[policy]`, or the work's workspace), the harness
 does not open another run. A work with a parent gets `break` with the
 comment `<agent> stopped the work "<title>" without a report after N
 runs.`, which parks it and wakes the parent waiting on it, whose run
-opens. A root work gets a request along the configured route instead,
-opened by the harness with that sentence as its reason and the options
+opens. A root work gets a request instead, on the `owner` route where
+`[policy] request_routes` names one and along the default route
+otherwise, opened by the harness with that sentence as its reason and the options
 `retry` (no call) and `cancel`, and an inbox note, the sentence followed
 by `Answer it with cancel or retry.`; the work waits on it. `reply --option retry`
 opens another run of the work; `reply --option cancel` cancels it. The

@@ -79,6 +79,9 @@ projects do. Without it the proposal is refused as an unknown route, naming
 the routes there are; there is no fallback to the default route. In the
 agency, whose default route passes the sales generalist, the system team's
 proposals reach the person directly instead of being reworded on the way.
+So does the harness's retry/cancel request for a root work its agent
+stopped on past `max_retries`, in a project with the `owner` route; in one
+without, it follows the default route.
 
 ## Forms and effects
 
@@ -94,7 +97,7 @@ proposals reach the person directly instead of being reworded on the way.
 | `wait` | A root work that only the person can move on later — a decision they will think over, something they will send — waits for their next message rather than asking again: their answer stays the answer, and the message reopens the work. A work below another cannot wait on a message. |
 | `promote` approval | The release agent requests permission with `request_access`; it follows the configured chain. Intermediaries must escalate: an agent cannot answer a request containing a sealed grant option, including with deny or text. Only the human decides; the pack's `promote` tool publishes once its grant makes it available. |
 | `propose_config`, `propose_pack` | Validated proposals whose apply option calls configure or pack with revision checks, always on the logical `owner` route. A text reply records advice without applying the proposal. |
-| Harness retry/cancel | A routed request after root retry exhaustion. Retry is a named decision with no calls; cancel chains cancellation. Child retry exhaustion remains a stopping break. |
+| Harness retry/cancel | A routed request after root retry exhaustion, on the logical `owner` route where the project configures it, else the default route. Retry is a named decision with no calls; cancel chains cancellation. Child retry exhaustion remains a stopping break. |
 | Unanswered receiver | Linked escalation through the same action and routing, of the request the run was opened for or, for an intermediary resumed by a text answer, of the origins the answer returned to it; an upstream human request gets an inbox notification. |
 
 An agent's run opened by the answer to its own question — a reply to its

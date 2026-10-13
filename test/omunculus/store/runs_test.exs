@@ -190,7 +190,7 @@ defmodule Omunculus.Store.RunsTest do
     assert Enum.map(events, & &1.type) == ["start-run", "model", "tool", "end-run"]
   end
 
-  defp unreported(conn, run, max_retries),
+  defp unreported(conn, run, max_retries, config \\ Fixtures.config()),
     do:
       Runs.unreported(
         conn,
@@ -198,7 +198,7 @@ defmodule Omunculus.Store.RunsTest do
         max_retries,
         &"#{&2} stopped #{&3} after #{&1}",
         &"#{&1} #{Enum.join(&2, " ")}",
-        Fixtures.config()
+        config
       )
 
   test "unreported retries a work while its runs without end are within max_retries",
@@ -258,6 +258,28 @@ defmodule Omunculus.Store.RunsTest do
              Query.all(conn, "SELECT * FROM comments WHERE inbox_id IS NOT NULL")
 
     assert comment.body == "concierge stopped a work after 1 cancel retry"
+  end
+
+  test "unreported asks about a root on the owner route where the project names one",
+       %{conn: conn} do
+    desk = %{"kind" => "human", "issuer" => "test", "subject" => "desk"}
+    default = %{"via" => [desk]}
+    owner = %{"name" => "owner", "via" => ["origin"]}
+    origin = Omunculus.Participant.human("local", Omunculus.Operations.local_principal().subject)
+
+    for {routes, arbiter} <- [{[default], desk}, {[owner, default], origin}] do
+      config = %{Fixtures.config() | request_routes: routes}
+      work_id = Fixtures.insert(conn, :works)
+      run = Fixtures.open_run(conn, %{work_id: work_id})
+      {:ok, _} = Runs.close(conn, run.id)
+
+      assert {:ok, {:stopped, [request, _notify]}} = unreported(conn, run, 0, config)
+
+      assert {:ok, %{arbiter: chosen}} =
+               Query.one(conn, "SELECT arbiter FROM requests WHERE id = ?", [request.request_id])
+
+      assert Jason.decode!(chosen) == arbiter
+    end
   end
 
   test "begin refuses a cancelled work, and a work's own run on a work not open",

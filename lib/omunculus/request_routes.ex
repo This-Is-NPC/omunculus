@@ -2,6 +2,18 @@ defmodule Omunculus.RequestRoutes do
   @moduledoc "Validates TOML request routes; the first matching rule selects its ordered destinations."
   alias Omunculus.Participant
 
+  @doc """
+  The logical route of what is the project owner's to decide, whoever else
+  the default route passes: a change to the project, and a root work its
+  agent stopped on past `[policy] max_retries`.
+  """
+  @spec owner() :: String.t()
+  def owner, do: "owner"
+
+  @doc "Whether `routes` configure the route `name`."
+  @spec named?([map], String.t()) :: boolean
+  def named?(routes, name), do: Enum.any?(routes, &(&1["name"] == name))
+
   def parse(nil, _agents, _workflows), do: {:error, {:policy, {:required, :request_routes}}}
 
   def parse(routes, agents, workflows) when is_list(routes) and routes != [] do
