@@ -67,4 +67,8 @@ defmodule Omunculus.Store do
   defdelegate continues(conn, run_id, body), to: Runs
   defdelegate open_runs(conn), to: Runs
   defdelegate left(conn), to: Runs
+  defdelegate uncaused(conn), to: Runs
+  defdelegate begun?(conn, opening, event), to: Runs
+  defdelegate stopped(conn), to: Runs
+  defdelegate runnable(conn, params), to: Runs
 end

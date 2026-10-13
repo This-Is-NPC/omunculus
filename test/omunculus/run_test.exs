@@ -2,7 +2,7 @@ defmodule Omunculus.RunTest do
   @human Omunculus.Fixtures.defaults(:requests).arbiter
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Fixtures, Id, Project, Run, Store}
+  alias Omunculus.{CLI, Fixtures, Harness, Id, Operations, Project, Run, Store}
   alias Omunculus.Store.Query
   alias Omunculus.Tools.Out
 
@@ -1649,7 +1649,7 @@ defmodule Omunculus.RunTest do
 
       ask = %{"reason" => "Retry the deploy?", "options" => %{"retry" => [], "stop" => []}}
 
-      {:ok, _events} =
+      {:ok, events} =
         Store.record_tools(
           project.conn,
           seller.id,
@@ -1674,6 +1674,7 @@ defmodule Omunculus.RunTest do
         Fixtures.open_run(project.conn, %{
           agent: "sales",
           request_id: request.id,
+          cause_id: Enum.find(events, &(&1.type == "request")).id,
           ceiling: ceiling
         })
 
@@ -1686,6 +1687,179 @@ defmodule Omunculus.RunTest do
       assert linked.arbiter == @human
       assert :ok = Run.recover(project)
       assert [_linked] = passed_on(project, request)
+
+      Project.close(project)
+    end
+  end
+
+  describe "runs due that never began" do
+    # A process that stops loses the runs it had made due and not yet
+    # begun: each test records the call that made one due without opening
+    # it, as the process did before stopping, then recovers the project.
+    defp due_config(dir) do
+      write_config(dir, """
+      [agents.lead]
+      depth = 0
+      text = "lead"
+      tools = ["work", "reply", "end"]
+
+      [agents.helper]
+      depth = 1
+      text = "helper"
+      tools = ["done", "ask", "end"]
+
+      [policy]
+      max_retries = 2
+      request_routes = [{ via = [{ kind = "agent", agent = "lead" }, "origin"] }]
+      """)
+
+      project = open_project(dir)
+      Fixtures.use_model(project, fn _assembled, _tools, call -> call.("end", %{}) end)
+      project
+    end
+
+    defp lost_call(project, run, name, args) do
+      ctx = %{trigger: "model", run_id: run.id, author: "agent", agent: run.agent}
+      assert {:ok, %{ok: true}, events} = Harness.dispatch(project, name, args, ctx)
+      {:ok, _closed} = Store.close_run(project.conn, run.id)
+      events
+    end
+
+    defp due_run(project, fields) do
+      ceiling = %{
+        have: ["work", "done", "ask", "reply", "end", "comment", "delegate", "continue"],
+        askable: [],
+        sealed: [],
+        blocked: [],
+        overrides: %{}
+      }
+
+      Fixtures.open_run(project.conn, Map.merge(%{ceiling: ceiling}, fields))
+    end
+
+    defp caused(project, events, type) do
+      event = Enum.find(events, &(&1.type == type))
+      {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs WHERE cause_id = ?", [event.id])
+      runs
+    end
+
+    # Recovering twice opens the lost run once.
+    defp recovered(project, events, type) do
+      assert caused(project, events, type) == []
+      assert :ok = Run.recover(project)
+      assert :ok = Run.recover(project)
+      caused(project, events, type)
+    end
+
+    test "a message's run", %{dir: dir} do
+      project = due_config(dir)
+
+      assert {:ok, _out, events} =
+               Operations.call(project, "send", %{"message" => "hi"}, %{}, false)
+
+      assert [%{agent: "lead", status: "done"}] = recovered(project, events, "prompt")
+
+      Project.close(project)
+    end
+
+    test "the run of a root work", %{dir: dir} do
+      project = due_config(dir)
+      run = due_run(project, %{agent: "lead"})
+      works = [%{"title" => "Site", "goal" => "Build it", "agent" => "lead"}]
+      events = lost_call(project, run, "work", %{"report" => "On it", "works" => works})
+
+      assert [%{agent: "lead", via: "work"}] = recovered(project, events, "work")
+
+      Project.close(project)
+    end
+
+    test "the run of a delegated work", %{dir: dir} do
+      project = due_config(dir)
+      root = Fixtures.insert(project.conn, :works, %{assignee: "lead"})
+      run = due_run(project, %{agent: "lead", work_id: root, own: true})
+      works = [%{"title" => "Page", "goal" => "Write it", "agent" => "helper"}]
+      events = lost_call(project, run, "work", %{"report" => "Handing down", "works" => works})
+
+      assert [%{agent: "helper", via: "delegate"}] = recovered(project, events, "delegate")
+
+      Project.close(project)
+    end
+
+    test "the run of a parent its last child continued", %{dir: dir} do
+      project = due_config(dir)
+
+      root =
+        Fixtures.insert(project.conn, :works, %{
+          assignee: "lead",
+          state: "waiting",
+          waiting: "child"
+        })
+
+      child =
+        Fixtures.insert(project.conn, :works, %{
+          assignee: "helper",
+          parent_id: root
+        })
+
+      run = due_run(project, %{agent: "helper", depth: 1, work_id: child, own: true})
+      events = lost_call(project, run, "done", %{"report" => "Written"})
+
+      assert [%{agent: "lead", work_id: ^root}] = recovered(project, events, "continue")
+
+      Project.close(project)
+    end
+
+    test "the run of an agent a request was routed to", %{dir: dir} do
+      project = due_config(dir)
+
+      root =
+        Fixtures.insert(project.conn, :works, %{
+          assignee: "lead",
+          state: "waiting",
+          waiting: "child"
+        })
+
+      child =
+        Fixtures.insert(project.conn, :works, %{
+          assignee: "helper",
+          parent_id: root
+        })
+
+      run = due_run(project, %{agent: "helper", depth: 1, work_id: child, own: true})
+      events = lost_call(project, run, "ask", %{"question" => "Which colour?"})
+
+      assert [%{agent: "lead", work_id: ^root}] = recovered(project, events, "request")
+
+      Project.close(project)
+    end
+
+    test "the retry of a work whose model stopped", %{dir: dir} do
+      project = due_config(dir)
+      root = Fixtures.insert(project.conn, :works, %{assignee: "lead"})
+      run = due_run(project, %{agent: "lead", work_id: root, own: true})
+      {:ok, _closed} = Store.close_run(project.conn, run.id)
+
+      assert :ok = Run.recover(project)
+      assert :ok = Run.recover(project)
+
+      assert {:ok, [%{via: "retry"}]} =
+               Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ? AND id != ?", [
+                 root,
+                 run.id
+               ])
+
+      Project.close(project)
+    end
+
+    test "a run that began is not opened again", %{dir: dir} do
+      project = due_config(dir)
+
+      assert {:ok, _out, events} =
+               Operations.call(project, "send", %{"message" => "hi"}, %{}, true)
+
+      assert [_run] = caused(project, events, "prompt")
+      assert :ok = Run.recover(project)
+      assert {:ok, [_only]} = Query.all(project.conn, "SELECT * FROM runs")
 
       Project.close(project)
     end

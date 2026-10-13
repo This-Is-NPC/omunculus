@@ -214,6 +214,38 @@ There is no `message` section when the opening came from `continue`,
 The model's final text does not reach the terminal. It is `EVENTS(model)`.
 `omunculus prompt` prints the assembled prompt, not that text.
 
+## A process that stops
+
+The runs due and not yet begun live only in the cycle, in the process
+that owns it: a run waiting for its work's turn or for a slot of
+`max_concurrent`, and the runs a call's actions asked for when the
+process stopped before making them due. Nothing records them as such.
+The store says what they were: every run names, as its `cause_id`, the
+event that made it due, and its `start-run` says whether it is the
+work's own run (`own`) or a named agent's. The server, opening a
+project, recovers it in this order:
+
+```text
+every run left open: a model event saying it was interrupted, then end-run
+every event that may ask for a run (prompt, reply, continue, break, cancel,
+  delegate, reopen, request, work) and that no run names as its cause:
+    the runs its action asks for now, as the follow-up does, kept when the
+    store would begin them and none began: for a named agent, no run of
+    that cause; for a work's own run, no own run of the work began after
+    the event (a work's own run due while another waited was merged into
+    it); a work's own runs found are one run
+every work still open whose last own run closed without end, no run of
+  its own found for it: what a run without a report gets — a retry, or
+  past max_retries the break or the request
+every request still pending at an agent whose last run for it closed:
+  on along its route, as an unanswered one goes
+then the runs found are due
+```
+
+A run found that the store refuses when it begins — its work cancelled,
+the request answered meanwhile — does not open, as in the cycle. The runs
+of calling hooks are not recovered.
+
 ## Work
 
 ```text

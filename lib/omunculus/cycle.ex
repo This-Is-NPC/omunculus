@@ -19,7 +19,8 @@ defmodule Omunculus.Cycle do
   `link/2`, called from the process of a run the store has just linked to
   a work, makes that run the work's open run until it finishes.
   A run that does not begin because its work is no longer open, or is
-  cancelled, is not an error.
+  cancelled, is not an error. The runs due and not yet begun are only
+  here; `Run.recover/1` finds again those a stopped process lost.
   """
 
   use GenServer

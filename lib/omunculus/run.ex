@@ -34,6 +34,13 @@ defmodule Omunculus.Run do
   an inbox entry naming the request. A run opened for a named agent is
   not retried. A cancelled work does not open runs, and a work's own run
   (no named agent) does not open once its work is no longer open.
+
+  `recover/1` takes up what a process that stopped left: it closes the
+  runs left open, then makes due the runs events asked for that never
+  began (`Harness.lost/1`, a work's own ones as one), gives each work still
+  open whose last own run stopped without `end`, and no run found for it,
+  what that run's close decides, passes on the requests left at an agent,
+  as `unanswered` does, and opens the runs found last.
   """
 
   alias Omunculus.{Ceiling, Config, Cycle, Harness, Mcp, Project, Prompt, Secrets, Store}
@@ -43,15 +50,28 @@ defmodule Omunculus.Run do
 
   @spec recover(Project.t()) :: :ok | {:error, term}
   def recover(project) do
-    with {:ok, runs} <- Store.open_runs(project.conn),
-         {:ok, config} <- Config.load(project.config_path),
-         :ok <- each(runs, &recover_one(project, config, &1)),
-         {:ok, left} <- Store.left(project.conn) do
-      # A process that stopped between a run's close and its follow-up
-      # left a request pending at an agent that no run will answer.
-      each(left, &unanswered(project, %{run: &1, config: config, execution: nil}))
-    end
+    Cycle.run(project, nil, fn project ->
+      with {:ok, runs} <- Store.open_runs(project.conn),
+           {:ok, config} <- Config.load(project.config_path),
+           :ok <- each(runs, &interrupt(project, &1)),
+           {:ok, lost} <- Harness.lost(project),
+           lost = Enum.uniq_by(lost, &turn/1),
+           {:ok, stopped} <- Store.stopped(project.conn),
+           due = MapSet.new(lost, &turn/1),
+           stopped = Enum.reject(stopped, &MapSet.member?(due, {:own, &1.work_id})),
+           :ok <- each(stopped, &retry(project, config, &1)),
+           {:ok, left} <- Store.left(project.conn),
+           # A process that stopped between a run's close and its follow-up
+           # left a request pending at an agent that no run will answer.
+           :ok <- each(left, &unanswered(project, %{run: &1, config: config, execution: nil})) do
+        Enum.each(lost, &Cycle.open(project, &1))
+      end
+    end)
   end
+
+  # A work's own runs due together are one run, as in the cycle.
+  defp turn(%{agent: nil, work_id: work_id}) when is_binary(work_id), do: {:own, work_id}
+  defp turn(opening), do: {:cause, opening.cause_id, make_ref()}
 
   defp each(runs, fun) do
     Enum.reduce_while(runs, :ok, fn run, :ok ->
@@ -62,14 +82,16 @@ defmodule Omunculus.Run do
     end)
   end
 
-  defp recover_one(project, config, run) do
+  defp interrupt(project, run) do
     with {:ok, _model} <-
            Store.record_model(project.conn, run.id, "Run interrupted by server restart."),
          {:ok, closed} <- Store.close_run(project.conn, run.id),
-         :ok <- Harness.follow_up(project, [closed]),
-         {:ok, work} <- Store.view(project.conn, "work", run.work_id) do
-      unreported(project, %{run: run, config: config, execution: nil}, work, true)
-    end
+         do: Harness.follow_up(project, [closed])
+  end
+
+  defp retry(project, config, run) do
+    with {:ok, work} <- Store.view(project.conn, "work", run.work_id),
+         do: unreported(project, %{run: run, config: config, execution: nil}, work, true)
   end
 
   @spec open(

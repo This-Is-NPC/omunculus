@@ -299,6 +299,47 @@ defmodule Omunculus.Harness do
     end
   end
 
+  @doc """
+  The runs the actions of past events asked for that never began, as
+  `Cycle.open/2` takes them: of each event `Store.uncaused/1` lists, the
+  openings its action asks for now that the store would begin
+  (`Store.runnable/2`) and that did not begin (`Store.begun?/3`). The
+  runs of calling hooks are not among them.
+  """
+  @spec lost(Project.t()) :: {:ok, [map]} | {:error, term}
+  def lost(project) do
+    with {:ok, events} <- Store.uncaused(project.conn) do
+      Enum.reduce_while(events, {:ok, []}, fn event, {:ok, lost} ->
+        case advance(project, nil, event, event.via, :actions) do
+          {:ok, _via, openings} ->
+            lost_ones =
+              openings
+              |> Enum.map(&Map.delete(&1, :linked_by))
+              |> Enum.filter(&lost?(project.conn, &1, event))
+
+            {:cont, {:ok, lost ++ lost_ones}}
+
+          {:error, _reason} = error ->
+            {:halt, error}
+        end
+      end)
+    end
+  end
+
+  defp lost?(conn, opening, event) do
+    agent = Map.get(opening, :agent)
+
+    params = %{
+      work_id: opening.work_id,
+      own: is_nil(agent),
+      agent: agent,
+      cause_id: opening.cause_id,
+      request_id: Map.get(opening, :request_id)
+    }
+
+    Store.runnable(conn, params) == :ok and not Store.begun?(conn, params, event)
+  end
+
   # Only the calling hooks walk needs the catalog.
   defp open(project, events) do
     with :ok <- write_grants(project, events),

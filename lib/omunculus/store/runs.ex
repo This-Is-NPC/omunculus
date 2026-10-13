@@ -16,6 +16,15 @@ defmodule Omunculus.Store.Runs do
   agent and the work's title.
   `continues/3` records the `session` event of a run that continues its
   agent's session: the run it continues and what it was told had happened.
+  `uncaused/1` lists the events that may ask for a run and that no run
+  began for, each with the name of the call that emitted it as `via`;
+  `begun?/3` says whether an opening due for one of them began: a run it
+  caused, or for a work's own run, any own run of the work begun after it,
+  into which a run due while it waited was merged. `runnable/2` is the
+  check `begin/2` makes. `stopped/1` lists the own runs whose model
+  stopped without `end` on a work still open and that no own run of the
+  work followed: their retry, or what follows it, was never decided or
+  never began.
   `left/1` lists the closed runs that left a request pending at their
   agent: each pending request's last run of its receiver opened for it or
   for a request it was escalated into.
@@ -34,6 +43,71 @@ defmodule Omunculus.Store.Runs do
   @spec open_runs(Connection.t()) :: {:ok, [map]} | {:error, term}
   def open_runs(conn),
     do: Query.all(conn, "SELECT * FROM runs WHERE status = 'open' ORDER BY started_at, id")
+
+  @spec uncaused(Connection.t()) :: {:ok, [map]} | {:error, term}
+  def uncaused(conn) do
+    Query.all(
+      conn,
+      """
+      SELECT events.*, (
+        SELECT json_extract(call.body, '$.name') FROM events AS call
+        WHERE call.type = 'tool' AND call.run_id IS events.run_id
+          AND call.sequence < events.sequence
+        ORDER BY call.sequence DESC LIMIT 1) AS via
+      FROM events
+      WHERE events.type IN
+          ('prompt', 'reply', 'continue', 'break', 'cancel', 'delegate', 'reopen', 'request', 'work')
+        AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.cause_id = events.id)
+      ORDER BY events.sequence
+      """
+    )
+  end
+
+  @spec begun?(Connection.t(), map, map) :: boolean
+  def begun?(conn, %{agent: nil, work_id: work_id}, event) when is_binary(work_id) do
+    {:ok, [%{begun: begun}]} =
+      Query.all(
+        conn,
+        """
+        SELECT EXISTS (
+          SELECT 1 FROM runs JOIN events AS start ON start.id = runs.event_id
+          WHERE runs.work_id = ? AND start.sequence > ?
+            AND json_extract(start.body, '$.own')) AS begun
+        """,
+        [work_id, event.sequence]
+      )
+
+    begun == 1
+  end
+
+  def begun?(conn, _named, event) do
+    {:ok, [%{begun: begun}]} =
+      Query.all(conn, "SELECT EXISTS (SELECT 1 FROM runs WHERE cause_id = ?) AS begun", [
+        event.id
+      ])
+
+    begun == 1
+  end
+
+  @spec stopped(Connection.t()) :: {:ok, [map]} | {:error, term}
+  def stopped(conn) do
+    Query.all(
+      conn,
+      """
+      SELECT runs.* FROM runs
+      JOIN events AS start ON start.id = runs.event_id
+      JOIN works ON works.id = runs.work_id
+      WHERE runs.status = 'done' AND works.state = 'open'
+        AND json_extract(start.body, '$.own')
+        AND NOT EXISTS (SELECT 1 FROM events WHERE events.run_id = runs.id AND events.type = 'end')
+        AND NOT EXISTS (
+          SELECT 1 FROM runs AS later JOIN events AS later_start ON later_start.id = later.event_id
+          WHERE later.work_id = runs.work_id AND later_start.sequence > start.sequence
+            AND json_extract(later_start.body, '$.own'))
+      ORDER BY start.sequence
+      """
+    )
+  end
 
   @spec left(Connection.t()) :: {:ok, [map]} | {:error, term}
   def left(conn) do
@@ -312,8 +386,7 @@ defmodule Omunculus.Store.Runs do
   defp do_begin(conn, params) do
     run_id = Id.new()
 
-    with :ok <- runnable(conn, params.work_id, Map.get(params, :own, false)),
-         :ok <- runnable_request(conn, params),
+    with :ok <- runnable(conn, params),
          {:ok, event} <-
            Events.append(conn, %{
              type: "start-run",
@@ -330,6 +403,7 @@ defmodule Omunculus.Store.Runs do
                Jason.encode!(%{
                  agent: params.agent,
                  depth: params.depth,
+                 own: Map.get(params, :own, false),
                  ceiling: params.ceiling,
                  execution: params.execution
                })
@@ -357,6 +431,12 @@ defmodule Omunculus.Store.Runs do
     end
   end
 
+  @spec runnable(Connection.t(), map) :: :ok | {:error, term}
+  def runnable(conn, params) do
+    with :ok <- runnable_work(conn, params.work_id, Map.get(params, :own, false)),
+         do: runnable_request(conn, params)
+  end
+
   defp runnable_request(conn, %{cause_id: cause_id, request_id: request_id, agent: agent})
        when is_binary(cause_id) and is_binary(request_id) do
     with {:ok, cause} <- View.view(conn, "event", cause_id),
@@ -373,9 +453,9 @@ defmodule Omunculus.Store.Runs do
 
   # A cancelled work opens no run; a work's own run (no named agent)
   # opens only while the work is open.
-  defp runnable(_conn, nil, _own), do: :ok
+  defp runnable_work(_conn, nil, _own), do: :ok
 
-  defp runnable(conn, work_id, own) do
+  defp runnable_work(conn, work_id, own) do
     case Helpers.fetch_work(conn, work_id) do
       {:ok, %{state: "cancelled"}} -> {:error, {:cancelled, work_id}}
       {:ok, %{state: "open"}} -> :ok
