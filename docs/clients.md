@@ -35,7 +35,7 @@ project, given as `OMUNCULUS_PROJECT` and its local socket as
 
 | App | Is |
 | --- | --- |
-| `apps/console` | the window on one project: its conversations, each as threads of its agents' runs, and the orchestration map of its agents, works and requests |
+| `apps/console` | the window on one project: its conversations, each as threads of its agents' runs, and the orchestration map of its agents, works and requests; and a board of the works of every project of the registry, by state |
 | `apps/mailbox` | a mailbox over every project: a thread is a conversation with one agent of depth 0, and its requests to you are answered there |
 | `apps/studio` | the settings of a project: its flowchart on a canvas, then one item of the config at a time |
 
