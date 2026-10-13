@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Run the server on the dev registry, with OPENROUTER_API_KEY from .env"
+#MISE description="Run the server on the dev registry, with OPENROUTER_API_KEY from .env and the deploy sockets"
 #MISE depends=["dev:bootstrap"]
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
@@ -8,5 +8,12 @@ if [[ -f .env ]]; then
   set -a
   source .env
   set +a
+fi
+# The dream team's deploy sockets, while its environment is up: the folder
+# the link names, as a command sees no link outside the folders it is given.
+sockets=packs/dream-team/environment/.state/sockets
+if [[ -L $sockets ]]; then
+  export OMUNCULUS_DEPLOY
+  OMUNCULUS_DEPLOY=$(readlink -f "$sockets")
 fi
 exec bin/omunculus serve --config dev/server.toml
