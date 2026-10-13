@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-#MISE description="Open the studio on the dev project of a running server"
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
 
