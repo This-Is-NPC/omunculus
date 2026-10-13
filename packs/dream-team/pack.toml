@@ -9,6 +9,9 @@ description = "Takes a request from a conversation to a published app: asks unti
 roles = ["team"]
 auth = ["homologation", "production"]
 
+[pack.requires]
+bash = "the codex-like preset's tools (priv/presets/codex-like/tools)"
+
 [secrets.deploy_preview]
 DEPLOY_KEY = "homologation"
 

@@ -8,6 +8,7 @@ name = "design-team"
 roles = ["team"]
 
 [pack.requires]
+bash = "the codex-like preset's tools (priv/presets/codex-like/tools)"
 deploy_preview = "the dream-team pack (packs/dream-team)"
 
 # Answers the sales desk: briefing, rounds, assessments; hands each design

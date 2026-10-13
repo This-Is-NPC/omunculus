@@ -55,7 +55,10 @@ images/         a portrait of each agent, <agent>.webp, 512 px square, its `imag
    two logins whose keys are the instances' private keys, for example
    `[auth.homologation]` with `key = "$OMUNCULUS_HOMOLOGATION_KEY"` and
    `[auth.production]` with `key = "$OMUNCULUS_PRODUCTION_KEY"`.
-3. Import it: `omunculus pack --path <this folder> --models team=<model>
+3. Its agents work through `bash`, which the pack `requires` and does not
+   bring: add the codex-like preset's tools (`priv/presets/codex-like/tools`)
+   to the project's `[tools] paths`.
+4. Import it: `omunculus pack --path <this folder> --models team=<model>
    --auth homologation=<login>,production=<login>`. It writes the pack to
    `[[packs]]` and copies `workspace/AGENTS.md` into the project's workspace.
 

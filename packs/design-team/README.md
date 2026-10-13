@@ -25,8 +25,10 @@ not a round, and rounds beyond those are the owner's decision.
 ## Importing it
 
 It works for the sales desk and publishes with the dream team's
-`deploy_preview`, which it `requires`: import the dream team first, then
-this team one depth below the sales desk.
+`deploy_preview`, which it `requires`, as it does `bash`, the codex-like
+preset's (`priv/presets/codex-like/tools`, in the project's `[tools]
+paths`): import the dream team first, then this team one depth below the
+sales desk.
 
 ```sh
 omunculus pack --path packs/design-team --models team=<model> --depth 1
