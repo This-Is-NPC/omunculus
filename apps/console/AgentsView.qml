@@ -149,14 +149,10 @@ Item {
     return tops.length === 0 ? labelWidth
       : (Math.min(...tops.map(place => place.x)) + Math.max(...tops.map(place => place.x + place.width)) - nodeWidth) / 2
   }
-  // The box a node takes, its lane's frame included.
-  function boxOf(key) {
-    const node = nodes.find(item => item.key === key)
+  // The box of a node's own card on the map, in a lane the stage it is at.
+  function cardOf(key) {
     const place = places[key]
-    return node && place ? {
-      x: place.x, y: place.y - (node.lane ? laneHead : 0), width: place.width,
-      height: nodeHeight + (node.lane ? laneHead + lanePad : 0)
-    } : null
+    return place ? { x: place.card, y: canvas.y + place.y, width: nodeWidth, height: nodeHeight } : null
   }
 
   // The requests still waiting, as arrows from the asking node to whoever decides.
@@ -205,8 +201,8 @@ Item {
     }
   }
 
-  // Picking a node brings it into the room left of the inspector.
-  onPickedChanged: if (picked !== null && boxOf(picked)) Qt.callLater(() => map.bringIntoView(boxOf(picked)))
+  // Picking a node brings its card into the room left of the inspector.
+  onPickedChanged: if (picked !== null && cardOf(picked)) Qt.callLater(() => map.bringIntoView(cardOf(picked)))
 
   FlowCanvas {
     id: map
