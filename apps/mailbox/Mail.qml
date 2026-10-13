@@ -116,6 +116,14 @@ Singleton {
     selected = ""
   }
 
+  // Opens the thread `by` places from the one open in the list shown.
+  function step(by) {
+    if (shown.length === 0)
+      return
+    const at = shown.findIndex(thread => thread.key === selected)
+    open(shown[Math.max(0, Math.min(shown.length - 1, at < 0 ? 0 : at + by))].key)
+  }
+
   // Marks a thread unread, as a mail client does, and goes back to the list.
   function markUnread(key) {
     seen = Object.assign({}, seen, { [key]: "" })

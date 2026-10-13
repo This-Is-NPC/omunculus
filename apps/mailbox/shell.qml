@@ -9,7 +9,7 @@ ShellRoot {
   // The mailbox, laid out as eco is: the masthead on top, whose notch sweeps
   // when the section changes, then the folders, the threads of the one picked
   // and the thread open, parted by hairlines that fade downwards, under a
-  // command bar whose commands follow where you are. Each column is headed by
+  // command bar whose actions follow where you are. Each column is headed by
   // its name and the arrow that folds it: the folders to a rail, the threads
   // away, sliding to their width; a narrow window shows one pane at a time. A
   // new thread is written in a dialog; a thread is answered only when asked.
@@ -30,14 +30,6 @@ ShellRoot {
     readonly property bool reading: Mail.thread !== null
 
     onClosed: Qt.quit()
-
-    function step(by) {
-      const shown = Mail.shown
-      if (shown.length === 0)
-        return
-      const at = shown.findIndex(thread => thread.key === Mail.selected)
-      Mail.open(shown[Math.max(0, Math.min(shown.length - 1, at < 0 ? 0 : at + by))].key)
-    }
 
     function search() {
       listFolded = false
@@ -70,10 +62,9 @@ ShellRoot {
           id: commands
           Layout.fillWidth: true
           place: window.reading ? "thread" : "list"
-          fit: window.narrow ? "narrow" : window.width < 1100 ? "compact" : "wide"
+          narrow: window.narrow
           onCompose: compose.open()
           onReply: Mail.replyRequested()
-          onStep: by => window.step(by)
         }
 
         // The one search box: in the command bar, or over the list on a narrow window.
@@ -241,8 +232,8 @@ ShellRoot {
       Shortcut { sequence: "/"; onActivated: window.search() }
       Shortcut { sequence: "Ctrl+B"; enabled: !window.narrow; onActivated: window.foldersFolded = !window.foldersFolded }
       Shortcut { sequence: "Ctrl+L"; enabled: !window.narrow; onActivated: window.listFolded = !window.listFolded }
-      Shortcut { sequence: "Alt+Down"; onActivated: window.step(1) }
-      Shortcut { sequence: "Alt+Up"; onActivated: window.step(-1) }
+      Shortcut { sequence: "Alt+Down"; onActivated: Mail.step(1) }
+      Shortcut { sequence: "Alt+Up"; onActivated: Mail.step(-1) }
     }
   }
 

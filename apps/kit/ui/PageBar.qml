@@ -27,40 +27,12 @@ Rectangle {
   readonly property var shown: commands.filter(command => command.shown !== false)
   readonly property var back: shown.find(command => command.role === "back") || null
   readonly property var tools: shown.filter(command => command.place === "end")
-  // The page's actions, each run of one group together: [[command]].
+  // The page's actions, in their order.
   readonly property var actions: shown.filter(command => command.role !== "back" && command.place !== "end")
-    .reduce((runs, command) => {
-      const last = runs.length > 0 ? runs[runs.length - 1] : null
-      if (last && command.group && last[0].group === command.group)
-        last.push(command)
-      else
-        runs.push([command])
-      return runs
-    }, [])
-  // Whether the names fit beside the readout's room.
-  readonly property bool compact: measure.implicitWidth > width - 340
 
   color: Qt.alpha(Theme.background, 0.9)
   border.color: Theme.line
   clip: true
-
-  // The actions with their names, never drawn, to know how wide they are.
-  Row {
-    id: measure
-    // Hidden by opacity: a row that is not visible lays out nothing to measure.
-    opacity: 0
-    enabled: false
-    spacing: 10
-    Repeater {
-      model: [].concat(...bar.actions)
-      delegate: TraceButton {
-        required property var modelData
-        dense: true
-        icon: modelData.icon || ""
-        text: modelData.text
-      }
-    }
-  }
 
   onSectionChanged: arrive.restart()
 
@@ -87,37 +59,13 @@ Rectangle {
       color: Theme.line
     }
 
-    Row {
+    // Each shows its short name when the names do not fit beside the readout's room.
+    CommandRow {
       id: contextual
       Layout.alignment: Qt.AlignVCenter
-      spacing: 10
+      commands: bar.actions
+      room: bar.width - 340
       transform: Translate { id: shift }
-
-      Repeater {
-        model: bar.actions
-        // A run of commands: one alone, or a group joined edge to edge.
-        delegate: Row {
-          id: run
-          required property var modelData
-          spacing: run.modelData.length > 1 ? -1 : 0
-          Repeater {
-            model: run.modelData
-            delegate: TraceButton {
-              required property var modelData
-              dense: true
-              role: modelData.group ? (modelData.checked ? "primary" : "action")
-                : modelData.role === "primary" || modelData.role === "guarded" ? modelData.role : "action"
-              filled: !modelData.group && modelData.role === "primary"
-              tone: modelData.tone || (role === "guarded" ? Theme.error : modelData.group && !modelData.checked ? Theme.dim : Theme.primary)
-              icon: modelData.icon || ""
-              text: bar.compact ? modelData.short || modelData.text : modelData.text
-              tip: modelData.tip || ""
-              enabled: modelData.enabled !== false
-              onClicked: modelData.run()
-            }
-          }
-        }
-      }
     }
 
     ParallelAnimation {

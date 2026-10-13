@@ -5,12 +5,14 @@ import QtQuick.Controls.Basic as C
 import "kit/ui"
 
 // ThreadView reads one thread like a mail thread: its subject, which decodes
-// when the thread opens, its agent and project, then its messages, the last
-// ones open and the earlier ones folded to a line each; a long thread hides
-// its middle behind one fold. A message that arrives fades and rises in, and
-// one that arrives out of view is counted on a pill that leads to it. Nothing
-// is written until you reply: the command bar's REPLY, or Ctrl+R, opens the reply under the
-// thread, and sending or Esc closes it; Esc then closes the thread.
+// when the thread opens, its agent and project, and beside them the ways to
+// the thread before or after it in the list and out of it; then its
+// messages, the last ones open and the earlier ones folded to a line each; a
+// long thread hides its middle behind one fold. A message that arrives fades
+// and rises in, and one that arrives out of view is counted on a pill that
+// leads to it. Nothing is written until you reply: the command bar's REPLY,
+// or Ctrl+R, opens the reply under the thread, and sending or Esc closes it;
+// Esc then closes the thread.
 Item {
   id: view
 
@@ -98,6 +100,15 @@ Item {
           ProjectTag { name: "· " + view.thread.project }
           ThreadState { thread: view.thread }
         }
+      }
+      // Moving to the thread before or after it in the list, and closing it,
+      // as a mail client's reading pane does beside the subject.
+      Row {
+        Layout.alignment: Qt.AlignTop
+        spacing: 6
+        IconButton { name: "chevron-up"; tip: "previous thread  alt+↑"; onClicked: Mail.step(-1) }
+        IconButton { name: "chevron-down"; tip: "next thread  alt+↓"; onClicked: Mail.step(1) }
+        IconButton { visible: !view.back; name: "close"; tip: "close the thread  esc"; onClicked: Mail.close() }
       }
     }
 
