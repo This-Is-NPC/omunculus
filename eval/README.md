@@ -137,7 +137,8 @@ A request for a path or directory inside the workspace asks to write there,
 so the person answers it, and the score counts it, as `sandbox.write`.
 
 An outcome is how the conversation ended for the person: `answer` (Father
-answered without a work), `done` (the root work closed), `break` (it stopped
+answered without a work, or the root work waits for the person's next
+message), `done` (the root work closed), `break` (it stopped
 and said why) or `waiting` (a request still waits on the person). The runner
 also records `stalled` (a model stopped without a report until its retries ran
 out), `timeout` and `error`; no task expects them.

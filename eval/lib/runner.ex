@@ -505,6 +505,8 @@ defmodule EquivalentExchange.Runner do
       root && root.state == "done" -> "done"
       Enum.any?(waiting, &(Requests.requirements(&1) != [])) -> "waiting"
       waiting != [] -> "stalled"
+      # It waits for the person's next message: its agent answered them.
+      root && root.state == "waiting" && root.waiting == "message" -> "answer"
       broke or (root && root.state == "cancelled") -> "break"
       # Open and waiting on no one: its agent answered and waits for the person.
       is_nil(root) or root.state == "open" -> "answer"
