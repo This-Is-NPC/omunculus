@@ -33,6 +33,13 @@ Rectangle {
   color: Theme.background
   border.color: Theme.line
 
+  // What is not a control here is still the inspector: a click or the wheel
+  // on it does not reach the map below.
+  MouseArea {
+    anchors.fill: parent
+    onWheel: wheel => wheel.accepted = true
+  }
+
   ColumnLayout {
     anchors { fill: parent; margins: 14 }
     spacing: 12
