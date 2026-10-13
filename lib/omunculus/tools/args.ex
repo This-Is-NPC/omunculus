@@ -14,6 +14,10 @@ defmodule Omunculus.Tools.Args do
     end
   end
 
+  @doc "Whether the flag `key` is set: true, or `\"true\"` from the command line."
+  @spec flag?(map, String.t()) :: boolean
+  def flag?(args, key), do: Map.get(args, key) in [true, "true"]
+
   @spec present(map, String.t()) :: String.t() | nil
   def present(args, key) do
     case Map.get(args, key) do

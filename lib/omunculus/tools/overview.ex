@@ -13,18 +13,32 @@ defmodule Omunculus.Tools.Overview do
   `askable`, `sealed`, `blocked`), a group with its members, a tool with
   the secrets the config binds to it; and, apart from them, the skills it
   has there, each with its description, state and the tools its
-  `allowed-tools` names. Workflows no place runs are listed apart. It loads the TOML in the harness's process.
+  `allowed-tools` names. Workflows no place runs are listed apart. That
+  whole project is what `whole` prints, for a client.
+
+  A model reads it in parts, since a real project's overview outgrows
+  what a call may return: without arguments the tool prints the same
+  places and depths with each agent named and sized in bytes only, and
+  `agent` prints, for each place, where that agent runs — the stages and
+  the depth it is at — each set of places it runs the same in with the
+  agent once. `workspace` keeps one place. It loads the TOML in the
+  harness's process.
   """
 
   alias Omunculus.{Ceiling, Config, Skills}
   alias Omunculus.Path, as: FilesystemPath
   alias Omunculus.Tool.Catalog
-  alias Omunculus.Tools.Out
+  alias Omunculus.Tools.{Args, Out}
 
   @spec run(map) :: map
-  def run(%{config_path: path}) when is_binary(path) do
-    case Config.load(path) do
-      {:ok, config} -> config |> overview() |> Jason.encode!() |> Out.ok()
+  def run(%{config_path: path} = input) when is_binary(path) do
+    args = Map.get(input, :args) || %{}
+
+    with {:ok, config} <- Config.load(path),
+         {:ok, shown} <- read(overview(config), args) do
+      shown |> Jason.encode!() |> Out.ok()
+    else
+      {:error, reason} when is_binary(reason) -> Out.fail(reason)
       {:error, reason} -> Out.fail(inspect(reason))
     end
   end
@@ -51,6 +65,90 @@ defmodule Omunculus.Tools.Overview do
       places: places,
       unused_workflows: config.workflows |> Map.keys() |> Enum.reject(&(&1 in run)) |> Enum.sort()
     }
+  end
+
+  defp read(whole, args) do
+    if Args.flag?(args, "whole") do
+      {:ok, whole}
+    else
+      with {:ok, places} <- places_in(whole.places, Args.present(args, "workspace")) do
+        case Args.present(args, "agent") do
+          nil -> {:ok, %{whole | places: Enum.map(places, &index/1)}}
+          name -> runs(places, name)
+        end
+      end
+    end
+  end
+
+  defp places_in(places, nil), do: {:ok, places}
+
+  defp places_in(places, workspace) do
+    case Enum.filter(places, &(&1.workspace == workspace)) do
+      [] -> {:error, "no workspace #{workspace}; overview without arguments lists the places"}
+      kept -> {:ok, kept}
+    end
+  end
+
+  defp index(place) do
+    Map.update!(place, :depths, fn depths ->
+      Enum.map(depths, fn depth ->
+        %{
+          depth
+          | workflows:
+              Enum.map(depth.workflows, fn workflow ->
+                %{
+                  workflow
+                  | stages: Enum.map(workflow.stages, &%{&1 | agent: brief(&1.agent)})
+                }
+              end),
+            agents: Enum.map(depth.agents, &Map.put(brief(&1), :idle, &1.idle))
+        }
+      end)
+    end)
+  end
+
+  defp brief(agent), do: %{name: agent.name, bytes: byte_size(Jason.encode!(agent))}
+
+  # Where the agent runs in each place, the places it runs the same in together.
+  defp runs(places, name) do
+    found =
+      for place <- places,
+          at = appearances(place, name),
+          at != [],
+          {agent, where} <- group(at) do
+        %{workspace: place.workspace, root: place.root, at: where, agent: agent}
+      end
+
+    if found == [],
+      do: {:error, "no agent #{name} runs here; overview without arguments lists them"},
+      else: {:ok, %{agent: name, runs: found}}
+  end
+
+  defp appearances(place, name) do
+    for depth <- place.depths,
+        {where, agent} <-
+          for(
+            workflow <- depth.workflows,
+            stage <- workflow.stages,
+            do:
+              {%{
+                 depth: depth.depth,
+                 workflow: workflow.name,
+                 stage: stage.name,
+                 deny: stage.deny
+               }, stage.agent}
+          ) ++ Enum.map(depth.agents, &{%{depth: depth.depth, idle: &1.idle}, &1}),
+        agent.name == name,
+        do: {where, Map.delete(agent, :idle)}
+  end
+
+  defp group(appearances) do
+    appearances
+    |> Enum.map(&elem(&1, 1))
+    |> Enum.uniq()
+    |> Enum.map(fn agent ->
+      {agent, for({where, ^agent} <- appearances, do: where)}
+    end)
   end
 
   # Without a default workspace a work that names none runs in the root.

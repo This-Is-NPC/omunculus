@@ -133,10 +133,10 @@ park a work.
 
 ## `omunculus config`
 
-- **Usage:** `omunculus config`
+- **Usage:** `omunculus config [--section <section>] [--item <item>] [--whole true]`
 - **Effect:** read-only
 
-Print the project's setup as one JSON object, for a client to show: its
+With `whole`, print the project's setup as one JSON object, for a client to show: its
 `root`, `agents` (name, depth, model, `workflow_only`, the `granted`,
 `negotiable`, `human` and `deny` lists of its own layer, its text and the
 SHA-256 of its `image`, or null), `models` (name,
@@ -151,6 +151,23 @@ bytes, and `names`, what a ceiling list may hold: the model tools, their
 groups and the sandbox resources. It loads the TOML in the harness's
 process; the sandbox hides the file from external tools. A server's local
 socket runs it through `POST /v1/cli`.
+
+A model reads the setup in parts, since a real project's outgrows what a
+call returns (`[policy] tool_output_bytes`). Without arguments it prints
+an index: `revision`, `root`, the default `workspace` and `sections`,
+each named section (`agents`, `workflows`, `models`, `workspaces`,
+`auth`, `secrets`, `packs`) by item name with the item's size in bytes,
+and `policy`, `access` and `names` by their size. `section` prints one
+section whole as `{section, revision, items}`; `item` prints one item,
+`<section>.<name>` as `configure` takes it or, with `section`, its name
+alone, as `{item, revision, ...}`; `policy` and `access` print as their
+section. An agent item gives what the config runs (depth, model,
+`workflow_only`, its lists, text), the `pack` it comes from and, as
+`file`, the table the file writes for it, or null; a workflow its steps,
+`pack` and `file`; a workspace whether it is the `default`; a provider
+whether its key is literal (`literal_key`); a model or a tool's secrets
+their `file` table. An unknown section or item fails, naming the
+sections.
 
 ## `omunculus configure`
 
@@ -175,10 +192,10 @@ not scoped to a conversation, it needs `project.manage_config`.
 
 ## `omunculus overview`
 
-- **Usage:** `omunculus overview`
+- **Usage:** `omunculus overview [--agent <name>] [--workspace <name>] [--whole true]`
 - **Effect:** read-only
 
-Print, as JSON, the project as it runs in each place a work can run, for
+With `whole`, print, as JSON, the project as it runs in each place a work can run, for
 a client to draw. `places` holds each workspace, and the project root
 while no workspace is the default; a place has its `root`, whether it is
 the `default` and whether it lies `outside` the project, its own ceiling
@@ -196,6 +213,14 @@ file`, never the value), and the names its layer lists, each with its
 it — the skills apart, as `skills`, each with its `description`, `state`
 and the tools its `allowed-tools` names (`uses`). `unused_workflows` are
 those no place runs.
+
+A model reads it in parts. Without arguments it prints the same places,
+depths, workflows and stages, each agent only as its `name` and its size
+in `bytes` (and `idle` for one without a stage). `agent` prints
+`{agent, runs}`: for each place, where the agent runs (`at`: the depth,
+and the workflow, stage and its `deny`, or `idle` without a stage) and
+the agent in full, once for the places it runs the same in. `workspace`
+keeps the place of that workspace. An unknown agent or workspace fails.
 
 ## `omunculus model_test`
 

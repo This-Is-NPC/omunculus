@@ -53,8 +53,10 @@ defmodule Omunculus.Tools.OverviewTest do
     %{path: path}
   end
 
-  defp overview(path) do
-    assert %{"ok" => true, "output" => output} = Overview.run(%{config_path: path})
+  defp overview(path), do: read(path, %{"whole" => true})
+
+  defp read(path, args) do
+    assert %{"ok" => true, "output" => output} = Overview.run(%{config_path: path, args: args})
     Jason.decode!(output)
   end
 
@@ -123,6 +125,41 @@ defmodule Omunculus.Tools.OverviewTest do
     names = Enum.map(agent["tools"], & &1["name"])
     assert "skill" in names
     refute "skills" in names
+  end
+
+  test "without arguments, each agent is named with its size only", %{path: path} do
+    index = read(path, %{})
+    whole = overview(path)
+    assert Enum.map(index["places"], & &1["workspace"]) == ["notes", "site"]
+    assert index["unused_workflows"] == ["spare"]
+
+    to_do = index |> place("site") |> depth(1) |> first_stage()
+    agent = whole |> place("site") |> depth(1) |> first_stage() |> Map.fetch!("agent")
+    assert to_do["agent"] == %{"name" => "worker", "bytes" => byte_size(Jason.encode!(agent))}
+
+    assert [%{"name" => "concierge", "idle" => false, "bytes" => _}] =
+             index |> place("site") |> depth(0) |> Map.fetch!("agents")
+
+    assert [%{"workspace" => "site"}] = read(path, %{"workspace" => "site"})["places"]
+  end
+
+  test "an agent in full where it runs, once for the places it runs the same in", %{path: path} do
+    assert %{"agent" => "worker", "runs" => runs} = read(path, %{"agent" => "worker"})
+
+    assert [notes, site] = runs
+    assert %{"workspace" => "notes", "agent" => %{"model" => %{"name" => "remote"}}} = notes
+
+    assert %{
+             "workspace" => "site",
+             "at" => [%{"depth" => 1, "workflow" => "delivery", "stage" => "to_do"}],
+             "agent" => %{"name" => "worker", "tools" => [_ | _]}
+           } = site
+
+    assert %{"runs" => [%{"workspace" => "site"}]} =
+             read(path, %{"agent" => "worker", "workspace" => "site"})
+
+    assert %{"ok" => false, "output" => "no agent ghost runs here" <> _} =
+             Overview.run(%{config_path: path, args: %{"agent" => "ghost"}})
   end
 
   test "the builtin catalog discovers overview for the command line and models" do

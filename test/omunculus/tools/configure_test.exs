@@ -11,7 +11,7 @@ defmodule Omunculus.Tools.ConfigureTest do
   end
 
   defp read(dir) do
-    {:ok, output} = CLI.run(["config"], dir)
+    {:ok, output} = CLI.run(["config", "--whole", "true"], dir)
     Jason.decode!(output)
   end
 

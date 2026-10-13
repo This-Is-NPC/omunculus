@@ -5,8 +5,12 @@ defmodule Omunculus.Tools.ConfigTest do
   alias Omunculus.Tool.Catalog
   alias Omunculus.Tools.Config
 
-  defp describe(path) do
-    assert %{"ok" => true, "output" => output, "emit" => []} = Config.run(%{config_path: path})
+  defp describe(path), do: read(path, %{"whole" => true})
+
+  defp read(path, args) do
+    assert %{"ok" => true, "output" => output, "emit" => []} =
+             Config.run(%{config_path: path, args: args})
+
     Jason.decode!(output)
   end
 
@@ -110,6 +114,70 @@ defmodule Omunculus.Tools.ConfigTest do
     refute "send" in described["names"]
   end
 
+  test "without arguments, an index of each section's items and their sizes" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    path = Fixtures.config_path(dir)
+    index = read(path, %{})
+    whole = describe(path)
+
+    assert index["revision"] == whole["revision"]
+    assert index["root"] == dir
+    refute Map.has_key?(index, "agents")
+
+    assert %{
+             "agents" => %{"concierge" => concierge, "worker" => _, "reviewer" => _},
+             "workflows" => %{"delivery" => _},
+             "models" => %{"fake" => _},
+             "workspaces" => %{},
+             "policy" => policy,
+             "names" => names
+           } = index["sections"]
+
+    assert Enum.all?([concierge, policy, names], &(is_integer(&1) and &1 > 0))
+  end
+
+  test "a section whole, or one item with what the config runs and what the file writes" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.pack(dir)
+
+    path =
+      Fixtures.write_pack_config(
+        dir,
+        ~s([[packs]]\npath = "team"\nmodels = { lead = "fast" }\nauth = { vault = "mine" }\ndepth = 1\n)
+      )
+
+    revision = describe(path)["revision"]
+
+    assert %{"section" => "workflows", "revision" => ^revision, "items" => %{"line" => line}} =
+             read(path, %{"section" => "workflows"})
+
+    assert %{"pack" => "team", "file" => nil, "steps" => [_ | _]} = line
+
+    assert %{"item" => "agents.chief", "depth" => 1, "model" => "fast", "pack" => "team"} =
+             chief = read(path, %{"item" => "agents.chief"})
+
+    assert chief["file"] == nil
+    assert read(path, %{"section" => "agents", "item" => "chief"}) == chief
+
+    assert %{"item" => "auth.mine", "literal_key" => true, "file" => %{"kind" => "api_key"}} =
+             read(path, %{"item" => "auth.mine"})
+
+    assert %{"section" => "policy", "items" => %{"file" => %{"assemble" => "assemble"}}} =
+             read(path, %{"item" => "policy"})
+  end
+
+  test "an unknown section or item names the sections" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    path = Fixtures.config_path(dir)
+
+    for args <- [%{"section" => "ghosts"}, %{"item" => "agents.ghost"}] do
+      assert %{"ok" => false, "output" => output} = Config.run(%{config_path: path, args: args})
+      assert output =~ "the sections are agents, workflows, models"
+    end
+  end
+
   test "fails without a config path" do
     assert %{"ok" => false, "output" => "config_path required"} = Config.run(%{})
   end
@@ -124,7 +192,7 @@ defmodule Omunculus.Tools.ConfigTest do
         ~s([[packs]]\npath = "team"\nmodels = { lead = "fast" }\nauth = { vault = "mine" }\ndepth = 1\n)
       )
 
-    assert %{"ok" => true, "output" => output} = Omunculus.Tools.Config.run(%{config_path: path})
+    output = Jason.encode!(describe(path))
 
     assert [
              %{
