@@ -27,6 +27,8 @@ Item {
   // Commands of its own, as the bar takes them, after the usual ones.
   property var extra: []
   property alias details: detailsColumn.data
+  // A picture of it, as a url, shown at the head of what it is, or "".
+  property string image: ""
   // [{title, items: [{text, section, id}]}]: what it uses and what uses it,
   // each item by the section and row it opens.
   property var related: []
@@ -163,6 +165,18 @@ Item {
           title: "about"
           Layout.preferredWidth: page.share(3)
           visible: page.facts.length > 0
+          Image {
+            Layout.fillWidth: true
+            Layout.maximumWidth: 420
+            Layout.preferredHeight: width
+            visible: page.image !== ""
+            source: page.image
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            smooth: true
+            mipmap: true
+            Rectangle { anchors.fill: parent; color: "transparent"; border.color: Theme.line }
+          }
           GridLayout {
             Layout.fillWidth: true
             columns: 2

@@ -13,6 +13,7 @@ Singleton {
 
   readonly property string socket: Quickshell.env("OMUNCULUS_SOCKET")
   readonly property string project: Quickshell.env("OMUNCULUS_PROJECT")
+  readonly property string base: "/v1/projects/" + project
 
   property bool connected: false
   // The project's setup, as the config tool prints it: {root, agents, models,
@@ -50,6 +51,25 @@ Singleton {
     message = text
     messageIsError = isError
     noticeCount++
+  }
+
+  // Image SHA-256 -> the file it was saved in, once fetched.
+  property var images: ({})
+  property var fetching: ({})
+  // The file of an agent's image, as a url, or "" while it has none or it
+  // is being fetched; each image is fetched once, kept by its SHA-256.
+  function imageOf(agent) {
+    const entry = setup ? setup.agents.find(each => each.name === agent) : null
+    if (!entry || !entry.image)
+      return ""
+    if (images[entry.image])
+      return "file://" + images[entry.image]
+    if (!fetching[entry.image]) {
+      fetching[entry.image] = true
+      http.fetch(socket, base + "/agents/" + encodeURIComponent(agent) + "/image", Quickshell.cachePath("images/" + entry.image),
+        file => images = Object.assign({}, images, { [entry.image]: file }))
+    }
+    return ""
   }
 
   function loadSetup() {

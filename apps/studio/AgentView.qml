@@ -20,6 +20,7 @@ ItemPage {
   readonly property var held: table[Studio.hasKey(table)] || table.granted || []
 
   kind: "agent"
+  image: Studio.imageOf(own ? item.newName : name)
   title: own ? item.newName : name
   origin: own ? "" : settings.originOf("agents", name)
   draft: own ? item : null

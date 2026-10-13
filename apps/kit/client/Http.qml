@@ -33,6 +33,32 @@ QtObject {
     request.createObject(root, { command: command, on: on, done: done, failed: failed || null })
   }
 
+  // Saves what `path` answers on the socket `on` into `file`; `done` gets
+  // the file once it holds a 2xx answer, and nothing is said otherwise.
+  function fetch(on, path, file, done) {
+    download.createObject(root, {
+      command: ["curl", "-sS", "--unix-socket", on, "--create-dirs", "-o", file, "-w", "%{http_code}", "http://localhost" + path],
+      file: file, done: done
+    })
+  }
+
+  property Component download: Component {
+    Process {
+      id: saving
+      property string file
+      property var done: null
+      running: true
+      stdout: StdioCollector {
+        onStreamFinished: {
+          const status = parseInt(text)
+          if (status >= 200 && status < 300)
+            saving.done(saving.file)
+          Qt.callLater(() => saving.destroy())
+        }
+      }
+    }
+  }
+
   property Component request: Component {
     Process {
       id: process
