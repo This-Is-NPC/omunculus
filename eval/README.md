@@ -17,8 +17,11 @@ a library: the CLI to send and reply, the store to read what happened.
 presets/amestris/   the agents under test, named after Fullmetal Alchemist
 configs/            the configurations a run lays over a preset
 tasks/<scenario>/<task>/
-                    instruction.md, task.toml, workspace/, check, solution/
+                    instruction.md, task.toml, workspace/, check, solution/; a pack's
+                    tasks are under packs/<pack>/tasks/<scenario>/<task>/
 tasks/_lib/         what every check shares
+skills/             the skills every project declares
+mcp/tickets/        the ticket system every project declares, an MCP server
 fixtures/scores/    hand-scored executions that prove the scoring
 fixtures/judge/     hand-written reports that measure the decider
 judge.toml          the decider and its thresholds
@@ -40,17 +43,11 @@ results/            one folder per run, ignored by git
 | Riza | 1, workflow only | verifies the stage before hers, runs tests |
 | Alphonse | 1, workflow only | reviews the work against the goal |
 
-They all run on the model `--model` names:
-
-| Model | What it is |
-|---|---|
-| `luna` | `openai/gpt-6-luna` through OpenRouter, which reports the cost of each call |
-| `haiku`, `sonnet`, `opus` | Claude Haiku, Sonnet and Opus 5.5 on Anthropic's API, priced by `prices.toml` |
-| `fake` | answers with the first line of its prompt; checks only the runner |
-
-`OPENROUTER_API_KEY` and `ANTHROPIC_API_KEY` come from `.env`. A model is a
-`[models.<name>]` table of the preset; one whose replies carry no cost needs
-its provider's id in `prices.toml`.
+They all run on the model `--model` names, a `[models.<name>]` table of
+`presets/amestris/omunculus.toml`; `fake` answers with the first line of its
+prompt and checks only the runner. The keys the preset's logins name come
+from `.env`. A model whose replies carry no cost needs its provider's id in
+`prices.toml`.
 
 A configuration may run a team of `packs/` instead: the dream team
 (`packs/dream-team`, see its README) is one.
@@ -60,6 +57,7 @@ A configuration may run a team of `packs/` instead: the dream team
 | Configuration | What it tests |
 |---|---|
 | `solo` | Father alone with every tool |
+| `team` | Father hands the request to Mustang, who splits it into works for Edward, Envy and Gluttony at depth 2; no workflow |
 | `delegation` | Father hands works down; the workers hold what they need |
 | `workflow` | every work goes through transmute (Edward), verify (Riza), review (Alphonse) |
 | `negotiated` | the workers must ask Father for `fs.write`, `sandbox.write`, `bash`, `sandbox.network` |
@@ -70,11 +68,14 @@ A configuration may run a team of `packs/` instead: the dream team
 
 A configuration is a TOML merged into the Amestris preset: tables merge, a
 list replaces a list. `[eval] drop_agents` removes agents, and the
-workflows that needed them go too. `[eval] pack` names a pack of `packs/`
-whose team runs alone: Amestris's agents and workflows go, and the `pack`
-tool imports it, its roles on the run's model and each provider it names on
-the configuration's login of that name. A pack's `tasks/` run with the
-others, their ids led by the pack's name.
+workflows that needed them go too. `[eval] packs` lists packs of `packs/`,
+each a `name` and the `depth` its team works below its own, whose teams run
+alone: Amestris's agents and workflows go, and the `pack` tool imports each,
+in order, its roles on the run's model and each provider it names on the
+configuration's login of that name. The configuration's own `workflows`,
+`[policy.depth.<n>]` layers and `[policy] request_routes` are laid over the
+project once the packs are imported, so they can compose the teams. A
+pack's `tasks/` run with the others, their ids led by the pack's name.
 
 ## A task
 
@@ -138,10 +139,11 @@ so the person answers it, and the score counts it, as `sandbox.write`.
 
 An outcome is how the conversation ended for the person: `answer` (Father
 answered without a work, or the root work waits for the person's next
-message), `done` (the root work closed), `break` (it stopped
-and said why) or `waiting` (a request still waits on the person). The runner
-also records `stalled` (a model stopped without a report until its retries ran
-out), `timeout` and `error`; no task expects them.
+message), `done` (the root work closed), `break` (it stopped and said why,
+or was cancelled) or `waiting` (a request that grants something still waits
+on the person). The runner also records `stalled` (a request that grants
+nothing still waits on the person, or a root work waits on no one who will
+move it), `timeout` and `error`; no task expects them.
 
 `check` runs as `check <workspace> <outcome.json>` and exits 0 when the task
 holds, 2 when the workspace holds but the run ended otherwise than expected,
@@ -163,11 +165,10 @@ claims `done`.
 
 ```sh
 mise run eval:selftest                       # checks and scoring
-mise run eval:run -- --model luna --k 3 --jobs 48 --label pilot
-mise run eval:run -- --model luna --task brief --configuration negotiated
-mise run eval:run -- --model sonnet --k 3 --jobs 24 --label sonnet
-mise run eval:run -- --model haiku --k 3 --jobs 24 --against eval/results/<before>
-mise run eval:run -- --model haiku --task ticket-tally --code-mode --label haiku-code
+mise run eval:run -- --model <model> --k 3 --jobs 24 --label pilot
+mise run eval:run -- --model <model> --task brief --configuration negotiated
+mise run eval:run -- --model <model> --k 3 --jobs 24 --against eval/results/<before>
+mise run eval:run -- --model <model> --task ticket-tally --code-mode --label code
 mise run eval:compare -- eval/results/<before> eval/results/<now>
 mix run eval/run.exs report eval/results/<run> --against eval/results/<before>
 mix run eval/run.exs score eval/results/<run>    # score an old run again
@@ -180,7 +181,9 @@ measured with and without the sandbox code bridge.
 may run at once, each on its own model; a run is compared only with the folder
 `--against` names, and with none without it. `--jobs` executions run at
 once (one by default): each has a project of its own, so they share nothing
-but the provider's rate limits, which each model's `retries` rides out. Anthropic limits the requests an organization has in flight: past 24 executions at once its models fail on it. Each execution gets a fresh project; the instruction goes through the CLI, which returns once every run
+but the provider's rate limits, which each model's `retries` rides out; a
+provider that limits the requests in flight fails past that many executions
+at once, so keep `--jobs` under it. Each execution gets a fresh project; the instruction goes through the CLI, which returns once every run
 has finished; then the runner plays the person, answering what waits on them
 as the task says, until no answer is made or the execution timeout. Free-text requests, and decisions offering neither the task's `decision` nor `deny`, which a person given choices may still answer in words, use the simulated person from the task facts, once per received envelope; the harness's `retry` waits. A linked text answer returns origins to the intermediary for distribution; the conversation records one question and one client message per envelope. It grants a request only when the
 task grants everything asked; denying, it says what it would not grant and
@@ -196,9 +199,8 @@ worker requests or distinct permissions granted.
 
 What only reading can tell — whether the last words say the task was done,
 say why it was not, say a command was run or a file written, and how good a
-written file is — goes to the decider of `judge.toml`
-(`openai/gpt-6-luna-decisions`, OpenRouter's decisions endpoint), which
-answers each question with a probability. At 0.7 or more a yes counts, at
+written file is — goes to the decider `judge.toml` names, which answers each question with a
+probability. At 0.7 or more a yes counts, at
 0.3 or less a no, and in between the answer is unsure and counts neither
 way. A claim to have run or written something is then checked, without a
 model, against the calls the events recorded. Each run begins by asking

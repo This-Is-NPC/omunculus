@@ -74,7 +74,7 @@ description = "Equivalent Exchange: compare two result folders (mise run eval:co
 run = "scripts/eval-compare"
 
 [tasks."eval:run"]
-description = "Equivalent Exchange: run the behaviour benchmark (mise run eval:run -- --model luna --k 2)"
+description = "Equivalent Exchange: run the behaviour benchmark (mise run eval:run -- --model <model> --k 2)"
 run = "scripts/eval-run"
 
 [tasks."eval:selftest"]
