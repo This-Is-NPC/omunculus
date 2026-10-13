@@ -163,7 +163,7 @@ Every change follows these. They are not aspirational.
 6. **All configuration comes from the user's TOML.** No hardcoded defaults for anything that lives in the config file. No configuration stored in the database.
 7. **Anything that searches, filters or formats for the model is a tool**, never harness logic. The harness discovers, authorizes, calls, records and applies.
 8. **The harness does not protect users from their own tools and hooks.** It guarantees the workflow sequence, the ceiling per stage and the store rules. What a user's hook does with those is the user's responsibility.
-9. **Clients and the core share only the server's contract.** An app under `apps/` reaches a project through the `/v1` HTTP contract on a socket and never reads the store, the TOML, `lib/` or `priv/`; the core never names an app, and what one needs is added to the contract for every client. `apps/kit/ui` imports nothing of `apps/kit/client`, and the kit imports no app. See `docs/clients.md`.
+9. **Clients and the core share only the server's contract.** An app under `apps/` reaches a project through the `/v1` HTTP contract on a socket and never reads the store, the TOML, `lib/` or `priv/`; the core never names an app, and what one needs is added to the contract for every client. `apps/kit/ui` imports nothing of `apps/kit/client`, the kit imports no app, and no app imports another; apps call each other only through Quickshell IPC. See `docs/clients.md`.
 
 ## Language
 

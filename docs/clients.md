@@ -15,8 +15,13 @@ OpenAPI document the server publishes at `/openapi.json`.
   one app; what a client needs is added to the contract for every client.
 - `mise run validate:boundaries`, part of `mise run pre-commit`, refuses a
   tracked line of `apps/` that names `lib/`, `priv/`, `omunculus.toml` or
-  the store, a line of `lib/` or `priv/` that names `apps/`, and a line of
-  `apps/kit` that imports an app or, in `ui`, the client.
+  the store, a line of `lib/` or `priv/` that names `apps/`, a line of
+  `apps/kit/ui` that imports the client, an import under `apps/` whose path
+  leaves its folder, and any link under `apps/` but an app's `kit` link. Since
+  Quickshell imports only from within the folder an app runs, an app reaches
+  no other app and the kit reaches no app.
+- Apps call each other only through Quickshell IPC
+  (`quickshell ipc --path apps/<app> call …`), never by importing.
 - A launcher may find the first socket with `mix omunculus.socket
   <server.toml> [<id>]`; from there, `GET /v1/projects` lists every project
   of the registry with its socket.

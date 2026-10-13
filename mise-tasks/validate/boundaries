@@ -19,6 +19,14 @@ refuse() {
 refuse "an app reads the core's code, config or store" \
   '(^|[^.[:alnum:]_])(lib|priv)/|omunculus\.toml|\.omunculus/' apps
 refuse "the core names an app" 'apps/' lib priv
-refuse "the kit imports an app" 'apps/(console|mailbox)|import "\.\./\.\.' apps/kit
 refuse "the kit's ui imports its client" 'import "\.\./client|kit/client' apps/kit/ui
+# Quickshell imports only from within the folder an app runs, so another
+# app or the kit can be reached only through a link or a path that leaves it.
+refuse "an app or the kit imports from outside its folder" 'import "([^"]*/)?\.\./' apps
+links=$(git ls-files -s apps | awk '$1 == "120000" { print $4 }')
+for link in $links; do
+  [[ $link == apps/*/kit && $link != apps/kit/* && $(git cat-file -p ":$link") == ../kit ]] && continue
+  printf '%s\nboundaries: a link in apps/ other than an app'"'"'s kit link\n' "$link" >&2
+  failed=1
+done
 exit $failed
