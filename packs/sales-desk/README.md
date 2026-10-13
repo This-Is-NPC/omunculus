@@ -29,7 +29,15 @@ done. During build, the release's request to grant `promote` is the
 client's one approval of the built site: the seller escalates it to them
 with the homologation address and every page by name, only the client can
 answer it, as the store refuses an agent's answer to a grant only a person
-gives, and the grant reaches the release that waits on it.
+gives, and the grant reaches the release that waits on it. The address is
+the one the release's request gives, copied: neither the seller nor the
+generalist supplies one of its own, as the design preview's. When the
+client's answer asks something the team knows and they cannot, the
+generalist replies with it in text to the seller's request rather than
+asking the client again, and the seller answers from the release's
+request, or replies in text down to a question's origin; a permission's
+origin only the person answers, as the store refuses an agent's text on
+it, so the seller escalates it again with what it gives.
 
 What reaches the client is what the desk addresses to them: the
 generalist's escalations, the seller's comments on the request — its
