@@ -193,6 +193,9 @@ defmodule Omunculus.WorkspaceTest do
 
     assert {:ok, "- write (concierge)\n  A note.txt (+1 -0)"} =
              CLI.run(["changes", "--work_id", work_id], dir)
+
+    assert {:ok, patch} = CLI.run(["changes", "--work_id", work_id, "--patch", "true"], dir)
+    assert patch =~ "- write (concierge)\n" and patch =~ "+hi"
   end
 
   test "revert puts back what the run's calls changed, unless a file moved on since", %{

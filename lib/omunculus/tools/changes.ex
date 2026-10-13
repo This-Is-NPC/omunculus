@@ -15,7 +15,7 @@ defmodule Omunculus.Tools.Changes do
   def run(%{args: args, view: view, config_path: config_path}) do
     with {:ok, %{store: %{changes: dir}}} when is_binary(dir) <- Config.load(config_path),
          {:ok, calls} <- calls(args, view) do
-      render(calls, args["patch"] == true, dir)
+      render(calls, args["patch"] in [true, "true"], dir)
     else
       {:ok, _config} -> Out.fail("changes are not recorded: [store] changes is not set")
       {:error, message} when is_binary(message) -> Out.fail(message)
