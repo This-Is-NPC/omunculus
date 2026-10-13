@@ -3,7 +3,8 @@ import QtQuick
 import "kit/ui"
 
 // AgentTurn is one run of an agent in the conversation, said like a line of
-// chat: on the left, in the agent's colour, its words drawn as they stream.
+// chat: on the left, under the agent's portrait and name in its colour, its
+// words drawn as they stream.
 // Below them, one dim line says what it did — the calls it made,
 // which failed, the work it closed or the access it granted; clicking it lists
 // the calls in place, with why a failed one failed. Until the agent says or
@@ -65,7 +66,7 @@ Item {
     Row {
       visible: !turn.continued
       spacing: 8
-      Rectangle { width: 5; height: 5; anchors.verticalCenter: parent.verticalCenter; color: turn.tone }
+      Portrait { width: 20; height: 20; anchors.verticalCenter: parent.verticalCenter; agent: turn.who }
       Label { text: turn.who.toUpperCase(); color: turn.tone; font.pixelSize: 10; font.letterSpacing: 2.5 }
       Label { text: turn.stamp; color: Qt.alpha(turn.tone, 0.7); font.pixelSize: 9; font.letterSpacing: 1 }
     }
