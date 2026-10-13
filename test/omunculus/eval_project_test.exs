@@ -359,10 +359,11 @@ defmodule Omunculus.EvalProjectTest do
 
       origin = Enum.find(events, &(&1.type == "request")).request_id
 
+      # The release's request is the client's approval: it goes to the
+      # seller, past the administrator whose work waits on the release.
       upstream =
         Enum.reduce(
           [
-            {"administrator", admin_work, 1, nil},
             {"seller", seller_work, 0,
              Enum.find(config.workflows["sale"], &(&1.name == "build")).ceiling},
             {"sales", nil, 0, nil}

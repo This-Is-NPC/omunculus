@@ -14,9 +14,10 @@ defmodule EquivalentExchange.Project do
   imports each, in order, every role on the run's model and each provider
   the pack names on the configuration's login of that name, copying the
   pack's workspace files in before the task's. Such a configuration's own
-  `workflows` and `[policy.depth.<n>]` layers compose the teams — a
-  workflow whose stages are agents of different packs — so they are laid
-  over the project once the packs are imported, and it must load then.
+  `workflows`, `[policy.depth.<n>]` layers and `[policy] request_routes`
+  compose the teams — a workflow whose stages are agents of different
+  packs, a route naming a pack's workflow — so they are laid over the
+  project once the packs are imported, and it must load then.
   """
 
   alias Omunculus.Config.Toml, as: ConfigToml
@@ -111,14 +112,14 @@ defmodule EquivalentExchange.Project do
     end
   end
 
-  # What composes the teams of the packs: it names their agents, so it is
-  # laid over the project only once they are imported.
+  # What composes the teams of the packs: it names their agents and
+  # workflows, so it is laid over the project only once they are imported.
   defp composition(overlay) do
     {workflows, overlay} = Map.pop(overlay, "workflows")
-    {depths, policy} = Map.pop(Map.get(overlay, "policy", %{}), "depth")
+    {layers, policy} = Map.split(Map.get(overlay, "policy", %{}), ["depth", "request_routes"])
 
     composition =
-      %{"workflows" => workflows, "policy" => depths && %{"depth" => depths}}
+      %{"workflows" => workflows, "policy" => if(layers != %{}, do: layers)}
       |> Map.reject(fn {_key, value} -> is_nil(value) end)
 
     {composition, Map.put(overlay, "policy", policy)}

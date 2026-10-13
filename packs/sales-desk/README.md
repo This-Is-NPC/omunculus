@@ -61,5 +61,15 @@ request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", { kin
 ```
 
 Replace its destination with the responsible configured participant when the
-owner and conversation origin differ. The agency and sales-desk eval overlays
-declare these routes. Questions needing an answer use `ask`; a sender replies from known facts or escalates received origins. The depth-0 generalist collects every unresolved question in its conversation into one escalation to the client, written to the client as it should reach them, with no ids, stage names or notes for the team, and distributes the returned text to those origins. `break` remains a stopped-work report. The generalist ends on thanks, acknowledgements and promises of later material; a completed sale starts new work only for an explicit new request.
+owner and conversation origin differ. With the dream team below, the
+release's request to grant `promote` is the client's approval of the built
+site, which only a person may give; a rule before the default sends it to
+the seller, who presents it to the client through the generalist, rather
+than up through the builders' administrator:
+
+```toml
+{ workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "seller" }, { kind = "agent", agent = "sales" }, "origin"] }
+```
+
+The sales-desk eval overlay declares the first two routes, the agency's all
+three. Questions needing an answer use `ask`; a sender replies from known facts or escalates received origins. The depth-0 generalist collects every unresolved question in its conversation into one escalation to the client, written to the client as it should reach them, with no ids, stage names or notes for the team, and distributes the returned text to those origins. `break` remains a stopped-work report. The generalist ends on thanks, acknowledgements and promises of later material; a completed sale starts new work only for an explicit new request.

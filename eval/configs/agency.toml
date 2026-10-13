@@ -37,5 +37,12 @@ steps = [
 [policy.depth.2]
 workflows = ["design", "page", "release"]
 
+# The release's request to grant promote is the client's approval of the
+# built site: it goes to the seller, who presents it to the client through
+# the generalist, rather than through the builders' administrator.
 [policy]
-request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", { kind = "agent", agent = "sales" }, "origin"] }]
+request_routes = [
+  { name = "owner", via = ["origin"] },
+  { workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "seller" }, { kind = "agent", agent = "sales" }, "origin"] },
+  { via = ["parent", { kind = "agent", agent = "sales" }, "origin"] },
+]
