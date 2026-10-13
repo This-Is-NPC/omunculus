@@ -77,6 +77,12 @@ images/         a portrait of each agent, <agent>.webp, 512 px square, its `imag
    --auth homologation=<login>,production=<login>`. It writes the pack to
    `[[packs]]` and copies `workspace/AGENTS.md` into the project's workspace.
 
+No command reaches a container daemon: the Docker socket is let into
+none, as it would give a command the machine. The image is checked
+where it is published: `deploy_preview` has homologation build it and
+answers with the build's output when it fails, which the clerk brings
+back for the build to be fixed.
+
 `promote` is in every agent's `human` list: only the person grants it, once
 they have seen the app in homologation. That grant is their approval of
 it, the only one: the administrator asks for none after the release.

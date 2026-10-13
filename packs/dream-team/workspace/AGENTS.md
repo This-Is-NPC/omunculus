@@ -241,5 +241,10 @@ alone.
 - **Publishable from the repository as it is:** a `Dockerfile` that serves
   the app on port 80, or a project Dokku detects by its language. No step
   outside the repository.
+- **The image is built where it is published.** `deploy_preview` has
+  homologation build it from the repository and answers with the
+  build's output when it fails. A command here reaches no container
+  daemon: do not build or run the image on the machine, and do not ask
+  for one.
 - **No key, secret or production address in the repository.** The deploy
   tools hold the keys; the repository holds only what builds the app.
