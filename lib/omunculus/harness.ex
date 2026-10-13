@@ -33,7 +33,18 @@ defmodule Omunculus.Harness do
   request.
   """
 
-  alias Omunculus.{Ceiling, Changes, Config, Cycle, Project, Secrets, Skills, Store}
+  alias Omunculus.{
+    Ceiling,
+    Changes,
+    Config,
+    ConversationRoot,
+    Cycle,
+    Project,
+    Secrets,
+    Skills,
+    Store
+  }
+
   alias Omunculus.Execution.Policy
   alias Omunculus.Store.Actions.Requests
   alias Omunculus.Tool.{Catalog, Invoke, Manifest, Overrides, Views}
@@ -42,24 +53,40 @@ defmodule Omunculus.Harness do
   @spec manifest(Project.t(), String.t()) :: {:ok, Manifest.t()} | {:error, term}
   def manifest(%Project{} = project, name) do
     with {:ok, config} <- resolved_config(project, nil),
-         {:ok, catalog} <- catalog(nil, nil, config, workspace_context(config, nil), nil) do
+         {:ok, catalog} <- catalog(nil, nil, config, workspace_context(config, nil, nil), nil) do
       fetch_dispatch_manifest(catalog, name, "cli")
     end
   end
 
-  @spec workspace_context(Config.t(), map | nil) :: %{
+  @doc """
+  The workspace a call of `work` in `conversation_id` works in: its name,
+  root and ceiling layer. With `[project] conversations`, a conversation's
+  root is its own folder in the workspace (`ConversationRoot`).
+  """
+  @spec workspace_context(Config.t(), map | nil, String.t() | nil) :: %{
           name: String.t() | nil,
           root: String.t() | nil,
           layer: Omunculus.Config.Layer.t() | nil
         }
-  def workspace_context(config, work) do
+  def workspace_context(config, work, conversation_id) do
     name = Config.effective_workspace(config, work)
 
     %{
       name: name,
-      root: Config.workspace_root(config, name),
+      root: root(config, Config.workspace_root(config, name), conversation_id),
       layer: Config.workspace_ceiling(config, name)
     }
+  end
+
+  defp root(%Config{conversations: nil}, root, _conversation_id), do: root
+  defp root(_config, root, nil), do: root
+  defp root(config, root, id), do: ConversationRoot.root(config, root || config.root, id)
+
+  # The conversation a call belongs to: its run's, its work's, or the one
+  # its context names.
+  defp conversation_id(run, work, ctx) do
+    (run && run.conversation_id) || (work && work.conversation_id) ||
+      Map.get(ctx, :conversation_id)
   end
 
   defp resolved_config(project, work) do
@@ -106,7 +133,7 @@ defmodule Omunculus.Harness do
          work_id = run_work_id(run),
          {:ok, work} <- fetch_work(project, work_id),
          {:ok, config, catalog} <- prepared(project, run, work, ctx),
-         workspace = workspace_context(config, work),
+         workspace = workspace_context(config, work, conversation_id(run, work, ctx)),
          {:ok, manifest} <- fetch_dispatch_manifest(catalog, name, ctx.trigger),
          :ok <- check_trigger(manifest, name, ctx.trigger),
          views =
@@ -141,7 +168,7 @@ defmodule Omunculus.Harness do
              project,
              run,
              config,
-             workspace_context(config, work),
+             workspace_context(config, work, conversation_id(run, work, ctx)),
              Map.get(ctx, :execution)
            ),
          do: {:ok, config, catalog}
@@ -156,8 +183,12 @@ defmodule Omunculus.Harness do
       with {:ok, run} <- resolve_run(project, event.run_id),
            {:ok, work} <- fetch_work(project, event.work_id),
            {:ok, config, catalog} <-
-             prepared(project, run, work, %{execution: execution, prepared: prepared}),
-           workspace = workspace_context(config, work) do
+             prepared(project, run, work, %{
+               execution: execution,
+               prepared: prepared,
+               conversation_id: Map.get(event, :conversation_id)
+             }),
+           workspace = workspace_context(config, work, conversation_id(run, work, event)) do
         ctx = %{
           run_id: event.run_id,
           author: if(run, do: "agent", else: "human"),

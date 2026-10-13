@@ -349,6 +349,31 @@ section, then the file. The ceiling keys and `overrides` of the file's
 key. Missing file is an error. A permanent grant with
 `scope = workspace` writes that file when it exists.
 
+### A folder per conversation
+
+```toml
+[project]
+conversations = "clients"
+```
+
+With `[project] conversations`, a folder relative to each workspace's
+root and inside it, each conversation works apart: its runs, and the
+calls made in it, have `<workspace root>/clients/<conversation id>` as
+their root in place of the workspace's, so what one conversation writes
+another neither reads nor changes, and a tool that names what it
+publishes after its root (the dream team's deploy tools) publishes each
+conversation's apart. The folder starts, the first time a run or call of
+the conversation needs it, as a copy of the workspace's files as they
+are then — the templates and the `AGENTS.md` a pack copied there —
+leaving out the conversations' folder itself and what omunculus keeps
+inside the workspace: the config file, the store with the files beside
+it, `[store] changes` and `attachments`, and `[auth] store`. A file added
+to the workspace later reaches only the conversations that start after.
+A call with no conversation — the direct CLI without `[access]`, which
+opens none — works in the workspace's root. With `[execution] host`,
+commands see the machine read-only, the other conversations' folders
+included; `deny_read` can name the folder.
+
 ## What a load will not invent
 
 No model from the environment. No store path next to the binary. No

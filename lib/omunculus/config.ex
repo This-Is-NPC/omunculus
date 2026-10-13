@@ -3,7 +3,9 @@ defmodule Omunculus.Config do
   Loads and validates a TOML config file. There is no package fallback:
   a missing file is `{:config, :missing, path}`. `load/1` and `grant/3`
   take the file path. The project root is the file's directory, or
-  `[project] root` resolved against it. Parses the policy layer, the
+  `[project] root` resolved against it; `[project] conversations`, when
+  set, is the folder, relative to each workspace's root, where each
+  conversation works in a folder of its own (`Omunculus.ConversationRoot`). Parses the policy layer, the
   per-depth layers under `[policy.depth.N]`, the workspaces under
   `[workspaces.<name>]` — each a directory `root` (resolved against the
   project root) plus a ceiling layer — the `[policy] workspace`
@@ -36,6 +38,7 @@ defmodule Omunculus.Config do
 
   @enforce_keys [
     :root,
+    :conversations,
     :policy,
     :depths,
     :workspaces,
@@ -114,6 +117,7 @@ defmodule Omunculus.Config do
 
   @type t :: %__MODULE__{
           root: String.t(),
+          conversations: String.t() | nil,
           policy: Layer.t(),
           depths: %{non_neg_integer => Layer.t()},
           workspaces: %{String.t() => workspace},
@@ -684,7 +688,8 @@ defmodule Omunculus.Config do
         config_path = Path.expand(path)
         config_dir = Path.dirname(config_path)
 
-        with {:ok, root} <- parse_project(Map.get(data, "project"), config_dir),
+        with {:ok, root, conversations} <-
+               parse_project(Map.get(data, "project"), config_dir),
              {:ok, execution} <- parse_execution(Map.get(data, "execution"), config_dir),
              {:ok, auth} <- parse_auth(Map.get(data, "auth"), config_dir),
              {:ok, access} <- parse_access(Map.get(data, "access")),
@@ -715,6 +720,7 @@ defmodule Omunculus.Config do
           else
             config = %__MODULE__{
               root: root,
+              conversations: conversations,
               policy: policy,
               depths: depths,
               workspaces: workspaces,
@@ -799,28 +805,44 @@ defmodule Omunculus.Config do
     end)
   end
 
-  defp parse_project(nil, config_dir), do: {:ok, config_dir}
+  defp parse_project(nil, config_dir), do: {:ok, config_dir, nil}
 
   defp parse_project(data, config_dir) when is_map(data) do
-    case Map.keys(data) -- ["root"] do
+    case Map.keys(data) -- ["root", "conversations"] do
       [key | _] ->
         {:error, {:project, {:unknown_key, key}}}
 
       [] ->
-        case Map.fetch(data, "root") do
-          :error ->
-            {:ok, config_dir}
-
-          {:ok, root} when is_binary(root) and root != "" ->
-            {:ok, Path.expand(root, config_dir)}
-
-          _ ->
-            {:error, {:project, {:invalid, :root}}}
+        with {:ok, root} <- project_root(Map.fetch(data, "root"), config_dir),
+             {:ok, conversations} <- conversations(Map.fetch(data, "conversations")) do
+          {:ok, root, conversations}
         end
     end
   end
 
   defp parse_project(_data, _config_dir), do: {:error, {:project, {:invalid, :table}}}
+
+  defp project_root(:error, config_dir), do: {:ok, config_dir}
+
+  defp project_root({:ok, root}, config_dir) when is_binary(root) and root != "",
+    do: {:ok, Path.expand(root, config_dir)}
+
+  defp project_root(_root, _config_dir), do: {:error, {:project, {:invalid, :root}}}
+
+  # A folder inside the workspace: relative, neither the workspace itself
+  # nor above it.
+  defp conversations(:error), do: {:ok, nil}
+
+  defp conversations({:ok, dir}) when is_binary(dir) do
+    inside = Path.expand(dir, "/workspace")
+
+    if Path.type(dir) == :relative and inside != "/workspace" and
+         Omunculus.Path.within?("/workspace", inside),
+       do: {:ok, dir},
+       else: {:error, {:project, {:invalid, :conversations}}}
+  end
+
+  defp conversations(_dir), do: {:error, {:project, {:invalid, :conversations}}}
 
   defp parse_store(nil, _config_dir), do: {:error, {:store, :missing}}
 

@@ -166,7 +166,10 @@ defmodule Omunculus.Run do
          {:ok, model} <- Config.model_fun(config, name),
          {:ok, message} <- fetch_prompt(project.conn, message_prompt_id),
          {:ok, grants} <- Store.grants(project.conn, work),
-         workspace = Harness.workspace_context(config, work),
+         conversation_id =
+           (work && work.conversation_id) || (message && message.conversation_id) ||
+             Map.get(opening, :conversation_id),
+         workspace = Harness.workspace_context(config, work, conversation_id),
          context = %{
            agent: name,
            depth: depth,
@@ -220,9 +223,7 @@ defmodule Omunculus.Run do
              ceiling: snapshot,
              execution: Policy.serializable(execution),
              work_id: work_id,
-             conversation_id:
-               (work && work.conversation_id) || (message && message.conversation_id) ||
-                 Map.get(opening, :conversation_id),
+             conversation_id: conversation_id,
              origin_issuer: (message && message.actor_issuer) || Map.get(opening, :origin_issuer),
              origin_subject:
                (message && message.actor_subject) || Map.get(opening, :origin_subject),
