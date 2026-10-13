@@ -4,13 +4,15 @@ import QtQuick.Layouts
 import "kit/ui"
 
 // Entry is one message of a thread, as a mail shows it: who wrote to whom and
-// when, an agent's portrait before its name, then the text and the files it carries, each a chip that saves the
-// file to the downloads directory and opens it. Folded, it is one line with
-// the start of the text. A request for you is a message too: a filled card
-// with its question and, while it waits, the way to answer it. A question
-// the harness passed on is that of whoever asked it, the harness's sentence
-// under it in small print; a note the harness wrote that passes on none is no
-// one's words: it reads NOTE, muted, where a speaker's name would be.
+// when, an agent's portrait before its name, then the text and the files it
+// carries, each a chip that saves the file to the downloads directory and
+// opens it. Folded, it is one line with the start of the text. A request for
+// you is a message too: a filled card with its question and, while it waits,
+// the way to answer it; your answer is a message of yours, the option it
+// chose under its words. A question the harness passed on is that of whoever
+// asked it, the harness's sentence under it in small print; a note the
+// harness wrote that passes on none is no one's words: it reads NOTE, muted,
+// where a speaker's name would be.
 SurfaceFrame {
   id: card
 
@@ -64,14 +66,14 @@ SurfaceFrame {
         }
         Label {
           visible: card.expanded
-          text: (card.mine ? "to " + card.entry.to : "to you") + (card.request ? (card.deciding ? " · asks you" : " · asked you") : "")
+          text: (card.mine ? "to " + card.entry.to : "to you") + (card.request ? (card.deciding ? " · asks you" : " · asked you") : card.entry.answering ? " · answered" : "")
           color: Theme.dim
           font.pixelSize: 11
         }
         Label {
           Layout.fillWidth: true
           visible: !card.expanded
-          text: Mail.oneLine(card.entry.text) + (card.entry.files.length > 0 ? "  [" + card.entry.files.length + (card.entry.files.length === 1 ? " file]" : " files]") : "")
+          text: (card.entry.option ? card.entry.option.toUpperCase() + " — " : "") + Mail.oneLine(card.entry.text) + (card.entry.files.length > 0 ? "  [" + card.entry.files.length + (card.entry.files.length === 1 ? " file]" : " files]") : "")
           color: Theme.dim
           font.pixelSize: 12
           elide: Text.ElideRight
@@ -130,13 +132,21 @@ SurfaceFrame {
 
     Label {
       Layout.fillWidth: true
-      visible: card.expanded && card.request && !card.entry.open
-      text: !card.entry.answer ? "CLOSED WITHOUT YOUR ANSWER"
-        : "YOU ANSWERED  " + [card.entry.answer.option.toUpperCase(), card.entry.answer.body !== card.entry.answer.option ? card.entry.answer.body : ""].filter(part => part).join(" — ")
-      color: Theme.dim
+      visible: card.expanded && !!card.entry.option
+      text: "CHOSE  " + (card.entry.option || "").toUpperCase()
+      color: Theme.primary
       font.pixelSize: 10
       font.letterSpacing: 1.5
       wrapMode: Text.Wrap
+    }
+
+    Label {
+      Layout.fillWidth: true
+      visible: card.expanded && card.request && !card.entry.open && !card.entry.answered
+      text: "CLOSED WITHOUT YOUR ANSWER"
+      color: Theme.dim
+      font.pixelSize: 10
+      font.letterSpacing: 1.5
     }
 
     Loader {

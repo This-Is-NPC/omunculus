@@ -342,7 +342,8 @@ Singleton {
   }
 
   // The thread a conversation's snapshot and events make. Its entries, in
-  // order: each message you wrote; each run of an agent of depth 0, as what it
+  // order: each message you wrote, and each answer you gave a request of the
+  // thread, the option it chose with its words; each run of an agent of depth 0, as what it
   // said to you: the text of its model replies that call no tool, its
   // comments and the files it attached; and each request whose arbiter is
   // you, the question of whoever asked it when the harness passed it on, as
@@ -362,8 +363,8 @@ Singleton {
       if (event.type === "prompt" && event.actor && event.actor.kind === "human") {
         agent = agent || body.agent || ""
         entries.push({ kind: "you", key: event.cursor, from: "you", to: body.agent || agent, text: body.message || "", at: event.at, open: false, files: body.attachments || [] })
-      } else if (event.type === "reply" && event.request_id) {
-        replies[event.request_id] = { option: Requests.chosen(body), body: body.body || "" }
+      } else if (event.type === "reply" && event.request_id && isMe(event.actor)) {
+        replies[event.request_id] = event
       } else if (rootRuns[event.run_id] && ["model", "comment", "attach"].includes(event.type)) {
         // A reply that calls a tool is the agent acting: its text narrates the
         // call to itself, and only a reply that calls none speaks to you.
@@ -388,6 +389,7 @@ Singleton {
     const asked = snapshot.requests.filter(request => isMe(request.arbiter))
     for (const request of asked) {
       const question = asking(request, notes)
+      const reply = replies[request.id]
       entries.push({
         kind: "request", key: request.id, from: question.from, to: "you",
         note: question.note,
@@ -395,8 +397,15 @@ Singleton {
         files: [],
         choices: Requests.choices(request),
         origins: question.origins,
-        answer: replies[request.id] || null
+        answered: !!reply
       })
+      // Your answer is a message of yours: its words, and the option it chose.
+      if (reply) {
+        const option = Requests.chosen(reply.body)
+        const words = String(reply.body.body || "")
+        entries.push({ kind: "you", key: reply.cursor, from: "you", to: question.note ? agent : question.from, answering: true,
+          option: option, text: words === option ? "" : words, at: reply.at, open: false, files: [] })
+      }
     }
     entries.sort((a, b) => a.at.localeCompare(b.at))
 
