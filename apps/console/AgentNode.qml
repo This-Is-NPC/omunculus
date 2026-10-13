@@ -5,7 +5,8 @@ import "kit/ui"
 
 // AgentNode is one agent on the conversation's map, a card of fixed size:
 // its portrait, its name in its colour and the model it runs on, the work it
-// is on with the workflow stage, and its state. Its border is that state —
+// is on, its state and the tool it is calling, and where it stands in its
+// workflow. Its border is that state —
 // running, waiting on you, broken, done — a ring keeps leaving the portrait
 // while it runs, and a badge counts what it asked that still waits. An agent
 // configured at that depth with nothing to do shows hollow. The keyboard
@@ -35,7 +36,7 @@ Rectangle {
   readonly property string portrait: Omunculus.imageOf(agent)
 
   width: 320
-  height: 128
+  height: 150
   activeFocusOnTab: !idle
   Keys.onReturnPressed: chosen()
   Keys.onSpacePressed: chosen()
@@ -144,6 +145,7 @@ Rectangle {
     Label {
       Layout.fillWidth: true
       Layout.fillHeight: true
+      Layout.minimumHeight: font.pixelSize + 4
       text: node.idle ? "idle" : node.title
       color: node.idle ? Theme.dim : Theme.foreground
       font.pixelSize: 12
@@ -154,12 +156,20 @@ Rectangle {
     Label {
       Layout.fillWidth: true
       visible: !node.idle
-      text: (node.running ? "RUNNING" : node.workState.toUpperCase())
-        + (node.work && node.work.workflow ? "  ·  " + node.work.workflow + " / " + node.work.stage : "")
+      text: (node.running ? "RUNNING" + (Omunculus.calling[node.key] ? "  ·  " + Omunculus.calling[node.key] : "") : node.workState.toUpperCase())
+        + (node.work && node.work.workflow ? "  ·  " + node.work.workflow.toUpperCase() : "")
       color: node.running ? node.agentTone : node.toYou > 0 ? Theme.warning : Theme.dim
       font.pixelSize: 9
       font.letterSpacing: 2
       elide: Text.ElideRight
+    }
+    WorkflowTrack {
+      Layout.fillWidth: true
+      Layout.preferredHeight: visible ? implicitHeight : 0
+      work: node.work
+      tone: node.agentTone
+      running: node.running
+      dense: true
     }
   }
 

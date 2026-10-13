@@ -56,7 +56,7 @@ Item {
   }
 
   readonly property int nodeWidth: 320
-  readonly property int nodeHeight: 128
+  readonly property int nodeHeight: 150
   readonly property int across: 40
   readonly property int down: 110
   readonly property int youHeight: 72

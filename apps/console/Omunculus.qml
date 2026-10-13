@@ -323,8 +323,10 @@ Singleton {
 
   // The thread of a work: its own when it was handed down, the main one for a
   // work the root agent opened for itself.
+  // The thread a work's runs show in: its own for a work handed down, the
+  // main one for the root agent's.
   function threadOf(work) {
-    return work && parentOf[work] !== undefined ? work : ""
+    return work && (parentOf[work] !== undefined || works.some(item => item.id === work && item.parent_id)) ? work : ""
   }
 
   // The model of a thread; an empty one until the thread has entries.
