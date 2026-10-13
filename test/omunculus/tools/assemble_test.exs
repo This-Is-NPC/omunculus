@@ -39,7 +39,14 @@ defmodule Omunculus.Tools.AssembleTest do
       "catalog" => [],
       "message" => %{body: "and the colours?"},
       "conversation_works" => [
-        %{id: "w1", title: "Bakery site", state: "done", last_comment: %{body: "Published"}}
+        %{id: "w1", title: "Bakery site", state: "done", last_comment: %{body: "Published"}},
+        %{
+          id: "w2",
+          title: "Menu page",
+          state: "waiting",
+          waiting: "message",
+          last_comment: %{body: "Take your time."}
+        }
       ],
       "chat" => [
         %{message: %{body: "I want a site"}, events: [said.(%{"content" => "Which shop?"})]},
@@ -69,7 +76,9 @@ defmodule Omunculus.Tools.AssembleTest do
 
     output = Assemble.run(%{@input | view: view})["output"]
 
-    assert output =~ "## Works\n- Bakery site (work w1, done): Published"
+    assert output =~
+             "## Works\n- Bakery site (work w1, done): Published\n" <>
+               "- Menu page (work w2, waiting on the person's next message): Take your time."
 
     assert output =~
              "## Conversation\n- person: I want a site\n- you: Which shop?\n- person: Doce Ana\n- you: Handing it down.\n- person: thanks\n"

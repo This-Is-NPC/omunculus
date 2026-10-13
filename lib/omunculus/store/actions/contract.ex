@@ -16,6 +16,7 @@ defmodule Omunculus.Store.Actions.Contract do
     "continue" => [],
     "end" => [],
     "break" => ~w(body),
+    "wait" => ~w(body),
     "reopen" => ~w(work_id body agent stage grant),
     "delegate" => ~w(title goal agent workflow workspace),
     "notify" => ~w(body work_id),
@@ -56,7 +57,7 @@ defmodule Omunculus.Store.Actions.Contract do
   # A body never names the stage, agent or model the TOML decides; a
   # `delegate`, and each of the `works` of a `work`, may name the new work's
   # agent or workflow, checked against the TOML.
-  defp forbidden(type, body) when type in ~w(work continue break delegate) do
+  defp forbidden(type, body) when type in ~w(work continue break wait delegate) do
     keys = if type == "delegate", do: @forbidden -- ["agent"], else: @forbidden
 
     case Enum.find(keys, &Map.has_key?(body, &1)) do

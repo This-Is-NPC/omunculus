@@ -241,7 +241,7 @@ keeps it as it was then, whatever the workspace does after.
 
 Actions the store will apply: `comment`, `request`, `notify`, `prompt`,
 `attach`, `inbox.read`, `escalate`, `reply`, `grant`, `cancel`, `work`, `delegate`,
-`continue`, `break`, `end`, `compact`, `comment.delete`. A `request`
+`continue`, `break`, `wait`, `end`, `compact`, `comment.delete`. A `request`
 carries a `reason` and `options`, a map from option name to a list of
 `{name, args}` tool calls. Options made only of `grant` calls whose
 names the run already has do not open a row — the output is
@@ -258,10 +258,14 @@ after the call's other actions, the work is still open and nothing will
 run it again: no request of the work pending, no run of it due since the
 run began (a next stage, a message, a child back that woke it). The
 refusal tells the model to hand the work on — `done`, `ask`, `work` or
-`break` — and, when a child that broke waits on the run, to reopen it or
+`break`, and on a root work `wait` — and, when a child that broke waits on the run, to reopen it or
 break first. A run without a work, a named agent's run, and a call whose
 other actions leave the work waiting, done or cancelled end freely.
-`continue` does not name a stage. While a child that broke waits on the
+`wait` takes `body` and parks a root work, one no other work handed
+down, until its person's next message reopens it (`waiting = message`),
+with the body as its comment; it is refused on a work below another
+(`not_root`), on a work not open, and while a child that broke waits on
+it. `continue` does not name a stage. While a child that broke waits on the
 work, the store refuses `continue`, `delegate` and `end` alike, with one
 refusal telling the model to reopen the child or break the work: `done`,
 or a tool that moves the work to its next stage, cannot close or hand on
@@ -318,12 +322,13 @@ needs `end` as have too.
 | `work` | see [Creating works](#creating-works) | `end` |
 | `done` | chains `comment` with the report and `continue` | `end` |
 | `break` | emits `break`, which parks the work with the report as its comment | `end` |
+| `wait` | emits `wait`, which parks a root work with the report as its comment until the person's next message | `end` |
 | `request_access` | emits a `comment` with the report on the run's work, then `request` with the options `grant_agent`, `grant_depth`, `grant_stage`, `grant_workspace`, `deny` and, on a work, `grant` | `end` |
 
 `continue` is only a chain step (`triggers = ["chain"]`): the model
 concludes or advances a work with `done`, which needs `comment`,
-`continue` and `end` as have. `break` needs no `comment`: the `break`
-action writes the report on the work itself. The request tools emit the
+`continue` and `end` as have. `break` and `wait` need no `comment`: their
+actions write the report on the work themselves. The request tools emit the
 comment and the request themselves, so the report precedes the request in
 `EVENTS`; in a run without a work they emit only the request. A request
 for a name the run already has opens no row and still ends the run.
@@ -391,7 +396,7 @@ fs.read   = read, ls, grep, find
 fs.write  = write, edit
 store     = comment, request_access, reply, grant, notify, read_work
 sandbox   = request_access
-sequence  = work, delegate, continue, break, end, done, cancel
+sequence  = work, delegate, continue, break, wait, end, done, cancel
 catalog   = tool_search
 skills    = skill, and every skill.<name> of [skills] paths
 cli       = send, inbox, inbox_read, prompt, config, configure, model_test, omapass, overview, tools, login, logout, cursor_login, preset

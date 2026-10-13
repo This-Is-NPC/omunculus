@@ -6,7 +6,11 @@ defmodule Omunculus.Store.Actions.Sequence do
   waits on it; `break` parks it with a
   comment, and is refused while the work waits on its children. A
   `break` reopens a parent
-  waiting on its children at once; `reopen` sends a child that broke back
+  waiting on its children at once; `wait` parks a root work, one no other
+  work handed down, until its person's next message reopens it, with the
+  report said to them as its comment, and is refused on a work below
+  another, on a work not open and while a child that broke waits on it;
+  `reopen` sends a child that broke back
   to work — to its agent, to another named at its depth, or, in a
   workflow, to the agent of the stage it names, its own or one before it,
   from which it goes through the stages after again — with the
@@ -53,6 +57,23 @@ defmodule Omunculus.Store.Actions.Sequence do
       apply_break(conn, ctx, body, work)
     end
   end
+
+  @spec wait(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
+  def wait(conn, body, ctx) do
+    with :ok <- ensure_context(:wait, ctx),
+         :ok <- Helpers.ensure_text(:wait, body, "body"),
+         {:ok, work} <- fetch_work(:wait, conn, ctx.work_id),
+         :ok <- ensure_root(:wait, work),
+         :ok <- ensure_open(:wait, work),
+         :ok <- no_broken_child(:wait, conn, work.id) do
+      apply_wait(conn, ctx, body, work)
+    end
+  end
+
+  # Only the person moves a root work on with a message; a work below
+  # another waits on the work that handed it down.
+  defp ensure_root(_tag, %{parent_id: nil}), do: :ok
+  defp ensure_root(tag, _work), do: {:error, {tag, :not_root}}
 
   @spec delegate(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def delegate(conn, body, ctx) do
@@ -256,7 +277,8 @@ defmodule Omunculus.Store.Actions.Sequence do
   # A work's own run may not end leaving its work open with nothing that
   # runs it again: no request of it pending, no run of it due since the run
   # began (a next stage, a message, a child back that woke it), so nothing
-  # would ever take it up. A child that broke waits on this run, so this
+  # would ever take it up. A root work may also wait for its person's next
+  # message, which its refusal says. A child that broke waits on this run, so this
   # run must decide it first.
   defp settled(_conn, %{work_id: nil}), do: :ok
 
@@ -265,6 +287,7 @@ defmodule Omunculus.Store.Actions.Sequence do
            conn,
            """
            SELECT works.state = 'open' AND json_extract(start.body, '$.own') AS open,
+             works.parent_id IS NULL AS root,
              EXISTS (SELECT 1 FROM requests
                      WHERE requests.work_id = works.id AND requests.status IN ('pending', 'escalated'))
                OR EXISTS (SELECT 1 FROM events
@@ -283,9 +306,9 @@ defmodule Omunculus.Store.Actions.Sequence do
            """,
            [ctx.work_id, ctx.run_id]
          ) do
-      {:ok, %{open: 1, held: held}} ->
+      {:ok, %{open: 1, held: held, root: root}} ->
         with :ok <- no_broken_child(:end, conn, ctx.work_id),
-             do: if(held == 0, do: {:error, {:end, :work_open}}, else: :ok)
+             do: if(held == 0, do: {:error, {:end, hanging(root)}}, else: :ok)
 
       {:ok, _settled} ->
         :ok
@@ -294,6 +317,9 @@ defmodule Omunculus.Store.Actions.Sequence do
         error
     end
   end
+
+  defp hanging(1), do: :root_open
+  defp hanging(0), do: :work_open
 
   defp ensure_context(_tag, %{run_id: run_id, work_id: work_id})
        when not is_nil(run_id) and not is_nil(work_id),
@@ -428,6 +454,29 @@ defmodule Omunculus.Store.Actions.Sequence do
              conn,
              "UPDATE works SET state = 'waiting', waiting_from = ?, updated_at = ? WHERE id = ?",
              [ctx.agent, Events.now(), ctx.work_id]
+           ) do
+      {:ok, event}
+    end
+  end
+
+  defp apply_wait(conn, ctx, body, work) do
+    comment_id = Id.new()
+
+    with {:ok, event} <-
+           Events.append(conn, %{
+             type: "wait",
+             run_id: ctx.run_id,
+             work_id: work.id,
+             comment_id: comment_id,
+             body: Jason.encode!(body)
+           }),
+         :ok <-
+           Helpers.insert_comment(conn, comment_id, %{works: work.id}, body["body"], event, ctx),
+         :ok <-
+           Query.exec(
+             conn,
+             "UPDATE works SET state = 'waiting', waiting = 'message', waiting_from = ?, updated_at = ? WHERE id = ?",
+             [ctx.agent, Events.now(), work.id]
            ) do
       {:ok, event}
     end

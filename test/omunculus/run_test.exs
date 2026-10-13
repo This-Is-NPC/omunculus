@@ -1120,7 +1120,7 @@ defmodule Omunculus.RunTest do
         [agents.concierge]
         depth = 0
         text = "concierge"
-        tools = ["ask", "break", "comment", "continue", "done", "end"]
+        tools = ["ask", "break", "comment", "continue", "done", "end", "wait"]
 
         [agents.worker]
         depth = 1
@@ -1269,7 +1269,7 @@ defmodule Omunculus.RunTest do
 
       assert_received {:sent, sent}
       assert "write" in sent and "work" in sent and sent == Enum.sort(sent)
-      assert Jason.decode!(run.tools) == ["ask", "break", "comment", "done", "end"]
+      assert Jason.decode!(run.tools) == ["ask", "break", "comment", "done", "end", "wait"]
       assert_received {:write, {:error, refused}}
       assert refused == Out.not_yours("write")
 
@@ -1609,13 +1609,42 @@ defmodule Omunculus.RunTest do
       assert {:ok, run} = Run.open(project, opening(nil, work_id))
 
       assert_received {:end, {:ok, refused}}
-      assert refused == Out.refused({:end, :work_open})
+      assert refused == Out.refused({:end, :root_open})
       assert [_only] = runs_of(project, work_id)
       assert {:ok, %{state: "done"}} = Store.view(project.conn, "work", work_id)
 
       assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
       assert [%{body: body}] = Enum.filter(events, &(&1.type == "end"))
       assert Jason.decode!(body) == %{}
+
+      Project.close(project)
+    end
+
+    test "a root work's run waits for the person's next message, which runs the work again",
+         %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+
+      scripted(project, [
+        fn call -> call.("wait", %{"report" => "Take your time."}) end,
+        ending()
+      ])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+      assert [_only] = runs_of(project, work_id)
+
+      assert {:ok, %{state: "waiting", waiting: "message"}} =
+               Store.view(project.conn, "work", work_id)
+
+      Project.close(project)
+
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "I accept"], dir)
+
+      project = open_project(dir)
+      assert [_waited, %{via: "send"}] = runs_of(project, work_id)
+      assert {:ok, %{state: "done"}} = Store.view(project.conn, "work", work_id)
 
       Project.close(project)
     end

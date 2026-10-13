@@ -1202,6 +1202,63 @@ defmodule Omunculus.Store.ActionsTest do
     end
   end
 
+  describe "wait action" do
+    defp wait_emit(report), do: [%{"type" => "wait", "body" => %{"body" => report}}]
+
+    test "parks a root work on its person's next message, with its comment, which a message reopens",
+         %{conn: conn} do
+      work_id =
+        Fixtures.insert(conn, :works, %{workflow: "delivery", stage: "to_do", state: "open"})
+
+      run_id = Fixtures.insert(conn, :runs, %{work_id: work_id})
+      ctx = %{@ctx | run_id: run_id, work_id: work_id, config: Fixtures.config(delivery_toml())}
+
+      assert {:ok, [_tool_event, event]} = record_tool(conn, wait_emit("Take your time."), ctx)
+
+      assert event.type == "wait"
+      assert event.work_id == work_id
+      assert Jason.decode!(event.body) == %{"body" => "Take your time."}
+
+      assert {:ok, %{body: "Take your time."}} =
+               Query.one(conn, "SELECT body FROM comments WHERE work_id = ?", [work_id])
+
+      assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+
+      assert {work.state, work.waiting, work.waiting_from, work.stage} ==
+               {"waiting", "message", "concierge", "to_do"}
+
+      assert {:ok, [_tool_event, %{type: "work"}, %{type: "prompt"}]} =
+               record_tool(
+                 conn,
+                 [%{"type" => "prompt", "body" => %{"message" => "yes", "work_id" => work_id}}],
+                 @ctx
+               )
+
+      assert {:ok, %{state: "open", waiting: nil}} =
+               Query.one(conn, "SELECT state, waiting FROM works WHERE id = ?", [work_id])
+    end
+
+    test "a work below another waits on that work, not on a message", %{conn: conn} do
+      {_parent_id, child_id} = waiting_parent_and_child(conn, nil)
+      run_id = Fixtures.insert(conn, :runs, %{work_id: child_id})
+      ctx = %{@ctx | run_id: run_id, work_id: child_id}
+
+      assert {:error, {:wait, :not_root}} = record_tool(conn, wait_emit("later"), ctx)
+      assert count(conn, "events") == 0
+    end
+
+    test "a work not open, or without a work, is refused", %{conn: conn} do
+      work_id = Fixtures.insert(conn, :works, %{state: "waiting", waiting: "child"})
+      run_id = Fixtures.insert(conn, :runs, %{work_id: work_id})
+
+      assert {:error, {:wait, :waiting}} =
+               record_tool(conn, wait_emit("later"), %{@ctx | run_id: run_id, work_id: work_id})
+
+      assert {:error, {:wait, :no_work}} =
+               record_tool(conn, wait_emit("later"), %{@ctx | run_id: run_id})
+    end
+  end
+
   describe "delegate action" do
     test "creates a child work with its goal, writes no comment, and parks the parent", %{
       conn: conn

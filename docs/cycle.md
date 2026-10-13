@@ -31,7 +31,8 @@ when the same call ends the run, once it has closed. A tool can chain `end`:
 run in one call; `work` comments its report on the run's work, delegates
 each new work below it and ends the run, or, in a run without a work,
 creates the root work and ends the run; `break` parks the work with its
-report and ends the run; `request_access` comments
+report and ends the run; `wait` parks a root work with its report until
+the person writes again and ends the run; `request_access` comments
 its report on the run's work, opens the request and ends the run. The
 model reaches `continue` only through `done`.
 
@@ -41,13 +42,19 @@ a child back makes due; so on a work's own run the store refuses `end`
 when the work would stay open with no request of it pending and no run of
 it due since the run began, and when a child that broke waits on it. The
 call fails with the refusal, which names what hands the work on (`done`,
-`ask`, `work`, `break`, or `reopen` for the broken child), and the run
-goes on; a model that then stops without `end` is retried as below. A
-person's next message is not something an open work waits for: a work
-that needs the person asks (`ask`, `request_access`) and waits on the
-request, or is parked by `break`, and a message reopens it. Pauses that
-keep their wait end as before: a run whose actions leave the work
-waiting (on children, a request, a break) or done, an intermediary that
+`ask`, `work`, `break`, on a root work `wait`, or `reopen` for the broken
+child), and the run goes on; a model that then stops without `end` is
+retried as below. A person's next message is not something an open work
+waits for: a work that needs the person asks (`ask`, `request_access`)
+and waits on the request; a root work that only the person can move on
+later — they will think it over, they will write when they have
+something — waits for their message with `wait` (`waiting = message`);
+a work parked by `break` stopped. A message reopens a
+work waiting on a request, parked by `break` or waiting with `wait`.
+`wait` is for a root work only: a work below another waits on the work
+that handed it down, never on a message. Pauses that keep their wait end
+as before: a run whose actions leave the work waiting (on children, a
+request, a break, the person's message) or done, an intermediary that
 escalates (the request it opened is pending, and its child wait is kept),
 a named agent's run (an arbiter, an intermediary resumed by an answer, a
 message to a work waiting on its children), and a run without a work.
@@ -271,16 +278,18 @@ of calling hooks are not recovered.
 
 ```text
 open:     action work (root) or delegate (child); stage = first of the TOML
-open → waiting:  break, request (waiting = request, waiting_for = the request), or delegate (waiting = child)
+open → waiting:  break, request (waiting = request, waiting_for = the request), delegate (waiting = child), or wait on a root (waiting = message)
 waiting → open:    reply to the request it waits on, all its children done or cancelled, or a child on break — same stage
-waiting → open:    send / prompt on a work waiting on a request or parked by break — reopened_by_prompt
+waiting → open:    send / prompt on a work waiting on a request, parked by break or waiting on a message — reopened_by_prompt
 open → open:       continue (chained by done) — next stage, new run
 open → done:       continue on the last stage, or on a work in no workflow
 open / waiting → cancelled: cancel, an option of a request
 ```
 
 `break` parks the work with its report as the comment. It does not
-advance the sequence.
+advance the sequence. `wait` parks a root work the same way, its report
+the comment, and says what it waits for: the person's next message,
+which nothing else brings.
 `continue` that closes a work, `cancel` and `break` hand it back to a
 parent waiting on its children: a `break` reopens the parent at once, a
 closing `continue` or a `cancel` once each of the parent's children is
@@ -293,7 +302,7 @@ parked for good. A message to a work waiting
 on its children leaves it waiting: it opens a run of the work's agent,
 named, which may comment, delegate more and end but not `done`, `break`
 or request, and the last child back still wakes the work. A root work is only closed,
-parked or cancelled. A cancelled work never opens a run again.
+parked, waiting on its person or cancelled. A cancelled work never opens a run again.
 `continue` does not name a stage, an agent or a model — the TOML does.
 
 ## Request and inbox

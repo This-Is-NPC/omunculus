@@ -2,7 +2,7 @@ defmodule Omunculus.Tools.Session do
   @moduledoc """
   The conversation an agent's run continues. A session is one agent's turn
   on a work, or, without a work, in a conversation: its runs pause (an
-  answer, a request, children working, a retry) until one hands the work
+  answer, a request, children working, a wait for the person, a retry) until one hands the work
   on with `continue` or `break`, or opens a root of its own. `history/2`
   rebuilds the session the last of the work's or the conversation's closed
   runs belongs to, from what the store

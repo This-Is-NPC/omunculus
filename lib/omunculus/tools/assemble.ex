@@ -224,11 +224,16 @@ defmodule Omunculus.Tools.Assemble do
     lines =
       Enum.map(works, fn work ->
         comment = if work.last_comment, do: ": " <> work.last_comment.body, else: ""
-        "- #{work.title} (work #{work.id}, #{work.state})#{comment}"
+        "- #{work.title} (work #{work.id}, #{root_state(work)})#{comment}"
       end)
 
     ["## Works\n" <> Enum.join(newest(lines, limit), "\n")]
   end
+
+  defp root_state(%{state: "waiting", waiting: "message"}),
+    do: "waiting on the person's next message"
+
+  defp root_state(%{state: state}), do: state
 
   # What the person and the agent said in the conversation, for a run
   # without a work whose session starts over: the agent's last reply that
