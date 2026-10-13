@@ -77,7 +77,7 @@ Rectangle {
         delegate: Label {
           required property string modelData
           text: modelData
-          color: Omunculus.toneOf(modelData)
+          color: Studio.toneOf(modelData)
           font.pixelSize: 11
         }
       }

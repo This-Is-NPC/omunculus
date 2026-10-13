@@ -27,13 +27,13 @@ ScrollPage {
     }
 
     Repeater {
-      model: Omunculus.projects
+      model: Studio.projects
       delegate: ProjectOverview {
         required property var modelData
         Layout.fillWidth: true
         projectId: modelData.id
-        overview: Omunculus.overviews[modelData.id]
-        onAgentPicked: name => { if (modelData.id === Omunculus.project) scroll.agentPicked(name) }
+        overview: Studio.overviews[modelData.id]
+        onAgentPicked: name => { if (modelData.id === Studio.project) scroll.agentPicked(name) }
       }
     }
   }

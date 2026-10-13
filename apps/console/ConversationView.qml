@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "kit/ui"
 
 // ConversationView is a conversation on screen, in one of three panes: the
 // chat, yours with the root agent, where every request shows where it was

@@ -79,7 +79,7 @@ SettingsCard {
     issue = ""
     const item = single ? section : section + "." + newName
     const from = !single && stored !== null && newName !== name ? name : ""
-    Omunculus.configure(item, draft, from, () => saving = false, reason => {
+    Studio.configure(item, draft, from, () => saving = false, reason => {
       saving = false
       issue = reason
     })

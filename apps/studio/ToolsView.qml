@@ -10,7 +10,7 @@ import "kit/ui"
 ScrollPage {
   id: scroll
 
-  readonly property var catalog: Omunculus.catalog
+  readonly property var catalog: Studio.catalog
   readonly property var entries: catalog ? catalog.tools : []
   readonly property var tools: entries.filter(entry => entry.kind !== "skill")
   contentHeight: content.implicitHeight
@@ -22,7 +22,7 @@ ScrollPage {
 
     Label {
       visible: scroll.catalog === null
-      text: Omunculus.connected ? "reading the catalog" : "the server does not answer"
+      text: Studio.connected ? "reading the catalog" : "the server does not answer"
       color: Theme.dim
     }
 
@@ -42,7 +42,7 @@ ScrollPage {
             Layout.fillWidth: true
             entry: modelData
             note: modelData.source === "inline" ? "inline in the project's config" : modelData.dir
-            agents: modelData.triggers.includes("model") ? Omunculus.holders(modelData.name) : []
+            agents: modelData.triggers.includes("model") ? Studio.holders(modelData.name) : []
           }
         }
       }

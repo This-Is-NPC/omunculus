@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import "focus.js" as Focus
+import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
 // TimelineView is one thread of the conversation: what you and its agents

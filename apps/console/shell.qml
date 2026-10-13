@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Hyprland
 import Quickshell.Io
 import "kit/ui"
 
@@ -61,7 +60,13 @@ ShellRoot {
           section: panel.current === "history" ? "conversations"
             : panel.current !== "conversation" ? Omunculus.project
             : panel.pane === "map" ? "agents" : panel.pane === "log" ? "log" : Omunculus.title
-          StatusLine { message: Omunculus.message; error: Omunculus.messageIsError; maxWidth: Math.max(0, panel.width - 480) }
+          StatusLine {
+            message: Omunculus.message
+            error: Omunculus.messageIsError
+            offline: !Omunculus.connected
+            count: Omunculus.noticeCount
+            maxWidth: Math.max(0, panel.width - 480)
+          }
           IconButton {
             visible: panel.current === "conversation"
             name: "cost"
@@ -82,12 +87,6 @@ ShellRoot {
             tip: panel.pane === "log" ? "back to the chat" : "every event, as a log"
             highlighted: panel.pane === "log"
             onClicked: panel.pane = panel.pane === "log" ? "chat" : "log"
-          }
-          IconButton {
-            name: "settings"
-            tip: "settings"
-            highlighted: Omunculus.settingsOpen
-            onClicked: Omunculus.toggleSettings()
           }
           // Closing the conversation on screen goes back to the conversations;
           // its agents go on.
@@ -190,66 +189,11 @@ ShellRoot {
     }
   }
 
-  // The settings: a window of their own, made once and then shown or hidden,
-  // since destroying a window makes Qt write its pipeline cache to disk.
-  FloatingWindow {
-    id: settings
-
-    // A child of the main window, so Hyprland keeps it floating above it.
-    parentWindow: panel
-    title: "omunculus · settings"
-    implicitWidth: Math.min(1400, screen ? screen.width - 96 : 1400)
-    implicitHeight: Math.min(900, screen ? screen.height - 96 : 900)
-    minimumSize: Qt.size(480, 360)
-    color: Theme.background
-    visible: Omunculus.settingsOpen
-    onClosed: Omunculus.settingsOpen = false
-
-    // Hyprland opens a child window centred on its parent, which can leave part
-    // of it off the screen, so it is centred on its monitor once it opens.
-    Connections {
-      target: Hyprland
-      function onRawEvent(event) {
-        if (event.name !== "openwindow")
-          return
-        const [address, , , title] = event.parse(4)
-        if (title === settings.title)
-          Hyprland.dispatch(`hl.dsp.window.center({ window = "address:0x${address}" })`)
-      }
-    }
-
-    Rectangle {
-      anchors.fill: parent
-      color: Theme.background
-      border.color: Theme.line
-
-      ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: 20
-        spacing: 18
-
-        Masthead {
-          Layout.fillWidth: true
-          Layout.fillHeight: false
-          section: "settings"
-          StatusLine { message: Omunculus.message; error: Omunculus.messageIsError; maxWidth: Math.max(0, settings.width - 480) }
-        }
-
-        SettingsView {
-          Layout.fillWidth: true
-          Layout.fillHeight: true
-          active: settings.visible
-        }
-      }
-    }
-  }
-
   // `quickshell ipc --path apps/console call omunculus <function>`, e.g. from a shortcut.
   IpcHandler {
     target: "omunculus"
     function newConversation(): void { Omunculus.createConversation() }
     function conversations(): void { if (Omunculus.conversationId === "") Omunculus.openHistory() }
-    function settings(): void { Omunculus.openSettings() }
     function open(conversationId: string): void { Omunculus.open(conversationId) }
     function agents(): void { if (Omunculus.conversationId !== "") panel.pane = "map" }
     function log(): void { if (Omunculus.conversationId !== "") panel.pane = "log" }

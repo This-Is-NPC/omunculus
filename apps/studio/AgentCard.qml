@@ -116,8 +116,8 @@ Rectangle {
 
     RowLayout {
       spacing: 7
-      Rectangle { implicitWidth: 7; implicitHeight: 7; radius: 3.5; color: Omunculus.toneOf(card.agent.name) }
-      Label { text: card.agent.name; color: Omunculus.toneOf(card.agent.name); font.pixelSize: 12; font.letterSpacing: 1 }
+      Rectangle { implicitWidth: 7; implicitHeight: 7; radius: 3.5; color: Studio.toneOf(card.agent.name) }
+      Label { text: card.agent.name; color: Studio.toneOf(card.agent.name); font.pixelSize: 12; font.letterSpacing: 1 }
     }
 
     // What it runs on.

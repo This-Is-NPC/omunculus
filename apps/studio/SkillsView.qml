@@ -9,9 +9,9 @@ import "kit/ui"
 ScrollPage {
   id: scroll
 
-  readonly property var catalog: Omunculus.catalog
+  readonly property var catalog: Studio.catalog
   readonly property var skills: catalog ? catalog.tools.filter(entry => entry.kind === "skill") : []
-  readonly property var document: Omunculus.setup ? Omunculus.setup.document : null
+  readonly property var document: Studio.setup ? Studio.setup.document : null
   readonly property var agents: document ? Object.keys(document.agents || {}).sort() : []
 
   contentHeight: content.implicitHeight
@@ -23,7 +23,7 @@ ScrollPage {
 
     Label {
       Layout.fillWidth: true
-      text: scroll.catalog === null ? (Omunculus.connected ? "reading the catalog" : "the server does not answer")
+      text: scroll.catalog === null ? (Studio.connected ? "reading the catalog" : "the server does not answer")
         : scroll.skills.length ? "Read from [skills] paths. An agent has them through the skills group, or one as skill.<name>, and reads one with the skill tool."
         : "No skill in [skills] paths."
       color: Theme.dim
@@ -62,14 +62,14 @@ ScrollPage {
                 required property string modelData
                 readonly property var table: scroll.document.agents[modelData]
                 text: modelData
-                checked: Omunculus.hasSkill(table, skill.name)
+                checked: Studio.hasSkill(table, skill.name)
                 tip: checked ? "take " + skill.name + " from " + modelData : "give " + skill.name + " to " + modelData
                 onClicked: {
                   const giving = !checked
                   const agent = modelData
-                  Omunculus.configure("agents." + agent, Omunculus.withSkill(table, skill.name, giving), "",
-                    () => Omunculus.tell((giving ? "gave " + skill.name + " to " : "took " + skill.name + " from ") + agent, false),
-                    reason => Omunculus.tell(reason, true))
+                  Studio.configure("agents." + agent, Studio.withSkill(table, skill.name, giving), "",
+                    () => Studio.tell((giving ? "gave " + skill.name + " to " : "took " + skill.name + " from ") + agent, false),
+                    reason => Studio.tell(reason, true))
                 }
               }
             }

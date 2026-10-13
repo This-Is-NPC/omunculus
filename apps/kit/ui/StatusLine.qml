@@ -1,5 +1,4 @@
 import QtQuick
-import "kit/ui"
 
 // StatusLine is the readout: the last message, and a warning while the
 // server is unreachable. Information fades after a few seconds; errors stay
@@ -9,15 +8,16 @@ Row {
   property string message
   property bool error: false
   // Whether to warn that the server is unreachable.
-  property bool offline: !Omunculus.connected
+  property bool offline: false
   // The message shortens before anything around it does.
   property real maxWidth: 380
   spacing: 10
   // Without a message or a warning it takes no room, not even a layout's spacing.
   visible: (message.length > 0 && session.opacity > 0) || offline
 
-  // A new notice shows and starts fading; a language switch only rewrites it.
-  property int count: Omunculus.noticeCount
+  // A new notice shows and starts fading, even when it repeats the last;
+  // its owner counts them.
+  property int count: 0
   onCountChanged: if (message.length > 0) { session.opacity = 1; fade.restart() }
   Timer { id: fade; interval: 6000; onTriggered: if (!line.error) session.opacity = 0 }
 

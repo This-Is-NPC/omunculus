@@ -1,5 +1,4 @@
 import QtQuick
-import "kit/ui"
 
 Rectangle {
   id: status

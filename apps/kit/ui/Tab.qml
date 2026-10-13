@@ -1,5 +1,4 @@
 import QtQuick
-import "kit/ui"
 
 // Tab is a section switch: a two-digit index and a tracked name, underlined
 // by a hairline in the accent while shown; a dot in the error colour after

@@ -28,9 +28,9 @@ Item {
   // What a removal asks to remove: [section, name].
   property var removal: null
 
-  readonly property var document: Omunculus.setup ? Omunculus.setup.document : null
-  readonly property var names: Omunculus.setup ? Omunculus.setup.names : []
-  readonly property var literalKeys: Omunculus.setup ? Omunculus.setup.literal_keys : []
+  readonly property var document: Studio.setup ? Studio.setup.document : null
+  readonly property var names: Studio.setup ? Studio.setup.names : []
+  readonly property var literalKeys: Studio.setup ? Studio.setup.literal_keys : []
   readonly property var tabs: ["overview", "secrets", "models", "agents", "workflows", "tools", "skills", "project"]
   readonly property var capabilities: ["project.manage_access", "project.manage_config", "conversation.create", "conversation.read",
     "conversation.send", "conversation.comment", "conversation.reply", "conversation.manage_access", "conversation.manage"]
@@ -89,10 +89,7 @@ Item {
   }
 
   function leave() {
-    if (agent !== "")
-      agent = ""
-    else
-      Omunculus.settingsOpen = false
+    agent = ""
   }
 
   onActiveChanged: if (active) body.forceActiveFocus()
@@ -149,7 +146,7 @@ Item {
 
     Label {
       visible: view.document === null
-      text: Omunculus.connected ? "reading the config" : "the server does not answer"
+      text: Studio.connected ? "reading the config" : "the server does not answer"
       color: Theme.dim
     }
   }
@@ -207,7 +204,7 @@ Item {
             id: card
             required property string modelData
             readonly property bool literal: view.literalKeys.includes(modelData) && draft.key === undefined
-            readonly property var omapass: Omunculus.omapass
+            readonly property var omapass: Studio.omapass
             readonly property string key: draft.key === undefined ? "" : String(draft.key)
             readonly property var omapassKey: /^!(.*omapass'?) get -- (.+)$/.exec(key)
             readonly property string source: literal ? "file"
@@ -363,7 +360,7 @@ Item {
             function test() {
               testing = true
               tested = ""
-              Omunculus.testModel(newName, draft, result => {
+              Studio.testModel(newName, draft, result => {
                 testing = false
                 testFailed = false
                 tested = "answered in " + (result.ms / 1000).toFixed(1) + " s: " + String(result.reply).replace(/\s+/g, " ").slice(0, 160)
@@ -504,7 +501,7 @@ Item {
                 RowLayout {
                   anchors { fill: parent; leftMargin: 14; rightMargin: 14 }
                   spacing: 14
-                  Label { text: entry.modelData; color: Omunculus.toneOf(entry.modelData); font.pixelSize: 12; font.letterSpacing: 1 }
+                  Label { text: entry.modelData; color: Studio.toneOf(entry.modelData); font.pixelSize: 12; font.letterSpacing: 1 }
                   Label {
                     Layout.fillWidth: true
                     text: view.stored("agents", entry.modelData) === null ? "new" :
@@ -607,21 +604,21 @@ Item {
                     Chip {
                       text: "ALL"
                       tip: "every skill of [skills] paths, as they come and go"
-                      checked: (card.draft[Omunculus.hasKey(card.draft)] || []).includes("skills")
-                      onClicked: card.replace(Omunculus.withAllSkills(card.draft, !checked))
+                      checked: (card.draft[Studio.hasKey(card.draft)] || []).includes("skills")
+                      onClicked: card.replace(Studio.withAllSkills(card.draft, !checked))
                     }
                     Repeater {
-                      model: Omunculus.skillNames
+                      model: Studio.skillNames
                       delegate: Chip {
                         required property string modelData
                         text: modelData
-                        checked: Omunculus.hasSkill(card.draft, modelData)
-                        onClicked: card.replace(Omunculus.withSkill(card.draft, modelData, !checked))
+                        checked: Studio.hasSkill(card.draft, modelData)
+                        onClicked: card.replace(Studio.withSkill(card.draft, modelData, !checked))
                       }
                     }
                   }
                   Note {
-                    visible: Omunculus.skillNames.length === 0
+                    visible: Studio.skillNames.length === 0
                     text: "No skill in [skills] paths."
                   }
                 }
@@ -966,10 +963,10 @@ Item {
     confirmText: "REMOVE"
     onConfirmed: {
       const [section, name] = view.removal
-      Omunculus.configure(section + "." + name, null, "", () => {
+      Studio.configure(section + "." + name, null, "", () => {
         if (section === "agents")
           view.agent = ""
-      }, reason => Omunculus.tell(reason, true))
+      }, reason => Studio.tell(reason, true))
     }
   }
 }
