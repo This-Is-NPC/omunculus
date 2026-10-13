@@ -48,19 +48,14 @@ Item {
   onHeightChanged: if (!moved) Qt.callLater(fit)
 
   // Brings the box {x, y, width, height}, in the chart's coordinates, into
-  // the room the insets leave.
+  // the room the insets leave; a box larger than the room shows from its
+  // top left.
   function bringIntoView(box) {
-    const right = width - rightInset - 20
-    const x = world.x + box.x * world.scale
-    const y = world.y + box.y * world.scale
-    if (x + box.width * world.scale > right)
-      world.x -= x + box.width * world.scale - right
-    if (x < leftInset + 20)
-      world.x += leftInset + 20 - x
-    if (y < topInset + 20)
-      world.y += topInset + 20 - y
-    if (y + box.height * world.scale > height - bottomInset - 20)
-      world.y -= y + box.height * world.scale - (height - bottomInset - 20)
+    const scale = world.scale
+    world.x -= Math.max(0, world.x + (box.x + box.width) * scale - (width - rightInset - 20))
+    world.x += Math.max(0, leftInset + 20 - (world.x + box.x * scale))
+    world.y -= Math.max(0, world.y + (box.y + box.height) * scale - (height - bottomInset - 20))
+    world.y += Math.max(0, topInset + 20 - (world.y + box.y * scale))
   }
 
   // Zooms by `factor` keeping the point (px, py) of the view where it is.
