@@ -17,7 +17,8 @@ defmodule Omunculus.Tools.Assemble do
   `## Children`, every work handed down from the run's work as it stands:
   its title, agent, id, workflow stage and state, a child that broke
   marked as waiting on this run to reopen it or break the work, with its
-  last comment. Under `## Results`, what the works handed down from the run's work came back
+  last comment, and a child that is done, unless it is under `## Results`,
+  with its last comment, its report. Under `## Results`, what the works handed down from the run's work came back
   with since its last closed run: each child closed or cancelled since,
   with its last comment, and, when the run was opened by a child's
   `break`, that child's report. A run with a request gets the request's
@@ -65,7 +66,7 @@ defmodule Omunculus.Tools.Assemble do
     # What happened since a pause, which a continued session is told.
     news =
       works_section(view["conversation_works"], limit) ++
-        children_section(view["children"]) ++
+        children_section(view["children"], view["results"] || []) ++
         results_section(view["results"] || [], view["cause"]) ++
         request_section(
           outside_inbox(view["request"], view["inbox"] || []),
@@ -158,15 +159,18 @@ defmodule Omunculus.Tools.Assemble do
   end
 
   # Every work handed down from this one as it stands, so a run finds the
-  # id of a child to reopen however it was opened.
-  defp children_section(nil), do: []
-  defp children_section([]), do: []
+  # id of a child to reopen however it was opened, and what a child that
+  # is done came back with after the run that saw it under ## Results.
+  defp children_section(nil, _results), do: []
+  defp children_section([], _results), do: []
 
-  defp children_section(children) do
+  defp children_section(children, results) do
+    reported = MapSet.new(results, & &1.id)
+
     lines =
       Enum.map(children, fn child ->
         "- #{child.title} (#{child.assignee}, work #{child.id}#{stage_of(child)}): " <>
-          child_state(child)
+          child_state(child, MapSet.member?(reported, child.id))
       end)
 
     ["## Children\n" <> Enum.join(lines, "\n")]
@@ -178,14 +182,21 @@ defmodule Omunculus.Tools.Assemble do
   defp stage_of(_child), do: ""
 
   # A waiting child with nothing to wait on broke and waits on its parent.
-  defp child_state(%{state: "waiting", waiting: nil} = child) do
-    report = if child.last_comment, do: ": " <> child.last_comment.body, else: ""
-    "broke, waiting on you to reopen it or to break this work" <> report
+  defp child_state(%{state: "waiting", waiting: nil} = child, _reported) do
+    "broke, waiting on you to reopen it or to break this work" <> report(child)
   end
 
-  defp child_state(%{state: "waiting", waiting: "child"}), do: "waiting on its own works"
-  defp child_state(%{state: "waiting", waiting: "request"}), do: "waiting on a request"
-  defp child_state(%{state: state}), do: state
+  defp child_state(%{state: "waiting", waiting: "child"}, _reported),
+    do: "waiting on its own works"
+
+  defp child_state(%{state: "waiting", waiting: "request"}, _reported),
+    do: "waiting on a request"
+
+  defp child_state(%{state: "done"} = child, false), do: "done" <> report(child)
+  defp child_state(%{state: state}, _reported), do: state
+
+  defp report(%{last_comment: %{body: body}}), do: ": " <> body
+  defp report(_child), do: ""
 
   # What the works handed down from this one came back with since its last
   # run: each closed child's last comment, its report, and the report of
@@ -193,8 +204,7 @@ defmodule Omunculus.Tools.Assemble do
   defp results_section(children, cause) do
     lines =
       Enum.map(children, fn child ->
-        report = if child.last_comment, do: ": " <> child.last_comment.body, else: ""
-        "- #{child.title} (#{child.assignee}, #{child.state}, work #{child.id})#{report}"
+        "- #{child.title} (#{child.assignee}, #{child.state}, work #{child.id})#{report(child)}"
       end) ++ broken(cause)
 
     if lines == [], do: [], else: ["## Results\n" <> Enum.join(lines, "\n")]

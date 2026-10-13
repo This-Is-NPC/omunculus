@@ -191,7 +191,8 @@ agent text
 → under `## Children`, every work handed down from this one as it
   stands: its title, agent, id, workflow and stage, and state; a child
   that broke is marked as waiting on this run to reopen it or break the
-  work, with its last comment, the break's report
+  work, with its last comment, the break's report, and a child that is
+  done, unless it is under `## Results`, has its last comment, its report
 → under `## Results`, what the works handed down from this one came back
   with since its last closed run: each child closed or cancelled since,
   with its last comment, and, when a child's `break` opened this run,
