@@ -9,9 +9,10 @@ import "kit/ui"
 // what for and what that lets it do, and who decides — you, or the agent above,
 // whom you can always overrule. While it waits, the answers come grouped: for
 // this work only, always (each scope saying where it is written), or no, with a
-// reason; or an answer in words, choosing none; or, when it waits on you, the
-// words go up to whoever decides above you. Answered, it says what was chosen
-// and by whom.
+// reason, and so for each decision it gathers from below, under its part, an
+// option carrying the words written; or an answer in words, choosing none; or,
+// when it waits on you, the words go up to whoever decides above you.
+// Answered, it says what was chosen and by whom.
 SurfaceFrame {
   id: card
 
@@ -25,18 +26,12 @@ SurfaceFrame {
   readonly property var work: request ? Omunculus.work(request.work_id || "") : null
   readonly property string asker: request ? Requests.label(request.requester) : ""
   readonly property var options: request ? Object.keys(request.options || {}) : []
-  // The first name a grant of the request gives, as {kind, name}.
-  readonly property var wanted: {
-    for (const option of options)
-      for (const step of request.options[option])
-        if (step.name === "grant")
-          return step.args
-    return null
-  }
-  readonly property var depth: {
-    const configured = Omunculus.setup ? Omunculus.setup.agents.find(item => item.name === asker) : null
-    return configured ? configured.depth : null
-  }
+  // Its own options, then those of the decisions it gathers from below still
+  // waiting, each {part, path, options, request}, as an escalation keeps a
+  // decision's options on its origin.
+  readonly property var choices: request ? Requests.choices(request) : []
+  // The first name a grant among its decisions gives, as {kind, name}.
+  readonly property var wanted: request ? Requests.granted(request) : null
   readonly property var place: Omunculus.workspaceOf(work ? work.workspace || "" : "")
 
   // Whether the words written escalate it rather than answer it.
@@ -51,9 +46,10 @@ SurfaceFrame {
     ;(first && Focus.within(first, content) ? first : words).forceActiveFocus()
   }
 
-  // Chooses an option, with the words as its body.
-  function decide(option, body) {
-    Omunculus.reply(key, option, body)
+  // Chooses an option, with the words as its body: the request's own or, by
+  // the parts of path, that of a decision it gathers.
+  function decide(option, body, path) {
+    Omunculus.reply(key, option, body, path)
     sent()
   }
 
@@ -86,20 +82,25 @@ SurfaceFrame {
     return "reach " + granted.name
   }
 
-  // How an option reads on its button.
-  function labelOf(option) {
+  // How an option of the request, or of a decision it gathers, reads on its
+  // button: a grant's scope is that of whoever asked it.
+  function labelOf(option, of) {
+    const from = of || request
+    if (!from)
+      return ""
+    const who = Requests.label(from.requester)
+    const job = Omunculus.work(from.work_id || "")
+    const where = Omunculus.workspaceOf(job ? job.workspace || "" : "")
+    const configured = Omunculus.setup ? Omunculus.setup.agents.find(item => item.name === who) : null
     return ({
       grant: "THIS WORK ONLY",
-      grant_agent: "FOR " + asker.toUpperCase(),
-      grant_depth: depth === null ? "AT ITS DEPTH" : "AT DEPTH " + depth,
-      grant_stage: "IN STAGE " + String(work && work.stage ? work.stage : "").toUpperCase(),
-      grant_workspace: "IN " + (place.name ? "WORKSPACE " + place.name.toUpperCase() : "THE PROJECT"),
+      grant_agent: "FOR " + who.toUpperCase(),
+      grant_depth: configured ? "AT DEPTH " + configured.depth : "AT ITS DEPTH",
+      grant_stage: "IN STAGE " + String(job && job.stage ? job.stage : "").toUpperCase(),
+      grant_workspace: "IN " + (where.name ? "WORKSPACE " + where.name.toUpperCase() : "THE PROJECT"),
       deny: "DENY"
     })[option] || option.replace(/_/g, " ").toUpperCase()
   }
-
-  readonly property var always: options.filter(option => option.startsWith("grant_"))
-  readonly property var others: options.filter(option => option !== "grant" && option !== "deny" && !option.startsWith("grant_"))
 
   implicitHeight: content.implicitHeight + 24
   variant: yours ? "filled" : "outline"
@@ -157,46 +158,68 @@ SurfaceFrame {
       wrapMode: Text.Wrap
     }
 
-    // For this work only.
-    Flow {
-      Layout.fillWidth: true
-      visible: card.open && (card.options.includes("grant") || card.others.length > 0)
-      spacing: 6
-      TraceButton {
-        visible: card.options.includes("grant")
-        dense: true
-        role: "primary"
-        icon: "check"
-        text: card.labelOf("grant")
-        onClicked: card.decide("grant", "")
-      }
-      Repeater {
-        model: card.others
-        delegate: TraceButton {
-          required property string modelData
-          dense: true
-          role: "progress"
-          text: card.labelOf(modelData)
-          onClicked: card.decide(modelData, "")
-        }
-      }
-    }
-
-    // Always: each scope a grant written into the TOML.
-    ColumnLayout {
-      Layout.fillWidth: true
-      visible: card.open && card.always.length > 0
-      spacing: 6
-      Caption { text: "ALWAYS  ·  WRITTEN INTO OMUNCULUS.TOML" }
-      Flow {
+    // Each decision as buttons, given with the words written: the request's
+    // own options, then those of each decision it gathers from below, under
+    // its part and who asked it; for this work only, then always.
+    Repeater {
+      model: card.open ? card.choices : []
+      delegate: ColumnLayout {
+        id: choice
+        required property var modelData
+        readonly property bool own: modelData.path.length === 0
+        readonly property var options: modelData.options
+        // The request's own deny goes with the words, as the reason of a no.
+        readonly property var once: options.filter(option => option !== "grant" && !option.startsWith("grant_") && !(own && option === "deny"))
+        readonly property var always: options.filter(option => option.startsWith("grant_"))
+        function decide(option) { card.decide(option, words.text.trim(), modelData.path) }
         Layout.fillWidth: true
         spacing: 6
-        Repeater {
-          model: card.always
-          delegate: Chip {
-            required property string modelData
-            text: card.labelOf(modelData)
-            onClicked: card.decide(modelData, "")
+
+        Caption {
+          visible: !choice.own
+          text: choice.modelData.part.replace(/_/g, " ").toUpperCase() + "  ·  " + Requests.label(choice.modelData.request.requester).toUpperCase() + " ASKS"
+        }
+        Flow {
+          Layout.fillWidth: true
+          visible: choice.options.includes("grant") || choice.once.length > 0
+          spacing: 6
+          TraceButton {
+            visible: choice.options.includes("grant")
+            dense: true
+            role: "primary"
+            icon: "check"
+            text: card.labelOf("grant", choice.modelData.request)
+            tip: words.text.trim() !== "" ? "with what you wrote" : ""
+            onClicked: choice.decide("grant")
+          }
+          Repeater {
+            model: choice.once
+            delegate: TraceButton {
+              required property string modelData
+              dense: true
+              role: modelData === "deny" || modelData === "cancel" ? "guarded" : "progress"
+              text: card.labelOf(modelData, choice.modelData.request)
+              tip: words.text.trim() !== "" ? "with what you wrote" : ""
+              onClicked: choice.decide(modelData)
+            }
+          }
+        }
+        // Always: each scope a grant written into the TOML.
+        Caption {
+          visible: choice.always.length > 0
+          text: "ALWAYS  ·  WRITTEN INTO OMUNCULUS.TOML"
+        }
+        Flow {
+          Layout.fillWidth: true
+          visible: choice.always.length > 0
+          spacing: 6
+          Repeater {
+            model: choice.always
+            delegate: Chip {
+              required property string modelData
+              text: card.labelOf(modelData, choice.modelData.request)
+              onClicked: choice.decide(modelData)
+            }
           }
         }
       }
@@ -213,7 +236,7 @@ SurfaceFrame {
         Layout.fillWidth: true
         dense: true
         placeholderText: card.escalating ? "why it goes up, for whoever decides above"
-          : card.options.includes("deny") ? "an answer in words, or why not" : "an answer in words"
+          : card.choices.length > 0 ? "words to go with a choice above, or an answer of your own" : "an answer in words"
         onAccepted: card.escalating ? card.escalate() : card.answerInWords()
       }
       Flow {

@@ -436,9 +436,11 @@ Singleton {
     call("POST", base + "/conversations/" + conversationId + "/comments", { body: value, work_id: work }, true, () => tell("noted", false))
   }
 
-  function reply(requestId, option, body) {
+  // Answers a request with words and an option, of the request itself or, by
+  // the parts of path, of the decision it gathers that the option is of.
+  function reply(requestId, option, body, path) {
     call("POST", base + "/conversations/" + conversationId + "/requests/" + requestId + "/reply",
-      Requests.answer(option, body), true, () => tell(option ? "replied " + option : "replied", false))
+      Requests.answer(option, body, path), true, () => tell(option ? "replied " + option : "replied", false))
   }
 
   // Raises a request waiting on you to whoever decides above you, as one
@@ -789,7 +791,7 @@ Singleton {
       append("", { kind: "request", key: event.request_id, who: who, stamp: stamp, at: at, work: work })
       break
     case "reply":
-      keep("replies", event.request_id, { option: body.option, who: who, body: body.body || "" })
+      keep("replies", event.request_id, { option: Requests.chosen(body), who: who, body: body.body || "" })
       break
     case "notify":
       if (event.inbox_id)

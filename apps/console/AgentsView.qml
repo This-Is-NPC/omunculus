@@ -158,15 +158,11 @@ Item {
     const target = human ? { x: youX, y: 0 } : places[work && work.parent_id ? work.parent_id : ""]
     if (!from || !target)
       return null
-    let wanted = ""
-    for (const option of Object.keys(request.options || {}))
-      for (const step of request.options[option])
-        if (step.name === "grant" && !wanted)
-          wanted = step.args.name
+    const wanted = Requests.granted(request)
     return {
       x1: from.card + nodeWidth * 0.78, y1: from.y,
       x2: (human ? target.x : target.card) + nodeWidth * 0.78, y2: target.y + (human ? youHeight : nodeHeight),
-      human: human, label: wanted
+      human: human, label: wanted ? wanted.name : ""
     }
   }).filter(arrow => arrow !== null)
 

@@ -21,13 +21,13 @@ function answer(option, body, path) {
 
 // The decisions a request offers: its own options, then, of every request it
 // gathers from below still waiting, the options named there, each with the
-// parts that lead to it, as an escalation keeps a decision's options on its
-// origin.
+// parts that lead to it and the request it is of, as an escalation keeps a
+// decision's options on its origin.
 function choices(request, path) {
   const at = path || [];
   const own = Object.keys(request.options || {});
   const mine = own.length > 0 && (at.length === 0 || ["pending", "escalated"].includes(request.status))
-    ? [{ part: at.length > 0 ? at[at.length - 1] : "", path: at, options: own }] : [];
+    ? [{ part: at.length > 0 ? at[at.length - 1] : "", path: at, options: own, request: request }] : [];
   return Object.keys(request.origins || {})
     .reduce((all, part) => all.concat(choices(request.origins[part], at.concat([part]))), mine);
 }
@@ -37,4 +37,14 @@ function chosen(answer) {
   if (answer.option) return answer.option;
   const parts = Object.values(answer.parts || {}).map(part => chosen(part)).filter(option => option);
   return parts.length > 0 ? parts[0] : "";
+}
+
+// The first name a grant among a request's decisions gives, as {kind, name};
+// null when none grants.
+function granted(request) {
+  for (const choice of choices(request))
+    for (const option of choice.options)
+      for (const step of choice.request.options[option])
+        if (step.name === "grant") return step.args;
+  return null;
 }
