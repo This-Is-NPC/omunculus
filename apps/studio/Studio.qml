@@ -143,14 +143,6 @@ Singleton {
     return entry.workflows.reduce((all, workflow) => all.concat(workflow.stages.map(stage => stage.agent)), [])
   }
 
-  // What the depths below 0 of an overview's place go through, "D1 delivery"
-  // a depth, joined by `separator`; "" when the place has only depth 0.
-  function runsAt(place, separator) {
-    return place.depths.filter(entry => entry.depth > 0)
-      .map(entry => "D" + entry.depth + " " + (entry.workflows.map(workflow => workflow.name).join(" | ") || "no workflow"))
-      .join(separator)
-  }
-
   // The agents of the project on screen that have the tool or skill `name` in
   // any of its places, by its overview.
   function holders(name) {

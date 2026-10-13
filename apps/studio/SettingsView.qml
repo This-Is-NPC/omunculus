@@ -4,18 +4,20 @@ import QtQuick.Layouts
 import "kit/ui"
 
 // SettingsView shapes the project's config in the order its parts depend on
-// each other: the overview of every project of the server as it runs in each
-// workspace, the secrets of the providers,
-// the models that use them, the agents on those models, the workflows of those
-// agents, the tools and the skills of the catalog, and the project's own
-// policy, workspaces and access. Each item is
-// edited and saved on its own, through the configure tool, which writes it only
+// each other: the secrets of the providers, the models that use them, the
+// agents on those models, the workflows of those agents, the tools and the
+// skills of the catalog, and the project's own policy, workspaces and
+// access, one section at a time. Each item is edited and saved on its own, through the configure tool, which writes it only
 // if the result loads. Nothing applies before it is saved; the next run reads it.
 Item {
   id: view
 
   property bool active: false
+  // The section on screen: secrets, models, agents, workflows, tools,
+  // skills or the project, 0 to 6.
   property int page: 0
+  // A section asked for, as when an item of another is revealed.
+  signal wanted(int page)
   // Section -> names added here and not saved yet.
   property var pending: ({})
   // Section/name -> whether its card is open.
@@ -31,7 +33,6 @@ Item {
   readonly property var document: Studio.setup ? Studio.setup.document : null
   readonly property var names: Studio.setup ? Studio.setup.names : []
   readonly property var literalKeys: Studio.setup ? Studio.setup.literal_keys : []
-  readonly property var tabs: ["overview", "secrets", "models", "agents", "workflows", "tools", "skills", "project"]
   readonly property var capabilities: ["project.manage_access", "project.manage_config", "conversation.create", "conversation.read",
     "conversation.send", "conversation.comment", "conversation.reply", "conversation.manage_access", "conversation.manage"]
 
@@ -76,7 +77,7 @@ Item {
 
   // Shows the item picked on the overview where it is edited.
   function reveal(section, name) {
-    page = { auth: 1, models: 2, agents: 3, workflows: 4 }[section]
+    wanted({ auth: 0, models: 1, agents: 2, workflows: 3 }[section])
     if (section === "agents")
       agent = name
     else
@@ -94,14 +95,6 @@ Item {
 
   onActiveChanged: if (active) body.forceActiveFocus()
 
-  Repeater {
-    model: 8
-    delegate: Item {
-      required property int index
-      Shortcut { enabled: view.active; sequence: "Ctrl+" + (index + 1); onActivated: view.page = index }
-    }
-  }
-
   // Esc that nothing inside took (an open list or dialog takes its own) goes back.
   ColumnLayout {
     id: body
@@ -110,29 +103,13 @@ Item {
     Keys.onEscapePressed: view.leave()
     spacing: 18
 
-    Flow {
-      Layout.fillWidth: true
-      spacing: 20
-      Repeater {
-        model: view.tabs
-        delegate: Tab {
-          required property string modelData
-          required property int index
-          label: modelData
-          digit: String(index + 1).padStart(2, "0")
-          current: view.page === index
-          onChosen: view.page = index
-        }
-      }
-    }
-
     Item {
       Layout.fillWidth: true
       Layout.fillHeight: true
       visible: view.document !== null
 
       Repeater {
-        model: [overviewPage, secretsPage, modelsPage, agentsPage, workflowsPage, toolsPage, skillsPage, projectPage]
+        model: [secretsPage, modelsPage, agentsPage, workflowsPage, toolsPage, skillsPage, projectPage]
         delegate: Stage {
           id: stage
           required property var modelData
@@ -181,11 +158,6 @@ Item {
     color: Theme.dim
     font.pixelSize: 11
     wrapMode: Text.Wrap
-  }
-
-  Component {
-    id: overviewPage
-    OverviewView { onAgentPicked: name => view.reveal("agents", name) }
   }
 
   Component {
@@ -321,7 +293,6 @@ Item {
             }
           }
         }
-        Chip { text: "ADD PROVIDER"; icon: "plus"; onClicked: view.add("auth", "provider") }
       }
     }
   }
@@ -466,7 +437,6 @@ Item {
             }
           }
         }
-        Chip { text: "ADD MODEL"; icon: "plus"; onClicked: view.add("models", "model") }
       }
     }
   }
@@ -522,7 +492,6 @@ Item {
                 }
               }
             }
-            Chip { text: "ADD AGENT"; icon: "plus"; onClicked: view.agent = view.add("agents", "agent") }
           }
         }
       }
@@ -737,7 +706,6 @@ Item {
             }
           }
         }
-        Chip { text: "ADD WORKFLOW"; icon: "plus"; onClicked: view.add("workflows", "workflow") }
       }
     }
   }
@@ -849,7 +817,6 @@ Item {
             }
           }
         }
-        Chip { text: "ADD WORKSPACE"; icon: "plus"; onClicked: view.add("workspaces", "workspace") }
 
         Kicker { Layout.fillWidth: true; Layout.topMargin: 8; text: "ACCESS" }
         Note {
