@@ -1,7 +1,7 @@
 name = "work"
 kind = "tool"
 triggers = ["model"]
-description = "Creates works with a title and a goal: comments the report on the run's work, delegates each work below it and ends the run. Without a work, creates the root work with the report as its first comment and, when each work names an agent or a workflow of the depth below, or none does and that depth has one agent or requires one workflow, hands them down at once."
+description = "Creates works with a title and a goal: comments the report on the run's work, delegates each work below it and ends the run. Without a work, creates the root work with the report as its first comment and, when each work names an agent or a workflow of the depth below, or none does and that depth has one agent or requires one workflow, hands them down at once. Where ## Agents shows a workflow every work goes through, a work goes through it: leave agent out."
 tags = ["sequence", "work"]
 groups = ["sequence"]
 module = "Omunculus.Tools.Work"
