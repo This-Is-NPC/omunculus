@@ -6,3 +6,86 @@ rebar = "3.27.0"
 
 [env]
 MIX_REBAR3 = "rebar3"
+
+[tasks."benchmark:build"]
+description = "Build the linear benchmark, harness release and master Rust stub"
+run = "scripts/benchmark-build"
+
+[tasks."benchmark:check"]
+description = "Test the Rust benchmark controller and compile the BEAM driver"
+depends = ["benchmark:build"]
+run = "scripts/benchmark-check"
+
+[tasks."benchmark:preflight"]
+description = "Linear resident benchmark: preflight"
+run = "scripts/benchmark-preflight"
+
+[tasks."benchmark:report"]
+description = "Linear resident benchmark: report"
+run = "scripts/benchmark-report"
+
+[tasks."benchmark:run"]
+description = "Linear resident benchmark: run"
+run = "scripts/benchmark-run"
+
+[tasks."dev:bootstrap"]
+description = "Seed the local administrator of each dev project once, and give the agency its packs' workspace files"
+run = "scripts/dev-bootstrap"
+
+[tasks."dev:console"]
+description = "Open the console on the dev project of a running server"
+run = "scripts/dev-console"
+
+[tasks."dev:mailbox"]
+description = "Open the mailbox on the dev project of a running server"
+run = "scripts/dev-mailbox"
+
+[tasks."dev:reset"]
+description = "Delete the dev projects' stores and workspaces"
+run = "scripts/dev-reset"
+
+[tasks."dev:serve"]
+description = "Run the server on the dev registry, with the keys of .env, the deploy sockets and keys and your git identity"
+depends = ["dev:bootstrap"]
+run = "scripts/dev-serve"
+
+[tasks."dev:studio"]
+description = "Open the studio on the agency project of a running server; -- --project dev for the other"
+run = "scripts/dev-studio"
+
+[tasks."eval:compare"]
+description = "Equivalent Exchange: compare two result folders (mise run eval:compare -- <before> <now>)"
+run = "scripts/eval-compare"
+
+[tasks."eval:run"]
+description = "Equivalent Exchange: run the behaviour benchmark (mise run eval:run -- --model luna --k 2)"
+run = "scripts/eval-run"
+
+[tasks."eval:selftest"]
+description = "Equivalent Exchange: prove every task's check against its solution"
+run = "scripts/eval-selftest"
+
+[tasks.pre-commit]
+description = "Check the boundaries and formatting before a commit"
+run = ["scripts/validate-boundaries", "scripts/check-format"]
+
+[tasks.pre-push]
+description = "Run regular validation before a push"
+run = "scripts/validate-regular"
+
+[tasks.up]
+description = "Start the dev server, unless one already answers; open the apps with dev:console, dev:studio and dev:mailbox"
+depends = ["dev:bootstrap"]
+run = "scripts/up"
+
+[tasks."validate:boundaries"]
+description = "Check that the apps and the core share only the server's contract"
+run = "scripts/validate-boundaries"
+
+[tasks."validate:regular"]
+description = "Run the regular test suite"
+run = "scripts/validate-regular"
+
+[tasks."validate:sandbox"]
+description = "Run Bubblewrap integration tests on a supported Linux host"
+run = "scripts/validate-sandbox"

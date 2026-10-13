@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-#MISE description="Open the console on the dev project of a running server"
-set -euo pipefail
-cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
-
-exec apps/kit/run console --config dev/server.toml --project dev "$@"

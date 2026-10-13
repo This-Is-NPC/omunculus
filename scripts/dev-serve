@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-#MISE description="Run the server on the dev registry, with the keys of .env, the deploy sockets and keys and your git identity"
-#MISE depends=["dev:bootstrap"]
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
 

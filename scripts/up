@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-#MISE description="Start the dev server, unless one already answers; open the apps with dev:console, dev:studio and dev:mailbox"
-#MISE depends=["dev:bootstrap"]
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
 
@@ -11,4 +9,4 @@ if curl -s -o /dev/null --unix-socket "$socket" http://localhost/openapi.json; t
   printf 'up: the dev server already answers on %s\n' "$socket"
   exit 0
 fi
-exec mise-tasks/dev/serve
+exec scripts/dev-serve

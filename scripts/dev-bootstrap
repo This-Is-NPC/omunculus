@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-#MISE description="Seed the local administrator of each dev project once, and give the agency its packs' workspace files"
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
 

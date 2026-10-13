@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-#MISE description="Delete the dev projects' stores and workspaces"
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
 

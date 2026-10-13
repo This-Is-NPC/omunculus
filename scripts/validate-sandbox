@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-#MISE description="Run Bubblewrap integration tests on a supported Linux host"
 set -euo pipefail
 
 project_root="${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"

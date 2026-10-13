@@ -34,7 +34,7 @@ packs/               teams distributed as packs (Config.Packs), each with the ev
 eval/                Equivalent Exchange, the behaviour benchmark: the Amestris preset,
                      its configurations, tasks and runner (mise run eval:run); each run
                      writes eval/results/<time>-<label>/, ignored by git
-mise-tasks/          validate/regular, validate/sandbox, validate/boundaries, pre-commit, pre-push, up, dev/*, benchmark/*, eval/*
+scripts/             the jobs mise.toml runs as tasks: validate-*, check-format, up, dev-*, benchmark-*, eval-*
 dev/                 the development environment: server registry and project config
 ```
 
