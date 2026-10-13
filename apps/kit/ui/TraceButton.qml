@@ -30,7 +30,6 @@ Rectangle {
   implicitWidth: Math.max(dense ? 72 : 150, iconRoom + caption.implicitWidth + 2 * side)
   implicitHeight: dense ? 28 : 44
   activeFocusOnTab: true
-  clip: true
   opacity: enabled ? 1 : 0.35
   color: armed ? tone : (primary ? Qt.alpha(tone, 0.08) : "transparent")
   border.color: primary ? tone : Theme.line
@@ -74,34 +73,41 @@ Rectangle {
     backdrop: button.color
   }
 
-  Row {
-    id: content
-    // Back once the trace has reached the end and gone.
-    visible: !trace.visible
-    anchors.centerIn: parent
-    spacing: 10
-    transform: Translate { id: contentShift }
+  // The content moves within the button, cut at its edges; the button
+  // itself is not, so its hit area may reach past them.
+  Item {
+    anchors.fill: parent
+    clip: true
+    Row {
+      id: content
+      // Back once the trace has reached the end and gone.
+      visible: !trace.visible
+      anchors.centerIn: parent
+      spacing: 10
+      transform: Translate { id: contentShift }
 
-    Icon {
-      anchors.verticalCenter: parent.verticalCenter
-      visible: button.icon.length > 0
-      name: button.icon
-      size: button.dense ? 12 : 14
-      color: button.ink
+      Icon {
+        anchors.verticalCenter: parent.verticalCenter
+        visible: button.icon.length > 0
+        name: button.icon
+        size: button.dense ? 12 : 14
+        color: button.ink
+      }
+      DecodeLabel {
+        id: caption
+        anchors.verticalCenter: parent.verticalCenter
+        // Elided before it reaches the key or the edges.
+        width: Math.min(implicitWidth, button.width - 2 * button.side - button.iconRoom)
+        elide: Text.ElideRight
+        value: button.text
+        soft: true
+        color: button.ink
+        font.pixelSize: button.dense ? 10 : 11
+        font.bold: button.armed
+        font.letterSpacing: button.dense ? 1 : 1.4
+      }
     }
-    DecodeLabel {
-      id: caption
-      anchors.verticalCenter: parent.verticalCenter
-      // Elided before it reaches the key or the edges.
-      width: Math.min(implicitWidth, button.width - 2 * button.side - button.iconRoom)
-      elide: Text.ElideRight
-      value: button.text
-      soft: true
-      color: button.ink
-      font.pixelSize: button.dense ? 10 : 11
-      font.bold: button.armed
-      font.letterSpacing: button.dense ? 1 : 1.4
-    }
+
   }
 
   Rectangle {
@@ -114,7 +120,7 @@ Rectangle {
 
   MouseArea {
     id: pointer
-    anchors.fill: parent
+    anchors { fill: parent; margins: -4 }
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
     onClicked: button.press()

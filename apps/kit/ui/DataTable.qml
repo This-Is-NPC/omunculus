@@ -135,7 +135,13 @@ Item {
     property bool atEnd: true
     onMovementEnded: atEnd = atYEnd
     onCountChanged: if (table.followsEnd && atEnd) Qt.callLater(positionViewAtEnd)
-    onActiveFocusChanged: if (activeFocus && currentIndex < 0 && count > 0) currentIndex = 0
+    onActiveFocusChanged: {
+      if (activeFocus && currentIndex < 0 && count > 0)
+        currentIndex = 0
+      // The row the keyboard lands on is the one picked.
+      if (activeFocus && table.picks && currentItem)
+        table.picked(currentItem.modelData)
+    }
     // Picking, the keyboard picks the row it moves to.
     onCurrentIndexChanged: if (table.picks && currentItem && activeFocus) table.picked(currentItem.modelData)
     Keys.onReturnPressed: if (currentItem) currentItem.open()
@@ -208,6 +214,8 @@ Item {
             width: table.columnWidth(index)
             height: row.height
             verticalAlignment: Text.AlignVCenter
+            // Apart from the next column, so a cut text does not run into it.
+            rightPadding: 12
             value: modelData
             soft: true
             revealOnStage: !table.compact

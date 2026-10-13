@@ -86,7 +86,7 @@ Rectangle {
 
   MouseArea {
     id: mouse
-    anchors.fill: parent
+    anchors { fill: parent; margins: -4 }
     hoverEnabled: true
     cursorShape: chip.off ? Qt.ArrowCursor : Qt.PointingHandCursor
     onClicked: chip.press()
