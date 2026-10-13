@@ -37,7 +37,8 @@ pack.toml       the agents, on the role `team`, the workflow, and the secrets
                 of the deploy tools, on the providers `homologation` and
                 `production`
 tools/          deploy_preview (homologation), promote (production) and
-                deliver, the administrator's done
+                deliver, the administrator's done; _deploy, the script the
+                two deploy tools run, which they read beside their own folders
 workspace/      AGENTS.md, the rules every agent of the team follows
 environment/    up and down: the two Dokku instances the deploy tools reach
 tasks/          the tasks that show the team works, in the eval's format
@@ -51,8 +52,11 @@ images/         a portrait of each agent, <agent>.webp, 512 px square, its `imag
    key of its own under `environment/.state/keys` and a unix socket under
    `environment/.state/sockets`. `environment/down` stops them.
 2. In the project's `omunculus.toml`, give the deploy tools what they read:
-   `OMUNCULUS_DEPLOY` (the sockets folder) in `[execution] environment`, and
-   two logins whose keys are the instances' private keys, for example
+   `OMUNCULUS_DEPLOY` (the sockets folder) in `[execution] environment`,
+   the sockets folder itself in `[execution] write` unless `[execution]
+   host` shows commands the machine (without either, they cannot reach the
+   sockets),
+   and two logins whose keys are the instances' private keys, for example
    `[auth.homologation]` with `key = "$OMUNCULUS_HOMOLOGATION_KEY"` and
    `[auth.production]` with `key = "$OMUNCULUS_PRODUCTION_KEY"`.
 3. Its agents work through `bash`, which the pack `requires` and does not
