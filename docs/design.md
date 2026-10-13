@@ -6,7 +6,7 @@ what it keeps on disk, the protocols it speaks, how it is packaged and
 built, and what was measured. Its sections are numbered and the numbers
 do not move: code and pages cite them as `docs/design.md §N`. What each
 module does with the store, the TOML and the sandbox in detail is on the
-other pages of `docs/`.
+other pages of [the map](README.md).
 
 ## 1. What it is and is not
 

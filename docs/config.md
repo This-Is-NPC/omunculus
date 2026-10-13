@@ -30,6 +30,11 @@ command sees only the runtimes, the workspace and the folders of the
 catalog's tools. `deny_read` lists paths, absolute or under `~`, a
 command may not read; `write` lists paths it may also write.
 
+A root in `runtimes` is read-only inside the sandbox and exposes every
+binary it contains; it is not a per-binary allowlist, so keep those
+installations outside workspaces. The executor installs neither
+Bubblewrap nor a runtime.
+
 `[execution.sandbox]` is mandatory beside it: `script`, `command`, `runner`
 and `exec`. The coordinator the model runs, the Deno (or other) flags, and
 the wrapper that feeds it stdin are here, not constants in the core.
