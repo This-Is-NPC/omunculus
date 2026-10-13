@@ -4,8 +4,9 @@ import QtQuick.Layouts
 import "kit/ui"
 
 // PolicyView is the project's [policy]: the tool that writes each run's
-// prompt, how often a stopped work runs again, how much output a prompt
-// keeps, the default workspace and workflow, and the ceiling of every run.
+// prompt, how often a stopped work runs again, how often in a row a broken
+// one is sent back, how much output a prompt keeps, the default workspace
+// and workflow, and the ceiling of every run.
 ItemPage {
   id: page
 
@@ -29,6 +30,7 @@ ItemPage {
   facts: [
     ["assemble", table.assemble || ""],
     ["max retries", table.max_retries === undefined ? "" : String(table.max_retries)],
+    ["max reopens", table.max_reopens === undefined ? "no limit" : String(table.max_reopens)],
     ["last run output bytes", table.last_run_output_bytes === undefined ? "" : String(table.last_run_output_bytes)],
     ["tool output bytes", table.tool_output_bytes === undefined ? "" : String(table.tool_output_bytes)],
     ["default workspace", table.workspace || "the project root"],
@@ -48,11 +50,12 @@ ItemPage {
     Layout.fillWidth: true
     spacing: 16
     OptionalNumber { draft: item; path: ["max_retries"]; Layout.preferredWidth: 140; label: "max retries" }
+    OptionalNumber { draft: item; path: ["max_reopens"]; Layout.preferredWidth: 140; label: "max reopens" }
     OptionalNumber { draft: item; path: ["last_run_output_bytes"]; Layout.preferredWidth: 180; label: "last run output bytes" }
     OptionalNumber { draft: item; path: ["tool_output_bytes"]; Layout.preferredWidth: 180; label: "tool output bytes" }
     Item { Layout.fillWidth: true }
   }
-  Note { value: "How often a work whose model stopped without a report runs again, and how much of each output a prompt keeps." }
+  Note { value: "How often a work whose model stopped without a report runs again, how many times in a row a parent may send a broken work back before it asks along its route instead (unset, no limit), and how much of each output a prompt keeps." }
   RowLayout {
     Layout.fillWidth: true
     spacing: 16
