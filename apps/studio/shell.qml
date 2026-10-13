@@ -129,7 +129,7 @@ ShellRoot {
         onChosen: index => window.choose(index)
       }
 
-      CommandBar {
+      PageBar {
         id: bar
         anchors { left: parent.left; leftMargin: rail.x + rail.foldedWidth + 16; right: parent.right; rightMargin: 20 }
         y: 20
@@ -137,6 +137,10 @@ ShellRoot {
         commands: window.commands
         section: window.page
         title: window.sections[window.page].name
+        message: Studio.message
+        error: Studio.messageIsError
+        offline: !Studio.connected
+        notices: Studio.noticeCount
       }
 
       // The footer: the studio, and the project the flow draws; with several

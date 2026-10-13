@@ -1,14 +1,12 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import "kit/ui"
 
-// TabRail is the studio's sections as a carousel down the left edge: the one
-// on screen sits at the top beside the command bar, the others follow in
-// order below it, the ones before it coming round after the last. Folded, it
-// takes only the width of the sections' numbers; under the pointer it
-// unfolds over what is beside it, each section naming itself, the one on
-// screen stretched and decoding. Choosing one turns the carousel until it is
-// at the top.
+// TabRail is an app's pages as a carousel down the left edge: the one on
+// screen sits at the top beside the command bar, the others follow in order
+// below it, the ones before it coming round after the last. Folded, it takes
+// only the width of the pages' numbers; under the pointer it unfolds over
+// what is beside it, each page naming itself, the one on screen stretched
+// and decoding. Choosing one turns the carousel until it is at the top.
 Item {
   id: rail
 
@@ -70,7 +68,7 @@ Item {
 
       onHeadChanged: if (head) title.replay()
 
-      // The keyboard reaches each section; Enter or Space chooses it.
+      // The keyboard reaches each page; Enter or Space chooses it.
       activeFocusOnTab: true
       onActiveFocusChanged: rail.focusedTabs += activeFocus ? 1 : -1
       Keys.onReturnPressed: rail.chosen(tab.index)

@@ -1,21 +1,26 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import "kit/ui"
 
-// CommandBar is the bar beside the carousel's head: the commands of the
-// section on screen, which slide in when the section changes, and at its end
-// the studio's readout. When their names do not fit, each shows its short
-// name, the one an icon already says left out.
+// PageBar is the command bar beside a TabRail's head: the commands of the
+// page on screen, which slide in when the page changes, and at its end the
+// app's readout. When their names do not fit, each shows its short name, the
+// one an icon already says left out.
 Rectangle {
   id: bar
 
   // [{text, short, icon, tip, role, run, shown}], in order.
   property var commands: []
-  // Changes when the section does, so the commands arrive again.
+  // Changes when the page does, so the commands arrive again.
   property int section: 0
-  // The section's name, first in the bar, as the folded carousel shows only numbers.
+  // The page's name, first in the bar, as the folded carousel shows only numbers.
   property string title: ""
+  // The readout: the app's last message, whether it is an error, whether the
+  // server is unreachable, and how many messages it has given.
+  property string message: ""
+  property bool error: false
+  property bool offline: false
+  property int notices: 0
 
   readonly property var shown: commands.filter(command => command.shown !== false)
   // Whether the names fit beside the readout's room.
@@ -90,10 +95,10 @@ Rectangle {
 
     StatusLine {
       Layout.alignment: Qt.AlignVCenter
-      message: Studio.message
-      error: Studio.messageIsError
-      offline: !Studio.connected
-      count: Studio.noticeCount
+      message: bar.message
+      error: bar.error
+      offline: bar.offline
+      count: bar.notices
       maxWidth: Math.max(0, bar.width - contextual.width - 80)
     }
   }
