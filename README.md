@@ -83,8 +83,9 @@ apps/kit/run console --config server.toml --project demo
 
 From a checkout, `mise run up` starts the development server on `dev/`,
 whose agents use `openai/gpt-6-luna` through OpenRouter with the
-`OPENROUTER_API_KEY` of `.env`, and opens its window; the server stops when
-the window closes. `mise run dev:reset` starts that project over.
+`OPENROUTER_API_KEY` of `.env`; with it running, `mise run dev:console`,
+`dev:studio` and `dev:mailbox` open the apps on it. `mise run dev:reset`
+starts that project over.
 
 It lists the conversations and follows the open one live as a chat between
 you and the root agent: what each of you said and, on a line below each run,

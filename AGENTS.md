@@ -114,7 +114,7 @@ bin/omunculus preset default --from priv/presets/default
 bin/omunculus send "text"
 bin/omunculus serve --config server.toml
 apps/kit/run console --config server.toml [--project <id>]
-mise run up                     # dev server and window; the server stops with the window
+mise run up                     # the dev server; the apps open with dev:console, dev:studio, dev:mailbox
 apps/kit/run mailbox --config server.toml [--project <id>]
 apps/kit/run studio --config server.toml [--project <id>]
 ```
@@ -139,11 +139,11 @@ apps/kit/run studio --config server.toml [--project <id>]
 | --- | --- |
 | `dev:bootstrap` | creates `dev/workspace` and seeds the local administrator while the store does not exist |
 | `dev:serve` | runs the server on `dev/server.toml`, with the variables of `.env` (`OPENROUTER_API_KEY`) in its environment |
-| `dev:gui` | opens the window on the `dev` project of a running server |
+| `dev:console` | opens the console on the `dev` project of a running server |
 | `dev:mailbox` | opens the mailbox on the `dev` project of a running server |
 | `dev:studio` | opens the studio on the `dev` project of a running server |
 | `dev:reset` | deletes the store and the workspace |
-| `up` | `dev:bootstrap`, then `dev:serve` in the background unless a server already answers, then `dev:gui`; a server it started stops when the window closes |
+| `up` | `dev:bootstrap`, then `dev:serve` unless a server already answers |
 
 While the dev server runs, `bin/omunculus --config dev/omunculus.toml <command>` goes to it through the socket.
 
