@@ -77,6 +77,15 @@ images/         a portrait of each agent, <agent>.webp, 512 px square, its `imag
    --auth homologation=<login>,production=<login>`. It writes the pack to
    `[[packs]]` and copies `workspace/AGENTS.md` into the project's workspace.
 
+The network is the person's: `sandbox.network` is in every agent's
+`human` list, and none holds it. `workspace/AGENTS.md` has the builders
+pin the tools the machine already holds, at the version it holds, and
+register that install with `mise link` (`mise link --force
+node@<version> /usr` for the `/usr/bin/node` the runtimes give), so
+`mise install` downloads nothing; only a tool the machine lacks makes the
+surgeon or a helper ask, through `request_access` to `owner`, for
+`sandbox.network`.
+
 No command reaches a container daemon: the Docker socket is let into
 none, as it would give a command the machine. The image is checked
 where it is published: `deploy_preview` has homologation build it and

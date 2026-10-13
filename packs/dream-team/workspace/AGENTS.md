@@ -42,6 +42,14 @@ call a system compiler or helper that is not the pinned one. Do not
 add a parallel runner (Make, npm scripts, ad-hoc shell wrappers)
 that duplicates a mise task.
 
+A command may run without network, where `mise install` cannot
+download. Pin a tool the machine already holds at the version it holds
+(`which node`, `node --version`) and register that install as the
+pinned version before `mise install`, which then downloads nothing:
+`mise link --force node@22.23.2 /usr` for `/usr/bin/node` 22.23.2. The
+pin stays a version, never `system`. A tool the machine lacks needs the
+network: say so as what is missing.
+
 ### Tasks
 
 Work lives in **scripts**, not in `mise.toml` bodies and not in
