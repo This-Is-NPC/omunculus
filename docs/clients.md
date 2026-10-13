@@ -22,8 +22,9 @@ OpenAPI document the server publishes at `/openapi.json`.
   no other app and the kit reaches no app.
 - Apps call each other only through Quickshell IPC
   (`quickshell ipc --path apps/<app> call …`), never by importing.
-- A launcher may find the first socket with `mix omunculus.socket
-  <server.toml> [<id>]`; from there, `GET /v1/projects` lists every project
+- A launcher may find a project's socket with `mix omunculus.socket
+  <server.toml> [<id>]`, where the id may be left out while the registry
+  holds one project; from there, `GET /v1/projects` lists every project
   of the registry with its socket.
 
 ## The setup, read through `/v1/cli`

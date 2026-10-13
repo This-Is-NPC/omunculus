@@ -7,7 +7,7 @@ Before each run the harness reads the file now and the work now. It does
 not reuse `RUNS.tools` from the previous run.
 
 ```text
-ceiling = workspace ∩ depth ∩ stage(work.stage) ∩ agent
+ceiling = policy ∩ workspace ∩ depth ∩ stage(work.stage) ∩ agent
 effective = (ceiling ∪ grants of this work ∪ grants of ancestors) − deny of any layer
 RUNS.tools = effective
 ```
@@ -45,11 +45,15 @@ names the `grant` calls give are classified for the requester:
 
 ```text
 a granted name blocked
-            → deny; no REQUESTS row
+            → refused: no one can grant <name> to this run: …; no REQUESTS row
 only grant calls, every name have
-            → already granted: <name>; no REQUESTS row
+            → refused: you already have <names>; use it rather than asking;
+              no REQUESTS row
 otherwise   → resolve the configured request route
 ```
+
+A refused request refuses the call that emitted it: the call is recorded
+as failed, its output the refusal, and none of its actions apply.
 
 `auto` only moves the unnamed bucket to askable. It does not skip
 `REQUESTS` and does not write a grant on its own. Routing follows the

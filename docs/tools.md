@@ -157,7 +157,7 @@ after it, under its own `chains`. The whole chain is refused when a step:
 
 - is not in the `chains` of the tool that chained it;
 - does not have `chain` in its `triggers`;
-- is not have in the run's ceiling, when the chain runs in a run;
+- is not among the tools the run has (`have` in its ceiling), when the chain runs in a run;
 - is already on the path of tools that led to it;
 - comes after `end`;
 - fails.
@@ -191,9 +191,9 @@ argument of the call.
 
 | Source | Reads | Options |
 | --- | --- | --- |
-| `works` | the work (`relation = "self"`, the default), its `parent`, or its `children`, oldest first | `from` is `work` (default) or `args.<name>` with `within = "descendants"`, which reads only a work below the call's own; children take `state` (a list) and `since = "last_run"` (changed after the work's last closed run finished); `include` adds `last_comment`, `comments` or the closed `runs` with their record to each work |
+| `works` | the work (`relation = "self"`, the default), its `parent`, or its `children`, oldest first; `"conversation"`, from `run`: for a run without a work, the root works of its conversation, oldest first | `from` is `work` (default) or `args.<name>` with `within = "descendants"`, which reads only a work below the call's own; children take `state` (a list) and `since = "last_run"` (changed after the work's last closed run finished); `include` adds `last_comment`, `comments` or the closed `runs` with their record to each work |
 | `comments` | the comments of the first of `from` among `work`, `request`, `inbox`, oldest first | `from` (default all three, in that order) |
-| `runs` | `relation = "last_closed"`: the work's last closed run; `"opener"`: the run that opened the call's request — each with the message that opened it (`message`) and every event it recorded (`events`); `"recent"`: the project's last `limit` closed runs, of every conversation, newest first, each with its work's `work_title`, `work_state`, `work_workflow` and `work_stage` and its `events` | `relation` (required); `limit` (required for `recent`, a positive integer) |
+| `runs` | `relation = "last_closed"`: the work's last closed run; `"opener"`: the run that opened the call's request — each with the message that opened it (`message`) and every event it recorded (`events`); `"conversation"`, from `run`: for a run without a work, the closed runs of its conversation that had none, oldest first, each with its record; `"recent"`: the project's last `limit` closed runs, of every conversation, newest first, each with its work's `work_title`, `work_state`, `work_workflow` and `work_stage` and its `events` | `relation` (required); `limit` (required for `recent`, a positive integer) |
 | `events` | `relation = "run"`: the events of the call's run so far; `"cause"`: the event that made the call's run due; `"attachments"`: the files attached in the run's conversation, oldest first, each `{name, media_type, bytes, sha256}` with its `event_id`, `at` and `by` | `relation` (required) |
 | `requests` | the request named by the `request_id` argument, or the call's request | `from` |
 | `prompts` | `relation = "message"`: the prompt that opened the run; `"assembled"`: the assembled prompt of the run named by `from` (default `args.run`, then `latest_run`) | `relation` (required); `from` for `assembled` |
@@ -207,7 +207,7 @@ argument of the call.
 | `skills` | the Agent Skills the run's ceiling has, each its `name`, `description` and `dir` | |
 
 Every read stays in the call's conversation and goes only through these
-relations. The harness computes `catalog`, `workspaces`, `agents`,
+relations, but for the project's unread inbox and its recent runs. The harness computes `catalog`, `workspaces`, `agents`,
 `paths`, `grant_scopes` and `skills` only for a call that declares them. `assemble` renders `agents` under `## Agents` when the run has
 the `work` card, each with the tools it has that the run has not, and
 `skills` under `## Skills`, a line `name: description` each.
@@ -306,7 +306,8 @@ with `work` needs `delegate`, `end` and `comment` as have too, but for
 one that never holds a work — at a depth that requires workflows, on none
 of their stages — whose `work` runs `end` alone; the
 `sequence` group carries `work`, `delegate` and `end`. The manifest's
-`[schemas.staged]` drops `agent` from the items, for the layer whose new
+`[schemas.staged]` drops `agent` and `workflow` from the items, leaving
+each its title, goal and workspace, for the layer whose new
 works land on a depth that requires one workflow:
 
 ```toml

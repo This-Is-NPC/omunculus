@@ -6,7 +6,7 @@ and models that file names. These are shapes the file will load today. None of
 them invent a table [the TOML](config.md) does not already have.
 
 Each snippet sits on the required tables — `[execution]`, `[execution.sandbox]`,
-`[store]`, `[models]`, `[policy] assemble` and `max_retries` — and on `[tools] paths` pointing at
+`[store]`, `[models]`, `[policy] assemble`, `max_retries` and `request_routes` — and on `[tools] paths` pointing at
 the folders you mean to call. The snippets below omit those tables unless they change. A missing
 required table is still a refusal, not an implied default.
 
@@ -354,6 +354,7 @@ config = "omunculus.toml"
 api = "openai-completions"
 url = "http://127.0.0.1:11434/v1"
 model = "llama"
+timeout_ms = 120000
 
 [agents.concierge]
 depth = 0
@@ -527,6 +528,7 @@ flowchart LR
 api = "openai-completions"
 url = "http://127.0.0.1:11434/v1"
 model = "qwen2.5"
+timeout_ms = 120000
 ```
 
 **Anthropic with a stored login:**
@@ -551,6 +553,8 @@ provider = "anthropic"
 api = "anthropic-messages"
 url = "https://api.anthropic.com/v1"
 model = "claude-sonnet-4-5"
+timeout_ms = 120000
+body = { max_tokens = 32000 }
 ```
 
 ```bash
@@ -569,6 +573,7 @@ provider = "openai"
 api = "openai-responses"
 url = "https://api.openai.com/v1"
 model = "gpt-5"
+timeout_ms = 120000
 ```
 
 **A program over the sandbox NDJSON protocol:**

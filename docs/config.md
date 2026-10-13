@@ -23,6 +23,13 @@ to `max_queue` more wait for a slot, each for at most `queue_timeout_ms`,
 and a run that gets no slot fails with `:queue_full` or
 `:queue_timeout`.
 
+Three keys of `[execution]` are optional. `host = true` shows a command
+the machine read-only, as the person sees it, with their home overlaid so
+that what it writes there stays in the run's scratch; without it a
+command sees only the runtimes, the workspace and the folders of the
+catalog's tools. `deny_read` lists paths, absolute or under `~`, a
+command may not read; `write` lists paths it may also write.
+
 `[execution.sandbox]` is mandatory beside it: `script`, `command`, `runner`
 and `exec`. The coordinator the model runs, the Deno (or other) flags, and
 the wrapper that feeds it stdin are here, not constants in the core.
@@ -104,6 +111,23 @@ from a call it makes directly or through `tools.*`; the rest is cut the
 same way. The recorded call keeps the output whole. Without it the model
 gets each output whole. A workspace sets it the same way as
 `max_retries`.
+
+`[policy] conversation_bytes` is optional: a positive integer, how much
+of its conversation's works and exchanges a run without a work is shown
+under `## Works` and `## Conversation`, the newest that fit. Without it
+they are shown whole.
+
+`[policy] send_catalog` is optional: `true` sends every run the
+catalog's model tools, not only its own, so all agents' requests start
+alike and a provider's cache serves them; a call to a tool the run does
+not have is refused and recorded as failed.
+
+`[policy] session_ttl_ms` and `session_max_bytes` are optional and go
+together: a run of an agent whose last run on the work, or in the
+conversation for a run without a work, paused and closed within
+`session_ttl_ms` continues that session, told only what happened since;
+a history longer than `session_max_bytes`, or one that cannot be rebuilt
+exactly, starts over ([the cycle](cycle.md#assemble)).
 
 ## Catalog
 
@@ -217,7 +241,8 @@ key = "$ANTHROPIC_API_KEY"
 provider = "anthropic"
 api = "anthropic-messages"
 url = "https://api.anthropic.com/v1"
-model = "claude-sonnet-5"
+model = "claude-sonnet-4-5"
+timeout_ms = 120000
 body = { max_tokens = 32000 }
 
 [auth.openrouter]
@@ -228,7 +253,8 @@ key = "$OPENROUTER_API_KEY"
 provider = "openrouter"
 api = "openai-completions"
 url = "https://openrouter.ai/api/v1"
-model = "anthropic/claude-sonnet-5"
+model = "anthropic/claude-sonnet-4-5"
+timeout_ms = 120000
 ```
 
 A model's `provider` names an `[auth.<name>]` login, whose key the adapter
@@ -243,13 +269,20 @@ sandbox NDJSON protocol (a `{"type":"delta","text":"..."}` line passes
 partial reply text to the run without recording it) and takes `command`, `model`, optional `provider`
 and `params`. `module` takes optional `params`. The HTTP adapters take
 `url`, `model`, `timeout_ms`, and optional `temperature`, `headers`,
-`provider` and `stream`. With `stream = true` the adapter asks for
+`provider`, `stream`, `retries` and `code_mode`; an `anthropic-messages`
+model also needs `body = { max_tokens = n }`, the most a reply may take,
+thinking included. With `stream = true` the adapter asks for
 server-sent events and passes the reply text to the run as it arrives;
-the recorded turn is the same as without it. `openai-completions` and
-`openai-responses` record, with each turn in `EVENTS(model)`, the
-`usage` object the server returns (input, cached input and output
-tokens); streamed, `openai-completions` asks for it with
-`stream_options.include_usage`. They also take an optional
+the recorded turn is the same as without it. `retries` sends a request
+again that many times on a rate limit, a timeout, a server error or a
+dropped connection, after the delay the server asks for; without it a
+failed request fails the call. `code_mode = true` also offers the model
+`__omunculus_execute`, which runs JavaScript in the sandbox calling
+`tools.<name>(args)` through the same authorized, recorded path as its
+other calls. Every HTTP adapter records, with each turn in
+`EVENTS(model)`, the `usage` object the server returns (input, cached
+input and output tokens); streamed, `openai-completions` asks for it
+with `stream_options.include_usage`. The two OpenAI adapters also take an optional
 `prompt_cache_key`, sent as is in every request, which OpenAI uses with
 the prompt's prefix to route requests to the server holding that prefix
 in cache.
@@ -281,6 +314,8 @@ provider = "anthropic"
 api = "anthropic-messages"
 url = "https://api.anthropic.com/v1"
 model = "claude-sonnet-4-5"
+timeout_ms = 120000
+body = { max_tokens = 32000 }
 ```
 
 `kind` is `api_key` (`key` = `$VAR`, `!cmd`, or a literal; empty falls
@@ -397,8 +432,9 @@ rather than concatenates. Ceiling keys and `overrides` inside an overlaid
 `policy`, `agents` or `workflows` table do not overlay. `[store]` stays
 global.
 
-`config` is a second TOML relative to that `root`, same schema minus
-`[workspaces]` and `[store]`. Precedence is global, then the inline
+`config` is a second TOML relative to that `root` that may hold only
+`[policy]`, `[agents]`, `[workflows]`, `[mcp]`, `[execution]`,
+`[project]`, `[tools]`, `[models]` and `[auth]`. Precedence is global, then the inline
 section, then the file. The ceiling keys and `overrides` of the file's
 `[policy]` join the section's layer, the file's `overrides` winning per
 key. Missing file is an error. A permanent grant with

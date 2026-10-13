@@ -9,7 +9,7 @@ event
     → emit → the store applies the action
     → hooks of that event run in the unroll, with the run open (not those of end)
     → a call that did not end the run: if its actions asked for a run
-      (prompt, work, continue, break, delegate, cancel, request, reply),
+      (prompt, work, continue, break, delegate, reopen, cancel, request, reply),
       that run opens now, while this one goes on
     → end, or the model stopping by itself or failing: EVENTS(end-run) of
       this run, with the failure's reason as its error
@@ -181,7 +181,8 @@ command fails with it.
 
 ## Assemble
 
-The default `assemble` tool joins, in this order:
+The default `assemble` tool joins, in this order, first the instructions,
+what stays the same across an agent's runs:
 
 ```text
 agent text
@@ -189,6 +190,13 @@ agent text
   with the tools it has that this run has not
 → cards of the tools in tools.*
 → under `## Skills`, the name and description of each skill the run has
+```
+
+then the context:
+
+```text
+under `## Environment`, the workspace every command starts in, the
+  person's home and the platform
 → if there is a work: title + goal + last comment, then, under
   `## Last run`, the work's last closed run; without a work, the run that
   opened this run's request: the message that opened it and every event
@@ -211,16 +219,27 @@ agent text
   in this conversation, including linked origin questions and work/stage
   context; a request already here is not repeated under `## Request`
 → if the opening carried inbox_id: its comments join `## Inbox`
+→ under `## Attachments`, the files attached in the run's conversation,
+  each with its name, media type, size, who attached it and its sha256
 → message of this opening, if any
 ```
 
-What stays the same across an agent's runs comes first, so a model
-server that caches the prefix of a prompt reuses it from one run to the
-next.
+A run without a work also gets, after the last run, what the person and
+the agent said in its conversation under `## Conversation`, when its
+session starts over, then the conversation's root works under `## Works`,
+each the newest that fits `[policy] conversation_bytes`. A run that continues its agent's
+paused session (`[policy] session_ttl_ms` and `session_max_bytes`) keeps
+the instructions the session started with and is told only what happened
+since: the works, the children, the results, the request, the inbox, the
+attachments and the message.
 
-Inbox does not appear because the work has unread notifications. Without
-`inbox_id` on the opening there is no `## Inbox`. Unread notifications of
-a work, if wanted in the prompt, are the `output` of the `inbox` tool.
+The instructions come first, so a model server that caches the prefix of
+a prompt reuses it from one run to the next.
+
+Inbox does not appear because the work has unread notifications: it holds
+the pending requests addressed to the run's agent, and the comments of the
+notification the opening carried as `inbox_id`. Unread notifications of a
+work, if wanted in the prompt, are the `output` of the `inbox` tool.
 
 A card is:
 
@@ -329,9 +348,10 @@ a chain); an option may list none. The model calls `request_access` with a list 
 `sandbox.network`) and a `report`. Its choices offer one `grant_<scope>` per permanent scope and `deny`,
 and, in a run on a work, `grant`, which grants on that work. In a run on
 a work the report is commented on it first, then the request. Options made only of `grant` calls whose names are all have are
-not a request: no row opens, and a tool that emits `request` without
-ending the run gets `already granted: <name>` in its output. A granted
-name that is blocked is `EVENTS(deny)`. Otherwise a request opens, its
+not a request: no row opens, and the call is refused with `refused: you
+already have <names>; use it rather than asking`. A granted name that is
+blocked refuses the call too, with `refused: no one can grant <name> to
+this run: …`. Otherwise a request opens, its
 reason the first comment on it; if a work is attached it becomes
 `waiting = request`. [Request routing](config.md) resolves its arbiter independently of grant authority.
 The request tool ends the asking run; an agent arbiter's run opens on

@@ -29,8 +29,8 @@ defmodule Omunculus.Config do
   addition — to an agent, a depth, a workflow step, or a workspace — by
   rewriting that same file, and `edit/5` writes one item a client edits
   (`document/1`) the same way. A workspace may name a `config` file relative
-  to its `root`; that file uses the same schema minus `[workspaces]` and
-  `[store]`, and its tables overlay the global config after any inline
+  to its `root`; that file holds only the tables `@workspace_file_keys`
+  names, and they overlay the global config after any inline
   `[workspaces.<name>]` tables.
   """
 

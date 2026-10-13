@@ -1,8 +1,8 @@
 # Omunculus compared with DeepSeek Harness, OpenCode v2 and Hermes Agent
 
-As of 2026-10-08. Omunculus at `d9469ca`; DeepSeek Harness 0.2.1-alpha.1;
-OpenCode v2.0.24; Hermes Agent v0.21.5. The other three were read from their
-repositories and documentation.
+The Omunculus column was checked against this tree on 2026-10-13. The other
+three are as of 2026-10-08: DeepSeek Harness 0.2.1-alpha.1, OpenCode v2.0.24
+and Hermes Agent v0.21.5, read from their repositories and documentation.
 
 Legend: **P** shipped · **T** a tool, hook or API client the architecture
 supports, not written yet · **K** needs a change in the harness core ·
@@ -29,27 +29,27 @@ supports, not written yet · **K** needs a change in the harness core ·
 | | Multiple projects and workspaces | **P** registry + workspaces with their own model and ceiling | ◐ | **P** | **P** profiles |
 | | Decisions recorded as data | **P** requests, options, arbiter, grants | ◐ approval log | ◐ | ◐ logs |
 | **Interfaces** | CLI / API / real time | **P** / **P** OpenAPI / **P** WebSocket | **P** / ◐ / **P** | **P** / **P** / **P** | **P** / **P** / **P** SSE |
-| | Graphical client | **T** | **P** | **P** | **P** |
+| | Graphical client | **P** Quickshell apps: console, mailbox, studio | **P** | **P** | **P** |
 | | Messaging channels | **T** events + hooks; requests become buttons | ✗ | ✗ | **P** ~25 |
 | | IDE (ACP) | **T** | **P** | **P** | **P** |
 | | Installation | ◐ checkout + mise | **P** npm | **P** brew/npm | **P** |
 | **Models** | Providers | **P** 3 protocols + **T** through `command` | ◐ | **P** 226 | **P** 40+ |
-| | Prompt caching | ◐ stable prefix + `prompt_cache_key`; no `cache_control` (**K**) | **P** | **P** | **P** |
-| | Tokens and cost | ◐ OpenAI only (**K**) | **P** | **P** | **P** |
-| **Tools for the model** | Code mode | **P** default, every tool | **P** `ptc` | **P** MCP and plugins | ◐ 7 tools |
+| | Prompt caching | **P** stable prefix, `prompt_cache_key`, Anthropic `cache_control` breakpoints | **P** | **P** | **P** |
+| | Tokens and cost | **P** every HTTP adapter records `usage`; `runs` sums tokens and cost | **P** | **P** | **P** |
+| **Tools for the model** | Code mode | **P** with a model's `code_mode`, every tool | **P** `ptc` | **P** MCP and plugins | ◐ 7 tools |
 | | On-demand schemas | ◐ `tool_search`/`pinned` exist; every schema is sent (**K**) | ✗ | **P** | **P** |
 | | MCP | **P** inside the sandbox | **P** | **P** | **P** |
-| **Context** | Context per run | **P** rebuilt each run: agent, tools, work, goal, last comment, last run | Accumulated session | Accumulated session | Accumulated session |
-| | Compaction | **—** each run rebuilds; an overflow becomes a retry with fresh context | **P** | **P** | **P** |
+| **Context** | Context per run | **P** rebuilt each run: agent, tools, work, goal, last comment, last run; or a paused session continued (`session_ttl_ms`) | Accumulated session | Accumulated session | Accumulated session |
+| | Compaction | ◐ a session past `session_max_bytes` starts over with fresh context; `compact_comments` | **P** | **P** | **P** |
 | | Tool output cut | **P** whole output kept in the event | **P** | **P** | **P** |
 | | History search beyond the last run | ◐ through comments and reports; deeper search needs a new view (**K**) | **P** | **P** | **P** FTS5 |
-| | Long-term memory / skills | **T** | ◐ | ◐ | **P** |
+| | Long-term memory / skills | ◐ Agent Skills (`[skills] paths`, `skill`); no memory | ◐ | ◐ | **P** |
 | **Coding: reading** | Read with offset/limit | **P** | **P** | **P** | **P** |
 | | Image / PDF | **T** | **P** | **P** | **P** |
-| | Grep / find | ◐ no `.gitignore`, Elixir regex; **T** with `rg` | **P** | **P** | **P** |
+| | Grep / find | **P** `grep` and `find` leave out `.git` and what `.gitignore` ignores | **P** | **P** | **P** |
 | | LSP | **T** | **P** | ✗ | ✗ |
 | **Coding: editing** | Exact, unique replacement | **P** | **P** | **P** | **P** |
-| | Multi-edit, patch, diff, read before edit | **T** | **P** | **P** | **P** |
+| | Multi-edit, patch, diff, read before edit | ◐ per-call diff through `changes`; **T** multi-edit and patch | **P** | **P** | **P** |
 | | Formatter after edit | **T** hook | ? | **P** | ? |
 | **Coding: execution** | Shell | ◐ new `sh -c` per call (codex-like preset) | **P** persistent | **P** | **P** persistent |
 | | Background processes | **—** event-driven | **P** | **P** | **P** |
@@ -63,7 +63,7 @@ supports, not written yet · **K** needs a change in the harness core ·
 | | Parallel subagents | **P** works + `max_concurrent` | **P** | **P** | **P** |
 | | Isolated writers (worktree) | **T** deterministic: the tool opens the worktree when the run starts and merges into the parent branch when it ends | ? | ◐ plugin | ✗ |
 | | Message during a run | ◐ goes to the work's next run | **P** | **P** | **P** |
-| | Undo / checkpoints | **T** hook | ◐ fork | **P** git | **P** `/rollback` |
+| | Undo / checkpoints | **P** `changes` records each call's files; `revert` puts a work's back | ◐ fork | **P** git | **P** `/rollback` |
 | | Reply shown on the CLI | **T** (`send` prints nothing today) | **P** | **P** | **P** |
 | **Extras** | Web search / browser / scheduling | **T** | **P** / ✗ / **P** | **P** / ◐ / ✗ | **P** / **P** / **P** |
 
@@ -71,15 +71,13 @@ supports, not written yet · **K** needs a change in the harness core ·
 
 Core changes (**K**):
 
-- `cache_control` and `usage` in the adapters other than OpenAI
 - on-demand schemas (send only `pinned`, `tool_search` returns the rest)
 - a deeper history view, for search beyond the last run
 - execution outside Linux and Bubblewrap
 
-Tools and hooks (**T**), a `coding` package for the presets: grep with `rg`,
-multi-edit and patch with diff, reply on the CLI, worktree per run, git
-checkpoints, formatter, LSP, image and PDF reading. For reach: a messaging
-channel, web search and a graphical client.
+Tools and hooks (**T**), a `coding` package for the presets: multi-edit and
+patch, reply on the CLI, worktree per run, formatter, LSP, image and PDF
+reading. For reach: a messaging channel and web search.
 
 ## Sources
 
