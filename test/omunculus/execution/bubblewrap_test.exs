@@ -160,6 +160,24 @@ defmodule Omunculus.Execution.BubblewrapTest do
     refute File.exists?(protected)
   end
 
+  test "a command names its user and home without the machine's accounts, or with the host's",
+       %{workspace: workspace} do
+    lookup = ~s{import os, pwd; u = pwd.getpwuid(os.getuid()); print(u.pw_name, u.pw_dir)}
+    {:ok, command} = Command.new("/usr/bin/python3", ["-c", lookup])
+    {:ok, id} = Command.new("/usr/bin/sh", ["-c", "id -un; id -gn; grep -c . /etc/passwd"])
+
+    assert {:ok, %{stdout: "omunculus /tmp/home\n", status: 0}} =
+             Omunculus.Execution.run(command, policy(workspace))
+
+    assert {:ok, %{stdout: "omunculus\nomunculus\n2\n", status: 0}} =
+             Omunculus.Execution.run(id, policy(workspace, network: "none"))
+
+    {name, 0} = System.cmd("id", ["-un"])
+    host = Policy.with_scratch(policy(workspace, host: true), Omunculus.Fixtures.tmp_dir())
+    {:ok, %{stdout: seen, status: 0}} = Omunculus.Execution.run(command, host)
+    assert seen == "#{String.trim(name)} #{System.user_home!()}\n"
+  end
+
   test "does not inherit undeclared host environment variables", %{workspace: workspace} do
     name = "OMUNCULUS_EXECUTION_TEST_SECRET"
     previous = System.get_env(name)

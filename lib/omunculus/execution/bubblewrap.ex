@@ -4,7 +4,10 @@ defmodule Omunculus.Execution.Bubblewrap do
   Each process gets a temporary directory of its own (mode 0700) for its
   pipes; a secret of its command is written there (mode 0400) before the
   process starts, bound read-only at `/run/secrets/<NAME>` with
-  `<NAME>_FILE` naming it, and removed with the directory.
+  `<NAME>_FILE` naming it, and removed with the directory. A command that
+  does not see the host gets there too the `/etc/passwd` and `/etc/group`
+  that name its user, so that what looks itself up (`id`, `ssh`, `git`)
+  finds it, without the machine's own.
   """
 
   @behaviour Omunculus.Execution.Backend
@@ -40,6 +43,7 @@ defmodule Omunculus.Execution.Bubblewrap do
 
   defp start_in_temp(bwrap, command, policy, temp_dir) do
     with :ok <- write_secrets(temp_dir, command.secrets),
+         :ok <- write_identity(temp_dir, policy),
          {:ok, created_hidden} <- prepare_hidden(policy, temp_dir) do
       case start_process(bwrap, command, policy, temp_dir, created_hidden) do
         {:ok, _handle} = result ->
@@ -121,6 +125,7 @@ defmodule Omunculus.Execution.Bubblewrap do
       network_files(policy) ++
       mount_args(mounts) ++
       hidden_args(policy, mounts, temp_dir) ++
+      identity_args(policy, temp_dir) ++
       environment_args(policy, mounts) ++
       secret_args(command.secrets, temp_dir) ++
       ["--chdir", command.cwd, "--", "/usr/bin/sh", "-c", policy.sandbox.runner, "omunculus-exec"] ++
@@ -481,6 +486,44 @@ defmodule Omunculus.Execution.Bubblewrap do
       (policy.environment
        |> Enum.sort_by(fn {name, _value} -> name end)
        |> Enum.flat_map(fn {name, value} -> ["--setenv", name, value] end))
+  end
+
+  # Bubblewrap maps the user who starts it to the same ids inside, and
+  # files of ids it does not map to the overflow ids, `nobody`'s.
+  @user "omunculus"
+  @overflow 65_534
+
+  defp write_identity(_temp_dir, %Policy{host: true}), do: :ok
+
+  defp write_identity(temp_dir, _policy) do
+    {uid, gid} = ids()
+
+    passwd =
+      "#{@user}:x:#{uid}:#{gid}:#{@user}:/tmp/home:/usr/bin/sh\n" <>
+        "nobody:x:#{@overflow}:#{@overflow}:nobody:/:/usr/bin/nologin\n"
+
+    group = "#{@user}:x:#{gid}:\nnobody:x:#{@overflow}:\n"
+
+    with :ok <- File.write(Path.join(temp_dir, "passwd"), passwd) do
+      File.write(Path.join(temp_dir, "group"), group)
+    end
+  end
+
+  defp ids do
+    status = File.read!("/proc/self/status")
+    {real_id(status, "Uid"), real_id(status, "Gid")}
+  end
+
+  defp real_id(status, field) do
+    [_, id] = Regex.run(~r/^#{field}:\s+(\d+)/m, status)
+    id
+  end
+
+  defp identity_args(%Policy{host: true}, _temp_dir), do: []
+
+  defp identity_args(_policy, temp_dir) do
+    ["--ro-bind", Path.join(temp_dir, "passwd"), "/etc/passwd"] ++
+      ["--ro-bind", Path.join(temp_dir, "group"), "/etc/group"]
   end
 
   @secrets "/run/secrets"
