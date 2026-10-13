@@ -80,10 +80,13 @@ defmodule Omunculus.ConfigTest do
     assert {:ok, %{projects: %{"dev" => path, "agency" => agency}}} =
              Omunculus.Server.Config.load("dev/server.toml")
 
-    assert {:ok, %Config{access: access}} = Config.load(path)
+    assert {:ok, %Config{access: access, agents: %{"steward" => _}}} = Config.load(path)
     assert access != nil
 
-    assert {:ok, %Config{agents: %{"sales" => _, "administrator" => _, "designer" => _}}} =
+    assert {:ok,
+            %Config{
+              agents: %{"steward" => _, "sales" => _, "administrator" => _, "designer" => _}
+            }} =
              Config.load(agency)
   end
 
