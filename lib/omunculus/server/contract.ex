@@ -56,7 +56,7 @@ defmodule Omunculus.Server.Contract do
     do:
       Map.take(
         row,
-        ~w(id parent_id workspace assignee title goal stage state waiting created_at updated_at)a
+        ~w(id parent_id workspace assignee title goal workflow stage state waiting created_at updated_at)a
       )
 
   def item(:runs, row),

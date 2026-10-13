@@ -33,6 +33,29 @@ defmodule Omunculus.Server.OpenAPITest do
     end
   end
 
+  test "a work gives the workflow it goes through beside its stage" do
+    schemas = Router.openapi_routes() |> OpenAPI.document() |> Jason.encode!() |> Jason.decode!()
+
+    assert %{"workflow" => _, "stage" => _} =
+             schemas["components"]["schemas"]["Work"]["properties"]
+
+    assert %{workflow: "page", stage: "build"} =
+             Omunculus.Server.Contract.item(:works, %{
+               id: "w",
+               parent_id: nil,
+               workspace: nil,
+               assignee: "surgeon",
+               title: "t",
+               goal: "g",
+               workflow: "page",
+               stage: "build",
+               state: "open",
+               waiting: nil,
+               created_at: "now",
+               updated_at: nil
+             })
+  end
+
   test "reply requires text and offers an optional option" do
     document = Router.openapi_routes() |> OpenAPI.document() |> Jason.encode!() |> Jason.decode!()
     schema = document["components"]["schemas"]["ReplyRequest"]

@@ -364,6 +364,7 @@ defmodule Omunculus.Server.OpenAPI do
             assignee: nullable_string(),
             title: string(),
             goal: string(),
+            workflow: nullable_string(),
             stage: nullable_string(),
             state: string(),
             waiting: nullable_string(),

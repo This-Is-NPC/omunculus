@@ -93,7 +93,7 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `GET /agents/{agent}/image` | Read an agent's `image`, with its media type, if the project is visible to you; `404` for an agent without one. |
 | `GET, POST /conversations` | List visible conversations or create one. |
 | `GET /conversations/{id}` | Read one visible conversation. |
-| `GET /conversations/{id}/snapshot` | Read works, runs, prompts, requests and inbox at one event cursor. |
+| `GET /conversations/{id}/snapshot` | Read works (each with the `workflow` it goes through and its `stage`), runs, prompts, requests and inbox at one event cursor. |
 | `GET /conversations/{id}/{works,runs,prompts,requests,inbox}` | Read one resource list. |
 | `GET /conversations/{id}/events?after={cursor}` | Read up to 500 later events in sequence order. |
 | `GET /conversations/{id}/stream?after={cursor}` | Open a WebSocket of later events; see [Event stream](#event-stream). |
