@@ -37,7 +37,7 @@ project, given as `OMUNCULUS_PROJECT` and its local socket as
 | --- | --- |
 | `apps/console` | the window on one project: its conversations, each as threads of its agents' runs, and the orchestration map of its agents, works and requests |
 | `apps/mailbox` | a mailbox over every project: a thread is a conversation with one agent of depth 0, and its requests to you are answered there |
-| `apps/studio` | the settings of a project: an overview of every project, then one item of the config at a time |
+| `apps/studio` | the settings of a project: its flowchart on a canvas, then one item of the config at a time |
 
 All are QML on Quickshell and share `apps/kit`:
 
