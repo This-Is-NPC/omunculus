@@ -17,8 +17,8 @@ ModalDialog {
     ["everywhere", [
       ["Tab · Shift+Tab", "move between controls"],
       ["Enter · Space", "press the control"],
-      ["1 · 2 · 3 · 4 · 5", "the pages: the conversations, the conversation, the map, the log, the board"],
-      ["Ctrl+1 … Ctrl+5", "the same, from a field being written or the picker"],
+      ["1 · 2 · …", "the page of that number: the conversations and the board, or, in a conversation, its chat, map, log and cost"],
+      ["Ctrl+1 · Ctrl+2 · …", "the same, from a field being written or the picker"],
       ["Ctrl+Tab · Ctrl+Shift+Tab", "the next or the previous page"],
       ["Esc", "let go of what the page holds, then back to where you were, at last the start"],
       ["Alt + a key of the bar", "the key, from a field being written"],
@@ -37,7 +37,7 @@ ModalDialog {
       ["← · → · ↑ · ↓", "choose whom it is with"],
       ["1 … 9 · Enter", "start it with them"]
     ]],
-    ["conversation", [
+    ["chat", [
       ["R", "answer the oldest request waiting on you"],
       ["M", "show the oldest note to you and mark it read"],
       ["N", "new conversation"]

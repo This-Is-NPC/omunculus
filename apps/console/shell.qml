@@ -6,10 +6,11 @@ import "kit/ui"
 
 ShellRoot {
   // The omunculus window. At the start: a new conversation, the project's
-  // conversations or the board. Entered: its pages down the left as a
-  // carousel — the conversations, the conversation, the map, the log and the
-  // board — the one on screen beside the bar of its commands, and the page
-  // under them; back from the first page entered is back to the start.
+  // conversations or the board. Entered: the pages of the level on screen
+  // down the left — the project's conversations and board, or the chat, map,
+  // log and cost of the conversation open — the one on screen beside the bar
+  // of its commands, and the page under them; back from the first page
+  // entered is back to the start.
   FloatingWindow {
     id: panel
 
@@ -29,7 +30,7 @@ ShellRoot {
     property bool started: false
     // Enters the pages at one; a new conversation begins with none open.
     function enter(page) {
-      if (page === "conversation")
+      if (page === "new")
         Omunculus.close()
       pagesView.enter(page)
       started = true
@@ -45,7 +46,7 @@ ShellRoot {
     }
 
     // Whether a dialog holds the keyboard, so the keys of the pages wait.
-    readonly property bool dialogOpen: cost.visible || shortcuts.visible || pagesView.dialogOpen
+    readonly property bool dialogOpen: shortcuts.visible || pagesView.dialogOpen
 
     onClosed: Qt.quit()
 
@@ -119,7 +120,7 @@ ShellRoot {
                 text: "NEW CONVERSATION"
                 enabled: Omunculus.connected
                 tip: "n"
-                onClicked: panel.enter("conversation")
+                onClicked: panel.enter("new")
               }
               TraceButton {
                 id: historyButton
@@ -163,6 +164,8 @@ ShellRoot {
           Stage {
             anchors.fill: parent
             shown: panel.started
+            // Coming in, the page on screen takes the keyboard once it can.
+            onVisibleChanged: if (visible) pagesView.focusEntry()
 
             PagesView {
               id: pagesView
@@ -171,15 +174,14 @@ ShellRoot {
               onStartWanted: panel.started = false
               compact: panel.compact
               short: panel.short
-              onCostWanted: cost.open()
-            }
+              }
 
             TabRail {
               id: rail
               // Over the bar and the page while it unfolds.
               z: 1
               tabs: pagesView.pages.map(name => ({ name: name }))
-              current: pagesView.pages.indexOf(pagesView.page)
+              current: pagesView.tabIndex
               onChosen: index => panel.choose(index)
             }
 
@@ -189,16 +191,16 @@ ShellRoot {
               height: rail.headHeight
               commands: pagesView.commands
               section: rail.current
-              title: pagesView.page
+              title: pagesView.title
               message: Omunculus.message
               error: Omunculus.messageIsError
               offline: !Omunculus.connected
               notices: Omunculus.noticeCount
             }
 
-            // 1 to 5, or Ctrl with them, choose a page (a field being written,
+            // The digit a page shows, or Ctrl with it, chooses it (a field being written,
             // or the picker of a new conversation, keeps its digits); Ctrl+Tab
-            // and Ctrl+Shift+Tab turn the carousel.
+            // and Ctrl+Shift+Tab go to the next or the previous page.
             Repeater {
               model: pagesView.pages.length
               delegate: Item {
@@ -240,7 +242,6 @@ ShellRoot {
       }
 
       ShortcutsDialog { id: shortcuts }
-      CostDialog { id: cost }
       Shortcut { sequences: ["?", "F1"]; onActivated: shortcuts.open() }
     }
   }
@@ -248,16 +249,17 @@ ShellRoot {
   // `quickshell ipc --path apps/console call omunculus <function>`, e.g. from a shortcut.
   IpcHandler {
     target: "omunculus"
-    function newConversation(): void { panel.started ? pagesView.newConversation() : panel.enter("conversation") }
+    function newConversation(): void { panel.started ? pagesView.newConversation() : panel.enter("new") }
     function conversations(): void { page("conversations") }
     function open(conversationId: string): void {
       if (!panel.started)
         panel.enter("conversations")
       pagesView.openConversation(conversationId)
     }
-    // A page by its name: conversations, conversation, map, log or board.
+    // A page by its name: conversations or board, or, with a conversation
+    // open, chat, map, log or cost.
     function page(name: string): void {
-      if (!pagesView.pages.includes(name))
+      if (!["conversations", "board"].includes(name) && !(pagesView.open && pagesView.inConversation.includes(name)))
         return
       if (panel.started)
         pagesView.go(name)

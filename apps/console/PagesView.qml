@@ -3,19 +3,19 @@ import QtQuick.Layouts
 import "kit/client/Requests.js" as Requests
 import "kit/ui"
 
-// PagesView is the window's pages, one on screen at a time: the
-// conversations of the project; the conversation open, yours with the root
-// agent, where every request shows where it was made, or, with none open,
-// whom a new one is with; the map of its agents at work, where the node
-// picked opens beside it; the log, every event a row; and the board, the
-// works of every project the window reaches, where a card opens its
-// conversation's map with the work picked. The map and the log, with no
-// conversation open, say so and lead to one. Each page gives the commands of
-// its bar: on the conversation, to answer what waits on you there and read
-// its notes; on the map, with a node picked, what you can do to it — answer
+// PagesView is the window's pages, one on screen at a time, in two levels.
+// The project's: its conversations, and the board, the works of every
+// project the window reaches, where a card opens its conversation's map with
+// the work picked; whom a new conversation is with is chosen on a screen of
+// the conversations. A conversation's, once one is open, in place of the
+// project's: its chat, yours with the root agent, where every request shows
+// where it was made; the map of its agents at work, where the node picked
+// opens beside it; the log, every event a row; and what it cost. Each page
+// gives the commands of its bar: on
+// the chat, to answer what waits on you there and read its notes; on the map, with a node picked, what you can do to it — answer
 // or escalate what it asked, leave it a note, mark its notes read, write to
 // it. A request is answered in its decision, opened over the page. Every
-// move to another page, conversation or project is remembered, so BACK, and
+// move into another level, conversation or project is remembered, so BACK, and
 // Esc once the page has let go of what it holds, return to exactly where it
 // was: the page, its project, its conversation and the node picked; back
 // from the first page entered is back to the start.
@@ -25,23 +25,26 @@ Item {
   property bool active: false
   property bool compact: false
   property bool short: false
-  signal costWanted()
   // Back from the first page entered.
   signal startWanted()
 
-  // The pages, in their order, and the one on screen.
-  readonly property var pages: ["conversations", "conversation", "map", "log", "board"]
-  property string page: "conversations"
   readonly property bool open: Omunculus.conversationId !== ""
+  // The pages of the level on screen, in their order: the project's, or the
+  // conversation's open.
+  readonly property var inConversation: ["chat", "map", "log", "cost"]
+  readonly property var pages: inConversation.includes(page) ? inConversation : ["conversations", "board"]
+  // The one on screen: a page, or "new", whom a new conversation is with,
+  // a screen of the conversations.
+  property string page: "conversations"
+  readonly property int tabIndex: pages.indexOf(page === "new" ? "conversations" : page)
+  readonly property string title: page === "new" ? "new conversation" : page
   // What the masthead names: the page, or the project and the conversation
   // open on it.
   readonly property string heading: page === "board" ? page
-    : Omunculus.project + "  ·  " + (page === "conversations" ? page
-      : open ? Omunculus.title
-      : page === "conversation" ? "new conversation" : "no conversation")
+    : Omunculus.project + "  ·  " + (inConversation.includes(page) ? Omunculus.title : title)
   // Whether the page takes the digits alone, as the picker of a new
   // conversation does; Ctrl with them still chooses a page.
-  readonly property bool digitsTaken: page === "conversation" && !open
+  readonly property bool digitsTaken: page === "new"
 
   // Where the window was before each move, the last last, as {page,
   // project, socket, conversation, picked}.
@@ -52,11 +55,13 @@ Item {
   }
   function remember() { history = history.concat([here()]).slice(-50) }
 
-  // Goes to a page, remembering where it was.
+  // Goes to a page: one of the level on screen in place of the one there,
+  // another level remembering where it was.
   function go(name) {
     if (name === page)
       return
-    remember()
+    if (!pages.includes(name))
+      remember()
     page = name
   }
 
@@ -90,14 +95,14 @@ Item {
     remember()
     if (id !== Omunculus.conversationId)
       Omunculus.open(id)
-    page = "conversation"
+    page = "chat"
   }
 
-  // The conversation page with none open: whom a new one is with.
+  // Whom a new conversation is with.
   function newConversation() {
     remember()
     Omunculus.close()
-    page = "conversation"
+    page = "new"
   }
 
   // Opens a work's conversation on its map, the work picked; a work of
@@ -134,10 +139,9 @@ Item {
     const back = { text: "BACK", icon: "chevron-left", role: "navigation", tip: "back to the " + (last ? last.page : "start") + "  esc",
       run: () => view.back() }
     const fresh = { text: "NEW CONVERSATION", short: "NEW", icon: "plus", key: "N", tip: "start another conversation  n", run: () => view.newConversation() }
-    const cost = { text: "COST", icon: "cost", tip: "what this conversation cost", run: () => view.costWanted() }
     if (page === "conversations")
       return [back, fresh]
-    if (!open && page !== "board")
+    if (page === "new" || page === "cost")
       return [back]
     if (page === "map" && node !== null)
       return [
@@ -151,16 +155,14 @@ Item {
           shown: node !== "", run: () => agents.write(true) },
         { text: "MARK READ", icon: "check", key: "M", tip: (notesHere.length > 1 ? "mark its " + notesHere.length + " notes read" : "mark its note read") + "  m",
           shown: notesHere.length > 0, run: () => notesHere.forEach(note => Omunculus.markRead(note.id)) },
-        { text: "WRITE", icon: "edit", key: "W", tip: "write to its agent  w", run: () => agents.write(false) },
-        cost
+        { text: "WRITE", icon: "edit", key: "W", tip: "write to its agent  w", run: () => agents.write(false) }
       ]
     if (page === "map")
       return [
         back,
         { text: "FIT", icon: "map", tip: "the whole map in view  f", run: () => agents.fit() },
         { text: Omunculus.pending + " PENDING", short: String(Omunculus.pending), icon: "warning", tone: Theme.warning, tip: "pick what waits on you",
-          shown: Omunculus.pending > 0, run: () => agents.pickPending() },
-        cost
+          shown: Omunculus.pending > 0, run: () => agents.pickPending() }
       ]
     if (page === "board")
       return [
@@ -194,8 +196,7 @@ Item {
           timeline.reveal(Omunculus.unread[0].id)
           Omunculus.markRead(Omunculus.unread[0].id)
         } },
-      fresh,
-      cost
+      fresh
     ]
   }
 
@@ -207,12 +208,14 @@ Item {
       conversations.focusEntry()
     else if (page === "board")
       board.focusEntry()
-    else if (!open)
-      (page === "conversation" ? picker : missing).forceActiveFocus()
+    else if (page === "new")
+      picker.forceActiveFocus()
     else if (page === "map")
       agents.forceActiveFocus()
     else if (page === "log")
       log.forceActiveFocus()
+    else if (page === "cost")
+      cost.forceActiveFocus()
     else
       mainComposer.focusEntry()
   }
@@ -224,6 +227,9 @@ Item {
   Connections {
     target: Omunculus
     function onConversationIdChanged() {
+      // The conversation's pages go with it.
+      if (!view.open && view.inConversation.includes(view.page))
+        view.page = "conversations"
       agents.picked = null
       log.picked = null
       Qt.callLater(view.focusEntry)
@@ -246,7 +252,7 @@ Item {
 
   Stage {
     anchors.fill: parent
-    shown: view.page === "conversation" && view.open
+    shown: view.page === "chat"
 
     ColumnLayout {
       anchors.fill: parent
@@ -268,10 +274,10 @@ Item {
     }
   }
 
-  // With no conversation open: whom a new one is with.
+  // Whom a new conversation is with.
   Stage {
     anchors.fill: parent
-    shown: view.page === "conversation" && !view.open
+    shown: view.page === "new"
 
     AgentPicker {
       id: picker
@@ -284,7 +290,7 @@ Item {
 
   Stage {
     anchors.fill: parent
-    shown: view.page === "map" && view.open
+    shown: view.page === "map"
 
     AgentsView {
       id: agents
@@ -296,7 +302,7 @@ Item {
 
   Stage {
     anchors.fill: parent
-    shown: view.page === "log" && view.open
+    shown: view.page === "log"
 
     LogView {
       id: log
@@ -306,18 +312,15 @@ Item {
     }
   }
 
-  // The map and the log with no conversation open.
+
   Stage {
     anchors.fill: parent
-    shown: (view.page === "map" || view.page === "log") && !view.open
+    shown: view.page === "cost"
 
-    NoConversation {
-      id: missing
+    CostView {
+      id: cost
       anchors.fill: parent
-      focus: parent.shown
-      what: view.page
-      onListWanted: view.go("conversations")
-      onNewWanted: view.newConversation()
+      focus: view.page === "cost"
       onLeave: view.back()
     }
   }

@@ -3,20 +3,22 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
 
-// CostDialog is what the conversation on screen has used, opened from the bar
-// of its conversation and map pages: the model calls, the tokens read, read from
-// cache and written, and what they cost, in all and by agent. A cost shows
-// only for calls whose provider reported one.
-ModalDialog {
-  id: dialog
+// CostView is what the conversation open has used: the model calls, the
+// tokens read, read from cache and written, and what they cost, in all and
+// by agent. A cost shows only for calls whose provider reported one. Esc
+// leaves.
+FocusScope {
+  id: view
 
-  maxWidth: 560
+  signal leave()
 
   readonly property var agents: Object.keys(Omunculus.usage.agents).sort()
 
   function tokens(count) {
     return count.toLocaleString(Qt.locale("en_US"), "f", 0)
   }
+
+  Keys.onEscapePressed: leave()
 
   component Figures: GridLayout {
     id: figures
@@ -27,9 +29,9 @@ ModalDialog {
     Label { text: "model calls"; color: Theme.dim; font.pixelSize: 11 }
     Label { text: String(figures.used.calls); font.pixelSize: 11 }
     Label { text: "tokens read"; color: Theme.dim; font.pixelSize: 11 }
-    Label { text: dialog.tokens(figures.used.input) + (figures.used.cached > 0 ? "  ·  " + dialog.tokens(figures.used.cached) + " from cache" : ""); font.pixelSize: 11 }
+    Label { text: view.tokens(figures.used.input) + (figures.used.cached > 0 ? "  ·  " + view.tokens(figures.used.cached) + " from cache" : ""); font.pixelSize: 11 }
     Label { text: "tokens written"; color: Theme.dim; font.pixelSize: 11 }
-    Label { text: dialog.tokens(figures.used.output); font.pixelSize: 11 }
+    Label { text: view.tokens(figures.used.output); font.pixelSize: 11 }
     Label { text: "cost"; color: Theme.dim; font.pixelSize: 11 }
     Label {
       text: figures.used.priced === 0 ? "not reported" : Omunculus.money(figures.used.cost)
@@ -39,30 +41,21 @@ ModalDialog {
     }
   }
 
-  contentItem: DialogPanel {
-    dialogOpen: dialog.visible
-    implicitHeight: form.implicitHeight + 56
-    index: "$"
-    title: "cost"
-    active: true
+  ScrollPage {
+    id: scroll
+    anchors.fill: parent
+    contentHeight: form.implicitHeight
 
     ColumnLayout {
       id: form
-      anchors.fill: parent
+      width: Math.min(scroll.width, 560)
       spacing: 18
 
-      Label {
-        Layout.fillWidth: true
-        text: Omunculus.title
-        color: Theme.dim
-        font.pixelSize: 11
-        elide: Text.ElideRight
-      }
-
+      Kicker { Layout.fillWidth: true; text: "in all" }
       Figures { Layout.fillWidth: true; used: Omunculus.usage.all }
 
       Repeater {
-        model: dialog.agents.length > 1 ? dialog.agents : []
+        model: view.agents.length > 1 ? view.agents : []
         delegate: ColumnLayout {
           id: agent
           required property string modelData
@@ -71,11 +64,6 @@ ModalDialog {
           Kicker { Layout.fillWidth: true; text: agent.modelData; tone: Omunculus.toneOf(agent.modelData) }
           Figures { Layout.fillWidth: true; used: Omunculus.usage.agents[agent.modelData] }
         }
-      }
-
-      DialogFooter {
-        cancelText: "CLOSE"
-        onCancelled: dialog.close()
       }
     }
   }
