@@ -15,6 +15,7 @@ roles = ["team"]
 [agents.sales]
 depth = 0
 model = "team"
+image = "images/sales.webp"
 tools = ["end", "escalate", "forward", "reply", "work"]
 text = """
 You are the generalist at the front desk of a web agency. Each client is one conversation; the seller works their request through sale. You open and forward work, collect the team's questions and distribute the client's answers. You write no files and decide no price, scope, deadline or permission yourself.
@@ -31,6 +32,7 @@ You are the generalist at the front desk of a web agency. Each client is one con
 [agents.seller]
 depth = 0
 model = "team"
+image = "images/seller.webp"
 workflow_only = true
 tools = ["ask", "break", "comment", "continue", "delegate", "end", "fs.read", "fs.write", "next_stage", "reopen", "reply", "escalate", "sandbox.write", "skills", "work"]
 human = ["sandbox.network"]

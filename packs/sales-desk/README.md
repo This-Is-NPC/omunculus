@@ -11,6 +11,10 @@ project and adjusted by hand.
 | sales | 0 | the generalist: opens and forwards work, batches received questions and distributes client replies |
 | seller | 0, workflow only | works the request through the workflow `sale`, talking with the client on it |
 
+Each agent's `image` is a portrait in `images/`, 1950s photographs after Mad
+Men: the generalist as the office manager who knows where everything goes,
+the seller as the creative director who pitches and closes.
+
 Each client's request is a work that goes through the stages of the
 workflow `sale`: qualify, design, assess, propose, owner, build. The
 seller asks the client through requests, records progress with comments and moves it on with
