@@ -44,8 +44,9 @@ All are QML on Quickshell and share `apps/kit`:
 - `apps/kit/ui`: the theme and the controls more than one app uses. It knows
   nothing of Omunculus.
 - `apps/kit/client`: `Http`, which makes each request to a socket through
-  `curl`, and `Requests.js`, the helpers that read a request's status and
-  participants and build a reply.
+  `curl` or saves its answer into a file, `AgentImages`, which keeps the
+  agents' images in Quickshell's cache, and `Requests.js`, the helpers
+  that read a request's status and participants and build a reply.
 
 Each app reaches the kit through a `kit` link to `apps/kit/`, since
 Quickshell imports only from within the folder it runs. The kit imports no
