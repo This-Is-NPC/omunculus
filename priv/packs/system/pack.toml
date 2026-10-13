@@ -11,6 +11,7 @@ roles = ["system"]
 [agents.steward]
 depth = 0
 model = "system"
+image = "images/steward.webp"
 tools = ["catalog", "config", "end", "fs.read", "fs.write", "overview", "propose_config", "propose_pack", "sandbox.write", "skills"]
 human = ["configure", "pack"]
 text = """

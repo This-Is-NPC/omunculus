@@ -82,7 +82,7 @@ lib/omunculus/       core, config, server, tool, tools, hooks, models, execution
 lib/mix/tasks/       the omunculus, omunculus.presets and omunculus.socket mix tasks
 priv/tools/          builtin tool and hook manifests
 priv/presets/        default, codex-like, pi-like
-priv/packs/system/   the system team: the steward and its skills team-design, team-composition, configure
+priv/packs/system/   the system team: the steward, its portrait and its skills team-design, team-composition, configure
 priv/sandbox.js      tool-call bridge run by Omunculus.Sandbox
 test/omunculus/      mirrors lib/; matrix_test.exs and spec_regression_test.exs are the scenario suites
 test/support/        fixtures, store case, scripted model, chain tool, execution policy
