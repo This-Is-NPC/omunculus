@@ -28,7 +28,9 @@ It works for the sales desk and publishes with the dream team's
 `deploy_preview`, which it `requires`, as it does `bash`, the codex-like
 preset's (`priv/presets/codex-like/tools`, in the project's `[tools]
 paths`): import the dream team first, then this team one depth below the
-sales desk.
+sales desk. The publisher commits under the git identity the project
+gives commands, as the dream team's README says, and sets none of its
+own.
 
 ```sh
 omunculus pack --path packs/design-team --models team=<model> --depth 1
