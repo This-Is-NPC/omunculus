@@ -17,7 +17,8 @@ the seller as the creative director who pitches and closes.
 
 Each client's request is a work that goes through the stages of the
 workflow `sale`: qualify, design, assess, propose, owner, build. The
-seller asks the client through requests, records progress with comments and moves it on with
+seller asks the client through requests — a choice, as accepting the price,
+with named options the client gets as buttons — records progress with comments and moves it on with
 the pack's tool `next_stage`, in place of `done`: it refuses the move
 until the proposal in `quotes/` that names the work has what the
 stage asks — the client's content after qualify, an approved preview or
