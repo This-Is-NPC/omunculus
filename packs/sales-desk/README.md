@@ -94,7 +94,9 @@ go ahead — has decided: the seller marks the proposal lost, with why in
 their words, and calls `break` with a report that closes it, never `wait`.
 
 The project must configure the logical `owner` request route used by discounts
-and contract decisions. For the authenticated conversation origin:
+and contract decisions; the harness's retry/cancel request for a client's
+request whose seller stopped on it past `max_retries` goes there too,
+rather than to the client. For the authenticated conversation origin:
 
 ```toml
 [policy]
