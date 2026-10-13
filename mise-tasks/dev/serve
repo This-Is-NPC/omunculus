@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Run the server on the dev registry, with OPENROUTER_API_KEY from .env, the deploy sockets and your git identity"
+#MISE description="Run the server on the dev registry, with OPENROUTER_API_KEY from .env, the deploy sockets and keys and your git identity"
 #MISE depends=["dev:bootstrap"]
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
@@ -15,6 +15,17 @@ sockets=packs/dream-team/environment/.state/sockets
 if [[ -L $sockets ]]; then
   export OMUNCULUS_DEPLOY
   OMUNCULUS_DEPLOY=$(readlink -f "$sockets")
+fi
+# Its logins, homologation's and production's, from the keys its
+# environment made, unless .env gives them.
+keys=packs/dream-team/environment/.state/keys
+if [[ -f $keys/homologation && -z ${OMUNCULUS_HOMOLOGATION_KEY:-} ]]; then
+  export OMUNCULUS_HOMOLOGATION_KEY
+  OMUNCULUS_HOMOLOGATION_KEY=$(cat "$keys/homologation")
+fi
+if [[ -f $keys/production && -z ${OMUNCULUS_PRODUCTION_KEY:-} ]]; then
+  export OMUNCULUS_PRODUCTION_KEY
+  OMUNCULUS_PRODUCTION_KEY=$(cat "$keys/production")
 fi
 # The agency's commits are the person's: their git identity, unless .env
 # gives one, for the GIT_* variables its [execution] environment names.
