@@ -35,7 +35,8 @@ change their stages in its own `[workflows.page]` and
 ## What it holds
 
 ```text
-pack.toml       the agents, on the role `team`, the workflow, and the secrets
+pack.toml       the agents, on the role `team`, the workflows `page` and
+                `release`, and the secrets
                 of the deploy tools, on the providers `homologation` and
                 `production`
 tools/          deploy_preview (homologation), promote (production) and
@@ -85,8 +86,8 @@ pin the tools the machine already holds, at the version it holds, and
 register that install with `mise link` (`mise link --force
 node@<version> /usr` for the `/usr/bin/node` the runtimes give), so
 `mise install` downloads nothing; only a tool the machine lacks makes the
-surgeon or a helper ask, through `request_access` to `owner`, for
-`sandbox.network`.
+surgeon ask, through `request_access` to `owner`, for `sandbox.network`;
+the toolsmith breaks with what is missing instead.
 
 The deploy tools name each app after the root it is published from:
 `<app>-<id>-hml` in homologation and `<app>-<id>` in production, `<id>`
@@ -101,7 +102,7 @@ where it is published: `deploy_preview` has homologation build it and
 answers with the build's output when it fails, which the clerk brings
 back for the build to be fixed.
 
-`promote` is in every agent's `human` list: only the person grants it, once
+`promote` is in the clerk's `human` list: only the person grants it, once
 they have seen the app in homologation. That grant is their approval of
 it, the only one: the administrator asks for none after the release. The
 clerk's request for it gives, written out, the homologation address
@@ -131,4 +132,8 @@ request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", "orig
 ```
 
 Replace its destination with the participant who runs the machine when
-that is not the conversation's origin. The lead answers received requests from the briefing or work goal and escalates all remaining questions together, preserving named origins; returned text is distributed with `reply`. Requests preserve waits on children. `break` stops failed work.
+that is not the conversation's origin. The administrator answers received
+requests from the work goal, the plan and the answers it knows and
+escalates all remaining questions together, preserving named origins;
+returned text is distributed with `reply`. Requests preserve waits on
+children. `break` stops failed work.
