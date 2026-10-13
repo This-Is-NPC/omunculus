@@ -181,10 +181,12 @@ Item {
       }
     }
 
-    // The reply, only once asked for.
+    // The reply, only once asked for; folded, its height is capped at none,
+    // since the layout gives a child no less than its fields' own otherwise.
     ColumnLayout {
       id: composer
       Layout.fillWidth: true
+      Layout.maximumHeight: Layout.preferredHeight
       Layout.preferredHeight: view.replying ? implicitHeight : 0
       clip: true
       opacity: view.replying ? 1 : 0
