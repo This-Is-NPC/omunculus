@@ -97,6 +97,14 @@ proposals reach the person directly instead of being reworded on the way.
 | Harness retry/cancel | A routed request after root retry exhaustion. Retry is a named decision with no calls; cancel chains cancellation. Child retry exhaustion remains a stopping break. |
 | Unanswered receiver | Linked escalation through the same action and routing, of the request the run was opened for or, for an intermediary resumed by a text answer, of the origins the answer returned to it; an upstream human request gets an inbox notification. |
 
+An agent's run opened by the answer to its own question — a reply to its
+request, or an upstream answer resuming an intermediary — does not put that
+question again: a `request` or `escalate` whose reason is the answered
+request's, whitespace aside, is refused with `asked_again`, whether the answer
+decided or only said that a decision comes later. The run goes on from the
+answer: it passes it on with `reply` to the requests it answers, and a root
+work that only its person can move on later waits for them with `wait`.
+
 Optional `to` on ask, request_access or escalate names a configured logical
 route. It is not a recipient type, and callers can omit it. Receivers answer
 what they know and escalate what they cannot answer.

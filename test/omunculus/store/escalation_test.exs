@@ -265,6 +265,59 @@ defmodule Omunculus.Store.EscalationTest do
                ~s(worker's on the work "tone": "tone")
   end
 
+  test "a run opened by the answer to its question does not put that question again",
+       %{conn: conn} = ctx do
+    {logo, tone, merged} = questions(conn, ctx)
+    assert {:ok, _} = reply(conn, ctx.root_ctx, merged, %{"body" => "I will think about it."})
+
+    resumed =
+      Fixtures.open_run(conn, %{
+        agent: "lead",
+        work_id: ctx.lead,
+        depth: 1,
+        conversation_id: ctx.conversation,
+        request_id: merged
+      })
+
+    lead_ctx = %{ctx.lead_ctx | run_id: resumed.id}
+    origins = %{"logo" => logo, "tone" => tone}
+
+    assert {:error, {:escalate, :asked_again}} =
+             apply_action(
+               conn,
+               "escalate",
+               %{"reason" => "Answer these named questions.\n", "origins" => origins},
+               lead_ctx
+             )
+
+    assert request(conn, logo).status == "pending"
+
+    assert {:ok, _} = reply(conn, lead_ctx, logo, %{"body" => "I will think about it."})
+    assert work(conn, hd(ctx.children)).state == "open"
+
+    worker =
+      Fixtures.open_run(conn, %{
+        agent: "worker",
+        work_id: hd(ctx.children),
+        depth: 2,
+        conversation_id: ctx.conversation,
+        request_id: logo
+      })
+
+    worker_ctx = %{hd(ctx.child_ctxs) | run_id: worker.id}
+
+    assert {:error, {:request, :asked_again}} =
+             apply_action(conn, "request", %{"reason" => "logo", "options" => %{}}, worker_ctx)
+
+    assert {:ok, _events} =
+             apply_action(
+               conn,
+               "request",
+               %{"reason" => "Which colour, then?", "options" => %{}},
+               worker_ctx
+             )
+  end
+
   test "partial named replies leave missing parts pending for another distribution round",
        %{conn: conn} = ctx do
     {logo, tone, merged} = questions(conn, ctx)

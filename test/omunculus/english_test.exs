@@ -32,6 +32,7 @@ defmodule Omunculus.EnglishTest do
       Out.refused({:end, :work_open}),
       Out.refused({:end, :root_open}),
       Out.refused({:wait, :not_root}),
+      Out.refused({:request, :asked_again}),
       Out.refused({:work, {:agent_not_allowed, "transmute"}}),
       Out.refused({:delegate, :agent_with_workflow}),
       Out.refused({:reopen, {:only_person, "write"}}),

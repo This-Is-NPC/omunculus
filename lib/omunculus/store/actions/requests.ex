@@ -5,6 +5,8 @@ defmodule Omunculus.Store.Actions.Requests do
   preserves the receiving work's existing wait. Replies close their request and
   return named parts transactionally through the same reply path. Grants always
   target the original requester and retain the actual answering identity.
+  An agent's run opened by the answer to its request cannot ask or escalate
+  with that request's reason again: the answer stands.
   """
 
   alias Omunculus.{Ceiling, Config, Id, Participant}
@@ -19,6 +21,7 @@ defmodule Omunculus.Store.Actions.Requests do
          {:ok, options} <- options(body["options"]),
          {:ok, run} <- fetch_run(conn, ctx.run_id),
          :ok <- ensure_actor_run(run, ctx),
+         :ok <- not_asked_again(:request, conn, run, ctx, body["reason"]),
          {:ok, work} <- Helpers.fetch_work(conn, ctx.work_id),
          :ok <- Helpers.ensure_not_waiting_children(:request, work),
          {:ok, participant} <- Participant.from_context(ctx),
@@ -45,6 +48,7 @@ defmodule Omunculus.Store.Actions.Requests do
          {:ok, participant} <- Participant.from_context(ctx),
          {:ok, run} <- fetch_run(conn, ctx.run_id),
          :ok <- ensure_actor_run(run, ctx),
+         :ok <- not_asked_again(:escalate, conn, run, ctx, body["reason"]),
          {:ok, work} <- Helpers.fetch_work(conn, ctx.work_id),
          {:ok, origins} <-
            origins(conn, body["origins"], participant, conversation(ctx, run, work)),
@@ -96,6 +100,27 @@ defmodule Omunculus.Store.Actions.Requests do
   defp ensure_actor_run(nil, %{author: "human"}), do: :ok
   defp ensure_actor_run(nil, _ctx), do: {:error, {:request, :no_run}}
   defp ensure_actor_run(_run, _ctx), do: :ok
+
+  # An agent's run opened by the answer to its question does not put that
+  # very question again: the answer stands, whether it decided or only said
+  # that a decision comes later.
+  defp not_asked_again(tag, conn, %{request_id: request_id}, %{author: "agent"}, reason)
+       when is_binary(request_id) do
+    case View.view(conn, "request", request_id) do
+      {:ok, %{status: "closed", reason: asked}} when is_binary(asked) ->
+        if String.trim(asked) == String.trim(reason),
+          do: {:error, {tag, :asked_again}},
+          else: :ok
+
+      {:ok, _other} ->
+        :ok
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  defp not_asked_again(_tag, _conn, _run, _ctx, _reason), do: :ok
 
   defp fetch_run(_conn, nil), do: {:ok, nil}
 

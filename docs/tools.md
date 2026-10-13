@@ -246,8 +246,10 @@ carries a `reason` and `options`, a map from option name to a list of
 `{name, args}` tool calls. Options made only of `grant` calls whose
 names the run already has do not open a row — the output is
 `already granted: <name>`. A granted name that is blocked is `deny`.
-`escalate` takes `reason` and `origins`, a map of distinct part names to
-received request IDs. It creates a linked request without overwriting a
+In an agent's run opened by the answer to its own request, a `request` or
+`escalate` with that request's reason, whitespace aside, is refused
+(`asked_again`): the answer stands. `escalate` takes `reason` and `origins`,
+a map of distinct part names to received request IDs. It creates a linked request without overwriting a
 parent's child wait. `reply` takes `request_id`, `body`, optional `option`
 and recursive named `parts`; `grant` takes
 `request_id`, `name`, `kind` and an optional `scope`, which only a

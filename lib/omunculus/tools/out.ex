@@ -303,6 +303,10 @@ defmodule Omunculus.Tools.Out do
     do:
       "refused: only a work the person gave waits for their message; this one was handed down to you: ask for what you need, or break to hand it back"
 
+  def refused({tag, :asked_again}) when tag in [:request, :escalate],
+    do:
+      "refused: this is the question whose answer opened this run, and it was answered: go on from that answer. Pass it on with reply to the requests it answers; when it decides nothing yet, as a person who will think it over, take it as their answer for now, and on a work they gave, wait for their next message"
+
   def refused({:work, :no_delegate}),
     do:
       "refused: this run cannot delegate, so it cannot hand a work to an agent below; a work naming no agent stays yours"
