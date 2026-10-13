@@ -11,6 +11,11 @@ packs = [{ name = "sales-desk" }, { name = "dream-team", depth = 1 }, { name = "
 environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH", "OMUNCULUS_DEPLOY"]
 timeout_ms = 300000
 
+# The seller attaches the proposal it gives the client.
+[store]
+attachments = ".omunculus/attachments"
+attachment_bytes = 10485760
+
 [auth.homologation]
 kind = "api_key"
 key = "$OMUNCULUS_HOMOLOGATION_KEY"

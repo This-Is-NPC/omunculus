@@ -114,6 +114,18 @@ than up through the builders' administrator:
 { workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "seller" }, { kind = "agent", agent = "sales" }, "origin"] }
 ```
 
+The client reads the proposal as a file: at stage propose, once the
+price, the Total and the Status are written, the seller attaches
+`quotes/<client-slug>.md` to the message that asks them to accept it, and
+only then. The project must keep attachments
+([config](../../docs/config.md)), or `attach` is refused:
+
+```toml
+[store]
+attachments = ".omunculus/attachments"
+attachment_bytes = 10485760
+```
+
 Each conversation is one client's. Give the project `[project]
 conversations` so each works in a folder of its own, copied from the
 workspace's files — the proposal template among them — when it starts
