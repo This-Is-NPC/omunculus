@@ -31,6 +31,15 @@ with the homologation address and every page by name, only the client can
 answer it, as the store refuses an agent's answer to a grant only a person
 gives, and the grant reaches the release that waits on it.
 
+What reaches the client is what the desk addresses to them: the
+generalist's escalations, the seller's comments on the request — its
+progress and each stage's report through `next_stage` — and the decisions
+routed to the client. Both agents act through tools in every reply, and
+the text a model writes beside a call is its own note, which the mailbox
+does not show (`docs/mailbox.md`): the generalist never speaks to the
+client in it, and a comment is written to the client, in Portuguese, or not
+at all.
+
 It expects a team below it whose front agent is `administrator` and
 answers a work that begins "Assessment only, build nothing:" without
 building — the dream team (`packs/dream-team`) imported one depth down:
