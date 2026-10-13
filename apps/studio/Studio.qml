@@ -137,6 +137,20 @@ Singleton {
     return Object.assign({}, table, { [key]: on ? list.concat(["skills"]) : list })
   }
 
+  // The agents of the stages of every workflow a depth of an overview's
+  // place may go through.
+  function staged(entry) {
+    return entry.workflows.reduce((all, workflow) => all.concat(workflow.stages.map(stage => stage.agent)), [])
+  }
+
+  // What the depths below 0 of an overview's place go through, "D1 delivery"
+  // a depth, joined by `separator`; "" when the place has only depth 0.
+  function runsAt(place, separator) {
+    return place.depths.filter(entry => entry.depth > 0)
+      .map(entry => "D" + entry.depth + " " + (entry.workflows.map(workflow => workflow.name).join(" | ") || "no workflow"))
+      .join(separator)
+  }
+
   // The agents of the project on screen that have the tool or skill `name` in
   // any of its places, by its overview.
   function holders(name) {
@@ -146,7 +160,7 @@ Singleton {
     const names = new Set()
     for (const place of overview.places)
       for (const entry of place.depths)
-        for (const agent of entry.stages.map(stage => stage.agent).concat(entry.agents))
+        for (const agent of staged(entry).concat(entry.agents))
           if (agent.tools.some(tool => tool.state === "have" && (tool.name === name || (tool.members || []).includes(name))))
             names.add(agent.name)
     return [...names].sort()

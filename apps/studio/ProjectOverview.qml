@@ -30,7 +30,7 @@ Item {
     const idle = new Set()
     for (const place of places)
       for (const entry of place.depths) {
-        entry.stages.forEach(stage => ran.add(stage.agent.name))
+        Studio.staged(entry).forEach(agent => ran.add(agent.name))
         entry.agents.forEach(agent => agent.idle ? idle.add(agent.name) : ran.add(agent.name))
       }
     return [...idle].filter(name => !ran.has(name))
@@ -73,8 +73,7 @@ Item {
             model: project.places
             delegate: Label {
               required property var modelData
-              text: (modelData.workspace || "root") + ": " + (modelData.depths.filter(entry => entry.depth > 0)
-                .map(entry => "D" + entry.depth + " " + (entry.workflow || "no workflow")).join(", ") || "depth 0 only")
+              text: (modelData.workspace || "root") + ": " + (Studio.runsAt(modelData, ", ") || "depth 0 only")
               color: Theme.dim
               font.pixelSize: 10
             }

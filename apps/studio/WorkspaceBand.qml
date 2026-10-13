@@ -24,8 +24,7 @@ Item {
   readonly property string folder: place.outside ? place.root
     : place.root.startsWith(projectRoot + "/") ? place.root.slice(projectRoot.length + 1) + "/"
     : place.root
-  readonly property string runs: place.depths.filter(entry => entry.depth > 0)
-    .map(entry => "D" + entry.depth + " " + (entry.workflow || "no workflow")).join("  ·  ")
+  readonly property string runs: Studio.runsAt(place, "  ·  ")
 
   implicitHeight: strip.implicitHeight + (folded ? 0 : cells.implicitHeight)
 
@@ -115,68 +114,74 @@ Item {
 
         Item { implicitHeight: 2 }
 
-        // A workflow: its stages in order, each with what it never has and its agent.
-        Rectangle {
-          Layout.fillWidth: true
-          Layout.leftMargin: 14
-          Layout.rightMargin: 14
-          visible: cell.entry !== null && cell.entry.workflow !== null
-          implicitHeight: pipe.implicitHeight + 20
-          color: Qt.alpha(Theme.background, 0.5)
-          border.color: Theme.line
+        // Each workflow a work here may go through: its stages in order, each
+        // with what it never has and its agent.
+        Repeater {
+          model: cell.entry ? cell.entry.workflows : []
+          delegate: Rectangle {
+            id: flow
+            required property var modelData
+            Layout.fillWidth: true
+            Layout.leftMargin: 14
+            Layout.rightMargin: 14
+            implicitHeight: pipe.implicitHeight + 20
+            color: Qt.alpha(Theme.background, 0.5)
+            border.color: Theme.line
 
-          ColumnLayout {
-            id: pipe
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
-            spacing: 8
-            Flow {
-              Layout.fillWidth: true
+            ColumnLayout {
+              id: pipe
+              anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
               spacing: 8
-              Caption { text: "WORKFLOW " + (cell.entry && cell.entry.workflow ? cell.entry.workflow.toUpperCase() : "") }
-              ChangeMark { visible: !!cell.entry && cell.entry.changed && band.name !== ""; text: band.name }
-              Label { text: cell.entry ? cell.entry.stages.length + " stages" : ""; color: Theme.dim; font.pixelSize: 10 }
-            }
-            Repeater {
-              model: cell.entry ? cell.entry.stages : []
-              delegate: ColumnLayout {
-                id: stage
-                required property var modelData
-                required property int index
-                readonly property bool last: index === cell.entry.stages.length - 1
+              Flow {
                 Layout.fillWidth: true
-                spacing: 5
-                Label {
-                  visible: stage.index > 0
-                  text: "↓"
-                  color: Theme.primary
-                }
-                Label {
+                spacing: 8
+                Caption { text: "WORKFLOW " + flow.modelData.name.toUpperCase() }
+                Label { visible: flow.modelData.required; text: "required"; color: Theme.warning; font.pixelSize: 10 }
+                ChangeMark { visible: !!cell.entry && cell.entry.changed && band.name !== ""; text: band.name }
+                Label { text: flow.modelData.stages.length + " stages"; color: Theme.dim; font.pixelSize: 10 }
+              }
+              Repeater {
+                model: flow.modelData.stages
+                delegate: ColumnLayout {
+                  id: stage
+                  required property var modelData
+                  required property int index
+                  readonly property bool last: index === flow.modelData.stages.length - 1
                   Layout.fillWidth: true
-                  text: String(stage.index + 1).padStart(2, "0") + "  " + stage.modelData.name.toUpperCase()
-                    + (stage.last ? "   → done, back to the depth above" : "")
-                  color: Theme.secondary
-                  font.pixelSize: 10
-                  font.letterSpacing: 1.5
-                  elide: Text.ElideRight
-                }
-                Flow {
-                  Layout.fillWidth: true
-                  visible: stage.modelData.deny.length > 0
-                  spacing: 3
-                  Label { text: "never here:"; color: Theme.dim; font.pixelSize: 10 }
-                  Repeater {
-                    model: stage.modelData.deny
-                    delegate: ToolChip {
-                      required property string modelData
-                      tool: ({ name: modelData, state: "blocked" })
+                  spacing: 5
+                  Label {
+                    visible: stage.index > 0
+                    text: "↓"
+                    color: Theme.primary
+                  }
+                  Label {
+                    Layout.fillWidth: true
+                    text: String(stage.index + 1).padStart(2, "0") + "  " + stage.modelData.name.toUpperCase()
+                      + (stage.last ? "   → done, back to the depth above" : "")
+                    color: Theme.secondary
+                    font.pixelSize: 10
+                    font.letterSpacing: 1.5
+                    elide: Text.ElideRight
+                  }
+                  Flow {
+                    Layout.fillWidth: true
+                    visible: stage.modelData.deny.length > 0
+                    spacing: 3
+                    Label { text: "never here:"; color: Theme.dim; font.pixelSize: 10 }
+                    Repeater {
+                      model: stage.modelData.deny
+                      delegate: ToolChip {
+                        required property string modelData
+                        tool: ({ name: modelData, state: "blocked" })
+                      }
                     }
                   }
-                }
-                AgentCard {
-                  Layout.fillWidth: true
-                  agent: stage.modelData.agent
-                  place: band.name
-                  onPicked: band.agentPicked(agent.name)
+                  AgentCard {
+                    Layout.fillWidth: true
+                    agent: stage.modelData.agent
+                    place: band.name
+                    onPicked: band.agentPicked(agent.name)
+                  }
                 }
               }
             }
@@ -187,8 +192,9 @@ Item {
           Layout.fillWidth: true
           Layout.leftMargin: 14
           Layout.rightMargin: 14
-          visible: cell.entry !== null && cell.entry.workflow === null && cell.entry.depth > 0
-          text: "no workflow" + (cell.entry && cell.entry.changed && band.name !== "" ? " here" : "") + " — a work goes to the agent it names, or the first:"
+          visible: cell.entry !== null && cell.entry.depth > 0 && cell.entry.agents.length > 0
+            && !cell.entry.workflows.some(workflow => workflow.required)
+          text: (cell.entry && cell.entry.workflows.length > 0 ? "or no workflow" : "no workflow") + (cell.entry && cell.entry.changed && band.name !== "" ? " here" : "") + " — a work goes to the agent it names, or the first:"
           color: Theme.dim
           font.pixelSize: 10
           wrapMode: Text.Wrap
