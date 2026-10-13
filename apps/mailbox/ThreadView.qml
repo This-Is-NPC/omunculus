@@ -252,6 +252,7 @@ Item {
                 Layout.fillWidth: true
                 entry: slot.modelData
                 thread: view.thread.key
+                project: view.thread.project
                 expanded: view.isOpen(slot.modelData)
                 onToggled: view.toggle(slot.modelData)
               }

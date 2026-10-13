@@ -71,6 +71,8 @@ FocusScope {
           width: parent.width - 2
           height: width
           agent: cardItem.modelData.name
+          source: Omunculus.imageOf(cardItem.modelData.name)
+          tone: Omunculus.toneOf(cardItem.modelData.name)
           initialSize: 72
         }
         Label {

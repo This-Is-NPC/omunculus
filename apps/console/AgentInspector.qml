@@ -63,6 +63,8 @@ Rectangle {
         implicitWidth: 72
         implicitHeight: 72
         agent: inspector.agent
+        source: Omunculus.imageOf(inspector.agent)
+        tone: Omunculus.toneOf(inspector.agent)
         framed: true
       }
       ColumnLayout {

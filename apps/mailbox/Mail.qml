@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import "kit/client"
 import "kit/client/Requests.js" as Requests
+import "kit/ui"
 
 // Mail is every project of the server as the mailbox sees it. A thread is a
 // conversation with one agent of depth 0: what you write goes to that agent,
@@ -22,6 +23,9 @@ Singleton {
   // Every project, as {id, socket, agents}: the agents of depth 0 a thread
   // can be with.
   property var projects: []
+  // Project id -> every agent of its config, as the config tool lists them:
+  // the agents whose pictures and colours the threads show.
+  property var rosters: ({})
   // "project/conversation" -> its thread: {key, project, id, agent, subject,
   // working, waiting, status, at, heard, snippet, entries}.
   property var threads: ({})
@@ -251,16 +255,21 @@ Singleton {
     }, failed)
   }
 
-  // The agents of depth 0 of each project not yet known, from its config.
+  // The agents of each project not yet known, from its config: those of
+  // depth 0 a thread can be with, and every one, for its picture and colour.
   function loadAgents(items) {
     const known = projects.filter(item => items.some(other => other.id === item.id))
     projects = items.map(item => known.find(other => other.id === item.id) || { id: item.id, socket: item.socket, agents: [] })
+    if (Object.keys(rosters).some(id => !items.some(item => item.id === id)))
+      rosters = Object.fromEntries(Object.entries(rosters).filter(([id]) => items.some(item => item.id === id)))
     for (const item of items) {
       if (known.some(other => other.id === item.id))
         continue
       http.call(item.socket, "POST", "/v1/cli", { argv: ["config", "--whole", "true"] }, false, data => {
-        const agents = JSON.parse(data.output).agents.filter(agent => agent.depth === 0 && !agent.workflow_only).map(agent => agent.name)
+        const roster = JSON.parse(data.output).agents
+        const agents = roster.filter(agent => agent.depth === 0 && !agent.workflow_only).map(agent => agent.name)
         projects = projects.map(other => other.id === item.id ? Object.assign({}, other, { agents: agents }) : other)
+        rosters = Object.assign({}, rosters, { [item.id]: roster })
       })
     }
   }
@@ -591,6 +600,37 @@ Singleton {
     return date.toDateString() === new Date().toDateString() ? Qt.formatTime(date, "HH:mm") : Qt.formatDate(date, "d MMM")
   }
 
+  // Whether a name is of an agent of a project, rather than a person's.
+  function isAgent(project, name) {
+    return (rosters[project] || []).some(agent => agent.name === name)
+  }
+
+  // An agent's colour, by its place among its project's agents.
+  function toneOf(project, name) {
+    const at = (rosters[project] || []).findIndex(agent => agent.name === name)
+    return at < 0 ? Theme.dim : Theme.agentPalette[at % Theme.agentPalette.length]
+  }
+
+  // The file of an agent's picture, as a url, or "" while it has none.
+  function imageOf(project, name) {
+    const keeper = images.objectAt(Object.keys(rosters).indexOf(project))
+    return keeper ? keeper.source(name) : ""
+  }
+
+  // Each project's pictures, fetched once through its own socket.
+  Instantiator {
+    id: images
+    model: Object.keys(root.rosters)
+    delegate: AgentImages {
+      required property string modelData
+      // Mail's Http, which `http` here would name this property.
+      http: root.client
+      socket: (root.projectOf(modelData) || { socket: "" }).socket
+      base: "/v1/projects/" + modelData
+      agents: root.rosters[modelData] || []
+    }
+  }
+
   FileView {
     id: seenFile
     path: Quickshell.statePath("seen.json")
@@ -602,6 +642,7 @@ Singleton {
     }
   }
 
+  readonly property Http client: http
   Http {
     id: http
     onRefused: reason => root.tell(reason, true)

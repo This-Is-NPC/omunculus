@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import "kit/ui"
 
 // Entry is one message of a thread, as a mail shows it: who wrote to whom and
-// when, then the text and the files it carries, each a chip that saves the
+// when, an agent's portrait before its name, then the text and the files it carries, each a chip that saves the
 // file to the downloads directory and opens it. Folded, it is one line with
 // the start of the text. A request for you is a message too: a filled card
 // with its question and, while it waits, the way to answer it. A question
@@ -16,12 +16,14 @@ SurfaceFrame {
 
   required property var entry
   required property string thread
+  required property string project
   property bool expanded: true
 
   readonly property bool request: entry.kind === "request"
   readonly property bool mine: entry.kind === "you"
   readonly property bool note: !!entry.note
   readonly property bool deciding: request && entry.open
+  readonly property bool agent: !mine && !note && Mail.isAgent(project, entry.from)
 
   signal toggled()
 
@@ -46,6 +48,14 @@ SurfaceFrame {
         anchors { left: parent.left; right: parent.right }
         spacing: 8
         Dot { visible: card.request; tone: card.deciding ? Theme.warning : Theme.dim }
+        Portrait {
+          visible: card.agent
+          Layout.preferredWidth: 20
+          Layout.preferredHeight: 20
+          agent: card.entry.from
+          source: Mail.imageOf(card.project, card.entry.from)
+          tone: Mail.toneOf(card.project, card.entry.from)
+        }
         Label {
           text: card.mine ? "YOU" : card.entry.from.toUpperCase()
           color: card.deciding ? Theme.warning : card.mine || card.note ? Theme.dim : Theme.primary

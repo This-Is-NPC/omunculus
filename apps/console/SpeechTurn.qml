@@ -39,7 +39,7 @@ Item {
       spacing: 8
       x: turn.mine ? body.width - width : 0
       Rectangle { visible: turn.mine; width: 5; height: 5; anchors.verticalCenter: parent.verticalCenter; color: turn.tone }
-      Portrait { visible: !turn.mine && !turn.note && turn.who !== ""; width: 20; height: 20; anchors.verticalCenter: parent.verticalCenter; agent: turn.who }
+      Portrait { visible: !turn.mine && !turn.note && turn.who !== ""; width: 20; height: 20; anchors.verticalCenter: parent.verticalCenter; agent: turn.who; source: Omunculus.imageOf(turn.who); tone: Omunculus.toneOf(turn.who) }
       Label { text: turn.note ? "NOTE" : turn.who.toUpperCase(); color: turn.tone; font.pixelSize: 10; font.letterSpacing: 2.5 }
       Label { text: turn.stamp; color: Qt.alpha(turn.tone, 0.7); font.pixelSize: 9; font.letterSpacing: 1 }
     }

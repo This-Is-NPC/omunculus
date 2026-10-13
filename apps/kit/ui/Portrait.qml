@@ -1,18 +1,17 @@
 import QtQuick
-import "kit/ui"
 
 // Portrait is an agent's picture, cropped to the square it fills, or, while it
 // has none, its initial in its colour on a faint wash of it. With a frame, a
-// hairline goes round it. The agent is of the window's project, or of the
-// `project` named.
+// hairline goes round it. The picture is the file the app fetched for it.
 Item {
   id: portrait
 
   required property string agent
-  property string project: ""
+  // The picture's url, "" while it has none, and the agent's colour.
+  property url source
+  property color tone: Theme.dim
   property bool framed: false
   property real initialSize: Math.max(8, Math.round(height * 0.45))
-  readonly property color tone: Omunculus.toneOf(agent)
 
   Rectangle {
     anchors.fill: parent
@@ -29,7 +28,7 @@ Item {
   Image {
     id: picture
     anchors { fill: parent; margins: portrait.framed ? 1 : 0 }
-    source: Omunculus.imageOf(portrait.agent, portrait.project)
+    source: portrait.source
     fillMode: Image.PreserveAspectCrop
     asynchronous: true
     smooth: true

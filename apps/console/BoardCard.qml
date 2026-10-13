@@ -91,7 +91,8 @@ Rectangle {
         Layout.preferredWidth: 18
         Layout.preferredHeight: 18
         agent: card.agent
-        project: card.work.project
+        source: Omunculus.imageOf(card.agent, card.work.project)
+        tone: Omunculus.toneOf(card.agent)
         initialSize: 9
       }
       Label {

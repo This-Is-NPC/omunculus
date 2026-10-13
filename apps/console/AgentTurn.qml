@@ -69,7 +69,7 @@ Item {
     Row {
       visible: !turn.continued
       spacing: 8
-      Portrait { width: 20; height: 20; anchors.verticalCenter: parent.verticalCenter; agent: turn.who }
+      Portrait { width: 20; height: 20; anchors.verticalCenter: parent.verticalCenter; agent: turn.who; source: Omunculus.imageOf(turn.who); tone: Omunculus.toneOf(turn.who) }
       Label { text: turn.who.toUpperCase(); color: turn.tone; font.pixelSize: 10; font.letterSpacing: 2.5 }
       Label { text: turn.stamp; color: Qt.alpha(turn.tone, 0.7); font.pixelSize: 9; font.letterSpacing: 1 }
     }

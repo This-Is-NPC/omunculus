@@ -61,6 +61,8 @@ Rectangle {
     width: node.height - 2 * node.border.width
     height: width
     agent: node.agent
+    source: Omunculus.imageOf(node.agent)
+    tone: Omunculus.toneOf(node.agent)
     initialSize: 44
     // A ring that keeps leaving the corner while the agent runs.
     Rectangle {

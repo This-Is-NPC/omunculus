@@ -263,7 +263,8 @@ Item {
                 Layout.preferredWidth: 26
                 Layout.preferredHeight: 26
                 agent: lane.modelData || ""
-                project: parent.works.length > 0 ? parent.works[0].project : ""
+                source: Omunculus.imageOf(lane.modelData || "", parent.works.length > 0 ? parent.works[0].project : "")
+                tone: Omunculus.toneOf(lane.modelData || "")
                 framed: true
                 initialSize: 12
               }

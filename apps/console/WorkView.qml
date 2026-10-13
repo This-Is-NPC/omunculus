@@ -306,7 +306,7 @@ FocusScope {
                   font.pixelSize: 12
                   elide: Text.ElideRight
                 }
-                Portrait { implicitWidth: 18; implicitHeight: 18; agent: stage.modelData.agent }
+                Portrait { implicitWidth: 18; implicitHeight: 18; agent: stage.modelData.agent; source: Omunculus.imageOf(stage.modelData.agent); tone: Omunculus.toneOf(stage.modelData.agent) }
                 Label {
                   Layout.fillWidth: true
                   text: stage.modelData.agent
@@ -319,7 +319,7 @@ FocusScope {
             RowLayout {
               visible: view.steps.length === 0
               spacing: 8
-              Portrait { implicitWidth: 18; implicitHeight: 18; agent: view.agent }
+              Portrait { implicitWidth: 18; implicitHeight: 18; agent: view.agent; source: Omunculus.imageOf(view.agent); tone: Omunculus.toneOf(view.agent) }
               Value { text: view.agent; color: Omunculus.toneOf(view.agent) }
             }
           }
