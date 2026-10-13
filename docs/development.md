@@ -13,3 +13,22 @@
 | `up` | `dev:bootstrap`, then `dev:serve` unless a server already answers |
 
 While the dev server runs, `bin/omunculus --config dev/omunculus.toml <command>` goes to it through the socket.
+
+## Commands
+
+```sh
+mise install                    # toolchain from mise.toml
+mix deps.get
+mise run validate:regular       # mix test --exclude cargo --exclude sandbox
+mise run validate:sandbox       # needs Linux with Bubblewrap namespaces
+mise run pre-commit             # validate:boundaries, then mix format --check-formatted
+mise run pre-push               # validate:regular
+mix compile --warnings-as-errors
+bin/omunculus preset default --from priv/presets/default
+bin/omunculus send "text"
+bin/omunculus serve --config server.toml
+apps/kit/run console --config server.toml [--project <id>]
+mise run up                     # the dev server; the apps open with dev:console, dev:studio, dev:mailbox
+apps/kit/run mailbox --config server.toml [--project <id>]
+apps/kit/run studio --config server.toml [--project <id>]
+```

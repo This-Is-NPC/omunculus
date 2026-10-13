@@ -2,8 +2,41 @@
 
 The core is `lib/omunculus/`. Read these modules first, in this order. What
 each one does with the store, the TOML and the sandbox is detailed in the
-documents linked from [AGENTS.md](../AGENTS.md#documentation); this page is
-the module map and the run cycle that ties them together.
+other documents of `docs/`; this page is the layout of the tree, the module
+map and the run cycle that ties them together.
+
+## Layout
+
+```text
+bin/omunculus        shell wrapper: mise exec -- mix omunculus
+apps/console/        the window: QML on Quickshell, a client of the server's local socket
+apps/mailbox/        the mailbox: a concept client
+apps/studio/         the studio: the project's settings
+apps/kit/            what the apps share: ui/, the theme and controls, client/, the curl
+                     requests to the server's sockets, the request helpers and the scripts
+                     that send and open attached files, and run, the launcher of every app
+lib/omunculus/       core, config, server, tool, tools, hooks, models, execution, store
+lib/mix/tasks/       the omunculus, omunculus.presets and omunculus.socket mix tasks
+priv/tools/          builtin tool and hook manifests
+priv/presets/        default, codex-like, pi-like
+priv/packs/system/   the system team: the steward, the auditor and the refiner, their portraits and their
+                     skills team-design, team-composition, configure, audit, refine
+priv/sandbox.js      tool-call bridge run by Omunculus.Sandbox
+test/omunculus/      mirrors lib/; matrix_test.exs and spec_regression_test.exs are the scenario suites
+test/support/        fixtures, store case, scripted model, chain tool, execution policy
+                     fixtures, command model bridge, MCP server, Rust OpenAI stub
+bench/               resident capacity benchmark
+packs/               teams distributed as packs (Config.Packs), each with the eval tasks that
+                     show it works: dream-team, which builds and publishes, with its tools,
+                     workspace files and environment; sales-desk, which answers clients
+                     and works over the dream team; design-team, which shows the client
+                     a preview of the site before it is built
+eval/                Equivalent Exchange, the behaviour benchmark: the Amestris preset,
+                     its configurations, tasks and runner (mise run eval:run); each run
+                     writes eval/results/<time>-<label>/, ignored by git
+mise-tasks/          validate/regular, validate/sandbox, validate/boundaries, pre-commit, pre-push, up, dev/*, benchmark/*, eval/*
+dev/                 the development environment: server registry and project config
+```
 
 ## `Omunculus.CLI`
 
