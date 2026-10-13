@@ -76,23 +76,6 @@ defmodule Omunculus.ConfigTest do
     assert Config.workflows_at(config, 1) == ["delivery"]
   end
 
-  test "the dev environment's registry and project files load" do
-    assert {:ok, %{projects: %{"dev" => path, "agency" => agency}}} =
-             Omunculus.Server.Config.load("dev/server.toml")
-
-    assert {:ok, %Config{access: access, agents: %{"steward" => _}}} = Config.load(path)
-    assert access != nil
-
-    assert {:ok,
-            %Config{
-              agents: %{"steward" => _, "sales" => _, "administrator" => _, "designer" => _},
-              workflows: %{"release" => release}
-            }} =
-             Config.load(agency)
-
-    assert %{ceiling: %{deny: ["done"]}} = Enum.find(release, &(&1.name == "promote"))
-  end
-
   test "request routes are required, validated once and retained on Config", %{dir: dir} do
     agents = "[agents.concierge]\ndepth = 0\ntext = \"root\"\n"
     Fixtures.write_config(dir, agents, request_routes: false)

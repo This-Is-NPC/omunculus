@@ -35,7 +35,7 @@ eval/                Equivalent Exchange, the behaviour benchmark: the Amestris 
                      its configurations, tasks and runner (mise run eval:run); each run
                      writes eval/results/<time>-<label>/, ignored by git
 scripts/             the jobs mise.toml runs as tasks: validate-*, check-format, up, dev-*, benchmark-*, eval-*
-dev/                 the development environment: server registry and project config
+dev/                 the development environment, local and ignored by git
 ```
 
 ## `Omunculus.CLI`

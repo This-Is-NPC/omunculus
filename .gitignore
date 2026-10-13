@@ -22,11 +22,8 @@ erl_crash.dump
 /test/support/openai_stub/target/
 /bench/results/
 /bench/*/target/
-/dev/.omunculus/
-/dev/workspace/
 /eval/results/
 __pycache__/
 /eval/.cache/
 /packs/dream-team/environment/.state/
-/dev/agency/.omunculus/
-/dev/agency/workspace/
+/dev/

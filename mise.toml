@@ -37,7 +37,7 @@ description = "Check that every relative link, image and anchor of the documenta
 run = "scripts/check-links"
 
 [tasks."dev:bootstrap"]
-description = "Seed the local administrator of each dev project once, and give the agency its packs' workspace files"
+description = "Create each dev project's workspace with its packs' workspace files and seed its local administrator once"
 run = "scripts/dev-bootstrap"
 
 [tasks."dev:console"]

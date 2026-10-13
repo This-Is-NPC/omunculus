@@ -89,11 +89,10 @@ apps/kit/run console --config server.toml --project demo
 `--project` may be left out when the registry holds one project.
 
 From a checkout, `mise run up` starts the development server on `dev/`,
-whose agents run on the model the dev configs name, with the keys of
-`.env`, and the agency the packs under `packs/`
-make; with it running, `mise run dev:console`, `dev:studio` and
-`dev:mailbox` open the apps on it. `mise run dev:reset` starts both
-projects over; see [the development environment](docs/development.md).
+a local folder ignored by git that holds your registry and project configs,
+with the keys of `.env`; with it running, `mise run dev:console`,
+`dev:studio` and `dev:mailbox` open the apps on it. `mise run dev:reset`
+starts its projects over; see [the development environment](docs/development.md).
 
 It lists the conversations and follows the open one live in three pages,
 chosen by number or from the tabs down the left, each with its commands in a
