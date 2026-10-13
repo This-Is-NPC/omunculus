@@ -71,7 +71,9 @@ the site first gets a preview in homologation, and the approved design's
 Prices: a site of 4 pages is R$ 1.500, each page beyond 4 R$ 300, and
 the desk may give up to 10% off on its own. A larger discount, and the
 contract with the payment and the start date once the client accepts, it
-asks the owner with `ask`; approved, it sends the builders the build.
+asks the owner with `ask`: the discount at stage propose, the contract
+once, at stage owner, after the client accepted, as `next_stage` at
+propose reminds it; approved, it sends the builders the build.
 
 A client who answers a decision without making it — they will think the
 price over and answer in a few days — has answered for now. The

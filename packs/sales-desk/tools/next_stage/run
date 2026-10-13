@@ -86,7 +86,7 @@ def main():
     elif stage == "propose":
         status = re.search(r"^Status:\s*(.*)$", text, re.M)
         if not value(section(text, "6. Price"), "Total") or not status or not status.group(1).startswith("accepted"):
-            refuse(stage, f"give the client the price, write the Total, and mark Status accepted, awaiting owner in {path.name} once they accept")
+            refuse(stage, f"give the client the price, write the Total, and mark Status accepted, awaiting owner in {path.name} once they accept; the owner's approval is asked at stage owner, after this one")
     elif stage == "owner":
         cause = view.get("cause") or {}
         if cause.get("type") != "reply" or body(cause).get("option") != "approve":
