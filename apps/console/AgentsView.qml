@@ -2,15 +2,18 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Shapes
+import "kit/client/Requests.js" as Requests
 import "kit/ui"
 
-// AgentsView is the conversation's agents at work, in one view. You sit on
-// top, with the workspace they work in; below, a band per depth holds the
-// works, each under the one it came from, and the agents configured at that
-// depth with nothing to do, hollow. A link flows while the agent below runs.
-// What an agent asked and still waits for is an arrow from it to whoever
-// decides, named after what it asked. Picking a node opens it beside the map:
-// to answer what it asked, read what it did, and write to it.
+// AgentsView is the conversation's agents at work, as a flowchart on a
+// canvas that moves and zooms, as the studio's flow does. You sit on top,
+// with the workspace they work in; below, a row per depth, named at its left,
+// holds the works, each under the one it came from, each card the agent's
+// portrait and the work it is on, and the agents configured at that depth
+// with nothing to do, hollow. A link flows while the agent below runs. What
+// an agent asked and still waits for is an arrow from it to whoever decides,
+// named after what it asked. Picking a node opens it beside the map: to
+// answer what it asked, read what it did, and write to it.
 Item {
   id: view
 
@@ -52,11 +55,13 @@ Item {
     return placed.concat(idle)
   }
 
-  readonly property int nodeWidth: 200
-  readonly property int nodeHeight: 66
-  readonly property int across: 24
-  readonly property int down: 70
-  readonly property int youHeight: 54
+  readonly property int nodeWidth: 320
+  readonly property int nodeHeight: 128
+  readonly property int across: 40
+  readonly property int down: 110
+  readonly property int youHeight: 72
+  // The column left of the rows, where each depth is named.
+  readonly property int labelWidth: 190
 
   // Where each node sits: leaves side by side in tree order, a parent centred
   // over its children, the idle ones after the rest of their band.
@@ -84,23 +89,23 @@ Item {
     const result = {}
     for (const node of nodes)
       result[node.key] = {
-        x: at[node.key] * (nodeWidth + across),
+        x: labelWidth + at[node.key] * (nodeWidth + across),
         y: youHeight + down + node.depth * (nodeHeight + down)
       }
     return result
   }
-  readonly property real wide: Math.max(nodeWidth, ...Object.values(places).map(place => place.x + nodeWidth))
+  readonly property real wide: Math.max(labelWidth + nodeWidth, ...Object.values(places).map(place => place.x + nodeWidth)) + 40
   readonly property real tall: youHeight + down + Math.max(0, ...nodes.map(node => node.depth)) * (nodeHeight + down) + nodeHeight
   readonly property real youX: {
     const tops = nodes.filter(node => node.depth === 0 && !node.idle).map(node => places[node.key].x)
-    return tops.length === 0 ? 0 : (Math.min(...tops) + Math.max(...tops)) / 2
+    return tops.length === 0 ? labelWidth : (Math.min(...tops) + Math.max(...tops)) / 2
   }
 
   // The requests still waiting, as arrows from the asking node to whoever decides.
   readonly property var arrows: Omunculus.asking.map(request => {
     const from = places[request.work_id || ""]
     const work = Omunculus.work(request.work_id || "")
-    const human = request.arbiter === "human"
+    const human = Requests.human(request.arbiter)
     const target = human ? { x: youX, y: 0 } : places[work && work.parent_id ? work.parent_id : ""]
     if (!from || !target)
       return null
@@ -123,37 +128,39 @@ Item {
       leave()
   }
 
-  RowLayout {
+  // Picking a node brings it into the room left of the inspector.
+  onPickedChanged: if (picked !== null && places[picked]) Qt.callLater(() => map.bringIntoView(Object.assign({ width: nodeWidth, height: nodeHeight }, places[picked])))
+
+  FlowCanvas {
+    id: map
     anchors.fill: parent
-    spacing: 14
+    contentWidth: view.wide
+    contentHeight: view.tall + 40
+    rightInset: inspector.visible ? inspector.width + 14 : 0
+    bottomInset: zoom.height + 16
+    onBackgroundClicked: view.picked = null
+    // A conversation is framed when it is drawn, and again as it grows,
+    // until it is moved by hand.
+    onContentWidthChanged: if (!moved) Qt.callLater(fit)
+    onContentHeightChanged: if (!moved) Qt.callLater(fit)
 
-    Flickable {
-      id: map
-      Layout.fillWidth: true
-      Layout.fillHeight: true
-      clip: true
-      boundsBehavior: Flickable.StopAtBounds
-      contentWidth: Math.max(width, canvas.width + 40)
-      contentHeight: Math.max(height, canvas.height + 40)
+    Item {
+      id: canvas
+      x: 0
+      y: 20
+      width: view.wide
+      height: view.tall
 
-      Item {
-        id: canvas
-        x: Math.max(20, (map.width - width) / 2)
-        y: 20
-        width: view.wide
-        height: view.tall
-
-        // Depth labels at the left of each band.
+        // Each depth named at the left of its row.
         Repeater {
           model: Array.from(new Set(view.nodes.map(node => node.depth))).sort()
-          delegate: Label {
+          delegate: Column {
             required property int modelData
-            x: -canvas.x + 4
-            y: view.youHeight + view.down + modelData * (view.nodeHeight + view.down) - 18
-            text: "DEPTH " + modelData
-            color: Theme.line
-            font.pixelSize: 9
-            font.letterSpacing: 3
+            x: 20
+            y: view.youHeight + view.down + modelData * (view.nodeHeight + view.down) + 10
+            spacing: 4
+            Label { text: "DEPTH"; color: Theme.dim; font.pixelSize: 10; font.letterSpacing: 3 }
+            DecodeLabel { value: String(modelData).padStart(2, "0"); color: Theme.primary; font.pixelSize: 36; font.letterSpacing: 2 }
           }
         }
 
@@ -207,9 +214,9 @@ Item {
           border.color: Omunculus.waiting.length > 0 ? Theme.warning : Theme.primary
           border.width: Omunculus.waiting.length > 0 ? 2 : 1
           ColumnLayout {
-            anchors { fill: parent; margins: 8; leftMargin: 12; rightMargin: 12 }
+            anchors { fill: parent; margins: 10; leftMargin: 14; rightMargin: 14 }
             spacing: 4
-            Label { text: "YOU"; color: Theme.primary; font.pixelSize: 10; font.letterSpacing: 3 }
+            DecodeLabel { value: "YOU"; color: Theme.primary; font.pixelSize: 18; font.letterSpacing: 6 }
             Label {
               Layout.fillWidth: true
               readonly property var place: Omunculus.workspaceOf("")
@@ -295,18 +302,24 @@ Item {
       }
     }
 
-    AgentInspector {
-      id: inspector
-      Layout.preferredWidth: Math.min(400, view.width * 0.45)
-      Layout.fillHeight: true
-      visible: view.picked !== null
-      key: view.picked === null ? "" : view.picked
-      agent: {
-        const node = view.nodes.find(item => item.key === view.picked)
-        return node ? node.agent : ""
-      }
-      onClosed: view.picked = null
-      onPicked: key => view.pick(key)
+  ZoomControl {
+    id: zoom
+    anchors { left: parent.left; bottom: parent.bottom }
+    target: map
+  }
+
+  // The node picked, beside the map, over it.
+  AgentInspector {
+    id: inspector
+    anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
+    width: Math.min(420, view.width * 0.45)
+    visible: view.picked !== null
+    key: view.picked === null ? "" : view.picked
+    agent: {
+      const node = view.nodes.find(item => item.key === view.picked)
+      return node ? node.agent : ""
     }
+    onClosed: view.picked = null
+    onPicked: key => view.pick(key)
   }
 }
