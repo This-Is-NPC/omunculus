@@ -48,25 +48,14 @@ ShellRoot {
       { name: "project" }
     ]
     // What can be added, each in its section, which it opens.
-    readonly property var adds: ({
-      provider: { text: "ADD PROVIDER", short: "PROVIDER", icon: "plus", run: () => { window.page = 1; settings.add("auth", "provider") } },
-      model: { text: "ADD MODEL", short: "MODEL", icon: "plus", run: () => { window.page = 2; settings.add("models", "model") } },
-      agent: { text: "ADD AGENT", short: "AGENT", icon: "plus", run: () => { window.page = 3; settings.agent = settings.add("agents", "agent") } },
-      workflow: { text: "ADD WORKFLOW", short: "WORKFLOW", icon: "plus", run: () => { window.page = 4; settings.add("workflows", "workflow") } },
-      workspace: { text: "ADD WORKSPACE", short: "WORKSPACE", icon: "plus", run: () => { window.page = 7; settings.add("workspaces", "workspace") } }
-    })
-    // Each section's commands, as the command bar shows them; the flow's are
-    // everything the project can be given.
-    readonly property var commands: [
-      [adds.agent, adds.workflow, adds.model, adds.provider, adds.workspace],
-      [adds.provider],
-      [adds.model],
-      [adds.agent],
-      [adds.workflow],
-      [],
-      [],
-      [adds.workspace]
-    ]
+    function adding(text, page, section) {
+      return { text: "ADD " + text, short: text, icon: "plus", run: () => { window.page = page; settings.create(section) } }
+    }
+    // The flow's commands: everything the project can be given. The other
+    // sections' come from what is picked or open in them.
+    readonly property var commands: page === 0
+      ? [adding("AGENT", 3, "agents"), adding("WORKFLOW", 4, "workflows"), adding("MODEL", 2, "models"), adding("PROVIDER", 1, "auth"), adding("WORKSPACE", 7, "workspaces")]
+      : settings.commands
 
     function choose(index) { page = (index + sections.length) % sections.length }
 
@@ -144,7 +133,7 @@ ShellRoot {
         anchors { left: parent.left; leftMargin: rail.x + rail.foldedWidth + 16; right: parent.right; rightMargin: 20 }
         y: 20
         height: rail.headHeight
-        commands: window.commands[window.page]
+        commands: window.commands
         section: window.page
       }
 
