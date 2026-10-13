@@ -1416,9 +1416,7 @@ defmodule Omunculus.RunTest do
         Fixtures.insert(project.conn, :works, %{parent_id: parent_id, assignee: "worker"})
 
       Fixtures.use_model(project, fn assembled, _tools, call ->
-        if String.starts_with?(assembled, "worker"),
-          do: raise("boom"),
-          else: call.("break", %{"report" => "passed up"})
+        if String.starts_with?(assembled, "worker"), do: raise("boom"), else: call.("end", %{})
       end)
 
       assert {:error, {:runs, [_, _]}} = Run.open(project, opening(nil, child_id))
@@ -1427,11 +1425,10 @@ defmodule Omunculus.RunTest do
       assert end_run_errors(project, child_id) == List.duplicate("the model crashed: boom", 2)
 
       assert breaks_of(project, child_id) == [
-               ~s(worker stopped the work "a work" without a report after 2 runs.)
+               "The work stopped without a report after 2 runs."
              ]
 
-      assert [_parent_run] = runs_of(project, parent_id)
-      assert breaks_of(project, parent_id) == ["passed up"]
+      assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", parent_id)
 
       Project.close(project)
     end
