@@ -5,12 +5,13 @@ import "kit/ui"
 
 // AgentNode is one agent on the conversation's map, a card of fixed size:
 // its portrait, its name in its colour and the model it runs on, the work it
-// is on, its state and the tool it is calling, and where it stands in its
-// workflow. Its border is that state —
-// running, waiting on you, broken, done — a ring keeps leaving the portrait
-// while it runs, and a badge counts what it asked that still waits. An agent
-// configured at that depth with nothing to do shows hollow. The keyboard
-// reaches it; Enter or Space picks it.
+// is on, its state and the tool it is calling, and, in a workflow's lane,
+// the stage that is its own. Its border is that state — running, waiting on
+// you, broken, done — a ring keeps leaving the portrait while it runs, and a
+// badge counts what it asked that still waits. A card that is no work shows
+// hollow: an agent configured at that depth with nothing to do, or a stage
+// of a lane the work went through, checked, or has ahead. The keyboard
+// reaches a work's card; Enter or Space picks it.
 Rectangle {
   id: node
 
@@ -18,8 +19,14 @@ Rectangle {
   property string key: ""
   property string agent: ""
   property string title: ""
-  // A configured agent with no work here.
+  // A card that is no work: an agent with nothing to do, or a stage of a
+  // lane the work is not at.
   property bool idle: false
+  // The stage of a lane it stands for, its place there, and whether the work
+  // went through it.
+  property string stage: ""
+  property int stageIndex: 0
+  property bool passed: false
   property bool selected: false
   signal chosen()
 
@@ -41,9 +48,9 @@ Rectangle {
   Keys.onReturnPressed: chosen()
   Keys.onSpacePressed: chosen()
   color: selected ? Qt.tint(Theme.background, Qt.alpha(Theme.primary, 0.1)) : pointer.containsMouse ? Theme.highlight : Theme.background
-  border.color: selected ? Theme.primary : stateTone
+  border.color: selected ? Theme.primary : passed ? Qt.alpha(Theme.success, 0.5) : stateTone
   border.width: selected || toYou > 0 || running ? 2 : 1
-  opacity: idle ? 0.45 : workState === "done" || workState === "cancelled" ? 0.6 : 1
+  opacity: passed ? 0.6 : idle ? 0.45 : workState === "done" || workState === "cancelled" ? 0.6 : 1
   Behavior on color { ColorAnimation { duration: 140 } }
   Behavior on border.color { ColorAnimation { duration: 200 } }
   Behavior on opacity { NumberAnimation { duration: 200 } }
@@ -146,7 +153,7 @@ Rectangle {
       Layout.fillWidth: true
       Layout.fillHeight: true
       Layout.minimumHeight: font.pixelSize + 4
-      text: node.idle ? "idle" : node.title
+      text: node.title
       color: node.idle ? Theme.dim : Theme.foreground
       font.pixelSize: 12
       wrapMode: Text.Wrap
@@ -156,20 +163,20 @@ Rectangle {
     Label {
       Layout.fillWidth: true
       visible: !node.idle
-      text: (node.running ? "RUNNING" + (Omunculus.calling[node.key] ? "  ·  " + Omunculus.calling[node.key] : "") : node.workState.toUpperCase())
-        + (node.work && node.work.workflow ? "  ·  " + node.work.workflow.toUpperCase() : "")
+      text: node.running ? "RUNNING" + (Omunculus.calling[node.key] ? "  ·  " + Omunculus.calling[node.key] : "") : node.workState.toUpperCase()
       color: node.running ? node.agentTone : node.toYou > 0 ? Theme.warning : Theme.dim
       font.pixelSize: 9
       font.letterSpacing: 2
       elide: Text.ElideRight
     }
-    WorkflowTrack {
+    Label {
       Layout.fillWidth: true
-      Layout.preferredHeight: visible ? implicitHeight : 0
-      work: node.work
-      tone: node.agentTone
-      running: node.running
-      dense: true
+      visible: node.stage !== ""
+      text: (node.passed ? "✓ " : "") + String(node.stageIndex + 1).padStart(2, "0") + " · " + node.stage.toUpperCase()
+      color: node.passed ? Theme.success : node.idle ? Theme.secondary : node.agentTone
+      font.pixelSize: 9
+      font.letterSpacing: 2
+      elide: Text.ElideRight
     }
   }
 

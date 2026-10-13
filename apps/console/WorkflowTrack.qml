@@ -12,7 +12,6 @@ Flow {
   required property var work
   property color tone: Theme.primary
   property bool running: false
-  property bool dense: false
 
   readonly property var steps: {
     const flow = Omunculus.setup && work && work.workflow ? Omunculus.setup.workflows.find(each => each.name === work.workflow) : null
@@ -38,12 +37,12 @@ Flow {
         anchors.verticalCenter: parent.verticalCenter
         text: "›"
         color: Theme.dim
-        font.pixelSize: track.dense ? 10 : 12
+        font.pixelSize: 12
       }
       Rectangle {
         id: pill
-        width: name.implicitWidth + (track.dense ? 10 : 14)
-        height: track.dense ? 16 : 20
+        width: name.implicitWidth + 14
+        height: 20
         color: stage.current ? Qt.alpha(track.tone, 0.18) : "transparent"
         border.color: stage.current ? track.tone : stage.passed ? Qt.alpha(Theme.foreground, 0.25) : Theme.line
         Label {
@@ -51,7 +50,7 @@ Flow {
           anchors.centerIn: parent
           text: (stage.passed ? "✓ " : "") + stage.modelData.name.toUpperCase()
           color: stage.current ? track.tone : stage.passed ? Theme.dim : Qt.alpha(Theme.foreground, 0.4)
-          font.pixelSize: track.dense ? 8 : 9
+          font.pixelSize: 9
           font.letterSpacing: 1.5
         }
         SequentialAnimation on opacity {

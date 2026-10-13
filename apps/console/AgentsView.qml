@@ -10,7 +10,8 @@ import "kit/ui"
 // with the workspace they work in; below, a row per depth, named at its left,
 // holds the works, each under the one it came from, each card the agent's
 // portrait and the work it is on, and the agents configured at that depth
-// with nothing to do, hollow. A link flows while the agent below runs. What
+// with nothing to do, hollow. A work that goes through a workflow is a lane
+// of its stages, its card at the stage it is at. A link flows while the agent below runs. What
 // an agent asked and still waits for is an arrow from it to whoever decides,
 // named after what it asked. Picking a node opens it beside the map: to
 // answer what it asked, read what it did, and write to it.
@@ -39,66 +40,120 @@ Item {
     return configured ? configured.name : ""
   }
 
-  // The nodes: {key, parent, agent, title, depth, idle}. The root agent's own
-  // conversation shows when nothing was opened for it or something waits on it.
+  // The workflow a work goes through, as its lane: {name, steps, at}, the
+  // stage it is at among the steps, whose agent runs it; null for a work in none, or at a stage
+  // its workflow no longer has.
+  function laneOf(work) {
+    const flow = Omunculus.setup && work.workflow ? Omunculus.setup.workflows.find(each => each.name === work.workflow) : null
+    const at = flow ? flow.steps.findIndex(step => step.name === work.stage) : -1
+    return at < 0 ? null : { name: flow.name, steps: flow.steps, at: at }
+  }
+
+  // The nodes: {key, parent, agent, title, depth, idle, lane, width}. The
+  // root agent's own conversation shows when nothing was opened for it or
+  // something waits on it.
   readonly property var nodes: {
-    const works = Omunculus.tree("", false).map(row => ({
-      key: row.work.id, parent: row.work.parent_id || null, agent: row.work.assignee || "", title: row.work.title, depth: row.level, idle: false
-    }))
+    const works = Omunculus.tree("", false).map(row => {
+      const lane = laneOf(row.work)
+      return {
+        key: row.work.id, parent: row.work.parent_id || null, agent: lane ? lane.steps[lane.at].agent : row.work.assignee || "",
+        title: row.work.title, depth: row.level, idle: false, lane: lane,
+        width: lane ? lane.steps.length * nodeWidth + (lane.steps.length - 1) * stageGap + 2 * lanePad : nodeWidth
+      }
+    })
     const top = works.filter(node => node.depth === 0).length === 0
       || Omunculus.asked("").length > 0 || Omunculus.unreadFrom("").length > 0
-      ? [{ key: "", parent: null, agent: rootAgent, title: Omunculus.title, depth: 0, idle: false }] : []
+      ? [{ key: "", parent: null, agent: rootAgent, title: Omunculus.title, depth: 0, idle: false, lane: null, width: nodeWidth }] : []
     const placed = top.concat(works)
     const idle = (Omunculus.setup ? Omunculus.setup.agents : [])
       .filter(agent => !agent.workflow_only && !placed.some(node => node.depth === agent.depth && node.agent === agent.name))
-      .map(agent => ({ key: "idle:" + agent.name, parent: null, agent: agent.name, title: "", depth: agent.depth, idle: true }))
+      .map(agent => ({ key: "idle:" + agent.name, parent: null, agent: agent.name, title: "idle", depth: agent.depth, idle: true, lane: null, width: nodeWidth }))
     return placed.concat(idle)
   }
 
   readonly property int nodeWidth: 320
   readonly property int nodeHeight: 150
   readonly property int across: 40
-  readonly property int down: 110
+  readonly property int down: 130
+  // A lane's stages apart, its frame around them, and its name above them.
+  readonly property int stageGap: 40
+  readonly property int lanePad: 16
+  readonly property int laneHead: 42
   readonly property int youHeight: 72
   // The column left of the rows, where each depth is named.
   readonly property int labelWidth: 190
 
-  // Where each node sits: leaves side by side in tree order, a parent centred
-  // over its children, the idle ones after the rest of their band.
+  // Where each node sits, {x, y, width, card}: each subtree as wide as its
+  // node or its children side by side, whichever is wider, the subtrees
+  // side by side in tree order, a parent centred over its children within
+  // its own, the idle ones after the rest of their band. `y` is the top of
+  // the cards, a lane's frame rising above it; `card` is the left of the
+  // work's own card, in a lane that of the stage it is at.
   readonly property var places: {
-    const at = {}
+    const byKey = {}
     const children = {}
     for (const node of nodes)
-      if (node.parent !== null && !node.idle)
+      byKey[node.key] = node
+    for (const node of nodes)
+      if (node.parent !== null && byKey[node.parent] && !node.idle)
         (children[node.parent] = children[node.parent] || []).push(node.key)
-    let slot = 0
-    const lay = key => {
+    const span = {}
+    const measure = key => {
       const kids = children[key] || []
-      if (kids.length === 0)
-        return at[key] = slot++
-      const spots = kids.map(lay)
-      return at[key] = (spots[0] + spots[spots.length - 1]) / 2
+      const row = kids.reduce((sum, kid) => sum + measure(kid), 0) + Math.max(0, kids.length - 1) * across
+      return span[key] = Math.max(byKey[key].width, row)
     }
-    nodes.filter(node => node.depth === 0 && !node.idle).forEach(node => lay(node.key))
+    const at = {}
+    const lay = (key, left) => {
+      const kids = children[key] || []
+      const row = kids.reduce((sum, kid) => sum + span[kid], 0) + Math.max(0, kids.length - 1) * across
+      let x = left + (span[key] - row) / 2
+      const centres = kids.map(kid => {
+        const spot = lay(kid, x)
+        x += span[kid] + across
+        return spot + byKey[kid].width / 2
+      })
+      const own = byKey[key].width
+      const centre = centres.length > 0 ? (centres[0] + centres[centres.length - 1]) / 2 : left + span[key] / 2
+      return at[key] = Math.max(left, Math.min(left + span[key] - own, centre - own / 2))
+    }
+    let left = labelWidth
+    for (const node of nodes.filter(node => !node.idle && (node.parent === null || !byKey[node.parent]))) {
+      measure(node.key)
+      lay(node.key, left)
+      left += span[node.key] + across
+    }
     const bands = {}
     for (const node of nodes)
       if (at[node.key] !== undefined)
-        bands[node.depth] = Math.max(bands[node.depth] ?? -1, at[node.key])
-    for (const node of nodes.filter(node => node.idle))
-      at[node.key] = bands[node.depth] = (bands[node.depth] ?? -1) + 1
+        bands[node.depth] = Math.max(bands[node.depth] ?? labelWidth - across, at[node.key] + node.width)
+    for (const node of nodes.filter(node => node.idle)) {
+      at[node.key] = (bands[node.depth] ?? labelWidth - across) + across
+      bands[node.depth] = at[node.key] + node.width
+    }
     const result = {}
     for (const node of nodes)
       result[node.key] = {
-        x: labelWidth + at[node.key] * (nodeWidth + across),
-        y: youHeight + down + node.depth * (nodeHeight + down)
+        x: at[node.key], y: youHeight + down + node.depth * (nodeHeight + down), width: node.width,
+        card: at[node.key] + (node.lane ? lanePad + node.lane.at * (nodeWidth + stageGap) : 0)
       }
     return result
   }
-  readonly property real wide: Math.max(labelWidth + nodeWidth, ...Object.values(places).map(place => place.x + nodeWidth)) + 40
-  readonly property real tall: youHeight + down + Math.max(0, ...nodes.map(node => node.depth)) * (nodeHeight + down) + nodeHeight
+  readonly property real wide: Math.max(labelWidth + nodeWidth, ...Object.values(places).map(place => place.x + place.width)) + 40
+  readonly property real tall: youHeight + down + Math.max(0, ...nodes.map(node => node.depth)) * (nodeHeight + down) + nodeHeight + lanePad
   readonly property real youX: {
-    const tops = nodes.filter(node => node.depth === 0 && !node.idle).map(node => places[node.key].x)
-    return tops.length === 0 ? labelWidth : (Math.min(...tops) + Math.max(...tops)) / 2
+    const tops = nodes.filter(node => node.depth === 0 && !node.idle).map(node => places[node.key])
+    return tops.length === 0 ? labelWidth
+      : (Math.min(...tops.map(place => place.x)) + Math.max(...tops.map(place => place.x + place.width)) - nodeWidth) / 2
+  }
+  // The box a node takes, its lane's frame included.
+  function boxOf(key) {
+    const node = nodes.find(item => item.key === key)
+    const place = places[key]
+    return node && place ? {
+      x: place.x, y: place.y - (node.lane ? laneHead : 0), width: place.width,
+      height: nodeHeight + (node.lane ? laneHead + lanePad : 0)
+    } : null
   }
 
   // The requests still waiting, as arrows from the asking node to whoever decides.
@@ -115,8 +170,8 @@ Item {
         if (step.name === "grant" && !wanted)
           wanted = step.args.name
     return {
-      x1: from.x + nodeWidth * 0.78, y1: from.y,
-      x2: target.x + nodeWidth * 0.78, y2: target.y + (human ? youHeight : nodeHeight),
+      x1: from.card + nodeWidth * 0.78, y1: from.y,
+      x2: (human ? target.x : target.card) + nodeWidth * 0.78, y2: target.y + (human ? youHeight : nodeHeight),
       human: human, label: wanted
     }
   }).filter(arrow => arrow !== null)
@@ -129,7 +184,7 @@ Item {
   }
 
   // Picking a node brings it into the room left of the inspector.
-  onPickedChanged: if (picked !== null && places[picked]) Qt.callLater(() => map.bringIntoView(Object.assign({ width: nodeWidth, height: nodeHeight }, places[picked])))
+  onPickedChanged: if (picked !== null && boxOf(picked)) Qt.callLater(() => map.bringIntoView(boxOf(picked)))
 
   FlowCanvas {
     id: map
@@ -164,14 +219,17 @@ Item {
           }
         }
 
-        // Links: you to the top band, each work to the one it came from.
+        // Links: you to the top band, each work to the one it came from,
+        // leaving a lane from the stage it is at and arriving at its frame.
         Repeater {
           model: view.nodes.filter(node => !node.idle)
           delegate: Shape {
             id: link
             required property var modelData
-            readonly property var to: view.places[modelData.key] || { x: 0, y: 0 }
-            readonly property var from: modelData.parent === null ? { x: view.youX, y: 0, you: true } : view.places[modelData.parent]
+            readonly property var place: view.places[modelData.key] || { x: 0, y: 0, width: view.nodeWidth }
+            readonly property var to: { "x": place.x + place.width / 2 - view.nodeWidth / 2, "y": place.y - (modelData.lane ? view.laneHead : 0) }
+            readonly property var parentPlace: modelData.parent === null ? undefined : view.places[modelData.parent]
+            readonly property var from: modelData.parent === null ? { x: view.youX, y: 0, you: true } : parentPlace ? { x: parentPlace.card, y: parentPlace.y } : undefined
             readonly property bool running: Omunculus.busy(modelData.key)
             anchors.fill: parent
             visible: from !== undefined
@@ -228,20 +286,44 @@ Item {
           }
         }
 
+        // Each node: a work's card, or its workflow's lane. Not a Loader,
+        // whose focus scope would keep the cards out of the Tab chain.
         Repeater {
           model: view.nodes
-          delegate: AgentNode {
+          delegate: Item {
+            id: slot
             required property var modelData
             // A node may be asked for before the places follow a change in nodes.
             readonly property var place: view.places[modelData.key] || { x: 0, y: 0 }
             x: place.x
-            y: place.y
-            key: modelData.idle ? "" : modelData.key
-            agent: modelData.agent
-            title: modelData.title
-            idle: modelData.idle
-            selected: !modelData.idle && view.picked === modelData.key
-            onChosen: view.pick(modelData.key)
+            y: place.y - (modelData.lane ? view.laneHead : 0)
+
+            Repeater {
+              model: slot.modelData.lane ? [] : [slot.modelData]
+              delegate: AgentNode {
+                required property var modelData
+                key: modelData.idle ? "" : modelData.key
+                agent: modelData.agent
+                title: modelData.title
+                idle: modelData.idle
+                selected: !modelData.idle && view.picked === modelData.key
+                onChosen: view.pick(modelData.key)
+              }
+            }
+            Repeater {
+              model: slot.modelData.lane ? [slot.modelData] : []
+              delegate: WorkflowLane {
+                required property var modelData
+                node: modelData
+                cardWidth: view.nodeWidth
+                cardHeight: view.nodeHeight
+                gap: view.stageGap
+                pad: view.lanePad
+                head: view.laneHead
+                selected: view.picked === modelData.key
+                onChosen: view.pick(modelData.key)
+              }
+            }
           }
         }
 
