@@ -6,13 +6,14 @@ import "kit/ui"
 
 // ThreadView reads one thread like a mail thread: its subject, which decodes
 // when the thread opens, its agent and project, and beside them the ways to
-// the thread before or after it in the list and out of it; then its
-// messages, the last ones open and the earlier ones folded to a line each; a
-// long thread hides its middle behind one fold. A message that arrives fades
-// and rises in, and one that arrives out of view is counted on a pill that
-// leads to it. Nothing is written until you reply: the command bar's REPLY,
-// or Ctrl+R, opens the reply under the thread, and sending or Esc closes it;
-// Esc then closes the thread.
+// the thread before or after it in the list and out of it; under them what
+// the thread is doing and what is yours to do; then its messages, the last
+// ones open and the earlier ones folded to a line each; a long thread hides
+// its middle behind one fold. A message that arrives fades and rises in, and
+// one that arrives out of view is counted on a pill that leads to it. Nothing
+// is written until you reply: the command bar's REPLY, or Ctrl+R, opens the
+// reply under the thread, and sending or Esc closes it; Esc then closes the
+// thread.
 Item {
   id: view
 
@@ -98,7 +99,6 @@ Item {
           spacing: 10
           Label { text: "WITH " + view.thread.agent.toUpperCase(); color: Theme.dim; font.pixelSize: 10; font.letterSpacing: 2 }
           ProjectTag { name: "· " + view.thread.project }
-          ThreadState { thread: view.thread }
         }
       }
       // Moving to the thread before or after it in the list, and closing it,
@@ -110,6 +110,13 @@ Item {
         IconButton { name: "chevron-down"; tip: "next thread  alt+↓"; onClicked: Mail.step(1) }
         IconButton { visible: !view.back; name: "close"; tip: "close the thread  esc"; onClicked: Mail.close() }
       }
+    }
+
+    StatusPanel {
+      Layout.fillWidth: true
+      thread: view.thread
+      onDecide: Mail.decisionRequested()
+      onWriteAgain: view.reply()
     }
 
     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.line }

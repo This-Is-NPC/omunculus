@@ -23,11 +23,11 @@ Singleton {
   // can be with.
   property var projects: []
   // "project/conversation" -> its thread: {key, project, id, agent, subject,
-  // working, waiting, at, heard, snippet, entries}.
+  // working, waiting, status, at, heard, snippet, entries}.
   property var threads: ({})
   // A thread with nothing in it, for a view whose thread has just gone.
   readonly property var blank: ({ key: "", project: "", id: "", agent: "", subject: "", working: false,
-    waiting: [], at: "", heard: "", snippet: "", entries: [] })
+    waiting: [], status: { state: "idle", label: "", brief: "", line: "", next: "" }, at: "", heard: "", snippet: "", entries: [] })
   // Newest first.
   readonly property var all: Object.values(threads).sort((a, b) => b.at.localeCompare(a.at))
   // "all", "waiting" (a decision of yours) or "working" (a run open).
@@ -304,13 +304,17 @@ Singleton {
   function update(key, thread) {
     const before = threads[key]
     threads = Object.assign({}, threads, { [key]: thread })
-    if (primed && thread.heard !== "" && (!before || before.heard < thread.heard) && selected !== key)
-      announce(thread)
+    if (!primed || selected === key)
+      return
+    const broke = ["failed", "stalled"].includes(thread.status.state) && (!before || before.status.state !== thread.status.state)
+    if (broke)
+      announce(thread.agent + " · " + thread.status.label.toLowerCase(), thread.status.line)
+    else if (thread.heard !== "" && (!before || before.heard < thread.heard))
+      announce(thread.waiting.length > 0 ? thread.agent + " waits for you" : thread.agent + " · " + thread.subject, thread.snippet)
   }
 
-  function announce(thread) {
-    notifier.command = ["notify-send", "-a", "omunculus",
-      thread.waiting.length > 0 ? thread.agent + " waits for you" : thread.agent + " · " + thread.subject, thread.snippet]
+  function announce(title, body) {
+    notifier.command = ["notify-send", "-a", "omunculus", title, body]
     notifier.startDetached()
   }
   Process { id: notifier }
@@ -380,12 +384,117 @@ Singleton {
       subject: subject.length > 90 ? subject.slice(0, 87) + "..." : subject || "(no message)",
       working: snapshot.runs.some(run => run.status === "open"),
       waiting: asked.filter(request => Requests.pending(request)).map(request => request.id),
+      status: status(snapshot, events, asked.filter(request => Requests.pending(request)), agent),
       at: latest ? latest.at : snapshot.conversation.created_at,
       heard: theirs.length > 0 ? theirs[theirs.length - 1].at : "",
       snippet: latest ? oneLine((latest.kind === "you" ? "you: " : "") + latest.text
         + (latest.files.length > 0 ? " [" + latest.files.map(file => file.name).join(", ") + "]" : "")) : "",
       entries: entries
     }
+  }
+
+  // What a thread's conversation is doing, from its snapshot and events, as
+  // {state, label, brief, line, next}: "waiting" while a request of yours is
+  // pending; "working" while a run of any depth is open, saying whose, on
+  // which work and stage, the tool it calls now and, on a retry, how many
+  // and why; "failed" when nothing runs and the last run ended with an
+  // error; "held" while nothing runs and a request waits on someone else;
+  // "stalled" when nothing runs, nothing is pending and a work is not over;
+  // "done" when every work it began is done or cancelled; "idle" otherwise.
+  // `brief` is for the list, `line` and `next` for the thread's head.
+  function status(snapshot, events, pending, to) {
+    const agent = to || "the agent"
+    const works = {}
+    for (const work of snapshot.works)
+      works[work.id] = work
+    const ended = {}
+    const calling = {}
+    for (const event of events) {
+      if (!event.run_id)
+        continue
+      const body = event.body || {}
+      if (event.type === "end-run")
+        ended[event.run_id] = body
+      else if (event.type === "model")
+        calling[event.run_id] = calls(body)
+      else if (event.type === "tool" && calling[event.run_id])
+        calling[event.run_id] = calling[event.run_id].filter((name, at, names) => name !== body.name || at !== names.indexOf(body.name))
+    }
+    const runs = snapshot.runs.slice().sort((a, b) => a.started_at.localeCompare(b.started_at))
+    const on = run => {
+      const work = works[run.work_id]
+      return work ? ", on “" + work.title + "”" + (work.stage ? " at " + work.stage : "") + "," : ""
+    }
+    const failure = run => run && ended[run.id] && ended[run.id].error ? String(ended[run.id].error) : ""
+    // The run before `run` on its work, and how many retries in a row lead to it.
+    const before = run => runs.filter(other => other.work_id === run.work_id && other.started_at < run.started_at).pop() || null
+    const retries = run => run && run.via === "retry" ? 1 + retries(before(run)) : 0
+
+    if (pending.length > 0) {
+      const request = pending[0]
+      const asks = Requests.label(request.requester) + " asks: " + oneLine(request.reason || "a decision")
+      return { state: "waiting", label: "WAITING ON YOU", brief: asks, line: asks + (pending.length > 1 ? "  (+" + (pending.length - 1) + " more)" : ""),
+        next: "Nothing in this thread moves until you decide: DECIDE takes you to the question." }
+    }
+
+    const open = runs.filter(run => run.status === "open")
+    if (open.length > 0) {
+      const run = open[open.length - 1]
+      const names = calling[run.id] || []
+      const doing = names.length > 0 ? "calling " + names.join(", ") : "thinking"
+      const tries = retries(run)
+      const others = open.length > 1 ? "  (+" + (open.length - 1) + " more running)" : ""
+      const why = failure(before(run))
+      return { state: "working", label: tries > 0 ? "RETRYING (" + tries + ")" : "WORKING",
+        brief: run.agent + " " + doing,
+        line: run.agent + on(run) + " " + doing + others,
+        next: tries > 0 ? "The try before failed" + (why ? ": " + why : "") + ". Once the retries run out, "
+          + (works[run.work_id] && works[run.work_id].parent_id ? "the work goes back to whoever handed it down." : "you are asked to retry or cancel.") : "" }
+    }
+
+    const finished = runs.filter(run => run.status !== "open").sort((a, b) => String(a.finished_at || "").localeCompare(String(b.finished_at || "")))
+    const last = finished.length > 0 ? finished[finished.length - 1] : null
+    const error = failure(last)
+    if (error !== "")
+      return { state: "failed", label: "FAILED", brief: last.agent + ": " + oneLine(error),
+        line: last.agent + on(last) + " failed: " + error,
+        next: "Nothing runs now. Write to " + agent + " again to try once more." }
+
+    const held = snapshot.requests.filter(request => Requests.pending(request))
+    if (held.length > 0) {
+      const who = Requests.label(held[0].arbiter)
+      return { state: "held", label: "WAITING ON " + who.toUpperCase(), brief: who + " has a question to answer",
+        line: Requests.label(held[0].requester) + " waits on " + who + ": " + oneLine(held[0].reason || ""), next: "" }
+    }
+
+    // With nothing running or pending, a work open, or waiting, waits on nothing.
+    const stuck = snapshot.works.find(work => work.state === "open") || snapshot.works.find(work => work.state === "waiting")
+    if (stuck) {
+      const by = runs.filter(run => run.work_id === stuck.id).pop()
+      const who = by ? by.agent : stuck.assignee || "its agent"
+      return { state: "stalled", label: "STALLED", brief: who + " stopped on “" + stuck.title + "”",
+        line: who + " stopped on “" + stuck.title + "”" + (stuck.stage ? " · " + stuck.stage : "") + " without finishing it, and nothing runs now.",
+        next: "Write to " + agent + " again to pick it up." }
+    }
+
+    const roots = snapshot.works.filter(work => !work.parent_id)
+    if (roots.length > 0 && roots.every(work => work.state === "done" || work.state === "cancelled"))
+      return { state: "done", label: roots.every(work => work.state === "cancelled") ? "CANCELLED" : "DONE", brief: "", line: "", next: "" }
+    return { state: "idle", label: "", brief: "", line: "", next: "" }
+  }
+
+  // The names of the tools a model event asks to call: an Anthropic message's
+  // tool uses, an OpenAI message's tool calls, a Responses output's function
+  // calls, or a command model's call; code mode's script is "code".
+  function calls(body) {
+    if (body === null || typeof body !== "object")
+      return []
+    const names = body.type === "call" ? [body.name]
+      : Array.isArray(body.content) ? body.content.filter(part => part.type === "tool_use").map(part => part.name)
+      : Array.isArray(body.tool_calls) ? body.tool_calls.map(call => call.function ? call.function.name : "")
+      : Array.isArray(body.output) ? body.output.filter(part => part.type === "function_call").map(part => part.name)
+      : []
+    return names.filter(name => !!name).map(name => name === "__omunculus_execute" ? "code" : name)
   }
 
   // A text on one line, without its Markdown marks, cut short when long.

@@ -5,7 +5,8 @@ import "kit/ui"
 // ThreadRow is one thread in the list, as a row of eco's tables: a hairline
 // outline at rest, a faint wash under the pointer, and the highlight with an
 // accent outline when it is the thread on screen. A dot marks it unread; its
-// subject decodes when it arrives while the list is on screen.
+// subject decodes when it arrives while the list is on screen. Under it, its
+// state, and what it is doing or else its last message.
 Rectangle {
   id: row
 
@@ -60,7 +61,8 @@ Rectangle {
       ThreadState { thread: row.thread }
       Label {
         Layout.fillWidth: true
-        text: row.thread.snippet
+        // What it is doing, while that says more than its last message.
+        text: row.thread.status.brief || row.thread.snippet
         color: Theme.dim
         font.pixelSize: 11
         elide: Text.ElideRight
