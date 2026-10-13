@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """The deploy tools. `deploy_preview` publishes the workspace's last commit
-to homologation as the app <app>-<id>-hml; `promote` publishes the image
+to homologation as the app <app>-<id>-hml and concludes the stage that
+publishes: its answer chains a comment with the homologation address and
+the commit, and continue; `promote` publishes the image
 homologation built for it to production as <app>-<id>, the very image that
 was seen there, and concludes the release's stage promote: its answer
 chains a comment with the production address, and continue. <id> comes
@@ -68,7 +70,8 @@ def tail(text, lines=15):
 
 
 def preview(call, app, root):
-    if run(["git", "-C", root, "rev-parse", "HEAD"], os.environ)[0] != 0:
+    status, commit = run(["git", "-C", root, "rev-parse", "--short", "HEAD"], os.environ)
+    if status != 0:
         answer(False, "the workspace has no commit to publish: commit it first")
 
     def push(env):
@@ -85,7 +88,9 @@ def preview(call, app, root):
     if status != 0:
         answer(False, f"publishing to homologation failed:\n{tail(said)}")
     url = f"http://{app}-hml.homologation.localhost:{PORTS['homologation']}"
-    answer(True, f"published to homologation at {url}\n{tail(said, 5)}")
+    report = f"Published to homologation at {url}: commit {commit}."
+    answer(True, f"published to homologation at {url}\n{tail(said, 5)}",
+           [{"name": "comment", "args": {"body": report}}, {"name": "continue", "args": {}}])
 
 
 def promote(call, app, root):

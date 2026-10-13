@@ -107,12 +107,15 @@ clerk's request for it gives, written out, the homologation address
 the built site; an answer in words without the grant is a question to the
 clerk, which asks again with the address.
 
-`promote` concludes the release: once it publishes, it comments the
-production address on the work and continues it, ending the run, and the
-stage `promote` denies `done`. The release ends only with production
-published or with the clerk's `break` saying why not; a project that
-composes its own `[workflows.release]` keeps `deny = ["done"]` on that
-stage.
+`deploy_preview` concludes the stage `publish` the same way: once it
+publishes, it comments the homologation address and the commit on the
+work and continues it, ending the run, and the stage denies `done`, so no
+stage after it sees a release that published nothing. `promote` concludes
+the release: once it publishes, it comments the production address on the
+work and continues it, ending the run, and the stage `promote` denies
+`done`. The release ends only with production published or with the
+clerk's `break` saying why not; a project that composes its own
+`[workflows.release]` keeps `deny = ["done"]` on both stages.
 
 Questions use `ask`. What only the machine's operator can settle — a
 tool, a login or a setting the machine lacks, as git's author identity —

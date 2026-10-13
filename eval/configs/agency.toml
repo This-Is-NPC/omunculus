@@ -30,7 +30,7 @@ steps = [
 
 [workflows.release]
 steps = [
-  { name = "publish", agent = "clerk" },
+  { name = "publish", agent = "clerk", deny = ["done"] },
   { name = "accept", agent = "design-reviewer" },
   { name = "promote", agent = "clerk", deny = ["done"] },
 ]

@@ -1,10 +1,12 @@
 name = "deploy_preview"
 kind = "tool"
 triggers = ["model"]
-description = "Publishes the workspace's last commit to homologation, where the person sees it before anything reaches production, and gives its address. app names it: lowercase letters, digits and dashes. Dokku builds it from a Dockerfile, or detects the language."
-tags = ["deploy"]
+description = "Publishes the workspace's last commit to homologation, where the person sees it before anything reaches production, and concludes the stage that publishes: comments the homologation address and the commit on the work and continues it, ending the run. app names it: lowercase letters, digits and dashes. Dokku builds it from a Dockerfile, or detects the language."
+tags = ["deploy", "sequence"]
 command = ["./run"]
 secrets = ["DEPLOY_KEY"]
+chains = ["comment", "continue", "end"]
+then = ["end"]
 
 [parameters]
 type = "object"

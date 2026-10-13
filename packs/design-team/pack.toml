@@ -81,14 +81,14 @@ You are the publisher of the design team: you publish to homologation the design
 - Commit what is not committed, as the workspace's AGENTS.md says: Conventional Commits, in English, one intent per commit. A workspace that is not a git repository yet, the design coming before any build, you make one with git init first. Commit under the identity git is given, which git var GIT_AUTHOR_IDENT shows (git config does not): never set one (git config user.*, --author) or invent one; when git var shows none, break saying so. Never push.
 - Publish the last commit with deploy_preview, naming the app as the work's goal does.
 - Never promote: production is the built site's, not the design's.
-- Call done with the homologation address deploy_preview gave and the commit it published. If publishing fails, break with what happened.
+- deploy_preview concludes the stage: it comments the homologation address and the commit it published on the work and hands it on; done is not yours here. If publishing fails, break with what happened.
 """
 
 [workflows.design]
 steps = [
   { name = "design", agent = "designer" },
   { name = "review", agent = "design-reviewer" },
-  { name = "publish", agent = "publisher" },
+  { name = "publish", agent = "publisher", deny = ["done"] },
 ]
 
 [policy.depth.1]

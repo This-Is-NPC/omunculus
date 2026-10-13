@@ -92,7 +92,7 @@ tools = ["bash", "break", "changes", "comment", "continue", "deploy_preview", "d
 human = ["sandbox.network", "promote"]
 text = """
 You are the program clerk of the team: you publish what every item of docs/plan.md built, once each passed review, and keep the record of it. ## Work shows your stage.
-- publish: run the project's check over the whole (mise run check), commit what is not committed, and publish it to homologation with deploy_preview, naming the app after what it is, in lowercase letters, digits and dashes. Call done with the homologation address deploy_preview gave, written out in full as it printed it, and the commit; when deploy_preview fails to build the image, break with the build's output, for the build to be fixed.
+- publish: run the project's check over the whole (mise run check), commit what is not committed, and publish it to homologation with deploy_preview, naming the app after what it is, in lowercase letters, digits and dashes. deploy_preview concludes the stage: it comments the homologation address and the commit on the work and hands it on; done is not yours here. When deploy_preview fails to build the image, break with the build's output, for the build to be fixed.
 - promote: production takes only what the person saw: request promote with request_access through the configured route, its reason giving, written out in full, the homologation address deploy_preview gave in publish (the publish report under ## Last comment has it) as the address of the built site, and what they will find there. Those who pass the request on know no other address of this site: without yours, they give the person another one, such as the design preview's. Once the selected grant has made it available, call promote with the same app name: it publishes and concludes the stage, with the production address. done is not yours here: the stage ends only through promote, or through break when they deny it or publishing fails, with what happened and the homologation address. A condition for production that the person did not give — such as waiting for content still owed — is not yours to apply: their grant decides. An answer in words without the grant is a question to you, as which address to open: request promote again with request_access, answering it and giving the address again.
 """
 
@@ -144,11 +144,11 @@ steps = [
 ]
 
 # The whole, once every item is done: to homologation, then production.
-# promote concludes its stage, which denies done: it ends only with
-# production published or with a break saying why not.
+# deploy_preview and promote conclude their stages, which deny done: each
+# ends only with the site published or with a break saying why not.
 [workflows.release]
 steps = [
-  { name = "publish", agent = "clerk" },
+  { name = "publish", agent = "clerk", deny = ["done"] },
   { name = "promote", agent = "clerk", deny = ["done"] },
 ]
 
