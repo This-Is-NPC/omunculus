@@ -1,0 +1,112 @@
+#!/usr/bin/env elixir
+# Fails when a relative link, image or anchor of the documentation does
+# not resolve. Links outside the repository (a scheme such as https:) are
+# not followed.
+
+defmodule CheckLinks do
+  @pathspecs ~w(*.md docs/**.md eval/README.md bench/**.md packs/*/README.md priv/packs/*/README.md)
+
+  def main do
+    root = System.get_env("MISE_PROJECT_ROOT") || git(["rev-parse", "--show-toplevel"])
+    File.cd!(root)
+
+    files =
+      git(["ls-files", "--cached", "--others", "--exclude-standard", "--" | Enum.map(@pathspecs, &":(glob)#{&1}")])
+      |> String.split("\n", trim: true)
+
+    failures = Enum.flat_map(files, &check/1)
+    Enum.each(failures, &IO.puts(:stderr, &1))
+    if failures != [], do: System.halt(1)
+  end
+
+  defp git(args) do
+    {out, 0} = System.cmd("git", args)
+    String.trim_trailing(out)
+  end
+
+  defp check(file) do
+    file
+    |> prose_lines()
+    |> Enum.flat_map(fn {line, n} -> Enum.map(targets(line), &{&1, n}) end)
+    |> Enum.flat_map(fn {target, n} ->
+      case resolve(file, target) do
+        :ok -> []
+        {:error, why} -> ["#{file}:#{n}: #{target}: #{why}"]
+      end
+    end)
+  end
+
+  # The numbered lines outside fenced code.
+  defp prose_lines(file) do
+    file
+    |> File.read!()
+    |> String.split("\n")
+    |> Enum.with_index(1)
+    |> Enum.reduce({[], false}, fn {line, n}, {acc, fenced} ->
+      cond do
+        String.match?(line, ~r/^\s*(```|~~~)/) -> {acc, not fenced}
+        fenced -> {acc, fenced}
+        true -> {[{line, n} | acc], fenced}
+      end
+    end)
+    |> elem(0)
+    |> Enum.reverse()
+  end
+
+  defp targets(line) do
+    line = Regex.replace(~r/`+[^`]*`+/, line, "")
+    inline = Regex.scan(~r/\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/, line, capture: :all_but_first)
+    reference = Regex.scan(~r/^\s*\[[^\]]+\]:\s+<?(\S+?)>?(?:\s|$)/, line, capture: :all_but_first)
+    (inline ++ reference) |> List.flatten() |> Enum.reject(&external?/1)
+  end
+
+  defp external?(target), do: String.match?(target, ~r/^[a-z][a-z0-9+.-]*:/i)
+
+  defp resolve(file, target) do
+    {path, anchor} =
+      case String.split(target, "#", parts: 2) do
+        [path, anchor] -> {path, anchor}
+        [path] -> {path, nil}
+      end
+
+    path = if path == "", do: file, else: Path.join(Path.dirname(file), URI.decode(path))
+
+    cond do
+      not File.exists?(path) -> {:error, "no such file"}
+      anchor == nil -> :ok
+      not String.ends_with?(path, ".md") -> :ok
+      anchor in anchors(path) -> :ok
+      true -> {:error, "no such anchor"}
+    end
+  end
+
+  # GitHub's heading anchors: lower case, punctuation dropped, spaces as
+  # hyphens, a repeated anchor suffixed -1, -2 and so on; and explicit ids.
+  defp anchors(path) do
+    lines = prose_lines(path)
+
+    headings =
+      for {line, _} <- lines, [_, text] <- [Regex.run(~r/^\#{1,6}\s+(.*?)\s*#*\s*$/, line)] do
+        text
+        |> String.downcase()
+        |> String.replace(~r/[^\p{L}\p{N}\s_-]/u, "")
+        |> String.replace(" ", "-")
+      end
+
+    ids =
+      for {line, _} <- lines, [_, id] <- Regex.scan(~r/<a\s+(?:id|name)="([^"]+)"/, line), do: id
+
+    numbered(headings) ++ ids
+  end
+
+  defp numbered(slugs) do
+    slugs
+    |> Enum.map_reduce(%{}, fn slug, seen ->
+      count = Map.get(seen, slug, 0)
+      {if(count == 0, do: slug, else: "#{slug}-#{count}"), Map.put(seen, slug, count + 1)}
+    end)
+    |> elem(0)
+  end
+end
+
+CheckLinks.main()

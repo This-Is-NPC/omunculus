@@ -28,6 +28,14 @@ run = "scripts/benchmark-report"
 description = "Linear resident benchmark: run"
 run = "scripts/benchmark-run"
 
+[tasks.check]
+description = "Check that the documentation's links resolve"
+depends = ["check:links"]
+
+[tasks."check:links"]
+description = "Check that every relative link, image and anchor of the documentation resolves"
+run = "scripts/check-links"
+
 [tasks."dev:bootstrap"]
 description = "Seed the local administrator of each dev project once, and give the agency its packs' workspace files"
 run = "scripts/dev-bootstrap"
@@ -66,8 +74,8 @@ description = "Equivalent Exchange: prove every task's check against its solutio
 run = "scripts/eval-selftest"
 
 [tasks.pre-commit]
-description = "Check the boundaries and formatting before a commit"
-run = ["scripts/validate-boundaries", "scripts/check-format"]
+description = "Check the boundaries, formatting and documentation links before a commit"
+run = ["scripts/validate-boundaries", "scripts/check-format", "scripts/check-links"]
 
 [tasks.pre-push]
 description = "Run regular validation before a push"
