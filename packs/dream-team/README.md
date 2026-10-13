@@ -61,10 +61,17 @@ images/         a portrait of each agent, <agent>.webp, 512 px square, its `imag
    and two logins whose keys are the instances' private keys, for example
    `[auth.homologation]` with `key = "$OMUNCULUS_HOMOLOGATION_KEY"` and
    `[auth.production]` with `key = "$OMUNCULUS_PRODUCTION_KEY"`.
-3. Its agents work through `bash`, which the pack `requires` and does not
+3. Its agents commit as the person running it, and set no identity of
+   their own: name `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`,
+   `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL` in `[execution]
+   environment` and set them, in the server's environment or the
+   command line's, to that person's name and email. Without
+   `[execution] host` a command's home is the run's scratch, which holds
+   no `.gitconfig`, so git has no other identity.
+4. Its agents work through `bash`, which the pack `requires` and does not
    bring: add the codex-like preset's tools (`priv/presets/codex-like/tools`)
    to the project's `[tools] paths`.
-4. Import it: `omunculus pack --path <this folder> --models team=<model>
+5. Import it: `omunculus pack --path <this folder> --models team=<model>
    --auth homologation=<login>,production=<login>`. It writes the pack to
    `[[packs]]` and copies `workspace/AGENTS.md` into the project's workspace.
 

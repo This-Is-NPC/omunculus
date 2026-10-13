@@ -173,10 +173,18 @@ There is nothing extra to fetch.
    `git add -i`.
 3. Derive **scope** from the paths touched (package, directory, or
    feature slug).
-4. Draft the message (grammar below). Show every draft to the user
-   **before** `git commit`.
+4. Draft the message (grammar below) and give it in your report.
 5. Commit. Do not push. When the working tree is clean, suggest the
    user push when ready.
+
+### Author
+
+A commit's author is the identity git is given where it runs: the
+project passes it to every command (`GIT_AUTHOR_NAME`,
+`GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`). Never
+set one (`git config user.*`, `--author`), never invent one and never ask
+anyone for one. When git has none, the commit cannot be made: say so,
+as a blocker of the machine, with what is missing.
 
 ### Message grammar
 
@@ -205,7 +213,8 @@ There is nothing extra to fetch.
 
 Never attribute a commit to an agent: no `Co-Authored-By: <model>`,
 no `Generated with <tool>`, no model name in trailer or body. The
-human running the session is the author. No opt-out. Other
+human running the session is the author, through the identity the
+project gives git. No opt-out. Other
 `Co-Authored-By` trailers only if the user asked for that person in
 this conversation.
 
