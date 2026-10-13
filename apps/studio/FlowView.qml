@@ -73,6 +73,21 @@ Item {
         const rowTop = y
         let x = labelWidth
         const here = []
+        const placeAgents = agents => {
+          for (const agent of agents) {
+            here.push(add({
+              id: key + "/" + entry.depth + "/" + agent.name, kind: "agent", x: x, y: rowTop, width: nodeWidth, height: nodeHeight,
+              agent: agent, pack: origins.agents[agent.name] || "", handing: hands(agent)
+            }))
+            x += nodeWidth + stageGap
+          }
+        }
+        // The agents a work goes to on their own lead the row, where the
+        // chart is framed from, ahead of the workflows however long they
+        // are; the workflow-only ones, idle here, close it.
+        placeAgents(entry.agents.filter(agent => !agent.idle))
+        if (here.length && entry.workflows.length)
+          x += flowGap - stageGap
         for (const workflow of entry.workflows) {
           const start = x
           const id = key + "/" + entry.depth + "/" + workflow.name
@@ -98,13 +113,7 @@ Item {
           here.push(group)
           x += flowGap - stageGap
         }
-        for (const agent of entry.agents) {
-          here.push(add({
-            id: key + "/" + entry.depth + "/" + agent.name, kind: "agent", x: x, y: rowTop, width: nodeWidth, height: nodeHeight,
-            agent: agent, pack: origins.agents[agent.name] || "", handing: hands(agent)
-          }))
-          x += nodeWidth + stageGap
-        }
+        placeAgents(entry.agents.filter(agent => agent.idle))
         for (const from of above.filter(box => box.kind === "person" || box.handing))
           for (const to of here)
             chart.edges.push({ from: from, to: to, kind: from.kind === "person" ? "talk" : "down" })
