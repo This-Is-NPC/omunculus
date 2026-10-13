@@ -328,9 +328,11 @@ Singleton {
 
   // The thread a conversation's snapshot and events make. Its entries, in
   // order: each message you wrote; each run of an agent of depth 0, as what it
-  // said; and each request whose arbiter is you, the question of whoever
-  // asked it when the harness passed it on, as when the agent left a question
-  // unanswered, with the harness's sentence as its fine print.
+  // said to you: the text of its model replies that call no tool, its
+  // comments and the files it attached; and each request whose arbiter is
+  // you, the question of whoever asked it when the harness passed it on, as
+  // when the agent left a question unanswered, with the harness's sentence as
+  // its fine print.
   function build(projectId, id, snapshot, events) {
     const rootRuns = {}
     for (const run of snapshot.runs)
@@ -348,7 +350,10 @@ Singleton {
       } else if (event.type === "reply" && event.request_id) {
         replies[event.request_id] = { option: Requests.chosen(body), body: body.body || "" }
       } else if (rootRuns[event.run_id] && ["model", "comment", "attach"].includes(event.type)) {
-        const words = (event.type === "model" ? text(body) : event.type === "comment" ? String(body.body || "") : String(body.note || "")).trim()
+        // A reply that calls a tool is the agent acting: its text narrates the
+        // call to itself, and only a reply that calls none speaks to you.
+        const words = (event.type === "model" ? (calls(body).length > 0 ? "" : text(body))
+          : event.type === "comment" ? String(body.body || "") : String(body.note || "")).trim()
         const files = event.type === "attach" ? body.attachments || [] : []
         if (words === "" && files.length === 0)
           continue
