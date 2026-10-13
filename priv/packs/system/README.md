@@ -20,6 +20,9 @@ request_routes`, as the default preset does with
 `{ name = "owner", via = ["origin"] }`: the change reaches the project's
 owner, not whoever the default route passes through.
 
+Only the steward proposes importing a pack: the auditor and the refiner
+are granted the `config` group, which brings `propose_pack`, and deny it.
+
 Their skills:
 
 - `team-design`: a new team, written as a pack under `packs/<name>/` of

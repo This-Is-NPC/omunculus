@@ -77,6 +77,9 @@ The default preset imports the system team (`priv/packs/system`):
   looped — and proposes, with the runs that show it, the change in the
   teams' texts, tools or workflows.
 
+The auditor and the refiner are granted the `config` group but denied its
+`propose_pack`: importing a pack is the steward's.
+
 Their proposals go on the logical `owner` route, which a project importing
 the team declares, as the default preset does with
 `{ name = "owner", via = ["origin"] }`; see [requests](requests.md).
