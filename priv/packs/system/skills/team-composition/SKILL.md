@@ -5,9 +5,10 @@ description: Fit teams together in this project — import a pack at the depth i
 
 # Composing teams
 
-1. Read the project with `config` and `overview`: which agents answer the
-   person at depth 0, which teams work below, which models and logins
-   exist.
+1. Read the project with `config` and `overview`, in parts: without
+   arguments each lists what there is — which agents answer the person
+   at depth 0, which teams work below; `config` with `section` `models`
+   and `auth` gives the models and logins that exist.
 2. Decide where each team works. Several agents may answer the person at
    depth 0, each in conversations of its own (the person names the agent
    they talk to). A team that serves another works below it: import it

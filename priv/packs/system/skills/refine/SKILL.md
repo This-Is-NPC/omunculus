@@ -6,8 +6,9 @@ description: Read how the project's last runs went — where an agent stopped wi
 # Refining the teams from their runs
 
 Read before you judge: `runs` sums up the project's last closed runs; `runs`
-with `run` gives one call by call; `config` and `overview` give what each
-agent was told and had.
+with `run` gives one call by call; `config` with `item` `agents.<name>` gives
+what an agent was told, and `overview` with `agent` what it had where it
+ran; without arguments, each lists what there is to read.
 
 ## What to look for
 

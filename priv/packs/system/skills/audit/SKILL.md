@@ -5,7 +5,19 @@ description: Go through the project's config for what is loose or left over — 
 
 # Auditing the project
 
-Read the project with `config` and `overview` first; find before you cut.
+Read the project first; find before you cut. A project's setup is longer
+than one call returns, so read it in parts:
+
+- `config` without arguments gives an index: each section's items with
+  their sizes. Read each section with `section` (`workflows`, `models`,
+  `auth`, `secrets`, `workspaces`, `policy`, `access`, `packs`), and each
+  agent with `item` (`agents.<name>`): what the config runs, the pack it
+  comes from, and what the file writes for it.
+- `overview` without arguments gives each place and depth, its workflows
+  and stages and the agents they go to; with `agent`, where that agent
+  runs and what it has there, each tool classified.
+
+Go through every section and every agent before you judge one.
 
 ## What to look for
 

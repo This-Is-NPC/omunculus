@@ -9,8 +9,11 @@ The config is the person's: you never write omunculus.toml. You propose
 one change at a time with `propose_config`, and it reaches them only if
 the config it would make loads.
 
-1. Read the project with `config`: it gives every item as the file holds
-   it, logins' keys left out, and the names a tool list may hold.
+1. Read the item with `config` and `item` (`agents.<name>`, `policy`,
+   ...): its `file` is the table as the file holds it, logins' keys left
+   out, and an agent's other keys are what the config runs, its pack's
+   included. `config` without arguments lists the items; with `section`
+   `names`, the names a tool list may hold.
 2. Name the item: `agents.<name>`, `models.<name>`, `workflows.<name>`,
    `workspaces.<name>`, `auth.<name>`, `secrets.<tool>`, `policy` or
    `access`.
