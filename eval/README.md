@@ -127,8 +127,10 @@ task with `deploy` publishes to the dream team's deploy environment, which
 `deploy_preview`, and production, which only `promote` reaches, a tool the
 person alone grants once they have seen homologation. The tools name each
 project's apps apart; afterwards what production serves for the app an
-execution published is copied for the check and the app is removed. A
-run with such a task refuses to start while the environment is down.
+execution published is copied for the check and the app is removed; the
+copy saves an extensionless page URL as `<path>/index.html` and keeps an
+explicit filename as it is. A run with such a task refuses to start while
+the environment is down.
 
 A request for a path or directory inside the workspace asks to write there,
 so the person answers it, and the score counts it, as `sandbox.write`.

@@ -16,9 +16,13 @@ hold is a refusal.
 For tools and `access bootstrap`, `--config <path>` is the only flag that belongs to the binary, and it must
 come first. Without it the file is `./omunculus.toml` in the working
 directory. `bin/omunculus` always passes that path unless the first argument
-is already `--config`. The project root is the directory of that file, or
+is already `--config` or `serve`, and makes a relative `--config` absolute
+against the caller's directory. The project root is the directory of that file, or
 `[project] root` resolved against it. The SQLite store is `[store] path`,
 also resolved against the file.
+
+The binary reads no environment variables: the config file, and with it the
+model of every agent, comes from `--config <path>` or `./omunculus.toml`.
 
 A missing file is `` no config at <path>; run `omunculus preset <name> --from <dir>` ``. There is no package config to fall back to.
 The one exception is a tool whose manifest set `config = false`, which is
@@ -60,7 +64,8 @@ Copy a preset onto the config path.
 `<name>` is recorded in the receipt (`preset <name> applied`). `--from` is
 the directory that actually supplies the bytes: it must contain
 `omunculus.toml`, and if it contains `tools/` that tree is copied beside the
-file. `[tools] paths` and `[execution.sandbox] script` are rewritten to
+file. `[tools] paths`, the `path` of each of its `[[packs]]` and
+`[execution.sandbox] script` are rewritten to
 absolute locations resolved against `--from`, and the `tools/` folder
 beside the written file is appended to `paths`, so a checkout of
 `priv/presets/default` keeps pointing at `priv/tools` and `priv/sandbox.js`
@@ -73,6 +78,10 @@ The three folders the package ships:
 | `priv/presets/default` | concierge / worker / reviewer, `fake` model, no shell |
 | `priv/presets/codex-like` | Codex-shaped ceiling, plus a `bash` tool |
 | `priv/presets/pi-like` | Pi-shaped ceiling, Anthropic OAuth already declared |
+
+The default preset's reviewer uses `ask` to request execution output it
+lacks without stopping the work, and the default preset imports the
+[system team](packs.md#the-system-team).
 
 A `--from` that is not a directory, or that has no `omunculus.toml`, is
 `unknown preset: <name>`.

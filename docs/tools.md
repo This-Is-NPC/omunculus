@@ -11,7 +11,7 @@ Builtin, default and third-party: one contract.
 
 ```text
 in:  { name, args, view, run_id, work_id, workspace, roots, config_path }
-out: { ok, output, emit, chain }
+out: { ok, output, emit, chain, instructions }
 ```
 
 `view` holds what the harness read for the call, one entry per
@@ -32,6 +32,9 @@ schema, the tool failed and nothing is written.
   "emit": [{ "type": "notify", "body": { "body": "need a look" } }]
 }
 ```
+
+`instructions` is optional: what the `assemble` tool puts before its
+`output`, the part of a prompt that stays the same from run to run.
 
 `chain` is optional: a list of `{ "name": …, "args": { … } }` steps the
 tool asks to run right after it, in the same call. See

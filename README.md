@@ -60,7 +60,9 @@ Every verb is in [the command line](docs/cli.md). The file the verbs read is
 [the TOML](docs/config.md). Shapes that file can take are
 [possibilities](docs/possibilities.md). What a send actually does to the store
 is [the cycle](docs/cycle.md). Who may call what is [the ceiling](docs/ceiling.md).
-A folder of your own is [a tool](docs/tools.md).
+A folder of your own is [a tool](docs/tools.md). A team distributed as a folder is
+[a pack](docs/packs.md). How the code is laid out is
+[the architecture](docs/architecture.md).
 
 ## HTTP server
 
@@ -86,7 +88,7 @@ whose agents use `openai/gpt-6-luna` through OpenRouter with the
 `OPENROUTER_API_KEY` of `.env`, and the agency the packs under `packs/`
 make; with it running, `mise run dev:console`, `dev:studio` and
 `dev:mailbox` open the apps on it. `mise run dev:reset` starts both
-projects over.
+projects over; see [the development environment](docs/development.md).
 
 It lists the conversations and follows the open one live in three pages,
 chosen by number or from the tabs down the left, each with its commands in a
@@ -98,7 +100,9 @@ you, hang from its node, with the options to answer. The composer counts
 what waits on you and leads to the map. Opening a node shows what that agent
 said and did, and writes to it. The log is every event, a row each. What the
 conversation cost opens from the conversation page's bar. `apps/kit/run studio` opens the project's
-settings, `apps/kit/run mailbox` a mailbox over every project. They need
+settings, `apps/kit/run mailbox` a mailbox over every project; each is
+described in [console](docs/console.md), [studio](docs/studio.md) and
+[mailbox](docs/mailbox.md). They need
 [Quickshell](https://quickshell.org/), `curl` with WebSocket support and a
 Wayland session.
 
