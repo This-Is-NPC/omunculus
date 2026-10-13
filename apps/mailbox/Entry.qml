@@ -7,7 +7,9 @@ import "kit/ui"
 // when, then the text and the files it carries, each a chip that saves the
 // file to the downloads directory and opens it. Folded, it is one line with
 // the start of the text. A request for you is a message too: a filled card
-// with its question and, while it waits, the way to answer it.
+// with its question and, while it waits, the way to answer it. A note the
+// harness wrote is no one's words: it reads NOTE, muted, where a speaker's
+// name would be.
 SurfaceFrame {
   id: card
 
@@ -17,6 +19,7 @@ SurfaceFrame {
 
   readonly property bool request: entry.kind === "request"
   readonly property bool mine: entry.kind === "you"
+  readonly property bool note: !!entry.note
   readonly property bool deciding: request && entry.open
 
   signal toggled()
@@ -44,7 +47,7 @@ SurfaceFrame {
         Dot { visible: card.request; tone: card.deciding ? Theme.warning : Theme.dim }
         Label {
           text: card.mine ? "YOU" : card.entry.from.toUpperCase()
-          color: card.deciding ? Theme.warning : card.mine ? Theme.dim : Theme.primary
+          color: card.deciding ? Theme.warning : card.mine || card.note ? Theme.dim : Theme.primary
           font.pixelSize: 10
           font.letterSpacing: 3
         }
@@ -85,7 +88,7 @@ SurfaceFrame {
       visible: card.expanded && card.entry.text !== ""
       plain: card.mine
       source: card.mine ? card.entry.text : Mail.markdown(card.entry.text)
-      color: card.mine ? Theme.dim : Theme.foreground
+      color: card.mine || card.note ? Theme.dim : Theme.foreground
       font.pixelSize: 13
       lineHeight: 1.25
       wrapMode: Text.Wrap

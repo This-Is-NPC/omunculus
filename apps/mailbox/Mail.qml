@@ -326,7 +326,8 @@ Singleton {
 
   // The thread a conversation's snapshot and events make. Its entries, in
   // order: each message you wrote; each run of an agent of depth 0, as what it
-  // said; and each request whose arbiter is you.
+  // said; and each request whose arbiter is you, a note when the harness
+  // wrote it for the agent, as when the agent left a question unanswered.
   function build(projectId, id, snapshot, events) {
     const rootRuns = {}
     for (const run of snapshot.runs)
@@ -360,11 +361,13 @@ Singleton {
         }
       }
     }
+    const notes = noted(events)
     const asked = snapshot.requests.filter(request => isMe(request.arbiter))
     for (const request of asked) {
       const question = asking(request)
       entries.push({
-        kind: "request", key: request.id, from: Requests.label(request.requester), to: "you",
+        kind: "request", key: request.id, from: notes[request.id] ? "note" : Requests.label(request.requester), to: "you",
+        note: !!notes[request.id],
         text: question.text, at: request.created_at, open: Requests.pending(request),
         files: [],
         options: Object.keys(request.options || {}),
@@ -386,7 +389,7 @@ Singleton {
       subject: subject.length > 90 ? subject.slice(0, 87) + "..." : subject || "(no message)",
       working: snapshot.runs.some(run => run.status === "open"),
       waiting: asked.filter(request => Requests.pending(request)).map(request => request.id),
-      status: status(snapshot, events, asked.filter(request => Requests.pending(request)), agent),
+      status: status(snapshot, events, asked.filter(request => Requests.pending(request)), agent, notes),
       at: latest ? latest.at : snapshot.conversation.created_at,
       heard: theirs.length > 0 ? theirs[theirs.length - 1].at : "",
       snippet: latest ? oneLine((latest.kind === "you" ? "you: " : "") + latest.text
@@ -403,8 +406,9 @@ Singleton {
   // error; "held" while nothing runs and a request waits on someone else;
   // "stalled" when nothing runs, nothing is pending and a work is not over;
   // "done" when every work it began is done or cancelled; "idle" otherwise.
-  // `brief` is for the list, `line` and `next` for the thread's head.
-  function status(snapshot, events, pending, to) {
+  // `brief` is for the list, `line` and `next` for the thread's head; a
+  // request in `notes` is the harness's, not its requester's.
+  function status(snapshot, events, pending, to, notes) {
     const agent = to || "the agent"
     const works = {}
     for (const work of snapshot.works)
@@ -434,7 +438,7 @@ Singleton {
 
     if (pending.length > 0) {
       const request = pending[0]
-      const asks = Requests.label(request.requester) + " asks: " + oneLine(request.reason || "a decision")
+      const asks = (notes[request.id] ? "note: " : Requests.label(request.requester) + " asks: ") + oneLine(request.reason || "a decision")
       return { state: "waiting", label: "WAITING ON YOU", brief: asks, line: asks + (pending.length > 1 ? "  (+" + (pending.length - 1) + " more)" : ""),
         next: "Nothing in this thread moves until you decide: DECIDE takes you to the question." }
     }
@@ -483,6 +487,16 @@ Singleton {
     if (roots.length > 0 && roots.every(work => work.state === "done" || work.state === "cancelled"))
       return { state: "done", label: roots.every(work => work.state === "cancelled") ? "CANCELLED" : "DONE", brief: "", line: "", next: "" }
     return { state: "idle", label: "", brief: "", line: "", next: "" }
+  }
+
+  // The requests the harness opened, by id: the events that opened them are
+  // its, whoever the request names as its requester.
+  function noted(events) {
+    const notes = {}
+    for (const event of events)
+      if (event.type === "request" && event.request_id && event.actor && event.actor.kind === "harness")
+        notes[event.request_id] = true
+    return notes
   }
 
   // The names of the tools a model event asks to call: an Anthropic message's
