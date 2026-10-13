@@ -15,8 +15,8 @@ import "kit/ui"
 Singleton {
   id: root
 
-  readonly property string socket: Quickshell.env("OMUNCULUS_CONSOLE_SOCKET")
-  readonly property string project: Quickshell.env("OMUNCULUS_CONSOLE_PROJECT")
+  readonly property string socket: Quickshell.env("OMUNCULUS_SOCKET")
+  readonly property string project: Quickshell.env("OMUNCULUS_PROJECT")
   readonly property string base: "/v1/projects/" + project
   // Every project of the server's registry, the one on screen among them, as
   // {id, socket}.
@@ -94,7 +94,7 @@ Singleton {
 
   Component.onCompleted: {
     if (socket === "" || project === "")
-      tell("OMUNCULUS_CONSOLE_SOCKET and OMUNCULUS_CONSOLE_PROJECT are not set; start through apps/console/run", true)
+      tell("OMUNCULUS_SOCKET and OMUNCULUS_PROJECT are not set; start through apps/kit/run console", true)
     else
       check()
   }

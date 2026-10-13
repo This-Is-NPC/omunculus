@@ -60,48 +60,15 @@ contract. [The server](docs/server.md), [clients](docs/clients.md).
 The command line is `omunculus <command> [--key value]`; every command is
 in [the command line](docs/cli.md).
 
-## What it does not do
-
-- It hosts no model: it calls a provider's API, a program or an Elixir
-  module ([the compatible providers](docs/config.md#compatible-providers)).
-- The server has no chat page of its own; HTTP clients use its API.
-- It does not protect you from your own tools and hooks: it guarantees the
-  workflow sequence, the ceiling per stage and the store rules.
-- It installs neither Bubblewrap nor the runtimes commands use.
-- It does not migrate a store made by an older schema: it refuses to open
-  it, and the store must be made again.
-
-## Known limitations
-
-- Linux only, with Bubblewrap: commands run in its namespaces.
-- A root in `[execution] runtimes` exposes every binary it holds; it is no
-  per-binary allowlist ([the TOML](docs/config.md#required-tables)).
-- A project's socket path must fit in 107 bytes, or the server does not
-  start ([how to run the server](docs/how-to-run-the-server.md)).
-- A provider's rate limits and limits on requests in flight bound how many
-  runs can call it at once.
-
-## What is broken
-
-Two defects are known; [what does not work](docs/what-does-not-work.md)
-says what to do meanwhile:
-
-1. Some refusals print as Elixir terms, as `send` without `--agent` in a
-   project with several agents at depth 0.
-2. The codex-like preset's `cursor` model names a program the preset does
-   not ship.
-
-Contributors start at [the design](docs/design.md).
-
-## Window
-
-`apps/console/run` opens a window on a project of a running
+Any program that speaks the server's HTTP contract is a client; what it may
+rely on is in [clients](docs/clients.md). The repository's own are under
+`apps/`, each opened by `apps/kit/run <app>`. The console opens a window on a project of a running
 [server](docs/server.md). It talks to the project's local socket, so it acts
 as the local user:
 
 ```bash
 bin/omunculus serve --config server.toml
-apps/console/run --config server.toml --project demo
+apps/kit/run console --config server.toml --project demo
 ```
 
 `--project` may be left out when the registry holds one project.

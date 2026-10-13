@@ -14,7 +14,7 @@ Singleton {
   id: root
 
   // The socket the mailbox was opened on; it lists every project.
-  readonly property string socket: Quickshell.env("OMUNCULUS_MAILBOX_SOCKET")
+  readonly property string socket: Quickshell.env("OMUNCULUS_SOCKET")
 
   property bool connected: false
   // You, as the server knows you: {issuer, subject}.
@@ -65,7 +65,7 @@ Singleton {
 
   Component.onCompleted: {
     if (socket === "")
-      tell("OMUNCULUS_MAILBOX_SOCKET is not set; start through apps/mailbox/run", true)
+      tell("OMUNCULUS_SOCKET is not set; start through apps/kit/run mailbox", true)
     else
       sweep()
   }

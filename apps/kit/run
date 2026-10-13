@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Opens an app of apps/ on a project of a running server's registry:
+#   apps/kit/run <app> --config <server.toml> [--project <id>]
+# The app gets the project's id and local socket as OMUNCULUS_PROJECT and
+# OMUNCULUS_SOCKET; GET /v1/projects there lists the registry's others.
+set -euo pipefail
+
+usage() {
+  printf 'usage: apps/kit/run <app> --config <server.toml> [--project <id>]\n' >&2
+  exit 1
+}
+
+[[ $# -ge 1 ]] || usage
+name=$1
+shift
+apps=$(realpath "$(dirname "$(realpath "$0")")/..")
+app=$apps/$name
+[[ $name != kit && -f $app/shell.qml ]] || { printf 'run: no app %s in %s\n' "$name" "$apps" >&2; exit 1; }
+root=$(realpath "$apps/..")
+
+config=""
+project=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --config) [[ $# -ge 2 ]] || usage; config=$2; shift 2 ;;
+    --project) [[ $# -ge 2 ]] || usage; project=("$2"); shift 2 ;;
+    *) usage ;;
+  esac
+done
+[[ -n $config ]] || usage
+[[ -f $config ]] || { printf '%s: no server registry at %s\n' "$name" "$config" >&2; exit 1; }
+config=$(realpath "$config")
+
+XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$UID}
+if [[ -z ${WAYLAND_DISPLAY:-} ]]; then
+  for candidate in "$XDG_RUNTIME_DIR"/wayland-*; do
+    [[ -S $candidate ]] && WAYLAND_DISPLAY=${candidate##*/} && break
+  done
+fi
+[[ -n ${WAYLAND_DISPLAY:-} ]] || { printf '%s: no Wayland session found\n' "$name" >&2; exit 1; }
+
+# The last line: a compile before the task prints its own lines first.
+IFS=$'\t' read -r id socket < <(cd "$root" && mise exec -- mix omunculus.socket "$config" "${project[@]}" | tail -n 1)
+[[ -n ${socket:-} ]] || exit 1
+[[ -S $socket ]] || { printf '%s: no socket at %s; start `omunculus serve` first\n' "$name" "$socket" >&2; exit 1; }
+
+export XDG_RUNTIME_DIR WAYLAND_DISPLAY QT_QPA_PLATFORM=wayland
+export OMUNCULUS_SOCKET=$socket OMUNCULUS_PROJECT=$id
+exec quickshell --path "$app"

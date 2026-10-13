@@ -20,9 +20,10 @@ OpenAPI document the server publishes at `/openapi.json`.
 
 ## The setup, read through `/v1/cli`
 
-A client reads a project's setup by running the core's tools over
-`POST /v1/cli` on the project's local socket ([the command line](cli.md)).
-Two of them print a whole form for a client:
+`apps/` holds the clients that come with Omunculus, each a folder that
+`apps/kit/run <app> --config <server.toml> [--project <id>]` opens on a
+project, given as `OMUNCULUS_PROJECT` and its local socket as
+`OMUNCULUS_SOCKET`:
 
 - `config --whole true` prints the setup as one JSON object: its `root`,
   `agents` (name, depth, model, `workflow_only`, the `granted`,
