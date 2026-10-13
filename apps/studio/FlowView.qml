@@ -13,11 +13,10 @@ import "kit/ui"
 Item {
   id: flow
 
-  // The project drawn: its id, its overview, and the packs it imports, as
-  // the config tool lists them for the project the studio was opened on.
+  // The project drawn: its id, its overview, and the packs it imports.
   property string projectId: Studio.project
   readonly property var overview: Studio.overviews[projectId] || null
-  readonly property var packs: projectId === Studio.project && Studio.setup ? Studio.setup.packs : []
+  readonly property var packs: Studio.packsOf[projectId] || []
   // Room the rail and the command bar take over the canvas, kept clear when it fits.
   property real leftInset: 0
   property real topInset: 0
@@ -144,6 +143,16 @@ Item {
   function zoomOut() { zoom(1 / 1.2, width / 2, height / 2) }
   function actualSize() { zoom(1 / world.scale, width / 2, height / 2) }
 
+  // Coming back to the flow decodes it again and sweeps it.
+  function reveal(item) {
+    for (const child of item.children || []) {
+      if (child.revealOnStage && child.replay)
+        child.replay()
+      reveal(child)
+    }
+  }
+  onVisibleChanged: if (visible) { reveal(world); sweep.restart() }
+
   property bool fitted: false
   onChartChanged: if (!fitted && chart.nodes.length > 0) { fitted = true; Qt.callLater(fit); sweep.restart() }
   onProjectIdChanged: { fitted = false; pickedId = "" }
@@ -231,10 +240,10 @@ Item {
           x: 24
           y: 22
           spacing: 14
-          DecodeLabel { value: (zone.place.workspace || "project root").toUpperCase(); color: Theme.success; font.pixelSize: 13; font.letterSpacing: 5 }
-          Label { text: zone.place.root; color: Theme.dim; font.pixelSize: 10 }
-          Label { visible: zone.place.default; text: "DEFAULT"; color: Theme.success; font.pixelSize: 9; font.letterSpacing: 2 }
-          Label { visible: zone.place.outside; text: "OUTSIDE THE PROJECT"; color: Theme.warning; font.pixelSize: 9; font.letterSpacing: 2 }
+          DecodeLabel { renderType: Text.CurveRendering; value: (zone.place.workspace || "project root").toUpperCase(); color: Theme.success; font.pixelSize: Math.min(36, 13 / Math.min(1, world.scale * 2)); font.letterSpacing: 5 }
+          Label { renderType: Text.CurveRendering; text: zone.place.root; color: Theme.dim; font.pixelSize: 10 }
+          Label { renderType: Text.CurveRendering; visible: zone.place.default; text: "DEFAULT"; color: Theme.success; font.pixelSize: 9; font.letterSpacing: 2 }
+          Label { renderType: Text.CurveRendering; visible: zone.place.outside; text: "OUTSIDE THE PROJECT"; color: Theme.warning; font.pixelSize: 9; font.letterSpacing: 2 }
           Repeater {
             model: zone.place.layer ? [].concat(
               zone.place.layer.mode ? [{ name: zone.place.layer.mode, state: "askable" }] : [],
@@ -259,14 +268,15 @@ Item {
         x: 28
         y: modelData.y + 14
         spacing: 4
-        Label { text: "DEPTH"; color: Theme.dim; font.pixelSize: 9; font.letterSpacing: 3 }
-        DecodeLabel { value: String(modelData.depth).padStart(2, "0"); color: Theme.primary; font.pixelSize: 30; font.letterSpacing: 2 }
+        Label { renderType: Text.CurveRendering; text: "DEPTH"; color: Theme.dim; font.pixelSize: 9; font.letterSpacing: 3 }
+        DecodeLabel { renderType: Text.CurveRendering; value: String(modelData.depth).padStart(2, "0"); color: Theme.primary; font.pixelSize: 30; font.letterSpacing: 2 }
         Label {
+          renderType: Text.CurveRendering
           text: modelData.depth === 0 ? "talks with you" : "handed down from " + (modelData.depth - 1)
           color: Theme.dim
           font.pixelSize: 10
         }
-        Label { visible: modelData.changed; text: "CHANGED HERE"; color: Theme.magenta; font.pixelSize: 9; font.letterSpacing: 2 }
+        Label { renderType: Text.CurveRendering; visible: modelData.changed; text: "CHANGED HERE"; color: Theme.magenta; font.pixelSize: 9; font.letterSpacing: 2 }
       }
     }
 
@@ -288,10 +298,10 @@ Item {
           x: 12
           y: 8
           spacing: 10
-          Label { text: "WORKFLOW"; color: Theme.dim; font.pixelSize: 9; font.letterSpacing: 2.5 }
-          DecodeLabel { value: modelData.name.toUpperCase(); color: Theme.secondary; font.pixelSize: 10; font.letterSpacing: 2.5 }
-          Label { visible: modelData.required; text: "REQUIRED"; color: Theme.warning; font.pixelSize: 9; font.letterSpacing: 2 }
-          Label { visible: modelData.pack !== ""; text: "◆ " + modelData.pack.toUpperCase(); color: Theme.magenta; font.pixelSize: 9; font.letterSpacing: 2 }
+          Label { renderType: Text.CurveRendering; text: "WORKFLOW"; color: Theme.dim; font.pixelSize: 9; font.letterSpacing: 2.5 }
+          DecodeLabel { renderType: Text.CurveRendering; value: modelData.name.toUpperCase(); color: Theme.secondary; font.pixelSize: Math.min(30, 10 / Math.min(1, world.scale * 2)); font.letterSpacing: 2.5 }
+          Label { renderType: Text.CurveRendering; visible: modelData.required; text: "REQUIRED"; color: Theme.warning; font.pixelSize: 9; font.letterSpacing: 2 }
+          Label { renderType: Text.CurveRendering; visible: modelData.pack !== ""; text: "◆ " + modelData.pack.toUpperCase(); color: Theme.magenta; font.pixelSize: 9; font.letterSpacing: 2 }
         }
       }
     }
@@ -358,6 +368,7 @@ Item {
         spec: modelData
         order: modelData.order
         picked: flow.pickedId === modelData.id
+        zoom: world.scale
         onChosen: flow.pickedId = flow.pickedId === modelData.id ? "" : modelData.id
       }
     }

@@ -3,6 +3,23 @@ import Quickshell
 import "kit/ui"
 
 ShellRoot {
+  // An icon pressed on its own, without a frame, as the zoom's are.
+  component Glyph: Item {
+    id: glyph
+    property string name
+    signal clicked()
+    width: 32
+    height: 32
+    Icon {
+      anchors.centerIn: parent
+      name: glyph.name
+      size: 12
+      color: pointer.containsMouse ? Theme.primary : Theme.dim
+      Behavior on color { ColorAnimation { duration: 150 } }
+    }
+    MouseArea { id: pointer; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: glyph.clicked() }
+  }
+
   // The studio, laid out as a canvas: the sections a carousel down the left,
   // the one on screen at its head beside the bar of its commands; the flow
   // fills the whole window under them, the other sections stand right of the
@@ -21,22 +38,22 @@ ShellRoot {
     // 0 is the flow; then the sections of the settings, in their order.
     property int page: 0
     readonly property var sections: [
-      { name: "flow", hint: "the project as it runs: depths, workflows, agents" },
-      { name: "secrets", hint: "where each provider's key comes from" },
-      { name: "models", hint: "the models the agents run on" },
-      { name: "agents", hint: "who does what, on which model, with which tools" },
-      { name: "workflows", hint: "the stages a work goes through" },
-      { name: "tools", hint: "the catalog: builtin, the project's, MCP" },
-      { name: "skills", hint: "what each agent knows how to do" },
-      { name: "project", hint: "policy, workspaces and access" }
+      { name: "flow" },
+      { name: "secrets" },
+      { name: "models" },
+      { name: "agents" },
+      { name: "workflows" },
+      { name: "tools" },
+      { name: "skills" },
+      { name: "project" }
     ]
     // What can be added, each in its section, which it opens.
     readonly property var adds: ({
-      provider: { text: "ADD PROVIDER", icon: "plus", run: () => { window.page = 1; settings.add("auth", "provider") } },
-      model: { text: "ADD MODEL", icon: "plus", run: () => { window.page = 2; settings.add("models", "model") } },
-      agent: { text: "ADD AGENT", icon: "plus", run: () => { window.page = 3; settings.agent = settings.add("agents", "agent") } },
-      workflow: { text: "ADD WORKFLOW", icon: "plus", run: () => { window.page = 4; settings.add("workflows", "workflow") } },
-      workspace: { text: "ADD WORKSPACE", icon: "plus", run: () => { window.page = 7; settings.add("workspaces", "workspace") } }
+      provider: { text: "ADD PROVIDER", short: "PROVIDER", icon: "plus", run: () => { window.page = 1; settings.add("auth", "provider") } },
+      model: { text: "ADD MODEL", short: "MODEL", icon: "plus", run: () => { window.page = 2; settings.add("models", "model") } },
+      agent: { text: "ADD AGENT", short: "AGENT", icon: "plus", run: () => { window.page = 3; settings.agent = settings.add("agents", "agent") } },
+      workflow: { text: "ADD WORKFLOW", short: "WORKFLOW", icon: "plus", run: () => { window.page = 4; settings.add("workflows", "workflow") } },
+      workspace: { text: "ADD WORKSPACE", short: "WORKSPACE", icon: "plus", run: () => { window.page = 7; settings.add("workspaces", "workspace") } }
     })
     // Each section's commands, as the command bar shows them; the flow's are
     // everything the project can be given.
@@ -172,7 +189,7 @@ ShellRoot {
         Row {
           id: zoomRow
           height: parent.height
-          IconButton { anchors.verticalCenter: parent.verticalCenter; name: "chevron-down"; tip: "zoom out  -"; onClicked: flow.zoomOut() }
+          Glyph { name: "chevron-down"; onClicked: flow.zoomOut() }
           Item {
             width: 76
             height: parent.height
@@ -186,9 +203,8 @@ ShellRoot {
             }
             MouseArea { id: zoomPointer; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: flow.actualSize() }
           }
-          IconButton { anchors.verticalCenter: parent.verticalCenter; name: "chevron-up"; tip: "zoom in  +"; onClicked: flow.zoomIn() }
-          Rectangle { width: 1; height: parent.height; color: Theme.line }
-          IconButton { anchors.verticalCenter: parent.verticalCenter; name: "map"; tip: "all in view  f"; onClicked: flow.fit() }
+          Glyph { name: "chevron-up"; onClicked: flow.zoomIn() }
+          Glyph { name: "map"; onClicked: flow.fit() }
         }
       }
 

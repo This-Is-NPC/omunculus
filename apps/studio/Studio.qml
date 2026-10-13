@@ -168,13 +168,19 @@ Singleton {
   // Project id -> the project as it runs in each of its workspaces, as the
   // overview tool prints it, read from that project's own socket.
   property var overviews: ({})
+  // Project id -> the packs it imports, as its config tool lists them.
+  property var packsOf: ({})
   function loadOverviews() {
     call("GET", "/v1/projects", null, false, data => {
       projects = data.items
-      for (const each of projects)
+      for (const each of projects) {
         http.call(each.socket, "POST", "/v1/cli", { argv: ["overview"] }, false, data => {
           overviews = Object.assign({}, overviews, { [each.id]: JSON.parse(data.output) })
         }, reason => overviews = Object.assign({}, overviews, { [each.id]: { error: reason } }))
+        http.call(each.socket, "POST", "/v1/cli", { argv: ["config"] }, false, data => {
+          packsOf = Object.assign({}, packsOf, { [each.id]: JSON.parse(data.output).packs })
+        }, () => {})
+      }
     })
   }
 

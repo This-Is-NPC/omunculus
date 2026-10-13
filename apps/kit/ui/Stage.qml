@@ -7,10 +7,13 @@ Item {
   id: stage
   property bool shown: false
   property real offset: 0
+  // Whether every decoding label within decodes again when the view comes,
+  // not only the soft ones.
+  property bool revealAll: false
   function revealTree(item) {
     if (!item)
       return
-    if (item.soft === true && item.revealOnStage && item.replay)
+    if ((item.soft === true || revealAll) && item.revealOnStage && item.replay)
       item.replay()
     for (const child of item.children || [])
       revealTree(child)

@@ -24,7 +24,7 @@ Rectangle {
     Flow {
       Layout.fillWidth: true
       spacing: 8
-      Label { text: row.entry.name; color: Theme.foreground; font.pixelSize: 12 }
+      DecodeLabel { value: row.entry.name; color: Theme.foreground; font.pixelSize: 12 }
       Label { text: row.entry.kind; color: Theme.dim; font.pixelSize: 9; font.letterSpacing: 2 }
       Repeater {
         model: row.entry.triggers

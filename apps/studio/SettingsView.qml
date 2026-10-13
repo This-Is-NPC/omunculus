@@ -116,6 +116,7 @@ Item {
           required property int index
           anchors.fill: parent
           shown: view.page === index
+          revealAll: true
           Loader { anchors.fill: parent; active: view.document !== null; sourceComponent: stage.modelData }
         }
       }
@@ -153,7 +154,7 @@ Item {
     onEdited: text => card.put(optional.path, text === "" ? null : Number(text))
   }
 
-  component Note: Label {
+  component Note: DecodeLabel {
     Layout.fillWidth: true
     color: Theme.dim
     font.pixelSize: 11
@@ -169,7 +170,7 @@ Item {
         id: content
         width: scroll.width
         spacing: 10
-        Note { text: "Where each provider's key comes from. Models name their provider; the key itself is never shown here." }
+        Note { value: "Where each provider's key comes from. Models name their provider; the key itself is never shown here." }
         Repeater {
           model: view.listed.auth
           delegate: ItemCard {
@@ -274,11 +275,11 @@ Item {
             }
             Note {
               visible: card.draft.kind === "api_key" && card.source === "login"
-              text: "The key a login stored for " + card.modelData + "; `omunculus login --provider " + card.modelData + "` stores it."
+              value: "The key a login stored for " + card.modelData + "; `omunculus login --provider " + card.modelData + "` stores it."
             }
             Note {
               visible: card.draft.kind === "api_key" && card.source === "file"
-              text: "The key is written in the project's config as it is; it stays there, unread here."
+              value: "The key is written in the project's config as it is; it stays there, unread here."
             }
             // The other kinds keep their own fields as text.
             Repeater {
@@ -306,7 +307,7 @@ Item {
         id: content
         width: scroll.width
         spacing: 10
-        Note { text: "What the agents run on: an api, the model's id and the options sent with every request. Test one before an agent runs on it." }
+        Note { value: "What the agents run on: an api, the model's id and the options sent with every request. Test one before an agent runs on it." }
         Repeater {
           model: view.listed.models
           delegate: ItemCard {
@@ -456,7 +457,7 @@ Item {
             id: content
             width: scroll.width
             spacing: 8
-            Note { text: "Who works: each agent at its depth, on a model, with its text and what it may do. Depth 0 talks with you. Pick one to shape it." }
+            Note { value: "Who works: each agent at its depth, on a model, with its text and what it may do. Depth 0 talks with you. Pick one to shape it." }
             Repeater {
               model: view.listed.agents
               delegate: Rectangle {
@@ -471,7 +472,7 @@ Item {
                 RowLayout {
                   anchors { fill: parent; leftMargin: 14; rightMargin: 14 }
                   spacing: 14
-                  Label { text: entry.modelData; color: Studio.toneOf(entry.modelData); font.pixelSize: 12; font.letterSpacing: 1 }
+                  DecodeLabel { value: entry.modelData; color: Studio.toneOf(entry.modelData); font.pixelSize: 12; font.letterSpacing: 1 }
                   Label {
                     Layout.fillWidth: true
                     text: view.stored("agents", entry.modelData) === null ? "new" :
@@ -588,7 +589,7 @@ Item {
                   }
                   Note {
                     visible: Studio.skillNames.length === 0
-                    text: "No skill in [skills] paths."
+                    value: "No skill in [skills] paths."
                   }
                 }
                 CeilingFields {
@@ -614,7 +615,7 @@ Item {
         id: content
         width: scroll.width
         spacing: 10
-        Note { text: "The stages a work goes through, in order, each run by its agent; what a stage never has is taken from its agent there." }
+        Note { value: "The stages a work goes through, in order, each run by its agent; what a stage never has is taken from its agent there." }
         Repeater {
           model: view.listed.workflows
           delegate: ItemCard {
@@ -746,7 +747,7 @@ Item {
             value: policy.draft.assemble || ""
             onEdited: text => policy.put(["assemble"], text === "" ? null : text)
           }
-          Note { text: "The tool that writes each run's prompt." }
+          Note { value: "The tool that writes each run's prompt." }
           RowLayout {
             Layout.fillWidth: true
             spacing: 16
@@ -755,7 +756,7 @@ Item {
             OptionalNumber { card: policy; path: ["tool_output_bytes"]; Layout.preferredWidth: 180; label: "tool output bytes" }
             Item { Layout.fillWidth: true }
           }
-          Note { text: "How often a work whose model stopped without a report runs again, and how much of each output a prompt keeps." }
+          Note { value: "How often a work whose model stopped without a report runs again, and how much of each output a prompt keeps." }
           RowLayout {
             Layout.fillWidth: true
             spacing: 16
@@ -785,7 +786,7 @@ Item {
         }
 
         Kicker { Layout.fillWidth: true; Layout.topMargin: 8; text: "WORKSPACES" }
-        Note { text: "Where the agents work: a directory, relative to the project root, with the ceiling that holds there. Without one, they work in the project root." }
+        Note { value: "Where the agents work: a directory, relative to the project root, with the ceiling that holds there. Without one, they work in the project root." }
         Repeater {
           model: view.listed.workspaces
           delegate: ItemCard {
@@ -820,7 +821,7 @@ Item {
 
         Kicker { Layout.fillWidth: true; Layout.topMargin: 8; text: "ACCESS" }
         Note {
-          text: view.document.access ? "Who may do what, by role; the members of each role are in the store, not here."
+          value: view.document.access ? "Who may do what, by role; the members of each role are in the store, not here."
             : "This project has no [access]: only its local user works in it."
         }
         ItemCard {

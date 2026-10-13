@@ -10,7 +10,7 @@ import "kit/ui"
 Item {
   id: rail
 
-  // [{name, hint}], in order.
+  // [{name}], in order.
   required property var tabs
   property int current: 0
   // The height of the stretched tab, which the command bar shares.
@@ -34,7 +34,7 @@ Item {
       readonly property bool head: slot === 0
       readonly property color tone: head ? Theme.primary : pointer.containsMouse ? Theme.foreground : Theme.dim
 
-      y: head ? 0 : rail.headHeight + rail.gap + 12 + (slot - 1) * (rail.tabHeight + rail.gap)
+      y: head ? 0 : rail.headHeight + rail.gap + (slot - 1) * (rail.tabHeight + rail.gap)
       width: head ? rail.width : 168
       height: head ? rail.headHeight : rail.tabHeight
       Behavior on y { NumberAnimation { duration: 360; easing.type: Easing.OutCubic } }
@@ -77,25 +77,6 @@ Item {
         cursorShape: Qt.PointingHandCursor
         onClicked: rail.chosen(tab.index)
       }
-    }
-  }
-
-  // What the section on screen is for, under the carousel's head.
-  Rectangle {
-    y: rail.headHeight + 2
-    width: Math.min(rail.width, hint.implicitWidth + 4)
-    height: hint.implicitHeight + 4
-    color: Theme.background
-    Label {
-      id: hint
-      x: 2
-      y: 2
-      width: rail.width - 4
-      text: rail.tabs[rail.current].hint
-      color: Theme.dim
-      font.pixelSize: 9
-      font.letterSpacing: 1
-      elide: Text.ElideRight
     }
   }
 }

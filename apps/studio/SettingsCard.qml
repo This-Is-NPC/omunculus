@@ -58,9 +58,9 @@ SurfaceFrame {
         tip: card.expanded ? "close" : "open"
         onClicked: card.toggled()
       }
-      Label {
+      DecodeLabel {
         Layout.fillWidth: true
-        text: card.title || card.placeholder
+        value: card.title || card.placeholder
         color: card.title ? Theme.foreground : Theme.dim
         font.pixelSize: 12
         elide: Text.ElideRight
@@ -70,11 +70,11 @@ SurfaceFrame {
           onClicked: card.toggled()
         }
       }
-      Label {
+      DecodeLabel {
         visible: card.note !== ""
         // Titles are short names; the note may take most of the row, cut at its end.
         Layout.maximumWidth: card.width * 0.6
-        text: card.note
+        value: card.note
         color: Theme.dim
         font.pixelSize: 10
         elide: Text.ElideRight
