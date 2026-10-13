@@ -73,6 +73,17 @@ the desk may give up to 10% off on its own. A larger discount, and the
 contract with the payment and the start date once the client accepts, it
 asks the owner with `ask`; approved, it sends the builders the build.
 
+A client who answers a decision without making it — they will think the
+price over and answer in a few days — has answered for now. The
+generalist passes their words in text down to the seller's request, as any
+answer, and the store refuses its putting the same question to them again;
+the seller writes it in the proposal and calls `wait` once, with a short
+message that acknowledges it and names again what they are to decide.
+The request is answered and its work waits for the client's next
+message, which the mailbox shows as waiting on them, and whatever they
+write next the generalist forwards to it, resuming the sale at the stage
+it waited in.
+
 The project must configure the logical `owner` request route used by discounts
 and contract decisions. For the authenticated conversation origin:
 
@@ -110,4 +121,4 @@ project of its own, which has no `[access]`, so its messages open no
 conversation.
 
 The sales-desk eval overlay declares the first two routes, the agency's all
-three. Questions needing an answer use `ask`; a sender replies from known facts or escalates received origins. The depth-0 generalist answers or escalates every request under its inbox in the run that sees it, never taking one there for a question already out, since a request it left unanswered reaches the client without it; it collects every unresolved question in its conversation into one escalation to the client, written to the client as it should reach them, with no ids, stage names or notes for the team, and distributes the returned text to those origins. `break` remains a stopped-work report. The generalist ends on thanks, acknowledgements and promises of later material; a completed sale starts new work only for an explicit new request.
+three. Questions needing an answer use `ask`; a sender replies from known facts or escalates received origins. The depth-0 generalist answers or escalates every request under its inbox in the run that sees it, never taking one there for a question already out, since a request it left unanswered reaches the client without it; it collects every unresolved question in its conversation into one escalation to the client, written to the client as it should reach them, with no ids, stage names or notes for the team, and distributes the returned text to those origins. `break` remains a stopped-work report, and `wait` the seller's pause for the client's next message. The generalist ends on thanks, acknowledgements and promises of later material; a completed sale starts new work only for an explicit new request.
