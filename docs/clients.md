@@ -23,8 +23,10 @@ OpenAPI document the server publishes at `/openapi.json`.
 
 ## The apps in this repository
 
-`apps/` holds the clients that come with Omunculus, each a folder that runs
-on its own with a `run` launcher:
+`apps/` holds the clients that come with Omunculus, each a folder that
+`apps/kit/run <app> --config <server.toml> [--project <id>]` opens on a
+project, given as `OMUNCULUS_PROJECT` and its local socket as
+`OMUNCULUS_SOCKET`:
 
 | App | Is |
 | --- | --- |

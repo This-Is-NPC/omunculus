@@ -70,13 +70,13 @@ The optional [server](docs/server.md) opens configured projects and exposes conv
 
 Any program that speaks the server's HTTP contract is a client; what it may
 rely on is in [clients](docs/clients.md). The repository's own are under
-`apps/`. `apps/console/run` opens a window on a project of a running
+`apps/`, each opened by `apps/kit/run <app>`. The console opens a window on a project of a running
 [server](docs/server.md). It talks to the project's local socket, so it acts
 as the local user:
 
 ```bash
 bin/omunculus serve --config server.toml
-apps/console/run --config server.toml --project demo
+apps/kit/run console --config server.toml --project demo
 ```
 
 `--project` may be left out when the registry holds one project.
