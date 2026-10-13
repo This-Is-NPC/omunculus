@@ -51,8 +51,11 @@ All are QML on Quickshell and share `apps/kit`:
   those of one group joined as one control with the checked one lit, each
   shortened to its short name or its icon when the names do not fit, which
   the mailbox's command bar uses too; and `FilePicker` and `FileChip`,
-  the files a message carries and a file attached in a conversation. It
-  knows nothing of Omunculus.
+  the files a message carries and a file attached in a conversation; and
+  `Prose`, what an agent wrote as Markdown, its web addresses, bare or
+  linked, links in the accent that the pointer turns over, Tab reaches,
+  Left and Right pick and Enter opens with `xdg-open`, only http and https.
+  It knows nothing of Omunculus.
 - `apps/kit/client`: `Http`, which makes each request to a socket through
   `curl` or saves its answer into a file, posts a message with files through
   `post-with-files` and saves and opens an attached file through
