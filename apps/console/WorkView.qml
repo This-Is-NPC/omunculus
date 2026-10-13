@@ -5,8 +5,8 @@ import "kit/ui"
 
 // WorkView is one work on a page of its own: its title, state and project
 // over two columns. On the left, its agent's portrait and model, where it
-// stands in its workflow, what it is for, what it asked and the notes it
-// left, and the works around it — the one it came from and those it handed
+// stands in its workflow, its description — the goal it was given — what
+// it asked and the notes it left, and the works around it — the one it came from and those it handed
 // down — each opening here. On the right, its runs, the files it changed or
 // the prompt a run was given. Esc leaves.
 FocusScope {
@@ -90,6 +90,22 @@ FocusScope {
               font.pixelSize: 10
               elide: Text.ElideRight
             }
+          }
+        }
+
+        Caption { text: "DESCRIPTION" }
+        Rectangle {
+          Layout.fillWidth: true
+          implicitHeight: goal.implicitHeight + 24
+          color: "transparent"
+          border.color: Theme.line
+          Label {
+            id: goal
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
+            text: view.work ? String(view.work.goal || "") : ""
+            textFormat: Text.MarkdownText
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
           }
         }
 

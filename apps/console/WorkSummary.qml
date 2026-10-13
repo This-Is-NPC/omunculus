@@ -12,7 +12,7 @@ ColumnLayout {
 
   // The work, or "" for the root agent's own conversation.
   required property string key
-  // Whether it heads itself with the work's title.
+  // Whether it heads itself with the work's title and goal.
   property bool titled: true
   signal picked(string key)
 
@@ -31,7 +31,7 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    visible: summary.work !== null && !!summary.work.goal && summary.work.goal !== summary.work.title
+    visible: summary.titled && summary.work !== null && !!summary.work.goal && summary.work.goal !== summary.work.title
     text: summary.work ? Omunculus.inline(String(summary.work.goal || "")) : ""
     textFormat: Text.MarkdownText
     color: Theme.dim
