@@ -20,9 +20,12 @@ ModalDialog {
       ["1 · 2 · 3 · 4 · 5", "the pages: the conversations, the conversation, the map, the log, the board"],
       ["Ctrl+1 … Ctrl+5", "the same, from a field being written or the picker"],
       ["Ctrl+Tab · Ctrl+Shift+Tab", "the next or the previous page"],
-      ["Esc", "let go of what the page holds, then back to where you were"],
+      ["Esc", "let go of what the page holds, then back to where you were, at last the start"],
       ["Alt + a key of the bar", "the key, from a field being written"],
       ["? · F1", "these keys"]
+    ]],
+    ["start", [
+      ["N · H · B", "a new conversation, the conversations, the board"]
     ]],
     ["conversations", [
       ["↑ · ↓", "choose"],

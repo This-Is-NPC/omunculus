@@ -17,7 +17,8 @@ import "kit/ui"
 // it. A request is answered in its decision, opened over the page. Every
 // move to another page, conversation or project is remembered, so BACK, and
 // Esc once the page has let go of what it holds, return to exactly where it
-// was: the page, its project, its conversation and the node picked.
+// was: the page, its project, its conversation and the node picked; back
+// from the first page entered is back to the start.
 Item {
   id: view
 
@@ -25,6 +26,8 @@ Item {
   property bool compact: false
   property bool short: false
   signal costWanted()
+  // Back from the first page entered.
+  signal startWanted()
 
   // The pages, in their order, and the one on screen.
   readonly property var pages: ["conversations", "conversation", "map", "log", "board"]
@@ -57,11 +60,18 @@ Item {
     page = name
   }
 
-  // Back to where the window was before its last move; false when it was
-  // nowhere before.
+  // Enters the pages from the start, at a page, with nothing behind it.
+  function enter(name) {
+    history = []
+    page = name
+  }
+
+  // Back to where the window was before its last move, or to the start.
   function back() {
-    if (history.length === 0)
-      return false
+    if (history.length === 0) {
+      startWanted()
+      return
+    }
     const at = history[history.length - 1]
     history = history.slice(0, -1)
     if (at.project !== Omunculus.project)
@@ -74,7 +84,6 @@ Item {
     }
     page = at.page
     agents.picked = at.picked
-    return true
   }
 
   function openConversation(id) {
@@ -122,8 +131,8 @@ Item {
   // a `key` answer to it too.
   readonly property var commands: {
     const last = history.length > 0 ? history[history.length - 1] : null
-    const back = { text: "BACK", icon: "chevron-left", role: "navigation", tip: "back to the " + (last ? last.page : "") + "  esc",
-      shown: last !== null, run: () => view.back() }
+    const back = { text: "BACK", icon: "chevron-left", role: "navigation", tip: "back to the " + (last ? last.page : "start") + "  esc",
+      run: () => view.back() }
     const fresh = { text: "NEW CONVERSATION", short: "NEW", icon: "plus", key: "N", tip: "start another conversation  n", run: () => view.newConversation() }
     const cost = { text: "COST", icon: "cost", tip: "what this conversation cost", run: () => view.costWanted() }
     if (page === "conversations")
