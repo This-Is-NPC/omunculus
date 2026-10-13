@@ -25,7 +25,11 @@ stage asks — the client's content after qualify, an approved preview or
 "not wanted" after design, the builders' answer after assess, the
 client's acceptance after propose — and, after owner, until the run was
 opened by the owner's approval, and after build, until a build came back
-done.
+done. During build, the release's request to grant `promote` is the
+client's one approval of the built site: the seller escalates it to them
+with the homologation address and every page by name, only the client can
+answer it, as the store refuses an agent's answer to a grant only a person
+gives, and the grant reaches the release that waits on it.
 
 It expects a team below it whose front agent is `administrator` and
 answers a work that begins "Assessment only, build nothing:" without

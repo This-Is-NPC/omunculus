@@ -7,7 +7,8 @@ needs = ["sandbox.write", "promote"]
 # The whole way from a vague request to a site in production: the sales
 # desk qualifies the client, the design team shows a preview and takes a
 # round of changes, the builders assess it, the client accepts the price,
-# the owner approves with ask, and the builders build and publish it.
+# the owner approves with ask, and the builders build and publish it, to
+# production once the client, seeing it in homologation, grants promote.
 [expect]
 outcome = ["answer", "done"]
 
