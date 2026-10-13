@@ -56,6 +56,11 @@ bin/omunculus reply "granted" --request_id <id> --option grant
 bin/omunculus login --provider anthropic
 ```
 
+The models a project can run on — Anthropic's Messages API, OpenAI's Responses
+and Chat Completions APIs (OpenRouter and other compatible servers among them),
+a program of your own or an Elixir module — are
+[the compatible providers](docs/config.md#compatible-providers).
+
 Every verb is in [the command line](docs/cli.md). The file the verbs read is
 [the TOML](docs/config.md). Shapes that file can take are
 [possibilities](docs/possibilities.md). What a send actually does to the store

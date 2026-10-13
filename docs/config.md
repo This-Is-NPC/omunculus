@@ -194,6 +194,48 @@ environment` stays what every process of a run receives.
 
 ## Models and auth
 
+### Compatible providers
+
+A model is any server that speaks one of the APIs below, or a program or an
+Elixir module of your own. Which provider and model a project uses is its
+`[models.<name>]` table; nothing else changes.
+
+| `api` | Speaks | For example |
+| --- | --- | --- |
+| `anthropic-messages` | Anthropic's Messages API (`/messages`) | Anthropic |
+| `openai-responses` | OpenAI's Responses API (`/responses`) | OpenAI |
+| `openai-completions` | OpenAI's Chat Completions API (`/chat/completions`) | OpenAI, OpenRouter, and servers compatible with it such as Ollama, vLLM or LM Studio |
+| `command` | the sandbox NDJSON protocol, from a program the run starts | a local CLI or a wrapper of your own |
+| `module` | an Elixir adapter of the package | `Omunculus.Model.Fake`, for runs without a network |
+
+```toml
+[auth.anthropic]
+kind = "api_key"
+key = "$ANTHROPIC_API_KEY"
+
+[models.claude]
+provider = "anthropic"
+api = "anthropic-messages"
+url = "https://api.anthropic.com/v1"
+model = "claude-sonnet-5"
+body = { max_tokens = 32000 }
+
+[auth.openrouter]
+kind = "api_key"
+key = "$OPENROUTER_API_KEY"
+
+[models.router]
+provider = "openrouter"
+api = "openai-completions"
+url = "https://openrouter.ai/api/v1"
+model = "anthropic/claude-sonnet-5"
+```
+
+A model's `provider` names an `[auth.<name>]` login, whose key the adapter
+sends; a local server that needs none leaves `provider` out.
+
+### The adapters
+
 `api` is `openai-completions`, `openai-responses`, `anthropic-messages`,
 `command` or `module`. `module` names an Elixir adapter (`Omunculus.Model.Fake`
 is the one the default preset uses). `command` runs a program over the
@@ -219,7 +261,7 @@ have no key for, and replaces what they send, such as the
 `anthropic-messages` `max_tokens`:
 
 ```toml
-[models.luna.body]
+[models.router.body]
 reasoning = { effort = "high" }
 max_tokens = 16000
 ```
