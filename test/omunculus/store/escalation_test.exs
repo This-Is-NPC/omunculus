@@ -234,6 +234,37 @@ defmodule Omunculus.Store.EscalationTest do
     assert {:ok, _} = reply(conn, ctx.lead_ctx, tone, %{"body" => "Calm tone."})
   end
 
+  test "a run resumed by a text answer passes on the origins it leaves pending",
+       %{conn: conn} = ctx do
+    {logo, tone, merged} = questions(conn, ctx)
+    assert {:ok, _} = reply(conn, ctx.root_ctx, merged, %{"body" => "Blue logo; calm tone."})
+
+    resumed =
+      Fixtures.open_run(conn, %{
+        agent: "lead",
+        work_id: ctx.lead,
+        depth: 1,
+        conversation_id: ctx.conversation,
+        request_id: merged
+      })
+
+    {:ok, _} = Store.close_run(conn, resumed.id)
+    {:ok, resumed} = Store.view(conn, "run", resumed.id)
+
+    assert {:ok, events} =
+             Store.unanswered(conn, resumed, ctx.config, &Omunculus.Tools.Out.unanswered/3)
+
+    again = Enum.find(events, &(&1.type == "request")).request_id
+    assert request(conn, logo).status == "escalated"
+    assert request(conn, tone).status == "escalated"
+    assert Jason.decode!(request(conn, again).arbiter) == Participant.agent("root")
+    assert request(conn, again).origins |> Map.keys() |> Enum.sort() == ~w(logo tone)
+
+    assert request(conn, again).reason ==
+             ~s(lead left 2 questions unanswered: worker's on the work "logo": "logo"; ) <>
+               ~s(worker's on the work "tone": "tone")
+  end
+
   test "partial named replies leave missing parts pending for another distribution round",
        %{conn: conn} = ctx do
     {logo, tone, merged} = questions(conn, ctx)

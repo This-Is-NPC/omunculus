@@ -85,7 +85,7 @@ responsibility; it can name a different participant from the conversation origin
 | `promote` approval | The release agent requests permission with `request_access`; it follows the configured chain. Intermediaries must escalate: an agent cannot answer a request containing a sealed grant option, including with deny or text. Only the human decides; the pack's `promote` tool publishes once its grant makes it available. |
 | `propose_config`, `propose_pack` | Validated proposals whose apply option calls configure or pack with revision checks. A text reply records advice without applying the proposal. |
 | Harness retry/cancel | A routed request after root retry exhaustion. Retry is a named decision with no calls; cancel chains cancellation. Child retry exhaustion remains a stopping break. |
-| Unanswered receiver | Linked single-origin escalation through the same action and routing; an upstream human request gets an inbox notification. |
+| Unanswered receiver | Linked escalation through the same action and routing, of the request the run was opened for or, for an intermediary resumed by a text answer, of the origins the answer returned to it; an upstream human request gets an inbox notification. |
 
 Optional `to` on ask, request_access or escalate names a configured logical
 route. It is not a recipient type, and callers can omit it. Receivers answer

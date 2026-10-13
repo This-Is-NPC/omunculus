@@ -17,7 +17,8 @@ defmodule Omunculus.Store.Runs do
   `continues/3` records the `session` event of a run that continues its
   agent's session: the run it continues and what it was told had happened.
   `unanswered/4` uses the linked escalation action when an agent receiver
-  closes without answering, its reason naming the agent and each question
+  closes without answering, or an intermediary resumed by a text answer
+  closes leaving pending the origins it returned, its reason naming the agent and each question
   it held, shortened, with who asked it and the title of their work. When the new request reaches a
   human it records an inbox note saying so, in the same transaction.
   """
@@ -165,50 +166,64 @@ defmodule Omunculus.Store.Runs do
   def unanswered(conn, run, config, reason_text) do
     Query.transaction(conn, fn ->
       with {:ok, request} <- View.view(conn, "request", run.request_id) do
-        if request.status == "pending" and
-             Jason.decode!(request.arbiter) == Omunculus.Participant.agent(run.agent) do
-          ctx = %{
-            run_id: run.id,
-            work_id: run.work_id,
-            author: "harness",
-            agent: run.agent,
-            config: config,
-            groups: %{}
-          }
-
-          with {:ok, questions} <- questions(conn, request),
-               text = &reason_text.(run.agent, questions, &1),
-               {:ok, events} <-
-                 Actions.run(
-                   conn,
-                   [
-                     %{
-                       "type" => "escalate",
-                       "body" => %{
-                         "reason" => text.(false),
-                         "origins" => %{"answer" => request.id}
-                       }
-                     }
-                   ],
-                   ctx
-                 ),
-               upstream = Enum.find(events, &(&1.type == "request")),
-               {:ok, linked} <- View.view(conn, "request", upstream.request_id),
-               {:ok, notified} <- notify_unanswered(conn, linked, ctx, text.(true)) do
-            {:ok, events ++ notified}
-          end
-        else
-          {:ok, []}
+        case left(request, Omunculus.Participant.agent(run.agent)) do
+          [] -> {:ok, []}
+          parts -> pass_on(conn, run, config, reason_text, parts)
         end
       end
     end)
   end
 
-  # The questions a request holds: its own, or those of the requests it
-  # links, each with who asked it and the title of the asker's work.
-  defp questions(conn, request) do
-    request
-    |> asked()
+  # What a run of `receiver` leaves pending: the request it was opened
+  # for, or, once that was answered, the origins the answer returned to it.
+  defp left(request, receiver) do
+    if held?(request, receiver),
+      do: [{"answer", request}],
+      else: request.origins |> Enum.filter(fn {_part, origin} -> held?(origin, receiver) end)
+  end
+
+  defp held?(request, receiver),
+    do: request.status == "pending" and Jason.decode!(request.arbiter) == receiver
+
+  defp pass_on(conn, run, config, reason_text, parts) do
+    ctx = %{
+      run_id: run.id,
+      work_id: run.work_id,
+      author: "harness",
+      agent: run.agent,
+      config: config,
+      groups: %{}
+    }
+
+    with {:ok, questions} <- questions(conn, parts),
+         text = &reason_text.(run.agent, questions, &1),
+         {:ok, events} <-
+           Actions.run(
+             conn,
+             [
+               %{
+                 "type" => "escalate",
+                 "body" => %{
+                   "reason" => text.(false),
+                   "origins" => Map.new(parts, fn {part, request} -> {part, request.id} end)
+                 }
+               }
+             ],
+             ctx
+           ),
+         upstream = Enum.find(events, &(&1.type == "request")),
+         {:ok, linked} <- View.view(conn, "request", upstream.request_id),
+         {:ok, notified} <- notify_unanswered(conn, linked, ctx, text.(true)) do
+      {:ok, events ++ notified}
+    end
+  end
+
+  # The questions the requests of `parts` hold: each its own, or those of
+  # the requests it links, with who asked it and the title of the asker's work.
+  defp questions(conn, parts) do
+    parts
+    |> Enum.sort()
+    |> Enum.flat_map(fn {_part, request} -> asked(request) end)
     |> Enum.reduce_while({:ok, []}, fn asked, {:ok, acc} ->
       case title(conn, asked.work_id) do
         {:ok, title} ->

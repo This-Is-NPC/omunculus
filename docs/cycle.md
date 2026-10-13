@@ -276,9 +276,12 @@ text-only answer resumes the intermediary for distribution even when its
 work still waits on children. A cancelled origin work never runs again.
 
 An agent receiver that closes without answering a pending request uses the
-same linked escalation action. At the root it reaches the authenticated
-human and writes an inbox notification naming that upstream request. An
-already escalated origin does not trigger a second escalation.
+same linked escalation action. So does an intermediary resumed by a text
+answer that closes leaving pending the origins the answer returned to it:
+they go on together, under the part names they had. At the root it reaches
+the authenticated human and writes an inbox notification naming that
+upstream request. An already escalated origin does not trigger a second
+escalation.
 
 `INBOX` notifies and does not wait. It does not park a run or a work.
 
