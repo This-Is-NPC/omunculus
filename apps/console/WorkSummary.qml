@@ -12,8 +12,10 @@ ColumnLayout {
 
   // The work, or "" for the root agent's own conversation.
   required property string key
-  // Whether it heads itself with the work's title and goal.
-  property bool titled: true
+  // Whether it shows the work whole — its title, goal, workflow and the
+  // work it came from — or, on the work's page, which shows those itself,
+  // only where it works, what it asked and its notes.
+  property bool whole: true
   signal picked(string key)
 
   readonly property var work: key !== "" ? Omunculus.work(key) : null
@@ -24,14 +26,14 @@ ColumnLayout {
 
   Label {
     Layout.fillWidth: true
-    visible: summary.titled
+    visible: summary.whole
     text: summary.work ? summary.work.title : Omunculus.title
     font.pixelSize: 13
     wrapMode: Text.Wrap
   }
   Label {
     Layout.fillWidth: true
-    visible: summary.titled && summary.work !== null && !!summary.work.goal && summary.work.goal !== summary.work.title
+    visible: summary.whole && summary.work !== null && !!summary.work.goal && summary.work.goal !== summary.work.title
     text: summary.work ? Omunculus.inline(String(summary.work.goal || "")) : ""
     textFormat: Text.MarkdownText
     color: Theme.dim
@@ -51,15 +53,15 @@ ColumnLayout {
       font.pixelSize: 11
       elide: Text.ElideMiddle
     }
-    Caption { visible: !!summary.work && !!summary.work.workflow; text: "WORKFLOW" }
+    Caption { visible: summary.whole && !!summary.work && !!summary.work.workflow; text: "WORKFLOW" }
     Label {
-      visible: !!summary.work && !!summary.work.workflow
+      visible: summary.whole && !!summary.work && !!summary.work.workflow
       text: summary.work && summary.work.workflow ? summary.work.workflow + "  ·  stage " + summary.work.stage : ""
       font.pixelSize: 11
     }
-    Caption { visible: summary.parentWork !== null; text: "FROM" }
+    Caption { visible: summary.whole && summary.parentWork !== null; text: "FROM" }
     Label {
-      visible: summary.parentWork !== null
+      visible: summary.whole && summary.parentWork !== null
       text: summary.parentWork ? (summary.parentWork.assignee || "").toUpperCase() + "  ·  " + summary.parentWork.title : ""
       color: from.containsMouse ? Theme.primary : Theme.foreground
       font.pixelSize: 11
