@@ -93,7 +93,8 @@ joined to the one it came from; whatever an agent asked and still waits for,
 and the notes it left you, hang from its node, with the options to answer.
 The composer counts what waits on you and leads to the map. Opening a node
 shows what that agent said and did, and writes to it. What the conversation
-cost opens from its masthead. It needs
+cost opens from its masthead. `apps/kit/run studio` opens the project's
+settings, `apps/kit/run mailbox` a mailbox over every project. They need
 [Quickshell](https://quickshell.org/), `curl` with WebSocket support and a
 Wayland session.
 
