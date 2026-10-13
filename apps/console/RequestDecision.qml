@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Requests.js" as Requests
 import "kit/ui"
 
 // RequestDecision is one request, wherever it shows: who asked, on which work,
@@ -16,10 +17,10 @@ SurfaceFrame {
 
   readonly property var request: Omunculus.requests.find(item => item.id === key) || null
   readonly property var answer: Omunculus.replies[key] || null
-  readonly property bool open: request !== null && String(request.status).startsWith("waiting")
-  readonly property bool yours: open && request.arbiter === "human"
+  readonly property bool open: request !== null && Requests.pending(request)
+  readonly property bool yours: open && Requests.human(request.arbiter)
   readonly property var work: request ? Omunculus.work(request.work_id || "") : null
-  readonly property string asker: request ? request.agent || "" : ""
+  readonly property string asker: request ? Requests.label(request.requester) : ""
   readonly property var options: request ? Object.keys(request.options || {}) : []
   // The first name a grant of the request gives, as {kind, name}.
   readonly property var wanted: {
@@ -98,8 +99,8 @@ SurfaceFrame {
 
     Label {
       Layout.fillWidth: true
-      visible: (Omunculus.reasons[card.key] || "") !== ""
-      text: Omunculus.inline(Omunculus.reasons[card.key] || "")
+      visible: !!card.request && !!card.request.reason
+      text: card.request ? Omunculus.inline(String(card.request.reason || "")) : ""
       textFormat: Text.MarkdownText
       color: Theme.dim
       font.pixelSize: 12
@@ -109,8 +110,8 @@ SurfaceFrame {
     Label {
       Layout.fillWidth: true
       text: !card.request ? ""
-        : card.open ? (card.yours ? "YOU DECIDE" : String(card.request.arbiter).toUpperCase() + " DECIDES  ·  YOU CAN DECIDE INSTEAD")
-        : card.answer ? card.labelOf(card.answer.option) + " — BY " + card.answer.who.toUpperCase() + (card.answer.body && card.answer.body !== card.answer.option ? ": " + card.answer.body : "")
+        : card.open ? (card.yours ? "YOU DECIDE" : Requests.label(card.request.arbiter).toUpperCase() + " DECIDES  ·  YOU CAN DECIDE INSTEAD")
+        : card.answer ? (card.answer.option ? card.labelOf(card.answer.option) : "ANSWERED") + " — BY " + card.answer.who.toUpperCase() + (card.answer.body && card.answer.body !== card.answer.option ? ": " + card.answer.body : "")
         : "CLOSED"
       color: card.yours ? Theme.warning : Theme.dim
       font.pixelSize: 10

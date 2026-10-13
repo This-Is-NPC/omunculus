@@ -57,11 +57,9 @@ Singleton {
   property var runThread: ({})
   // Work id ("" for runs without one) -> the tool its agent called last.
   property var calling: ({})
-  // Inbox id -> the text its notify event carried, request id -> the reason
-  // its request event carried, and request id -> how it was answered
-  // ({option, who, body}); the snapshot has none of them.
+  // Inbox id -> the text its notify event carried, and request id -> how it
+  // was answered ({option, who, body}); the snapshot has neither.
   property var notes: ({})
-  property var reasons: ({})
   property var replies: ({})
   // The project's setup, as the config tool prints it: {root, agents, models,
   // workspaces, workspace, workflows, ...}; null until it answers.
@@ -220,7 +218,6 @@ Singleton {
     calling = {}
     threads = {}
     notes = {}
-    reasons = {}
     replies = {}
     tones = {}
     usage = { all: tally(), agents: {} }
@@ -603,7 +600,6 @@ Singleton {
       step(event.run_id, { name: "grant", ok: true, text: "granted " + body.name + (body.scope ? " for the " + body.scope : " for this work"), output: "", outcome: true })
       break
     case "request":
-      keep("reasons", event.request_id, body.reason || "")
       append("", { kind: "request", key: event.request_id, who: who, stamp: stamp, at: at, work: work })
       break
     case "reply":
