@@ -52,7 +52,9 @@ All are QML on Quickshell and share `apps/kit`:
   shortened to its short name or its icon when the names do not fit, which
   the mailbox's command bar uses too; and `FilePicker` and `FileChip`,
   the files a message carries and a file attached in a conversation; and
-  `Prose`, what an agent wrote as Markdown, its web addresses, bare or
+  `Prose`, what an agent wrote as Markdown as it was written, each line
+  break kept and a line after a list that is no item of it a paragraph of
+  its own, rather than more of the last item; its web addresses, bare or
   linked, links in the accent that the pointer turns over, Tab reaches,
   Left and Right pick and Enter opens with `xdg-open`, only http and https.
   It knows nothing of Omunculus.
