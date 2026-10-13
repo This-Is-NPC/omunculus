@@ -44,7 +44,7 @@ ColumnLayout {
       Layout.preferredWidth: 0
       spacing: 6
       TraceButton { id: backButton; dense: true; role: "navigation"; icon: "chevron-left"; text: "BACK"; tip: "esc"; onClicked: Omunculus.view = "start" }
-      TraceButton { id: newButton; dense: true; role: "navigation"; icon: "plus"; text: "NEW CONVERSATION"; tip: "n"; onClicked: Omunculus.createConversation() }
+      TraceButton { id: newButton; dense: true; role: "navigation"; icon: "plus"; text: "NEW CONVERSATION"; tip: "n"; onClicked: Omunculus.startConversation() }
     }
     Label {
       Layout.alignment: Qt.AlignTop | Qt.AlignRight

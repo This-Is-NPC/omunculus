@@ -57,7 +57,7 @@ ShellRoot {
         Masthead {
           Layout.fillWidth: true
           Layout.fillHeight: false
-          section: panel.current === "history" ? "conversations"
+          section: panel.current === "history" ? "conversations" : panel.current === "pick" ? "new conversation"
             : panel.current !== "conversation" ? Omunculus.project
             : panel.pane === "map" ? "agents" : panel.pane === "log" ? "log" : Omunculus.title
           StatusLine {
@@ -131,7 +131,7 @@ ShellRoot {
                 text: "NEW CONVERSATION"
                 enabled: Omunculus.connected
                 tip: "n"
-                onClicked: Omunculus.createConversation()
+                onClicked: Omunculus.startConversation()
               }
               TraceButton {
                 id: historyButton
@@ -166,6 +166,19 @@ ShellRoot {
             HistoryView { anchors.fill: parent; active: parent.shown }
           }
 
+          // Whom a new conversation is with.
+          Stage {
+            anchors.fill: parent
+            shown: panel.current === "pick"
+            AgentPicker {
+              anchors.fill: parent
+              focus: parent.shown
+              onVisibleChanged: if (visible) forceActiveFocus()
+              onPicked: name => Omunculus.createConversation(name)
+              onBack: Omunculus.view = "start"
+            }
+          }
+
           // The conversation on screen. The keyboard starts in its composer.
           Stage {
             anchors.fill: parent
@@ -192,7 +205,7 @@ ShellRoot {
   // `quickshell ipc --path apps/console call omunculus <function>`, e.g. from a shortcut.
   IpcHandler {
     target: "omunculus"
-    function newConversation(): void { Omunculus.createConversation() }
+    function newConversation(): void { Omunculus.startConversation() }
     function conversations(): void { if (Omunculus.conversationId === "") Omunculus.openHistory() }
     function open(conversationId: string): void { Omunculus.open(conversationId) }
     function agents(): void { if (Omunculus.conversationId !== "") panel.pane = "map" }

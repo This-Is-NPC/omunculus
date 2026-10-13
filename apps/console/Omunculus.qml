@@ -19,12 +19,18 @@ Singleton {
   readonly property string project: Quickshell.env("OMUNCULUS_PROJECT")
   readonly property string base: "/v1/projects/" + project
   property bool connected: false
-  // "start", "history", or "" while a conversation is on screen.
+  // "start", "pick" (choosing whom to talk with), "history", or "" while a
+  // conversation is on screen.
   property string view: "start"
   property var conversations: []
   // Conversation id -> {title, running, waiting}, read from its snapshot.
   property var summaries: ({})
   property string conversationId: ""
+  // The agent the conversation on screen is with: the one its first message
+  // named, or the one picked for a new one; every message names it again.
+  property string agent: ""
+  // Whom a new conversation may be with: the agents of depth 0 not only in workflows.
+  readonly property var talkable: setup ? setup.agents.filter(each => each.depth === 0 && !each.workflow_only) : []
   readonly property var conversation: conversations.find(item => item.id === conversationId) || null
   readonly property string title: conversationId === "" ? "" : (summaries[conversationId] || {}).title || "new conversation"
   property var works: []
@@ -175,15 +181,31 @@ Singleton {
     loadConversations()
   }
 
-  function createConversation() {
+  // A new conversation starts by choosing whom it is with.
+  function startConversation() { view = "pick" }
+
+  function createConversation(name) {
     call("POST", base + "/conversations", {}, true, data => {
       loadConversations()
       open(data.id)
+      agent = name
     })
+  }
+
+  // The file of an agent's image, as a url, or "" while it has none or it is
+  // being fetched.
+  function imageOf(name) { return images.source(name) }
+  AgentImages {
+    id: images
+    http: http
+    socket: root.socket
+    base: root.base
+    agents: root.setup ? root.setup.agents : []
   }
 
   function open(id) {
     conversationId = id
+    agent = ""
     view = ""
     cursor = ""
     rows = {}
@@ -253,6 +275,8 @@ Singleton {
     const body = { message: value }
     if (work)
       body.work_id = work
+    else if (agent !== "")
+      body.agent = agent
     call("POST", base + "/conversations/" + conversationId + "/messages", body, true, () => {})
   }
 
@@ -519,6 +543,8 @@ Singleton {
     meet([who, body.agent])
     switch (event.type) {
     case "prompt":
+      if (agent === "" && body.agent)
+        agent = body.agent
       append(key, { who: "you", mine: true, text: body.message || "", stamp: stamp, at: at })
       break
     case "comment":

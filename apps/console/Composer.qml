@@ -65,7 +65,7 @@ ColumnLayout {
       TextBox {
         id: entry
         Layout.fillWidth: true
-        placeholderText: composer.work === "" ? "say what you need" : "write to " + ((Omunculus.work(composer.work) || {}).assignee || "this work")
+        placeholderText: composer.work === "" ? (Omunculus.agent ? "say to " + Omunculus.agent + " what you need" : "say what you need") : "write to " + ((Omunculus.work(composer.work) || {}).assignee || "this work")
         background: Item {}
         onAccepted: composer.submit()
       }
