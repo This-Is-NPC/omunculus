@@ -187,6 +187,39 @@ defmodule Omunculus.Tool.ViewsTest do
     assert {:ok, %{}} == hydrate(conn, views, %{run_id: run, work_id: root})
   end
 
+  test "recent runs reads the project's last closed runs, newest first, with their work and events",
+       %{conn: conn} do
+    work = Fixtures.insert(conn, :works, %{title: "build", workflow: "page", stage: "review"})
+
+    older =
+      Fixtures.insert(conn, :runs, %{
+        status: "done",
+        work_id: work,
+        started_at: "2026-01-01T00:00:01Z",
+        finished_at: "2026-01-01T00:00:09Z"
+      })
+
+    newer = Fixtures.insert(conn, :runs, %{status: "done", started_at: "2026-01-01T00:00:02Z"})
+    Fixtures.insert(conn, :runs, %{started_at: "2026-01-01T00:00:03Z"})
+    call = Fixtures.insert(conn, :events, %{type: "tool", run_id: older, sequence: 1})
+
+    views = %{"runs" => %{"source" => "runs", "relation" => "recent", "limit" => 5}}
+
+    assert {:ok, %{"runs" => [%{id: ^newer, work_title: nil, events: []}, run]}} =
+             hydrate(conn, views, %{})
+
+    assert %{id: ^older, work_title: "build", work_workflow: "page", work_stage: "review"} = run
+    assert [%{id: ^call}] = run.events
+
+    assert {:ok, %{"runs" => [%{id: ^newer}]}} =
+             hydrate(conn, put_in(views, ["runs", "limit"], 1), %{})
+
+    for limit <- [nil, 0, "5"] do
+      table = %{"source" => "runs", "relation" => "recent", "limit" => limit}
+      assert {:error, _} = Views.parse(%{"runs" => Map.reject(table, &is_nil(elem(&1, 1)))})
+    end
+  end
+
   test "a view whose anchors are all absent is left out", %{conn: conn} do
     views = %{"comments" => %{"source" => "comments"}, "work" => %{"source" => "works"}}
     assert {:ok, %{}} == hydrate(conn, views, %{})

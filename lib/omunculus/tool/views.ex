@@ -27,7 +27,10 @@ defmodule Omunculus.Tool.Views do
   - `runs`: `relation` `last_closed` (from `work`) or `opener` (the run
     that opened the call's `request`), with its record, or `conversation`
     (from `run`), for a run without a work the closed runs of its
-    conversation that had none, oldest first, each with its record.
+    conversation that had none, oldest first, each with its record; or
+    `recent`, without an anchor, the project's last `limit` closed runs,
+    newest first, each with its work's title, state, workflow and stage
+    and its events.
   - `events`: `relation` `run`, the events of the call's run so far,
     `cause`, the event that made the call's run due, or `attachments`, the
     files attached in the run's conversation, oldest first, each as its
@@ -51,8 +54,9 @@ defmodule Omunculus.Tool.Views do
     `required`, in which case they come alone. `skills` are the Agent Skills the call's run has, each its `name`,
     `description` and `dir`.
 
-  Every read is of the call's conversation, through those relations only;
-  tools never open the store.
+  Every read is of the call's conversation, through those relations only,
+  but for the project's unread inbox and its recent runs; tools never open
+  the store.
   """
 
   alias Omunculus.Store
@@ -65,7 +69,8 @@ defmodule Omunculus.Tool.Views do
           states: [String.t()] | nil,
           since_last_run: boolean,
           include: [String.t()],
-          within: String.t() | nil
+          within: String.t() | nil,
+          limit: pos_integer | nil
         }
 
   @computed ~w(catalog workspaces agents paths grant_scopes skills)
@@ -97,7 +102,8 @@ defmodule Omunculus.Tool.Views do
       states: nil,
       since_last_run: false,
       include: [],
-      within: nil
+      within: nil,
+      limit: nil
     }
 
     with {:ok, from} <- string_list(table, "from"),
@@ -132,6 +138,18 @@ defmodule Omunculus.Tool.Views do
 
   defp source_spec("comments", table, spec) do
     with :ok <- only_keys(table, ~w(from)), do: {:ok, %{spec | from: ~w(work request inbox)}}
+  end
+
+  defp source_spec("runs", %{"relation" => "recent"} = table, spec) do
+    with :ok <- only_keys(table, ~w(relation limit)) do
+      case table["limit"] do
+        limit when is_integer(limit) and limit > 0 ->
+          {:ok, %{spec | relation: "recent", limit: limit}}
+
+        _ ->
+          {:error, {:invalid, "limit"}}
+      end
+    end
   end
 
   defp source_spec("runs", table, spec) do
@@ -314,6 +332,9 @@ defmodule Omunculus.Tool.Views do
 
   defp read(conn, %{source: "inbox", relation: "unread", from: []}, _scope),
     do: Store.unread_inbox(conn, nil)
+
+  defp read(conn, %{source: "runs", relation: "recent", limit: limit}, _scope),
+    do: Store.recent_runs(conn, limit)
 
   defp read(conn, %{source: "prompts", relation: "assembled", from: from}, scope) do
     with {:ok, run} <- assembled_run(conn, from, scope) do

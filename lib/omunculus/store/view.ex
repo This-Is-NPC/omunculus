@@ -168,6 +168,34 @@ defmodule Omunculus.Store.View do
     end)
   end
 
+  @doc """
+  The project's last `limit` closed runs, newest first, each with its
+  work's title, state, workflow and stage (nil without a work) and its
+  events.
+  """
+  @spec recent_runs(Omunculus.Store.Connection.t(), pos_integer) :: {:ok, [map]}
+  def recent_runs(conn, limit) do
+    with {:ok, runs} <-
+           Query.all(
+             conn,
+             """
+             SELECT runs.*, works.title AS work_title, works.state AS work_state,
+                    works.workflow AS work_workflow, works.stage AS work_stage
+             FROM runs LEFT JOIN works ON works.id = runs.work_id
+             WHERE runs.status = 'done'
+             ORDER BY runs.started_at DESC, runs.id DESC LIMIT ?
+             """,
+             [limit]
+           ) do
+      Enum.reduce_while(runs, {:ok, []}, fn run, {:ok, acc} ->
+        case replay(conn, {:run, run.id}) do
+          {:ok, events} -> {:cont, {:ok, acc ++ [Map.put(run, :events, events)]}}
+          error -> {:halt, error}
+        end
+      end)
+    end
+  end
+
   @doc "The run that opened a request, with its record."
   @spec opener_run(Omunculus.Store.Connection.t(), String.t()) :: {:ok, map | nil}
   def opener_run(conn, request_id) do

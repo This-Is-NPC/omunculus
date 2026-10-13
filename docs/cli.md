@@ -207,6 +207,21 @@ Print the project's catalog as JSON, for a client to list: under
 with its `command` and `secrets`, since a server's tools are known only
 once a run starts it.
 
+## `omunculus runs`
+
+- **Usage:** `omunculus runs [--agent <name>] [--limit <n>] [--run <id>]`
+- **Effect:** read-only
+
+Print the project's last closed runs, newest first, as many as its
+manifest's `recent` view reads: for each, its agent and depth, when it
+started and how long it took, its work with the workflow stage, what made
+it due (`via`), how it ended — the tool whose chain reached `end`, or that
+the model stopped without it — its calls by name, each failed or refused
+call with the start of its output, and the model's replies with the
+tokens and cost their providers reported. `agent` keeps that agent's
+runs, `limit` fewer of them; `run`, an id or the start of one, prints
+that run call by call instead.
+
 ## `omunculus omapass`
 
 - **Usage:** `omunculus omapass`
