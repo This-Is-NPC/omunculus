@@ -21,7 +21,7 @@ request_routes`, as the default preset does with
 owner, not whoever the default route passes through.
 
 Only the steward proposes importing a pack: the auditor and the refiner
-are granted the `config` group, which brings `propose_pack`, and deny it.
+are granted `config`, `overview` and `propose_config`, not `propose_pack`.
 
 Their skills:
 

@@ -234,6 +234,51 @@ defmodule Omunculus.Tool.CatalogTest do
     assert Catalog.groups(catalog) == %{}
   end
 
+  test "a tool named as a group is skipped and logged, its group kept", %{
+    project_dir: project_dir
+  } do
+    write_tool(project_dir, "read", """
+    name = "read"
+    kind = "tool"
+    groups = ["fs.read"]
+    command = ["./run"]
+    """)
+
+    write_tool(project_dir, "fs.read", """
+    name = "fs.read"
+    kind = "tool"
+    command = ["./run"]
+    """)
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        catalog = Catalog.discover(tools(project_dir))
+        assert Map.keys(catalog) == ["read"]
+        assert Catalog.groups(catalog) == %{"fs.read" => ["read"]}
+      end)
+
+    assert log =~ "skipping tool fs.read: its name is the group of read"
+  end
+
+  test "the builtin config and prompt tools are not groups; setup and assembly are" do
+    catalog = Catalog.unconfigured()
+    groups = Catalog.groups(catalog)
+
+    assert groups["assembly"] == ["assemble"]
+    refute Map.has_key?(groups, "config")
+    refute Map.has_key?(groups, "prompt")
+
+    assert groups["setup"] == [
+             "config",
+             "overview",
+             "propose_config",
+             "propose_pack"
+           ]
+
+    assert Map.has_key?(catalog, "config")
+    assert Map.has_key?(catalog, "prompt")
+  end
+
   test "builtin fs.read is find, grep, ls and read" do
     catalog = Catalog.unconfigured()
 

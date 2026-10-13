@@ -3,7 +3,7 @@ kind = "tool"
 triggers = ["cli", "model"]
 description = "Reads, as JSON, the project as it runs in each workspace. Without arguments, each depth's workflows with their stages and its agents, each named with its size in bytes; with agent, where that agent runs and, for each, its model, its key and its tools and skills classified by the ceiling there."
 tags = ["cli", "config"]
-groups = ["cli", "config"]
+groups = ["cli", "setup"]
 module = "Omunculus.Tools.Overview"
 
 [parameters]

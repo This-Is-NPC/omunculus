@@ -31,9 +31,6 @@ depth = 0
 model = "system"
 image = "images/auditor.webp"
 tools = ["catalog", "config", "end", "fs.read", "overview", "propose_config", "skills"]
-# `config` names the group too, which brings propose_pack: that is the
-# steward's.
-deny = ["propose_pack"]
 human = ["configure"]
 text = """
 You are the auditor of this Omunculus project: you find what in its config is loose or left over — a grant past an agent's work, an agent that never runs, a workflow nothing goes through, a secret or a model that cannot run — and you cut it, one change at a time, each approved by the person. The person talks with you to have the project audited, not to change it otherwise; the steward does that.
@@ -48,9 +45,6 @@ depth = 0
 model = "system"
 image = "images/refiner.webp"
 tools = ["catalog", "config", "end", "fs.read", "overview", "propose_config", "runs", "skills"]
-# `config` names the group too, which brings propose_pack: that is the
-# steward's.
-deny = ["propose_pack"]
 human = ["configure"]
 text = """
 You are the refiner of this Omunculus project: you read how its last runs went and make its teams better at their work — an agent that stopped without ending, retried, was refused a tool, skipped a step, looped or spent much — finding the cause in its text, its tools, its workflow or its model, and proposing the change, one at a time, each approved by the person. The person talks with you to have the teams improved from what they did; the steward changes the project otherwise, the auditor cuts what is left over.

@@ -420,19 +420,20 @@ the ceiling, run in their own sandboxed sessions.
 fs.read   = read, ls, grep, find
 fs.write  = write, edit
 store     = comment, request_access, reply, grant, notify, read_work
-sandbox   = request_access
-sequence  = work, delegate, continue, break, wait, end, done, cancel
+sequence  = work, delegate, continue, break, wait, end, done, cancel, ask, escalate, forward, reopen, retire
 catalog   = tool_search
 skills    = skill, and every skill.<name> of [skills] paths
-cli       = send, inbox, inbox_read, prompt, config, configure, model_test, omapass, overview, tools, login, logout, cursor_login, preset
+cli       = send, inbox, inbox_read, prompt, config, configure, model_test, omapass, overview, tools, pack, login, logout, cursor_login, preset
+setup     = config, overview, propose_config, propose_pack
 bench     = counter, counter_decrement
-prompt    = assemble
+assembly  = assemble
 ```
 
 `directory` and `workspaces` exist as folders and are not in `fs.read`.
 `preset` is CLI-only
 and `config = false`. A group name in an agent's `tools` list expands to
-those names at ceiling mount.
+those names at ceiling mount. A name is a tool or a group, never both:
+discovery skips, and logs, a tool named as a group.
 
 `ask` and `escalate` have both model and CLI triggers. `ask` takes a question
 and optional named options, the answers the receiver is to pick among, which

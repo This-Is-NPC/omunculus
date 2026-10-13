@@ -3,7 +3,7 @@ kind = "tool"
 triggers = ["harness"]
 description = "Builds the assembled prompt of a run from its views."
 tags = ["prompt"]
-groups = ["prompt"]
+groups = ["assembly"]
 module = "Omunculus.Tools.Assemble"
 
 [parameters]

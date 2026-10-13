@@ -121,7 +121,9 @@ module = "Omunculus.Tools.Read"
 
 Discovery walks `paths` in order, then the skills of `[skills] paths`
 ([Skills](#skills)), then `[[mcp.servers]]`, then inline
-`[tools.<name>]` tables. The last declaration of a `name` wins. There is
+`[tools.<name>]` tables. The last declaration of a `name` wins; a tool
+named as a group (a name in some manifest's `groups`) is skipped and
+logged, so a name in a ceiling list is a tool or a group. There is
 no magical `priv/tools`, `~/.omunculus/tools` or `<project>/tools` outside
 what `paths` lists, with one exception: a name the command line or the
 harness dispatches (`send`, `assemble`, …) that the catalog does not hold

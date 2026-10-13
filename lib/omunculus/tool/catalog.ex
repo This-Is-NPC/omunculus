@@ -5,7 +5,8 @@ defmodule Omunculus.Tool.Catalog do
   skills of `tools.skills` (`Omunculus.Skills`, named `skill.<name>`), then
   `[[mcp.servers]]`, then inline `[tools.<name>]` tables; the last
   declaration of a `name` wins. Also derives the group map of spec §9.5 from the manifests'
-  own `groups` field.
+  own `groups` field. A tool named as a group is refused, so that a name
+  in a ceiling list is either a tool or a group.
   """
 
   require Logger
@@ -46,6 +47,21 @@ defmodule Omunculus.Tool.Catalog do
     |> Map.merge(Skills.discover(skills))
     |> discover_mcp(servers, policy, secrets)
     |> Map.merge(inline)
+    |> refuse_group_names()
+  end
+
+  defp refuse_group_names(catalog) do
+    catalog
+    |> groups()
+    |> Enum.filter(fn {group, _members} -> Map.has_key?(catalog, group) end)
+    |> Enum.reduce(catalog, fn {group, members}, acc ->
+      Logger.warning(
+        "skipping tool #{group}: its name is the group of #{Enum.join(members, ", ")}; " <>
+          "rename the tool or the group"
+      )
+
+      Map.delete(acc, group)
+    end)
   end
 
   defp discover_folders(acc, roots) do

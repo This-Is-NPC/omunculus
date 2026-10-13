@@ -24,7 +24,7 @@ the config it would make loads.
 
 ## Cutting one tool of a group
 
-A name in `tools` may be a group, which grants all its members: `config`
+A name in `tools` may be a group, which grants all its members: `setup`
 brings `config`, `overview`, `propose_config` and `propose_pack`
 (`overview` with `agent` shows each group's members). To take
 one member away and keep the rest, list it in the agent's `deny`, which
@@ -33,7 +33,7 @@ or to spell out the members that stay:
 
 ```toml
 [agents.auditor]
-tools = ["config", "end", "skills"]
+tools = ["setup", "end", "skills"]
 deny = ["propose_pack"]
 ```
 
