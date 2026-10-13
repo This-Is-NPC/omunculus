@@ -73,14 +73,23 @@ apps/kit/run console --config server.toml --project demo
 
 `--project` may be left out when the registry holds one project.
 
-It lists the conversations and follows the open one live as a chat between
-you and the root agent: what each of you said and, on a line below each run,
-what the agent did. A map shows the agents at work, each work handed down
-joined to the one it came from; whatever an agent asked and still waits for,
-and the notes it left you, hang from its node, with the options to answer.
-The composer counts what waits on you and leads to the map. Opening a node
-shows what that agent said and did, and writes to it. What the conversation
-cost opens from its masthead. `apps/kit/run studio` opens the project's
+From a checkout, `mise run up` starts the development server on `dev/`,
+whose agents use `openai/gpt-6-luna` through OpenRouter with the
+`OPENROUTER_API_KEY` of `.env`, and the agency the packs under `packs/`
+make; with it running, `mise run dev:console`, `dev:studio` and
+`dev:mailbox` open the apps on it. `mise run dev:reset` starts both
+projects over.
+
+It lists the conversations and follows the open one live in three pages,
+chosen by number or from the tabs down the left, each with its commands in a
+bar. The conversation page is a chat between you and the root agent: what
+each of you said and, on a line below each run, what the agent did. The map
+shows the agents at work, each work handed down joined to the one it came
+from; whatever an agent asked and still waits for, and the notes it left
+you, hang from its node, with the options to answer. The composer counts
+what waits on you and leads to the map. Opening a node shows what that agent
+said and did, and writes to it. The log is every event, a row each. What the
+conversation cost opens from the conversation page's bar. `apps/kit/run studio` opens the project's
 settings, `apps/kit/run mailbox` a mailbox over every project. They need
 [Quickshell](https://quickshell.org/), `curl` with WebSocket support and a
 Wayland session.

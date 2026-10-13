@@ -31,7 +31,17 @@ ModalDialog {
       ["/", "search"]
     ]],
     ["conversation", [
-      ["Esc", "back from a work, or to the conversations"]
+      ["1 · 2 · 3", "its pages: the conversation, the map, the log"],
+      ["Ctrl+1 · Ctrl+2 · Ctrl+3", "the same, from a field being written"],
+      ["Ctrl+Tab · Ctrl+Shift+Tab", "the next or the previous page"],
+      ["Esc", "close what the page has picked, or back to the conversations"]
+    ]],
+    ["map", [
+      ["F", "the whole map in view"]
+    ]],
+    ["log", [
+      ["/", "filter the events"],
+      ["Esc", "empty the filter, then back to the rows"]
     ]],
     ["timeline", [
       ["↑ · ↓ · PgUp · PgDn", "move between entries"],

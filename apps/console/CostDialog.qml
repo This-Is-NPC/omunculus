@@ -3,10 +3,10 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
 
-// CostDialog is what the conversation on screen has used, opened only from its
-// masthead: the model calls, the tokens read, read from cache and written, and
-// what they cost, in all and by agent. A cost shows only for calls whose
-// provider reported one.
+// CostDialog is what the conversation on screen has used, opened only from the
+// bar of its conversation page: the model calls, the tokens read, read from
+// cache and written, and what they cost, in all and by agent. A cost shows
+// only for calls whose provider reported one.
 ModalDialog {
   id: dialog
 

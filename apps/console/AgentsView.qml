@@ -14,7 +14,8 @@ import "kit/ui"
 // of its stages, its card at the stage it is at. A link flows while the agent below runs. What
 // an agent asked and still waits for is an arrow from it to whoever decides,
 // named after what it asked. Picking a node opens it beside the map: to
-// answer what it asked, read what it did, and write to it.
+// answer what it asked, read what it did, and write to it. A card the
+// keyboard reaches comes into view; F frames the whole map.
 Item {
   id: view
 
@@ -24,6 +25,8 @@ Item {
   signal leave()
 
   function pick(key) { picked = key }
+
+  function fit() { map.fit() }
 
   // Picks the first node with something waiting on you.
   function pickPending() {
@@ -181,6 +184,25 @@ Item {
       picked = null
     else
       leave()
+  }
+  Keys.onPressed: event => {
+    if (event.key !== Qt.Key_F)
+      return
+    fit()
+    event.accepted = true
+  }
+
+  // The item the keyboard reaches on the map comes into the room left of the
+  // inspector, as its box in the map's coordinates.
+  readonly property Item focused: Window.activeFocusItem
+  onFocusedChanged: {
+    for (let item = focused; item; item = item.parent) {
+      if (item === map.world) {
+        const at = focused.mapToItem(map.world, 0, 0)
+        map.bringIntoView({ x: at.x, y: at.y, width: focused.width, height: focused.height })
+        return
+      }
+    }
   }
 
   // Picking a node brings it into the room left of the inspector.

@@ -7,7 +7,8 @@ import "kit/ui"
 // each — when, what kind, who, its run and work, and what it says on one line.
 // A filter keeps the rows whose text holds it; a row picked shows the whole
 // event below, as the server sent it. The table follows the newest row while
-// it is at the end.
+// it is at the end. `/` goes to the filter; Esc there empties it, then goes
+// back to the rows; Esc on them closes the event picked, then leaves.
 Item {
   id: view
 
@@ -24,8 +25,29 @@ Item {
 
   function short(id) { return id ? id.slice(0, 8) : "" }
 
-  Keys.onEscapePressed: picked !== null ? picked = null : view.leave()
-  onActiveFocusChanged: if (activeFocus) table.forceActiveFocus()
+  function focusFilter() { filterBox.forceActiveFocus() }
+
+  // The event picked, whole, or the rows shown, a line each.
+  function copy() {
+    Omunculus.copy(picked !== null ? JSON.stringify(picked.event, null, 2)
+      : rows.map(line => [line.time, line.type, line.who, line.run, line.work, line.what].join("\t")).join("\n"))
+  }
+
+  function back() {
+    if (picked !== null)
+      picked = null
+    else
+      leave()
+  }
+
+  Keys.onEscapePressed: back()
+  Keys.onPressed: event => {
+    if (event.text !== "/")
+      return
+    focusFilter()
+    event.accepted = true
+  }
+  onActiveFocusChanged: if (activeFocus) table.focusRows()
 
   ColumnLayout {
     anchors.fill: parent
@@ -35,10 +57,21 @@ Item {
       Layout.fillWidth: true
       spacing: 10
       TextBox {
+        id: filterBox
         Layout.fillWidth: true
         dense: true
         placeholderText: "filter by kind, agent, run, work or text"
         onTextEdited: view.filter = text
+        Keys.onEscapePressed: {
+          if (text) {
+            clear()
+            view.filter = ""
+          } else {
+            table.focusRows()
+          }
+        }
+        Keys.onDownPressed: table.focusRows()
+        Keys.onReturnPressed: table.focusRows()
       }
       Label {
         text: view.rows.length + (view.filter.trim() ? " of " + Omunculus.log.length : "") + " events"
@@ -76,7 +109,7 @@ Item {
       selectedId: view.picked ? view.picked.id : ""
       emptyText: Omunculus.replaying ? "reading the conversation" : "no event matches"
       onOpened: line => view.picked = line
-      onBackRequested: view.leave()
+      onBackRequested: view.back()
     }
 
     // The event picked, whole.
@@ -93,7 +126,7 @@ Item {
         spacing: 10
         Label { text: view.picked ? view.picked.type.toUpperCase() : ""; color: Theme.primary; font.pixelSize: 10; font.letterSpacing: 2 }
         Label { Layout.fillWidth: true; text: view.picked ? view.picked.at : ""; color: Theme.dim; font.pixelSize: 10 }
-        IconButton { name: "copy"; tip: "copy the event"; onClicked: Omunculus.copy(detail.text) }
+        IconButton { name: "copy"; tip: "copy the event"; onClicked: view.copy() }
         IconButton { name: "close"; tip: "close (Esc)"; onClicked: view.picked = null }
       }
 

@@ -9,7 +9,7 @@ import QtQuick.Layouts
 Rectangle {
   id: bar
 
-  // [{text, short, icon, tip, role, run, shown}], in order.
+  // [{text, short, icon, tip, role, tone, enabled, run, shown}], in order.
   property var commands: []
   // Changes when the page does, so the commands arrive again.
   property int section: 0
@@ -76,6 +76,7 @@ Rectangle {
           required property var modelData
           dense: true
           role: modelData.role || "progress"
+          tone: modelData.tone || (role === "guarded" ? Theme.error : Theme.primary)
           icon: modelData.icon || ""
           text: bar.compact ? modelData.short || modelData.text : modelData.text
           tip: modelData.tip || ""

@@ -6,8 +6,8 @@ import "kit/ui"
 
 ShellRoot {
   // The omunculus window. Without a conversation: start one, or read the
-  // project's. With one: whether agents work in it, its timeline, and a
-  // composer to write to it.
+  // project's. With one: its pages down the left as a carousel, the one on
+  // screen beside the bar of its commands, and the page under them.
   FloatingWindow {
     id: panel
 
@@ -22,12 +22,21 @@ ShellRoot {
     // Below this height, the window keeps its room for the conversation: tighter
     // margins, and the targets of the composer only as the one picked.
     readonly property bool short: height < 560
-    // What the conversation shows: "chat", the "map" of its agents, or its
-    // "log"; another conversation on screen starts on the chat.
-    property string pane: "chat"
+    // The page of the conversation on screen, one of its view's pages;
+    // another conversation on screen starts on the first.
+    property string page: conversationView.pages[0]
     Connections {
       target: Omunculus
-      function onConversationIdChanged() { panel.pane = "chat" }
+      function onConversationIdChanged() { panel.page = conversationView.pages[0] }
+    }
+
+    // Chooses a page by its place, round from either end, and gives it the
+    // keyboard, so the carousel folds away.
+    function choose(index) {
+      const pages = conversationView.pages
+      page = pages[(index + pages.length) % pages.length]
+      rail.pinned = false
+      Qt.callLater(conversationView.focusEntry)
     }
 
     readonly property string current: Omunculus.conversationId !== "" ? "conversation" : Omunculus.view
@@ -59,42 +68,14 @@ ShellRoot {
           Layout.fillHeight: false
           section: panel.current === "history" ? "conversations" : panel.current === "pick" ? "new conversation"
             : panel.current !== "conversation" ? Omunculus.project
-            : panel.pane === "map" ? "agents" : panel.pane === "log" ? "log" : Omunculus.title
+            : Omunculus.title
+          // With a conversation on screen, the page's bar gives the readout.
           StatusLine {
-            message: Omunculus.message
+            message: panel.current === "conversation" ? "" : Omunculus.message
             error: Omunculus.messageIsError
-            offline: !Omunculus.connected
+            offline: panel.current !== "conversation" && !Omunculus.connected
             count: Omunculus.noticeCount
             maxWidth: Math.max(0, panel.width - 480)
-          }
-          IconButton {
-            visible: panel.current === "conversation"
-            name: "cost"
-            tip: "what this conversation cost"
-            onClicked: cost.open()
-          }
-          IconButton {
-            visible: panel.current === "conversation"
-            name: "map"
-            tip: panel.pane === "map" ? "back to the chat" : "the agents at work"
-            highlighted: panel.pane === "map"
-            count: Omunculus.pending
-            onClicked: panel.pane = panel.pane === "map" ? "chat" : "map"
-          }
-          IconButton {
-            visible: panel.current === "conversation"
-            name: "list"
-            tip: panel.pane === "log" ? "back to the chat" : "every event, as a log"
-            highlighted: panel.pane === "log"
-            onClicked: panel.pane = panel.pane === "log" ? "chat" : "log"
-          }
-          // Closing the conversation on screen goes back to the conversations;
-          // its agents go on.
-          IconButton {
-            visible: panel.current === "conversation"
-            name: "close"
-            tip: "back to the conversations"
-            onClicked: { panel.pane = "chat"; Omunculus.leave() }
           }
         }
 
@@ -179,18 +160,67 @@ ShellRoot {
             }
           }
 
-          // The conversation on screen. The keyboard starts in its composer.
+          // The conversation on screen: its pages, the bar of the one shown,
+          // and the page. The keyboard starts in its composer.
           Stage {
             anchors.fill: parent
             shown: panel.current === "conversation"
+
             ConversationView {
               id: conversationView
-              anchors.fill: parent
+              anchors { left: bar.left; right: parent.right; top: bar.bottom; topMargin: panel.short ? 10 : 16; bottom: parent.bottom }
               active: parent.shown
               compact: panel.compact
               short: panel.short
-              pane: panel.pane
-              onPaneChosen: pane => panel.pane = pane
+              page: panel.page
+              onPageChosen: page => panel.page = page
+              onCostWanted: cost.open()
+            }
+
+            TabRail {
+              id: rail
+              // Over the bar and the page while it unfolds.
+              z: 1
+              tabs: conversationView.pages.map(name => ({ name: name }))
+              current: conversationView.pages.indexOf(panel.page)
+              onChosen: index => panel.choose(index)
+            }
+
+            PageBar {
+              id: bar
+              anchors { left: parent.left; leftMargin: rail.foldedWidth + 16; right: parent.right }
+              height: rail.headHeight
+              commands: conversationView.commands
+              section: rail.current
+              title: panel.page
+              message: Omunculus.message
+              error: Omunculus.messageIsError
+              offline: !Omunculus.connected
+              notices: Omunculus.noticeCount
+            }
+
+            // 1 to 3, or Ctrl with them, choose a page (a field being written
+            // keeps its digits); Ctrl+Tab and Ctrl+Shift+Tab turn the carousel.
+            Repeater {
+              model: conversationView.pages.length
+              delegate: Item {
+                required property int index
+                Shortcut {
+                  enabled: panel.current === "conversation" && !cost.visible && !shortcuts.visible
+                  sequences: [String(index + 1), "Ctrl+" + (index + 1)]
+                  onActivated: panel.choose(index)
+                }
+              }
+            }
+            Shortcut {
+              enabled: panel.current === "conversation" && !cost.visible && !shortcuts.visible
+              sequence: "Ctrl+Tab"
+              onActivated: panel.choose(rail.current + 1)
+            }
+            Shortcut {
+              enabled: panel.current === "conversation" && !cost.visible && !shortcuts.visible
+              sequences: ["Ctrl+Shift+Tab", "Ctrl+Backtab"]
+              onActivated: panel.choose(rail.current - 1)
             }
           }
         }
@@ -208,8 +238,10 @@ ShellRoot {
     function newConversation(): void { Omunculus.startConversation() }
     function conversations(): void { if (Omunculus.conversationId === "") Omunculus.openHistory() }
     function open(conversationId: string): void { Omunculus.open(conversationId) }
-    function agents(): void { if (Omunculus.conversationId !== "") panel.pane = "map" }
-    function log(): void { if (Omunculus.conversationId !== "") panel.pane = "log" }
+    // A page of the conversation on screen, by its name.
+    function page(name: string): void { if (Omunculus.conversationId !== "" && conversationView.pages.includes(name)) panel.page = name }
+    function agents(): void { page("map") }
+    function log(): void { page("log") }
     function send(message: string): void { Omunculus.send(message) }
   }
 }
