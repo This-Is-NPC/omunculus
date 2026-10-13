@@ -1023,7 +1023,7 @@ defmodule Omunculus.ConfigTest do
     {:ok, config} = Config.load(default_preset())
     assert {:ok, {"worker", %{depth: 1}}} = Config.agent_at_depth(config, 1)
 
-    assert {:error, {:agent_required, 0, ["concierge", "steward"]}} =
+    assert {:error, {:agent_required, 0, ["auditor", "concierge", "steward"]}} =
              Config.agent_at_depth(config, 0)
   end
 

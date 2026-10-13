@@ -8,16 +8,19 @@ the project's work.
 | Agent | Depth | Role |
 |---|---|---|
 | steward | 0 | keeps the project's structure: designs teams, fits them together, changes the config |
+| auditor | 0 | finds what in the config is loose or left over, and proposes cutting it |
 
-Every change the steward makes goes to the person as a request: the
+Every change the steward or the auditor makes goes to the person as a request: the
 config it would make is loaded first, so a change that would break the
 file never reaches them, and it applies only once they approve it and only
 while the file is as it was when proposed.
 
-Its skills:
+Their skills:
 
 - `team-design`: a new team, written as a pack under `packs/<name>/` of
   the workspace, with the tasks that show it works.
 - `team-composition`: teams fitted together — at which depth each works,
   on which models, and what one tells another.
 - `configure`: any other change to the config, one item at a time.
+- `audit`: the auditor's — grants past the work, what never runs or cannot
+  run, each cut proposed on its own.

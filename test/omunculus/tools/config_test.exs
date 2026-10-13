@@ -13,7 +13,8 @@ defmodule Omunculus.Tools.ConfigTest do
   test "describes the default preset's agents, model and workflow" do
     described = describe(Path.join(Fixtures.preset_dir("default"), "omunculus.toml"))
 
-    assert [%{"name" => "concierge", "depth" => 0, "model" => "fake"} | _] = described["agents"]
+    assert %{"depth" => 0, "model" => "fake"} =
+             Enum.find(described["agents"], &(&1["name"] == "concierge"))
 
     assert %{"name" => "worker", "depth" => 1, "human" => ["sandbox.write"]} =
              Enum.find(described["agents"], &(&1["name"] == "worker"))
