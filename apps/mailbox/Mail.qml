@@ -258,7 +258,7 @@ Singleton {
     for (const item of items) {
       if (known.some(other => other.id === item.id))
         continue
-      http.call(item.socket, "POST", "/v1/cli", { argv: ["config"] }, false, data => {
+      http.call(item.socket, "POST", "/v1/cli", { argv: ["config", "--whole", "true"] }, false, data => {
         const agents = JSON.parse(data.output).agents.filter(agent => agent.depth === 0 && !agent.workflow_only).map(agent => agent.name)
         projects = projects.map(other => other.id === item.id ? Object.assign({}, other, { agents: agents }) : other)
       })

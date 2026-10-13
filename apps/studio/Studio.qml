@@ -65,7 +65,7 @@ Singleton {
   }
 
   function loadSetup() {
-    call("POST", "/v1/cli", { argv: ["config"] }, false, data => setup = JSON.parse(data.output))
+    call("POST", "/v1/cli", { argv: ["config", "--whole", "true"] }, false, data => setup = JSON.parse(data.output))
   }
 
   // An agent's colour, by its place among the setup's agents.
@@ -186,10 +186,10 @@ Singleton {
     call("GET", "/v1/projects", null, false, data => {
       projects = data.items
       for (const each of projects) {
-        http.call(each.socket, "POST", "/v1/cli", { argv: ["overview"] }, false, data => {
+        http.call(each.socket, "POST", "/v1/cli", { argv: ["overview", "--whole", "true"] }, false, data => {
           overviews = Object.assign({}, overviews, { [each.id]: JSON.parse(data.output) })
         }, reason => overviews = Object.assign({}, overviews, { [each.id]: { error: reason } }))
-        http.call(each.socket, "POST", "/v1/cli", { argv: ["config"] }, false, data => {
+        http.call(each.socket, "POST", "/v1/cli", { argv: ["config", "--whole", "true"] }, false, data => {
           packsOf = Object.assign({}, packsOf, { [each.id]: JSON.parse(data.output).packs })
         }, () => {})
       }

@@ -142,7 +142,7 @@ Singleton {
   // Reads the project's setup through the config tool on the local socket.
   function loadSetup() {
     const on = project
-    cli(["config"], output => {
+    cli(["config", "--whole", "true"], output => {
       if (on === project)
         setup = JSON.parse(output)
     })
@@ -226,7 +226,7 @@ Singleton {
       for (const place of data.items) {
         loadWorks(place)
         loadBoardConversations(place)
-        http.call(place.socket, "POST", "/v1/cli", { argv: ["config"] }, false, answer => keep("boardSetups", place.id, JSON.parse(answer.output)))
+        http.call(place.socket, "POST", "/v1/cli", { argv: ["config", "--whole", "true"] }, false, answer => keep("boardSetups", place.id, JSON.parse(answer.output)))
       }
       watching = true
     })
