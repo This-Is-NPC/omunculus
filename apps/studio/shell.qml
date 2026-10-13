@@ -81,6 +81,7 @@ ShellRoot {
     // Chooses a section and gives it the keyboard, so the carousel folds
     // away and the arrows reach what is on screen.
     function choose(index) {
+      settings.forget()
       page = (index + sections.length) % sections.length
       rail.pinned = false
       Qt.callLater(() => page === 0 ? flow.forceActiveFocus() : settings.takeFocus())
@@ -225,12 +226,12 @@ ShellRoot {
         }
       }
 
-      // Ctrl+1 to Ctrl+8 choose a section; Ctrl+Tab and Ctrl+Shift+Tab turn the carousel.
+      // 1 to 8, or Ctrl with them, choose a section (a field being written keeps its digits); Ctrl+Tab and Ctrl+Shift+Tab turn the carousel.
       Repeater {
         model: window.sections.length
         delegate: Item {
           required property int index
-          Shortcut { sequence: "Ctrl+" + (index + 1); onActivated: window.choose(index) }
+          Shortcut { sequences: [String(index + 1), "Ctrl+" + (index + 1)]; onActivated: window.choose(index) }
         }
       }
       Shortcut { sequence: "Ctrl+Tab"; onActivated: window.choose(window.page + 1) }

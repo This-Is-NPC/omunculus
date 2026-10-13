@@ -94,6 +94,17 @@ Item {
     if (section && (pending[section] || []).includes(id))
       drop(section, id)
     shown = setOf(shown, index, "")
+    // Back from a followed item: to the screen it was followed from.
+    if (history.length > 0) {
+      const from = history[history.length - 1]
+      history = history.slice(0, -1)
+      wanted(from.section)
+      if (from.id !== "")
+        open(from.section, from.id, false)
+      // The screen come back to still holds the keyboard's place.
+      Qt.callLater(takeFocus)
+      return
+    }
     // Back on the table, the keyboard is on its rows again.
     Qt.callLater(() => tables[index] && tables[index].focusRows())
   }
@@ -128,10 +139,17 @@ Item {
     return (catalog ? catalog.tools : []).filter(entry => entry.kind === "skill" && (held.includes("skills") || held.includes(entry.name)))
   }
   // Opens a related item, in its own section.
+  // Following one, the screen it was followed from is remembered, so going
+  // back from it comes back there.
   function follow(index, id) {
+    history = history.concat([{ section: page, id: shown[page] || "" }])
     wanted(index)
     open(index, id, false)
   }
+  // The screens related items were followed from, the last last.
+  property var history: []
+  // Choosing a section elsewhere starts the way back over.
+  function forget() { history = [] }
 
   // Shows an item picked elsewhere, as on the flow, where it is read.
   function reveal(section, name) {
