@@ -4,7 +4,8 @@ to homologation as the app <app>-<id>-hml; `promote` publishes the image
 homologation built for it to production as <app>-<id>, the very image that
 was seen there, and concludes the release's stage promote: its answer
 chains a comment with the production address, and continue. <id> comes
-from the workspace's path, so each project publishes apps of its own. Each
+from the root's path, so each project, and each conversation working in a
+folder of its own, publishes apps of its own. Each
 reaches its Dokku through the unix socket of that instance under
 $OMUNCULUS_DEPLOY, with the key its secret DEPLOY_KEY holds, loaded into an
 ssh-agent of its own that ends with the call: no network, and no key on
@@ -75,7 +76,7 @@ def preview(call, app, root):
         return run(["git", "-C", root, "push", "--force", f"dokku@homologation:{app}-hml", "HEAD:refs/heads/main"], env)
 
     status, said = with_agent(push)
-    # A push cut short leaves the app's deploy lock behind; each project
+    # A push cut short leaves the app's deploy lock behind; each root
     # publishes its own app, one release at a time, so the lock is stale.
     if status != 0 and "deploy lock in place" in said:
         unlock = ssh_command("homologation") + ["dokku@homologation", "apps:unlock", f"{app}-hml"]

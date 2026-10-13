@@ -26,6 +26,9 @@ Given a model for each of its roles and a login for each of its providers,
 it writes the pack to `[[packs]]` and copies the pack's `workspace/` into
 the default workspace, keeping the files there, when the config loads with
 it. It lists the pack's `environment/`, which it does not run.
+With `[project] conversations`, a conversation's folder starts as a copy
+of the workspace, so those files reach every conversation that starts
+after the import ([config](config.md#a-folder-per-conversation)).
 
 A tool a team's agents use that the pack does not bring goes in
 `[pack.requires]`, its name and, as text, where to get it:
@@ -49,6 +52,11 @@ Pack questions use `ask`, permission forms use `request_access`, and
 intermediaries use `reply` or `escalate`; `break` stops failed work. Design
 leads and administrators answer known facts and escalate the remaining
 named origins while preserving child waits ([requests](requests.md)).
+
+Each of the sales desk's conversations is one client's: the project
+importing it sets `[project] conversations`, so no client's proposal,
+design or site is in another's reach, and the dream team's deploy tools
+name each conversation's apps apart.
 
 The sales desk and its `next_stage` refusal name the logical `owner` route,
 which the project importing it configures, as do the dream team's

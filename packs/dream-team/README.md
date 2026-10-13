@@ -86,6 +86,13 @@ node@<version> /usr` for the `/usr/bin/node` the runtimes give), so
 surgeon or a helper ask, through `request_access` to `owner`, for
 `sandbox.network`.
 
+The deploy tools name each app after the root it is published from:
+`<app>-<id>-hml` in homologation and `<app>-<id>` in production, `<id>`
+the first six hex digits of the root's SHA-256, so two projects publish
+apps of their own, and, with `[project] conversations`, so do two
+conversations of one project, each working in its own folder
+([config](../../docs/config.md#a-folder-per-conversation)).
+
 No command reaches a container daemon: the Docker socket is let into
 none, as it would give a command the machine. The image is checked
 where it is published: `deploy_preview` has homologation build it and

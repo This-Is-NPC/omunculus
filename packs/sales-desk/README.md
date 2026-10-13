@@ -92,5 +92,22 @@ than up through the builders' administrator:
 { workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "seller" }, { kind = "agent", agent = "sales" }, "origin"] }
 ```
 
+Each conversation is one client's. Give the project `[project]
+conversations` so each works in a folder of its own, copied from the
+workspace's files — the proposal template among them — when it starts
+([config](../../docs/config.md#a-folder-per-conversation)):
+
+```toml
+[project]
+conversations = "clients"
+```
+
+Without it every conversation shares the workspace: a seller listing
+`quotes/` reads the proposals of earlier clients, and the builders find
+another client's design and site where they build, and it reaches the
+client as theirs. The eval overlays need none: each task runs in a
+project of its own, which has no `[access]`, so its messages open no
+conversation.
+
 The sales-desk eval overlay declares the first two routes, the agency's all
 three. Questions needing an answer use `ask`; a sender replies from known facts or escalates received origins. The depth-0 generalist answers or escalates every request under its inbox in the run that sees it, never taking one there for a question already out, since a request it left unanswered reaches the client without it; it collects every unresolved question in its conversation into one escalation to the client, written to the client as it should reach them, with no ids, stage names or notes for the team, and distributes the returned text to those origins. `break` remains a stopped-work report. The generalist ends on thanks, acknowledgements and promises of later material; a completed sale starts new work only for an explicit new request.
