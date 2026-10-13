@@ -5,14 +5,16 @@ import "kit/ui"
 // StatusPanel is the open thread's state, under its subject, outlined and
 // washed in the state's tone: what it is doing in plain words — who works on
 // what and the tool it calls, what failed and why, where it stalled — what
-// happens next, and the action that is yours to take: DECIDE while it waits
-// on you, WRITE AGAIN when it failed or stalled.
+// happens next, and the action that is yours to take: DECIDE while a
+// decision of yours is pending, REPLY while its work waits for your word,
+// WRITE AGAIN when it failed or stalled.
 Rectangle {
   id: panel
 
   required property var thread
   readonly property var status: thread.status
   readonly property string action: status.state === "waiting" ? "DECIDE"
+    : status.state === "awaited" ? "REPLY"
     : status.state === "failed" || status.state === "stalled" ? "WRITE AGAIN" : ""
 
   signal decide()
@@ -63,7 +65,9 @@ Rectangle {
       tone: badge.tone
       icon: panel.status.state === "waiting" ? "warning" : "enter"
       text: panel.action
-      tip: panel.status.state === "waiting" ? "what the thread waits on you for" : "write to " + panel.thread.agent + " again  ctrl+r"
+      tip: panel.status.state === "waiting" ? "what the thread waits on you for"
+        : panel.status.state === "awaited" ? "write to " + panel.thread.agent + "  ctrl+r"
+        : "write to " + panel.thread.agent + " again  ctrl+r"
       onClicked: panel.status.state === "waiting" ? panel.decide() : panel.writeAgain()
     }
   }

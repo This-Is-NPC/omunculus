@@ -30,14 +30,14 @@ Singleton {
     waiting: [], status: { state: "idle", label: "", brief: "", line: "", next: "" }, at: "", heard: "", snippet: "", entries: [] })
   // Newest first.
   readonly property var all: Object.values(threads).sort((a, b) => b.at.localeCompare(a.at))
-  // "all", "waiting" (a decision of yours) or "working" (a run open).
+  // "all", "waiting" (a decision or a word of yours) or "working" (a run open).
   property string folder: "all"
   // A project id, or "" for every project.
   property string project: ""
   // What the search box asks for, lowercased; "" finds every thread.
   property string query: ""
   readonly property var shown: all.filter(thread => (project === "" || thread.project === project)
-    && (folder === "all" || (folder === "waiting" ? thread.waiting.length > 0 : thread.working))
+    && (folder === "all" || (folder === "waiting" ? waitsOnYou(thread) : thread.working))
     && matches(thread))
   property string selected: ""
   readonly property var thread: threads[selected] || null
@@ -51,7 +51,7 @@ Singleton {
   // across sessions.
   property var seen: ({})
   readonly property int unread: all.filter(thread => isUnread(thread)).length
-  readonly property int waiting: all.filter(thread => thread.waiting.length > 0).length
+  readonly property int waiting: all.filter(thread => waitsOnYou(thread)).length
   readonly property int working: all.filter(thread => thread.working).length
 
   property string message: ""
@@ -312,7 +312,13 @@ Singleton {
     if (broke)
       announce(thread.agent + " · " + thread.status.label.toLowerCase(), thread.status.line)
     else if (thread.heard !== "" && (!before || before.heard < thread.heard))
-      announce(thread.waiting.length > 0 ? thread.agent + " waits for you" : thread.agent + " · " + thread.subject, thread.snippet)
+      announce(waitsOnYou(thread) ? thread.agent + " waits for you" : thread.agent + " · " + thread.subject, thread.snippet)
+  }
+
+  // Whether nothing in a thread moves until you act: a request of yours is
+  // pending, or its work waits for your next message.
+  function waitsOnYou(thread) {
+    return thread.waiting.length > 0 || thread.status.state === "awaited"
   }
 
   function announce(title, body) {
@@ -412,7 +418,9 @@ Singleton {
   // which work and stage, the tool it calls now and, on a retry, how many
   // and why; "failed" when nothing runs and the last run ended with an
   // error; "held" while nothing runs and a request waits on someone else;
-  // "stalled" when nothing runs, nothing is pending and a work is not over;
+  // "awaited" while nothing runs and a work you gave waits for your next
+  // message; "stalled" when nothing runs, nothing is pending and a work is
+  // not over;
   // "done" when every work it began is done or cancelled; "idle" otherwise.
   // `brief` is for the list, `line` and `next` for the thread's head; a
   // request in `notes` is the harness's, not its requester's.
@@ -480,6 +488,16 @@ Singleton {
       const who = Requests.label(held[0].arbiter)
       return { state: "held", label: "WAITING ON " + who.toUpperCase(), brief: who + " has a question to answer",
         line: Requests.label(held[0].requester) + " waits on " + who + ": " + oneLine(held[0].reason || ""), next: "" }
+    }
+
+    // A work you gave that waits for your next message: only you move it on.
+    const awaited = snapshot.works.find(work => !work.parent_id && work.state === "waiting" && work.waiting === "message")
+    if (awaited) {
+      const by = runs.filter(run => run.work_id === awaited.id).pop()
+      const who = by ? by.agent : awaited.assignee || agent
+      return { state: "awaited", label: "WAITING ON YOU", brief: who + " waits for your word",
+        line: who + " waits for your next message on “" + awaited.title + "”" + (awaited.stage ? " · " + awaited.stage : "") + ".",
+        next: "Nothing in this thread moves until you write to " + agent + ": REPLY picks it up." }
     }
 
     // With nothing running or pending, a work open, or waiting, waits on nothing.

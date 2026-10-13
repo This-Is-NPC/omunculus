@@ -5,10 +5,10 @@ import "kit/ui"
 
 // BoardView is the works of every project the window reaches, those of
 // every conversation you may read there, on a board: a column per state —
-// open, waiting on a child or a request, broken and waiting on its parent to
-// decide, done, cancelled — the latest changed first, each card a work. By
-// agent or by project, the columns are crossed by a lane of each; with
-// several projects, chips keep one. It follows each project's stream while
+// open, waiting on a child, a request or your next message, broken and
+// waiting on its parent to decide, done, cancelled — the latest changed
+// first, each card a work. By agent or by project, the columns are crossed
+// by a lane of each; with several projects, chips keep one. It follows each project's stream while
 // it is on screen. A card opened opens its conversation's map with the work
 // picked, on its project. `/` goes to the filter, which keeps the works
 // whose title, project, conversation, workflow, stage or agent holds it;
@@ -31,7 +31,7 @@ Item {
 
   readonly property var states: [
     { key: "open", tip: "an agent has it" },
-    { key: "waiting", tip: "on a child or a request" },
+    { key: "waiting", tip: "on a child, a request or your next message" },
     { key: "broken", tip: "it broke; its parent decides" },
     { key: "done", tip: "" },
     { key: "cancelled", tip: "" }
