@@ -35,6 +35,23 @@ report and ends the run; `request_access` comments
 its report on the run's work, opens the request and ends the run. The
 model reaches `continue` only through `done`.
 
+A work's own run cannot leave its work hanging. Nothing runs a work that
+is open but its own run, the next stage's, or one a message, an answer or
+a child back makes due; so on a work's own run the store refuses `end`
+when the work would stay open with no request of it pending and no run of
+it due since the run began, and when a child that broke waits on it. The
+call fails with the refusal, which names what hands the work on (`done`,
+`ask`, `work`, `break`, or `reopen` for the broken child), and the run
+goes on; a model that then stops without `end` is retried as below. A
+person's next message is not something an open work waits for: a work
+that needs the person asks (`ask`, `request_access`) and waits on the
+request, or is parked by `break`, and a message reopens it. Pauses that
+keep their wait end as before: a run whose actions leave the work
+waiting (on children, a request, a break) or done, an intermediary that
+escalates (the request it opened is pending, and its child wait is kept),
+a named agent's run (an arbiter, an intermediary resumed by an answer, a
+message to a work waiting on its children), and a run without a work.
+
 A hook is a tool fired by an event: same contract, any `emit`. Who opens
 the next run of a work is the action. A hook can open a run too if its
 manifest has `agent`, or if it emits one of those actions. Cascades are

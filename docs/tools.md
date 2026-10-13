@@ -253,7 +253,15 @@ and recursive named `parts`; `grant` takes
 `request_id`, `name`, `kind` and an optional `scope`, which only a
 person may give; `cancel` takes `request_id` and cancels the request's
 work. `end` is the only action that ends the run; it needs a
-run. `continue` does not name a stage. `prompt` and `attach` take
+run. On a work's own run (no named agent) the store refuses `end` while,
+after the call's other actions, the work is still open and nothing will
+run it again: no request of the work pending, no run of it due since the
+run began (a next stage, a message, a child back that woke it). The
+refusal tells the model to hand the work on — `done`, `ask`, `work` or
+`break` — and, when a child that broke waits on the run, to reopen it or
+break first. A run without a work, a named agent's run, and a call whose
+other actions leave the work waiting, done or cancelled end freely.
+`continue` does not name a stage. `prompt` and `attach` take
 `attachments`, each `{name, media_type, bytes, sha256}` checked against
 the file `Omunculus.Attachments` keeps; `attach` needs a run. `EVENTS` is append-only.
 

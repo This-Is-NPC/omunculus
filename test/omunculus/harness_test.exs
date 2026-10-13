@@ -7,7 +7,15 @@ defmodule Omunculus.HarnessTest do
   alias Omunculus.Tools.Out
 
   import Omunculus.Fixtures,
-    only: [open_project: 1, opening: 1, opening: 2, write_config: 2, write_hook: 4, write_tool: 4]
+    only: [
+      open_project: 1,
+      opening: 1,
+      opening: 2,
+      opening: 3,
+      write_config: 2,
+      write_hook: 4,
+      write_tool: 4
+    ]
 
   setup do
     dir = Fixtures.tmp_dir()
@@ -753,7 +761,9 @@ defmodule Omunculus.HarnessTest do
       Fixtures.use_model(dir, model)
       message_id = Fixtures.insert(project.conn, :prompts, %{kind: "message", body: "hi"})
 
-      assert {:ok, run} = Run.open(project, opening(message_id, work_id))
+      assert {:ok, run} =
+               Run.open(project, opening(message_id, work_id, %{agent: "concierge"}))
+
       refute_received :reached_after_end
 
       assert Enum.map(tl(tool_calls(project.conn)), &{&1["name"], &1["via"]}) == [

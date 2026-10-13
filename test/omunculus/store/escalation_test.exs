@@ -11,15 +11,15 @@ defmodule Omunculus.Store.EscalationTest do
   [agents.root]
   depth = 0
   text = "root"
-  tools = ["reply", "escalate", "end", "grant", "cancel"]
+  tools = ["reply", "escalate", "end", "grant", "cancel", "comment", "continue", "done"]
   [agents.lead]
   depth = 1
   text = "lead"
-  tools = ["reply", "escalate", "end", "grant", "cancel"]
+  tools = ["reply", "escalate", "end", "grant", "cancel", "comment", "continue", "done"]
   [agents.worker]
   depth = 2
   text = "worker"
-  tools = ["ask", "end"]
+  tools = ["ask", "end", "comment", "continue", "done"]
   """
   setup %{conn: conn} do
     config = Fixtures.config(@agents)
@@ -576,8 +576,11 @@ defmodule Omunculus.Store.EscalationTest do
 
           call.("end", %{})
 
+        {role, 3} when role in ["lead", "root"] ->
+          call.("done", %{"report" => "delivered"})
+
         {"worker", _} ->
-          call.("end", %{})
+          call.("done", %{"report" => "answered"})
 
         other ->
           flunk("unexpected resumed role: #{inspect(other)}")
@@ -605,10 +608,15 @@ defmodule Omunculus.Store.EscalationTest do
              reply(conn, ctx.owner, upstream, %{"body" => "Use blue and calm."})
 
     assert :ok = Omunculus.Harness.follow_up(project, answer_events)
-    assert Agent.get(turns, & &1) == %{"lead" => 2, "root" => 2, "worker" => 2}
-    assert work(conn, ctx.root).waiting == "child"
-    assert work(conn, ctx.lead).waiting == "child"
-    assert Enum.all?(ctx.children, &(work(conn, &1).state == "open"))
+    # The answered workers finish, which wakes the lead, whose work done
+    # wakes the root.
+    assert Agent.get(turns, & &1) == %{"lead" => 3, "root" => 3, "worker" => 2}
+
+    assert Enum.all?(
+             [ctx.root, ctx.lead | ctx.children],
+             &(work(conn, &1).state == "done")
+           )
+
     assert {:ok, []} = Query.all(conn, "SELECT id FROM requests WHERE status != 'closed'")
 
     assert {:ok, runs} =

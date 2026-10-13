@@ -29,6 +29,8 @@ defmodule Omunculus.EnglishTest do
       Out.requested_by("agent"),
       Out.refused({:request, {:already_have, "comment"}}),
       Out.refused({:delegate, {:broken_child, "w1"}}),
+      Out.refused({:end, {:broken_child, "w1"}}),
+      Out.refused({:end, :work_open}),
       Out.refused({:work, {:agent_not_allowed, "transmute"}}),
       Out.refused({:delegate, :agent_with_workflow}),
       Out.refused({:reopen, {:only_person, "write"}}),

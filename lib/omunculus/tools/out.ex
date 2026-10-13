@@ -291,6 +291,14 @@ defmodule Omunculus.Tools.Out do
     do:
       "refused: work #{work_id} below yours broke and waits on you: reopen it with instructions, or break to pass it up"
 
+  def refused({:end, {:broken_child, work_id}}),
+    do:
+      "refused: work #{work_id} below yours broke and waits on you: reopen it with instructions, or break to pass it up, before ending"
+
+  def refused({:end, :work_open}),
+    do:
+      "refused: your work is still open and nothing would take it up after you end: hand it on instead, with done when your part is finished, ask for what you need to go on, work to hand parts of it below, or break when it cannot go on"
+
   def refused({:work, :no_delegate}),
     do:
       "refused: this run cannot delegate, so it cannot hand a work to an agent below; a work naming no agent stays yours"

@@ -174,8 +174,9 @@ defmodule Omunculus.Tools.WorkTest do
             on_root.(other, call)
         end
 
-        # A run that did not end above ends here, so no work is retried.
-        call.("end", %{})
+        # A run that did not end above hands its work on here, so no work
+        # is retried.
+        call.("done", %{"report" => "idle"})
         {:ok, "idle"}
       end
     end
@@ -187,8 +188,10 @@ defmodule Omunculus.Tools.WorkTest do
       assert [root] = all(project, "SELECT * FROM works")
       assert %{parent_id: nil, title: "Root", goal: "Ship", assignee: "lead", stage: nil} = root
 
-      assert [%{body: "planned"}] =
-               all(project, "SELECT * FROM comments WHERE work_id = ?", [root.id])
+      assert [%{body: "planned"}, %{body: "idle"}] =
+               all(project, "SELECT * FROM comments WHERE work_id = ? ORDER BY created_at", [
+                 root.id
+               ])
 
       assert [first, second] = runs_in_order(project)
       assert first.work_id == root.id
@@ -287,9 +290,9 @@ defmodule Omunculus.Tools.WorkTest do
 
       assert [%{title: "A", goal: "Goal A"}, %{title: "B", goal: "Goal B"}] = children
       assert Enum.all?(children, &(&1.assignee == "alpha" and &1.state == "done"))
-      assert root.state == "open"
+      assert root.state == "done"
 
-      assert ["planned", "split"] =
+      assert ["planned", "split", "idle"] =
                project
                |> all("SELECT body FROM comments WHERE work_id = ? ORDER BY created_at, id", [
                  root.id
@@ -307,7 +310,7 @@ defmodule Omunculus.Tools.WorkTest do
         for %{type: "continue", body: body} = event <- all(project, "SELECT * FROM events"),
             do: {event, Jason.decode!(body)["parent_id"]}
 
-      assert [{_event, nil}, {waking, parent_id}] = continues
+      assert [{_event, nil}, {waking, parent_id}, {_closing, nil}] = continues
       assert parent_id == root.id
 
       [last_start] = all(project, "SELECT * FROM events WHERE id = ?", [last.event_id])
@@ -471,7 +474,9 @@ defmodule Omunculus.Tools.WorkTest do
       assert_received {:work, {:ok, output}}
       assert output == Out.chain_failed("delegate", :not_have)
       assert [_root] = all(project, "SELECT * FROM works")
-      assert [%{body: "planned"}] = all(project, "SELECT * FROM comments")
+
+      assert [%{body: "planned"}] =
+               all(project, "SELECT * FROM comments WHERE author = 'agent'")
 
       Project.close(project)
     end
@@ -519,7 +524,9 @@ defmodule Omunculus.Tools.WorkTest do
       end
 
       assert [_root] = all(project, "SELECT * FROM works")
-      assert [%{body: "planned"}] = all(project, "SELECT * FROM comments")
+
+      assert [%{body: "planned"}, %{body: "idle"}] =
+               all(project, "SELECT * FROM comments ORDER BY created_at")
 
       Project.close(project)
     end

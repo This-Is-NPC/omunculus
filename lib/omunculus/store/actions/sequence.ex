@@ -19,7 +19,10 @@ defmodule Omunculus.Store.Actions.Sequence do
   also when the parent already waits on others;
   unnamed, the child's agent is the first stage's agent or the depth's
   first agent. Those three need a work already linked to the run. `end`
-  appends the `end` event that ends the run and needs only the run.
+  appends the `end` event that ends the run and needs only the run; a
+  work's own run cannot end while its work is open and nothing will run it
+  again: no request of the work pending, no next stage or message due, or
+  a child that broke waiting on it.
   `cancel` sets the work of the request named by `request_id`
   `cancelled`, unless it is already done or cancelled.
   """
@@ -237,12 +240,61 @@ defmodule Omunculus.Store.Actions.Sequence do
   def end_run(_conn, %{run_id: nil}), do: {:error, {:end, :no_run}}
 
   def end_run(conn, ctx) do
-    Events.append(conn, %{
-      type: "end",
-      run_id: ctx.run_id,
-      work_id: ctx.work_id,
-      body: "{}"
-    })
+    with :ok <- settled(conn, ctx) do
+      Events.append(conn, %{
+        type: "end",
+        run_id: ctx.run_id,
+        work_id: ctx.work_id,
+        body: "{}"
+      })
+    end
+  end
+
+  # A work's own run may not end leaving its work open with nothing that
+  # runs it again: no request of it pending, no run of it due since the run
+  # began (a next stage, a message, a child back that woke it), so nothing
+  # would ever take it up. A child that broke waits on this run, so this
+  # run must decide it first.
+  defp settled(_conn, %{work_id: nil}), do: :ok
+
+  defp settled(conn, ctx) do
+    case Query.one(
+           conn,
+           """
+           SELECT works.state = 'open' AND json_extract(start.body, '$.own') AS open,
+             (SELECT child.id FROM works AS child
+              WHERE child.parent_id = works.id AND child.state = 'waiting' AND child.waiting IS NULL
+              LIMIT 1) AS broken,
+             EXISTS (SELECT 1 FROM requests
+                     WHERE requests.work_id = works.id AND requests.status IN ('pending', 'escalated'))
+               OR EXISTS (SELECT 1 FROM events
+                          WHERE events.sequence > start.sequence
+                            AND ((events.work_id = works.id
+                                  AND (events.type = 'prompt'
+                                       OR (events.type = 'continue'
+                                           AND json_extract(events.body, '$.to') IS NOT NULL)))
+                                 OR (events.type IN ('continue', 'break', 'cancel')
+                                     AND json_extract(events.body, '$.parent_id') = works.id)))
+               AS held
+           FROM runs
+           JOIN events AS start ON start.id = runs.event_id
+           JOIN works ON works.id = ?
+           WHERE runs.id = ?
+           """,
+           [ctx.work_id, ctx.run_id]
+         ) do
+      {:ok, %{open: 1, broken: broken}} when is_binary(broken) ->
+        {:error, {:end, {:broken_child, broken}}}
+
+      {:ok, %{open: 1, held: 0}} ->
+        {:error, {:end, :work_open}}
+
+      {:ok, _settled} ->
+        :ok
+
+      {:error, _reason} = error ->
+        error
+    end
   end
 
   defp ensure_context(_tag, %{run_id: run_id, work_id: work_id})

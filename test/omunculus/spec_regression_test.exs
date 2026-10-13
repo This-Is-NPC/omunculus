@@ -305,7 +305,10 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, Fixtures.opening(nil, parent, %{request_id: request}))
+             Run.open(
+               p,
+               Fixtures.opening(nil, parent, %{request_id: request, agent: "concierge"})
+             )
 
     assert {:ok, %{status: "closed"}} = Store.view(p.conn, "request", request)
     assert {:ok, events} = Store.replay(p.conn, {:request, request})
@@ -569,30 +572,41 @@ defmodule Omunculus.SpecRegressionTest do
       String.replace(
         @config,
         ~s("sandbox.network", "end"]),
-        ~s("sandbox.network", "end", "delegate"]\noverrides.work.then = [])
+        ~s("sandbox.network", "end", "delegate", "continue", "done"]\noverrides.work.then = [])
+      )
+      |> String.replace(
+        ~s(tools = ["comment", "request_access", "read", "end"]),
+        ~s(tools = ["comment", "request_access", "read", "end", "continue", "done"])
       )
     )
 
     hook(p, "on-delegate", "delegate")
     parent = Fixtures.insert(p.conn, :works, %{assignee: "concierge"})
     test_pid = self()
+    {:ok, parent_runs} = Agent.start_link(fn -> 0 end)
 
     Fixtures.use_model(p, fn assembled, _, call ->
-      if String.starts_with?(assembled, "concierge") do
-        assert {:ok, _} =
-                 call.("work", %{
-                   "report" => "delegated",
-                   "works" => [%{"title" => "child", "goal" => "child goal"}]
-                 })
+      cond do
+        not String.starts_with?(assembled, "concierge") ->
+          send(test_pid, :child_started)
+          call.("done", %{"report" => "made"})
 
-        # The parent's model goes on only once the child's run has started.
-        assert_receive :child_started, 5_000
-        assert {:ok, _} = call.("comment", %{"body" => "still here"})
-        call.("end", %{})
-        flunk("end must end the run")
-      else
-        send(test_pid, :child_started)
-        call.("end", %{})
+        # The child back wakes the parent, whose next run closes it.
+        Agent.get_and_update(parent_runs, &{&1, &1 + 1}) > 0 ->
+          call.("done", %{"report" => "shipped"})
+
+        true ->
+          assert {:ok, _} =
+                   call.("work", %{
+                     "report" => "delegated",
+                     "works" => [%{"title" => "child", "goal" => "child goal"}]
+                   })
+
+          # The parent's model goes on only once the child's run has started.
+          assert_receive :child_started, 5_000
+          assert {:ok, _} = call.("comment", %{"body" => "still here"})
+          call.("end", %{})
+          flunk("end must end the run")
       end
     end)
 
@@ -621,8 +635,8 @@ defmodule Omunculus.SpecRegressionTest do
              Query.one(p.conn, "SELECT * FROM events WHERE id = ?", [child_run.event_id])
 
     assert child_start.sequence < parent_end.sequence
-    assert {:ok, %{state: "open"}} = Store.view(p.conn, "work", child.id)
-    assert {:ok, %{state: "waiting"}} = Store.view(p.conn, "work", parent)
+    assert {:ok, %{state: "done"}} = Store.view(p.conn, "work", child.id)
+    assert {:ok, %{state: "done"}} = Store.view(p.conn, "work", parent)
   end
 
   test "a child that ends with done or break is not retried",

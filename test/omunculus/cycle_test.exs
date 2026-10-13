@@ -41,7 +41,7 @@ defmodule Omunculus.CycleTest do
   end
 
   # The root is created by the run of send, splits into two children and
-  # ends when it runs again; each child runs `child`.
+  # is done when it runs again; each child runs `child`.
   defp model(child) do
     fn assembled, _tools, call ->
       case {role(assembled), last_comment(assembled)} do
@@ -61,7 +61,7 @@ defmodule Omunculus.CycleTest do
           })
 
         {"lead", _children_done} ->
-          call.("end", %{})
+          call.("done", %{"report" => "shipped"})
 
         {"alpha", _comment} ->
           child.(assembled, call)
@@ -119,7 +119,7 @@ defmodule Omunculus.CycleTest do
 
     {root, runs} = root_runs(project)
     assert length(runs) == 3
-    assert root.state == "open"
+    assert root.state == "done"
 
     children = all(project, "SELECT * FROM works WHERE parent_id = ?", [root.id])
     assert Enum.map(children, & &1.state) == ["done", "done"]
@@ -313,7 +313,7 @@ defmodule Omunculus.CycleTest do
              all(project, "SELECT * FROM events WHERE type = 'break' AND work_id = ?", [failed.id])
 
     {root, runs} = root_runs(project)
-    assert root.state == "open"
+    assert root.state == "done"
     assert length(runs) == 3
     Project.close(project)
   end

@@ -58,14 +58,14 @@ defmodule Omunculus.Tools.ForwardTest do
     depth = 0
     workflow_only = true
     text = "clerk"
-    tools = ["comment", "end"]
+    tools = ["ask", "comment", "end"]
 
     [workflows.desk]
     steps = [{ name = "talk", agent = "clerk" }]
     """)
 
     Fixtures.use_model(dir, fn assembled, _tools, call ->
-      case {role(assembled), Regex.run(~r/\(work (\w+), open\)/, assembled)} do
+      case {role(assembled), Regex.run(~r/\(work (\w+), waiting\)/, assembled)} do
         {"front", [_, id]} ->
           call.("forward", %{"work_id" => id, "message" => "more"})
 
@@ -76,7 +76,7 @@ defmodule Omunculus.Tools.ForwardTest do
           })
 
         {"clerk", _} ->
-          call.("end", %{})
+          call.("ask", %{"question" => "Anything else?"})
       end
 
       {:ok, ""}

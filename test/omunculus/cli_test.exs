@@ -450,9 +450,10 @@ defmodule Omunculus.CLITest do
   describe "work + comment" do
     test "the concierge creates the work, a follow-up comments on it, and a third opening sees the last comment",
          %{dir: dir} do
+      # The root's run parks it until the person writes again.
       model = fn assembled, _tools, call ->
         if assembled =~ "## Work\n",
-          do: call.("end", %{}),
+          do: call.("break", %{"report" => "parked"}),
           else: create_root(call, "Count to five")
       end
 
@@ -474,7 +475,7 @@ defmodule Omunculus.CLITest do
 
       assert Enum.map(events, & &1.type) ==
                ["tool", "prompt", "start-run", "tool", "tool", "work", "tool", "end", "end-run"] ++
-                 ["start-run", "tool", "tool", "end", "end-run"]
+                 ["start-run", "tool", "tool", "break", "tool", "end", "tool", "end-run"]
 
       assert {:ok, [first_assembled, _root_assembled]} =
                Query.all(
@@ -488,8 +489,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         send(test_pid, {:second_assembled, assembled})
-        assert {:ok, ""} = call.("comment", %{"body" => "first comment"})
-        call.("end", %{})
+        call.("break", %{"report" => "first comment"})
       end
 
       Fixtures.use_model(dir, model)
@@ -505,10 +505,11 @@ defmodule Omunculus.CLITest do
 
       project = open_project(dir)
 
-      assert {:ok, [report, comment]} =
+      assert {:ok, [report, parked, comment]} =
                Query.all(project.conn, "SELECT * FROM comments ORDER BY created_at")
 
       assert report.body == "opened"
+      assert parked.body == "parked"
       assert comment.work_id == work.id
       assert comment.body == "first comment"
 
@@ -627,7 +628,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, [old_run]} = Query.all(project.conn, "SELECT * FROM runs")
       Project.close(project)
 
-      model = fn _assembled, _tools, call -> call.("end", %{}) end
+      model = fn _assembled, _tools, call -> call.("done", %{"report" => "shipped"}) end
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} =
@@ -645,7 +646,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
       assert Jason.decode!(work.grants) == ["write"]
-      assert work.state == "open"
+      assert work.state == "done"
 
       assert {:ok, runs} =
                Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
@@ -1053,7 +1054,7 @@ defmodule Omunculus.CLITest do
 
       request_id = open_write_request(dir, work_id)
 
-      model = fn _assembled, _tools, call -> call.("end", %{}) end
+      model = fn _assembled, _tools, call -> call.("done", %{"report" => "shipped"}) end
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} =
@@ -1081,7 +1082,7 @@ defmodule Omunculus.CLITest do
       other_work_id = Fixtures.insert(project.conn, :works, %{title: "Another one"})
       Project.close(project)
 
-      model = fn _assembled, _tools, call -> call.("end", %{}) end
+      model = fn _assembled, _tools, call -> call.("done", %{"report" => "shipped"}) end
       Fixtures.use_model(dir, model)
       assert {:ok, ""} = CLI.run(["send", "--work_id", other_work_id, "new request"], dir)
 
@@ -1220,7 +1221,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         send(test_pid, {:assembled, assembled})
-        call.("end", %{})
+        call.("done", %{"report" => "done without it"})
       end
 
       Fixtures.use_model(dir, model)
@@ -1241,7 +1242,7 @@ defmodule Omunculus.CLITest do
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
 
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
-      assert work.state == "open"
+      assert work.state == "done"
       assert work.grants == nil
 
       assert {:ok, [_old_run, new_run]} =
@@ -1635,7 +1636,7 @@ defmodule Omunculus.CLITest do
       assert length(previous_runs) == 2
       Project.close(project)
 
-      model = fn _assembled, _tools, call -> call.("end", %{}) end
+      model = fn _assembled, _tools, call -> call.("break", %{"report" => "still paused"}) end
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "come back"], dir)
@@ -1649,8 +1650,14 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work.id])
       assert work.stage == "to_do"
-      assert work.state == "open"
       assert work.waiting == nil
+
+      assert {:ok, [_reopened]} =
+               Query.all(
+                 project.conn,
+                 "SELECT * FROM events WHERE work_id = ? AND type = 'work' AND json_extract(body, '$.reason') = 'reopened_by_prompt'",
+                 [work.id]
+               )
 
       Project.close(project)
     end
@@ -1661,7 +1668,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "I am the concierge."
-      tools = ["work", "delegate", "comment", "end"]
+      tools = ["work", "delegate", "comment", "continue", "done", "end"]
 
       [agents.worker]
       depth = 1
@@ -1679,7 +1686,7 @@ defmodule Omunculus.CLITest do
             {:ok, "unused"}
 
           assembled =~ "## Work\n" ->
-            call.("end", %{})
+            call.("done", %{"report" => "delivered"})
 
           true ->
             create_root(call, "Big task")
@@ -1695,7 +1702,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, works} = Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
       [parent, child] = works
-      assert parent.state == "open"
+      assert parent.state == "done"
       assert child.state == "done"
       assert child.assignee == "worker"
       assert child.parent_id == parent.id
@@ -1729,11 +1736,13 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    for {tool, args, tools, action, workflow?, child_state} <- [
+    for {tool, args, tools, action, workflow?, child_state, parent_tool, parent_state} <- [
           {"done", %{"report" => "finished"}, ~w(comment continue done end), "continue", false,
-           "done"},
-          {"break", %{"report" => "stuck"}, ~w(break end), "break", false, "waiting"},
-          {"break", %{"report" => "stuck"}, ~w(break end), "break", true, "waiting"}
+           "done", "done", "done"},
+          {"break", %{"report" => "stuck"}, ~w(break end), "break", false, "waiting", "break",
+           "waiting"},
+          {"break", %{"report" => "stuck"}, ~w(break end), "break", true, "waiting", "break",
+           "waiting"}
         ] do
       test "#{tool} #{if workflow?, do: "with", else: "without"} a workflow hands the child back to its waiting parent and opens the parent's run",
            %{dir: dir} do
@@ -1755,7 +1764,7 @@ defmodule Omunculus.CLITest do
           [agents.concierge]
           depth = 0
           text = "I am the concierge."
-          tools = ["work", "delegate", "comment", "end"]
+          tools = ["work", "delegate", "comment", "break", "continue", "done", "end"]
 
           [agents.worker]
           depth = 1
@@ -1771,14 +1780,7 @@ defmodule Omunculus.CLITest do
               {:ok, "unused"}
 
             assembled =~ "## Results" ->
-              call.("end", %{})
-
-            assembled =~ "## Last comment\nopened" ->
-              delegate_one(call, "Sub task", "do this")
-              {:ok, "unused"}
-
-            assembled =~ "## Work\n" ->
-              call.("end", %{})
+              call.(unquote(parent_tool), %{"report" => "handled"})
 
             true ->
               create_unnamed(call, "Big task")
@@ -1795,7 +1797,7 @@ defmodule Omunculus.CLITest do
         assert {:ok, [parent, child]} =
                  Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
 
-        assert parent.state == "open"
+        assert parent.state == unquote(parent_state)
         assert parent.waiting == nil
         assert child.state == unquote(child_state)
 
@@ -1824,7 +1826,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "I am the concierge."
-      tools = ["work", "comment", "end"]
+      tools = ["work", "comment", "continue", "done", "end"]
 
       [agents.worker]
       depth = 1
@@ -1838,9 +1840,11 @@ defmodule Omunculus.CLITest do
       Project.close(project)
 
       Fixtures.use_model(dir, fn assembled, _tools, call ->
-        if assembled =~ "I am the worker.",
-          do: call.("done", %{"report" => "finished"}),
-          else: call.("end", %{})
+        cond do
+          assembled =~ "I am the worker." -> call.("done", %{"report" => "finished"})
+          assembled =~ "## Results" -> call.("done", %{"report" => "all done"})
+          true -> call.("end", %{})
+        end
       end)
 
       assert {:ok, ""} = CLI.run(["send", "--work_id", parent, "how is it going?"], dir)
@@ -1858,7 +1862,7 @@ defmodule Omunculus.CLITest do
 
       project = open_project(dir)
       assert {:ok, %{state: "done"}} = Store.view(project.conn, "work", child)
-      assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", parent)
+      assert {:ok, %{state: "done"}} = Store.view(project.conn, "work", parent)
 
       assert {:ok, [_message_run, %{agent: "concierge", via: "continue"}]} =
                Query.all(
@@ -1909,7 +1913,7 @@ defmodule Omunculus.CLITest do
             {:ok, "unused"}
 
           assembled =~ "## Results" ->
-            call.("end", %{})
+            call.("done", %{"report" => "delivered"})
 
           true ->
             assert assembled =~ "- workflow delivery: to_do (worker) → review (concierge)"
@@ -1926,7 +1930,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, works} = Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
       [parent, child] = works
-      assert parent.state == "open"
+      assert parent.state == "done"
       assert child.state == "done"
       assert child.stage == "review"
 
@@ -1948,7 +1952,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "I am the concierge."
-      tools = ["work", "delegate", "comment", "end", "grant", "reply", "write"]
+      tools = ["work", "delegate", "comment", "continue", "done", "end", "grant", "reply", "write"]
 
       [agents.worker]
       depth = 1
@@ -1998,7 +2002,7 @@ defmodule Omunculus.CLITest do
             {:ok, "unused"}
 
           assembled =~ "## Work\n" ->
-            call.("end", %{})
+            call.("done", %{"report" => "written below"})
 
           true ->
             create_root(call, "Big task3")
@@ -2031,7 +2035,7 @@ defmodule Omunculus.CLITest do
       [parent, child] = works
       assert Jason.decode!(child.grants) == ["write"]
       assert child.state == "done"
-      assert parent.state == "open"
+      assert parent.state == "done"
 
       assert {:ok, runs} = Query.all(reader.conn, "SELECT * FROM runs ORDER BY started_at")
 
@@ -2048,12 +2052,12 @@ defmodule Omunculus.CLITest do
   end
 
   describe "inbox" do
-    test "notify mid-run leaves an unread inbox row, the run keeps going and closes done, the work stays open, and CLI reads it",
+    test "notify mid-run leaves an unread inbox row, the run keeps going and closes done, and CLI reads it",
          %{dir: dir} do
       model = fn assembled, _tools, call ->
         unless assembled =~ "## Work\n", do: create_root(call, "Help")
         assert {:ok, ""} = call.("notify", %{"body" => "need help"})
-        call.("end", %{})
+        call.("done", %{"report" => "helped"})
       end
 
       Fixtures.use_model(dir, model)
@@ -2063,7 +2067,7 @@ defmodule Omunculus.CLITest do
       project = open_project(dir)
 
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
-      assert work.state == "open"
+      assert work.state == "done"
 
       assert {:ok, [inbox_row]} = Query.all(project.conn, "SELECT * FROM inbox")
       assert inbox_row.agent == "concierge"
@@ -2385,7 +2389,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["comment", "compact_comments", "end", "work"]
+      tools = ["ask", "comment", "compact_comments", "end", "work"]
       """)
 
       model1 = fn assembled, _tools, call ->
@@ -2393,7 +2397,7 @@ defmodule Omunculus.CLITest do
         assert {:ok, ""} = call.("comment", %{"body" => "one"})
         assert {:ok, ""} = call.("comment", %{"body" => "two"})
         assert {:ok, ""} = call.("comment", %{"body" => "three"})
-        call.("end", %{})
+        call.("ask", %{"question" => "Anything else?"})
       end
 
       Fixtures.use_model(dir, model1)
@@ -2415,7 +2419,7 @@ defmodule Omunculus.CLITest do
         assert {:ok, ""} =
                  call.("compact_comments", %{"op" => "commit", "summary" => "summary: 1 2 3"})
 
-        call.("end", %{})
+        call.("ask", %{"question" => "Anything else?"})
       end
 
       Fixtures.use_model(dir, model2)
@@ -2432,7 +2436,10 @@ defmodule Omunculus.CLITest do
       assert summary.body == "summary: 1 2 3"
 
       assert {:ok, work_events} = Store.replay(project.conn, {:work, work.id})
-      comment_events = Enum.filter(work_events, &(&1.type in ["work", "comment"]))
+
+      comment_events =
+        Enum.filter(work_events, &(&1.type in ["work", "comment"] and &1.comment_id != nil))
+
       assert Enum.map(comment_events, & &1.comment_id) == Enum.map(comments, & &1.id)
 
       compact_event = Enum.find(work_events, &(&1.type == "compact"))
@@ -2543,7 +2550,7 @@ defmodule Omunculus.CLITest do
             {:ok, "unused"}
 
           assembled =~ "## Work\n" ->
-            call.("end", %{})
+            call.("done", %{"report" => "shipped"})
 
           true ->
             call.("work", %{
@@ -2584,7 +2591,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, works} = Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
       [parent, child] = works
       assert child.state == "done"
-      assert parent.state == "open"
+      assert parent.state == "done"
 
       Project.close(project)
     end
