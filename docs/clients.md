@@ -64,7 +64,8 @@ All are QML on Quickshell and share `apps/kit`:
   `open-attachment`, the scripts beside it, `AgentImages`, which keeps the
   agents' images in Quickshell's cache, and `Requests.js`, the helpers
   that read a request's status and participants, the decisions it gathers
-  from below and the option a reply chose, and build a reply.
+  from below and the option a reply chose, whether the harness opened it
+  and the questions it then passes on, and build a reply.
 
 Each app reaches the kit through a `kit` link to `apps/kit/`, since
 Quickshell imports only from within the folder it runs. The kit imports no
