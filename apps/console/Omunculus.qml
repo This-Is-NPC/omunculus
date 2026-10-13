@@ -39,7 +39,6 @@ Singleton {
   property var inbox: []
   // The latest event cursor of the open conversation; the stream resumes after it.
   property string cursor: ""
-  property bool streaming: false
   // While the history of the conversation opened is read in.
   property bool replaying: false
   // Thread key ("" or a work id) -> its ListModel. Each entry: kind (speech,
@@ -227,7 +226,7 @@ Singleton {
     inbox = []
     log = []
     logBuffer = []
-    streamLink.active = false
+    conversationStream.stop()
     // The history comes in one read, before the stream resumes after it.
     call("GET", base + "/conversations/" + id + "/events", null, false, data => {
       if (id !== conversationId)
@@ -238,16 +237,14 @@ Singleton {
       log = logBuffer
       logBuffer = []
       refresh()
-      connectStream()
+      conversationStream.start()
     })
   }
 
   // leave goes back to the conversations; the agents go on without the window.
   function leave() {
     conversationId = ""
-    streamGeneration++
-    streamLink.active = false
-    streaming = false
+    conversationStream.stop()
     threads = {}
     openHistory()
   }
@@ -322,6 +319,15 @@ Singleton {
 
   function work(id) {
     return works.find(item => item.id === id) || null
+  }
+
+  // The workflow a work goes through, as its lane: {name, steps, at}, the
+  // stage it is at among the steps, whose agent runs it; null for a work in
+  // none, or at a stage its workflow no longer has.
+  function laneOf(work) {
+    const flow = setup && work.workflow ? setup.workflows.find(each => each.name === work.workflow) : null
+    const at = flow ? flow.steps.findIndex(step => step.name === work.stage) : -1
+    return at < 0 ? null : { name: flow.name, steps: flow.steps, at: at }
   }
 
   // The works under `id` in tree order, each with its depth below it; `id`
@@ -642,87 +648,12 @@ Singleton {
       refreshTimer.restart()
   }
 
-  // Splits the stream's bytes into the JSON objects its frames carry: curl
-  // writes each frame's payload as it comes, with nothing between them.
-  // `buffer` starts at the object being read; `scanned` characters of it
-  // have been read with the depth and string state below. The scan runs on
-  // locals: reading a property converts its whole string on every access.
-  property string buffer: ""
-  property int scanned: 0
-  property int scanDepth: 0
-  property bool scanString: false
-  property bool scanEscape: false
-  function feed(data) {
-    const text = buffer + data
-    let depth = scanDepth
-    let inString = scanString
-    let escaped = scanEscape
-    let start = 0
-    for (let i = scanned; i < text.length; i++) {
-      const c = text[i]
-      if (inString) {
-        if (escaped)
-          escaped = false
-        else if (c === "\\")
-          escaped = true
-        else if (c === "\"")
-          inString = false
-      } else if (c === "\"") {
-        inString = true
-      } else if (c === "{") {
-        if (depth === 0)
-          start = i
-        depth++
-      } else if (c === "}") {
-        depth--
-        if (depth === 0) {
-          handle(JSON.parse(text.slice(start, i + 1)))
-          start = i + 1
-        }
-      }
-    }
-    buffer = text.slice(depth === 0 ? text.length : start)
-    scanned = buffer.length
-    scanDepth = depth
-    scanString = inString
-    scanEscape = escaped
-  }
-
-  // Each connection is a new process; a stream that ends while its
-  // conversation is still open connects again after a second.
-  property int streamGeneration: 0
-  function connectStream() {
-    streamGeneration++
-    buffer = ""
-    scanned = 0
-    scanDepth = 0
-    scanString = false
-    scanEscape = false
-    streamLink.active = false
-    streamLink.active = conversationId !== ""
-  }
-
-  Loader {
-    id: streamLink
-    active: false
-    sourceComponent: Process {
-      readonly property int generation: root.streamGeneration
-      command: ["curl", "-sN", "--unix-socket", root.socket,
-        "ws://localhost" + root.base + "/conversations/" + root.conversationId + "/stream" + (root.cursor !== "" ? "?after=" + root.cursor : "")]
-      running: true
-      stdout: SplitParser {
-        splitMarker: ""
-        onRead: data => root.feed(data)
-      }
-      onRunningChanged: if (generation === root.streamGeneration) root.streaming = running
-      onExited: if (generation === root.streamGeneration) reconnect.restart()
-    }
-  }
-
-  Timer {
-    id: reconnect
-    interval: 1000
-    onTriggered: root.connectStream()
+  // The open conversation's events, after the last one read.
+  EventStream {
+    id: conversationStream
+    socket: root.socket
+    path: root.base + "/conversations/" + root.conversationId + "/stream" + (root.cursor !== "" ? "?after=" + root.cursor : "")
+    onReceived: event => root.handle(event)
   }
 
   Timer {

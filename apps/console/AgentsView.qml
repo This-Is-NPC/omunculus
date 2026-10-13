@@ -47,21 +47,12 @@ Item {
     return configured ? configured.name : ""
   }
 
-  // The workflow a work goes through, as its lane: {name, steps, at}, the
-  // stage it is at among the steps, whose agent runs it; null for a work in none, or at a stage
-  // its workflow no longer has.
-  function laneOf(work) {
-    const flow = Omunculus.setup && work.workflow ? Omunculus.setup.workflows.find(each => each.name === work.workflow) : null
-    const at = flow ? flow.steps.findIndex(step => step.name === work.stage) : -1
-    return at < 0 ? null : { name: flow.name, steps: flow.steps, at: at }
-  }
-
   // The nodes: {key, parent, agent, title, depth, idle, lane, width}. The
   // root agent's own conversation shows when nothing was opened for it or
   // something waits on it.
   readonly property var nodes: {
     const works = Omunculus.tree("", false).map(row => {
-      const lane = laneOf(row.work)
+      const lane = Omunculus.laneOf(row.work)
       return {
         key: row.work.id, parent: row.work.parent_id || null, agent: lane ? lane.steps[lane.at].agent : row.work.assignee || "",
         title: row.work.title, depth: row.level, idle: false, lane: lane,
