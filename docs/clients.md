@@ -44,8 +44,11 @@ All are QML on Quickshell and share `apps/kit`:
 - `apps/kit/ui`: the theme and the controls more than one app uses, among
   them `FlowCanvas`, a canvas that moves, zooms and pinches, and its
   `ZoomControl`, and `TabRail`, an app's pages as a carousel down the left
-  edge, with `PageBar`, the commands of the page on screen beside it and the
-  app's readout, which the app gives it, and `FilePicker` and `FileChip`,
+  edge, with `PageBar`, the commands of the page on screen beside it, ranked
+  — BACK apart, the page's main action solid, the others outlined, the
+  commands of one group joined as one control with the checked one lit, and
+  its tools at the end as icons — and the app's readout, which the app
+  gives it, and `FilePicker` and `FileChip`,
   the files a message carries and a file attached in a conversation. It
   knows nothing of Omunculus.
 - `apps/kit/client`: `Http`, which makes each request to a socket through
