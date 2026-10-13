@@ -4,7 +4,7 @@
 erl_crash.dump
 /.temp/
 /.omunculus/
-.env
+/.env
 .elixir_ls
 *.beam
 *.sqlite3
