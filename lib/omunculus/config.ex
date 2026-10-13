@@ -32,7 +32,7 @@ defmodule Omunculus.Config do
 
   alias Omunculus.Auth
   alias Omunculus.Config.{Layer, Packs}
-  alias Omunculus.Tool.{Manifest, Overrides}
+  alias Omunculus.Tool.{Catalog, Manifest, Overrides}
 
   @enforce_keys [
     :root,
@@ -645,8 +645,18 @@ defmodule Omunculus.Config do
   end
 
   defp parse(data, path, validate_overlays?) do
-    with {:ok, data} <- Packs.expand(data, Path.dirname(Path.expand(path))),
-         do: parse_expanded(data, path, validate_overlays?)
+    with {:ok, data, required} <- Packs.expand(data, Path.dirname(Path.expand(path))),
+         {:ok, config} <- parse_expanded(data, path, validate_overlays?),
+         :ok <- provided(config, required),
+         do: {:ok, config}
+  end
+
+  # The tools the packs require, in the catalog of the config's tool
+  # folders, skills and inline tools.
+  defp provided(config, required) do
+    if Enum.all?(required, fn {_pack, tools} -> tools == %{} end),
+      do: :ok,
+      else: Packs.lacking(required, config.tools |> Catalog.discover() |> Map.keys())
   end
 
   defp parse_expanded(data, path, validate_overlays?) do

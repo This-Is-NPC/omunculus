@@ -12,7 +12,7 @@ defmodule Omunculus.Tools.ProposePack do
   `then` appends `end`.
   """
 
-  alias Omunculus.Config
+  alias Omunculus.{CLI, Config}
   alias Omunculus.Config.Packs
   alias Omunculus.Tools.{Args, Out, Steps}
 
@@ -25,14 +25,20 @@ defmodule Omunculus.Tools.ProposePack do
          {:ok, pack} <- Packs.read(dir),
          entry = entry(dir, args),
          {:ok, config} <- Config.try_pack(path, entry),
-         [] <- Steps.missing(config, Map.keys(Map.get(pack, "agents", %{}))),
-         {:unmet, []} <- {:unmet, Omunculus.Tools.Pack.unmet(config, pack)} do
+         [] <- Steps.missing(config, Map.keys(Map.get(pack, "agents", %{}))) do
       Out.ok("", [%{"type" => "request", "body" => request(args, dir, pack, entry, config)}])
     else
-      {:error, reason} -> Out.fail("the config would not load with it: #{inspect(reason)}")
-      [_ | _] = missing -> Out.fail("its agents would be refused:\n" <> Enum.join(missing, "\n"))
-      {:unmet, unmet} -> Out.fail(Omunculus.Tools.Pack.requires(unmet))
-      message -> Out.fail(message)
+      {:error, {:packs, {_pack, :requires, _lacked}} = reason} ->
+        Out.fail(CLI.format_error(reason))
+
+      {:error, reason} ->
+        Out.fail("the config would not load with it: #{inspect(reason)}")
+
+      [_ | _] = missing ->
+        Out.fail("its agents would be refused:\n" <> Enum.join(missing, "\n"))
+
+      message ->
+        Out.fail(message)
     end
   end
 

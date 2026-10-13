@@ -54,8 +54,10 @@ tasks/         the tasks that show the team works
   such as owner, which the project must configure. Permission requests
   use `request_access`, including `kind = "resource"` for sandbox capabilities.
   Receivers use `reply` or `escalate`; `break` only stops failed work.
-- A tool the team uses that another pack brings goes in `[pack] requires`:
-  importing the pack is refused while the project lacks it.
+- A tool the team uses that the pack does not bring goes in
+  `[pack.requires]`, with where to get it as text (another pack, a
+  preset's tools): loading the config refuses the pack while the project
+  lacks it.
 - A tool's secrets name providers (`[secrets.<tool>]`, each secret a
   provider listed in `[pack] auth`); the importer maps them to its logins.
   `[pack] auth` lists those providers and nothing else: the login a model

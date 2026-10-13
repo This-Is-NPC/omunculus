@@ -47,36 +47,58 @@ defmodule Omunculus.Tools.PackTest do
     assert [%{"path" => "team"}] = Toml.decode_file!(config_path)["packs"]
   end
 
-  test "refuses a pack whose required tools the project lacks", %{
+  test "refuses a pack whose required tools the project lacks, saying where to get them", %{
     dir: dir,
     config_path: config_path
   } do
     toml = Path.join([dir, "team", "pack.toml"])
     original = File.read!(toml)
 
-    File.write!(
-      toml,
+    requiring = fn tool ->
       String.replace(
         original,
-        ~s(roles = ["lead"]),
-        ~s(roles = ["lead"]\nrequires = ["deploy_preview"])
+        ~s(auth = ["vault"]),
+        ~s(auth = ["vault"]\n\n[pack.requires]\n#{tool} = "the shell pack"\n)
       )
-    )
+    end
 
-    assert %{
-             "ok" => false,
-             "output" => "it requires tools the project lacks: deploy_preview" <> _
-           } =
+    File.write!(toml, requiring.("bash"))
+
+    assert %{"ok" => false, "output" => output} =
              pack(config_path, %{"models" => "lead=fast", "auth" => "vault=mine"})
+
+    assert output ==
+             "pack team requires tools the project lacks: bash (the shell pack); " <>
+               "add a [tools] path that holds them or import the pack that brings them"
 
     refute Map.has_key?(Toml.decode_file!(config_path), "packs")
 
+    # Once the project has it, loading the config with the pack checks it again.
+    File.write!(toml, requiring.("end"))
+    assert %{"ok" => true} = pack(config_path, %{"models" => "lead=fast", "auth" => "vault=mine"})
+    File.write!(toml, requiring.("bash"))
+    assert {:error, {:packs, {"team", :requires, %{"bash" => _}}}} = Config.load(config_path)
+  end
+
+  test "refuses a pack whose requires gives no place to get a tool", %{
+    dir: dir,
+    config_path: config_path
+  } do
+    toml = Path.join([dir, "team", "pack.toml"])
+
     File.write!(
       toml,
-      String.replace(original, ~s(roles = ["lead"]), ~s(roles = ["lead"]\nrequires = ["end"]))
+      String.replace(
+        File.read!(toml),
+        ~s(auth = ["vault"]),
+        ~s(auth = ["vault"]\nrequires = ["end"])
+      )
     )
 
-    assert %{"ok" => true} = pack(config_path, %{"models" => "lead=fast", "auth" => "vault=mine"})
+    assert %{"ok" => false, "output" => output} =
+             pack(config_path, %{"models" => "lead=fast", "auth" => "vault=mine"})
+
+    assert output =~ ~s({"team", :requires, :invalid})
   end
 
   test "the builtin catalog discovers pack for the command line and a reply's chain" do

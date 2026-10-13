@@ -24,9 +24,23 @@ omunculus pack --path <dir> --models role=model --auth provider=login [--depth n
 
 Given a model for each of its roles and a login for each of its providers,
 it writes the pack to `[[packs]]` and copies the pack's `workspace/` into
-the default workspace, keeping the files there, unless the project lacks a
-tool the pack `requires` (from another pack). It lists the pack's
-`environment/`, which it does not run. An agent can propose the same import
+the default workspace, keeping the files there, when the config loads with
+it. It lists the pack's `environment/`, which it does not run.
+
+A tool a team's agents use that the pack does not bring goes in
+`[pack.requires]`, its name and, as text, where to get it:
+
+```toml
+[pack.requires]
+bash = "the codex-like preset's tools (priv/presets/codex-like/tools)"
+```
+
+Loading a config refuses a pack whose required tools its catalog — the
+tool folders of `[tools] paths` and the packs, the skills and the inline
+tools — lacks, naming each tool and where to get it, so neither the
+`pack` tool nor a run starts with a team that cannot call them. An MCP
+server's tools are known only once a run starts it, so a pack cannot
+require one. An agent can propose the same import
 to the person with `propose_pack`, whose `apply` option calls `pack`.
 
 ## How a team talks

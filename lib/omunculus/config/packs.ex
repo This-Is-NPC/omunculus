@@ -8,8 +8,8 @@ defmodule Omunculus.Config.Packs do
   depth layer of the pack moves down that many.
 
   A pack is a folder with a `pack.toml`: `[pack]` gives its `name`, its
-  `roles`, the `auth` providers its secrets name and the tools of other
-  packs it `requires`, which importing it checks, and it may hold
+  `roles`, the `auth` providers its secrets name and, in `[pack.requires]`,
+  each tool it uses that it does not bring with where to get it, and it may hold
   `[agents.<name>]`, each on one of its roles, `[workflows.<name>]`,
   `[secrets.<tool>]`, `[[mcp.servers]]` and `[policy.depth.<n>]`. Beside it,
   `tools/` and `skills/` are its tools and skills, `workspace/` the files a
@@ -24,35 +24,53 @@ defmodule Omunculus.Config.Packs do
   become the models and providers the config maps them to, an MCP server's
   command and an agent's image are found from the pack's folder, and a pack's `tools/` and
   `skills/` come before the config's own paths, so the config's tools and
-  skills win too.
+  skills win too. `expand/2` also returns, by pack, the tools each
+  requires, which `lacking/2` checks against the config's catalog.
   """
 
   @pack_keys ~w(pack agents workflows secrets mcp policy)
   @import_keys ~w(path models auth depth)
 
-  @spec expand(map, String.t()) :: {:ok, map} | {:error, term}
+  @spec expand(map, String.t()) ::
+          {:ok, map, %{String.t() => %{String.t() => String.t()}}} | {:error, term}
   def expand(data, config_dir) do
     {packs, data} = Map.pop(data, "packs", [])
 
     if is_list(packs) do
-      Enum.reduce_while(packs, {:ok, data, %{}}, fn entry, {:ok, data, owners} ->
+      Enum.reduce_while(packs, {:ok, data, %{}, %{}}, fn entry, {:ok, data, owners, required} ->
         with {:ok, dir, pack} <- load(entry, config_dir),
              {:ok, name} <- name(pack),
              {:ok, pack} <- shift(name, pack, Map.get(entry, "depth", 0)),
              {:ok, pack} <- bind(name, pack, entry, dir),
              {:ok, data, owners} <- lay(name, pack, data, owners) do
-          {:cont, {:ok, paths(data, dir), owners}}
+          required = Map.put(required, name, requires(pack.pack))
+          {:cont, {:ok, paths(data, dir), owners, required}}
         else
           {:error, reason} -> {:halt, {:error, {:packs, reason}}}
         end
       end)
       |> case do
-        {:ok, data, _owners} -> {:ok, data}
+        {:ok, data, _owners, required} -> {:ok, data, required}
         error -> error
       end
     else
       {:error, {:packs, {:invalid, :list}}}
     end
+  end
+
+  @doc """
+  The first pack of `required` (as `expand/2` returns it) that requires a
+  tool `names` lacks, with each tool it lacks and where to get it, or `:ok`.
+  """
+  @spec lacking(%{String.t() => %{String.t() => String.t()}}, [String.t()]) ::
+          :ok | {:error, {:packs, {String.t(), :requires, %{String.t() => String.t()}}}}
+  def lacking(required, names) do
+    Enum.find_value(Enum.sort(required), :ok, fn {name, tools} ->
+      case Map.drop(tools, names) do
+        lacked when map_size(lacked) == 0 -> nil
+        lacked -> {:error, {:packs, {name, :requires, lacked}}}
+      end
+    end)
   end
 
   @doc "The pack in `dir`, as its `pack.toml` writes it."
@@ -63,11 +81,22 @@ defmodule Omunculus.Config.Packs do
     with true <- File.regular?(file) || {:error, {:no_pack, dir}},
          {:ok, pack} <- Toml.decode_file(file),
          [] <- Map.keys(pack) -- @pack_keys,
-         {:ok, _name} <- name(pack) do
+         {:ok, name} <- name(pack),
+         true <- requires?(pack) || {:error, {name, :requires, :invalid}} do
       {:ok, pack}
     else
       [key | _] -> {:error, {:unknown_key, key}}
       {:error, _reason} = error -> error
+    end
+  end
+
+  defp requires(pack), do: get_in(pack, ["pack", "requires"]) || %{}
+
+  # `[pack.requires]`: each tool's name, and where to get it, as text.
+  defp requires?(pack) do
+    case requires(pack) do
+      %{} = tools -> Enum.all?(tools, fn {_tool, where} -> is_binary(where) and where != "" end)
+      _other -> false
     end
   end
 

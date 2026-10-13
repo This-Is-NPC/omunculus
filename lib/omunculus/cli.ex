@@ -164,6 +164,12 @@ defmodule Omunculus.CLI do
     "overrides.#{tool}.schema names #{variant}, which the #{tool} manifest does not declare"
   end
 
+  def format_error({:packs, {pack, :requires, lacked}}) when is_map(lacked) do
+    tools = Enum.map_join(Enum.sort(lacked), "; ", fn {tool, where} -> "#{tool} (#{where})" end)
+
+    "pack #{pack} requires tools the project lacks: #{tools}; add a [tools] path that holds them or import the pack that brings them"
+  end
+
   def format_error(:no_runs), do: "no runs"
   def format_error(:project_in_use), do: "project is in use by another Omunculus process"
 
