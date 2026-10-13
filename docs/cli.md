@@ -363,6 +363,7 @@ refuses to open:
 | `omunculus.toml is missing [store]` | no store path |
 | `omunculus.toml agent <name> is missing model` | agent without `model` |
 | `omunculus.toml [policy] max_retries is required, a non-negative integer` | `max_retries` absent or invalid |
+| `omunculus.toml [policy] max_reopens must be a non-negative integer` | `max_reopens` invalid |
 | `omunculus.toml [policy] last_run_output_bytes must be a positive integer` | `last_run_output_bytes` invalid |
 | `omunculus.toml [policy] tool_output_bytes must be a positive integer` | `tool_output_bytes` invalid |
 | `omunculus.toml is missing assemble` | no assemble tool named |

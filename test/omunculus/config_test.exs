@@ -156,6 +156,25 @@ defmodule Omunculus.ConfigTest do
     assert {:ok, %Config{max_retries: 0}} = load(dir)
   end
 
+  test "[policy] max_reopens is optional, a non-negative integer", %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """
+
+    Fixtures.write_config(dir, agents)
+    assert {:ok, %Config{max_reopens: nil}} = load(dir)
+
+    for invalid <- ["-1", "1.5", ~s("2")] do
+      write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\nmax_reopens = #{invalid}\n")
+      assert {:error, {:policy, {:invalid, :max_reopens}}} = load(dir)
+    end
+
+    Fixtures.write_config(dir, agents <> "\n[policy]\nmax_reopens = 2\n")
+    assert {:ok, %Config{max_reopens: 2}} = load(dir)
+  end
+
   test "[policy] last_run_output_bytes and tool_output_bytes are optional positive integers",
        %{dir: dir} do
     agents = """

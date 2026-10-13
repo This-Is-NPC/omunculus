@@ -302,7 +302,17 @@ stage), its `delegate` and its `end`, so the broken child is never left
 parked for good. `retire` cancels the broken child with the parent's
 report as its comment; the parent's run goes on, and may delegate what
 must come first and a new work after it, or the parent waits again on
-its other children while some are not back. A message to a work waiting
+its other children while some are not back.
+
+A work that keeps breaking does not go round for ever. With `[policy]
+max_reopens`, once a parent has sent one work back that many times in a
+row — its reopens since an answer to a request of the parent's work last
+came — its next `reopen` sends nothing back: the store opens a request
+along the parent's route instead, its reason the question the `reopen`
+tool wrote (`past_limit`: the work, that it went back as often as the
+limit allows, and the instructions it would have gone back with), and
+the parent waits on it, the broken work still waiting on the parent. The
+answer opens the parent's run, and the count starts over. A message to a work waiting
 on its children leaves it waiting: it opens a run of the work's agent,
 named, which may comment, delegate more and end but not `done`, `break`
 or request, and the last child back still wakes the work. A root work is only closed,

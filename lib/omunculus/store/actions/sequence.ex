@@ -16,7 +16,10 @@ defmodule Omunculus.Store.Actions.Sequence do
   from which it goes through the stages after again — with the
   parent's instructions as its comment, and parks the parent on its
   children again, giving the work the names it lists in `grant` that its
-  agent lacks and the parent could grant it on a request; `delegate` is refused while a child that broke waits on
+  agent lacks and the parent could grant it on a request; once the child
+  went back `[policy] max_reopens` times in a row, since an answer to a
+  request of the parent's work last came, the parent opens a request with
+  the `past_limit` reason instead, along its route; `delegate` is refused while a child that broke waits on
   the parent's decision; closing or cancelling a work reopens
   it once each of its children is done or cancelled; each names
   the reopened parent as `parent_id` in its event. `delegate` opens a
@@ -126,9 +129,44 @@ defmodule Omunculus.Store.Actions.Sequence do
          {:ok, {stage, assignee}} <-
            reopen_assignee(conn, ctx.config, child, body["agent"], body["stage"]),
          {:ok, grants} <- reopen_grants(conn, ctx, child, parent, assignee, body["grant"]),
-         {:ok, event} <- apply_reopen(conn, ctx, body, child, parent, {stage, assignee}) do
-      give_all(conn, ctx, child, assignee, grants, event)
+         {:ok, rounds} <- rounds(conn, child, parent) do
+      if past_limit?(ctx.config.max_reopens, rounds) do
+        ask_instead(conn, body, ctx)
+      else
+        with {:ok, event} <- apply_reopen(conn, ctx, body, child, parent, {stage, assignee}),
+             do: give_all(conn, ctx, child, assignee, grants, event)
+      end
     end
+  end
+
+  # The rounds a child went back in a row: its reopens since an answer to
+  # a request of the parent's work last came.
+  defp rounds(conn, child, parent) do
+    with {:ok, %{rounds: rounds}} <-
+           Query.one(
+             conn,
+             """
+             SELECT COUNT(*) AS rounds FROM events
+             WHERE type = 'reopen' AND work_id = ?
+               AND sequence > COALESCE(
+                 (SELECT MAX(sequence) FROM events WHERE type = 'reply' AND work_id = ?), 0)
+             """,
+             [child.id, parent.id]
+           ),
+         do: {:ok, rounds}
+  end
+
+  defp past_limit?(nil, _rounds), do: false
+  defp past_limit?(max_reopens, rounds), do: rounds >= max_reopens
+
+  # Past `[policy] max_reopens` the work does not go back once more: the
+  # parent asks along its route instead, with the reason its tool wrote,
+  # and waits on the request, the broken child still waiting on it.
+  defp ask_instead(conn, body, ctx) do
+    with :ok <- Helpers.ensure_text(:reopen, body, "past_limit"),
+         {:ok, event} <-
+           Requests.request(conn, %{"reason" => body["past_limit"], "options" => %{}}, ctx),
+         do: {:ok, [event]}
   end
 
   # What the parent gives with the reopen: names the agent lacks on the work

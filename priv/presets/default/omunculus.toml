@@ -91,6 +91,7 @@ steps = [
 request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
+max_reopens = 3
 last_run_output_bytes = 8192
 tool_output_bytes = 32768
 conversation_bytes = 16384

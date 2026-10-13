@@ -9,7 +9,9 @@ defmodule Omunculus.Config do
   per-depth layers under `[policy.depth.N]`, the workspaces under
   `[workspaces.<name>]` — each a directory `root` (resolved against the
   project root) plus a ceiling layer — the `[policy] workspace`
-  default, the required `[policy] max_retries` and `request_routes`, the optional `[policy]
+  default, the required `[policy] max_retries` and `request_routes`, the
+  optional `[policy] max_reopens` (how many times in a row a parent may
+  reopen one work below it before its next reopen asks instead), the optional `[policy]
   last_run_output_bytes` and `tool_output_bytes`, the optional `[policy]
   conversation_bytes` (how much of its conversation's works and exchanges
   a run without a work is shown), the optional `[policy]
@@ -46,6 +48,7 @@ defmodule Omunculus.Config do
     :workflows,
     :assemble,
     :max_retries,
+    :max_reopens,
     :request_routes,
     :last_run_output_bytes,
     :tool_output_bytes,
@@ -125,6 +128,7 @@ defmodule Omunculus.Config do
           workflows: %{String.t() => [step]},
           assemble: String.t() | nil,
           max_retries: non_neg_integer,
+          max_reopens: non_neg_integer | nil,
           request_routes: [map],
           last_run_output_bytes: pos_integer | nil,
           tool_output_bytes: pos_integer | nil,
@@ -176,7 +180,7 @@ defmodule Omunculus.Config do
   @mcp_server_keys ~w(name command protocol_version secrets)
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
-  @policy_extra_keys ~w(depth workflows workspace assemble max_retries last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes request_routes)
+  @policy_extra_keys ~w(depth workflows workspace assemble max_retries max_reopens last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes request_routes)
   @agent_extra_keys ~w(depth text workflow_only model assemble image)
   # The files an agent's image may be.
   @image_extensions ~w(.png .jpg .jpeg .webp .gif)
@@ -699,8 +703,8 @@ defmodule Omunculus.Config do
              {:ok, agents} <- parse_agents(Map.get(data, "agents", %{}), models, config_dir),
              {:ok, workflows} <- parse_workflows(Map.get(data, "workflows", %{}), agents),
              {:ok, policy, depths, policy_workflows, policy_workspace, depth_workflows, assemble,
-              max_retries, last_run_output_bytes, tool_output_bytes, conversation_bytes,
-              send_catalog,
+              max_retries, max_reopens, last_run_output_bytes, tool_output_bytes,
+              conversation_bytes, send_catalog,
               session} <-
                parse_policy(Map.get(data, "policy", %{}), workflows, workspaces),
              {:ok, request_routes} <-
@@ -728,6 +732,7 @@ defmodule Omunculus.Config do
               workflows: workflows,
               assemble: assemble,
               max_retries: max_retries,
+              max_reopens: max_reopens,
               request_routes: request_routes,
               last_run_output_bytes: last_run_output_bytes,
               tool_output_bytes: tool_output_bytes,
@@ -1290,13 +1295,14 @@ defmodule Omunculus.Config do
              {:ok, depths, depth_workflows} <- parse_depths(depth_data, workflows),
              {:ok, assemble} <- tag_error(fetch_assemble(assemble_data), :policy),
              {:ok, max_retries} <- fetch_max_retries(data),
+             {:ok, max_reopens} <- fetch_max_reopens(data),
              {:ok, last_run_output_bytes} <- fetch_positive(data, :last_run_output_bytes),
              {:ok, tool_output_bytes} <- fetch_positive(data, :tool_output_bytes),
              {:ok, conversation_bytes} <- fetch_positive(data, :conversation_bytes),
              {:ok, send_catalog} <- fetch_send_catalog(data),
              {:ok, session} <- fetch_session(data) do
           {:ok, policy, depths, policy_workflows, policy_workspace, depth_workflows, assemble,
-           max_retries, last_run_output_bytes, tool_output_bytes, conversation_bytes,
+           max_retries, max_reopens, last_run_output_bytes, tool_output_bytes, conversation_bytes,
            send_catalog, session}
         end
     end
@@ -1313,6 +1319,15 @@ defmodule Omunculus.Config do
 
   defp fetch_max_retries(%{"max_retries" => n}) when is_integer(n) and n >= 0, do: {:ok, n}
   defp fetch_max_retries(_data), do: {:error, {:policy, {:invalid, :max_retries}}}
+
+  # Absent, a parent reopens a work below it as often as it likes.
+  defp fetch_max_reopens(data) do
+    case Map.get(data, "max_reopens") do
+      nil -> {:ok, nil}
+      n when is_integer(n) and n >= 0 -> {:ok, n}
+      _invalid -> {:error, {:policy, {:invalid, :max_reopens}}}
+    end
+  end
 
   # Absent, a run is sent its own tools only.
   defp fetch_send_catalog(data) do

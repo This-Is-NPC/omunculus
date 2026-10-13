@@ -2123,4 +2123,73 @@ defmodule Omunculus.RunTest do
       Project.close(project)
     end
   end
+
+  describe "a parent past [policy] max_reopens" do
+    test "asks along its route instead of reopening, and its run ends", %{dir: dir} do
+      write_config(dir, """
+      [agents.lead]
+      depth = 0
+      text = "lead"
+      tools = ["reopen", "retire", "end"]
+
+      [agents.helper]
+      depth = 1
+      text = "helper"
+      tools = ["done", "end"]
+
+      [policy]
+      max_retries = 0
+      max_reopens = 0
+      request_routes = [{ via = ["origin"] }]
+      """)
+
+      project = open_project(dir)
+      root = Fixtures.insert(project.conn, :works, %{assignee: "lead"})
+
+      child =
+        Fixtures.insert(project.conn, :works, %{
+          assignee: "helper",
+          parent_id: root,
+          state: "waiting"
+        })
+
+      ceiling = %{
+        have: ["reopen", "end"],
+        askable: [],
+        sealed: [],
+        blocked: [],
+        overrides: %{}
+      }
+
+      run =
+        Fixtures.open_run(project.conn, %{
+          agent: "lead",
+          work_id: root,
+          own: true,
+          ceiling: ceiling
+        })
+
+      ctx = %{trigger: "model", run_id: run.id, author: "agent", agent: "lead"}
+      args = %{"work_id" => child, "instructions" => "publish nothing, only comment"}
+
+      assert {:ok, %{ok: true}, events} = Harness.dispatch(project, "reopen", args, ctx)
+      assert for(%{type: type} when type != "tool" <- events, do: type) == ["request", "end"]
+
+      assert {:ok, %{state: "waiting", waiting: nil}} =
+               Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [child])
+
+      assert {:ok, %{state: "waiting", waiting: "request"}} =
+               Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [root])
+
+      request_id = Enum.find(events, &(&1.type == "request")).request_id
+
+      assert {:ok, [%{body: body}]} =
+               Query.all(project.conn, "SELECT * FROM comments WHERE request_id = ?", [request_id])
+
+      assert body =~ "[policy] max_reopens"
+      assert body =~ "publish nothing, only comment"
+
+      Project.close(project)
+    end
+  end
 end

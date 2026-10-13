@@ -1,11 +1,11 @@
 defmodule Omunculus.Tools.ReopenTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.Tools.Reopen
+  alias Omunculus.Tools.{Out, Reopen}
 
   @args %{"work_id" => "w1", "instructions" => "use edit this time"}
 
-  test "emits reopen with the instructions, the agent and what to grant" do
+  test "emits reopen with the instructions, the agent, what to grant and what to ask past the limit" do
     grant = [
       %{"kind" => "tool", "name" => "edit"},
       %{"kind" => "resource", "name" => "sandbox.write"}
@@ -21,7 +21,8 @@ defmodule Omunculus.Tools.ReopenTest do
                    "work_id" => "w1",
                    "body" => "use edit this time",
                    "agent" => "edward",
-                   "grant" => grant
+                   "grant" => grant,
+                   "past_limit" => Out.reopen_limit("w1", "use edit this time")
                  }
                }
              ]

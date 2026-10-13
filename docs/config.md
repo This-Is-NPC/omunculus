@@ -52,6 +52,17 @@ the harness breaks it ([the cycle](cycle.md)). `[workspaces.<w>.policy]
 max_retries`, or `[policy] max_retries` in the workspace's `config` file,
 sets it for the works in that workspace.
 
+`[policy] max_reopens` is optional: a non-negative integer, how many
+times in a row a parent may send one work below it back with `reopen`.
+The rounds counted are the work's reopens since an answer to a request
+of the parent's work last came. Once they reach `max_reopens`, the next
+`reopen` does not send the work back: the parent asks along its request
+route instead, with a question naming the work and the instructions it
+would have gone back with, and waits on the answer, the broken work still
+waiting on it ([the cycle](cycle.md#work)). Without it a parent reopens
+a work as often as it likes. A workspace sets it the same way as
+`max_retries`.
+
 `[policy] request_routes` is mandatory and nonempty. Loading a config without
 it refuses with `{:policy, {:required, :request_routes}}`. Malformed routes return
 `{:policy, {:invalid, :request_routes}}`. Routes are parsed

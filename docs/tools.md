@@ -357,7 +357,10 @@ children again and the run ends. `retire` takes `work_id` and a `report`:
 the work is cancelled with the report as its comment and the run goes
 on — the parent, free of the broken work, may hand out what must come
 first and a new work after it, or waits on its other children when some
-are not back. `break` passes the parent's own work up. Only a work that
+are not back. `break` passes the parent's own work up. With `[policy]
+max_reopens`, a `reopen` past the limit opens a request along the
+parent's route instead, its reason the `past_limit` text the tool wrote,
+and the parent waits on the answer ([the cycle](cycle.md#work)). Only a work that
 broke can be reopened or retired: a work that is done stays done, and
 what it did is changed by a new work. Either refuses any other work with
 `not_broken` or `not_a_child`.

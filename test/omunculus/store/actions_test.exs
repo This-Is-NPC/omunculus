@@ -1103,6 +1103,76 @@ defmodule Omunculus.Store.ActionsTest do
                record_tool(conn, [delegate], ctx)
     end
 
+    test "past [policy] max_reopens the parent asks its route instead, until an answer comes",
+         %{conn: conn} do
+      config = Fixtures.config(arbiter_toml() <> "\n[policy]\nmax_reopens = 1\n")
+      root_id = Fixtures.insert(conn, :works, %{assignee: "concierge"})
+      parent_id = Fixtures.insert(conn, :works, %{parent_id: root_id, assignee: "worker"})
+
+      child_id =
+        Fixtures.insert(conn, :works, %{
+          parent_id: parent_id,
+          assignee: "worker",
+          state: "waiting"
+        })
+
+      emit = put_in(reopen_emit(child_id), ["body", "past_limit"], "it keeps breaking")
+
+      reopen = fn ->
+        run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
+        record_tool(conn, [emit], request_ctx(run, parent_id, config))
+      end
+
+      breaks = fn ->
+        :ok = Query.exec(conn, "UPDATE works SET state = 'waiting' WHERE id = ?", [child_id])
+
+        :ok =
+          Query.exec(conn, "UPDATE works SET state = 'open', waiting = NULL WHERE id = ?", [
+            parent_id
+          ])
+      end
+
+      assert {:ok, [_tool_event, %{type: "reopen"}]} = reopen.()
+      breaks.()
+
+      assert {:ok, [_tool_event, %{type: "request"} = asked]} = reopen.()
+
+      assert {:ok, %{arbiter: @concierge, status: "pending"}} =
+               Query.one(conn, "SELECT * FROM requests WHERE id = ?", [asked.request_id])
+
+      assert {:ok, [%{body: "it keeps breaking"}]} =
+               Query.all(conn, "SELECT * FROM comments WHERE request_id = ?", [asked.request_id])
+
+      assert {:ok, %{state: "waiting", waiting: nil}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
+
+      assert {:ok, %{state: "waiting", waiting: "request"}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+
+      without_reason = update_in(emit, ["body"], &Map.delete(&1, "past_limit"))
+      run = Fixtures.open_run(conn, %{agent: "worker", ceiling: @ceiling})
+
+      assert {:error, {:reopen, :no_past_limit}} =
+               record_tool(conn, [without_reason], request_ctx(run, parent_id, config))
+
+      concierge = Fixtures.open_run(conn, %{agent: "concierge", ceiling: @ceiling})
+
+      assert {:ok, _replied} =
+               record_tool(
+                 conn,
+                 [
+                   %{
+                     "type" => "reply",
+                     "body" => %{"request_id" => asked.request_id, "body" => "once more"}
+                   }
+                 ],
+                 request_ctx(concierge, root_id, config)
+               )
+
+      breaks.()
+      assert {:ok, [_tool_event, %{type: "reopen"}]} = reopen.()
+    end
+
     test "refuses a work that is not a broken child of the run's work", %{conn: conn} do
       parent_id = Fixtures.insert(conn, :works)
       working = Fixtures.insert(conn, :works, %{parent_id: parent_id, state: "open"})

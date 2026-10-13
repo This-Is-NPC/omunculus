@@ -125,6 +125,10 @@ defmodule Omunculus.CLI do
     "omunculus.toml [policy] max_retries is required, a non-negative integer"
   end
 
+  def format_error({:policy, {:invalid, :max_reopens}}) do
+    "omunculus.toml [policy] max_reopens must be a non-negative integer"
+  end
+
   def format_error({:policy, {:invalid, key}})
       when key in [:last_run_output_bytes, :tool_output_bytes, :conversation_bytes] do
     "omunculus.toml [policy] #{key} must be a positive integer"
