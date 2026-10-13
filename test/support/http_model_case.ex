@@ -35,9 +35,9 @@ defmodule Omunculus.HttpModelCase do
         assert {:ok, "benchmark complete"} = call_model(@adapter, base_url, call)
         assert calls(agent) == [{"counter", %{}}]
 
-        assert {:ok, %{"last_tools" => [tool, executor]}} = OpenAIStub.stats(stub)
+        # Without code_mode the adapter offers the run's tools alone.
+        assert {:ok, %{"last_tools" => [tool]}} = OpenAIStub.stats(stub)
         assert tool["name"] == "counter"
-        assert executor["name"] == "__omunculus_execute"
         assert tool["parameters"]["type"] == "object"
       end
 
