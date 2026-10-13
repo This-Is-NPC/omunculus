@@ -14,7 +14,11 @@ the project's work.
 Every change the steward, the auditor or the refiner makes goes to the person as a request: the
 config it would make is loaded first, so a change that would break the
 file never reaches them, and it applies only once they approve it and only
-while the file is as it was when proposed.
+while the file is as it was when proposed. The request goes on the logical
+`owner` route, so a project importing the team declares it in `[policy]
+request_routes`, as the default preset does with
+`{ name = "owner", via = ["origin"] }`: the change reaches the project's
+owner, not whoever the default route passes through.
 
 Their skills:
 

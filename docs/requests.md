@@ -71,6 +71,15 @@ sales-desk and agency eval overlays also declare the logical `owner` route
 used by sales decisions. Importing that pack requires configuring this logical
 responsibility; it can name a different participant from the conversation origin.
 
+A change to the project is its owner's to decide, whoever the default route
+passes through: `propose_config` and `propose_pack` send their request with
+`to = "owner"`, so a project whose agents have them — the system team's —
+declares the `owner` route, as the default preset and the development
+projects do. Without it the proposal is refused as an unknown route, naming
+the routes there are; there is no fallback to the default route. In the
+agency, whose default route passes the sales generalist, the system team's
+proposals reach the person directly instead of being reworded on the way.
+
 ## Forms and effects
 
 | Form | Behavior |
@@ -83,7 +92,7 @@ responsibility; it can name a different participant from the conversation origin
 | `grant`, `cancel` | Chain-only effects of a selected reply option, targeting the original request. |
 | `break`, `reopen` | Stop failed work and return it for correction. A resumable question uses a request rather than a break/reopen round trip. |
 | `promote` approval | The release agent requests permission with `request_access`; it follows the configured chain. Intermediaries must escalate: an agent cannot answer a request containing a sealed grant option, including with deny or text. Only the human decides; the pack's `promote` tool publishes once its grant makes it available. |
-| `propose_config`, `propose_pack` | Validated proposals whose apply option calls configure or pack with revision checks. A text reply records advice without applying the proposal. |
+| `propose_config`, `propose_pack` | Validated proposals whose apply option calls configure or pack with revision checks, always on the logical `owner` route. A text reply records advice without applying the proposal. |
 | Harness retry/cancel | A routed request after root retry exhaustion. Retry is a named decision with no calls; cancel chains cancellation. Child retry exhaustion remains a stopping break. |
 | Unanswered receiver | Linked escalation through the same action and routing, of the request the run was opened for or, for an intermediary resumed by a text answer, of the origins the answer returned to it; an upstream human request gets an inbox notification. |
 

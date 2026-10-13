@@ -77,6 +77,10 @@ The default preset imports the system team (`priv/packs/system`):
   looped — and proposes, with the runs that show it, the change in the
   teams' texts, tools or workflows.
 
+Their proposals go on the logical `owner` route, which a project importing
+the team declares, as the default preset does with
+`{ name = "owner", via = ["origin"] }`; see [requests](requests.md).
+
 Their portraits and their skills (`team-design`, `team-composition`,
 `configure`, `audit`, `refine`) are in the pack; see
 [`priv/packs/system/README.md`](../priv/packs/system/README.md).

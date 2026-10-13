@@ -71,7 +71,7 @@ defmodule Omunculus.CLITest do
     Project.close(project)
 
     for {destination, refusal} <- [
-          {["--to", "absent"], {:request, {:unknown_route, "absent", []}}},
+          {["--to", "absent"], {:request, {:unknown_route, "absent", ["owner"]}}},
           {[], {:request, :no_route}}
         ] do
       assert {:error, ^refusal} =
@@ -853,6 +853,71 @@ defmodule Omunculus.CLITest do
 
       Project.close(project)
       assert assembled =~ "answered apply: the reply is below"
+    end
+
+    test "a proposal goes to the project's owner, not along the default route", %{dir: dir} do
+      config = """
+      [agents.keeper]
+      depth = 0
+      text = "I keep the project."
+      tools = ["propose_config", "end"]
+      human = ["configure"]
+
+      [agents.desk]
+      depth = 0
+      text = "I answer."
+      tools = ["end"]
+
+      [policy]
+      request_routes = [ROUTES]
+      """
+
+      owner = ~s({ name = "owner", via = ["origin"] }, )
+      default = ~s({ via = [{ kind = "agent", agent = "desk" }, "origin"] })
+      write_config(dir, String.replace(config, "ROUTES", owner <> default))
+
+      # Proposes the desk's own table with a shorter text.
+      proposing = fn dir ->
+        fn assembled, _tools, call ->
+          if assembled =~ "## Request\n" do
+            call.("end", %{})
+          else
+            desk = Toml.decode_file!(Path.join(dir, "omunculus.toml"))["agents"]["desk"]
+
+            call.("propose_config", %{
+              "item" => "agents.desk",
+              "value" => Map.put(desk, "text", "I answer briefly."),
+              "reason" => "shorter answers"
+            })
+          end
+        end
+      end
+
+      Fixtures.use_model(dir, proposing.(dir))
+
+      assert {:ok, _said} = CLI.run(["send", "--agent", "keeper", "shorten desk"], dir)
+      project = open_project(dir)
+      assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
+      assert request.arbiter == @human
+      Project.close(project)
+
+      # Without an owner route the store refuses the proposal, naming the routes there are.
+      dir = Fixtures.tmp_dir()
+      Fixtures.install_default(dir)
+      write_config(dir, String.replace(config, "ROUTES", default))
+      Fixtures.use_model(dir, proposing.(dir))
+      assert {:ok, _said} = CLI.run(["send", "--agent", "keeper", "shorten desk"], dir)
+      project = open_project(dir)
+      assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
+
+      assert {:ok, [%{body: body}]} =
+               Query.all(
+                 project.conn,
+                 "SELECT body FROM events WHERE type = 'tool' AND body LIKE '%propose_config%'"
+               )
+
+      Project.close(project)
+      assert body =~ "owner"
     end
 
     test "a pack an agent proposes to import is loaded first, then the person's to apply",

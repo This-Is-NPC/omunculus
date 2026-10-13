@@ -2,7 +2,8 @@ defmodule Omunculus.Tools.ProposeConfig do
   @moduledoc """
   Builtin `propose_config` tool: loads the config `config_path` would make
   once `item` is `value` (`Omunculus.Config.try_item/3`) and, when it loads,
-  emits a request whose `apply` option calls `configure` with that change
+  emits a request, on the logical route `owner` (`route/0`), whose `apply`
+  option calls `configure` with that change
   at the file's current revision, and whose `deny` calls nothing; its
   reason gives the agent's `reason` and the item as it is and as it would
   be, logins' keys left out. A change that does not load fails here, with
@@ -34,6 +35,13 @@ defmodule Omunculus.Tools.ProposeConfig do
 
   def run(_input), do: Out.fail("config_path required")
 
+  @doc """
+  The logical request route a proposal to change the project goes on: the
+  project is its owner's to change, whoever else the default route passes.
+  """
+  @spec route() :: String.t()
+  def route, do: "owner"
+
   defp steps(config, {"agents", name}, value) when not is_nil(value),
     do: Steps.missing(config, [name])
 
@@ -45,6 +53,7 @@ defmodule Omunculus.Tools.ProposeConfig do
       |> Args.put_present("from", args)
 
     %{
+      "to" => route(),
       "reason" =>
         Enum.join(
           [

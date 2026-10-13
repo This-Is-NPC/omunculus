@@ -85,8 +85,10 @@ steps = [
   { name = "review", agent = "reviewer", deny = ["fs.write", "bench", "sandbox.write"] },
 ]
 
+# The system team proposes changes to the project on the owner route: the
+# project is the person's to change.
 [policy]
-request_routes = [{ via = ["parent", "origin"] }]
+request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", "origin"] }]
 assemble = "assemble"
 max_retries = 3
 last_run_output_bytes = 8192

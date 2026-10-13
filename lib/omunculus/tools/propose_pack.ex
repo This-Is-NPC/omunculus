@@ -3,7 +3,8 @@ defmodule Omunculus.Tools.ProposePack do
   Builtin `propose_pack` tool: loads the config `config_path` would make
   once the pack at `path`, relative to the workspace, is imported with
   `models`, `auth` and `depth` (`Omunculus.Config.try_pack/2`) and, when it
-  loads, emits a request whose `apply` option calls `pack` with that
+  loads, emits a request, on the route `ProposeConfig.route/0` names, whose
+  `apply` option calls `pack` with that
   import, and whose `deny` calls nothing; its reason gives the agent's
   `reason`, each of the pack's agents at the depth and on the model it
   would run, and what the pack's `environment/` holds, which the person
@@ -14,7 +15,7 @@ defmodule Omunculus.Tools.ProposePack do
 
   alias Omunculus.{CLI, Config}
   alias Omunculus.Config.Packs
-  alias Omunculus.Tools.{Args, Out, Steps}
+  alias Omunculus.Tools.{Args, Out, ProposeConfig, Steps}
 
   @spec run(map) :: map
   def run(%{args: args, config_path: path, roots: roots}) when is_binary(path) do
@@ -56,6 +57,7 @@ defmodule Omunculus.Tools.ProposePack do
           do: "- #{name}: depth #{agent.depth}, model #{agent.model}"
 
     %{
+      "to" => ProposeConfig.route(),
       "reason" =>
         Enum.join(
           [
