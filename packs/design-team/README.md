@@ -40,6 +40,9 @@ workspace/design/README.md     the layout and rules of the design
 workspace/templates/design-brief.md
                                the briefing, and the rounds included
 tasks/                         the evals that show it works
+images/                        a portrait of each agent, its `image`, after Totally Spies!:
+                               the lead as Jerry, the designer as Clover, the reviewer
+                               as Sam, the publisher as Alex
 ```
 
 Questions use `ask`. The lead answers received requests from the briefing or work goal and escalates all remaining questions together, preserving named origins; returned text is distributed with `reply`. Requests preserve waits on children. `break` stops failed work.

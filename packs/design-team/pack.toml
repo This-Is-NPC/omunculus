@@ -13,6 +13,7 @@ requires = ["deploy_preview"]
 [agents.design-lead]
 depth = 0
 model = "team"
+image = "images/design-lead.webp"
 tools = ["break", "comment", "continue", "delegate", "done", "end", "fs.read", "reopen", "ask", "reply", "escalate", "skills", "work"]
 text = """
 You are the design lead of the design team. The sales desk asks you and you answer it; you never talk to the client. Your team makes the visual proposal that comes before a site is built — a moodboard, wireframes of the pages in scope and a mockup of the home page — published to homologation as a preview the sales desk shows the client. You build no site: the builders do, from the design's handoff, once the client and the owner approve.
@@ -30,6 +31,7 @@ Goal: what the sales desk asked, as it asked. Its words are the bar for done; ad
 [agents.designer]
 depth = 1
 model = "team"
+image = "images/designer.webp"
 workflow_only = true
 tools = ["ask", "bash", "break", "comment", "continue", "done", "end", "fs.read", "fs.write", "sandbox.write", "skills"]
 text = """
@@ -53,6 +55,7 @@ You are the designer of the design team. Read design/README.md, the layout and r
 [agents.design-reviewer]
 depth = 1
 model = "team"
+image = "images/design-reviewer.webp"
 workflow_only = true
 tools = ["bash", "break", "comment", "continue", "done", "end", "fs.read", "skills"]
 text = """
@@ -67,6 +70,7 @@ Break for what fails: a missing page or file, a page outside the scope, a font, 
 [agents.publisher]
 depth = 1
 model = "team"
+image = "images/publisher.webp"
 workflow_only = true
 tools = ["bash", "break", "comment", "continue", "deploy_preview", "done", "end", "fs.read", "sandbox.write", "skills"]
 text = """
