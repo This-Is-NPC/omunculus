@@ -28,7 +28,6 @@ ItemPage {
     ["depth", table.depth === undefined ? "" : String(table.depth)],
     ["model", table.model || ""],
     ["workflow only", table.workflow_only ? "yes" : "no"],
-    ["has", held.join(", ")],
     ["asks for", (table.negotiable || []).join(", ")],
     ["a person gives", (table.human || []).join(", ")],
     ["never has", (table.deny || []).join(", ")]
@@ -54,7 +53,6 @@ ItemPage {
   }
 
   details: [
-    Caption { text: "TEXT" },
     Label {
       Layout.fillWidth: true
       text: page.table.text || ""

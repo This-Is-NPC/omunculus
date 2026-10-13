@@ -4,9 +4,9 @@ import QtQuick.Layouts
 import "kit/ui"
 
 // ItemPage is the screen of one item of the project: what kind it is, its
-// name, the pack it comes from, and, read, three panels side by side — its
-// `facts`, its `details` and what is `related` to it, each related item
-// opening where it is shown — or one under the other on a narrow window;
+// name, the pack it comes from, and, read, its `image` and `facts`, its
+// `details` and what is `related` to it, each related item opening where
+// it is shown;
 // edited, its `form`, the name first when it has one. Its commands, for the bar, go
 // back, edit, remove, save, discard and cancel as fit, then its own `extra`.
 // An item a pack brings, or one the config does not write, is only read.
@@ -27,16 +27,15 @@ Item {
   // Commands of its own, as the bar takes them, after the usual ones.
   property var extra: []
   property alias details: detailsColumn.data
-  // A picture of it, as a url, shown at the head of what it is, or "".
+  // A picture of it, as a url, shown beside what it is, or "".
   property string image: ""
   // [{title, items: [{text, section, id}]}]: what it uses and what uses it,
   // each item by the section and row it opens.
   property var related: []
   default property alias form: formColumn.data
 
-  // Wide enough for the panels side by side, which share the width 3 : 5 : 3.
+  // Wide enough for what is related to stand beside the rest.
   readonly property bool wide: scroll.width >= 1000
-  function share(parts) { return wide ? (content.width - 32) * parts / 11 : content.width }
 
   // A titled frame the read panels share; its fields stack inside.
   component Panel: Rectangle {
@@ -120,9 +119,9 @@ Item {
 
     ColumnLayout {
       id: content
-      // Read, the panels take the room; edited, the form keeps a readable
-      // measure, centred.
-      width: Math.min(scroll.width, page.editing ? 880 : 1600)
+      // Read, it takes the room up to a wide measure; edited, the form keeps
+      // a readable one; centred either way.
+      width: Math.min(scroll.width, page.editing ? 880 : 1640)
       x: (scroll.width - width) / 2
       spacing: 14
 
@@ -153,63 +152,79 @@ Item {
         text: page.draft ? page.draft.issue : ""
       }
 
-      // Read: the facts, the details and what is related, as panels.
+      // Read: beside its image, what it is, as pairs; under them its
+      // description, the width of the main column; what is related to it
+      // down the right side. One under the other on a narrow window. The
+      // page scrolls as a whole.
       GridLayout {
         Layout.fillWidth: true
         visible: !page.editing
-        columns: page.wide ? 3 : 1
-        columnSpacing: 16
-        rowSpacing: 16
+        columns: page.wide ? 2 : 1
+        columnSpacing: 24
+        rowSpacing: 20
 
-        Panel {
-          title: "about"
-          Layout.preferredWidth: page.share(3)
-          visible: page.facts.length > 0
-          Image {
+        ColumnLayout {
+          id: main
+          Layout.fillWidth: true
+          Layout.alignment: Qt.AlignTop
+          spacing: 20
+
+          RowLayout {
             Layout.fillWidth: true
-            Layout.maximumWidth: 420
-            Layout.preferredHeight: width
-            visible: page.image !== ""
-            source: page.image
-            fillMode: Image.PreserveAspectCrop
-            asynchronous: true
-            smooth: true
-            mipmap: true
-            Rectangle { anchors.fill: parent; color: "transparent"; border.color: Theme.line }
-          }
-          GridLayout {
-            Layout.fillWidth: true
-            columns: 2
-            columnSpacing: 18
-            rowSpacing: 8
-            Repeater {
-              model: page.editing ? [] : page.facts.reduce((cells, fact) => cells.concat([{ label: true, text: fact[0] }, { label: false, text: fact[1] }]), [])
-              delegate: DecodeLabel {
-                required property var modelData
-                Layout.fillWidth: !modelData.label
-                Layout.alignment: Qt.AlignTop
-                value: modelData.label ? modelData.text.toUpperCase() : (modelData.text === "" ? "—" : modelData.text)
-                color: modelData.label ? Theme.dim : Theme.foreground
-                font.pixelSize: modelData.label ? 10 : 13
-                font.letterSpacing: modelData.label ? 2 : 0
-                wrapMode: modelData.label ? Text.NoWrap : Text.Wrap
+            spacing: 24
+            Image {
+              Layout.alignment: Qt.AlignTop
+              Layout.preferredWidth: page.image === "" ? 0 : Math.min(260, main.width * 0.3)
+              Layout.preferredHeight: Layout.preferredWidth
+              visible: page.image !== ""
+              source: page.image
+              fillMode: Image.PreserveAspectCrop
+              asynchronous: true
+              smooth: true
+              mipmap: true
+              Rectangle { anchors.fill: parent; color: "transparent"; border.color: Theme.line }
+            }
+            GridLayout {
+              Layout.fillWidth: true
+              Layout.alignment: Qt.AlignTop
+              visible: page.facts.length > 0
+              // Two pairs a row when there is room.
+              columns: main.width - (page.image === "" ? 0 : 284) > 760 ? 4 : 2
+              columnSpacing: 18
+              rowSpacing: 10
+              Repeater {
+                model: page.editing ? [] : page.facts.reduce((cells, fact) => cells.concat([{ label: true, text: fact[0] }, { label: false, text: fact[1] }]), [])
+                delegate: DecodeLabel {
+                  required property var modelData
+                  Layout.fillWidth: !modelData.label
+                  Layout.preferredWidth: modelData.label ? -1 : 1
+                  Layout.alignment: Qt.AlignTop
+                  value: modelData.label ? modelData.text.toUpperCase() : (modelData.text === "" ? "—" : modelData.text)
+                  color: modelData.label ? Theme.dim : Theme.foreground
+                  font.pixelSize: modelData.label ? 10 : 13
+                  font.letterSpacing: modelData.label ? 2 : 0
+                  wrapMode: modelData.label ? Text.NoWrap : Text.Wrap
+                }
               }
             }
           }
-        }
-        Panel {
-          title: "description"
-          Layout.preferredWidth: page.share(5)
-          visible: detailsColumn.children.length > 0
-          ColumnLayout {
-            id: detailsColumn
+
+          Panel {
+            title: "description"
             Layout.fillWidth: true
-            spacing: 12
+            visible: detailsColumn.children.length > 0
+            ColumnLayout {
+              id: detailsColumn
+              Layout.fillWidth: true
+              spacing: 12
+            }
           }
         }
+
         Panel {
           title: "related"
-          Layout.preferredWidth: page.share(3)
+          Layout.alignment: Qt.AlignTop
+          Layout.preferredWidth: page.wide ? 380 : main.width
           Note {
             visible: page.related.every(group => group.items.length === 0)
             value: "Nothing else in the project names it."
