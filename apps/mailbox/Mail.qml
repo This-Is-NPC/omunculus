@@ -345,7 +345,7 @@ Singleton {
         agent = agent || body.agent || ""
         entries.push({ kind: "you", key: event.cursor, from: "you", to: body.agent || agent, text: body.message || "", at: event.at, open: false, files: body.attachments || [] })
       } else if (event.type === "reply" && event.request_id) {
-        replies[event.request_id] = { option: chosen(body), body: body.body || "" }
+        replies[event.request_id] = { option: Requests.chosen(body), body: body.body || "" }
       } else if (rootRuns[event.run_id] && ["model", "comment", "attach"].includes(event.type)) {
         const words = (event.type === "model" ? text(body) : event.type === "comment" ? String(body.body || "") : String(body.note || "")).trim()
         const files = event.type === "attach" ? body.attachments || [] : []
@@ -372,7 +372,7 @@ Singleton {
         note: !!notes[request.id],
         text: question.text, at: request.created_at, open: Requests.pending(request),
         files: [],
-        choices: choices(request, []),
+        choices: Requests.choices(request),
         origins: question.origins,
         answer: replies[request.id] || null
       })
@@ -513,26 +513,6 @@ Singleton {
       : Array.isArray(body.output) ? body.output.filter(part => part.type === "function_call").map(part => part.name)
       : []
     return names.filter(name => !!name).map(name => name === "__omunculus_execute" ? "code" : name)
-  }
-
-  // The decisions a request offers: its own options, then, of every request
-  // it gathers from below still waiting, the options named there, each with
-  // the parts that lead to it, as an escalation keeps a decision's options
-  // on its origin.
-  function choices(request, path) {
-    const own = Object.keys(request.options || {})
-    const mine = own.length > 0 && (path.length === 0 || ["pending", "escalated"].includes(request.status))
-      ? [{ part: path.length > 0 ? path[path.length - 1] : "", path: path, options: own }] : []
-    return Object.keys(request.origins || {})
-      .reduce((all, part) => all.concat(choices(request.origins[part], path.concat([part]))), mine)
-  }
-
-  // The option a reply chose: its own, or the first one its parts chose.
-  function chosen(answer) {
-    if (answer.option)
-      return answer.option
-    const parts = Object.values(answer.parts || {}).map(part => chosen(part)).filter(option => option)
-    return parts.length > 0 ? parts[0] : ""
   }
 
   // What a request asks, each question once: a reason an origin's question
