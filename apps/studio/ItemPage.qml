@@ -4,9 +4,9 @@ import QtQuick.Layouts
 import "kit/ui"
 
 // ItemPage is the screen of one item of the project: what kind it is, its
-// name, the pack it comes from, and, read, its `image` and `facts`, its
-// `details` and what is `related` to it, each related item opening where
-// it is shown;
+// name, the pack it comes from, and, read, three columns: its `image` with
+// its `facts` under it, its `details`, and what is `related` to it, each
+// related item opening where it is shown;
 // edited, its `form`, the name first when it has one. Its commands, for the bar, go
 // back, edit, remove, save, discard and cancel as fit, then its own `extra`.
 // An item a pack brings, or one the config does not write, is only read.
@@ -27,7 +27,7 @@ Item {
   // Commands of its own, as the bar takes them, after the usual ones.
   property var extra: []
   property alias details: detailsColumn.data
-  // A picture of it, as a url, shown beside what it is, or "".
+  // A picture of it, as a url, shown above what it is, or "".
   property string image: ""
   // [{title, items: [{text, section, id}]}]: what it uses and what uses it,
   // each item by the section and row it opens.
@@ -37,20 +37,30 @@ Item {
   // Wide enough for what is related to stand beside the rest.
   readonly property bool wide: scroll.width >= 1000
 
-  // A titled frame the read panels share; its fields stack inside.
+  // Whether the screen is read on a wide window: then it fits the window,
+  // each column the full height, and only a column too long scrolls, by
+  // itself; otherwise the columns stack and the page scrolls.
+  readonly property bool fits: wide && !editing
+
+  // A titled frame the read columns share; what it holds scrolls inside it
+  // when it is given less height than it needs.
   component Panel: Rectangle {
     id: panel
     property string title
     default property alias fields: inner.data
-    Layout.alignment: Qt.AlignTop
-    implicitHeight: inner.implicitHeight + 32
+    implicitHeight: heading.implicitHeight + inner.implicitHeight + 46
     color: "transparent"
     border.color: Theme.line
-    ColumnLayout {
-      id: inner
-      anchors { left: parent.left; right: parent.right; top: parent.top; margins: 16 }
-      spacing: 10
-      Caption { text: panel.title.toUpperCase() }
+    Caption { id: heading; x: 16; y: 16; text: panel.title.toUpperCase() }
+    ScrollPage {
+      id: inside
+      anchors { left: parent.left; right: parent.right; top: heading.bottom; bottom: parent.bottom; leftMargin: 16; rightMargin: 16; topMargin: 12; bottomMargin: 14 }
+      contentHeight: inner.implicitHeight
+      ColumnLayout {
+        id: inner
+        width: inside.width
+        spacing: 10
+      }
     }
   }
 
@@ -115,10 +125,11 @@ Item {
   ScrollPage {
     id: scroll
     anchors.fill: parent
-    contentHeight: content.implicitHeight
+    contentHeight: page.fits ? scroll.height : content.implicitHeight
 
     ColumnLayout {
       id: content
+      height: page.fits ? scroll.height : implicitHeight
       // Read, it takes the room up to a wide measure; edited, the form keeps
       // a readable one; centred either way.
       width: Math.min(scroll.width, page.editing ? 880 : 1640)
@@ -152,45 +163,45 @@ Item {
         text: page.draft ? page.draft.issue : ""
       }
 
-      // Read: beside its image, what it is, as pairs; under them its
-      // description, the width of the main column; what is related to it
-      // down the right side. One under the other on a narrow window. The
-      // page scrolls as a whole.
+      // Read: its image with its facts under it, its description, and what
+      // is related to it, as columns the height of the window when wide.
       GridLayout {
         Layout.fillWidth: true
+        Layout.fillHeight: page.fits
         visible: !page.editing
-        columns: page.wide ? 2 : 1
-        columnSpacing: 24
+        columns: page.wide ? 3 : 1
+        columnSpacing: 20
         rowSpacing: 20
 
         ColumnLayout {
-          id: main
-          Layout.fillWidth: true
+          id: side
+          // Wide, a fixed column; narrow, the page's width.
+          readonly property real measure: page.wide ? 300 : content.width
+          Layout.preferredWidth: measure
+          Layout.maximumWidth: measure
+          Layout.fillHeight: page.fits
           Layout.alignment: Qt.AlignTop
-          spacing: 20
-
-          RowLayout {
+          spacing: 16
+          Image {
+            Layout.preferredWidth: page.wide ? side.measure : Math.min(260, content.width)
+            Layout.preferredHeight: Layout.preferredWidth
+            visible: page.image !== ""
+            source: page.image
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            smooth: true
+            mipmap: true
+            Rectangle { anchors.fill: parent; color: "transparent"; border.color: Theme.line }
+          }
+          Panel {
+            title: "about"
             Layout.fillWidth: true
-            spacing: 24
-            Image {
-              Layout.alignment: Qt.AlignTop
-              Layout.preferredWidth: page.image === "" ? 0 : Math.min(260, main.width * 0.3)
-              Layout.preferredHeight: Layout.preferredWidth
-              visible: page.image !== ""
-              source: page.image
-              fillMode: Image.PreserveAspectCrop
-              asynchronous: true
-              smooth: true
-              mipmap: true
-              Rectangle { anchors.fill: parent; color: "transparent"; border.color: Theme.line }
-            }
+            Layout.fillHeight: page.fits
+            visible: page.facts.length > 0
             GridLayout {
               Layout.fillWidth: true
-              Layout.alignment: Qt.AlignTop
-              visible: page.facts.length > 0
-              // Two pairs a row when there is room.
-              columns: main.width - (page.image === "" ? 0 : 284) > 760 ? 4 : 2
-              columnSpacing: 18
+              columns: 2
+              columnSpacing: 14
               rowSpacing: 10
               Repeater {
                 model: page.editing ? [] : page.facts.reduce((cells, fact) => cells.concat([{ label: true, text: fact[0] }, { label: false, text: fact[1] }]), [])
@@ -208,23 +219,27 @@ Item {
               }
             }
           }
+        }
 
-          Panel {
-            title: "description"
+        Panel {
+          title: "description"
+          Layout.fillWidth: true
+          Layout.fillHeight: page.fits
+          Layout.alignment: Qt.AlignTop
+          visible: detailsColumn.children.length > 0
+          ColumnLayout {
+            id: detailsColumn
             Layout.fillWidth: true
-            visible: detailsColumn.children.length > 0
-            ColumnLayout {
-              id: detailsColumn
-              Layout.fillWidth: true
-              spacing: 12
-            }
+            spacing: 12
           }
         }
 
         Panel {
           title: "related"
+          Layout.preferredWidth: page.wide ? 360 : content.width
+          Layout.maximumWidth: Layout.preferredWidth
+          Layout.fillHeight: page.fits
           Layout.alignment: Qt.AlignTop
-          Layout.preferredWidth: page.wide ? 380 : main.width
           Note {
             visible: page.related.every(group => group.items.length === 0)
             value: "Nothing else in the project names it."
