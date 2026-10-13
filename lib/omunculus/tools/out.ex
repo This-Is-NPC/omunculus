@@ -168,6 +168,62 @@ defmodule Omunculus.Tools.Out do
   def failure(reason) when is_binary(reason), do: reason
   def failure(reason), do: inspect(reason)
 
+  @doc """
+  Why a run's model failed, as its `end-run` says it to a person: the
+  error of any adapter (`{:anthropic | :openai | :command, reason}`) or a
+  crash of the model.
+  """
+  @spec model_failed(term) :: String.t()
+  def model_failed({adapter, reason}) when adapter in [:anthropic, :openai, :command],
+    do: model_failed(reason)
+
+  def model_failed({:http, status, body}),
+    do: "the model's server answered #{status}: #{server_message(body)}"
+
+  def model_failed(%{__exception__: true, reason: :timeout}), do: model_failed(:timeout)
+  def model_failed(:timeout), do: "the model did not answer in time"
+
+  def model_failed({:invalid_response, :incomplete}),
+    do: "the model's reply ended before it was complete"
+
+  def model_failed({:invalid_response, _body}),
+    do: "the model's server answered something that is not a reply"
+
+  def model_failed({:exit, status}), do: "the model's program exited with status #{status}"
+  def model_failed(:closed), do: "the model's program ended without answering"
+
+  def model_failed({:invalid_json, _reason}),
+    do: "the model's program wrote a line that is not JSON"
+
+  def model_failed(:invalid_output),
+    do: "the model's program wrote a message that is not a reply"
+
+  def model_failed(:invalid_command), do: "the model's program is not a command"
+
+  def model_failed({:model_crashed, {kind, reason}}),
+    do: "the model crashed: #{Exception.format_banner(kind, reason)}"
+
+  def model_failed({:model_crashed, exception}),
+    do: "the model crashed: #{Exception.message(exception)}"
+
+  def model_failed(%{__exception__: true} = exception),
+    do: "the model's server could not be reached: #{Exception.message(exception)}"
+
+  def model_failed(reason) when is_binary(reason), do: reason
+  def model_failed(reason), do: "the model failed: #{inspect(reason)}"
+
+  defp server_message(%{"error" => %{"message" => message}}) when is_binary(message), do: message
+  defp server_message(%{"error" => message}) when is_binary(message), do: message
+  defp server_message(%{"message" => message}) when is_binary(message), do: message
+  defp server_message(body) when is_binary(body), do: body
+
+  defp server_message(body) do
+    case Jason.encode(body) do
+      {:ok, json} -> json
+      {:error, _reason} -> inspect(body)
+    end
+  end
+
   @spec refused(term) :: String.t()
   def refused({:request, {:blocked, name}}),
     do:

@@ -87,6 +87,11 @@ defmodule Omunculus.RunTest do
 
     assert {:ok, [run]} = Store.Query.all(project.conn, "SELECT status FROM runs")
     assert run.status == "done"
+
+    assert {:ok, [end_run]} =
+             Store.Query.all(project.conn, "SELECT body FROM events WHERE type = 'end-run'")
+
+    assert Jason.decode!(end_run.body) == %{"error" => "the model failed: :down"}
   end
 
   test "a model calling a project tool leaves a start-run, tool, model, end-run replay", %{
@@ -1354,6 +1359,61 @@ defmodule Omunculus.RunTest do
                Store.view(project.conn, "work", work_id)
 
       assert waiting_for == request.id
+
+      Project.close(project)
+    end
+
+    defp end_run_errors(project, work_id) do
+      {:ok, events} = Store.replay(project.conn, {:work, work_id})
+      for %{type: "end-run", body: body} <- events, do: Jason.decode!(body)["error"]
+    end
+
+    test "a model that fails says why on its end-run and its work is retried", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      overloaded = %{"error" => %{"type" => "overloaded_error", "message" => "Overloaded"}}
+
+      scripted(project, [
+        fn _call -> {:error, {:anthropic, {:http, 529, overloaded}}} end,
+        ending()
+      ])
+
+      assert {:error, {:anthropic, {:http, 529, ^overloaded}}} =
+               Run.open(project, opening(nil, work_id))
+
+      assert Enum.map(runs_of(project, work_id), & &1.via) == [nil, "retry"]
+
+      assert end_run_errors(project, work_id) == [
+               "the model's server answered 529: Overloaded",
+               nil
+             ]
+
+      Project.close(project)
+    end
+
+    test "a model that keeps crashing breaks its child work past max_retries", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      parent_id = Fixtures.insert(project.conn, :works, %{state: "waiting", waiting: "child"})
+
+      child_id =
+        Fixtures.insert(project.conn, :works, %{parent_id: parent_id, assignee: "worker"})
+
+      Fixtures.use_model(project, fn assembled, _tools, call ->
+        if String.starts_with?(assembled, "worker"), do: raise("boom"), else: call.("end", %{})
+      end)
+
+      assert {:error, {:runs, [_, _]}} = Run.open(project, opening(nil, child_id))
+
+      assert Enum.map(runs_of(project, child_id), & &1.via) == [nil, "retry"]
+      assert end_run_errors(project, child_id) == List.duplicate("the model crashed: boom", 2)
+
+      assert breaks_of(project, child_id) == [
+               "The work stopped without a report after 2 runs."
+             ]
+
+      assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", parent_id)
 
       Project.close(project)
     end

@@ -60,7 +60,7 @@ Discovers the catalog, checks the trigger, hydrates the views a manifest declare
 
 ## `Omunculus.Run`
 
-Opens one run, holding a slot of the execution limiter's `run` class (`[execution]` `max_concurrent`, `max_queue`, `queue_timeout_ms`): resolves the agent from the stage of the work's workflow, the work's assignee or, for a message without a work, the agent of depth 0 the message is for — the one it names (`send --agent`), else the one its conversation began with, else the only one, decided and recorded when the message is stored, which refuses it otherwise; a work that names no agent where its depth has several is refused too, and an unnamed root is its creating run's agent's — mounts the ceiling, builds the execution policy (with `[policy] send_catalog` the model is sent every model tool of the catalog, so all agents' requests start alike, and may call only its own; a call to another is refused and recorded as failed), begins the run with the event that made it due as its `cause_id`, dispatches the `assemble` tool, attaches `PROMPTS(assembled)` and, when the tool continues the agent's paused session on the work, a `session` event naming the run it continues and what it was told had happened since, drives the model until it calls `end` or stops — its calls and their reactions reuse the config and catalog it prepared (`Harness.prepared/3`) rather than loading them again — making the runs each call's actions ask for due at once, closes the run, then retries a work whose model stopped without `end`; over `max_retries` it breaks a child work and opens a request along the configured route, with `retry` and `cancel` options and an inbox entry, for a root work. A cancelled work opens no run; a work's own run does not open once the work is no longer open.
+Opens one run, holding a slot of the execution limiter's `run` class (`[execution]` `max_concurrent`, `max_queue`, `queue_timeout_ms`): resolves the agent from the stage of the work's workflow, the work's assignee or, for a message without a work, the agent of depth 0 the message is for — the one it names (`send --agent`), else the one its conversation began with, else the only one, decided and recorded when the message is stored, which refuses it otherwise; a work that names no agent where its depth has several is refused too, and an unnamed root is its creating run's agent's — mounts the ceiling, builds the execution policy (with `[policy] send_catalog` the model is sent every model tool of the catalog, so all agents' requests start alike, and may call only its own; a call to another is refused and recorded as failed), begins the run with the event that made it due as its `cause_id`, dispatches the `assemble` tool, attaches `PROMPTS(assembled)` and, when the tool continues the agent's paused session on the work, a `session` event naming the run it continues and what it was told had happened since, drives the model until it calls `end` or stops — its calls and their reactions reuse the config and catalog it prepared (`Harness.prepared/3`) rather than loading them again — making the runs each call's actions ask for due at once, closes the run, then retries a work whose model stopped without `end`, a model that fails or crashes counting as one that stopped, its `end-run` carrying `error`, why in a sentence (`Out.model_failed/1`, one formatter for every adapter's errors); over `max_retries` it breaks a child work and opens a request along the configured route, with `retry` and `cancel` options and an inbox entry, for a root work. A cancelled work opens no run; a work's own run does not open once the work is no longer open.
 
 ## `Omunculus.Ceiling`
 
@@ -131,11 +131,11 @@ omunculus send "text"
       model → tool calls → EVENTS(tool) per call and chained step
               + emitted actions + hooks
         → a call without end: open_due/2 makes the runs its actions ask for due at once
-      until the model calls end (EVENTS(end)) or stops (EVENTS(model))
-      EVENTS(end-run), RUNS.status = done
+      until the model calls end (EVENTS(end)), stops (EVENTS(model)) or fails
+      EVENTS(end-run), with {"error": why} when the model failed, RUNS.status = done
   → follow_up/3 makes the runs the ending call asked for due, runs the hooks
     of end, then makes the reaction runs of calling hooks due
-  → a model that stopped without end on a work still open: a run with
+  → a model that stopped without end or failed on a work still open: a run with
     via = retry on that work, or, once [policy] max_retries is used up, a
     break (a child) or a routed request with retry / cancel (a root)
   → the command returns when every run it opened, transitively, has finished

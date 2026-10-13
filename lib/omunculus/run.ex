@@ -22,8 +22,11 @@ defmodule Omunculus.Run do
   each call of the model, the runs the actions of the call ask for are
   due at once, while this run goes on; the `end` action instead stops
   the model and closes the run before its action or hook continuations,
-  and the reaction runs of calling hooks are due once the run closes. When the model of a run on a work stops by itself
-  and the work is still open, the work gets another run with `via` =
+  and the reaction runs of calling hooks are due once the run closes. A
+  model that fails or crashes stops the run as one that stops by itself,
+  its `end-run` carrying `error`, why in a sentence (`Out.model_failed/1`),
+  and the failure is still returned. When the model of a run on a work
+  stops by itself and the work is still open, the work gets another run with `via` =
   `retry`, until the latest runs of the work without `end` exceed
   `max_retries`; then the harness breaks a work that has a parent with a
   comment saying so, and for a root work opens a request along the configured route,
@@ -490,12 +493,15 @@ defmodule Omunculus.Run do
     )
   end
 
-  defp close_run(project, state) do
-    with {:ok, event} <- Store.close_run(project.conn, state.run.id),
+  defp close_run(project, state, error) do
+    with {:ok, event} <- Store.close_run(project.conn, state.run.id, error),
          {:ok, _hooks} <- Harness.react(project, [event], [], state.execution, state.prepared),
          do: :ok
   end
 
+  # A model that fails or crashes stops the run as one that stopped by
+  # itself, its `end-run` saying why; a failure of the harness after a
+  # call does not, since the call's actions are already applied.
   defp run_model(project, state, work, assembled, tools, call, model) do
     %{run: run, execution: execution} = state
     run_id = run.id
@@ -514,16 +520,17 @@ defmodule Omunculus.Run do
             &publish_delta(project, run, &1),
             execution
           )
+          |> model_failed()
         end
       rescue
-        exception -> {:error, {:model_crashed, exception}}
+        exception -> {:model_failed, {:model_crashed, exception}}
       catch
         :throw, {:run_ended, ^run_id} -> :ended
         :throw, {:follow_up_failed, ^run_id, reason} -> {:error, reason}
-        kind, reason -> {:error, {:model_crashed, {kind, reason}}}
+        kind, reason -> {:model_failed, {:model_crashed, {kind, reason}}}
       end
 
-    with :ok <- close_run(project, state) do
+    with :ok <- close_run(project, state, failure(result)) do
       case result do
         {:ok, _text} ->
           follow_up(project, state, work, true)
@@ -531,12 +538,22 @@ defmodule Omunculus.Run do
         :ended ->
           follow_up(project, state, work, false)
 
+        {:model_failed, reason} ->
+          with {:ok, _} <- follow_up(project, state, work, true),
+               do: {:error, reason}
+
         {:error, _reason} = error ->
           with {:ok, _} <- follow_up(project, state, work, false),
                do: error
       end
     end
   end
+
+  defp model_failed({:error, reason}), do: {:model_failed, reason}
+  defp model_failed(result), do: result
+
+  defp failure({:model_failed, reason}), do: Out.model_failed(reason)
+  defp failure(_result), do: nil
 
   defp follow_up(project, state, work, stopped?) do
     {opened, events} = split_followed(project, state.run, :atomics.get(state.cursor, 1))

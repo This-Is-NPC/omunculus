@@ -115,9 +115,10 @@ defmodule Omunculus.Store.Runs do
     Access.check(conn, ctx.config.access, principal, capability, ctx.conversation_id)
   end
 
-  @spec close(Connection.t(), String.t()) :: {:ok, map} | {:error, term}
-  def close(conn, run_id) do
-    Query.transaction(conn, fn -> do_close(conn, run_id) end)
+  @doc "Closes an open run; its `end-run` carries `error`, why its model failed, when given."
+  @spec close(Connection.t(), String.t(), String.t() | nil) :: {:ok, map} | {:error, term}
+  def close(conn, run_id, error \\ nil) do
+    Query.transaction(conn, fn -> do_close(conn, run_id, error) end)
   end
 
   @spec unreported(
@@ -351,24 +352,31 @@ defmodule Omunculus.Store.Runs do
   defp link_message(conn, prompt_id, run_id),
     do: Query.exec(conn, "UPDATE prompts SET run_id = ? WHERE id = ?", [run_id, prompt_id])
 
-  defp do_close(conn, run_id) do
+  defp do_close(conn, run_id, error) do
     with {:ok, run} <- View.view(conn, "run", run_id) do
-      close_open_run(conn, run)
+      close_open_run(conn, run, error)
     end
   end
 
-  defp close_open_run(_conn, %{status: status}) when status != "open",
+  defp close_open_run(_conn, %{status: status}, _error) when status != "open",
     do: {:error, {:run, :not_open}}
 
-  defp close_open_run(_conn, nil), do: {:error, {:run, :not_open}}
+  defp close_open_run(_conn, nil, _error), do: {:error, {:run, :not_open}}
 
-  defp close_open_run(conn, run) do
+  defp close_open_run(conn, run, error) do
     with :ok <-
            Query.exec(conn, "UPDATE runs SET status = 'done', finished_at = ? WHERE id = ?", [
              Events.now(),
              run.id
            ]) do
-      Events.append(conn, %{type: "end-run", actor_kind: "harness", run_id: run.id, body: "{}"})
+      body = if error, do: %{error: error}, else: %{}
+
+      Events.append(conn, %{
+        type: "end-run",
+        actor_kind: "harness",
+        run_id: run.id,
+        body: Jason.encode!(body)
+      })
     end
   end
 end

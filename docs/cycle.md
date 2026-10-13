@@ -11,13 +11,14 @@ event
     → a call that did not end the run: if its actions asked for a run
       (prompt, work, continue, break, delegate, cancel, request, reply),
       that run opens now, while this one goes on
-    → end, or the model stopping by itself: EVENTS(end-run) of this run
+    → end, or the model stopping by itself or failing: EVENTS(end-run) of
+      this run, with the failure's reason as its error
     → if an action of the ending call asked for a run
         → open the next run (agent and ceiling from the TOML, now)
     → hooks of end (they see this run closed; the next runs are due and
       may already be running)
     → reaction runs of hooks with an agent
-    → if the model stopped by itself on a work still open: a retry run of
+    → if the model stopped by itself or failed on a work still open: a retry run of
       that work, or, once max_retries is used up, a break (a child) or a
       request along the configured route (a root)
 ```
@@ -68,11 +69,11 @@ each tool
     hooks of those events, still in the unroll
     if end: nothing after it in this run executes
     no end: the runs its actions asked for open now
-close (end, or the model stopped)
-    EVENTS(end-run), status = done
+close (end, or the model stopped or failed)
+    EVENTS(end-run), status = done; {"error": why} when the model failed
     next runs the ending call's actions asked for, then hooks of end,
       then reaction runs of hooks with an agent
-    the model stopped by itself on a work still open: retry, break, or a
+    the model stopped by itself or failed on a work still open: retry, break, or a
       request along the configured route
 ```
 
@@ -139,6 +140,18 @@ opens another run of the work; `reply --option cancel` cancels it. The
 run opened by `send` has no work and is never retried; a run
 opened for a named agent (a hook's `agent`, a request's arbiter) is not
 retried either; nor is a work left `waiting` or `done` by its run.
+
+A model that fails — its server answers with an error or cannot be
+reached, it does not answer in time, its program exits, or it crashes —
+stops its run the same way, and the failure counts as a run without
+`end`. The run's `end-run` carries the reason as a sentence for a person,
+`{"error": "the model's server answered 529: Overloaded"}`, and the
+command that opened the run still fails with it. A run that stops by
+itself, or ends with `end`, has an empty `end-run` body. A failure of the
+harness after a call of the model (making the runs its actions asked for
+due) is not the model's: the run closes with an empty `end-run`, its work
+is not retried, since the call's actions are already applied, and the
+command fails with it.
 
 ## Assemble
 
