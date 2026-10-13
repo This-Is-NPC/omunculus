@@ -1,0 +1,117 @@
+#!/usr/bin/env -S mix run --no-start
+# Writes docs/cli.md from the binary's moduledoc and the manifests of the
+# builtin tools with the cli trigger; with --check, fails when the file
+# differs from what it would write.
+
+defmodule DocsCli do
+  alias Omunculus.Tool.Catalog
+
+  @path "docs/cli.md"
+
+  def main(argv) do
+    text = render()
+
+    case argv do
+      ["--check"] ->
+        if File.read(@path) != {:ok, text} do
+          IO.puts(:stderr, "#{@path} is stale; run `mise run docs:cli`")
+          System.halt(1)
+        end
+
+      [] ->
+        File.write!(@path, text)
+    end
+  end
+
+  defp render do
+    {:docs_v1, _, _, _, %{"en" => binary}, _, _} = Code.fetch_docs(Mix.Tasks.Omunculus)
+
+    commands =
+      %{paths: [Path.expand("priv/tools")], inline: %{}, skills: []}
+      |> Catalog.discover()
+      |> Map.values()
+      |> Enum.filter(&("cli" in &1.triggers))
+      |> Enum.sort_by(& &1.name)
+
+    [
+      "# The command line\n\n",
+      "<!-- Written by `mise run docs:cli` from lib/mix/tasks/omunculus.ex and ",
+      "priv/tools/*/tool.toml; edit those, not this file. -->\n\n",
+      "## The binary\n\n",
+      String.replace(binary, ~r/^## /m, "### "),
+      "\n## The commands\n\n",
+      "Each command is a builtin tool whose manifest lists the `cli` trigger.\n",
+      Enum.map(commands, &command/1)
+    ]
+    |> IO.iodata_to_binary()
+  end
+
+  defp command(manifest) do
+    properties = Map.get(manifest.parameters, "properties", %{})
+    required = Map.get(manifest.parameters, "required", [])
+    keys = Enum.sort_by(Map.keys(properties), &{&1 not in required, index(required, &1), &1})
+
+    [
+      "\n### `omunculus #{manifest.name}`\n\n",
+      "```text\n#{usage(manifest.name, Enum.map(keys, &{&1, properties[&1]}), required)}\n```\n\n",
+      manifest.description |> String.trim() |> escape(),
+      "\n",
+      notes(manifest),
+      arguments(keys, properties, required)
+    ]
+  end
+
+  # Text of a manifest, where <name> is a placeholder rather than a tag.
+  defp escape(text), do: text |> String.replace("<", "&lt;") |> String.replace(">", "&gt;")
+
+  defp index(list, key), do: Enum.find_index(list, &(&1 == key)) || 0
+
+  defp usage(name, keys, required) do
+    words =
+      Enum.map(keys, fn {key, spec} ->
+        value = if spec["type"] == "boolean", do: "true", else: "<#{key}>"
+
+        cond do
+          key == List.first(required) -> value
+          key in required -> "--#{key} #{value}"
+          true -> "[--#{key} #{value}]"
+        end
+      end)
+
+    Enum.join(["omunculus", name | words], " ")
+  end
+
+  defp notes(manifest) do
+    callers =
+      Enum.flat_map(manifest.triggers, fn
+        "model" -> ["a model"]
+        "chain" -> ["a chain"]
+        _cli -> []
+      end)
+
+    [
+      if(manifest.config, do: [], else: "\nRuns without a project config.\n"),
+      if(callers == [], do: [], else: "\nAlso called by #{Enum.join(callers, " and ")}.\n")
+    ]
+  end
+
+  defp arguments([], _properties, _required), do: []
+
+  defp arguments(keys, properties, required) do
+    rows =
+      Enum.map(keys, fn key ->
+        spec = properties[key]
+
+        "| `#{key}` | #{type(spec)} | #{if key in required, do: "yes", else: "no"} | " <>
+          (spec |> Map.get("description", "") |> escape() |> String.replace("|", "\\|")) <> " |\n"
+      end)
+
+    ["\n| Argument | Type | Required | Description |\n| --- | --- | --- | --- |\n" | rows]
+  end
+
+  defp type(%{"type" => type}) when type in ["object", "array"], do: "JSON #{type}"
+  defp type(%{"type" => type}), do: type
+  defp type(_spec), do: "JSON"
+end
+
+DocsCli.main(System.argv())

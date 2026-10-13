@@ -1,7 +1,9 @@
 name = "prompt"
 kind = "tool"
 triggers = ["cli"]
-description = "Prints the assembled prompt of a run."
+description = """
+Prints the assembled prompt of a run, by default the last one to start. No run is no runs, an id the store does not hold unknown run <id>, and a run that never attached an assembled prompt no assembled prompt.
+"""
 tags = ["cli", "prompt"]
 groups = ["cli"]
 module = "Omunculus.Tools.Prompt"
@@ -11,6 +13,7 @@ type = "object"
 
 [parameters.properties.run]
 type = "string"
+description = "The run, by id; without it, the last run to start."
 
 [views.prompt]
 source = "prompts"

@@ -1,7 +1,9 @@
 name = "omapass"
 kind = "tool"
 triggers = ["cli"]
-description = "Prints whether omapass is installed, its program and the passwords it keeps, never their secrets, as JSON."
+description = """
+Prints, as JSON, what a client needs to take a provider's key from omapass, the optional Omarchy password plugin: installed and, once it is, program (the omapass on PATH, or the plugin's own under HOME), accounts (each password's account and folder, never a secret) and error when it could not list them. A key taken from it is key = "!<program> get -- <account>". It runs omapass outside the sandbox, as a ! key does, since the keyring answers only there.
+"""
 tags = ["cli", "config"]
 groups = ["cli"]
 module = "Omunculus.Tools.Omapass"

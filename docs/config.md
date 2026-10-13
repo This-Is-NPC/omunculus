@@ -438,3 +438,36 @@ the command-line and harness lookup under [Catalog](#catalog).
 `$VAR` in an `[auth]` key and names listed in `[execution] environment`
 are the two times the process environment is read, and both are declared
 in this file.
+
+## Errors a load names
+
+The command line prints these on stderr before a tool runs, or when a run
+needs what is missing:
+
+| Line | When |
+| --- | --- |
+| `` no config at <path>; run `omunculus preset <name> --from <dir>` `` | file missing |
+| `omunculus.toml is missing [execution]; required keys: …` | table or keys absent |
+| `omunculus.toml is missing [execution.sandbox]` | sandbox table absent |
+| `omunculus.toml [execution] resources includes unknown name <name>` | a resource the executor does not know |
+| `omunculus.toml is missing [models]` | no adapters |
+| `omunculus.toml is missing [store]` | no store path |
+| `omunculus.toml agent <name> is missing model` | agent without `model` |
+| `omunculus.toml [policy] max_retries is required, a non-negative integer` | `max_retries` absent or invalid |
+| `omunculus.toml [policy] request_routes is required, a nonempty list of routes` | `request_routes` absent |
+| `omunculus.toml [policy] request_routes must be a nonempty list of valid routes` | `request_routes` invalid |
+| `omunculus.toml [policy] max_reopens must be a non-negative integer` | `max_reopens` invalid |
+| `omunculus.toml [policy] <key> must be a positive integer` | `last_run_output_bytes`, `tool_output_bytes`, `conversation_bytes`, `session_ttl_ms` or `session_max_bytes` invalid |
+| `omunculus.toml [policy] session_ttl_ms and session_max_bytes go together` | one of the two without the other |
+| `omunculus.toml [policy] send_catalog must be true or false` | `send_catalog` invalid |
+| `omunculus.toml is missing assemble` | no assemble tool named |
+| `assemble returned an empty prompt` | assemble ran and produced nothing |
+| `overrides.<tool>.chains names <name>, which the <tool> manifest does not chain` | an override widens `chains` |
+| `overrides of <tool> leave a then outside its chains or with end not last` | an override breaks the `then` rule |
+| `overrides.<tool>.schema names <variant>, which the <tool> manifest does not declare` | an override names an unknown schema |
+| `pack <pack> requires tools the project lacks: …` | an imported pack names tools no `[tools] path` holds |
+| `` not logged in to <id>; run `omunculus login --provider <id>` `` | credential missing |
+| `store schema predates conversations; recreate the store` | a store older than the schema |
+| `project is in use by another Omunculus process` | another direct command holds the project |
+
+A reason without a sentence of its own prints as the Elixir term.

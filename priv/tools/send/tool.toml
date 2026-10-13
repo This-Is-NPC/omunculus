@@ -1,7 +1,9 @@
 name = "send"
 kind = "tool"
 triggers = ["cli"]
-description = "Delivers the message and opens the first run: of the work work_id names, else of the agent of depth 0 agent names, else of the agent the conversation began with, else of the only agent of depth 0."
+description = """
+Delivers the message and opens the first run: of the work work_id names, else of the agent of depth 0 agent names, else of the agent the conversation began with, else of the only agent of depth 0. It writes PROMPTS(message) and EVENTS(prompt); it creates no work and copies the message onto no title. A work waiting on a request, or parked by break, is reopened first, with EVENTS(work) reason reopened_by_prompt; a work waiting on its children stays waiting, and the message opens a run of its agent. A successful send prints nothing: the assembled prompt and the model's text are in the store.
+"""
 groups = ["cli"]
 module = "Omunculus.Tools.Send"
 
@@ -11,6 +13,10 @@ required = ["message"]
 
 [parameters.properties.message]
 type = "string"
+
+[parameters.properties.work_id]
+type = "string"
+description = "The work the message is for."
 
 [parameters.properties.agent]
 type = "string"

@@ -1,7 +1,7 @@
 name = "logout"
 kind = "tool"
 triggers = ["cli"]
-description = "Removes stored credentials for an auth provider."
+description = "Removes a provider's stored credential from the auth store; the TOML is not touched."
 tags = ["cli", "auth"]
 groups = ["cli"]
 module = "Omunculus.Tools.Logout"
@@ -12,3 +12,4 @@ required = ["provider"]
 
 [parameters.properties.provider]
 type = "string"
+description = "The [auth.<id>] provider."

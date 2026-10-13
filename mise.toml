@@ -29,8 +29,12 @@ description = "Linear resident benchmark: run"
 run = "scripts/benchmark-run"
 
 [tasks.check]
-description = "Check that the documentation's links resolve"
-depends = ["check:links"]
+description = "Check that docs/cli.md is current and the documentation's links resolve"
+depends = ["check:cli", "check:links"]
+
+[tasks."check:cli"]
+description = "Check that docs/cli.md is what docs:cli writes"
+run = "scripts/docs-cli --check"
 
 [tasks."check:links"]
 description = "Check that every relative link, image and anchor of the documentation resolves"
@@ -61,6 +65,10 @@ run = "scripts/dev-serve"
 description = "Open the studio on the agency project of a running server; -- --project dev for the other"
 run = "scripts/dev-studio"
 
+[tasks."docs:cli"]
+description = "Write docs/cli.md from the binary's moduledoc and the cli tools' manifests"
+run = "scripts/docs-cli"
+
 [tasks."eval:compare"]
 description = "Equivalent Exchange: compare two result folders (mise run eval:compare -- <before> <now>)"
 run = "scripts/eval-compare"
@@ -74,8 +82,8 @@ description = "Equivalent Exchange: prove every task's check against its solutio
 run = "scripts/eval-selftest"
 
 [tasks.pre-commit]
-description = "Check the boundaries, formatting and documentation links before a commit"
-run = ["scripts/validate-boundaries", "scripts/check-format", "scripts/check-links"]
+description = "Check the boundaries, formatting and documentation before a commit"
+run = ["scripts/validate-boundaries", "scripts/check-format", "scripts/docs-cli --check", "scripts/check-links"]
 
 [tasks.pre-push]
 description = "Run regular validation before a push"

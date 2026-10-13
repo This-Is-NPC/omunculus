@@ -1,7 +1,9 @@
 name = "tools"
 kind = "tool"
 triggers = ["cli"]
-description = "Prints the project's catalog as JSON: each tool and skill with where it comes from, what it is for and the secrets it declares."
+description = """
+Prints the project's catalog as JSON. Under tools, each tool, hook and skill with its name, kind, description, triggers, groups, the secrets it declares and the binding [secrets.<tool>] gives them, a skill's uses, its source (folder, inline or skill) and dir; under mcp, each [[mcp.servers]] with its command and secrets, since a server's tools are known only once a run starts it.
+"""
 tags = ["cli", "config"]
 groups = ["cli"]
 module = "Omunculus.Tools.Tools"
