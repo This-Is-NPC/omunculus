@@ -1,10 +1,10 @@
-# Quote: Doce Ana (bakery)
+# Proposta: Ana (Doce Ana)
 
-Status: accepted, awaiting owner
+Status: aceita, aguardando o dono
 
-## Feasibility
-- Answer: yes
+## Avaliação da equipe técnica
+- Resposta: sim
 
-## Price
-- Base (4 pages): R$ 1.500
+## 6. Preço
+- Base (4 páginas): R$ 1.500
 - Total: R$ 1.500

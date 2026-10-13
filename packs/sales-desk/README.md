@@ -27,7 +27,7 @@ with named options the client gets as buttons — records progress with comments
 the pack's tool `next_stage`, in place of `done`: it refuses the move
 until the proposal in `quotes/` that names the work has what the
 stage asks — the client's content after qualify, an approved preview or
-"not wanted" after design, the builders' answer after assess, the
+"não desejada" after design, the builders' answer after assess, the
 client's acceptance after propose — and, after owner, until the run was
 opened by the owner's approval, and after build, until a build came back
 done. During build, the release's request to grant `promote` is the
@@ -66,9 +66,12 @@ omunculus pack --path packs/dream-team --models team=<model> \
 The client talks with it by name: `omunculus send --agent sales "…"`.
 
 The proposal follows `workspace/templates/proposal.md`, from the
-client's problem in their words to the next steps; change the template
-in the project to change the proposal, keeping the parts the stages
-check. With the
+client's problem in their words to the next steps. It is the client's
+document, which they receive attached, so all of it is in Portuguese: its
+headings, its labels and its Status words (`aceita, aguardando o dono`,
+`aprovada`, ...), which `next_stage` and the eval checks read as they are
+written there. Change the template in the project to change the
+proposal, keeping the headings and labels the stages check. With the
 design team (`packs/design-team`) below it too, a client who wants to see
 the site first gets a preview in homologation, and the approved design's
 `design/handoff.md` goes to the builders.

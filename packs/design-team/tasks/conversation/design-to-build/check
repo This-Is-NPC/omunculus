@@ -47,7 +47,7 @@ if not any("handoff" in (w["goal"] or "") for w in builds):
 quotes = [q for q in (workspace / "quotes").glob("*.md")] if (workspace / "quotes").is_dir() else []
 if not any(re.search(r"1\.?500", q.read_text()) for q in quotes):
     fail("no proposal in quotes/ prices four pages at R$ 1.500")
-if not any(re.search(r"status:\s*approved", q.read_text(), re.I) for q in quotes):
+if not any(re.search(r"status:\s*aprovada", q.read_text(), re.I) for q in quotes):
     fail("no proposal is marked approved")
 
 # In production, with what the client asked for.

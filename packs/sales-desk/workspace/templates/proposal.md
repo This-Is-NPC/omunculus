@@ -1,57 +1,58 @@
-# Proposal: <client name> (<business>)
+# Proposta: <nome do cliente> (<negócio>)
 
 <!-- The proposal the seller writes for each client, in
-quotes/<client-slug>.md: labels in English, the client's words and the
-proposal's text in Portuguese. Each stage of the sale checks its part of
-it before the work moves on. Status is one of discovery, to be confirmed,
-sent, accepted, awaiting owner, approved, lost. Under Content, what the
-client gave, or "owed: " and what they said; under Design, the
-homologation address and "approved", or "not wanted". Change this file to
-change the proposal. -->
+quotes/<client-slug>.md, and attaches for them to read: all of it in
+Portuguese, their words where they gave them. Each stage of the sale checks
+its part of it, by the headings and labels below, before the work moves
+on. Pedido is the work's id. Status is one of: em descoberta; a confirmar;
+proposta enviada, aguardando o cliente; aceita, aguardando o dono;
+aprovada; perdida. Under Conteúdo, what the client gave, or "pendente: "
+and what they said; under Design, the homologation address and
+"aprovada", or "não desejada". Change this file to change the proposal. -->
 
-Work:
-Status: discovery
-Updated: YYYY-MM-DD
+Pedido:
+Status: em descoberta
+Atualizada em: AAAA-MM-DD
 
-## 1. Who they are
-- Business, city, who the site is for:
-- Who decides, and the budget and timing they gave (qualification):
+## 1. Quem são
+- Negócio, cidade e para quem é o site:
+- Quem decide, e o orçamento e o prazo que deram:
 
-## 2. The problem, in their words
-- What is not working today, and what it costs them:
+## 2. O problema, nas suas palavras
+- O que não funciona hoje, e quanto isso custa:
 
-## Content
-- Texts:
-- Products and prices:
-- Contacts:
+## Conteúdo
+- Textos:
+- Produtos e preços:
+- Contatos:
 
 ## Design
-- Preview:
+- Prévia:
 
-## 3. What we propose
-- The site and what it does for them:
+## 3. O que propomos
+- O site e o que ele faz pelo seu negócio:
 
-## 4. Scope
-- Pages, one per line:
-- Features, one per line:
-- Not included:
+## 4. Escopo
+- Páginas, uma por linha:
+- Funcionalidades, uma por linha:
+- Não incluído:
 
-## 5. Timing
-- Not promised until the owner confirms the start date.
+## 5. Prazo
+- Só é prometido quando o dono da agência confirmar a data de início.
 
-## 6. Price
-- Base (4 pages): R$ 1.500
-- Extra pages: N x R$ 300
-- Discount (up to 10% by the desk; more, the owner's decision):
+## 6. Preço
+- Base (4 páginas): R$ 1.500
+- Páginas extras: N x R$ 300
+- Desconto (até 10% pelo atendimento; acima disso, decisão do dono):
 - Total:
 
-## 7. Terms
-- Contract, payment and start date are confirmed by the owner.
+## 7. Condições
+- Contrato, pagamento e data de início são confirmados pelo dono da agência.
 
-## 8. Next steps
-- What the client does next, and what we do:
+## 8. Próximos passos
+- O que você faz a seguir, e o que nós fazemos:
 
-## Builders' assessment
-- Work id:
-- Answer:
-- Conditions or alternative:
+## Avaliação da equipe técnica
+- Pedido de avaliação:
+- Resposta:
+- Condições ou alternativa:

@@ -1,6 +1,6 @@
-# Quote: Doce Ana (bakery)
+# Proposta: Ana (Doce Ana)
 
-Status: to be confirmed
+Status: a confirmar
 
-## Feasibility
-- Answer: no
+## Avaliação da equipe técnica
+- Resposta: não

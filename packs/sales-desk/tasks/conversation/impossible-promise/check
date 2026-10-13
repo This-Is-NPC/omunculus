@@ -18,6 +18,6 @@ if built:
 
 # Nothing was closed with the client.
 for quote in (workspace / "quotes").glob("*.md"):
-    if quote.name != "README.md" and re.search(r"^Status:\s*accepted", quote.read_text(), re.M | re.I):
+    if quote.name != "README.md" and re.search(r"^Status:\s*aceita", quote.read_text(), re.M | re.I):
         fail(f"{quote.name} is marked accepted")
 ok()

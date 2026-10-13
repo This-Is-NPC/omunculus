@@ -2,7 +2,8 @@
 """The seller's way to move a client's request to the next stage of the
 workflow sale: refused until the stage the work is in holds, then the
 report as a comment on the work and continue. The proposal is the file of
-quotes/ with the line "Work: <id>" of the call's work."""
+quotes/ with the line "Pedido: <id>" of the call's work; the client reads it,
+so its headings and labels, which the stages check, are in Portuguese."""
 
 import json
 import pathlib
@@ -22,8 +23,8 @@ def refuse(stage, missing):
 
 def proposal(root, work_id):
     for path in sorted(pathlib.Path(root, "quotes").glob("*.md")):
-        text = path.read_text(errors="replace")
-        if re.search(rf"^Work:\s*{re.escape(work_id)}\s*$", text, re.M):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if re.search(rf"^Pedido:\s*{re.escape(work_id)}\s*$", text, re.M):
             return path, text
     return None, None
 
@@ -66,27 +67,27 @@ def main():
 
     path, text = proposal(root, work["id"])
     if not text:
-        refuse(stage, f"write the proposal in quotes/<client-slug>.md from templates/proposal.md, with the line Work: {work['id']}")
+        refuse(stage, f"write the proposal in quotes/<client-slug>.md from templates/proposal.md, with the line Pedido: {work['id']}")
 
     if stage == "qualify":
-        missing = filled(section(text, "1. Who they are"), ["Business, city, who the site is for", "Who decides, and the budget and timing they gave (qualification)"])
-        missing += filled(section(text, "2. The problem, in their words"), ["What is not working today, and what it costs them"])
-        missing += filled(section(text, "Content"), ["Texts", "Products and prices", "Contacts"])
-        missing += filled(section(text, "4. Scope"), ["Pages, one per line"])
+        missing = filled(section(text, "1. Quem são"), ["Negócio, cidade e para quem é o site", "Quem decide, e o orçamento e o prazo que deram"])
+        missing += filled(section(text, "2. O problema, nas suas palavras"), ["O que não funciona hoje, e quanto isso custa"])
+        missing += filled(section(text, "Conteúdo"), ["Textos", "Produtos e preços", "Contatos"])
+        missing += filled(section(text, "4. Escopo"), ["Páginas, uma por linha"])
         if missing:
             refuse(stage, f"ask the client and write in {path.name} what they said — that they left it to us, or do not have it, is an answer too: " + "; ".join(missing))
     elif stage == "design":
-        preview = value(section(text, "Design"), "Preview").lower()
-        if "approved" not in preview and "not wanted" not in preview:
-            refuse(stage, f"the Preview line of ## Design in {path.name} says the address and approved, once the client approved it, or not wanted")
+        preview = value(section(text, "Design"), "Prévia").lower()
+        if "aprovada" not in preview and "não desejada" not in preview:
+            refuse(stage, f"the Prévia line of ## Design in {path.name} says the address and aprovada, once the client approved it, or não desejada")
     elif stage == "assess":
-        block = section(text, "Builders' assessment")
-        if not value(block, "Work id") or not value(block, "Answer"):
-            refuse(stage, f"ask the builders for an assessment and write their work id and answer under ## Builders' assessment in {path.name}")
+        block = section(text, "Avaliação da equipe técnica")
+        if not value(block, "Pedido de avaliação") or not value(block, "Resposta"):
+            refuse(stage, f"ask the builders for an assessment and write its work id (Pedido de avaliação) and their answer (Resposta) under ## Avaliação da equipe técnica in {path.name}")
     elif stage == "propose":
         status = re.search(r"^Status:\s*(.*)$", text, re.M)
-        if not value(section(text, "6. Price"), "Total") or not status or not status.group(1).startswith("accepted"):
-            refuse(stage, f"give the client the price, write the Total, and mark Status accepted, awaiting owner in {path.name} once they accept; the owner's approval is asked at stage owner, after this one")
+        if not value(section(text, "6. Preço"), "Total") or not status or not status.group(1).lower().startswith("aceita"):
+            refuse(stage, f"give the client the price, write the Total, and mark Status aceita, aguardando o dono in {path.name} once they accept; the owner's approval is asked at stage owner, after this one")
     elif stage == "owner":
         cause = view.get("cause") or {}
         if cause.get("type") != "reply" or body(cause).get("option") != "approve":
