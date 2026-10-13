@@ -60,27 +60,12 @@ Rectangle {
     RowLayout {
       Layout.fillWidth: true
       spacing: 12
-      Item {
+      Portrait {
         Layout.alignment: Qt.AlignTop
         implicitWidth: 72
         implicitHeight: 72
-        Rectangle { anchors.fill: parent; color: Qt.alpha(inspector.agentTone, 0.08); border.color: Theme.line }
-        Label {
-          anchors.centerIn: parent
-          visible: face.status !== Image.Ready
-          text: inspector.agent.charAt(0).toUpperCase()
-          color: inspector.agentTone
-          font.pixelSize: 32
-        }
-        Image {
-          id: face
-          anchors { fill: parent; margins: 1 }
-          source: Omunculus.imageOf(inspector.agent)
-          fillMode: Image.PreserveAspectCrop
-          asynchronous: true
-          smooth: true
-          mipmap: true
-        }
+        agent: inspector.agent
+        framed: true
       }
       ColumnLayout {
         Layout.fillWidth: true

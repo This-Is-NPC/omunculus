@@ -64,25 +64,14 @@ FocusScope {
         border.color: current ? Theme.primary : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.5) : Theme.line
         Behavior on border.color { ColorAnimation { duration: 140 } }
 
-        Image {
+        Portrait {
           id: portrait
           x: 1
           y: 1
           width: parent.width - 2
           height: width
-          source: Omunculus.imageOf(cardItem.modelData.name)
-          fillMode: Image.PreserveAspectCrop
-          asynchronous: true
-          smooth: true
-          mipmap: true
-        }
-        // Without a portrait, its initial in its colour.
-        Label {
-          anchors.centerIn: portrait
-          visible: portrait.status !== Image.Ready
-          text: cardItem.modelData.name.charAt(0).toUpperCase()
-          color: Omunculus.toneOf(cardItem.modelData.name)
-          font.pixelSize: 72
+          agent: cardItem.modelData.name
+          initialSize: 72
         }
         Label {
           x: 8

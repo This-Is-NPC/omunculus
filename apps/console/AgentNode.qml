@@ -40,7 +40,6 @@ Rectangle {
     : workState === "broken" ? Theme.error
     : running ? agentTone
     : Theme.line
-  readonly property string portrait: Omunculus.imageOf(agent)
 
   width: 320
   height: 150
@@ -55,30 +54,14 @@ Rectangle {
   Behavior on border.color { ColorAnimation { duration: 200 } }
   Behavior on opacity { NumberAnimation { duration: 200 } }
 
-  // The portrait, or the agent's initial in its colour.
-  Item {
+  Portrait {
     id: face
     x: node.border.width
     y: node.border.width
     width: node.height - 2 * node.border.width
     height: width
-    Rectangle { anchors.fill: parent; color: Qt.alpha(node.agentTone, 0.08) }
-    Label {
-      anchors.centerIn: parent
-      visible: picture.status !== Image.Ready
-      text: node.agent.charAt(0).toUpperCase()
-      color: node.agentTone
-      font.pixelSize: 44
-    }
-    Image {
-      id: picture
-      anchors.fill: parent
-      source: node.portrait
-      fillMode: Image.PreserveAspectCrop
-      asynchronous: true
-      smooth: true
-      mipmap: true
-    }
+    agent: node.agent
+    initialSize: 44
     // A ring that keeps leaving the corner while the agent runs.
     Rectangle {
       id: ring
