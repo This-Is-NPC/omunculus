@@ -116,8 +116,8 @@ answered directly. `run_id` and `work_id` may be null. `origins` recursively
 maps part names to their canonical requests, including the original `reason`,
 `workflow`, `stage` and options. Replies authorize each named effect for its
 original target and the actual authenticated answerer. Omit `option` for text;
-explicit null or empty values return `400`. There is no human escalation
-endpoint.
+explicit null or empty values return `400`. A person escalates through
+`/requests/escalate`, below.
 
 ## Event stream
 
