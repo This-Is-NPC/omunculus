@@ -51,8 +51,10 @@ All are QML on Quickshell and share `apps/kit`:
   those of one group joined as one control with the checked one lit, each
   shortened to its short name or its icon when the names do not fit, which
   the mailbox's command bar uses too; and `FilePicker` and `FileChip`,
-  the files a message carries and a file attached in a conversation; and
-  `Prose`, what an agent wrote as Markdown as it was written, each line
+  the files a message carries and a file attached in a conversation;
+  `Portrait`, an agent's picture, which the app fetched, or while it has
+  none its initial in its colour, which the console and the mailbox show;
+  and `Prose`, what an agent wrote as Markdown as it was written, each line
   break kept and a line after a list that is no item of it a paragraph of
   its own, rather than more of the last item; its web addresses, bare or
   linked, links in the accent that the pointer turns over, Tab reaches,
