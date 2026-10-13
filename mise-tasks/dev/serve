@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Run the server on the dev registry, with OPENROUTER_API_KEY from .env and the deploy sockets"
+#MISE description="Run the server on the dev registry, with OPENROUTER_API_KEY from .env, the deploy sockets and your git identity"
 #MISE depends=["dev:bootstrap"]
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
@@ -16,4 +16,10 @@ if [[ -L $sockets ]]; then
   export OMUNCULUS_DEPLOY
   OMUNCULUS_DEPLOY=$(readlink -f "$sockets")
 fi
+# The agency's commits are the person's: their git identity, unless .env
+# gives one, for the GIT_* variables its [execution] environment names.
+name=$(git config user.name || true)
+email=$(git config user.email || true)
+export GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME:-$name}" GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-$email}"
+export GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-$name}" GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-$email}"
 exec bin/omunculus serve --config dev/server.toml

@@ -5,7 +5,7 @@
 | Task | Does |
 | --- | --- |
 | `dev:bootstrap` | creates each project's workspace, copies into the agency's the packs' `workspace/` files it lacks, as the `pack` tool does, and seeds each project's local administrator while its store does not exist |
-| `dev:serve` | runs the server on `dev/server.toml`, with the variables of `.env` (`OPENROUTER_API_KEY`) in its environment and, while the dream team's environment is up (`packs/dream-team/environment/up`), `OMUNCULUS_DEPLOY` set to its sockets folder, which the agency's `[execution] write` names |
+| `dev:serve` | runs the server on `dev/server.toml`, with the variables of `.env` (`OPENROUTER_API_KEY`) in its environment and, while the dream team's environment is up (`packs/dream-team/environment/up`), `OMUNCULUS_DEPLOY` set to its sockets folder, which the agency's `[execution] write` names, and `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL`, unless `.env` sets them, your `git config` name and email, which the agency's `[execution] environment` passes to its commands, so the builders commit as you |
 | `dev:console` | opens the console on the `dev` project of a running server |
 | `dev:mailbox` | opens the mailbox on the `dev` project of a running server |
 | `dev:studio` | opens the studio on the `agency` project of a running server (`-- --project dev` for the other) |
