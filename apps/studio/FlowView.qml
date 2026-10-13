@@ -227,7 +227,6 @@ Item {
           color: Qt.alpha(Theme.success, 0.035)
           border.color: Qt.alpha(Theme.success, 0.3)
         }
-        Rectangle { width: 3; height: parent.height; color: Qt.alpha(Theme.success, 0.7) }
         Row {
           x: 24
           y: 22

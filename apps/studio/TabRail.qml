@@ -48,8 +48,6 @@ Item {
 
       onHeadChanged: if (head) title.replay()
 
-      Rectangle { visible: tab.head; width: 2; height: parent.height; color: Theme.primary }
-
       Row {
         anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: tab.head ? 16 : 12 }
         spacing: 10

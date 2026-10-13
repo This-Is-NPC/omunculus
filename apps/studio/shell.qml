@@ -30,25 +30,25 @@ ShellRoot {
       { name: "skills", hint: "what each agent knows how to do" },
       { name: "project", hint: "policy, workspaces and access" }
     ]
-    // Each section's commands, as the command bar shows them.
+    // What can be added, each in its section, which it opens.
+    readonly property var adds: ({
+      provider: { text: "ADD PROVIDER", icon: "plus", run: () => { window.page = 1; settings.add("auth", "provider") } },
+      model: { text: "ADD MODEL", icon: "plus", run: () => { window.page = 2; settings.add("models", "model") } },
+      agent: { text: "ADD AGENT", icon: "plus", run: () => { window.page = 3; settings.agent = settings.add("agents", "agent") } },
+      workflow: { text: "ADD WORKFLOW", icon: "plus", run: () => { window.page = 4; settings.add("workflows", "workflow") } },
+      workspace: { text: "ADD WORKSPACE", icon: "plus", run: () => { window.page = 7; settings.add("workspaces", "workspace") } }
+    })
+    // Each section's commands, as the command bar shows them; the flow's are
+    // everything the project can be given.
     readonly property var commands: [
-      [
-        { text: "FIT", icon: "map", tip: "the whole flow in view  f", run: () => flow.fit() },
-        { text: "100%", tip: "actual size  0", run: () => flow.actualSize() },
-        { text: "", icon: "chevron-down", tip: "zoom out  -", run: () => flow.zoomOut() },
-        { text: "", icon: "chevron-up", tip: "zoom in  +", run: () => flow.zoomIn() },
-        { text: "READ AGAIN", icon: "spark", tip: "read every project again", run: () => Studio.loadOverviews() }
-      ].concat(Studio.projects.length > 1 ? Studio.projects.map(project => ({
-        text: project.id.toUpperCase(), icon: "folder", role: project.id === flow.projectId ? "primary" : "progress",
-        tip: "draw " + project.id, run: () => flow.projectId = project.id
-      })) : []),
-      [{ text: "ADD PROVIDER", icon: "plus", run: () => settings.add("auth", "provider") }],
-      [{ text: "ADD MODEL", icon: "plus", run: () => settings.add("models", "model") }],
-      [{ text: "ADD AGENT", icon: "plus", run: () => settings.agent = settings.add("agents", "agent") }],
-      [{ text: "ADD WORKFLOW", icon: "plus", run: () => settings.add("workflows", "workflow") }],
+      [adds.agent, adds.workflow, adds.model, adds.provider, adds.workspace],
+      [adds.provider],
+      [adds.model],
+      [adds.agent],
+      [adds.workflow],
       [],
       [],
-      [{ text: "ADD WORKSPACE", icon: "plus", run: () => settings.add("workspaces", "workspace") }]
+      [adds.workspace]
     ]
 
     function choose(index) { page = (index + sections.length) % sections.length }
@@ -131,7 +131,8 @@ ShellRoot {
         section: window.page
       }
 
-      // The studio and the project it was opened on, in the corner.
+      // The studio, and the project the flow draws: with several in the
+      // registry, each is named and picking one draws it.
       Rectangle {
         anchors { left: parent.left; bottom: parent.bottom; leftMargin: 14; bottomMargin: 12 }
         width: brand.implicitWidth + 12
@@ -144,26 +145,51 @@ ShellRoot {
         spacing: 10
         Label { text: "OMUNCULUS"; color: Theme.dim; font.pixelSize: 10; font.letterSpacing: 5 }
         Label { text: "/"; color: Theme.primary; font.pixelSize: 10 }
-        DecodeLabel { value: "STUDIO · " + Studio.project.toUpperCase(); color: Theme.secondary; font.pixelSize: 10; font.letterSpacing: 4 }
+        Label { text: "STUDIO"; color: Theme.secondary; font.pixelSize: 10; font.letterSpacing: 4 }
+        Repeater {
+          model: Studio.projects.length > 0 ? Studio.projects.map(project => project.id) : [Studio.project]
+          delegate: DecodeLabel {
+            id: projectName
+            required property string modelData
+            value: modelData.toUpperCase()
+            color: modelData === flow.projectId ? Theme.primary : projectPointer.containsMouse ? Theme.foreground : Theme.dim
+            font.pixelSize: 10
+            font.letterSpacing: 4
+            MouseArea { id: projectPointer; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { flow.projectId = projectName.modelData; window.page = 0 } }
+          }
+        }
       }
 
-      // How near the canvas is; pressing it brings it to its actual size.
+      // How near the canvas is, and the ways to bring it nearer, farther, to
+      // its actual size (pressing the number) or all in view.
       Rectangle {
         anchors { right: parent.right; bottom: parent.bottom; rightMargin: 20; bottomMargin: 20 }
         visible: window.page === 0
-        width: 120
+        width: zoomRow.implicitWidth
         height: 32
-        color: Qt.alpha(Theme.background, 0.9)
-        border.color: zoomPointer.containsMouse ? Theme.primary : Theme.line
-        DecodeLabel {
-          anchors.centerIn: parent
-          value: Math.round(flow.zoomLevel * 100) + " %"
-          autoPlay: false
-          color: Theme.foreground
-          font.pixelSize: 12
-          font.letterSpacing: 2
+        color: Qt.alpha(Theme.background, 0.94)
+        border.color: Theme.line
+        Row {
+          id: zoomRow
+          height: parent.height
+          IconButton { anchors.verticalCenter: parent.verticalCenter; name: "chevron-down"; tip: "zoom out  -"; onClicked: flow.zoomOut() }
+          Item {
+            width: 76
+            height: parent.height
+            DecodeLabel {
+              anchors.centerIn: parent
+              value: Math.round(flow.zoomLevel * 100) + " %"
+              autoPlay: false
+              color: zoomPointer.containsMouse ? Theme.primary : Theme.foreground
+              font.pixelSize: 12
+              font.letterSpacing: 2
+            }
+            MouseArea { id: zoomPointer; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: flow.actualSize() }
+          }
+          IconButton { anchors.verticalCenter: parent.verticalCenter; name: "chevron-up"; tip: "zoom in  +"; onClicked: flow.zoomIn() }
+          Rectangle { width: 1; height: parent.height; color: Theme.line }
+          IconButton { anchors.verticalCenter: parent.verticalCenter; name: "map"; tip: "all in view  f"; onClicked: flow.fit() }
         }
-        MouseArea { id: zoomPointer; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: flow.actualSize() }
       }
 
       // Ctrl+1 to Ctrl+8 choose a section; Ctrl+Tab and Ctrl+Shift+Tab turn the carousel.

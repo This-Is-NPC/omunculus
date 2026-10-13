@@ -53,9 +53,6 @@ Item {
     border.color: node.agent && node.agent.idle ? Theme.line : node.edge
     Behavior on border.color { ColorAnimation { duration: 160 } }
 
-    // The tone's bar on the left edge.
-    Rectangle { width: 2; height: parent.height; color: node.tone; opacity: node.agent && node.agent.idle ? 0.3 : 1 }
-
     // The sight's brackets, one at each corner.
     Repeater {
       model: 4
