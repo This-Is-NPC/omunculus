@@ -45,10 +45,12 @@ All are QML on Quickshell and share `apps/kit`:
   them `FlowCanvas`, a canvas that moves, zooms and pinches, and its
   `ZoomControl`, and `TabRail`, an app's pages as a carousel down the left
   edge, with `PageBar`, the commands of the page on screen beside it, ranked
-  — BACK apart, the page's main action solid, the others outlined, the
-  commands of one group joined as one control with the checked one lit, and
-  its tools at the end as icons — and the app's readout, which the app
-  gives it, and `FilePicker` and `FileChip`,
+  — BACK apart, the page's actions in a `CommandRow`, and its tools at the
+  end as icons — and the app's readout, which the app gives it; `CommandRow`,
+  a bar's actions in their order, the main one solid, the others outlined,
+  those of one group joined as one control with the checked one lit, each
+  shortened to its short name or its icon when the names do not fit, which
+  the mailbox's command bar uses too; and `FilePicker` and `FileChip`,
   the files a message carries and a file attached in a conversation. It
   knows nothing of Omunculus.
 - `apps/kit/client`: `Http`, which makes each request to a socket through
