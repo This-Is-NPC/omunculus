@@ -11,7 +11,7 @@ and the owner approve, the builders work from its `design/handoff.md`.
 | --- | --- | --- |
 | design-lead | 0 | answers the sales desk: briefing, rounds, assessments |
 | designer | 1, workflow only | makes the design in `design/` |
-| design-reviewer | 1, workflow only | checks the design against the briefing, and, where a project composes it into the build, what is built against the approved design |
+| design-reviewer | 1, workflow only | checks the design against the briefing, and, where a project composes it into the build, what is built against the approved design, naming for each fault the item of the plan that fixes it |
 | publisher | 1, workflow only | publishes it to homologation |
 
 Every design goes through the workflow `design`: design (designer), review

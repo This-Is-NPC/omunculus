@@ -25,10 +25,12 @@ workflow `page` — build (surgeon), review (copilot) — handed down one at a
 time, base first; then one work of the workflow `release` — publish, then
 promote (clerk) — takes the whole out. The pack's tool `deliver`, the
 administrator's way to conclude, refuses a build until every item and the
-release came back done. The pack requires both workflows at the surgeon's
-depth; a project that composes teams may change their stages in its own
-`[workflows.page]` and `[workflows.release]`, as long as it requires them
-there.
+release came back done. A release that breaks because of what an item
+built is not sent back to hold it: the administrator retires it, hands the
+item down again through `page`, and then a new release. The pack requires
+both workflows at the surgeon's depth; a project that composes teams may
+change their stages in its own `[workflows.page]` and
+`[workflows.release]`, as long as it requires them there.
 
 ## What it holds
 
