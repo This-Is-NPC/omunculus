@@ -41,6 +41,7 @@ tools/          deploy_preview (homologation), promote (production) and
 workspace/      AGENTS.md, the rules every agent of the team follows
 environment/    up and down: the two Dokku instances the deploy tools reach
 tasks/          the tasks that show the team works, in the eval's format
+images/         a portrait of each agent, <agent>.webp, 512 px square
 ```
 
 ## Using it
