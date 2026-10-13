@@ -78,4 +78,16 @@ images/         a portrait of each agent, <agent>.webp, 512 px square, its `imag
 `promote` is in every agent's `human` list: only the person grants it, once
 they have seen the app in homologation.
 
-Questions use `ask`. The lead answers received requests from the briefing or work goal and escalates all remaining questions together, preserving named origins; returned text is distributed with `reply`. Requests preserve waits on children. `break` stops failed work.
+Questions use `ask`. What only the machine's operator can settle — a
+tool, a login or a setting the machine lacks, as git's author identity —
+the administrator and the surgeon ask through the logical route `owner`,
+never toward whoever asked for the work, so the project configures it,
+for example:
+
+```toml
+[policy]
+request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", "origin"] }]
+```
+
+Replace its destination with the participant who runs the machine when
+that is not the conversation's origin. The lead answers received requests from the briefing or work goal and escalates all remaining questions together, preserving named origins; returned text is distributed with `reply`. Requests preserve waits on children. `break` stops failed work.

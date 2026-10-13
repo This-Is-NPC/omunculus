@@ -1,7 +1,8 @@
 # The dream team (packs/dream-team) alone, imported by the pack tool as a
 # person imports it. What the pack leaves to the project is here: the
 # logins of its deploy environment (packs/dream-team/environment/up), the
-# variable its deploy tools find the sockets by, and time for a build.
+# variable its deploy tools find the sockets by, time for a build and the
+# owner route its technical questions take.
 [eval]
 packs = [{ name = "dream-team" }]
 
@@ -16,3 +17,6 @@ key = "$OMUNCULUS_HOMOLOGATION_KEY"
 [auth.production]
 kind = "api_key"
 key = "$OMUNCULUS_PRODUCTION_KEY"
+
+[policy]
+request_routes = [{ name = "owner", via = ["origin"] }, { via = ["parent", "origin"] }]

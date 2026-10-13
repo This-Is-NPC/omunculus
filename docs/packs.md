@@ -51,8 +51,9 @@ leads and administrators answer known facts and escalate the remaining
 named origins while preserving child waits ([requests](requests.md)).
 
 The sales desk and its `next_stage` refusal name the logical `owner` route,
-which the project importing it configures; the sales-desk and agency eval
-overlays declare it. Their default route goes through the parent, then the
+which the project importing it configures, as do the dream team's
+administrator and surgeon for what only the machine's operator can settle;
+the dream-team, sales-desk and agency eval overlays declare it. Their default route goes through the parent, then the
 sales generalist, then the conversation origin. The generalist batches all
 received questions in its conversation into one escalation and distributes
 the returned text with `reply`; seller questions and preview and price
