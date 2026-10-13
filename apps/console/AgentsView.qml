@@ -54,7 +54,7 @@ Item {
     const works = Omunculus.tree("", false).map(row => {
       const lane = Omunculus.laneOf(row.work)
       return {
-        key: row.work.id, parent: row.work.parent_id || null, agent: lane ? lane.steps[lane.at].agent : row.work.assignee || "",
+        key: row.work.id, parent: row.work.parent_id || null, agent: Omunculus.agentOf(row.work),
         title: row.work.title, depth: row.level, idle: false, lane: lane,
         width: lane ? lane.steps.length * nodeWidth + (lane.steps.length - 1) * stageGap + 2 * lanePad : nodeWidth
       }
@@ -196,7 +196,9 @@ Item {
     }
   }
 
-  // Picking a node brings its card into the room left of the inspector.
+  // Picking a node brings its card into the room left of the inspector, and
+  // so does framing the map again, as it does when a work picked as its
+  // conversation opens comes onto it.
   onPickedChanged: if (picked !== null && cardOf(picked)) Qt.callLater(() => map.bringIntoView(cardOf(picked)))
 
   FlowCanvas {
@@ -207,6 +209,7 @@ Item {
     rightInset: inspector.visible ? inspector.width + 14 : 0
     bottomInset: zoom.height + 16
     onBackgroundClicked: view.picked = null
+    onFramed: if (view.picked !== null && view.cardOf(view.picked)) bringIntoView(view.cardOf(view.picked))
     // A conversation is framed when it is drawn, and again as it grows,
     // until it is moved by hand.
     onContentWidthChanged: if (!moved) Qt.callLater(fit)

@@ -5,7 +5,7 @@ import "kit/ui"
 
 // HistoryView filters the project's conversations — those agents work in,
 // those waiting on you, and what was first said in them — and opens a selected
-// row. `/` goes to the search; ↓ or Enter back to the rows.
+// row. `/` goes to the search; ↓ or Enter back to the rows; Esc on them leaves.
 ColumnLayout {
   id: history
   spacing: 14
@@ -14,6 +14,10 @@ ColumnLayout {
   // "", "working" or "waiting".
   property string filter: ""
   property string search: ""
+  signal opened(string id)
+  signal leave()
+
+  function focusEntry() { table.focusRows() }
 
   function known(conversation) { return Omunculus.summaries[conversation.id] || null }
   readonly property int working: Omunculus.conversations.filter(item => { const s = known(item); return s && s.running > 0 }).length
@@ -26,57 +30,44 @@ ColumnLayout {
   })
 
   Keys.onPressed: event => {
-    if (event.key === Qt.Key_N)
-      newButton.press()
-    else if (event.text === "/")
-      searchBox.forceActiveFocus()
-    else
+    if (event.text !== "/")
       return
+    searchBox.forceActiveFocus()
     event.accepted = true
   }
-  Keys.onEscapePressed: backButton.press()
+  Keys.onEscapePressed: leave()
 
   RowLayout {
     Layout.fillWidth: true
-    // The buttons wrap rather than run past a narrow window.
-    Flow {
+    spacing: 10
+    TextBox {
+      id: searchBox
       Layout.fillWidth: true
-      Layout.preferredWidth: 0
-      spacing: 6
-      TraceButton { id: backButton; dense: true; role: "navigation"; icon: "chevron-left"; text: "BACK"; tip: "esc"; onClicked: Omunculus.view = "start" }
-      TraceButton { id: newButton; dense: true; role: "navigation"; icon: "plus"; text: "NEW CONVERSATION"; tip: "n"; onClicked: Omunculus.startConversation() }
-    }
-    Label {
-      Layout.alignment: Qt.AlignTop | Qt.AlignRight
-      Layout.topMargin: 8
-      text: history.shown.length + (history.shown.length === 1 ? " CONVERSATION" : " CONVERSATIONS")
-      color: Theme.dim
-      font.pixelSize: 10
-      font.letterSpacing: 3
-    }
-  }
-
-  TextBox {
-    id: searchBox
-    Layout.fillWidth: true
-    dense: true
-    placeholderText: "search what was said first"
-    onTextEdited: typing.restart()
-    // The filter follows once typing pauses.
-    Timer { id: typing; interval: 250; onTriggered: history.search = searchBox.text }
-    Keys.onEscapePressed: {
-      if (searchBox.text) {
-        searchBox.clear()
-        history.search = ""
-      } else {
+      dense: true
+      placeholderText: "search what was said first"
+      onTextEdited: typing.restart()
+      // The filter follows once typing pauses.
+      Timer { id: typing; interval: 250; onTriggered: history.search = searchBox.text }
+      Keys.onEscapePressed: {
+        if (searchBox.text) {
+          searchBox.clear()
+          history.search = ""
+        } else {
+          table.focusRows()
+        }
+      }
+      Keys.onDownPressed: table.focusRows()
+      Keys.onReturnPressed: {
+        typing.stop()
+        history.search = searchBox.text
         table.focusRows()
       }
     }
-    Keys.onDownPressed: table.focusRows()
-    Keys.onReturnPressed: {
-      typing.stop()
-      history.search = searchBox.text
-      table.focusRows()
+    Label {
+      text: history.shown.length + (history.shown.length === 1 ? " conversation" : " conversations")
+      color: Theme.dim
+      font.pixelSize: 10
+      font.letterSpacing: 1
     }
   }
 
@@ -116,7 +107,7 @@ ColumnLayout {
     conversations: history.shown
     active: history.active
     emptyText: history.search ? "nothing first said matches “" + history.search + "”" : "no conversation yet"
-    onOpened: conversation => Omunculus.open(conversation.id)
-    onBackRequested: backButton.press()
+    onOpened: conversation => history.opened(conversation.id)
+    onBackRequested: history.leave()
   }
 }

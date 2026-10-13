@@ -15,13 +15,12 @@ import "kit/ui"
 Singleton {
   id: root
 
-  readonly property string socket: Quickshell.env("OMUNCULUS_SOCKET")
-  readonly property string project: Quickshell.env("OMUNCULUS_PROJECT")
+  // The project the window is on and its socket: the one it was opened on,
+  // until a card of another project's is opened on the board.
+  property string socket: Quickshell.env("OMUNCULUS_SOCKET")
+  property string project: Quickshell.env("OMUNCULUS_PROJECT")
   readonly property string base: "/v1/projects/" + project
   property bool connected: false
-  // "start", "pick" (choosing whom to talk with), "history", or "" while a
-  // conversation is on screen.
-  property string view: "start"
   property var conversations: []
   // Conversation id -> {title, running, waiting}, read from its snapshot.
   property var summaries: ({})
@@ -72,6 +71,24 @@ Singleton {
   property var log: []
   // The lines of the history while it is read in, given to `log` at once.
   property var logBuffer: []
+
+  // The board: every project the window's socket lists, as {id, socket},
+  // and by project id its works, its setup as the config tool prints it,
+  // its conversations, and the runs open on its works (run id -> work id),
+  // all kept from each project's stream while the board is watched. A work
+  // on the board carries its `project`.
+  property var boardProjects: []
+  property var boardWorks: ({})
+  property var boardSetups: ({})
+  property var boardConversations: ({})
+  property var boardRuns: ({})
+  // Whether the board is on screen, and whether its projects' streams are
+  // read, once the projects are known.
+  property bool boardWanted: false
+  property bool watching: false
+  readonly property var board: [].concat(...boardProjects.map(place => boardWorks[place.id] || []))
+  // The works an agent runs on now, each as "project/work id".
+  readonly property var boardBusy: [].concat(...Object.keys(boardRuns).map(id => Object.values(boardRuns[id]).map(work => id + "/" + work)))
 
   // Agent name -> its colour, in the order agents first appear.
   property var tones: ({})
@@ -124,7 +141,11 @@ Singleton {
 
   // Reads the project's setup through the config tool on the local socket.
   function loadSetup() {
-    cli(["config"], output => setup = JSON.parse(output))
+    const on = project
+    cli(["config"], output => {
+      if (on === project)
+        setup = JSON.parse(output)
+    })
   }
 
   // Runs a command line on the local socket, as `omunculus <argv>` would;
@@ -152,22 +173,26 @@ Singleton {
   }
 
   function loadConversations() {
+    const on = project
     call("GET", base + "/conversations", null, false, data => {
+      if (on !== project)
+        return
       conversations = data.items.slice().sort((a, b) => b.created_at.localeCompare(a.created_at))
-      summarize(conversations.map(item => item.id))
+      summarize({ id: project, socket: socket }, conversations.map(item => item.id))
     })
   }
 
-  // Reads each conversation's snapshot in turn, for its line in the history.
-  function summarize(ids) {
+  // Reads each conversation's snapshot in turn, on its project's socket, for
+  // its line in the history and its name on the board.
+  function summarize(place, ids) {
     if (ids.length === 0)
       return
-    call("GET", base + "/conversations/" + ids[0] + "/snapshot", null, false, data => {
+    http.call(place.socket, "GET", "/v1/projects/" + place.id + "/conversations/" + ids[0] + "/snapshot", null, false, data => {
       const next = Object.assign({}, summaries)
       next[ids[0]] = summary(data)
       summaries = next
-      summarize(ids.slice(1))
-    }, () => summarize(ids.slice(1)))
+      summarize(place, ids.slice(1))
+    }, () => summarize(place, ids.slice(1)))
   }
 
   function summary(data) {
@@ -179,13 +204,112 @@ Singleton {
     }
   }
 
-  function openHistory() {
-    view = "history"
-    loadConversations()
+  // What a conversation is called: what was first said in it, or when it began.
+  function conversationLabel(id) {
+    const said = (summaries[id] || {}).title
+    const began = [].concat(conversations, ...Object.values(boardConversations)).find(item => item.id === id)
+    return said || (began ? "conversation of " + Qt.formatDateTime(new Date(began.created_at), "dd MMM hh:mm") : "a conversation")
   }
 
-  // A new conversation starts by choosing whom it is with.
-  function startConversation() { view = "pick" }
+  // Follows every project's works while the board is on screen, from what
+  // each project's stream sends from its start.
+  function watchBoard(on) {
+    boardWanted = on
+    watching = false
+    if (!on)
+      return
+    boardRuns = {}
+    call("GET", "/v1/projects", null, false, data => {
+      if (!boardWanted)
+        return
+      boardProjects = data.items
+      for (const place of data.items) {
+        loadWorks(place)
+        loadBoardConversations(place)
+        http.call(place.socket, "POST", "/v1/cli", { argv: ["config"] }, false, answer => keep("boardSetups", place.id, JSON.parse(answer.output)))
+      }
+      watching = true
+    })
+  }
+
+  function loadWorks(place) {
+    http.call(place.socket, "GET", "/v1/projects/" + place.id + "/works", null, false, data => {
+      const works = data.items.map(work => Object.assign({ project: place.id }, work))
+      keep("boardWorks", place.id, works)
+      meet(works.map(work => agentOf(work)))
+    })
+  }
+
+  function loadBoardConversations(place) {
+    http.call(place.socket, "GET", "/v1/projects/" + place.id + "/conversations", null, false, data => {
+      keep("boardConversations", place.id, data.items)
+      summarize(place, data.items.map(item => item.id))
+    })
+  }
+
+  // What an event of a project's stream changes on the board: the runs open,
+  // the project's works, and, for a new conversation or what was first said
+  // in one, the project's conversations.
+  function boardEvent(place, event) {
+    if (event.type === "run.delta")
+      return
+    if (event.type === "start-run" || event.type === "end-run") {
+      const runs = Object.assign({}, boardRuns[place.id] || {})
+      if (event.type === "start-run")
+        runs[event.run_id] = event.work_id || ""
+      else
+        delete runs[event.run_id]
+      keep("boardRuns", place.id, runs)
+    }
+    if (event.type === "conversation" || event.type === "prompt")
+      staleConversations[place.id] = place
+    staleWorks[place.id] = place
+    boardTimer.restart()
+  }
+  // The projects whose works or conversations are read again once events
+  // pause.
+  property var staleWorks: ({})
+  property var staleConversations: ({})
+  Timer {
+    id: boardTimer
+    interval: 250
+    onTriggered: {
+      Object.values(root.staleWorks).forEach(place => root.loadWorks(place))
+      Object.values(root.staleConversations).forEach(place => root.loadBoardConversations(place))
+      root.staleWorks = {}
+      root.staleConversations = {}
+    }
+  }
+  Instantiator {
+    model: root.watching ? root.boardProjects : []
+    delegate: EventStream {
+      required property var modelData
+      // The cursor it resumes after.
+      property string cursor: ""
+      socket: modelData.socket
+      path: "/v1/projects/" + modelData.id + "/stream" + (cursor !== "" ? "?after=" + cursor : "")
+      onReceived: event => {
+        if (event.cursor)
+          cursor = event.cursor
+        root.boardEvent(modelData, event)
+      }
+      Component.onCompleted: start()
+    }
+  }
+
+  // Opens the window on another project the socket listed, as {id, socket}:
+  // its conversations and its setup, the conversation on screen closed.
+  function switchProject(place) {
+    if (place.id === project)
+      return
+    close()
+    project = place.id
+    socket = place.socket
+    setup = null
+    conversations = []
+    loadConversations()
+    loadSetup()
+  }
 
   function createConversation(name) {
     call("POST", base + "/conversations", {}, true, data => {
@@ -195,9 +319,14 @@ Singleton {
     })
   }
 
-  // The file of an agent's image, as a url, or "" while it has none or it is
-  // being fetched.
-  function imageOf(name) { return images.source(name) }
+  // The file of an agent's image, of the window's project or of another one
+  // on the board, as a url, or "" while it has none or it is being fetched.
+  function imageOf(name, place) {
+    if (!place || place === project)
+      return images.source(name)
+    const keeper = boardImages.count > 0 ? boardImages.objectAt(boardProjects.findIndex(item => item.id === place)) : null
+    return keeper ? keeper.source(name) : ""
+  }
   AgentImages {
     id: images
     http: http
@@ -205,11 +334,22 @@ Singleton {
     base: root.base
     agents: root.setup ? root.setup.agents : []
   }
+  Instantiator {
+    id: boardImages
+    model: root.boardProjects
+    delegate: AgentImages {
+      required property var modelData
+      // The window's Http, which `http` here would name this property.
+      http: images.http
+      socket: modelData.socket
+      base: "/v1/projects/" + modelData.id
+      agents: (root.boardSetups[modelData.id] || { agents: [] }).agents
+    }
+  }
 
   function open(id) {
     conversationId = id
     agent = ""
-    view = ""
     cursor = ""
     rows = {}
     parentOf = {}
@@ -241,12 +381,12 @@ Singleton {
     })
   }
 
-  // leave goes back to the conversations; the agents go on without the window.
-  function leave() {
+  // Closes the conversation on screen; its agents go on without the window.
+  function close() {
     conversationId = ""
     conversationStream.stop()
     threads = {}
-    openHistory()
+    loadConversations()
   }
 
   function refresh() {
@@ -321,13 +461,20 @@ Singleton {
     return works.find(item => item.id === id) || null
   }
 
-  // The workflow a work goes through, as its lane: {name, steps, at}, the
+  // The workflow a work goes through, as its project's setup has it, as its lane: {name, steps, at}, the
   // stage it is at among the steps, whose agent runs it; null for a work in
   // none, or at a stage its workflow no longer has.
   function laneOf(work) {
-    const flow = setup && work.workflow ? setup.workflows.find(each => each.name === work.workflow) : null
+    const known = work.project && work.project !== project ? boardSetups[work.project] : setup
+    const flow = known && work.workflow ? known.workflows.find(each => each.name === work.workflow) : null
     const at = flow ? flow.steps.findIndex(step => step.name === work.stage) : -1
     return at < 0 ? null : { name: flow.name, steps: flow.steps, at: at }
+  }
+
+  // The agent a work is with: its stage's in a workflow, else its assignee.
+  function agentOf(work) {
+    const lane = laneOf(work)
+    return lane ? lane.steps[lane.at].agent : work.assignee || ""
   }
 
   // The works under `id` in tree order, each with its depth below it; `id`

@@ -17,12 +17,12 @@ ModalDialog {
     ["everywhere", [
       ["Tab · Shift+Tab", "move between controls"],
       ["Enter · Space", "press the control"],
-      ["Esc", "go back"],
+      ["1 · 2 · 3 · 4 · 5", "the pages: the conversations, the conversation, the map, the log, the board"],
+      ["Ctrl+1 … Ctrl+5", "the same, from a field being written or the picker"],
+      ["Ctrl+Tab · Ctrl+Shift+Tab", "the next or the previous page"],
+      ["Esc", "let go of what the page holds, then back to where you were"],
+      ["Alt + a key of the bar", "the key, from a field being written"],
       ["? · F1", "these keys"]
-    ]],
-    ["start", [
-      ["N", "new conversation"],
-      ["H", "the conversations"]
     ]],
     ["conversations", [
       ["↑ · ↓", "choose"],
@@ -30,14 +30,14 @@ ModalDialog {
       ["N", "new conversation"],
       ["/", "search"]
     ]],
+    ["new conversation", [
+      ["← · → · ↑ · ↓", "choose whom it is with"],
+      ["1 … 9 · Enter", "start it with them"]
+    ]],
     ["conversation", [
-      ["1 · 2 · 3", "its pages: the conversation, the map, the log"],
-      ["Ctrl+1 · Ctrl+2 · Ctrl+3", "the same, from a field being written"],
-      ["Ctrl+Tab · Ctrl+Shift+Tab", "the next or the previous page"],
-      ["Esc", "close what the page has picked, or back to the conversations"],
       ["R", "answer the oldest request waiting on you"],
       ["M", "show the oldest note to you and mark it read"],
-      ["Alt + a key of the bar", "the same, from a field being written"]
+      ["N", "new conversation"]
     ]],
     ["map", [
       ["F", "the whole map in view"],
@@ -46,6 +46,13 @@ ModalDialog {
       ["C", "leave it a note, without a run"],
       ["M", "mark its notes read"],
       ["W", "write to its agent"]
+    ]],
+    ["board", [
+      ["← · → · ↑ · ↓", "move between the works, across and down the columns"],
+      ["Enter · Space", "open the work on its conversation's map"],
+      ["S · A · P", "by state, a lane per agent, a lane per project"],
+      ["/", "filter the works"],
+      ["Esc", "empty the filter, then back to the works"]
     ]],
     ["log", [
       ["/", "filter the events"],
@@ -98,7 +105,7 @@ ModalDialog {
                 Layout.fillWidth: true
                 spacing: 14
                 Label {
-                  Layout.preferredWidth: 170
+                  Layout.preferredWidth: 200
                   text: key.modelData[0]
                   color: Theme.primary
                   font.pixelSize: 11
