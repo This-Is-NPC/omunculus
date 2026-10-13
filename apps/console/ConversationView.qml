@@ -26,12 +26,14 @@ Item {
   // The commands of the page on screen, as the PageBar takes them.
   readonly property var commands: {
     const back = { text: "CONVERSATIONS", short: "BACK", icon: "chevron-left", role: "navigation", tip: "back to the conversations  esc", run: () => Omunculus.leave() }
+    const cost = { text: "COST", icon: "cost", tip: "what this conversation cost", run: () => view.costWanted() }
     if (page === "map")
       return [
         back,
         { text: "FIT", icon: "map", tip: "the whole map in view  f", run: () => agents.fit() },
         { text: Omunculus.pending + " PENDING", short: String(Omunculus.pending), icon: "warning", tone: Theme.warning, tip: "pick what waits on you",
-          shown: Omunculus.pending > 0, run: () => agents.pickPending() }
+          shown: Omunculus.pending > 0, run: () => agents.pickPending() },
+        cost
       ]
     if (page === "log")
       return [
@@ -43,7 +45,7 @@ Item {
     return [
       back,
       { text: "NEW CONVERSATION", short: "NEW", icon: "plus", tip: "start another conversation", run: () => { Omunculus.leave(); Omunculus.startConversation() } },
-      { text: "COST", icon: "cost", tip: "what this conversation cost", run: () => view.costWanted() }
+      cost
     ]
   }
 
