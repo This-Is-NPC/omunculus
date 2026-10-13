@@ -4,7 +4,7 @@ import "kit/ui"
 
 // AgentTurn is one run of an agent in the conversation, said like a line of
 // chat: on the left, under the agent's portrait and name in its colour, its
-// words drawn as they stream.
+// words drawn as they stream, and the files it attached.
 // Below them, one dim line says what it did — the calls it made,
 // which failed, the work it closed or the access it granted; clicking it lists
 // the calls in place, with why a failed one failed. Until the agent says or
@@ -19,6 +19,8 @@ Item {
   required property string partial
   required property bool streaming
   required property string steps
+  // The files the run attached, as JSON.
+  required property string files
   required property real at
   required property string stamp
   property bool continued: false
@@ -27,11 +29,12 @@ Item {
   readonly property var lines: JSON.parse(steps)
   readonly property var calls: lines.filter(line => !line.outcome)
   readonly property var outcomes: lines.filter(line => line.outcome)
+  readonly property var attached: JSON.parse(files)
   readonly property var failed: calls.filter(call => !call.ok)
   readonly property string said: text + (partial !== "" ? (text !== "" ? "\n\n" : "") + partial : "")
   readonly property color tone: Omunculus.toneOf(who)
   // A run that said and did nothing leaves no trace in the conversation.
-  readonly property bool empty: !streaming && said === "" && lines.length === 0
+  readonly property bool empty: !streaming && said === "" && lines.length === 0 && attached.length === 0
   property double now: Date.now()
   readonly property int worked: Math.max(0, Math.round(now / 1000 - at))
   // Room beside the words kept for the copy button.
@@ -90,6 +93,21 @@ Item {
         font.pixelSize: 12
         lineHeight: 1.2
         wrapMode: Text.Wrap
+      }
+    }
+
+    // The files it attached, each opening when chosen.
+    Flow {
+      visible: turn.attached.length > 0
+      width: turn.widest
+      spacing: 6
+      Repeater {
+        model: turn.attached
+        delegate: FileChip {
+          required property var modelData
+          file: modelData
+          onClicked: Omunculus.openAttachment(modelData)
+        }
       }
     }
 

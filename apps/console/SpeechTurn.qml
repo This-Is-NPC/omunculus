@@ -1,10 +1,10 @@
 import QtQuick
 import "kit/ui"
 
-// SpeechTurn is one thing said in the conversation, in a box: yours on the
-// right, each agent's on the left tinted with its colour, under its portrait.
-// A line that continues the same speaker's turn drops the name and time and
-// sits close to the one before.
+// SpeechTurn is one thing said in the conversation, in a box, with the files
+// attached with it below: yours on the right, each agent's on the left tinted
+// with its colour, under its portrait. A line that continues the same
+// speaker's turn drops the name and time and sits close to the one before.
 Item {
   id: turn
 
@@ -12,14 +12,17 @@ Item {
   required property string text
   required property bool mine
   required property string stamp
+  // The files attached with it, as JSON.
+  required property string files
   property bool continued: false
 
+  readonly property var attached: JSON.parse(files)
   readonly property color tone: Omunculus.toneOf(who)
   // At most this wide: the whole width on a narrow window, about three quarters otherwise.
   readonly property real widest: turn.width < 520 ? turn.width : turn.width * 0.78
   readonly property real inset: 10
 
-  implicitHeight: body.y + body.height + 2
+  implicitHeight: (chips.visible ? chips.y + chips.height : body.y + body.height) + 2
 
   Column {
     id: body
@@ -55,6 +58,25 @@ Item {
         font.pixelSize: 12
         lineHeight: 1.2
         wrapMode: Text.Wrap
+      }
+    }
+  }
+
+  // The files attached with it, on its side, each opening when chosen.
+  Flow {
+    id: chips
+    visible: turn.attached.length > 0
+    x: turn.mine ? turn.width - width : 0
+    y: body.y + body.height + 6
+    width: turn.widest
+    layoutDirection: turn.mine ? Qt.RightToLeft : Qt.LeftToRight
+    spacing: 6
+    Repeater {
+      model: turn.attached
+      delegate: FileChip {
+        required property var modelData
+        file: modelData
+        onClicked: Omunculus.openAttachment(modelData)
       }
     }
   }

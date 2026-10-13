@@ -4,7 +4,8 @@ import "kit/ui"
 
 // Composer is where you write: in the main thread, to the root agent; in a
 // work, to that work's agent, or a note its agents read without a new run,
-// which Enter leaves while the box is noting.
+// which Enter leaves while the box is noting. A message carries the files
+// picked under the box; a note carries none.
 // Sending shows the trace while the agent you write to is working; the agents
 // below it never hold it. In the box, while anything waits on you, how much
 // does, and the way to the agents map where it is answered.
@@ -49,7 +50,7 @@ ColumnLayout {
       return
     if (composer.busy)
       sendButton.restartTrace()
-    Omunculus.send(value, composer.work)
+    Omunculus.send(value, composer.work, files.take())
   }
 
   function note() {
@@ -127,5 +128,11 @@ ColumnLayout {
         onClicked: composer.submit()
       }
     }
+  }
+
+  FilePicker {
+    id: files
+    Layout.fillWidth: true
+    visible: !composer.noting
   }
 }

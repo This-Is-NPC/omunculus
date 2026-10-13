@@ -270,8 +270,9 @@ Singleton {
     })
   }
 
-  // A message to the root agent, or, with a work, to that work's agent.
-  function send(text, work) {
+  // A message to the root agent, or, with a work, to that work's agent, with
+  // the files at the paths `files` lists.
+  function send(text, work, files) {
     const value = text.trim()
     if (value === "" || conversationId === "")
       return
@@ -280,7 +281,14 @@ Singleton {
       body.work_id = work
     else if (agent !== "")
       body.agent = agent
-    call("POST", base + "/conversations/" + conversationId + "/messages", body, true, () => {})
+    http.post(socket, base + "/conversations/" + conversationId + "/messages", body, files, () => {})
+  }
+
+  // Saves a file attached in the conversation to the downloads directory and
+  // opens it.
+  function openAttachment(file) {
+    http.openAttachment(socket, base + "/conversations/" + conversationId + "/attachments/" + file.sha256, file)
+    tell("opening " + file.name, false)
   }
 
   // A note on a work: context its agents read, not a new run.
@@ -475,7 +483,7 @@ Singleton {
     const model = threads[key]
     model.append(Object.assign({
       kind: "speech", key: "", who: "", text: "", mine: false, stamp: "", at: 0, work: "",
-      streaming: false, partial: "", steps: "[]",
+      streaming: false, partial: "", steps: "[]", files: "[]",
       fresh: !replaying
     }, entry))
     return { thread: key, row: model.count - 1 }
@@ -530,15 +538,19 @@ Singleton {
     update(place, "steps", JSON.stringify(steps))
   }
 
-  // Adds what was said to the turn of its run, or as a line of its own in `key`.
-  function say(key, runId, who, said, stamp, at) {
+  // Adds what was said, and the files attached with it, to the turn of its
+  // run, or as a line of its own in `key`.
+  function say(key, runId, who, said, stamp, at, files) {
     const place = rows[runId]
     if (place === undefined) {
-      append(key, { who: who, mine: who === "you", text: said, stamp: stamp, at: at })
+      append(key, { who: who, mine: who === "you", text: said, stamp: stamp, at: at, files: JSON.stringify(files || []) })
       return
     }
-    const before = entryAt(place).text
-    update(place, "text", before === "" ? said : before + "\n\n" + said)
+    const entry = entryAt(place)
+    if (said !== "")
+      update(place, "text", entry.text === "" ? said : entry.text + "\n\n" + said)
+    if (files && files.length > 0)
+      update(place, "files", JSON.stringify(JSON.parse(entry.files).concat(files)))
   }
 
   function handle(event) {
@@ -567,7 +579,10 @@ Singleton {
     case "prompt":
       if (agent === "" && body.agent)
         agent = body.agent
-      append(key, { who: "you", mine: true, text: body.message || "", stamp: stamp, at: at })
+      append(key, { who: "you", mine: true, text: body.message || "", stamp: stamp, at: at, files: JSON.stringify(body.attachments || []) })
+      break
+    case "attach":
+      say(key, event.run_id, who, String(body.note || ""), stamp, at, body.attachments || [])
       break
     case "comment":
       if (body.body)

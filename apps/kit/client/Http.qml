@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Io
 
 // HTTP requests to the server's local sockets, each through a curl process.
@@ -31,6 +32,26 @@ QtObject {
   // above, and reads it as `call` does.
   function run(command, on, done, failed) {
     request.createObject(root, { command: command, on: on, done: done, failed: failed || null })
+  }
+
+  // A POST of `body` as `call` makes it, with the files at the paths `files`
+  // lists attached when there are any, through post-with-files.
+  function post(on, path, body, files, done, failed) {
+    if (!files || files.length === 0)
+      return call(on, "POST", path, body, true, done, failed)
+    run([script("post-with-files"), on, path, key(), JSON.stringify(body)].concat(files), on, done, failed)
+  }
+
+  // Saves the file attached in a conversation that `path` answers on the
+  // socket `on` to the downloads directory and opens it, through
+  // open-attachment.
+  function openAttachment(on, path, file) {
+    Quickshell.execDetached([script("open-attachment"), on, path, file.name, file.sha256])
+  }
+
+  // The path of a script beside this file.
+  function script(name) {
+    return decodeURIComponent(String(Qt.resolvedUrl(name)).replace(/^file:\/\//, ""))
   }
 
   // Saves what `path` answers on the socket `on` into `file`; `done` gets

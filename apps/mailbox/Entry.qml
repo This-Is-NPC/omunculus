@@ -98,11 +98,9 @@ SurfaceFrame {
       spacing: 6
       Repeater {
         model: card.entry.files
-        delegate: Chip {
+        delegate: FileChip {
           required property var modelData
-          icon: "import"
-          text: modelData.name + "  ·  " + Mail.size(modelData.bytes)
-          tip: "save to downloads and open"
+          file: modelData
           onClicked: Mail.openAttachment(card.thread, modelData)
         }
       }

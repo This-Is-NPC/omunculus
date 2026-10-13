@@ -196,6 +196,7 @@ Item {
       required property bool streaming
       required property string partial
       required property string steps
+      required property string files
       required property bool fresh
 
       width: timeline.width
@@ -229,6 +230,7 @@ Item {
           text: entry.text
           mine: entry.mine
           stamp: entry.stamp
+          files: entry.files
           continued: root.revision >= 0 && root.continues(entry.index)
         }
       }
@@ -251,6 +253,7 @@ Item {
           partial: entry.partial
           streaming: entry.streaming
           steps: entry.steps
+          files: entry.files
           at: entry.at
           stamp: entry.stamp
           continued: root.revision >= 0 && root.continues(entry.index)

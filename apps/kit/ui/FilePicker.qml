@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Dialogs
-import "kit/ui"
 
 // FilePicker holds the files a message will carry: a chip that picks them
 // and a chip for each picked, which takes it off when chosen.

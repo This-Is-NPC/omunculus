@@ -158,7 +158,7 @@ Singleton {
     if (value === "" || !place || agent === "")
       return
     http.call(place.socket, "POST", "/v1/projects/" + project + "/conversations", {}, true, data => {
-      post(place.socket, "/v1/projects/" + project + "/conversations/" + data.id + "/messages",
+      http.post(place.socket, "/v1/projects/" + project + "/conversations/" + data.id + "/messages",
         { message: value, agent: agent }, files, () => {
           selected = project + "/" + data.id
           tell("sent to " + agent, false)
@@ -173,7 +173,7 @@ Singleton {
     const value = text.trim()
     if (!thread || value === "")
       return
-    post(projectOf(thread.project).socket, "/v1/projects/" + thread.project + "/conversations/" + thread.id + "/messages",
+    http.post(projectOf(thread.project).socket, "/v1/projects/" + thread.project + "/conversations/" + thread.id + "/messages",
       { message: value, agent: thread.agent }, files, () => {
         tell("sent to " + thread.agent, false)
         sweep()
@@ -185,16 +185,9 @@ Singleton {
     const thread = threads[key]
     if (!thread)
       return
-    opener.command = [Quickshell.shellPath("open-attachment"), projectOf(thread.project).socket,
-      "/v1/projects/" + thread.project + "/conversations/" + thread.id + "/attachments/" + file.sha256, file.name, file.sha256]
-    opener.startDetached()
+    http.openAttachment(projectOf(thread.project).socket,
+      "/v1/projects/" + thread.project + "/conversations/" + thread.id + "/attachments/" + file.sha256, file)
     tell("opening " + file.name, false)
-  }
-  Process { id: opener }
-
-  // The size of a file, as a person reads it.
-  function size(bytes) {
-    return bytes < 1024 ? bytes + " B" : bytes < 1048576 ? (bytes / 1024).toFixed(1) + " KB" : (bytes / 1048576).toFixed(1) + " MB"
   }
 
   // Answers a request of a thread: an option it offers, text, or both.
@@ -432,14 +425,6 @@ Singleton {
         root.seen = JSON.parse(text())
       } catch (e) {}
     }
-  }
-
-  // A POST of `body` through curl on the socket `on`, with the files at the
-  // paths `files` lists attached when there are any.
-  function post(on, path, body, files, done) {
-    if (!files || files.length === 0)
-      return http.call(on, "POST", path, body, true, done)
-    http.run([Quickshell.shellPath("post-with-files"), on, path, http.key(), JSON.stringify(body)].concat(files), on, done)
   }
 
   Http {
