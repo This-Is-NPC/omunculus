@@ -180,7 +180,7 @@ may run at once, each on its own model; a run is compared only with the folder
 once (one by default): each has a project of its own, so they share nothing
 but the provider's rate limits, which each model's `retries` rides out. Anthropic limits the requests an organization has in flight: past 24 executions at once its models fail on it. Each execution gets a fresh project; the instruction goes through the CLI, which returns once every run
 has finished; then the runner plays the person, answering what waits on them
-as the task says, until no answer is made or the execution timeout. Free-text requests use the simulated person from the task facts, once per received envelope. A linked text answer returns origins to the intermediary for distribution; the conversation records one question and one client message per envelope. It grants a request only when the
+as the task says, until no answer is made or the execution timeout. Free-text requests, and decisions offering neither the task's `decision` nor `deny`, which a person given choices may still answer in words, use the simulated person from the task facts, once per received envelope; the harness's `retry` waits. A linked text answer returns origins to the intermediary for distribution; the conversation records one question and one client message per envelope. It grants a request only when the
 task grants everything asked; denying, it says what it would not grant and
 what it would.
 
@@ -264,4 +264,4 @@ time, the BEAM CPU of the intervals they were open (shared evenly among
 the runs open then, an estimate), and the CPU and peak memory of the
 sandboxed processes its runs started.
 
-Requests that grant names follow the task’s `[human]` answers deterministically, including through nested escalation. The person model answers free-text questions; an envelope with grant provenance never falls back to it.
+Requests that grant names follow the task’s `[human]` answers deterministically, including through nested escalation. The person model answers free-text questions and, in words, decisions offering neither the task's `decision` nor `deny`; an envelope with grant provenance never falls back to it.

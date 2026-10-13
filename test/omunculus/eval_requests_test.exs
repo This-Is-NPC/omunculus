@@ -51,6 +51,18 @@ defmodule Omunculus.EvalRequestsTest do
     refute Map.has_key?(answer["parts"], "question")
   end
 
+  test "a decision offering neither the task's decision nor deny is answered in words" do
+    decision = request("Do you accept R$ 1.500?", %{"accept" => [], "adjust" => []})
+    merged = request("Do you accept R$ 1.500?", %{}, %{"price" => decision})
+
+    assert {:ok, %{"body" => "I will think about it."} = answer} =
+             Requests.answer(%{human: %{}}, %{}, merged, "/tmp", fn _ ->
+               {:ok, "I will think about it."}
+             end)
+
+    refute Map.has_key?(answer, "parts")
+  end
+
   test "an envelope with grant provenance cannot fall back to a person text decision" do
     grant =
       request("Approve production?", %{

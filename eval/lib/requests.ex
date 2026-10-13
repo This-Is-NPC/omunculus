@@ -20,10 +20,14 @@ defmodule EquivalentExchange.Requests do
     end
   end
 
+  # What the person answers in words: a question, or a decision `leaf`
+  # picks no option of, as a person given choices may still write. The
+  # harness's retry is not theirs to answer.
   defp question?(request) do
     origins = Map.get(request, :origins, %{})
+
     if map_size(origins) == 0,
-      do: Jason.decode!(request.options) == %{},
+      do: not Map.has_key?(Jason.decode!(request.options), "retry"),
       else: Enum.any?(origins, fn {_part, origin} -> question?(origin) end)
   end
 
