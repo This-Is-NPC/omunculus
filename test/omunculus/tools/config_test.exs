@@ -137,8 +137,29 @@ defmodule Omunculus.Tools.ConfigTest do
              }
            ] = Jason.decode!(output)["packs"]
 
-    assert %{"text" => "chief"} =
+    assert %{"text" => "chief", "image" => nil} =
              Enum.find(Jason.decode!(output)["agents"], &(&1["name"] == "chief"))
+  end
+
+  test "gives each agent's image by its SHA-256" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    path = Fixtures.config_path(dir)
+    File.write!(Path.join(dir, "face.png"), "face")
+
+    File.write!(
+      path,
+      String.replace(
+        File.read!(path),
+        "[agents.concierge]\n",
+        "[agents.concierge]\nimage = \"face.png\"\n"
+      )
+    )
+
+    sha256 = :crypto.hash(:sha256, "face") |> Base.encode16(case: :lower)
+    agents = describe(path)["agents"]
+    assert %{"image" => ^sha256} = Enum.find(agents, &(&1["name"] == "concierge"))
+    assert %{"image" => nil} = Enum.find(agents, &(&1["name"] == "worker"))
   end
 
   test "the builtin catalog discovers config for the command line and models" do

@@ -22,7 +22,7 @@ defmodule Omunculus.Config.Packs do
   model changed; two packs with an item of one name are refused, but for a
   depth layer, where the workflows each requires add up. Roles
   become the models and providers the config maps them to, an MCP server's
-  command is found from the pack's folder, and a pack's `tools/` and
+  command and an agent's image are found from the pack's folder, and a pack's `tools/` and
   `skills/` come before the config's own paths, so the config's tools and
   skills win too.
   """
@@ -121,7 +121,7 @@ defmodule Omunculus.Config.Packs do
 
     with :ok <- covers(name, :models, roles, models),
          :ok <- covers(name, :auth, providers, auth),
-         {:ok, agents} <- roles(name, Map.get(pack, "agents", %{}), models),
+         {:ok, agents} <- roles(name, Map.get(pack, "agents", %{}), models, dir),
          {:ok, secrets} <- providers(name, Map.get(pack, "secrets", %{}), auth),
          {:ok, servers} <- server_secrets(name, get_in(pack, ["mcp", "servers"]) || [], auth) do
       servers = Enum.map(servers, &found_command(&1, dir))
@@ -139,14 +139,24 @@ defmodule Omunculus.Config.Packs do
 
   defp covers(name, kind, _declared, _mapped), do: {:error, {name, kind, :not_a_table}}
 
-  defp roles(name, agents, models) do
+  # Each agent on the model its role is bound to, its image found in the pack's folder.
+  defp roles(name, agents, models, dir) do
     Enum.reduce_while(agents, {:ok, %{}}, fn {agent, table}, {:ok, acc} ->
       case Map.fetch(models, Map.get(table, "model")) do
-        {:ok, model} -> {:cont, {:ok, Map.put(acc, agent, Map.put(table, "model", model))}}
-        :error -> {:halt, {:error, {name, :agents, {:no_role, agent}}}}
+        {:ok, model} ->
+          table = Map.put(table, "model", model)
+          {:cont, {:ok, Map.put(acc, agent, found_image(table, dir))}}
+
+        :error ->
+          {:halt, {:error, {name, :agents, {:no_role, agent}}}}
       end
     end)
   end
+
+  defp found_image(%{"image" => image} = table, dir) when is_binary(image) and image != "",
+    do: Map.put(table, "image", Path.expand(image, dir))
+
+  defp found_image(table, _dir), do: table
 
   defp providers(name, secrets, auth) do
     Enum.reduce_while(secrets, {:ok, %{}}, fn {tool, table}, {:ok, acc} ->

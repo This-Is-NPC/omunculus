@@ -372,7 +372,6 @@ defmodule Omunculus.ServerTest do
     Fixtures.install_default(dir)
     project_path = Fixtures.config_path(dir)
     File.write!(project_path, File.read!(project_path) <> "\n" <> @access)
-    uid = Operations.local_principal().subject
 
     data = Toml.decode_file!(project_path)
 
@@ -385,36 +384,7 @@ defmodule Omunculus.ServerTest do
 
     File.write!(project_path, Config.Toml.encode(data))
 
-    assert {:ok, "access bootstrapped"} =
-             CLI.run(
-               ["--config", project_path, "access", "bootstrap"] ++
-                 ["--issuer", "local", "--subject", uid],
-               dir
-             )
-
-    server_path = Path.join(dir, "server.toml")
-
-    File.write!(server_path, """
-    [server]
-    max_concurrent = 4
-    max_queue = 64
-    queue_timeout_ms = 30000
-    max_connections = 4
-
-    [projects.solo]
-    config = "omunculus.toml"
-    """)
-
-    {:ok, config} = Config.load(project_path)
-    socket = Socket.path(config.store.path)
-    {:ok, server} = Server.start_link(server_path)
-
-    local = fn method, path, opts ->
-      Req.request!(
-        [method: method, url: "http://localhost" <> path, unix_socket: socket, retry: false] ++
-          opts
-      )
-    end
+    {server, local} = serve_local(dir, project_path)
 
     conversation = fn key ->
       local.(:post, "/v1/projects/solo/conversations",
@@ -465,6 +435,31 @@ defmodule Omunculus.ServerTest do
 
     assert local.(:get, "/v1/projects/solo/conversations/#{other}/attachments/#{sha256}", []).status ==
              404
+
+    :ok = Supervisor.stop(server)
+  end
+
+  test "an agent's image is served to whoever sees the project" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(Path.join(dir, "concierge.png"), "png bytes")
+
+    project =
+      project_path
+      |> File.read!()
+      |> String.replace("[agents.concierge]\n", "[agents.concierge]\nimage = \"concierge.png\"\n")
+
+    File.write!(project_path, project <> "\n" <> @access)
+    {server, local} = serve_local(dir, project_path)
+
+    got = local.(:get, "/v1/projects/solo/agents/concierge/image", [])
+    assert got.status == 200
+    assert got.body == "png bytes"
+    assert ["image/png" <> _] = Req.Response.get_header(got, "content-type")
+
+    assert local.(:get, "/v1/projects/solo/agents/worker/image", []).status == 404
+    assert local.(:get, "/v1/projects/solo/agents/nobody/image", []).status == 404
 
     :ok = Supervisor.stop(server)
   end
@@ -765,6 +760,45 @@ defmodule Omunculus.ServerTest do
 
     :ok = Supervisor.stop(server)
     refute File.exists?(socket)
+  end
+
+  # Bootstraps the local administrator of the project at `project_path`, serves
+  # it alone as "solo", and gives a request on its local socket.
+  defp serve_local(dir, project_path) do
+    uid = Operations.local_principal().subject
+
+    assert {:ok, "access bootstrapped"} =
+             CLI.run(
+               ["--config", project_path, "access", "bootstrap"] ++
+                 ["--issuer", "local", "--subject", uid],
+               dir
+             )
+
+    server_path = Path.join(dir, "server.toml")
+
+    File.write!(server_path, """
+    [server]
+    max_concurrent = 4
+    max_queue = 64
+    queue_timeout_ms = 30000
+    max_connections = 4
+
+    [projects.solo]
+    config = "omunculus.toml"
+    """)
+
+    {:ok, config} = Config.load(project_path)
+    socket = Socket.path(config.store.path)
+    {:ok, server} = Server.start_link(server_path)
+
+    local = fn method, path, opts ->
+      Req.request!(
+        [method: method, url: "http://localhost" <> path, unix_socket: socket, retry: false] ++
+          opts
+      )
+    end
+
+    {server, local}
   end
 
   defp receive_events(stream, done?, events \\ []) do

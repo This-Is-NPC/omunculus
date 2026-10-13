@@ -165,6 +165,17 @@ defmodule Omunculus.Server.Router do
     end
   end
 
+  OpenAPI.route :get, "/v1/projects/:project_id/agents/:agent/image", :get_agent_image do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, path} <- Project.agent_image(project_id, principal, agent) do
+      conn
+      |> put_resp_content_type(MIME.from_path(path), nil)
+      |> send_file(200, path)
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
   OpenAPI.route :post,
                 "/v1/projects/:project_id/conversations/:conversation_id/requests",
                 :create_request do

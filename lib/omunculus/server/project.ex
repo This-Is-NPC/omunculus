@@ -50,6 +50,10 @@ defmodule Omunculus.Server.Project do
   def attachment(id, principal, conversation_id, sha256),
     do: GenServer.call(via(id), {:attachment, principal, conversation_id, sha256})
 
+  @doc "The file of an agent's image, for a principal who sees the project."
+  def agent_image(id, principal, agent),
+    do: GenServer.call(via(id), {:agent_image, principal, agent})
+
   @doc "Subscribes the calling process to the project's store announcements."
   def subscribe(id), do: Store.subscribe(GenServer.call(via(id), :project).conn)
 
@@ -134,6 +138,21 @@ defmodule Omunculus.Server.Project do
            {:ok, config} <- Config.load(project.config_path),
            {:ok, path} <- Attachments.path(config.store, sha256) do
         {:ok, meta, path}
+      end
+
+    {:reply, reply, project}
+  end
+
+  def handle_call({:agent_image, principal, agent}, _from, project) do
+    reply =
+      with {:ok, true} <- Access.visible?(project, principal),
+           {:ok, config} <- Config.load(project.config_path),
+           %{image: path} when is_binary(path) <- Map.get(config.agents, agent) do
+        {:ok, path}
+      else
+        {:ok, false} -> {:error, :not_found}
+        {:error, _reason} = error -> error
+        _ -> {:error, :not_found}
       end
 
     {:reply, reply, project}

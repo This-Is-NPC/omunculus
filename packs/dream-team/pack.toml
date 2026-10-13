@@ -19,6 +19,7 @@ DEPLOY_KEY = "production"
 [agents.administrator]
 depth = 0
 model = "team"
+image = "images/administrator.webp"
 tools = ["bash", "break", "catalog", "changes", "continue", "delegate", "deliver", "end", "forward", "fs.read", "fs.write", "reopen", "ask", "escalate", "reply", "sandbox.write", "skills", "store", "work"]
 human = ["sandbox.network"]
 text = """
@@ -44,6 +45,7 @@ Goal: what was asked, as it was asked. Its words are the bar for done; add no re
 [agents.surgeon]
 depth = 1
 model = "team"
+image = "images/surgeon.webp"
 tools = ["bash", "break", "changes", "comment", "continue", "delegate", "directory", "done", "end", "fs.read", "fs.write", "reopen", "ask", "escalate", "reply", "request_access", "sandbox.write", "skills", "store", "work"]
 human = ["sandbox.network"]
 text = """
@@ -60,6 +62,7 @@ You are the surgeon of the team: you decide how the work is built and write the 
 [agents.copilot]
 depth = 1
 model = "team"
+image = "images/copilot.webp"
 workflow_only = true
 tools = ["bash", "break", "changes", "comment", "continue", "directory", "done", "end", "fs.read", "sandbox.write", "skills"]
 human = ["sandbox.network"]
@@ -78,6 +81,7 @@ You are the copilot of the team: you review the item of docs/plan.md the surgeon
 [agents.clerk]
 depth = 1
 model = "team"
+image = "images/clerk.webp"
 workflow_only = true
 tools = ["bash", "break", "changes", "comment", "continue", "deploy_preview", "directory", "done", "end", "fs.read", "fs.write", "request_access", "sandbox.write", "skills"]
 human = ["sandbox.network", "promote"]
@@ -90,6 +94,7 @@ You are the program clerk of the team: you publish what every item of docs/plan.
 [agents.toolsmith]
 depth = 2
 model = "team"
+image = "images/toolsmith.webp"
 tools = ["bash", "break", "comment", "continue", "directory", "done", "end", "fs.read", "fs.write", "request_access", "sandbox.write", "skills"]
 human = ["sandbox.network"]
 text = """
@@ -99,6 +104,7 @@ You are the toolsmith of the team: you build the tools the surgeon asks for — 
 [agents.tester]
 depth = 2
 model = "team"
+image = "images/tester.webp"
 tools = ["bash", "break", "comment", "continue", "directory", "done", "end", "fs.read", "fs.write", "request_access", "sandbox.write", "skills"]
 human = ["sandbox.network"]
 text = """
@@ -108,6 +114,7 @@ You are the tester of the team: you write the tests the work needs and run them 
 [agents.editor]
 depth = 2
 model = "team"
+image = "images/editor.webp"
 tools = ["bash", "break", "comment", "continue", "directory", "done", "end", "fs.read", "fs.write", "request_access", "sandbox.write", "skills"]
 human = ["sandbox.network"]
 text = """
@@ -117,6 +124,7 @@ You are the editor of the team: you write README.md and docs/ as the workspace's
 [agents.language_lawyer]
 depth = 2
 model = "team"
+image = "images/language_lawyer.webp"
 tools = ["bash", "break", "comment", "continue", "directory", "done", "end", "fs.read", "request_access", "skills"]
 human = ["sandbox.network"]
 text = """

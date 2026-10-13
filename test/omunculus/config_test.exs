@@ -548,6 +548,26 @@ defmodule Omunculus.ConfigTest do
     assert {:ok, %Config{agents: %{"concierge" => %{text: ""}}}} = load(dir)
   end
 
+  test "an agent's image is a picture file relative to the config's directory", %{dir: dir} do
+    File.write!(Path.join(dir, "face.webp"), "image")
+    File.write!(Path.join(dir, "notes.txt"), "text")
+
+    agent = fn image -> "[agents.concierge]\ndepth = 0\ntext = \"hi\"\n" <> image end
+
+    write_toml(dir, agent.(""))
+    assert {:ok, %Config{agents: %{"concierge" => %{image: nil}}}} = load(dir)
+
+    write_toml(dir, agent.(~s(image = "face.webp"\n)))
+    face = Path.join(dir, "face.webp")
+    assert {:ok, %Config{agents: %{"concierge" => %{image: ^face}}}} = load(dir)
+
+    write_toml(dir, agent.(~s(image = "notes.txt"\n)))
+    assert {:error, {:agent, "concierge", {:invalid, :image}}} = load(dir)
+
+    write_toml(dir, agent.(~s(image = "gone.png"\n)))
+    assert {:error, {:agent, "concierge", {:missing_image, "gone.png"}}} = load(dir)
+  end
+
   test "workflow_only defaults to false", %{dir: dir} do
     write_toml(dir, """
     [agents.concierge]

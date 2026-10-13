@@ -24,6 +24,24 @@ defmodule Omunculus.Config.PacksTest do
     assert hd(config.tools.paths) == Path.join(pack, "tools")
   end
 
+  test "a pack's agent finds its image in the pack's folder", %{dir: dir, pack: pack} do
+    manifest = Path.join(pack, "pack.toml")
+    File.write!(Path.join(pack, "chief.png"), "image")
+
+    File.write!(
+      manifest,
+      String.replace(
+        File.read!(manifest),
+        "[agents.chief]\n",
+        "[agents.chief]\nimage = \"chief.png\"\n"
+      )
+    )
+
+    assert {:ok, config} = load(dir, @imports)
+    assert config.agents["chief"].image == Path.join(pack, "chief.png")
+    assert config.agents["hand"].image == nil
+  end
+
   test "a pack imported depths below its own moves its agents and depth layers down",
        %{dir: dir} do
     assert {:ok, config} =

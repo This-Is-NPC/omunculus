@@ -121,8 +121,9 @@ park a work.
 - **Effect:** read-only
 
 Print the project's setup as one JSON object, for a client to show: its
-`root`, `agents` (name, depth, model, `workflow_only` and the `granted`,
-`negotiable`, `human` and `deny` lists of its own layer), `models` (name,
+`root`, `agents` (name, depth, model, `workflow_only`, the `granted`,
+`negotiable`, `human` and `deny` lists of its own layer, its text and the
+SHA-256 of its `image`, or null), `models` (name,
 `api`, `provider`, `model`, and nothing else of their tables),
 `workspaces` (name, root), the default `workspace`, and `workflows` with
 their steps. For an editor it adds `document`: the `agents`, `models`,

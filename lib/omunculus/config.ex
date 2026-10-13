@@ -70,6 +70,7 @@ defmodule Omunculus.Config do
           depth: non_neg_integer,
           text: String.t(),
           workflow_only: boolean,
+          image: String.t() | nil,
           model: String.t(),
           assemble: String.t() | nil,
           ceiling: Layer.t()
@@ -172,7 +173,9 @@ defmodule Omunculus.Config do
   @workspace_overlay_keys ~w(execution models agents workflows tools policy mcp auth)
   @workspace_file_keys ~w(policy agents workflows mcp execution project tools models auth)
   @policy_extra_keys ~w(depth workflows workspace assemble max_retries last_run_output_bytes tool_output_bytes conversation_bytes send_catalog session_ttl_ms session_max_bytes request_routes)
-  @agent_extra_keys ~w(depth text workflow_only model assemble)
+  @agent_extra_keys ~w(depth text workflow_only model assemble image)
+  # The files an agent's image may be.
+  @image_extensions ~w(.png .jpg .jpeg .webp .gif)
   @http_model_keys ~w(api url model timeout_ms temperature headers body provider stream retries code_mode)
   @openai_model_keys @http_model_keys ++ ~w(prompt_cache_key)
   @module_model_keys ~w(api module params)
@@ -678,7 +681,7 @@ defmodule Omunculus.Config do
              {:ok, models} <- parse_models(Map.get(data, "models"), auth, config_dir),
              {:ok, store} <- parse_store(Map.get(data, "store"), config_dir),
              {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), root),
-             {:ok, agents} <- parse_agents(Map.get(data, "agents", %{}), models),
+             {:ok, agents} <- parse_agents(Map.get(data, "agents", %{}), models, config_dir),
              {:ok, workflows} <- parse_workflows(Map.get(data, "workflows", %{}), agents),
              {:ok, policy, depths, policy_workflows, policy_workspace, depth_workflows, assemble,
               max_retries, last_run_output_bytes, tool_output_bytes, conversation_bytes,
@@ -2263,16 +2266,16 @@ defmodule Omunculus.Config do
   defp maybe_put_model(map, _key, nil), do: map
   defp maybe_put_model(map, key, value), do: Map.put(map, key, value)
 
-  defp parse_agents(agents, models) when is_map(agents) do
+  defp parse_agents(agents, models, config_dir) when is_map(agents) do
     Enum.reduce_while(agents, {:ok, %{}}, fn {name, data}, {:ok, acc} ->
-      case parse_agent(name, data, models) do
+      case parse_agent(name, data, models, config_dir) do
         {:ok, agent} -> {:cont, {:ok, Map.put(acc, name, agent)}}
         {:error, _reason} = error -> {:halt, error}
       end
     end)
   end
 
-  defp parse_agent(name, data, models) when is_map(data) do
+  defp parse_agent(name, data, models, config_dir) when is_map(data) do
     case Map.keys(data) -- (@agent_extra_keys ++ @layer_keys) do
       [key | _] ->
         {:error, {:agent, name, {:unknown_key, key}}}
@@ -2283,12 +2286,14 @@ defmodule Omunculus.Config do
              {:ok, workflow_only} <- fetch_workflow_only(data),
              {:ok, model} <- fetch_model(data, models),
              {:ok, assemble} <- fetch_assemble(data["assemble"]),
+             {:ok, image} <- fetch_image(data, config_dir),
              {:ok, ceiling} <- parse_layer(Map.drop(data, @agent_extra_keys), nil) do
           {:ok,
            %{
              depth: depth,
              text: text,
              workflow_only: workflow_only,
+             image: image,
              model: model,
              assemble: assemble,
              ceiling: ceiling
@@ -2299,7 +2304,33 @@ defmodule Omunculus.Config do
     end
   end
 
-  defp parse_agent(name, _data, _models), do: {:error, {:agent, name, {:invalid, :depth}}}
+  defp parse_agent(name, _data, _models, _config_dir),
+    do: {:error, {:agent, name, {:invalid, :depth}}}
+
+  # An agent's image: a picture file, relative to the config's directory.
+  defp fetch_image(data, config_dir) do
+    case Map.fetch(data, "image") do
+      :error ->
+        {:ok, nil}
+
+      {:ok, path} when is_binary(path) and path != "" ->
+        file = Path.expand(path, config_dir)
+
+        cond do
+          String.downcase(Path.extname(file)) not in @image_extensions ->
+            {:error, {:invalid, :image}}
+
+          not File.regular?(file) ->
+            {:error, {:missing_image, path}}
+
+          true ->
+            {:ok, file}
+        end
+
+      _ ->
+        {:error, {:invalid, :image}}
+    end
+  end
 
   defp fetch_model(data, models) do
     case Map.fetch(data, "model") do

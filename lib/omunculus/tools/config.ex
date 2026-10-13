@@ -1,8 +1,8 @@
 defmodule Omunculus.Tools.Config do
   @moduledoc """
   Builtin `config` tool: the project's setup as a client shows it, in
-  JSON. The project root, agents with their depth, model, ceiling lists
-  and text, the models by name with their api, provider and model id and
+  JSON. The project root, agents with their depth, model, ceiling lists,
+  text and the SHA-256 of their image, if any, the models by name with their api, provider and model id and
   nothing else of their table, the workspaces with their roots and the
   default one, each workflow's steps, and the packs it imports, each with
   its name, folder, depth, the models and logins it is bound to, the
@@ -94,9 +94,16 @@ defmodule Omunculus.Tools.Config do
       negotiable: agent.ceiling.negotiable,
       human: agent.ceiling.human,
       deny: agent.ceiling.deny,
-      text: agent.text
+      text: agent.text,
+      image: image(agent.image)
     }
   end
+
+  # An agent's image by its SHA-256, so a client keeps one copy until it changes.
+  defp image(nil), do: nil
+
+  defp image(path),
+    do: path |> File.read!() |> then(&:crypto.hash(:sha256, &1)) |> Base.encode16(case: :lower)
 
   defp model({name, model}) do
     %{name: name, api: model.api, provider: model.input["provider"], model: model.input["model"]}

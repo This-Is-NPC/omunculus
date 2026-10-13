@@ -53,6 +53,11 @@ defmodule Omunculus.Server.OpenAPI do
       status: 200,
       response: :file
     },
+    get_agent_image: %{
+      summary: "Read an agent's image",
+      status: 200,
+      response: :file
+    },
     send_message: %{
       summary: "Send a message",
       status: 202,

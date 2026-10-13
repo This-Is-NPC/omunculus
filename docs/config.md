@@ -38,6 +38,11 @@ database. Creating the file creates twelve tables. Stores made by earlier versio
 at one of those names. Without `[models]`, or without an agent's `model`,
 the load fails.
 
+An agent may have an `image`, a picture (`.png`, `.jpg`, `.jpeg`, `.webp`
+or `.gif`) relative to the config's directory, or to the pack's folder for
+an agent a pack brings, that clients show for it. A path that is not such
+a file is refused at load.
+
 `[policy] assemble` (or `agents.<x>.assemble`) names the tool that builds
 the assembled prompt. Without it the opening of a run fails.
 

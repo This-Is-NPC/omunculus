@@ -90,6 +90,7 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | --- | --- |
 | `GET /v1/identity` | Return the token principal. |
 | `GET /v1/projects` | List the projects you see: over HTTP, those whose conversations you may read or where you are a member of one; on a local socket, every project of the registry with its `socket`. |
+| `GET /agents/{agent}/image` | Read an agent's `image`, with its media type, if the project is visible to you; `404` for an agent without one. |
 | `GET, POST /conversations` | List visible conversations or create one. |
 | `GET /conversations/{id}` | Read one visible conversation. |
 | `GET /conversations/{id}/snapshot` | Read works, runs, prompts, requests and inbox at one event cursor. |
