@@ -237,8 +237,10 @@ every event that may ask for a run (prompt, reply, continue, break, cancel,
 every work still open whose last own run closed without end, no run of
   its own found for it: what a run without a report gets — a retry, or
   past max_retries the break or the request
-every request still pending at an agent whose last run for it closed:
-  on along its route, as an unanswered one goes
+every request still pending at an agent whose last run for it closed,
+  and no answer to the request it escalated came after that run began
+  (the answer's run, found above, resumes the agent): on along its
+  route, as an unanswered one goes
 then the runs found are due
 ```
 
@@ -318,7 +320,9 @@ the authenticated human and writes an inbox notification naming that
 upstream request. An already escalated origin does not trigger a second
 escalation. The server, opening a project, does the same for every request
 still pending at an agent whose last run for it closed: the process that
-closed it stopped before its follow-up.
+closed it stopped before its follow-up. A request an answer returned to
+the agent after that run began is not passed on: the answer's run,
+recovered with the others, resumes it.
 
 `INBOX` notifies and does not wait. It does not park a run or a work.
 

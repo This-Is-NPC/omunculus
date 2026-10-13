@@ -27,7 +27,8 @@ defmodule Omunculus.Store.Runs do
   never began.
   `left/1` lists the closed runs that left a request pending at their
   agent: each pending request's last run of its receiver opened for it or
-  for a request it was escalated into.
+  for a request it was escalated into, unless an answer to that request
+  came after it began, whose run resumes the receiver.
   `unanswered/4` uses the linked escalation action when an agent receiver
   closes without answering, or an intermediary resumed by a text answer
   closes leaving pending the origins it returned, its reason naming the agent and each question
@@ -122,9 +123,15 @@ defmodule Omunculus.Store.Runs do
             SELECT escalated_id FROM request_escalations WHERE origin_id = requests.id))
         ORDER BY held.started_at DESC, held.id DESC
         LIMIT 1)
+      JOIN events AS start ON start.id = runs.event_id
       WHERE requests.status = 'pending'
         AND json_extract(requests.arbiter, '$.kind') = 'agent'
         AND runs.status = 'done'
+        AND NOT EXISTS (
+          SELECT 1 FROM events AS answer
+          WHERE answer.type = 'reply' AND answer.sequence > start.sequence
+            AND answer.request_id IN (
+              SELECT escalated_id FROM request_escalations WHERE origin_id = requests.id))
       ORDER BY runs.started_at, runs.id
       """
     )

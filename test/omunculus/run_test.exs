@@ -1690,6 +1690,47 @@ defmodule Omunculus.RunTest do
 
       Project.close(project)
     end
+
+    test "recovery resumes, rather than passes on, an intermediary whose answer came", %{
+      dir: dir
+    } do
+      desk_config(dir)
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works, %{assignee: "seller"})
+      seller = due_run(project, %{agent: "seller", work_id: work_id, own: true})
+      asked = lost_call(project, seller, "ask", %{"question" => "Which colour?"})
+      request = asked(project)
+      cause = Enum.find(asked, &(&1.type == "request"))
+      sales = due_run(project, %{agent: "sales", request_id: request.id, cause_id: cause.id})
+      origins = %{"colour" => request.id}
+
+      escalated =
+        lost_call(project, sales, "escalate", %{"reason" => "Colour?", "origins" => origins})
+
+      upstream = Enum.find(escalated, &(&1.type == "request")).request_id
+
+      assert {:ok, _out, _events} =
+               Operations.call(
+                 project,
+                 "reply",
+                 %{"request_id" => upstream, "body" => "Blue"},
+                 %{},
+                 false
+               )
+
+      Fixtures.use_model(project, fn assembled, _tools, call ->
+        if String.starts_with?(assembled, "sales"),
+          do: call.("reply", %{"request_id" => request.id, "body" => "Blue"}),
+          else: call.("end", %{})
+      end)
+
+      assert :ok = Run.recover(project)
+
+      assert {:ok, %{status: "closed"}} = Store.view(project.conn, "request", request.id)
+      assert [%{id: ^upstream}] = passed_on(project, request)
+
+      Project.close(project)
+    end
   end
 
   describe "runs due that never began" do
@@ -1727,7 +1768,17 @@ defmodule Omunculus.RunTest do
 
     defp due_run(project, fields) do
       ceiling = %{
-        have: ["work", "done", "ask", "reply", "end", "comment", "delegate", "continue"],
+        have: [
+          "work",
+          "done",
+          "ask",
+          "reply",
+          "escalate",
+          "end",
+          "comment",
+          "delegate",
+          "continue"
+        ],
         askable: [],
         sealed: [],
         blocked: [],

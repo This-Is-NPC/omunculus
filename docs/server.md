@@ -138,7 +138,7 @@ Each frame is a JSON text frame. The first frames are the events after `after` (
 
 An older store without conversation or participant request columns, escalation
 links or the current request status constraint is rejected and must be
-explicitly recreated. Opening a project, the server recovers what an interrupted process left ([the cycle](cycle.md#a-process-that-stops)): it closes the runs left open, makes due again the runs that events asked for and that never began, gives a work whose last own run stopped without `end` the retry policy's decision, and passes on along its route a request still pending at an agent whose last run for it has closed. HTTP requests do not wait for a run to finish.
+explicitly recreated. Opening a project, the server recovers what an interrupted process left ([the cycle](cycle.md#a-process-that-stops)): it closes the runs left open, makes due again the runs that events asked for and that never began, gives a work whose last own run stopped without `end` the retry policy's decision, and passes on along its route a request still pending at an agent whose last run for it has closed, unless an answer returned it to that agent since. HTTP requests do not wait for a run to finish.
 
 ## Human request commands
 
