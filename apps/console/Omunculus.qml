@@ -48,7 +48,7 @@ Singleton {
   // fresh: it arrived while the conversation was open, rather than with its
   // history. A turn is one run of an agent: what it said and what it did.
   // Every request and every note to you also shows in the main thread, where
-  // it was made.
+  // it was made, keyed by its request or inbox id.
   property var threads: ({})
   // Run id -> {thread, row}.
   property var rows: ({})
@@ -294,6 +294,18 @@ Singleton {
   function reply(requestId, option, body) {
     call("POST", base + "/conversations/" + conversationId + "/requests/" + requestId + "/reply",
       Requests.answer(option, body), true, () => tell(option ? "replied " + option : "replied", false))
+  }
+
+  // Raises a request waiting on you to whoever decides above you, as one
+  // part named after its asker.
+  function escalate(requestId, reason) {
+    const request = requests.find(item => item.id === requestId)
+    if (!request)
+      return
+    const origins = {}
+    origins[Requests.label(request.requester)] = requestId
+    call("POST", base + "/conversations/" + conversationId + "/requests/escalate",
+      { reason: reason, origins: origins }, true, () => tell("escalated", false))
   }
 
   function markRead(inboxId) {
@@ -608,7 +620,7 @@ Singleton {
     case "notify":
       if (event.inbox_id)
         keep("notes", event.inbox_id, body.body || "")
-      append("", { who: who, text: body.body || "", stamp: stamp, at: at, work: work })
+      append("", { key: event.inbox_id || "", who: who, text: body.body || "", stamp: stamp, at: at, work: work })
       break
     }
     if (!replaying)

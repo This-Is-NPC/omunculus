@@ -34,10 +34,18 @@ ModalDialog {
       ["1 · 2 · 3", "its pages: the conversation, the map, the log"],
       ["Ctrl+1 · Ctrl+2 · Ctrl+3", "the same, from a field being written"],
       ["Ctrl+Tab · Ctrl+Shift+Tab", "the next or the previous page"],
-      ["Esc", "close what the page has picked, or back to the conversations"]
+      ["Esc", "close what the page has picked, or back to the conversations"],
+      ["R", "answer the oldest request waiting on you"],
+      ["M", "show the oldest note to you and mark it read"],
+      ["Alt + a key of the bar", "the same, from a field being written"]
     ]],
     ["map", [
-      ["F", "the whole map in view"]
+      ["F", "the whole map in view"],
+      ["R", "answer what the node picked asked"],
+      ["E", "escalate what it asked you"],
+      ["C", "leave it a note, without a run"],
+      ["M", "mark its notes read"],
+      ["W", "write to its agent"]
     ]],
     ["log", [
       ["/", "filter the events"],
@@ -49,7 +57,11 @@ ModalDialog {
       ["Tab", "the tools of the entry"]
     ]],
     ["composer", [
-      ["Enter", "send"]
+      ["Enter", "send, or leave the note"],
+      ["Esc", "write to the agent rather than note"]
+    ]],
+    ["request", [
+      ["Enter", "in its words: answer, or escalate when escalating"]
     ]]
   ]
 

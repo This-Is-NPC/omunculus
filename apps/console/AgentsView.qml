@@ -28,6 +28,10 @@ Item {
 
   function fit() { map.fit() }
 
+  // Puts the keyboard in the picked node's composer, to write to it or,
+  // `noting`, to leave it a note.
+  function write(noting) { inspector.write(noting) }
+
   // Picks the first node with something waiting on you.
   function pickPending() {
     const asking = Omunculus.waiting[0]

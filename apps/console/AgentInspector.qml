@@ -36,7 +36,12 @@ Rectangle {
   property string promptRun: ""
   onKeyChanged: promptRun = ""
 
-  function focusEntry() { composer.focusEntry() }
+  // Shows the work and puts the keyboard in its composer, to write to it or,
+  // `noting`, to leave it a note.
+  function write(noting) {
+    section = "work"
+    composer.focusEntry(noting)
+  }
 
   color: Theme.background
   border.color: Theme.line

@@ -45,6 +45,17 @@ Item {
     root.unseen++
   }
 
+  // Brings the entry of `key` into view, and stops following the end.
+  function reveal(key) {
+    for (let row = 0; row < model.count; row++) {
+      if (model.get(row).key === key) {
+        timeline.following = false
+        timeline.positionViewAtIndex(row, ListView.Center)
+        return
+      }
+    }
+  }
+
   // Goes to the end and follows it again, past a turn still streaming.
   function jump() {
     const newest = timeline.count > 0 ? timeline.model.get(timeline.count - 1) : null

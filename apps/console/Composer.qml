@@ -3,7 +3,8 @@ import QtQuick.Layouts
 import "kit/ui"
 
 // Composer is where you write: in the main thread, to the root agent; in a
-// work, to that work's agent, or a note its agents read without a new run.
+// work, to that work's agent, or a note its agents read without a new run,
+// which Enter leaves while the box is noting.
 // Sending shows the trace while the agent you write to is working; the agents
 // below it never hold it. In the box, while anything waits on you, how much
 // does, and the way to the agents map where it is answered.
@@ -20,12 +21,19 @@ ColumnLayout {
   // in the main thread; the work's own in a work.
   readonly property bool busy: work === "" ? Omunculus.running.some(run => String(run.depth) === "0") : Omunculus.busy(work)
 
+  // Whether Enter leaves a note rather than sends; once a note is left, or
+  // on Esc, the box writes to the agent again.
+  property bool noting: false
+
   signal pendingChosen()
 
   spacing: 10
 
-  // Put the keyboard in the box.
-  function focusEntry() { entry.forceActiveFocus() }
+  // Put the keyboard in the box; in a work, `note` makes Enter leave a note.
+  function focusEntry(note) {
+    noting = !!note && work !== ""
+    entry.forceActiveFocus()
+  }
 
   // The text typed, trimmed; the box is emptied once there is any.
   function take() {
@@ -46,8 +54,10 @@ ColumnLayout {
 
   function note() {
     const value = take()
-    if (value)
-      Omunculus.note(value, composer.work)
+    if (!value)
+      return
+    Omunculus.note(value, composer.work)
+    noting = false
   }
 
   Rectangle {
@@ -65,9 +75,15 @@ ColumnLayout {
       TextBox {
         id: entry
         Layout.fillWidth: true
-        placeholderText: composer.work === "" ? (Omunculus.agent ? "say to " + Omunculus.agent + " what you need" : "say what you need") : "write to " + ((Omunculus.work(composer.work) || {}).assignee || "this work")
+        placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? (Omunculus.agent ? "say to " + Omunculus.agent + " what you need" : "say what you need") : "write to " + ((Omunculus.work(composer.work) || {}).assignee || "this work")
         background: Item {}
-        onAccepted: composer.submit()
+        onAccepted: composer.noting ? composer.note() : composer.submit()
+        Keys.onEscapePressed: event => {
+          if (composer.noting)
+            composer.noting = false
+          else
+            event.accepted = false
+        }
       }
       TraceButton {
         id: pendingButton
@@ -90,7 +106,7 @@ ColumnLayout {
       }
       TraceButton {
         dense: true
-        role: "progress"
+        role: composer.noting ? "primary" : "progress"
         implicitWidth: composer.compact ? 32 : 110
         visible: composer.work !== ""
         icon: "plus"

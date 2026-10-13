@@ -2,13 +2,16 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/client/Requests.js" as Requests
+import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
 // RequestDecision is one request, wherever it shows: who asked, on which work,
 // what for and what that lets it do, and who decides — you, or the agent above,
 // whom you can always overrule. While it waits, the answers come grouped: for
 // this work only, always (each scope saying where it is written), or no, with a
-// reason. Answered, it says what was chosen and by whom.
+// reason; or an answer in words, choosing none; or, when it waits on you, the
+// words go up to whoever decides above you. Answered, it says what was chosen
+// and by whom.
 SurfaceFrame {
   id: card
 
@@ -35,6 +38,42 @@ SurfaceFrame {
     return configured ? configured.depth : null
   }
   readonly property var place: Omunculus.workspaceOf(work ? work.workspace || "" : "")
+
+  // Whether the words written escalate it rather than answer it.
+  property bool escalating: false
+  // An answer or an escalation was sent.
+  signal sent()
+
+  // Put the keyboard in the words, or on the first way to decide.
+  function focusWords() { words.forceActiveFocus() }
+  function focusDecision() {
+    const first = content.nextItemInFocusChain(true)
+    ;(first && Focus.within(first, content) ? first : words).forceActiveFocus()
+  }
+
+  // Chooses an option, with the words as its body.
+  function decide(option, body) {
+    Omunculus.reply(key, option, body)
+    sent()
+  }
+
+  // Answers in the words written, choosing no option.
+  function answerInWords() {
+    const body = words.text.trim()
+    if (body === "")
+      return
+    Omunculus.reply(key, "", body)
+    sent()
+  }
+
+  // Raises it, with the words as the reason, to whoever decides above you.
+  function escalate() {
+    const reason = words.text.trim()
+    if (reason === "" || !yours)
+      return
+    Omunculus.escalate(key, reason)
+    sent()
+  }
 
   // What the granted name lets the agent do.
   function unlocks(granted) {
@@ -130,7 +169,7 @@ SurfaceFrame {
         role: "primary"
         icon: "check"
         text: card.labelOf("grant")
-        onClicked: Omunculus.reply(card.key, "grant", "")
+        onClicked: card.decide("grant", "")
       }
       Repeater {
         model: card.others
@@ -139,7 +178,7 @@ SurfaceFrame {
           dense: true
           role: "progress"
           text: card.labelOf(modelData)
-          onClicked: Omunculus.reply(card.key, modelData, "")
+          onClicked: card.decide(modelData, "")
         }
       }
     }
@@ -158,30 +197,57 @@ SurfaceFrame {
           delegate: Chip {
             required property string modelData
             text: card.labelOf(modelData)
-            onClicked: Omunculus.reply(card.key, modelData, "")
+            onClicked: card.decide(modelData, "")
           }
         }
       }
     }
 
-    // No, with a reason the agent reads.
-    RowLayout {
+    // In words: an answer that chooses no option, the reason of a no, or,
+    // when it waits on you, why it goes up to whoever decides above you.
+    ColumnLayout {
       Layout.fillWidth: true
-      visible: card.open && card.options.includes("deny")
-      spacing: 8
+      visible: card.open
+      spacing: 6
       TextBox {
-        id: reason
+        id: words
         Layout.fillWidth: true
         dense: true
-        placeholderText: "why not, for the agent"
-        onAccepted: Omunculus.reply(card.key, "deny", reason.text.trim())
+        placeholderText: card.escalating ? "why it goes up, for whoever decides above"
+          : card.options.includes("deny") ? "an answer in words, or why not" : "an answer in words"
+        onAccepted: card.escalating ? card.escalate() : card.answerInWords()
       }
-      TraceButton {
-        dense: true
-        role: "guarded"
-        icon: "close"
-        text: "DENY"
-        onClicked: Omunculus.reply(card.key, "deny", reason.text.trim())
+      Flow {
+        Layout.fillWidth: true
+        spacing: 6
+        TraceButton {
+          dense: true
+          role: card.escalating ? "progress" : "primary"
+          icon: "enter"
+          text: "ANSWER"
+          tip: "answer in words, choosing no option"
+          enabled: words.text.trim() !== ""
+          onClicked: card.answerInWords()
+        }
+        TraceButton {
+          visible: card.options.includes("deny")
+          dense: true
+          role: "guarded"
+          icon: "close"
+          text: "DENY"
+          tip: "no, with the reason written, if any"
+          onClicked: card.decide("deny", words.text.trim())
+        }
+        TraceButton {
+          visible: card.yours
+          dense: true
+          role: card.escalating ? "primary" : "progress"
+          icon: "chevron-up"
+          text: "ESCALATE"
+          tip: "raise it to whoever decides above you, with the reason written"
+          enabled: words.text.trim() !== ""
+          onClicked: card.escalate()
+        }
       }
     }
   }

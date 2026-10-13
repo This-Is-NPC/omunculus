@@ -39,6 +39,9 @@ ShellRoot {
       Qt.callLater(conversationView.focusEntry)
     }
 
+    // Whether a dialog holds the keyboard, so the keys of the pages wait.
+    readonly property bool dialogOpen: cost.visible || shortcuts.visible || conversationView.dialogOpen
+
     readonly property string current: Omunculus.conversationId !== "" ? "conversation" : Omunculus.view
 
     onClosed: Qt.quit()
@@ -206,19 +209,34 @@ ShellRoot {
               delegate: Item {
                 required property int index
                 Shortcut {
-                  enabled: panel.current === "conversation" && !cost.visible && !shortcuts.visible
+                  enabled: panel.current === "conversation" && !panel.dialogOpen
                   sequences: [String(index + 1), "Ctrl+" + (index + 1)]
                   onActivated: panel.choose(index)
                 }
               }
             }
+            // The keys of the page's commands, R to reply and the like, or
+            // Alt with them, which a field being written leaves to them; the
+            // field keeps the letters alone.
+            Repeater {
+              model: conversationView.commands.filter(command => command.key && command.shown !== false && command.enabled !== false)
+              delegate: Item {
+                id: keyed
+                required property var modelData
+                Shortcut {
+                  enabled: panel.current === "conversation" && !panel.dialogOpen
+                  sequences: [keyed.modelData.key, "Alt+" + keyed.modelData.key]
+                  onActivated: keyed.modelData.run()
+                }
+              }
+            }
             Shortcut {
-              enabled: panel.current === "conversation" && !cost.visible && !shortcuts.visible
+              enabled: panel.current === "conversation" && !panel.dialogOpen
               sequence: "Ctrl+Tab"
               onActivated: panel.choose(rail.current + 1)
             }
             Shortcut {
-              enabled: panel.current === "conversation" && !cost.visible && !shortcuts.visible
+              enabled: panel.current === "conversation" && !panel.dialogOpen
               sequences: ["Ctrl+Shift+Tab", "Ctrl+Backtab"]
               onActivated: panel.choose(rail.current - 1)
             }
