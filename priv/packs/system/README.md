@@ -29,7 +29,9 @@ Their skills:
   the workspace, with the tasks that show it works.
 - `team-composition`: teams fitted together — at which depth each works,
   on which models, and what one tells another.
-- `configure`: any other change to the config, one item at a time.
+- `configure`: any other change to the config, one item at a time —
+  including one member of a granted group cut with `deny`, and an agent or
+  workflow a pack brings changed by that item's keys in the project's file.
 - `audit`: the auditor's — grants past the work, what never runs or cannot
   run, each cut proposed on its own.
 - `refine`: the refiner's — what the last runs show went wrong, its cause

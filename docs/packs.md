@@ -71,7 +71,10 @@ The default preset imports the system team (`priv/packs/system`):
   proposes every change with `propose_config` or `propose_pack`;
 - the `auditor`, beside it, which finds what in the config is loose or left
   over — grants past an agent's work, what never runs or cannot run — and
-  proposes cutting each with `propose_config`;
+  proposes cutting each with `propose_config` — one member of a granted
+  group through the agent's `deny`, and an agent or workflow a pack brings
+  through that item's keys in the project's file, which override the
+  pack's;
 - the `refiner`, which reads the project's last runs with `runs` — where an
   agent stopped without ending, retried, was refused, skipped a step or
   looped — and proposes, with the runs that show it, the change in the

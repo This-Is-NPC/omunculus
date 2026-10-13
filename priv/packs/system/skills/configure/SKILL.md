@@ -22,9 +22,39 @@ the config it would make loads.
    the new name as `item` and the old one as `from`.
 4. Give a reason the person can decide on: what changes and why.
 
-An agent that comes from a pack can be changed without touching the pack:
-an item of the config with its name overrides the pack's key by key, so
-`agents.<name>` with only `text` changes its text and keeps the rest.
+## Cutting one tool of a group
+
+A name in `tools` may be a group, which grants all its members: `config`
+brings `config`, `overview`, `propose_config` and `propose_pack`
+(`overview` with `agent` shows each group's members). To take
+one member away and keep the rest, list it in the agent's `deny`, which
+blocks a name whatever grants it; there is no need to drop the whole group
+or to spell out the members that stay:
+
+```toml
+[agents.auditor]
+tools = ["config", "end", "skills"]
+deny = ["propose_pack"]
+```
+
+## Changing what a pack brings
+
+An agent or workflow that comes from a pack is changed without touching
+the pack: an item of the config with its name overrides the pack's key by
+key, so `agents.<name>` with only the keys that change writes just those
+in the project's file and keeps the rest of the pack's. Its value is the
+item's `file`, the table the project's file holds for it (none at first),
+with the keys you change:
+
+```json
+{"item": "agents.researcher", "value": {"deny": ["fs.write"]},
+ "reason": "researcher only reads: its runs never wrote a file"}
+```
+
+A key you write replaces the pack's whole: `config` shows the key as the
+config runs it, so a `deny` or `tools` you write starts from that list,
+with the name you add or cut. `granted` instead adds its names to the
+pack's `tools`.
 
 If the proposal is refused because the config would not load, read why,
 fix the value and propose again. If the person's answer applies a change

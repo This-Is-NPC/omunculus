@@ -42,5 +42,20 @@ Go through every section and every agent before you judge one.
 3. One finding, one proposal. What you are not sure of, ask the person
    about instead of proposing.
 
-A pack's items are the pack's: what you would cut there, say to the
-person, who changes it through the steward.
+## Cutting one name, and what a pack brings
+
+- A group granted where one of its members is past the work: cut that
+  member with the agent's `deny`, keeping the group, rather than dropping
+  the group or saying it cannot be cut.
+- An agent or workflow a pack brings: cut it in the project's file, which
+  overrides the pack's item key by key — propose `agents.<name>` with
+  only the key that changes, as the configure skill shows. For example,
+  a pack's agent granted `fs.write` whose work only reads:
+
+  ```json
+  {"item": "agents.researcher", "value": {"deny": ["fs.write"]},
+   "reason": "researcher only reads: its runs never wrote a file"}
+  ```
+
+  What the project's file cannot reach — a pack's own tools, skills and
+  files — say to the person.
