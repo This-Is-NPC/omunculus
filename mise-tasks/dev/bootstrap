@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
-#MISE description="Seed the dev project's local administrator once"
+#MISE description="Seed the local administrator of each dev project once, and give the agency its packs' workspace files"
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
 
-mkdir -p dev/workspace
-[[ -f dev/.omunculus/store.sqlite3 ]] && exit 0
-exec bin/omunculus --config dev/omunculus.toml access bootstrap --issuer local --subject "$(id -u)"
+# The agency's packs, in its [[packs]] order: the files of each one's
+# workspace/ that the agency's workspace lacks, as the pack tool copies them.
+mkdir -p dev/agency/workspace
+for pack in sales-desk dream-team design-team; do
+  cp -rn "packs/$pack/workspace/." dev/agency/workspace/ 2>/dev/null || true
+done
+
+for config in dev/omunculus.toml dev/agency/omunculus.toml; do
+  dir=$(dirname "$config")
+  mkdir -p "$dir/workspace"
+  [[ -f $dir/.omunculus/store.sqlite3 ]] && continue
+  bin/omunculus --config "$config" access bootstrap --issuer local --subject "$(id -u)"
+done

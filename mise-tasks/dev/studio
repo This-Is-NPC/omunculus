@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-#MISE description="Open the studio on the dev project of a running server"
+#MISE description="Open the studio on the agency project of a running server; -- --project dev for the other"
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
 
-exec apps/kit/run studio --config dev/server.toml
+exec apps/kit/run studio --config dev/server.toml --project agency "$@"

@@ -28,3 +28,5 @@ erl_crash.dump
 __pycache__/
 /eval/.cache/
 /packs/dream-team/environment/.state/
+/dev/agency/.omunculus/
+/dev/agency/workspace/

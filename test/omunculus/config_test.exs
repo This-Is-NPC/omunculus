@@ -77,9 +77,14 @@ defmodule Omunculus.ConfigTest do
   end
 
   test "the dev environment's registry and project files load" do
-    assert {:ok, %{projects: %{"dev" => path}}} = Omunculus.Server.Config.load("dev/server.toml")
+    assert {:ok, %{projects: %{"dev" => path, "agency" => agency}}} =
+             Omunculus.Server.Config.load("dev/server.toml")
+
     assert {:ok, %Config{access: access}} = Config.load(path)
     assert access != nil
+
+    assert {:ok, %Config{agents: %{"sales" => _, "administrator" => _, "designer" => _}}} =
+             Config.load(agency)
   end
 
   test "request routes are required, validated once and retained on Config", %{dir: dir} do
