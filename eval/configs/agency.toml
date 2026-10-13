@@ -21,6 +21,7 @@ key = "$OMUNCULUS_PRODUCTION_KEY"
 
 # The design team checks what the builders built against the design the
 # client approved: each item of the plan, then the whole before promote.
+# The stage promote denies done, as the pack's: promote concludes it.
 [workflows.page]
 steps = [
   { name = "build", agent = "surgeon" },
@@ -31,7 +32,7 @@ steps = [
 steps = [
   { name = "publish", agent = "clerk" },
   { name = "accept", agent = "design-reviewer" },
-  { name = "promote", agent = "clerk" },
+  { name = "promote", agent = "clerk", deny = ["done"] },
 ]
 
 [policy.depth.2]

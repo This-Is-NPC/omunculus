@@ -2,11 +2,13 @@
 """The deploy tools. `deploy_preview` publishes the workspace's last commit
 to homologation as the app <app>-<id>-hml; `promote` publishes the image
 homologation built for it to production as <app>-<id>, the very image that
-was seen there. <id> comes from the workspace's path, so each project
-publishes apps of its own. Each reaches its Dokku through the unix socket of that instance
-under $OMUNCULUS_DEPLOY, with the key its secret DEPLOY_KEY holds, loaded
-into an ssh-agent of its own that ends with the call: no network, and no key
-on disk. Usage: deploy preview|promote, the call's JSON on stdin."""
+was seen there, and concludes the release's stage promote: its answer
+chains a comment with the production address, and continue. <id> comes
+from the workspace's path, so each project publishes apps of its own. Each
+reaches its Dokku through the unix socket of that instance under
+$OMUNCULUS_DEPLOY, with the key its secret DEPLOY_KEY holds, loaded into an
+ssh-agent of its own that ends with the call: no network, and no key on
+disk. Usage: deploy preview|promote, the call's JSON on stdin."""
 
 import hashlib
 import json
@@ -21,8 +23,8 @@ import time
 PORTS = {"homologation": 8080, "production": 9080}
 
 
-def answer(ok, output):
-    json.dump({"ok": ok, "output": output, "emit": []}, sys.stdout)
+def answer(ok, output, chain=()):
+    json.dump({"ok": ok, "output": output, "emit": [], "chain": list(chain)}, sys.stdout)
     sys.stdout.write("\n")
     sys.exit(0)
 
@@ -102,7 +104,9 @@ def promote(call, app, root):
     if status != 0:
         answer(False, f"promoting to production failed:\n{tail(said)}")
     url = f"http://{app}.production.localhost:{PORTS['production']}"
-    answer(True, f"promoted to production at {url}\n{tail(said, 5)}")
+    report = f"Promoted to production at {url}: the image the person saw in homologation and approved by granting promote."
+    answer(True, f"promoted to production at {url}\n{tail(said, 5)}",
+           [{"name": "comment", "args": {"body": report}}, {"name": "continue", "args": {}}])
 
 
 def main():

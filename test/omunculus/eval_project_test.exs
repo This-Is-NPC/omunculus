@@ -304,6 +304,39 @@ defmodule Omunculus.EvalProjectTest do
     assert {:ok, %{grants: nil, waiting: "child"}} = Store.view(conn, "work", root)
   end
 
+  for configuration <- ~w(dream-team sales-desk agency) do
+    test "#{configuration} release's promote stage ends only through promote or break" do
+      dir = Fixtures.tmp_dir()
+
+      assert {:ok, path} =
+               EquivalentExchange.Project.build(dir, unquote(configuration), {"fake", false}, nil)
+
+      assert {:ok, config} = Config.load(path)
+      catalog = Omunculus.Tool.Catalog.discover(config.tools)
+      assert %{chains: ["comment", "continue", "end"], then: ["end"]} = catalog["promote"]
+      stage = Enum.find(config.workflows["release"], &(&1.name == "promote")).ceiling
+
+      ceiling =
+        Ceiling.mount(
+          config,
+          %{
+            agent: "clerk",
+            depth: config.agents["clerk"].depth,
+            grants: ["promote"],
+            stage: stage,
+            workspace: Config.workspace_ceiling(config, nil),
+            groups: Omunculus.Tool.Catalog.groups(catalog)
+          },
+          Map.keys(catalog)
+        )
+
+      assert Ceiling.classify(ceiling, "done", "tool") == "blocked"
+
+      for name <- ["promote", "break" | catalog["promote"].chains],
+          do: assert(Ceiling.classify(ceiling, name, "tool") == "have")
+    end
+  end
+
   for option <- ~w(grant deny) do
     test "agency promote follows the task human #{option} through nested escalation", %{
       conn: conn

@@ -85,9 +85,12 @@ defmodule Omunculus.ConfigTest do
 
     assert {:ok,
             %Config{
-              agents: %{"steward" => _, "sales" => _, "administrator" => _, "designer" => _}
+              agents: %{"steward" => _, "sales" => _, "administrator" => _, "designer" => _},
+              workflows: %{"release" => release}
             }} =
              Config.load(agency)
+
+    assert %{ceiling: %{deny: ["done"]}} = Enum.find(release, &(&1.name == "promote"))
   end
 
   test "request routes are required, validated once and retained on Config", %{dir: dir} do
