@@ -24,10 +24,7 @@ Rectangle {
     lane ? lane.name.toUpperCase() + " " + String(lane.at + 1).padStart(2, "0") + "/" + String(lane.steps.length).padStart(2, "0") + " " + lane.steps[lane.at].name.toUpperCase() : "",
     work.state === "waiting" && work.waiting ? "ON A " + work.waiting.toUpperCase() : ""
   ].filter(part => part !== "").join("  ·  ")
-  readonly property string age: {
-    const seconds = Math.max(0, (now - Date.parse(work.updated_at || work.created_at)) / 1000)
-    return seconds < 60 ? "now" : seconds < 3600 ? Math.floor(seconds / 60) + "m" : seconds < 86400 ? Math.floor(seconds / 3600) + "h" : Math.floor(seconds / 86400) + "d"
-  }
+  readonly property string age: Omunculus.ago(work.updated_at || work.created_at, now)
 
   implicitHeight: details.implicitHeight + 24
   activeFocusOnTab: true

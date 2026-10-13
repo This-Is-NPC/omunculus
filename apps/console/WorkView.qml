@@ -3,15 +3,15 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
 
-// WorkView is one work on a page of its own. On top, the project it is in,
-// its state and its title. Then its route, left to right: where it came
-// from — the work that handed it down, or you through the conversation's
-// agent; where it is now — the stages of its workflow, each with the agent
-// that takes it, the one it is at lit, or the agent it is with; and where it
-// goes — the works it handed down, then the next stage or whom it reports
-// to. Each work on the route opens here. Below, its description, the goal it
-// was given, where it works, what it asked and its notes, and beside them
-// its runs, the files it changed or the prompt a run was given. Esc leaves.
+// WorkView is one work on a page of its own, as an issue is read: where it
+// is — its project, its conversation, the work it came from — and its title
+// on top; then, on the left, what it is for, what it asked and its notes,
+// and under them its runs, the files it changed or the prompt a run was
+// given; on the right, its properties: its state, its project, its workflow
+// with each stage over the agent that takes it, or the agent it is with,
+// where it came from and the works it handed down, each opening here, whom
+// it goes to next, where it works and when it began and last changed.
+// Esc leaves.
 FocusScope {
   id: view
 
@@ -42,7 +42,12 @@ FocusScope {
     : work && work.state === "waiting" && !work.waiting ? Theme.error
     : Omunculus.stateTone(work ? work.state : "")
 
-  // What the right shows: "runs", "changes" or "prompt".
+  // The time now, which the ages follow.
+  property real now: Date.now()
+  Timer { interval: 30000; repeat: true; running: view.visible; onTriggered: view.now = Date.now() }
+  readonly property var place: Omunculus.workspaceOf(work ? work.workspace || "" : "")
+
+  // What shows under the description: "runs", "changes" or "prompt".
   property string section: "runs"
   // The run whose prompt shows, or "" for the work's last.
   property string promptRun: ""
@@ -53,39 +58,50 @@ FocusScope {
 
   Keys.onEscapePressed: leave()
 
-  // One leg of the route: a heading and what is there.
-  component Leg: Rectangle {
-    id: leg
-    property string heading
-    property bool lit: false
-    default property alias body: legBody.data
-    implicitHeight: legBody.implicitHeight + legHead.implicitHeight + 34
-    color: lit ? Qt.tint(Theme.background, Qt.alpha(Theme.primary, 0.06)) : "transparent"
-    border.color: lit ? Qt.alpha(Theme.primary, 0.7) : Theme.line
-    Caption { id: legHead; x: 12; y: 12; text: leg.heading }
+  // A property of the work: its name over what it is.
+  component Property: ColumnLayout {
+    id: property
+    property string name
+    default property alias body: value.data
+    Layout.fillWidth: true
+    spacing: 4
+    Caption { text: property.name }
     ColumnLayout {
-      id: legBody
-      anchors { left: parent.left; right: parent.right; top: legHead.bottom; margins: 12; topMargin: 10 }
-      spacing: 8
+      id: value
+      Layout.fillWidth: true
+      spacing: 4
     }
   }
 
-  // A work on the route, which opens here.
-  component WorkLink: Rectangle {
+  // A property's plain value.
+  component Value: Label {
+    Layout.fillWidth: true
+    font.pixelSize: 12
+    wrapMode: Text.Wrap
+  }
+
+  // Another work, its title over its agent and state, which opens here.
+  component WorkLink: Item {
     id: link
     required property var item
     Layout.fillWidth: true
-    implicitHeight: linkText.implicitHeight + 16
-    color: linkArea.containsMouse ? Qt.alpha(Theme.foreground, 0.05) : "transparent"
-    border.color: linkArea.containsMouse || link.activeFocus ? Theme.primary : Theme.line
+    implicitHeight: linkText.implicitHeight + 4
     activeFocusOnTab: true
     Keys.onReturnPressed: view.picked(link.item.id)
     Keys.onSpacePressed: view.picked(link.item.id)
+    FocusRing {}
     ColumnLayout {
       id: linkText
-      anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 10 }
-      spacing: 2
-      Label { Layout.fillWidth: true; text: link.item.title; font.pixelSize: 12; elide: Text.ElideRight }
+      anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
+      spacing: 1
+      Label {
+        Layout.fillWidth: true
+        text: link.item.title
+        color: linkArea.containsMouse ? Theme.primary : Theme.foreground
+        font.pixelSize: 12
+        font.underline: linkArea.containsMouse
+        elide: Text.ElideRight
+      }
       Label {
         Layout.fillWidth: true
         text: Omunculus.agentOf(link.item) + "  ·  " + String(link.item.state)
@@ -103,55 +119,41 @@ FocusScope {
     }
   }
 
-  component Arrow: Icon {
-    Layout.alignment: Qt.AlignVCenter
-    name: "chevron-right"
-    color: Theme.dim
-  }
-
   ColumnLayout {
     anchors.fill: parent
-    spacing: 16
+    spacing: 10
 
-    // Where it is, and what.
+    // Where it is: its project, its conversation, the work it came from.
     RowLayout {
       Layout.fillWidth: true
-      spacing: 10
-      Rectangle {
-        implicitWidth: projectName.implicitWidth + 20
-        implicitHeight: 24
-        color: "transparent"
-        border.color: Theme.line
-        Label {
-          id: projectName
-          anchors.centerIn: parent
-          text: "PROJECT  " + Omunculus.project.toUpperCase()
-          color: Theme.foreground
-          font.pixelSize: 10
-          font.letterSpacing: 2
-        }
-      }
-      Rectangle {
-        implicitWidth: stateName.implicitWidth + 20
-        implicitHeight: 24
-        color: "transparent"
-        border.color: view.stateTone
-        Label {
-          id: stateName
-          anchors.centerIn: parent
-          text: view.stateText
-          color: view.stateTone
-          font.pixelSize: 10
-          font.letterSpacing: 2
-        }
-      }
+      spacing: 8
+      Label { text: Omunculus.project.toUpperCase(); color: Theme.primary; font.pixelSize: 11; font.letterSpacing: 3 }
+      Label { text: "/"; color: Theme.dim; font.pixelSize: 11 }
       Label {
-        Layout.fillWidth: true
-        text: "in " + Omunculus.title
+        Layout.maximumWidth: view.width * 0.3
+        text: Omunculus.title
         color: Theme.dim
         font.pixelSize: 11
         elide: Text.ElideRight
       }
+      Label { visible: view.parentWork !== null; text: "/"; color: Theme.dim; font.pixelSize: 11 }
+      Label {
+        Layout.fillWidth: true
+        visible: view.parentWork !== null
+        text: view.parentWork ? view.parentWork.title : ""
+        color: crumb.containsMouse ? Theme.primary : Theme.dim
+        font.pixelSize: 11
+        font.underline: crumb.containsMouse
+        elide: Text.ElideRight
+        MouseArea {
+          id: crumb
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: view.picked(view.parentWork.id)
+        }
+      }
+      Item { Layout.fillWidth: view.parentWork === null }
     }
     DecodeLabel {
       Layout.fillWidth: true
@@ -160,140 +162,52 @@ FocusScope {
       font.letterSpacing: 1
       wrapMode: Text.Wrap
     }
+    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.line }
 
-    // Its route: from, now, to, the three as tall as the tallest.
-    RowLayout {
-      Layout.fillWidth: true
-      Layout.fillHeight: false
-      spacing: 10
-
-      Leg {
-        Layout.fillWidth: true
-        Layout.preferredWidth: 1
-        Layout.fillHeight: true
-        heading: "FROM"
-        WorkLink { visible: view.parentWork !== null; item: view.parentWork || ({ id: "", title: "", state: "" }) }
-        Label {
-          Layout.fillWidth: true
-          visible: view.parentWork === null
-          text: "you, through " + (Omunculus.agent || "the conversation's agent")
-          font.pixelSize: 12
-          wrapMode: Text.Wrap
-        }
-      }
-      Arrow {}
-      Leg {
-        Layout.fillWidth: true
-        Layout.preferredWidth: 1.4
-        Layout.fillHeight: true
-        heading: view.steps.length > 0 ? "NOW  ·  WORKFLOW " + String(view.work.workflow).toUpperCase() : "NOW"
-        lit: !view.finished
-        // Each stage and who takes it; the one it is at lit, those passed checked.
-        Repeater {
-          model: view.steps
-          delegate: RowLayout {
-            id: stage
-            required property var modelData
-            required property int index
-            readonly property bool passed: view.finished || index < view.at
-            readonly property bool current: !view.finished && index === view.at
-            Layout.fillWidth: true
-            spacing: 8
-            Label {
-              text: stage.passed ? "✓" : stage.current ? "▸" : "·"
-              color: stage.current ? Theme.primary : Theme.dim
-              font.pixelSize: 12
-            }
-            Label {
-              text: stage.modelData.name
-              color: stage.current ? Theme.primary : stage.passed ? Theme.foreground : Theme.dim
-              font.pixelSize: 12
-              font.bold: stage.current
-            }
-            Label {
-              Layout.fillWidth: true
-              text: stage.modelData.agent
-              color: stage.current ? Omunculus.toneOf(stage.modelData.agent) : Theme.dim
-              font.pixelSize: 11
-              elide: Text.ElideRight
-            }
-          }
-        }
-        RowLayout {
-          visible: view.steps.length === 0
-          spacing: 8
-          Portrait { implicitWidth: 22; implicitHeight: 22; agent: view.agent }
-          Label { text: "with " + view.agent; color: Omunculus.toneOf(view.agent); font.pixelSize: 12 }
-        }
-      }
-      Arrow {}
-      Leg {
-        Layout.fillWidth: true
-        Layout.preferredWidth: 1
-        Layout.fillHeight: true
-        heading: "TO"
-        Repeater {
-          model: view.children
-          delegate: WorkLink {
-            required property var modelData
-            item: modelData
-          }
-        }
-        Label {
-          Layout.fillWidth: true
-          text: view.finished ? "reported to " + view.reportsTo
-            : view.at >= 0 && view.at < view.steps.length - 1
-              ? "then " + view.steps[view.at + 1].name + ", with " + view.steps[view.at + 1].agent
-              : "then reports to " + view.reportsTo
-          color: Theme.dim
-          font.pixelSize: 11
-          wrapMode: Text.Wrap
-        }
-      }
-    }
-
-    // What it is for, and what it did.
     RowLayout {
       Layout.fillWidth: true
       Layout.fillHeight: true
-      spacing: 20
+      spacing: 0
 
-      ScrollPage {
-        id: side
-        Layout.preferredWidth: Math.min(440, view.width * 0.45)
-        Layout.fillHeight: true
-        contentHeight: about.implicitHeight
-
-        ColumnLayout {
-          id: about
-          width: side.width
-          spacing: 12
-
-          Caption { text: "DESCRIPTION" }
-          Label {
-            Layout.fillWidth: true
-            text: view.work ? String(view.work.goal || "") : ""
-            textFormat: Text.MarkdownText
-            font.pixelSize: 13
-            wrapMode: Text.Wrap
-          }
-          WorkSummary {
-            Layout.fillWidth: true
-            Layout.topMargin: 8
-            key: view.key
-            whole: false
-            onPicked: key => view.picked(key)
-          }
-        }
-      }
-
+      // The work: what it is for, then what it did.
       ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
+        Layout.rightMargin: 20
         spacing: 12
+
+        Caption { Layout.topMargin: 6; text: "DESCRIPTION" }
+        ScrollPage {
+          id: described
+          Layout.fillWidth: true
+          // As tall as it reads, up to two fifths of the room.
+          Layout.preferredHeight: Math.min(about.implicitHeight, view.height * 0.4)
+          contentHeight: about.implicitHeight
+
+          ColumnLayout {
+            id: about
+            width: described.width
+            spacing: 12
+            Label {
+              Layout.fillWidth: true
+              text: view.work ? String(view.work.goal || "") : ""
+              textFormat: Text.MarkdownText
+              font.pixelSize: 14
+              lineHeight: 1.2
+              wrapMode: Text.Wrap
+            }
+            WorkSummary {
+              Layout.fillWidth: true
+              key: view.key
+              whole: false
+              onPicked: key => view.picked(key)
+            }
+          }
+        }
 
         RowLayout {
           Layout.fillWidth: true
+          Layout.topMargin: 8
           spacing: 6
           Repeater {
             model: [
@@ -303,8 +217,7 @@ FocusScope {
             ]
             delegate: TraceButton {
               required property var modelData
-              Layout.fillWidth: true
-              Layout.preferredWidth: 1
+              Layout.preferredWidth: 120
               dense: true
               role: view.section === modelData.name ? "primary" : "action"
               text: modelData.name.toUpperCase()
@@ -312,6 +225,7 @@ FocusScope {
               onClicked: view.section = modelData.name
             }
           }
+          Item { Layout.fillWidth: true }
         }
 
         WorkRuns {
@@ -339,6 +253,114 @@ FocusScope {
           key: view.key
           run: view.promptRun
           onLatestWanted: view.promptRun = ""
+        }
+      }
+
+      Rectangle { Layout.fillHeight: true; implicitWidth: 1; color: Theme.line }
+
+      // Its properties.
+      ScrollPage {
+        id: properties
+        Layout.preferredWidth: Math.min(300, view.width * 0.36)
+        Layout.fillHeight: true
+        contentHeight: propertyList.implicitHeight + 12
+
+        ColumnLayout {
+          id: propertyList
+          x: 20
+          y: 6
+          width: properties.width - 20
+          spacing: 16
+
+          Property {
+            name: "STATE"
+            Value { text: view.stateText; color: view.stateTone; font.letterSpacing: 1 }
+          }
+          Property {
+            name: "PROJECT"
+            Value { text: Omunculus.project }
+          }
+          Property {
+            name: view.steps.length > 0 ? "WORKFLOW  ·  " + String(view.work.workflow).toUpperCase() : "WITH"
+            // Each stage over the agent that takes it: passed checked, the
+            // one it is at lit.
+            Repeater {
+              model: view.steps
+              delegate: RowLayout {
+                id: stage
+                required property var modelData
+                required property int index
+                readonly property bool passed: view.finished || index < view.at
+                readonly property bool current: !view.finished && index === view.at
+                Layout.fillWidth: true
+                spacing: 8
+                Label {
+                  Layout.preferredWidth: 10
+                  text: stage.passed ? "✓" : stage.current ? "▸" : "·"
+                  color: stage.current ? Theme.primary : Theme.dim
+                  font.pixelSize: 12
+                }
+                Label {
+                  Layout.preferredWidth: 70
+                  text: stage.modelData.name
+                  color: stage.current ? Theme.primary : stage.passed ? Theme.foreground : Theme.dim
+                  font.pixelSize: 12
+                  elide: Text.ElideRight
+                }
+                Portrait { implicitWidth: 18; implicitHeight: 18; agent: stage.modelData.agent }
+                Label {
+                  Layout.fillWidth: true
+                  text: stage.modelData.agent
+                  color: stage.current ? Omunculus.toneOf(stage.modelData.agent) : Theme.dim
+                  font.pixelSize: 11
+                  elide: Text.ElideRight
+                }
+              }
+            }
+            RowLayout {
+              visible: view.steps.length === 0
+              spacing: 8
+              Portrait { implicitWidth: 18; implicitHeight: 18; agent: view.agent }
+              Value { text: view.agent; color: Omunculus.toneOf(view.agent) }
+            }
+          }
+          Property {
+            name: "FROM"
+            WorkLink { visible: view.parentWork !== null; item: view.parentWork || ({ id: "", title: "", state: "" }) }
+            Value { visible: view.parentWork === null; text: "you, through " + (Omunculus.agent || "the conversation's agent") }
+          }
+          Property {
+            name: view.children.length > 0 ? "HANDED DOWN  ·  " + view.children.length : "HANDED DOWN"
+            Repeater {
+              model: view.children
+              delegate: WorkLink {
+                required property var modelData
+                item: modelData
+              }
+            }
+            Value { visible: view.children.length === 0; text: "nothing"; color: Theme.dim }
+          }
+          Property {
+            name: view.finished ? "REPORTED TO" : "NEXT"
+            Value {
+              text: view.finished ? view.reportsTo
+                : view.at >= 0 && view.at < view.steps.length - 1
+                  ? view.steps[view.at + 1].name + ", with " + view.steps[view.at + 1].agent
+                  : "reports to " + view.reportsTo
+            }
+          }
+          Property {
+            name: "WORKSPACE"
+            Value { text: (view.place.name ? view.place.name + "  ·  " : "") + view.place.root; elide: Text.ElideMiddle; wrapMode: Text.NoWrap }
+          }
+          Property {
+            name: "BEGAN  ·  CHANGED"
+            Value {
+              text: view.work ? Omunculus.ago(view.work.created_at, view.now) + " ago  ·  "
+                + Omunculus.ago(view.work.updated_at || view.work.created_at, view.now) + " ago" : ""
+              color: Theme.dim
+            }
+          }
         }
       }
     }

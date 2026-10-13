@@ -12,9 +12,9 @@ ColumnLayout {
 
   // The work, or "" for the root agent's own conversation.
   required property string key
-  // Whether it shows the work whole — its title, goal, workflow and the
-  // work it came from — or, on the work's page, which shows those itself,
-  // only where it works, what it asked and its notes.
+  // Whether it shows the work whole — its title, goal, where it works, its
+  // workflow and the work it came from — or, on the work's page, which shows
+  // those itself, only what it asked and its notes.
   property bool whole: true
   signal picked(string key)
 
@@ -43,6 +43,7 @@ ColumnLayout {
 
   GridLayout {
     Layout.fillWidth: true
+    visible: summary.whole
     columns: 2
     columnSpacing: 12
     rowSpacing: 6
@@ -53,15 +54,15 @@ ColumnLayout {
       font.pixelSize: 11
       elide: Text.ElideMiddle
     }
-    Caption { visible: summary.whole && !!summary.work && !!summary.work.workflow; text: "WORKFLOW" }
+    Caption { visible: !!summary.work && !!summary.work.workflow; text: "WORKFLOW" }
     Label {
-      visible: summary.whole && !!summary.work && !!summary.work.workflow
+      visible: !!summary.work && !!summary.work.workflow
       text: summary.work && summary.work.workflow ? summary.work.workflow + "  ·  stage " + summary.work.stage : ""
       font.pixelSize: 11
     }
-    Caption { visible: summary.whole && summary.parentWork !== null; text: "FROM" }
+    Caption { visible: summary.parentWork !== null; text: "FROM" }
     Label {
-      visible: summary.whole && summary.parentWork !== null
+      visible: summary.parentWork !== null
       text: summary.parentWork ? (summary.parentWork.assignee || "").toUpperCase() + "  ·  " + summary.parentWork.title : ""
       color: from.containsMouse ? Theme.primary : Theme.foreground
       font.pixelSize: 11

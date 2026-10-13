@@ -653,6 +653,12 @@ Singleton {
 
 
 
+  // How long ago a stamp was, as of `now` in milliseconds: now, 5m, 3h, 2d.
+  function ago(stamp, now) {
+    const seconds = Math.max(0, (now - Date.parse(stamp)) / 1000)
+    return seconds < 60 ? "now" : seconds < 3600 ? Math.floor(seconds / 60) + "m" : seconds < 86400 ? Math.floor(seconds / 3600) + "h" : Math.floor(seconds / 86400) + "d"
+  }
+
   // A sum of money as the provider reported it, in US dollars.
   function money(spent) {
     return "US$ " + (spent < 0.01 ? spent.toFixed(4) : spent.toFixed(2))
