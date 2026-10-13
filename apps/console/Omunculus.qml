@@ -566,9 +566,9 @@ Singleton {
   }
 
   // Text as Markdown should show it: without inline code marks, which would
-  // set it in a larger font, and with each line break kept.
+  // set it in a larger font.
   function inline(text) {
-    return text.replace(/`([^`\n]+)`/g, "$1").replace(/([^\n])\n(?!\n)/g, "$1  \n")
+    return text.replace(/`([^`\n]+)`/g, "$1")
   }
 
   function brief(args) {

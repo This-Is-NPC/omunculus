@@ -87,7 +87,7 @@ SurfaceFrame {
       Layout.fillWidth: true
       visible: card.expanded && card.entry.text !== ""
       plain: card.mine
-      source: card.mine ? card.entry.text : Mail.markdown(card.entry.text)
+      source: card.entry.text
       color: card.mine || card.note ? Theme.dim : Theme.foreground
       font.pixelSize: 13
       lineHeight: 1.25

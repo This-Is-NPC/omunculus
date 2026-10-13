@@ -558,11 +558,6 @@ Singleton {
     return date.toDateString() === new Date().toDateString() ? Qt.formatTime(date, "HH:mm") : Qt.formatDate(date, "d MMM")
   }
 
-  // Text as Markdown should show it, with each line break kept.
-  function markdown(value) {
-    return String(value || "").replace(/([^\n])\n(?!\n)/g, "$1  \n")
-  }
-
   FileView {
     id: seenFile
     path: Quickshell.statePath("seen.json")

@@ -1,12 +1,14 @@
 import QtQuick
 import Quickshell
 
-// Prose is what an agent wrote, shown as Markdown with its web addresses as
-// links in the accent: a bare address becomes one, the pointer turns over one
-// and its address shows beside it, and choosing one opens it in the desktop's
-// browser. With links, it is a stop of the keyboard: Left and Right pick one,
-// Enter or Space opens it. Only http and https addresses open. Plain, it is
-// the text as it was written, with no marks and no links.
+// Prose is what an agent wrote, shown as Markdown as it was written: each
+// line break kept, and a line after a list that is no item of it a paragraph
+// of its own. Its web addresses are links in the accent: a bare address
+// becomes one, the pointer turns over one and its address shows beside it,
+// and choosing one opens it in the desktop's browser. With links, it is a
+// stop of the keyboard: Left and Right pick one, Enter or Space opens it.
+// Only http and https addresses open. Plain, it is the text as it was
+// written, with no marks and no links.
 Label {
   id: prose
 
@@ -16,7 +18,7 @@ Label {
   // The link the keyboard is on.
   property int chosen: 0
 
-  readonly property var parsed: plain ? { text: source, links: [] } : linked(source)
+  readonly property var parsed: plain ? { text: source, links: [] } : linked(written(source))
   readonly property var links: parsed.links
   readonly property string pointed: hoveredLink !== "" ? hoveredLink : activeFocus && links.length > 0 ? links[Math.min(chosen, links.length - 1)] : ""
 
@@ -25,6 +27,33 @@ Label {
   activeFocusOnTab: links.length > 0
   onLinksChanged: chosen = 0
   onLinkActivated: link => open(link)
+
+  // `value` with each line break kept, where Markdown would join the lines,
+  // but in code and in a list item's indented lines, which a break would
+  // turn into an item of their own; and a line that follows a list
+  // unindented and is no item a paragraph, not more of the last item.
+  function written(value) {
+    const item = /^\s*(?:[-*+]|\d+[.)])\s/
+    const fence = /^\s{0,3}(?:```|~~~)/
+    const indented = /^\s+\S/
+    let text = ""
+    let fenced = false
+    let listed = false
+    let before = null
+    for (const line of String(value || "").split("\n")) {
+      if (before !== null)
+        text += fenced || fence.test(line) || fence.test(before) || before.trim() === "" || line.trim() === "" ? "\n"
+          : listed && indented.test(line) ? "\n"
+          : listed && !item.test(line) ? "\n\n"
+          : "  \n"
+      text += line
+      if (fence.test(line))
+        fenced = !fenced
+      listed = !fenced && (item.test(line) || (listed && indented.test(line)))
+      before = line
+    }
+    return text
+  }
 
   // `value` with each web address it links or holds bare as an anchor in the
   // accent, which Markdown would draw in the system's colour, and every one of
