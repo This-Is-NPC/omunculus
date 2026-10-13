@@ -1,8 +1,9 @@
 defmodule Omunculus.Server.EventStream do
   @moduledoc """
-  The WebSocket of one conversation: sends each event committed after the
-  cursor and each partial model reply as a JSON text frame. It accepts no
-  messages from the client.
+  The WebSocket of one conversation, or, without `conversation_id`, of every
+  conversation of the project the principal may read: sends each event
+  committed after the cursor and each partial model reply as a JSON text
+  frame. It accepts no messages from the client.
   """
 
   @behaviour WebSock
@@ -35,15 +36,15 @@ defmodule Omunculus.Server.EventStream do
 
   def handle_info(:read, state), do: read(state)
 
-  def handle_info(
-        {:store, _owner, {:delta, %{conversation_id: id} = delta}},
-        %{conversation_id: id} = state
-      ),
-      do: {:push, {:text, Jason.encode!(Contract.delta(state.project, delta))}, state}
+  # The conversations a delta may come from are those the last read could read.
+  def handle_info({:store, _owner, {:delta, delta}}, state) do
+    if delta.conversation_id in state.readable,
+      do: {:push, {:text, Jason.encode!(Contract.delta(state.project, delta))}, state},
+      else: {:ok, state}
+  end
 
-  def handle_info({:store, _owner, {:delta, _other_conversation}}, state), do: {:ok, state}
-
-  # Reading again after a keepalive also notices a revoked membership.
+  # Reading again after a keepalive also notices a revoked membership: it
+  # closes a conversation's stream and leaves the project's without it.
   def handle_info(:keepalive, state) do
     Process.send_after(self(), :keepalive, @keepalive_ms)
     send(self(), :read)
@@ -54,14 +55,14 @@ defmodule Omunculus.Server.EventStream do
   def terminate(_reason, state), do: StreamLimiter.release(state.stream_key)
 
   defp read(state) do
-    case Project.events(state.project, state.principal, state.conversation_id, state.cursor) do
-      {:ok, []} ->
-        {:ok, state}
+    case events(state) do
+      {:ok, readable, []} ->
+        {:ok, %{state | readable: readable}}
 
-      {:ok, events} ->
+      {:ok, readable, events} ->
         send(self(), :read)
         frames = Enum.map(events, &{:text, Jason.encode!(Contract.event(state.project, &1))})
-        {:push, frames, %{state | cursor: List.last(events).sequence}}
+        {:push, frames, %{state | cursor: List.last(events).sequence, readable: readable}}
 
       {:error, reason} when reason in [:forbidden, :not_found] ->
         {:stop, :normal, {1008, "forbidden"}, state}
@@ -69,6 +70,15 @@ defmodule Omunculus.Server.EventStream do
       {:error, reason} ->
         {:stop, reason, {1011, "internal_error"}, state}
     end
+  end
+
+  defp events(%{conversation_id: nil} = state),
+    do: Project.project_events(state.project, state.principal, state.cursor)
+
+  defp events(state) do
+    with {:ok, events} <-
+           Project.events(state.project, state.principal, state.conversation_id, state.cursor),
+         do: {:ok, [state.conversation_id], events}
   end
 
   defp drain_announcements do

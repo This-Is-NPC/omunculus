@@ -92,6 +92,8 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `GET /v1/projects` | List the projects you see: over HTTP, those whose conversations you may read or where you are a member of one; on a local socket, every project of the registry with its `socket`. |
 | `GET /agents/{agent}/image` | Read an agent's `image`, with its media type, if the project is visible to you; `404` for an agent without one. |
 | `GET, POST /conversations` | List visible conversations or create one. |
+| `GET /works?state={state}` | List the works of every conversation you may read, oldest first, each with its `conversation_id`; `state` (`open`, `waiting`, `done` or `cancelled`) keeps those in it alone, and any other value is `400`. |
+| `GET /stream?after={cursor}` | Open a WebSocket of the later events of every conversation you may read; see [Event stream](#event-stream). |
 | `GET /conversations/{id}` | Read one visible conversation. |
 | `GET /conversations/{id}/snapshot` | Read works (each with the `workflow` it goes through and its `stage`), runs, prompts, requests and inbox at one event cursor. |
 | `GET /conversations/{id}/{works,runs,prompts,requests,inbox}` | Read one resource list. |
@@ -105,7 +107,7 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `POST /members`, `DELETE /members/{issuer}/{subject}` | Assign or revoke a project role. |
 | `POST /conversations/{id}/members`, `DELETE /conversations/{id}/members/{issuer}/{subject}` | Assign or revoke a conversation role. |
 
-Membership `POST` bodies are `{"issuer":"my-idp","subject":"bob","role":"reader"}`. Create a conversation, then send a message with an idempotency key. Fetch its snapshot and resume with `/events?after=<snapshot.cursor>` or `/stream?after=<snapshot.cursor>`. Each event includes version `v`, `cursor`, `project`, `type`, `at`, `actor`, `origin`, resource IDs and `body`. A caller without access gets `404` for conversation resources.
+Membership `POST` bodies are `{"issuer":"my-idp","subject":"bob","role":"reader"}`. Create a conversation, then send a message with an idempotency key. Fetch its snapshot and resume with `/events?after=<snapshot.cursor>` or `/stream?after=<snapshot.cursor>`. Each event includes version `v`, `cursor`, `project`, `conversation_id`, `type`, `at`, `actor`, `origin`, resource IDs and `body`. A caller without access gets `404` for conversation resources.
 
 Request resources expose `requester` and `arbiter` as participant objects:
 `{"kind":"agent","agent":"name"}` or
@@ -123,12 +125,14 @@ explicit null or empty values return `400`. A person escalates through
 
 `GET /conversations/{id}/stream` upgrades to a WebSocket, authenticated like any other request: the local principal on the socket, the `Authorization` header on TCP. A request without the WebSocket upgrade headers gets `400`. The stream is read-only; commands go through the `POST` routes.
 
-Each frame is a JSON text frame. The first frames are the events after `after` (all of them without it), then each event as soon as it is committed, with its cursor in `cursor`. Partial model text arrives as `{"v":1,"type":"run.delta","project","run_id","work_id","text"}` without a cursor; it is not stored, so a resumed stream does not repeat it, and the recorded `model` event holds the whole reply. The server pings every 15 seconds and reads again, so a revoked membership closes the stream even while the conversation is idle.
+Each frame is a JSON text frame. The first frames are the events after `after` (all of them without it), then each event as soon as it is committed, with its cursor in `cursor`. Partial model text arrives as `{"v":1,"type":"run.delta","project","conversation_id","run_id","work_id","text"}` without a cursor; it is not stored, so a resumed stream does not repeat it, and the recorded `model` event holds the whole reply. The server pings every 15 seconds and reads again, so a revoked membership closes the stream even while the conversation is idle.
+
+`GET /stream` is the same for the whole project: its frames are the events and partial replies of every conversation you may read, in sequence order, each naming its `conversation_id`, and its cursor is any event's. Each read decides again which conversations those are, so a conversation created or shared with you joins the stream, and one whose membership is revoked leaves it without closing it.
 
 | Close code | Reason |
 | --- | --- |
 | `1003 unsupported` | The client sent a data frame. |
-| `1008 forbidden` | The caller lost read access to the conversation. |
+| `1008 forbidden` | The caller lost read access to the conversation (a conversation's stream only). |
 | `1011 internal_error` | The server could not read the events. |
 | `1013 too_many_streams` | `max_connections` streams are already open. |
 

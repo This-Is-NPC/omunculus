@@ -139,6 +139,43 @@ defmodule Omunculus.Store.Access do
     end
   end
 
+  @doc """
+  The events after `after_cursor` of every conversation `principal` may
+  read, up to 500 in sequence order, with the ids of those conversations.
+  """
+  @spec project_events(Project.t(), principal, non_neg_integer) ::
+          {:ok, [String.t()], [map]} | {:error, term}
+  def project_events(project, principal, after_cursor) do
+    with {:ok, ids} <- readable(project, principal),
+         {:ok, events} <-
+           Query.all(
+             project.conn,
+             "SELECT * FROM events WHERE conversation_id IN (SELECT value FROM json_each(?)) AND sequence > ? ORDER BY sequence LIMIT 500",
+             [Jason.encode!(ids), after_cursor]
+           ) do
+      {:ok, ids, events}
+    end
+  end
+
+  @doc """
+  The works of every conversation `principal` may read, oldest first; with
+  `state`, those in it alone.
+  """
+  @spec works(Project.t(), principal, String.t() | nil) :: {:ok, [map]} | {:error, term}
+  def works(project, principal, state) do
+    with {:ok, ids} <- readable(project, principal) do
+      Query.all(
+        project.conn,
+        "SELECT * FROM works WHERE conversation_id IN (SELECT value FROM json_each(?)) AND (?2 IS NULL OR state = ?2) ORDER BY created_at, id",
+        [Jason.encode!(ids), state]
+      )
+    end
+  end
+
+  defp readable(project, principal) do
+    with {:ok, rows} <- conversations(project, principal), do: {:ok, Enum.map(rows, & &1.id)}
+  end
+
   @list_sql %{
     works: "SELECT * FROM works WHERE conversation_id = ? ORDER BY created_at, id",
     runs: "SELECT * FROM runs WHERE conversation_id = ? ORDER BY started_at, id",

@@ -33,6 +33,18 @@ defmodule Omunculus.Server.OpenAPI do
       status: 200,
       response: "Conversations"
     },
+    list_works: %{
+      summary: "List the works of the conversations you may read",
+      status: 200,
+      response: "Works",
+      states: true
+    },
+    project_stream: %{
+      summary: "Subscribe to later events of the conversations you may read",
+      status: 101,
+      response: :stream,
+      cursor: true
+    },
     get_conversation: %{summary: "Read a conversation", status: 200, response: "Conversation"},
     snapshot: %{summary: "Read a conversation snapshot", status: 200, response: "Snapshot"},
     list_items: %{summary: "List conversation resources", status: 200, response: "Items"},
@@ -204,6 +216,15 @@ defmodule Omunculus.Server.OpenAPI do
         }
     )
     |> maybe_append(
+      spec[:states] &&
+        %{
+          name: "state",
+          in: "query",
+          schema: %{type: "string", enum: Omunculus.Server.Contract.work_states()},
+          description: "Only the works in this state"
+        }
+    )
+    |> maybe_append(
       spec[:idempotent] &&
         %{
           name: "Idempotency-Key",
@@ -359,6 +380,7 @@ defmodule Omunculus.Server.OpenAPI do
         object(
           %{
             id: string(),
+            conversation_id: nullable_string(),
             parent_id: nullable_string(),
             workspace: nullable_string(),
             assignee: nullable_string(),
@@ -366,13 +388,14 @@ defmodule Omunculus.Server.OpenAPI do
             goal: string(),
             workflow: nullable_string(),
             stage: nullable_string(),
-            state: string(),
+            state: %{type: "string", enum: Omunculus.Server.Contract.work_states()},
             waiting: nullable_string(),
             created_at: string(),
             updated_at: nullable_string()
           },
           ["id", "title", "goal", "state"]
         ),
+      "Works" => object(%{items: array(ref("Work"))}, ["items"]),
       "Run" =>
         object(
           %{
@@ -457,6 +480,7 @@ defmodule Omunculus.Server.OpenAPI do
             v: %{type: "integer"},
             cursor: string(),
             project: string(),
+            conversation_id: nullable_string(),
             type: string(),
             at: string(),
             actor: %{

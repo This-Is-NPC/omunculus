@@ -3,6 +3,10 @@ defmodule Omunculus.Server.Contract do
 
   @version 1
 
+  @doc "The states a work is in, as the store keeps them."
+  @spec work_states() :: [String.t()]
+  def work_states, do: ~w(open waiting done cancelled)
+
   @spec cursor(non_neg_integer | nil) :: String.t() | nil
   def cursor(nil), do: nil
   def cursor(sequence), do: Base.url_encode64(<<sequence::unsigned-64>>, padding: false)
@@ -25,6 +29,7 @@ defmodule Omunculus.Server.Contract do
       v: @version,
       cursor: cursor(event.sequence),
       project: project_id,
+      conversation_id: event.conversation_id,
       type: event.type,
       at: event.at,
       actor: actor(event),
@@ -45,6 +50,7 @@ defmodule Omunculus.Server.Contract do
       v: @version,
       project: project_id,
       type: "run.delta",
+      conversation_id: delta.conversation_id,
       run_id: delta.run_id,
       work_id: delta.work_id,
       text: delta.text
@@ -56,7 +62,7 @@ defmodule Omunculus.Server.Contract do
     do:
       Map.take(
         row,
-        ~w(id parent_id workspace assignee title goal workflow stage state waiting created_at updated_at)a
+        ~w(id conversation_id parent_id workspace assignee title goal workflow stage state waiting created_at updated_at)a
       )
 
   def item(:runs, row),

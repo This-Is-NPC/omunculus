@@ -81,6 +81,26 @@ defmodule Omunculus.Server.Router do
     end
   end
 
+  OpenAPI.route :get, "/v1/projects/:project_id/works", :list_works do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, state} <- work_state(conn.params["state"]),
+         {:ok, works} <- Project.works(project_id, principal, state) do
+      reply(conn, 200, %{items: Enum.map(works, &Contract.item(:works, &1))})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  OpenAPI.route :get, "/v1/projects/:project_id/stream", :project_stream do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, cursor} <- Contract.decode_cursor(conn.params["after"]),
+         :ok <- websocket_request(conn) do
+      upgrade_stream(conn, project_id, principal, nil, cursor)
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
   OpenAPI.route :post, "/v1/projects/:project_id/members", :put_project_member do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, target} <- target(conn.body_params),
@@ -308,15 +328,7 @@ defmodule Omunculus.Server.Router do
          {:ok, cursor} <- Contract.decode_cursor(conn.params["after"]),
          {:ok, _conversation} <- Project.conversation(project_id, principal, conversation_id),
          :ok <- websocket_request(conn) do
-      state = %{
-        project: project_id,
-        principal: principal,
-        conversation_id: conversation_id,
-        cursor: cursor,
-        stream_key: conn.assigns.server_opts[:stream_key]
-      }
-
-      upgrade_adapter(conn, :websocket, {EventStream, state, []})
+      upgrade_stream(conn, project_id, principal, conversation_id, cursor)
     else
       error -> error_reply(conn, error)
     end
@@ -512,6 +524,26 @@ defmodule Omunculus.Server.Router do
   defp list_kind("requests"), do: {:ok, :requests}
   defp list_kind("inbox"), do: {:ok, :inbox}
   defp list_kind(_), do: {:error, :not_found}
+
+  defp work_state(nil), do: {:ok, nil}
+
+  defp work_state(state) do
+    if state in Contract.work_states(), do: {:ok, state}, else: {:error, :invalid}
+  end
+
+  # A conversation's stream, or with a nil `conversation_id` the project's.
+  defp upgrade_stream(conn, project_id, principal, conversation_id, cursor) do
+    state = %{
+      project: project_id,
+      principal: principal,
+      conversation_id: conversation_id,
+      cursor: cursor,
+      readable: [],
+      stream_key: conn.assigns.server_opts[:stream_key]
+    }
+
+    upgrade_adapter(conn, :websocket, {EventStream, state, []})
+  end
 
   # Bandit validates the rest of the handshake; a plain request stops here
   # so it gets a 400 without Bandit logging a protocol error.

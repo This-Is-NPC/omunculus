@@ -5,6 +5,7 @@ defmodule Omunculus.ServerTest do
 
   alias Omunculus.{CLI, Config, Fixtures, Operations, Project, Server, Store}
   alias Omunculus.Server.{Contract, Socket}
+  alias Omunculus.Store.Access
 
   @access """
   [access]
@@ -365,6 +366,100 @@ defmodule Omunculus.ServerTest do
 
     send(stream, {:send, {:text, "hello"}})
     assert_receive {:frame, ^stream, {:close, 1003, "unsupported"}}, 3_000
+  end
+
+  test "a project's works and events reach only whoever may read their conversation" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(project_path, File.read!(project_path) <> "\n" <> @access)
+    project = Fixtures.open_project(dir)
+    admin = %{issuer: "test", subject: "admin"}
+    reader = %{issuer: "test", subject: "reader"}
+    :ok = Access.bootstrap(project, admin)
+    {:ok, %{id: shared}} = Access.create_conversation(project, admin)
+    {:ok, %{id: hidden}} = Access.create_conversation(project, admin)
+    :ok = Access.put_member(project, admin, reader, "reader", shared)
+    seen = Fixtures.insert(project.conn, :works, %{conversation_id: shared})
+    done = Fixtures.insert(project.conn, :works, %{conversation_id: shared, state: "done"})
+    unseen = Fixtures.insert(project.conn, :works, %{conversation_id: hidden})
+
+    ids = fn {:ok, rows} -> rows |> Enum.map(& &1.id) |> Enum.sort() end
+    assert ids.(Access.works(project, reader, nil)) == Enum.sort([seen, done])
+    assert ids.(Access.works(project, reader, "done")) == [done]
+    assert ids.(Access.works(project, admin, nil)) == Enum.sort([seen, done, unseen])
+    assert {:ok, []} = Access.works(project, %{issuer: "test", subject: "outsider"}, nil)
+
+    assert {:ok, [^shared], events} = Access.project_events(project, reader, 0)
+    assert [_ | _] = events
+    assert Enum.all?(events, &(&1.conversation_id == shared))
+    assert {:ok, readable, all} = Access.project_events(project, admin, 0)
+    assert Enum.sort(readable) == Enum.sort([shared, hidden])
+    assert Enum.any?(all, &(&1.conversation_id == hidden))
+    last = List.last(all).sequence
+    assert {:ok, _readable, []} = Access.project_events(project, admin, last)
+
+    Project.close(project)
+  end
+
+  test "a project lists its works and streams the events of all its conversations" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(project_path, File.read!(project_path) <> "\n" <> @access)
+    project = Fixtures.open_project(dir)
+    earlier = Omunculus.Id.new()
+
+    :ok =
+      Omunculus.Store.Query.insert(project.conn, :conversations, %{
+        id: earlier,
+        created_issuer: "local",
+        created_subject: "someone",
+        created_at: "2026-01-01T00:00:00Z"
+      })
+
+    {:ok, _event} =
+      Omunculus.Store.Events.append(project.conn, %{
+        type: "conversation",
+        conversation_id: earlier,
+        body: "{}"
+      })
+
+    work = Fixtures.insert(project.conn, :works, %{conversation_id: earlier, state: "done"})
+    Project.close(project)
+    {server, local} = serve_local(dir, project_path)
+    {:ok, config} = Config.load(project_path)
+    socket = Socket.path(config.store.path)
+
+    [first, second] =
+      for key <- ~w(c1 c2) do
+        local.(:post, "/v1/projects/solo/conversations",
+          headers: [{"idempotency-key", key}],
+          json: %{}
+        ).body["id"]
+      end
+
+    stream =
+      open_stream({:local, socket}, 0, "/v1/projects/solo/stream", [], hostname: "localhost")
+
+    created =
+      receive_events(stream, &(length(&1) == 3))
+      |> Enum.map(&{&1["type"], &1["conversation_id"]})
+
+    assert created == [
+             {"conversation", earlier},
+             {"conversation", first},
+             {"conversation", second}
+           ]
+
+    assert [%{"id" => ^work, "conversation_id" => ^earlier, "state" => "done"}] =
+             local.(:get, "/v1/projects/solo/works", []).body["items"]
+
+    assert local.(:get, "/v1/projects/solo/works?state=open", []).body == %{"items" => []}
+    assert local.(:get, "/v1/projects/solo/works?state=broken", []).status == 400
+    assert local.(:get, "/v1/projects/solo/stream", []).status == 400
+
+    :ok = Supervisor.stop(server)
   end
 
   test "a message carries files, which only its conversation gives back" do

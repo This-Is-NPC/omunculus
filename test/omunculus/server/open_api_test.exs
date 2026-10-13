@@ -42,6 +42,7 @@ defmodule Omunculus.Server.OpenAPITest do
     assert %{workflow: "page", stage: "build"} =
              Omunculus.Server.Contract.item(:works, %{
                id: "w",
+               conversation_id: "c",
                parent_id: nil,
                workspace: nil,
                assignee: "surgeon",
@@ -54,6 +55,20 @@ defmodule Omunculus.Server.OpenAPITest do
                created_at: "now",
                updated_at: nil
              })
+  end
+
+  test "a project lists its works by state and streams its conversations' events" do
+    document = Router.openapi_routes() |> OpenAPI.document() |> Jason.encode!() |> Jason.decode!()
+    works = document["paths"]["/v1/projects/{project_id}/works"]["get"]
+    assert works["responses"]["200"]["content"]["application/json"]["schema"]["$ref"] =~ "Works"
+    state = Enum.find(works["parameters"], &(&1["name"] == "state"))
+    assert state["in"] == "query"
+    assert state["schema"]["enum"] == ~w(open waiting done cancelled)
+    stream = document["paths"]["/v1/projects/{project_id}/stream"]["get"]
+    assert Enum.any?(stream["parameters"], &(&1["name"] == "after"))
+    schemas = document["components"]["schemas"]
+    assert schemas["Work"]["properties"]["conversation_id"]
+    assert schemas["Event"]["properties"]["conversation_id"]
   end
 
   test "reply requires text and offers an optional option" do

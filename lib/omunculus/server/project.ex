@@ -39,6 +39,13 @@ defmodule Omunculus.Server.Project do
   def events(id, principal, conversation_id, cursor),
     do: GenServer.call(via(id), {:events, principal, conversation_id, cursor})
 
+  @doc "The events after `cursor` of every conversation `principal` may read, with their ids."
+  def project_events(id, principal, cursor),
+    do: GenServer.call(via(id), {:project_events, principal, cursor})
+
+  @doc "The works of every conversation `principal` may read, those in `state` alone when given."
+  def works(id, principal, state), do: GenServer.call(via(id), {:works, principal, state})
+
   @doc """
   Keeps the files of a message `principal` may send to `conversation_id`,
   each `{name, media_type, content}`, and gives what describes each.
@@ -111,6 +118,14 @@ defmodule Omunculus.Server.Project do
 
   def handle_call({:events, principal, id, cursor}, _from, project) do
     {:reply, Access.events(project, principal, id, cursor), project}
+  end
+
+  def handle_call({:project_events, principal, cursor}, _from, project) do
+    {:reply, Access.project_events(project, principal, cursor), project}
+  end
+
+  def handle_call({:works, principal, state}, _from, project) do
+    {:reply, Access.works(project, principal, state), project}
   end
 
   def handle_call(:project, _from, project), do: {:reply, project, project}
