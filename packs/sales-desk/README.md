@@ -82,7 +82,9 @@ message that acknowledges it and names again what they are to decide.
 The request is answered and its work waits for the client's next
 message, which the mailbox shows as waiting on them, and whatever they
 write next the generalist forwards to it, resuming the sale at the stage
-it waited in.
+it waited in. A client who refuses — picks `recusar`, or says they will not
+go ahead — has decided: the seller marks the proposal lost, with why in
+their words, and calls `break` with a report that closes it, never `wait`.
 
 The project must configure the logical `owner` request route used by discounts
 and contract decisions. For the authenticated conversation origin:
