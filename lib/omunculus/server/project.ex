@@ -1,6 +1,9 @@
 defmodule Omunculus.Server.Project do
   @moduledoc """
   Owns one project's connection and run cycle for the lifetime of the server.
+  The process only opens and closes them: it keeps the project as its
+  registry value, and every read and command runs in the process that asks
+  for it, so none waits behind another but on the store connection itself.
   """
 
   use GenServer
@@ -9,84 +12,126 @@ defmodule Omunculus.Server.Project do
   alias Omunculus.Store.Access
 
   def start_link({id, config_path, global_limits}) do
-    GenServer.start_link(__MODULE__, {config_path, global_limits},
-      name: {:via, Registry, {Omunculus.Server.Registry, id}}
-    )
+    GenServer.start_link(__MODULE__, {id, config_path, global_limits}, name: via(id))
   end
 
+  @doc """
+  Runs a command in the calling process. Commands with the same
+  `command_id` of one principal run one after another, so a repeated one
+  replays the receipt the first left.
+  """
   def command(id, name, args, principal, conversation_id, command_id) do
-    GenServer.call(
-      via(id),
-      {:command, name, args, principal, conversation_id, command_id},
-      :infinity
-    )
+    project = project(id)
+
+    :global.trans({{__MODULE__, id, principal, command_id}, self()}, fn ->
+      run_command(project, name, args, principal, conversation_id, command_id)
+    end)
   end
 
   def create_conversation(id, principal, command_id),
-    do: GenServer.call(via(id), {:create_conversation, principal, command_id})
+    do: Access.create_conversation(project(id), principal, command_id)
 
-  def conversations(id, principal), do: GenServer.call(via(id), {:conversations, principal})
+  def conversations(id, principal), do: Access.conversations(project(id), principal)
 
   @doc "Whether `principal` sees the project."
-  def visible?(id, principal), do: GenServer.call(via(id), {:visible, principal})
+  def visible?(id, principal), do: Access.visible?(project(id), principal)
 
   @doc "The project's local socket."
-  def socket(id), do: GenServer.call(via(id), :socket)
+  def socket(id) do
+    with {:ok, config} <- Config.load(project(id).config_path),
+         do: {:ok, Omunculus.Server.Socket.path(config.store.path)}
+  end
 
   def conversation(id, principal, conversation_id),
-    do: GenServer.call(via(id), {:conversation, principal, conversation_id})
+    do: Access.conversation(project(id), principal, conversation_id)
 
   def events(id, principal, conversation_id, cursor),
-    do: GenServer.call(via(id), {:events, principal, conversation_id, cursor})
+    do: Access.events(project(id), principal, conversation_id, cursor)
 
   @doc "The events after `cursor` of every conversation `principal` may read, with their ids."
   def project_events(id, principal, cursor),
-    do: GenServer.call(via(id), {:project_events, principal, cursor})
+    do: Access.project_events(project(id), principal, cursor)
 
   @doc "The works of every conversation `principal` may read, those in `state` alone when given."
-  def works(id, principal, state), do: GenServer.call(via(id), {:works, principal, state})
+  def works(id, principal, state), do: Access.works(project(id), principal, state)
 
   @doc """
   Keeps the files of a message `principal` may send to `conversation_id`,
   each `{name, media_type, content}`, and gives what describes each.
   """
-  def attach(id, principal, conversation_id, files),
-    do: GenServer.call(via(id), {:attach, principal, conversation_id, files})
+  def attach(id, principal, conversation_id, files) do
+    project = project(id)
+
+    with :ok <- Access.check(project, principal, "conversation.send", conversation_id),
+         {:ok, config} <- Config.load(project.config_path) do
+      Enum.reduce_while(files, {:ok, []}, fn {name, media_type, content}, {:ok, kept} ->
+        case Attachments.put(config.store, name, media_type, content) do
+          {:ok, meta} -> {:cont, {:ok, kept ++ [meta]}}
+          error -> {:halt, error}
+        end
+      end)
+    end
+  end
 
   @doc "The attachment of `sha256` in `conversation_id`, with the file kept for it."
-  def attachment(id, principal, conversation_id, sha256),
-    do: GenServer.call(via(id), {:attachment, principal, conversation_id, sha256})
+  def attachment(id, principal, conversation_id, sha256) do
+    project = project(id)
+
+    with :ok <- Access.check(project, principal, "conversation.read", conversation_id),
+         {:ok, attached} <- Store.attachments(project.conn, conversation_id),
+         %{} = meta <- Enum.find(attached, &(&1["sha256"] == sha256)) || {:error, :not_found},
+         {:ok, config} <- Config.load(project.config_path),
+         {:ok, path} <- Attachments.path(config.store, sha256) do
+      {:ok, meta, path}
+    end
+  end
 
   @doc "The file of an agent's image, for a principal who sees the project."
-  def agent_image(id, principal, agent),
-    do: GenServer.call(via(id), {:agent_image, principal, agent})
+  def agent_image(id, principal, agent) do
+    project = project(id)
+
+    with {:ok, true} <- Access.visible?(project, principal),
+         {:ok, config} <- Config.load(project.config_path),
+         %{image: path} when is_binary(path) <- Map.get(config.agents, agent) do
+      {:ok, path}
+    else
+      {:ok, false} -> {:error, :not_found}
+      {:error, _reason} = error -> error
+      _ -> {:error, :not_found}
+    end
+  end
 
   @doc "Subscribes the calling process to the project's store announcements."
-  def subscribe(id), do: Store.subscribe(GenServer.call(via(id), :project).conn)
+  def subscribe(id), do: Store.subscribe(project(id).conn)
 
   @doc """
   Runs a command line in the calling process as one command of the
   project's cycle, returning once the runs it opened have finished.
   """
-  def cli(id, argv),
-    do: via(id) |> GenServer.call(:project) |> Cycle.command(nil, &CLI.in_project(&1, argv))
+  def cli(id, argv), do: Cycle.command(project(id), nil, &CLI.in_project(&1, argv))
 
   def list(id, principal, conversation_id, kind),
-    do: GenServer.call(via(id), {:list, principal, conversation_id, kind})
+    do: Access.list(project(id), principal, conversation_id, kind)
 
   def snapshot(id, principal, conversation_id),
-    do: GenServer.call(via(id), {:snapshot, principal, conversation_id})
+    do: Access.snapshot(project(id), principal, conversation_id)
 
   def put_member(id, actor, target, role, conversation_id),
-    do: GenServer.call(via(id), {:put_member, actor, target, role, conversation_id})
+    do: Access.put_member(project(id), actor, target, role, conversation_id)
 
   def remove_member(id, actor, target, conversation_id),
-    do: GenServer.call(via(id), {:remove_member, actor, target, conversation_id})
+    do: Access.remove_member(project(id), actor, target, conversation_id)
 
   defp via(id), do: {:via, Registry, {Omunculus.Server.Registry, id}}
 
+  # The project the process opened, which it keeps as its registry value.
+  defp project(id) do
+    [{_pid, %Project{} = project}] = Registry.lookup(Omunculus.Server.Registry, id)
+    project
+  end
+
   @impl true
-  def init({config_path, global_limits}) do
+  def init({id, config_path, global_limits}) do
     with {:ok, config} <- Config.load(config_path),
          :ok <- require_access(config),
          {:ok, project} <- Project.open(config, lock: true),
@@ -94,6 +139,7 @@ defmodule Omunculus.Server.Project do
          {:ok, cycle} <- Cycle.start_link(project),
          project = %{project | cycle: cycle},
          :ok <- Run.recover(project) do
+      {_project, _nil} = Registry.update_value(Omunculus.Server.Registry, id, fn _ -> project end)
       {:ok, project}
     else
       {:error, reason} -> {:stop, reason}
@@ -102,107 +148,6 @@ defmodule Omunculus.Server.Project do
 
   defp require_access(%{access: access}) when is_map(access), do: :ok
   defp require_access(_), do: {:error, :access_required}
-
-  @impl true
-  def handle_call({:create_conversation, principal, command_id}, _from, project) do
-    {:reply, Access.create_conversation(project, principal, command_id), project}
-  end
-
-  def handle_call({:conversations, principal}, _from, project) do
-    {:reply, Access.conversations(project, principal), project}
-  end
-
-  def handle_call({:conversation, principal, id}, _from, project) do
-    {:reply, Access.conversation(project, principal, id), project}
-  end
-
-  def handle_call({:events, principal, id, cursor}, _from, project) do
-    {:reply, Access.events(project, principal, id, cursor), project}
-  end
-
-  def handle_call({:project_events, principal, cursor}, _from, project) do
-    {:reply, Access.project_events(project, principal, cursor), project}
-  end
-
-  def handle_call({:works, principal, state}, _from, project) do
-    {:reply, Access.works(project, principal, state), project}
-  end
-
-  def handle_call(:project, _from, project), do: {:reply, project, project}
-
-  def handle_call({:attach, principal, conversation_id, files}, _from, project) do
-    reply =
-      with :ok <- Access.check(project, principal, "conversation.send", conversation_id),
-           {:ok, config} <- Config.load(project.config_path) do
-        Enum.reduce_while(files, {:ok, []}, fn {name, media_type, content}, {:ok, kept} ->
-          case Attachments.put(config.store, name, media_type, content) do
-            {:ok, meta} -> {:cont, {:ok, kept ++ [meta]}}
-            error -> {:halt, error}
-          end
-        end)
-      end
-
-    {:reply, reply, project}
-  end
-
-  def handle_call({:attachment, principal, conversation_id, sha256}, _from, project) do
-    reply =
-      with :ok <- Access.check(project, principal, "conversation.read", conversation_id),
-           {:ok, attached} <- Store.attachments(project.conn, conversation_id),
-           %{} = meta <- Enum.find(attached, &(&1["sha256"] == sha256)) || {:error, :not_found},
-           {:ok, config} <- Config.load(project.config_path),
-           {:ok, path} <- Attachments.path(config.store, sha256) do
-        {:ok, meta, path}
-      end
-
-    {:reply, reply, project}
-  end
-
-  def handle_call({:agent_image, principal, agent}, _from, project) do
-    reply =
-      with {:ok, true} <- Access.visible?(project, principal),
-           {:ok, config} <- Config.load(project.config_path),
-           %{image: path} when is_binary(path) <- Map.get(config.agents, agent) do
-        {:ok, path}
-      else
-        {:ok, false} -> {:error, :not_found}
-        {:error, _reason} = error -> error
-        _ -> {:error, :not_found}
-      end
-
-    {:reply, reply, project}
-  end
-
-  def handle_call({:visible, principal}, _from, project),
-    do: {:reply, Access.visible?(project, principal), project}
-
-  def handle_call(:socket, _from, project) do
-    reply =
-      with {:ok, config} <- Config.load(project.config_path),
-           do: {:ok, Omunculus.Server.Socket.path(config.store.path)}
-
-    {:reply, reply, project}
-  end
-
-  def handle_call({:list, principal, id, kind}, _from, project) do
-    {:reply, Access.list(project, principal, id, kind), project}
-  end
-
-  def handle_call({:snapshot, principal, id}, _from, project) do
-    {:reply, Access.snapshot(project, principal, id), project}
-  end
-
-  def handle_call({:put_member, actor, target, role, id}, _from, project) do
-    {:reply, Access.put_member(project, actor, target, role, id), project}
-  end
-
-  def handle_call({:remove_member, actor, target, id}, _from, project) do
-    {:reply, Access.remove_member(project, actor, target, id), project}
-  end
-
-  def handle_call({:command, name, args, principal, conversation_id, command_id}, _from, project) do
-    {:reply, run_command(project, name, args, principal, conversation_id, command_id), project}
-  end
 
   defp run_command(project, name, args, principal, conversation_id, command_id) do
     hash =

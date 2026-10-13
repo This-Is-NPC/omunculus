@@ -51,6 +51,9 @@ defmodule Omunculus.Server.EventStream do
     {:push, {:ping, ""}, state}
   end
 
+  # The stream traps exits; a read's file handles end normally.
+  def handle_info({:EXIT, _pid, :normal}, state), do: {:ok, state}
+
   @impl true
   def terminate(_reason, state), do: StreamLimiter.release(state.stream_key)
 

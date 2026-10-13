@@ -559,6 +559,88 @@ defmodule Omunculus.ServerTest do
     :ok = Supervisor.stop(server)
   end
 
+  defmodule HeldHook do
+    @moduledoc "A hook that, while a process is registered as `:held_hook`, waits for its `:release`."
+
+    def run(_input) do
+      case Process.whereis(:held_hook) do
+        nil ->
+          :ok
+
+        test ->
+          send(test, {:held, self()})
+          receive do: (:release -> :ok)
+      end
+
+      Omunculus.Tools.Out.ok()
+    end
+  end
+
+  test "a command held in its hooks keeps neither reads nor other commands waiting" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(project_path, File.read!(project_path) <> "\n" <> @access)
+    hook_dir = Path.join([dir, "tools", "hold-prompt"])
+    File.mkdir_p!(hook_dir)
+
+    File.write!(Path.join(hook_dir, "hook.toml"), """
+    name = "hold-prompt"
+    kind = "hook"
+    events = ["prompt"]
+    module = "#{inspect(HeldHook)}"
+    """)
+
+    {server, local} = serve_local(dir, project_path)
+    quick = &local.(&1, &2, [receive_timeout: 2_000] ++ &3)
+
+    created =
+      local.(:post, "/v1/projects/solo/conversations",
+        headers: [{"idempotency-key", "c1"}],
+        json: %{}
+      )
+
+    conversation = "/v1/projects/solo/conversations/#{created.body["id"]}"
+    Process.register(self(), :held_hook)
+
+    hold = fn ->
+      Task.async(fn ->
+        local.(:post, conversation <> "/messages",
+          headers: [{"idempotency-key", "m1"}],
+          json: %{message: "hold", agent: "concierge"}
+        )
+      end)
+    end
+
+    held = hold.()
+    assert_receive {:held, hook}, 5_000
+    Process.unregister(:held_hook)
+    # The same command again, while the first is still held, replays it.
+    repeated = hold.()
+
+    assert quick.(:get, conversation <> "/snapshot", []).status == 200
+    assert quick.(:get, conversation <> "/events", []).status == 200
+
+    other =
+      quick.(:post, "/v1/projects/solo/conversations",
+        headers: [{"idempotency-key", "c2"}],
+        json: %{}
+      )
+
+    assert other.status == 201
+
+    assert quick.(:post, "/v1/projects/solo/conversations/#{other.body["id"]}/messages",
+             headers: [{"idempotency-key", "m2"}],
+             json: %{message: "go", agent: "concierge"}
+           ).status == 202
+
+    send(hook, :release)
+    assert %{status: 202, body: body} = Task.await(held)
+    assert %{status: 202, body: ^body} = Task.await(repeated)
+
+    :ok = Supervisor.stop(server)
+  end
+
   test "each project is served to the local user on a socket next to its store" do
     dir = Fixtures.tmp_dir()
     Fixtures.install_default(dir)
