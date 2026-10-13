@@ -22,7 +22,7 @@ Item {
   property real topInset: 0
   property real bottomInset: 0
 
-  readonly property real zoomLevel: world.scale
+  readonly property real zoomLevel: canvas.zoomLevel
   readonly property var picked: chart.nodes.find(node => node.id === pickedId) || null
   property string pickedId: ""
 
@@ -121,58 +121,13 @@ Item {
     return chart
   }
 
-  // Frames the chart in the room the rail, the bar, the footer and an open
-  // inspector leave: whole, unless that would make it too small to read, in
-  // which case it starts from its top left at the smallest readable size.
-  function fit() {
-    const right = inspector.open ? inspector.width + 20 : 0
-    const room = Qt.size(width - leftInset - right - 40, height - topInset - bottomInset - 40)
-    if (chart.width <= 0 || room.width <= 0 || room.height <= 0)
-      return
-    const scale = Math.max(readable, Math.min(1.2, room.width / chart.width, room.height / chart.height))
-    world.scale = scale
-    world.x = leftInset + 20 + Math.max(0, (room.width - chart.width * scale) / 2)
-    world.y = topInset + 20 + Math.max(0, (room.height - chart.height * scale) / 2)
-    moved = false
-    if (picked)
-      bringIntoView(picked)
-  }
-  // The smallest scale fitting goes to: below it the cards no longer read.
-  readonly property real readable: 0.45
-  // Whether the canvas was moved or zoomed by hand since it was framed; until
-  // then it is framed again when the window changes size.
-  property bool moved: false
-  onWidthChanged: if (!moved) Qt.callLater(fit)
-  onHeightChanged: if (!moved) Qt.callLater(fit)
-
-  // Brings the node picked into the room left of the inspector.
-  function bringIntoView(node) {
-    const right = width - inspector.width - 40
-    const x = world.x + node.x * world.scale
-    const y = world.y + node.y * world.scale
-    if (x + node.width * world.scale > right)
-      world.x -= x + node.width * world.scale - right
-    if (x < leftInset + 20)
-      world.x += leftInset + 20 - x
-    if (y < topInset + 20)
-      world.y += topInset + 20 - y
-    if (y + node.height * world.scale > height - bottomInset - 20)
-      world.y -= y + node.height * world.scale - (height - bottomInset - 20)
-  }
-  onPickedChanged: if (picked) Qt.callLater(() => bringIntoView(picked))
-
-  // Zooms by `factor` keeping the point (px, py) of the view where it is.
-  function zoom(factor, px, py) {
-    const scale = Math.max(0.15, Math.min(2.5, world.scale * factor))
-    const ratio = scale / world.scale
-    world.x = px - (px - world.x) * ratio
-    world.y = py - (py - world.y) * ratio
-    world.scale = scale
-    moved = true
-  }
-  function zoomIn() { zoom(1.2, width / 2, height / 2) }
-  function zoomOut() { zoom(1 / 1.2, width / 2, height / 2) }
-  function actualSize() { zoom(1 / world.scale, width / 2, height / 2) }
+  // Its framing and zoom, as the canvas does them.
+  function fit() { canvas.fit() }
+  function zoomIn() { canvas.zoomIn() }
+  function zoomOut() { canvas.zoomOut() }
+  function actualSize() { canvas.actualSize() }
+  function bringIntoView(node) { canvas.bringIntoView(node) }
+  onPickedChanged: if (picked) Qt.callLater(() => canvas.bringIntoView(picked))
 
   // Coming back to the flow decodes it again and sweeps it.
   function reveal(item) {
@@ -182,103 +137,23 @@ Item {
       reveal(child)
     }
   }
-  onVisibleChanged: if (visible) { reveal(world); sweep.restart() }
+  onVisibleChanged: if (visible) { reveal(canvas.world); sweep.restart() }
 
   property bool fitted: false
   onChartChanged: if (!fitted && chart.nodes.length > 0) { fitted = true; Qt.callLater(fit); sweep.restart() }
   onProjectIdChanged: { fitted = false; pickedId = "" }
 
-  // The canvas's dots, a brighter cross every fifth, moving with it.
-  Canvas {
-    id: grid
+  FlowCanvas {
+    id: canvas
     anchors.fill: parent
-    onPaint: {
-      const context = getContext("2d")
-      context.reset()
-      const step = 28 * world.scale
-      if (step < 6)
-        return
-      const ox = ((world.x % step) + step) % step
-      const oy = ((world.y % step) + step) % step
-      const col = Math.round((world.x - ox) / step)
-      const row = Math.round((world.y - oy) / step)
-      // Far out, only the crosses stay.
-      const dots = step >= 12
-      for (let i = 0, x = ox; x < width; x += step, i++)
-        for (let j = 0, y = oy; y < height; y += step, j++) {
-          const major = (i - col) % 5 === 0 && (j - row) % 5 === 0
-          if (!major && !dots)
-            continue
-          context.fillStyle = String(major ? Qt.alpha(Theme.primary, 0.22) : Qt.alpha(Theme.foreground, 0.09))
-          if (major) {
-            context.fillRect(x - 3, y, 7, 1)
-            context.fillRect(x, y - 3, 1, 7)
-          } else {
-            context.fillRect(x, y, 1, 1)
-          }
-        }
-    }
-    Connections {
-      target: world
-      function onXChanged() { grid.requestPaint() }
-      function onYChanged() { grid.requestPaint() }
-      function onScaleChanged() { grid.requestPaint() }
-    }
-    Connections {
-      target: Theme
-      function onPrimaryChanged() { grid.requestPaint() }
-    }
-  }
-
-  // Dragging the canvas moves it; the wheel zooms around the pointer.
-  MouseArea {
-    anchors.fill: parent
-    property point last
-    cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-    onPressed: mouse => last = Qt.point(mouse.x, mouse.y)
-    onPositionChanged: mouse => {
-      world.x += mouse.x - last.x
-      world.y += mouse.y - last.y
-      flow.moved = true
-      last = Qt.point(mouse.x, mouse.y)
-    }
-    onClicked: flow.pickedId = ""
-    // A wheel zooms; a touchpad's two fingers move the canvas, and zoom
-    // with Ctrl held.
-    onWheel: wheel => {
-      if (wheel.pixelDelta.x === 0 && wheel.pixelDelta.y === 0 || wheel.modifiers & Qt.ControlModifier) {
-        flow.zoom(Math.pow(1.0015, wheel.angleDelta.y), wheel.x, wheel.y)
-      } else {
-        world.x += wheel.pixelDelta.x
-        world.y += wheel.pixelDelta.y
-        flow.moved = true
-      }
-    }
-  }
-
-  // Two fingers pinch the canvas nearer or farther, around them.
-  PinchHandler {
-    target: null
-    property real last: 1
-    onActiveChanged: last = 1
-    onActiveScaleChanged: {
-      flow.zoom(activeScale / last, centroid.position.x, centroid.position.y)
-      last = activeScale
-    }
-  }
-
-  Item {
-    id: world
-    transformOrigin: Item.TopLeft
-    width: flow.chart.width
-    height: flow.chart.height
-    // Below its actual size, the chart is drawn at that size and then
-    // reduced as an image is, through mipmaps, so its outlines, lines and
-    // text stay smooth instead of losing pixels; above it, it is drawn at
-    // the size it shows.
-    layer.enabled: scale < 1
-    layer.smooth: true
-    layer.mipmap: true
+    contentWidth: flow.chart.width
+    contentHeight: flow.chart.height
+    leftInset: flow.leftInset
+    topInset: flow.topInset
+    bottomInset: flow.bottomInset
+    rightInset: inspector.open ? inspector.width + 20 : 0
+    onBackgroundClicked: flow.pickedId = ""
+    onFramed: if (flow.picked) canvas.bringIntoView(flow.picked)
 
     // Each workspace's zone, with its strip: name, folder, its own lists.
     Repeater {

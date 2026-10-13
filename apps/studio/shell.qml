@@ -3,28 +3,6 @@ import Quickshell
 import "kit/ui"
 
 ShellRoot {
-  // An icon pressed on its own, without a frame, as the zoom's are; the
-  // keyboard reaches it and Enter or Space presses it.
-  component Glyph: Item {
-    id: glyph
-    property string name
-    signal clicked()
-    width: 36
-    height: 36
-    activeFocusOnTab: true
-    Keys.onReturnPressed: clicked()
-    Keys.onSpacePressed: clicked()
-    Icon {
-      anchors.centerIn: parent
-      name: glyph.name
-      size: 12
-      color: pointer.containsMouse || glyph.activeFocus ? Theme.primary : Theme.dim
-      Behavior on color { ColorAnimation { duration: 150 } }
-    }
-    MouseArea { id: pointer; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: glyph.clicked() }
-    FocusRing {}
-  }
-
   // A word pressed as a link, as the projects in the corner are; the
   // keyboard reaches it, and its hit area is larger than its letters.
   component Link: DecodeLabel {
@@ -190,40 +168,10 @@ ShellRoot {
         }
       }
 
-      // How near the canvas is, and the ways to bring it nearer, farther, to
-      // its actual size (pressing the number) or all in view.
-      Rectangle {
+      ZoomControl {
         anchors { right: parent.right; rightMargin: 20; verticalCenter: footer.verticalCenter }
         visible: window.page === 0
-        width: zoomRow.implicitWidth
-        height: 36
-        color: Qt.alpha(Theme.background, 0.94)
-        border.color: Theme.line
-        Row {
-          id: zoomRow
-          height: parent.height
-          Glyph { name: "chevron-down"; onClicked: flow.zoomOut() }
-          Item {
-            id: actual
-            width: 76
-            height: parent.height
-            activeFocusOnTab: true
-            Keys.onReturnPressed: flow.actualSize()
-            Keys.onSpacePressed: flow.actualSize()
-            DecodeLabel {
-              anchors.centerIn: parent
-              value: Math.round(flow.zoomLevel * 100) + " %"
-              autoPlay: false
-              color: zoomPointer.containsMouse || actual.activeFocus ? Theme.primary : Theme.foreground
-              font.pixelSize: 12
-              font.letterSpacing: 2
-            }
-            MouseArea { id: zoomPointer; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: flow.actualSize() }
-            FocusRing {}
-          }
-          Glyph { name: "chevron-up"; onClicked: flow.zoomIn() }
-          Glyph { name: "map"; onClicked: flow.fit() }
-        }
+        target: flow
       }
 
       // 1 to 8, or Ctrl with them, choose a section (a field being written keeps its digits); Ctrl+Tab and Ctrl+Shift+Tab turn the carousel.
