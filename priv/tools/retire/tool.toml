@@ -1,0 +1,18 @@
+name = "retire"
+kind = "tool"
+triggers = ["model"]
+description = "Cancels a work below yours that broke and that you no longer want, with the report as its last comment, so you can hand out what must come first and a new work after it. The run goes on."
+tags = ["sequence", "work"]
+groups = ["sequence"]
+module = "Omunculus.Tools.Retire"
+
+[parameters]
+type = "object"
+required = ["work_id", "report"]
+
+[parameters.properties.work_id]
+type = "string"
+
+[parameters.properties.report]
+type = "string"
+description = "Why the work is no longer wanted and what replaces it."

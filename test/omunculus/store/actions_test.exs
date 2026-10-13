@@ -1115,6 +1115,59 @@ defmodule Omunculus.Store.ActionsTest do
     end
   end
 
+  describe "retire action" do
+    defp retire_emit(work_id, body \\ "the page comes first"),
+      do: %{"type" => "retire", "body" => %{"work_id" => work_id, "body" => body}}
+
+    test "cancels a broken child with the report, after which the parent may delegate",
+         %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works)
+      child_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, state: "waiting"})
+      ctx = %{@ctx | run_id: Fixtures.insert(conn, :runs), work_id: parent_id}
+      delegate = %{"type" => "delegate", "body" => %{"title" => "fix", "goal" => "g"}}
+
+      assert {:ok, [_tool_event, event, _delegated]} =
+               record_tool(conn, [retire_emit(child_id), delegate], ctx)
+
+      assert event.type == "cancel"
+      assert event.work_id == child_id
+      assert Jason.decode!(event.body) == %{"body" => "the page comes first", "parent_id" => nil}
+
+      assert {:ok, %{state: "cancelled"}} =
+               Query.one(conn, "SELECT * FROM works WHERE id = ?", [child_id])
+
+      assert {:ok, [%{body: "the page comes first"}]} =
+               Query.all(conn, "SELECT * FROM comments WHERE work_id = ?", [child_id])
+    end
+
+    test "leaves the parent open, or waiting on its other children not back", %{conn: conn} do
+      for {sibling, state, waiting} <- [{"done", "open", nil}, {"open", "waiting", "child"}] do
+        parent_id = Fixtures.insert(conn, :works)
+        child_id = Fixtures.insert(conn, :works, %{parent_id: parent_id, state: "waiting"})
+        Fixtures.insert(conn, :works, %{parent_id: parent_id, state: sibling})
+        ctx = %{@ctx | run_id: Fixtures.insert(conn, :runs), work_id: parent_id}
+
+        assert {:ok, _events} = record_tool(conn, [retire_emit(child_id)], ctx)
+
+        assert {:ok, %{state: ^state, waiting: ^waiting}} =
+                 Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id])
+      end
+    end
+
+    test "refuses a work that is not a broken child of the run's work", %{conn: conn} do
+      parent_id = Fixtures.insert(conn, :works)
+      working = Fixtures.insert(conn, :works, %{parent_id: parent_id, state: "open"})
+      finished = Fixtures.insert(conn, :works, %{parent_id: parent_id, state: "done"})
+      stranger = Fixtures.insert(conn, :works, %{state: "waiting"})
+      ctx = %{@ctx | run_id: Fixtures.insert(conn, :runs), work_id: parent_id}
+
+      assert {:error, {:retire, :not_broken}} = record_tool(conn, [retire_emit(working)], ctx)
+      assert {:error, {:retire, :not_broken}} = record_tool(conn, [retire_emit(finished)], ctx)
+      assert {:error, {:retire, :not_a_child}} = record_tool(conn, [retire_emit(stranger)], ctx)
+      assert {:error, {:retire, :no_body}} = record_tool(conn, [retire_emit(working, "")], ctx)
+    end
+  end
+
   describe "break action" do
     for {label, stage} <- [{"without a workflow", nil}, {"with a workflow", "to_do"}] do
       test "#{label} parks the child with its comment and reopens the parent waiting on it", %{

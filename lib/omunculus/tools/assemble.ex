@@ -16,7 +16,7 @@ defmodule Omunculus.Tools.Assemble do
   output cut to `last_run_output_bytes` in the args when set. Then, under
   `## Children`, every work handed down from the run's work as it stands:
   its title, agent, id, workflow stage and state, a child that broke
-  marked as waiting on this run to reopen it or break the work, with its
+  marked as waiting on this run to reopen it, retire it or break the work, with its
   last comment, and a child that is done, unless it is under `## Results`,
   with its last comment, its report. Under `## Results`, what the works handed down from the run's work came back
   with since its last closed run: each child closed or cancelled since,
@@ -183,7 +183,7 @@ defmodule Omunculus.Tools.Assemble do
 
   # A waiting child with nothing to wait on broke and waits on its parent.
   defp child_state(%{state: "waiting", waiting: nil} = child, _reported) do
-    "broke, waiting on you to reopen it or to break this work" <> report(child)
+    "broke, waiting on you to reopen it, retire it or break this work" <> report(child)
   end
 
   defp child_state(%{state: "waiting", waiting: "child"}, _reported),

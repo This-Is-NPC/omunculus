@@ -289,7 +289,11 @@ defmodule Omunculus.Tools.Out do
 
   def refused({tag, {:broken_child, work_id}}) when tag in [:delegate, :continue, :end, :wait],
     do:
-      "refused: work #{work_id} below yours broke and waits on you: reopen it with instructions, or break to pass it up, before you go on"
+      "refused: work #{work_id} below yours broke and waits on you: reopen it with instructions; retire it with a report when you no longer want it — say a release that cannot pass until another work is fixed — and then hand out the fix and a new work after it; or break to pass it up, before you go on"
+
+  def refused({tag, :not_broken}) when tag in [:reopen, :retire],
+    do:
+      "refused: that work did not break and does not wait on you: only a work below yours that broke can be reopened or retired; to change what a finished work did, hand out a new work for it once no broken work waits on you"
 
   def refused({:end, :work_open}),
     do:

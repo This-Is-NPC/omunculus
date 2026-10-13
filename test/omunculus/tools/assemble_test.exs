@@ -227,7 +227,7 @@ defmodule Omunculus.Tools.AssembleTest do
                "- Plan (worker, work w2): waiting on its own works\n" <>
                "- Release (worker, work w4): done: live at http://site.example\n" <>
                "- Publish (publisher, work w3, workflow design, stage publish): " <>
-               "broke, waiting on you to reopen it or to break this work: deploy failed"
+               "broke, waiting on you to reopen it, retire it or break this work: deploy failed"
 
     # A child back since the last run has its report under ## Results alone.
     results = [Enum.at(view["children"], 2)]

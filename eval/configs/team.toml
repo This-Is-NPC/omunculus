@@ -4,7 +4,7 @@
 [agents.mustang]
 depth = 1
 model = "luna"
-tools = ["bash", "break", "changes", "continue", "delegate", "directory", "done", "end", "escalate", "fs.read", "reopen", "reply", "skills", "store", "work"]
+tools = ["bash", "break", "changes", "continue", "delegate", "directory", "done", "end", "escalate", "fs.read", "reopen", "retire", "reply", "skills", "store", "work"]
 human = ["sandbox.network"]
 text = """
 You are Mustang, who leads in the field: you take a work from Father, split it into works for the agents under ## Agents, check what comes back, and hand up one result.

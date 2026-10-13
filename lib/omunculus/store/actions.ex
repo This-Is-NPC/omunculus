@@ -17,7 +17,7 @@ defmodule Omunculus.Store.Actions do
   through. `attach` records the files a run attached to its conversation,
   as `Omunculus.Attachments` kept them, in an `attach` event; outside a run
   it is refused.
-  `continue`, `break`, `wait`, `reopen`, `delegate`, `cancel` and `end` are
+  `continue`, `break`, `wait`, `reopen`, `retire`, `delegate`, `cancel` and `end` are
   dispatched to `Actions.Sequence`; `request`, `reply` and `grant` to
   `Actions.Requests`; `notify` and `inbox.read` to `Actions.Inbox`;
   `compact` and `comment.delete` to `Actions.Comments`.
@@ -86,6 +86,9 @@ defmodule Omunculus.Store.Actions do
 
   defp dispatch(conn, %{"type" => "reopen"} = emit, ctx),
     do: Sequence.reopen(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "retire"} = emit, ctx),
+    do: Sequence.retire(conn, Map.get(emit, "body", %{}), ctx)
 
   defp dispatch(conn, %{"type" => "delegate"} = emit, ctx),
     do: Sequence.delegate(conn, Map.get(emit, "body", %{}), ctx)

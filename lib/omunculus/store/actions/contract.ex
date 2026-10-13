@@ -18,6 +18,7 @@ defmodule Omunculus.Store.Actions.Contract do
     "break" => ~w(body),
     "wait" => ~w(body),
     "reopen" => ~w(work_id body agent stage grant),
+    "retire" => ~w(work_id body),
     "delegate" => ~w(title goal agent workflow workspace),
     "notify" => ~w(body work_id),
     "inbox.read" => ~w(inbox_id),

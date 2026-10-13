@@ -241,7 +241,7 @@ keeps it as it was then, whatever the workspace does after.
 
 Actions the store will apply: `comment`, `request`, `notify`, `prompt`,
 `attach`, `inbox.read`, `escalate`, `reply`, `grant`, `cancel`, `work`, `delegate`,
-`continue`, `break`, `wait`, `end`, `compact`, `comment.delete`. A `request`
+`continue`, `break`, `wait`, `reopen`, `retire`, `end`, `compact`, `comment.delete`. A `request`
 carries a `reason` and `options`, a map from option name to a list of
 `{name, args}` tool calls. Options made only of `grant` calls whose
 names the run already has do not open a row — the output is
@@ -254,7 +254,9 @@ parent's child wait. `reply` takes `request_id`, `body`, optional `option`
 and recursive named `parts`; `grant` takes
 `request_id`, `name`, `kind` and an optional `scope`, which only a
 person may give; `cancel` takes `request_id` and cancels the request's
-work. `end` is the only action that ends the run; it needs a
+work; `retire` takes `work_id` and `body` and cancels a work below the
+run's own that broke, with the body as its comment, in a `cancel` event
+(see [A work below that broke](#a-work-below-that-broke)). `end` is the only action that ends the run; it needs a
 run. On a work's own run (no named agent) the store refuses `end` while,
 after the call's other actions, the work is still open and nothing will
 run it again: no request of the work pending, no run of it due since the
@@ -269,7 +271,7 @@ with the body as its comment; it is refused on a work below another
 (`not_root`), on a work not open, and while a child that broke waits on
 it. `continue` does not name a stage. While a child that broke waits on the
 work, the store refuses `continue`, `delegate` and `end` alike, with one
-refusal telling the model to reopen the child or break the work: `done`,
+refusal telling the model to reopen the child, retire it or break the work: `done`,
 or a tool that moves the work to its next stage, cannot close or hand on
 a work and leave the broken child parked for good. `prompt` and `attach` take
 `attachments`, each `{name, media_type, bytes, sha256}` checked against
@@ -343,6 +345,22 @@ title, agent, state, stage and goal, every comment on it, and the record
 of each of its closed runs as `## Last run` shows one, without the call
 that assembled each run's prompt. `## Children` and `## Results` name
 each child's work id.
+
+## A work below that broke
+
+A child that broke waits on its parent's run, which decides it with one
+of three model tools. `reopen` takes `work_id`, `instructions` and
+optionally `agent`, `stage` and `grant`: the work goes back to its agent,
+another of its depth, or, in a workflow, the agent of a stage up to its
+own, with the instructions as its comment; the parent waits on its
+children again and the run ends. `retire` takes `work_id` and a `report`:
+the work is cancelled with the report as its comment and the run goes
+on — the parent, free of the broken work, may hand out what must come
+first and a new work after it, or waits on its other children when some
+are not back. `break` passes the parent's own work up. Only a work that
+broke can be reopened or retired: a work that is done stays done, and
+what it did is changed by a new work. Either refuses any other work with
+`not_broken` or `not_a_child`.
 
 ## Answering a request
 

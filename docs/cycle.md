@@ -42,8 +42,8 @@ a child back makes due; so on a work's own run the store refuses `end`
 when the work would stay open with no request of it pending and no run of
 it due since the run began, and when a child that broke waits on it. The
 call fails with the refusal, which names what hands the work on (`done`,
-`ask`, `work`, `break`, on a root work `wait`, or `reopen` for the broken
-child), and the run goes on; a model that then stops without `end` is
+`ask`, `work`, `break`, on a root work `wait`, or `reopen` or `retire`
+for the broken child), and the run goes on; a model that then stops without `end` is
 retried as below. A person's next message is not something an open work
 waits for: a work that needs the person asks (`ask`, `request_access`)
 and waits on the request; a root work that only the person can move on
@@ -197,7 +197,7 @@ agent text
   last_run_output_bytes` when set), and each store action it emitted
 → under `## Children`, every work handed down from this one as it
   stands: its title, agent, id, workflow and stage, and state; a child
-  that broke is marked as waiting on this run to reopen it or break the
+  that broke is marked as waiting on this run to reopen it, retire it or break the
   work, with its last comment, the break's report, and a child that is
   done, unless it is under `## Results`, has its last comment, its report
 → under `## Results`, what the works handed down from this one came back
@@ -284,6 +284,7 @@ waiting → open:    send / prompt on a work waiting on a request, parked by bre
 open → open:       continue (chained by done) — next stage, new run
 open → done:       continue on the last stage, or on a work in no workflow
 open / waiting → cancelled: cancel, an option of a request
+waiting → cancelled: retire, by the parent a broken child waits on
 ```
 
 `break` parks the work with its report as the comment. It does not
@@ -295,10 +296,13 @@ parent waiting on its children: a `break` reopens the parent at once, a
 closing `continue` or a `cancel` once each of the parent's children is
 done or cancelled. The event that reopened the parent carries its
 `parent_id`, and the parent's next run opens. A child that broke waits
-on that run to `reopen` it or `break` the parent: until one does, the
+on that run to `reopen` it, `retire` it or `break` the parent: until one does, the
 store refuses the parent's `continue` (so `done`, or a move to the next
 stage), its `delegate` and its `end`, so the broken child is never left
-parked for good. A message to a work waiting
+parked for good. `retire` cancels the broken child with the parent's
+report as its comment; the parent's run goes on, and may delegate what
+must come first and a new work after it, or the parent waits again on
+its other children while some are not back. A message to a work waiting
 on its children leaves it waiting: it opens a run of the work's agent,
 named, which may comment, delegate more and end but not `done`, `break`
 or request, and the last child back still wakes the work. A root work is only closed,

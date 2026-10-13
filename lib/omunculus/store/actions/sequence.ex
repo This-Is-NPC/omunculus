@@ -29,7 +29,11 @@ defmodule Omunculus.Store.Actions.Sequence do
   again: no request of the work pending, no next stage or message due, or
   a child that broke waiting on it.
   `cancel` sets the work of the request named by `request_id`
-  `cancelled`, unless it is already done or cancelled.
+  `cancelled`, unless it is already done or cancelled. `retire` cancels a
+  child that broke and that the parent no longer wants, with the parent's
+  report as its comment, in a `cancel` event; the parent goes on, or
+  waits on its children again while others are not back, and with the
+  broken child gone it may delegate.
   """
 
   alias Omunculus.{Ceiling, Config}
@@ -118,7 +122,7 @@ defmodule Omunculus.Store.Actions.Sequence do
          :ok <- Helpers.ensure_text(:reopen, body, "body"),
          {:ok, parent} <- fetch_work(:reopen, conn, ctx.work_id),
          {:ok, child} <- fetch_work(:reopen, conn, body["work_id"]),
-         :ok <- broken_child(child, parent),
+         :ok <- broken_child(:reopen, child, parent),
          {:ok, {stage, assignee}} <-
            reopen_assignee(conn, ctx.config, child, body["agent"], body["stage"]),
          {:ok, grants} <- reopen_grants(conn, ctx, child, parent, assignee, body["grant"]),
@@ -201,14 +205,16 @@ defmodule Omunculus.Store.Actions.Sequence do
   defp reopen_steps(:off), do: {:error, {:reopen, :no_workflow}}
   defp reopen_steps({:error, reason}), do: {:error, {:reopen, reason}}
 
-  # A work a parent may reopen is its own child, parked by a break.
-  defp broken_child(%{parent_id: parent_id, state: "waiting", waiting: nil}, %{id: parent_id}),
-    do: :ok
+  # A work a parent may reopen or retire is its own child, parked by a break.
+  defp broken_child(_tag, %{parent_id: parent_id, state: "waiting", waiting: nil}, %{
+         id: parent_id
+       }),
+       do: :ok
 
-  defp broken_child(%{parent_id: parent_id}, %{id: parent_id}),
-    do: {:error, {:reopen, :not_broken}}
+  defp broken_child(tag, %{parent_id: parent_id}, %{id: parent_id}),
+    do: {:error, {tag, :not_broken}}
 
-  defp broken_child(_child, _parent), do: {:error, {:reopen, :not_a_child}}
+  defp broken_child(tag, _child, _parent), do: {:error, {tag, :not_a_child}}
 
   defp apply_reopen(conn, ctx, body, child, parent, {stage, assignee}) do
     comment_id = Id.new()
@@ -229,15 +235,61 @@ defmodule Omunculus.Store.Actions.Sequence do
              "UPDATE works SET state = 'open', stage = ?, assignee = ?, updated_at = ? WHERE id = ?",
              [stage, assignee, Events.now(), child.id]
            ),
-         :ok <-
-           Query.exec(
-             conn,
-             "UPDATE works SET state = 'waiting', waiting = 'child', waiting_from = ?, updated_at = ? WHERE id = ?",
-             [ctx.agent, Events.now(), parent.id]
-           ) do
+         :ok <- wait_on_children(conn, ctx, parent.id) do
       {:ok, event}
     end
   end
+
+  @spec retire(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
+  def retire(conn, body, ctx) do
+    with :ok <- ensure_context(:retire, ctx),
+         :ok <- Helpers.ensure_text(:retire, body, "body"),
+         {:ok, parent} <- fetch_work(:retire, conn, ctx.work_id),
+         {:ok, child} <- fetch_work(:retire, conn, body["work_id"]),
+         :ok <- broken_child(:retire, child, parent) do
+      apply_retire(conn, ctx, body, child, parent)
+    end
+  end
+
+  # The retired child is cancelled; a parent with other children not back
+  # waits on them again, as a reopen would leave it.
+  defp apply_retire(conn, ctx, body, child, parent) do
+    comment_id = Id.new()
+
+    with {:ok, event} <-
+           Events.append(conn, %{
+             type: "cancel",
+             run_id: ctx.run_id,
+             work_id: child.id,
+             comment_id: comment_id,
+             body: Jason.encode!(%{body: body["body"], parent_id: nil})
+           }),
+         :ok <-
+           Helpers.insert_comment(conn, comment_id, %{works: child.id}, body["body"], event, ctx),
+         :ok <-
+           Query.exec(
+             conn,
+             "UPDATE works SET state = 'cancelled', waiting_from = NULL, updated_at = ? WHERE id = ?",
+             [Events.now(), child.id]
+           ),
+         {:ok, %{undone: undone}} <-
+           Query.one(
+             conn,
+             "SELECT COUNT(*) AS undone FROM works WHERE parent_id = ? AND state NOT IN ('done', 'cancelled')",
+             [parent.id]
+           ),
+         :ok <- if(undone > 0, do: wait_on_children(conn, ctx, parent.id), else: :ok) do
+      {:ok, event}
+    end
+  end
+
+  defp wait_on_children(conn, ctx, parent_id),
+    do:
+      Query.exec(
+        conn,
+        "UPDATE works SET state = 'waiting', waiting = 'child', waiting_from = ?, updated_at = ? WHERE id = ?",
+        [ctx.agent, Events.now(), parent_id]
+      )
 
   @spec cancel(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def cancel(conn, body, ctx) do

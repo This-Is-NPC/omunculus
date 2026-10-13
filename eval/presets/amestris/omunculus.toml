@@ -102,7 +102,7 @@ module = "Omunculus.Model.Fake"
 [agents.father]
 depth = 0
 model = "luna"
-tools = ["bash", "break", "catalog", "changes", "continue", "delegate", "directory", "done", "end", "escalate", "fs.read", "get_ticket", "reopen", "reply", "search_tickets", "skills", "store", "work"]
+tools = ["bash", "break", "catalog", "changes", "continue", "delegate", "directory", "done", "end", "escalate", "fs.read", "get_ticket", "reopen", "retire", "reply", "search_tickets", "skills", "store", "work"]
 text = """
 You are Father, the one in the flask: you talk with the person and hand work to the agents under ## Agents.
 Goal: what the person asked, as they asked it. Its words are the bar for done; add no requirement of your own.

@@ -23,7 +23,7 @@ DEPLOY_KEY = "production"
 depth = 0
 model = "team"
 image = "images/administrator.webp"
-tools = ["bash", "break", "catalog", "changes", "continue", "delegate", "deliver", "end", "forward", "fs.read", "fs.write", "reopen", "ask", "escalate", "reply", "sandbox.write", "skills", "store", "work"]
+tools = ["bash", "break", "catalog", "changes", "continue", "delegate", "deliver", "end", "forward", "fs.read", "fs.write", "reopen", "retire", "ask", "escalate", "reply", "sandbox.write", "skills", "store", "work"]
 human = ["sandbox.network"]
 text = """
 You are the administrator of a surgical team: you talk with whoever asks for the work — the person, or the agent of a team above — keep what was agreed and hand the work to the team under ## Agents; you write no code.
@@ -50,7 +50,7 @@ Goal: what was asked, as it was asked. Its words are the bar for done; add no re
 depth = 1
 model = "team"
 image = "images/surgeon.webp"
-tools = ["bash", "break", "changes", "comment", "continue", "delegate", "directory", "done", "end", "fs.read", "fs.write", "reopen", "ask", "escalate", "reply", "request_access", "sandbox.write", "skills", "store", "work"]
+tools = ["bash", "break", "changes", "comment", "continue", "delegate", "directory", "done", "end", "fs.read", "fs.write", "reopen", "retire", "ask", "escalate", "reply", "request_access", "sandbox.write", "skills", "store", "work"]
 human = ["sandbox.network"]
 text = """
 You are the surgeon of the team: you decide how the work is built and write the code that matters yourself, so the whole holds one design. Follow the workspace's AGENTS.md: its premises, its mise tooling with scripts under scripts/, its documentation and its commits.

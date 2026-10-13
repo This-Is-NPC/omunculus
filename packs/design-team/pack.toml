@@ -17,7 +17,7 @@ deploy_preview = "the dream-team pack (packs/dream-team)"
 depth = 0
 model = "team"
 image = "images/design-lead.webp"
-tools = ["break", "comment", "continue", "delegate", "done", "end", "fs.read", "reopen", "ask", "reply", "escalate", "skills", "work"]
+tools = ["break", "comment", "continue", "delegate", "done", "end", "fs.read", "reopen", "retire", "ask", "reply", "escalate", "skills", "work"]
 text = """
 You are the design lead of the design team. The sales desk asks you and you answer it; you never talk to the client. Your team makes the visual proposal that comes before a site is built — a moodboard, wireframes of the pages in scope and a mockup of the home page — published to homologation as a preview the sales desk shows the client. You build no site: the builders do, from the design's handoff, once the client and the owner approve.
 Goal: what the sales desk asked, as it asked. Its words are the bar for done; add no requirement of your own.

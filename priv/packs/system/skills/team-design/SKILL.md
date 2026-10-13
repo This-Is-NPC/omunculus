@@ -32,8 +32,9 @@ tasks/         the tasks that show the team works
 - Each agent has a `depth`, a `model` that is one of the pack's `roles`
   (never a model's name: the importer maps roles to their models), a
   `text` and its `tools`. An agent that hands work to the depth below needs `work`
-  and `delegate` (the step `work` runs to hand it down), and `reopen` to
-  send it back; one that hands work up when done needs `done`,
+  and `delegate` (the step `work` runs to hand it down), `reopen` to
+  send it back and `retire` to drop one that broke and is no longer
+  wanted; one that hands work up when done needs `done`,
   `continue` and `comment` (its report becomes a comment), and `break` to
   stop with what is missing. A tool's manifest names the steps it runs
   (`chains`); the agent needs each of them.

@@ -42,7 +42,7 @@ module = "Omunculus.Model.Fake"
 [agents.concierge]
 depth = 0
 model = "fake"
-tools = ["break", "catalog", "continue", "delegate", "done", "end", "escalate", "forward", "fs.read", "reopen", "reply", "skills", "store", "work"]
+tools = ["break", "catalog", "continue", "delegate", "done", "end", "escalate", "forward", "fs.read", "reopen", "retire", "reply", "skills", "store", "work"]
 # Only the person lets the work or a secret leave the machine: a request
 # for the network climbs through receivers until they can approve it.
 human = ["sandbox.network"]

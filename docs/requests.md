@@ -90,7 +90,7 @@ proposals reach the person directly instead of being reworded on the way.
 | `escalate` | One question linked to distinct named received origins, preserving their options and permission targets. |
 | `reply` | Nonempty body, optional selected option, optional recursive named parts. Chosen option calls execute transactionally through the common chain path. |
 | `grant`, `cancel` | Chain-only effects of a selected reply option, targeting the original request. |
-| `break`, `reopen` | Stop failed work and return it for correction. A resumable question uses a request rather than a break/reopen round trip. |
+| `break`, `reopen`, `retire` | Stop failed work, return it for correction, or retire it when the parent no longer wants it. A resumable question uses a request rather than a break/reopen round trip. |
 | `wait` | A root work that only the person can move on later — a decision they will think over, something they will send — waits for their next message rather than asking again: their answer stays the answer, and the message reopens the work. A work below another cannot wait on a message. |
 | `promote` approval | The release agent requests permission with `request_access`; it follows the configured chain. Intermediaries must escalate: an agent cannot answer a request containing a sealed grant option, including with deny or text. Only the human decides; the pack's `promote` tool publishes once its grant makes it available. |
 | `propose_config`, `propose_pack` | Validated proposals whose apply option calls configure or pack with revision checks, always on the logical `owner` route. A text reply records advice without applying the proposal. |
