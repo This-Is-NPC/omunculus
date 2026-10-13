@@ -84,7 +84,11 @@ defmodule Omunculus.Run do
 
   defp interrupt(project, run) do
     with {:ok, _model} <-
-           Store.record_model(project.conn, run.id, "Run interrupted by server restart."),
+           Store.record_model(
+             project.conn,
+             run.id,
+             "Run interrupted: the process running it stopped."
+           ),
          {:ok, closed} <- Store.close_run(project.conn, run.id),
          do: Harness.follow_up(project, [closed])
   end

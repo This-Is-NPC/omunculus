@@ -10,10 +10,13 @@ defmodule Omunculus.CLI do
   returns once every run the call opened, transitively, has finished;
   the error of any of them fails the command, several one per line.
   When a server owns the project, the command line goes to it over the
-  project's local socket and is answered the same way.
+  project's local socket and is answered the same way. Taking the
+  project's lock itself, the command first recovers what a process that
+  stopped left (`Run.recover/1`), and returns once those runs have
+  finished too.
   """
 
-  alias Omunculus.{Config, Harness, Operations, Project}
+  alias Omunculus.{Config, Cycle, Harness, Operations, Project, Run}
   alias Omunculus.Server.Socket
   alias Omunculus.Store.Access
   alias Omunculus.Tool.{Catalog, Manifest}
@@ -201,7 +204,9 @@ defmodule Omunculus.CLI do
     case Project.open(config, lock: true) do
       {:ok, project} ->
         try do
-          in_project(project, argv)
+          Cycle.run(project, nil, fn project ->
+            with :ok <- Run.recover(project), do: in_project(project, argv)
+          end)
         after
           Project.close(project)
         end

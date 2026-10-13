@@ -222,8 +222,9 @@ that owns it: a run waiting for its work's turn or for a slot of
 process stopped before making them due. Nothing records them as such.
 The store says what they were: every run names, as its `cause_id`, the
 event that made it due, and its `start-run` says whether it is the
-work's own run (`own`) or a named agent's. The server, opening a
-project, recovers it in this order:
+work's own run (`own`) or a named agent's. The server opening a
+project, and a direct command taking its lock, recover it in this
+order:
 
 ```text
 every run left open: a model event saying it was interrupted, then end-run
@@ -318,7 +319,7 @@ answer that closes leaving pending the origins the answer returned to it:
 they go on together, under the part names they had. At the root it reaches
 the authenticated human and writes an inbox notification naming that
 upstream request. An already escalated origin does not trigger a second
-escalation. The server, opening a project, does the same for every request
+escalation. Opening a project, the server or a direct command does the same for every request
 still pending at an agent whose last run for it closed: the process that
 closed it stopped before its follow-up. A request an answer returned to
 the agent after that run began is not passed on: the answer's run,

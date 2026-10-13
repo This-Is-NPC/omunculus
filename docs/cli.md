@@ -52,6 +52,12 @@ project's `[access]` then applies to the local user, who needs a
 membership. A project held by another direct command is refused as in
 use.
 
+A command that takes the project's lock itself first recovers what a
+process that stopped left, as the server does when it opens the project
+([the cycle](cycle.md#a-process-that-stops)): it closes the runs left
+open and makes due again the runs that never began, and returns once
+those have finished too, failing with their errors as with its own.
+
 `omunculus --config <project.toml> access bootstrap --issuer <issuer> --subject <subject>` seeds the first project administrator. It requires ownership of the project config file and an empty project membership table. `omunculus serve --config <server.toml>` starts the optional HTTP server; see [the server guide](server.md).
 
 ## `omunculus preset`

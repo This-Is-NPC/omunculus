@@ -187,7 +187,7 @@ defmodule Omunculus.Tools.Runs do
   defp decoded(%{body: body}), do: Jason.decode!(body)
 
   # A model event's body is the reply as JSON, or plain text, as the
-  # harness records a run the server's restart interrupted.
+  # harness records a run whose process stopped.
   defp reply(body) do
     case Jason.decode(body) do
       {:ok, reply} when is_map(reply) -> reply

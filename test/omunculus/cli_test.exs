@@ -238,6 +238,25 @@ defmodule Omunculus.CLITest do
     end
   end
 
+  test "a command that takes the project first opens the runs a stopped process left due",
+       %{dir: dir} do
+    project = open_project(dir)
+
+    assert {:ok, _out, [_call, message]} =
+             Omunculus.Operations.call(project, "send", %{"message" => "left due"}, %{}, false)
+
+    Project.close(project)
+
+    assert {:ok, _output} = CLI.run(["config"], dir)
+
+    project = open_project(dir)
+
+    assert {:ok, [%{status: "done"}]} =
+             Query.all(project.conn, "SELECT * FROM runs WHERE cause_id = ?", [message.id])
+
+    Project.close(project)
+  end
+
   test "prompt prints the last run assembled prompt", %{dir: dir} do
     assert {:ok, ""} = CLI.run(["send", "first message"], dir)
     assert {:ok, ""} = CLI.run(["send", "second message"], dir)
