@@ -177,6 +177,24 @@ mix run eval/run.exs score eval/results/<run>    # score an old run again
 `--code-mode` turns on the model's `code_mode`, so the same tasks can be
 measured with and without the sandbox code bridge.
 
+The preset's `local` model uses the OpenAI-compatible llama.cpp server at
+`http://192.168.0.200:8081/v1`, with model id `bonsai2-27b`, no authentication
+and thinking disabled. Change that model table to use another local server.
+To compare it with Haiku on the same task, run these in separate terminals:
+
+```sh
+mise run eval:run -- --model haiku --configuration agency --task design-to-build --k 1 --jobs 1 --timeout 3600 --label comparison-haiku
+mise run eval:run -- --model local --configuration agency --task design-to-build --k 1 --jobs 1 --timeout 3600 --label comparison-local
+```
+
+Each run has its own projects and result folder. Deploy tasks require the
+dream team's environment; published app names are scoped to each project.
+The simulated person and the decider keep their configured external models
+for both runs. Once both finish, use `mise run eval:compare -- <haiku-result>
+<local-result>`; both paths are placeholders for their result folders.
+Local inference has no provider cost in the report; this does not measure
+electricity or hardware costs, or the separate person and decider calls.
+
 `eval:run` loads `.env` for the provider's key. Runs are isolated, so several
 may run at once, each on its own model; a run is compared only with the folder
 `--against` names, and with none without it. `--jobs` executions run at
