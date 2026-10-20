@@ -61,7 +61,12 @@ defmodule Omunculus.Config.TomlTest do
         "delivery" => %{
           "steps" => [
             %{"name" => "to_do", "agent" => "worker"},
-            %{"name" => "review", "agent" => "concierge", "deny" => ["counter"]}
+            %{
+              "name" => "review",
+              "agent" => "concierge",
+              "deny" => ["counter"],
+              "overrides" => %{"done" => %{"then" => []}}
+            }
           ]
         }
       }
@@ -70,5 +75,12 @@ defmodule Omunculus.Config.TomlTest do
     encoded = ConfigToml.encode(map)
     assert encoded =~ ~s({ agent = "worker", name = "to_do" })
     assert Toml.decode!(encoded) == map
+  end
+
+  test "text over several lines is a multi-line string that round-trips" do
+    text = "You are the worker.\nQuote \"this\", keep C:\\ and \u0001.\n"
+    encoded = ConfigToml.encode(%{"text" => text})
+    assert encoded =~ ~s(text = """\nYou are the worker.\n)
+    assert Toml.decode!(encoded) == %{"text" => text}
   end
 end

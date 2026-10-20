@@ -1,0 +1,22 @@
+name = "skill"
+kind = "tool"
+triggers = ["model"]
+description = "Reads a skill listed under ## Skills: its instructions, or one file of its folder."
+tags = ["skills"]
+groups = ["skills"]
+module = "Omunculus.Tools.Skill"
+
+[parameters]
+type = "object"
+required = ["name"]
+
+[parameters.properties.name]
+type = "string"
+description = "The skill's name, as ## Skills lists it."
+
+[parameters.properties.file]
+type = "string"
+description = "A file of the skill's folder, relative to it, as its instructions name it."
+
+[views.skills]
+source = "skills"

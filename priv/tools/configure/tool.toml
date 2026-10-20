@@ -1,0 +1,29 @@
+name = "configure"
+kind = "tool"
+triggers = ["cli", "chain"]
+description = """
+Writes one item of the config (agents.<name>, models.<name>, workflows.<name>, workspaces.<name>, auth.<name>, secrets.<tool>, policy or access) from a JSON table, or removes it for null, while the file is at the revision config printed. The rest of the file keeps what it holds; a provider written without a key keeps the literal key the file holds for it; [auth] store and the tables of the process (project, execution, store, tools, mcp) are not items. A file changed since revision is refused with omunculus.toml changed since it was read; read it again. A result that does not load is refused with the reason, and the file stays as it was. The file is rewritten whole through a temporary file, keys in order and long text as multi-line strings. It needs project.manage_config.
+"""
+tags = ["cli", "config"]
+groups = ["cli"]
+module = "Omunculus.Tools.Configure"
+
+[parameters]
+type = "object"
+required = ["item", "value", "revision"]
+
+[parameters.properties.item]
+type = "string"
+description = "The item: <section>.<name>, policy or access."
+
+[parameters.properties.value]
+type = "string"
+description = "The item as a JSON table, or null to remove it."
+
+[parameters.properties.revision]
+type = "string"
+description = "The SHA-256 of the file config printed."
+
+[parameters.properties.from]
+type = "string"
+description = "An item of the same section removed in the same write, which renames it."

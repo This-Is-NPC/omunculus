@@ -1,9 +1,7 @@
 name = "read"
 kind = "tool"
-shape = "simple"
-views = ["paths"]
 triggers = ["model"]
-description = "Reads a file."
+description = "Reads a file, or limit lines of it from line offset (from 1)."
 tags = ["fs"]
 groups = ["fs.read"]
 module = "Omunculus.Tools.Read"
@@ -14,3 +12,14 @@ required = ["path"]
 
 [parameters.properties.path]
 type = "string"
+
+[parameters.properties.offset]
+type = "integer"
+minimum = 1
+
+[parameters.properties.limit]
+type = "integer"
+minimum = 1
+
+[views.paths]
+source = "paths"

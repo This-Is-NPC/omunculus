@@ -1,43 +1,92 @@
 defmodule Omunculus.Harness do
   @moduledoc """
-  Discovers and dispatches tool names through the shared contract. Hydrates
-  declared views, commits calls and emits atomically, then reacts to their
-  events. Run lifecycle events use the same `react/2` path.
+  Discovers and dispatches tool names through the shared contract. The
+  catalog a call sees has the `overrides` of its run applied, or those of
+  the policy and workspace layers outside a run. Hydrates declared views,
+  runs the steps a call chains (`out.chain`, then the manifest's `then`)
+  under the same contract, commits the call, its steps and all their
+  emits atomically, then reacts to their events. A step
+  outside the chaining tool's `chains`, without the `chain` trigger, not
+  have in the run's ceiling, already on the chain path, after `end`, or
+  failing fails the call and writes none of the chain's emits; a call
+  outside a run checks no ceiling. Run lifecycle events use the same
+  `react/2` path. The `request` view is the request named by the call's
+  `request_id` argument, or else the run's; `grant_scopes` is the list of
+  scopes the store accepts on a permanent grant.
 
-  Hooks use the same emit path as tools. Non-terminal events still run
-  hooks during the model unroll; events that end the run wait until
-  `follow_up/2` has closed the run and opened the next one. `follow_up/2`
-  opens action runs, then those deferred hooks, then agent reactions,
-  preserving the originating tool or hook in `via`.
+  Hooks use the same emit path as tools. Hooks of every event run during
+  the model unroll except those of `end`, the only event that ends a run:
+  they wait until `follow_up/3` runs after the run has closed and the
+  runs its events ask for are due. `open_due/2` writes the permanent
+  grants among the events to the TOML and makes the runs their actions
+  ask for due in the `Omunculus.Cycle`, which opens them concurrently;
+  `follow_up/3` does the same, then runs those deferred hooks, then makes
+  the reaction runs of calling hooks due, preserving the originating tool
+  or hook in `via`. A `reply` opens a run of the requester's work when
+  that work is open after the reply and its option's calls, and, for a
+  request from a run without a work, a run of that run's agent in its
+  conversation. An upstream text answer resumes an intermediary with unresolved
+  origins even while its work waits on children; human requesters need no run.
+  A message to a work waiting on its children opens a run of the work's
+  agent, named, and leaves the work waiting.
+  The `runs.request` view is the run that opened the run's
+  request.
   """
 
-  alias Omunculus.{Config, Project, Run, Store}
+  alias Omunculus.{
+    Ceiling,
+    Changes,
+    Config,
+    ConversationRoot,
+    Cycle,
+    Project,
+    Secrets,
+    Skills,
+    Store
+  }
+
   alias Omunculus.Execution.Policy
-  alias Omunculus.Tool.{Catalog, Invoke, Manifest}
+  alias Omunculus.Store.Actions.Requests
+  alias Omunculus.Tool.{Catalog, Invoke, Manifest, Overrides, Views}
   alias Omunculus.Tools.Out
 
-  @spec manifest(Project.t(), String.t()) ::
-          {:ok, Manifest.t()} | {:error, {:unknown_tool, String.t()}}
-  def manifest(%Project{config_path: path}, name) do
-    with {:ok, config} <- Config.load(path),
-         {:ok, config} <- Config.for_workspace(config, Config.effective_workspace(config, nil)) do
-      config.tools |> Catalog.discover(config.mcp, nil) |> fetch_dispatch_manifest(name, "cli")
+  @spec manifest(Project.t(), String.t()) :: {:ok, Manifest.t()} | {:error, term}
+  def manifest(%Project{} = project, name) do
+    with {:ok, config} <- resolved_config(project, nil),
+         {:ok, catalog} <- catalog(nil, nil, config, workspace_context(config, nil, nil), nil) do
+      fetch_dispatch_manifest(catalog, name, "cli")
     end
   end
 
-  @spec workspace_context(Config.t(), map | nil) :: %{
+  @doc """
+  The workspace a call of `work` in `conversation_id` works in: its name,
+  root and ceiling layer. With `[project] conversations`, a conversation's
+  root is its own folder in the workspace (`ConversationRoot`).
+  """
+  @spec workspace_context(Config.t(), map | nil, String.t() | nil) :: %{
           name: String.t() | nil,
           root: String.t() | nil,
           layer: Omunculus.Config.Layer.t() | nil
         }
-  def workspace_context(config, work) do
+  def workspace_context(config, work, conversation_id) do
     name = Config.effective_workspace(config, work)
 
     %{
       name: name,
-      root: Config.workspace_root(config, name),
+      root: root(config, Config.workspace_root(config, name), conversation_id),
       layer: Config.workspace_ceiling(config, name)
     }
+  end
+
+  defp root(%Config{conversations: nil}, root, _conversation_id), do: root
+  defp root(_config, root, nil), do: root
+  defp root(config, root, id), do: ConversationRoot.root(config, root || config.root, id)
+
+  # The conversation a call belongs to: its run's, its work's, or the one
+  # its context names.
+  defp conversation_id(run, work, ctx) do
+    (run && run.conversation_id) || (work && work.conversation_id) ||
+      Map.get(ctx, :conversation_id)
   end
 
   defp resolved_config(project, work) do
@@ -83,74 +132,126 @@ defmodule Omunculus.Harness do
     with {:ok, run} <- resolve_run(project, ctx.run_id),
          work_id = run_work_id(run),
          {:ok, work} <- fetch_work(project, work_id),
-         {:ok, config} <- resolved_config(project, work),
-         catalog =
-           Catalog.discover(config.tools, config.mcp, Map.get(ctx, :execution)),
+         {:ok, config, catalog} <- prepared(project, run, work, ctx),
+         workspace = workspace_context(config, work, conversation_id(run, work, ctx)),
          {:ok, manifest} <- fetch_dispatch_manifest(catalog, name, ctx.trigger),
          :ok <- check_trigger(manifest, name, ctx.trigger),
-         workspace = workspace_context(config, work),
-         views = %{
-           catalog: catalog_view(run, catalog, start_event(project, run)),
-           workspaces: workspaces_view(config, workspace.name),
-           request_id: run && run.request_id,
-           inbox_id: run_inbox_id(project, run),
-           paths: path_permissions(project, run, workspace)
-         },
+         views =
+           views(project, run, work, config, catalog, workspace, %{
+             request_id: run && run.request_id,
+             inbox_id: run_inbox_id(project, run)
+           }),
          {:ok, out, events} <-
            call(project, manifest, args, work_id, ctx, config, catalog, views, workspace),
          {:ok, hook_events} <-
-           maybe_react(project, events, [], Map.get(ctx, :execution)) do
-      {:ok, augment(out, events), events ++ hook_events}
+           maybe_react(project, events, [], Map.get(ctx, :execution), Map.get(ctx, :prepared)) do
+      {:ok, out, events ++ hook_events}
     end
   end
 
-  @doc "Dispatches reactions to committed events, including the run lifecycle."
-  def react(project, events, active \\ [], execution \\ nil) do
-    with {:ok, base} <- Config.load(project.config_path) do
-      Enum.reduce_while(events, {:ok, []}, fn event, {:ok, acc} ->
-        with {:ok, run} <- resolve_run(project, event.run_id),
-             {:ok, work} <- fetch_work(project, event.work_id),
-             {:ok, config} <-
-               Config.for_workspace(base, Config.effective_workspace(base, work)) do
-          catalog = Catalog.discover(config.tools, config.mcp, execution)
-          workspace = workspace_context(config, work)
+  @doc """
+  What a run prepared when it opened — its config, for its workspace, and
+  its catalog — for the calls and reactions of that run, which then do not
+  load the config or discover the catalog again.
+  """
+  @spec prepared(String.t(), Config.t(), map) :: map
+  def prepared(run_id, config, catalog), do: %{run_id: run_id, config: config, catalog: catalog}
 
-          ctx = %{
-            run_id: event.run_id,
-            author: if(run, do: "agent", else: "human"),
-            agent: run && run.agent,
+  # The run's own calls use what it prepared; any other loads them.
+  defp prepared(_project, %{id: run_id}, _work, %{prepared: %{run_id: run_id} = prepared}),
+    do: {:ok, prepared.config, prepared.catalog}
+
+  defp prepared(project, run, work, ctx) do
+    with {:ok, config} <- resolved_config(project, work),
+         {:ok, catalog} <-
+           catalog(
+             project,
+             run,
+             config,
+             workspace_context(config, work, conversation_id(run, work, ctx)),
+             Map.get(ctx, :execution)
+           ),
+         do: {:ok, config, catalog}
+  end
+
+  @doc """
+  Dispatches reactions to committed events, including the run lifecycle;
+  events of the run `prepared` is for react with what it prepared.
+  """
+  def react(project, events, active \\ [], execution \\ nil, prepared \\ nil) do
+    Enum.reduce_while(events, {:ok, []}, fn event, {:ok, acc} ->
+      with {:ok, run} <- resolve_run(project, event.run_id),
+           {:ok, work} <- fetch_work(project, event.work_id),
+           {:ok, config, catalog} <-
+             prepared(project, run, work, %{
+               execution: execution,
+               prepared: prepared,
+               conversation_id: Map.get(event, :conversation_id)
+             }),
+           workspace = workspace_context(config, work, conversation_id(run, work, event)) do
+        ctx = %{
+          run_id: event.run_id,
+          author: if(run, do: "agent", else: "human"),
+          agent: run && run.agent,
+          issuer: Map.get(event, :actor_issuer),
+          subject: Map.get(event, :actor_subject),
+          origin_issuer: Map.get(event, :origin_issuer),
+          origin_subject: Map.get(event, :origin_subject),
+          conversation_id: Map.get(event, :conversation_id),
+          request_id: event.request_id,
+          inbox_id: event.inbox_id,
+          via: run && run.via,
+          execution: execution,
+          prepared: prepared
+        }
+
+        views =
+          views(project, run, work, config, catalog, workspace, %{
             request_id: event.request_id,
-            inbox_id: event.inbox_id,
-            via: run && run.via,
-            execution: execution
-          }
+            inbox_id: event.inbox_id
+          })
 
-          views = %{
-            catalog: catalog_view(run, catalog, start_event(project, run)),
-            workspaces: workspaces_view(config, workspace.name),
-            request_id: event.request_id,
-            inbox_id: event.inbox_id,
-            paths: path_permissions(project, run, workspace)
-          }
-
-          case run_hooks_for(
-                 project,
-                 catalog,
-                 event,
-                 event.work_id,
-                 ctx,
-                 config,
-                 views,
-                 workspace,
-                 active
-               ) do
-            {:ok, result} -> {:cont, {:ok, acc ++ result}}
-            error -> {:halt, error}
-          end
-        else
+        case run_hooks_for(
+               project,
+               catalog,
+               event,
+               event.work_id,
+               ctx,
+               config,
+               views,
+               workspace,
+               active
+             ) do
+          {:ok, result} -> {:cont, {:ok, acc ++ result}}
           error -> {:halt, error}
         end
-      end)
+      else
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  # What a call's views read that the harness computes rather than the
+  # store — the catalog, workspaces, agents, paths, grant scopes and skills
+  # of the run, each computed only when a view asks for it — plus the request and
+  # inbox ids `ids` names, which anchor its views.
+  defp views(project, run, work, config, catalog, workspace, ids) do
+    Map.put(ids, :computed, %{
+      "catalog" => fn _spec -> catalog_view(run, catalog, start_event(project, run)) end,
+      "workspaces" => fn _spec -> workspaces_view(config, workspace.name) end,
+      "agents" => fn spec -> agents_view(project, config, work, catalog, workspace, spec) end,
+      "paths" => fn _spec -> path_permissions(project, run, workspace) end,
+      "grant_scopes" => fn _spec -> Requests.scopes() end,
+      "skills" => fn _spec -> skills_view(project, run, catalog) end
+    })
+  end
+
+  # The skills the run has, among the names its mounted ceiling has.
+  defp skills_view(project, run, catalog) do
+    names = (run_ceiling(project, run) || %{}) |> Map.get("have", []) |> Enum.sort()
+
+    for name <- names, %Manifest{kind: "skill"} = skill <- [Map.get(catalog, name)] do
+      %{name: Skills.short_name(name), description: skill.description, dir: skill.dir}
     end
   end
 
@@ -166,37 +267,138 @@ defmodule Omunculus.Harness do
     event && event.inbox_id
   end
 
-  defp path_permissions(project, run, workspace) do
+  defp run_ceiling(project, run) do
     case start_event(project, run) do
-      nil ->
-        %{}
-
-      event ->
-        Omunculus.Ceiling.paths(
-          Jason.decode!(event.body)["ceiling"],
-          workspace.root || project.dir
-        )
+      nil -> nil
+      event -> Jason.decode!(event.body)["ceiling"]
     end
   end
 
-  @spec follow_up(Project.t(), [map]) :: :ok | {:error, term}
-  def follow_up(project, events) do
-    with {:ok, config} <- Config.load(project.config_path),
-         {:ok, config} <- Config.for_workspace(config, Config.effective_workspace(config, nil)),
-         catalog = Catalog.discover(config.tools, config.mcp, nil),
-         {:ok, _via} <- walk(project, catalog, events, :actions),
-         {:ok, _hooks} <- react(project, Enum.filter(events, &ending_event?/1), []),
-         {:ok, _via} <- walk(project, catalog, events, :hooks) do
-      :ok
+  # The catalog a call sees: a run's overrides come from its mounted
+  # snapshot; outside a run only the policy and workspace layers apply.
+  defp catalog(project, run, config, workspace, execution) do
+    config.tools
+    |> Catalog.discover(config.mcp, execution, &Secrets.resolve(config, &1.secrets))
+    |> Overrides.apply(run_overrides(project, run, config, workspace))
+  end
+
+  defp run_overrides(_project, nil, config, workspace),
+    do:
+      Ceiling.overrides(config, %{agent: nil, depth: nil, stage: nil, workspace: workspace.layer})
+
+  defp run_overrides(project, run, _config, _workspace) do
+    case run_ceiling(project, run) do
+      nil -> %{}
+      ceiling -> ceiling["overrides"]
     end
   end
 
-  defp walk(project, catalog, events, phase) do
-    Enum.reduce_while(events, {:ok, nil}, fn event, {:ok, via} ->
+  defp path_permissions(project, run, workspace) do
+    case run_ceiling(project, run) do
+      nil -> %{}
+      ceiling -> Ceiling.paths(ceiling, workspace.root || project.dir)
+    end
+  end
+
+  @doc """
+  Opens the runs `events` ask for, then runs the hooks of the ending
+  events among them, then opens the reaction runs of the calling hooks
+  among `opened ++ events`. `opened` are earlier events of the same run
+  whose runs `open_due/2` already opened.
+  """
+  @spec follow_up(Project.t(), [map], [map]) :: :ok | {:error, term}
+  def follow_up(project, events, opened \\ []) do
+    Cycle.run(project, nil, fn project ->
+      with :ok <- open(project, events),
+           {:ok, catalog} <- follow_catalog(project),
+           {:ok, _hooks} <- react(project, Enum.filter(events, &ending_event?/1), []),
+           {:ok, reactions} <- openings(project, catalog, opened ++ events, :hooks) do
+        due(project, reactions)
+      end
+    end)
+  end
+
+  @doc "Writes the permanent grants among `events` and opens the runs their actions ask for."
+  @spec open_due(Project.t(), [map]) :: :ok | {:error, term}
+  def open_due(project, events) do
+    Cycle.run(project, nil, &open(&1, events))
+  end
+
+  defp follow_catalog(project) do
+    with {:ok, config} <- resolved_config(project, nil) do
+      {:ok, Catalog.discover(config.tools, config.mcp, nil)}
+    end
+  end
+
+  @doc """
+  The runs the actions of past events asked for that never began, as
+  `Cycle.open/2` takes them: of each event `Store.uncaused/1` lists, the
+  openings its action asks for now that the store would begin
+  (`Store.runnable/2`) and that did not begin (`Store.begun?/3`). The
+  runs of calling hooks are not among them.
+  """
+  @spec lost(Project.t()) :: {:ok, [map]} | {:error, term}
+  def lost(project) do
+    with {:ok, events} <- Store.uncaused(project.conn) do
+      Enum.reduce_while(events, {:ok, []}, fn event, {:ok, lost} ->
+        case advance(project, nil, event, event.via, :actions) do
+          {:ok, _via, openings} ->
+            lost_ones =
+              openings
+              |> Enum.map(&Map.delete(&1, :linked_by))
+              |> Enum.filter(&lost?(project.conn, &1, event))
+
+            {:cont, {:ok, lost ++ lost_ones}}
+
+          {:error, _reason} = error ->
+            {:halt, error}
+        end
+      end)
+    end
+  end
+
+  defp lost?(conn, opening, event) do
+    agent = Map.get(opening, :agent)
+
+    params = %{
+      work_id: opening.work_id,
+      own: is_nil(agent),
+      agent: agent,
+      cause_id: opening.cause_id,
+      request_id: Map.get(opening, :request_id)
+    }
+
+    Store.runnable(conn, params) == :ok and not Store.begun?(conn, params, event)
+  end
+
+  # Only the calling hooks walk needs the catalog.
+  defp open(project, events) do
+    with :ok <- write_grants(project, events),
+         {:ok, openings} <- openings(project, nil, events, :actions),
+         do: due(project, openings)
+  end
+
+  defp openings(project, catalog, events, phase) do
+    events
+    |> Enum.reduce_while({:ok, nil, []}, fn event, {:ok, via, openings} ->
       case advance(project, catalog, event, via, phase) do
-        {:ok, _via} = ok -> {:cont, ok}
+        {:ok, via, more} -> {:cont, {:ok, via, openings ++ more}}
         {:error, _reason} = error -> {:halt, error}
       end
+    end)
+    |> case do
+      {:ok, _via, openings} -> {:ok, openings}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  # Called from the process of the run that created a root, `Cycle.link/2`
+  # gives it the root's turn before the root's own run is due.
+  defp due(project, openings) do
+    Enum.each(openings, fn opening ->
+      {linked_by, opening} = Map.pop(opening, :linked_by)
+      if linked_by, do: Cycle.link(project, opening.work_id)
+      Cycle.open(project, opening)
     end)
   end
 
@@ -260,6 +462,58 @@ defmodule Omunculus.Harness do
     end)
   end
 
+  # The agents and workflows a new work may name: those of the depth below
+  # the call's run, to which a run without a work hands its works down too;
+  # where that depth requires workflows, only those, each `required`. With
+  # `tools`, each agent comes with the model tools its own ceiling has at
+  # that depth.
+  defp agents_view(project, config, work, catalog, workspace, spec) do
+    depth = if work, do: Store.work_depth(project.conn, work) + 1, else: 1
+    required = Config.workflows_for(config, depth) != []
+
+    workflows =
+      Enum.map(Config.workflows_at(config, depth), fn name ->
+        %{
+          workflow: name,
+          stages: Enum.map(config.workflows[name], &%{name: &1.name, agent: &1.agent}),
+          required: required
+        }
+      end)
+
+    if required,
+      do: workflows,
+      else: agents_named(config, depth, catalog, workspace, spec) ++ workflows
+  end
+
+  defp agents_named(config, depth, catalog, workspace, spec) do
+    names = config |> Config.agents_at_depth(depth) |> Enum.map(fn {name, _agent} -> name end)
+
+    if "tools" in spec.include,
+      do:
+        Enum.map(names, &%{name: &1, tools: agent_tools(config, &1, depth, catalog, workspace)}),
+      else: names
+  end
+
+  defp agent_tools(config, agent, depth, catalog, workspace) do
+    model_catalog = Catalog.with_trigger(catalog, "model")
+
+    snapshot =
+      Ceiling.mount(
+        config,
+        %{
+          agent: agent,
+          depth: depth,
+          grants: [],
+          stage: nil,
+          groups: Catalog.groups(catalog),
+          workspace: workspace.layer
+        },
+        Map.keys(model_catalog)
+      )
+
+    snapshot.have |> Enum.filter(&Map.has_key?(model_catalog, &1)) |> Enum.sort()
+  end
+
   defp catalog_view(nil, _catalog, _event), do: []
 
   defp catalog_view(%{tools: tools}, catalog, event) do
@@ -306,122 +560,32 @@ defmodule Omunculus.Harness do
       work_id: work_id,
       author: ctx.author,
       agent: ctx.agent,
+      issuer: Map.get(ctx, :issuer),
+      subject: Map.get(ctx, :subject),
+      origin_issuer: Map.get(ctx, :origin_issuer),
+      origin_subject: Map.get(ctx, :origin_subject),
+      principal: Map.get(ctx, :principal),
+      capability: Map.get(ctx, :capability),
+      conversation_id: Map.get(ctx, :conversation_id),
+      command_id: Map.get(ctx, :command_id),
+      command_hash: Map.get(ctx, :command_hash),
       config: config,
       groups: Catalog.groups(catalog),
       request_id: Map.get(ctx, :request_id),
       inbox_id: Map.get(ctx, :inbox_id)
     }
 
-  defp hydrate_views(project, names, run_id, work_id, views) do
-    Enum.reduce_while(names, {:ok, %{}}, fn name, {:ok, acc} ->
-      case resolve_view_id(name, run_id, work_id, views) do
-        {:error, _reason} = error -> {:halt, error}
-        :skip -> {:cont, {:ok, acc}}
-        :catalog -> {:cont, {:ok, Map.put(acc, "catalog", views.catalog)}}
-        :workspaces -> {:cont, {:ok, Map.put(acc, "workspaces", views.workspaces)}}
-        :paths -> {:cont, {:ok, Map.put(acc, "paths", views.paths)}}
-        {:cli_prompt, args} -> fetch_cli_prompt(project, name, args, acc)
-        {:ok, canonical, id} -> fetch_view(project, name, canonical, id, acc)
-        {:ok, id} -> fetch_view(project, name, name, id, acc)
-      end
-    end)
-  end
-
-  defp fetch_view(project, declared, canonical, id, acc) do
-    case Store.view(project.conn, canonical, id) do
-      {:ok, result} ->
-        acc = Map.put(acc, declared, result)
-        acc = if declared == canonical, do: acc, else: Map.put(acc, canonical, result)
-        {:cont, {:ok, acc}}
-
-      {:error, _reason} = error ->
-        {:halt, error}
-    end
-  end
-
-  @work_scoped_views ~w(work comments.work inbox.work)
-
-  defp resolve_view_id(name, _run_id, work_id, _request_id) when name in @work_scoped_views do
-    if work_id, do: {:ok, work_id}, else: :skip
-  end
-
-  defp resolve_view_id("events.run", run_id, _work_id, _request_id) do
-    if run_id, do: {:ok, run_id}, else: :skip
-  end
-
-  defp resolve_view_id("events", run_id, _work_id, _views) do
-    if run_id, do: {:ok, "events.run", run_id}, else: :skip
-  end
-
-  defp resolve_view_id("comments", _run_id, work_id, views) do
-    cond do
-      is_binary(work_id) -> {:ok, "comments.work", work_id}
-      is_binary(views[:request_id]) -> {:ok, "comments.request", views.request_id}
-      is_binary(views[:inbox_id]) -> {:ok, "comments.inbox", views.inbox_id}
-      true -> :skip
-    end
-  end
-
-  defp resolve_view_id("comments.request", _run_id, _work_id, %{request_id: request_id}) do
-    if request_id, do: {:ok, request_id}, else: :skip
-  end
-
-  defp resolve_view_id("comments.inbox", _run_id, _work_id, %{inbox_id: inbox_id}) do
-    if inbox_id, do: {:ok, inbox_id}, else: :skip
-  end
-
-  defp resolve_view_id("request", _run_id, _work_id, %{request_id: request_id}) do
-    if request_id, do: {:ok, request_id}, else: :skip
-  end
-
-  defp resolve_view_id("paths", _run_id, _work_id, _views), do: :paths
-  defp resolve_view_id("counter", _run_id, _work_id, _views), do: {:ok, nil}
-  defp resolve_view_id("inbox", _run_id, _work_id, _request_id), do: {:ok, nil}
-  defp resolve_view_id("catalog", _run_id, _work_id, _request_id), do: :catalog
-  defp resolve_view_id("workspaces", _run_id, _work_id, _request_id), do: :workspaces
-  defp resolve_view_id("runs.last", _run_id, _work_id, _views), do: {:ok, nil}
-
-  defp resolve_view_id("prompt", _run_id, _work_id, %{trigger: "cli"} = views),
-    do: {:cli_prompt, Map.get(views, :args, %{})}
-
-  defp resolve_view_id("prompt", _run_id, _work_id, views) do
-    case Map.get(views, :prompt_id) do
-      id when is_binary(id) and id != "" -> {:ok, id}
-      _missing -> :skip
-    end
-  end
-
-  defp resolve_view_id(name, _run_id, _work_id, _request_id), do: {:error, {:unknown_view, name}}
-
-  defp fetch_cli_prompt(project, name, args, acc) do
-    case cli_assembled_id(project, args) do
-      {:ok, id} -> fetch_view(project, name, "prompt", id, acc)
-      {:error, _reason} = error -> {:halt, error}
-    end
-  end
-
-  defp cli_assembled_id(project, args) do
-    with {:ok, run} <- cli_run(project, Map.get(args, "run")),
-         id when is_binary(id) and id != "" <- run.prompt_id do
-      {:ok, id}
-    else
-      nil -> {:error, :no_assembled}
-      {:error, _reason} = error -> error
-    end
-  end
-
-  defp cli_run(project, id) when is_binary(id) and id != "" do
-    case Store.view(project.conn, "run", id) do
-      {:ok, nil} -> {:error, {:unknown_run, id}}
-      other -> other
-    end
-  end
-
-  defp cli_run(project, _id) do
-    case Store.view(project.conn, "runs.last", nil) do
-      {:ok, nil} -> {:error, :no_runs}
-      other -> other
-    end
+  # Where a call's views start, and the values the harness computes for it.
+  defp view_scope(env, args) do
+    %{
+      run_id: env.ctx.run_id,
+      work_id: env.work_id,
+      request_id: env.views.request_id,
+      inbox_id: env.views.inbox_id,
+      prompt_id: Map.get(env.ctx, :prompt_id),
+      args: args,
+      computed: env.views.computed
+    }
   end
 
   defp run_hooks_for(project, catalog, event, work_id, ctx, config, views, workspace, active) do
@@ -431,7 +595,13 @@ defmodule Omunculus.Harness do
     |> Enum.reduce_while({:ok, []}, fn hook, {:ok, acc} ->
       case invoke_hook(project, hook, event, work_id, ctx, config, catalog, views, workspace) do
         {:ok, hook_events} ->
-          case maybe_react(project, hook_events, [hook.name | active], ctx.execution) do
+          case maybe_react(
+                 project,
+                 hook_events,
+                 [hook.name | active],
+                 ctx.execution,
+                 Map.get(ctx, :prepared)
+               ) do
             {:ok, reactions} -> {:cont, {:ok, acc ++ hook_events ++ reactions}}
             error -> {:halt, error}
           end
@@ -460,49 +630,206 @@ defmodule Omunculus.Harness do
   end
 
   defp call(project, manifest, args, work_id, ctx, config, catalog, views, workspace) do
-    with {:ok, execution} <-
-           execution_context(manifest, ctx, config, workspace, project.dir, catalog),
-         views =
-           Map.merge(views, %{
-             trigger: Map.get(ctx, :trigger),
-             args: args,
-             prompt_id: Map.get(ctx, :prompt_id)
-           }),
-         {:ok, view} <- hydrate_views(project, manifest.views, ctx.run_id, work_id, views),
-         input = %{
-           name: manifest.name,
-           args: args,
-           view: view,
-           run_id: ctx.run_id,
-           work_id: work_id,
-           workspace: workspace.name,
-           roots: if(workspace.root, do: [workspace.root], else: [project.dir]),
-           config_path: project.config_path
-         },
-         {:ok, out} <- Invoke.call(manifest, input, execution),
-         emits = if(out.ok, do: out.emit, else: []),
-         record = %{name: manifest.name, args: args, ok: out.ok, output: out.output},
-         {:ok, events} <-
-           Store.record_tool(
-             project.conn,
-             ctx.run_id,
-             record,
-             emits,
-             store_ctx(ctx, work_id, config, catalog)
-           ) do
-      {:ok, out, events}
+    env = %{
+      project: project,
+      work_id: work_id,
+      ctx: ctx,
+      config: config,
+      catalog: catalog,
+      views: views,
+      workspace: workspace
+    }
+
+    with {:ok, before} <- snapshot(env),
+         {:ok, out} <- invoke(env, manifest, args) do
+      {out, calls} =
+        case chain(env, manifest, out, [manifest.name], [call_entry(manifest, args, out, nil)]) do
+          {:ok, calls} ->
+            {out, calls}
+
+          {:error, {:chain, name, reason}} ->
+            failed = %{out | ok: false, output: Out.chain_failed(name, reason)}
+            {failed, [call_entry(manifest, args, failed, nil)]}
+        end
+
+      store_ctx = store_ctx(ctx, work_id, config, catalog)
+
+      with {:ok, changes} <- changed(env, before) do
+        case Store.record_tools(project.conn, ctx.run_id, with_changes(calls, changes), store_ctx) do
+          {:ok, events} ->
+            {:ok, out, events}
+
+          # A model's call the store refuses is recorded as failed, with why,
+          # and writes none of its emits: the model reads why and goes on.
+          {:error, reason} when ctx.trigger == "model" ->
+            refused = %{out | ok: false, output: Out.refused(reason)}
+            entry = call_entry(manifest, args, refused, nil)
+
+            with {:ok, events} <-
+                   Store.record_tools(
+                     project.conn,
+                     ctx.run_id,
+                     with_changes([entry], changes),
+                     store_ctx
+                   ) do
+              {:ok, refused, events}
+            end
+
+          {:error, _reason} = error ->
+            error
+        end
+      end
     end
   end
 
-  @ending_events ~w(request deny grant continue break delegate)
+  # A model's call in a run that may write its workspace is told apart by
+  # the workspace's tree before and after it, when `[store] changes` keeps
+  # them; the files it changed go with the call's event.
+  defp snapshot(%{config: %{store: %{changes: dir}} = config, ctx: ctx} = env)
+       when is_binary(dir) and ctx.trigger == "model" do
+    root = env.workspace.root || env.project.dir
 
-  defp maybe_react(project, events, active, execution) do
-    react(project, Enum.reject(events, &ending_event?/1), active, execution)
+    case ctx do
+      %{execution: %Policy{} = policy} ->
+        if Policy.writable?(policy, root),
+          do:
+            with(
+              {:ok, tree} <- Changes.snapshot(dir, root, [config.store.path, dir]),
+              do: {:ok, {root, tree}}
+            ),
+          else: {:ok, nil}
+
+      _no_run ->
+        {:ok, nil}
+    end
+  end
+
+  defp snapshot(_env), do: {:ok, nil}
+
+  defp changed(_env, nil), do: {:ok, nil}
+
+  defp changed(env, {root, before}) do
+    dir = env.config.store.changes
+
+    with {:ok, after_} <- Changes.snapshot(dir, root, [env.config.store.path, dir]),
+         {:ok, files} <- Changes.files(dir, before, after_) do
+      if files == [],
+        do: {:ok, nil},
+        else: {:ok, %{before: before, after: after_, files: files}}
+    end
+  end
+
+  defp with_changes(calls, nil), do: calls
+
+  defp with_changes([{call, emits} | steps], changes),
+    do: [{Map.put(call, :changes, changes), emits} | steps]
+
+  defp invoke(env, manifest, args) do
+    with {:ok, execution} <-
+           execution_context(
+             manifest,
+             env.ctx,
+             env.config,
+             env.workspace,
+             env.project.dir,
+             env.catalog
+           ),
+         {:ok, view} <- Views.hydrate(env.project.conn, manifest.views, view_scope(env, args)) do
+      input = %{
+        name: manifest.name,
+        args: args,
+        view: view,
+        run_id: env.ctx.run_id,
+        work_id: env.work_id,
+        workspace: env.workspace.name,
+        roots: if(env.workspace.root, do: [env.workspace.root], else: [env.project.dir]),
+        config_path: env.project.config_path
+      }
+
+      # A secret goes to the tool's process alone, and out of what it returns.
+      with {:ok, secrets} <- Secrets.for_tool(env.config, manifest) do
+        manifest
+        |> Invoke.call(input, execution, secrets)
+        |> Secrets.mask(secrets)
+      end
+    end
+  end
+
+  defp call_entry(manifest, args, out, via) do
+    record = %{name: manifest.name, args: args, ok: out.ok, output: out.output}
+    record = if via, do: Map.put(record, :via, via), else: record
+    {record, if(out.ok, do: out.emit, else: [])}
+  end
+
+  # Steps run depth first: a step's own chain runs before the next step.
+  # `active` is the path from the called tool to the current one; `calls`
+  # is everything executed so far, the called tool first.
+  defp chain(_env, _manifest, %{ok: false}, _active, calls), do: {:ok, calls}
+
+  defp chain(env, manifest, out, active, calls) do
+    steps = out.chain ++ Enum.map(manifest.then, &%{name: &1, args: %{}})
+
+    Enum.reduce_while(steps, {:ok, calls}, fn step, {:ok, calls} ->
+      case chain_step(env, manifest, step, active, calls) do
+        {:ok, _calls} = ok -> {:cont, ok}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp chain_step(env, parent, %{name: name, args: args}, active, calls) do
+    step_env = %{env | ctx: Map.put(env.ctx, :trigger, "chain")}
+
+    with :ok <- chain_check(name, name in parent.chains, :not_chainable),
+         :ok <- chain_check(name, name not in active, :loop),
+         :ok <- chain_check(name, not Enum.any?(calls, &ended?/1), :after_end),
+         {:ok, manifest} <- chain_manifest(env.catalog, name),
+         :ok <- chain_check(name, Manifest.triggered_by?(manifest, "chain"), :not_triggered),
+         :ok <- chain_check(name, run_has?(env, name), :not_have),
+         {:ok, out} <- chain_invoke(step_env, manifest, args),
+         :ok <- chain_check(name, out.ok, {:failed, out.output}) do
+      chain(
+        step_env,
+        manifest,
+        out,
+        [name | active],
+        calls ++ [call_entry(manifest, args, out, parent.name)]
+      )
+    end
+  end
+
+  defp chain_check(_name, true, _reason), do: :ok
+  defp chain_check(name, false, reason), do: {:error, {:chain, name, reason}}
+
+  defp ended?({%{name: name}, _emits}), do: name == "end"
+
+  defp chain_manifest(catalog, name) do
+    case fetch_manifest(catalog, name) do
+      {:ok, _manifest} = ok -> ok
+      {:error, _reason} -> {:error, {:chain, name, :unknown_tool}}
+    end
+  end
+
+  defp chain_invoke(env, manifest, args) do
+    case invoke(env, manifest, args) do
+      {:ok, _out} = ok -> ok
+      {:error, reason} -> {:error, {:chain, manifest.name, reason}}
+    end
+  end
+
+  defp run_has?(%{ctx: %{run_id: nil}}, _name), do: true
+
+  defp run_has?(env, name) do
+    {:ok, run} = resolve_run(env.project, env.ctx.run_id)
+    Ceiling.classify(run_ceiling(env.project, run), name, "tool") == "have"
+  end
+
+  defp maybe_react(project, events, active, execution, prepared) do
+    react(project, Enum.reject(events, &ending_event?/1), active, execution, prepared)
   end
 
   @spec ending_event?(map) :: boolean
-  def ending_event?(%{type: "work", body: body}), do: Jason.decode!(body)["start"] == true
-  def ending_event?(event), do: event.type in @ending_events
+  def ending_event?(event), do: event.type == "end"
 
   defp execution_context(
          _manifest,
@@ -550,100 +877,89 @@ defmodule Omunculus.Harness do
 
   defp stringify(event), do: Map.new(event, fn {key, value} -> {to_string(key), value} end)
 
-  defp augment(%{ok: true, emit: emits} = out, events) do
-    case request_emit_name(emits) do
-      nil ->
-        out
-
-      name ->
-        if Enum.any?(events, &(&1.type in ["request", "deny"])) do
-          out
-        else
-          %{out | output: out.output <> "\n#{Out.already_granted(name)}"}
-        end
-    end
-  end
-
-  defp augment(out, _events), do: out
-
-  defp request_emit_name(emits) do
-    Enum.find_value(emits, fn
-      %{"type" => "request", "body" => %{"name" => name}} -> name
-      _ -> nil
-    end)
-  end
-
-  defp advance(project, catalog, %{type: "tool", body: body} = event, _via, :hooks) do
+  defp advance(_project, catalog, %{type: "tool", body: body} = event, _via, :hooks) do
     name = Jason.decode!(body)["name"]
 
     case Map.get(catalog, name) do
       %Manifest{kind: "hook", agent: agent} when not is_nil(agent) ->
-        with :ok <- open_reaction_run(project, event, name, agent), do: {:ok, name}
+        {:ok, name, [reaction_opening(event, name, agent)]}
 
       _not_a_calling_hook ->
-        {:ok, name}
+        {:ok, name, []}
     end
   end
 
   defp advance(_project, _catalog, %{type: "tool", body: body}, _via, :actions),
-    do: {:ok, Jason.decode!(body)["name"]}
+    do: {:ok, Jason.decode!(body)["name"], []}
 
   defp advance(project, _catalog, %{type: "prompt"} = event, via, :actions) do
-    with :ok <-
-           open_run(
-             project,
-             open_params(prompt_id: event.prompt_id, work_id: event.work_id, via: via)
-           ),
-         do: {:ok, via}
-  end
-
-  defp advance(project, _catalog, %{type: "grant"} = event, via, :actions) do
-    with :ok <- apply_grant(project, event),
-         :ok <- open_grant_run(project, event, via) do
-      {:ok, via}
+    with {:ok, agent} <- prompt_agent(project, event) do
+      {:ok, via,
+       [
+         opening(event, %{
+           prompt_id: event.prompt_id,
+           work_id: event.work_id,
+           via: via,
+           agent: agent
+         })
+       ]}
     end
   end
 
-  defp advance(project, _catalog, %{type: "continue"} = event, via, :actions) do
-    with :ok <- open_continue_run(project, event, via), do: {:ok, via}
+  defp advance(project, _catalog, %{type: "reply"} = event, via, :actions) do
+    with {:ok, openings} <- reply_openings(project, event, via), do: {:ok, via, openings}
   end
 
-  defp advance(project, _catalog, %{type: "delegate"} = event, via, :actions) do
-    with :ok <-
-           open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via)),
-         do: {:ok, via}
+  defp advance(_project, _catalog, %{type: type} = event, via, :actions)
+       when type in ["continue", "break", "cancel"],
+       do: {:ok, via, sequence_openings(event, via)}
+
+  defp advance(_project, _catalog, %{type: type} = event, via, :actions)
+       when type in ["delegate", "reopen"],
+       do: {:ok, via, [opening(event, %{work_id: event.work_id, via: via})]}
+
+  defp advance(_project, _catalog, %{type: "request"} = event, via, :actions),
+    do: {:ok, via, request_openings(event, via)}
+
+  defp advance(_project, _catalog, %{type: "work"} = event, via, :actions),
+    do: {:ok, via, root_openings(event, via)}
+
+  defp advance(_project, _catalog, _event, via, _phase), do: {:ok, via, []}
+
+  # A message to a work waiting on its children runs the work's agent by
+  # name, since the work's own run opens only once the work is open again.
+  defp prompt_agent(project, %{work_id: work_id} = event) do
+    with {:ok, work} <- fetch_work(project, work_id) do
+      case work do
+        %{state: "waiting", waiting: "child", assignee: assignee} -> {:ok, assignee}
+        _other -> {:ok, Jason.decode!(event.body)["agent"]}
+      end
+    end
   end
 
-  defp advance(project, _catalog, %{type: "request"} = event, via, :actions) do
-    with :ok <- open_request_run(project, event, via), do: {:ok, via}
+  defp reaction_opening(event, hook_name, agent) do
+    opening(event, %{
+      work_id: event.work_id,
+      request_id: event.request_id,
+      inbox_id: event.inbox_id,
+      via: hook_name,
+      agent: agent
+    })
   end
 
-  defp advance(project, _catalog, %{type: "work"} = event, via, :actions) do
-    with :ok <- open_finished_work_run(project, event, via), do: {:ok, via}
+  # Permanent grants reach the TOML before any run the same events open.
+  defp write_grants(project, events) do
+    events
+    |> Enum.filter(&(&1.type == "grant"))
+    |> Enum.reduce_while(:ok, fn event, :ok ->
+      case write_grant(project, Jason.decode!(event.body)) do
+        :ok -> {:cont, :ok}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
   end
 
-  defp advance(_project, _catalog, _event, via, _phase), do: {:ok, via}
-
-  defp open_params(prompt_id: prompt_id, work_id: work_id, via: via),
-    do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: via, agent: nil}
-
-  defp open_reaction_run(project, event, hook_name, agent) do
-    open_run(
-      project,
-      %{
-        prompt_id: nil,
-        work_id: event.work_id,
-        request_id: event.request_id,
-        inbox_id: event.inbox_id,
-        via: hook_name,
-        agent: agent
-      }
-    )
-  end
-
-  defp apply_grant(project, event) do
-    body = Jason.decode!(event.body)
-
+  defp write_grant(project, body) do
     case body["scope"] do
       "agent" ->
         Config.grant(project.config_path, {:agent, body["agent"]}, body["name"])
@@ -662,69 +978,107 @@ defmodule Omunculus.Harness do
     end
   end
 
-  defp open_grant_run(_project, %{work_id: nil}, _via), do: :ok
+  # The requester's work runs again when it is open once the reply and
+  # the calls of its option are applied; without a work, its agent runs
+  # again in the requesting run's conversation.
+  defp reply_openings(project, %{request_id: id} = event, via) do
+    with {:ok, request} <- Store.view(project.conn, "request", id),
+         {:ok, work} <- fetch_work(project, request.work_id) do
+      requester = Jason.decode!(request.requester)
+      unresolved = Enum.any?(request.origins, fn {_part, origin} -> origin.status != "closed" end)
 
-  defp open_grant_run(project, %{work_id: work_id, request_id: request_id}, via) do
-    open_run(
-      project,
-      %{prompt_id: nil, work_id: work_id, request_id: request_id, via: via, agent: nil}
-    )
+      cond do
+        requester["kind"] == "human" ->
+          {:ok, []}
+
+        work && work.state in ~w(done cancelled) ->
+          {:ok, []}
+
+        map_size(request.origins) > 0 and not unresolved ->
+          {:ok, []}
+
+        map_size(request.origins) > 0 ->
+          {:ok,
+           [
+             opening(event, %{
+               work_id: request.work_id,
+               request_id: id,
+               via: via,
+               agent: requester["agent"],
+               conversation_id: request.conversation_id
+             })
+           ]}
+
+        is_nil(work) ->
+          {:ok,
+           [
+             opening(event, %{
+               request_id: id,
+               via: via,
+               agent: requester["agent"],
+               conversation_id: request.conversation_id
+             })
+           ]}
+
+        work.state == "open" ->
+          {:ok, [opening(event, %{work_id: work.id, request_id: id, via: via})]}
+
+        true ->
+          {:ok, []}
+      end
+    end
   end
 
-  defp open_continue_run(project, event, via) do
-    case Jason.decode!(event.body) do
-      %{"to" => to} when not is_nil(to) ->
-        open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via))
+  defp sequence_openings(event, via) do
+    case {event.type, Jason.decode!(event.body)} do
+      {"continue", %{"to" => to}} when not is_nil(to) ->
+        [opening(event, %{work_id: event.work_id, via: via})]
 
-      %{"parent_id" => parent_id} when not is_nil(parent_id) ->
-        open_run(project, open_params(prompt_id: nil, work_id: parent_id, via: via))
+      {_type, %{"parent_id" => parent_id}} when not is_nil(parent_id) ->
+        [opening(event, %{work_id: parent_id, via: via})]
 
       _no_next_run ->
-        :ok
+        []
     end
   end
 
-  defp open_request_run(project, event, via) do
-    case Jason.decode!(event.body) do
-      %{"arbiter" => arbiter, "arbiter_work_id" => work_id} ->
-        with :ok <-
-               open_run(
-                 project,
-                 %{
-                   prompt_id: nil,
-                   work_id: work_id,
-                   request_id: event.request_id,
-                   via: via,
-                   agent: arbiter
-                 }
-               ),
-             do: :ok
+  defp request_openings(event, via) do
+    body = Jason.decode!(event.body)
 
-      _no_agent_arbiter ->
-        :ok
+    case body["arbiter"] do
+      %{"kind" => "agent", "agent" => agent} ->
+        [
+          opening(event, %{
+            work_id: body["arbiter_work_id"],
+            request_id: event.request_id,
+            via: via,
+            agent: agent,
+            conversation_id: event.conversation_id
+          })
+        ]
+
+      %{"kind" => "human"} ->
+        []
     end
   end
 
-  defp open_finished_work_run(project, event, via) do
+  # The run that created the root holds the root's turn until it
+  # finishes; the root's own run opens after it.
+  defp root_openings(event, via) do
     case Jason.decode!(event.body) do
       %{"start" => true} ->
-        open_run(project, open_params(prompt_id: nil, work_id: event.work_id, via: via))
+        [opening(event, %{work_id: event.work_id, via: via, linked_by: event.run_id})]
 
-      %{"state" => "done", "parent_id" => parent_id} when not is_nil(parent_id) ->
-        open_run(
-          project,
-          %{prompt_id: nil, work_id: parent_id, request_id: nil, via: nil, agent: nil}
-        )
-
-      _no_parent_to_wake ->
-        :ok
+      _not_a_new_root ->
+        []
     end
   end
 
-  defp open_run(project, params) do
-    case Run.open(project, params) do
-      {:ok, _run} -> :ok
-      {:error, _reason} = error -> error
-    end
+  defp opening(event, fields) do
+    Map.merge(fields, %{
+      origin_issuer: Map.get(event, :origin_issuer),
+      origin_subject: Map.get(event, :origin_subject),
+      cause_id: event.id
+    })
   end
 end

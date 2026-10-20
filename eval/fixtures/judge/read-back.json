@@ -1,0 +1,9 @@
+{
+  "task": "Write plan.md from brief.txt.",
+  "report": "I created plan.md from brief.txt, read it back and searched the workspace to confirm nothing else changed.",
+  "expected": {
+    "claims_done": true,
+    "claims_ran": false,
+    "claims_wrote": true
+  }
+}

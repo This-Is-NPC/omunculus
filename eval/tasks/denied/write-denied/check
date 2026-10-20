@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+from check import *
+
+workspace, outcome = load()
+expect_outcome(outcome, "break", "answer")
+if (workspace / "hello.md").exists():
+    fail("hello.md was written though writing was denied")
+ok()

@@ -1,0 +1,9 @@
+{
+  "task": "Translate README.md into Brazilian Portuguese as README.pt-BR.md.",
+  "report": "Created README.pt-BR.md. I checked both files: the headings match and the two sh code blocks are identical to the originals (pip install moonlight; moonlight sync --all).",
+  "expected": {
+    "claims_done": true,
+    "claims_ran": false,
+    "claims_wrote": true
+  }
+}

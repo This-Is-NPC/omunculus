@@ -1,20 +1,20 @@
 defmodule Omunculus.Store.Actions.Helpers do
   @moduledoc """
-  Shared machinery between `Actions` and `Actions.Sequence`: existence
-  checks and error tagging (spec §8.3), the `COMMENTS` insert every
+  Shared machinery between the `Actions` modules: existence and
+  non-empty text checks and error tagging, the `COMMENTS` insert every
   action that writes one reuses, reopening a waiting work, a new work's
-  depth and its stage/assignee from the workflow, resolving its
-  `workspace` from a given name, its parent, or the project's default
-  (spec §9.1), inserting the `WORKS` row itself, and the ancestor grants
-  walk of spec §5.
+  stage and assignee from the workflow, the named agent or the depth's
+  first agent, resolving its `workspace` from a given name, its parent,
+  or the project's default, inserting the `WORKS` row itself,
+  fetching a request by id, refusing to park a work that waits on its
+  children, and the ancestor grants walk.
   """
 
   alias Omunculus.Config
   alias Omunculus.Store.{Events, Query, View}
 
-  @forbidden ~w(stage agent model)
-
-  @spec ensure_exist(Exqlite.Sqlite3.db(), [{atom, String.t() | nil}]) :: :ok | {:error, term}
+  @spec ensure_exist(Omunculus.Store.Connection.t(), [{atom, String.t() | nil}]) ::
+          :ok | {:error, term}
   def ensure_exist(conn, targets) do
     targets
     |> Enum.reject(fn {_table, id} -> is_nil(id) end)
@@ -33,19 +33,22 @@ defmodule Omunculus.Store.Actions.Helpers do
   def tag_error(_tag, {:ok, _value} = ok), do: ok
   def tag_error(tag, {:error, reason}), do: {:error, {tag, reason}}
 
-  @spec ensure_no_forbidden(atom, map) :: :ok | {:error, {atom, {:forbidden, String.t()}}}
-  def ensure_no_forbidden(tag, body) do
-    case Enum.find(@forbidden, &Map.has_key?(body, &1)) do
-      nil -> :ok
-      key -> {:error, {tag, {:forbidden, key}}}
+  @doc "Refuses a body whose `key` is not a non-empty string with `{tag, :no_<key>}`."
+  @spec ensure_text(atom, map, String.t()) :: :ok | {:error, {atom, atom}}
+  def ensure_text(tag, body, key) do
+    case Map.get(body, key) do
+      text when is_binary(text) and text != "" -> :ok
+      _missing -> {:error, {tag, String.to_atom("no_" <> key)}}
     end
   end
 
-  @spec insert_comment(Exqlite.Sqlite3.db(), String.t(), map, String.t(), map, map) ::
+  @spec insert_comment(Omunculus.Store.Connection.t(), String.t(), map, String.t(), map, map) ::
           :ok | {:error, term}
   def insert_comment(conn, id, targets, text, event, ctx) do
     Query.insert(conn, :comments, %{
       id: id,
+      actor_issuer: Map.get(ctx, :issuer),
+      actor_subject: Map.get(ctx, :subject),
       work_id: targets[:works],
       request_id: targets[:requests],
       inbox_id: targets[:inbox],
@@ -58,7 +61,14 @@ defmodule Omunculus.Store.Actions.Helpers do
     })
   end
 
-  @spec reopen_work(Exqlite.Sqlite3.db(), String.t() | nil) :: :ok | {:error, term}
+  @doc "Refuses an action that would park a work already waiting on its children."
+  @spec ensure_not_waiting_children(atom, map | nil) :: :ok | {:error, {atom, :waiting_children}}
+  def ensure_not_waiting_children(tag, %{state: "waiting", waiting: "child"}),
+    do: {:error, {tag, :waiting_children}}
+
+  def ensure_not_waiting_children(_tag, _work), do: :ok
+
+  @spec reopen_work(Omunculus.Store.Connection.t(), String.t() | nil) :: :ok | {:error, term}
   def reopen_work(_conn, nil), do: :ok
 
   def reopen_work(conn, work_id) do
@@ -69,36 +79,67 @@ defmodule Omunculus.Store.Actions.Helpers do
     )
   end
 
-  @spec depth_at(Exqlite.Sqlite3.db(), String.t() | nil) ::
-          {:ok, non_neg_integer} | {:error, term}
-  def depth_at(_conn, nil), do: {:ok, 0}
+  @doc """
+  Where a work going to `depth` starts — `{workflow, stage, assignee}` — as
+  it names a `workflow` or an `agent`, or neither. A depth whose policy
+  requires workflows takes a work only through one of them, the only one
+  when it names none; elsewhere a work names its agent among the depth's,
+  the only one when it names none, or a workflow whose stage agents are
+  all of that depth.
+  """
+  @spec stage_and_assignee(Config.t(), non_neg_integer, String.t() | nil, String.t() | nil) ::
+          {:ok, {String.t() | nil, String.t() | nil, String.t()}} | {:error, term}
+  def stage_and_assignee(config, depth, agent, workflow) do
+    required = Config.workflows_for(config, depth)
 
-  def depth_at(conn, parent_id) do
-    case Query.one(conn, "SELECT * FROM works WHERE id = ?", [parent_id]) do
-      {:ok, nil} -> {:error, {:missing, :works, parent_id}}
-      {:ok, parent} -> {:ok, View.work_depth(conn, parent) + 1}
-      {:error, _reason} = error -> error
+    case {workflow, agent, required} do
+      {workflow, agent, _required} when is_binary(workflow) and is_binary(agent) ->
+        {:error, :agent_with_workflow}
+
+      {nil, nil, [only]} ->
+        first_stage(config, only)
+
+      {nil, nil, [_ | _]} ->
+        {:error, {:workflow_required, required}}
+
+      {nil, agent, [_ | _]} when is_binary(agent) ->
+        {:error, {:workflow_required, required}}
+
+      {workflow, nil, _required} when is_binary(workflow) ->
+        allowed = Config.workflows_at(config, depth)
+
+        if workflow in allowed,
+          do: first_stage(config, workflow),
+          else: {:error, {:workflow_not_allowed, workflow, allowed}}
+
+      {nil, nil, []} ->
+        with {:ok, {name, _agent}} <- Config.agent_at_depth(config, depth),
+             do: {:ok, {nil, nil, name}}
+
+      {nil, agent, []} ->
+        if List.keymember?(Config.agents_at_depth(config, depth), agent, 0),
+          do: {:ok, {nil, nil, agent}},
+          else: {:error, {:agent_not_allowed, agent}}
     end
   end
 
-  @spec stage_and_assignee(Config.t(), non_neg_integer, (-> {:ok, String.t()} | {:error, term})) ::
-          {:ok, {String.t() | nil, String.t()}} | {:error, term}
-  def stage_and_assignee(config, depth, fallback_agent) do
-    case Config.workflow_for(config, depth) do
-      {:ok, [step | _rest]} -> {:ok, {step.name, step.agent}}
-      :off -> with {:ok, agent} <- fallback_agent.(), do: {:ok, {nil, agent}}
-    end
+  defp first_stage(config, workflow) do
+    with {:ok, [step | _rest]} <- Config.workflow(config, workflow),
+         do: {:ok, {workflow, step.name, step.agent}}
   end
 
-  @spec insert_work(Exqlite.Sqlite3.db(), map) :: :ok | {:error, term}
+  @spec insert_work(Omunculus.Store.Connection.t(), map) :: :ok | {:error, term}
   def insert_work(conn, work) do
     Query.insert(conn, :works, %{
       id: work.id,
+      conversation_id: Map.get(work, :conversation_id),
       parent_id: work.parent_id,
       event_id: work.event_id,
       workspace: work.workspace,
       assignee: work.assignee,
       title: work.title,
+      goal: work.goal,
+      workflow: work.workflow,
       stage: work.stage,
       state: "open",
       created_at: work.at,
@@ -119,13 +160,24 @@ defmodule Omunculus.Store.Actions.Helpers do
     end
   end
 
-  @spec fetch_work(Exqlite.Sqlite3.db(), String.t() | nil) :: {:ok, map | nil} | {:error, term}
+  @spec fetch_work(Omunculus.Store.Connection.t(), String.t() | nil) ::
+          {:ok, map | nil} | {:error, term}
   def fetch_work(_conn, nil), do: {:ok, nil}
 
   def fetch_work(conn, work_id),
-    do: Query.one(conn, "SELECT * FROM works WHERE id = ?", [work_id])
+    do: View.view(conn, "work", work_id)
 
-  @spec grants(Exqlite.Sqlite3.db(), map | nil) :: {:ok, [String.t()]}
+  @spec fetch_request(atom, Omunculus.Store.Connection.t(), String.t() | nil) ::
+          {:ok, map} | {:error, term}
+  def fetch_request(tag, _conn, nil), do: {:error, {tag, :no_request}}
+
+  def fetch_request(tag, conn, request_id) do
+    with :ok <- tag_error(tag, ensure_exist(conn, [{:requests, request_id}])) do
+      View.view(conn, "request", request_id)
+    end
+  end
+
+  @spec grants(Omunculus.Store.Connection.t(), map | nil) :: {:ok, [String.t()]}
   def grants(_conn, nil), do: {:ok, []}
 
   def grants(conn, work) do

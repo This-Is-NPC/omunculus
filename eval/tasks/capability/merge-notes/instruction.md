@@ -1,0 +1,1 @@
+Collect every open action item (the lines starting with "- [ ]") of the notes in notes/ into todo.md, one per line as "- [ ] <text> (<date>)", where <date> is the date in the name of the note it came from. Leave out the items already done.

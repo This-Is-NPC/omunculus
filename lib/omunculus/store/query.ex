@@ -1,47 +1,55 @@
 defmodule Omunculus.Store.Query do
   @moduledoc """
   Thin wrapper over `Exqlite.Sqlite3`. The only place in the project allowed
-  to prepare and step raw SQL against a connection.
+  to prepare and step raw SQL, always inside the connection's owner
+  (`Store.Connection`). `transaction/2` runs its whole body there, between
+  `BEGIN IMMEDIATE` and `COMMIT`, so what the body reads cannot change
+  before it writes.
   """
 
   alias Exqlite.Sqlite3
+  alias Omunculus.Store.Connection
 
-  @spec all(Sqlite3.db(), String.t(), list()) :: {:ok, [map]} | {:error, term}
+  @spec all(Connection.t(), String.t(), list()) :: {:ok, [map]} | {:error, term}
   def all(conn, sql, params \\ []) do
-    with {:ok, stmt} <- Sqlite3.prepare(conn, sql) do
-      try do
-        with :ok <- Sqlite3.bind(stmt, params),
-             {:ok, columns} <- Sqlite3.columns(conn, stmt),
-             {:ok, rows} <- Sqlite3.fetch_all(conn, stmt) do
-          {:ok, Enum.map(rows, &row_to_map(columns, &1))}
+    Connection.run(conn, fn db ->
+      with {:ok, stmt} <- Sqlite3.prepare(db, sql) do
+        try do
+          with :ok <- Sqlite3.bind(stmt, params),
+               {:ok, columns} <- Sqlite3.columns(db, stmt),
+               {:ok, rows} <- Sqlite3.fetch_all(db, stmt) do
+            {:ok, Enum.map(rows, &row_to_map(columns, &1))}
+          end
+        after
+          Sqlite3.release(db, stmt)
         end
-      after
-        Sqlite3.release(conn, stmt)
       end
-    end
+    end)
   end
 
-  @spec one(Sqlite3.db(), String.t(), list()) :: {:ok, map | nil} | {:error, term}
+  @spec one(Connection.t(), String.t(), list()) :: {:ok, map | nil} | {:error, term}
   def one(conn, sql, params \\ []) do
     with {:ok, rows} <- all(conn, sql, params) do
       {:ok, List.first(rows)}
     end
   end
 
-  @spec exec(Sqlite3.db(), String.t(), list()) :: :ok | {:error, term}
+  @spec exec(Connection.t(), String.t(), list()) :: :ok | {:error, term}
   def exec(conn, sql, params \\ []) do
-    with {:ok, stmt} <- Sqlite3.prepare(conn, sql) do
-      try do
-        with :ok <- Sqlite3.bind(stmt, params) do
-          step_until_done(conn, stmt)
+    Connection.run(conn, fn db ->
+      with {:ok, stmt} <- Sqlite3.prepare(db, sql) do
+        try do
+          with :ok <- Sqlite3.bind(stmt, params) do
+            step_until_done(db, stmt)
+          end
+        after
+          Sqlite3.release(db, stmt)
         end
-      after
-        Sqlite3.release(conn, stmt)
       end
-    end
+    end)
   end
 
-  @spec insert(Sqlite3.db(), atom, map) :: :ok | {:error, term}
+  @spec insert(Connection.t(), atom, map) :: :ok | {:error, term}
   def insert(conn, table, row) do
     columns = Map.keys(row)
     placeholders = Enum.map_join(columns, ", ", fn _ -> "?" end)
@@ -53,12 +61,14 @@ defmodule Omunculus.Store.Query do
     )
   end
 
-  @spec transaction(Sqlite3.db(), (-> {:ok, term} | {:error, term})) ::
+  @spec transaction(Connection.t(), (-> {:ok, term} | {:error, term})) ::
           {:ok, term} | {:error, term}
   def transaction(conn, fun) do
-    with :ok <- exec(conn, "BEGIN IMMEDIATE") do
-      run(conn, fun)
-    end
+    Connection.run(conn, fn _db ->
+      with :ok <- exec(conn, "BEGIN IMMEDIATE") do
+        run(conn, fun)
+      end
+    end)
   end
 
   defp run(conn, fun) do
@@ -76,10 +86,10 @@ defmodule Omunculus.Store.Query do
       reraise error, __STACKTRACE__
   end
 
-  defp step_until_done(conn, stmt) do
-    case Sqlite3.step(conn, stmt) do
+  defp step_until_done(db, stmt) do
+    case Sqlite3.step(db, stmt) do
       :done -> :ok
-      {:row, _row} -> step_until_done(conn, stmt)
+      {:row, _row} -> step_until_done(db, stmt)
       {:error, _reason} = error -> error
       :busy -> {:error, :busy}
     end

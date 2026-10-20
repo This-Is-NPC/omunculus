@@ -2,60 +2,98 @@ defmodule Omunculus.Store.Actions do
   @moduledoc """
   Write side of the store: `run/3` applies the emits from a tool's
   `out.emit` in order, inside whatever transaction the caller holds — the
-  whole batch commits or nothing does (spec §8.3). `continue`, `break`
-  and `delegate` are dispatched to `Actions.Sequence`; `notify` and
-  `inbox.read` to `Actions.Inbox`; `compact` and `comment.delete` to
-  `Actions.Comments`.
+  whole batch commits or nothing does. `work` creates a root
+  work with the `report` as its first comment and links the run to it when
+  the run has no work yet. Of its `works`, one naming an agent or a
+  workflow of depth 0 — or unnamed, when depth 0 requires a workflow or
+  depth 1 has no agent — is the root itself, marked to start; when each
+  names an agent or a workflow of depth 1 or none, the root is held by
+  the run's agent and each is delegated below it, so the root's run opens
+  once they are back — only for a run whose ceiling has `delegate`:
+  without it, an unnamed work is the root itself and naming an agent or a
+  workflow of depth 1 is refused. `work` and `delegate` may name the new
+  work's `agent` or its `workflow`, as `Helpers.stage_and_assignee/4`
+  allows at its depth; the work keeps its workflow, whose stages it goes
+  through. `attach` records the files a run attached to its conversation,
+  as `Omunculus.Attachments` kept them, in an `attach` event; outside a run
+  it is refused.
+  `continue`, `break`, `wait`, `reopen`, `retire`, `delegate`, `cancel` and `end` are
+  dispatched to `Actions.Sequence`; `request`, `reply` and `grant` to
+  `Actions.Requests`; `notify` and `inbox.read` to `Actions.Inbox`;
+  `compact` and `comment.delete` to `Actions.Comments`.
   """
 
-  alias Omunculus.Ceiling
-  alias Omunculus.Config
-  alias Omunculus.Id
-  alias Omunculus.Store.Actions.{Comments, Contract, Helpers, Inbox, Sequence}
-  alias Omunculus.Store.{Events, Query, View}
+  alias Omunculus.{Attachments, Ceiling, Config, Id}
+  alias Omunculus.Store.Actions.{Comments, Contract, Helpers, Inbox, Requests, Sequence}
+  alias Omunculus.Store.{Events, Query}
 
   @comment_targets %{"work_id" => :works, "request_id" => :requests, "inbox_id" => :inbox}
-  @reply_decisions ~w(grant deny)
-  @reply_scopes ~w(agent depth stage workspace)
 
-  @spec run(Exqlite.Sqlite3.db(), [map], map) :: {:ok, [map]} | {:error, term}
+  @spec run(Omunculus.Store.Connection.t(), [map], map) :: {:ok, [map]} | {:error, term}
   def run(conn, emits, ctx) do
-    emits
-    |> Enum.reduce_while({:ok, []}, fn emit, {:ok, events} ->
-      case with(:ok <- Contract.validate(emit), do: dispatch(conn, emit, ctx)) do
-        {:ok, result} -> {:cont, {:ok, [result | events]}}
-        {:error, _reason} = error -> {:halt, error}
+    Events.with_actor(conn, ctx, fn ->
+      emits
+      |> Enum.reduce_while({:ok, []}, fn emit, {:ok, events} ->
+        case with(:ok <- Contract.validate(emit), do: dispatch(conn, emit, ctx)) do
+          {:ok, result} -> {:cont, {:ok, [result | events]}}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+      |> case do
+        {:ok, events} ->
+          {:ok, events |> Enum.reverse() |> List.flatten() |> Enum.reject(&is_nil/1)}
+
+        error ->
+          error
       end
     end)
-    |> case do
-      {:ok, events} -> {:ok, events |> Enum.reverse() |> List.flatten() |> Enum.reject(&is_nil/1)}
-      error -> error
-    end
   end
 
   defp dispatch(conn, %{"type" => "comment"} = emit, ctx),
     do: comment(conn, Map.get(emit, "body", %{}), ctx)
 
-  defp dispatch(conn, %{"type" => "prompt"} = emit, _ctx),
-    do: prompt(conn, Map.get(emit, "body", %{}))
+  defp dispatch(conn, %{"type" => "prompt"} = emit, ctx),
+    do: prompt(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "attach"} = emit, ctx),
+    do: attach(conn, Map.get(emit, "body", %{}), ctx)
 
   defp dispatch(conn, %{"type" => "work"} = emit, ctx),
     do: work(conn, Map.get(emit, "body", %{}), ctx)
 
   defp dispatch(conn, %{"type" => "request"} = emit, ctx),
-    do: request(conn, Map.get(emit, "body", %{}), ctx)
+    do: Requests.request(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "escalate"} = emit, ctx),
+    do: Requests.escalate(conn, Map.get(emit, "body", %{}), ctx)
 
   defp dispatch(conn, %{"type" => "reply"} = emit, ctx),
-    do: reply(conn, Map.get(emit, "body", %{}), ctx)
+    do: Requests.reply(conn, Map.get(emit, "body", %{}), ctx)
 
-  defp dispatch(conn, %{"type" => "continue"} = emit, ctx),
-    do: Sequence.continue(conn, Map.get(emit, "body", %{}), ctx)
+  defp dispatch(conn, %{"type" => "grant"} = emit, ctx),
+    do: Requests.grant(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "cancel"} = emit, ctx),
+    do: Sequence.cancel(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "continue"}, ctx), do: Sequence.continue(conn, ctx)
 
   defp dispatch(conn, %{"type" => "break"} = emit, ctx),
     do: Sequence.break(conn, Map.get(emit, "body", %{}), ctx)
 
+  defp dispatch(conn, %{"type" => "wait"} = emit, ctx),
+    do: Sequence.wait(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "reopen"} = emit, ctx),
+    do: Sequence.reopen(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "retire"} = emit, ctx),
+    do: Sequence.retire(conn, Map.get(emit, "body", %{}), ctx)
+
   defp dispatch(conn, %{"type" => "delegate"} = emit, ctx),
     do: Sequence.delegate(conn, Map.get(emit, "body", %{}), ctx)
+
+  defp dispatch(conn, %{"type" => "end"}, ctx), do: Sequence.end_run(conn, ctx)
 
   defp dispatch(conn, %{"type" => "notify"} = emit, ctx),
     do: Inbox.notify(conn, Map.get(emit, "body", %{}), ctx)
@@ -75,15 +113,12 @@ defmodule Omunculus.Store.Actions do
     targets =
       Map.new(@comment_targets, fn {key, table} -> {table, Map.get(body, key)} end)
 
-    with :ok <- ensure_text(body),
+    with :ok <- Helpers.ensure_text(:comment, body, "body"),
          :ok <- ensure_target(targets),
          :ok <- Helpers.tag_error(:comment, Helpers.ensure_exist(conn, Map.to_list(targets))) do
       write_comment(conn, body, targets, ctx)
     end
   end
-
-  defp ensure_text(%{"body" => text}) when is_binary(text) and text != "", do: :ok
-  defp ensure_text(_body), do: {:error, {:comment, :no_body}}
 
   defp ensure_target(targets) do
     if Enum.any?(targets, fn {_table, id} -> not is_nil(id) end) do
@@ -111,23 +146,51 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
-  defp prompt(conn, %{"message" => text} = body) when is_binary(text) and text != "" do
-    with :ok <-
+  # A message's files, each one `Omunculus.Attachments` keeps.
+  defp prompt_attachments(%{"attachments" => list} = body, ctx) when list != [] do
+    with {:ok, checked} <- Attachments.check(ctx.config.store, list),
+         do: {:ok, Map.put(body, "attachments", checked)}
+  end
+
+  defp prompt_attachments(body, _ctx), do: {:ok, Map.delete(body, "attachments")}
+
+  # A run's files for its conversation, as `Omunculus.Attachments` kept them.
+  defp attach(conn, body, ctx) do
+    case {Map.get(ctx, :run_id), body} do
+      {nil, _body} ->
+        {:error, {:attach, :no_run}}
+
+      {run_id, %{"attachments" => [_ | _] = list}} ->
+        with {:ok, checked} <- Attachments.check(ctx.config.store, list) do
+          body = Map.put(body, "attachments", checked)
+          Events.append(conn, %{type: "attach", run_id: run_id, body: Jason.encode!(body)})
+        end
+
+      _invalid ->
+        {:error, {:attach, {:invalid, :attachments}}}
+    end
+  end
+
+  defp prompt(conn, body, ctx) do
+    with :ok <- Helpers.ensure_text(:prompt, body, "message"),
+         :ok <-
            Helpers.tag_error(:prompt, Helpers.ensure_exist(conn, [{:works, body["work_id"]}])),
+         {:ok, body} <- prompt_attachments(body, ctx),
          {:ok, reopened} <- reopen_waiting_work(conn, body["work_id"]),
-         {:ok, prompt_event} <- write_prompt(conn, body, text) do
+         {:ok, prompt_event} <- write_prompt(conn, body, ctx) do
       {:ok, Enum.reject([reopened, prompt_event], &is_nil/1)}
     end
   end
 
-  defp prompt(_conn, _body), do: {:error, {:prompt, :no_message}}
-
   defp reopen_waiting_work(_conn, nil), do: {:ok, nil}
 
+  # A work waiting on its children keeps waiting: the message runs its
+  # agent while it waits, and the last child back still wakes it.
   defp reopen_waiting_work(conn, work_id) do
-    with {:ok, work} <- Query.one(conn, "SELECT state FROM works WHERE id = ?", [work_id]) do
+    with {:ok, work} <-
+           Query.one(conn, "SELECT state, waiting FROM works WHERE id = ?", [work_id]) do
       case work do
-        %{state: "waiting"} ->
+        %{state: "waiting", waiting: waiting} when waiting != "child" ->
           with :ok <- Helpers.reopen_work(conn, work_id) do
             Events.append(conn, %{
               type: "work",
@@ -142,90 +205,261 @@ defmodule Omunculus.Store.Actions do
     end
   end
 
-  defp write_prompt(conn, body, text) do
+  # A run may only message a work of its own conversation.
+  defp write_prompt(conn, body, ctx) do
+    with :ok <- same_conversation(conn, body["work_id"], Map.get(ctx, :run_id)),
+         {:ok, body} <- addressed(conn, body, ctx),
+         do: insert_prompt(conn, body, ctx)
+  end
+
+  # A message without a work goes to the agent of depth 0 it names, else to
+  # the one its conversation began with, else to the only one there; the
+  # event says which.
+  defp addressed(_conn, %{"work_id" => work_id, "agent" => _agent}, _ctx)
+       when is_binary(work_id),
+       do: {:error, {:prompt, :agent_with_work}}
+
+  defp addressed(_conn, %{"work_id" => work_id} = body, _ctx) when is_binary(work_id),
+    do: {:ok, body}
+
+  defp addressed(conn, body, ctx) do
+    front = ctx.config |> Config.agents_at_depth(0) |> Enum.map(&elem(&1, 0))
+
+    case Map.get(body, "agent") || conversation_agent(conn, Map.get(ctx, :conversation_id)) do
+      nil ->
+        case front do
+          [only] -> {:ok, Map.put(body, "agent", only)}
+          [] -> {:error, {:prompt, {:no_agent_at_depth, 0}}}
+          several -> {:error, {:prompt, {:agent_required, 0, several}}}
+        end
+
+      agent ->
+        if agent in front,
+          do: {:ok, Map.put(body, "agent", agent)},
+          else: {:error, {:prompt, {:not_at_depth_0, agent}}}
+    end
+  end
+
+  defp conversation_agent(conn, conversation_id) do
+    case Query.one(
+           conn,
+           """
+           SELECT agent FROM runs
+           WHERE work_id IS NULL AND depth = '0' AND conversation_id IS ?
+           ORDER BY started_at DESC, id DESC LIMIT 1
+           """,
+           [conversation_id]
+         ) do
+      {:ok, %{agent: agent}} -> agent
+      _none -> nil
+    end
+  end
+
+  defp same_conversation(_conn, nil, _run_id), do: :ok
+  defp same_conversation(_conn, _work_id, nil), do: :ok
+
+  defp same_conversation(conn, work_id, run_id) do
+    case Query.one(
+           conn,
+           """
+           SELECT 1 AS same FROM works, runs
+           WHERE works.id = ? AND runs.id = ? AND works.conversation_id IS runs.conversation_id
+           """,
+           [work_id, run_id]
+         ) do
+      {:ok, %{same: 1}} -> :ok
+      _other -> {:error, {:prompt, {:outside_conversation, work_id}}}
+    end
+  end
+
+  defp insert_prompt(conn, body, ctx) do
     prompt_id = Id.new()
+
+    conversation_id =
+      case body["work_id"] do
+        nil ->
+          Map.get(ctx, :conversation_id)
+
+        work_id ->
+          case Query.one(conn, "SELECT conversation_id FROM works WHERE id = ?", [work_id]) do
+            {:ok, work} -> work && work.conversation_id
+            _ -> nil
+          end
+      end
 
     with :ok <-
            Query.insert(conn, :prompts, %{
              id: prompt_id,
+             conversation_id: conversation_id,
+             actor_issuer: Map.get(ctx, :issuer),
+             actor_subject: Map.get(ctx, :subject),
              kind: "message",
-             body: text,
+             body: body["message"],
              run_id: nil,
              created_at: Events.now()
            }) do
+      # A run's message is among its events, so its close opens the run it asks for.
       Events.append(conn, %{
         type: "prompt",
+        run_id: Map.get(ctx, :run_id),
         prompt_id: prompt_id,
         work_id: body["work_id"],
+        conversation_id: conversation_id,
+        actor_issuer: Map.get(ctx, :issuer),
+        actor_subject: Map.get(ctx, :subject),
         body: Jason.encode!(body)
       })
     end
   end
 
-  defp work(conn, %{"title" => title} = body, ctx) when is_binary(title) and title != "" do
-    with :ok <- Helpers.ensure_no_forbidden(:work, body) do
-      case body["work_id"] do
-        nil -> create_work(conn, body, ctx)
-        work_id -> update_work(conn, work_id, body, ctx)
+  defp work(conn, body, ctx) do
+    with :ok <- Helpers.ensure_text(:work, body, "report"),
+         {:ok, items} <- work_items(body["works"]),
+         {:ok, delegates?} <- delegates?(conn, ctx.run_id) do
+      cond do
+        delegates? and down?(ctx.config, items) ->
+          hand_down(conn, body["report"], items, ctx)
+
+        not delegates? and Enum.any?(items, &below?(ctx.config, &1)) ->
+          {:error, {:work, :no_delegate}}
+
+        match?([_], items) ->
+          own_root(conn, body["report"], hd(items), ctx)
+
+        true ->
+          {:error, {:work, :one_root}}
       end
     end
   end
 
-  defp work(_conn, _body, _ctx), do: {:error, {:work, :no_title}}
+  # Handing works down is delegating: a run whose ceiling lacks delegate
+  # keeps the root for itself, as a chained delegate would be refused.
+  defp delegates?(_conn, nil), do: {:ok, true}
 
-  defp update_work(conn, work_id, body, ctx) do
-    with :ok <- Helpers.tag_error(:work, Helpers.ensure_exist(conn, [{:works, work_id}])),
-         :ok <-
-           Query.exec(conn, "UPDATE works SET title = ?, updated_at = ? WHERE id = ?", [
-             body["title"],
-             Events.now(),
-             work_id
-           ]) do
-      Events.append(conn, %{
-        type: "work",
-        work_id: work_id,
-        run_id: ctx.run_id,
-        body: Jason.encode!(body)
-      })
+  defp delegates?(conn, run_id) do
+    with {:ok, run} <- Query.one(conn, "SELECT event_id FROM runs WHERE id = ?", [run_id]),
+         {:ok, start} <-
+           Query.one(conn, "SELECT body FROM events WHERE id = ?", [run && run.event_id]) do
+      case start && Jason.decode!(start.body)["ceiling"] do
+        nil -> {:ok, true}
+        ceiling -> {:ok, Ceiling.classify(ceiling, "delegate", "tool") == "have"}
+      end
     end
   end
 
-  defp create_work(conn, body, ctx) do
-    with {:ok, depth} <- Helpers.tag_error(:work, Helpers.depth_at(conn, body["parent_id"])),
-         {:ok, {stage, assignee}} <-
-           Helpers.stage_and_assignee(ctx.config, depth, fn -> {:ok, ctx.agent} end),
-         {:ok, parent} <- Helpers.fetch_work(conn, body["parent_id"]),
+  defp children(config), do: for({name, %{depth: 1}} <- config.agents, do: name)
+
+  defp below?(config, item),
+    do:
+      item["agent"] in children(config) or
+        item["workflow"] in Config.workflows_at(config, 1)
+
+  # Works go to depth 1 when each names one of its agents or workflows, or
+  # neither: an unnamed work goes through the workflow the depth requires or to its
+  # agent. A work naming an agent or a workflow of depth 0, or any work
+  # when depth 0 requires a workflow (its first stage takes the root) or
+  # depth 1 has no agent, is the root itself.
+  defp down?(config, items) do
+    free_root? = Config.workflows_for(config, 0) == []
+
+    unnamed_down? =
+      Config.agents_at_depth(config, 1) != [] or Config.workflows_for(config, 1) != []
+
+    free_root? and
+      Enum.all?(items, fn item ->
+        if item["agent"] || item["workflow"], do: below?(config, item), else: unnamed_down?
+      end)
+  end
+
+  defp work_items([_ | _] = items) do
+    if Enum.all?(items, &item?/1),
+      do: {:ok, items},
+      else: {:error, {:work, {:invalid, "works"}}}
+  end
+
+  defp work_items(_items), do: {:error, {:work, {:invalid, "works"}}}
+
+  defp item?(item) when is_map(item) do
+    Enum.all?(item, fn {key, value} ->
+      key in ~w(title goal agent workflow workspace) and is_binary(value)
+    end) and Enum.all?(~w(title goal), &(Map.get(item, &1, "") != ""))
+  end
+
+  defp item?(_item), do: false
+
+  # One work for an agent of depth 0, or the depth's own, starts as the root:
+  # unnamed, it is the creating run's agent's, unless a workflow's first
+  # stage takes it.
+  defp own_root(conn, report, item, ctx) do
+    workflow = item["workflow"]
+    free? = is_nil(workflow) and Config.workflows_for(ctx.config, 0) == []
+    agent = item["agent"] || (free? && ctx.agent) || nil
+
+    with {:ok, start} <-
+           Helpers.tag_error(:work, Helpers.stage_and_assignee(ctx.config, 0, agent, workflow)),
          {:ok, workspace} <-
-           Helpers.tag_error(
-             :work,
-             Helpers.resolve_workspace(ctx.config, body["workspace"], parent)
-           ) do
-      work_id = Id.new()
+           Helpers.tag_error(:work, Helpers.resolve_workspace(ctx.config, item["workspace"], nil)) do
+      create_root(conn, Map.put(item, "report", report), ctx, start, workspace, true)
+    end
+  end
 
-      with {:ok, event} <-
-             Events.append(conn, %{
-               type: "work",
-               work_id: work_id,
-               run_id: ctx.run_id,
-               body:
-                 Jason.encode!(
-                   Map.put(body, "start", not is_nil(stage) and not is_nil(ctx.run_id))
-                 )
-             }),
-           :ok <-
-             Helpers.insert_work(conn, %{
-               id: work_id,
-               parent_id: body["parent_id"],
-               workspace: workspace,
-               assignee: assignee,
-               stage: stage,
-               title: body["title"],
-               event_id: event.id,
-               at: event.at
-             }),
-           :ok <- link_run(conn, ctx.run_id, work_id) do
-        {:ok, event}
-      end
+  # Works for agents of depth 1 go below a root the run's agent holds, which
+  # does not start: its run opens once they are back.
+  defp hand_down(conn, report, items, ctx) do
+    held_by = if Config.workflows_for(ctx.config, 0) == [], do: Map.get(ctx, :agent)
+
+    root = %{
+      "title" => Enum.map_join(items, "; ", & &1["title"]),
+      "goal" => Enum.map_join(items, "\n\n", & &1["goal"]),
+      "report" => report
+    }
+
+    with {:ok, start} <-
+           Helpers.tag_error(:work, Helpers.stage_and_assignee(ctx.config, 0, held_by, nil)),
+         {:ok, workspace} <-
+           Helpers.tag_error(:work, Helpers.resolve_workspace(ctx.config, nil, nil)),
+         {:ok, event} <- create_root(conn, root, ctx, start, workspace, false) do
+      items
+      |> Enum.reduce_while({:ok, [event]}, fn item, {:ok, events} ->
+        case Sequence.delegate(conn, item, Map.put(ctx, :work_id, event.work_id)) do
+          {:ok, delegated} -> {:cont, {:ok, events ++ [delegated]}}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+    end
+  end
+
+  # A root marked to start runs once the run that created it has ended.
+  defp create_root(conn, body, ctx, {workflow, stage, assignee}, workspace, start) do
+    work_id = Id.new()
+    comment_id = Id.new()
+
+    with {:ok, event} <-
+           Events.append(conn, %{
+             type: "work",
+             work_id: work_id,
+             run_id: ctx.run_id,
+             comment_id: comment_id,
+             body: Jason.encode!(Map.put(body, "start", start))
+           }),
+         :ok <-
+           Helpers.insert_work(conn, %{
+             id: work_id,
+             conversation_id: event.conversation_id,
+             parent_id: nil,
+             workspace: workspace,
+             assignee: assignee,
+             workflow: workflow,
+             stage: stage,
+             title: body["title"],
+             goal: body["goal"],
+             event_id: event.id,
+             at: event.at
+           }),
+         :ok <-
+           Helpers.insert_comment(conn, comment_id, %{works: work_id}, body["report"], event, ctx),
+         :ok <- link_run(conn, ctx.run_id, work_id) do
+      {:ok, event}
     end
   end
 
@@ -241,293 +475,6 @@ defmodule Omunculus.Store.Actions do
 
       {:error, _reason} = error ->
         error
-    end
-  end
-
-  defp request(conn, body, ctx) do
-    kind = body["kind"]
-    name = body["name"]
-    reason = body["reason"]
-
-    with :ok <- ensure_kind(kind),
-         :ok <- ensure_name(name),
-         :ok <- ensure_reason(reason),
-         {:ok, run} <- fetch_run(conn, ctx.run_id),
-         {:ok, event} <- Query.one(conn, "SELECT * FROM events WHERE id = ?", [run.event_id]) do
-      snapshot = event.body |> Jason.decode!() |> Map.fetch!("ceiling")
-      classify_request(conn, ctx, run, Ceiling.classify(snapshot, name, kind), kind, name, reason)
-    end
-  end
-
-  defp ensure_kind(kind) when is_binary(kind) and kind != "", do: :ok
-  defp ensure_kind(_kind), do: {:error, {:request, {:invalid, :kind}}}
-
-  defp ensure_name(name) when is_binary(name) and name != "", do: :ok
-  defp ensure_name(_name), do: {:error, {:request, :no_name}}
-
-  defp ensure_reason(reason) when is_binary(reason) and reason != "", do: :ok
-  defp ensure_reason(_reason), do: {:error, {:request, :no_reason}}
-
-  defp fetch_run(_conn, nil), do: {:error, {:request, :no_run}}
-
-  defp fetch_run(conn, run_id) do
-    case Query.one(conn, "SELECT * FROM runs WHERE id = ?", [run_id]) do
-      {:ok, nil} -> {:error, {:request, {:missing, :runs, run_id}}}
-      other -> other
-    end
-  end
-
-  defp classify_request(_conn, _ctx, _run, "have", _kind, _name, _reason), do: {:ok, nil}
-
-  defp classify_request(conn, ctx, _run, "blocked", kind, name, reason) do
-    Events.append(conn, %{
-      type: "deny",
-      run_id: ctx.run_id,
-      work_id: ctx.work_id,
-      body: Jason.encode!(%{kind: kind, name: name, reason: reason})
-    })
-  end
-
-  defp classify_request(conn, ctx, run, class, kind, name, reason)
-       when class in ["askable", "sealed"] do
-    open_request(conn, ctx, run, class, kind, name, reason)
-  end
-
-  defp open_request(conn, ctx, run, class, kind, name, reason) do
-    with {:ok, arbiter} <- resolve_arbiter(conn, ctx, name, class) do
-      request_id = Id.new()
-      comment_id = Id.new()
-      body = Map.merge(%{kind: kind, name: name, reason: reason}, arbiter.body_extra)
-
-      with {:ok, event} <-
-             Events.append(conn, %{
-               type: "request",
-               run_id: ctx.run_id,
-               work_id: ctx.work_id,
-               request_id: request_id,
-               comment_id: comment_id,
-               body: Jason.encode!(body)
-             }),
-           :ok <-
-             Query.insert(conn, :requests, %{
-               id: request_id,
-               run_id: ctx.run_id,
-               agent: run.agent,
-               work_id: ctx.work_id,
-               ask: Jason.encode!(%{kind: kind, name: name}),
-               arbiter: arbiter.arbiter,
-               status: arbiter.status,
-               event_id: event.id,
-               created_at: Events.now()
-             }),
-           :ok <-
-             Helpers.insert_comment(conn, comment_id, %{requests: request_id}, reason, event, ctx),
-           :ok <- mark_waiting_for_access(conn, ctx.work_id, name, run.agent) do
-        {:ok, event}
-      end
-    end
-  end
-
-  defp resolve_arbiter(_conn, _ctx, _name, "sealed"), do: {:ok, arbiter_info(:human)}
-
-  defp resolve_arbiter(conn, ctx, name, _class) do
-    with {:ok, work} <- Helpers.fetch_work(conn, ctx.work_id),
-         {:ok, parent} <- Helpers.fetch_work(conn, work && work.parent_id),
-         {:ok, decision} <- agent_arbiter(conn, ctx, parent, name) do
-      {:ok, arbiter_info(decision)}
-    end
-  end
-
-  defp agent_arbiter(_conn, _ctx, nil, _name), do: {:ok, :human}
-  defp agent_arbiter(_conn, _ctx, %{assignee: nil}, _name), do: {:ok, :human}
-
-  defp agent_arbiter(conn, ctx, parent, name) do
-    depth = View.work_depth(conn, parent)
-
-    with {:ok, grants} <- Helpers.grants(conn, parent) do
-      stage = stage_layer(ctx.config, depth, parent.stage)
-      workspace_name = Config.effective_workspace(ctx.config, parent)
-      workspace = Config.workspace_ceiling(ctx.config, workspace_name)
-
-      snapshot =
-        Ceiling.mount(
-          ctx.config,
-          %{
-            agent: parent.assignee,
-            depth: depth,
-            grants: grants,
-            stage: stage,
-            workspace: workspace,
-            groups: ctx.groups
-          },
-          [name]
-        )
-
-      case Ceiling.classify(snapshot, name) do
-        class when class in ["have", "askable"] -> {:ok, {:agent, parent.assignee, parent.id}}
-        _class -> {:ok, :human}
-      end
-    end
-  end
-
-  defp stage_layer(_config, _depth, nil), do: nil
-
-  defp stage_layer(config, depth, stage) do
-    with {:ok, steps} <- Config.workflow_for(config, depth),
-         {:ok, step} <- Config.step_at(steps, stage) do
-      step.ceiling
-    else
-      _off_or_off_sequence -> nil
-    end
-  end
-
-  defp arbiter_info(:human), do: %{arbiter: "human", status: "waiting_human", body_extra: %{}}
-
-  defp arbiter_info({:agent, arbiter, arbiter_work_id}),
-    do: %{
-      arbiter: arbiter,
-      status: "waiting_agent",
-      body_extra: %{arbiter: arbiter, arbiter_work_id: arbiter_work_id}
-    }
-
-  defp mark_waiting_for_access(_conn, nil, _name, _agent), do: :ok
-
-  defp mark_waiting_for_access(conn, work_id, name, agent) do
-    Query.exec(
-      conn,
-      "UPDATE works SET state = 'waiting', waiting = 'access', waiting_for = ?, waiting_from = ?, updated_at = ? WHERE id = ?",
-      [name, agent, Events.now(), work_id]
-    )
-  end
-
-  defp reply(conn, body, ctx) do
-    request_id = body["request_id"]
-    decision = body["decision"]
-    text = body["body"]
-    scope = body["scope"]
-
-    with :ok <- Helpers.tag_error(:reply, Helpers.ensure_exist(conn, [{:requests, request_id}])),
-         {:ok, request} <- Query.one(conn, "SELECT * FROM requests WHERE id = ?", [request_id]),
-         :ok <- ensure_open(request),
-         :ok <- ensure_decision(decision),
-         :ok <- ensure_reply_text(text),
-         :ok <- ensure_scope(scope),
-         :ok <- authorize_reply(request, ctx, scope) do
-      apply_reply(conn, ctx, request, decision, text, scope, body)
-    end
-  end
-
-  defp authorize_reply(_request, %{author: "human"}, _scope), do: :ok
-
-  defp authorize_reply(%{status: "waiting_agent", arbiter: arbiter}, %{agent: arbiter}, nil),
-    do: :ok
-
-  defp authorize_reply(_request, _ctx, _scope), do: {:error, {:reply, :not_arbiter}}
-
-  defp ensure_open(%{status: status}) when status in ["waiting_human", "waiting_agent"], do: :ok
-  defp ensure_open(_request), do: {:error, {:reply, :closed}}
-
-  defp ensure_decision(decision) when decision in @reply_decisions, do: :ok
-  defp ensure_decision(_decision), do: {:error, {:reply, {:invalid, :decision}}}
-
-  defp ensure_reply_text(text) when is_binary(text) and text != "", do: :ok
-  defp ensure_reply_text(_text), do: {:error, {:reply, :no_body}}
-
-  defp ensure_scope(nil), do: :ok
-  defp ensure_scope(scope) when scope in @reply_scopes, do: :ok
-  defp ensure_scope(_scope), do: {:error, {:reply, {:invalid, :scope}}}
-
-  defp apply_reply(conn, ctx, request, decision, text, scope, body) do
-    comment_id = Id.new()
-
-    with {:ok, reply_event} <-
-           Events.append(conn, %{
-             type: "reply",
-             run_id: ctx.run_id,
-             request_id: request.id,
-             work_id: request.work_id,
-             comment_id: comment_id,
-             body: Jason.encode!(body)
-           }),
-         :ok <-
-           Helpers.insert_comment(
-             conn,
-             comment_id,
-             %{requests: request.id},
-             text,
-             reply_event,
-             ctx
-           ),
-         :ok <-
-           Query.exec(conn, "UPDATE requests SET status = 'closed' WHERE id = ?", [
-             request.id
-           ]),
-         {:ok, effect_event} <- apply_decision(conn, ctx, decision, request, scope) do
-      {:ok, [reply_event, effect_event]}
-    end
-  end
-
-  defp apply_decision(conn, ctx, "grant", request, scope) do
-    ask = Jason.decode!(request.ask)
-
-    with {:ok, depth} <- run_depth(conn, request.run_id),
-         {:ok, work} <- Helpers.fetch_work(conn, request.work_id),
-         :ok <- grant_work(conn, request.work_id, ask["name"], scope) do
-      Events.append(conn, %{
-        type: "grant",
-        run_id: ctx.run_id,
-        request_id: request.id,
-        work_id: request.work_id,
-        body:
-          Jason.encode!(%{
-            name: ask["name"],
-            kind: ask["kind"],
-            agent: request.agent,
-            depth: depth,
-            scope: scope,
-            workflow: work && Config.workflow_name_for(ctx.config, View.work_depth(conn, work)),
-            stage: work && work.stage,
-            workspace: work && work.workspace
-          })
-      })
-    end
-  end
-
-  defp apply_decision(conn, ctx, "deny", request, _scope) do
-    ask = Jason.decode!(request.ask)
-
-    Events.append(conn, %{
-      type: "deny",
-      run_id: ctx.run_id,
-      request_id: request.id,
-      work_id: request.work_id,
-      body: Jason.encode!(%{name: ask["name"], kind: ask["kind"]})
-    })
-  end
-
-  defp run_depth(conn, run_id) do
-    with {:ok, run} <- Query.one(conn, "SELECT depth FROM runs WHERE id = ?", [run_id]) do
-      {:ok, String.to_integer(run.depth)}
-    end
-  end
-
-  defp grant_work(_conn, nil, _name, _scope), do: :ok
-
-  defp grant_work(conn, work_id, name, nil) do
-    with :ok <- append_grant(conn, work_id, name), do: Helpers.reopen_work(conn, work_id)
-  end
-
-  defp grant_work(conn, work_id, _name, _scope), do: Helpers.reopen_work(conn, work_id)
-
-  defp append_grant(conn, work_id, name) do
-    with {:ok, work} <- Query.one(conn, "SELECT grants FROM works WHERE id = ?", [work_id]) do
-      grants = if work.grants, do: Jason.decode!(work.grants), else: []
-      updated = if name in grants, do: grants, else: grants ++ [name]
-
-      Query.exec(conn, "UPDATE works SET grants = ? WHERE id = ?", [
-        Jason.encode!(updated),
-        work_id
-      ])
     end
   end
 end

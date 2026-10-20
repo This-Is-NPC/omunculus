@@ -1,13 +1,13 @@
 defmodule Omunculus.WorkspaceTest do
   use ExUnit.Case, async: false
 
-  alias Omunculus.{CLI, Config, Fixtures, Id, Project}
+  alias Omunculus.{CLI, Config, Fixtures, Project}
   alias Omunculus.Store.Query
 
+  import Omunculus.Fixtures, only: [open_project: 1, write_config: 2]
+
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
 
     [one, two, three] =
       for n <- ["001", "002", "003"] do
@@ -19,13 +19,6 @@ defmodule Omunculus.WorkspaceTest do
 
     %{dir: dir, one: one, two: two, three: three}
   end
-
-  defp open(dir) do
-    {:ok, project} = Fixtures.open_project(dir)
-    project
-  end
-
-  defp write_config(dir, contents), do: Fixtures.write_config(dir, contents)
 
   defp base_toml(one, two, three) do
     """
@@ -45,7 +38,7 @@ defmodule Omunculus.WorkspaceTest do
     [agents.concierge]
     depth = 0
     text = "concierge"
-    tools = ["work", "delegate", "directory", "workspaces", "read", "write", "request_access", "reply", "comment", "peek", "sandbox.write", "sandbox.network"]
+    tools = ["work", "delegate", "end", "directory", "workspaces", "read", "write", "changes", "revert", "request_access", "reply", "comment", "peek", "sandbox.write", "sandbox.network"]
 
     [agents.worker]
     depth = 1
@@ -119,6 +112,156 @@ defmodule Omunculus.WorkspaceTest do
     refute File.exists?(Path.join(dir, "note.txt"))
   end
 
+  test "with [store] changes, a call that wrote records the files it changed", %{
+    dir: dir,
+    one: one,
+    two: two,
+    three: three
+  } do
+    File.write!(Path.join(one, "kept.txt"), "kept\n")
+
+    write_config(
+      dir,
+      base_toml(one, two, three) <>
+        """
+
+        [store]
+        path = ".omunculus/store.sqlite3"
+        changes = ".omunculus/changes"
+        """
+    )
+
+    model = fn _assembled, _tools, call ->
+      assert {:ok, ""} = call.("write", %{"path" => "note.txt", "content" => "hi\n"})
+      assert {:ok, _listing} = call.("directory", %{})
+      assert {:ok, "- write (this run)\n  A note.txt (+1 -0)"} = call.("changes", %{})
+      assert {:ok, patch} = call.("changes", %{"patch" => true})
+      assert patch =~ "+hi"
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(dir, model)
+    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+
+    project = open_project(dir)
+    {:ok, events} = Query.all(project.conn, "SELECT body FROM events WHERE type = 'tool'")
+    calls = Map.new(events, &{Jason.decode!(&1.body)["name"], Jason.decode!(&1.body)})
+
+    assert %{"files" => [%{"path" => "note.txt", "op" => "A", "added" => 1, "deleted" => 0}]} =
+             changes = calls["write"]["changes"]
+
+    refute Map.has_key?(calls["directory"], "changes")
+
+    assert {:ok, patch} =
+             Omunculus.Changes.patch(
+               Path.join(dir, ".omunculus/changes"),
+               changes["before"],
+               changes["after"]
+             )
+
+    assert patch =~ "+hi"
+  end
+
+  test "from the command line, changes lists what a named work's calls changed", %{
+    dir: dir,
+    one: one,
+    two: two,
+    three: three
+  } do
+    write_config(
+      dir,
+      base_toml(one, two, three) <>
+        """
+
+        [store]
+        path = ".omunculus/store.sqlite3"
+        changes = ".omunculus/changes"
+        """
+    )
+
+    project = open_project(dir)
+    work_id = Fixtures.insert(project.conn, :works, %{title: "Note", assignee: "concierge"})
+    Project.close(project)
+
+    model = fn _assembled, _tools, call ->
+      assert {:ok, ""} = call.("write", %{"path" => "note.txt", "content" => "hi\n"})
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(dir, model)
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+
+    assert {:ok, "- write (concierge)\n  A note.txt (+1 -0)"} =
+             CLI.run(["changes", "--work_id", work_id], dir)
+
+    assert {:ok, patch} = CLI.run(["changes", "--work_id", work_id, "--patch", "true"], dir)
+    assert patch =~ "- write (concierge)\n" and patch =~ "+hi"
+  end
+
+  test "revert puts back what the run's calls changed, unless a file moved on since", %{
+    dir: dir,
+    one: one,
+    two: two,
+    three: three
+  } do
+    kept = Path.join(one, "kept.txt")
+    File.write!(kept, "kept\n")
+
+    write_config(
+      dir,
+      base_toml(one, two, three) <>
+        """
+
+        [store]
+        path = ".omunculus/store.sqlite3"
+        changes = ".omunculus/changes"
+        """
+    )
+
+    model = fn _assembled, _tools, call ->
+      assert {:ok, ""} = call.("write", %{"path" => "note.txt", "content" => "hi\n"})
+      assert {:ok, ""} = call.("write", %{"path" => "kept.txt", "content" => "changed\n"})
+      File.write!(kept, "moved on\n")
+
+      assert {:ok, "refused: kept.txt changed after the work's last change; nothing was restored"} =
+               call.("revert", %{})
+
+      assert File.exists?(Path.join(one, "note.txt"))
+      File.write!(kept, "changed\n")
+      assert {:ok, "Restored: kept.txt\nRemoved: note.txt"} = call.("revert", %{})
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(dir, model)
+    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+
+    assert File.read!(kept) == "kept\n"
+    refute File.exists?(Path.join(one, "note.txt"))
+  end
+
+  test "a run's scratch goes when it ends, and what a run left is swept when the project opens",
+       %{dir: dir, one: one, two: two, three: three} do
+    write_config(dir, base_toml(one, two, three))
+    {:ok, config} = Config.load(Path.join(dir, "omunculus.toml"))
+    root = Omunculus.Run.scratch_root(config)
+    test = self()
+
+    model = fn _assembled, _tools, _call ->
+      send(test, {:scratch, File.ls!(root)})
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(dir, model)
+    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+    assert_received {:scratch, [_one_run]}
+    assert File.ls!(root) == []
+
+    File.mkdir_p!(Path.join(root, "left-by-a-crash"))
+    {:ok, project} = Project.open(config, lock: true)
+    Project.close(project)
+    refute File.exists?(root)
+  end
+
   test "a work created with workspace two has write absent from the run's tools", %{
     dir: dir,
     one: one,
@@ -126,7 +269,7 @@ defmodule Omunculus.WorkspaceTest do
     three: three
   } do
     write_config(dir, base_toml(one, two, three))
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
@@ -135,7 +278,7 @@ defmodule Omunculus.WorkspaceTest do
 
     assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
 
     assert {:ok, [run]} =
              Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
@@ -156,7 +299,7 @@ defmodule Omunculus.WorkspaceTest do
     File.write!(Path.join(two, "secret.txt"), "secret")
     File.write!(Path.join(one, "other.txt"), "other")
 
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
@@ -180,7 +323,7 @@ defmodule Omunculus.WorkspaceTest do
     three: three
   } do
     write_config(dir, base_toml(one, two, three))
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
@@ -188,8 +331,14 @@ defmodule Omunculus.WorkspaceTest do
 
     model = fn _assembled, _tools, call ->
       case Agent.get_and_update(counter, fn n -> {n, n + 1} end) do
-        0 -> call.("delegate", %{"title" => "child", "body" => "do this"})
-        _already_delegated -> :ok
+        0 ->
+          call.("work", %{
+            "report" => "delegated",
+            "works" => [%{"title" => "child", "goal" => "do this"}]
+          })
+
+        _already_delegated ->
+          :ok
       end
 
       {:ok, "done"}
@@ -199,7 +348,7 @@ defmodule Omunculus.WorkspaceTest do
 
     assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
 
     assert {:ok, [child]} =
              Query.all(project.conn, "SELECT * FROM works WHERE parent_id = ?", [work_id])
@@ -215,7 +364,7 @@ defmodule Omunculus.WorkspaceTest do
     three: three
   } do
     write_config(dir, base_toml(one, two, three))
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
@@ -244,7 +393,7 @@ defmodule Omunculus.WorkspaceTest do
     write_config(dir, base_toml(one, two, three))
     File.write!(Path.join(three, "marker.txt"), "m")
 
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "three", title: "In three"})
     Project.close(project)
 
@@ -268,14 +417,14 @@ defmodule Omunculus.WorkspaceTest do
        %{dir: dir, one: one, two: two, three: three} do
     write_config(dir, base_toml(one, two, three))
     write_check_tool(dir, "delete", "delete")
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
     request_model = fn _assembled, _tools, call ->
       call.("request_access", %{
-        "kind" => "tool",
-        "name" => "delete",
+        "report" => "blocked on delete",
+        "access" => [%{"kind" => "tool", "name" => "delete"}],
         "reason" => "need to delete"
       })
 
@@ -286,7 +435,7 @@ defmodule Omunculus.WorkspaceTest do
 
     assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
     Project.close(project)
 
@@ -299,10 +448,8 @@ defmodule Omunculus.WorkspaceTest do
                  "reply",
                  "--request_id",
                  request.id,
-                 "--decision",
-                 "grant",
-                 "--scope",
-                 "workspace",
+                 "--option",
+                 "grant_workspace",
                  "allowed forever"
                ],
                dir
@@ -326,12 +473,12 @@ defmodule Omunculus.WorkspaceTest do
 
     [policy]
     workspace = "one"
-    workflow = "delivery"
+    workflows = ["delivery"]
 
     [agents.concierge]
     depth = 0
     text = "concierge"
-    tools = ["work", "delegate", "read", "write", "request_access", "reply", "comment"]
+    tools = ["work", "delegate", "end", "read", "write", "request_access", "reply", "comment"]
 
     [workflows.delivery]
     steps = [
@@ -349,11 +496,12 @@ defmodule Omunculus.WorkspaceTest do
     write_config(dir, stage_scope_toml(one, two, three))
 
     write_check_tool(dir, "delete", "delete")
-    project = open(dir)
+    project = open_project(dir)
 
     work_id =
       Fixtures.insert(project.conn, :works, %{
         workspace: "two",
+        workflow: "delivery",
         stage: "to_do",
         title: "In two"
       })
@@ -362,8 +510,8 @@ defmodule Omunculus.WorkspaceTest do
 
     request_model = fn _assembled, _tools, call ->
       call.("request_access", %{
-        "kind" => "tool",
-        "name" => "delete",
+        "report" => "blocked on delete",
+        "access" => [%{"kind" => "tool", "name" => "delete"}],
         "reason" => "need to delete"
       })
 
@@ -374,7 +522,7 @@ defmodule Omunculus.WorkspaceTest do
 
     assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
     Project.close(project)
 
@@ -387,10 +535,8 @@ defmodule Omunculus.WorkspaceTest do
                  "reply",
                  "--request_id",
                  request.id,
-                 "--decision",
-                 "grant",
-                 "--scope",
-                 "stage",
+                 "--option",
+                 "grant_stage",
                  "allowed forever"
                ],
                dir
@@ -421,7 +567,7 @@ defmodule Omunculus.WorkspaceTest do
 
     assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
     assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
 
     assert {:ok, event} =
@@ -447,7 +593,7 @@ defmodule Omunculus.WorkspaceTest do
         """
     )
 
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 
@@ -487,7 +633,7 @@ defmodule Omunculus.WorkspaceTest do
 
     assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
     assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
 
     assert {:ok, event} =
@@ -518,7 +664,7 @@ defmodule Omunculus.WorkspaceTest do
         """
     )
 
-    project = open(dir)
+    project = open_project(dir)
     work_id = Fixtures.insert(project.conn, :works, %{workspace: "two", title: "In two"})
     Project.close(project)
 

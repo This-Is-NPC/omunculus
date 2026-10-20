@@ -7,7 +7,7 @@ defmodule Omunculus.Model.CommandTest do
   alias Omunculus.Model.Command
 
   @bridge Path.expand("test/support/command_bridge.py", Path.join([__DIR__, "..", "..", ".."]))
-  @assembled "You are the worker."
+  @prompt %Omunculus.Prompt{instructions: "You are the worker.", context: ""}
   @tools [%{name: "counter", description: "increments", parameters: %{}}]
 
   defp recorder do
@@ -19,9 +19,7 @@ defmodule Omunculus.Model.CommandTest do
   defp calls(agent), do: Agent.get(agent, & &1)
 
   test "a bash/python bridge calls tools then returns text" do
-    dir = Path.join(System.tmp_dir!(), Omunculus.Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Omunculus.Fixtures.tmp_dir()
 
     policy =
       ExecutionPolicyFixtures.policy([dir, Path.dirname(@bridge)],
@@ -44,11 +42,18 @@ defmodule Omunculus.Model.CommandTest do
     {agent, call} = recorder()
     recorded = Agent.start_link(fn -> [] end) |> elem(1)
     record = fn message -> Agent.update(recorded, &(&1 ++ [message])) end
+    test = self()
 
-    assert {:ok, "benchmark complete"} = model.(@assembled, @tools, call, record, policy)
+    delta = fn text ->
+      send(test, {:delta, text})
+      :ok
+    end
+
+    assert {:ok, "benchmark complete"} = model.(@prompt, @tools, call, record, delta, policy)
     assert calls(agent) == [{"counter", %{}}]
     messages = Agent.get(recorded, & &1)
-    assert Enum.any?(messages, &(&1["type"] == "call"))
-    assert Enum.any?(messages, &(&1["type"] == "text"))
+    assert Enum.map(messages, & &1["type"]) == ["call", "text"]
+    assert_received {:delta, "benchmark "}
+    assert_received {:delta, "complete"}
   end
 end

@@ -3,7 +3,7 @@ defmodule Omunculus.Tools.ReadTest do
 
   alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Tool.{Catalog, Invoke}
-  alias Omunculus.Tools.Read
+  alias Omunculus.Tools.{Out, Read}
 
   setup do
     root = Path.join(System.tmp_dir!(), Omunculus.Id.new())
@@ -27,6 +27,43 @@ defmodule Omunculus.Tools.ReadTest do
     input = %{@input | args: %{"path" => "file.txt"}, roots: [root]}
 
     assert Read.run(input, policy(input)) == %{"ok" => true, "output" => "hello\n", "emit" => []}
+  end
+
+  test "refuses a file that is not text, saying its size", %{root: root} do
+    File.write!(Path.join(root, "call.wav"), <<82, 73, 70, 70, 228, 93, 0, 0>>)
+    input = %{@input | args: %{"path" => "call.wav"}, roots: [root]}
+
+    assert Read.run(input, policy(input)) == Out.fail(Out.not_text("call.wav", 8))
+  end
+
+  test "offset and limit read those lines and say which of how many", %{root: root} do
+    File.write!(Path.join(root, "lines.txt"), "one\ntwo\nthree\nfour")
+
+    read = fn args ->
+      input = %{@input | args: Map.put(args, "path", "lines.txt"), roots: [root]}
+      Read.run(input, policy(input))["output"]
+    end
+
+    assert read.(%{"offset" => 2, "limit" => 2}) == "two\nthree\n(lines 2-3 of 4)"
+    assert read.(%{"offset" => 3}) == "three\nfour\n(lines 3-4 of 4)"
+    assert read.(%{"limit" => 1}) == "one\n(lines 1-1 of 4)"
+    assert read.(%{"limit" => 9}) == "one\ntwo\nthree\nfour\n(lines 1-4 of 4)"
+  end
+
+  test "refuses an offset past the last line or a count that is not positive", %{root: root} do
+    read = fn args ->
+      input = %{@input | args: Map.put(args, "path", "file.txt"), roots: [root]}
+      Read.run(input, policy(input))
+    end
+
+    assert %{"ok" => false, "output" => "offset 2 is past the last line, 1"} =
+             read.(%{"offset" => 2})
+
+    assert %{"ok" => false, "output" => "offset must be a positive integer"} =
+             read.(%{"offset" => 0})
+
+    assert %{"ok" => false, "output" => "limit must be a positive integer"} =
+             read.(%{"limit" => "3"})
   end
 
   test "refuses a path outside the root", %{root: root} do

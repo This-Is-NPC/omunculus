@@ -1,14 +1,11 @@
 defmodule Omunculus.Execution.BubblewrapTest do
   use ExUnit.Case, async: false
 
-  alias Omunculus.Id
   alias Omunculus.Execution.{Bubblewrap, Command, Policy}
   alias Omunculus.ExecutionPolicyFixtures
 
   setup do
-    workspace = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(workspace)
-    on_exit(fn -> File.rm_rf!(workspace) end)
+    workspace = Omunculus.Fixtures.tmp_dir()
     %{workspace: workspace}
   end
 
@@ -23,6 +20,109 @@ defmodule Omunculus.Execution.BubblewrapTest do
 
     assert {:ok, %{stdout: "output:hello", stderr: "error:hello", status: 0}} =
              Omunculus.Execution.run(command, policy(workspace), "hello\n")
+  end
+
+  test "a run's scratch is the /tmp and home every command of it shares, outside the workspace",
+       %{workspace: workspace} do
+    scratch = Omunculus.Fixtures.tmp_dir()
+    policy = Policy.with_scratch(policy(workspace), scratch)
+
+    run = fn script ->
+      Omunculus.Execution.run(elem(Command.new("/usr/bin/sh", ["-c", script]), 1), policy)
+    end
+
+    assert {:ok, %{status: 0}} = run.("echo kept > /tmp/note && echo home > $HOME/profile")
+    assert {:ok, %{stdout: "kept\nhome\n"}} = run.("cat /tmp/note $HOME/profile")
+    assert File.read!(Path.join(scratch, "note")) == "kept\n"
+    assert File.ls!(workspace) == []
+
+    assert {:ok, %{stdout: ""}} =
+             Omunculus.Execution.run(
+               elem(Command.new("/usr/bin/sh", ["-c", "ls /tmp | grep note || true"]), 1),
+               policy(workspace)
+             )
+  end
+
+  test "a command whose run's home overlay is still in use waits for it", %{workspace: workspace} do
+    policy =
+      Policy.with_scratch(
+        policy(workspace, host: true, max_concurrent: 2),
+        Omunculus.Fixtures.tmp_dir()
+      )
+
+    {:ok, holding} = Command.new("/usr/bin/sh", ["-c", "sleep 0.3"])
+    {:ok, next} = Command.new("/usr/bin/sh", ["-c", "echo mounted"])
+
+    held = Elixir.Task.async(fn -> Omunculus.Execution.run(holding, policy) end)
+    Process.sleep(100)
+
+    assert {:ok, %{stdout: "mounted\n"}} = Omunculus.Execution.run(next, policy)
+    assert {:ok, %{status: 0}} = Elixir.Task.await(held)
+  end
+
+  test "a command that sees the host reads it as the person does and writes only where let",
+       %{workspace: workspace} do
+    home = System.user_home!()
+    mark = Path.join(home, ".omunculus-host-test-#{System.unique_integer([:positive])}")
+    secret = mark <> "-secret"
+    File.write!(mark, "seen\n")
+    File.write!(secret, "kept\n")
+    on_exit(fn -> File.rm(mark) && File.rm(secret) end)
+
+    scratch = Omunculus.Fixtures.tmp_dir()
+
+    host = fn overrides ->
+      Policy.with_scratch(policy(workspace, [host: true] ++ overrides), scratch)
+    end
+
+    run = fn policy, script ->
+      Omunculus.Execution.run(elem(Command.new("/usr/bin/sh", ["-c", script]), 1), policy)
+    end
+
+    # The person's files read as they are; their home takes writes that stay
+    # in the run's scratch.
+    writing = host.(hidden: [secret])
+    assert {:ok, %{stdout: "seen\n"}} = run.(writing, "cat #{mark}")
+
+    assert {:ok, %{stdout: "home\n"}} =
+             run.(writing, "echo home > #{mark}-new && cat #{mark}-new")
+
+    refute File.exists?(mark <> "-new")
+    assert File.exists?(Path.join([scratch, ".home", Path.basename(mark) <> "-new"]))
+
+    # Elsewhere nothing is written, a denied path is not there, nor /run.
+    assert {:ok, %{stdout: "refused\n"}} =
+             run.(writing, "touch /etc/omunculus-test 2>/dev/null || echo refused")
+
+    assert {:ok, %{stdout: "gone\n"}} =
+             run.(writing, "cat #{secret} 2>/dev/null | grep -q kept || echo gone")
+
+    assert {:ok, %{stdout: "\n"}} = run.(writing, "ls /run | grep -v systemd; echo")
+
+    # Without sandbox.write the workspace stays read-only, under the home too.
+    reading = host.(read_only: [workspace], read_write: [])
+
+    assert {:ok, %{stdout: "refused\n"}} =
+             run.(reading, "touch #{workspace}/x 2>/dev/null || echo refused")
+
+    assert {:ok, %{stdout: "written\n"}} = run.(writing, "touch #{workspace}/x && echo written")
+    assert File.exists?(Path.join(workspace, "x"))
+  end
+
+  test "a sandbox that cannot start says so and leaves no process waiting on its input", %{
+    workspace: workspace
+  } do
+    writers = fn ->
+      {said, _status} = System.cmd("pgrep", ["-f", "omunculus-input"])
+      said |> String.split() |> length()
+    end
+
+    before = writers.()
+    {:ok, command} = Command.new("/usr/bin/sh", ["-c", "true"], cwd: workspace)
+    policy = policy(workspace, read_only: ["/nonexistent-omunculus-path"])
+
+    assert {:error, {:bubblewrap, :setup_failed}} = Omunculus.Execution.run(command, policy)
+    assert writers.() <= before
   end
 
   test "runs Python from the declared runtime", %{workspace: workspace} do
@@ -60,6 +160,24 @@ defmodule Omunculus.Execution.BubblewrapTest do
     refute File.exists?(protected)
   end
 
+  test "a command names its user and home without the machine's accounts, or with the host's",
+       %{workspace: workspace} do
+    lookup = ~s{import os, pwd; u = pwd.getpwuid(os.getuid()); print(u.pw_name, u.pw_dir)}
+    {:ok, command} = Command.new("/usr/bin/python3", ["-c", lookup])
+    {:ok, id} = Command.new("/usr/bin/sh", ["-c", "id -un; id -gn; grep -c . /etc/passwd"])
+
+    assert {:ok, %{stdout: "omunculus /tmp/home\n", status: 0}} =
+             Omunculus.Execution.run(command, policy(workspace))
+
+    assert {:ok, %{stdout: "omunculus\nomunculus\n2\n", status: 0}} =
+             Omunculus.Execution.run(id, policy(workspace, network: "none"))
+
+    {name, 0} = System.cmd("id", ["-un"])
+    host = Policy.with_scratch(policy(workspace, host: true), Omunculus.Fixtures.tmp_dir())
+    {:ok, %{stdout: seen, status: 0}} = Omunculus.Execution.run(command, host)
+    assert seen == "#{String.trim(name)} #{System.user_home!()}\n"
+  end
+
   test "does not inherit undeclared host environment variables", %{workspace: workspace} do
     name = "OMUNCULUS_EXECUTION_TEST_SECRET"
     previous = System.get_env(name)
@@ -72,6 +190,35 @@ defmodule Omunculus.Execution.BubblewrapTest do
     {:ok, command} = Command.new("/usr/bin/sh", ["-c", "printf %s \"${#{name}-unset}\""])
 
     assert {:ok, %{stdout: "unset"}} = Omunculus.Execution.run(command, policy(workspace))
+  end
+
+  test "hands a secret to its process alone, as a read-only file named by <NAME>_FILE", %{
+    workspace: workspace
+  } do
+    script =
+      ~s{printf "%s|%s|" "$GH_TOKEN_FILE" "$(cat "$GH_TOKEN_FILE")"; } <>
+        ~s{stat -c %a "$GH_TOKEN_FILE"; ! printf x > "$GH_TOKEN_FILE"}
+
+    {:ok, command} =
+      Command.new("/usr/bin/sh", ["-c", script], secrets: %{"GH_TOKEN" => "token-value"})
+
+    assert {:ok, %{stdout: "/run/secrets/GH_TOKEN|token-value|400\n", status: 0}} =
+             Omunculus.Execution.run(command, policy(workspace))
+
+    {:ok, other} = Command.new("/usr/bin/sh", ["-c", "test ! -e /run/secrets && printf none"])
+    assert {:ok, %{stdout: "none"}} = Omunculus.Execution.run(other, policy(workspace))
+
+    assert Path.wildcard(Path.join(System.tmp_dir!(), "omunculus-execution-*/secrets")) == []
+  end
+
+  test "never shows a command's secrets when it is inspected" do
+    {:ok, command} = Command.new("/usr/bin/true", [], secrets: %{"GH_TOKEN" => "token-value"})
+    refute inspect(command) =~ "token-value"
+  end
+
+  test "refuses a secret whose name is not a variable's" do
+    assert {:error, :invalid_command} =
+             Command.new("/usr/bin/true", [], secrets: %{"GH-TOKEN" => "token-value"})
   end
 
   test "cancels the Bubblewrap process tree on timeout", %{workspace: workspace} do
@@ -106,6 +253,11 @@ defmodule Omunculus.Execution.BubblewrapTest do
 
     refute Enum.chunk_every(host_args, 3, 1, :discard)
            |> Enum.any?(&(&1 == ["--ro-bind", "/", "/"]))
+
+    # With the network, a process can name hosts and trust certificates.
+    resolver = ["--ro-bind-try", "/etc/resolv.conf", "/etc/resolv.conf"]
+    assert resolver in Enum.chunk_every(host_args, 3, 1, :discard)
+    refute resolver in Enum.chunk_every(none_args, 3, 1, :discard)
   end
 
   test "uses the runner from the policy", %{workspace: workspace} do
@@ -132,6 +284,7 @@ defmodule Omunculus.Execution.BubblewrapTest do
     handle = %Bubblewrap.Handle{
       port: nil,
       input: nil,
+      input_pid: nil,
       stderr_reader: nil,
       temp_dir: temp_dir,
       created_hidden: []
@@ -144,9 +297,10 @@ defmodule Omunculus.Execution.BubblewrapTest do
     %Policy{
       id: "test-policy",
       workspace: %{name: nil, root: workspace},
-      read_only: [],
-      read_write: [workspace],
+      read_only: Keyword.get(overrides, :read_only, []),
+      read_write: Keyword.get(overrides, :read_write, [workspace]),
       hidden: Keyword.get(overrides, :hidden, []),
+      host: Keyword.get(overrides, :host, false),
       runtimes: ["/usr"],
       backend: "bubblewrap",
       environment: %{"LANG" => "C"},
@@ -154,7 +308,7 @@ defmodule Omunculus.Execution.BubblewrapTest do
       limits: %{
         timeout_ms: Keyword.get(overrides, :timeout_ms, 2_000),
         max_output_bytes: 1_024,
-        max_concurrent: 1,
+        max_concurrent: Keyword.get(overrides, :max_concurrent, 1),
         max_queue: 1,
         queue_timeout_ms: 100
       },

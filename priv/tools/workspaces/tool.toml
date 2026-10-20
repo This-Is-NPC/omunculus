@@ -1,11 +1,12 @@
 name = "workspaces"
 kind = "tool"
-shape = "simple"
 triggers = ["model"]
 description = "Lists configured workspaces, with * on the run's."
 tags = ["fs"]
 module = "Omunculus.Tools.Workspaces"
-views = ["workspaces"]
 
 [parameters]
 type = "object"
+
+[views.workspaces]
+source = "workspaces"

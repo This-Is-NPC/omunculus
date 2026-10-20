@@ -1,0 +1,56 @@
+# Where agents publish and where the person promotes: two Dokku instances on
+# the machine's Docker, each with its own data, keys and ports, all on
+# 127.0.0.1. Agents hold a key to homologation only; production takes only
+# the key the promote tool is given. Each instance's SSH is also a unix
+# socket under DEPLOY_SOCKETS, which a sandbox without the network reaches.
+# DEPLOY_DATA and DEPLOY_SOCKETS are set by ./up.
+services:
+  homologation:
+    image: dokku/dokku:0.38.31
+    container_name: omunculus-dokku-homologation
+    network_mode: bridge
+    ports:
+      - "127.0.0.1:3022:22"
+      - "127.0.0.1:8080:80"
+    volumes:
+      - "${DEPLOY_DATA}/homologation:/mnt/dokku"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    environment:
+      DOKKU_HOSTNAME: homologation.localhost
+      DOKKU_HOST_ROOT: "${DEPLOY_DATA}/homologation/home/dokku"
+      DOKKU_LIB_HOST_ROOT: "${DEPLOY_DATA}/homologation/var/lib/dokku"
+    restart: unless-stopped
+
+  production:
+    image: dokku/dokku:0.38.31
+    container_name: omunculus-dokku-production
+    network_mode: bridge
+    ports:
+      - "127.0.0.1:4022:22"
+      - "127.0.0.1:9080:80"
+    volumes:
+      - "${DEPLOY_DATA}/production:/mnt/dokku"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    environment:
+      DOKKU_HOSTNAME: production.localhost
+      DOKKU_HOST_ROOT: "${DEPLOY_DATA}/production/home/dokku"
+      DOKKU_LIB_HOST_ROOT: "${DEPLOY_DATA}/production/var/lib/dokku"
+    restart: unless-stopped
+
+  homologation-socket:
+    image: alpine/socat:1.8.0.3
+    container_name: omunculus-dokku-homologation-socket
+    network_mode: host
+    volumes:
+      - "${DEPLOY_SOCKETS}:/sockets"
+    command: ["UNIX-LISTEN:/sockets/homologation.sock,fork,unlink-early,mode=666", "TCP:127.0.0.1:3022"]
+    restart: unless-stopped
+
+  production-socket:
+    image: alpine/socat:1.8.0.3
+    container_name: omunculus-dokku-production-socket
+    network_mode: host
+    volumes:
+      - "${DEPLOY_SOCKETS}:/sockets"
+    command: ["UNIX-LISTEN:/sockets/production.sock,fork,unlink-early,mode=666", "TCP:127.0.0.1:4022"]
+    restart: unless-stopped

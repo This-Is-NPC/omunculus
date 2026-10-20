@@ -1,6 +1,9 @@
 defmodule Omunculus.SpecRegressionTest do
+  @human Omunculus.Fixtures.defaults(:requests).arbiter
+  @concierge Jason.encode!(Omunculus.Participant.agent("concierge"))
   use ExUnit.Case, async: true
 
+  alias Omunculus.Tools.Out
   alias Omunculus.{Ceiling, CLI, Config, Fixtures, Id, Project, Run, Store}
   alias Omunculus.Store.Query
 
@@ -33,12 +36,12 @@ defmodule Omunculus.SpecRegressionTest do
   depth = 0
   model = "fake"
   text = "concierge"
-  tools = ["work", "comment", "reply", "request_access", "notify", "read", "write", "sandbox.network"]
+  tools = ["work", "comment", "grant", "reply", "request_access", "notify", "read", "write", "sandbox.network", "end"]
   [agents.worker]
   depth = 1
   model = "fake"
   text = "worker"
-  tools = ["comment", "request_access", "read"]
+  tools = ["comment", "request_access", "read", "end"]
   human = ["write"]
   """
 
@@ -48,10 +51,10 @@ defmodule Omunculus.SpecRegressionTest do
 
     File.write!(
       Path.join(dir, "omunculus.toml"),
-      ensure_assemble(@config <> "\n" <> Fixtures.tools_table(dir))
+      ensure_policy(@config <> "\n" <> Fixtures.tools_table(dir))
     )
 
-    {:ok, project} = Fixtures.open_project(dir)
+    project = Fixtures.open_project(dir)
 
     on_exit(fn ->
       Project.close(project)
@@ -61,23 +64,27 @@ defmodule Omunculus.SpecRegressionTest do
     %{project: project, dir: dir}
   end
 
-  defp opening(work_id \\ nil, overrides \\ %{}),
-    do:
-      Map.merge(
-        %{prompt_id: nil, work_id: work_id, request_id: nil, via: nil, agent: nil},
-        overrides
-      )
+  defp ensure_policy(body) do
+    Enum.reduce(
+      [
+        {"assemble", ~s("assemble")},
+        {"max_retries", "0"},
+        {"request_routes", ~s([{ via = ["parent", "origin"] }])}
+      ],
+      body,
+      fn {key, value}, body ->
+        cond do
+          String.contains?(body, key <> " =") ->
+            body
 
-  defp ensure_assemble(body) do
-    if String.contains?(body, "assemble =") do
-      body
-    else
-      if String.contains?(body, "[policy]") do
-        String.replace(body, "[policy]", "[policy]\nassemble = \"assemble\"", global: false)
-      else
-        body <> "\n[policy]\nassemble = \"assemble\"\n"
+          String.contains?(body, "[policy]") ->
+            String.replace(body, "[policy]", "[policy]\n#{key} = #{value}", global: false)
+
+          true ->
+            body <> "\n[policy]\n#{key} = #{value}\n"
+        end
       end
-    end
+    )
   end
 
   defp write_config(project, text) do
@@ -86,7 +93,7 @@ defmodule Omunculus.SpecRegressionTest do
         do: text,
         else: text <> "\n" <> Fixtures.tools_table(project.dir)
 
-    File.write!(Path.join(project.dir, "omunculus.toml"), ensure_assemble(body))
+    File.write!(Path.join(project.dir, "omunculus.toml"), ensure_policy(body))
   end
 
   defp hook(project, name, event, emits \\ [], agent \\ nil) do
@@ -124,58 +131,113 @@ defmodule Omunculus.SpecRegressionTest do
     ]
 
     assert {:error, {:invalid_emit, "comment", {:unknown_field, "created_at"}}} =
-             Store.record_tool(p.conn, nil, %{name: "comment"}, emits, ctx)
+             Store.record_tools(p.conn, nil, [{%{name: "comment"}, emits}], ctx)
 
     assert {:ok, []} = Store.replay(p.conn, :project)
-    assert {:ok, []} = Store.view(p.conn, "comments.work", work)
+    assert {:ok, []} = Store.comments(p.conn, :work, work)
   end
 
-  test "sealed child request goes to the human even when the parent has authority", %{project: p} do
+  test "sealed child request reaches the parent without granting authority", %{project: p} do
     parent = Fixtures.insert(p.conn, :works, %{assignee: "concierge"})
     child = Fixtures.insert(p.conn, :works, %{assignee: "worker", parent_id: parent})
 
-    Fixtures.use_model(p, fn _, _, call ->
-      call.("request_access", %{
-        "kind" => "tool",
-        "name" => "write",
-        "reason" => "write report"
-      })
+    Fixtures.use_model(p, fn assembled, _, call ->
+      if assembled =~ "## Request" do
+        call.("end", %{})
+      else
+        call.("request_access", %{
+          "report" => "blocked",
+          "access" => [%{"kind" => "tool", "name" => "write"}],
+          "reason" => "write report"
+        })
 
-      flunk("request must end the run")
+        flunk("request_access must end the run")
+      end
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening(child))
+             Run.open(p, Fixtures.opening(nil, child))
 
-    assert {:ok, [%{arbiter: "human", status: "waiting_human"}]} =
-             Query.all(p.conn, "SELECT * FROM requests")
+    assert {:ok,
+            [%{arbiter: @concierge, status: "escalated"}, %{arbiter: @human, status: "pending"}]} =
+             Query.all(p.conn, "SELECT * FROM requests ORDER BY created_at")
 
-    assert {:ok, [_]} = Query.all(p.conn, "SELECT * FROM runs")
+    assert {:ok, [_, _]} = Query.all(p.conn, "SELECT * FROM runs")
   end
 
-  test "an agent cannot reply to a human request or make a permanent grant", %{project: p} do
+  test "an agent cannot reply to a human request", %{project: p} do
     requester = Fixtures.insert(p.conn, :runs)
     request = Fixtures.insert(p.conn, :requests, %{run_id: requester})
 
     Fixtures.use_model(p, fn _, _, call ->
-      for scope <- [nil, "agent"] do
-        args = %{"request_id" => request, "decision" => "grant", "body" => "approve"}
-        args = if scope, do: Map.put(args, "scope", scope), else: args
-        assert {:error, {:reply, :not_arbiter}} = call.("reply", args)
+      for option <- ["grant", "deny"] do
+        args = %{"request_id" => request, "option" => option, "body" => "approve"}
+        assert call.("reply", args) == {:ok, Out.refused({:reply, :not_arbiter})}
       end
 
       {:ok, "done"}
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening())
+             Run.open(p, Fixtures.opening(nil))
 
-    assert {:ok, %{status: "waiting_human"}} = Store.view(p.conn, "request", request)
+    assert {:ok, %{status: "pending"}} = Store.view(p.conn, "request", request)
   end
 
-  test "arbiter receives request id and grant ends its run before resuming the child", %{
+  test "an arbiter agent cannot make a permanent grant and the reply writes nothing", %{
     project: p
   } do
+    {parent, child, request} =
+      agent_request(p, %{
+        "grant_agent" => [
+          %{
+            "name" => "grant",
+            "args" => %{"kind" => "tool", "name" => "write", "scope" => "agent"}
+          }
+        ]
+      })
+
+    Fixtures.use_model(p, fn _, _, call ->
+      args = %{"request_id" => request, "option" => "grant_agent", "body" => "forever"}
+      assert call.("reply", args) == {:ok, Out.refused({:grant, :not_human})}
+      {:ok, "done"}
+    end)
+
+    assert {:ok, _} = Run.open(p, Fixtures.opening(nil, parent, %{request_id: request}))
+    # Its run closed without a reply, so a linked request goes to the next receiver.
+    assert {:ok, %{status: "escalated", arbiter: @concierge}} =
+             Store.view(p.conn, "request", request)
+
+    assert {:ok, events} = Store.replay(p.conn, :project)
+    assert %{body: body} = Enum.find(events, &(&1.type == "escalate"))
+    assert Jason.decode!(body) == %{"origins" => %{"answer" => request}}
+    assert Enum.any?(events, &(&1.type == "notify"))
+    assert {:ok, %{state: "waiting", grants: nil}} = Store.view(p.conn, "work", child)
+    {:ok, config} = Config.load(p.config_path)
+    refute "write" in config.agents["worker"].ceiling.granted
+  end
+
+  test "an option call outside reply's chains fails the reply and writes nothing", %{
+    project: p
+  } do
+    {parent, child, request} =
+      agent_request(p, %{"note" => [%{"name" => "comment", "args" => %{"body" => "x"}}]})
+
+    Fixtures.use_model(p, fn _, _, call ->
+      args = %{"request_id" => request, "option" => "note", "body" => "noted"}
+      assert {:ok, output} = call.("reply", args)
+      assert output =~ "chain failed at comment"
+      {:ok, "done"}
+    end)
+
+    assert {:ok, _} = Run.open(p, Fixtures.opening(nil, parent, %{request_id: request}))
+    assert {:ok, %{status: "escalated"}} = Store.view(p.conn, "request", request)
+    assert {:ok, %{state: "waiting"}} = Store.view(p.conn, "work", child)
+  end
+
+  # A child of a concierge work, waiting on a request from its run whose
+  # arbiter is the concierge.
+  defp agent_request(p, options \\ %{}) do
     parent = Fixtures.insert(p.conn, :works, %{assignee: "concierge"})
 
     child =
@@ -183,25 +245,46 @@ defmodule Omunculus.SpecRegressionTest do
         assignee: "worker",
         parent_id: parent,
         state: "waiting",
-        waiting: "access"
+        waiting: "request"
       })
 
-    requester =
-      Fixtures.insert(p.conn, :runs, %{
+    requester_run =
+      Fixtures.open_run(p.conn, %{
         agent: "worker",
-        depth: "1",
+        depth: 1,
         work_id: child,
-        status: "done"
+        ceiling: %{
+          have: ["comment"],
+          askable: ["write"],
+          sealed: [],
+          blocked: [],
+          uncited: "askable"
+        }
       })
+
+    {:ok, _} = Store.close_run(p.conn, requester_run.id)
+    requester = requester_run.id
+
+    default = Jason.decode!(Fixtures.defaults(:requests).options)
 
     request =
       Fixtures.insert(p.conn, :requests, %{
-        agent: "worker",
+        requester: Jason.encode!(Omunculus.Participant.agent("worker")),
         run_id: requester,
         work_id: child,
-        arbiter: "concierge",
-        status: "waiting_agent"
+        arbiter: @concierge,
+        status: "pending",
+        options: Jason.encode!(Map.merge(default, options))
       })
+
+    :ok = Query.exec(p.conn, "UPDATE works SET waiting_for = ? WHERE id = ?", [request, child])
+    {parent, child, request}
+  end
+
+  test "arbiter receives request id and its end closes the run before resuming the child", %{
+    project: p
+  } do
+    {parent, _child, request} = agent_request(p)
 
     Fixtures.use_model(p, fn assembled, tools, call ->
       if String.starts_with?(assembled, "concierge") do
@@ -209,11 +292,12 @@ defmodule Omunculus.SpecRegressionTest do
 
         call.("reply", %{
           "request_id" => request,
-          "decision" => "grant",
+          "option" => "grant",
           "body" => "approved"
         })
 
-        flunk("grant must end the arbiter's run")
+        call.("end", %{})
+        flunk("end must end the arbiter's run")
       else
         assert Enum.any?(tools, &(&1.name == "write"))
         {:ok, "resumed"}
@@ -221,7 +305,10 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening(parent, %{request_id: request}))
+             Run.open(
+               p,
+               Fixtures.opening(nil, parent, %{request_id: request, agent: "concierge"})
+             )
 
     assert {:ok, %{status: "closed"}} = Store.view(p.conn, "request", request)
     assert {:ok, events} = Store.replay(p.conn, {:request, request})
@@ -236,22 +323,20 @@ defmodule Omunculus.SpecRegressionTest do
     Fixtures.use_model(p, fn _, tools, call ->
       refute Enum.any?(tools, &(&1.name == "missing_tool"))
 
-      call.("request_access", %{
-        "kind" => "tool",
-        "name" => "missing_tool",
-        "reason" => "test"
-      })
+      assert call.("request_access", %{
+               "report" => "blocked",
+               "access" => [%{"kind" => "tool", "name" => "missing_tool"}],
+               "reason" => "test"
+             }) == {:ok, Out.refused({:request, {:blocked, "missing_tool"}})}
 
-      flunk("blocked request ends the run")
+      {:ok, "went on"}
     end)
 
     assert {:ok, run} =
-             Run.open(p, opening())
+             Run.open(p, Fixtures.opening(nil))
 
     refute "missing_tool" in Jason.decode!(run.tools)
     assert {:ok, []} = Query.all(p.conn, "SELECT * FROM requests")
-    assert {:ok, events} = Store.replay(p.conn, {:run, run.id})
-    assert Enum.any?(events, &(&1.type == "deny"))
   end
 
   test "permanent grant clears human and negotiable in the chosen layer", %{project: p} do
@@ -282,11 +367,12 @@ defmodule Omunculus.SpecRegressionTest do
 
     child = Fixtures.insert(p.conn, :works, %{assignee: "worker", parent_id: parent})
     Fixtures.use_model(p, fn _, _, _ -> {:ok, "done"} end)
-    assert {:ok, run} = Run.open(p, opening(child))
+    assert {:ok, run} = Run.open(p, Fixtures.opening(nil, child))
     assert "write" in Jason.decode!(run.tools)
     write_config(p, config_text <> "deny = [\"write\"]\n")
     Fixtures.use_model(p, fn _, _, _ -> {:ok, "done"} end)
-    assert {:ok, run} = Run.open(p, opening(child))
+    # The first run broke the child, so only a named agent opens a run on it.
+    assert {:ok, run} = Run.open(p, Fixtures.opening(nil, child, %{agent: "worker"}))
     refute "write" in Jason.decode!(run.tools)
   end
 
@@ -319,7 +405,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening())
+             Run.open(p, Fixtures.opening(nil))
 
     work = Fixtures.insert(p.conn, :works, %{grants: Jason.encode!([outside])})
 
@@ -331,7 +417,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening(work))
+             Run.open(p, Fixtures.opening(nil, work))
   end
 
   test "CLI comments on an inbox without creating a request", %{project: p} do
@@ -344,7 +430,7 @@ defmodule Omunculus.SpecRegressionTest do
              )
 
     assert {:ok, [%{body: "noted", author: "human"}]} =
-             Store.view(p.conn, "comments.inbox", inbox)
+             Store.comments(p.conn, :inbox, inbox)
 
     assert {:ok, []} = Query.all(p.conn, "SELECT * FROM requests")
   end
@@ -359,7 +445,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, run} =
-             Run.open(p, opening(work))
+             Run.open(p, Fixtures.opening(nil, work))
 
     {:ok, events} = Store.replay(p.conn, {:run, run.id})
     calls = for %{type: "tool", body: body} <- events, do: Jason.decode!(body)["name"]
@@ -374,14 +460,20 @@ defmodule Omunculus.SpecRegressionTest do
       @config <>
         """
         [policy]
-        workflow = "delivery"
+        workflows = ["delivery"]
         [workflows.delivery]
         steps = [{name = "first", agent = "concierge"}, {name = "second", agent = "concierge"}]
         """
     )
 
     hook(p, "on-notify", "notify", [%{type: "continue", body: %{}}])
-    work = Fixtures.insert(p.conn, :works, %{stage: "first", assignee: "concierge"})
+
+    work =
+      Fixtures.insert(p.conn, :works, %{
+        workflow: "delivery",
+        stage: "first",
+        assignee: "concierge"
+      })
 
     {:ok, n} = Agent.start_link(fn -> 0 end)
 
@@ -389,7 +481,9 @@ defmodule Omunculus.SpecRegressionTest do
       case Agent.get_and_update(n, fn i -> {i, i + 1} end) do
         0 ->
           assert {:ok, _} = call.("notify", %{"body" => "notice"})
-          flunk("continue from the hook must end the run")
+          assert {:ok, %{stage: "second"}} = Store.view(p.conn, "work", work)
+          call.("end", %{})
+          flunk("end must end the run")
 
         _ ->
           {:ok, "done"}
@@ -397,38 +491,47 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening(work))
+             Run.open(p, Fixtures.opening(nil, work))
 
     assert {:ok, %{stage: "second"}} = Store.view(p.conn, "work", work)
     assert {:ok, [_continue]} = Query.all(p.conn, "SELECT * FROM events WHERE type = 'continue'")
   end
 
-  test "on-continue sees the next stage after end-run and the next start-run", %{project: p} do
+  test "on-continue runs in the unroll while hooks of end wait for the close", %{
+    project: p
+  } do
     write_config(
       p,
       String.replace(
         @config,
-        ~s(tools = ["work", "comment", "reply", "request_access", "notify", "read", "write", "sandbox.network"]),
-        ~s(tools = ["work", "comment", "reply", "request_access", "notify", "read", "write", "sandbox.network", "continue"])
+        ~s("sandbox.network", "end"]),
+        ~s("sandbox.network", "end", "continue", "done"])
       ) <>
         """
         [policy]
-        workflow = "delivery"
+        workflows = ["delivery"]
         [workflows.delivery]
         steps = [{name = "first", agent = "concierge"}, {name = "second", agent = "concierge"}]
         """
     )
 
     hook(p, "on-continue", "continue")
-    work = Fixtures.insert(p.conn, :works, %{stage: "first", assignee: "concierge"})
+    hook(p, "on-end", "end")
+
+    work =
+      Fixtures.insert(p.conn, :works, %{
+        workflow: "delivery",
+        stage: "first",
+        assignee: "concierge"
+      })
 
     {:ok, n} = Agent.start_link(fn -> 0 end)
 
     Fixtures.use_model(p, fn _, _, call ->
       case Agent.get_and_update(n, fn i -> {i, i + 1} end) do
         0 ->
-          call.("continue", %{})
-          flunk("continue must end the run")
+          call.("done", %{"report" => "first done"})
+          flunk("done must end the run")
 
         _ ->
           {:ok, "later"}
@@ -436,37 +539,141 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening(work))
+             Run.open(p, Fixtures.opening(nil, work))
 
     assert {:ok, %{stage: "second"}} = Store.view(p.conn, "work", work)
     assert {:ok, events} = Store.replay(p.conn, {:work, work})
     types = Enum.map(events, & &1.type)
 
     continue_at = Enum.find_index(types, &(&1 == "continue"))
-    end_at = Enum.find_index(types, &(&1 == "end-run"))
+    end_run_at = Enum.find_index(types, &(&1 == "end-run"))
     starts = Enum.with_index(types) |> Enum.filter(fn {type, _} -> type == "start-run" end)
-    assert continue_at < end_at
     assert length(starts) == 2
     {_type, second_start} = List.last(starts)
-    assert end_at < second_start
+    assert continue_at < end_run_at
+    assert end_run_at < second_start
 
-    names =
-      for %{type: "tool", body: body} <- events, do: Jason.decode!(body)["name"]
-
-    hook_at =
-      events
-      |> Enum.with_index()
-      |> Enum.find_value(fn {event, index} ->
-        event.type == "tool" and Jason.decode!(event.body)["name"] == "on-continue" and index
+    hook_at = fn name ->
+      Enum.find_index(events, fn event ->
+        event.type == "tool" and Jason.decode!(event.body)["name"] == name
       end)
+    end
 
-    assert hook_at
-    assert end_at < hook_at
-    assert second_start < hook_at
-    assert "on-continue" in names
+    assert continue_at < hook_at.("on-continue")
+    assert hook_at.("on-continue") < end_run_at
+    # The next run opens concurrently with the hooks of end.
+    assert end_run_at < hook_at.("on-end")
   end
 
-  test "creating a workflow work ends the old run and mounts its first agent and ceiling", %{
+  test "work with then = [] does not end the run: the delegate hook runs at once and the child opens while the parent's run goes on",
+       %{project: p} do
+    write_config(
+      p,
+      String.replace(
+        @config,
+        ~s("sandbox.network", "end"]),
+        ~s("sandbox.network", "end", "delegate", "continue", "done"]\noverrides.work.then = [])
+      )
+      |> String.replace(
+        ~s(tools = ["comment", "request_access", "read", "end"]),
+        ~s(tools = ["comment", "request_access", "read", "end", "continue", "done"])
+      )
+    )
+
+    hook(p, "on-delegate", "delegate")
+    parent = Fixtures.insert(p.conn, :works, %{assignee: "concierge"})
+    test_pid = self()
+    {:ok, parent_runs} = Agent.start_link(fn -> 0 end)
+
+    Fixtures.use_model(p, fn assembled, _, call ->
+      cond do
+        not String.starts_with?(assembled, "concierge") ->
+          send(test_pid, :child_started)
+          call.("done", %{"report" => "made"})
+
+        # The child back wakes the parent, whose next run closes it.
+        Agent.get_and_update(parent_runs, &{&1, &1 + 1}) > 0 ->
+          call.("done", %{"report" => "shipped"})
+
+        true ->
+          assert {:ok, _} =
+                   call.("work", %{
+                     "report" => "delegated",
+                     "works" => [%{"title" => "child", "goal" => "child goal"}]
+                   })
+
+          # The parent's model goes on only once the child's run has started.
+          assert_receive :child_started, 5_000
+          assert {:ok, _} = call.("comment", %{"body" => "still here"})
+          call.("end", %{})
+          flunk("end must end the run")
+      end
+    end)
+
+    assert {:ok, run} = Run.open(p, Fixtures.opening(nil, parent))
+
+    assert {:ok, events} = Store.replay(p.conn, {:run, run.id})
+    types = Enum.map(events, & &1.type)
+    delegate_at = Enum.find_index(types, &(&1 == "delegate"))
+    assert Jason.decode!(Enum.at(events, delegate_at + 1).body)["name"] == "on-delegate"
+    assert "comment" in Enum.drop(types, delegate_at)
+    assert Enum.take(types, -2) == ["end", "end-run"]
+
+    assert {:ok, [child]} = Query.all(p.conn, "SELECT * FROM works WHERE parent_id = ?", [parent])
+
+    assert {:ok, [child_run]} =
+             Query.all(p.conn, "SELECT * FROM runs WHERE work_id = ?", [child.id])
+
+    assert child_run.via == "delegate"
+
+    assert {:ok, [parent_end]} =
+             Query.all(p.conn, "SELECT * FROM events WHERE type = 'end-run' AND run_id = ?", [
+               run.id
+             ])
+
+    assert {:ok, child_start} =
+             Query.one(p.conn, "SELECT * FROM events WHERE id = ?", [child_run.event_id])
+
+    assert child_start.sequence < parent_end.sequence
+    assert {:ok, %{state: "done"}} = Store.view(p.conn, "work", child.id)
+    assert {:ok, %{state: "done"}} = Store.view(p.conn, "work", parent)
+  end
+
+  test "a child that ends with done or break is not retried",
+       %{project: p} do
+    write_config(
+      p,
+      String.replace(
+        @config,
+        ~s(tools = ["comment", "request_access", "read", "end"]),
+        ~s(tools = ["comment", "request_access", "read", "end", "continue", "done", "break"])
+      )
+    )
+
+    for action <- ["done", "break"] do
+      parent = Fixtures.insert(p.conn, :works, %{assignee: "concierge"})
+      child = Fixtures.insert(p.conn, :works, %{assignee: "worker", parent_id: parent})
+
+      Fixtures.use_model(p, fn assembled, _, call ->
+        if String.starts_with?(assembled, "worker") do
+          call.(action, %{"report" => "stopping"})
+          flunk("#{action} must end the run")
+        else
+          {:ok, "parent"}
+        end
+      end)
+
+      assert {:ok, _run} = Run.open(p, Fixtures.opening(nil, child))
+
+      assert {:ok, %{state: state}} = Store.view(p.conn, "work", child)
+      assert state == if(action == "done", do: "done", else: "waiting")
+
+      assert {:ok, [_one_run]} =
+               Query.all(p.conn, "SELECT * FROM runs WHERE work_id = ?", [child])
+    end
+  end
+
+  test "a workflow work created by work opens with its first agent and ceiling", %{
     project: p
   } do
     write_config(
@@ -474,26 +681,30 @@ defmodule Omunculus.SpecRegressionTest do
       @config <>
         """
         [policy]
-        workflow = "delivery"
+        workflows = ["delivery"]
         [workflows.delivery]
         steps = [{name = "first", agent = "worker", deny = ["write"]}]
         """
     )
 
     Fixtures.use_model(p, fn assembled, tools, call ->
-      if assembled =~ "## Work" do
+      if assembled =~ "## Work\n" do
         assert String.starts_with?(assembled, "worker")
         refute assembled =~ "## Message"
         refute Enum.any?(tools, &(&1.name == "write"))
         {:ok, "first stage"}
       else
-        call.("work", %{"title" => "stage handoff"})
-        flunk("creation must end the old run")
+        call.("work", %{
+          "report" => "handed off",
+          "works" => [%{"title" => "stage handoff", "goal" => "stage handoff"}]
+        })
+
+        flunk("work must end the old run")
       end
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening())
+             Run.open(p, Fixtures.opening(nil))
 
     assert {:ok, [work]} = Query.all(p.conn, "SELECT * FROM works")
     assert work.stage == "first"
@@ -521,20 +732,20 @@ defmodule Omunculus.SpecRegressionTest do
         [workflows.delivery]
         steps = [{name = "review", agent = "worker", deny = ["write"]}]
         [policy]
-        workflow = "delivery"
+        workflows = ["delivery"]
         """
     )
 
-    work = Fixtures.insert(p.conn, :works, %{stage: "review"})
+    work = Fixtures.insert(p.conn, :works, %{workflow: "delivery", stage: "review"})
 
     Fixtures.use_model(p, fn _, tools, call ->
       refute Enum.any?(tools, &(&1.name == "write"))
-      assert {:error, {:not_allowed, "write"}} = call.("write", %{})
+      assert call.("write", %{}) == {:error, Out.not_yours("write")}
       {:ok, "done"}
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening(work, %{agent: "concierge", via: "reaction"}))
+             Run.open(p, Fixtures.opening(nil, work, %{agent: "concierge", via: "reaction"}))
 
     write_config(
       p,
@@ -553,27 +764,30 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:error, {:workflow_off, "reviewer"}} =
-             Run.open(p, opening(nil, %{agent: "reviewer"}))
+             Run.open(p, Fixtures.opening(nil, nil, %{agent: "reviewer"}))
   end
 
-  test "model messages are recorded before terminal actions", %{project: p} do
+  test "model messages are recorded before the actions they call", %{project: p} do
     Fixtures.use_model(p, fn _, _, call, record ->
       :ok = record.(%{content: "I need access", tool_calls: [%{name: "request_access"}]})
 
       call.("request_access", %{
-        "kind" => "path",
-        "name" => "./secret",
+        "report" => "blocked",
+        "access" => [%{"kind" => "path", "name" => "./secret"}],
         "reason" => "read report"
       })
 
-      flunk("request ends run")
+      flunk("request_access must end the run")
     end)
 
     assert {:ok, run} =
-             Run.open(p, opening())
+             Run.open(p, Fixtures.opening(nil))
 
     assert {:ok, events} = Store.replay(p.conn, {:run, run.id})
-    assert Enum.map(events, & &1.type) == ~w(start-run tool model tool request end-run tool)
+
+    assert Enum.map(events, & &1.type) ==
+             ~w(start-run tool model tool request tool end tool end-run)
+
     assert Enum.find(events, &(&1.type == "model")).body =~ "I need access"
   end
 
@@ -592,7 +806,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} =
-             Run.open(p, opening())
+             Run.open(p, Fixtures.opening(nil))
 
     assert {:ok, [%{id: inbox}]} = Query.all(p.conn, "SELECT * FROM inbox")
     assert {:ok, events} = Store.replay(p.conn, {:inbox, inbox})

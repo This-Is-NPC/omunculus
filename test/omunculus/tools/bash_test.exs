@@ -4,12 +4,10 @@ defmodule Omunculus.Tools.BashTest do
   alias Omunculus.Execution.Policy
   alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Tool.{Catalog, Invoke, Manifest}
-  alias Omunculus.Tools.Bash
+  alias Omunculus.Tools.{Bash, Out}
 
   setup do
-    root = Path.join(System.tmp_dir!(), Omunculus.Id.new())
-    File.mkdir_p!(root)
-    on_exit(fn -> File.rm_rf!(root) end)
+    root = Omunculus.Fixtures.tmp_dir()
     %{root: root}
   end
 
@@ -37,6 +35,21 @@ defmodule Omunculus.Tools.BashTest do
     assert output =~ "marker"
   end
 
+  test "starts in workdir, under the workspace root, and refuses one it cannot read", %{
+    root: root
+  } do
+    File.mkdir_p!(Path.join(root, "sub"))
+    input = %{@input | args: %{"command" => "pwd", "workdir" => "sub"}, roots: [root]}
+
+    assert %{"ok" => true, "output" => output} = Bash.run(input, policy(root))
+    assert String.trim(output) == Path.join(root, "sub")
+
+    for workdir <- ["missing", "/proc/1", 3] do
+      input = %{@input | args: %{"command" => "pwd", "workdir" => workdir}, roots: [root]}
+      assert %{"ok" => false, "output" => "workdir " <> _} = Bash.run(input, policy(root))
+    end
+  end
+
   test "a non-zero exit fails and appends the exit status", %{root: root} do
     input = %{@input | args: %{"command" => "exit 3"}, roots: [root]}
 
@@ -51,8 +64,37 @@ defmodule Omunculus.Tools.BashTest do
     target = Path.join(root, "target")
     input = %{@input | args: %{"command" => "touch #{target}"}, roots: [root]}
 
-    assert %{"ok" => false} = Bash.run(input, policy(root, read_only: [root], read_write: []))
+    assert %{"ok" => false, "output" => output} =
+             Bash.run(input, policy(root, read_only: [root], read_write: []))
+
+    # The model learns why, and what would let it.
+    assert String.ends_with?(output, Out.read_only_workspace())
     refute File.exists?(target)
+  end
+
+  test "says why a write failed even when the command exits 0", %{root: root} do
+    target = Path.join(root, "target")
+    input = %{@input | args: %{"command" => "touch #{target}; ls"}, roots: [root]}
+
+    assert %{"ok" => true, "output" => output} =
+             Bash.run(input, policy(root, read_only: [root], read_write: []))
+
+    assert String.ends_with?(output, Out.read_only_workspace())
+  end
+
+  test "says the network is closed when a command cannot reach a host, even this machine",
+       %{root: root} do
+    for script <- [
+          ~s|python3 -c "import socket; socket.gethostbyname('pypi.org')"|,
+          ~s|python3 -c "import socket; socket.create_connection(('127.0.0.1', 9))"|
+        ] do
+      input = %{@input | args: %{"command" => script}, roots: [root]}
+
+      assert %{"ok" => false, "output" => output} =
+               Bash.run(input, policy(root, network: "none"))
+
+      assert String.ends_with?(output, Out.closed_network()), script
+    end
   end
 
   test "refuses without a command", %{root: root} do
@@ -96,7 +138,7 @@ defmodule Omunculus.Tools.BashTest do
       runtimes: ["/usr"],
       backend: "bubblewrap",
       environment: %{"LANG" => "C"},
-      network: "host",
+      network: Keyword.get(overrides, :network, "host"),
       limits: %{
         timeout_ms: 2_000,
         max_output_bytes: 1_024,

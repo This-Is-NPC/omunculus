@@ -1,0 +1,9 @@
+scenario = "research"
+critical = false
+configurations = ["solo", "delegation", "workflow", "negotiated", "human-gated"]
+needs = []
+
+[expect]
+outcome = ["done", "answer"]
+
+[human]

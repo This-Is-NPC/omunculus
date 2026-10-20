@@ -1,7 +1,7 @@
 use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, State},
-    http::StatusCode,
+    http::{header, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -196,6 +196,7 @@ struct AppState {
     counters: Counters,
     barrier: RequestBarrier,
     last_tools: RwLock<Value>,
+    last_prompt_cache_key: RwLock<Option<String>>,
 }
 
 impl AppState {
@@ -205,11 +206,16 @@ impl AppState {
             counters: Counters::new(),
             barrier: RequestBarrier::new(),
             last_tools: RwLock::new(json!([])),
+            last_prompt_cache_key: RwLock::new(None),
         })
     }
 
     async fn set_last_tools(&self, tools: Value) {
         *self.last_tools.write().await = tools;
+    }
+
+    async fn set_last_prompt_cache_key(&self, key: Option<String>) {
+        *self.last_prompt_cache_key.write().await = key;
     }
 
     async fn configure(&self, input: ControlRequest) {
@@ -277,6 +283,7 @@ impl AppState {
             "failed": self.counters.failed.load(Ordering::Relaxed),
             "barrier_timeouts": self.counters.barrier_timeouts.load(Ordering::Relaxed),
             "last_tools": self.last_tools.read().await.clone(),
+            "last_prompt_cache_key": self.last_prompt_cache_key.read().await.clone(),
         })
     }
 }
@@ -329,9 +336,39 @@ struct ControlRequest {
 #[derive(Debug, Deserialize, Default)]
 struct ChatRequest {
     #[serde(default)]
+    stream: bool,
+    #[serde(default)]
+    stream_options: StreamOptions,
+    #[serde(default)]
     messages: Vec<Message>,
     #[serde(default)]
     tools: Vec<Tool>,
+    #[serde(default)]
+    prompt_cache_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct StreamOptions {
+    #[serde(default)]
+    include_usage: bool,
+}
+
+fn chat_usage() -> Value {
+    json!({
+        "prompt_tokens": 3,
+        "completion_tokens": 1,
+        "total_tokens": 4,
+        "prompt_tokens_details": {"cached_tokens": 2}
+    })
+}
+
+fn responses_usage() -> Value {
+    json!({
+        "input_tokens": 3,
+        "input_tokens_details": {"cached_tokens": 2},
+        "output_tokens": 1,
+        "total_tokens": 4
+    })
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -386,6 +423,9 @@ async fn completions(State(state): State<Arc<AppState>>, body: Bytes) -> Respons
         .map(|function| json!({"name": function.name, "parameters": function.parameters}))
         .collect();
     state.set_last_tools(last_tools).await;
+    state
+        .set_last_prompt_cache_key(request.prompt_cache_key.clone())
+        .await;
 
     let config = state.config().await;
     match state
@@ -453,13 +493,34 @@ async fn completions(State(state): State<Arc<AppState>>, body: Bytes) -> Respons
     };
 
     guard.finish(true);
+    if request.stream {
+        let mut chunks = Vec::new();
+        if let Some(call) = message["tool_calls"].get(0) {
+            let arguments = call["function"]["arguments"].as_str().unwrap_or("");
+            let (head, tail) = arguments.split_at(arguments.len() / 2);
+            chunks.push(json!({"choices": [{"index": 0, "delta": {"role": "assistant", "tool_calls": [{"index": 0, "id": call["id"], "type": "function", "function": {"name": call["function"]["name"], "arguments": head}}]}}]}));
+            chunks.push(json!({"choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "function": {"arguments": tail}}]}}]}));
+        } else {
+            let (head, tail) = split_text(message["content"].as_str().unwrap_or(""));
+            chunks.push(json!({"choices": [{"index": 0, "delta": {"role": "assistant", "content": head}}]}));
+            chunks.push(json!({"choices": [{"index": 0, "delta": {"content": tail}}]}));
+        }
+        chunks.push(json!({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}));
+        if request.stream_options.include_usage {
+            chunks.push(json!({"choices": [], "usage": chat_usage()}));
+        }
+        let mut events: Vec<(Option<&str>, String)> =
+            chunks.iter().map(|chunk| (None, chunk.to_string())).collect();
+        events.push((None, "[DONE]".to_owned()));
+        return event_stream(events);
+    }
     (
         StatusCode::OK,
         Json(json!({
             "id": "benchmark",
             "object": "chat.completion",
             "choices": [{"index": 0, "message": message, "finish_reason": "stop"}],
-            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+            "usage": chat_usage()
         })),
     )
         .into_response()
@@ -468,9 +529,13 @@ async fn completions(State(state): State<Arc<AppState>>, body: Bytes) -> Respons
 #[derive(Debug, Deserialize, Default)]
 struct ResponsesRequest {
     #[serde(default)]
+    stream: bool,
+    #[serde(default)]
     input: Vec<Value>,
     #[serde(default)]
     tools: Vec<ResponsesTool>,
+    #[serde(default)]
+    prompt_cache_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -524,6 +589,9 @@ async fn responses(State(state): State<Arc<AppState>>, body: Bytes) -> Response 
         })
         .collect();
     state.set_last_tools(last_tools).await;
+    state
+        .set_last_prompt_cache_key(request.prompt_cache_key.clone())
+        .await;
 
     let config = state.config().await;
     match state
@@ -594,12 +662,33 @@ async fn responses(State(state): State<Arc<AppState>>, body: Bytes) -> Response 
     };
 
     guard.finish(true);
+    if request.stream {
+        let mut events = vec![(
+            Some("response.created"),
+            json!({"type": "response.created", "response": {"id": "benchmark", "output": []}}).to_string(),
+        )];
+        if let Some(text) = output[0]["content"][0]["text"].as_str() {
+            let (head, tail) = split_text(text);
+            for part in [head, tail] {
+                events.push((
+                    Some("response.output_text.delta"),
+                    json!({"type": "response.output_text.delta", "delta": part}).to_string(),
+                ));
+            }
+        }
+        events.push((
+            Some("response.completed"),
+            json!({"type": "response.completed", "response": {"id": "benchmark", "object": "response", "output": output, "usage": responses_usage()}}).to_string(),
+        ));
+        return event_stream(events);
+    }
     (
         StatusCode::OK,
         Json(json!({
             "id": "benchmark",
             "object": "response",
-            "output": output
+            "output": output,
+            "usage": responses_usage()
         })),
     )
         .into_response()
@@ -607,6 +696,8 @@ async fn responses(State(state): State<Arc<AppState>>, body: Bytes) -> Response 
 
 #[derive(Debug, Deserialize, Default)]
 struct MessagesRequest {
+    #[serde(default)]
+    stream: bool,
     #[serde(default)]
     tools: Vec<MessagesTool>,
     #[serde(default)]
@@ -619,6 +710,25 @@ struct MessagesTool {
     name: String,
     #[serde(default)]
     input_schema: Value,
+}
+
+// Every reply opens with a thinking block whose text is left out and whose
+// signature comes alone, as Claude's do; a later turn must send it back
+// signed, or the reply is refused as the API refuses it.
+const THINKING_SIGNATURE: &str = "stub-signature";
+
+fn unsigned_thinking(messages: &[Value]) -> bool {
+    messages
+        .iter()
+        .filter(|message| message.get("role").and_then(Value::as_str) == Some("assistant"))
+        .flat_map(|message| match message.get("content") {
+            Some(Value::Array(items)) => items.iter().collect::<Vec<_>>(),
+            _ => Vec::new(),
+        })
+        .any(|item| {
+            item.get("type").and_then(Value::as_str) == Some("thinking")
+                && item.get("signature").and_then(Value::as_str) != Some(THINKING_SIGNATURE)
+        })
 }
 
 fn count_tool_results(messages: &[Value]) -> u64 {
@@ -652,6 +762,11 @@ async fn messages(State(state): State<Arc<AppState>>, body: Bytes) -> Response {
         })
         .collect();
     state.set_last_tools(last_tools).await;
+
+    if unsigned_thinking(&request.messages) {
+        guard.finish(false);
+        return error_response(StatusCode::BAD_REQUEST, "a thinking block came back without its signature");
+    }
 
     let config = state.config().await;
     match state
@@ -717,17 +832,69 @@ async fn messages(State(state): State<Arc<AppState>>, body: Bytes) -> Response {
     };
 
     guard.finish(true);
+    if request.stream {
+        let block = &content[0];
+        let (start, deltas) = if block["type"] == "text" {
+            let (head, tail) = split_text(block["text"].as_str().unwrap_or(""));
+            (
+                json!({"type": "text", "text": ""}),
+                [head, tail].map(|part| json!({"type": "text_delta", "text": part})),
+            )
+        } else {
+            let input = block["input"].to_string();
+            let (head, tail) = input.split_at(input.len() / 2);
+            (
+                json!({"type": "tool_use", "id": block["id"], "name": block["name"], "input": {}}),
+                [head, tail].map(|part| json!({"type": "input_json_delta", "partial_json": part})),
+            )
+        };
+        let mut events = vec![
+            ("message_start", json!({"type": "message_start", "message": {"id": "benchmark", "type": "message", "role": "assistant", "content": [], "stop_reason": Value::Null}})),
+            ("content_block_start", json!({"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": "", "signature": ""}})),
+            ("content_block_delta", json!({"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": ""}})),
+            ("content_block_delta", json!({"type": "content_block_delta", "index": 0, "delta": {"type": "signature_delta", "signature": THINKING_SIGNATURE}})),
+            ("content_block_stop", json!({"type": "content_block_stop", "index": 0})),
+            ("content_block_start", json!({"type": "content_block_start", "index": 1, "content_block": start})),
+        ];
+        for delta in deltas {
+            events.push(("content_block_delta", json!({"type": "content_block_delta", "index": 1, "delta": delta})));
+        }
+        events.push(("content_block_stop", json!({"type": "content_block_stop", "index": 1})));
+        events.push(("message_delta", json!({"type": "message_delta", "delta": {"stop_reason": stop_reason}})));
+        events.push(("message_stop", json!({"type": "message_stop"})));
+        return event_stream(
+            events
+                .into_iter()
+                .map(|(name, data)| (Some(name), data.to_string()))
+                .collect(),
+        );
+    }
     (
         StatusCode::OK,
         Json(json!({
             "id": "benchmark",
             "type": "message",
             "role": "assistant",
-            "content": content,
+            "content": [json!({"type": "thinking", "thinking": "", "signature": THINKING_SIGNATURE}), content[0].clone()],
             "stop_reason": stop_reason
         })),
     )
         .into_response()
+}
+
+fn split_text(text: &str) -> (&str, &str) {
+    text.split_at(text.len().min("benchmark ".len()))
+}
+
+fn event_stream(events: Vec<(Option<&str>, String)>) -> Response {
+    let mut body = String::new();
+    for (name, data) in events {
+        if let Some(name) = name {
+            body.push_str(&format!("event: {name}\n"));
+        }
+        body.push_str(&format!("data: {data}\n\n"));
+    }
+    (StatusCode::OK, [(header::CONTENT_TYPE, "text/event-stream")], body).into_response()
 }
 
 fn error_response(status: StatusCode, message: &str) -> Response {

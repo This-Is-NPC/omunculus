@@ -6,3 +6,86 @@ rebar = "3.27.0"
 
 [env]
 MIX_REBAR3 = "rebar3"
+
+[tasks."benchmark:build"]
+description = "Build the linear benchmark, harness release and master Rust stub"
+run = "scripts/benchmark-build"
+
+[tasks."benchmark:check"]
+description = "Test the Rust benchmark controller and compile the BEAM driver"
+depends = ["benchmark:build"]
+run = "scripts/benchmark-check"
+
+[tasks."benchmark:preflight"]
+description = "Linear resident benchmark: preflight"
+run = "scripts/benchmark-preflight"
+
+[tasks."benchmark:report"]
+description = "Linear resident benchmark: report"
+run = "scripts/benchmark-report"
+
+[tasks."benchmark:run"]
+description = "Linear resident benchmark: run"
+run = "scripts/benchmark-run"
+
+[tasks.check]
+description = "Check that docs/cli.md is current and the documentation's links resolve"
+depends = ["check:cli", "check:links"]
+
+[tasks."check:cli"]
+description = "Check that docs/cli.md is what docs:cli writes"
+run = "scripts/docs-cli --check"
+
+[tasks."check:links"]
+description = "Check that every relative link, image and anchor of the documentation resolves"
+run = "scripts/check-links"
+
+[tasks."dev:bootstrap"]
+description = "Create each dev project's workspace with its packs' workspace files and seed its local administrator once"
+run = "scripts/dev-bootstrap"
+
+[tasks."dev:reset"]
+description = "Delete the dev projects' stores and workspaces"
+run = "scripts/dev-reset"
+
+[tasks."dev:serve"]
+description = "Run the server on the dev registry, with the keys of .env, the deploy sockets and keys and your git identity"
+depends = ["dev:bootstrap"]
+run = "scripts/dev-serve"
+
+[tasks."docs:cli"]
+description = "Write docs/cli.md from the binary's moduledoc and the cli tools' manifests"
+run = "scripts/docs-cli"
+
+[tasks."eval:compare"]
+description = "Equivalent Exchange: compare two result folders (mise run eval:compare -- <before> <now>)"
+run = "scripts/eval-compare"
+
+[tasks."eval:run"]
+description = "Equivalent Exchange: run the behaviour benchmark (mise run eval:run -- --model <model> --k 2)"
+run = "scripts/eval-run"
+
+[tasks."eval:selftest"]
+description = "Equivalent Exchange: prove every task's check against its solution"
+run = "scripts/eval-selftest"
+
+[tasks.pre-commit]
+description = "Check formatting and documentation before a commit"
+run = ["scripts/check-format", "scripts/docs-cli --check", "scripts/check-links"]
+
+[tasks.pre-push]
+description = "Run regular validation before a push"
+run = "scripts/validate-regular"
+
+[tasks.up]
+description = "Start the dev server unless one already answers"
+depends = ["dev:bootstrap"]
+run = "scripts/up"
+
+[tasks."validate:regular"]
+description = "Run the regular test suite"
+run = "scripts/validate-regular"
+
+[tasks."validate:sandbox"]
+description = "Run Bubblewrap integration tests on a supported Linux host"
+run = "scripts/validate-sandbox"

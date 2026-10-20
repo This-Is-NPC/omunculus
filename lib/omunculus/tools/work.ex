@@ -1,24 +1,65 @@
 defmodule Omunculus.Tools.Work do
   @moduledoc """
-  Builtin `work` tool, per spec §8.5 and §9.1: creates or updates a work
-  and writes its `title`, and an optional `workspace` name, as a `work`
-  emit. It does not name stage, agent or model.
+  Builtin `work` tool: takes a `report` and the `works` to create, each
+  with a `title`, a `goal` and optionally an `agent` or a `workflow`, and
+  a `workspace`.
+  In a run with a work it chains `comment` with the report on that work
+  and one `delegate` per item. In a run without a work it emits the `work`
+  action with the report and the items, which creates the root work with
+  the report as its first comment: the one item itself, or, when each
+  names an agent or a workflow of depth 1, a root that hands them down. Its manifest's
+  `then` appends `end`.
   """
 
   alias Omunculus.Tools.{Args, Out}
 
-  @spec run(map) :: map
-  def run(%{args: %{"title" => title} = args}) when is_binary(title) and title != "" do
-    body =
-      %{"title" => title}
-      |> Args.put_present("work_id", args)
-      |> Args.put_present("parent_id", args)
-      |> Args.put_present("workspace", args)
+  @required ~w(title goal)
+  @optional ~w(agent workflow workspace)
 
-    Out.ok("", [%{"type" => "work", "body" => body}])
+  @spec run(map) :: map
+  def run(%{args: args, work_id: work_id}) do
+    with {:ok, report} <- Args.fetch(args, "report"),
+         {:ok, works} <- works(args["works"]) do
+      create(work_id, report, works)
+    else
+      {:error, message} -> Out.fail(message)
+    end
   end
 
-  def run(_input) do
-    Out.fail("title required")
+  defp works([_ | _] = items) do
+    items
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, []}, fn {item, index}, {:ok, acc} ->
+      case item(item) do
+        {:ok, work} -> {:cont, {:ok, acc ++ [work]}}
+        {:error, message} -> {:halt, {:error, "works[#{index}]: #{message}"}}
+      end
+    end)
+  end
+
+  defp works(_items), do: {:error, "works required"}
+
+  defp item(item) when is_map(item) do
+    case Args.missing(item, @required) do
+      nil ->
+        {:ok, Enum.reduce(@required ++ @optional, %{}, &Args.put_present(&2, &1, item))}
+
+      message ->
+        {:error, message}
+    end
+  end
+
+  defp item(_item), do: {:error, "object required"}
+
+  defp create(nil, report, works),
+    do: Out.ok("", [%{"type" => "work", "body" => %{"report" => report, "works" => works}}])
+
+  defp create(_work_id, report, works) do
+    Out.ok("")
+    |> Map.put(
+      "chain",
+      [%{"name" => "comment", "args" => %{"body" => report}}] ++
+        Enum.map(works, &%{"name" => "delegate", "args" => &1})
+    )
   end
 end

@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+from check import *
+
+workspace, outcome = load()
+expect_outcome(outcome, "done", "answer")
+todo = text(workspace, "todo.md")
+for item, date in [("Book the venue", "2026-10-06"), ("Send the budget to Ana", "2026-10-06"), ("Renew the TLS certificate", "2026-10-07")]:
+    line = next((l for l in todo.splitlines() if item.lower() in l.lower()), None)
+    if line is None:
+        fail(f"missing: {item}")
+    if date not in line:
+        fail(f"{item} lacks its date {date}")
+if "draft the agenda" in todo.lower():
+    fail("a done item was copied")
+ok()

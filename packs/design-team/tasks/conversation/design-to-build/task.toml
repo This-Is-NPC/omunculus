@@ -1,0 +1,32 @@
+scenario = "conversation"
+critical = false
+configurations = ["agency"]
+deploy = true
+needs = ["sandbox.write", "promote"]
+
+# The whole way from a vague request to a site in production: the sales
+# desk qualifies the client, the design team shows a preview and takes a
+# round of changes, the builders assess it, the client accepts the price,
+# the owner approves with ask, and the builders build and publish it, to
+# production once the client, seeing it in homologation, grants promote.
+[expect]
+outcome = ["answer", "done"]
+
+[human]
+"sandbox.write" = "grant"
+"promote" = "grant"
+decision = "approve"
+
+[person]
+facts = """
+Your bakery is Doce Ana, in Campinas, Brazil. Orders come by phone and get lost; you want clients to find the menu and order by WhatsApp. You decide alone, have no deadline and think of spending up to R$ 2.000.
+You want a simple site with four pages: home, menu, about and contact, and a WhatsApp button.
+Menu: brigadeiro cake R$ 85, carrot cake R$ 60, box of 12 brigadeiros R$ 36.
+About: Ana has baked since 2009; everything is made to order.
+Contact: WhatsApp (19) 99876-5432; orders at least two days ahead.
+You have no logo and no photos. You like warm colours, brown and cream; the tone is homely, sweet and simple.
+Before deciding anything, you want to see how the site would look.
+The first time you are shown a preview, you ask for one change: the WhatsApp button bigger and green. When you are shown it with that change, you approve the design.
+When you are given the price of R$ 1.500 for the four pages, you accept it.
+When the site is ready in homologation, you approve it going to production.
+"""

@@ -1,19 +1,28 @@
 defmodule Omunculus.RunTest do
+  @human Omunculus.Fixtures.defaults(:requests).arbiter
   use ExUnit.Case, async: true
 
-  alias Omunculus.{Fixtures, Id, Project, Run, Store}
+  alias Omunculus.{CLI, Fixtures, Harness, Id, Operations, Project, Run, Store}
   alias Omunculus.Store.Query
   alias Omunculus.Tools.Out
 
+  import Omunculus.Fixtures,
+    only: [
+      open_project: 1,
+      opening: 1,
+      opening: 2,
+      opening: 3,
+      write_config: 2,
+      write_config: 3,
+      write_model_tool: 3,
+      write_tool: 4
+    ]
+
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
     Fixtures.install_default(dir)
     %{dir: dir}
   end
-
-  defp write_config(dir, contents, opts \\ []), do: Fixtures.write_config(dir, contents, opts)
 
   defp assemble_toml do
     """
@@ -38,39 +47,8 @@ defmodule Omunculus.RunTest do
     """
   end
 
-  defp write_tool(dir, name, toml, script) do
-    tool_dir = Path.join([dir, "tools", name])
-    File.mkdir_p!(tool_dir)
-    File.write!(Path.join(tool_dir, "tool.toml"), toml)
-    run_path = Path.join(tool_dir, "run")
-    File.write!(run_path, script)
-    File.chmod!(run_path, 0o755)
-  end
-
-  defp model_tool_toml(name),
-    do: """
-    name = "#{name}"
-    kind = "tool"
-    triggers = ["model"]
-    command = ["./run"]
-    """
-
-  defp fixed_output_script(output),
-    do: """
-    #!/bin/sh
-    echo '{"ok": true, "output": "#{output}", "emit": []}'
-    """
-
-  defp open_project(dir) do
-    {:ok, project} = Fixtures.open_project(dir)
-    project
-  end
-
   defp message(conn, body \\ "hi"),
     do: Fixtures.insert(conn, :prompts, %{kind: "message", body: body})
-
-  defp open(prompt_id, work_id \\ nil),
-    do: %{prompt_id: prompt_id, work_id: work_id, request_id: nil, via: nil, agent: nil}
 
   test "a model that raises leaves the run done and returns the crash", %{dir: dir} do
     write_config(dir, """
@@ -84,7 +62,7 @@ defmodule Omunculus.RunTest do
     Fixtures.use_model(project, fn _assembled, _tools, _call -> raise "boom" end)
 
     assert {:error, {:model_crashed, %RuntimeError{message: "boom"}}} =
-             Run.open(project, open(prompt_id))
+             Run.open(project, opening(prompt_id))
 
     assert {:ok, [run]} = Store.Query.all(project.conn, "SELECT status FROM runs")
     assert run.status == "done"
@@ -105,10 +83,15 @@ defmodule Omunculus.RunTest do
     end)
 
     assert {:error, {:openai, :down}} =
-             Run.open(project, open(prompt_id))
+             Run.open(project, opening(prompt_id))
 
     assert {:ok, [run]} = Store.Query.all(project.conn, "SELECT status FROM runs")
     assert run.status == "done"
+
+    assert {:ok, [end_run]} =
+             Store.Query.all(project.conn, "SELECT body FROM events WHERE type = 'end-run'")
+
+    assert Jason.decode!(end_run.body) == %{"error" => "the model failed: :down"}
   end
 
   test "a model calling a project tool leaves a start-run, tool, model, end-run replay", %{
@@ -121,7 +104,7 @@ defmodule Omunculus.RunTest do
     tools = ["echo", "sandbox.network"]
     """)
 
-    write_tool(dir, "echo", model_tool_toml("echo"), fixed_output_script("echoed"))
+    write_model_tool(dir, "echo", ~s({"ok": true, "output": "echoed", "emit": []}))
     project = open_project(dir)
     message_id = message(project.conn)
 
@@ -132,7 +115,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message_id))
+    assert {:ok, run} = Run.open(project, opening(message_id))
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
     assert Enum.map(events, & &1.type) == ["start-run", "tool", "tool", "model", "end-run"]
     [assemble_event, echo_event] = Enum.filter(events, &(&1.type == "tool"))
@@ -154,7 +137,7 @@ defmodule Omunculus.RunTest do
     )
 
     project = open_project(dir)
-    assert {:error, {:assemble, :missing}} = Run.open(project, open(message(project.conn)))
+    assert {:error, {:assemble, :missing}} = Run.open(project, opening(message(project.conn)))
     assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
     Project.close(project)
   end
@@ -170,7 +153,7 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
     Fixtures.use_model(project, fn _assembled, _tools, _call -> raise "must never be called" end)
 
-    assert {:error, {:assemble, :empty}} = Run.open(project, open(message(project.conn)))
+    assert {:error, {:assemble, :empty}} = Run.open(project, opening(message(project.conn)))
     assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
     assert run.status == "done"
     assert run.prompt_id == nil
@@ -194,24 +177,31 @@ defmodule Omunculus.RunTest do
       {:ok, "done"}
     end)
 
-    assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+    assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
     assert_received {:assembled, "CUSTOM ASSEMBLED"}
     Project.close(project)
   end
 
-  test "a model calling a name outside the effective set is rejected and nothing is recorded",
+  test "a model calling a name outside the effective set is rejected and recorded as failed",
        %{dir: dir} do
-    write_tool(dir, "echo", model_tool_toml("echo"), fixed_output_script("echoed"))
+    write_model_tool(dir, "echo", ~s({"ok": true, "output": "echoed", "emit": []}))
     project = open_project(dir)
     message_id = message(project.conn)
 
     model = fn _assembled, _tools, call -> call.("nonexistent", %{}) end
     Fixtures.use_model(project, model)
 
-    assert {:error, {:not_allowed, "nonexistent"}} = Run.open(project, open(message_id))
+    assert Run.open(project, opening(message_id)) == {:error, Out.not_yours("nonexistent")}
 
     assert {:ok, events} = Query.all(project.conn, "SELECT * FROM events WHERE type = 'tool'")
-    assert Enum.map(events, &Jason.decode!(&1.body)["name"]) == ["assemble"]
+    assert [_assemble, refused] = Enum.map(events, &Jason.decode!(&1.body))
+
+    assert refused == %{
+             "name" => "nonexistent",
+             "args" => %{},
+             "ok" => false,
+             "output" => Out.not_yours("nonexistent")
+           }
 
     Project.close(project)
   end
@@ -229,7 +219,7 @@ defmodule Omunculus.RunTest do
     model = fn _assembled, _tools, _call -> raise "must never be called" end
     Fixtures.use_model(project, model)
 
-    assert {:error, {:no_agent_at_depth, 0}} = Run.open(project, open(message_id))
+    assert {:error, {:no_agent_at_depth, 0}} = Run.open(project, opening(message_id))
     assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
 
     Project.close(project)
@@ -243,8 +233,8 @@ defmodule Omunculus.RunTest do
     tools = ["one", "sandbox.network"]
     """)
 
-    write_tool(dir, "one", model_tool_toml("one"), fixed_output_script("one-out"))
-    write_tool(dir, "two", model_tool_toml("two"), fixed_output_script("two-out"))
+    write_model_tool(dir, "one", ~s({"ok": true, "output": "one-out", "emit": []}))
+    write_model_tool(dir, "two", ~s({"ok": true, "output": "two-out", "emit": []}))
 
     project = open_project(dir)
     message_id = message(project.conn)
@@ -259,13 +249,14 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message_id))
+    assert {:ok, _run} = Run.open(project, opening(message_id))
 
     assert_received {:assembled, assembled}
     assert assembled =~ "- one:"
     refute assembled =~ "- two:"
 
-    assert_received {:two, {:error, {:not_allowed, "two"}}}
+    assert_received {:two, {:error, refused}}
+    assert refused == Out.not_yours("two")
 
     Project.close(project)
   end
@@ -277,7 +268,7 @@ defmodule Omunculus.RunTest do
     model = fn assembled, _tools, _call -> {:ok, assembled} end
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message_id))
+    assert {:ok, run} = Run.open(project, opening(message_id))
     refute run.work_id
     Project.close(project)
   end
@@ -295,7 +286,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message_id, work_id))
+    assert {:ok, run} = Run.open(project, opening(message_id, work_id))
     assert run.work_id == work_id
 
     assert_received {:assembled, assembled}
@@ -328,7 +319,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message_id, work_id))
+    assert {:ok, _run} = Run.open(project, opening(message_id, work_id))
 
     assert_received {:assembled, assembled}
     refute assembled =~ "## Inbox"
@@ -342,7 +333,13 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
     message_id = message(project.conn)
     work_id = Fixtures.insert(project.conn, :works, %{title: "Fix the parser"})
-    request_id = Fixtures.insert(project.conn, :requests, %{work_id: work_id, agent: "worker"})
+
+    request_id =
+      Fixtures.insert(project.conn, :requests, %{
+        work_id: work_id,
+        requester: Jason.encode!(Omunculus.Participant.agent("worker"))
+      })
+
     inbox_id = Fixtures.insert(project.conn, :inbox, %{work_id: work_id})
     Fixtures.insert(project.conn, :comments, %{inbox_id: inbox_id, body: "standalone notice"})
     Fixtures.insert(project.conn, :comments, %{request_id: request_id, body: "please look"})
@@ -357,7 +354,7 @@ defmodule Omunculus.RunTest do
     Fixtures.use_model(project, model)
 
     opening =
-      open(message_id, work_id)
+      opening(message_id, work_id)
       |> Map.put(:request_id, request_id)
       |> Map.put(:inbox_id, inbox_id)
 
@@ -369,9 +366,7 @@ defmodule Omunculus.RunTest do
     assert assembled =~ "standalone notice"
     request_at = :binary.match(assembled, "## Request") |> elem(0)
     inbox_at = :binary.match(assembled, "## Inbox") |> elem(0)
-    tools_at = :binary.match(assembled, "## Tools") |> elem(0)
     assert request_at < inbox_at
-    assert inbox_at < tools_at
 
     Project.close(project)
   end
@@ -389,7 +384,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message_id, work_id))
+    assert {:ok, _run} = Run.open(project, opening(message_id, work_id))
 
     assert_received {:assembled, assembled}
     refute assembled =~ "## Inbox"
@@ -404,7 +399,7 @@ defmodule Omunculus.RunTest do
     model = fn _assembled, _tools, _call -> raise "must never be called" end
     Fixtures.use_model(project, model)
 
-    assert {:error, {:no_work, "nope"}} = Run.open(project, open(message_id, "nope"))
+    assert {:error, {:no_work, "nope"}} = Run.open(project, opening(message_id, "nope"))
     assert {:ok, []} = Query.all(project.conn, "SELECT * FROM runs")
 
     Project.close(project)
@@ -422,16 +417,11 @@ defmodule Omunculus.RunTest do
     deny = ["deny_tool"]
     """)
 
-    write_tool(dir, "granted_tool", model_tool_toml("granted_tool"), fixed_output_script("ok"))
+    write_model_tool(dir, "granted_tool", ~s({"ok": true, "output": "ok", "emit": []}))
 
-    write_tool(
-      dir,
-      "negotiable_tool",
-      model_tool_toml("negotiable_tool"),
-      fixed_output_script("ok")
-    )
+    write_model_tool(dir, "negotiable_tool", ~s({"ok": true, "output": "ok", "emit": []}))
 
-    write_tool(dir, "deny_tool", model_tool_toml("deny_tool"), fixed_output_script("ok"))
+    write_model_tool(dir, "deny_tool", ~s({"ok": true, "output": "ok", "emit": []}))
 
     project = open_project(dir)
     message_id = message(project.conn)
@@ -444,7 +434,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message_id))
+    assert {:ok, run} = Run.open(project, opening(message_id))
 
     assert Jason.decode!(run.tools) == ["granted_tool"]
 
@@ -466,14 +456,14 @@ defmodule Omunculus.RunTest do
     tools = ["a"]
     """)
 
-    write_tool(dir, "a", model_tool_toml("a"), fixed_output_script("ok"))
-    write_tool(dir, "b", model_tool_toml("b"), fixed_output_script("ok"))
+    write_model_tool(dir, "a", ~s({"ok": true, "output": "ok", "emit": []}))
+    write_model_tool(dir, "b", ~s({"ok": true, "output": "ok", "emit": []}))
 
     project = open_project(dir)
     model = fn _assembled, _tools, _call -> {:ok, "done"} end
     Fixtures.use_model(project, model)
 
-    assert {:ok, run1} = Run.open(project, open(message(project.conn)))
+    assert {:ok, run1} = Run.open(project, opening(message(project.conn)))
     assert Jason.decode!(run1.tools) == ["a"]
     assert {:ok, [start1 | _]} = Store.replay(project.conn, {:run, run1.id})
     policy1 = Jason.decode!(start1.body)["execution"]
@@ -488,7 +478,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run2} = Run.open(project, open(message(project.conn)))
+    assert {:ok, run2} = Run.open(project, opening(message(project.conn)))
     assert Jason.decode!(run2.tools) == ["a", "b"]
     assert {:ok, [start2 | _]} = Store.replay(project.conn, {:run, run2.id})
     policy2 = Jason.decode!(start2.body)["execution"]
@@ -498,13 +488,13 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
-  test "the default concierge ceiling has more than 12 effective tools and lists every card when nothing is pinned",
+  test "the default concierge ceiling has 15 model tools and lists every card when nothing is pinned",
        %{dir: dir} do
     write_config(dir, """
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store"]
+    tools = ["break", "catalog", "continue", "delegate", "done", "end", "fs.read", "reply", "skills", "store", "work"]
     """)
 
     project = open_project(dir)
@@ -517,8 +507,11 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message(project.conn)))
-    assert length(Jason.decode!(run.tools)) == 13
+    assert {:ok, run} = Run.open(project, opening(message(project.conn)))
+    assert length(Jason.decode!(run.tools)) == 15
+    assert "read_work" in Jason.decode!(run.tools)
+    assert "skill" in Jason.decode!(run.tools)
+    refute "continue" in Jason.decode!(run.tools)
 
     assert_received {:assembled, assembled}
     assert assembled =~ "- tool_search:"
@@ -536,7 +529,7 @@ defmodule Omunculus.RunTest do
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store"]
+    tools = ["break", "catalog", "continue", "delegate", "done", "end", "fs.read", "reply", "store", "work"]
     pinned = ["store", "sequence", "catalog"]
     """)
 
@@ -550,7 +543,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+    assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
     assert_received {:assembled, assembled}
     assert assembled =~ "- tool_search:"
     assert assembled =~ "- comment:"
@@ -566,7 +559,7 @@ defmodule Omunculus.RunTest do
     [agents.concierge]
     depth = 0
     text = "hi"
-    tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store", "counter"]
+    tools = ["break", "catalog", "continue", "delegate", "end", "fs.read", "reply", "store", "work", "counter"]
     """)
 
     project = open_project(dir)
@@ -579,7 +572,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+    assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
     assert_received {:assembled, assembled}
     assert assembled =~ "- counter:"
     assert assembled =~ "- read:"
@@ -591,7 +584,7 @@ defmodule Omunculus.RunTest do
   test "stage pinned intersects agent pinned", %{dir: dir} do
     write_config(dir, """
     [policy]
-    workflow = "delivery"
+    workflows = ["delivery"]
 
     [agents.concierge]
     depth = 0
@@ -604,7 +597,14 @@ defmodule Omunculus.RunTest do
     """)
 
     project = open_project(dir)
-    work = Fixtures.insert(project.conn, :works, %{stage: "first", assignee: "concierge"})
+
+    work =
+      Fixtures.insert(project.conn, :works, %{
+        workflow: "delivery",
+        stage: "first",
+        assignee: "concierge"
+      })
+
     test_pid = self()
 
     model = fn assembled, _tools, _call ->
@@ -614,7 +614,7 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message(project.conn), work))
+    assert {:ok, _run} = Run.open(project, opening(message(project.conn), work))
     assert_received {:assembled, assembled}
     assert assembled =~ "- comment:"
     refute assembled =~ "- read:"
@@ -634,7 +634,7 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
     Fixtures.use_model(project, fn _assembled, _tools, _call -> {:ok, "done"} end)
 
-    assert {:ok, run} = Run.open(project, open(message(project.conn)))
+    assert {:ok, run} = Run.open(project, opening(message(project.conn)))
     names = Jason.decode!(run.tools)
     assert names == ["find", "grep", "ls", "read"]
     assert {:ok, [start | _]} = Store.replay(project.conn, {:run, run.id})
@@ -662,34 +662,34 @@ defmodule Omunculus.RunTest do
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+    assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
 
     assert_received {:assembled, assembled}
     assert assembled =~ "- tool_search:"
-    refute assembled =~ "Mais "
+    refute assembled =~ "more tools"
 
     Project.close(project)
   end
 
   test "a child work sees its parent's grants but an unrelated work does not", %{dir: dir} do
-    write_tool(dir, "extra", model_tool_toml("extra"), fixed_output_script("ok"))
+    write_model_tool(dir, "extra", ~s({"ok": true, "output": "ok", "emit": []}))
 
     project = open_project(dir)
     model = fn _assembled, _tools, _call -> {:ok, "done"} end
 
     parent_id = Fixtures.insert(project.conn, :works, %{grants: ~s(["extra"])})
-    child_id = Fixtures.insert(project.conn, :works, %{parent_id: parent_id})
+    child_id = Fixtures.insert(project.conn, :works, %{parent_id: parent_id, assignee: "worker"})
     unrelated_id = Fixtures.insert(project.conn, :works)
     Fixtures.use_model(project, model)
 
     assert {:ok, child_run} =
-             Run.open(project, open(message(project.conn), child_id))
+             Run.open(project, opening(message(project.conn), child_id))
 
     assert "extra" in Jason.decode!(child_run.tools)
     Fixtures.use_model(project, model)
 
     assert {:ok, unrelated_run} =
-             Run.open(project, open(message(project.conn), unrelated_id))
+             Run.open(project, opening(message(project.conn), unrelated_id))
 
     refute "extra" in Jason.decode!(unrelated_run.tools)
 
@@ -704,7 +704,7 @@ defmodule Omunculus.RunTest do
     deny = ["write"]
     """)
 
-    write_tool(dir, "write", model_tool_toml("write"), fixed_output_script("ok"))
+    write_model_tool(dir, "write", ~s({"ok": true, "output": "ok", "emit": []}))
 
     project = open_project(dir)
     model = fn _assembled, _tools, _call -> {:ok, "done"} end
@@ -712,40 +712,38 @@ defmodule Omunculus.RunTest do
     work_id = Fixtures.insert(project.conn, :works, %{grants: ~s(["write"])})
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message(project.conn), work_id))
+    assert {:ok, run} = Run.open(project, opening(message(project.conn), work_id))
 
     refute "write" in Jason.decode!(run.tools)
 
     Project.close(project)
   end
 
-  test "a request_access emit ends the run before any further tool call happens", %{dir: dir} do
+  test "end ends the run before any further tool call happens", %{dir: dir} do
     project = open_project(dir)
     message_id = message(project.conn)
     test_pid = self()
 
     model = fn _assembled, _tools, call ->
-      call.("request_access", %{"kind" => "path", "name" => "./secret", "reason" => "need it"})
+      call.("end", %{})
       send(test_pid, :reached_second_call)
-      call.("request_access", %{"kind" => "tool", "name" => "other", "reason" => "x"})
+
+      call.("request_access", %{
+        "report" => "x",
+        "access" => [%{"kind" => "tool", "name" => "other"}],
+        "reason" => "x"
+      })
+
       {:ok, "unused"}
     end
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, run} = Run.open(project, open(message_id))
+    assert {:ok, run} = Run.open(project, opening(message_id))
     refute_received :reached_second_call
 
     assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
-
-    assert Enum.map(events, & &1.type) == [
-             "start-run",
-             "tool",
-             "tool",
-             "request",
-             "end-run",
-             "tool"
-           ]
+    assert Enum.map(events, & &1.type) == ["start-run", "tool", "tool", "end", "end-run"]
 
     assert {:ok, stored} = Query.one(project.conn, "SELECT * FROM runs WHERE id = ?", [run.id])
     assert stored.status == "done"
@@ -753,28 +751,175 @@ defmodule Omunculus.RunTest do
     Project.close(project)
   end
 
-  test "request_sandbox with sandbox.write opens a REQUESTS row", %{dir: dir} do
-    write_config(dir, """
-    [agents.concierge]
-    depth = 0
-    text = "hi"
-    tools = ["request_sandbox"]
-    """)
-
+  test "request_access ends the run: nothing the model calls after it runs", %{dir: dir} do
     project = open_project(dir)
+    message_id = message(project.conn)
+    test_pid = self()
 
     model = fn _assembled, _tools, call ->
-      call.("request_sandbox", %{"name" => "sandbox.write", "reason" => "need to write"})
+      call.("request_access", %{
+        "report" => "blocked",
+        "access" => [%{"kind" => "path", "name" => "./secret"}],
+        "reason" => "need it"
+      })
+
+      send(test_pid, :reached_after_request)
       {:ok, "unused"}
     end
 
     Fixtures.use_model(project, model)
 
-    assert {:ok, _run} = Run.open(project, open(message(project.conn)))
+    assert {:ok, run} = Run.open(project, opening(message_id))
+    refute_received :reached_after_request
+    assert {:ok, [_request]} = Query.all(project.conn, "SELECT * FROM requests")
+
+    assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+    types = Enum.map(events, & &1.type)
+    assert ["request", "tool", "end" | _rest] = Enum.drop_while(types, &(&1 != "request"))
+    assert List.last(types) == "end-run"
+
+    Project.close(project)
+  end
+
+  test "request_access for sandbox.write opens a REQUESTS row", %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["end", "request_access"]
+    """)
+
+    project = open_project(dir)
+
+    model = fn _assembled, _tools, call ->
+      call.("request_access", %{
+        "report" => "blocked on write",
+        "access" => [%{"kind" => "resource", "name" => "sandbox.write"}],
+        "reason" => "need to write"
+      })
+
+      {:ok, "unused"}
+    end
+
+    Fixtures.use_model(project, model)
+
+    assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
-    ask = Jason.decode!(request.ask)
-    assert ask["kind"] == "resource"
-    assert ask["name"] == "sandbox.write"
+
+    options = Jason.decode!(request.options)
+
+    assert %{"grant_agent" => [%{"args" => %{"kind" => "resource", "name" => "sandbox.write"}}]} =
+             options
+
+    refute Map.has_key?(options, "grant")
+
+    Project.close(project)
+  end
+
+  test "request_access in a run with a work comments the report on it before the request and ends the run",
+       %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["comment", "end", "request_access"]
+    """)
+
+    project = open_project(dir)
+    work_id = Fixtures.insert(project.conn, :works)
+
+    model = fn _assembled, _tools, call ->
+      call.("request_access", %{
+        "report" => "blocked on write",
+        "access" => [%{"kind" => "resource", "name" => "sandbox.write"}],
+        "reason" => "need to write"
+      })
+
+      {:ok, "unused"}
+    end
+
+    Fixtures.use_model(project, model)
+
+    assert {:ok, run} = Run.open(project, opening(message(project.conn), work_id))
+    assert {:ok, [_request]} = Query.all(project.conn, "SELECT * FROM requests")
+
+    assert {:ok, [%{body: "blocked on write"}]} =
+             Store.comments(project.conn, :work, work_id)
+
+    assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+
+    assert ["comment", "request", "tool", "end" | _rest] =
+             events |> Enum.map(& &1.type) |> Enum.drop_while(&(&1 != "comment"))
+
+    Project.close(project)
+  end
+
+  test "continue is not offered to the model and a model call to it is refused", %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["comment", "continue", "done", "end"]
+    """)
+
+    project = open_project(dir)
+    work_id = Fixtures.insert(project.conn, :works)
+    test_pid = self()
+
+    model = fn assembled, tools, call ->
+      send(test_pid, {:offered, assembled, Enum.map(tools, & &1.name)})
+      send(test_pid, {:continue, call.("continue", %{})})
+      {:ok, "unused"}
+    end
+
+    Fixtures.use_model(project, model)
+
+    assert {:ok, run} = Run.open(project, opening(message(project.conn), work_id))
+    assert_received {:offered, assembled, names}
+    refute "continue" in names
+    refute assembled =~ "- continue:"
+    assert "done" in names
+    assert_received {:continue, {:error, refused}}
+    assert refused == Out.not_yours("continue")
+
+    assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+    refute "continue" in Enum.map(events, & &1.type)
+
+    Project.close(project)
+  end
+
+  test "break without a report fails, writes nothing and leaves the run going", %{dir: dir} do
+    write_config(dir, """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    tools = ["break", "comment", "end"]
+    """)
+
+    project = open_project(dir)
+    work_id = Fixtures.insert(project.conn, :works)
+    test_pid = self()
+
+    model = fn _assembled, _tools, call ->
+      send(test_pid, {:break, call.("break", %{})})
+      call.("end", %{})
+    end
+
+    Fixtures.use_model(project, model)
+
+    assert {:ok, run} =
+             Run.open(
+               project,
+               opening(message(project.conn), work_id, %{agent: "concierge"})
+             )
+
+    assert_received {:break, {:ok, "report required"}}
+
+    assert {:ok, []} = Store.comments(project.conn, :work, work_id)
+    assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", work_id)
+
+    assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+    assert Enum.map(events, & &1.type) == ["start-run", "tool", "tool", "tool", "end", "end-run"]
 
     Project.close(project)
   end
@@ -783,7 +928,12 @@ defmodule Omunculus.RunTest do
     project = open_project(dir)
 
     model = fn _assembled, _tools, call ->
-      call.("request_sandbox", %{"name" => "sandbox.write", "reason" => "need to write"})
+      call.("request_access", %{
+        "report" => "blocked on write",
+        "access" => [%{"kind" => "resource", "name" => "sandbox.write"}],
+        "reason" => "need to write"
+      })
+
       {:ok, "unused"}
     end
 
@@ -799,10 +949,15 @@ defmodule Omunculus.RunTest do
              })
 
     assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
-    ask = Jason.decode!(request.ask)
-    assert ask["kind"] == "resource"
-    assert ask["name"] == "sandbox.write"
-    assert request.status == "waiting_human"
+
+    options = Jason.decode!(request.options)
+
+    assert %{"grant_agent" => [%{"args" => %{"kind" => "resource", "name" => "sandbox.write"}}]} =
+             options
+
+    refute Map.has_key?(options, "grant")
+
+    assert request.status == "pending"
 
     Project.close(project)
   end
@@ -852,7 +1007,7 @@ defmodule Omunculus.RunTest do
     assert {:error, {:no_agent, "nope"}} =
              Run.open(
                project,
-               %{prompt_id: nil, work_id: nil, request_id: nil, via: nil, agent: "nope"}
+               opening(nil, nil, %{agent: "nope"})
              )
 
     Project.close(project)
@@ -929,5 +1084,1112 @@ defmodule Omunculus.RunTest do
     assert worker_assembled =~ "worker-text"
 
     Project.close(project)
+  end
+
+  test "the deltas of a model reach the store's subscribers without being recorded", %{
+    dir: dir
+  } do
+    project = open_project(dir)
+
+    Fixtures.use_model(project, fn _assembled, _tools, _call, record, delta, _execution ->
+      :ok = delta.("hel")
+      :ok = delta.("lo")
+      :ok = record.("hello")
+      {:ok, "hello"}
+    end)
+
+    :ok = Store.subscribe(project.conn)
+    assert {:ok, run} = Run.open(project, opening(nil))
+    owner = project.conn.owner
+
+    assert_received {:store, ^owner, {:delta, %{run_id: run_id, text: "hel"}}}
+    assert_received {:store, ^owner, {:delta, %{run_id: ^run_id, text: "lo"}}}
+    assert run_id == run.id
+
+    {:ok, events} = Store.replay(project.conn, {:run, run.id})
+    assert [%{body: "hello"}] = Enum.filter(events, &(&1.type == "model"))
+
+    Project.close(project)
+  end
+
+  describe "a run that stops without end" do
+    defp retry_config(dir, policy, extra \\ "") do
+      write_config(
+        dir,
+        """
+        [agents.concierge]
+        depth = 0
+        text = "concierge"
+        tools = ["ask", "break", "comment", "continue", "done", "end", "wait"]
+
+        [agents.worker]
+        depth = 1
+        text = "worker"
+        tools = ["comment", "continue", "done", "end"]
+
+        [policy]
+        #{policy}
+        """ <> extra
+      )
+    end
+
+    # Replies from `steps` in order, one per run, and sends each assembled
+    # prompt to the test; the last step repeats.
+    defp scripted(project, steps) do
+      test_pid = self()
+      {:ok, script} = Agent.start_link(fn -> steps end)
+
+      Fixtures.use_model(project, fn assembled, _tools, call ->
+        send(test_pid, {:assembled, assembled})
+
+        step =
+          Agent.get_and_update(script, fn
+            [only] -> {only, [only]}
+            [step | rest] -> {step, rest}
+          end)
+
+        step.(call)
+      end)
+    end
+
+    defp idle(text), do: fn _call -> {:ok, text} end
+    defp ending, do: fn call -> call.("done", %{"report" => "finished"}) end
+    defp asking, do: fn call -> call.("ask", %{"question" => "Go on?"}) end
+
+    defp ending_run do
+      fn call ->
+        call.("end", %{})
+        flunk("end must end the run")
+      end
+    end
+
+    defp runs_of(project, work_id) do
+      {:ok, runs} =
+        Query.all(
+          project.conn,
+          "SELECT runs.* FROM runs JOIN events ON events.id = runs.event_id WHERE runs.work_id = ? ORDER BY events.sequence",
+          [work_id]
+        )
+
+      runs
+    end
+
+    defp root_request(project, work_id) do
+      {:ok, [request]} =
+        Query.all(project.conn, "SELECT * FROM requests WHERE work_id = ?", [work_id])
+
+      request
+    end
+
+    defp breaks_of(project, work_id) do
+      {:ok, events} = Store.replay(project.conn, {:work, work_id})
+      for %{type: "break", body: body} <- events, do: Jason.decode!(body)["body"]
+    end
+
+    test "opens a retry run on the same work whose prompt has the last run's events", %{
+      dir: dir
+    } do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      scripted(project, [idle("first try"), ending()])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+      assert [first, retry] = runs_of(project, work_id)
+      assert first.via == nil
+      assert retry.via == "retry"
+      assert_received {:assembled, _first}
+      assert_received {:assembled, assembled}
+      assert assembled =~ "## Last run\n- model first try"
+      refute assembled =~ "## Last comment"
+      assert {:ok, %{state: "done"}} = Store.view(project.conn, "work", work_id)
+      assert breaks_of(project, work_id) == []
+
+      Project.close(project)
+    end
+
+    test "the retry prompt has the last comment and the stopped run's calls", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+
+      commenting = fn call ->
+        {:ok, ""} = call.("comment", %{"body" => "halfway"})
+        {:ok, "stopped"}
+      end
+
+      scripted(project, [commenting, ending()])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+      assert_received {:assembled, _first}
+      assert_received {:assembled, assembled}
+      assert assembled =~ "## Last comment\nhalfway"
+      assert assembled =~ ~s(- tool comment {"body":"halfway"} ok)
+      assert assembled =~ "- model stopped"
+
+      Project.close(project)
+    end
+
+    test "[policy] last_run_output_bytes cuts the outputs in the retry prompt", %{dir: dir} do
+      retry_config(dir, "max_retries = 1\nlast_run_output_bytes = 2")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+
+      failing = fn call ->
+        {:ok, _output} = call.("comment", %{})
+        {:ok, "stopped"}
+      end
+
+      scripted(project, [failing, ending()])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+      assert_received {:assembled, _first}
+      assert_received {:assembled, assembled}
+      assert assembled =~ ~r/- tool comment \{\} failed\n.{2}\n\(\d+ bytes cut\)\n/
+
+      Project.close(project)
+    end
+
+    test "[policy] send_catalog sends every agent the same tools and refuses those not its own",
+         %{dir: dir} do
+      retry_config(dir, "max_retries = 0\nsend_catalog = true")
+      project = open_project(dir)
+      test_pid = self()
+
+      Fixtures.use_model(project, fn _assembled, tools, call ->
+        send(test_pid, {:sent, Enum.map(tools, & &1.name)})
+        send(test_pid, {:write, call.("write", %{"path" => "x", "content" => "y"})})
+        {:ok, "done"}
+      end)
+
+      assert {:ok, run} = Run.open(project, opening(message(project.conn)))
+
+      assert_received {:sent, sent}
+      assert "write" in sent and "work" in sent and sent == Enum.sort(sent)
+      assert Jason.decode!(run.tools) == ["ask", "break", "comment", "done", "end", "wait"]
+      assert_received {:write, {:error, refused}}
+      assert refused == Out.not_yours("write")
+
+      Project.close(project)
+    end
+
+    test "[policy] tool_output_bytes cuts what the model gets but not the recorded call", %{
+      dir: dir
+    } do
+      retry_config(dir, "max_retries = 1\ntool_output_bytes = 2")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      test_pid = self()
+
+      failing = fn call ->
+        {:ok, output} = call.("comment", %{})
+        send(test_pid, {:tool_output, output})
+        {:ok, "stopped"}
+      end
+
+      scripted(project, [failing, ending()])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+      assert_received {:tool_output, output}
+      assert output == "bo\n(11 bytes cut)"
+      assert_received {:assembled, _first}
+      assert_received {:assembled, assembled}
+      assert assembled =~ "- tool comment {} failed\nbody required"
+
+      Project.close(project)
+    end
+
+    test "after max_retries retries a child is broken and its waiting parent's run opens", %{
+      dir: dir
+    } do
+      retry_config(dir, "max_retries = 2")
+      project = open_project(dir)
+      parent_id = Fixtures.insert(project.conn, :works, %{state: "waiting", waiting: "child"})
+
+      child_id =
+        Fixtures.insert(project.conn, :works, %{parent_id: parent_id, assignee: "worker"})
+
+      Fixtures.use_model(project, fn assembled, _tools, call ->
+        if String.starts_with?(assembled, "worker"),
+          do: {:ok, "idle"},
+          else: call.("break", %{"report" => "passed up"})
+      end)
+
+      assert {:ok, _run} = Run.open(project, opening(nil, child_id))
+
+      assert Enum.map(runs_of(project, child_id), & &1.via) == [nil, "retry", "retry"]
+
+      assert breaks_of(project, child_id) == [
+               ~s(worker stopped the work "a work" without a report after 3 runs.)
+             ]
+
+      assert {:ok, %{state: "waiting"}} = Store.view(project.conn, "work", child_id)
+      assert [_parent_run] = runs_of(project, parent_id)
+      assert breaks_of(project, parent_id) == ["passed up"]
+
+      Project.close(project)
+    end
+
+    test "a root work over the limit asks the human to retry or cancel it", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      scripted(project, [idle("idle")])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+      assert length(runs_of(project, work_id)) == 2
+      assert breaks_of(project, work_id) == []
+
+      request = root_request(project, work_id)
+      assert request.arbiter == @human
+      assert request.status == "pending"
+
+      assert Jason.decode!(request.options) == %{
+               "retry" => [],
+               "cancel" => [%{"name" => "cancel", "args" => %{}}]
+             }
+
+      assert {:ok, [reason]} =
+               Query.all(project.conn, "SELECT * FROM comments WHERE request_id = ?", [
+                 request.id
+               ])
+
+      assert reason.body == ~s(concierge stopped the work "a work" without a report after 2 runs.)
+      assert reason.author == "harness"
+
+      assert {:ok, [inbox]} = Query.all(project.conn, "SELECT * FROM inbox")
+      assert inbox.work_id == work_id
+
+      assert {:ok, [%{body: body}]} =
+               Query.all(project.conn, "SELECT * FROM comments WHERE inbox_id = ?", [inbox.id])
+
+      assert body == reason.body <> " Answer it with cancel or retry."
+
+      assert {:ok, %{state: "waiting", waiting: "request", waiting_for: waiting_for}} =
+               Store.view(project.conn, "work", work_id)
+
+      assert waiting_for == request.id
+
+      Project.close(project)
+    end
+
+    defp end_run_errors(project, work_id) do
+      {:ok, events} = Store.replay(project.conn, {:work, work_id})
+      for %{type: "end-run", body: body} <- events, do: Jason.decode!(body)["error"]
+    end
+
+    test "a model that fails says why on its end-run and its work is retried", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      overloaded = %{"error" => %{"type" => "overloaded_error", "message" => "Overloaded"}}
+
+      scripted(project, [
+        fn _call -> {:error, {:anthropic, {:http, 529, overloaded}}} end,
+        ending()
+      ])
+
+      assert {:error, {:anthropic, {:http, 529, ^overloaded}}} =
+               Run.open(project, opening(nil, work_id))
+
+      assert Enum.map(runs_of(project, work_id), & &1.via) == [nil, "retry"]
+
+      assert end_run_errors(project, work_id) == [
+               "the model's server answered 529: Overloaded",
+               nil
+             ]
+
+      Project.close(project)
+    end
+
+    test "a model that keeps crashing breaks its child work past max_retries", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      parent_id = Fixtures.insert(project.conn, :works, %{state: "waiting", waiting: "child"})
+
+      child_id =
+        Fixtures.insert(project.conn, :works, %{parent_id: parent_id, assignee: "worker"})
+
+      Fixtures.use_model(project, fn assembled, _tools, call ->
+        if String.starts_with?(assembled, "worker"),
+          do: raise("boom"),
+          else: call.("break", %{"report" => "passed up"})
+      end)
+
+      assert {:error, {:runs, [_, _]}} = Run.open(project, opening(nil, child_id))
+
+      assert Enum.map(runs_of(project, child_id), & &1.via) == [nil, "retry"]
+      assert end_run_errors(project, child_id) == List.duplicate("the model crashed: boom", 2)
+
+      assert breaks_of(project, child_id) == [
+               ~s(worker stopped the work "a work" without a report after 2 runs.)
+             ]
+
+      assert [_parent_run] = runs_of(project, parent_id)
+      assert breaks_of(project, parent_id) == ["passed up"]
+
+      Project.close(project)
+    end
+
+    test "max_retries = 0 asks at once", %{dir: dir} do
+      retry_config(dir, "max_retries = 0")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      scripted(project, [idle("idle")])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+      assert [_only] = runs_of(project, work_id)
+      assert %{id: request_id} = root_request(project, work_id)
+
+      assert {:ok, [%{body: body}]} =
+               Query.all(project.conn, "SELECT * FROM comments WHERE request_id = ?", [
+                 request_id
+               ])
+
+      assert body == ~s(concierge stopped the work "a work" without a report after 1 run.)
+
+      Project.close(project)
+    end
+
+    for {answer, args, expected} <- [
+          {"retry", ["--option", "retry"], "answered retry: the reply is below"},
+          {"text", [], "answered: the reply is below"}
+        ] do
+      test "replying with #{answer} to the root's request opens another run of it", %{dir: dir} do
+        retry_config(dir, "max_retries = 0")
+        project = open_project(dir)
+        work_id = Fixtures.insert(project.conn, :works)
+        scripted(project, [idle("idle"), ending()])
+        assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+        request = root_request(project, work_id)
+
+        assert {:ok, ""} =
+                 CLI.run(["reply", "--request_id", request.id] ++ unquote(args) ++ ["go on"], dir)
+
+        assert [_first, again] = runs_of(project, work_id)
+        assert again.via == "reply"
+        assert again.request_id == request.id
+        assert {:ok, %{body: prompt}} = Store.view(project.conn, "prompt", again.prompt_id)
+        assert prompt =~ unquote(expected)
+        assert String.ends_with?(prompt, "\ngo on")
+        assert {:ok, %{state: "done"}} = Store.view(project.conn, "work", work_id)
+
+        Project.close(project)
+      end
+    end
+
+    test "replying cancel to the root's request cancels it and opens no run", %{dir: dir} do
+      retry_config(dir, "max_retries = 0")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      scripted(project, [idle("idle")])
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+      request = root_request(project, work_id)
+
+      assert {:ok, ""} =
+               CLI.run(["reply", "--request_id", request.id, "--option", "cancel", "drop"], dir)
+
+      assert [_only] = runs_of(project, work_id)
+      assert {:ok, %{state: "cancelled"}} = Store.view(project.conn, "work", work_id)
+
+      assert {:error, {:cancelled, ^work_id}} = Run.open(project, opening(nil, work_id))
+      assert [_only] = runs_of(project, work_id)
+
+      Project.close(project)
+    end
+
+    test "a run ending with end starts the count over", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      scripted(project, [idle("one"), asking(), idle("two"), asking()])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+      request = root_request(project, work_id)
+      assert {:ok, ""} = CLI.run(["reply", "--request_id", request.id, "go on"], dir)
+
+      assert Enum.map(runs_of(project, work_id), & &1.via) == [nil, "retry", "reply", "retry"]
+      assert breaks_of(project, work_id) == []
+
+      Project.close(project)
+    end
+
+    test "the work's workspace overrides max_retries", %{dir: dir} do
+      File.mkdir_p!(Path.join(dir, "main"))
+      File.mkdir_p!(Path.join(dir, "other"))
+
+      retry_config(dir, ~s(max_retries = 0\nworkspace = "main"), """
+
+      [workspaces.main]
+      root = "main"
+
+      [workspaces.other]
+      root = "other"
+
+      [workspaces.other.policy]
+      max_retries = 1
+      """)
+
+      project = open_project(dir)
+      main_id = Fixtures.insert(project.conn, :works, %{workspace: "main"})
+      other_id = Fixtures.insert(project.conn, :works, %{workspace: "other"})
+      scripted(project, [idle("idle")])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, main_id))
+      assert {:ok, _run} = Run.open(project, opening(nil, other_id))
+
+      assert length(runs_of(project, main_id)) == 1
+      assert length(runs_of(project, other_id)) == 2
+
+      Project.close(project)
+    end
+
+    test "a work left waiting or done by its run is not retried", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+
+      for state <- ["waiting", "done"] do
+        work_id = Fixtures.insert(project.conn, :works)
+
+        scripted(project, [
+          fn _call ->
+            :ok =
+              Query.exec(project.conn, "UPDATE works SET state = ? WHERE id = ?", [state, work_id])
+
+            {:ok, "left #{state}"}
+          end
+        ])
+
+        assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+        assert [_only] = runs_of(project, work_id)
+        assert breaks_of(project, work_id) == []
+      end
+
+      Project.close(project)
+    end
+
+    test "the run opened by send and a run for a named agent are not retried", %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      scripted(project, [idle("idle")])
+
+      assert {:ok, _run} = Run.open(project, opening(message(project.conn)))
+      assert {:ok, [_send_run]} = Query.all(project.conn, "SELECT * FROM runs")
+
+      assert {:ok, _run} =
+               Run.open(project, %{opening(nil, work_id) | agent: "concierge"})
+
+      assert [_only] = runs_of(project, work_id)
+
+      Project.close(project)
+    end
+
+    test "end on a work's own run that leaves it open with nothing to wait for is refused, and the run goes on",
+         %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+      test_pid = self()
+
+      scripted(project, [
+        fn call ->
+          send(test_pid, {:end, call.("end", %{})})
+          call.("done", %{"report" => "finished"})
+        end
+      ])
+
+      assert {:ok, run} = Run.open(project, opening(nil, work_id))
+
+      assert_received {:end, {:ok, refused}}
+      assert refused == Out.refused({:end, :root_open})
+      assert [_only] = runs_of(project, work_id)
+      assert {:ok, %{state: "done"}} = Store.view(project.conn, "work", work_id)
+
+      assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+      assert [%{body: body}] = Enum.filter(events, &(&1.type == "end"))
+      assert Jason.decode!(body) == %{}
+
+      Project.close(project)
+    end
+
+    test "a root work's run waits for the person's next message, which runs the work again",
+         %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+
+      scripted(project, [
+        fn call -> call.("wait", %{"report" => "Take your time."}) end,
+        ending()
+      ])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+      assert [_only] = runs_of(project, work_id)
+
+      assert {:ok, %{state: "waiting", waiting: "message"}} =
+               Store.view(project.conn, "work", work_id)
+
+      Project.close(project)
+
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "I accept"], dir)
+
+      project = open_project(dir)
+      assert [_waited, %{via: "send"}] = runs_of(project, work_id)
+      assert {:ok, %{state: "done"}} = Store.view(project.conn, "work", work_id)
+
+      Project.close(project)
+    end
+
+    test "a model that stops after its end was refused is retried as one that stopped without end",
+         %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+
+      scripted(project, [
+        fn call ->
+          call.("end", %{})
+          {:ok, "idle"}
+        end,
+        ending()
+      ])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+      assert Enum.map(runs_of(project, work_id), & &1.via) == [nil, "retry"]
+      assert {:ok, %{state: "done"}} = Store.view(project.conn, "work", work_id)
+
+      Project.close(project)
+    end
+
+    test "end is refused while a child that broke waits on the run, which must decide it",
+         %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      parent_id = Fixtures.insert(project.conn, :works)
+
+      child_id =
+        Fixtures.insert(project.conn, :works, %{
+          parent_id: parent_id,
+          assignee: "worker",
+          state: "waiting"
+        })
+
+      test_pid = self()
+
+      scripted(project, [
+        fn call ->
+          send(test_pid, {:end, call.("end", %{})})
+          call.("break", %{"report" => "passed up"})
+        end
+      ])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, parent_id))
+
+      assert_received {:end, {:ok, refused}}
+      assert refused == Out.refused({:end, {:broken_child, child_id}})
+      assert breaks_of(project, parent_id) == ["passed up"]
+
+      Project.close(project)
+    end
+
+    test "done is refused while a child that broke waits on the run, leaving the work open",
+         %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      parent_id = Fixtures.insert(project.conn, :works)
+
+      child_id =
+        Fixtures.insert(project.conn, :works, %{
+          parent_id: parent_id,
+          assignee: "worker",
+          state: "waiting"
+        })
+
+      test_pid = self()
+
+      scripted(project, [
+        fn call ->
+          send(test_pid, {:done, call.("done", %{"report" => "finished"})})
+          call.("break", %{"report" => "passed up"})
+        end
+      ])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, parent_id))
+
+      assert_received {:done, {:ok, refused}}
+      assert refused == Out.refused({:continue, {:broken_child, child_id}})
+      assert breaks_of(project, parent_id) == ["passed up"]
+      assert {:ok, %{state: "waiting"}} = Store.view(project.conn, "work", parent_id)
+      assert {:ok, %{state: "waiting"}} = Store.view(project.conn, "work", child_id)
+
+      Project.close(project)
+    end
+
+    test "end leaves a work open when a request of it is pending or a run of it is due, and on a named agent's run",
+         %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      asked = Fixtures.insert(project.conn, :works)
+      Fixtures.insert(project.conn, :requests, %{work_id: asked})
+      named = Fixtures.insert(project.conn, :works)
+      staged = Fixtures.insert(project.conn, :works)
+      scripted(project, [ending_run()])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, asked))
+      assert {:ok, _run} = Run.open(project, %{opening(nil, named) | agent: "concierge"})
+
+      # A run of the work became due while this one ran: its next stage.
+      scripted(project, [
+        fn call ->
+          {:ok, _event} =
+            Store.Events.append(project.conn, %{
+              type: "continue",
+              work_id: staged,
+              body: Jason.encode!(%{from: "a", to: "b"})
+            })
+
+          call.("end", %{})
+          flunk("end must end the run")
+        end
+      ])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, staged))
+
+      for work_id <- [asked, named, staged] do
+        assert [run] = runs_of(project, work_id)
+        assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
+        assert "end" in Enum.map(events, & &1.type)
+        assert {:ok, %{state: "open"}} = Store.view(project.conn, "work", work_id)
+      end
+
+      Project.close(project)
+    end
+  end
+
+  describe "a request left at an agent" do
+    # The sales desk's shape: the seller asks, its request goes to the
+    # generalist, an agent of depth 0 without a work, then to the person.
+    defp desk_config(dir) do
+      write_config(dir, """
+      [agents.seller]
+      depth = 0
+      text = "seller"
+      tools = ["ask", "end"]
+
+      [agents.sales]
+      depth = 0
+      text = "sales"
+      tools = ["reply", "escalate", "end"]
+
+      [policy]
+      request_routes = [{ via = [{ kind = "agent", agent = "sales" }, "origin"] }]
+      """)
+    end
+
+    defp asked(project) do
+      {:ok, [request]} =
+        Query.all(project.conn, "SELECT * FROM requests WHERE requester LIKE '%seller%'")
+
+      request
+    end
+
+    defp passed_on(project, request) do
+      {:ok, linked} =
+        Query.all(
+          project.conn,
+          "SELECT requests.* FROM requests JOIN request_escalations ON escalated_id = requests.id WHERE origin_id = ?",
+          [request.id]
+        )
+
+      linked
+    end
+
+    test "a receiver whose run ends without answering passes the request on", %{dir: dir} do
+      desk_config(dir)
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works, %{assignee: "seller"})
+
+      Fixtures.use_model(project, fn assembled, _tools, call ->
+        if String.starts_with?(assembled, "seller"),
+          do: call.("ask", %{"question" => "Retry the deploy?", "options" => ["retry", "stop"]}),
+          else: call.("end", %{})
+      end)
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+      request = asked(project)
+      assert request.status == "escalated"
+      assert Jason.decode!(request.arbiter) == Omunculus.Participant.agent("sales")
+      assert [linked] = passed_on(project, request)
+      assert linked.arbiter == @human
+      assert {:ok, [_note]} = Query.all(project.conn, "SELECT * FROM inbox")
+
+      Project.close(project)
+    end
+
+    test "recovery passes on a request whose receiver's run closed without its follow-up", %{
+      dir: dir
+    } do
+      desk_config(dir)
+      {:ok, config} = Fixtures.load_config(dir)
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works, %{assignee: "seller"})
+      ceiling = %{have: ["ask", "end"], askable: [], sealed: [], blocked: [], overrides: %{}}
+
+      seller =
+        Fixtures.open_run(project.conn, %{agent: "seller", work_id: work_id, ceiling: ceiling})
+
+      ask = %{"reason" => "Retry the deploy?", "options" => %{"retry" => [], "stop" => []}}
+
+      {:ok, events} =
+        Store.record_tools(
+          project.conn,
+          seller.id,
+          [
+            {%{name: "ask", args: ask, ok: true, output: ""},
+             [%{"type" => "request", "body" => ask}]}
+          ],
+          %{
+            run_id: seller.id,
+            work_id: work_id,
+            author: "agent",
+            agent: "seller",
+            config: config,
+            groups: %{}
+          }
+        )
+
+      {:ok, _closed} = Store.close_run(project.conn, seller.id)
+      request = asked(project)
+
+      sales =
+        Fixtures.open_run(project.conn, %{
+          agent: "sales",
+          request_id: request.id,
+          cause_id: Enum.find(events, &(&1.type == "request")).id,
+          ceiling: ceiling
+        })
+
+      {:ok, _closed} = Store.close_run(project.conn, sales.id)
+
+      assert :ok = Run.recover(project)
+
+      assert {:ok, %{status: "escalated"}} = Store.view(project.conn, "request", request.id)
+      assert [linked] = passed_on(project, request)
+      assert linked.arbiter == @human
+      assert :ok = Run.recover(project)
+      assert [_linked] = passed_on(project, request)
+
+      Project.close(project)
+    end
+
+    test "recovery resumes, rather than passes on, an intermediary whose answer came", %{
+      dir: dir
+    } do
+      desk_config(dir)
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works, %{assignee: "seller"})
+      seller = due_run(project, %{agent: "seller", work_id: work_id, own: true})
+      asked = lost_call(project, seller, "ask", %{"question" => "Which colour?"})
+      request = asked(project)
+      cause = Enum.find(asked, &(&1.type == "request"))
+      sales = due_run(project, %{agent: "sales", request_id: request.id, cause_id: cause.id})
+      origins = %{"colour" => request.id}
+
+      escalated =
+        lost_call(project, sales, "escalate", %{"reason" => "Colour?", "origins" => origins})
+
+      upstream = Enum.find(escalated, &(&1.type == "request")).request_id
+
+      assert {:ok, _out, _events} =
+               Operations.call(
+                 project,
+                 "reply",
+                 %{"request_id" => upstream, "body" => "Blue"},
+                 %{},
+                 false
+               )
+
+      Fixtures.use_model(project, fn assembled, _tools, call ->
+        if String.starts_with?(assembled, "sales"),
+          do: call.("reply", %{"request_id" => request.id, "body" => "Blue"}),
+          else: call.("end", %{})
+      end)
+
+      assert :ok = Run.recover(project)
+
+      assert {:ok, %{status: "closed"}} = Store.view(project.conn, "request", request.id)
+      assert [%{id: ^upstream}] = passed_on(project, request)
+
+      Project.close(project)
+    end
+  end
+
+  describe "runs due that never began" do
+    # A process that stops loses the runs it had made due and not yet
+    # begun: each test records the call that made one due without opening
+    # it, as the process did before stopping, then recovers the project.
+    defp due_config(dir) do
+      write_config(dir, """
+      [agents.lead]
+      depth = 0
+      text = "lead"
+      tools = ["comment", "continue", "done", "work", "reply", "end"]
+
+      [agents.helper]
+      depth = 1
+      text = "helper"
+      tools = ["done", "ask", "end"]
+
+      [policy]
+      max_retries = 2
+      request_routes = [{ via = [{ kind = "agent", agent = "lead" }, "origin"] }]
+      """)
+
+      project = open_project(dir)
+      # A run on a work hands it on; one without a work, which done
+      # refuses, ends.
+      Fixtures.use_model(project, fn _assembled, _tools, call ->
+        call.("done", %{"report" => "finished"})
+        call.("end", %{})
+      end)
+
+      project
+    end
+
+    defp lost_call(project, run, name, args) do
+      ctx = %{trigger: "model", run_id: run.id, author: "agent", agent: run.agent}
+      assert {:ok, %{ok: true}, events} = Harness.dispatch(project, name, args, ctx)
+      {:ok, _closed} = Store.close_run(project.conn, run.id)
+      events
+    end
+
+    defp due_run(project, fields) do
+      ceiling = %{
+        have: [
+          "work",
+          "done",
+          "ask",
+          "reply",
+          "escalate",
+          "end",
+          "comment",
+          "delegate",
+          "continue"
+        ],
+        askable: [],
+        sealed: [],
+        blocked: [],
+        overrides: %{}
+      }
+
+      Fixtures.open_run(project.conn, Map.merge(%{ceiling: ceiling}, fields))
+    end
+
+    defp caused(project, events, type) do
+      event = Enum.find(events, &(&1.type == type))
+      {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs WHERE cause_id = ?", [event.id])
+      runs
+    end
+
+    # Recovering twice opens the lost run once.
+    defp recovered(project, events, type) do
+      assert caused(project, events, type) == []
+      assert :ok = Run.recover(project)
+      assert :ok = Run.recover(project)
+      caused(project, events, type)
+    end
+
+    test "a message's run", %{dir: dir} do
+      project = due_config(dir)
+
+      assert {:ok, _out, events} =
+               Operations.call(project, "send", %{"message" => "hi"}, %{}, false)
+
+      assert [%{agent: "lead", status: "done"}] = recovered(project, events, "prompt")
+
+      Project.close(project)
+    end
+
+    test "the run of a root work", %{dir: dir} do
+      project = due_config(dir)
+      run = due_run(project, %{agent: "lead"})
+      works = [%{"title" => "Site", "goal" => "Build it", "agent" => "lead"}]
+      events = lost_call(project, run, "work", %{"report" => "On it", "works" => works})
+
+      assert [%{agent: "lead", via: "work"}] = recovered(project, events, "work")
+
+      Project.close(project)
+    end
+
+    test "the run of a delegated work", %{dir: dir} do
+      project = due_config(dir)
+      root = Fixtures.insert(project.conn, :works, %{assignee: "lead"})
+      run = due_run(project, %{agent: "lead", work_id: root, own: true})
+      works = [%{"title" => "Page", "goal" => "Write it", "agent" => "helper"}]
+      events = lost_call(project, run, "work", %{"report" => "Handing down", "works" => works})
+
+      assert [%{agent: "helper", via: "delegate"}] = recovered(project, events, "delegate")
+
+      Project.close(project)
+    end
+
+    test "the run of a parent its last child continued", %{dir: dir} do
+      project = due_config(dir)
+
+      root =
+        Fixtures.insert(project.conn, :works, %{
+          assignee: "lead",
+          state: "waiting",
+          waiting: "child"
+        })
+
+      child =
+        Fixtures.insert(project.conn, :works, %{
+          assignee: "helper",
+          parent_id: root
+        })
+
+      run = due_run(project, %{agent: "helper", depth: 1, work_id: child, own: true})
+      events = lost_call(project, run, "done", %{"report" => "Written"})
+
+      assert [%{agent: "lead", work_id: ^root}] = recovered(project, events, "continue")
+
+      Project.close(project)
+    end
+
+    test "the run of an agent a request was routed to", %{dir: dir} do
+      project = due_config(dir)
+
+      root =
+        Fixtures.insert(project.conn, :works, %{
+          assignee: "lead",
+          state: "waiting",
+          waiting: "child"
+        })
+
+      child =
+        Fixtures.insert(project.conn, :works, %{
+          assignee: "helper",
+          parent_id: root
+        })
+
+      run = due_run(project, %{agent: "helper", depth: 1, work_id: child, own: true})
+      events = lost_call(project, run, "ask", %{"question" => "Which colour?"})
+
+      assert [%{agent: "lead", work_id: ^root}] = recovered(project, events, "request")
+
+      Project.close(project)
+    end
+
+    test "the retry of a work whose model stopped", %{dir: dir} do
+      project = due_config(dir)
+      root = Fixtures.insert(project.conn, :works, %{assignee: "lead"})
+      run = due_run(project, %{agent: "lead", work_id: root, own: true})
+      {:ok, _closed} = Store.close_run(project.conn, run.id)
+
+      assert :ok = Run.recover(project)
+      assert :ok = Run.recover(project)
+
+      assert {:ok, [%{via: "retry"}]} =
+               Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ? AND id != ?", [
+                 root,
+                 run.id
+               ])
+
+      Project.close(project)
+    end
+
+    test "a run that began is not opened again", %{dir: dir} do
+      project = due_config(dir)
+
+      assert {:ok, _out, events} =
+               Operations.call(project, "send", %{"message" => "hi"}, %{}, true)
+
+      assert [_run] = caused(project, events, "prompt")
+      assert :ok = Run.recover(project)
+      assert {:ok, [_only]} = Query.all(project.conn, "SELECT * FROM runs")
+
+      Project.close(project)
+    end
+  end
+
+  describe "a parent past [policy] max_reopens" do
+    test "asks along its route instead of reopening, and its run ends", %{dir: dir} do
+      write_config(dir, """
+      [agents.lead]
+      depth = 0
+      text = "lead"
+      tools = ["reopen", "retire", "end"]
+
+      [agents.helper]
+      depth = 1
+      text = "helper"
+      tools = ["done", "end"]
+
+      [policy]
+      max_retries = 0
+      max_reopens = 0
+      request_routes = [{ via = ["origin"] }]
+      """)
+
+      project = open_project(dir)
+      root = Fixtures.insert(project.conn, :works, %{assignee: "lead"})
+
+      child =
+        Fixtures.insert(project.conn, :works, %{
+          assignee: "helper",
+          parent_id: root,
+          state: "waiting"
+        })
+
+      ceiling = %{
+        have: ["reopen", "end"],
+        askable: [],
+        sealed: [],
+        blocked: [],
+        overrides: %{}
+      }
+
+      run =
+        Fixtures.open_run(project.conn, %{
+          agent: "lead",
+          work_id: root,
+          own: true,
+          ceiling: ceiling
+        })
+
+      ctx = %{trigger: "model", run_id: run.id, author: "agent", agent: "lead"}
+      args = %{"work_id" => child, "instructions" => "publish nothing, only comment"}
+
+      assert {:ok, %{ok: true}, events} = Harness.dispatch(project, "reopen", args, ctx)
+      assert for(%{type: type} when type != "tool" <- events, do: type) == ["request", "end"]
+
+      assert {:ok, %{state: "waiting", waiting: nil}} =
+               Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [child])
+
+      assert {:ok, %{state: "waiting", waiting: "request"}} =
+               Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [root])
+
+      request_id = Enum.find(events, &(&1.type == "request")).request_id
+
+      assert {:ok, [%{body: body}]} =
+               Query.all(project.conn, "SELECT * FROM comments WHERE request_id = ?", [request_id])
+
+      assert body =~ "[policy] max_reopens"
+      assert body =~ "publish nothing, only comment"
+
+      Project.close(project)
+    end
   end
 end

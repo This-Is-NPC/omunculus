@@ -32,11 +32,11 @@ defmodule Omunculus.Tools.ContinueTest do
            }
   end
 
-  test "the builtin catalog discovers continue with triggers == [\"model\"]" do
+  test "the builtin catalog discovers continue as a chain-only step" do
     catalog = Catalog.unconfigured()
 
     assert %{"continue" => manifest} = catalog
-    assert manifest.triggers == ["model"]
+    assert manifest.triggers == ["chain"]
   end
 
   test "the manifest wiring yields the same emit as calling the module directly" do

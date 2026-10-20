@@ -103,7 +103,7 @@ defmodule Omunculus.Tools.ToolSearchTest do
     assert %{"tool_search" => manifest} = catalog
     assert manifest.triggers == ["model"]
     assert manifest.groups == ["catalog"]
-    assert manifest.views == ["catalog"]
+    assert Enum.map(manifest.views, &{&1.key, &1.source}) == [{"catalog", "catalog"}]
   end
 
   test "the manifest wiring yields the same output as calling the module directly" do

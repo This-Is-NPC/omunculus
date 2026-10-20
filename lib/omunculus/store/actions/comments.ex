@@ -1,6 +1,6 @@
 defmodule Omunculus.Store.Actions.Comments do
   @moduledoc """
-  `compact` and `comment.delete` of spec §8.3: both act on exactly one of
+  `compact` and `comment.delete`: both act on exactly one of
   `work_id`, `request_id` or `inbox_id` — a run inside a work may only
   target that work. `compact` replaces every comment of the target (or
   only the ones named in `ids`) with a single summary comment; `EVENTS`
@@ -15,17 +15,17 @@ defmodule Omunculus.Store.Actions.Comments do
 
   @targets %{"work_id" => :works, "request_id" => :requests, "inbox_id" => :inbox}
 
-  @spec compact(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  @spec compact(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def compact(conn, body, ctx) do
     with {:ok, {column, table, id}} <- target(:compact, conn, body, ctx),
-         :ok <- ensure_summary(body),
+         :ok <- Helpers.ensure_text(:compact, body, "summary"),
          {:ok, all_ids} <- comment_ids(conn, column, id),
          {:ok, deleted} <- resolve_deleted(:compact, all_ids, body["ids"]) do
       apply_compact(conn, column, table, id, deleted, body["summary"], ctx)
     end
   end
 
-  @spec delete(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  @spec delete(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def delete(conn, body, ctx) do
     with {:ok, {column, _table, id}} <- target(:comment_delete, conn, body, ctx),
          {:ok, ids} <- ensure_ids(body),
@@ -63,11 +63,6 @@ defmodule Omunculus.Store.Actions.Comments do
        do: {:error, {tag, :foreign_work}}
 
   defp ensure_same_work(_tag, _table, _id, _ctx), do: :ok
-
-  defp ensure_summary(%{"summary" => summary}) when is_binary(summary) and summary != "",
-    do: :ok
-
-  defp ensure_summary(_body), do: {:error, {:compact, :no_summary}}
 
   defp ensure_ids(%{"ids" => ids}) when is_list(ids) and ids != [], do: {:ok, ids}
   defp ensure_ids(_body), do: {:error, {:comment_delete, :no_ids}}

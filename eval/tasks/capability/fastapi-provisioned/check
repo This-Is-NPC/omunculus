@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+from check import *
+
+# The API runs for whoever gets the folder, on the real FastAPI.
+workspace, outcome = load()
+expect_outcome(outcome, "done", "answer")
+fastapi_items_api(workspace)
+ok()

@@ -1,9 +1,7 @@
 name = "find"
 kind = "tool"
-shape = "simple"
-views = ["paths"]
 triggers = ["model"]
-description = "Finds paths by pattern."
+description = "Finds the files and directories under path whose path matches a glob pattern, such as **/*.py, leaving out .git and what .gitignore ignores. The way to look for the work's files: faster and narrower than find in a shell."
 tags = ["fs"]
 groups = ["fs.read"]
 module = "Omunculus.Tools.Find"
@@ -14,6 +12,15 @@ required = ["pattern"]
 
 [parameters.properties.pattern]
 type = "string"
+description = "A glob relative to path: * within a name, ** across directories."
 
 [parameters.properties.path]
 type = "string"
+description = "The directory to search, relative to the workspace root; the root when left out."
+
+[parameters.properties.limit]
+type = "integer"
+minimum = 1
+
+[views.paths]
+source = "paths"

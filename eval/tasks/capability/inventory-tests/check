@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+from check import *
+
+import hashlib, shutil, subprocess, tempfile
+# The tests pass as they were given: on a copy, so running them leaves nothing behind.
+workspace, outcome = load()
+expect_outcome(outcome, "done", "answer")
+given = "ee0f076ab9626bba3f6a46aef9e91c10babc8265828f68e80628dc0d3f1b6412"
+tests = workspace / "tests" / "test_inventory.py"
+if not tests.is_file() or hashlib.sha256(tests.read_bytes()).hexdigest() != given:
+    fail("tests/test_inventory.py was changed")
+with tempfile.TemporaryDirectory() as copy:
+    shutil.copytree(workspace, copy, dirs_exist_ok=True)
+    run = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests"], cwd=copy, capture_output=True, text=True, timeout=60)
+if run.returncode != 0:
+    fail("the tests fail: " + run.stderr.strip().splitlines()[-1])
+ok()

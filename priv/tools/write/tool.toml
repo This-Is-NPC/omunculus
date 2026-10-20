@@ -1,9 +1,7 @@
 name = "write"
 kind = "tool"
-shape = "simple"
-views = ["paths"]
 triggers = ["model"]
-description = "Creates or overwrites a file."
+description = "Creates or overwrites a file. Needs sandbox.write."
 tags = ["fs"]
 groups = ["fs.write"]
 module = "Omunculus.Tools.Write"
@@ -17,3 +15,6 @@ type = "string"
 
 [parameters.properties.content]
 type = "string"
+
+[views.paths]
+source = "paths"

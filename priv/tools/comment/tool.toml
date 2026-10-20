@@ -1,7 +1,6 @@
 name = "comment"
 kind = "tool"
-shape = "simple"
-triggers = ["cli", "model"]
+triggers = ["cli", "model", "chain"]
 description = "Writes a comment on the work, request, or inbox."
 tags = ["comment", "work", "store"]
 groups = ["store"]

@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+from check import *
+
+workspace, outcome = load()
+expect_outcome(outcome, "answer")
+if "391" not in outcome["report"]:
+    fail("the answer is not 391")
+ok()

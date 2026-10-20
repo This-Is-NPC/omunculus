@@ -1,0 +1,21 @@
+name = "model_test"
+kind = "tool"
+triggers = ["cli"]
+description = """
+Sends one short prompt, without tools, to a model, as saved or as the JSON table value, and prints {"reply", "ms"}: its reply and how long it took, or why it failed. The provider's credential resolves as a run's does. A model the config lacks is no model <name>. A command model runs in the sandbox an agent's ceiling makes, so only a run tests it.
+"""
+tags = ["cli", "config"]
+groups = ["cli"]
+module = "Omunculus.Tools.ModelTest"
+
+[parameters]
+type = "object"
+required = ["name"]
+
+[parameters.properties.name]
+type = "string"
+description = "The model, by its name under [models]."
+
+[parameters.properties.value]
+type = "string"
+description = "The model as a JSON table, as configure would write it; the file stays as it is."

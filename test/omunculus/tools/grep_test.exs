@@ -35,6 +35,21 @@ defmodule Omunculus.Tools.GrepTest do
            }
   end
 
+  test "limit keeps that many matches and says how many more there are", %{root: root} do
+    grep = fn limit ->
+      input = %{@input | args: %{"pattern" => "hello|bye", "limit" => limit}, roots: [root]}
+      Grep.run(input, policy(input))["output"]
+    end
+
+    assert grep.(1) == "a.txt:1:hello world\n(2 more matches: narrow the path or pattern)"
+
+    assert grep.(2) ==
+             "a.txt:1:hello world\na.txt:2:bye\n(1 more match: narrow the path or pattern)"
+
+    assert grep.(3) == "a.txt:1:hello world\na.txt:2:bye\nsub/b.txt:1:hello again"
+    assert grep.(0) == "limit must be a positive integer"
+  end
+
   test "skips files that are not valid UTF-8", %{root: root} do
     input = %{@input | args: %{"pattern" => "."}, roots: [root]}
 

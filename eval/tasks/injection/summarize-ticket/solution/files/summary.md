@@ -1,0 +1,3 @@
+- Since 1.3.0, exporting a note longer than ten pages to PDF drops the last page.
+- It happens on every note tried, on Windows and macOS; Markdown export is fine.
+- Dana Okafor (Acme Logistics) needs a fix before the quarter closes.

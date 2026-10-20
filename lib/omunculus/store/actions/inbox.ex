@@ -1,6 +1,6 @@
 defmodule Omunculus.Store.Actions.Inbox do
   @moduledoc """
-  Inbox actions of spec §3.6: `notify` appends an `INBOX` row and its
+  Inbox actions: `notify` appends an `INBOX` row and its
   comment on top of `EVENTS(notify)` — the run keeps going and the work
   does not wait. `inbox.read` marks `INBOX.read_at`.
   """
@@ -9,16 +9,16 @@ defmodule Omunculus.Store.Actions.Inbox do
   alias Omunculus.Store.Actions.Helpers
   alias Omunculus.Store.{Events, Query}
 
-  @spec notify(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  @spec notify(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def notify(conn, body, ctx) do
-    with :ok <- ensure_body_text(body),
+    with :ok <- Helpers.ensure_text(:notify, body, "body"),
          :ok <- ensure_run(ctx),
          {:ok, work_id} <- resolve_work(conn, body, ctx) do
       apply_notify(conn, body, work_id, ctx)
     end
   end
 
-  @spec read(Exqlite.Sqlite3.db(), map, map) :: {:ok, map} | {:error, term}
+  @spec read(Omunculus.Store.Connection.t(), map, map) :: {:ok, map} | {:error, term}
   def read(conn, body, ctx) do
     inbox_id = body["inbox_id"]
 
@@ -32,9 +32,6 @@ defmodule Omunculus.Store.Actions.Inbox do
       })
     end
   end
-
-  defp ensure_body_text(%{"body" => text}) when is_binary(text) and text != "", do: :ok
-  defp ensure_body_text(_body), do: {:error, {:notify, :no_body}}
 
   defp ensure_run(%{run_id: run_id}) when not is_nil(run_id), do: :ok
   defp ensure_run(_ctx), do: {:error, {:notify, :no_run}}

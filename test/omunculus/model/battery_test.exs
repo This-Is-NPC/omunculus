@@ -34,38 +34,95 @@ defmodule Omunculus.Model.BatteryTest do
   defp tools(names), do: Enum.map(names, &%{name: &1, description: "a tool", parameters: %{}})
 
   defp complete(assembled, tools, call) do
-    Battery.new(%{}).(assembled, tools, call, fn _text -> :ok end, nil)
+    prompt = %Omunculus.Prompt{instructions: "", context: assembled}
+    Battery.new(%{}).(prompt, tools, call, fn _text -> :ok end, fn _text -> :ok end, nil)
   end
 
-  test "rule 1 with delegate: opens the work then delegates, ending before counting" do
-    names = ~w(work delegate counter)
+  @count_work %{"title" => "Count to 5", "goal" => "count with counter to 5"}
+
+  test "rule 1: without a work, opens one with work and its report, without counting" do
+    names = ~w(work counter)
     assembled = Enum.join(["You are the concierge.", tools_section(names)], "\n\n")
 
     {agent, call} = recorder()
 
-    assert {:ok, _result} = complete(assembled, tools(names), call)
+    assert {:ok, "opened"} = complete(assembled, tools(names), call)
 
-    assert calls(agent) == [
-             {"work", %{"title" => "Count to 5"}},
-             {"delegate", %{"title" => "Count to 5", "body" => "count with counter to 5"}}
-           ]
+    assert calls(agent) == [{"work", %{"report" => "opened", "works" => [@count_work]}}]
   end
 
-  test "rule 1 without delegate: opens the work and falls through to counting" do
-    names = ~w(work counter)
+  test "rule 1 without the work card: counts in the run" do
+    names = ~w(counter)
     assembled = Enum.join(["You are the concierge.", tools_section(names)], "\n\n")
 
-    {agent, call} = recorder(%{"counter" => ["1", "2", "3", "4", "5"]})
+    {agent, call} = recorder(%{"counter" => ["5"]})
 
     assert {:ok, "counted to 5"} = complete(assembled, tools(names), call)
-
-    [first | rest] = calls(agent)
-    assert first == {"work", %{"title" => "Count to 5"}}
-    assert Enum.count(rest, fn {name, _args} -> name == "counter" end) == 5
+    assert calls(agent) == [{"counter", %{}}]
   end
 
-  test "rule 2: counts to 5 with counter, stopping as soon as it reaches 5, then comments, notifies and continues" do
-    names = ~w(counter comment notify continue)
+  test "delegates one floor down with work when it cannot count" do
+    names = ~w(work done)
+
+    assembled =
+      Enum.join(
+        [
+          "You are the manager.",
+          "## Work\nCount to 5",
+          "## Last comment\nopened",
+          tools_section(names)
+        ],
+        "\n\n"
+      )
+
+    {agent, call} = recorder()
+
+    assert {:ok, "delegated"} = complete(assembled, tools(names), call)
+    assert calls(agent) == [{"work", %{"report" => "delegated", "works" => [@count_work]}}]
+  end
+
+  test "does not delegate again once its last comment says it delegated" do
+    names = ~w(work comment)
+
+    assembled =
+      Enum.join(
+        [
+          "You are the manager.",
+          "## Work\nCount to 5",
+          "## Last comment\ndelegated",
+          tools_section(names)
+        ],
+        "\n\n"
+      )
+
+    {agent, call} = recorder()
+
+    assert {:ok, "nothing to do"} = complete(assembled, tools(names), call)
+    assert calls(agent) == []
+  end
+
+  test "reviews a delegated work that came back with done" do
+    names = ~w(work done)
+
+    assembled =
+      Enum.join(
+        [
+          "You are the manager.",
+          "## Work\nCount to 5",
+          "## Last comment\ndelegated",
+          tools_section(names)
+        ],
+        "\n\n"
+      )
+
+    {agent, call} = recorder()
+
+    assert {:ok, "reviewed"} = complete(assembled, tools(names), call)
+    assert calls(agent) == [{"done", %{"report" => "reviewed"}}]
+  end
+
+  test "rule 2 without done: counts to 5 with counter, stopping as soon as it reaches 5, then comments and notifies" do
+    names = ~w(counter comment notify)
 
     assembled =
       Enum.join(
@@ -77,23 +134,26 @@ defmodule Omunculus.Model.BatteryTest do
 
     assert {:ok, "counted to 5"} = complete(assembled, tools(names), call)
 
-    call_names = calls(agent) |> Enum.map(&elem(&1, 0))
-    assert Enum.count(call_names, &(&1 == "counter")) == 5
+    assert calls(agent) ==
+             List.duplicate({"counter", %{}}, 5) ++
+               [{"comment", %{"body" => "counted to 5"}}, {"notify", %{"body" => "reached 5"}}]
+  end
 
-    assert call_names == [
-             "counter",
-             "counter",
-             "counter",
-             "counter",
-             "counter",
-             "comment",
-             "notify",
-             "continue"
+  test "rule 2 with done: notifies, then concludes with done carrying the count" do
+    names = ~w(counter comment notify done)
+
+    assembled =
+      Enum.join(["You are the worker.", "## Work\nCount to 5", tools_section(names)], "\n\n")
+
+    {agent, call} = recorder(%{"counter" => ["5"]})
+
+    assert {:ok, "counted to 5"} = complete(assembled, tools(names), call)
+
+    assert calls(agent) == [
+             {"counter", %{}},
+             {"notify", %{"body" => "reached 5"}},
+             {"done", %{"report" => "counted to 5"}}
            ]
-
-    assert {"comment", %{"body" => "counted to 5"}} in calls(agent)
-    assert {"notify", %{"body" => "reached 5"}} in calls(agent)
-    assert {"continue", %{}} in calls(agent)
   end
 
   test "rule 2 stops as soon as the counter reaches 5 without exhausting the 5 calls" do
@@ -108,8 +168,8 @@ defmodule Omunculus.Model.BatteryTest do
     assert call_names == ["counter", "counter"]
   end
 
-  test "rule 3: a last comment announcing the count and a continue card advance the review" do
-    names = ~w(continue)
+  test "rule 3: a last comment announcing the count and a done card conclude the review" do
+    names = ~w(done)
 
     assembled =
       Enum.join(
@@ -120,7 +180,7 @@ defmodule Omunculus.Model.BatteryTest do
     {agent, call} = recorder()
 
     assert {:ok, "reviewed"} = complete(assembled, tools(names), call)
-    assert calls(agent) == [{"continue", %{}}]
+    assert calls(agent) == [{"done", %{"report" => "reviewed"}}]
   end
 
   test "rule 4: an agent addressed as observer comments on the work it is watching" do

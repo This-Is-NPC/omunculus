@@ -1,26 +1,70 @@
 defmodule Omunculus.CLI do
   @moduledoc """
-  The binary's dispatch, per spec §7: `omunculus <name> [args]` resolves
+  The binary's dispatch: `omunculus <name> [args]` resolves
   `--config <path>` (default `./omunculus.toml` in the given cwd) and
   calls the same contract the model uses, with `trigger: "cli"`. The
   project root is the config file's directory, or `[project] root`
   relative to it. Tools with `config = false` run without opening the
   store. Configured calls hand their events to `Harness.follow_up/2`,
-  which opens runs whose model comes from `agents.<x>.model`.
+  which opens runs whose model comes from `agents.<x>.model`, and
+  returns once every run the call opened, transitively, has finished;
+  the error of any of them fails the command, several one per line.
+  When a server owns the project, the command line goes to it over the
+  project's local socket and is answered the same way. Taking the
+  project's lock itself, the command first recovers what a process that
+  stopped left (`Run.recover/1`), and returns once those runs have
+  finished too.
   """
 
-  alias Omunculus.{Config, Harness, Project}
+  alias Omunculus.{Config, Cycle, Harness, Operations, Project, Run}
+  alias Omunculus.Server.Socket
+  alias Omunculus.Store.Access
   alias Omunculus.Tool.{Catalog, Manifest}
 
   @spec run([String.t()], String.t()) :: {:ok, String.t()} | {:error, term}
   def run(argv, cwd) do
     with {:ok, config_path, rest} <- split_config(argv, cwd) do
       case rest do
-        [] -> {:error, :no_tool}
-        [name | args] -> dispatch_named(name, args, config_path)
+        [] ->
+          {:error, :no_tool}
+
+        [name | args] ->
+          case Map.get(Catalog.unconfigured(), name) do
+            %Manifest{config: false} = manifest ->
+              project = %Project{
+                dir: Path.dirname(config_path),
+                conn: nil,
+                config_path: config_path
+              }
+
+              run_tool(manifest, name, args, project, false)
+
+            _other ->
+              with {:ok, config} <- Config.load(config_path), do: open(config, rest)
+          end
       end
     end
   end
+
+  @doc """
+  Runs a command line, without `--config`, against a project already
+  open, as the local principal.
+  """
+  @spec in_project(Project.t(), [String.t()]) :: {:ok, String.t()} | {:error, term}
+  def in_project(project, ["access", "bootstrap", "--issuer", issuer, "--subject", subject]) do
+    with :ok <- owner_of_config(project.config_path),
+         :ok <- Access.bootstrap(project, %{issuer: issuer, subject: subject}) do
+      {:ok, "access bootstrapped"}
+    end
+  end
+
+  def in_project(project, [name | args]) do
+    with {:ok, manifest} <- Harness.manifest(project, name) do
+      run_tool(manifest, name, args, project, true)
+    end
+  end
+
+  def in_project(_project, []), do: {:error, :no_tool}
 
   @spec main([String.t()]) :: :ok
   def main(argv) do
@@ -40,6 +84,21 @@ defmodule Omunculus.CLI do
     "no config at #{path}; run `omunculus preset <name> --from <dir>`"
   end
 
+  def format_error({:config, :stale}),
+    do: "omunculus.toml changed since it was read; read it again"
+
+  def format_error({:config, :invalid_item}),
+    do:
+      "the item is not agents, models, workflows, workspaces, auth or secrets .<name>, policy or access, " <>
+        "with a JSON table or null"
+
+  def format_error({:tool_failed, output}), do: output
+
+  def format_error({:model_test, :unknown, name}), do: "no model #{name}"
+
+  def format_error({:model_test, :command}),
+    do: "a command model runs in the sandbox of an agent's ceiling; a run tests it"
+
   def format_error({:execution, :missing, keys}) do
     "omunculus.toml is missing [execution]; required keys: #{Enum.join(keys, ", ")}"
   end
@@ -56,6 +115,38 @@ defmodule Omunculus.CLI do
     "omunculus.toml is missing [store]"
   end
 
+  def format_error({:policy, {:required, :request_routes}}),
+    do: "omunculus.toml [policy] request_routes is required, a nonempty list of routes"
+
+  def format_error({:policy, {:invalid, :request_routes}}),
+    do: "omunculus.toml [policy] request_routes must be a nonempty list of valid routes"
+
+  def format_error({:policy, {:invalid, :max_retries}}) do
+    "omunculus.toml [policy] max_retries is required, a non-negative integer"
+  end
+
+  def format_error({:policy, {:invalid, :max_reopens}}) do
+    "omunculus.toml [policy] max_reopens must be a non-negative integer"
+  end
+
+  def format_error({:policy, {:invalid, key}})
+      when key in [:last_run_output_bytes, :tool_output_bytes, :conversation_bytes] do
+    "omunculus.toml [policy] #{key} must be a positive integer"
+  end
+
+  def format_error({:policy, {:invalid, key}})
+      when key in [:session_ttl_ms, :session_max_bytes] do
+    "omunculus.toml [policy] #{key} must be a positive integer"
+  end
+
+  def format_error({:policy, {:invalid, :session}}) do
+    "omunculus.toml [policy] session_ttl_ms and session_max_bytes go together"
+  end
+
+  def format_error({:policy, {:invalid, :send_catalog}}) do
+    "omunculus.toml [policy] send_catalog must be true or false"
+  end
+
   def format_error({:execution, {:sandbox, :missing}}) do
     "omunculus.toml is missing [execution.sandbox]"
   end
@@ -68,11 +159,40 @@ defmodule Omunculus.CLI do
     "not logged in to #{id}; run `omunculus login --provider #{id}`"
   end
 
+  def format_error({:overrides, tool, {:not_chainable, name}}) do
+    "overrides.#{tool}.chains names #{name}, which the #{tool} manifest does not chain"
+  end
+
+  def format_error({:overrides, tool, {:invalid, :then}}) do
+    "overrides of #{tool} leave a then outside its chains or with end not last"
+  end
+
+  def format_error({:overrides, tool, {:unknown_schema, variant}}) do
+    "overrides.#{tool}.schema names #{variant}, which the #{tool} manifest does not declare"
+  end
+
+  def format_error({:packs, {pack, :requires, lacked}}) when is_map(lacked) do
+    tools = Enum.map_join(Enum.sort(lacked), "; ", fn {tool, where} -> "#{tool} (#{where})" end)
+
+    "pack #{pack} requires tools the project lacks: #{tools}; add a [tools] path that holds them or import the pack that brings them"
+  end
+
   def format_error(:no_runs), do: "no runs"
+  def format_error(:project_in_use), do: "project is in use by another Omunculus process"
+
+  def format_error(:store_requires_recreation),
+    do: "store schema predates conversations; recreate the store"
+
+  def format_error(:not_project_owner),
+    do: "only the owner of the project config may bootstrap access"
+
   def format_error({:unknown_run, id}), do: "unknown run #{id}"
   def format_error(:no_assembled), do: "no assembled prompt"
   def format_error({:assemble, :missing}), do: "omunculus.toml is missing assemble"
   def format_error({:assemble, :empty}), do: "assemble returned an empty prompt"
+
+  def format_error({:runs, reasons}), do: Enum.map_join(reasons, "\n", &format_error/1)
+  def format_error({:forwarded, message}), do: message
 
   def format_error(reason), do: inspect(reason)
 
@@ -84,40 +204,52 @@ defmodule Omunculus.CLI do
   defp split_config(argv, cwd),
     do: {:ok, Path.expand("omunculus.toml", cwd), argv}
 
-  defp dispatch_named(name, args, config_path) do
-    dir = Path.dirname(config_path)
-    catalog = Catalog.unconfigured()
-
-    case Map.get(catalog, name) do
-      %Manifest{config: false} = manifest ->
-        project = %Project{dir: dir, conn: nil, config_path: config_path}
-        run_tool(manifest, name, args, project, false)
-
-      _other ->
-        with {:ok, config} <- Config.load(config_path),
-             {:ok, project} <- Project.open(config) do
-          try do
-            with {:ok, manifest} <- Harness.manifest(project, name) do
-              run_tool(manifest, name, args, project, true)
-            end
-          after
-            Project.close(project)
-          end
+  defp open(config, argv) do
+    case Project.open(config, lock: true) do
+      {:ok, project} ->
+        try do
+          Cycle.run(project, nil, fn project ->
+            with :ok <- Run.recover(project), do: in_project(project, argv)
+          end)
+        after
+          Project.close(project)
         end
+
+      {:error, :project_in_use} ->
+        forward(config, argv)
+
+      error ->
+        error
     end
+  end
+
+  # A project held without a socket, by another direct command, stays in use.
+  defp forward(config, argv) do
+    case Req.post("http://localhost/v1/cli",
+           unix_socket: Socket.path(config.store.path),
+           json: %{argv: argv},
+           receive_timeout: :infinity,
+           retry: false
+         ) do
+      {:ok, %{status: 200, body: %{"output" => output}}} -> {:ok, output}
+      {:ok, %{status: 422, body: %{"message" => message}}} -> {:error, {:forwarded, message}}
+      {:ok, %{status: status}} -> {:error, {:forwarded, "server replied #{status}"}}
+      {:error, _unreachable} -> {:error, :project_in_use}
+    end
+  end
+
+  defp owner_of_config(path) do
+    if File.stat!(path).uid == File.stat!("/proc/self").uid,
+      do: :ok,
+      else: {:error, :not_project_owner}
   end
 
   defp run_tool(manifest, name, rest, project, follow_up?) do
     with {:ok, args} <- build_args(rest, manifest),
-         ctx = %{trigger: "cli", run_id: nil, author: "human", agent: nil},
-         {:ok, out, events} <- Harness.dispatch(project, name, args, ctx),
-         :ok <- maybe_follow_up(follow_up?, project, events) do
+         {:ok, out, _events} <- Operations.call(project, name, args, %{}, follow_up?) do
       if out.ok, do: {:ok, out.output}, else: {:error, {:tool_failed, out.output}}
     end
   end
-
-  defp maybe_follow_up(true, project, events), do: Harness.follow_up(project, events)
-  defp maybe_follow_up(false, _project, _events), do: :ok
 
   defp build_args(rest, manifest) do
     positional_key =

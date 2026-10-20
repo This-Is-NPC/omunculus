@@ -1,0 +1,20 @@
+name = "read_work"
+kind = "tool"
+triggers = ["model"]
+description = "Reads a work below this run's: its goal, state, comments and what each of its runs did."
+tags = ["store", "work"]
+groups = ["store"]
+module = "Omunculus.Tools.ReadWork"
+
+[parameters]
+type = "object"
+required = ["work_id"]
+
+[parameters.properties.work_id]
+type = "string"
+
+[views.target]
+source = "works"
+from = ["args.work_id"]
+within = "descendants"
+include = ["comments", "runs"]

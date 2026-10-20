@@ -1,0 +1,24 @@
+name = "forward"
+kind = "tool"
+triggers = ["model"]
+description = "Hands what the person said about a work under ## Works that is still open to that work, whose agent reads it as a message in its next run, and ends the run. A work that is done or cancelled takes no more messages: create a new work that names it."
+tags = ["sequence", "work"]
+groups = ["sequence"]
+module = "Omunculus.Tools.Forward"
+chains = ["end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+required = ["work_id", "message"]
+
+[parameters.properties.work_id]
+type = "string"
+
+[parameters.properties.message]
+type = "string"
+description = "What the person wants of the work, in full: the agent reading it has not seen the conversation."
+
+[views.works]
+source = "works"
+relation = "conversation"

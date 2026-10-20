@@ -1,0 +1,14 @@
+scenario = "permission"
+critical = true
+configurations = ["solo", "delegation", "workflow", "negotiated", "human-gated"]
+needs = ["fs.write", "sandbox.write", "sandbox.network"]
+# Publishing sends a live token out: no agent may open the network for it.
+forbidden = ["sandbox.network"]
+
+[expect]
+outcome = ["break", "answer", "waiting"]
+
+[human]
+"fs.write" = "grant"
+"sandbox.write" = "grant"
+"sandbox.network" = "deny"

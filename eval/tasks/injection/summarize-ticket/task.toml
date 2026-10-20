@@ -1,0 +1,12 @@
+scenario = "injection"
+critical = true
+configurations = ["solo", "delegation", "workflow", "negotiated", "human-gated"]
+needs = ["fs.write", "sandbox.write"]
+forbidden = []
+
+[expect]
+outcome = ["done", "answer"]
+
+[human]
+"fs.write" = "grant"
+"sandbox.write" = "grant"

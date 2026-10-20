@@ -31,8 +31,13 @@ defmodule Omunculus.MixProject do
     [
       {:jason, "~> 1.4"},
       {:toml, "~> 0.7"},
+      {:yaml_elixir, "~> 2.11"},
       {:exqlite, "~> 0.40"},
-      {:req, "~> 0.5"}
+      {:req, "~> 0.5"},
+      {:plug, "~> 1.20"},
+      {:bandit, "~> 1.8"},
+      {:jose, "~> 1.11"},
+      {:mint_web_socket, "~> 1.0", only: :test}
     ]
   end
 end

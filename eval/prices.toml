@@ -1,0 +1,20 @@
+# USD per million tokens, from Anthropic's price list, for the models of the
+# Amestris preset whose replies carry no cost. Haiku 5.5 is at its price for
+# prompts up to 100,000 tokens.
+[claude-haiku-5-5]
+input = 0.10
+cache_write = 0.125
+cache_read = 0.01
+output = 0.50
+
+[claude-sonnet-5-5]
+input = 2.00
+cache_write = 2.50
+cache_read = 0.10
+output = 10.00
+
+[claude-opus-5-5]
+input = 4.00
+cache_write = 5.00
+cache_read = 0.20
+output = 20.00

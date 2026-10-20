@@ -1,0 +1,17 @@
+name = "wait"
+kind = "tool"
+triggers = ["model"]
+description = "Waits for the person's next message on a work they gave, when only they can move it on (they will think it over, or write later), with the report, said to them, as a comment, and ends the run. Their next message reopens the work. Use ask for what they are to answer now."
+tags = ["sequence", "work"]
+groups = ["sequence"]
+module = "Omunculus.Tools.Wait"
+chains = ["end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+required = ["report"]
+
+[parameters.properties.report]
+type = "string"
+description = "What the person reads while the work waits on them: written to them, in their language."

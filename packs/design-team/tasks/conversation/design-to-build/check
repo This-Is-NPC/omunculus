@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+from check import *
+
+workspace, outcome = load()
+expect_outcome(outcome, "answer", "done")
+works_ = team(outcome)
+
+# The design came first: a preview, a round of changes, approved.
+designs = [w for w in works_ if w["assignee"] == "design-lead"]
+if not designs:
+    fail("the design team was not asked for a design")
+if not any(w["assignee"] == "publisher" and w["state"] == "done" for w in works_):
+    fail("no design was published to homologation")
+for name in ["design/briefing.md", "design/handoff.md", "design/preview/mockup/index.html"]:
+    if not (workspace / name).is_file():
+        fail(f"{name} is missing")
+rounds = workspace / "design" / "rounds.md"
+if not rounds.is_file() or not re.search(r"whatsapp", rounds.read_text(), re.I):
+    fail("the round asking for a bigger WhatsApp button is not in design/rounds.md")
+
+# Built from a plan, base then each page, each reviewed by the design team.
+plan = workspace / "docs" / "plan.md"
+if not plan.is_file():
+    fail("docs/plan.md is missing")
+items = re.findall(r"^##\s+(.+)$", plan.read_text(), re.M)
+if len(items) < 5:
+    fail(f"docs/plan.md has {len(items)} items, not a base and the four pages")
+if not (workspace / "design" / "preview" / "system.css").is_file():
+    fail("design/preview/system.css, the design system, is missing")
+reviewed = [w for w in works_ if w["assignee"] == "design-reviewer" and w["state"] == "done"]
+if len(reviewed) < 5:
+    fail(f"{len(reviewed)} items reviewed by the design team, not a base and the four pages")
+
+# The builders assessed it before the price, then built it.
+administrator = [w for w in works_ if w["assignee"] == "administrator"]
+def assessment(work):
+    return (work["goal"] or "").lower().startswith("assessment only")
+if not any(assessment(w) for w in administrator):
+    fail("the builders were not asked for an assessment")
+builds = [w for w in administrator if not assessment(w)]
+if not builds:
+    fail("the builders were never asked to build")
+if not any("handoff" in (w["goal"] or "") for w in builds):
+    fail("the build's goal does not name design/handoff.md")
+
+# The proposal, priced from the table and approved by the owner.
+quotes = [q for q in (workspace / "quotes").glob("*.md")] if (workspace / "quotes").is_dir() else []
+if not any(re.search(r"1\.?500", q.read_text()) for q in quotes):
+    fail("no proposal in quotes/ prices four pages at R$ 1.500")
+if not any(re.search(r"status:\s*aprovada", q.read_text(), re.I) for q in quotes):
+    fail("no proposal is marked approved")
+
+# In production, with what the client asked for.
+site = published(workspace, outcome)
+pages = list(site.rglob("*.html"))
+if len(pages) < 4:
+    fail(f"{len(pages)} pages published, not the four asked for")
+html = " ".join(p.read_text(errors="replace") for p in pages)
+for fact in ["Doce Ana", "brigadeiro", "85", "2009"]:
+    if not re.search(fact, html, re.I):
+        fail(f"the published site does not show {fact}")
+if not re.search(r"wa\.me/(55)?19998765432|99876-?5432", html):
+    fail("the published site has no WhatsApp contact")
+ok()

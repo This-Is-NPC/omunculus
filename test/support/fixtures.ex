@@ -8,7 +8,7 @@ defmodule Omunculus.Fixtures do
   alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Id
   alias Omunculus.Project
-  alias Omunculus.Store.Query
+  alias Omunculus.Store.{Query, Runs}
   alias Omunculus.Test.ScriptedModel
   alias Omunculus.Tools.Preset
 
@@ -27,26 +27,50 @@ defmodule Omunculus.Fixtures do
   """
 
   @defaults %{
-    prompts: %{kind: "message", body: "hi", created_at: @now},
+    prompts: %{
+      kind: "message",
+      body: "hi",
+      created_at: @now,
+      actor_issuer: "local",
+      actor_subject: Omunculus.Operations.local_principal().subject
+    },
     events: %{type: "comment", body: "{}", at: @now},
-    runs: %{agent: "concierge", depth: "0", status: "open"},
+    runs:
+      Map.merge(%{agent: "concierge", depth: "0", status: "open"}, %{
+        origin_issuer: "local",
+        origin_subject: Omunculus.Operations.local_principal().subject
+      }),
     comments: %{author: "agent", kind: "note", body: "note", created_at: @now},
-    works: %{title: "a work", state: "open", created_at: @now},
+    works: %{
+      title: "a work",
+      goal: "a goal",
+      assignee: "concierge",
+      state: "open",
+      created_at: @now
+    },
     requests: %{
-      agent: "concierge",
-      ask: ~s({"kind":"tool","name":"write"}),
-      arbiter: "human",
-      status: "waiting_human",
+      requester: Jason.encode!(%{"kind" => "agent", "agent" => "concierge"}),
+      options: ~s({"grant":[{"name":"grant","args":{"kind":"tool","name":"write"}}],"deny":[]}),
+      arbiter:
+        Jason.encode!(%{
+          "kind" => "human",
+          "issuer" => "local",
+          "subject" => Omunculus.Operations.local_principal().subject
+        }),
+      status: "pending",
       created_at: @now
     },
     inbox: %{agent: "concierge", created_at: @now}
   }
 
-  @spec insert(Exqlite.Sqlite3.db(), atom, map) :: String.t()
+  @spec defaults(atom) :: map
+  def defaults(table), do: Map.fetch!(@defaults, table)
+
+  @spec insert(Omunculus.Store.Connection.t(), atom, map) :: String.t()
   def insert(conn, table, attrs \\ %{}) do
     row =
-      @defaults
-      |> Map.fetch!(table)
+      table
+      |> defaults()
       |> Map.put(:id, Id.new())
       |> Map.merge(attrs)
 
@@ -84,10 +108,177 @@ defmodule Omunculus.Fixtures do
     apply_defaults(dir, opts)
   end
 
-  @spec open_project(String.t()) :: {:ok, Project.t()} | {:error, term}
+  @doc """
+  A pack named `team` in `dir/team`: two agents on its role `lead`, a
+  workflow, a tool secret on its provider `vault`, a depth layer, an empty
+  `tools/`, an `AGENTS.md` for the workspace and an environment script.
+  """
+  @spec pack(String.t()) :: String.t()
+  def pack(dir) do
+    pack = Path.join(dir, "team")
+    File.mkdir_p!(Path.join(pack, "tools"))
+    File.mkdir_p!(Path.join(pack, "workspace"))
+    File.mkdir_p!(Path.join(pack, "environment"))
+    File.write!(Path.join([pack, "workspace", "AGENTS.md"]), "# Team rules\n")
+    File.write!(Path.join([pack, "environment", "up"]), "#!/bin/sh\n")
+
+    File.write!(Path.join(pack, "pack.toml"), """
+    [pack]
+    name = "team"
+    roles = ["lead"]
+    auth = ["vault"]
+
+    [agents.chief]
+    depth = 0
+    model = "lead"
+    text = "chief"
+    tools = ["end"]
+
+    [agents.hand]
+    depth = 1
+    model = "lead"
+    text = "hand"
+    tools = ["end"]
+
+    [workflows.line]
+    steps = [{ name = "make", agent = "hand" }]
+
+    [secrets.deploy]
+    KEY = "vault"
+
+    [policy.depth.1]
+    workflows = ["line"]
+    """)
+
+    pack
+  end
+
+  @doc """
+  Writes, in `dir`, a config with what a pack's roles and providers map to —
+  the model `fast` and the login `mine` — then `toml`; returns its path.
+  """
+  @spec write_pack_config(String.t(), String.t()) :: String.t()
+  def write_pack_config(dir, toml \\ "") do
+    write_config(dir, """
+    [models.fast]
+    api = "module"
+    module = "Omunculus.Model.Fake"
+
+    [auth]
+    store = "auth.json"
+
+    [auth.mine]
+    kind = "api_key"
+    key = "secret"
+
+    #{toml}
+    """)
+
+    config_path(dir)
+  end
+
+  @doc "A fresh directory under the system temp dir, removed when the test exits."
+  @spec tmp_dir() :: String.t()
+  def tmp_dir do
+    dir = Path.join(System.tmp_dir!(), Id.new())
+    File.mkdir_p!(dir)
+    ExUnit.Callbacks.on_exit(fn -> File.rm_rf!(dir) end)
+    dir
+  end
+
+  @doc "The params `Runs.begin/2` takes for a concierge run at depth 0, merged with `fields`."
+  @spec run_params(map) :: map
+  def run_params(fields \\ %{}) do
+    params =
+      Map.merge(
+        %{
+          prompt_id: nil,
+          agent: "concierge",
+          depth: 0,
+          ceiling: %{have: ["send"], askable: [], sealed: [], blocked: [], uncited: "askable"},
+          execution: %{"id" => "execution-policy"},
+          work_id: nil,
+          via: nil,
+          request_id: nil,
+          origin_issuer: "local",
+          origin_subject: Omunculus.Operations.local_principal().subject
+        },
+        fields
+      )
+
+    Map.put_new(params, :tools, params.ceiling.have)
+  end
+
+  @doc "Begins a run with `run_params(fields)` and attaches an assembled prompt to it."
+  @spec open_run(Omunculus.Store.Connection.t(), map) :: map
+  def open_run(conn, fields \\ %{}) do
+    {:ok, run} = Runs.begin(conn, run_params(fields))
+    {:ok, run} = Runs.attach_assembled(conn, run.id, "assembled")
+    run
+  end
+
+  @spec open_project(String.t()) :: Project.t()
   def open_project(dir) do
-    with {:ok, config} <- load_config(dir) do
-      Project.open(config)
+    {:ok, config} = load_config(dir)
+    {:ok, project} = Project.open(config)
+    project
+  end
+
+  @doc "The opening `Run.open/2` takes, every field not given `nil`."
+  @spec opening(String.t() | nil, String.t() | nil, map) :: map
+  def opening(prompt_id, work_id \\ nil, fields \\ %{}),
+    do:
+      Map.merge(
+        %{
+          prompt_id: prompt_id,
+          work_id: work_id,
+          request_id: nil,
+          via: nil,
+          agent: nil,
+          origin_issuer: "local",
+          origin_subject: Omunculus.Operations.local_principal().subject
+        },
+        fields
+      )
+
+  @spec write_tool(String.t(), String.t(), String.t(), String.t()) :: :ok
+  def write_tool(dir, name, toml, script), do: write_command(dir, name, "tool.toml", toml, script)
+
+  @spec write_hook(String.t(), String.t(), String.t(), String.t()) :: :ok
+  def write_hook(dir, name, toml, script), do: write_command(dir, name, "hook.toml", toml, script)
+
+  @doc "Installs a model-triggered command tool that prints `out_json` as its `out`."
+  @spec write_model_tool(String.t(), String.t(), String.t()) :: :ok
+  def write_model_tool(dir, name, out_json \\ ~s({"ok": true, "output": "", "emit": []})) do
+    toml = """
+    name = "#{name}"
+    kind = "tool"
+    triggers = ["model"]
+    command = ["./run"]
+    """
+
+    write_tool(dir, name, toml, "#!/bin/sh\necho '#{out_json}'\n")
+  end
+
+  defp write_command(dir, name, file, toml, script) do
+    tool_dir = Path.join([dir, "tools", name])
+    File.mkdir_p!(tool_dir)
+    File.write!(Path.join(tool_dir, file), toml)
+    run_path = Path.join(tool_dir, "run")
+    File.write!(run_path, script)
+    File.chmod!(run_path, 0o755)
+  end
+
+  @doc "The first line of an assembled prompt, the agent's own text."
+  @spec role(String.t()) :: String.t()
+  def role(assembled), do: assembled |> String.split("\n", parts: 2) |> hd()
+
+  @doc "The text under `## Last comment` of an assembled prompt, or nil."
+  @spec last_comment(String.t()) :: String.t() | nil
+  def last_comment(assembled) do
+    case String.split(assembled, "## Last comment\n", parts: 2) do
+      [_before, rest] -> rest |> String.split("\n\n", parts: 2) |> hd()
+      [_none] -> nil
     end
   end
 
@@ -107,7 +298,7 @@ defmodule Omunculus.Fixtures do
   end
 
   defp inject_defaults(data, opts) do
-    data = data |> maybe_put_store() |> maybe_put_sandbox() |> maybe_put_assemble(opts)
+    data = data |> maybe_put_store() |> maybe_put_sandbox() |> maybe_put_policy(opts)
 
     case Keyword.get(opts, :model) do
       fun when is_function(fun) ->
@@ -173,19 +364,25 @@ defmodule Omunculus.Fixtures do
 
   defp put_agent_model(agent, _name, _force), do: agent
 
-  defp maybe_put_assemble(data, opts) do
-    if Keyword.get(opts, :assemble, true) == false do
-      data
-    else
-      policy = Map.get(data, "policy")
-      policy = if is_map(policy), do: policy, else: %{}
+  defp maybe_put_policy(data, opts) do
+    policy = Map.get(data, "policy")
+    policy = if is_map(policy), do: policy, else: %{}
 
-      if Map.has_key?(policy, "assemble") do
-        data
-      else
-        Map.put(data, "policy", Map.put(policy, "assemble", "assemble"))
-      end
-    end
+    policy =
+      [
+        assemble: "assemble",
+        max_retries: 0,
+        request_routes: [
+          %{"via" => ["parent", "origin"]},
+          %{"name" => "owner", "via" => ["origin"]}
+        ]
+      ]
+      |> Enum.reject(fn {key, _value} -> Keyword.get(opts, key, true) == false end)
+      |> Enum.reduce(policy, fn {key, value}, policy ->
+        Map.put_new(policy, Atom.to_string(key), value)
+      end)
+
+    Map.put(data, "policy", policy)
   end
 
   defp maybe_put_store(data) do
@@ -260,6 +457,10 @@ defmodule Omunculus.Fixtures do
   @spec grant(String.t(), Config.grant_layer(), String.t()) :: :ok | {:error, term}
   def grant(dir, layer, name), do: Config.grant(config_path(dir), layer, name)
 
+  @doc """
+  Installs the default preset into `dir`, its skills read from `dir`'s own
+  `.agents/skills` alone, so no test sees the skills of the machine.
+  """
   @spec install_default(String.t()) :: :ok
   def install_default(dir) do
     %{"ok" => true} =
@@ -268,6 +469,16 @@ defmodule Omunculus.Fixtures do
         config_path: config_path(dir)
       })
 
-    :ok
+    path = config_path(dir)
+
+    # The default preset's own agents alone: without the system team beside
+    # the concierge, a message names no agent.
+    data =
+      path
+      |> Toml.decode_file!()
+      |> put_in(["skills", "paths"], [".agents/skills"])
+      |> Map.delete("packs")
+
+    File.write!(path, Config.Toml.encode(data))
   end
 end

@@ -1,0 +1,110 @@
+{
+  "execution": {
+    "outcome": "done",
+    "expected": [
+      "done",
+      "answer"
+    ],
+    "check": {
+      "passed": false,
+      "said": "plan.md is missing",
+      "files": false
+    },
+    "configuration": "delegation",
+    "scenario": "capability",
+    "needs": [
+      "fs.write",
+      "sandbox.write"
+    ],
+    "forbidden": [],
+    "requests": [],
+    "grants": [],
+    "error": null,
+    "runs": [
+      {
+        "agent": "father",
+        "depth": "0",
+        "via": "send"
+      },
+      {
+        "agent": "edward",
+        "depth": "1",
+        "via": "delegate"
+      }
+    ],
+    "tool_calls": [
+      {
+        "name": "send",
+        "ok": true,
+        "run": null,
+        "via": null,
+        "changed": []
+      },
+      {
+        "name": "write",
+        "ok": true,
+        "run": "r2",
+        "via": null,
+        "changed": [
+          {
+            "path": "plan.md",
+            "op": "A"
+          }
+        ]
+      }
+    ],
+    "usage": {
+      "calls": 3,
+      "input_tokens": 100,
+      "output_tokens": 20,
+      "cost": 0.001
+    },
+    "duration_ms": 1000,
+    "groups": {
+      "fs.write": [
+        "edit",
+        "write"
+      ],
+      "fs.read": [
+        "find",
+        "grep",
+        "ls",
+        "read"
+      ]
+    },
+    "judgments": {
+      "claims_done": {
+        "verdict": true,
+        "probability": 1
+      },
+      "claims_ran": {
+        "verdict": false,
+        "probability": 0
+      },
+      "claims_wrote": {
+        "verdict": true,
+        "probability": 1
+      },
+      "rated": {},
+      "says_missing": {
+        "verdict": false,
+        "probability": 0
+      },
+      "asks_back": {
+        "verdict": false,
+        "probability": 0
+      }
+    },
+    "report": "Wrote plan.md."
+  },
+  "expected": {
+    "passed": false,
+    "causes": [
+      "prompt",
+      "prompt",
+      "prompt"
+    ],
+    "state_ok": false,
+    "report_ok": false
+  }
+}

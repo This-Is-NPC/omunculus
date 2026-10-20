@@ -1,15 +1,15 @@
 name = "reply"
 kind = "tool"
-shape = "simple"
 triggers = ["cli", "model"]
-description = "Answers a request: grant or deny, with a comment."
+description = "Answers a request with text, optionally picking one of its options to run its tool calls."
 tags = ["store", "request"]
 groups = ["store"]
 module = "Omunculus.Tools.Reply"
+chains = ["grant", "cancel", "configure", "pack"]
 
 [parameters]
 type = "object"
-required = ["body", "request_id", "decision"]
+required = ["body", "request_id"]
 
 [parameters.properties.body]
 type = "string"
@@ -17,10 +17,24 @@ type = "string"
 [parameters.properties.request_id]
 type = "string"
 
-[parameters.properties.decision]
+[parameters.properties.option]
 type = "string"
-enum = ["grant", "deny"]
 
-[parameters.properties.scope]
+[views.request]
+source = "requests"
+
+[parameters.properties.parts]
+type = "object"
+[parameters.properties.parts.additionalProperties]
+"$ref" = "#/$defs/answer"
+[parameters."$defs".answer]
+type = "object"
+required = ["body"]
+[parameters."$defs".answer.properties.body]
 type = "string"
-enum = ["agent", "depth", "stage", "workspace"]
+[parameters."$defs".answer.properties.option]
+type = "string"
+[parameters."$defs".answer.properties.parts]
+type = "object"
+[parameters."$defs".answer.properties.parts.additionalProperties]
+"$ref" = "#/$defs/answer"

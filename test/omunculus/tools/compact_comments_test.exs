@@ -125,12 +125,11 @@ defmodule Omunculus.Tools.CompactCommentsTest do
            }
   end
 
-  test "the builtin catalog discovers compact_comments as a composite tool over comments" do
+  test "the builtin catalog discovers compact_comments over comments" do
     catalog = Catalog.unconfigured()
 
     assert %{"compact_comments" => manifest} = catalog
-    assert manifest.shape == "composite"
-    assert manifest.views == ["comments"]
+    assert Enum.map(manifest.views, &{&1.key, &1.source}) == [{"comments", "comments"}]
   end
 
   test "the manifest wiring yields the same output as calling the module directly" do

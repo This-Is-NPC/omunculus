@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+
+if [[ ! -f dev/server.toml ]]; then
+  echo "dev-bootstrap: no dev/server.toml; see docs/development.md" >&2
+  exit 1
+fi
+
+# Each project config of dev/: its workspace, the workspace/ files of the
+# packs it imports that the workspace lacks, as the pack tool copies them,
+# and its local administrator while its store does not exist.
+while IFS= read -r config; do
+  dir=$(dirname "$config")
+  root=$(sed -n 's/^root = "\(.*\)"$/\1/p' "$config" | head -n 1)
+  workspace="$dir/${root:-.}"
+  mkdir -p "$workspace"
+  while IFS= read -r pack; do
+    cp -rn "$dir/$pack/workspace/." "$workspace/" 2>/dev/null || true
+  done < <(awk '/^\[\[packs\]\]/ { p = 1; next } /^\[/ { p = 0 } p && /^path = "/ { gsub(/^path = "|"$/, ""); print }' "$config")
+  [[ -f $dir/.omunculus/store.sqlite3 ]] && continue
+  bin/omunculus --config "$config" access bootstrap --issuer local --subject "$(id -u)"
+done < <(find dev -maxdepth 2 -name omunculus.toml)

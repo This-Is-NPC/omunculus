@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+from check import *
+
+import subprocess
+# stock.csv is what the project's tool exports, to the byte.
+workspace, outcome = load()
+expect_outcome(outcome, "done", "answer")
+official = subprocess.run([sys.executable, str(workspace / "bin" / "inv"), "export", "--format", "csv"], capture_output=True, text=True).stdout
+if text(workspace, "stock.csv").strip() != official.strip():
+    fail("stock.csv is not what bin/inv exports")
+ok()

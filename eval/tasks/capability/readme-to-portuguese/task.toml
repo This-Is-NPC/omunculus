@@ -1,0 +1,16 @@
+scenario = "capability"
+critical = false
+configurations = ["solo", "delegation", "workflow", "negotiated", "human-gated"]
+needs = ["fs.write", "sandbox.write"]
+
+[expect]
+outcome = ["done", "answer"]
+
+[human]
+"fs.write" = "grant"
+"sandbox.write" = "grant"
+
+[[judge]]
+id = "faithful"
+question = "How well is README.pt-BR.md a faithful and complete Brazilian Portuguese translation of README.md, keeping its structure and code blocks and leaving the name Moonlight untranslated?"
+files = ["README.md", "README.pt-BR.md"]

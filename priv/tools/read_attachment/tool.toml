@@ -1,0 +1,17 @@
+name = "read_attachment"
+kind = "tool"
+triggers = ["model"]
+description = "Reads a file attached in this conversation, by the sha256 ## Attachments gives it. A file that is not text is refused with its size."
+tags = ["files", "attachments"]
+module = "Omunculus.Tools.ReadAttachment"
+
+[parameters]
+type = "object"
+required = ["sha256"]
+
+[parameters.properties.sha256]
+type = "string"
+
+[views.attachments]
+source = "events"
+relation = "attachments"

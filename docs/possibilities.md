@@ -6,14 +6,14 @@ and models that file names. These are shapes the file will load today. None of
 them invent a table [the TOML](config.md) does not already have.
 
 Each snippet sits on the required tables — `[execution]`, `[execution.sandbox]`,
-`[store]`, `[models]`, `[policy] assemble` — and on `[tools] paths` pointing at
+`[store]`, `[models]`, `[policy] assemble`, `max_retries` and `request_routes` — and on `[tools] paths` pointing at
 the folders you mean to call. The snippets below omit those tables unless they change. A missing
 required table is still a refusal, not an implied default.
 
 ## 1. One agent, no work
 
-A single depth-0 agent. `send` opens a run; there is no `delegate` and no
-sequence. The model reads and edits, and asks when `sandbox.write` is not have.
+A single depth-0 agent. `send` opens a run; there is no work below it and
+no workflow. The model reads and edits, and asks you when `sandbox.write` is not have.
 This is the `pi-like` preset, minus the Anthropic login.
 
 ```mermaid
@@ -37,24 +37,37 @@ module = "Omunculus.Model.Fake"
 [agents.pi]
 depth = 0
 model = "fake"
-tools = ["catalog", "fs.read", "fs.write", "request_sandbox", "sequence", "store"]
-negotiable = ["sandbox.write"]
+tools = ["catalog", "fs.read", "fs.write", "request_access", "sequence", "store"]
+human = ["sandbox.write"]
 text = """
 You are a Pi-style agent: compact, direct, and without shell access.
 """
 
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
+max_retries = 3
 ```
 
-`continue` / `break` sit in `sequence` but do nothing useful without a work on a
-workflow. They are listed so a later `[workflows.*]` can turn them on without
-rewriting the agent.
+`done` / `break` sit in `sequence` and act on the run's work, each with a
+report, and each ends the run. Without a workflow, `done` closes the work and
+`break` parks it with the report as its comment; a later `[workflows.*]` turns
+`done` into a stage walk without rewriting the agent. `done` chains `comment`
+with its report, `continue` and `end`; `continue` is only that chain step, and
+`sequence` carries it and `end`. `work`, also there, opens the root work from
+the run `send` opened and ends that run; the root's run follows.
 
 ## 2. Concierge that delegates
 
-Depth 0 talks to you. Depth 1 does the work. The child is a `delegate` emit, not
-a second CLI. The parent waits (`waiting = child`) until the child is `done`.
+Depth 0 talks to you. Depth 1 does the work. The concierge answers what needs
+no tool it lacks itself, in the run `send` opened. For the rest it calls `work`
+with a report and the works to create: from the run `send` opened it creates
+the root work, and from the root's run it chains one `delegate` per child, not
+a second CLI. The parent waits (`waiting = child`) until all its children are
+`done` or `cancelled`, or one of them breaks; its next run reads what they
+came back with under `## Results`.
+Each item may name the child's `agent` among the depth-1 agents the prompt
+lists under `## Agents`, with the tools each has that the concierge has not.
 The default preset is this, with a reviewer parked behind `workflow_only`.
 
 ```mermaid
@@ -70,8 +83,8 @@ flowchart TB
     end
     store[(one store)]
     person -->|CLI| send --> concierge
-    concierge -->|delegate| worker
-    worker -->|"waiting = child until done"| concierge
+    concierge -->|"work → delegate"| worker
+    worker -->|"waiting = child until all done"| concierge
     concierge --- store
     worker --- store
 ```
@@ -84,32 +97,34 @@ module = "Omunculus.Model.Fake"
 [agents.concierge]
 depth = 0
 model = "fake"
-tools = ["break", "catalog", "continue", "delegate", "fs.read", "reply", "store"]
+tools = ["break", "catalog", "continue", "delegate", "done", "end", "fs.read", "reply", "store", "work"]
 text = """
-You are the project concierge. Read the message and delegate when the work is a job.
+You are the project concierge; you talk with the person. Answer yourself, in plain text, whatever needs no tool you lack: a greeting, a question, an explanation. Call work only for what needs a tool that an agent under ## Agents has and you have not, with a report and the works to create. When ## Results shows what they did, check it against the goal: if it is met, call done with a report that answers the person; if not, call work again saying what is missing.
 """
 
 [agents.worker]
 depth = 1
 model = "fake"
-tools = ["break", "comment", "continue", "fs.read", "fs.write", "notify", "request_access", "request_sandbox"]
-negotiable = ["sandbox.write"]
+tools = ["break", "comment", "continue", "done", "end", "fs.read", "fs.write", "notify", "request_access"]
+human = ["sandbox.write"]
 text = """
-You are the worker. Complete the assigned work and call continue when the stage is complete.
+You are the worker. Complete the assigned work and call done with a report when the stage is complete.
 """
 
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
+max_retries = 3
 ```
 
-A `workflow_only` agent is parsed and ignored until a step names it. Defining
-`[workflows.delivery]` without `[policy] workflow` (or a `[policy.depth.N]
-workflow`) leaves the sequence off: the table is inventory, not a running
-pipeline.
+A `workflow_only` agent is parsed and ignored until a step names it.
+`[workflows.delivery]` alone is a workflow a work may name: one handed
+down with `workflow = "delivery"` goes through its stages; one naming an
+agent does not.
 
 ## 3. A named sequence
 
-`continue` does not pick the next stage. The TOML does. The reviewer never
+`done` does not pick the next stage. The TOML does. The reviewer never
 appears as a free agent at its depth; only the step may call it.
 
 ```mermaid
@@ -118,8 +133,8 @@ flowchart LR
     subgraph seq [workflows.delivery]
         todo["to_do — worker"]
         review["review — reviewer"]
-        todo -->|continue| review
-        review -->|continue on last| done[done]
+        todo -->|done| review
+        review -->|done on last| closed[closed]
     end
     store[(store)]
     person -->|send / reply| todo
@@ -127,20 +142,20 @@ flowchart LR
     review --- store
 ```
 
-The reviewer is not on the depth-1 free list. `continue` walks this graph; it
-does not name the next node.
+The reviewer is not on the depth-1 free list. `done` walks this graph through
+the `continue` it chains; it does not name the next node.
 
 ```toml
 [agents.worker]
 depth = 1
 model = "fake"
-tools = ["comment", "continue", "fs.read", "fs.write"]
+tools = ["comment", "continue", "done", "end", "fs.read", "fs.write"]
 
 [agents.reviewer]
 depth = 1
 model = "fake"
 workflow_only = true
-tools = ["comment", "continue", "fs.read", "notify"]
+tools = ["comment", "continue", "done", "end", "fs.read", "notify"]
 
 [workflows.delivery]
 steps = [
@@ -149,22 +164,32 @@ steps = [
 ]
 
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
-workflow = "delivery"
+max_retries = 3
+workflows = ["delivery"]
 ```
 
 A grant of `write` on the work in `to_do` is still on the row in `review`. The
 stage `deny` cuts it from the effective set. Back on `to_do` (if the sequence
 ever returned there) the grant would show again without a second reply.
 
-Depth can choose a different workflow than `[policy]`:
+A depth can require other workflows than `[policy]`:
 
 ```toml
 [policy.depth.1]
-workflow = "delivery"
+workflows = ["delivery"]
+
+[policy.depth.0.overrides.work]
+schema = "staged"
 ```
 
-Unnamed depths stay off the sequence.
+On a depth that requires workflows the stages name the agents: the store
+refuses an `agent` on the works created there, and, with one required,
+the `staged` schema of `work` lets the depth above leave it out. With
+several, each work names one. A depth that requires none takes an agent
+or any workflow whose stage agents are of it, so teams that share a depth
+each keep their own.
 
 ## 4. Three floors
 
@@ -185,8 +210,8 @@ flowchart TB
     end
     store[(store)]
     person -->|send / reply| concierge
-    concierge -->|delegate| manager
-    manager -->|delegate| worker
+    concierge -->|"work → delegate"| manager
+    manager -->|"work → delegate"| worker
     worker -->|request with nobody above at 0| person
     concierge --- store
     manager --- store
@@ -197,32 +222,34 @@ flowchart TB
 [agents.concierge]
 depth = 0
 model = "fake"
-tools = ["catalog", "delegate", "reply", "store"]
+tools = ["catalog", "delegate", "end", "reply", "store", "work"]
 
 [agents.manager]
 depth = 1
 model = "fake"
-tools = ["comment", "delegate", "notify", "reply"]
+tools = ["comment", "delegate", "end", "notify", "reply", "work"]
 
 [agents.worker]
 depth = 2
 model = "fake"
-tools = ["comment", "continue", "fs.read", "fs.write", "request_sandbox"]
+tools = ["comment", "continue", "done", "end", "fs.read", "fs.write", "request_access"]
 negotiable = ["sandbox.write"]
 
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
+max_retries = 3
 mode = "auto"
 
 [policy.depth.2]
 mode = "allowlist"
-granted = ["comment", "continue", "fs.read"]
+granted = ["comment", "continue", "done", "end", "fs.read"]
 negotiable = ["fs.write", "sandbox.write"]
 ```
 
 `auto` on `[policy]` puts everything uncited in askable. The depth-2 allowlist
-then blocks whatever that floor did not name. Depth 0 has nobody above: a
-request from the concierge goes to the person.
+then blocks whatever that floor did not name. The declared route tries the
+parent work and then the authenticated origin; it does not change grant authority.
 
 ## 5. Two trees, one store
 
@@ -267,7 +294,9 @@ tools = ["catalog", "fs.read", "store"]
 text = "global"
 
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
+max_retries = 3
 workspace = "app"
 
 [workspaces.app]
@@ -297,7 +326,7 @@ refused.
 The section may point at a second TOML, relative to that `root`. Same schema
 minus `[workspaces]` and `[store]`. Precedence is global, then the inline
 section, then the file. Missing file is an error. A permanent grant with
-`--scope workspace` writes that file when it exists.
+the `grant_workspace` option of a request writes that file when it exists.
 
 ```mermaid
 flowchart TB
@@ -325,6 +354,7 @@ config = "omunculus.toml"
 api = "openai-completions"
 url = "http://127.0.0.1:11434/v1"
 model = "llama"
+timeout_ms = 120000
 
 [agents.concierge]
 depth = 0
@@ -333,7 +363,9 @@ tools = ["catalog", "fs.read", "fs.write"]
 negotiable = ["sandbox.write"]
 
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
+max_retries = 3
 mode = "allowlist"
 ```
 
@@ -350,10 +382,11 @@ flowchart TB
     call --> classify{ceiling}
     classify -->|have| granted["already granted"]
     classify -->|blocked| deny["EVENTS deny"]
-    classify -->|sealed or nobody above| human["REQUESTS arbiter = human"]
-    classify -->|askable + agent above| above["REQUESTS arbiter = that agent"]
-    human --> reply["reply grant / deny"]
-    above --> reply
+    classify -->|askable or sealed| route["configured request route"]
+    route --> receiver["resolved participant"]
+    receiver --> reply["reply text or selected option"]
+    receiver --> escalate["escalate with linked origins"]
+    escalate --> route
 ```
 
 **Allowlist** — only what was named is have. Everything else is blocked, not
@@ -361,7 +394,9 @@ asked:
 
 ```toml
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
+max_retries = 3
 mode = "allowlist"
 
 [agents.concierge]
@@ -378,12 +413,12 @@ human `reply`, not an agent above:
 [agents.codex]
 depth = 0
 model = "fake"
-tools = ["bash", "catalog", "fs.read", "fs.write", "request_access", "request_sandbox", "store"]
+tools = ["bash", "catalog", "end", "fs.read", "fs.write", "request_access", "store"]
 negotiable = ["sandbox.write"]
 human = ["delete"]
 ```
 
-**Ask the agent above** — `sandbox.write` is have for calling `request_sandbox`,
+**Ask the agent above** — `sandbox.write` is have for calling `request_access`,
 and negotiable as a resource. Have on the tool is not have on the resource.
 Until a grant, the workspace is read-only for external commands.
 
@@ -391,7 +426,7 @@ Until a grant, the workspace is read-only for external commands.
 [agents.worker]
 depth = 1
 model = "fake"
-tools = ["fs.read", "fs.write", "request_sandbox"]
+tools = ["end", "fs.read", "fs.write", "request_access"]
 negotiable = ["sandbox.write"]
 ```
 
@@ -493,6 +528,7 @@ flowchart LR
 api = "openai-completions"
 url = "http://127.0.0.1:11434/v1"
 model = "qwen2.5"
+timeout_ms = 120000
 ```
 
 **Anthropic with a stored login:**
@@ -517,6 +553,8 @@ provider = "anthropic"
 api = "anthropic-messages"
 url = "https://api.anthropic.com/v1"
 model = "claude-sonnet-4-5"
+timeout_ms = 120000
+body = { max_tokens = 32000 }
 ```
 
 ```bash
@@ -535,6 +573,7 @@ provider = "openai"
 api = "openai-responses"
 url = "https://api.openai.com/v1"
 model = "gpt-5"
+timeout_ms = 120000
 ```
 
 **A program over the sandbox NDJSON protocol:**
@@ -556,7 +595,9 @@ An agent may name a different assemble tool than `[policy]`:
 
 ```toml
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
+max_retries = 3
 
 [agents.concierge]
 depth = 0

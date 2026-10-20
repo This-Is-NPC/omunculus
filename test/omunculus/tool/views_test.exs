@@ -1,0 +1,252 @@
+defmodule Omunculus.Tool.ViewsTest do
+  use Omunculus.StoreCase, async: true
+
+  alias Omunculus.Fixtures
+  alias Omunculus.Store
+  alias Omunculus.Tool.Views
+
+  @scope %{
+    run_id: nil,
+    work_id: nil,
+    request_id: nil,
+    inbox_id: nil,
+    prompt_id: nil,
+    args: %{},
+    computed: %{}
+  }
+
+  defp hydrate(conn, views, scope) do
+    {:ok, specs} = Views.parse(views)
+    Views.hydrate(conn, specs, Map.merge(@scope, scope))
+  end
+
+  defp child(conn, parent_id, title, state, updated_at) do
+    Fixtures.insert(conn, :works, %{
+      parent_id: parent_id,
+      title: title,
+      state: state,
+      updated_at: updated_at
+    })
+  end
+
+  test "works reads the work, its parent and its children by state", %{conn: conn} do
+    root = Fixtures.insert(conn, :works, %{title: "root"})
+    done = child(conn, root, "done one", "done", "2026-01-01T00:00:01Z")
+    child(conn, root, "open one", "open", "2026-01-01T00:00:02Z")
+
+    views = %{
+      "self" => %{"source" => "works"},
+      "parent" => %{"source" => "works", "relation" => "parent"},
+      "closed" => %{"source" => "works", "relation" => "children", "state" => ["done"]}
+    }
+
+    assert {:ok, %{"self" => %{title: "root"}, "parent" => nil, "closed" => [%{id: ^done}]}} =
+             hydrate(conn, views, %{work_id: root})
+
+    assert {:ok, %{"parent" => %{id: ^root}}} = hydrate(conn, views, %{work_id: done})
+  end
+
+  test "children since the last run are those changed after the work's last closed run",
+       %{conn: conn} do
+    root = Fixtures.insert(conn, :works)
+    child(conn, root, "before", "done", "2026-01-01T00:00:01Z")
+    run = Fixtures.open_run(conn, %{work_id: root})
+    {:ok, _} = Store.close_run(conn, run.id)
+    {:ok, closed} = Store.view(conn, "run", run.id)
+    child(conn, root, "after", "done", closed.finished_at <> "1")
+
+    views = %{
+      "results" => %{
+        "source" => "works",
+        "relation" => "children",
+        "since" => "last_run",
+        "include" => ["last_comment"]
+      }
+    }
+
+    assert {:ok, %{"results" => [%{title: "after", last_comment: nil}]}} =
+             hydrate(conn, views, %{work_id: root})
+  end
+
+  test "includes add each work's last comment, comments and closed runs", %{conn: conn} do
+    root = Fixtures.insert(conn, :works)
+    work = child(conn, root, "child", "done", "2026-01-01T00:00:01Z")
+
+    Fixtures.insert(conn, :comments, %{
+      work_id: work,
+      body: "first",
+      created_at: "2026-01-01T00:00:01Z"
+    })
+
+    Fixtures.insert(conn, :comments, %{
+      work_id: work,
+      body: "report",
+      created_at: "2026-01-01T00:00:02Z"
+    })
+
+    views = %{
+      "children" => %{
+        "source" => "works",
+        "relation" => "children",
+        "include" => ["last_comment", "comments", "runs"]
+      }
+    }
+
+    assert {:ok, %{"children" => [read]}} = hydrate(conn, views, %{work_id: root})
+    assert read.last_comment.body == "report"
+    assert Enum.map(read.comments, & &1.body) == ["first", "report"]
+    assert read.runs == []
+  end
+
+  test "a work named by an argument is read only when it descends from the call's work",
+       %{conn: conn} do
+    root = Fixtures.insert(conn, :works)
+    middle = child(conn, root, "middle", "waiting", "2026-01-01T00:00:01Z")
+    below = child(conn, middle, "below", "done", "2026-01-01T00:00:02Z")
+    other = Fixtures.insert(conn, :works, %{title: "elsewhere"})
+
+    views = %{
+      "target" => %{"source" => "works", "from" => ["args.work_id"], "within" => "descendants"}
+    }
+
+    assert {:ok, %{"target" => %{title: "below"}}} =
+             hydrate(conn, views, %{work_id: root, args: %{"work_id" => below}})
+
+    assert {:error, {:outside, ^other}} =
+             hydrate(conn, views, %{work_id: root, args: %{"work_id" => other}})
+
+    assert {:error, {:outside, ^root}} =
+             hydrate(conn, views, %{work_id: middle, args: %{"work_id" => root}})
+
+    # A person's call, outside any run and work, reads the work it names.
+    assert {:ok, %{"target" => %{title: "elsewhere"}}} =
+             hydrate(conn, views, %{work_id: nil, args: %{"work_id" => other}})
+  end
+
+  test "events with the cause relation read the event that made the run due", %{conn: conn} do
+    cause = Fixtures.insert(conn, :events, %{type: "continue", sequence: 1})
+    run = Fixtures.insert(conn, :runs, %{cause_id: cause})
+    views = %{"cause" => %{"source" => "events", "relation" => "cause"}}
+
+    assert {:ok, %{"cause" => %{id: ^cause, type: "continue"}}} =
+             hydrate(conn, views, %{run_id: run})
+  end
+
+  test "events with the attachments relation read the files of the run's conversation", %{
+    conn: conn
+  } do
+    conversation = Omunculus.Id.new()
+
+    :ok =
+      Omunculus.Store.Query.insert(conn, :conversations, %{
+        id: conversation,
+        created_at: "2026-01-01T00:00:00Z",
+        created_issuer: "local",
+        created_subject: "1000"
+      })
+
+    file = %{"name" => "a.txt", "media_type" => "text/plain", "bytes" => 1, "sha256" => "ab"}
+
+    prompt =
+      Fixtures.insert(conn, :events, %{
+        type: "prompt",
+        sequence: 1,
+        conversation_id: conversation,
+        actor_kind: "human",
+        body: Jason.encode!(%{"message" => "see", "attachments" => [file]})
+      })
+
+    Fixtures.insert(conn, :events, %{type: "prompt", sequence: 2, conversation_id: conversation})
+    run = Fixtures.insert(conn, :runs, %{conversation_id: conversation})
+    views = %{"files" => %{"source" => "events", "relation" => "attachments"}}
+
+    assert {:ok, %{"files" => [attached]}} = hydrate(conn, views, %{run_id: run})
+
+    assert attached ==
+             Map.merge(file, %{"event_id" => prompt, "at" => attached["at"], "by" => "person"})
+  end
+
+  test "for a run without a work, conversation reads its conversation's root works", %{
+    conn: conn
+  } do
+    root = Fixtures.insert(conn, :works, %{title: "root"})
+    child(conn, root, "below", "open", "2026-01-01T00:00:01Z")
+    run = Fixtures.insert(conn, :runs, %{})
+
+    views = %{
+      "works" => %{
+        "source" => "works",
+        "relation" => "conversation",
+        "include" => ["last_comment"]
+      }
+    }
+
+    assert {:ok, %{"works" => [%{id: ^root, last_comment: nil}]}} =
+             hydrate(conn, views, %{run_id: run})
+
+    assert {:ok, %{}} == hydrate(conn, views, %{run_id: run, work_id: root})
+  end
+
+  test "recent runs reads the project's last closed runs, newest first, with their work and events",
+       %{conn: conn} do
+    work = Fixtures.insert(conn, :works, %{title: "build", workflow: "page", stage: "review"})
+
+    older =
+      Fixtures.insert(conn, :runs, %{
+        status: "done",
+        work_id: work,
+        started_at: "2026-01-01T00:00:01Z",
+        finished_at: "2026-01-01T00:00:09Z"
+      })
+
+    newer = Fixtures.insert(conn, :runs, %{status: "done", started_at: "2026-01-01T00:00:02Z"})
+    Fixtures.insert(conn, :runs, %{started_at: "2026-01-01T00:00:03Z"})
+    call = Fixtures.insert(conn, :events, %{type: "tool", run_id: older, sequence: 1})
+
+    views = %{"runs" => %{"source" => "runs", "relation" => "recent", "limit" => 5}}
+
+    assert {:ok, %{"runs" => [%{id: ^newer, work_title: nil, events: []}, run]}} =
+             hydrate(conn, views, %{})
+
+    assert %{id: ^older, work_title: "build", work_workflow: "page", work_stage: "review"} = run
+    assert [%{id: ^call}] = run.events
+
+    assert {:ok, %{"runs" => [%{id: ^newer}]}} =
+             hydrate(conn, put_in(views, ["runs", "limit"], 1), %{})
+
+    for limit <- [nil, 0, "5"] do
+      table = %{"source" => "runs", "relation" => "recent", "limit" => limit}
+      assert {:error, _} = Views.parse(%{"runs" => Map.reject(table, &is_nil(elem(&1, 1)))})
+    end
+  end
+
+  test "a view whose anchors are all absent is left out", %{conn: conn} do
+    views = %{"comments" => %{"source" => "comments"}, "work" => %{"source" => "works"}}
+    assert {:ok, %{}} == hydrate(conn, views, %{})
+  end
+
+  test "received inbox is anchored only to the current run; unread notices keep their anchors", %{
+    conn: conn
+  } do
+    assert {:ok, [%{from: ["run"], relation: "received"}]} =
+             Views.parse(%{"inbox" => %{"source" => "inbox", "relation" => "received"}})
+
+    for from <- [["work"], ["args.run"], ["latest_run"]] do
+      assert {:error, _} =
+               Views.parse(%{
+                 "inbox" => %{"source" => "inbox", "relation" => "received", "from" => from}
+               })
+    end
+
+    assert {:error, _} =
+             Views.parse(%{"inbox" => %{"source" => "inbox", "relation" => "unknown"}})
+
+    work = Fixtures.insert(conn, :works)
+    note = Fixtures.insert(conn, :inbox, %{work_id: work})
+
+    assert {:ok, %{"inbox" => [%{id: ^note}]}} =
+             hydrate(conn, %{"inbox" => %{"source" => "inbox", "from" => ["work"]}}, %{
+               work_id: work
+             })
+  end
+end

@@ -1,11 +1,9 @@
 name = "assemble"
 kind = "tool"
-shape = "simple"
 triggers = ["harness"]
 description = "Builds the assembled prompt of a run from its views."
 tags = ["prompt"]
-groups = ["prompt"]
-views = ["prompt", "work", "comments.work", "comments.request", "comments.inbox", "request", "catalog"]
+groups = ["assembly"]
 module = "Omunculus.Tools.Assemble"
 
 [parameters]
@@ -16,3 +14,103 @@ type = "string"
 
 [parameters.properties.inbox_id]
 type = "string"
+
+[parameters.properties.last_run_output_bytes]
+type = "integer"
+minimum = 1
+
+[parameters.properties.agent]
+type = "string"
+
+[parameters.properties.tool_output_bytes]
+type = "integer"
+minimum = 1
+
+[parameters.properties.conversation_bytes]
+type = "integer"
+minimum = 1
+
+[parameters.properties.session_ttl_ms]
+type = "integer"
+minimum = 1
+
+[parameters.properties.session_max_bytes]
+type = "integer"
+minimum = 1
+
+[views.message]
+source = "prompts"
+relation = "message"
+
+[views.work]
+source = "works"
+
+[views.comments]
+source = "comments"
+from = ["work"]
+
+[views.last_run]
+source = "runs"
+relation = "last_closed"
+
+[views.session]
+source = "works"
+include = ["runs"]
+
+[views.chat]
+source = "runs"
+relation = "conversation"
+
+[views.conversation_works]
+source = "works"
+relation = "conversation"
+include = ["last_comment"]
+
+[views.children]
+source = "works"
+relation = "children"
+include = ["last_comment"]
+
+[views.results]
+source = "works"
+relation = "children"
+state = ["done", "cancelled"]
+since = "last_run"
+include = ["last_comment"]
+
+[views.cause]
+source = "events"
+relation = "cause"
+
+[views.opener]
+source = "runs"
+relation = "opener"
+
+[views.request]
+source = "requests"
+
+[views.request_comments]
+source = "comments"
+from = ["request"]
+
+[views.attachments]
+source = "events"
+relation = "attachments"
+
+[views.inbox]
+source = "inbox"
+relation = "received"
+
+[views.inbox_comments]
+source = "comments"
+from = ["inbox"]
+
+[views.agents]
+source = "agents"
+include = ["tools"]
+
+[views.catalog]
+source = "catalog"
+
+[views.skills]
+source = "skills"

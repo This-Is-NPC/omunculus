@@ -1,7 +1,5 @@
 name = "ls"
 kind = "tool"
-shape = "simple"
-views = ["paths"]
 triggers = ["model"]
 description = "Lists a directory."
 tags = ["fs"]
@@ -13,3 +11,6 @@ type = "object"
 
 [parameters.properties.path]
 type = "string"
+
+[views.paths]
+source = "paths"

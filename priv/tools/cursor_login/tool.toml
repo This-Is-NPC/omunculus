@@ -1,8 +1,7 @@
 name = "cursor_login"
 kind = "tool"
-shape = "simple"
 triggers = ["cli"]
-description = "Opens Cursor's browser login and stores the resulting credential."
+description = "Opens Cursor's browser login and stores the resulting credential: the login tool behind an [auth] provider of kind tool that names it."
 tags = ["cli", "auth"]
 groups = ["cli"]
 command = ["./run"]

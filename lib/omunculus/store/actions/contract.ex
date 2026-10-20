@@ -1,15 +1,25 @@
 defmodule Omunculus.Store.Actions.Contract do
   @moduledoc "Validates the published emit fields before the store applies a batch."
 
+  @forbidden ~w(stage agent model)
+
   @fields %{
     "comment" => ~w(body work_id request_id inbox_id),
-    "prompt" => ~w(message work_id),
-    "work" => ~w(title work_id parent_id workspace),
-    "request" => ~w(kind name reason),
-    "reply" => ~w(request_id decision body scope),
+    "prompt" => ~w(message work_id agent attachments),
+    "attach" => ~w(attachments note),
+    "work" => ~w(report works),
+    "request" => ~w(reason options to),
+    "reply" => ~w(request_id option body parts),
+    "escalate" => ~w(reason origins to),
+    "grant" => ~w(request_id name kind scope),
+    "cancel" => ~w(request_id),
     "continue" => [],
+    "end" => [],
     "break" => ~w(body),
-    "delegate" => ~w(title body workspace),
+    "wait" => ~w(body),
+    "reopen" => ~w(work_id body agent stage grant past_limit),
+    "retire" => ~w(work_id body),
+    "delegate" => ~w(title goal agent workflow workspace),
     "notify" => ~w(body work_id),
     "inbox.read" => ~w(inbox_id),
     "compact" => ~w(work_id request_id inbox_id summary ids),
@@ -45,11 +55,34 @@ defmodule Omunculus.Store.Actions.Contract do
     end
   end
 
-  defp forbidden(type, body) when type in ~w(work continue break delegate),
-    do: Omunculus.Store.Actions.Helpers.ensure_no_forbidden(String.to_existing_atom(type), body)
+  # A body never names the stage, agent or model the TOML decides; a
+  # `delegate`, and each of the `works` of a `work`, may name the new work's
+  # agent or workflow, checked against the TOML.
+  defp forbidden(type, body) when type in ~w(work continue break wait delegate) do
+    keys = if type == "delegate", do: @forbidden -- ["agent"], else: @forbidden
+
+    case Enum.find(keys, &Map.has_key?(body, &1)) do
+      nil -> :ok
+      key -> {:error, {String.to_existing_atom(type), {:forbidden, key}}}
+    end
+  end
 
   defp forbidden(_type, _body), do: :ok
+
   defp valid_value?(_key, nil), do: true
   defp valid_value?("ids", ids), do: is_list(ids) and Enum.all?(ids, &is_binary/1)
+  defp valid_value?(key, value) when key in ~w(origins parts), do: is_map(value)
+  defp valid_value?("options", options), do: is_map(options)
+  defp valid_value?("works", works), do: is_list(works)
+  defp valid_value?("attachments", list), do: is_list(list) and Enum.all?(list, &is_map/1)
+
+  defp valid_value?("grant", grant),
+    do:
+      is_list(grant) and
+        Enum.all?(
+          grant,
+          &match?(%{"kind" => k, "name" => n} when is_binary(k) and is_binary(n), &1)
+        )
+
   defp valid_value?(_key, value), do: is_binary(value)
 end

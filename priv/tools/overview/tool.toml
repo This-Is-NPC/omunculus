@@ -1,0 +1,22 @@
+name = "overview"
+kind = "tool"
+triggers = ["cli", "model"]
+description = "Reads, as JSON, the project as it runs in each workspace. Without arguments, each depth's workflows with their stages and its agents, each named with its size in bytes; with agent, where that agent runs and, for each, its model, its key and its tools and skills classified by the ceiling there."
+tags = ["cli", "config"]
+groups = ["cli", "setup"]
+module = "Omunculus.Tools.Overview"
+
+[parameters]
+type = "object"
+
+[parameters.properties.agent]
+type = "string"
+description = "The agent to read in full."
+
+[parameters.properties.workspace]
+type = "string"
+description = "Only the place of this workspace."
+
+[parameters.properties.whole]
+type = "boolean"
+description = "Every agent in full at once, for a client; a real project's is longer than a call returns."

@@ -1,0 +1,40 @@
+name = "reopen"
+kind = "tool"
+triggers = ["model"]
+description = "Sends a work below yours that broke back to its agent, to another agent you name, or, when it goes through stages, to the stage you name — its own or an earlier one, from which it goes through the stages after again — with instructions on how to go on, granting it on that work what you list in grant, and ends the run."
+tags = ["sequence", "work"]
+groups = ["sequence"]
+module = "Omunculus.Tools.Reopen"
+chains = ["end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+required = ["work_id", "instructions"]
+
+[parameters.properties.work_id]
+type = "string"
+
+[parameters.properties.instructions]
+type = "string"
+
+[parameters.properties.agent]
+type = "string"
+
+[parameters.properties.stage]
+type = "string"
+description = "For a work that goes through stages: the stage that takes it back, its own or an earlier one."
+
+[parameters.properties.grant]
+type = "array"
+
+[parameters.properties.grant.items]
+type = "object"
+required = ["kind", "name"]
+
+[parameters.properties.grant.items.properties.kind]
+type = "string"
+enum = ["tool", "resource", "path", "directory"]
+
+[parameters.properties.grant.items.properties.name]
+type = "string"

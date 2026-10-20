@@ -1,0 +1,238 @@
+defmodule Omunculus.Tools.ConfigTest do
+  use ExUnit.Case, async: true
+
+  alias Omunculus.Fixtures
+  alias Omunculus.Tool.Catalog
+  alias Omunculus.Tools.Config
+
+  defp describe(path), do: read(path, %{"whole" => true})
+
+  defp read(path, args) do
+    assert %{"ok" => true, "output" => output, "emit" => []} =
+             Config.run(%{config_path: path, args: args})
+
+    Jason.decode!(output)
+  end
+
+  test "describes the default preset's agents, model and workflow" do
+    described = describe(Path.join(Fixtures.preset_dir("default"), "omunculus.toml"))
+
+    assert %{"depth" => 0, "model" => "fake"} =
+             Enum.find(described["agents"], &(&1["name"] == "concierge"))
+
+    assert %{"name" => "worker", "depth" => 1, "human" => ["sandbox.write"]} =
+             Enum.find(described["agents"], &(&1["name"] == "worker"))
+
+    assert [%{"name" => "fake", "api" => "module", "provider" => nil, "model" => nil}] =
+             described["models"]
+
+    assert described["workspaces"] == []
+    assert described["workspace"] == nil
+
+    assert [
+             %{
+               "name" => "delivery",
+               "steps" => [
+                 %{"name" => "to_do", "agent" => "worker"},
+                 %{"name" => "review", "agent" => "reviewer"}
+               ]
+             }
+           ] =
+             described["workflows"]
+  end
+
+  test "lists the workspaces with the default one, and keeps model secrets out of the setup" do
+    dir = Fixtures.tmp_dir()
+    root = Path.join(dir, "site")
+    File.mkdir_p!(root)
+
+    Fixtures.write_config(dir, """
+    [workspaces.site]
+    root = "#{root}"
+
+    [policy]
+    workspace = "site"
+    assemble = "assemble"
+    max_retries = 1
+
+    [auth]
+    store = "auth.json"
+
+    [auth.openrouter]
+    kind = "api_key"
+    key = "secret-key"
+
+    [models.remote]
+    api = "openai-completions"
+    provider = "openrouter"
+    url = "https://openrouter.ai/api/v1"
+    model = "openai/gpt-6-luna"
+    timeout_ms = 1000
+    headers = { authorization = "Bearer secret" }
+
+    [agents.concierge]
+    depth = 0
+    model = "remote"
+    text = "concierge"
+    """)
+
+    described = describe(Fixtures.config_path(dir))
+
+    assert described["root"] == dir
+    assert described["workspaces"] == [%{"name" => "site", "root" => root}]
+    assert described["workspace"] == "site"
+
+    assert [
+             %{
+               "name" => "remote",
+               "api" => "openai-completions",
+               "provider" => "openrouter",
+               "model" => "openai/gpt-6-luna"
+             }
+           ] =
+             described["models"]
+
+    refute described |> Map.drop(["document"]) |> Jason.encode!() =~ "secret"
+    refute Jason.encode!(described) =~ "secret-key"
+    assert described["literal_keys"] == ["openrouter"]
+  end
+
+  test "adds the tables an editor writes, the file's revision and the ceiling names" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    path = Fixtures.config_path(dir)
+    described = describe(path)
+
+    assert Map.keys(described["document"]) == ~w(agents auth models policy workflows)
+    assert described["literal_keys"] == []
+    assert described["document"]["agents"]["worker"]["human"] == ["sandbox.write"]
+
+    assert described["revision"] ==
+             :crypto.hash(:sha256, File.read!(path)) |> Base.encode16(case: :lower)
+
+    assert Enum.all?(~w(work done store sandbox.write), &(&1 in described["names"]))
+    refute "send" in described["names"]
+  end
+
+  test "without arguments, an index of each section's items and their sizes" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    path = Fixtures.config_path(dir)
+    index = read(path, %{})
+    whole = describe(path)
+
+    assert index["revision"] == whole["revision"]
+    assert index["root"] == dir
+    refute Map.has_key?(index, "agents")
+
+    assert %{
+             "agents" => %{"concierge" => concierge, "worker" => _, "reviewer" => _},
+             "workflows" => %{"delivery" => _},
+             "models" => %{"fake" => _},
+             "workspaces" => %{},
+             "policy" => policy,
+             "names" => names
+           } = index["sections"]
+
+    assert Enum.all?([concierge, policy, names], &(is_integer(&1) and &1 > 0))
+  end
+
+  test "a section whole, or one item with what the config runs and what the file writes" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.pack(dir)
+
+    path =
+      Fixtures.write_pack_config(
+        dir,
+        ~s([[packs]]\npath = "team"\nmodels = { lead = "fast" }\nauth = { vault = "mine" }\ndepth = 1\n)
+      )
+
+    revision = describe(path)["revision"]
+
+    assert %{"section" => "workflows", "revision" => ^revision, "items" => %{"line" => line}} =
+             read(path, %{"section" => "workflows"})
+
+    assert %{"pack" => "team", "file" => nil, "steps" => [_ | _]} = line
+
+    assert %{"item" => "agents.chief", "depth" => 1, "model" => "fast", "pack" => "team"} =
+             chief = read(path, %{"item" => "agents.chief"})
+
+    assert chief["file"] == nil
+    assert read(path, %{"section" => "agents", "item" => "chief"}) == chief
+
+    assert %{"item" => "auth.mine", "literal_key" => true, "file" => %{"kind" => "api_key"}} =
+             read(path, %{"item" => "auth.mine"})
+
+    assert %{"section" => "policy", "items" => %{"file" => %{"assemble" => "assemble"}}} =
+             read(path, %{"item" => "policy"})
+  end
+
+  test "an unknown section or item names the sections" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    path = Fixtures.config_path(dir)
+
+    for args <- [%{"section" => "ghosts"}, %{"item" => "agents.ghost"}] do
+      assert %{"ok" => false, "output" => output} = Config.run(%{config_path: path, args: args})
+      assert output =~ "the sections are agents, workflows, models"
+    end
+  end
+
+  test "fails without a config path" do
+    assert %{"ok" => false, "output" => "config_path required"} = Config.run(%{})
+  end
+
+  test "says which packs the project imports and what each brings" do
+    dir = Fixtures.tmp_dir()
+    pack = Fixtures.pack(dir)
+
+    path =
+      Fixtures.write_pack_config(
+        dir,
+        ~s([[packs]]\npath = "team"\nmodels = { lead = "fast" }\nauth = { vault = "mine" }\ndepth = 1\n)
+      )
+
+    output = Jason.encode!(describe(path))
+
+    assert [
+             %{
+               "name" => "team",
+               "path" => ^pack,
+               "depth" => 1,
+               "models" => %{"lead" => "fast"},
+               "agents" => ["chief", "hand"],
+               "workflows" => ["line"],
+               "files" => ["environment/up", "pack.toml", "workspace/AGENTS.md"]
+             }
+           ] = Jason.decode!(output)["packs"]
+
+    assert %{"text" => "chief", "image" => nil} =
+             Enum.find(Jason.decode!(output)["agents"], &(&1["name"] == "chief"))
+  end
+
+  test "gives each agent's image by its SHA-256" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    path = Fixtures.config_path(dir)
+    File.write!(Path.join(dir, "face.png"), "face")
+
+    File.write!(
+      path,
+      String.replace(
+        File.read!(path),
+        "[agents.concierge]\n",
+        "[agents.concierge]\nimage = \"face.png\"\n"
+      )
+    )
+
+    sha256 = :crypto.hash(:sha256, "face") |> Base.encode16(case: :lower)
+    agents = describe(path)["agents"]
+    assert %{"image" => ^sha256} = Enum.find(agents, &(&1["name"] == "concierge"))
+    assert %{"image" => nil} = Enum.find(agents, &(&1["name"] == "worker"))
+  end
+
+  test "the builtin catalog discovers config for the command line and models" do
+    assert %{"config" => manifest} = Catalog.unconfigured()
+    assert manifest.triggers == ["cli", "model"]
+  end
+end

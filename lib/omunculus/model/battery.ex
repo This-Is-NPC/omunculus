@@ -1,30 +1,35 @@
 defmodule Omunculus.Model.Battery do
   @moduledoc """
-  The bench model of spec §6, the "count to 5" scenario: decides only
+  The bench model, the "count to 5" scenario: decides only
   from what it can see in the assembled prompt — the cards under
-  `## Tools`, the presence of `## Work`, the text under `## Last
-  comment` and the agent's own first line — opening the work when there
-  is none, delegating when it can, counting to 5 with `counter`
-  otherwise, delegating one more floor down when it still cannot count
-  and has not already (marked by its own "delegated" comment, so a later
+  `## Tools`, the presence of `## Work` and `## Results`, the text under
+  `## Last comment` and the agent's own first line — opening the work with `work`
+  when there is none, counting to 5 with `counter` when it can,
+  delegating one floor down with `work` when it still cannot count and
+  has not already (marked by its own "delegated" report, so a later
   reopening of the same work does not delegate again), reviewing a
-  finished count on the next opening, and reacting as an observer when
-  addressed as one.
+  finished count or works that came back (`## Results`) on the next opening,
+  and reacting as an observer when addressed as one. It concludes a count
+  or a review with `done` when it has the card; without it, it comments a
+  count with `comment`.
   """
 
   @counted "counted to 5"
   @delegated "delegated"
+  @opened "opened"
+  @count_work %{"title" => "Count to 5", "goal" => "count with counter to 5"}
 
   @spec new(map) ::
-          (String.t(),
+          (Omunculus.Prompt.t(),
            [map],
            (String.t(), map -> {:ok, String.t()} | {:error, term}),
            (map -> :ok | {:error, term}),
+           (String.t() -> :ok),
            term ->
              {:ok, String.t()})
   def new(_spec) do
-    fn assembled, tools, call, record, _execution ->
-      with {:ok, text} <- assembled |> parse(tools) |> decide(call) do
+    fn prompt, tools, call, record, _delta, _execution ->
+      with {:ok, text} <- prompt |> Omunculus.Prompt.text() |> parse(tools) |> decide(call) do
         :ok = record.(text)
         {:ok, text}
       end
@@ -32,37 +37,31 @@ defmodule Omunculus.Model.Battery do
   end
 
   defp decide(%{work: false, cards: cards} = parsed, call) do
-    if MapSet.member?(cards, "work"), do: open_work(parsed, call), else: count(parsed, call)
+    if MapSet.member?(cards, "work"),
+      do: create_work(call, @opened),
+      else: count(parsed, call)
   end
 
   defp decide(parsed, call), do: count(parsed, call)
 
-  defp open_work(%{cards: cards} = parsed, call) do
-    call.("work", %{"title" => "Count to 5"})
-
-    if MapSet.member?(cards, "delegate") do
-      delegate_down(cards, call)
-    else
-      count(%{parsed | work: true}, call)
-    end
+  defp create_work(call, report) do
+    call.("work", %{"report" => report, "works" => [@count_work]})
+    {:ok, report}
   end
 
   defp count(%{cards: cards} = parsed, call) do
     if MapSet.member?(cards, "counter") do
       count_to_five(call, 5)
-      if MapSet.member?(cards, "comment"), do: call.("comment", %{"body" => @counted})
+
+      if MapSet.member?(cards, "comment") and not MapSet.member?(cards, "done"),
+        do: call.("comment", %{"body" => @counted})
+
       if MapSet.member?(cards, "notify"), do: call.("notify", %{"body" => "reached 5"})
-      if MapSet.member?(cards, "continue"), do: call.("continue", %{})
+      if MapSet.member?(cards, "done"), do: call.("done", %{"report" => @counted})
       {:ok, @counted}
     else
       review(parsed, call)
     end
-  end
-
-  defp delegate_down(cards, call) do
-    if MapSet.member?(cards, "comment"), do: call.("comment", %{"body" => @delegated})
-    call.("delegate", %{"title" => "Count to 5", "body" => "count with counter to 5"})
-    {:ok, @delegated}
   end
 
   defp count_to_five(_call, 0), do: :ok
@@ -74,14 +73,14 @@ defmodule Omunculus.Model.Battery do
     end
   end
 
-  defp review(%{last_comment: comment, cards: cards} = parsed, call) do
+  defp review(%{last_comment: comment, cards: cards, results: results} = parsed, call) do
     cond do
-      reviewable?(comment, cards) ->
-        call.("continue", %{})
+      reviewable?(comment, cards) or (results and MapSet.member?(cards, "done")) ->
+        call.("done", %{"report" => "reviewed"})
         {:ok, "reviewed"}
 
-      MapSet.member?(cards, "delegate") and not delegated?(comment) ->
-        delegate_down(cards, call)
+      MapSet.member?(cards, "work") and not delegated?(comment) ->
+        create_work(call, @delegated)
 
       true ->
         observe(parsed, call)
@@ -90,8 +89,9 @@ defmodule Omunculus.Model.Battery do
 
   defp reviewable?(comment, cards),
     do:
-      is_binary(comment) and String.contains?(comment, @counted) and
-        MapSet.member?(cards, "continue")
+      is_binary(comment) and
+        (String.contains?(comment, @counted) or String.contains?(comment, @delegated)) and
+        MapSet.member?(cards, "done")
 
   defp delegated?(comment), do: is_binary(comment) and String.contains?(comment, @delegated)
 
@@ -107,7 +107,8 @@ defmodule Omunculus.Model.Battery do
   defp parse(assembled, tools) do
     %{
       cards: MapSet.new(tools, & &1.name),
-      work: String.contains?(assembled, "## Work"),
+      work: String.contains?(assembled, "## Work\n"),
+      results: String.contains?(assembled, "## Results"),
       last_comment: last_comment(assembled),
       agent_line: assembled |> String.split("\n", parts: 2) |> List.first() || ""
     }

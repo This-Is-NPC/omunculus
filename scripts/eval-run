@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+
+# The providers' keys come from .env, as the dev server's do.
+if [[ -f .env ]]; then
+  set -a
+  source .env
+  set +a
+fi
+exec mix run eval/run.exs run "$@"

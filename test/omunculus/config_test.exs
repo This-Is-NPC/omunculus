@@ -3,18 +3,38 @@ defmodule Omunculus.ConfigTest do
 
   alias Omunculus.Config
   alias Omunculus.Config.Layer
-  alias Omunculus.{Fixtures, Id, Project}
+  alias Omunculus.{Fixtures, Project}
   alias Omunculus.Store.Query
 
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
     %{dir: dir}
   end
 
   defp write_toml(dir, contents) do
     Fixtures.write_config(dir, contents)
+  end
+
+  # An anthropic-messages model needs its max_tokens, unless the line sets the body.
+  defp write_http_model(dir, api, line) do
+    body =
+      if api == "anthropic-messages" and not String.starts_with?(line, "body"),
+        do: "body = { max_tokens = 1024 }"
+
+    write_toml(dir, """
+    [models.local]
+    api = "#{api}"
+    url = "http://localhost:8080/v1"
+    model = "local"
+    timeout_ms = 120000
+    #{line}
+    #{body}
+
+    [agents.concierge]
+    depth = 0
+    model = "local"
+    text = "hi"
+    """)
   end
 
   defp toml(dir), do: Path.join(dir, "omunculus.toml")
@@ -52,7 +72,33 @@ defmodule Omunculus.ConfigTest do
 
     assert %{"worker" => %{depth: 1}} = agents
     assert %{"delivery" => [%{name: "to_do"}, %{name: "review"}]} = workflows
-    assert Config.workflow_for(config, 0) == :off
+    assert Config.workflows_for(config, 1) == []
+    assert Config.workflows_at(config, 1) == ["delivery"]
+  end
+
+  test "request routes are required, validated once and retained on Config", %{dir: dir} do
+    agents = "[agents.concierge]\ndepth = 0\ntext = \"root\"\n"
+    Fixtures.write_config(dir, agents, request_routes: false)
+    assert {:error, {:policy, {:required, :request_routes}}} = load(dir)
+
+    for routes <- [
+          "[]",
+          "42",
+          "[{ via = [] }]",
+          "[{ via = [\"person\"] }]",
+          "[{ via = [{ kind = \"agent\", agent = \"absent\" }] }]",
+          "[{ workflow = \"absent\", via = [\"origin\"] }]"
+        ] do
+      Fixtures.write_config(dir, agents <> "\n[policy]\nrequest_routes = #{routes}\n")
+      assert {:error, {:policy, {:invalid, :request_routes}}} = load(dir)
+    end
+
+    Fixtures.write_config(
+      dir,
+      agents <> "\n[policy]\nrequest_routes = [{ via = [\"parent\", \"origin\"] }]\n"
+    )
+
+    assert {:ok, %{request_routes: [%{"via" => ["parent", "origin"]}]}} = load(dir)
   end
 
   test "the default preset names assemble on policy" do
@@ -74,6 +120,197 @@ defmodule Omunculus.ConfigTest do
     assert agents["concierge"].assemble == "other"
   end
 
+  test "[policy] max_retries is required and a non-negative integer", %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """
+
+    Fixtures.write_config(dir, agents, max_retries: false)
+    assert {:error, {:policy, {:invalid, :max_retries}}} = load(dir)
+
+    for invalid <- ["-1", "1.5", ~s("2")] do
+      write_toml(dir, agents <> "\n[policy]\nmax_retries = #{invalid}\n")
+      assert {:error, {:policy, {:invalid, :max_retries}}} = load(dir)
+    end
+
+    write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\n")
+    assert {:ok, %Config{max_retries: 0}} = load(dir)
+  end
+
+  test "[policy] max_reopens is optional, a non-negative integer", %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """
+
+    Fixtures.write_config(dir, agents)
+    assert {:ok, %Config{max_reopens: nil}} = load(dir)
+
+    for invalid <- ["-1", "1.5", ~s("2")] do
+      write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\nmax_reopens = #{invalid}\n")
+      assert {:error, {:policy, {:invalid, :max_reopens}}} = load(dir)
+    end
+
+    Fixtures.write_config(dir, agents <> "\n[policy]\nmax_reopens = 2\n")
+    assert {:ok, %Config{max_reopens: 2}} = load(dir)
+  end
+
+  test "[policy] last_run_output_bytes and tool_output_bytes are optional positive integers",
+       %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """
+
+    write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\n")
+    assert {:ok, %Config{last_run_output_bytes: nil, tool_output_bytes: nil}} = load(dir)
+
+    for key <- [:last_run_output_bytes, :tool_output_bytes] do
+      for invalid <- ["0", "-1", "1.5", ~s("2")] do
+        write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\n#{key} = #{invalid}\n")
+        assert {:error, {:policy, {:invalid, ^key}}} = load(dir)
+      end
+
+      write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\n#{key} = 4096\n")
+      assert {:ok, config} = load(dir)
+      assert Map.fetch!(config, key) == 4096
+    end
+  end
+
+  test "[policy] send_catalog is an optional boolean", %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """
+
+    write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\n")
+    assert {:ok, %Config{send_catalog: false}} = load(dir)
+
+    write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\nsend_catalog = true\n")
+    assert {:ok, %Config{send_catalog: true}} = load(dir)
+
+    write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\nsend_catalog = \"yes\"\n")
+    assert {:error, {:policy, {:invalid, :send_catalog}}} = load(dir)
+  end
+
+  test "[policy] session_ttl_ms and session_max_bytes go together", %{dir: dir} do
+    agents = """
+    [agents.concierge]
+    depth = 0
+    text = "hi"
+    """
+
+    policy = fn lines -> write_toml(dir, agents <> "\n[policy]\nmax_retries = 0\n" <> lines) end
+
+    policy.("")
+    assert {:ok, %Config{session_ttl_ms: nil, session_max_bytes: nil}} = load(dir)
+
+    policy.("session_ttl_ms = 300000\nsession_max_bytes = 200000\n")
+    assert {:ok, %Config{session_ttl_ms: 300_000, session_max_bytes: 200_000}} = load(dir)
+
+    policy.("session_ttl_ms = 300000\n")
+    assert {:error, {:policy, {:invalid, :session}}} = load(dir)
+
+    policy.("session_ttl_ms = 0\nsession_max_bytes = 200000\n")
+    assert {:error, {:policy, {:invalid, :session_ttl_ms}}} = load(dir)
+  end
+
+  test "the default preset leaves the network to the person, never to the concierge" do
+    assert {:ok, %Config{agents: agents}} = Config.load(default_preset())
+    assert "sandbox.network" in agents["concierge"].ceiling.human
+  end
+
+  test "an HTTP model takes optional retries, a non-negative integer", %{dir: dir} do
+    model = fn retries ->
+      """
+      [models.m]
+      api = "openai-completions"
+      url = "http://localhost/v1"
+      model = "x"
+      timeout_ms = 1000
+      #{retries}
+
+      [agents.concierge]
+      depth = 0
+      model = "m"
+      text = "hi"
+
+      [policy]
+      max_retries = 0
+      """
+    end
+
+    write_toml(dir, model.("retries = 3"))
+    assert {:ok, %Config{models: %{"m" => %{input: %{"retries" => 3}}}}} = load(dir)
+
+    write_toml(dir, model.("retries = -1"))
+    assert {:error, {:models, "m", {:invalid, :retries}}} = load(dir)
+  end
+
+  test "a command may see the host, kept from what deny_read names", %{dir: dir} do
+    load_with = fn keys ->
+      write_toml(dir, "[agents.concierge]\ndepth = 0\ntext = \"hi\"\n")
+      {:ok, data} = Toml.decode_file(toml(dir))
+
+      File.write!(
+        toml(dir),
+        Config.Toml.encode(update_in(data, ["execution"], &Map.merge(&1, keys)))
+      )
+
+      load(dir)
+    end
+
+    assert {:ok, config} =
+             load_with.(%{"host" => true, "deny_read" => ["~/.ssh"], "write" => ["/srv/data"]})
+
+    assert config.execution.host
+    assert config.execution.deny_read == [Path.expand("~/.ssh")]
+    assert config.execution.write == ["/srv/data"]
+
+    assert {:ok, %{execution: %{host: false, deny_read: [], write: []}}} = load_with.(%{})
+    assert {:error, {:execution, {:invalid, :host}}} = load_with.(%{"host" => "yes"})
+
+    assert {:error, {:execution, {:invalid, :deny_read}}} =
+             load_with.(%{"deny_read" => ["relative"]})
+  end
+
+  test "an HTTP model offers code mode only with code_mode = true", %{dir: dir} do
+    model = fn line ->
+      """
+      [models.m]
+      api = "anthropic-messages"
+      url = "http://localhost/v1"
+      model = "x"
+      timeout_ms = 1000
+      body = { max_tokens = 1024 }
+      #{line}
+
+      [agents.concierge]
+      depth = 0
+      model = "m"
+      text = "hi"
+
+      [policy]
+      max_retries = 0
+      """
+    end
+
+    write_toml(dir, model.("code_mode = true"))
+    assert {:ok, %Config{models: %{"m" => %{input: %{"code_mode" => true}}}}} = load(dir)
+
+    write_toml(dir, model.(""))
+    assert {:ok, %Config{models: %{"m" => %{input: input}}}} = load(dir)
+    refute Map.has_key?(input, "code_mode")
+
+    write_toml(dir, model.(~s(code_mode = "yes")))
+    assert {:error, {:models, "m", {:invalid, :code_mode}}} = load(dir)
+  end
+
   test "pinned is a layer list and is absent on the default preset" do
     assert {:ok, %Config{policy: policy, agents: agents}} = Config.load(default_preset())
     assert policy.pinned == []
@@ -93,30 +330,41 @@ defmodule Omunculus.ConfigTest do
     assert agent.ceiling.pinned == ["store"]
   end
 
-  test "the default preset's reviewer is workflow_only with the §9.1 ceiling" do
+  test "the default preset's reviewer is workflow_only, with the skills to check against" do
     assert {:ok, %Config{agents: agents}} = Config.load(default_preset())
 
     assert %{"reviewer" => %{depth: 1, workflow_only: true, ceiling: ceiling}} = agents
-    assert ceiling.granted == ["break", "comment", "continue", "fs.read", "notify"]
+
+    assert ceiling.granted == [
+             "ask",
+             "break",
+             "comment",
+             "continue",
+             "done",
+             "end",
+             "fs.read",
+             "notify",
+             "skills"
+           ]
   end
 
-  test "the default preset's worker asks for sandbox.write" do
+  test "the default preset's worker asks the person for sandbox.write" do
     assert {:ok, %Config{agents: agents}} = Config.load(default_preset())
 
     assert %{"worker" => %{ceiling: ceiling}} = agents
-    assert "request_sandbox" in ceiling.granted
+    assert "request_access" in ceiling.granted
     refute "sandbox.write" in ceiling.granted
-    assert ceiling.negotiable == ["sandbox.write"]
+    assert ceiling.human == ["sandbox.write"]
   end
 
-  test "codex-like and pi-like presets keep sandbox.write negotiable" do
+  test "codex-like and pi-like presets leave sandbox.write to the person" do
     for {preset, agent} <- [{"codex-like", "codex"}, {"pi-like", "pi"}] do
       path = Application.app_dir(:omunculus, "priv/presets/#{preset}/omunculus.toml")
       assert {:ok, %Config{agents: agents}} = Config.load(path)
       ceiling = agents[agent].ceiling
-      assert "request_sandbox" in ceiling.granted
+      assert "request_access" in ceiling.granted
       refute "sandbox.write" in ceiling.granted
-      assert "sandbox.write" in ceiling.negotiable
+      assert "sandbox.write" in ceiling.human
     end
   end
 
@@ -306,6 +554,26 @@ defmodule Omunculus.ConfigTest do
     """)
 
     assert {:ok, %Config{agents: %{"concierge" => %{text: ""}}}} = load(dir)
+  end
+
+  test "an agent's image is a picture file relative to the config's directory", %{dir: dir} do
+    File.write!(Path.join(dir, "face.webp"), "image")
+    File.write!(Path.join(dir, "notes.txt"), "text")
+
+    agent = fn image -> "[agents.concierge]\ndepth = 0\ntext = \"hi\"\n" <> image end
+
+    write_toml(dir, agent.(""))
+    assert {:ok, %Config{agents: %{"concierge" => %{image: nil}}}} = load(dir)
+
+    write_toml(dir, agent.(~s(image = "face.webp"\n)))
+    face = Path.join(dir, "face.webp")
+    assert {:ok, %Config{agents: %{"concierge" => %{image: ^face}}}} = load(dir)
+
+    write_toml(dir, agent.(~s(image = "notes.txt"\n)))
+    assert {:error, {:agent, "concierge", {:invalid, :image}}} = load(dir)
+
+    write_toml(dir, agent.(~s(image = "gone.png"\n)))
+    assert {:error, {:agent, "concierge", {:missing_image, "gone.png"}}} = load(dir)
   end
 
   test "workflow_only defaults to false", %{dir: dir} do
@@ -756,9 +1024,12 @@ defmodule Omunculus.ConfigTest do
     assert {:error, {:policy, :no_default_workspace}} = load(dir)
   end
 
-  test "agent_at_depth found" do
+  test "agent_at_depth finds the only agent of a depth and asks for a name among several" do
     {:ok, config} = Config.load(default_preset())
-    assert {:ok, {"concierge", %{depth: 0}}} = Config.agent_at_depth(config, 0)
+    assert {:ok, {"worker", %{depth: 1}}} = Config.agent_at_depth(config, 1)
+
+    assert {:error, {:agent_required, 0, ["auditor", "concierge", "refiner", "steward"]}} =
+             Config.agent_at_depth(config, 0)
   end
 
   test "agent_at_depth not found" do
@@ -785,6 +1056,29 @@ defmodule Omunculus.ConfigTest do
     assert File.read!(Path.join(dir, "omunculus.toml")) =~ ~s(tools = ["counter", "write"])
     assert {:ok, %Config{agents: %{"worker" => agent}}} = load(dir)
     assert agent.ceiling.granted == ["counter", "write"]
+  end
+
+  test "concurrent grants to one file all land, and concurrent loads read a whole file",
+       %{dir: dir} do
+    write_toml(dir, """
+    [agents.worker]
+    depth = 1
+    tools = ["counter"]
+    text = "work"
+    """)
+
+    names = Enum.map(1..10, &"tool#{&1}")
+
+    grants =
+      Enum.map(names, fn name -> Task.async(fn -> grant(dir, {:agent, "worker"}, name) end) end)
+
+    loads = Enum.map(names, fn _ -> Task.async(fn -> load(dir) end) end)
+
+    assert Enum.uniq(Task.await_many(grants)) == [:ok]
+    assert Enum.all?(Task.await_many(loads), &match?({:ok, %Config{}}, &1))
+
+    assert {:ok, %Config{agents: %{"worker" => agent}}} = load(dir)
+    assert Enum.sort(agent.ceiling.granted) == Enum.sort(["counter" | names])
   end
 
   test "grant creates the depth layer when absent", %{dir: dir} do
@@ -1058,7 +1352,7 @@ defmodule Omunculus.ConfigTest do
         workers_toml() <>
           """
           [policy]
-          workflow = "ghost"
+          workflows = ["ghost"]
           """
       )
 
@@ -1071,14 +1365,14 @@ defmodule Omunculus.ConfigTest do
         workers_toml() <>
           """
           [policy.depth.1]
-          workflow = "ghost"
+          workflows = ["ghost"]
           """
       )
 
       assert {:error, {:policy, {:depth, 1, {:unknown_workflow, "ghost"}}}} = load(dir)
     end
 
-    test "policy workflow names the default workflow", %{dir: dir} do
+    test "policy workflows are required at every depth", %{dir: dir} do
       write_toml(
         dir,
         workers_toml() <>
@@ -1090,16 +1384,16 @@ defmodule Omunculus.ConfigTest do
           ]
 
           [policy]
-          workflow = "delivery"
+          workflows = ["delivery"]
           """
       )
 
       assert {:ok, config} = load(dir)
-      assert {:ok, [%{name: "to_do"}, %{name: "review"}]} = Config.workflow_for(config, 0)
-      assert {:ok, [%{name: "to_do"}, %{name: "review"}]} = Config.workflow_for(config, 1)
+      assert Config.workflows_for(config, 0) == ["delivery"]
+      assert Config.workflows_at(config, 1) == ["delivery"]
     end
 
-    test "a depth workflow overrides the policy workflow at that depth", %{dir: dir} do
+    test "a depth's workflows override the policy's at that depth", %{dir: dir} do
       write_toml(
         dir,
         workers_toml() <>
@@ -1111,30 +1405,58 @@ defmodule Omunculus.ConfigTest do
           steps = [{ name = "only", agent = "reviewer" }]
 
           [policy]
-          workflow = "delivery"
+          workflows = ["delivery"]
 
           [policy.depth.1]
-          workflow = "solo"
+          workflows = ["solo"]
           """
       )
 
       assert {:ok, config} = load(dir)
-      assert {:ok, [%{name: "to_do"}]} = Config.workflow_for(config, 0)
-      assert {:ok, [%{name: "only"}]} = Config.workflow_for(config, 1)
+      assert Config.workflows_for(config, 0) == ["delivery"]
+      assert Config.workflows_for(config, 1) == ["solo"]
     end
 
-    test "no policy workflow and no depth workflow is off", %{dir: dir} do
+    test "where none is required, a depth offers the workflows whose stage agents are of it",
+         %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [agents.lead]
+          depth = 0
+          text = "lead"
+
+          [workflows.delivery]
+          steps = [{ name = "to_do", agent = "worker" }]
+
+          [workflows.mixed]
+          steps = [{ name = "plan", agent = "lead" }, { name = "do", agent = "worker" }]
+          """
+      )
+
+      assert {:ok, config} = load(dir)
+      assert Config.workflows_for(config, 1) == []
+      assert Config.workflows_at(config, 1) == ["delivery"]
+      assert Config.workflows_at(config, 0) == []
+      assert Config.workflow(config, nil) == :off
+      assert Config.workflow(config, "ghost") == {:error, {:unknown_workflow, "ghost"}}
+    end
+
+    test "a depth's workflows are a list", %{dir: dir} do
       write_toml(
         dir,
         workers_toml() <>
           """
           [workflows.delivery]
           steps = [{ name = "to_do", agent = "worker" }]
+
+          [policy.depth.1]
+          workflows = "delivery"
           """
       )
 
-      assert {:ok, config} = load(dir)
-      assert Config.workflow_for(config, 0) == :off
+      assert {:error, {:policy, {:depth, 1, {:invalid, :workflows}}}} = load(dir)
     end
 
     test "step_at finds a step by stage name", %{dir: dir} do
@@ -1149,12 +1471,12 @@ defmodule Omunculus.ConfigTest do
           ]
 
           [policy]
-          workflow = "delivery"
+          workflows = ["delivery"]
           """
       )
 
       assert {:ok, config} = load(dir)
-      assert {:ok, steps} = Config.workflow_for(config, 0)
+      assert {:ok, steps} = Config.workflow(config, "delivery")
       assert {:ok, %{name: "review", agent: "reviewer"}} = Config.step_at(steps, "review")
     end
 
@@ -1167,12 +1489,12 @@ defmodule Omunculus.ConfigTest do
           steps = [{ name = "to_do", agent = "worker" }]
 
           [policy]
-          workflow = "delivery"
+          workflows = ["delivery"]
           """
       )
 
       assert {:ok, config} = load(dir)
-      assert {:ok, steps} = Config.workflow_for(config, 0)
+      assert {:ok, steps} = Config.workflow(config, "delivery")
       assert {:error, :off_sequence} = Config.step_at(steps, "ghost")
     end
 
@@ -1188,12 +1510,12 @@ defmodule Omunculus.ConfigTest do
           ]
 
           [policy]
-          workflow = "delivery"
+          workflows = ["delivery"]
           """
       )
 
       assert {:ok, config} = load(dir)
-      assert {:ok, steps} = Config.workflow_for(config, 0)
+      assert {:ok, steps} = Config.workflow(config, "delivery")
       assert {:ok, %{name: "review"}} = Config.next_step(steps, "to_do")
     end
 
@@ -1209,12 +1531,12 @@ defmodule Omunculus.ConfigTest do
           ]
 
           [policy]
-          workflow = "delivery"
+          workflows = ["delivery"]
           """
       )
 
       assert {:ok, config} = load(dir)
-      assert {:ok, steps} = Config.workflow_for(config, 0)
+      assert {:ok, steps} = Config.workflow(config, "delivery")
       assert {:ok, nil} = Config.next_step(steps, "review")
     end
 
@@ -1227,12 +1549,12 @@ defmodule Omunculus.ConfigTest do
           steps = [{ name = "to_do", agent = "worker" }]
 
           [policy]
-          workflow = "delivery"
+          workflows = ["delivery"]
           """
       )
 
       assert {:ok, config} = load(dir)
-      assert {:ok, steps} = Config.workflow_for(config, 0)
+      assert {:ok, steps} = Config.workflow(config, "delivery")
       assert {:error, :off_sequence} = Config.next_step(steps, "ghost")
     end
   end
@@ -1260,7 +1582,8 @@ defmodule Omunculus.ConfigTest do
                %{
                  name: "github",
                  command: ["npx", "-y", "@modelcontextprotocol/server-github"],
-                 protocol_version: "2025-03-26"
+                 protocol_version: "2025-03-26",
+                 secrets: %{}
                }
              ]
     end
@@ -1407,6 +1730,10 @@ defmodule Omunculus.ConfigTest do
       #{execution()}
       [store]
       path = ".omunculus/store.sqlite3"
+
+      [policy]
+      max_retries = 0
+      request_routes = [{ via = ["parent", "origin"] }]
 
       [models.fake]
       api = "module"
@@ -1598,6 +1925,58 @@ defmodule Omunculus.ConfigTest do
 
       assert {:error, {:models, "local", {:invalid, :timeout_ms}}} = load(dir)
     end
+
+    test "stream is an optional boolean of the HTTP adapters", %{dir: dir} do
+      write_http_model(dir, "anthropic-messages", "stream = true")
+      assert {:ok, config} = load(dir)
+      assert config.models["local"].input["stream"] == true
+
+      write_http_model(dir, "anthropic-messages", "stream = \"yes\"")
+      assert {:error, {:models, "local", {:invalid, :stream}}} = load(dir)
+    end
+
+    test "prompt_cache_key is an optional string of the OpenAI adapters", %{dir: dir} do
+      for api <- ["openai-completions", "openai-responses"] do
+        write_http_model(dir, api, "prompt_cache_key = \"worker\"")
+        assert {:ok, config} = load(dir)
+        assert config.models["local"].input["prompt_cache_key"] == "worker"
+
+        write_http_model(dir, api, "prompt_cache_key = \"\"")
+        assert {:error, {:models, "local", {:invalid, :prompt_cache_key}}} = load(dir)
+      end
+
+      write_http_model(dir, "anthropic-messages", "prompt_cache_key = \"worker\"")
+      assert {:error, {:models, "local", {:unknown_key, "prompt_cache_key"}}} = load(dir)
+    end
+
+    test "body is an optional table of the HTTP adapters", %{dir: dir} do
+      for api <- ["openai-completions", "openai-responses"] do
+        write_http_model(dir, api, "body = { reasoning = { effort = \"high\" } }")
+        assert {:ok, config} = load(dir)
+        assert config.models["local"].input["body"] == %{"reasoning" => %{"effort" => "high"}}
+
+        write_http_model(dir, api, "body = \"high\"")
+        assert {:error, {:models, "local", {:invalid, :body}}} = load(dir)
+      end
+    end
+
+    test "an anthropic-messages model sets the most tokens a reply takes in its body", %{
+      dir: dir
+    } do
+      write_http_model(
+        dir,
+        "anthropic-messages",
+        "body = { max_tokens = 32000, thinking = { type = \"adaptive\" } }"
+      )
+
+      assert {:ok, config} = load(dir)
+      assert config.models["local"].input["body"]["max_tokens"] == 32000
+
+      for line <- ["body = { thinking = { type = \"adaptive\" } }", "body = { max_tokens = 0 }"] do
+        write_http_model(dir, "anthropic-messages", line)
+        assert {:error, {:models, "local", {:invalid, :max_tokens}}} = load(dir)
+      end
+    end
   end
 
   describe "store" do
@@ -1634,6 +2013,67 @@ defmodule Omunculus.ConfigTest do
 
       assert {:ok, config} = load(dir)
       assert config.store.path == Path.join(dir, "data/alt.sqlite3")
+      assert config.store.changes == nil
+    end
+
+    test "changes, when given, is resolved against the config file", %{dir: dir} do
+      store = fn changes ->
+        write_toml(dir, """
+        [store]
+        path = "data/alt.sqlite3"
+        changes = #{changes}
+
+        [models.fake]
+        api = "module"
+        module = "Omunculus.Model.Fake"
+
+        [agents.concierge]
+        depth = 0
+        model = "fake"
+        text = "hi"
+        """)
+
+        load(dir)
+      end
+
+      assert {:ok, config} = store.(~s("data/changes"))
+      assert config.store.changes == Path.join(dir, "data/changes")
+      assert {:error, {:store, {:invalid, :changes}}} = store.(~s(""))
+      assert {:error, {:store, {:invalid, :changes}}} = store.("true")
+    end
+
+    test "attachments come with attachment_bytes, resolved against the config file", %{dir: dir} do
+      store = fn keys ->
+        write_toml(dir, """
+        [store]
+        path = "data/alt.sqlite3"
+        #{keys}
+
+        [models.fake]
+        api = "module"
+        module = "Omunculus.Model.Fake"
+
+        [agents.concierge]
+        depth = 0
+        model = "fake"
+        text = "hi"
+        """)
+
+        load(dir)
+      end
+
+      assert {:ok, config} = store.(~s(attachments = "data/files"\nattachment_bytes = 1024))
+      assert config.store.attachments == Path.join(dir, "data/files")
+      assert config.store.attachment_bytes == 1024
+      assert {:ok, %{store: %{attachments: nil, attachment_bytes: nil}}} = store.("")
+
+      assert {:error, {:store, {:required, :attachment_bytes}}} =
+               store.(~s(attachments = "data/files"))
+
+      assert {:error, {:store, {:required, :attachments}}} = store.("attachment_bytes = 1024")
+
+      assert {:error, {:store, {:invalid, :attachment_bytes}}} =
+               store.(~s(attachments = "data/files"\nattachment_bytes = 0))
     end
 
     test "two configs in one directory can use different stores", %{dir: dir} do
@@ -1935,6 +2375,37 @@ defmodule Omunculus.ConfigTest do
   end
 
   describe "workspace config file" do
+    test "max_retries from the inline section and from the file override policy", %{dir: dir} do
+      File.mkdir_p!(Path.join(dir, "app"))
+      File.mkdir_p!(Path.join(dir, "lib"))
+      File.write!(Path.join([dir, "lib", "omunculus.toml"]), "[policy]\nmax_retries = 5\n")
+
+      write_toml(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [policy]
+      workspace = "app"
+      max_retries = 1
+
+      [workspaces.app]
+      root = "app"
+
+      [workspaces.app.policy]
+      max_retries = 3
+
+      [workspaces.lib]
+      root = "lib"
+      config = "omunculus.toml"
+      """)
+
+      assert {:ok, config} = load(dir)
+      assert config.max_retries == 1
+      assert {:ok, %Config{max_retries: 3}} = Config.for_workspace(config, "app")
+      assert {:ok, %Config{max_retries: 5}} = Config.for_workspace(config, "lib")
+    end
+
     test "file wins over inline timeout", %{dir: dir} do
       workspace_root = Path.join(dir, "app")
       File.mkdir_p!(workspace_root)
@@ -2171,18 +2642,115 @@ defmodule Omunculus.ConfigTest do
       assert File.read!(toml(dir)) =~ ~s(granted = ["write"])
     end
   end
+
+  describe "overrides" do
+    test "every layer reads its overrides; a workflow's fold into its steps", %{dir: dir} do
+      File.mkdir_p!(Path.join(dir, "app"))
+
+      File.write!(Path.join(dir, "app/omunculus.toml"), """
+      [policy.overrides.done]
+      schema = "short"
+      """)
+
+      write_toml(dir, """
+      [policy]
+      workspace = "app"
+
+      [policy.overrides.done]
+      then = []
+
+      [policy.depth.1.overrides.done]
+      chains = ["end"]
+
+      [workspaces.app]
+      root = "app"
+      config = "omunculus.toml"
+
+      [workspaces.app.overrides.done]
+      then = ["end"]
+
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+
+      [agents.concierge.overrides.done]
+      chains = ["comment", "end"]
+
+      [workflows.delivery]
+      steps = [
+        { name = "to_do", agent = "concierge", overrides = { done = { then = ["comment"] } } },
+        { name = "review", agent = "concierge" },
+      ]
+
+      [workflows.delivery.overrides.done]
+      schema = "full"
+      chains = ["comment"]
+      """)
+
+      assert {:ok, config} = load(dir)
+      assert config.policy.overrides == %{"done" => %{"then" => []}}
+      assert config.depths[1].overrides == %{"done" => %{"chains" => ["end"]}}
+
+      assert config.workspaces["app"].ceiling.overrides == %{
+               "done" => %{"then" => ["end"], "schema" => "short"}
+             }
+
+      assert config.agents["concierge"].ceiling.overrides == %{
+               "done" => %{"chains" => ["comment", "end"]}
+             }
+
+      assert %{"delivery" => [to_do, review]} = config.workflows
+
+      assert to_do.ceiling.overrides == %{
+               "done" => %{"schema" => "full", "chains" => ["comment"], "then" => ["comment"]}
+             }
+
+      assert review.ceiling.overrides == %{
+               "done" => %{"schema" => "full", "chains" => ["comment"]}
+             }
+    end
+
+    for {layer, toml, reason} <- [
+          {"policy", "[policy.overrides.done]\nstage = \"x\"",
+           {:policy, {:overrides, "done", {:unknown_key, "stage"}}}},
+          {"depth", "[policy.depth.1.overrides.done]\nstage = \"x\"",
+           {:policy, {:depth, 1, {:overrides, "done", {:unknown_key, "stage"}}}}},
+          {"agent", "[agents.concierge.overrides.done]\nstage = \"x\"",
+           {:agent, "concierge", {:overrides, "done", {:unknown_key, "stage"}}}},
+          {"workflow",
+           "[workflows.delivery]\nsteps = [{ name = \"a\", agent = \"concierge\" }]\n[workflows.delivery.overrides.done]\nstage = \"x\"",
+           {:workflow, "delivery", {:overrides, "done", {:unknown_key, "stage"}}}},
+          {"step",
+           "[workflows.delivery]\nsteps = [{ name = \"a\", agent = \"concierge\", overrides = { done = { stage = \"x\" } } }]",
+           {:workflow, "delivery", {:overrides, "done", {:unknown_key, "stage"}}}},
+          {"policy then", "[policy.overrides.done]\nthen = \"end\"",
+           {:policy, {:overrides, "done", {:invalid, :then}}}},
+          {"policy schema", "[policy.overrides.done]\nschema = []",
+           {:policy, {:overrides, "done", {:invalid, :schema}}}}
+        ] do
+      test "an invalid override on the #{layer} layer fails the load", %{dir: dir} do
+        write_toml(dir, """
+        [agents.concierge]
+        depth = 0
+        text = "hi"
+
+        #{unquote(toml)}
+        """)
+
+        assert load(dir) == {:error, unquote(Macro.escape(reason))}
+      end
+    end
+  end
 end
 
 defmodule Omunculus.ConfigAuthTest do
   use ExUnit.Case, async: true
 
   alias Omunculus.Config
-  alias Omunculus.{Fixtures, Id}
+  alias Omunculus.Fixtures
 
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
     %{dir: dir}
   end
 
@@ -2326,6 +2894,7 @@ defmodule Omunculus.ConfigAuthTest do
     url = "http://localhost:8080/v1"
     model = "claude"
     timeout_ms = 120000
+    body = { max_tokens = 1024 }
 
     [agents.concierge]
     depth = 0

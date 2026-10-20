@@ -1,9 +1,15 @@
 defmodule Omunculus.Tool.Invoke do
   @moduledoc """
-  Runs a tool or hook's contract per spec §8.1 and §8.7: JSON `in` on
+  Runs a tool or hook's contract: JSON `in` on
   stdin, JSON `out` on stdout for a `command`; a `tools/call` to the MCP
   server for a manifest with `mcp` set. Either way the result goes through
-  the same `validate/1`.
+  the same `validate/1`. The optional `chain` of `out` is a list of
+  `{name, args}` steps; `args` defaults to an empty map. The optional
+  `instructions` of `out`, empty by default, is the part of a prompt the
+  tool assembles that stays the same from run to run, and its optional
+  `session` the session the run continues (`Omunculus.Tools.Session`).
+  An `output` that is not valid UTF-8 has its invalid bytes replaced, so
+  what a tool printed can always be recorded and sent to a model.
   """
 
   alias Omunculus.Execution
@@ -12,22 +18,37 @@ defmodule Omunculus.Tool.Invoke do
   alias Omunculus.Path, as: FilesystemPath
   alias Omunculus.Tool.Manifest
 
-  @spec call(Manifest.t(), map) ::
-          {:ok, %{ok: boolean, output: String.t(), emit: [map]}} | {:error, term}
+  @type out :: %{
+          ok: boolean,
+          output: String.t(),
+          emit: [map],
+          chain: [%{name: String.t(), args: map}],
+          instructions: String.t(),
+          session: map | nil
+        }
+
+  @spec call(Manifest.t(), map) :: {:ok, out} | {:error, term}
   def call(manifest, input), do: call(manifest, input, nil)
 
-  @spec call(Manifest.t(), map, Policy.t() | nil) ::
-          {:ok, %{ok: boolean, output: String.t(), emit: [map]}} | {:error, term}
-  def call(%Manifest{mcp: mcp} = manifest, input, %Policy{} = execution) when not is_nil(mcp) do
-    with {:ok, result} <- Mcp.call(mcp, manifest.name, input.args, execution) do
+  @doc """
+  Calls the tool `manifest` with `input`. A `command` tool or an MCP
+  server runs under `execution`, and its process alone receives `secrets`.
+  """
+  @spec call(Manifest.t(), map, Policy.t() | nil, %{String.t() => String.t()}) ::
+          {:ok, out} | {:error, term}
+  def call(manifest, input, execution, secrets \\ %{})
+
+  def call(%Manifest{mcp: mcp} = manifest, input, %Policy{} = execution, secrets)
+      when not is_nil(mcp) do
+    with {:ok, result} <- Mcp.call(mcp, manifest.name, input.args, execution, secrets) do
       validate(%{"ok" => result.ok, "output" => result.output, "emit" => result.emit})
     end
   end
 
-  def call(%Manifest{mcp: mcp}, _input, nil) when not is_nil(mcp),
+  def call(%Manifest{mcp: mcp}, _input, nil, _secrets) when not is_nil(mcp),
     do: {:error, :execution_context_required}
 
-  def call(%Manifest{module: module}, input, execution) when is_binary(module) do
+  def call(%Manifest{module: module}, input, execution, _secrets) when is_binary(module) do
     with {:ok, mod} <- resolve_module(module) do
       case run_module(mod, input, execution) do
         {:error, _reason} = error -> error
@@ -36,9 +57,9 @@ defmodule Omunculus.Tool.Invoke do
     end
   end
 
-  def call(%Manifest{command: command} = manifest, input, %Policy{} = execution)
+  def call(%Manifest{command: command} = manifest, input, %Policy{} = execution, secrets)
       when is_list(command) do
-    with {:ok, command} <- external_command(manifest, command, execution) do
+    with {:ok, command} <- external_command(manifest, command, execution, secrets) do
       case Execution.run(command, execution, Jason.encode!(input)) do
         {:ok, %{stdout: stdout}} -> decode(stdout)
         {:error, {:exit, status, _stdout, stderr}} -> {:error, {:exit, status, stderr}}
@@ -47,7 +68,7 @@ defmodule Omunculus.Tool.Invoke do
     end
   end
 
-  def call(%Manifest{command: command}, _input, nil) when is_list(command),
+  def call(%Manifest{command: command}, _input, nil, _secrets) when is_list(command),
     do: {:error, :execution_context_required}
 
   defp run_module(module, input, %Policy{} = execution) do
@@ -75,13 +96,14 @@ defmodule Omunculus.Tool.Invoke do
     ArgumentError -> {:error, {:no_module, module}}
   end
 
-  defp external_command(%Manifest{dir: dir}, [program | args], policy) do
+  defp external_command(%Manifest{dir: dir}, [program | args], policy, secrets) do
     with {:ok, executable} <- executable(dir, program, policy),
          {:ok, command} <-
            Command.new(
              "/usr/bin/sh",
              ["-c", policy.sandbox.exec, "omunculus-tool", executable | args],
-             cwd: dir
+             cwd: dir,
+             secrets: secrets
            ) do
       {:ok, command}
     end
@@ -147,8 +169,20 @@ defmodule Omunculus.Tool.Invoke do
   defp validate(decoded) when is_map(decoded) do
     with {:ok, ok} <- fetch_bool(decoded, "ok"),
          {:ok, output} <- fetch_string(decoded, "output", ""),
-         {:ok, emit} <- fetch_emit(decoded) do
-      {:ok, %{ok: ok, output: output, emit: emit}}
+         output = String.replace_invalid(output),
+         {:ok, emit} <- fetch_emit(decoded),
+         {:ok, chain} <- fetch_chain(decoded),
+         {:ok, instructions} <- fetch_string(decoded, "instructions", ""),
+         {:ok, session} <- fetch_session(decoded) do
+      {:ok,
+       %{
+         ok: ok,
+         output: output,
+         emit: emit,
+         chain: chain,
+         instructions: instructions,
+         session: session
+       }}
     end
   end
 
@@ -158,6 +192,20 @@ defmodule Omunculus.Tool.Invoke do
     case Map.fetch(decoded, key) do
       {:ok, value} when is_boolean(value) -> {:ok, value}
       _ -> {:error, {:invalid_output, decoded}}
+    end
+  end
+
+  defp fetch_session(decoded) do
+    case Map.get(decoded, "session") do
+      nil ->
+        {:ok, nil}
+
+      %{"continues" => id, "since" => since, "history" => history} = session
+      when is_binary(id) and is_binary(since) and is_list(history) ->
+        {:ok, session}
+
+      _invalid ->
+        {:error, {:invalid_output, decoded}}
     end
   end
 
@@ -183,6 +231,35 @@ defmodule Omunculus.Tool.Invoke do
         {:error, {:invalid_output, decoded}}
     end
   end
+
+  defp fetch_chain(decoded) do
+    case chain_steps(Map.get(decoded, "chain", [])) do
+      {:ok, _steps} = ok -> ok
+      :error -> {:error, {:invalid_output, decoded}}
+    end
+  end
+
+  @doc "Parses a list of `{name, args}` tool calls, the shape of `out.chain`."
+  @spec chain_steps(term) :: {:ok, [%{name: String.t(), args: map}]} | :error
+  def chain_steps(list) when is_list(list) do
+    Enum.reduce_while(Enum.reverse(list), {:ok, []}, fn entry, {:ok, acc} ->
+      case chain_step(entry) do
+        {:ok, step} -> {:cont, {:ok, [step | acc]}}
+        :error -> {:halt, :error}
+      end
+    end)
+  end
+
+  def chain_steps(_list), do: :error
+
+  defp chain_step(%{"name" => name} = entry) when is_binary(name) and name != "" do
+    case Map.get(entry, "args", %{}) do
+      args when is_map(args) -> {:ok, %{name: name, args: args}}
+      _ -> :error
+    end
+  end
+
+  defp chain_step(_entry), do: :error
 
   defp valid_emit_entry?(%{"type" => type, "body" => body}),
     do: is_binary(type) and is_map(body)

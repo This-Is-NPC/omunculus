@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+from check import *
+
+# A real Word document, every placeholder filled from deal.txt and the rest kept.
+workspace, outcome = load()
+expect_outcome(outcome, "done", "answer")
+text = "\n".join(text for _style, text in docx_paragraphs(workspace, "contract.docx"))
+if "{{" in text:
+    fail("contract.docx still holds a placeholder")
+for value in ["Riza Hawkeye Consulting", "2026-11-02", "EUR 4,800", "Service Agreement", "thirty days' written notice"]:
+    if value not in text:
+        fail(f"contract.docx lacks {value!r}")
+ok()

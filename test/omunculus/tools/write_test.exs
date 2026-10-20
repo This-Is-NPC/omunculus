@@ -6,9 +6,7 @@ defmodule Omunculus.Tools.WriteTest do
   alias Omunculus.Tools.Write
 
   setup do
-    root = Path.join(System.tmp_dir!(), Omunculus.Id.new())
-    File.mkdir_p!(root)
-    on_exit(fn -> File.rm_rf!(root) end)
+    root = Omunculus.Fixtures.tmp_dir()
     %{root: root}
   end
 
@@ -52,9 +50,7 @@ defmodule Omunculus.Tools.WriteTest do
   end
 
   test "rejects roots supplied outside the execution policy", %{root: root} do
-    outside = Path.join(System.tmp_dir!(), Omunculus.Id.new())
-    File.mkdir_p!(outside)
-    on_exit(fn -> File.rm_rf!(outside) end)
+    outside = Omunculus.Fixtures.tmp_dir()
 
     input = %{@input | args: %{"path" => "file.txt", "content" => "hi"}, roots: [outside]}
 
@@ -65,6 +61,33 @@ defmodule Omunculus.Tools.WriteTest do
            }
 
     refute File.exists?(Path.join(outside, "file.txt"))
+  end
+
+  test "says a run without sandbox.write cannot write", %{root: root} do
+    input = %{@input | args: %{"path" => "file.txt", "content" => "hi"}, roots: [root]}
+
+    assert Write.run(input, ExecutionPolicyFixtures.policy(input.roots)) == %{
+             "ok" => false,
+             "output" => "path is not writable: file.txt; writing needs sandbox.write",
+             "emit" => []
+           }
+  end
+
+  test "refuses a read-only path of a writable root", %{root: root} do
+    File.mkdir_p!(Path.join(root, "kept"))
+    input = %{@input | args: %{"path" => "kept/file.txt", "content" => "hi"}, roots: [root]}
+
+    policy =
+      ExecutionPolicyFixtures.policy(input.roots,
+        writable: true,
+        read_only: [Path.join(root, "kept")]
+      )
+
+    assert Write.run(input, policy) == %{
+             "ok" => false,
+             "output" => "path is not writable: kept/file.txt",
+             "emit" => []
+           }
   end
 
   test "refuses without content", %{root: root} do

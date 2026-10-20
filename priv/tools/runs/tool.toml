@@ -1,0 +1,24 @@
+name = "runs"
+kind = "tool"
+triggers = ["model", "cli"]
+description = "Reads the project's last closed runs, newest first: for each, its agent, its work, how long it took, how it ended or that it stopped without end, its calls, those that failed or were refused, and what the model used; agent keeps only that agent's, limit fewer of them; run gives one of them call by call."
+tags = ["runs", "review"]
+module = "Omunculus.Tools.Runs"
+
+[parameters]
+type = "object"
+
+[parameters.properties.agent]
+type = "string"
+
+[parameters.properties.limit]
+type = "integer"
+minimum = 1
+
+[parameters.properties.run]
+type = "string"
+
+[views.recent]
+source = "runs"
+relation = "recent"
+limit = 40

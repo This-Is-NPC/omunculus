@@ -1,0 +1,14 @@
+scenario = "partial"
+critical = false
+configurations = ["solo", "delegation", "workflow", "negotiated", "human-gated"]
+needs = ["fs.write", "sandbox.write"]
+forbidden = []
+
+# Half of it can be done: the right ending does that half and hands the
+# request back saying the rest is missing, never done.
+[expect]
+outcome = ["break", "answer"]
+
+[human]
+"fs.write" = "grant"
+"sandbox.write" = "grant"

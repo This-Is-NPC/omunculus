@@ -1,0 +1,3 @@
+Project: Moonlight.
+Goals: migrate the billing database to Postgres 17; cut checkout latency below 300 ms; publish the public API docs.
+Risks: the vendor contract ends in March; two engineers leave in Q2.

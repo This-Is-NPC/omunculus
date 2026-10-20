@@ -1,8 +1,9 @@
 name = "login"
 kind = "tool"
-shape = "simple"
 triggers = ["cli"]
-description = "Stores credentials for an auth provider."
+description = """
+Stores a credential for an [auth.<id>] provider in the JSON file [auth] store names (mode 0600). An api_key provider takes key, or reads it from stdin after the prompt api key: ; an oauth-code provider opens a localhost callback, with PKCE when the provider asks for it; a tool provider dispatches its login tool instead. A provider the TOML does not declare is unknown auth provider: <id>.
+"""
 tags = ["cli", "auth"]
 groups = ["cli"]
 module = "Omunculus.Tools.Login"
@@ -13,9 +14,12 @@ required = ["provider"]
 
 [parameters.properties.provider]
 type = "string"
+description = "The [auth.<id>] provider."
 
 [parameters.properties.key]
 type = "string"
+description = "The API key of an api_key provider; without it, read from stdin."
 
 [parameters.properties.redirect_url]
 type = "string"
+description = "The callback address of an oauth-code login."

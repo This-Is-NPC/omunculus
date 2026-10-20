@@ -1,12 +1,10 @@
 defmodule Omunculus.Tools.LogoutTest do
   use ExUnit.Case, async: false
 
-  alias Omunculus.{CLI, Config, Fixtures, Id}
+  alias Omunculus.{CLI, Config, Fixtures}
 
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
     %{dir: dir}
   end
 

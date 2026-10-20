@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+from check import *
+
+workspace, outcome = load()
+expect_outcome(outcome, "done", "answer")
+scope = {}
+exec(text(workspace, "duration.py"), scope)
+for given, seconds in [("1h30m", 5400), ("45s", 45), ("2h5m10s", 7510), ("10m", 600), ("3h", 10800)]:
+    got = scope["parse_duration"](given)
+    if got != seconds:
+        fail(f"parse_duration({given!r}) is {got}, not {seconds}")
+ok()

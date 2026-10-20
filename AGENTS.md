@@ -1,109 +1,267 @@
-# AGENTS.md
+# Agent rules
 
-Instructions for any agent or person working in this repository. Everything here describes the code as it is on the current commit. If the code changes, change this file in the same commit.
+This file is the contract for anyone (human or agent) changing a
+repository that uses it. It is self-contained: do not look up an
+external skill to commit, and do not invent a second toolchain
+beside mise.
 
-## What Omunculus is
-
-A local, CLI-only harness that orchestrates tool-using language models. It opens a SQLite store per project, assembles a prompt for one run, lets the model call tools inside the execution sandbox, records every step as an event, and applies the store actions those tools emit. Work items, access requests, notifications and workflow stages are state in the store; the harness only follows them.
-
-Targets Linux, Elixir 1.17, OTP 27, Deno 2.9 and Bubblewrap 0.8 or newer. Tool versions are pinned in `mise.toml`.
-
-## Architecture
-
-The core is `lib/omunculus/`. Read these modules first, in this order.
-
-| Module | Role |
-| --- | --- |
-| `Omunculus.CLI` | Entry point. `omunculus <name> [--key value]` dispatches a tool with trigger `cli`, then hands the resulting events to the harness. Reads `OMUNCULUS_PROJECT` and `OMUNCULUS_MODEL` from the environment. |
-| `Omunculus.Project` | Opens `<project>/.omunculus/store.sqlite3` and holds the connection. |
-| `Omunculus.Config` | Loads and validates `omunculus.toml`: policy (including `assemble`), depth layers, workspaces, agents, workflows, MCP servers and the required `[execution]` table (including `resources`). Also rewrites the file for permanent grants. |
-| `Omunculus.Harness` | Discovers the catalog, checks the trigger, hydrates the views a manifest declares, invokes the tool, records `EVENTS(tool)`, and applies the emitted actions. Hooks on non-terminal events run immediately; hooks on events that end the run wait until `follow_up/2` has opened the next run. |
-| `Omunculus.Run` | Opens one run: resolves the agent for the depth or workflow stage, mounts the ceiling, builds the execution policy, begins the run, dispatches the `assemble` tool, attaches `PROMPTS(assembled)`, drives the model, closes the run. |
-| `Omunculus.Ceiling` | Intersects the policy, workspace, depth, agent and stage layers into the effective tool set of a run and classifies a name as have, askable, sealed or blocked. `pinned` intersects the same way and marks which effective tools become cards when `tool_search` is present. |
-| `Omunculus.Store` and `Omunculus.Store.*` | The only code that touches SQL. `View` reads cuts of the tables. `Actions` applies emits (`comment`, `request`, `reply`, `work`, `delegate`, `continue`, `break`, `notify`, `prompt`, `compact`, ...). `Runs` and `Events` write the run lifecycle. `Schema` creates the seven tables. |
-| `Omunculus.Tool.Catalog`, `Manifest`, `Invoke` | Discover `tool.toml` / `hook.toml` folders and MCP servers, parse manifests, and call a tool either as an Elixir module or as an external command fed JSON on stdin. `Manifest.card/1` is `- name: description [tags: a, b]`; no tags, no suffix. |
-| `Omunculus.Tools.*` | The builtin tools. Each has a manifest under `priv/tools/<name>/` and a module here. |
-| `Omunculus.Sandbox` | Runs the code the model submits inside the execution sandbox and answers each `tools.<name>(args)` call it makes. |
-| `Omunculus.Execution.*` | Starts every external process through Bubblewrap under an immutable per-run policy, with concurrency, queue, timeout and output limits. |
-| `Omunculus.Mcp` | JSON-RPC to one MCP server, run through the execution sandbox, for discovery and calls. |
-| `Omunculus.Model.Fake`, `Battery`, `OpenAI`, `OpenAIResponses`, `AnthropicMessages`, `Command` | Model adapters. `fake` echoes the first prompt line. `battery` is the scripted "count to 5" model. `openai` posts to `/chat/completions`, `openai-responses` to `/responses`, `anthropic-messages` to `/messages`. `command` runs an external program over the sandbox NDJSON protocol. |
-
-### The run cycle
-
-```text
-omunculus send "text"
-  → tool send emits prompt → PROMPTS(message) + EVENTS(prompt)
-  → follow_up opens a run
-      Config.load, Catalog.discover, Ceiling.mount, Policy.build
-      RUNS + EVENTS(start-run)
-      assemble tool → PROMPTS(assembled) + EVENTS(tool)
-      model → tool calls → EVENTS(tool) + emitted actions + hooks
-      EVENTS(model), EVENTS(end-run), RUNS.status = done
-  → follow_up opens the next run if an action asked for one
-```
-
-### Configuration
-
-All configuration is TOML. The project file is `<project>/omunculus.toml`; when it is absent the harness currently loads `priv/omunculus.toml` from the package. Presets under `priv/presets/` are copied into the project by the `preset` tool. Nothing in the store is configuration.
-
-### Tools, hooks and presets
-
-A tool is a folder with `tool.toml` and either `module = "Elixir.Module"` or `command = ["./run"]`. A hook is the same with `hook.toml` and `events = [...]`. Discovery order is builtin (`priv/tools`), user (`~/.omunculus/tools`), MCP servers, then `<project>/tools`; the most specific wins on a shared name. The CLI and the model call the same contract: `in: {name, args, view, run_id, work_id, workspace, roots}`, `out: {ok, output, emit}`.
-
-## Layout
-
-```text
-bin/omunculus        shell wrapper: mise exec -- mix omunculus
-lib/omunculus/       core, tools, models, execution, store
-lib/mix/tasks/       the omunculus mix task
-priv/tools/          builtin tool and hook manifests
-priv/presets/        codex-like, pi-like
-priv/omunculus.toml  package default config
-priv/sandbox.js      tool-call bridge run by Omunculus.Sandbox
-test/omunculus/      mirrors lib/; matrix_test.exs and spec_regression_test.exs are the scenario suites
-test/support/        fixtures, store case, MCP server, Rust OpenAI stub
-bench/               resident capacity benchmark
-mise-tasks/          validate/regular, validate/sandbox, pre-commit, pre-push, benchmark/*
-```
-
-## Commands
-
-```sh
-mise install                    # toolchain from mise.toml
-mix deps.get
-mise run validate:regular       # mix test --exclude cargo --exclude sandbox
-mise run validate:sandbox       # needs Linux with Bubblewrap namespaces
-mise run pre-commit             # mix format --check-formatted
-mise run pre-push               # validate:regular
-mix compile --warnings-as-errors
-OMUNCULUS_MODEL=fake bin/omunculus send "text"
-```
-
-Environment read by the CLI: `OMUNCULUS_PROJECT` (defaults to the current directory), `OMUNCULUS_MODEL` (`fake`, `battery`, `openai`), and for `openai` also `OMUNCULUS_OPENAI_URL`, `OMUNCULUS_OPENAI_MODEL`, optional `OMUNCULUS_OPENAI_KEY`.
+The premises, mise rules, documentation rules, and commit rules below
+are **not** project-specific. Copy them as-is. Architecture, layout, and
+constraints of *this* tree live only under **This project**.
 
 ## Premises
 
-Every change follows these. They are not aspirational.
+- **Performance is a reason to change.** If a change is correct and
+  makes sense, do it even when the measured gain is 0.01 ms. Do not
+  skip a worthwhile optimisation because the delta is small. Measure
+  when the cost of being wrong is high; do not use "nobody can
+  perceive it" as a veto.
+- **Zero dead code.** Delete unused functions, types, imports, flags,
+  and files. Do not leave a replacement beside the thing it replaces.
+- **Zero duplicated code.** One implementation of a behaviour. Extract
+  or share rather than copy.
+- **Zero legacy code.** No compatibility shims, deprecated aliases,
+  dual paths, or "keep the old one until later" leftovers. Finish the
+  cutover in the same change that introduces the new path.
+- **Comments state the code.** A comment names what the next lines
+  do, or a constraint the type system cannot. It is not a tutorial,
+  a history, or a design essay.
+- **Documentation lives in `docs/`.** Guides, measurements, language
+  traps, and "how this is meant to be used" go there — not in
+  comments, not in commit messages as a substitute for a doc, and not
+  in this file except as rules.
+- **Clean up after every run.** A test, run, evaluation or benchmark
+  ends by removing what it started, when it passes and when it fails:
+  stop the processes, servers and environments it brought up; remove the
+  containers, images, volumes and networks it created; delete the build
+  caches, temporary files and scratch folders it wrote. Keep only the
+  result it was meant to produce. Nothing it started is left using disk,
+  CPU or memory.
+- **English only.** Code, comments, commit messages, `docs/`,
+  `README.md`, this file, mise task names and descriptions: English.
 
-1. **Zero legacy code.** What a change replaces is deleted in the same commit. No fallbacks, no compatibility aliases, no old TOML keys accepted silently.
-2. **Zero duplicated code.** If two places do the same thing, one calls the other or they become one. This includes tests and fixtures.
-3. **Zero dead code.** A function, module, constant, manifest key or test nobody calls after the change is removed in the same commit. `mix compile --warnings-as-errors` must be clean; for public functions, grep for callers before committing.
-4. **Document only what exists.** README, `@moduledoc` and this file describe behavior the code has on that commit. No "planned", no "soon", no section for an unimplemented feature.
-5. **A comment is a statement about the code, not documentation.** It says what the adjacent line does or why, only when the code alone does not. Do not lift comments into documentation. Do not write a `@moduledoc` that narrates a spec.
-6. **All configuration comes from the user's TOML.** No hardcoded defaults for anything that lives in the config file. No configuration stored in the database.
-7. **Anything that searches, filters or formats for the model is a tool**, never harness logic. The harness discovers, authorizes, calls, records and applies.
-8. **The harness does not protect users from their own tools and hooks.** It guarantees the workflow sequence, the ceiling per stage and the store rules. What a user's hook does with those is the user's responsibility.
+## Tooling: mise
 
-## Language
+mise owns the toolchain and every project command. Pin tools in
+`mise.toml`. Run `mise install` before work. Invoke tools through
+mise (`mise exec -- …` or, once defined, `mise run <task>`). Do not
+call a system compiler or helper that is not the pinned one. Do not
+add a parallel runner (Make, npm scripts, ad-hoc shell wrappers)
+that duplicates a mise task.
 
-Code, comments, output strings, tool manifests, agent texts, test fixtures and README are in English.
+### Tasks
 
-## Commits
+Work lives in **scripts**, not in `mise.toml` bodies and not in
+`mise-tasks/`. Each script is one job. mise **consumes** those
+scripts: a `[tasks.name]` entry names the script, sets
+`description` / `depends` / `env` / `sources` / `outputs` /
+`usage` / `confirm`, and runs it. Git hooks and any other caller
+run the same file. Do not duplicate the job as inline `run =`
+shell, a file task, and a script.
 
-Work happens as local commits on the working branch. There are no pull requests.
+- Put scripts under `scripts/`. Make them executable, with a
+  shebang. Prefer `MISE_PROJECT_ROOT` when the script must know
+  the repo root; otherwise relative paths from the project root
+  (mise sets cwd to the directory of `mise.toml`).
+- **Atomic:** one script, one responsibility. Compose larger work
+  with `depends` (may run in parallel) or a `run` **array** of
+  script invocations (sequential; a failure stops the rest,
+  `set -e` for `sh`/`bash`/`zsh`). Aggregators (`check`, `bench`,
+  `build`) only wire scripts together. The documented entry is
+  `mise run <name>`; a hook calls `scripts/<name>`, not a second
+  copy of the logic.
+- **Idempotent:** running the same script twice with the same
+  inputs leaves the tree in the same good state. Safe to re-run
+  from a hook, CI, or `mise run`.
+- Give every task a `description`. Use `alias` only when the short
+  name is used often. Confirm destructive tasks with `confirm`.
+- Declare `sources` and `outputs` when a task is skippable if
+  inputs have not changed (builds). Use `sources` alone with
+  `mise watch`.
+- Arguments: a `usage` spec on the TOML task. Values arrive as
+  `usage_*` environment variables. Do not use the deprecated Tera
+  `arg()` / `option()` / `flag()` helpers.
+- Do not add file tasks under `mise-tasks/` (or the other mise
+  task directories). Do not keep a TOML task and a file task for
+  the same name.
+- List and inspect with `mise tasks ls` and
+  `mise tasks info <name>`. Run with `mise run <name>`. Do not
+  tell the user to `mise exec` a one-off that already has a task.
+  Do not tell them to invoke `scripts/` when a task exists, except
+  from git hooks and other non-mise entry points that must call
+  the script directly.
 
-- **Conventional Commits.** `type(scope): imperative summary`. Types in use: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`. Scope is the module or area (`harness`, `store`, `execution`, `tools`, `config`, `docs`). A breaking change to a contract or file format gets `!` after the scope.
-- **One intention per commit.** A commit does one thing: one deviation fixed, one tool added, one document updated. Do not mix a refactor with a behavior change. Do not mix two items.
-- **The body says why**, when the summary is not enough. It does not repeat the diff.
-- **No AI trailers.** No `Co-Authored-By`, `Generated-with`, `Signed-off-by` for a model, or any other line attributing the commit to an assistant. This applies to commit messages, tags and any pull request description that may ever exist.
-- Before committing: `mise run pre-commit` and `mise run validate:regular` pass; `mix compile --warnings-as-errors` is clean.
+## Documentation
+
+Documentation is written for somebody using the project, one question
+at a time, and kept true by the same tools that build it.
+
+### The pages
+
+- `README.md` is the front door, written for somebody installing the
+  released program: what the project is in one paragraph, pictures of
+  it working, Install (the release's installer, never development
+  commands), Start here, the big ideas as short bold-led paragraphs
+  each linking its page, the interface (keys, with a picture), What it
+  does not do, Known limitations, What is broken (only while a defect
+  is known), one line sending contributors to the design page,
+  Requirements, license. Development and build commands live in the
+  design page, not here.
+- `docs/README.md` is the map: every page in the order somebody meets
+  it, one line each on the question it answers, the shortest useful
+  path, a "when you know what you want" table, and the conventions
+  every page shares.
+- `docs/how-to-*.md` holds one task per page. Each opens with
+  "**The question:**" and says whether it is enough on its own, then
+  "Before you start", then numbered steps, each with the command or
+  the action and its real output, and ends with what can go wrong and
+  where to go next. A page never explains a task that has its own page;
+  it links it.
+- `docs/screens.md` walks every screen in the order of use, with
+  pictures, keys, and the screens that have none. It says how its
+  pictures are made and what in them is pinned.
+- `docs/cli.md` is generated from the program's own command
+  definitions by a mise task, never edited by hand; `mise run check`
+  fails when it is stale.
+- `docs/what-does-not-work.md` exists only while a known defect is not
+  fixed: every such defect, numbered, each with **What happens.** and
+  **What to do in the meantime.**, and whether it was seen running or
+  read in the code, with a "What is broken" section in `README.md`
+  sampling it. No other page names a defect that is not there. When
+  the last defect is fixed, the page and the README section go; when a
+  known defect is left unfixed, both come back in the same change.
+- Limits of the platform or of a provider are not defects: `README.md`
+  lists them under "Known limitations", and each is said again on the
+  page where somebody meets it.
+- `docs/design.md` is for contributors: the model, the architecture,
+  state on disk, protocols, packaging, what it is and is not, what was
+  measured. Its sections are numbered and the numbers do not move: code
+  and pages cite them as `docs/design.md §N`.
+
+### Pictures
+
+Pictures in `docs/img` are generated from the real program by a mise
+task, against an isolated instance seeded with synthetic, versioned
+fixtures — never the developer's own data, accounts or keys. Name them
+`NN-<what>.png` in the order the screens page walks them. Look at every
+picture a change produces. A picture that cannot be generated says so,
+and where it came from.
+
+### Discipline
+
+- The documentation changes in the same change as the behaviour it
+  describes: a new or changed command, screen, setting or defect
+  updates its pages, pictures and `docs/cli.md` in that change.
+- Facts come from the code or from running it. Outputs are real
+  outputs. What was measured is said to be measured; what was only
+  argued or read is said so in those words.
+- Plain, short sentences: say what happens and what to do. No
+  marketing, no promises of future work outside the defects page.
+- Placeholders are named as placeholders the first time they appear.
+- Every relative link, image and anchor resolves; `mise run check`
+  runs a link check that fails when one does not.
+
+## Commits (okt-task-commit)
+
+Agents draft and create commits. The human owns publication: **never
+`git push`**. When the tree is clean, say that a push is ready.
+
+These rules inline the okt-task-commit playbook, the Conventional
+Commits 1.0.0 grammar used with it, and the conventional-commits law.
+There is nothing extra to fetch.
+
+### Procedure
+
+1. Read `git status` and `git diff --cached`. If nothing is staged,
+   read the unstaged diff (`git diff` and untracked files).
+2. Group hunks into **one intent per commit**. Split mixed trees with
+   non-interactive staging only: `git add <path>` and
+   `git restore --staged <path>`. Do not use `git add -p` or
+   `git add -i`.
+3. Derive **scope** from the paths touched (package, directory, or
+   feature slug).
+4. Draft the message (grammar below). Show every draft to the user
+   **before** `git commit`.
+5. Commit. Do not push. When the working tree is clean, suggest the
+   user push when ready.
+
+### Message grammar
+
+```
+<type>(<scope>)!: <subject>
+
+<body>
+
+<footer(s)>
+```
+
+- **type** (required): `feat`, `fix`, `docs`, `refactor`, `chore`,
+  `test`, `build`, `ci`, `perf`. `feat` and `fix` are
+  SemVer-significant. One type per commit: a feature and a fix are
+  two commits.
+- **scope**: noun in parentheses, from the paths. Omit only when no
+  scope is honest.
+- **!**: immediately before `:` for a breaking change
+  (`feat(api)!: …`). Pair with a `BREAKING CHANGE:` footer.
+- **subject**: English, imperative mood ("Add" not "Added"), ≤50
+  characters, no trailing period, lowercase after the colon.
+- **body** (optional): wrap at 72 columns. Explain the *why* the
+  diff does not. Not a paste of the patch.
+- **footers**: `Token: value` lines (`Refs: #123`,
+  `BREAKING CHANGE: drops X`).
+
+Never attribute a commit to an agent: no `Co-Authored-By: <model>`,
+no `Generated with <tool>`, no model name in trailer or body. The
+human running the session is the author. No opt-out. Other
+`Co-Authored-By` trailers only if the user asked for that person in
+this conversation.
+
+Bad: `feat: add filter and fix duplicate insert` (two intents).
+Good: `feat(filter): add priority option` then
+`fix(insert): prevent duplicates`.
+
+## This project
+
+Omunculus is a local harness that orchestrates tool-using language models,
+driven from a direct CLI or an optional HTTP server. It opens a SQLite store
+per project, assembles a prompt for one run, lets the model call tools inside
+the execution sandbox, records every step as an event, and applies the store
+actions those tools emit. Works, conversations, memberships, requests,
+notifications and workflow stages are state in the store; the harness only
+follows them. It targets Linux, Elixir 1.17, OTP 27, Deno 2.9 and Bubblewrap
+0.8 or newer, pinned in `mise.toml`.
+
+The core is `lib/omunculus/`: the CLI and the project's cycle of runs; the
+config loader; the harness, which discovers, authorizes, calls and records
+tools and applies their actions; the run, which drives one model until it
+ends; the ceiling, which decides what a run may call; the store, the only code
+that touches SQL; the server and its `/v1` contract; the tool catalog and the
+builtin tools under `priv/tools/`; the sandbox and every external process
+under Bubblewrap; MCP servers; and the model adapters. Teams come as packs
+(`priv/packs/system`, `packs/`); presets are in `priv/presets/`.
+
+All configuration comes from the user's TOML: no hardcoded default for
+anything the config file holds, and none stored in the database. Anything
+that searches, filters or formats for the model is a tool, never harness
+logic. The harness does not protect users from their own tools and hooks: it
+guarantees the workflow sequence, the ceiling per stage and the store rules.
+
+Clients reach a project only through the server’s `/v1` contract and never
+read the store, the TOML, `lib/` or `priv/`. The core never names a client;
+contract changes include the OpenAPI schema, tests and `docs/server.md`.
+
+Commits stay local on the working branch; there are no pull requests. Before
+committing, `mise run pre-commit` and `mise run validate:regular` pass and
+`mix compile --warnings-as-errors` is clean. `mise run validate:sandbox`
+needs Bubblewrap namespaces. `mise run up` starts the development server
+(`dev/`).
+
+Guides: `docs/README.md` is the map of every page; `docs/design.md` (the
+model, each core module and the run cycle, in numbered sections), the
+`docs/how-to-*.md` task pages, `docs/cli.md` (generated by
+`mise run docs:cli`), `docs/config.md`, `docs/packs.md`, `docs/cycle.md`,
+`docs/ceiling.md`, `docs/tools.md`, `docs/requests.md`, `docs/server.md`,
+`docs/clients.md`,
+`docs/development.md`, `docs/possibilities.md`, `docs/comparison.md`,
+`docs/what-does-not-work.md`; `eval/README.md` (the behaviour benchmark) and
+`bench/README.md` (the capacity benchmark). Setup: `README.md`.

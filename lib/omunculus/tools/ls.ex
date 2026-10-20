@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.Ls do
   @moduledoc """
-  Builtin `ls` tool, per spec §9.2: lists a directory under the run's
+  Builtin `ls` tool: lists a directory under the run's
   roots, one entry per line, sorted, directories suffixed with `/`.
   """
 

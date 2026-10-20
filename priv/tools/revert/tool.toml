@@ -1,0 +1,26 @@
+name = "revert"
+kind = "tool"
+triggers = ["model"]
+description = "Puts the files a work's calls changed back as they were before it, removing those it added: of this run's work, or of a work below it. Refuses, restoring nothing, when one changed since. Needs sandbox.write."
+tags = ["files", "undo"]
+module = "Omunculus.Tools.Revert"
+
+[parameters]
+type = "object"
+
+[parameters.properties.work_id]
+type = "string"
+
+[views.run]
+source = "events"
+relation = "run"
+
+[views.own]
+source = "works"
+include = ["runs"]
+
+[views.target]
+source = "works"
+from = ["args.work_id"]
+within = "descendants"
+include = ["runs"]

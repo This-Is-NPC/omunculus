@@ -1,12 +1,15 @@
 name = "inbox"
 kind = "tool"
-shape = "simple"
 triggers = ["cli"]
-description = "Lists unread notifications."
+description = """
+Lists unread notifications, one per line: id agent: body. An empty inbox prints empty inbox and still succeeds. Listing waits on no decision and parks no work.
+"""
 tags = ["cli", "inbox"]
 groups = ["cli"]
-views = ["inbox"]
 module = "Omunculus.Tools.Inbox"
 
 [parameters]
 type = "object"
+
+[views.inbox]
+source = "inbox"

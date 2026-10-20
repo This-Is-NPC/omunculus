@@ -1,6 +1,6 @@
 defmodule Omunculus.Tools.Counter do
   @moduledoc """
-  Builtin `counter` tool, per spec §9.4: returns the next value derived
+  Builtin `counter` tool: returns the next value derived
   from the committed counter tool calls.
   """
 

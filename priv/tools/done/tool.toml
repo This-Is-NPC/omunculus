@@ -1,0 +1,16 @@
+name = "done"
+kind = "tool"
+triggers = ["model"]
+description = "Concludes the run's work: comments the report on it, continues it and ends the run."
+tags = ["sequence", "work"]
+groups = ["sequence"]
+module = "Omunculus.Tools.Done"
+chains = ["comment", "continue", "end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+required = ["report"]
+
+[parameters.properties.report]
+type = "string"

@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""The seller's way to move a client's request to the next stage of the
+workflow sale: refused until the stage the work is in holds, then the
+report as a comment on the work and continue. The proposal is the file of
+quotes/ with the line "Pedido: <id>" of the call's work; the client reads it,
+so its headings and labels, which the stages check, are in Portuguese."""
+
+import json
+import pathlib
+import re
+import sys
+
+
+def answer(ok, output, chain=()):
+    json.dump({"ok": ok, "output": output, "emit": [], "chain": list(chain)}, sys.stdout)
+    sys.stdout.write("\n")
+    sys.exit(0)
+
+
+def refuse(stage, missing):
+    answer(False, f"stage {stage} does not hold yet: {missing}. Do that first, then call next_stage again.")
+
+
+def proposal(root, work_id):
+    for path in sorted(pathlib.Path(root, "quotes").glob("*.md")):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if re.search(rf"^Pedido:\s*{re.escape(work_id)}\s*$", text, re.M):
+            return path, text
+    return None, None
+
+
+def section(text, title):
+    match = re.search(rf"^##\s+{re.escape(title)}\s*$(.*?)(?=^##\s|\Z)", text, re.M | re.S)
+    return match.group(1) if match else ""
+
+
+def value(block, label):
+    match = re.search(rf"^-\s*{re.escape(label)}:[ \t]*(.*)$", block, re.M)
+    return match.group(1).strip() if match else ""
+
+
+def filled(block, labels):
+    return [label for label in labels if not value(block, label)]
+
+
+def body(event):
+    data = (event or {}).get("body")
+    if isinstance(data, str):
+        try:
+            return json.loads(data)
+        except ValueError:
+            return {}
+    return data or {}
+
+
+def main():
+    call = json.load(sys.stdin)
+    view = call.get("view") or {}
+    work = view.get("work") or {}
+    stage = work.get("stage")
+    root = (call.get("roots") or [None])[0]
+    report = ((call.get("args") or {}).get("report") or "").strip()
+    if not report:
+        answer(False, "report required")
+    if not stage or not root:
+        answer(False, "next_stage moves a request of the workflow sale; this run has none")
+
+    path, text = proposal(root, work["id"])
+    if not text:
+        refuse(stage, f"write the proposal in quotes/<client-slug>.md from templates/proposal.md, with the line Pedido: {work['id']}")
+
+    if stage == "qualify":
+        missing = filled(section(text, "1. Quem são"), ["Negócio, cidade e para quem é o site", "Quem decide, e o orçamento e o prazo que deram"])
+        missing += filled(section(text, "2. O problema, nas suas palavras"), ["O que não funciona hoje, e quanto isso custa"])
+        missing += filled(section(text, "Conteúdo"), ["Textos", "Produtos e preços", "Contatos"])
+        missing += filled(section(text, "4. Escopo"), ["Páginas, uma por linha"])
+        if missing:
+            refuse(stage, f"ask the client and write in {path.name} what they said — that they left it to us, or do not have it, is an answer too: " + "; ".join(missing))
+    elif stage == "design":
+        preview = value(section(text, "Design"), "Prévia").lower()
+        if "aprovada" not in preview and "não desejada" not in preview:
+            refuse(stage, f"the Prévia line of ## Design in {path.name} says the address and aprovada, once the client approved it, or não desejada")
+    elif stage == "assess":
+        block = section(text, "Avaliação da equipe técnica")
+        if not value(block, "Pedido de avaliação") or not value(block, "Resposta"):
+            refuse(stage, f"ask the builders for an assessment and write its work id (Pedido de avaliação) and their answer (Resposta) under ## Avaliação da equipe técnica in {path.name}")
+    elif stage == "propose":
+        status = re.search(r"^Status:\s*(.*)$", text, re.M)
+        if not value(section(text, "6. Preço"), "Total") or not status or not status.group(1).lower().startswith("aceita"):
+            refuse(stage, f"give the client the price, write the Total, and mark Status aceita, aguardando o dono in {path.name} once they accept; the owner's approval is asked at stage owner, after this one")
+    elif stage == "owner":
+        cause = view.get("cause") or {}
+        if cause.get("type") != "reply" or body(cause).get("option") != "approve":
+            refuse(stage, "ask the owner with ask, to owner, the options approve and deny; call next_stage in the run their approve opens")
+    elif stage == "build":
+        builds = [child for child in view.get("children") or []
+                  if child.get("state") == "done" and not (child.get("goal") or "").lower().startswith("assessment only")]
+        if not builds:
+            refuse(stage, "send the builders the build as a work naming their administrator, and call next_stage once it comes back done")
+
+    answer(True, "", [{"name": "comment", "args": {"body": report}}, {"name": "continue", "args": {}}])
+
+
+main()

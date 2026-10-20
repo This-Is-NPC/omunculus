@@ -24,14 +24,29 @@ defmodule Omunculus.Execution.Process do
     }
   end
 
+  # A process that already ended has sent how it ended: there is no input
+  # left to give it.
   @spec write(pid, iodata) :: :ok | {:error, term}
-  def write(pid, data), do: GenServer.call(pid, {:write, data})
+  def write(pid, data), do: call_unless_ended(pid, {:write, data})
 
   @spec close_input(pid) :: :ok | {:error, term}
-  def close_input(pid), do: GenServer.call(pid, :close_input)
+  def close_input(pid), do: call_unless_ended(pid, :close_input)
 
+  # Stopping waits for the process, busy as it may be with output, however
+  # long: its stop only kills and cleans up. One that already ended is
+  # stopped.
   @spec stop(pid, term) :: :ok | {:error, term}
-  def stop(pid, reason), do: GenServer.call(pid, {:stop, reason})
+  def stop(pid, reason) do
+    GenServer.call(pid, {:stop, reason}, :infinity)
+  catch
+    :exit, {reason, _call} when reason in [:noproc, :normal] -> :ok
+  end
+
+  defp call_unless_ended(pid, message) do
+    GenServer.call(pid, message)
+  catch
+    :exit, {reason, _call} when reason in [:noproc, :normal] -> :ok
+  end
 
   @impl true
   def init({command, policy, owner, ref, backend, lease, class}) do
@@ -158,13 +173,16 @@ defmodule Omunculus.Execution.Process do
 
   defp finish(%{stderr_closed: false} = state), do: {:noreply, state}
 
+  # Cleaned up before the owner hears it ended, so what the owner looks at
+  # next is as the command left it.
   defp finish(state) do
+    state.backend.cleanup(state.handle)
+    Limiter.release(state.limits, state.lease, state.class)
+
     if is_nil(state.terminal_error) do
       send(state.owner, {:execution, state.ref, {:exit, state.exit_status}})
     end
 
-    state.backend.cleanup(state.handle)
-    Limiter.release(state.limits, state.lease, state.class)
     {:stop, :normal, %{state | released: true}}
   end
 

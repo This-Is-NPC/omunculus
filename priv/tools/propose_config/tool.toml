@@ -1,0 +1,27 @@
+name = "propose_config"
+kind = "tool"
+triggers = ["model"]
+description = "Proposes to the person one change to the project's config: item (agents.<name>, models.<name>, workflows.<name>, workspaces.<name>, auth.<name>, secrets.<tool>, policy or access) becomes value, a table, or goes for null. The config it would make is loaded first: a change that does not load is refused here, with why. One that loads becomes a request to the project's owner, on the request route named owner, with what the item was and what it would be, and the run ends until the person applies or denies it."
+tags = ["config"]
+groups = ["setup"]
+module = "Omunculus.Tools.ProposeConfig"
+chains = ["end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+required = ["item", "reason"]
+
+[parameters.properties.item]
+type = "string"
+
+[parameters.properties.value]
+description = "The item's table as it would be written, or null to remove it."
+
+[parameters.properties.from]
+type = "string"
+description = "An item of the same section renamed to item."
+
+[parameters.properties.reason]
+type = "string"
+description = "Why, for the person deciding."

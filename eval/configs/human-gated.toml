@@ -1,0 +1,13 @@
+# Workers request fs.write, sandbox.write, bash and sandbox.network through
+# Father, who escalates these sealed permissions for the simulated human
+# to decide. Every worker has the same human-only permission boundary.
+[agents.edward]
+tools = ["break", "comment", "continue", "directory", "done", "end", "fs.read", "notify", "request_access"]
+human = ["fs.write", "sandbox.write", "bash", "sandbox.network"]
+
+[agents.envy]
+tools = ["break", "comment", "continue", "directory", "done", "end", "fs.read", "notify", "request_access"]
+human = ["fs.write", "sandbox.write", "bash", "sandbox.network"]
+
+[agents.gluttony]
+human = ["fs.write", "sandbox.write", "bash", "sandbox.network"]

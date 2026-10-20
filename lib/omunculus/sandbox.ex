@@ -71,10 +71,10 @@ defmodule Omunculus.Sandbox do
       if MapSet.member?(allowed, name) do
         case call.(name, args) do
           {:ok, output} -> %{id: id, ok: true, output: output}
-          {:error, reason} -> %{id: id, ok: false, output: inspect(reason)}
+          {:error, reason} -> %{id: id, ok: false, output: Omunculus.Tools.Out.failure(reason)}
         end
       else
-        %{id: id, ok: false, output: inspect({:not_allowed, name})}
+        %{id: id, ok: false, output: Omunculus.Tools.Out.not_yours(name)}
       end
 
     with :ok <- Execution.write(handle, Jason.encode!(response) <> "\n") do

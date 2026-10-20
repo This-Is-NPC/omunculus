@@ -1,11 +1,9 @@
 name = "tool_search"
 kind = "tool"
-shape = "simple"
 triggers = ["model"]
 description = "Searches this run's catalog by name, description, or tag."
 tags = ["catalog"]
 groups = ["catalog"]
-views = ["catalog"]
 module = "Omunculus.Tools.ToolSearch"
 
 [parameters]
@@ -19,3 +17,6 @@ type = "array"
 
 [parameters.properties.tags.items]
 type = "string"
+
+[views.catalog]
+source = "catalog"

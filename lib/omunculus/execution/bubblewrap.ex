@@ -1,6 +1,13 @@
 defmodule Omunculus.Execution.Bubblewrap do
   @moduledoc """
   Runs commands in a Bubblewrap namespace with only the policy's mounts.
+  Each process gets a temporary directory of its own (mode 0700) for its
+  pipes; a secret of its command is written there (mode 0400) before the
+  process starts, bound read-only at `/run/secrets/<NAME>` with
+  `<NAME>_FILE` naming it, and removed with the directory. A command that
+  does not see the host gets there too the `/etc/passwd` and `/etc/group`
+  that name its user, so that what looks itself up (`id`, `ssh`, `git`)
+  finds it, without the machine's own.
   """
 
   @behaviour Omunculus.Execution.Backend
@@ -13,7 +20,7 @@ defmodule Omunculus.Execution.Bubblewrap do
 
   defmodule Handle do
     @moduledoc false
-    @enforce_keys [:port, :input, :stderr_reader, :temp_dir, :created_hidden]
+    @enforce_keys [:port, :input, :input_pid, :stderr_reader, :temp_dir, :created_hidden]
     defstruct @enforce_keys
   end
 
@@ -35,7 +42,9 @@ defmodule Omunculus.Execution.Bubblewrap do
   end
 
   defp start_in_temp(bwrap, command, policy, temp_dir) do
-    with {:ok, created_hidden} <- prepare_hidden(policy, temp_dir) do
+    with :ok <- write_secrets(temp_dir, command.secrets),
+         :ok <- write_identity(temp_dir, policy),
+         {:ok, created_hidden} <- prepare_hidden(policy, temp_dir) do
       case start_process(bwrap, command, policy, temp_dir, created_hidden) do
         {:ok, _handle} = result ->
           result
@@ -55,6 +64,7 @@ defmodule Omunculus.Execution.Bubblewrap do
        %Handle{
          port: port,
          input: input,
+         input_pid: os_pid(input),
          stderr_reader: stderr_reader,
          temp_dir: temp_dir,
          created_hidden: created_hidden
@@ -80,8 +90,8 @@ defmodule Omunculus.Execution.Bubblewrap do
 
   @impl true
   def stop(%Handle{} = handle, _reason) do
-    kill_port(handle.input)
-    kill_port(handle.port)
+    kill_input(handle)
+    kill_sandbox(handle.port)
     kill_port(handle.stderr_reader)
     cleanup_hidden(handle.created_hidden)
     :ok
@@ -89,7 +99,7 @@ defmodule Omunculus.Execution.Bubblewrap do
 
   @impl true
   def cleanup(%Handle{} = handle) do
-    kill_port(handle.input)
+    kill_input(handle)
     kill_port(handle.stderr_reader)
     cleanup_hidden(handle.created_hidden)
     File.rm_rf(handle.temp_dir)
@@ -110,11 +120,14 @@ defmodule Omunculus.Execution.Bubblewrap do
 
     ["--unshare-all", "--unshare-user"] ++
       network_args(policy.network) ++
-      ["--die-with-parent", "--new-session", "--clearenv", "--tmpfs", "/"] ++
-      base_filesystem_args() ++
+      ["--die-with-parent", "--new-session", "--clearenv"] ++
+      filesystem_args(policy) ++
+      network_files(policy) ++
       mount_args(mounts) ++
-      hidden_args(policy.hidden, mounts, temp_dir) ++
+      hidden_args(policy, mounts, temp_dir) ++
+      identity_args(policy, temp_dir) ++
       environment_args(policy, mounts) ++
+      secret_args(command.secrets, temp_dir) ++
       ["--chdir", command.cwd, "--", "/usr/bin/sh", "-c", policy.sandbox.runner, "omunculus-exec"] ++
       [
         Path.join(temp_dir, "input"),
@@ -264,12 +277,32 @@ defmodule Omunculus.Execution.Bubblewrap do
     end
   end
 
+  # On a filesystem such as btrfs, an overlay goes on being in use a few
+  # milliseconds after the last process of the sandbox that mounted it has
+  # gone, so the run's next command may find its home overlay busy. bwrap
+  # then fails before the runner starts, with the input and stderr fifos not
+  # yet opened, so starting it again is safe. bwrap's own messages, apart
+  # from the command's stderr, tell that case apart.
+  @setup ~S"""
+  setup=$1; shift; tries=100
+  while :; do
+    "$@" 2> "$setup"; status=$?
+    if [ "$status" -ne 0 ] && [ "$tries" -gt 0 ] &&
+      /usr/bin/grep -q "Can't make overlay mount.*Device or resource busy" "$setup"; then
+      tries=$((tries - 1)); /usr/bin/sleep 0.01; continue
+    fi
+    /usr/bin/cat "$setup" >&2; exit "$status"
+  done
+  """
+
   defp open_port(bwrap, command, policy, temp_dir) do
     {:ok,
-     Port.open({:spawn_executable, bwrap}, [
+     Port.open({:spawn_executable, "/usr/bin/sh"}, [
        :binary,
        :exit_status,
-       args: arguments(command, policy, temp_dir)
+       args:
+         ["-c", @setup, "omunculus-bwrap", Path.join(temp_dir, "setup"), bwrap] ++
+           arguments(command, policy, temp_dir)
      ])}
   rescue
     error in ArgumentError -> {:error, {:bubblewrap, Exception.message(error)}}
@@ -278,33 +311,74 @@ defmodule Omunculus.Execution.Bubblewrap do
   defp network_args("host"), do: ["--share-net"]
   defp network_args("none"), do: []
 
-  defp base_filesystem_args do
-    [
-      "--dir",
-      "/tmp",
-      "--tmpfs",
-      "/tmp",
-      "--dir",
-      "/tmp/home",
-      "--tmpfs",
-      "/tmp/home",
-      "--proc",
-      "/proc",
-      "--dev",
-      "/dev",
-      "--symlink",
-      "usr/bin",
-      "/bin",
-      "--symlink",
-      "usr/lib",
-      "/lib",
-      "--symlink",
-      "usr/lib",
-      "/lib64",
-      "--symlink",
-      "usr/sbin",
-      "/sbin"
-    ]
+  # A network a process can use names hosts and trusts certificates: the
+  # host's resolver, hosts and TLS anchors, read-only, where it has them —
+  # already there for a command that sees the host.
+  @network_files ~w(/etc/resolv.conf /etc/hosts /etc/nsswitch.conf /etc/ssl /etc/ca-certificates /etc/pki)
+
+  defp network_files(%Policy{host: true}), do: []
+
+  defp network_files(%Policy{network: "host"}),
+    do: Enum.flat_map(@network_files, &["--ro-bind-try", &1, &1])
+
+  defp network_files(_policy), do: []
+
+  # Seeing the host, a command reads the machine as the person does, and
+  # writes only where its mounts let it: its home is the person's, its
+  # writes kept in the run's scratch; /run, with the sockets of the
+  # machine's services, is not there, but for the resolver.
+  defp filesystem_args(%Policy{host: true} = policy) do
+    home = System.user_home!()
+
+    overlay =
+      if policy.scratch do
+        upper = Path.join(policy.scratch, ".home")
+        work = Path.join(policy.scratch, ".home-work")
+        File.mkdir_p!(upper)
+        File.mkdir_p!(work)
+        ["--overlay-src", home, "--overlay", upper, work, home]
+      else
+        []
+      end
+
+    tmp = if policy.scratch, do: ["--bind", policy.scratch, "/tmp"], else: ["--tmpfs", "/tmp"]
+
+    ["--ro-bind", "/", "/"] ++
+      overlay ++
+      tmp ++
+      ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/run"] ++
+      ["--ro-bind-try", "/run/systemd/resolve", "/run/systemd/resolve"]
+  end
+
+  defp filesystem_args(policy), do: ["--tmpfs", "/"] ++ base_filesystem_args(policy.scratch)
+
+  # A run's scratch is its /tmp, home included, kept from one command to
+  # the next; a command outside a run gets an empty one.
+  defp base_filesystem_args(scratch) do
+    tmp =
+      if scratch,
+        do: ["--bind", scratch, "/tmp", "--dir", "/tmp/home"],
+        else: ["--dir", "/tmp", "--tmpfs", "/tmp", "--dir", "/tmp/home", "--tmpfs", "/tmp/home"]
+
+    tmp ++
+      [
+        "--proc",
+        "/proc",
+        "--dev",
+        "/dev",
+        "--symlink",
+        "usr/bin",
+        "/bin",
+        "--symlink",
+        "usr/lib",
+        "/lib",
+        "--symlink",
+        "usr/lib",
+        "/lib64",
+        "--symlink",
+        "usr/sbin",
+        "/sbin"
+      ]
   end
 
   defp mounts(policy, temp_dir) do
@@ -347,15 +421,9 @@ defmodule Omunculus.Execution.Bubblewrap do
     (directory_args ++ Enum.reverse(binds)) |> List.flatten()
   end
 
-  defp hidden_args(hidden, mounts, temp_dir) do
-    visible = fn hidden_path ->
-      Enum.any?(mounts, fn {_mode, _source, destination} ->
-        FilesystemPath.within?(destination, hidden_path)
-      end)
-    end
-
-    hidden
-    |> Enum.filter(visible)
+  defp hidden_args(policy, mounts, temp_dir) do
+    policy
+    |> visible_hidden(mounts)
     |> Enum.sort_by(&{path_depth(&1), &1})
     |> Enum.flat_map(fn path ->
       if File.dir?(path) do
@@ -366,16 +434,25 @@ defmodule Omunculus.Execution.Bubblewrap do
     end)
   end
 
+  # The hidden paths a command would see: under the host, those that exist
+  # (one that does not has nothing to hide); else those within its mounts.
+  defp visible_hidden(%Policy{host: true, hidden: hidden}, _mounts),
+    do: Enum.filter(hidden, &File.exists?/1)
+
+  defp visible_hidden(%Policy{hidden: hidden}, mounts) do
+    Enum.filter(hidden, fn hidden_path ->
+      Enum.any?(mounts, fn {_mode, _source, destination} ->
+        FilesystemPath.within?(destination, hidden_path)
+      end)
+    end)
+  end
+
   defp prepare_hidden(policy, temp_dir) do
     mounts = mounts(policy, temp_dir)
 
     result =
-      policy.hidden
-      |> Enum.filter(fn hidden ->
-        Enum.any?(mounts, fn {_mode, _source, destination} ->
-          FilesystemPath.within?(destination, hidden)
-        end)
-      end)
+      policy
+      |> visible_hidden(mounts)
       |> Enum.reduce_while([], fn path, created ->
         if File.exists?(path) do
           {:cont, created}
@@ -411,6 +488,84 @@ defmodule Omunculus.Execution.Bubblewrap do
        |> Enum.flat_map(fn {name, value} -> ["--setenv", name, value] end))
   end
 
+  # Bubblewrap maps the user who starts it to the same ids inside, and
+  # files of ids it does not map to the overflow ids, `nobody`'s.
+  @user "omunculus"
+  @overflow 65_534
+
+  defp write_identity(_temp_dir, %Policy{host: true}), do: :ok
+
+  defp write_identity(temp_dir, _policy) do
+    {uid, gid} = ids()
+
+    passwd =
+      "#{@user}:x:#{uid}:#{gid}:#{@user}:/tmp/home:/usr/bin/sh\n" <>
+        "nobody:x:#{@overflow}:#{@overflow}:nobody:/:/usr/bin/nologin\n"
+
+    group = "#{@user}:x:#{gid}:\nnobody:x:#{@overflow}:\n"
+
+    with :ok <- File.write(Path.join(temp_dir, "passwd"), passwd) do
+      File.write(Path.join(temp_dir, "group"), group)
+    end
+  end
+
+  defp ids do
+    status = File.read!("/proc/self/status")
+    {real_id(status, "Uid"), real_id(status, "Gid")}
+  end
+
+  defp real_id(status, field) do
+    [_, id] = Regex.run(~r/^#{field}:\s+(\d+)/m, status)
+    id
+  end
+
+  defp identity_args(%Policy{host: true}, _temp_dir), do: []
+
+  defp identity_args(_policy, temp_dir) do
+    ["--ro-bind", Path.join(temp_dir, "passwd"), "/etc/passwd"] ++
+      ["--ro-bind", Path.join(temp_dir, "group"), "/etc/group"]
+  end
+
+  @secrets "/run/secrets"
+
+  defp write_secrets(_temp_dir, secrets) when map_size(secrets) == 0, do: :ok
+
+  defp write_secrets(temp_dir, secrets) do
+    directory = Path.join(temp_dir, "secrets")
+
+    with :ok <- File.mkdir(directory), :ok <- File.chmod(directory, 0o700) do
+      Enum.reduce_while(secrets, :ok, fn {name, value}, :ok ->
+        path = Path.join(directory, name)
+
+        case File.write(path, value) do
+          :ok -> {:cont, File.chmod(path, 0o400)}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+    end
+  end
+
+  defp secret_args(secrets, _temp_dir) when map_size(secrets) == 0, do: []
+
+  defp secret_args(secrets, temp_dir) do
+    ["--dir", "/run", "--dir", @secrets] ++
+      (secrets
+       |> Map.keys()
+       |> Enum.sort()
+       |> Enum.flat_map(fn name ->
+         inside = Path.join(@secrets, name)
+
+         [
+           "--ro-bind",
+           Path.join([temp_dir, "secrets", name]),
+           inside,
+           "--setenv",
+           name <> "_FILE",
+           inside
+         ]
+       end))
+  end
+
   defp mount_directories(path, include_self?) do
     path = if include_self?, do: path, else: Path.dirname(path)
 
@@ -431,6 +586,32 @@ defmodule Omunculus.Execution.Bubblewrap do
     Enum.each(paths, &File.rm/1)
   end
 
+  # The writer of a command's input waits for the command to open it: one
+  # that never starts leaves it waiting, its port closed, so it is killed
+  # by the process id it had.
+  defp kill_input(handle) do
+    kill_port(handle.input)
+    if handle.input_pid && writing?(handle.input_pid, handle.temp_dir), do: kill(handle.input_pid)
+  end
+
+  # Still this command's writer, not a process that took its id since.
+  defp writing?(pid, temp_dir) do
+    case File.read("/proc/#{pid}/cmdline") do
+      {:ok, cmdline} -> String.contains?(cmdline, Path.join(temp_dir, "input"))
+      {:error, _gone} -> false
+    end
+  end
+
+  defp os_pid(port) do
+    case Port.info(port, :os_pid) do
+      {:os_pid, pid} -> pid
+      nil -> nil
+    end
+  end
+
+  defp kill(pid),
+    do: System.cmd("kill", ["-KILL", Integer.to_string(pid)], stderr_to_stdout: true)
+
   defp kill_port(port) do
     case Port.info(port, :os_pid) do
       {:os_pid, pid} ->
@@ -442,6 +623,58 @@ defmodule Omunculus.Execution.Bubblewrap do
     end
   rescue
     ArgumentError -> :ok
+  end
+
+  # Killed alone, the shell that starts bwrap leaves what runs inside it to
+  # die after it, and its mounts with them. Every process of the sandbox is
+  # killed, and gone, before the command is over.
+  defp kill_sandbox(port) do
+    case Port.info(port, :os_pid) do
+      {:os_pid, pid} ->
+        pids = [pid | descendants(pid)]
+
+        _ =
+          System.cmd("kill", ["-KILL" | Enum.map(pids, &Integer.to_string/1)],
+            stderr_to_stdout: true
+          )
+
+        await_exit(pids)
+
+      nil ->
+        :ok
+    end
+  rescue
+    ArgumentError -> :ok
+  end
+
+  defp descendants(pid) do
+    case File.read("/proc/#{pid}/task/#{pid}/children") do
+      {:ok, children} ->
+        for child <- String.split(children),
+            child = String.to_integer(child),
+            descendant <- [child | descendants(child)],
+            do: descendant
+
+      {:error, _gone} ->
+        []
+    end
+  end
+
+  defp await_exit(pids) do
+    if Enum.any?(pids, &running?/1) do
+      Process.sleep(5)
+      await_exit(pids)
+    else
+      :ok
+    end
+  end
+
+  # A zombie has let go of its namespaces already.
+  defp running?(pid) do
+    case File.read("/proc/#{pid}/stat") do
+      {:ok, stat} -> not String.starts_with?(stat |> String.split(")") |> List.last(), " Z")
+      {:error, _gone} -> false
+    end
   end
 
   defp parse_exit_status(value) do

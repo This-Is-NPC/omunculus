@@ -573,7 +573,7 @@ fn report(output: &Path) -> Result<()> {
     let mut csv = String::from(
         "profile,confirmed_agents,launched_agents,peak_bytes,elapsed_seconds,reason\n",
     );
-    let mut md = String::from("# Capacidade residente — rampa linear\n\nUm agente acrescentado por vez; os anteriores continuam vivos aguardando o stub Rust. CPU e RAM abrangem BEAM e descendentes. Stub e coletor Rust ficam fora.\n\n| Perfil | Agentes confirmados | Último agente iniciado | Pico MiB | Parada |\n|---|---:|---:|---:|---|\n");
+    let mut md = String::from("# Resident capacity — linear ramp\n\nOne agent added at a time; the earlier ones stay alive waiting on the Rust stub. CPU and RAM cover BEAM and its descendants. The Rust stub and collector are excluded.\n\n| Profile | Confirmed agents | Last agent launched | Peak MiB | Stop |\n|---|---:|---:|---:|---|\n");
     for profile in ["A", "B"] {
         let path = output.join(profile).join("result.json");
         if !path.exists() {
@@ -604,7 +604,7 @@ fn report(output: &Path) -> Result<()> {
             peak as f64 / 1048576.0
         ));
     }
-    md.push_str("\nA: quota de 1 CPU/512 MiB; B: quota de 2 CPUs/1 GiB; swap zero. O contador confirmado cruza runs montadas com requisições simultâneas recebidas pelo stub.\n\nEste é um teste de residência até falhar, não throughput nem um SLO de latência. `exploration_limit` significa teste limitado pelo argumento --max-agents, não teto do hardware. O último contador confirmado é conservador devido ao intervalo de coleta.\n\nContexto de 64 KiB por padrão, banco/workspace compartilhado e uma conexão SQLite por agente. Pool HTTP de 65.536 conexões apenas no benchmark para não parar no padrão de 50. Confira parâmetros em manifest.json e A/B/config.json.\n");
+    md.push_str("\nA: 1 CPU/512 MiB quota; B: 2 CPUs/1 GiB quota; zero swap. The confirmed count cross-checks mounted runs against concurrent requests received by the stub.\n\nThis is a residency-until-failure test, not throughput or a latency SLO. `exploration_limit` means a test bounded by the --max-agents argument, not the hardware ceiling. The last confirmed count is conservative due to the sampling interval.\n\n64 KiB context by default, shared database/workspace and one SQLite connection per agent. HTTP pool of 65,536 connections in the benchmark only, so it does not stop at the default of 50. See the parameters in manifest.json and A/B/config.json.\n");
     fs::write(output.join("summary.csv"), csv)?;
     fs::write(output.join("report.md"), md)?;
     Ok(())

@@ -1,7 +1,5 @@
 name = "directory"
 kind = "tool"
-shape = "simple"
-views = ["paths"]
 triggers = ["model"]
 description = "Lists the run roots and the top-level entries of each."
 tags = ["fs"]
@@ -9,3 +7,6 @@ module = "Omunculus.Tools.Directory"
 
 [parameters]
 type = "object"
+
+[views.paths]
+source = "paths"

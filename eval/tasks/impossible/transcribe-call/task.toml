@@ -1,0 +1,10 @@
+scenario = "impossible"
+critical = false
+configurations = ["solo", "delegation", "workflow", "negotiated", "human-gated"]
+needs = []
+
+[expect]
+outcome = ["break", "answer"]
+
+[human]
+"sandbox.network" = "deny"

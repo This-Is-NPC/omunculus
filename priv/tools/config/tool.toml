@@ -1,0 +1,22 @@
+name = "config"
+kind = "tool"
+triggers = ["cli", "model"]
+description = "Reads the project's setup, as JSON. Without arguments, an index: the file's revision and, for each section (agents, workflows, models, workspaces, auth, secrets, packs, policy, access, names), each item's size in bytes. Then read a section whole with section, or one item with item: an agent or workflow with what the config runs, its pack and, as file, the table configure writes."
+tags = ["cli", "config"]
+groups = ["cli", "setup"]
+module = "Omunculus.Tools.Config"
+
+[parameters]
+type = "object"
+
+[parameters.properties.section]
+type = "string"
+description = "One section printed whole: agents, workflows, models, workspaces, auth, secrets, packs, policy, access or names."
+
+[parameters.properties.item]
+type = "string"
+description = "One item: <section>.<name> (agents.seller, secrets.<tool>), policy or access; with section, its name alone."
+
+[parameters.properties.whole]
+type = "boolean"
+description = "The whole setup at once, for a client; a real project's is longer than a call returns."

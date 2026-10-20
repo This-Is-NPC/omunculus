@@ -1,26 +1,37 @@
 defmodule Omunculus.Model.OpenAI do
   @moduledoc """
-  Factory for an OpenAI-compatible model of the contract of spec §8.6:
+  Factory for an OpenAI-compatible model of the model contract:
   `new/1` takes the `[models.<name>]` spec (`url`, `model`, `timeout_ms`,
-  optional `temperature`, `headers`, `credential`) and returns a 5-arity
-  `(assembled, tools, call, record, execution)` fun. Declares each of
+  optional `temperature`, `headers`, `body`, `prompt_cache_key`, `credential`) and
+  returns a 6-arity
+  `(prompt, tools, call, record, delta, execution)` fun. Declares each of
   `tools` (the run's effective tools, as `%{name, description,
   parameters}`) as a function with its real `parameters` schema — an
   empty schema becomes `%{type: "object", properties: %{}}` so servers
-  accept it — posts the assembled as the user turn to
+  accept it — posts the prompt's instructions as a `system` message and
+  its context as the user turn, or, continuing a session, the session's
+  messages as they were and what happened since, to
   `<url>/chat/completions`, and for every `tool_calls` entry in the
   reply runs `call.(name, args)` and feeds the output back as a `tool`
   message, looping until a reply carries no tool call. Every reply is
-  recorded before dispatch. `__omunculus_execute` runs JavaScript in the
-  sandbox and uses the same authorized call callback as native tool
-  calls.
+  recorded before dispatch, with the reply's `usage` when the server
+  sends one; the next request carries the reply without it.
+  With `code_mode`, the model is also offered `__omunculus_execute`, which
+  runs JavaScript in the sandbox through the same authorized call
+  callback as native tool calls. With `stream = true` the
+  reply is read as server-sent events, its text passed to `delta` as it
+  arrives, and `stream_options.include_usage` asks for the `usage` chunk.
   """
 
+  alias Omunculus.Model.{Arguments, Body, EventStream}
+  alias Omunculus.Prompt
+
   @spec new(map) ::
-          (String.t(),
+          (Prompt.t(),
            [map],
            (String.t(), map -> {:ok, String.t()} | {:error, term}),
            (map -> :ok | {:error, term}),
+           (String.t() -> :ok),
            Omunculus.Execution.Policy.t() ->
              {:ok, String.t()} | {:error, term})
   def new(spec) when is_map(spec) do
@@ -28,17 +39,23 @@ defmodule Omunculus.Model.OpenAI do
       url: spec["url"] <> "/chat/completions",
       model: spec["model"],
       timeout: spec["timeout_ms"],
+      retries: spec["retries"],
+      code_mode: spec["code_mode"] == true,
       headers: request_headers(spec),
-      temperature: spec["temperature"]
+      temperature: spec["temperature"],
+      stream: spec["stream"] == true,
+      prompt_cache_key: spec["prompt_cache_key"],
+      body: spec["body"] || %{}
     }
 
-    fn assembled, tools, call, record, execution ->
-      function_tools = Enum.map(tools, &function_tool/1) ++ [executor_tool()]
+    fn prompt, tools, call, record, delta, execution ->
+      function_tools =
+        Enum.map(tools, &function_tool/1) ++ if(client.code_mode, do: [executor_tool()], else: [])
 
       loop(
-        client,
+        Map.put(client, :delta, delta),
         function_tools,
-        [%{role: "user", content: assembled}],
+        messages(prompt),
         call,
         record,
         tools,
@@ -69,6 +86,31 @@ defmodule Omunculus.Model.OpenAI do
   defp headers_list(headers) when is_map(headers),
     do: Enum.map(headers, fn {key, value} -> {key, value} end)
 
+  # The instructions are a message of their own: a server caches whole
+  # messages, so the next run's request reuses them though its context differs.
+  defp messages(%Prompt{instructions: instructions} = prompt),
+    do: system(instructions) ++ conversation(prompt)
+
+  defp system(""), do: []
+  defp system(instructions), do: [%{role: "system", content: instructions}]
+
+  # A run continuing its session sends the session as it was: the same
+  # messages the provider has in its cache, then what happened since.
+  defp conversation(%Prompt{history: nil, context: context}),
+    do: [%{role: "user", content: context}]
+
+  defp conversation(%Prompt{history: history}), do: Enum.flat_map(history, &turn/1)
+
+  defp turn(%{"user" => text}), do: [%{role: "user", content: text}]
+
+  defp turn(%{"model" => reply, "outputs" => outputs}) do
+    calls = Enum.zip(reply["tool_calls"] || [], outputs)
+    [strip_message(reply) | Enum.map(calls, &tool_message/1)]
+  end
+
+  defp tool_message({%{"id" => id}, output}),
+    do: %{role: "tool", tool_call_id: id, content: output}
+
   defp executor_tool do
     function_tool(%{
       name: "__omunculus_execute",
@@ -98,20 +140,20 @@ defmodule Omunculus.Model.OpenAI do
 
   defp loop(client, tools, messages, call, record, catalog, execution) do
     with {:ok, message} <- post(client, request_body(client, tools, messages)),
-         :ok <- record.(strip_message(message)) do
+         :ok <- record.(maybe_put(strip_message(message), "usage", message["usage"])) do
       case message do
         %{"tool_calls" => [_ | _] = tool_calls} ->
-          with {:ok, tool_messages} <- run_tool_calls(tool_calls, call, catalog, execution) do
-            loop(
-              client,
-              tools,
-              messages ++ [strip_message(message) | tool_messages],
-              call,
-              record,
-              catalog,
-              execution
-            )
-          end
+          tool_messages = Enum.map(tool_calls, &run_tool_call(&1, call, catalog, execution))
+
+          loop(
+            client,
+            tools,
+            messages ++ [strip_message(message) | tool_messages],
+            call,
+            record,
+            catalog,
+            execution
+          )
 
         _final ->
           {:ok, message["content"] || ""}
@@ -122,16 +164,29 @@ defmodule Omunculus.Model.OpenAI do
   defp request_body(client, tools, messages) do
     %{model: client.model, messages: messages, tools: tools}
     |> maybe_put(:temperature, client.temperature)
+    |> maybe_put(:prompt_cache_key, client.prompt_cache_key)
+    |> maybe_put(:stream, client.stream || nil)
+    |> maybe_put(:stream_options, if(client.stream, do: %{include_usage: true}))
+    |> Body.merge(client.body)
   end
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
+  defp post(%{stream: true} = client, body) do
+    reply = %{content: nil, tool_calls: %{}, usage: nil}
+
+    case EventStream.post(client, body, reply, &chunk(&1, &2, client)) do
+      {:ok, reply} -> {:ok, streamed_message(reply)}
+      {:error, reason} -> {:error, {:openai, reason}}
+    end
+  end
+
   defp post(client, body) do
-    case Req.post(client.url,
-           json: body,
-           headers: client.headers,
-           receive_timeout: client.timeout
+    case Req.post(
+           client.url,
+           [json: body, headers: client.headers, receive_timeout: client.timeout] ++
+             Omunculus.Model.Retry.options(client.retries)
          ) do
       {:ok, %Req.Response{status: status, body: response_body}} when status in 200..299 ->
         extract_message(response_body)
@@ -144,16 +199,60 @@ defmodule Omunculus.Model.OpenAI do
     end
   end
 
-  defp extract_message(%{"choices" => [%{"message" => message} | _]}), do: {:ok, message}
+  defp extract_message(%{"choices" => [%{"message" => message} | _]} = body),
+    do: {:ok, maybe_put(message, "usage", body["usage"])}
+
   defp extract_message(body), do: {:error, {:openai, {:invalid_response, body}}}
 
-  defp run_tool_calls(tool_calls, call, catalog, execution) do
-    Enum.reduce_while(tool_calls, {:ok, []}, fn tool_call, {:ok, acc} ->
-      case run_tool_call(tool_call, call, catalog, execution) do
-        {:ok, tool_message} -> {:cont, {:ok, acc ++ [tool_message]}}
-        {:error, reason} -> {:halt, {:error, {:openai, reason}}}
-      end
+  defp chunk(%{"choices" => [%{"delta" => delta} | _]} = data, reply, client) do
+    reply
+    |> chunk_usage(data["usage"])
+    |> chunk_content(delta["content"], client)
+    |> chunk_tool_calls(delta["tool_calls"])
+  end
+
+  defp chunk(data, reply, _client), do: chunk_usage(reply, data["usage"])
+
+  defp chunk_usage(reply, nil), do: reply
+  defp chunk_usage(reply, usage), do: %{reply | usage: usage}
+
+  defp chunk_content(reply, text, client) when is_binary(text) and text != "" do
+    :ok = client.delta.(text)
+    %{reply | content: (reply.content || "") <> text}
+  end
+
+  defp chunk_content(reply, _text, _client), do: reply
+
+  defp chunk_tool_calls(reply, [_ | _] = calls) do
+    Enum.reduce(calls, reply, fn %{"index" => index} = part, reply ->
+      current =
+        Map.get(reply.tool_calls, index, %{
+          "id" => nil,
+          "type" => "function",
+          "function" => %{"name" => "", "arguments" => ""}
+        })
+
+      function = Map.get(part, "function", %{})
+
+      updated =
+        current
+        |> Map.put("id", part["id"] || current["id"])
+        |> update_in(["function", "name"], &(&1 <> (function["name"] || "")))
+        |> update_in(["function", "arguments"], &(&1 <> (function["arguments"] || "")))
+
+      %{reply | tool_calls: Map.put(reply.tool_calls, index, updated)}
     end)
+  end
+
+  defp chunk_tool_calls(reply, _calls), do: reply
+
+  defp streamed_message(%{content: content, tool_calls: calls, usage: usage}) do
+    message = maybe_put(%{"role" => "assistant", "content" => content}, "usage", usage)
+
+    case calls |> Enum.sort_by(&elem(&1, 0)) |> Enum.map(&elem(&1, 1)) do
+      [] -> message
+      tool_calls -> Map.put(message, "tool_calls", tool_calls)
+    end
   end
 
   defp run_tool_call(
@@ -162,9 +261,11 @@ defmodule Omunculus.Model.OpenAI do
          catalog,
          execution
        ) do
-    with {:ok, args} <- decode_arguments(arguments) do
-      {:ok, tool_result_message(id, invoke(name, args, call, catalog, execution))}
-    end
+    result =
+      with {:ok, args} <- Arguments.decode(arguments),
+           do: invoke(name, args, call, catalog, execution)
+
+    tool_result_message(id, result)
   end
 
   defp invoke("__omunculus_execute", %{"code" => code}, call, catalog, execution)
@@ -173,20 +274,11 @@ defmodule Omunculus.Model.OpenAI do
 
   defp invoke(name, args, call, _catalog, _execution), do: call.(name, args)
 
-  defp decode_arguments(""), do: {:ok, %{}}
-
-  defp decode_arguments(arguments) do
-    case Jason.decode(arguments) do
-      {:ok, decoded} -> {:ok, decoded}
-      {:error, reason} -> {:error, {:invalid_arguments, reason}}
-    end
-  end
-
   defp tool_result_message(id, {:ok, output}),
     do: %{role: "tool", tool_call_id: id, content: output}
 
   defp tool_result_message(id, {:error, reason}),
-    do: %{role: "tool", tool_call_id: id, content: inspect(reason)}
+    do: %{role: "tool", tool_call_id: id, content: Omunculus.Tools.Out.failure(reason)}
 
   defp strip_message(message), do: Map.take(message, ["role", "content", "tool_calls"])
 end

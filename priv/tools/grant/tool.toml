@@ -1,0 +1,23 @@
+name = "grant"
+kind = "tool"
+triggers = ["chain"]
+description = "Grants a name to the work of a request, or with a scope to a TOML layer. A scope needs a human."
+tags = ["store", "request"]
+groups = ["store"]
+module = "Omunculus.Tools.Grant"
+
+[parameters]
+type = "object"
+required = ["request_id", "name", "kind"]
+
+[parameters.properties.request_id]
+type = "string"
+
+[parameters.properties.name]
+type = "string"
+
+[parameters.properties.kind]
+type = "string"
+
+[parameters.properties.scope]
+type = "string"

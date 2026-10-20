@@ -1,14 +1,25 @@
 defmodule Omunculus.Tool.Manifest do
   @moduledoc """
-  Struct parsed from a `tool.toml` or `hook.toml`, per spec §8.5. An entry
-  built from an MCP server's `tools/list` (spec §8.7) sets `mcp` instead of
-  going through `load/1`.
+  Struct parsed from a `tool.toml` or `hook.toml`. An entry
+  built from an MCP server's `tools/list` sets `mcp` instead of
+  going through `load/1`. `chains` lists the tools this one may chain and
+  `then` the ones chained after its `out.chain`; every name in `then` is in
+  `chains` and `end`, when present, is the last of `then`. `views` are the
+  `[views.<key>]` tables `Omunculus.Tool.Views` parses. `secrets` names
+  the secrets a `command` tool's process receives, each bound to an
+  `[auth]` provider in the config's `[secrets.<tool>]`; an MCP entry names
+  those its server's `secrets` binds. A skill's `uses` are the tools its
+  `allowed-tools` names, for a client to show; the ceiling still decides.
+  A tool found in a folder of `[tools] paths` has that folder as its
+  `root`, which its commands read with the folders beside its own.
   """
+
+  alias Omunculus.Execution.Command
+  alias Omunculus.Tool.Views
 
   @enforce_keys [:name, :kind, :dir]
   defstruct name: nil,
             kind: nil,
-            shape: "simple",
             triggers: ["model"],
             description: "",
             tags: [],
@@ -16,17 +27,22 @@ defmodule Omunculus.Tool.Manifest do
             command: nil,
             module: nil,
             parameters: %{},
+            schemas: %{},
             views: [],
             events: [],
+            chains: [],
+            then: [],
+            secrets: [],
+            uses: [],
             agent: nil,
             dir: nil,
+            root: nil,
             mcp: nil,
             config: true
 
   @type t :: %__MODULE__{
           name: String.t(),
           kind: String.t(),
-          shape: String.t(),
           triggers: [String.t()],
           description: String.t(),
           tags: [String.t()],
@@ -34,15 +50,21 @@ defmodule Omunculus.Tool.Manifest do
           command: [String.t()] | nil,
           module: String.t() | nil,
           parameters: map,
-          views: [String.t()],
+          schemas: %{String.t() => map},
+          views: [Views.spec()],
           events: [String.t()],
+          chains: [String.t()],
+          then: [String.t()],
+          secrets: [String.t()],
+          uses: [String.t()],
           agent: String.t() | nil,
           dir: String.t() | nil,
+          root: String.t() | nil,
           mcp: Omunculus.Config.mcp_server() | nil,
           config: boolean
         }
 
-  @known_keys ~w(name kind shape triggers description tags groups command module parameters views events agent config)
+  @known_keys ~w(name kind triggers description tags groups command module parameters schemas views events chains then secrets agent config)
 
   @spec load(String.t()) :: {:ok, t} | {:error, term}
   def load(path) do
@@ -94,12 +116,16 @@ defmodule Omunculus.Tool.Manifest do
     with {:ok, name} <- required_string(raw, "name"),
          {:ok, kind} <- required_enum(raw, "kind", ["tool", "hook"]),
          {:ok, {command, module}} <- required_command_or_module(raw),
-         {:ok, shape} <- optional_string(raw, "shape", "simple"),
          {:ok, description} <- optional_string(raw, "description", ""),
          {:ok, tags} <- optional_string_list(raw, "tags", []),
          {:ok, groups} <- optional_string_list(raw, "groups", []),
          {:ok, parameters} <- optional_map(raw, "parameters", %{}),
-         {:ok, views} <- optional_string_list(raw, "views", []),
+         {:ok, schemas} <- schemas(raw),
+         {:ok, views} <- Views.parse(Map.get(raw, "views", %{})),
+         {:ok, chains} <- optional_string_list(raw, "chains", []),
+         {:ok, then} <- optional_string_list(raw, "then", []),
+         :ok <- validate_then(then, chains),
+         {:ok, secrets} <- secrets(raw, command),
          {:ok, {triggers, events, agent}} <- kind_fields(raw, kind),
          {:ok, config} <- optional_bool(raw, "config", true),
          :ok <- check_config_flag(name, kind, triggers, config) do
@@ -107,7 +133,6 @@ defmodule Omunculus.Tool.Manifest do
        %__MODULE__{
          name: name,
          kind: kind,
-         shape: shape,
          triggers: triggers,
          description: description,
          tags: tags,
@@ -115,12 +140,45 @@ defmodule Omunculus.Tool.Manifest do
          command: command,
          module: module,
          parameters: parameters,
+         schemas: schemas,
          views: views,
          events: events,
+         chains: chains,
+         then: then,
+         secrets: secrets,
          agent: agent,
          dir: dir,
          config: config
        }}
+    end
+  end
+
+  # Only an external command runs as a process a secret can be handed to.
+  defp secrets(raw, command) do
+    with {:ok, names} <- optional_string_list(raw, "secrets", []) do
+      cond do
+        names == [] -> {:ok, []}
+        is_nil(command) -> {:error, {:invalid, :secrets}}
+        Enum.all?(names, &Command.secret_name?/1) -> {:ok, Enum.uniq(names)}
+        true -> {:error, {:invalid, :secrets}}
+      end
+    end
+  end
+
+  defp schemas(raw) do
+    with {:ok, schemas} <- optional_map(raw, "schemas", %{}) do
+      if Enum.all?(schemas, fn {_variant, schema} -> is_map(schema) end),
+        do: {:ok, schemas},
+        else: {:error, {:invalid, :schemas}}
+    end
+  end
+
+  @spec validate_then([String.t()], [String.t()]) :: :ok | {:error, {:invalid, :then}}
+  def validate_then(then, chains) do
+    cond do
+      Enum.any?(then, &(&1 not in chains)) -> {:error, {:invalid, :then}}
+      "end" in Enum.drop(then, -1) -> {:error, {:invalid, :then}}
+      true -> :ok
     end
   end
 
@@ -132,7 +190,7 @@ defmodule Omunculus.Tool.Manifest do
     with :ok <- forbidden(raw, "events"),
          :ok <- forbidden(raw, "agent"),
          {:ok, triggers} <-
-           optional_enum_list(raw, "triggers", ["model"], ["model", "cli", "harness"]),
+           optional_enum_list(raw, "triggers", ["model"], ["model", "cli", "harness", "chain"]),
          :ok <- validate_harness_triggers(triggers) do
       {:ok, {triggers, [], nil}}
     end

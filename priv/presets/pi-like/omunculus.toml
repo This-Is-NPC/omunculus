@@ -1,13 +1,24 @@
 [execution]
 backend = "bubblewrap"
 runtimes = ["/usr"]
-environment = ["LANG", "LC_ALL", "TERM"]
+environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH"]
 timeout_ms = 30000
 max_output_bytes = 1048576
 max_concurrent = 4
 max_queue = 64
 queue_timeout_ms = 30000
 resources = ["sandbox.write", "sandbox.network"]
+# A command sees the machine as the person does, read-only: their tools,
+# versions and settings, so what it builds runs for them. What follows it
+# may not read: keys, logins, credentials and browser profiles.
+host = true
+deny_read = [
+  "~/.ssh", "~/.gnupg", "~/.aws", "~/.azure", "~/.config/gcloud", "~/.kube",
+  "~/.docker", "~/.netrc", "~/.git-credentials", "~/.config/gh", "~/.npmrc",
+  "~/.pypirc", "~/.password-store", "~/.local/share/keyrings", "~/.mozilla",
+  "~/.config/google-chrome", "~/.config/chromium", "~/.config/BraveSoftware",
+  "~/.codex", "~/.claude",
+]
 
 [execution.sandbox]
 script = "../../sandbox.js"
@@ -20,6 +31,9 @@ path = ".omunculus/store.sqlite3"
 
 [tools]
 paths = ["../../tools"]
+
+[skills]
+paths = ["~/.agents/skills", ".agents/skills"]
 
 [auth]
 store = ".omunculus/auth.json"
@@ -46,15 +60,21 @@ url = "https://api.anthropic.com/v1"
 model = "claude-sonnet-4-5"
 timeout_ms = 120000
 headers = { anthropic-beta = "oauth-2025-04-08" }
+body = { max_tokens = 32000 }
 
 [agents.pi]
 depth = 0
 model = "fake"
-tools = ["catalog", "fs.read", "fs.write", "request_sandbox", "sequence", "store"]
-negotiable = ["sandbox.write"]
+tools = ["catalog", "fs.read", "fs.write", "request_access", "sequence", "skills", "store"]
+human = ["sandbox.write"]
 text = """
-You are a Pi-style agent: compact, direct, and without shell access. Read and edit files with tools, record the work performed, and request access when needed.
+You are a Pi-style agent: compact, direct, and without shell access. Read and edit files with tools, record the work performed, request access when needed, and call done with a report when the work is complete.
 """
 
 [policy]
+request_routes = [{ via = ["parent", "origin"] }]
 assemble = "assemble"
+max_retries = 3
+last_run_output_bytes = 8192
+tool_output_bytes = 32768
+conversation_bytes = 16384

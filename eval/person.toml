@@ -1,0 +1,6 @@
+# The person a task with [person] simulates: a model that answers what the
+# agent asks with only the task's facts.
+[model]
+url = "https://api.anthropic.com/v1/messages"
+model = "claude-haiku-5-5"
+key_env = "ANTHROPIC_API_KEY"

@@ -1,0 +1,5 @@
+{
+  "outcome": "done",
+  "report": "app.py serves /health and /items with FastAPI, set up in .venv.",
+  "delete": []
+}

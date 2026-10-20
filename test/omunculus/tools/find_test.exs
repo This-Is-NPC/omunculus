@@ -36,6 +36,15 @@ defmodule Omunculus.Tools.FindTest do
            }
   end
 
+  test "keeps at most limit paths, and leaves out .git", %{root: root} do
+    File.mkdir_p!(Path.join(root, ".git"))
+    File.write!(Path.join(root, ".git/c.txt"), "")
+    input = %{@input | args: %{"pattern" => "**/*.txt", "limit" => 1}, roots: [root]}
+
+    assert Find.run(input, policy(input))["output"] ==
+             "a.txt\n(1 more match: narrow the path or pattern)"
+  end
+
   test "drops results that escape the roots via ..", %{root: root} do
     input = %{@input | args: %{"pattern" => "../*.txt"}, roots: [root]}
 

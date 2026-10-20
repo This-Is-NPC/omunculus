@@ -1,9 +1,10 @@
 name = "preset"
 kind = "tool"
-shape = "simple"
 triggers = ["cli"]
 config = false
-description = "Applies a preset: TOML and tool folders into the project."
+description = """
+Applies a preset: copies from's omunculus.toml onto the config path, and its tools/ beside it when there is one. [tools] paths, the path of each [[packs]] and [execution.sandbox] script are rewritten to absolute locations resolved against from, and the tools/ folder beside the written file is added to paths. A from that is not a folder holding omunculus.toml is unknown preset: <name>. It is the one command that runs without a config.
+"""
 tags = ["cli", "preset"]
 groups = ["cli"]
 module = "Omunculus.Tools.Preset"
@@ -14,6 +15,8 @@ required = ["name", "from"]
 
 [parameters.properties.name]
 type = "string"
+description = "The preset's name, recorded in the receipt preset <name> applied."
 
 [parameters.properties.from]
 type = "string"
+description = "The folder that supplies the files; it holds omunculus.toml."

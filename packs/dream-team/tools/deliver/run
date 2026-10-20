@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+"""The administrator's done: a build is delivered only once the plan in
+docs/plan.md is covered — each of its items (a "## <item>" heading) by a
+done work of the workflow page whose title begins with the item, and the
+whole by a done work of the workflow release. An assessment is delivered
+as it is."""
+
+import json
+import pathlib
+import re
+import sys
+
+
+def answer(ok, output, chain=()):
+    json.dump({"ok": ok, "output": output, "emit": [], "chain": list(chain)}, sys.stdout)
+    sys.stdout.write("\n")
+    sys.exit(0)
+
+
+def main():
+    call = json.load(sys.stdin)
+    view = call.get("view") or {}
+    work = view.get("work") or {}
+    report = ((call.get("args") or {}).get("report") or "").strip()
+    root = (call.get("roots") or [None])[0]
+    if not report:
+        answer(False, "report required")
+    if not work:
+        answer(False, "deliver concludes a work; this run has none")
+
+    if not (work.get("goal") or "").lower().startswith("assessment only"):
+        plan = pathlib.Path(root or ".", "docs", "plan.md")
+        if not plan.is_file():
+            answer(False, "not delivered: write docs/plan.md first — a ## base item, then a ## page: <name> item per page, each with what it shows and how to check it — and hand down each item as a work of the workflow page, its title beginning with the item")
+        items = [m.strip() for m in re.findall(r"^##\s+(.+)$", plan.read_text(errors="replace"), re.M)]
+        if not items:
+            answer(False, "not delivered: docs/plan.md has no ## item")
+
+        children = view.get("children") or []
+        done = [c for c in children if c.get("state") == "done"]
+        missing = [item for item in items
+                   if not any(c.get("workflow") == "page" and (c.get("title") or "").lower().startswith(item.lower()) for c in done)]
+        if missing:
+            answer(False, "not delivered: these items of docs/plan.md have no done work of the workflow page whose title begins with them: " + "; ".join(missing))
+        if not any(c.get("workflow") == "release" for c in done):
+            answer(False, "not delivered: hand down the release, a work of the workflow release, once every item is done, and deliver when it comes back done")
+
+    answer(True, "", [{"name": "comment", "args": {"body": report}}, {"name": "continue", "args": {}}])
+
+
+main()

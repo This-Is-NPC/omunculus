@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+
+# The last line: a compile before the task prints its own lines first.
+IFS=$'\t' read -r _ socket < <(mise exec -- mix omunculus.socket dev/server.toml dev | tail -n 1)
+[[ -n ${socket:-} ]] || exit 1
+if curl -s -o /dev/null --unix-socket "$socket" http://localhost/openapi.json; then
+  printf 'up: the dev server already answers on %s\n' "$socket"
+  exit 0
+fi
+exec scripts/dev-serve

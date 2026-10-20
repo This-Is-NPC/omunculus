@@ -1,8 +1,7 @@
 name = "inbox_read"
 kind = "tool"
-shape = "simple"
 triggers = ["cli"]
-description = "Marks a notification as read."
+description = "Marks a notification as read: the next inbox listing leaves it out."
 tags = ["cli", "inbox"]
 groups = ["cli"]
 module = "Omunculus.Tools.InboxRead"
@@ -13,3 +12,4 @@ required = ["inbox_id"]
 
 [parameters.properties.inbox_id]
 type = "string"
+description = "The notification, by the id inbox lists."

@@ -7,8 +7,6 @@ defmodule Omunculus.Execution.Policy do
   alias Omunculus.{Ceiling, Config}
   alias Omunculus.Path, as: FilesystemPath
 
-  @resources ~w(sandbox.write sandbox.network)
-
   @enforce_keys [
     :id,
     :workspace,
@@ -23,7 +21,7 @@ defmodule Omunculus.Execution.Policy do
     :tools,
     :sandbox
   ]
-  defstruct @enforce_keys
+  defstruct @enforce_keys ++ [scratch: nil, host: false]
 
   @type t :: %__MODULE__{
           id: String.t(),
@@ -43,6 +41,8 @@ defmodule Omunculus.Execution.Policy do
             queue_timeout_ms: pos_integer
           },
           tools: [String.t()],
+          scratch: String.t() | nil,
+          host: boolean,
           sandbox: %{
             script: String.t(),
             command: [String.t()],
@@ -54,8 +54,7 @@ defmodule Omunculus.Execution.Policy do
   @spec build(Config.t(), map, map, String.t(), [String.t()], [String.t()]) ::
           {:ok, t} | {:error, term}
   def build(config, snapshot, workspace, project_dir, tools, implementation_roots) do
-    with :ok <- validate_resources(config),
-         {:ok, project_root} <- canonical_directory(project_dir, :project),
+    with {:ok, project_root} <- canonical_directory(project_dir, :project),
          {:ok, workspace_root} <- canonical_directory(workspace.root || project_root, :workspace),
          :ok <- validate_workspace_boundary(config, workspace.name, workspace_root),
          {:ok, paths} <- resolve_ceiling_paths(snapshot, workspace_root),
@@ -78,10 +77,20 @@ defmodule Omunculus.Execution.Policy do
     end
   end
 
+  @doc """
+  The policy with `dir` as the run's scratch: every command of the run
+  sees it as `/tmp`, its home within, so what one leaves there the next
+  finds, outside the workspace.
+  """
+  @spec with_scratch(t, String.t()) :: t
+  def with_scratch(%__MODULE__{} = policy, dir) do
+    policy = %{policy | scratch: dir}
+    %{policy | id: policy_id(policy)}
+  end
+
   @spec restricted(Config.t(), map, String.t(), [String.t()]) :: {:ok, t} | {:error, term}
   def restricted(config, workspace, project_dir, implementation_roots) do
-    with :ok <- validate_resources(config),
-         {:ok, project_root} <- canonical_directory(project_dir, :project),
+    with {:ok, project_root} <- canonical_directory(project_dir, :project),
          {:ok, workspace_root} <- canonical_directory(workspace.root || project_root, :workspace),
          :ok <- validate_workspace_boundary(config, workspace.name, workspace_root),
          {:ok, runtimes} <- resolve_runtimes(config.execution.runtimes, workspace_root),
@@ -92,6 +101,7 @@ defmodule Omunculus.Execution.Policy do
         read_only: implementation_roots,
         read_write: [],
         hidden: protected_paths(config),
+        host: config.execution.host,
         runtimes: runtimes,
         backend: config.execution.backend,
         environment: environment(config.execution.environment),
@@ -137,6 +147,8 @@ defmodule Omunculus.Execution.Policy do
   def serializable(%__MODULE__{} = policy) do
     %{
       "id" => policy.id,
+      "scratch" => policy.scratch,
+      "host" => policy.host,
       "workspace" => %{"name" => policy.workspace.name, "root" => policy.workspace.root},
       "read_only" => policy.read_only,
       "read_write" => policy.read_write,
@@ -201,7 +213,7 @@ defmodule Omunculus.Execution.Policy do
       |> Kernel.++(implementation_roots)
       |> unique()
 
-    read_write = if write?, do: [workspace_root], else: []
+    read_write = if write?, do: [workspace_root | writable(config)], else: []
 
     policy = %__MODULE__{
       id: "",
@@ -215,6 +227,7 @@ defmodule Omunculus.Execution.Policy do
       network: network,
       limits: limits(config),
       tools: Enum.sort(tools),
+      host: config.execution.host,
       sandbox: config.execution.sandbox
     }
 
@@ -319,14 +332,29 @@ defmodule Omunculus.Execution.Policy do
     parent = Path.dirname(store)
     root = Path.expand(config.root)
 
+    # The store's own directory, or the store with its log beside it.
     store_hidden =
       if parent != root and FilesystemPath.within?(root, parent) do
-        parent
+        [parent]
       else
-        store
+        [store, store <> "-wal", store <> "-shm"]
       end
 
-    [store_hidden, Path.expand(config.path)]
+    # Seeing the machine, a command must not read what the person keeps
+    # from it, nor omunculus's own logins.
+    host_hidden =
+      if config.execution.host,
+        do: config.execution.deny_read ++ List.wrap(config.auth.store),
+        else: []
+
+    store_hidden ++ [Path.expand(config.path) | host_hidden]
+  end
+
+  # The other paths a writing command may write, those that exist.
+  defp writable(config) do
+    for path <- config.execution.write,
+        {:ok, canonical} <- [FilesystemPath.canonical(path)],
+        do: canonical
   end
 
   defp protected?(policy, path),
@@ -356,13 +384,6 @@ defmodule Omunculus.Execution.Policy do
   end
 
   defp stringify_keys(map), do: Map.new(map, fn {key, value} -> {Atom.to_string(key), value} end)
-
-  defp validate_resources(%{execution: %{resources: resources}}) when is_list(resources) do
-    case Enum.find(resources, &(&1 not in @resources)) do
-      nil -> :ok
-      name -> {:error, {:execution, {:unknown_resource, name}}}
-    end
-  end
 
   defp unique(paths), do: paths |> Enum.uniq() |> Enum.sort()
 end

@@ -1,36 +1,31 @@
 defmodule Omunculus.MatrixTest do
   @moduledoc """
-  Walks the twelve D0/D1/D2 × H0/H1 × W0/W1 cells of spec §6 through the
+  Walks the twelve D0/D1/D2 × H0/H1 × W0/W1 cells through the
   same "count to 5" task, driven by `Omunculus.Model.Battery`.
   """
 
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Config, Fixtures, Id, Project, Store}
+  alias Omunculus.{CLI, Config, Fixtures, Project, Store}
   alias Omunculus.Store.Query
 
-  @concierge_d0_tools ~w(bench break continue fs.read sandbox.network store)
-  @concierge_d1_tools ~w(break catalog continue delegate fs.read sandbox.network store)
-  @concierge_d2_tools ~w(catalog delegate fs.read sandbox.network sequence store)
-  @worker_tools ~w(bench break comment continue fs.read notify request_access sandbox.network)
-  @worker_d2_tools ~w(bench comment continue fs.read notify request_access sandbox.network)
-  @manager_tools ~w(delegate fs.read sandbox.network sequence store)
+  import Omunculus.Fixtures, only: [open_project: 1]
+
+  @concierge_d0_tools ~w(bench break continue done end fs.read sandbox.network store work)
+  @concierge_d1_tools ~w(break catalog continue delegate done end fs.read sandbox.network store work)
+  @concierge_d2_tools ~w(catalog fs.read sandbox.network sequence store)
+  @worker_tools ~w(bench break comment continue done end fs.read notify request_access sandbox.network)
+  @worker_d2_tools ~w(bench comment continue done end fs.read notify request_access sandbox.network)
+  @manager_tools ~w(fs.read sandbox.network sequence store)
 
   @concierge_text "You are the project concierge. Read the message, use the tools in `tools.*` when you need them, and respond."
-  @worker_text "You are the worker. Do the work you received, comment on progress, and call continue when the stage is done."
+  @worker_text "You are the worker. Do the work you received, comment on progress, and call done with a report when the stage is complete."
   @manager_text "You are the manager. Delegate to whoever is below and review when the work comes back."
   @observer_text "You are the observer. Record the notification."
 
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
     %{dir: dir}
-  end
-
-  defp open(dir) do
-    {:ok, project} = Fixtures.open_project(dir)
-    project
   end
 
   defp concierge_section(tools) do
@@ -76,7 +71,10 @@ defmodule Omunculus.MatrixTest do
       ]
 
       [policy]
-      workflow = "delivery"
+      workflows = ["delivery"]
+
+      [policy.overrides.work]
+      schema = "staged"
       """
   end
 
@@ -93,8 +91,11 @@ defmodule Omunculus.MatrixTest do
         { name = "review", agent = "concierge", deny = ["bench"] },
       ]
 
+      [policy.depth.0.overrides.work]
+      schema = "staged"
+
       [policy.depth.1]
-      workflow = "delivery"
+      workflows = ["delivery"]
       """
   end
 
@@ -116,8 +117,11 @@ defmodule Omunculus.MatrixTest do
         { name = "review", agent = "manager", deny = ["bench"] },
       ]
 
+      [policy.depth.1.overrides.work]
+      schema = "staged"
+
       [policy.depth.2]
-      workflow = "delivery"
+      workflows = ["delivery"]
       """
   end
 
@@ -165,11 +169,12 @@ defmodule Omunculus.MatrixTest do
     write_config(dir, depth, workflow?)
     if hook?, do: add_observer_hook(dir)
 
-    assert {:ok, ""} = CLI.run(["send", "count to 5"], dir)
+    # The observer is at depth 0 too: the person says whom they talk to.
+    assert {:ok, ""} = CLI.run(["send", "--agent", "concierge", "count to 5"], dir)
   end
 
   defp counter_value(conn) do
-    assert {:ok, value} = Store.view(conn, "counter", nil)
+    assert {:ok, value} = Store.counter(conn)
     Integer.to_string(value)
   end
 
@@ -181,23 +186,30 @@ defmodule Omunculus.MatrixTest do
     work
   end
 
-  defp continue_events(conn) do
-    assert {:ok, events} = Store.replay(conn, :project)
+  defp continue_events(conn, work) do
+    assert {:ok, events} = Store.replay(conn, {:work, work.id})
     events |> Enum.filter(&(&1.type == "continue")) |> Enum.map(&Jason.decode!(&1.body))
   end
 
   defp assert_counted_to_five(_dir, conn) do
     assert counter_value(conn) == "5"
+    assert {:ok, []} = Query.all(conn, "SELECT * FROM runs WHERE via = 'retry'")
     counted_work(conn)
   end
 
   defp assert_workflow_on(conn, work) do
     assert {:ok, work} = Query.one(conn, "SELECT * FROM works WHERE id = ?", [work.id])
     assert work.state == "done"
-    assert [%{"to" => "review"}, %{"to" => nil}] = continue_events(conn)
+    assert [%{"to" => "review"}, %{"to" => nil}] = continue_events(conn, work)
   end
 
-  defp assert_workflow_off(conn), do: assert(continue_events(conn) == [])
+  defp assert_workflow_off(conn, work) do
+    assert work.state == "done"
+    parent_id = work.parent_id
+
+    assert [%{"from" => nil, "to" => nil, "parent_id" => ^parent_id}] =
+             continue_events(conn, work)
+  end
 
   defp assert_observer_reacted(conn) do
     assert {:ok, [_reaction]} =
@@ -214,7 +226,7 @@ defmodule Omunculus.MatrixTest do
              Query.all(conn, "SELECT * FROM runs WHERE agent = 'worker' AND depth = '1'")
 
     assert {:ok, [parent]} = Query.all(conn, "SELECT * FROM works WHERE parent_id IS NULL")
-    assert parent.state == "open"
+    assert parent.state == "done"
 
     assert {:ok, parent_runs} =
              Query.all(conn, "SELECT * FROM runs WHERE work_id = ?", [parent.id])
@@ -237,18 +249,17 @@ defmodule Omunculus.MatrixTest do
              Query.one(conn, "SELECT * FROM works WHERE id = ?", [manager_work.parent_id])
 
     assert root.parent_id == nil
-    assert root.state == "open"
+    assert root.state == "done"
   end
 
   test "D0-H0-W0", %{dir: dir} do
     run_cell(dir, 0, false, false)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert work.parent_id == nil
-    assert work.state == "open"
 
-    assert_workflow_off(project.conn)
+    assert_workflow_off(project.conn, work)
     refute_observer_reacted(project.conn)
 
     Project.close(project)
@@ -256,12 +267,10 @@ defmodule Omunculus.MatrixTest do
 
   test "D0-H1-W0", %{dir: dir} do
     run_cell(dir, 0, true, false)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
-    assert work.state == "open"
-
-    assert_workflow_off(project.conn)
+    assert_workflow_off(project.conn, work)
     assert_observer_reacted(project.conn)
 
     Project.close(project)
@@ -269,7 +278,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D0-H0-W1", %{dir: dir} do
     run_cell(dir, 0, false, true)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert_workflow_on(project.conn, work)
@@ -280,7 +289,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D0-H1-W1", %{dir: dir} do
     run_cell(dir, 0, true, true)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert_workflow_on(project.conn, work)
@@ -291,13 +300,12 @@ defmodule Omunculus.MatrixTest do
 
   test "D1-H0-W0", %{dir: dir} do
     run_cell(dir, 1, false, false)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert work.parent_id != nil
-    assert work.state == "done"
 
-    assert_workflow_off(project.conn)
+    assert_workflow_off(project.conn, work)
     assert_child_delegated(project.conn)
     refute_observer_reacted(project.conn)
 
@@ -306,12 +314,11 @@ defmodule Omunculus.MatrixTest do
 
   test "D1-H1-W0", %{dir: dir} do
     run_cell(dir, 1, true, false)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
-    assert work.state == "done"
 
-    assert_workflow_off(project.conn)
+    assert_workflow_off(project.conn, work)
     assert_child_delegated(project.conn)
     assert_observer_reacted(project.conn)
 
@@ -320,7 +327,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D1-H0-W1", %{dir: dir} do
     run_cell(dir, 1, false, true)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert_workflow_on(project.conn, work)
@@ -332,7 +339,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D1-H1-W1", %{dir: dir} do
     run_cell(dir, 1, true, true)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert_workflow_on(project.conn, work)
@@ -344,14 +351,13 @@ defmodule Omunculus.MatrixTest do
 
   test "D2-H0-W0", %{dir: dir} do
     run_cell(dir, 2, false, false)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
-    assert work.state == "done"
     assert_worker_ran_at_depth_two(project.conn)
     assert_reopened_to_root(project.conn, work)
 
-    assert_workflow_off(project.conn)
+    assert_workflow_off(project.conn, work)
     refute_observer_reacted(project.conn)
 
     Project.close(project)
@@ -359,14 +365,13 @@ defmodule Omunculus.MatrixTest do
 
   test "D2-H1-W0", %{dir: dir} do
     run_cell(dir, 2, true, false)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
-    assert work.state == "done"
     assert_worker_ran_at_depth_two(project.conn)
     assert_reopened_to_root(project.conn, work)
 
-    assert_workflow_off(project.conn)
+    assert_workflow_off(project.conn, work)
     assert_observer_reacted(project.conn)
 
     Project.close(project)
@@ -374,7 +379,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D2-H0-W1", %{dir: dir} do
     run_cell(dir, 2, false, true)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert_worker_ran_at_depth_two(project.conn)
@@ -388,7 +393,7 @@ defmodule Omunculus.MatrixTest do
 
   test "D2-H1-W1", %{dir: dir} do
     run_cell(dir, 2, true, true)
-    project = open(dir)
+    project = open_project(dir)
 
     work = assert_counted_to_five(dir, project.conn)
     assert_worker_ran_at_depth_two(project.conn)

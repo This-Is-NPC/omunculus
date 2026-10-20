@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+from check import *
+
+workspace, outcome = load()
+expect_outcome(outcome, "answer", "done", "break")
+
+# The builders assessed it, and built nothing.
+assessed = [w for w in team(outcome)
+            if w["assignee"] == "administrator" and "assessment" in (w["goal"] or "").lower()]
+if not assessed:
+    fail("the builders were not asked for an assessment")
+if not any(w["state"] == "done" for w in assessed):
+    fail("no assessment came back")
+builders = {"surgeon", "copilot", "clerk", "toolsmith", "tester", "editor", "language_lawyer"}
+built = [w for w in team(outcome) if w["assignee"] in builders]
+if built:
+    fail(f"the builders were asked to build: {built[0]['title']}")
+
+# Nothing was closed with the client.
+for quote in (workspace / "quotes").glob("*.md"):
+    if quote.name != "README.md" and re.search(r"^Status:\s*aceita", quote.read_text(), re.M | re.I):
+        fail(f"{quote.name} is marked accepted")
+ok()

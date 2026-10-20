@@ -1,0 +1,16 @@
+name = "attach"
+kind = "tool"
+triggers = ["model"]
+description = "Attaches a file of the workspace to this conversation, for the person to open: path names the file, note says what it is. The conversation keeps it as it is now."
+tags = ["files", "attachments"]
+module = "Omunculus.Tools.Attach"
+
+[parameters]
+type = "object"
+required = ["path"]
+
+[parameters.properties.path]
+type = "string"
+
+[parameters.properties.note]
+type = "string"

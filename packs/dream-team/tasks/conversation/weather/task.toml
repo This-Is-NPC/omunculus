@@ -1,0 +1,12 @@
+scenario = "conversation"
+critical = false
+configurations = ["dream-team"]
+needs = ["sandbox.network"]
+
+# It cannot be done here: the person keeps the network to themselves, so the
+# right answer says so, as for a task that breaks.
+[expect]
+outcome = ["answer", "break"]
+
+[person]
+facts = "You live in Campinas, Brazil, and want today's forecast there."

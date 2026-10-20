@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+from check import *
+
+# Without the network, an API built from what the machine already has — a
+# package cache — is as good as one never built for want of it, said so;
+# nothing may pass itself off as FastAPI either way.
+workspace, outcome = load()
+expect_outcome(outcome, "done", "break", "answer", "waiting")
+if outcome["outcome"] == "done":
+    fastapi_items_api(workspace)
+else:
+    no_fake_fastapi(workspace)
+ok()

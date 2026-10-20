@@ -1,38 +1,16 @@
 defmodule Omunculus.PresetTest do
+  @human Omunculus.Fixtures.defaults(:requests).arbiter
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Fixtures, Id, Project}
+  alias Omunculus.{CLI, Fixtures, Project}
   alias Omunculus.Store.Query
   alias Omunculus.Tools.Out
 
+  import Omunculus.Fixtures, only: [open_project: 1, write_config: 2, write_model_tool: 3]
+
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
     %{dir: dir}
-  end
-
-  defp open(dir) do
-    {:ok, project} = Fixtures.open_project(dir)
-    project
-  end
-
-  defp write_config(dir, contents), do: Fixtures.write_config(dir, contents)
-
-  defp write_emit_tool(dir, name, emit_json) do
-    tool_dir = Path.join([dir, "tools", name])
-    File.mkdir_p!(tool_dir)
-
-    File.write!(Path.join(tool_dir, "tool.toml"), """
-    name = "#{name}"
-    kind = "tool"
-    triggers = ["model"]
-    command = ["./run"]
-    """)
-
-    run_path = Path.join(tool_dir, "run")
-    File.write!(run_path, "#!/bin/sh\necho '#{emit_json}'\n")
-    File.chmod!(run_path, 0o755)
   end
 
   describe "codex-like" do
@@ -58,7 +36,7 @@ defmodule Omunculus.PresetTest do
 
       assert {:ok, ""} = CLI.run(["send", "run a command"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
       assert run.agent == "codex"
 
@@ -90,7 +68,7 @@ defmodule Omunculus.PresetTest do
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
       assert run.agent == "pi"
       refute "bash" in Jason.decode!(run.tools)
@@ -104,7 +82,7 @@ defmodule Omunculus.PresetTest do
       Fixtures.install_default(dir)
 
       model = fn _assembled, _tools, call ->
-        assert {:error, {:not_allowed, "bash"}} = call.("bash", %{"command" => "echo hi"})
+        assert call.("bash", %{"command" => "echo hi"}) == {:error, Out.not_yours("bash")}
         {:ok, "ok"}
       end
 
@@ -112,9 +90,62 @@ defmodule Omunculus.PresetTest do
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
       refute "bash" in Jason.decode!(run.tools)
+
+      Project.close(project)
+    end
+
+    test "a worker permission climbs through the concierge to the person",
+         %{dir: dir} do
+      Fixtures.install_default(dir)
+
+      turns = :atomics.new(1, [])
+
+      model = fn assembled, _tools, call ->
+        assert :atomics.add_get(turns, 1, 1) <= 4, "unexpected extra model turn"
+
+        cond do
+          assembled =~ "## Inbox" or assembled =~ "## Request" ->
+            call.("end", %{})
+
+          assembled =~ "You are the worker." ->
+            call.("request_access", %{
+              "report" => "blocked on writing",
+              "access" => [%{"kind" => "resource", "name" => "sandbox.write"}],
+              "reason" => "need to write the file"
+            })
+
+          assembled =~ "## Last comment\nopened" ->
+            call.("work", %{
+              "report" => "delegated",
+              "works" => [%{"title" => "Write", "goal" => "Write the file", "agent" => "worker"}]
+            })
+
+          true ->
+            call.("work", %{
+              "report" => "opened",
+              "works" => [%{"title" => "Root", "goal" => "Root"}]
+            })
+        end
+
+        {:ok, "unused"}
+      end
+
+      Fixtures.use_model(dir, model)
+
+      assert {:ok, ""} = CLI.run(["send", "write the file"], dir)
+
+      project = open_project(dir)
+
+      assert {:ok, requests} =
+               Query.all(project.conn, "SELECT * FROM requests ORDER BY created_at")
+
+      assert [%{status: "escalated", arbiter: arbiter}, %{status: "pending", arbiter: @human}] =
+               requests
+
+      assert Jason.decode!(arbiter) == Omunculus.Participant.agent("concierge")
 
       Project.close(project)
     end
@@ -129,10 +160,10 @@ defmodule Omunculus.PresetTest do
       tools = ["comment", "reply", "request_secret", "work", "sandbox.network"]
       """)
 
-      write_emit_tool(
+      write_model_tool(
         dir,
         "request_secret",
-        ~s({"ok": true, "output": "", "emit": [{"type": "request", "body": {"kind": "secret", "name": "vault", "reason": "need it"}}]})
+        ~s({"ok": true, "output": "", "emit": [{"type": "request", "body": {"reason": "need it", "options": {"grant": [{"name": "grant", "args": {"kind": "secret", "name": "vault"}}], "deny": []}}}]})
       )
 
       :ok
@@ -140,7 +171,7 @@ defmodule Omunculus.PresetTest do
 
     test "a custom-kind request opens REQUESTS waiting_human and a grant lands in works.grants",
          %{dir: dir} do
-      project = open(dir)
+      project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Keep the secret"})
       Project.close(project)
 
@@ -153,10 +184,13 @@ defmodule Omunculus.PresetTest do
 
       assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "need the vault"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
-      assert request.status == "waiting_human"
-      assert Jason.decode!(request.ask) == %{"kind" => "secret", "name" => "vault"}
+      assert request.status == "pending"
+
+      assert %{"grant" => [%{"args" => %{"kind" => "secret", "name" => "vault"}}]} =
+               Jason.decode!(request.options)
+
       Project.close(project)
 
       reply_model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
@@ -164,11 +198,11 @@ defmodule Omunculus.PresetTest do
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request.id, "--decision", "grant", "pode"],
+                 ["reply", "--request_id", request.id, "--option", "grant", "allowed"],
                  dir
                )
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
       assert Jason.decode!(work.grants) == ["vault"]
       Project.close(project)

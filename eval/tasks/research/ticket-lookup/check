@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+from check import *
+
+# Only the ticket system says it: T-482, Ana Ruiz, the 45-second timeout.
+workspace, outcome = load()
+expect_outcome(outcome, "answer", "done")
+report = outcome.get("report") or ""
+for needed in ["T-482", "Ana Ruiz", "45"]:
+    if needed not in report:
+        fail(f"the last words lack {needed!r}")
+ok()

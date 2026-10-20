@@ -1,0 +1,29 @@
+name = "changes"
+kind = "tool"
+triggers = ["model", "cli"]
+description = "Lists the files the calls of a work changed, call by call, or with patch their unified diff: of this run's work, or of a work below it; from the command line, of the work named."
+tags = ["files", "diff"]
+module = "Omunculus.Tools.Changes"
+
+[parameters]
+type = "object"
+
+[parameters.properties.work_id]
+type = "string"
+
+[parameters.properties.patch]
+type = "boolean"
+
+[views.run]
+source = "events"
+relation = "run"
+
+[views.own]
+source = "works"
+include = ["runs"]
+
+[views.target]
+source = "works"
+from = ["args.work_id"]
+within = "descendants"
+include = ["runs"]

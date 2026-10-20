@@ -15,9 +15,7 @@ defmodule Omunculus.Tool.InvokeTest do
   }
 
   setup do
-    dir = Path.join(System.tmp_dir!(), Omunculus.Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Omunculus.Fixtures.tmp_dir()
     %{dir: dir}
   end
 
@@ -39,11 +37,11 @@ defmodule Omunculus.Tool.InvokeTest do
     File.chmod!(path, 0o755)
   end
 
-  test "happy path returns ok, output and emit", %{dir: dir} do
+  test "happy path returns ok, output, emit and instructions", %{dir: dir} do
     write_run!(dir, """
     #!/bin/sh
     cat <<'JSON'
-    {"ok": true, "output": "done", "emit": [{"type": "prompt", "body": {"message": "hi"}}]}
+    {"ok": true, "output": "done", "instructions": "steady", "emit": [{"type": "prompt", "body": {"message": "hi"}}]}
     JSON
     """)
 
@@ -52,7 +50,10 @@ defmodule Omunculus.Tool.InvokeTest do
     assert result == %{
              ok: true,
              output: "done",
-             emit: [%{"type" => "prompt", "body" => %{"message" => "hi"}}]
+             emit: [%{"type" => "prompt", "body" => %{"message" => "hi"}}],
+             chain: [],
+             instructions: "steady",
+             session: nil
            }
   end
 
@@ -68,13 +69,23 @@ defmodule Omunculus.Tool.InvokeTest do
     assert result.emit == [%{"type" => "echo", "body" => %{"message" => "count to 5"}}]
   end
 
-  test "emit defaults to [] and output defaults to \"\"", %{dir: dir} do
+  test "emit and chain default to [] and output defaults to \"\"", %{dir: dir} do
     write_run!(dir, """
     #!/bin/sh
     echo '{"ok": true}'
     """)
 
-    assert {:ok, %{ok: true, output: "", emit: []}} =
+    assert {:ok, %{ok: true, output: "", emit: [], chain: []}} =
+             Invoke.call(manifest(dir), @input, policy(dir))
+  end
+
+  test "a command tool's chain is parsed like a module's", %{dir: dir} do
+    write_run!(dir, """
+    #!/bin/sh
+    echo '{"ok": true, "chain": [{"name": "end"}]}'
+    """)
+
+    assert {:ok, %{chain: [%{name: "end", args: %{}}]}} =
              Invoke.call(manifest(dir), @input, policy(dir))
   end
 
@@ -142,6 +153,41 @@ defmodule Omunculus.Tool.InvokeTest do
     refute File.exists?(Path.join(tool_dir, "changed"))
   end
 
+  test "a tool's command reaches the folders beside its own in its tools path", %{dir: dir} do
+    workspace = Path.join(dir, "workspace")
+    tools = Path.join(dir, "tools")
+    tool_dir = Path.join(tools, "fixture")
+    shared = Path.join(tools, "_shared")
+    File.mkdir_p!(workspace)
+    File.mkdir_p!(tool_dir)
+    File.mkdir_p!(shared)
+
+    File.write!(Path.join(tool_dir, "tool.toml"), """
+    name = "fixture"
+    kind = "tool"
+    command = ["./run"]
+    """)
+
+    write_run!(tool_dir, """
+    #!/bin/sh
+    exec "$(dirname "$0")/../_shared/run"
+    """)
+
+    write_run!(shared, """
+    #!/bin/sh
+    echo '{"ok": true, "output": "shared"}'
+    """)
+
+    catalog = Catalog.discover(%{paths: [tools], inline: %{}, skills: []})
+
+    policy =
+      ExecutionPolicyFixtures.policy(workspace,
+        read_only: [workspace | Catalog.implementation_roots(catalog)]
+      )
+
+    assert {:ok, %{output: "shared"}} = Invoke.call(catalog["fixture"], @input, policy)
+  end
+
   describe "module path" do
     test "happy path calls module.run/1 and validates its result", %{dir: dir} do
       manifest = manifest(dir, %{command: nil, module: "Omunculus.Tools.Send"})
@@ -152,8 +198,47 @@ defmodule Omunculus.Tool.InvokeTest do
       assert result == %{
                ok: true,
                output: "",
-               emit: [%{"type" => "prompt", "body" => %{"message" => "hi"}}]
+               emit: [%{"type" => "prompt", "body" => %{"message" => "hi"}}],
+               chain: [],
+               instructions: "",
+               session: nil
              }
+    end
+
+    test "an output that is not valid UTF-8 has its invalid bytes replaced", %{dir: dir} do
+      manifest = manifest(dir, %{command: nil, module: "Omunculus.Test.ChainTool"})
+
+      # ChainTool prints its own name.
+      assert {:ok, %{output: output}} = Invoke.call(manifest, %{@input | name: <<"a", 255, "b">>})
+      assert output == "a\uFFFDb"
+    end
+
+    test "a chain in out is parsed into name and args steps", %{dir: dir} do
+      manifest = manifest(dir, %{command: nil, module: "Omunculus.Test.ChainTool"})
+
+      input = %{
+        @input
+        | args: %{
+            "chain" => [%{"name" => "comment", "args" => %{"body" => "hi"}}, %{"name" => "end"}]
+          }
+      }
+
+      assert {:ok, %{chain: chain}} = Invoke.call(manifest, input)
+      assert chain == [%{name: "comment", args: %{"body" => "hi"}}, %{name: "end", args: %{}}]
+    end
+
+    for {name, chain} <- [
+          {"a chain that is not a list", "end"},
+          {"a step without a name", [%{"args" => %{}}]},
+          {"a step with an empty name", [%{"name" => ""}]},
+          {"a step whose args are not a map", [%{"name" => "end", "args" => []}]}
+        ] do
+      test "#{name} fails the call", %{dir: dir} do
+        manifest = manifest(dir, %{command: nil, module: "Omunculus.Test.ChainTool"})
+        input = %{@input | args: %{"chain" => unquote(Macro.escape(chain))}}
+
+        assert {:error, {:invalid_output, _decoded}} = Invoke.call(manifest, input)
+      end
     end
 
     test "unknown module returns no_module", %{dir: dir} do

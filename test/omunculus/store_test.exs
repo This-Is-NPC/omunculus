@@ -27,14 +27,14 @@ defmodule Omunculus.StoreTest do
     emit = %{"type" => "comment", "body" => %{"work_id" => work_id, "body" => "first"}}
     call = %{name: "comment", args: %{}, ok: true, output: "first"}
 
-    assert {:ok, [tool_event, event]} = Store.record_tool(conn, nil, call, [emit], ctx)
+    assert {:ok, [tool_event, event]} = Store.record_tools(conn, nil, [{call, [emit]}], ctx)
     :ok = Store.close(conn)
 
     {:ok, conn} = Store.open(path)
     assert {:ok, [^tool_event, ^event]} = Store.replay(conn, :project)
 
     assert {:ok, [%{body: "first", event_id: event_id}]} =
-             Store.view(conn, "comments.work", work_id)
+             Store.comments(conn, :work, work_id)
 
     assert event_id == event.id
     :ok = Store.close(conn)

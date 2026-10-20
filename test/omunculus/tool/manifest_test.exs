@@ -4,9 +4,7 @@ defmodule Omunculus.Tool.ManifestTest do
   alias Omunculus.Tool.Manifest
 
   setup do
-    dir = Path.join(System.tmp_dir!(), Omunculus.Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Omunculus.Fixtures.tmp_dir()
     %{dir: dir}
   end
 
@@ -28,7 +26,6 @@ defmodule Omunculus.Tool.ManifestTest do
 
     assert manifest.name == "read"
     assert manifest.kind == "tool"
-    assert manifest.shape == "simple"
     assert manifest.triggers == ["model"]
     assert manifest.description == ""
     assert manifest.tags == []
@@ -36,6 +33,9 @@ defmodule Omunculus.Tool.ManifestTest do
     assert manifest.parameters == %{}
     assert manifest.views == []
     assert manifest.events == []
+    assert manifest.chains == []
+    assert manifest.then == []
+    assert manifest.schemas == %{}
     assert manifest.dir == dir
     assert manifest.config == true
   end
@@ -45,28 +45,83 @@ defmodule Omunculus.Tool.ManifestTest do
       write_toml(dir, """
       name = "compact_comments"
       kind = "tool"
-      shape = "composite"
       triggers = ["model", "cli"]
       description = "Summarizes comments on the work."
       tags = ["comments", "compact"]
       groups = ["work.write"]
       command = ["./run"]
-      views = ["comments"]
 
       [parameters]
       type = "object"
       required = ["path"]
+
+      [views.comments]
+      source = "comments"
       """)
 
     assert {:ok, manifest} = Manifest.load(path)
 
-    assert manifest.shape == "composite"
     assert manifest.triggers == ["model", "cli"]
     assert manifest.description == "Summarizes comments on the work."
     assert manifest.tags == ["comments", "compact"]
     assert manifest.groups == ["work.write"]
-    assert manifest.views == ["comments"]
+
+    assert [%{key: "comments", source: "comments", from: ["work", "request", "inbox"]}] =
+             manifest.views
+
     assert manifest.parameters == %{"type" => "object", "required" => ["path"]}
+  end
+
+  test "parses views composed of a source, anchors and options", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "results"
+      kind = "tool"
+      command = ["./run"]
+
+      [views.results]
+      source = "works"
+      relation = "children"
+      state = ["done", "waiting"]
+      since = "last_run"
+      include = ["last_comment"]
+
+      [views.target]
+      source = "works"
+      from = ["args.work_id"]
+      within = "descendants"
+      include = ["comments", "runs"]
+      """)
+
+    assert {:ok, manifest} = Manifest.load(path)
+
+    assert [
+             %{
+               key: "results",
+               relation: "children",
+               states: ["done", "waiting"],
+               since_last_run: true,
+               include: ["last_comment"],
+               from: ["work"]
+             },
+             %{key: "target", relation: "self", from: ["args.work_id"], within: "descendants"}
+           ] = manifest.views
+  end
+
+  test "refuses views as a list, an unknown source and options out of place", %{dir: dir} do
+    for {views, reason} <- [
+          {~s(views = ["comments"]), {:views, :not_a_table}},
+          {"[views.x]\nsource = \"nope\"", {:views, "x", {:unknown_source, "nope"}}},
+          {"[views.x]\nsource = \"works\"\nstate = [\"done\"]", {:views, "x", :children_only}},
+          {"[views.x]\nsource = \"works\"\nfrom = [\"args.id\"]",
+           {:views, "x", {:anchors, ["args.id"]}}},
+          {"[views.x]\nsource = \"runs\"", {:views, "x", {:missing, :relation}}},
+          {"[views.x]\nsource = \"catalog\"\nfrom = [\"work\"]",
+           {:views, "x", {:unknown_key, "from"}}}
+        ] do
+      path = write_toml(dir, "name = \"t\"\nkind = \"tool\"\ncommand = [\"./run\"]\n" <> views)
+      assert {:error, ^reason} = Manifest.load(path)
+    end
   end
 
   test "rejects a missing name", %{dir: dir} do
@@ -445,5 +500,79 @@ defmodule Omunculus.Tool.ManifestTest do
       """)
 
     assert Manifest.load(path) == {:error, {:invalid, :triggers}}
+  end
+
+  test "chains, then and the chain trigger are read", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "finish"
+      kind = "tool"
+      triggers = ["model", "chain"]
+      module = "Omunculus.Tools.Comment"
+      chains = ["comment", "end"]
+      then = ["comment", "end"]
+      """)
+
+    assert {:ok, %Manifest{triggers: ["model", "chain"], chains: ["comment", "end"]} = manifest} =
+             Manifest.load(path)
+
+    assert manifest.then == ["comment", "end"]
+  end
+
+  for {name, then} <- [
+        {"a then name outside chains", ~s(["comment", "end", "notify"])},
+        {"end before the last then name", ~s(["end", "comment"])},
+        {"end twice in then", ~s(["end", "end"])}
+      ] do
+    test "#{name} fails to load", %{dir: dir} do
+      path =
+        write_toml(dir, """
+        name = "finish"
+        kind = "tool"
+        module = "Omunculus.Tools.Comment"
+        chains = ["comment", "end"]
+        then = #{unquote(then)}
+        """)
+
+      assert Manifest.load(path) == {:error, {:invalid, :then}}
+    end
+  end
+
+  test "schemas are named variants beside parameters", %{dir: dir} do
+    path =
+      write_toml(dir, """
+      name = "finish"
+      kind = "tool"
+      module = "Omunculus.Tools.Comment"
+
+      [parameters]
+      type = "object"
+      required = ["body"]
+
+      [schemas.short]
+      type = "object"
+      required = []
+      """)
+
+    assert {:ok, manifest} = Manifest.load(path)
+    assert manifest.parameters == %{"type" => "object", "required" => ["body"]}
+    assert manifest.schemas == %{"short" => %{"type" => "object", "required" => []}}
+  end
+
+  for {name, schemas} <- [
+        {"a schemas value that is not a table", ~s(schemas = "short")},
+        {"a variant that is not a table", ~s(schemas = { short = "object" })}
+      ] do
+    test "#{name} fails to load", %{dir: dir} do
+      path =
+        write_toml(dir, """
+        name = "finish"
+        kind = "tool"
+        module = "Omunculus.Tools.Comment"
+        #{unquote(schemas)}
+        """)
+
+      assert Manifest.load(path) == {:error, {:invalid, :schemas}}
+    end
   end
 end

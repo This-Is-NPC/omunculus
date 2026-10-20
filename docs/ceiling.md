@@ -7,12 +7,12 @@ Before each run the harness reads the file now and the work now. It does
 not reuse `RUNS.tools` from the previous run.
 
 ```text
-ceiling = workspace ∩ depth ∩ stage(work.stage) ∩ agent
+ceiling = policy ∩ workspace ∩ depth ∩ stage(work.stage) ∩ agent
 effective = (ceiling ∪ grants of this work ∪ grants of ancestors) − deny of any layer
 RUNS.tools = effective
 ```
 
-The stage is on the work. `continue` writes the next one; the run the
+The stage is on the work. `continue`, which `done` chains, writes the next one; the run the
 harness prepares after that emit already sees the new ceiling — tools in
 or out — without anyone editing `grants`.
 
@@ -40,20 +40,30 @@ Lists, in any mode:
 Precedence in the effective set: `deny` > `human` > `negotiable` >
 `granted`. A layer that lists `human` beats `auto` on the others.
 
-Who answers an `emit` `request`:
+Who answers an `emit` `request`. Its options are lists of tool calls; the
+names the `grant` calls give are classified for the requester:
 
 ```text
-blocked     → deny; no REQUESTS row
-have        → already granted: <name>; no REQUESTS row
-askable + an agent above with authority (have ∪ askable of theirs)
-            → REQUESTS arbiter = that agent
-askable with nobody above, or sealed
-            → REQUESTS arbiter = human
+a granted name blocked
+            → refused: no one can grant <name> to this run: …; no REQUESTS row
+only grant calls, every name have
+            → refused: you already have <names>; use it rather than asking;
+              no REQUESTS row
+otherwise   → resolve the configured request route
 ```
 
+A refused request refuses the call that emitted it: the call is recorded
+as failed, its output the refusal, and none of its actions apply.
+
 `auto` only moves the unnamed bucket to askable. It does not skip
-`REQUESTS` and it does not write a grant on its own. Depth 0 has nobody
-above: the request goes to the person.
+`REQUESTS` and does not write a grant on its own. Routing follows the
+first matching `[policy] request_routes` rule, independently of whether
+the receiving participant can authorize the option. A receiver answers
+or escalates through the same linked request path. A sealed grant climbs
+that route; only an authorized human may choose its grant option on the
+original request, directly or through named reply parts. The arbiter's
+`reply` chains chosen option calls under its ceiling; an agent needs each
+of them as have in its run. See [request routing](config.md).
 
 `pinned` intersects the same way `granted` does: an empty list on a layer
 does not restrict. Tools in `pinned` ∩ effective become cards; the rest
@@ -62,26 +72,29 @@ effective set, `pinned` is ignored.
 
 ## Grants
 
-A grant (agent above, or person) writes three things on the **work**, not
-on the run:
+A grant is the `grant` tool, a step `reply` chains from the chosen
+option. It writes on the requester's **work**, not on the run:
 
-1. `WORKS.grants` gains `ask.name` (`write`, `./secrets`, `sandbox.write`, …)
+1. `WORKS.grants` gains the granted name (`write`, `./secrets`, `sandbox.write`, …)
 2. `EVENTS` `grant`
-3. `COMMENTS` on the request thread
 
-The old run does not gain the tool. `reply` grant prepares a run on the
-**same** stage; that run remounts and adds the grant. `reply` deny does
-not reopen the work.
+and the `reply` writes its body in `COMMENTS` on the request thread.
 
-**Temporary** — the default. `ask.name` enters only `WORKS.grants` of that
-`work_id`. No work attached, no grant on any work. The TOML does not
+The old run does not gain the tool. The `reply` reopens the work and
+prepares a run on the **same** stage; that run remounts and adds the
+grant. `deny` reopens it too, without the name.
+
+**Temporary** — no `scope`. The name enters only `WORKS.grants` of the
+request's work. No work attached, no grant on any work. The TOML does not
 change. The next run of this work (and of children, when they open) sees
 it. Sibling works do not.
 
-**Permanent** — `--scope agent|depth|stage|workspace` rewrites the file
-on that layer. Nothing is written to `grants`. Every later run that falls
-on that layer gets the access, in any work. A workspace with its own
-`config` file is written there.
+**Permanent** — `scope` = `agent`, `depth`, `stage` or `workspace`, only
+from a person: the store refuses a scoped grant by an agent. The harness
+rewrites the file on that layer before it opens the next run. Nothing is
+written to `grants`. Every later run that falls on that layer gets the
+access, in any work. A workspace with its own `config` file is written
+there.
 
 The harness does not copy `grants` onto a child at birth. At the opening
 of a run it walks `parent_id`:
@@ -98,8 +111,9 @@ lists `deny = ["counter"]`.
 
 `sandbox.write` and `sandbox.network` are ceiling resources. They are
 separate from the right to *call* a tool of a similar name. The worker in
-the default preset has `request_sandbox` in `tools` and `sandbox.write` in
-`negotiable`: it may ask, it may not write the workspace until a grant.
+the default preset has `request_access` in `tools` and `sandbox.write` in
+`human`: it may ask through the configured route, and it may not write
+the workspace until a grant.
 
 | Resource state | What the executor does |
 | --- | --- |
@@ -108,10 +122,12 @@ the default preset has `request_sandbox` in `tools` and `sandbox.write` in
 | `sandbox.network = have` | Bubblewrap shares the host network namespace |
 | any other `sandbox.network` | a network namespace with no host networking |
 
-A grant ends the current run, so only the next run receives the new
-policy. Network access does not provide credentials, host environment
+A grant does not change the policy of a run already open; only the
+next run receives the new policy. Network access does not provide credentials, host environment
 variables, home directories, SSH agents, desktop sockets, or write access
-outside the workspace.
+outside the workspace. A tool's own credentials come only from the
+secrets the config binds to it ([Tool secrets](config.md#tool-secrets)),
+and only its process receives them.
 
 The JavaScript coordinator has no direct workspace, network, environment
 or process access. It can only call the tools authorized for this run.

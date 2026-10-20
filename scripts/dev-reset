@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+
+# Each project config of dev/: its store and its workspace.
+while IFS= read -r config; do
+  dir=$(dirname "$config")
+  root=$(sed -n 's/^root = "\(.*\)"$/\1/p' "$config" | head -n 1)
+  rm -rf "$dir/.omunculus"
+  # Only a folder below the config's: never ".", "..", or an absolute path.
+  [[ -n $root && $root != . && $root != /* && $root != *..* ]] && rm -rf "${dir:?}/$root"
+done < <(find dev -maxdepth 2 -name omunculus.toml)

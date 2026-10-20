@@ -1,75 +1,91 @@
 defmodule Omunculus.CLITest do
+  @human Omunculus.Fixtures.defaults(:requests).arbiter
+  @concierge Jason.encode!(Omunculus.Participant.agent("concierge"))
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Fixtures, Id, Project, Store}
+  alias Omunculus.{CLI, Fixtures, Project, Store}
   alias Omunculus.Store.Query
   alias Omunculus.Tools.Out
 
+  import Omunculus.Fixtures,
+    only: [
+      open_project: 1,
+      write_config: 2,
+      write_hook: 4,
+      write_model_tool: 2,
+      write_model_tool: 3
+    ]
+
   setup do
-    dir = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf!(dir) end)
+    dir = Fixtures.tmp_dir()
     Fixtures.install_default(dir)
     %{dir: dir}
   end
 
-  defp open(dir) do
-    {:ok, project} = Fixtures.open_project(dir)
-    project
-  end
+  # A work naming nobody: the root itself when depth 0 has a workflow, else
+  # handed down to depth 1.
+  defp create_unnamed(call, title),
+    do: call.("work", %{"report" => "opened", "works" => [%{"title" => title, "goal" => title}]})
 
-  defp write_config(dir, contents), do: Fixtures.write_config(dir, contents)
+  # The concierge opens a root for itself by naming itself.
+  defp create_root(call, title),
+    do:
+      call.("work", %{
+        "report" => "opened",
+        "works" => [%{"title" => title, "goal" => title, "agent" => "concierge"}]
+      })
 
-  defp write_tool(dir, name) do
-    tool_dir = Path.join([dir, "tools", name])
-    File.mkdir_p!(tool_dir)
-
-    File.write!(Path.join(tool_dir, "tool.toml"), """
-    name = "#{name}"
-    kind = "tool"
-    triggers = ["model"]
-    command = ["./run"]
-    """)
-
-    run_path = Path.join(tool_dir, "run")
-
-    File.write!(run_path, """
-    #!/bin/sh
-    echo '{"ok": true, "output": "", "emit": []}'
-    """)
-
-    File.chmod!(run_path, 0o755)
-  end
-
-  defp write_emit_tool(dir, name, emit_json) do
-    tool_dir = Path.join([dir, "tools", name])
-    File.mkdir_p!(tool_dir)
-
-    File.write!(Path.join(tool_dir, "tool.toml"), """
-    name = "#{name}"
-    kind = "tool"
-    triggers = ["model"]
-    command = ["./run"]
-    """)
-
-    run_path = Path.join(tool_dir, "run")
-    File.write!(run_path, "#!/bin/sh\necho '#{emit_json}'\n")
-    File.chmod!(run_path, 0o755)
-  end
-
-  defp write_hook(dir, name, toml, script) do
-    hook_dir = Path.join([dir, "tools", name])
-    File.mkdir_p!(hook_dir)
-    File.write!(Path.join(hook_dir, "hook.toml"), toml)
-    run_path = Path.join(hook_dir, "run")
-    File.write!(run_path, script)
-    File.chmod!(run_path, 0o755)
-  end
+  defp delegate_one(call, title, goal),
+    do:
+      call.("work", %{"report" => "delegated", "works" => [%{"title" => title, "goal" => goal}]})
 
   defp tool_event_names(events) do
     events
     |> Enum.filter(&(&1.type == "tool"))
     |> Enum.map(&Jason.decode!(&1.body)["name"])
+  end
+
+  test "CLI refuses missing request routes explicitly", %{dir: dir} do
+    Fixtures.write_config(dir, "[agents.concierge]\ndepth = 0\ntext = \"root\"\n",
+      request_routes: false
+    )
+
+    assert {:error, reason} = CLI.run(["send", "hi"], dir)
+    assert reason == {:policy, {:required, :request_routes}}
+    assert CLI.format_error(reason) =~ "request_routes is required"
+  end
+
+  test "CLI refuses unknown and looping routes without creating a request", %{dir: dir} do
+    project = open_project(dir)
+    conversation = Omunculus.Id.new()
+    principal = Omunculus.Operations.local_principal()
+
+    :ok =
+      Query.insert(project.conn, :conversations, %{
+        id: conversation,
+        created_issuer: principal.issuer,
+        created_subject: principal.subject,
+        created_at: "2026-01-01"
+      })
+
+    Project.close(project)
+
+    for {destination, refusal} <- [
+          {["--to", "absent"], {:request, {:unknown_route, "absent", ["owner"]}}},
+          {[], {:request, :no_route}}
+        ] do
+      assert {:error, ^refusal} =
+               CLI.run(
+                 ["ask", "--conversation_id", conversation, "--question", "Question"] ++
+                   destination,
+                 dir
+               )
+    end
+
+    project = open_project(dir)
+    assert {:ok, []} = Query.all(project.conn, "SELECT id FROM requests")
+    assert {:ok, []} = Query.all(project.conn, "SELECT id FROM comments")
+    Project.close(project)
   end
 
   test "format_error for not_logged_in", _ctx do
@@ -80,7 +96,7 @@ defmodule Omunculus.CLITest do
   test "send delivers a message, opens a run and the run reaches done", %{dir: dir} do
     assert {:ok, ""} = CLI.run(["send", "count to 5"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
 
     assert {:ok, [message]} =
              Query.all(project.conn, "SELECT * FROM prompts WHERE kind = 'message'")
@@ -116,10 +132,88 @@ defmodule Omunculus.CLITest do
     Project.close(project)
   end
 
+  test "each run records the event that made it due", %{dir: dir} do
+    model = fn assembled, _tools, call ->
+      cond do
+        assembled =~ "You are the worker." ->
+          call.("done", %{"report" => "answered"})
+
+        assembled =~ "## Last comment\nanswered" or assembled =~ "## Last comment\ndelegated" ->
+          call.("done", %{"report" => "closed"})
+
+        assembled =~ "## Last comment\nopened" ->
+          delegate_one(call, "Answer", "answer it")
+
+        true ->
+          create_root(call, "Root")
+      end
+
+      {:ok, "unused"}
+    end
+
+    Fixtures.use_model(dir, model)
+    assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+
+    project = open_project(dir)
+
+    {:ok, runs} =
+      Query.all(
+        project.conn,
+        "SELECT runs.*, cause.type AS cause_type, cause.work_id AS cause_work FROM runs LEFT JOIN events AS cause ON cause.id = runs.cause_id ORDER BY runs.started_at"
+      )
+
+    assert [
+             %{via: "send", cause_type: "prompt"},
+             %{via: "work", cause_type: "work"},
+             %{agent: "worker", via: "delegate", cause_type: "delegate", work_id: child},
+             %{agent: "concierge", via: "continue", cause_type: "continue", cause_work: child}
+           ] = runs
+
+    Project.close(project)
+  end
+
+  test "a parent woken by its child reads the child's report and closes", %{dir: dir} do
+    test_pid = self()
+
+    model = fn assembled, _tools, call ->
+      cond do
+        assembled =~ "You are the worker." ->
+          call.("done", %{"report" => "said hello back"})
+
+        assembled =~ "\n\n## Results\n" ->
+          send(test_pid, {:results, assembled})
+          call.("done", %{"report" => "the worker said hello back"})
+
+        assembled =~ "## Last comment\nopened" ->
+          delegate_one(call, "Answer", "answer the greeting")
+
+        true ->
+          create_root(call, "Root")
+      end
+
+      {:ok, "unused"}
+    end
+
+    Fixtures.use_model(dir, model)
+    assert {:ok, ""} = CLI.run(["send", "Alo"], dir)
+
+    assert_received {:results, assembled}
+    assert assembled =~ ~r/## Results\n- Answer \(worker, done, work \w+\): said hello back/
+
+    project = open_project(dir)
+    {:ok, runs} = Query.all(project.conn, "SELECT agent FROM runs ORDER BY started_at")
+    assert Enum.map(runs, & &1.agent) == ["concierge", "concierge", "worker", "concierge"]
+
+    {:ok, [root]} = Query.all(project.conn, "SELECT * FROM works WHERE parent_id IS NULL")
+    assert root.state == "done"
+
+    Project.close(project)
+  end
+
   test "the --message form works", %{dir: dir} do
     assert {:ok, ""} = CLI.run(["send", "--message", "hello"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
 
     assert {:ok, [message]} =
              Query.all(project.conn, "SELECT * FROM prompts WHERE kind = 'message'")
@@ -133,14 +227,46 @@ defmodule Omunculus.CLITest do
     assert {:error, {:unknown_tool, "nope"}} = CLI.run(["nope"], dir)
   end
 
+  test "a project another command holds without a server is in use", %{dir: dir} do
+    {:ok, config} = Omunculus.Config.load(Fixtures.config_path(dir))
+    {:ok, holder} = Project.open(config, lock: true)
+
+    try do
+      assert {:error, :project_in_use} = CLI.run(["send", "blocked"], dir)
+    after
+      Project.close(holder)
+    end
+  end
+
+  test "a command that takes the project first opens the runs a stopped process left due",
+       %{dir: dir} do
+    project = open_project(dir)
+
+    assert {:ok, _out, [_call, message]} =
+             Omunculus.Operations.call(project, "send", %{"message" => "left due"}, %{}, false)
+
+    Project.close(project)
+
+    assert {:ok, _output} = CLI.run(["config"], dir)
+
+    project = open_project(dir)
+
+    assert {:ok, [%{status: "done"}]} =
+             Query.all(project.conn, "SELECT * FROM runs WHERE cause_id = ?", [message.id])
+
+    Project.close(project)
+  end
+
   test "prompt prints the last run assembled prompt", %{dir: dir} do
     assert {:ok, ""} = CLI.run(["send", "first message"], dir)
     assert {:ok, ""} = CLI.run(["send", "second message"], dir)
 
     assert {:ok, output} = CLI.run(["prompt"], dir)
-    assert output =~ "second message"
-    refute output =~ "first message"
-    assert output =~ "- read: Reads a file. [tags: fs]"
+    assert output =~ "## Message\nsecond message"
+    refute output =~ "## Message\nfirst message"
+
+    assert output =~
+             "- read: Reads a file, or limit lines of it from line offset (from 1). [tags: fs]"
 
     assert output =~
              "- comment: Writes a comment on the work, request, or inbox. [tags: comment, work, store]"
@@ -148,7 +274,7 @@ defmodule Omunculus.CLITest do
 
   test "prompt --run prints that run assembled prompt", %{dir: dir} do
     assert {:ok, ""} = CLI.run(["send", "first message"], dir)
-    project = open(dir)
+    project = open_project(dir)
     assert {:ok, [first]} = Query.all(project.conn, "SELECT * FROM runs")
     first_id = first.id
     Project.close(project)
@@ -169,6 +295,21 @@ defmodule Omunculus.CLITest do
     assert {:error, {:unknown_run, "missing"}} = CLI.run(["prompt", "--run", "missing"], dir)
 
     assert CLI.format_error({:unknown_run, "missing"}) == "unknown run missing"
+  end
+
+  test "a failed tool's error is its own output", _ctx do
+    assert CLI.format_error({:tool_failed, "message required"}) == "message required"
+  end
+
+  test "an override that does not fit its manifest is a clear error" do
+    assert CLI.format_error({:overrides, "done", {:not_chainable, "work"}}) ==
+             "overrides.done.chains names work, which the done manifest does not chain"
+
+    assert CLI.format_error({:overrides, "done", {:invalid, :then}}) ==
+             "overrides of done leave a then outside its chains or with end not last"
+
+    assert CLI.format_error({:overrides, "done", {:unknown_schema, "short"}}) ==
+             "overrides.done.schema names short, which the done manifest does not declare"
   end
 
   test "send without a config file does not open a run", %{dir: dir} do
@@ -200,9 +341,7 @@ defmodule Omunculus.CLITest do
 
   test "--config uses that file; the project root is the file's directory", %{dir: dir} do
     File.rm!(Path.join(dir, "omunculus.toml"))
-    other = Path.join(System.tmp_dir!(), Id.new())
-    File.mkdir_p!(other)
-    on_exit(fn -> File.rm_rf!(other) end)
+    other = Fixtures.tmp_dir()
     Fixtures.install_default(other)
     config = Path.join(other, "omunculus.toml")
 
@@ -280,6 +419,14 @@ defmodule Omunculus.CLITest do
 
   test "a missing [execution.sandbox] table is named in the error" do
     assert CLI.format_error({:execution, {:sandbox, :missing}}) =~ "[execution.sandbox]"
+    assert CLI.format_error({:policy, {:invalid, :max_retries}}) =~ "[policy] max_retries"
+    assert CLI.format_error({:policy, {:invalid, :max_reopens}}) =~ "[policy] max_reopens"
+
+    assert CLI.format_error({:policy, {:invalid, :last_run_output_bytes}}) =~
+             "[policy] last_run_output_bytes"
+
+    assert CLI.format_error({:policy, {:invalid, :tool_output_bytes}}) =~
+             "[policy] tool_output_bytes"
   end
 
   test "send with no args fails and reports the tool's own output", %{dir: dir} do
@@ -290,7 +437,7 @@ defmodule Omunculus.CLITest do
     assert {:ok, ""} = CLI.run(["send", "first"], dir)
     assert {:ok, ""} = CLI.run(["send", "second"], dir)
 
-    project = open(dir)
+    project = open_project(dir)
 
     assert {:ok, assembleds} =
              Query.all(project.conn, "SELECT * FROM prompts WHERE kind = 'assembled'")
@@ -304,32 +451,38 @@ defmodule Omunculus.CLITest do
   describe "work + comment" do
     test "the concierge creates the work, a follow-up comments on it, and a third opening sees the last comment",
          %{dir: dir} do
-      model = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "Count to five"})
-        {:ok, "ok"}
+      # The root's run parks it until the person writes again.
+      model = fn assembled, _tools, call ->
+        if assembled =~ "## Work\n",
+          do: call.("break", %{"report" => "parked"}),
+          else: create_root(call, "Count to five")
       end
 
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} = CLI.run(["send", "Count to 5"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
       assert work.title == "Count to five"
       assert work.title != "Count to 5"
       assert work.assignee == "concierge"
 
-      assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
-      assert run.work_id == work.id
+      assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs")
+      assert Enum.map(runs, & &1.work_id) == [work.id, work.id]
 
       assert {:ok, events} = Store.replay(project.conn, :project)
 
       assert Enum.map(events, & &1.type) ==
-               ["tool", "prompt", "start-run", "tool", "tool", "work", "model", "end-run"]
+               ["tool", "prompt", "start-run", "tool", "tool", "work", "tool", "end", "end-run"] ++
+                 ["start-run", "tool", "tool", "break", "tool", "end", "tool", "end-run"]
 
-      assert {:ok, [first_assembled]} =
-               Query.all(project.conn, "SELECT * FROM prompts WHERE kind = 'assembled'")
+      assert {:ok, [first_assembled, _root_assembled]} =
+               Query.all(
+                 project.conn,
+                 "SELECT prompts.* FROM prompts JOIN runs ON runs.prompt_id = prompts.id JOIN events ON events.id = runs.event_id WHERE kind = 'assembled' ORDER BY events.sequence"
+               )
 
       Project.close(project)
 
@@ -337,8 +490,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         send(test_pid, {:second_assembled, assembled})
-        assert {:ok, ""} = call.("comment", %{"body" => "first comment"})
-        {:ok, "done"}
+        call.("break", %{"report" => "first comment"})
       end
 
       Fixtures.use_model(dir, model)
@@ -346,15 +498,19 @@ defmodule Omunculus.CLITest do
       assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "keep going"], dir)
 
       assert_received {:second_assembled, second_assembled}
-      assert second_assembled =~ "## Work"
+      assert second_assembled =~ "## Work\n"
       assert second_assembled =~ work.title
       assert second_assembled =~ "## Message\nkeep going"
       refute second_assembled =~ "Count to 5"
       refute second_assembled =~ first_assembled.body
 
-      project = open(dir)
+      project = open_project(dir)
 
-      assert {:ok, [comment]} = Query.all(project.conn, "SELECT * FROM comments")
+      assert {:ok, [report, parked, comment]} =
+               Query.all(project.conn, "SELECT * FROM comments ORDER BY created_at")
+
+      assert report.body == "opened"
+      assert parked.body == "parked"
       assert comment.work_id == work.id
       assert comment.body == "first comment"
 
@@ -379,7 +535,7 @@ defmodule Omunculus.CLITest do
       assert {:error, {:prompt, {:missing, :works, "nope"}}} =
                CLI.run(["send", "--work_id", "nope", "x"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, []} = Query.all(project.conn, "SELECT * FROM events")
       Project.close(project)
     end
@@ -387,15 +543,15 @@ defmodule Omunculus.CLITest do
 
   describe "request and reply" do
     setup %{dir: dir} do
-      write_tool(dir, "write")
+      write_model_tool(dir, "write")
       :ok
     end
 
     defp open_write_request(dir, work_id \\ nil) do
       model = fn _assembled, _tools, call ->
         call.("request_access", %{
-          "kind" => "tool",
-          "name" => "write",
+          "report" => "blocked on write",
+          "access" => [%{"kind" => "tool", "name" => "write"}],
           "reason" => "need to write"
         })
 
@@ -411,29 +567,31 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(args, dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
       Project.close(project)
 
       request.id
     end
 
-    test "an askable request opens REQUESTS waiting_human, comments the reason, and marks a linked work waiting for access",
+    test "an askable request opens REQUESTS waiting_human, comments the reason, and parks a linked work on the request",
          %{dir: dir} do
-      project = open(dir)
+      project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
       request_id = open_write_request(dir, work_id)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, request} =
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
 
-      assert request.status == "waiting_human"
-      assert request.arbiter == "human"
-      assert Jason.decode!(request.ask) == %{"kind" => "tool", "name" => "write"}
+      assert request.status == "pending"
+      assert request.arbiter == @human
+
+      assert %{"deny" => [], "grant" => [%{"name" => "grant"}]} =
+               Jason.decode!(request.options)
 
       assert {:ok, [comment]} =
                Query.all(project.conn, "SELECT * FROM comments WHERE request_id = ?", [
@@ -442,36 +600,45 @@ defmodule Omunculus.CLITest do
 
       assert comment.body == "need to write"
 
+      assert {:ok, [report]} =
+               Query.all(project.conn, "SELECT * FROM comments WHERE work_id = ?", [work_id])
+
+      assert report.body == "blocked on write"
+
+      assert {:ok, events} = Store.replay(project.conn, :project)
+      types = events |> Enum.map(& &1.type) |> Enum.drop_while(&(&1 != "comment"))
+      assert ["comment", "request", "tool", "end" | _rest] = types
+
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
       assert work.state == "waiting"
-      assert work.waiting == "access"
-      assert work.waiting_for == "write"
+      assert work.waiting == "request"
+      assert work.waiting_for == request_id
 
       Project.close(project)
     end
 
     test "reply grant adds the name to works.grants, reopens the work, and opens a new run on the same stage with the granted tool",
          %{dir: dir} do
-      project = open(dir)
+      project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
       request_id = open_write_request(dir, work_id)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, [old_run]} = Query.all(project.conn, "SELECT * FROM runs")
       Project.close(project)
 
-      model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
+      model = fn _assembled, _tools, call -> call.("done", %{"report" => "shipped"}) end
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--decision", "grant", "pode"],
+                 ["reply", "--request_id", request_id, "--option", "grant", "allowed"],
                  dir
                )
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, request} =
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
@@ -480,7 +647,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
       assert Jason.decode!(work.grants) == ["write"]
-      assert work.state == "open"
+      assert work.state == "done"
 
       assert {:ok, runs} =
                Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
@@ -494,21 +661,401 @@ defmodule Omunculus.CLITest do
       assert {:ok, new_assembled} =
                Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [new_run.prompt_id])
 
-      assert new_assembled.body =~ "## Work"
+      assert new_assembled.body =~ "## Work\n"
       refute new_assembled.body =~ "## Message"
+
+      Project.close(project)
+    end
+
+    # A work whose child broke, waiting on it to reopen the child or break.
+    defp work_with_broken_child(dir) do
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
+
+      child_id =
+        Fixtures.insert(project.conn, :works, %{
+          title: "Publish it",
+          parent_id: work_id,
+          assignee: "worker",
+          state: "waiting"
+        })
+
+      Project.close(project)
+      {work_id, child_id}
+    end
+
+    defp broken_line(child_id),
+      do: "- Publish it (worker, work #{child_id}): broke, waiting on you to reopen it"
+
+    test "the run a reply opens on a work shows the child that broke with its id",
+         %{dir: dir} do
+      {work_id, child_id} = work_with_broken_child(dir)
+      request_id = open_write_request(dir, work_id)
+
+      Fixtures.use_model(dir, fn _assembled, _tools, call -> call.("end", %{}) end)
+
+      assert {:ok, ""} =
+               CLI.run(["reply", "--request_id", request_id, "--option", "deny", "no"], dir)
+
+      project = open_project(dir)
+
+      assert {:ok, %{body: assembled}} =
+               Query.one(
+                 project.conn,
+                 "SELECT prompts.body FROM runs JOIN prompts ON prompts.id = runs.prompt_id WHERE runs.request_id = ?",
+                 [request_id]
+               )
+
+      assert assembled =~ "## Children\n" <> broken_line(child_id)
+      Project.close(project)
+    end
+
+    test "with [policy] sessions, the run a reply opens continues the paused session",
+         %{dir: dir} do
+      config = Path.join(dir, "omunculus.toml")
+
+      File.write!(
+        config,
+        String.replace(
+          File.read!(config),
+          "[policy]\n",
+          "[policy]\nsession_ttl_ms = 600000\nsession_max_bytes = 1000000\n",
+          global: false
+        )
+      )
+
+      {work_id, child_id} = work_with_broken_child(dir)
+
+      # The reply a provider sends, recorded as an adapter records it.
+      asking = fn _assembled, _tools, call, record, _delta, _execution ->
+        :ok =
+          record.(%{
+            "role" => "assistant",
+            "content" => nil,
+            "tool_calls" => [
+              %{
+                "id" => "c1",
+                "type" => "function",
+                "function" => %{"name" => "request_access", "arguments" => "{}"}
+              }
+            ]
+          })
+
+        call.("request_access", %{
+          "report" => "blocked on write",
+          "access" => [%{"kind" => "tool", "name" => "write"}],
+          "reason" => "need to write"
+        })
+
+        {:ok, "unused"}
+      end
+
+      Fixtures.use_model(dir, asking)
+      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "save this"], dir)
+
+      project = open_project(dir)
+      assert {:ok, [paused]} = Query.all(project.conn, "SELECT * FROM runs")
+      assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
+      Project.close(project)
+
+      Fixtures.use_model(dir, fn _assembled, _tools, call -> call.("end", %{}) end)
+
+      assert {:ok, ""} =
+               CLI.run(["reply", "--request_id", request.id, "--option", "grant", "ok"], dir)
+
+      project = open_project(dir)
+
+      assert {:ok, runs} =
+               Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
+
+      continued = Enum.find(runs, &(&1.id != paused.id))
+      assert {:ok, events} = Store.replay(project.conn, {:run, continued.id})
+
+      assert %{body: body} = Enum.find(events, &(&1.type == "session"))
+      assert %{"continues" => continues, "since" => since} = Jason.decode!(body)
+      assert continues == paused.id
+      assert since =~ "## Request"
+      assert since =~ "## Children\n" <> broken_line(child_id)
+      # The session keeps its instructions; the tool the reply granted is in what changed.
+      assert since =~ "## Tools" and since =~ "- write"
+
+      Project.close(project)
+    end
+
+    test "a change to the config an agent proposes is loaded first, then the person's to apply",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.keeper]
+      depth = 0
+      text = "I keep the project."
+      tools = ["propose_config", "end"]
+      human = ["configure"]
+      """)
+
+      config = Path.join(dir, "omunculus.toml")
+
+      # One model throughout: replacing it rewrites the file the proposal was read at.
+      Fixtures.use_model(dir, fn assembled, _tools, call ->
+        model = Toml.decode_file!(config)["agents"]["keeper"]["model"]
+
+        if assembled =~ "## Request\n" do
+          call.("end", %{})
+        else
+          [_, message] = List.last(Regex.scan(~r/## Message\n(.*)/, assembled))
+
+          value =
+            if message =~ "broken",
+              do: %{"text" => "no depth"},
+              else: %{"depth" => 1, "model" => model, "text" => "I help.", "tools" => ["end"]}
+
+          call.("propose_config", %{
+            "item" => "agents.helper",
+            "value" => value,
+            "reason" => "a helper"
+          })
+        end
+      end)
+
+      # A change the config would not load with is refused before anyone is asked.
+      assert {:ok, _said} = CLI.run(["send", "add a broken helper"], dir)
+      project = open_project(dir)
+      assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
+      Project.close(project)
+
+      assert {:ok, _said} = CLI.run(["send", "add a helper"], dir)
+
+      project = open_project(dir)
+      assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
+
+      assert {:ok, %{body: body}} =
+               Query.one(project.conn, "SELECT body FROM events WHERE id = ?", [request.event_id])
+
+      Project.close(project)
+
+      reason = Jason.decode!(body)["reason"]
+      assert request.status == "pending"
+      assert reason =~ "agents.helper as it is:\n(none)"
+      assert reason =~ "agents.helper as it would be:\n"
+      refute Toml.decode_file!(config)["agents"]["helper"]
+
+      assert {:ok, _said} =
+               CLI.run(["reply", "--request_id", request.id, "--option", "apply", "yes"], dir)
+
+      assert %{"text" => "I help."} =
+               Toml.decode_file!(Path.join(dir, "omunculus.toml"))["agents"]["helper"]
+
+      # The run the answer opens is told which option the person chose.
+      project = open_project(dir)
+
+      assert {:ok, %{body: assembled}} =
+               Query.one(
+                 project.conn,
+                 "SELECT body FROM prompts WHERE kind = 'assembled' ORDER BY created_at DESC LIMIT 1"
+               )
+
+      Project.close(project)
+      assert assembled =~ "answered apply: the reply is below"
+    end
+
+    test "a proposal goes to the project's owner, not along the default route", %{dir: dir} do
+      config = """
+      [agents.keeper]
+      depth = 0
+      text = "I keep the project."
+      tools = ["propose_config", "end"]
+      human = ["configure"]
+
+      [agents.desk]
+      depth = 0
+      text = "I answer."
+      tools = ["end"]
+
+      [policy]
+      request_routes = [ROUTES]
+      """
+
+      owner = ~s({ name = "owner", via = ["origin"] }, )
+      default = ~s({ via = [{ kind = "agent", agent = "desk" }, "origin"] })
+      write_config(dir, String.replace(config, "ROUTES", owner <> default))
+
+      # Proposes the desk's own table with a shorter text.
+      proposing = fn dir ->
+        fn assembled, _tools, call ->
+          if assembled =~ "## Request\n" do
+            call.("end", %{})
+          else
+            desk = Toml.decode_file!(Path.join(dir, "omunculus.toml"))["agents"]["desk"]
+
+            call.("propose_config", %{
+              "item" => "agents.desk",
+              "value" => Map.put(desk, "text", "I answer briefly."),
+              "reason" => "shorter answers"
+            })
+          end
+        end
+      end
+
+      Fixtures.use_model(dir, proposing.(dir))
+
+      assert {:ok, _said} = CLI.run(["send", "--agent", "keeper", "shorten desk"], dir)
+      project = open_project(dir)
+      assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
+      assert request.arbiter == @human
+      Project.close(project)
+
+      # Without an owner route the store refuses the proposal, naming the routes there are.
+      dir = Fixtures.tmp_dir()
+      Fixtures.install_default(dir)
+      write_config(dir, String.replace(config, "ROUTES", default))
+      Fixtures.use_model(dir, proposing.(dir))
+      assert {:ok, _said} = CLI.run(["send", "--agent", "keeper", "shorten desk"], dir)
+      project = open_project(dir)
+      assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
+
+      assert {:ok, [%{body: body}]} =
+               Query.all(
+                 project.conn,
+                 "SELECT body FROM events WHERE type = 'tool' AND body LIKE '%propose_config%'"
+               )
+
+      Project.close(project)
+      assert body =~ "owner"
+    end
+
+    test "a pack an agent proposes to import is loaded first, then the person's to apply",
+         %{dir: dir} do
+      Fixtures.pack(dir)
+
+      config =
+        Fixtures.write_pack_config(dir, """
+        [agents.keeper]
+        depth = 0
+        text = "I keep the project."
+        tools = ["propose_pack", "end"]
+        human = ["pack"]
+        """)
+
+      Fixtures.use_model(dir, fn assembled, _tools, call ->
+        if assembled =~ "## Request\n" do
+          call.("end", %{})
+        else
+          [_, message] = List.last(Regex.scan(~r/## Message\n(.*)/, assembled))
+          models = if message =~ "broken", do: %{}, else: %{"lead" => "fast"}
+
+          call.("propose_pack", %{
+            "path" => "team",
+            "models" => models,
+            "auth" => %{"vault" => "mine"},
+            "depth" => 1,
+            "reason" => "the team"
+          })
+        end
+      end)
+
+      assert {:ok, _said} = CLI.run(["send", "a broken import"], dir)
+      project = open_project(dir)
+      assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
+      Project.close(project)
+
+      assert {:ok, _said} = CLI.run(["send", "import the team"], dir)
+      project = open_project(dir)
+      assert {:ok, [request]} = Query.all(project.conn, "SELECT * FROM requests")
+
+      assert {:ok, %{body: body}} =
+               Query.one(project.conn, "SELECT body FROM events WHERE id = ?", [request.event_id])
+
+      Project.close(project)
+
+      assert Jason.decode!(body)["reason"] =~
+               "- chief: depth 1, model fast\n- hand: depth 2, model fast"
+
+      refute Map.has_key?(Toml.decode_file!(config), "packs")
+
+      assert {:ok, _said} =
+               CLI.run(["reply", "--request_id", request.id, "--option", "apply", "yes"], dir)
+
+      assert {:ok, %{agents: %{"chief" => %{depth: 1}}}} = Omunculus.Config.load(config)
+    end
+
+    test "a message goes to the agent of depth 0 it names, then to the one its conversation began with",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.front]
+      depth = 0
+      text = "I am front."
+      tools = ["end"]
+
+      [agents.desk]
+      depth = 0
+      text = "I am desk."
+      tools = ["end"]
+      """)
+
+      Fixtures.use_model(dir, fn _assembled, _tools, call -> call.("end", %{}) end)
+
+      assert {:error, {:prompt, {:agent_required, 0, ["desk", "front"]}}} =
+               CLI.run(["send", "hello"], dir)
+
+      assert {:error, {:prompt, {:not_at_depth_0, "ghost"}}} =
+               CLI.run(["send", "--agent", "ghost", "hello"], dir)
+
+      assert {:ok, ""} = CLI.run(["send", "--agent", "desk", "hello"], dir)
+      assert {:ok, ""} = CLI.run(["send", "and again"], dir)
+
+      project = open_project(dir)
+      assert {:ok, runs} = Query.all(project.conn, "SELECT agent FROM runs ORDER BY started_at")
+      assert Enum.map(runs, & &1.agent) == ["desk", "desk"]
+      Project.close(project)
+    end
+
+    test "with [policy] sessions, a message without a work continues the conversation",
+         %{dir: dir} do
+      config = Path.join(dir, "omunculus.toml")
+
+      File.write!(
+        config,
+        String.replace(
+          File.read!(config),
+          "[policy]\n",
+          "[policy]\nsession_ttl_ms = 600000\nsession_max_bytes = 1000000\n",
+          global: false
+        )
+      )
+
+      # Asks back in plain text, as a provider's reply is recorded.
+      asking = fn _assembled, _tools, _call, record, _delta, _execution ->
+        :ok = record.(%{"role" => "assistant", "content" => "Which shop is it for?"})
+        {:ok, "Which shop is it for?"}
+      end
+
+      Fixtures.use_model(dir, asking)
+      assert {:ok, _said} = CLI.run(["send", "I want a website"], dir)
+      assert {:ok, _said} = CLI.run(["send", "Doce Ana, a bakery"], dir)
+
+      project = open_project(dir)
+
+      assert {:ok, [asked, answered]} =
+               Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+
+      assert {:ok, events} = Store.replay(project.conn, {:run, answered.id})
+
+      assert %{body: body} = Enum.find(events, &(&1.type == "session"))
+      assert %{"continues" => continues, "since" => since} = Jason.decode!(body)
+      assert continues == asked.id
+      assert since == "## Message\nDoce Ana, a bakery"
 
       Project.close(project)
     end
 
     test "reply grant with scope agent writes the permanent grant to the project's omunculus.toml, leaves works.grants untouched, and a fresh work also gets the tool",
          %{dir: dir} do
-      project = open(dir)
+      project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
       request_id = open_write_request(dir, work_id)
 
-      model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
+      model = fn _assembled, _tools, call -> call.("done", %{"report" => "shipped"}) end
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} =
@@ -517,16 +1064,14 @@ defmodule Omunculus.CLITest do
                    "reply",
                    "--request_id",
                    request_id,
-                   "--decision",
-                   "grant",
-                   "--scope",
-                   "agent",
+                   "--option",
+                   "grant_agent",
                    "allowed forever"
                  ],
                  dir
                )
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
       assert work.grants == nil
       Project.close(project)
@@ -534,15 +1079,15 @@ defmodule Omunculus.CLITest do
       assert {:ok, config} = Fixtures.load_config(dir)
       assert "write" in config.agents["concierge"].ceiling.granted
 
-      project = open(dir)
+      project = open_project(dir)
       other_work_id = Fixtures.insert(project.conn, :works, %{title: "Another one"})
       Project.close(project)
 
-      model = fn _assembled, _tools, _call -> {:ok, "ok"} end
+      model = fn _assembled, _tools, call -> call.("done", %{"report" => "shipped"}) end
       Fixtures.use_model(dir, model)
       assert {:ok, ""} = CLI.run(["send", "--work_id", other_work_id, "new request"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [run]} =
                Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [other_work_id])
@@ -551,31 +1096,41 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "a blocked request denies immediately, opens no REQUESTS row, and the run reaches done",
+    test "a blocked request is refused to the model, which goes on, and opens no REQUESTS row",
          %{dir: dir} do
       write_config(dir, """
       [agents.concierge]
       depth = 0
       text = "hi"
-      tools = ["comment", "request_access", "work"]
+      tools = ["comment", "end", "request_access", "work"]
       deny = ["write"]
       """)
 
+      test_pid = self()
+
       model = fn _assembled, _tools, call ->
-        call.("request_access", %{"kind" => "tool", "name" => "write", "reason" => "need it"})
-        {:ok, "unused"}
+        send(
+          test_pid,
+          {:refused,
+           call.("request_access", %{
+             "report" => "blocked on write",
+             "access" => [%{"kind" => "tool", "name" => "write"}],
+             "reason" => "need it"
+           })}
+        )
+
+        {:ok, "went on"}
       end
 
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} = CLI.run(["send", "save"], dir)
+      assert_received {:refused, {:ok, refused}}
+      assert refused == Out.refused({:request, {:blocked, "write"}})
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
-
-      assert {:ok, events} = Store.replay(project.conn, :project)
-      assert "deny" in Enum.map(events, & &1.type)
 
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
       assert run.status == "done"
@@ -583,18 +1138,56 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "requesting a name the run already has does not open REQUESTS and lets the model keep calling tools",
+    test "request_access for a name the run already has is refused, so the model goes on",
          %{dir: dir} do
       test_pid = self()
 
       model = fn _assembled, _tools, call ->
-        assert {:ok, output} =
-                 call.("request_access", %{
-                   "kind" => "tool",
-                   "name" => "comment",
-                   "reason" => "just checking"
-                 })
+        send(
+          test_pid,
+          {:asked,
+           call.("request_access", %{
+             "report" => "checking comment",
+             "access" => [%{"kind" => "tool", "name" => "comment"}],
+             "reason" => "just checking"
+           })}
+        )
 
+        {:ok, "went on"}
+      end
+
+      Fixtures.use_model(dir, model)
+
+      assert {:ok, ""} = CLI.run(["send", "hi"], dir)
+      assert_received {:asked, {:ok, refused}}
+      assert refused == Out.refused({:request, {:already_have, "comment"}})
+
+      project = open_project(dir)
+      assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
+      # The refused call wrote none of its emits: no report, and the run did not end there.
+      assert {:ok, []} = Query.all(project.conn, "SELECT * FROM comments")
+      Project.close(project)
+    end
+
+    test "a request emit for a name the run already has opens no REQUESTS and lets the model keep calling tools",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "hi"
+      tools = ["ask_comment", "comment"]
+      """)
+
+      write_model_tool(
+        dir,
+        "ask_comment",
+        ~s({"ok": true, "output": "", "emit": [{"type": "request", "body": {"reason": "just checking", "options": {"grant": [{"name": "grant", "args": {"kind": "tool", "name": "comment"}}]}}}]})
+      )
+
+      test_pid = self()
+
+      model = fn _assembled, _tools, call ->
+        assert {:ok, output} = call.("ask_comment", %{})
         send(test_pid, {:output, output})
         {:ok, "continuing"}
       end
@@ -604,9 +1197,9 @@ defmodule Omunculus.CLITest do
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
       assert_received {:output, output}
-      assert output =~ Out.already_granted("comment")
+      assert output == Out.refused({:request, {:already_have, "comment"}})
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, []} = Query.all(project.conn, "SELECT * FROM requests")
 
       assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
@@ -618,92 +1211,62 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "reply deny closes the request, leaves the work waiting, and opens no new run", %{
-      dir: dir
-    } do
-      project = open(dir)
+    test "reply deny closes the request, reopens the work and opens its run with the request",
+         %{dir: dir} do
+      project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
       request_id = open_write_request(dir, work_id)
+      test_pid = self()
 
-      project = open(dir)
-      assert {:ok, [old_run]} = Query.all(project.conn, "SELECT * FROM runs")
-      Project.close(project)
+      model = fn assembled, _tools, call ->
+        send(test_pid, {:assembled, assembled})
+        call.("done", %{"report" => "done without it"})
+      end
 
-      model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--decision", "deny", "not allowed"],
+                 ["reply", "--request_id", request_id, "--option", "deny", "not allowed"],
                  dir
                )
 
-      project = open(dir)
+      assert_received {:assembled, assembled}
+      assert assembled =~ "## Request"
+      assert assembled =~ "not allowed"
 
-      assert {:ok, request} =
+      project = open_project(dir)
+
+      assert {:ok, %{status: "closed"}} =
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
 
-      assert request.status == "closed"
-
-      assert {:ok, events} = Store.replay(project.conn, :project)
-      deny_event = Enum.find(events, &(&1.type == "deny"))
-      assert deny_event.request_id == request_id
-
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
-      assert work.state == "waiting"
-      assert work.waiting == "access"
-      assert work.waiting_for == "write"
+      assert work.state == "done"
+      assert work.grants == nil
 
-      assert {:ok, runs} =
-               Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
+      assert {:ok, [_old_run, new_run]} =
+               Query.all(
+                 project.conn,
+                 "SELECT * FROM runs WHERE work_id = ? ORDER BY started_at",
+                 [
+                   work_id
+                 ]
+               )
 
-      assert length(runs) == 1
-      assert hd(runs).id == old_run.id
+      assert new_run.request_id == request_id
+      assert new_run.via == "reply"
+      refute "write" in Jason.decode!(new_run.tools)
 
-      Project.close(project)
-
-      model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
-      Fixtures.use_model(dir, model)
-      assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "try again"], dir)
-
-      project = open(dir)
-      assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work_id])
-      assert work.state == "open"
-      assert work.waiting == nil
-      grants = if work.grants, do: Jason.decode!(work.grants), else: []
-      refute "write" in grants
-
-      assert {:ok, events} = Store.replay(project.conn, :project)
-
-      work_event =
-        Enum.find(events, fn event ->
-          event.type == "work" and Jason.decode!(event.body)["reason"] == "reopened_by_prompt"
-        end)
-
-      prompt_event =
-        Enum.find(events, fn event ->
-          event.type == "prompt" and event.work_id == work_id and
-            Jason.decode!(event.body)["message"] == "try again"
-        end)
-
-      assert work_event
-      assert prompt_event
-      assert work_event.sequence < prompt_event.sequence
-
-      assert {:ok, runs} =
-               Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
-
-      assert length(runs) == 2
       Project.close(project)
     end
 
-    test "a request without a linked work has no work_id, and granting it opens no run and touches no work",
+    test "a request without a linked work has no work_id; the reply runs its agent again with the request and the asking run",
          %{dir: dir} do
       request_id = open_write_request(dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, request} =
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
@@ -711,35 +1274,52 @@ defmodule Omunculus.CLITest do
       assert request.work_id == nil
       Project.close(project)
 
-      model = fn _assembled, _tools, _call -> raise "must never be called" end
+      test_pid = self()
+
+      model = fn assembled, _tools, call ->
+        send(test_pid, {:assembled, assembled})
+        call.("end", %{})
+      end
+
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--decision", "grant", "pode"],
+                 ["reply", "--request_id", request_id, "--option", "grant_agent", "allowed"],
                  dir
                )
 
-      project = open(dir)
+      assert_received {:assembled, assembled}
+      assert assembled =~ "## Request\n#{request_id}"
+      assert assembled =~ "allowed"
+      assert assembled =~ "## Last run\n- message save this"
+      assert assembled =~ "- tool request_access"
+
+      project = open_project(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
       assert "grant" in Enum.map(events, & &1.type)
 
       assert {:ok, []} = Query.all(project.conn, "SELECT * FROM works")
 
-      assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs")
-      assert length(runs) == 1
+      assert {:ok, [asking, again]} =
+               Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+
+      assert again.via == "reply"
+      assert again.agent == asking.agent
+      assert again.request_id == request_id
+      assert "write" in Jason.decode!(again.tools)
 
       Project.close(project)
     end
 
     test "replying twice to the same request fails the second time", %{dir: dir} do
       request_id = open_write_request(dir)
-      model = fn _assembled, _tools, _call -> {:ok, "thanks"} end
+      model = fn _assembled, _tools, call -> call.("end", %{}) end
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--decision", "grant", "pode"],
+                 ["reply", "--request_id", request_id, "--option", "deny", "no"],
                  dir
                )
 
@@ -747,7 +1327,7 @@ defmodule Omunculus.CLITest do
 
       assert {:error, {:reply, :closed}} =
                CLI.run(
-                 ["reply", "--request_id", request_id, "--decision", "grant", "de novo"],
+                 ["reply", "--request_id", request_id, "--option", "deny", "again"],
                  dir
                )
     end
@@ -770,18 +1350,18 @@ defmodule Omunculus.CLITest do
         """
       )
 
-      project = open(dir)
+      project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
       request_id = open_write_request(dir, work_id)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, request} =
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
 
-      assert request.status == "waiting_human"
+      assert request.status == "pending"
 
       assert {:ok, [_inbox_row]} = Query.all(project.conn, "SELECT * FROM inbox")
 
@@ -796,18 +1376,19 @@ defmodule Omunculus.CLITest do
   end
 
   describe "sequence and child" do
-    test "D0-H0-W1: continue moves a work through the workflow's steps and the last stage closes it",
+    test "D0-H0-W1: done moves a work through the workflow's steps and the last stage closes it",
          %{dir: dir} do
       write_config(dir, """
       [agents.concierge]
       depth = 0
-      text = "Sou o concierge."
-      tools = ["work", "continue", "comment"]
+      text = "I am the concierge."
+      tools = ["work", "continue", "comment", "done", "end"]
 
       [agents.reviewer]
       depth = 0
-      text = "Sou o reviewer."
-      tools = ["work", "continue", "comment"]
+      workflow_only = true
+      text = "I am the reviewer."
+      tools = ["work", "continue", "comment", "done", "end"]
 
       [workflows.delivery]
       steps = [
@@ -816,18 +1397,20 @@ defmodule Omunculus.CLITest do
       ]
 
       [policy]
-      workflow = "delivery"
+      workflows = ["delivery"]
       """)
 
       model = fn assembled, _tools, call ->
         cond do
-          assembled =~ "Sou o concierge." ->
-            unless assembled =~ "## Work", do: call.("work", %{"title" => "Ship it"})
-            call.("continue", %{})
+          assembled =~ "I am the concierge." ->
+            if assembled =~ "## Work\n",
+              do: call.("done", %{"report" => "built"}),
+              else: create_unnamed(call, "Ship it")
+
             {:ok, "unused"}
 
-          assembled =~ "Sou o reviewer." ->
-            call.("continue", %{})
+          assembled =~ "I am the reviewer." ->
+            call.("done", %{"report" => "reviewed"})
             {:ok, "unused"}
         end
       end
@@ -836,7 +1419,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "Ship it please"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
       assert work.state == "done"
@@ -857,45 +1440,55 @@ defmodule Omunculus.CLITest do
       types1 = Enum.map(events1, & &1.type)
       refute "model" in types1
       continue_at = Enum.find_index(types1, &(&1 == "continue"))
-      end_at = Enum.find_index(types1, &(&1 == "end-run"))
-      assert continue_at < end_at
-      assert List.last(events1).type == "tool"
-      assert Jason.decode!(List.last(events1).body)["name"] == "on-continue"
+      assert Enum.at(types1, continue_at + 2) == "end"
+      hook = Enum.at(events1, continue_at + 3)
+      assert hook.type == "tool"
+      assert Jason.decode!(hook.body)["name"] == "on-continue"
+      assert List.last(types1) == "end-run"
 
       assert {:ok, assembled2} =
                Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [run2.prompt_id])
 
-      assert assembled2.body =~ "## Work"
+      assert assembled2.body =~ "## Work\n"
       refute assembled2.body =~ "- work:"
 
       Project.close(project)
     end
 
-    test "continue is refused while the workflow is off and the run keeps going", %{dir: dir} do
+    test "done without a workflow closes a root work and ends the run", %{dir: dir} do
       write_config(dir, """
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["work", "continue"]
+      tools = ["work", "comment", "continue", "done", "end"]
       """)
 
-      model = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "No sequence"})
-        assert {:error, {:continue, :workflow_off}} = call.("continue", %{})
-        {:ok, "continuing anyway"}
+      model = fn assembled, _tools, call ->
+        if assembled =~ "## Work\n",
+          do: call.("done", %{"report" => "closed"}),
+          else: create_root(call, "No sequence")
+
+        {:ok, "unused"}
       end
 
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
-      assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
+      assert {:ok, [_creation, run]} =
+               Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+
       assert run.status == "done"
 
+      assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
+      assert work.state == "done"
+
       assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
-      assert "model" in Enum.map(events, & &1.type)
+      refute "model" in Enum.map(events, & &1.type)
+      continue = Enum.find(events, &(&1.type == "continue"))
+      assert Jason.decode!(continue.body) == %{"from" => nil, "to" => nil, "parent_id" => nil}
 
       Project.close(project)
     end
@@ -905,7 +1498,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["work", "bad_continue", "sandbox.network"]
+      tools = ["work", "bad_continue", "end", "sandbox.network"]
 
       [workflows.delivery]
       steps = [
@@ -914,19 +1507,21 @@ defmodule Omunculus.CLITest do
       ]
 
       [policy]
-      workflow = "delivery"
+      workflows = ["delivery"]
       """)
 
-      write_emit_tool(
+      write_model_tool(
         dir,
         "bad_continue",
         ~s({"ok": true, "output": "", "emit": [{"type": "continue", "body": {"stage": "review"}}]})
       )
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work", do: call.("work", %{"title" => "Ship it"})
+        unless assembled =~ "## Work\n",
+          do: create_unnamed(call, "Ship it")
 
-        assert {:error, {:continue, {:forbidden, "stage"}}} = call.("bad_continue", %{})
+        assert call.("bad_continue", %{}) ==
+                 {:ok, Out.refused({:continue, {:forbidden, "stage"}})}
 
         {:ok, "continuing"}
       end
@@ -935,7 +1530,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
       assert work.stage == "to_do"
       Project.close(project)
@@ -947,7 +1542,7 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["counter", "continue"]
+      tools = ["counter", "comment", "continue", "done", "end"]
 
       [workflows.delivery]
       steps = [
@@ -956,15 +1551,16 @@ defmodule Omunculus.CLITest do
       ]
 
       [policy]
-      workflow = "delivery"
+      workflows = ["delivery"]
       """)
 
-      write_tool(dir, "counter")
+      write_model_tool(dir, "counter")
 
-      project = open(dir)
+      project = open_project(dir)
 
       work_id =
         Fixtures.insert(project.conn, :works, %{
+          workflow: "delivery",
           stage: "to_do",
           assignee: "concierge",
           grants: ~s(["counter"])
@@ -974,7 +1570,7 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         if assembled =~ "- counter:" do
-          call.("continue", %{})
+          call.("done", %{"report" => "counted"})
           {:ok, "unused"}
         else
           {:ok, "done"}
@@ -985,7 +1581,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "go on"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
       assert length(runs) == 2
@@ -1004,18 +1600,20 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["work", "break", "comment"]
+      tools = ["work", "break", "comment", "end"]
 
       [workflows.solo]
       steps = [{ name = "to_do", agent = "concierge" }]
 
       [policy]
-      workflow = "solo"
+      workflows = ["solo"]
       """)
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work", do: call.("work", %{"title" => "Needs help"})
-        call.("break", %{"body" => "need to pause"})
+        if assembled =~ "## Work\n",
+          do: call.("break", %{"report" => "need to pause"}),
+          else: create_unnamed(call, "Needs help")
+
         {:ok, "unused"}
       end
 
@@ -1023,25 +1621,28 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "handle this"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
       assert work.state == "waiting"
       assert work.stage == "to_do"
       assert work.waiting_from == "concierge"
 
-      assert {:ok, [comment]} = Query.all(project.conn, "SELECT * FROM comments")
+      assert {:ok, [report, comment]} =
+               Query.all(project.conn, "SELECT * FROM comments ORDER BY created_at")
+
+      assert report.body == "opened"
       assert comment.body == "need to pause"
 
       assert {:ok, previous_runs} = Query.all(project.conn, "SELECT * FROM runs")
       assert length(previous_runs) == 2
       Project.close(project)
 
-      model = fn _assembled, _tools, _call -> {:ok, "voltei"} end
+      model = fn _assembled, _tools, call -> call.("break", %{"report" => "still paused"}) end
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} = CLI.run(["send", "--work_id", work.id, "come back"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs")
       assert length(runs) == 3
@@ -1050,8 +1651,14 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, work} = Query.one(project.conn, "SELECT * FROM works WHERE id = ?", [work.id])
       assert work.stage == "to_do"
-      assert work.state == "open"
       assert work.waiting == nil
+
+      assert {:ok, [_reopened]} =
+               Query.all(
+                 project.conn,
+                 "SELECT * FROM events WHERE work_id = ? AND type = 'work' AND json_extract(body, '$.reason') = 'reopened_by_prompt'",
+                 [work.id]
+               )
 
       Project.close(project)
     end
@@ -1061,29 +1668,29 @@ defmodule Omunculus.CLITest do
       write_config(dir, """
       [agents.concierge]
       depth = 0
-      text = "Sou o concierge."
-      tools = ["work", "delegate", "comment"]
+      text = "I am the concierge."
+      tools = ["work", "delegate", "comment", "continue", "done", "end"]
 
       [agents.worker]
       depth = 1
-      text = "Sou o worker."
-      tools = ["comment"]
+      text = "I am the worker."
+      tools = ["comment", "continue", "done", "end"]
       """)
 
       model = fn assembled, _tools, call ->
         cond do
-          assembled =~ "Sou o worker." ->
-            {:ok, "done"}
+          assembled =~ "I am the worker." ->
+            call.("done", %{"report" => "finished"})
 
-          assembled =~ "## Work" ->
-            {:ok, "acompanhando"}
+          assembled =~ "## Last comment\nopened" ->
+            delegate_one(call, "Sub task", "do this")
+            {:ok, "unused"}
+
+          assembled =~ "## Work\n" ->
+            call.("done", %{"report" => "delivered"})
 
           true ->
-            assert {:ok, ""} = call.("work", %{"title" => "Big task"})
-
-            assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task", "body" => "do this"})
-
+            create_root(call, "Big task")
             {:ok, "unused"}
         end
       end
@@ -1092,20 +1699,22 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "Big task please"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, works} = Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
       [parent, child] = works
-      assert parent.state == "open"
+      assert parent.state == "done"
       assert child.state == "done"
       assert child.assignee == "worker"
       assert child.parent_id == parent.id
+      assert child.goal == "do this"
 
       assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
-      assert length(runs) == 3
-      [run1, run2, run3] = runs
+      assert length(runs) == 4
+      [_creation, run1, run2, run3] = runs
 
       assert run1.agent == "concierge"
+      assert run1.work_id == parent.id
       assert run2.agent == "worker"
       assert run2.depth == "1"
       assert run2.via == "delegate"
@@ -1116,7 +1725,8 @@ defmodule Omunculus.CLITest do
                Query.one(project.conn, "SELECT * FROM prompts WHERE id = ?", [run2.prompt_id])
 
       assert assembled2.body =~ "Sub task"
-      assert assembled2.body =~ "## Last comment\ndo this"
+      assert assembled2.body =~ "## Goal\ndo this"
+      refute assembled2.body =~ "## Last comment"
 
       assert {:ok, project_events} = Store.replay(project.conn, :project)
 
@@ -1127,18 +1737,156 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
+    for {tool, args, tools, action, workflow?, child_state, parent_tool, parent_state} <- [
+          {"done", %{"report" => "finished"}, ~w(comment continue done end), "continue", false,
+           "done", "done", "done"},
+          {"break", %{"report" => "stuck"}, ~w(break end), "break", false, "waiting", "break",
+           "waiting"},
+          {"break", %{"report" => "stuck"}, ~w(break end), "break", true, "waiting", "break",
+           "waiting"}
+        ] do
+      test "#{tool} #{if workflow?, do: "with", else: "without"} a workflow hands the child back to its waiting parent and opens the parent's run",
+           %{dir: dir} do
+        workflow =
+          if unquote(workflow?),
+            do: """
+
+            [workflows.solo]
+            steps = [{ name = "to_do", agent = "worker" }]
+
+            [policy.depth.1]
+            workflows = ["solo"]
+            """,
+            else: ""
+
+        write_config(
+          dir,
+          """
+          [agents.concierge]
+          depth = 0
+          text = "I am the concierge."
+          tools = ["work", "delegate", "comment", "break", "continue", "done", "end"]
+
+          [agents.worker]
+          depth = 1
+          text = "I am the worker."
+          tools = #{inspect(unquote(tools))}
+          """ <> workflow
+        )
+
+        model = fn assembled, _tools, call ->
+          cond do
+            assembled =~ "I am the worker." ->
+              call.(unquote(tool), unquote(Macro.escape(args)))
+              {:ok, "unused"}
+
+            assembled =~ "## Results" ->
+              call.(unquote(parent_tool), %{"report" => "handled"})
+
+            true ->
+              create_unnamed(call, "Big task")
+              {:ok, "unused"}
+          end
+        end
+
+        Fixtures.use_model(dir, model)
+
+        assert {:ok, ""} = CLI.run(["send", "Big task please"], dir)
+
+        project = open_project(dir)
+
+        assert {:ok, [parent, child]} =
+                 Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
+
+        assert parent.state == unquote(parent_state)
+        assert parent.waiting == nil
+        assert child.state == unquote(child_state)
+
+        # The unnamed work goes down at once, so the root's own run comes
+        # only when the child is back.
+        assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+        assert length(runs) == 3
+        [run2, run3] = Enum.take(runs, -2)
+
+        assert run2.work_id == child.id
+        assert run3.work_id == parent.id
+        assert run3.agent == "concierge"
+
+        assert {:ok, events} = Store.replay(project.conn, {:run, run2.id})
+        event = Enum.find(events, &(&1.type == unquote(action)))
+        assert Jason.decode!(event.body)["parent_id"] == parent.id
+        assert "end" in Enum.map(events, & &1.type)
+
+        Project.close(project)
+      end
+    end
+
+    test "a message to a parent waiting on its child runs it without letting the child go, so the child's done wakes it",
+         %{dir: dir} do
+      write_config(dir, """
+      [agents.concierge]
+      depth = 0
+      text = "I am the concierge."
+      tools = ["work", "comment", "continue", "done", "end"]
+
+      [agents.worker]
+      depth = 1
+      text = "I am the worker."
+      tools = ["comment", "continue", "done", "end"]
+      """)
+
+      project = open_project(dir)
+      parent = Fixtures.insert(project.conn, :works, %{state: "waiting", waiting: "child"})
+      child = Fixtures.insert(project.conn, :works, %{assignee: "worker", parent_id: parent})
+      Project.close(project)
+
+      Fixtures.use_model(dir, fn assembled, _tools, call ->
+        cond do
+          assembled =~ "I am the worker." -> call.("done", %{"report" => "finished"})
+          assembled =~ "## Results" -> call.("done", %{"report" => "all done"})
+          true -> call.("end", %{})
+        end
+      end)
+
+      assert {:ok, ""} = CLI.run(["send", "--work_id", parent, "how is it going?"], dir)
+
+      project = open_project(dir)
+      assert {:ok, waiting} = Store.view(project.conn, "work", parent)
+      assert {waiting.state, waiting.waiting} == {"waiting", "child"}
+
+      assert {:ok, [%{agent: "concierge", via: "send"}]} =
+               Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [parent])
+
+      Project.close(project)
+
+      assert {:ok, ""} = CLI.run(["send", "--work_id", child, "finish it"], dir)
+
+      project = open_project(dir)
+      assert {:ok, %{state: "done"}} = Store.view(project.conn, "work", child)
+      assert {:ok, %{state: "done"}} = Store.view(project.conn, "work", parent)
+
+      assert {:ok, [_message_run, %{agent: "concierge", via: "continue"}]} =
+               Query.all(
+                 project.conn,
+                 "SELECT * FROM runs WHERE work_id = ? ORDER BY started_at",
+                 [parent]
+               )
+
+      Project.close(project)
+    end
+
     test "D1-H0-W1: the child follows its own depth-scoped workflow through the parent's agents",
          %{dir: dir} do
       write_config(dir, """
       [agents.concierge]
       depth = 0
-      text = "Sou o concierge."
-      tools = ["work", "delegate", "comment", "continue"]
+      text = "I am the concierge."
+      tools = ["work", "delegate", "comment", "continue", "done", "end"]
 
       [agents.worker]
       depth = 1
-      text = "Sou o worker."
-      tools = ["comment", "continue"]
+      text = "I am the worker."
+      tools = ["comment", "continue", "done", "end"]
 
       [workflows.delivery]
       steps = [
@@ -1146,29 +1894,31 @@ defmodule Omunculus.CLITest do
         { name = "review", agent = "concierge" },
       ]
 
+      [policy.depth.0.overrides.work]
+      schema = "staged"
+
       [policy.depth.1]
-      workflow = "delivery"
+      workflows = ["delivery"]
       """)
 
+      # Only depth 1 has a workflow, so the unnamed work goes straight to
+      # its first stage, below a root the concierge holds.
       model = fn assembled, _tools, call ->
         cond do
-          assembled =~ "Sou o worker." ->
-            call.("continue", %{})
+          assembled =~ "I am the worker." ->
+            call.("done", %{"report" => "built"})
             {:ok, "unused"}
 
-          assembled =~ "Sub task2" ->
-            call.("continue", %{})
+          assembled =~ "## Last comment\nbuilt" ->
+            call.("done", %{"report" => "reviewed"})
             {:ok, "unused"}
 
-          assembled =~ "## Work" ->
-            {:ok, "acompanhando"}
+          assembled =~ "## Results" ->
+            call.("done", %{"report" => "delivered"})
 
           true ->
-            assert {:ok, ""} = call.("work", %{"title" => "Big task2"})
-
-            assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task2", "body" => "do this 2"})
-
+            assert assembled =~ "- workflow delivery: to_do (worker) → review (concierge)"
+            create_unnamed(call, "Big task2")
             {:ok, "unused"}
         end
       end
@@ -1177,22 +1927,22 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "Big task2 please"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, works} = Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
       [parent, child] = works
-      assert parent.state == "open"
+      assert parent.state == "done"
       assert child.state == "done"
       assert child.stage == "review"
 
       assert {:ok, runs} = Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
       assert length(runs) == 4
-      [run1, run2, run3, run4] = runs
+      [creation, run1, run2, run3] = runs
 
-      assert run1.agent == "concierge" and run1.depth == "0"
-      assert run2.agent == "worker" and run2.depth == "1"
-      assert run3.agent == "concierge" and run3.depth == "1"
-      assert run4.agent == "concierge" and run4.depth == "0"
+      assert creation.agent == "concierge" and creation.depth == "0"
+      assert run1.agent == "worker" and run1.depth == "1"
+      assert run2.agent == "concierge" and run2.depth == "1"
+      assert run3.agent == "concierge" and run3.depth == "0"
 
       Project.close(project)
     end
@@ -1202,61 +1952,61 @@ defmodule Omunculus.CLITest do
       write_config(dir, """
       [agents.concierge]
       depth = 0
-      text = "Sou o concierge."
-      tools = ["work", "delegate", "comment", "reply", "write"]
+      text = "I am the concierge."
+      tools = ["work", "delegate", "comment", "continue", "done", "end", "grant", "reply", "write"]
 
       [agents.worker]
       depth = 1
-      text = "Sou o worker."
-      tools = ["comment", "request_access"]
+      text = "I am the worker."
+      tools = ["comment", "continue", "done", "end", "request_access"]
       """)
 
-      reader = open(dir)
+      reader = open_project(dir)
       {:ok, counter} = Agent.start_link(fn -> 0 end)
       on_exit(fn -> Project.close(reader) end)
 
       model = fn assembled, _tools, call ->
         cond do
-          assembled =~ "Sou o worker." ->
+          assembled =~ "I am the worker." ->
             case Agent.get_and_update(counter, fn n -> {n, n + 1} end) do
               0 ->
                 call.("request_access", %{
-                  "kind" => "tool",
-                  "name" => "write",
+                  "report" => "blocked on write",
+                  "access" => [%{"kind" => "tool", "name" => "write"}],
                   "reason" => "need to write"
                 })
 
                 {:ok, "unused"}
 
               _already_granted ->
-                {:ok, "concluido"}
+                call.("done", %{"report" => "written"})
             end
 
           assembled =~ "## Request" ->
             assert {:ok, [request]} =
                      Query.all(
                        reader.conn,
-                       "SELECT * FROM requests WHERE status = 'waiting_agent'"
+                       "SELECT * FROM requests WHERE status = 'pending'"
                      )
 
             assert {:ok, ""} =
                      call.("reply", %{
                        "request_id" => request.id,
-                       "decision" => "grant",
+                       "option" => "grant",
                        "body" => "you may write"
                      })
 
-            {:ok, "concedido"}
+            {:ok, "granted"}
 
-          assembled =~ "## Work" ->
-            {:ok, "acompanhando"}
+          assembled =~ "## Last comment\nopened" ->
+            delegate_one(call, "Sub task3", "write this")
+            {:ok, "unused"}
+
+          assembled =~ "## Work\n" ->
+            call.("done", %{"report" => "written below"})
 
           true ->
-            assert {:ok, ""} = call.("work", %{"title" => "Big task3"})
-
-            assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task3", "body" => "escreva isso"})
-
+            create_root(call, "Big task3")
             {:ok, "unused"}
         end
       end
@@ -1267,7 +2017,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, [request]} = Query.all(reader.conn, "SELECT * FROM requests")
       assert request.status == "closed"
-      assert request.arbiter == "concierge"
+      assert request.arbiter == @concierge
 
       assert {:ok, request_run} =
                Query.one(reader.conn, "SELECT * FROM runs WHERE request_id IS NOT NULL")
@@ -1286,7 +2036,7 @@ defmodule Omunculus.CLITest do
       [parent, child] = works
       assert Jason.decode!(child.grants) == ["write"]
       assert child.state == "done"
-      assert parent.state == "open"
+      assert parent.state == "done"
 
       assert {:ok, runs} = Query.all(reader.conn, "SELECT * FROM runs ORDER BY started_at")
 
@@ -1303,22 +2053,22 @@ defmodule Omunculus.CLITest do
   end
 
   describe "inbox" do
-    test "notify mid-run leaves an unread inbox row, the run keeps going and closes done, the work stays open, and CLI reads it",
+    test "notify mid-run leaves an unread inbox row, the run keeps going and closes done, and CLI reads it",
          %{dir: dir} do
-      model = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "Ajuda"})
+      model = fn assembled, _tools, call ->
+        unless assembled =~ "## Work\n", do: create_root(call, "Help")
         assert {:ok, ""} = call.("notify", %{"body" => "need help"})
-        {:ok, "ok"}
+        call.("done", %{"report" => "helped"})
       end
 
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
-      assert work.state == "open"
+      assert work.state == "done"
 
       assert {:ok, [inbox_row]} = Query.all(project.conn, "SELECT * FROM inbox")
       assert inbox_row.agent == "concierge"
@@ -1330,11 +2080,13 @@ defmodule Omunculus.CLITest do
 
       assert comment.body == "need help"
 
-      assert {:ok, [run]} = Query.all(project.conn, "SELECT * FROM runs")
+      assert {:ok, [_creation, run]} =
+               Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
+
       assert run.status == "done"
 
       assert {:ok, events} = Store.replay(project.conn, {:run, run.id})
-      assert "model" in Enum.map(events, & &1.type)
+      assert "notify" in Enum.map(events, & &1.type)
 
       Project.close(project)
 
@@ -1342,7 +2094,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, ^expected_line} = CLI.run(["inbox"], dir)
       assert {:ok, ""} = CLI.run(["inbox_read", inbox_row.id], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, read} =
                Query.one(project.conn, "SELECT * FROM inbox WHERE id = ?", [inbox_row.id])
@@ -1360,19 +2112,19 @@ defmodule Omunculus.CLITest do
 
   describe "D0-H1-W0: builtin no-op hooks" do
     setup %{dir: dir} do
-      write_tool(dir, "write")
+      write_model_tool(dir, "write")
       :ok
     end
 
-    test "a request emits a tool event named on-request right after it, carrying the call's run and work ids",
+    test "a request emits a tool event named on-request right after the call's chain, carrying the call's run and work ids",
          %{dir: dir} do
-      project = open(dir)
+      project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
       request_id = open_write_request(dir, work_id)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
 
       request_event = Enum.find(events, &(&1.type == "request"))
@@ -1383,15 +2135,17 @@ defmodule Omunculus.CLITest do
           event.type == "tool" and Jason.decode!(event.body)["name"] == "on-request"
         end)
 
-      assert request_event.sequence < end_event.sequence
-      assert end_event.sequence < hook_event.sequence
+      chain_end = Enum.find(events, &(&1.type == "end" and &1.run_id == request_event.run_id))
+      assert request_event.sequence < chain_end.sequence
+      assert hook_event.sequence == chain_end.sequence + 1
+      assert hook_event.sequence < end_event.sequence
       assert hook_event.run_id == request_event.run_id
       assert hook_event.work_id == request_event.work_id
 
       assert {:ok, request} =
                Query.one(project.conn, "SELECT * FROM requests WHERE id = ?", [request_id])
 
-      assert request.status == "waiting_human"
+      assert request.status == "pending"
 
       Project.close(project)
     end
@@ -1407,7 +2161,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
       types = Enum.map(events, & &1.type)
 
@@ -1424,24 +2178,26 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "a continue with a workflow on emits a tool event named on-continue right after it",
+    test "a continue with a workflow on emits a tool event named on-continue right after the call's chain",
          %{dir: dir} do
       write_config(dir, """
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["work", "continue"]
+      tools = ["work", "comment", "continue", "done", "end"]
 
       [workflows.solo]
       steps = [{ name = "to_do", agent = "concierge" }]
 
       [policy]
-      workflow = "solo"
+      workflows = ["solo"]
       """)
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work", do: call.("work", %{"title" => "Ship it"})
-        call.("continue", %{})
+        if assembled =~ "## Work\n",
+          do: call.("done", %{"report" => "shipped"}),
+          else: create_unnamed(call, "Ship it")
+
         {:ok, "unused"}
       end
 
@@ -1449,7 +2205,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
 
       continue_event = events |> Enum.filter(&(&1.type == "continue")) |> List.last()
@@ -1462,30 +2218,34 @@ defmodule Omunculus.CLITest do
           event.type == "tool" and Jason.decode!(event.body)["name"] == "on-continue"
         end)
 
-      assert continue_event.sequence < end_event.sequence
-      assert end_event.sequence < hook_event.sequence
+      chain_end = Enum.find(events, &(&1.type == "end" and &1.run_id == continue_event.run_id))
+      assert continue_event.sequence < chain_end.sequence
+      assert hook_event.sequence == chain_end.sequence + 1
+      assert hook_event.sequence < end_event.sequence
       assert hook_event.run_id == continue_event.run_id
 
       Project.close(project)
     end
 
-    test "a break emits a tool event named on-break right after it", %{dir: dir} do
+    test "a break emits a tool event named on-break right after the call's chain", %{dir: dir} do
       write_config(dir, """
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["work", "break", "comment"]
+      tools = ["work", "break", "comment", "end"]
 
       [workflows.solo]
       steps = [{ name = "to_do", agent = "concierge" }]
 
       [policy]
-      workflow = "solo"
+      workflows = ["solo"]
       """)
 
       model = fn assembled, _tools, call ->
-        unless assembled =~ "## Work", do: call.("work", %{"title" => "Needs help"})
-        call.("break", %{"body" => "need to pause"})
+        if assembled =~ "## Work\n",
+          do: call.("break", %{"report" => "need to pause"}),
+          else: create_unnamed(call, "Needs help")
+
         {:ok, "unused"}
       end
 
@@ -1493,7 +2253,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "handle this"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, events} = Store.replay(project.conn, :project)
 
       break_event = Enum.find(events, &(&1.type == "break"))
@@ -1504,8 +2264,10 @@ defmodule Omunculus.CLITest do
           event.type == "tool" and Jason.decode!(event.body)["name"] == "on-break"
         end)
 
-      assert break_event.sequence < end_event.sequence
-      assert end_event.sequence < hook_event.sequence
+      chain_end = Enum.find(events, &(&1.type == "end" and &1.run_id == break_event.run_id))
+      assert break_event.sequence < chain_end.sequence
+      assert hook_event.sequence == chain_end.sequence + 1
+      assert hook_event.sequence < end_event.sequence
       assert hook_event.run_id == break_event.run_id
 
       Project.close(project)
@@ -1538,7 +2300,7 @@ defmodule Omunculus.CLITest do
         """
       )
 
-      project = open(dir)
+      project = open_project(dir)
       work_id = Fixtures.insert(project.conn, :works, %{title: "Ship it"})
       Project.close(project)
 
@@ -1547,7 +2309,7 @@ defmodule Omunculus.CLITest do
           assert {:ok, ""} = call.("notify", %{"body" => "notice"})
           {:ok, "ok"}
         else
-          {:ok, "reagido"}
+          {:ok, "reacted"}
         end
       end
 
@@ -1555,7 +2317,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "handle"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, runs} =
                Query.all(project.conn, "SELECT * FROM runs WHERE work_id = ?", [work_id])
@@ -1575,13 +2337,13 @@ defmodule Omunculus.CLITest do
       Project.close(project)
     end
 
-    test "a hook that emits continue on a work with workflow off fails the same as any tool and persists nothing from that call",
+    test "a hook that emits continue on a work without a workflow closes it",
          %{dir: dir} do
       write_config(dir, """
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["work", "notify", "sandbox.network"]
+      tools = ["work", "end", "notify", "sandbox.network"]
       """)
 
       write_hook(
@@ -1599,26 +2361,24 @@ defmodule Omunculus.CLITest do
         """
       )
 
-      test_pid = self()
-
-      model = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
-        send(test_pid, {:notify_result, call.("notify", %{"body" => "notice"})})
-        {:ok, "continuing"}
+      model = fn assembled, _tools, call ->
+        unless assembled =~ "## Work\n", do: create_root(call, "Ship it")
+        call.("notify", %{"body" => "notice"})
+        {:ok, "unused"}
       end
 
       Fixtures.use_model(dir, model)
 
       assert {:ok, ""} = CLI.run(["send", "hi"], dir)
 
-      assert_received {:notify_result, {:error, {:continue, :workflow_off}}}
+      project = open_project(dir)
 
-      project = open(dir)
-
-      assert {:ok, [_inbox_row]} = Query.all(project.conn, "SELECT * FROM inbox")
+      assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
+      assert work.state == "done"
 
       assert {:ok, events} = Store.replay(project.conn, :project)
-      refute "on-notify" in tool_event_names(events)
+      assert "on-notify" in tool_event_names(events)
+      assert "continue" in Enum.map(events, & &1.type)
 
       Project.close(project)
     end
@@ -1630,25 +2390,25 @@ defmodule Omunculus.CLITest do
       [agents.concierge]
       depth = 0
       text = "concierge"
-      tools = ["comment", "compact_comments", "work"]
+      tools = ["ask", "comment", "compact_comments", "end", "work"]
       """)
 
-      model1 = fn _assembled, _tools, call ->
-        assert {:ok, ""} = call.("work", %{"title" => "Tally"})
+      model1 = fn assembled, _tools, call ->
+        unless assembled =~ "## Work\n", do: create_root(call, "Tally")
         assert {:ok, ""} = call.("comment", %{"body" => "one"})
         assert {:ok, ""} = call.("comment", %{"body" => "two"})
         assert {:ok, ""} = call.("comment", %{"body" => "three"})
-        {:ok, "ok"}
+        call.("ask", %{"question" => "Anything else?"})
       end
 
       Fixtures.use_model(dir, model1)
 
       assert {:ok, ""} = CLI.run(["send", "count the steps"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
       assert {:ok, [work]} = Query.all(project.conn, "SELECT * FROM works")
-      assert {:ok, comments} = Store.view(project.conn, "comments.work", work.id)
-      assert Enum.map(comments, & &1.body) == ["one", "two", "three"]
+      assert {:ok, comments} = Store.comments(project.conn, :work, work.id)
+      assert Enum.map(comments, & &1.body) == ["opened", "one", "two", "three"]
       Project.close(project)
 
       test_pid = self()
@@ -1660,7 +2420,7 @@ defmodule Omunculus.CLITest do
         assert {:ok, ""} =
                  call.("compact_comments", %{"op" => "commit", "summary" => "summary: 1 2 3"})
 
-        {:ok, "compacted"}
+        call.("ask", %{"question" => "Anything else?"})
       end
 
       Fixtures.use_model(dir, model2)
@@ -1671,20 +2431,23 @@ defmodule Omunculus.CLITest do
       expected = comments |> Enum.map(&"#{&1.id} #{&1.author}: #{&1.body}") |> Enum.join("\n")
       assert load_output == expected
 
-      project = open(dir)
+      project = open_project(dir)
 
-      assert {:ok, [summary]} = Store.view(project.conn, "comments.work", work.id)
+      assert {:ok, [summary]} = Store.comments(project.conn, :work, work.id)
       assert summary.body == "summary: 1 2 3"
 
       assert {:ok, work_events} = Store.replay(project.conn, {:work, work.id})
-      comment_events = Enum.filter(work_events, &(&1.type == "comment"))
+
+      comment_events =
+        Enum.filter(work_events, &(&1.type in ["work", "comment"] and &1.comment_id != nil))
+
       assert Enum.map(comment_events, & &1.comment_id) == Enum.map(comments, & &1.id)
 
       compact_event = Enum.find(work_events, &(&1.type == "compact"))
       assert compact_event
       assert Jason.decode!(compact_event.body)["deleted"] == Enum.map(comments, & &1.id)
 
-      assert {:ok, [_run1, run2]} =
+      assert {:ok, [_creation, _run1, run2]} =
                Query.all(project.conn, "SELECT * FROM runs ORDER BY started_at")
 
       assert {:ok, run2_events} = Store.replay(project.conn, {:run, run2.id})
@@ -1694,7 +2457,7 @@ defmodule Omunculus.CLITest do
 
       model3 = fn assembled, _tools, _call ->
         send(test_pid, {:third_assembled, assembled})
-        {:ok, "visto"}
+        {:ok, "seen"}
       end
 
       Fixtures.use_model(dir, model3)
@@ -1703,8 +2466,8 @@ defmodule Omunculus.CLITest do
 
       assert_received {:third_assembled, third_assembled}
       assert third_assembled =~ "## Last comment\nsummary: 1 2 3"
-      refute third_assembled =~ ~r/^um$/m
-      refute third_assembled =~ ~r/^dois$/m
+      refute third_assembled =~ ~r/^one$/m
+      refute third_assembled =~ ~r/^two$/m
       refute third_assembled =~ ~r/^three$/m
     end
 
@@ -1716,23 +2479,23 @@ defmodule Omunculus.CLITest do
       tools = ["comment", "compact_comments", "foreign_compact", "work", "sandbox.network"]
       """)
 
-      project = open(dir)
-      my_work_id = Fixtures.insert(project.conn, :works, %{title: "Meu work"})
-      other_work_id = Fixtures.insert(project.conn, :works, %{title: "Outro work"})
+      project = open_project(dir)
+      my_work_id = Fixtures.insert(project.conn, :works, %{title: "My work"})
+      other_work_id = Fixtures.insert(project.conn, :works, %{title: "Other work"})
 
       other_comment_id =
         Fixtures.insert(project.conn, :comments, %{work_id: other_work_id, body: "do not touch"})
 
       Project.close(project)
 
-      write_emit_tool(
+      write_model_tool(
         dir,
         "foreign_compact",
         ~s({"ok": true, "output": "", "emit": [{"type": "compact", "body": {"work_id": "#{other_work_id}", "summary": "stolen"}}]})
       )
 
       model = fn _assembled, _tools, call ->
-        assert {:error, {:compact, :foreign_work}} = call.("foreign_compact", %{})
+        assert call.("foreign_compact", %{}) == {:ok, Out.refused({:compact, :foreign_work})}
         {:ok, "ok"}
       end
 
@@ -1740,9 +2503,9 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "--work_id", my_work_id, "compact"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
-      assert {:ok, [comment]} = Store.view(project.conn, "comments.work", other_work_id)
+      assert {:ok, [comment]} = Store.comments(project.conn, :work, other_work_id)
       assert comment.id == other_comment_id
       assert comment.body == "do not touch"
 
@@ -1753,19 +2516,19 @@ defmodule Omunculus.CLITest do
       write_config(dir, """
       [agents.concierge]
       depth = 0
-      text = "Sou o concierge."
-      tools = ["catalog", "delegate", "fs.read", "sequence", "store"]
+      text = "I am the concierge."
+      tools = ["catalog", "fs.read", "sequence", "store"]
 
       [agents.worker]
       depth = 1
-      text = "Sou o worker."
-      tools = ["comment", "continue", "fs.read", "fs.write"]
+      text = "I am the worker."
+      tools = ["comment", "continue", "done", "end", "fs.read", "fs.write"]
 
       [agents.reviewer]
       depth = 1
       workflow_only = true
       text = "You are the reviewer."
-      tools = ["comment", "continue", "fs.read", "notify"]
+      tools = ["comment", "continue", "done", "end", "fs.read", "notify"]
 
       [workflows.delivery]
       steps = [
@@ -1774,28 +2537,27 @@ defmodule Omunculus.CLITest do
       ]
 
       [policy.depth.1]
-      workflow = "delivery"
+      workflows = ["delivery"]
       """)
 
       model = fn assembled, _tools, call ->
         cond do
           assembled =~ "You are the reviewer." ->
-            call.("continue", %{})
-            {:ok, "reviewed"}
-
-          assembled =~ "Sou o worker." ->
-            assert {:ok, ""} = call.("comment", %{"body" => "done"})
-            call.("continue", %{})
+            call.("done", %{"report" => "reviewed"})
             {:ok, "unused"}
 
-          assembled =~ "## Work" ->
-            {:ok, "acompanhando"}
+          assembled =~ "I am the worker." ->
+            call.("done", %{"report" => "done"})
+            {:ok, "unused"}
+
+          assembled =~ "## Work\n" ->
+            call.("done", %{"report" => "shipped"})
 
           true ->
-            assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
-
-            assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task", "body" => "do this"})
+            call.("work", %{
+              "report" => "opened",
+              "works" => [%{"title" => "Ship it", "goal" => "Ship it"}]
+            })
 
             {:ok, "unused"}
         end
@@ -1805,7 +2567,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "Ship it please"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [reviewer_run]} =
                Query.all(project.conn, "SELECT * FROM runs WHERE agent = 'reviewer'")
@@ -1830,7 +2592,7 @@ defmodule Omunculus.CLITest do
       assert {:ok, works} = Query.all(project.conn, "SELECT * FROM works ORDER BY created_at")
       [parent, child] = works
       assert child.state == "done"
-      assert parent.state == "open"
+      assert parent.state == "done"
 
       Project.close(project)
     end
@@ -1839,12 +2601,12 @@ defmodule Omunculus.CLITest do
       write_config(dir, """
       [agents.concierge]
       depth = 0
-      text = "Sou o concierge."
-      tools = ["work", "delegate", "comment"]
+      text = "I am the concierge."
+      tools = ["work", "delegate", "comment", "end"]
 
       [agents.worker]
       depth = 1
-      text = "Sou o worker."
+      text = "I am the worker."
       tools = ["comment"]
 
       [agents.reviewer]
@@ -1856,18 +2618,18 @@ defmodule Omunculus.CLITest do
 
       model = fn assembled, _tools, call ->
         cond do
-          assembled =~ "Sou o worker." ->
+          assembled =~ "I am the worker." ->
             {:ok, "done"}
 
-          assembled =~ "## Work" ->
-            {:ok, "acompanhando"}
+          assembled =~ "## Last comment\nopened" ->
+            delegate_one(call, "Sub task", "do this")
+            {:ok, "unused"}
+
+          assembled =~ "## Work\n" ->
+            call.("end", %{})
 
           true ->
-            assert {:ok, ""} = call.("work", %{"title" => "Ship it"})
-
-            assert {:ok, ""} =
-                     call.("delegate", %{"title" => "Sub task", "body" => "do this"})
-
+            create_root(call, "Ship it")
             {:ok, "unused"}
         end
       end
@@ -1876,7 +2638,7 @@ defmodule Omunculus.CLITest do
 
       assert {:ok, ""} = CLI.run(["send", "Ship it please"], dir)
 
-      project = open(dir)
+      project = open_project(dir)
 
       assert {:ok, [child_run]} =
                Query.all(project.conn, "SELECT * FROM runs WHERE agent = 'worker'")

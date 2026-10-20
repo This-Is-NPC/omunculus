@@ -1,0 +1,20 @@
+#!/usr/bin/env python3
+from check import *
+
+workspace, outcome = load()
+expect_outcome(outcome, "done", "answer")
+source = text(workspace, "README.md")
+target = text(workspace, "README.pt-BR.md")
+heads = lambda md: re.findall(r"^#{1,6}\s", md, re.M)
+if len(heads(source)) != len(heads(target)):
+    fail("the headings differ in number")
+blocks = lambda md: re.findall(r"```.*?```", md, re.S)
+if blocks(source) != blocks(target):
+    fail("a code block changed")
+if "Moonlight" not in target:
+    fail("Moonlight was translated or dropped")
+if not re.search(r"instala", target, re.I) or not re.search(r"\buso\b|\butiliza", target, re.I):
+    fail("the sections were not translated")
+if "keeps your notes" in target:
+    fail("English prose was left as is")
+ok()

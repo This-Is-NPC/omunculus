@@ -1,22 +1,35 @@
 name = "edit"
 kind = "tool"
-shape = "simple"
-views = ["paths"]
 triggers = ["model"]
-description = "Replaces an exact span in a file."
+description = "Replaces exact spans in a file: each old must appear once in the file as it is, apart from the others; all apply or none. Read the file first; an edit of a file that changed since is refused. Needs sandbox.write."
 tags = ["fs"]
 groups = ["fs.write"]
 module = "Omunculus.Tools.Edit"
 
 [parameters]
 type = "object"
-required = ["path", "old", "new"]
+required = ["path", "edits"]
 
 [parameters.properties.path]
 type = "string"
 
-[parameters.properties.old]
+[parameters.properties.edits]
+type = "array"
+minItems = 1
+
+[parameters.properties.edits.items]
+type = "object"
+required = ["old", "new"]
+
+[parameters.properties.edits.items.properties.old]
 type = "string"
 
-[parameters.properties.new]
+[parameters.properties.edits.items.properties.new]
 type = "string"
+
+[views.paths]
+source = "paths"
+
+[views.run]
+source = "events"
+relation = "run"

@@ -67,6 +67,28 @@ defmodule Omunculus.Execution.ProcessTest do
     assert_receive {:execution, ^ref, {:exit, 0}}
   end
 
+  test "stopping a process that already ended is no error" do
+    ref = make_ref()
+    {:ok, command} = Command.new("/usr/bin/true")
+
+    {:ok, pid} =
+      Process.start(
+        command,
+        policy(),
+        self(),
+        ref,
+        Omunculus.Execution.ProcessTest.FakeBackend,
+        make_ref(),
+        :tool
+      )
+
+    monitor = Elixir.Process.monitor(pid)
+    assert :ok = Process.close_input(pid)
+    assert_receive {:execution, ^ref, {:exit, 0}}
+    assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}
+    assert :ok = Process.stop(pid, :timeout)
+  end
+
   test "stops a backend before forwarding output beyond the configured limit" do
     ref = make_ref()
     {:ok, command} = Command.new("/usr/bin/true")

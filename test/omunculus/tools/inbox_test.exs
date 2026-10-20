@@ -43,7 +43,7 @@ defmodule Omunculus.Tools.InboxTest do
 
     assert %{"inbox" => manifest} = catalog
     assert manifest.triggers == ["cli"]
-    assert manifest.views == ["inbox"]
+    assert Enum.map(manifest.views, &{&1.key, &1.source}) == [{"inbox", "inbox"}]
   end
 
   test "the manifest wiring yields the same output as calling the module directly" do

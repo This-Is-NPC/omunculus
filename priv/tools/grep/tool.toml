@@ -1,9 +1,7 @@
 name = "grep"
 kind = "tool"
-shape = "simple"
-views = ["paths"]
 triggers = ["model"]
-description = "Searches file contents for text."
+description = "Searches the files under path for lines matching a regex, leaving out .git and what .gitignore ignores, and keeps at most limit matches. The way to search the work's files: faster and narrower than grep or find in a shell."
 tags = ["fs"]
 groups = ["fs.read"]
 module = "Omunculus.Tools.Grep"
@@ -14,6 +12,15 @@ required = ["pattern"]
 
 [parameters.properties.pattern]
 type = "string"
+description = "A regex matched against each line."
 
 [parameters.properties.path]
 type = "string"
+description = "The file or directory to search, relative to the workspace root; the root when left out."
+
+[parameters.properties.limit]
+type = "integer"
+minimum = 1
+
+[views.paths]
+source = "paths"

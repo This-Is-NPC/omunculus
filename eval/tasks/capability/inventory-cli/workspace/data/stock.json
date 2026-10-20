@@ -1,0 +1,5 @@
+[
+  {"sku": "B-200", "name": "Nut", "qty": 40, "price_cents": 10},
+  {"sku": "A-100", "name": "Bolt", "qty": 12, "price_cents": 25},
+  {"sku": "C-300", "name": "Washer", "qty": 7, "price_cents": 5}
+]

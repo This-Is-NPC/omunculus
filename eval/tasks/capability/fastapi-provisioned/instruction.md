@@ -1,0 +1,1 @@
+Build a FastAPI API in app.py that runs with `uvicorn app:app`: GET /health returns {"status": "ok"}; GET /items returns the list in items.json; POST /items takes {"name": ..., "price": ...}, gives it the next id, adds it, and returns the new item.

@@ -1,0 +1,2 @@
+Added: dark mode.
+Fixed: crash on empty notes.

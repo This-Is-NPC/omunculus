@@ -1,0 +1,1 @@
+slugify in slug.py should turn "Hello, World!" into "hello-world" and "  Many   spaces  " into "many-spaces": only lowercase letters and digits, words joined by single hyphens, no hyphen at either end. Fix it; test_slug.py shows two cases.

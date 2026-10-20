@@ -1,17 +1,102 @@
 defmodule Omunculus.Run do
   @moduledoc """
-  Opens a run with freshly assembled context and permissions. A named
-  reaction agent still obeys the work's stage and workflow-only flags.
-  The agent's `model` from config is constructed via `new/1`. The
-  assembled prompt is the `output` of the tool named by
-  `agents.<x>.assemble` or `[policy] assemble`. Streaming adapters
-  record each message before tools. Terminal actions close the run
-  before its action or hook continuations.
+  Opens a run with freshly assembled context and permissions, inside the
+  project's `Omunculus.Cycle` (one of its own when there is none, so
+  `open/2` then returns after every run this one opened, transitively,
+  has finished). The run holds a slot of the `run` class of the execution
+  limiter, bounded by `[execution]` `max_concurrent`, `max_queue` and
+  `queue_timeout_ms`, from before its opening until after its follow-up.
+  A work
+  runs with its stage's agent, or without a stage with its assignee. A
+  named reaction agent still obeys the work's stage and workflow-only
+  flags. The agent's `model` from config is constructed via `new/1`. The
+  assembled prompt (`Omunculus.Prompt`) is the `instructions` and the
+  `output` of the tool named by `agents.<x>.assemble` or
+  `[policy] assemble`; `PROMPTS(assembled)` keeps its whole text. Streaming adapters
+  record each message before tools. The run's `overrides` apply to its
+  catalog before the model sees it, so the model gets each tool's
+  resolved schema; an invalid override keeps the run from opening. With
+  `[policy] tool_output_bytes`, the output of each call the model makes,
+  directly or through `tools.*`, reaches it cut to that many bytes, while
+  the recorded call keeps it whole. After
+  each call of the model, the runs the actions of the call ask for are
+  due at once, while this run goes on; the `end` action instead stops
+  the model and closes the run before its action or hook continuations,
+  and the reaction runs of calling hooks are due once the run closes. A
+  model that fails or crashes stops the run as one that stops by itself,
+  its `end-run` carrying `error`, why in a sentence (`Out.model_failed/1`),
+  and the failure is still returned. When the model of a run on a work
+  stops by itself and the work is still open, the work gets another run with `via` =
+  `retry`, until the latest runs of the work without `end` exceed
+  `max_retries`; then the harness breaks a work that has a parent with a
+  comment saying so, and for a root work opens a request along the configured route,
+  with that sentence as its reason, the options `retry` and `cancel`, and
+  an inbox entry naming the request. A run opened for a named agent is
+  not retried. A cancelled work does not open runs, and a work's own run
+  (no named agent) does not open once its work is no longer open.
+
+  `recover/1` takes up what a process that stopped left: it closes the
+  runs left open, then makes due the runs events asked for that never
+  began (`Harness.lost/1`, a work's own ones as one), gives each work still
+  open whose last own run stopped without `end`, and no run found for it,
+  what that run's close decides, passes on the requests left at an agent,
+  as `unanswered` does, and opens the runs found last.
   """
 
-  alias Omunculus.{Ceiling, Config, Harness, Mcp, Project, Store}
-  alias Omunculus.Execution.Policy
-  alias Omunculus.Tool.Catalog
+  alias Omunculus.{Ceiling, Config, Cycle, Harness, Mcp, Project, Prompt, Secrets, Store}
+  alias Omunculus.Execution.{Limiter, Policy}
+  alias Omunculus.Tool.{Catalog, Overrides}
+  alias Omunculus.Tools.Out
+
+  @spec recover(Project.t()) :: :ok | {:error, term}
+  def recover(project) do
+    Cycle.run(project, nil, fn project ->
+      with {:ok, runs} <- Store.open_runs(project.conn),
+           {:ok, config} <- Config.load(project.config_path),
+           :ok <- each(runs, &interrupt(project, &1)),
+           {:ok, lost} <- Harness.lost(project),
+           lost = Enum.uniq_by(lost, &turn/1),
+           {:ok, stopped} <- Store.stopped(project.conn),
+           due = MapSet.new(lost, &turn/1),
+           stopped = Enum.reject(stopped, &MapSet.member?(due, {:own, &1.work_id})),
+           :ok <- each(stopped, &retry(project, config, &1)),
+           {:ok, left} <- Store.left(project.conn),
+           # A process that stopped between a run's close and its follow-up
+           # left a request pending at an agent that no run will answer.
+           :ok <- each(left, &unanswered(project, %{run: &1, config: config, execution: nil})) do
+        Enum.each(lost, &Cycle.open(project, &1))
+      end
+    end)
+  end
+
+  # A work's own runs due together are one run, as in the cycle.
+  defp turn(%{agent: nil, work_id: work_id}) when is_binary(work_id), do: {:own, work_id}
+  defp turn(opening), do: {:cause, opening.cause_id, make_ref()}
+
+  defp each(runs, fun) do
+    Enum.reduce_while(runs, :ok, fn run, :ok ->
+      case fun.(run) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp interrupt(project, run) do
+    with {:ok, _model} <-
+           Store.record_model(
+             project.conn,
+             run.id,
+             "Run interrupted: the process running it stopped."
+           ),
+         {:ok, closed} <- Store.close_run(project.conn, run.id),
+         do: Harness.follow_up(project, [closed])
+  end
+
+  defp retry(project, config, run) do
+    with {:ok, work} <- Store.view(project.conn, "work", run.work_id),
+         do: unreported(project, %{run: run, config: config, execution: nil}, work, true)
+  end
 
   @spec open(
           Project.t(),
@@ -23,25 +108,68 @@ defmodule Omunculus.Run do
             agent: String.t() | nil
           }
         ) :: {:ok, map} | {:error, term}
-  def open(
-        project,
-        %{
-          prompt_id: message_prompt_id,
-          work_id: work_id,
-          request_id: request_id,
-          via: via,
-          agent: agent
-        } = opening
-      ) do
+  def open(project, opening) do
+    Cycle.run(project, opening, &admitted(&1, opening))
+  end
+
+  defp admitted(project, opening) do
     with {:ok, config} <- Config.load(project.config_path),
-         {:ok, work} <- fetch_work(project.conn, work_id),
+         {:ok, global_lease} <- acquire_global(project.global_limits) do
+      local_limits = Map.put(config.execution, :scope, {:project, config.store.path})
+
+      try do
+        with {:ok, lease} <- Limiter.acquire(local_limits, self(), :run) do
+          scratch = scratch(config)
+
+          try do
+            start(project, config, opening, scratch)
+          after
+            File.rm_rf(scratch)
+            Limiter.release(local_limits, lease, :run)
+          end
+        end
+      after
+        if global_lease, do: Limiter.release(project.global_limits, global_lease, :run)
+      end
+    end
+  end
+
+  @doc "Where the scratch of a run of the project at `config` goes: beside its store."
+  @spec scratch_root(Config.t()) :: String.t()
+  def scratch_root(config), do: config.store.path <> ".scratch"
+
+  defp scratch(config) do
+    dir = Path.join(scratch_root(config), Omunculus.Id.new())
+    File.mkdir_p!(dir)
+    dir
+  end
+
+  defp acquire_global(nil), do: {:ok, nil}
+  defp acquire_global(limits), do: Limiter.acquire(limits, self(), :run)
+
+  defp start(
+         project,
+         config,
+         %{
+           prompt_id: message_prompt_id,
+           work_id: work_id,
+           request_id: request_id,
+           via: via,
+           agent: agent
+         } = opening,
+         scratch
+       ) do
+    with {:ok, work} <- fetch_work(project.conn, work_id),
          {:ok, config} <-
            Config.for_workspace(config, Config.effective_workspace(config, work)),
          {:ok, {name, text, depth, stage}} <- resolve_agent(config, project.conn, work, agent),
          {:ok, model} <- Config.model_fun(config, name),
-         {:ok, _message} <- fetch_prompt(project.conn, message_prompt_id),
+         {:ok, message} <- fetch_prompt(project.conn, message_prompt_id),
          {:ok, grants} <- Store.grants(project.conn, work),
-         workspace = Harness.workspace_context(config, work),
+         conversation_id =
+           (work && work.conversation_id) || (message && message.conversation_id) ||
+             Map.get(opening, :conversation_id),
+         workspace = Harness.workspace_context(config, work, conversation_id),
          context = %{
            agent: name,
            depth: depth,
@@ -59,16 +187,23 @@ defmodule Omunculus.Run do
          mcp_roots = Mcp.implementation_roots(config.mcp),
          {:ok, discovery} <-
            Policy.discovery(config, discovery_snapshot, workspace, project.dir, mcp_roots),
-         catalog = Catalog.discover(config.tools, config.mcp, discovery),
-         model_catalog = Catalog.with_trigger(catalog, "model"),
+         catalog =
+           Catalog.discover(
+             config.tools,
+             config.mcp,
+             discovery,
+             &Secrets.resolve(config, &1.secrets)
+           ),
          snapshot =
            Ceiling.mount(
              config,
              Map.put(context, :groups, Catalog.groups(catalog)),
              Map.keys(catalog) ++ config.execution.resources
            ),
+         {:ok, catalog} <- Overrides.apply(catalog, snapshot.overrides),
+         model_catalog = Catalog.with_trigger(catalog, "model"),
          names = effective_names(snapshot, model_catalog),
-         tools = effective_tools(names, model_catalog),
+         tools = effective_tools(sent(config, names, model_catalog), model_catalog),
          {:ok, execution} <-
            Policy.build(
              config,
@@ -78,6 +213,7 @@ defmodule Omunculus.Run do
              names,
              Catalog.implementation_roots(catalog) ++ mcp_roots
            ),
+         execution = Policy.with_scratch(execution, scratch),
          {:ok, assemble_name} <- assemble_tool(config, name),
          {:ok, run} <-
            Store.begin_run(project.conn, %{
@@ -87,9 +223,15 @@ defmodule Omunculus.Run do
              ceiling: snapshot,
              execution: Policy.serializable(execution),
              work_id: work_id,
+             conversation_id: conversation_id,
+             origin_issuer: (message && message.actor_issuer) || Map.get(opening, :origin_issuer),
+             origin_subject:
+               (message && message.actor_subject) || Map.get(opening, :origin_subject),
+             own: is_nil(agent),
              via: via,
              request_id: request_id,
              inbox_id: Map.get(opening, :inbox_id),
+             cause_id: Map.get(opening, :cause_id),
              tools: names
            }),
          {:ok, run, assembled} <-
@@ -97,32 +239,30 @@ defmodule Omunculus.Run do
              project,
              run,
              assemble_name,
-             text,
+             assemble_args(config, name, text, Map.get(opening, :inbox_id)),
              message_prompt_id,
              Map.get(opening, :inbox_id),
              execution
            ),
-         call = build_call(project, run, names, execution) do
+         cursor = :atomics.new(1, []),
+         prepared = Harness.prepared(run.id, config, catalog),
+         call = build_call(project, run, names, config, prepared, execution, cursor) do
       run_model(
         project,
-        run,
-        config,
+        %{run: run, config: config, prepared: prepared, execution: execution, cursor: cursor},
         if(agent, do: nil, else: work),
         assembled,
         tools,
         call,
-        model,
-        execution
+        model
       )
     end
   end
 
-  defp resolve_agent(config, conn, work, agent) when not is_nil(agent) do
+  defp resolve_agent(config, _conn, work, agent) when not is_nil(agent) do
     case Map.fetch(config.agents, agent) do
       {:ok, agent_config} ->
-        depth = if work, do: Store.work_depth(conn, work), else: agent_config.depth
-
-        with {:ok, steps} <- workflow_steps(config, depth),
+        with {:ok, steps} <- workflow_steps(config, work),
              :ok <- workflow_agent(agent, agent_config, steps),
              {:ok, step} <- step_for(steps, work && work.stage) do
           {:ok, {agent, agent_config.text, agent_config.depth, step && step.ceiling}}
@@ -142,22 +282,32 @@ defmodule Omunculus.Run do
   defp resolve_agent(config, conn, work, nil) do
     depth = Store.work_depth(conn, work)
 
-    with {:ok, steps} <- workflow_steps(config, depth),
+    with {:ok, steps} <- workflow_steps(config, work),
          {:ok, step} <- step_for(steps, work.stage) do
       case step do
-        nil -> agent_at_depth(config, depth)
+        nil -> assignee_agent(config, work.assignee, depth)
         step -> {:ok, {step.agent, agent_text(config, step.agent), depth, step.ceiling}}
       end
+    end
+  end
+
+  defp assignee_agent(config, name, depth) do
+    case Map.fetch(config.agents, name) do
+      {:ok, agent} -> {:ok, {name, agent.text, depth, nil}}
+      :error -> {:error, {:no_agent, name}}
     end
   end
 
   defp workflow_agent(name, %{workflow_only: true}, nil), do: {:error, {:workflow_off, name}}
   defp workflow_agent(_name, _agent, _steps), do: :ok
 
-  defp workflow_steps(config, depth) do
-    case Config.workflow_for(config, depth) do
+  defp workflow_steps(_config, nil), do: {:ok, nil}
+
+  defp workflow_steps(config, work) do
+    case Config.workflow(config, work.workflow) do
       {:ok, steps} -> {:ok, steps}
       :off -> {:ok, nil}
+      {:error, _reason} = error -> error
     end
   end
 
@@ -168,12 +318,6 @@ defmodule Omunculus.Run do
     case Config.step_at(steps, stage) do
       {:ok, step} -> {:ok, step}
       {:error, :off_sequence} -> {:error, {:off_sequence, stage}}
-    end
-  end
-
-  defp agent_at_depth(config, depth) do
-    with {:ok, {name, agent}} <- Config.agent_at_depth(config, depth) do
-      {:ok, {name, agent.text, depth, nil}}
     end
   end
 
@@ -208,7 +352,21 @@ defmodule Omunculus.Run do
     end
   end
 
-  defp invoke_assemble(project, run, name, text, prompt_id, inbox_id, execution) do
+  defp assemble_args(config, agent, text, inbox_id) do
+    [
+      {"inbox_id", inbox_id},
+      {"last_run_output_bytes", config.last_run_output_bytes},
+      {"tool_output_bytes", config.tool_output_bytes},
+      {"conversation_bytes", config.conversation_bytes},
+      {"session_ttl_ms", config.session_ttl_ms},
+      {"session_max_bytes", config.session_max_bytes}
+    ]
+    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+    |> Map.new()
+    |> Map.merge(%{"text" => text, "agent" => agent})
+  end
+
+  defp invoke_assemble(project, run, name, args, prompt_id, inbox_id, execution) do
     ctx = %{
       trigger: "harness",
       run_id: run.id,
@@ -220,15 +378,18 @@ defmodule Omunculus.Run do
       inbox_id: inbox_id
     }
 
-    args =
-      %{"text" => text}
-      |> then(fn args -> if inbox_id, do: Map.put(args, "inbox_id", inbox_id), else: args end)
-
     case Harness.dispatch(project, name, args, ctx) do
       {:ok, out, _events} ->
-        with :ok <- assembled_output(out),
-             {:ok, run} <- Store.attach_assembled(project.conn, run.id, out.output) do
-          {:ok, run, out.output}
+        prompt = %Prompt{
+          instructions: out.instructions,
+          context: out.output,
+          history: out.session && out.session["history"]
+        }
+
+        with :ok <- assembled_output(out.ok, Prompt.text(prompt)),
+             {:ok, run} <- Store.attach_assembled(project.conn, run.id, Prompt.text(prompt)),
+             :ok <- continues(project, run, out.session) do
+          {:ok, run, prompt}
         else
           error -> fail_run(project, run, error)
         end
@@ -238,10 +399,19 @@ defmodule Omunculus.Run do
     end
   end
 
-  defp assembled_output(%{ok: true, output: output}) when is_binary(output) and output != "",
-    do: :ok
+  # A run that continues its agent's session says which run it continues
+  # and what it was told had happened since, so the next can rebuild it.
+  defp continues(_project, _run, nil), do: :ok
 
-  defp assembled_output(_out), do: {:error, {:assemble, :empty}}
+  defp continues(project, run, session) do
+    Store.continues(project.conn, run.id, %{
+      continues: session["continues"],
+      since: session["since"]
+    })
+  end
+
+  defp assembled_output(true, text) when text != "", do: :ok
+  defp assembled_output(_ok, _text), do: {:error, {:assemble, :empty}}
 
   defp fail_run(project, run, reason) do
     _ = Store.close_run(project.conn, run.id)
@@ -252,6 +422,12 @@ defmodule Omunculus.Run do
     snapshot.have |> Enum.filter(&Map.has_key?(catalog, &1)) |> Enum.sort()
   end
 
+  # With `send_catalog` every run is sent the same tools, the catalog's
+  # model tools, so all agents' requests start alike; it may still call
+  # only its own, `names`.
+  defp sent(%{send_catalog: true}, _names, catalog), do: catalog |> Map.keys() |> Enum.sort()
+  defp sent(_config, names, _catalog), do: names
+
   defp effective_tools(names, catalog) do
     Enum.map(names, fn name ->
       manifest = Map.fetch!(catalog, name)
@@ -259,7 +435,7 @@ defmodule Omunculus.Run do
     end)
   end
 
-  defp build_call(project, run, names, execution) do
+  defp build_call(project, run, names, config, prepared, execution, cursor) do
     allowed = MapSet.new(names)
 
     fn name, args ->
@@ -269,44 +445,100 @@ defmodule Omunculus.Run do
           run_id: run.id,
           author: "agent",
           agent: run.agent,
-          execution: execution
+          execution: execution,
+          prepared: prepared
         }
 
-        case Harness.dispatch(project, name, args, ctx) do
-          {:ok, out, events} ->
-            if Enum.any?(events, &Harness.ending_event?/1) do
-              throw({:run_ended, run.id})
-            end
+        result = Harness.dispatch(project, name, args, ctx)
+        # An action may have committed even when a hook after it failed.
+        follow_call(project, run, cursor)
 
-            {:ok, out.output}
-
-          {:error, _reason} = error ->
-            # An action may already have committed before a hook failed.
-            {:ok, events} = Store.replay(project.conn, {:run, run.id})
-            if Enum.any?(events, &Harness.ending_event?/1), do: throw({:run_ended, run.id})
-            error
+        case result do
+          {:ok, out, _events} -> {:ok, Out.cut(out.output, config.tool_output_bytes)}
+          {:error, _reason} = error -> error
         end
       else
-        {:error, {:not_allowed, name}}
+        refuse(project, run, name, args)
       end
     end
   end
 
-  defp record_model(project, run, execution, text) do
+  # A call to a tool not its own is recorded, failed, with what the model is
+  # told, so the run's record holds every call it made.
+  defp refuse(project, run, name, args) do
+    refused = Out.not_yours(name)
+    call = %{name: name, args: args, ok: false, output: refused}
+    ctx = %{run_id: run.id, work_id: run.work_id, author: "agent", agent: run.agent}
+
+    with {:ok, _events} <- Store.record_tools(project.conn, run.id, [{call, []}], ctx),
+         do: {:error, refused}
+  end
+
+  # The run's events since the last call: with `end` among them the run
+  # stops; otherwise the runs their actions ask for open now, while this
+  # run goes on. `cursor` holds the sequence of the last event opened.
+  defp follow_call(project, run, cursor) do
+    seen = :atomics.get(cursor, 1)
+    events = unfollowed(project, run, seen)
+
+    cond do
+      Enum.any?(events, &Harness.ending_event?/1) ->
+        throw({:run_ended, run.id})
+
+      events == [] ->
+        :ok
+
+      :atomics.compare_exchange(cursor, 1, seen, List.last(events).sequence) != :ok ->
+        follow_call(project, run, cursor)
+
+      true ->
+        case Harness.open_due(project, events) do
+          :ok -> :ok
+          {:error, reason} -> throw({:follow_up_failed, run.id, reason})
+        end
+    end
+  end
+
+  defp unfollowed(project, run, seen),
+    do: project |> split_followed(run, seen) |> elem(1)
+
+  defp split_followed(project, run, seen) do
+    {:ok, events} = Store.replay(project.conn, {:run, run.id})
+    Enum.split_with(events, &(&1.sequence <= seen))
+  end
+
+  defp record_model(project, state, text) do
     body = if is_binary(text), do: text, else: Jason.encode!(text)
 
-    with {:ok, event} <- Store.record_model(project.conn, run.id, body),
-         {:ok, _hooks} <- Harness.react(project, [event], [], execution),
+    with {:ok, event} <- Store.record_model(project.conn, state.run.id, body),
+         {:ok, _hooks} <- Harness.react(project, [event], [], state.execution, state.prepared),
          do: :ok
   end
 
-  defp close_run(project, run, execution) do
-    with {:ok, event} <- Store.close_run(project.conn, run.id),
-         {:ok, _hooks} <- Harness.react(project, [event], [], execution),
+  defp publish_delta(project, run, text) do
+    Store.publish(
+      project.conn,
+      {:delta,
+       %{
+         run_id: run.id,
+         work_id: run.work_id,
+         conversation_id: run.conversation_id,
+         text: text
+       }}
+    )
+  end
+
+  defp close_run(project, state, error) do
+    with {:ok, event} <- Store.close_run(project.conn, state.run.id, error),
+         {:ok, _hooks} <- Harness.react(project, [event], [], state.execution, state.prepared),
          do: :ok
   end
 
-  defp run_model(project, run, config, work, assembled, tools, call, model, execution) do
+  # A model that fails or crashes stops the run as one that stopped by
+  # itself, its `end-run` saying why; a failure of the harness after a
+  # call does not, since the call's actions are already applied.
+  defp run_model(project, state, work, assembled, tools, call, model) do
+    %{run: run, execution: execution} = state
     run_id = run.id
 
     result =
@@ -314,67 +546,104 @@ defmodule Omunculus.Run do
         {:ok, events} = Store.replay(project.conn, {:run, run.id})
         start = Enum.filter(events, &(&1.type == "start-run"))
 
-        with {:ok, _hooks} <- Harness.react(project, start, [], execution) do
+        with {:ok, _hooks} <- Harness.react(project, start, [], execution, state.prepared) do
           model.(
             assembled,
             tools,
             call,
-            &record_model(project, run, execution, &1),
+            &record_model(project, state, &1),
+            &publish_delta(project, run, &1),
             execution
           )
+          |> model_failed()
         end
       rescue
-        exception -> {:error, {:model_crashed, exception}}
+        exception -> {:model_failed, {:model_crashed, exception}}
       catch
         :throw, {:run_ended, ^run_id} -> :ended
-        kind, reason -> {:error, {:model_crashed, {kind, reason}}}
+        :throw, {:follow_up_failed, ^run_id, reason} -> {:error, reason}
+        kind, reason -> {:model_failed, {:model_crashed, {kind, reason}}}
       end
 
-    with :ok <- close_run(project, run, execution) do
+    with :ok <- close_run(project, state, failure(result)) do
       case result do
         {:ok, _text} ->
-          finish_and_follow_up(project, run, config, work, execution, true)
+          follow_up(project, state, work, true)
 
         :ended ->
-          finish_and_follow_up(project, run, config, work, execution, false)
+          follow_up(project, state, work, false)
+
+        {:model_failed, reason} ->
+          with {:ok, _} <- follow_up(project, state, work, true),
+               do: {:error, reason}
 
         {:error, _reason} = error ->
-          with {:ok, _} <-
-                 finish_and_follow_up(project, run, config, work, execution, false),
+          with {:ok, _} <- follow_up(project, state, work, false),
                do: error
       end
     end
   end
 
-  defp finish_and_follow_up(project, run, config, work, execution, ended_normally?) do
-    with :ok <- maybe_finish_work(project, config, work, run.id, execution, ended_normally?),
-         {:ok, events} <- Store.replay(project.conn, {:run, run.id}),
-         :ok <- Harness.follow_up(project, events) do
-      {:ok, run}
+  defp model_failed({:error, reason}), do: {:model_failed, reason}
+  defp model_failed(result), do: result
+
+  defp failure({:model_failed, reason}), do: Out.model_failed(reason)
+  defp failure(_result), do: nil
+
+  defp follow_up(project, state, work, stopped?) do
+    {opened, events} = split_followed(project, state.run, :atomics.get(state.cursor, 1))
+
+    with :ok <- Harness.follow_up(project, events, opened),
+         :ok <- unreported(project, state, work, stopped?),
+         :ok <- unanswered(project, state) do
+      {:ok, state.run}
     end
   end
 
-  defp maybe_finish_work(_conn, _config, nil, _run_id, _execution, _ended_normally?), do: :ok
+  # A receiver that leaves a pending request uses the same linked escalation.
+  defp unanswered(project, state) do
+    with {:ok, events} <-
+           Store.unanswered(project.conn, state.run, state.config, &Out.unanswered/3),
+         {:ok, _hooks} <-
+           Harness.react(project, events, [], state.execution, Map.get(state, :prepared)) do
+      Harness.follow_up(project, events)
+    end
+  end
 
-  defp maybe_finish_work(
-         _conn,
-         _config,
-         %{parent_id: nil},
-         _run_id,
-         _execution,
-         _ended_normally?
-       ),
-       do: :ok
+  # A run on a work whose model stopped by itself leaves the work open: the
+  # store decides, in one transaction, whether the work gets another run
+  # or, past max_retries, a break (a child) or a request (a root).
+  defp unreported(_project, _state, nil, _stopped?), do: :ok
+  defp unreported(_project, _state, _work, false), do: :ok
 
-  defp maybe_finish_work(_conn, _config, _work, _run_id, _execution, false), do: :ok
+  defp unreported(project, state, work, true) do
+    case Store.unreported(
+           project.conn,
+           state.run,
+           state.config.max_retries,
+           &Out.unreported/3,
+           &Out.request_inbox/2,
+           state.config
+         ) do
+      {:ok, :retry} ->
+        Cycle.open(project, %{
+          work_id: work.id,
+          via: "retry",
+          origin_issuer: state.run.origin_issuer,
+          origin_subject: state.run.origin_subject
+        })
 
-  defp maybe_finish_work(project, config, work, run_id, execution, true) do
-    if Config.workflow_for(config, Store.work_depth(project.conn, work)) == :off do
-      with {:ok, event} <- Store.finish_work(project.conn, work.id, run_id),
-           {:ok, _hooks} <- Harness.react(project, [event], [], execution),
-           do: :ok
-    else
-      :ok
+      {:ok, {:stopped, events}} ->
+        with {:ok, _hooks} <-
+               Harness.react(project, events, [], state.execution, Map.get(state, :prepared)) do
+          Harness.follow_up(project, events)
+        end
+
+      {:ok, :none} ->
+        :ok
+
+      {:error, _reason} = error ->
+        error
     end
   end
 end

@@ -1,22 +1,41 @@
 name = "request_access"
 kind = "tool"
-shape = "simple"
 triggers = ["model"]
-description = "Requests access to a tool, path, or directory."
+description = "Requests, in one request, everything the work needs and the run lacks: tools, paths, directories, and sandbox capabilities (resource: sandbox.write, sandbox.network). Comments the report on the run's work when it has one, opens the request and ends the run."
 tags = ["store", "request"]
 groups = ["store"]
 module = "Omunculus.Tools.RequestAccess"
+chains = ["end"]
+then = ["end"]
 
 [parameters]
 type = "object"
-required = ["kind", "name", "reason"]
+required = ["report", "access", "reason"]
 
-[parameters.properties.kind]
+[parameters.properties.report]
 type = "string"
-enum = ["tool", "path", "directory"]
 
-[parameters.properties.name]
+[parameters.properties.access]
+type = "array"
+minItems = 1
+
+[parameters.properties.access.items]
+type = "object"
+required = ["kind", "name"]
+
+[parameters.properties.access.items.properties.kind]
+type = "string"
+enum = ["tool", "resource", "path", "directory"]
+
+[parameters.properties.access.items.properties.name]
 type = "string"
 
 [parameters.properties.reason]
 type = "string"
+
+[views.grant_scopes]
+source = "grant_scopes"
+
+[parameters.properties.to]
+type = "string"
+minLength = 1
