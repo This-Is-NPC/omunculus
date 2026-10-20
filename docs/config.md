@@ -276,7 +276,9 @@ and `params`. `module` takes optional `params`. The HTTP adapters take
 `url`, `model`, `timeout_ms`, and optional `temperature`, `headers`,
 `provider`, `stream`, `retries` and `code_mode`; an `anthropic-messages`
 model also needs `body = { max_tokens = n }`, the most a reply may take,
-thinking included. With `stream = true` the adapter asks for
+thinking included. `timeout_ms` is a positive integer in milliseconds or
+`"infinity"` to wait without a receive timeout, useful for slow local inference.
+With `stream = true` the adapter asks for
 server-sent events and passes the reply text to the run as it arrives;
 the recorded turn is the same as without it. `retries` sends a request
 again that many times on a rate limit, a timeout, a server error or a

@@ -2233,6 +2233,8 @@ defmodule Omunculus.Config do
   defp model_timeout(%{"timeout_ms" => timeout}) when is_integer(timeout) and timeout > 0,
     do: {:ok, timeout}
 
+  defp model_timeout(%{"timeout_ms" => "infinity"}), do: {:ok, :infinity}
+
   defp model_timeout(_data), do: {:error, {:invalid, :timeout_ms}}
 
   defp model_temperature(data) do

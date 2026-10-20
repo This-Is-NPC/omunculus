@@ -1935,6 +1935,28 @@ defmodule Omunculus.ConfigTest do
       assert {:error, {:models, "local", {:invalid, :stream}}} = load(dir)
     end
 
+    test "HTTP model receive timeouts can be unlimited", %{dir: dir} do
+      for api <- ["openai-completions", "openai-responses", "anthropic-messages"] do
+        write_toml(dir, """
+        [models.local]
+        api = "#{api}"
+        url = "http://localhost:8080/v1"
+        model = "local"
+        timeout_ms = "infinity"
+        body = { max_tokens = 1024 }
+
+        [agents.concierge]
+        depth = 0
+        model = "local"
+        text = "hi"
+        """)
+
+        assert {:ok, config} = load(dir)
+        assert config.models["local"].input["timeout_ms"] == :infinity
+        assert config.data["models"]["local"]["timeout_ms"] == "infinity"
+      end
+    end
+
     test "prompt_cache_key is an optional string of the OpenAI adapters", %{dir: dir} do
       for api <- ["openai-completions", "openai-responses"] do
         write_http_model(dir, api, "prompt_cache_key = \"worker\"")

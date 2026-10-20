@@ -78,7 +78,7 @@ body = { max_tokens = 32000 }
 api = "openai-completions"
 url = "http://192.168.0.200:8081/v1"
 model = "bonsai2-27b"
-timeout_ms = 600000
+timeout_ms = "infinity"
 body = { max_tokens = 32000, chat_template_kwargs = { enable_thinking = false } }
 
 [models.sonnet]

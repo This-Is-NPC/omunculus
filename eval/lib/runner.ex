@@ -23,14 +23,15 @@ defmodule EquivalentExchange.Runner do
   the runs that answer opens are
   followed the same way. Free-text questions use the task's simulated person,
   once per received envelope, preserving the conversation and returning linked
-  origins to intermediaries for distribution. The execution timeout bounds the
-  response loop. A request offering only retry or cancel is left waiting.
+  origins to intermediaries for distribution. A finite execution timeout bounds
+  the response loop; `infinity` waits until it ends. A request offering only
+  retry or cancel is left waiting.
 
   A task with `[person]` goes on as a conversation: once the runs settle,
   `EquivalentExchange.Person` reads what the agent last said and answers
   what it asks, which is sent as the person's next message, until it asks
   nothing; then each of the task's `follow_ups` is sent the same way. Only
-  the execution's timeout bounds how long it goes on. A task with `deploy`
+  a finite execution timeout bounds how long it goes on. A task with `deploy`
   publishes to the deploy environment (`EquivalentExchange.Deploy`); what
   production serves for the app it promoted is copied for the check, then
   every app it published is removed.
@@ -45,7 +46,8 @@ defmodule EquivalentExchange.Runner do
     Score,
     Task,
     Requests,
-    Usage
+    Usage,
+    Deadline
   }
 
   alias Omunculus.CLI
@@ -69,6 +71,7 @@ defmodule EquivalentExchange.Runner do
       end)
 
     k = Keyword.get(options, :k, 1)
+    timeout = options |> Keyword.get(:timeout, "600") |> Deadline.parse()
     started = DateTime.utc_now()
     label = Keyword.get(options, :label, model)
 
@@ -104,7 +107,7 @@ defmodule EquivalentExchange.Runner do
       configurations: plan |> Enum.map(&elem(&1, 1)) |> Enum.uniq(),
       tasks: Enum.map(tasks, & &1.id),
       executions: length(plan),
-      timeout_s: Keyword.get(options, :timeout, 600),
+      timeout_s: timeout,
       jobs: Keyword.get(options, :jobs, 1),
       judge: judge_trust(),
       against: against
@@ -113,7 +116,6 @@ defmodule EquivalentExchange.Runner do
     # Executions share nothing — each has its own project — so `jobs` of them
     # run at once; a line is printed as each one ends.
     jobs = Keyword.get(options, :jobs, 1)
-    timeout = Keyword.get(options, :timeout, 600)
     sampler = Resources.start()
 
     plan
@@ -182,7 +184,7 @@ defmodule EquivalentExchange.Runner do
     started = System.monotonic_time(:millisecond)
 
     {status, played} =
-      within(timeout_s * 1000, fn ->
+      Deadline.run(timeout_s, fn ->
         with {:ok, _said} <- CLI.run(["--config", config_path, "send", instruction], project),
              {:ok, played} <-
                play_person(config_path, project, task, groups, %{
@@ -701,17 +703,6 @@ defmodule EquivalentExchange.Runner do
   defp error({:error, :timeout}), do: "timeout"
   defp error({:error, reason}), do: CLI.format_error(reason)
   defp error({:ok, _answers}), do: nil
-
-  # Runs `fun` within `ms`; {:error, :timeout} past it.
-  defp within(ms, fun) do
-    work = Elixir.Task.async(fn -> fun.() end)
-
-    case Elixir.Task.yield(work, ms) || Elixir.Task.shutdown(work, :brutal_kill) do
-      {:ok, {:ok, played}} -> {{:ok, played}, played}
-      {:ok, {:error, reason}} -> {{:error, reason}, nil}
-      nil -> {{:error, :timeout}, nil}
-    end
-  end
 
   defp with_store(project, fun) do
     {:ok, config} = Omunculus.Config.load(Path.join(project, "omunculus.toml"))

@@ -1,14 +1,14 @@
 # Equivalent Exchange: `mix run eval/run.exs <command>`.
 #   selftest   prove every task's check against its solution
 #   run        run the suite: --model luna --k 2 --label <name> [--task <part>]...
-#              [--configuration <name>]... [--timeout <seconds>] [--jobs <n>]
+#              [--configuration <name>]... [--timeout <seconds|infinity>] [--jobs <n>]
 #              [--against <result folder>] [--code-mode] [--agent-model <agent>=<model>]...
 #   score      judge and score again every execution of a result folder, then its report
 #   report     write a result folder's summary, report and comparison; --against
 #              <result folder> sets what it is compared with
 #   compare    compare two result folders, the earlier first
 for file <-
-      ~w(project task judge person deploy score resources report selftest requests usage runner),
+      ~w(project task judge person deploy score resources report selftest requests usage deadline runner),
     do: Code.require_file("lib/#{file}.ex", __DIR__)
 
 case System.argv() do
@@ -32,7 +32,7 @@ case System.argv() do
           label: :string,
           task: :keep,
           configuration: :keep,
-          timeout: :integer,
+          timeout: :string,
           jobs: :integer,
           against: :string,
           code_mode: :boolean

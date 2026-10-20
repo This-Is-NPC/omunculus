@@ -177,6 +177,13 @@ mix run eval/run.exs score eval/results/<run>    # score an old run again
 `--code-mode` turns on the model's `code_mode`, so the same tasks can be
 measured with and without the sandbox code bridge.
 
+`--timeout <seconds>` bounds each execution; the default is 600 seconds.
+`--timeout infinity` waits until the conversation ends without an elapsed-time
+limit. The manifest records `timeout_s` as `"infinity"`. HTTP models have their
+own receive timeout: use `timeout_ms = "infinity"` in a model table to remove it.
+The preset's `local` model uses that setting so inference speed does not end
+its calls. Sandbox command limits remain configured under `[execution]`.
+
 `--agent-model <agent>=<model>` overrides one agent after the packs are
 imported. Repeat it to mix models; agent names and model aliases must exist
 in the resulting project. The manifest, execution and report record the
@@ -191,7 +198,7 @@ To compare it with Haiku on the same task, run these in separate terminals:
 
 ```sh
 mise run eval:run -- --model haiku --configuration agency --task design-to-build --k 1 --jobs 1 --timeout 3600 --label comparison-haiku
-mise run eval:run -- --model local --configuration agency --task design-to-build --k 1 --jobs 1 --timeout 3600 --label comparison-local
+mise run eval:run -- --model local --configuration agency --task design-to-build --k 1 --jobs 1 --timeout infinity --label comparison-local
 ```
 
 Each run has its own projects and result folder. Deploy tasks require the
@@ -205,7 +212,7 @@ electricity or hardware costs, or the separate person and decider calls.
 For a hybrid agency, keep Haiku on the coordinators and Bonsai on the workers:
 
 ```sh
-mise run eval:run -- --model local --agent-model sales=haiku --agent-model seller=haiku --agent-model administrator=haiku --agent-model design-lead=haiku --configuration agency --task design-to-build --k 1 --jobs 1 --timeout 3600 --label comparison-hybrid
+mise run eval:run -- --model local --agent-model sales=haiku --agent-model seller=haiku --agent-model administrator=haiku --agent-model design-lead=haiku --configuration agency --task design-to-build --k 1 --jobs 1 --timeout infinity --label comparison-hybrid
 ```
 
 Design, implementation, review and publication agents keep the default

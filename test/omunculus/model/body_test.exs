@@ -42,6 +42,12 @@ defmodule Omunculus.Model.BodyTest do
   end
 
   for module <- [OpenAI, OpenAIResponses, AnthropicMessages] do
+    test "#{inspect(module)} accepts an unlimited receive timeout" do
+      assert request(unquote(module), %{}, nil, %{"timeout_ms" => :infinity})["model"] == "stub"
+    end
+  end
+
+  for module <- [OpenAI, OpenAIResponses, AnthropicMessages] do
     test "#{inspect(module)} offers the sandbox bridge only with code_mode" do
       named = fn request ->
         for tool <- request["tools"] || [], do: tool["name"] || get_in(tool, ["function", "name"])
