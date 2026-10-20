@@ -36,7 +36,18 @@ defmodule EquivalentExchange.Runner do
   every app it published is removed.
   """
 
-  alias EquivalentExchange.{Deploy, Judge, Person, Project, Resources, Score, Task, Requests}
+  alias EquivalentExchange.{
+    Deploy,
+    Judge,
+    Person,
+    Project,
+    Resources,
+    Score,
+    Task,
+    Requests,
+    Usage
+  }
+
   alias Omunculus.CLI
   alias Omunculus.Store.Query
 
@@ -46,6 +57,17 @@ defmodule EquivalentExchange.Runner do
   def run(options) do
     model = Keyword.get(options, :model, "luna")
     code_mode = Keyword.get(options, :code_mode, false)
+
+    agent_models =
+      options
+      |> Keyword.get_values(:agent_model)
+      |> Map.new(fn value ->
+        case String.split(value, "=", parts: 2) do
+          [agent, model] when agent != "" and model != "" -> {agent, model}
+          _ -> raise ArgumentError, "--agent-model expects agent=model, got: #{value}"
+        end
+      end)
+
     k = Keyword.get(options, :k, 1)
     started = DateTime.utc_now()
     label = Keyword.get(options, :label, model)
@@ -76,6 +98,7 @@ defmodule EquivalentExchange.Runner do
       label: label,
       commit: commit(),
       model: model,
+      agent_models: agent_models,
       code_mode: code_mode,
       repetitions: k,
       configurations: plan |> Enum.map(&elem(&1, 1)) |> Enum.uniq(),
@@ -97,7 +120,7 @@ defmodule EquivalentExchange.Runner do
     |> Elixir.Task.async_stream(
       fn {task, configuration, n} ->
         {task, configuration, n,
-         execute(folder, task, configuration, n, {model, code_mode}, timeout)}
+         execute(folder, task, configuration, n, {model, code_mode, agent_models}, timeout)}
       end,
       max_concurrency: jobs,
       ordered: false,
@@ -127,7 +150,7 @@ defmodule EquivalentExchange.Runner do
   defp wanted?(_id, []), do: true
   defp wanted?(id, filters), do: Enum.any?(filters, &String.contains?(id, &1))
 
-  defp execute(folder, task, configuration, n, {model, code_mode}, timeout_s) do
+  defp execute(folder, task, configuration, n, {model, code_mode, agent_models}, timeout_s) do
     dir =
       Path.join([
         folder,
@@ -141,7 +164,13 @@ defmodule EquivalentExchange.Runner do
     File.mkdir_p!(project)
 
     {:ok, config_path} =
-      Project.build(project, configuration, {model, code_mode}, Path.join(task.dir, "workspace"))
+      Project.build(
+        project,
+        configuration,
+        {model, code_mode},
+        Path.join(task.dir, "workspace"),
+        agent_models
+      )
 
     groups = groups(config_path)
     workspace = Path.join(project, "workspace")
@@ -155,7 +184,11 @@ defmodule EquivalentExchange.Runner do
     {status, played} =
       within(timeout_s * 1000, fn ->
         with {:ok, _said} <- CLI.run(["--config", config_path, "send", instruction], project),
-             {:ok, played} <- play_person(config_path, project, task, groups, %{answers: [], conversation: [{"person", instruction}]}) do
+             {:ok, played} <-
+               play_person(config_path, project, task, groups, %{
+                 answers: [],
+                 conversation: [{"person", instruction}]
+               }) do
           converse(
             {config_path, project, groups, person},
             played,
@@ -205,6 +238,7 @@ defmodule EquivalentExchange.Runner do
       configuration: configuration,
       repetition: n,
       model: model,
+      agent_models: agent_models,
       outcome: outcome,
       expected: Task.outcomes(task, configuration),
       expected_report: task.expect["report"],
@@ -229,7 +263,7 @@ defmodule EquivalentExchange.Runner do
       changed: Enum.map(changed, & &1["path"]),
       sent_back: sent_back(facts),
       works: works(facts),
-      usage: usage(facts, price(project, model)),
+      usage: usage(facts, project),
       duration_ms: duration,
       needs: task.needs,
       forbidden: task.forbidden,
@@ -284,7 +318,7 @@ defmodule EquivalentExchange.Runner do
       "expected_report" => task.expect["report"],
       "check" => %{"passed" => passed, "said" => said, "files" => files},
       "grants" => grants(facts),
-      "usage" => usage(facts, price(project, execution["model"]))
+      "usage" => usage(facts, project)
     })
     |> assess(task, workspace)
   end
@@ -323,6 +357,7 @@ defmodule EquivalentExchange.Runner do
     waiting_on_person(project)
     |> Enum.reduce_while({:ok, played, 0}, fn request, {:ok, played, count} ->
       conversation = played.conversation ++ [{"agent", request.reason}]
+
       reply = fn _question ->
         if task.person,
           do: Person.reply(task.person["facts"], conversation),
@@ -335,11 +370,15 @@ defmodule EquivalentExchange.Runner do
         else
           case CLI.run(Requests.arguments(config_path, request.id, answer), project) do
             {:ok, _said} ->
-              {:cont, {:ok, %{
-                answers: played.answers ++ Requests.answers(request, answer),
-                conversation: conversation ++ [{"person", answer["body"]}]
-              }, count + 1}}
-            {:error, _reason} = error -> {:halt, error}
+              {:cont,
+               {:ok,
+                %{
+                  answers: played.answers ++ Requests.answers(request, answer),
+                  conversation: conversation ++ [{"person", answer["body"]}]
+                }, count + 1}}
+
+            {:error, _reason} = error ->
+              {:halt, error}
           end
         end
       else
@@ -382,9 +421,11 @@ defmodule EquivalentExchange.Runner do
 
     with {:ok, text, follow_ups} <- message,
          {:ok, _said} <- CLI.run(["--config", config_path, "send", text], project),
-         {:ok, played} <- play_person(config_path, project, person.task, groups, %{
-           played | conversation: conversation ++ [{"person", text}]
-         }) do
+         {:ok, played} <-
+           play_person(config_path, project, person.task, groups, %{
+             played
+             | conversation: conversation ++ [{"person", text}]
+           }) do
       converse(at, played, follow_ups)
     else
       :done -> {:ok, %{played | conversation: conversation}}
@@ -651,80 +692,11 @@ defmodule EquivalentExchange.Runner do
   defp work_depth(%{parent_id: parent}, by_id),
     do: 1 + work_depth(Map.fetch!(by_id, parent), by_id)
 
-  # What the provider reported of each model call, and of the prompt it
-  # served from its cache: overall, on the first call of each run, and by
-  # agent.
-  defp usage(facts, price) do
-    agents = Map.new(facts.runs, &{&1.id, &1.agent})
-
-    calls =
-      for %{type: "model", body: %{"usage" => usage}} = event <- facts.events, is_map(usage) do
-        %{run: event.run_id, agent: agents[event.run_id], usage: tokens(usage, price)}
-      end
-
-    firsts = calls |> Enum.uniq_by(& &1.run) |> Enum.map(& &1.usage)
-    usages = Enum.map(calls, & &1.usage)
-
-    %{
-      calls: Enum.count(facts.events, &(&1.type == "model")),
-      input_tokens: sum(usages, :prompt),
-      output_tokens: sum(usages, :output),
-      cost: sum(usages, :cost),
-      cache: cache(usages),
-      first_call_cache: cache(firsts),
-      cache_by_agent:
-        calls |> Enum.group_by(& &1.agent, & &1.usage) |> Map.new(fn {a, u} -> {a, cache(u)} end)
-    }
-  end
-
-  # One call's tokens in one shape. OpenRouter sends the OpenAI fields and
-  # the cost; Anthropic sends its own, with the cache apart from the
-  # input, and no cost, which its price per million tokens gives.
-  defp tokens(%{"input_tokens" => input} = usage, price) do
-    write = usage["cache_creation_input_tokens"] || 0
-    read = usage["cache_read_input_tokens"] || 0
-    output = usage["output_tokens"] || 0
-
-    %{
-      prompt: input + write + read,
-      cached: read,
-      write: write,
-      output: output,
-      cost:
-        (input * price["input"] + write * price["cache_write"] + read * price["cache_read"] +
-           output * price["output"]) / 1_000_000
-    }
-  end
-
-  defp tokens(usage, _price) do
-    details = usage["prompt_tokens_details"] || %{}
-
-    %{
-      prompt: usage["prompt_tokens"] || 0,
-      cached: details["cached_tokens"] || 0,
-      write: details["cache_write_tokens"] || 0,
-      output: usage["completion_tokens"] || 0,
-      cost: usage["cost"] || 0
-    }
-  end
-
-  # The price of the model a run named, from eval/prices.toml by the
-  # provider's model id; nil for one whose replies carry their cost.
-  defp price(project, model) do
+  defp usage(facts, project) do
     {:ok, config} = Omunculus.Config.load(Path.join(project, "omunculus.toml"))
-    id = config.models |> Map.fetch!(model) |> get_in([:input, "model"])
-    @eval |> Path.join("prices.toml") |> Toml.decode_file!() |> Map.get(id)
+    prices = @eval |> Path.join("prices.toml") |> Toml.decode_file!()
+    Usage.summarize(facts, config, prices)
   end
-
-  defp cache(usages) do
-    %{
-      prompt_tokens: sum(usages, :prompt),
-      cached_tokens: sum(usages, :cached),
-      cache_write_tokens: sum(usages, :write)
-    }
-  end
-
-  defp sum(maps, key), do: maps |> Enum.map(&(&1[key] || 0)) |> Enum.sum()
 
   defp error({:error, :timeout}), do: "timeout"
   defp error({:error, reason}), do: CLI.format_error(reason)

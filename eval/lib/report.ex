@@ -246,6 +246,15 @@ defmodule EquivalentExchange.Report do
   defp code_mode(%{"code_mode" => true}), do: " in code mode"
   defp code_mode(_manifest), do: ""
 
+  defp model(manifest) do
+    overrides =
+      (manifest["agent_models"] || %{})
+      |> Enum.sort()
+      |> Enum.map_join(", ", fn {agent, model} -> "#{agent}=#{model}" end)
+
+    manifest["model"] <> if(overrides == "", do: "", else: " (#{overrides})")
+  end
+
   # A measure of the machine as a whole number: 1300.0 reads 1300, not 1.3e3.
   defp whole(nil), do: "–"
   defp whole(value), do: value |> round() |> Integer.to_string()
@@ -263,7 +272,7 @@ defmodule EquivalentExchange.Report do
     """
     # Equivalent Exchange · #{summary.run}
 
-    Model `#{manifest["model"]}`#{code_mode(manifest)} · commit `#{manifest["commit"]}` · #{manifest["repetitions"]} repetition(s) · #{summary.totals.executions} executions · #{trust(manifest["judge"])}#{unavailable(summary.totals.judge_unavailable)}
+    Model `#{model(manifest)}`#{code_mode(manifest)} · commit `#{manifest["commit"]}` · #{manifest["repetitions"]} repetition(s) · #{summary.totals.executions} executions · #{trust(manifest["judge"])}#{unavailable(summary.totals.judge_unavailable)}
 
     #{table("Totals", %{"all" => summary.totals})}
     #{table("By configuration", summary.by_configuration)}
@@ -360,7 +369,7 @@ defmodule EquivalentExchange.Report do
     """
     # #{now.run} against #{before.run}
 
-    Model `#{before.manifest["model"]}`#{code_mode(before.manifest)} → `#{now.manifest["model"]}`#{code_mode(now.manifest)} · commit `#{before.manifest["commit"]}` → `#{now.manifest["commit"]}`
+    Model `#{model(before.manifest)}`#{code_mode(before.manifest)} → `#{model(now.manifest)}`#{code_mode(now.manifest)} · commit `#{before.manifest["commit"]}` → `#{now.manifest["commit"]}`
 
     ## Better
 

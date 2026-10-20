@@ -9,6 +9,37 @@ defmodule Omunculus.EvalProjectTest do
   alias Omunculus.Store.Query
   alias Omunculus.Tools.RequestAccess
 
+  test "a hybrid agency overrides imported coordinators and keeps workers on the default model" do
+    dir = Fixtures.tmp_dir()
+    coordinators = Map.new(~w(sales seller administrator design-lead), &{&1, "haiku"})
+
+    assert {:ok, path} =
+             EquivalentExchange.Project.build(dir, "agency", {"local", true}, nil, coordinators)
+
+    assert {:ok, config} = Config.load(path)
+
+    for {name, agent} <- config.agents do
+      assert agent.model == Map.get(coordinators, name, "local")
+    end
+
+    data = Toml.decode_file!(path)
+    assert data["models"]["local"]["code_mode"]
+    assert data["models"]["haiku"]["code_mode"]
+  end
+
+  test "model overrides reject unknown agents and model aliases" do
+    for override <- [{"missing", "haiku"}, {"sales", "missing"}] do
+      assert {:error, {:agent_model, ^override}} =
+               EquivalentExchange.Project.build(
+                 Fixtures.tmp_dir(),
+                 "agency",
+                 {"local", false},
+                 nil,
+                 Map.new([override])
+               )
+    end
+  end
+
   for configuration <- EquivalentExchange.Project.configurations() do
     test "#{configuration} loads and creates decision, permission and retry requests", %{
       conn: conn

@@ -2,12 +2,13 @@
 #   selftest   prove every task's check against its solution
 #   run        run the suite: --model luna --k 2 --label <name> [--task <part>]...
 #              [--configuration <name>]... [--timeout <seconds>] [--jobs <n>]
-#              [--against <result folder>] [--code-mode]
+#              [--against <result folder>] [--code-mode] [--agent-model <agent>=<model>]...
 #   score      judge and score again every execution of a result folder, then its report
 #   report     write a result folder's summary, report and comparison; --against
 #              <result folder> sets what it is compared with
 #   compare    compare two result folders, the earlier first
-for file <- ~w(project task judge person deploy score resources report selftest requests runner),
+for file <-
+      ~w(project task judge person deploy score resources report selftest requests usage runner),
     do: Code.require_file("lib/#{file}.ex", __DIR__)
 
 case System.argv() do
@@ -26,6 +27,7 @@ case System.argv() do
       OptionParser.parse(argv,
         strict: [
           model: :string,
+          agent_model: :keep,
           k: :integer,
           label: :string,
           task: :keep,

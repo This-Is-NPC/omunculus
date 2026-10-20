@@ -18,6 +18,8 @@ defmodule EquivalentExchange.Project do
   compose the teams — a workflow whose stages are agents of different
   packs, a route naming a pack's workflow — so they are laid over the
   project once the packs are imported, and it must load then.
+  Per-agent model overrides are applied after those imports and validated
+  against the expanded agents and available model aliases.
   """
 
   alias Omunculus.Config.Toml, as: ConfigToml
@@ -35,9 +37,9 @@ defmodule EquivalentExchange.Project do
   end
 
   @doc "Builds the project in `dir` and returns the path of its omunculus.toml."
-  @spec build(String.t(), String.t(), {String.t(), boolean}, String.t() | nil) ::
+  @spec build(String.t(), String.t(), {String.t(), boolean}, String.t() | nil, map) ::
           {:ok, String.t()} | {:error, term}
-  def build(dir, configuration, {model, code_mode}, workspace) do
+  def build(dir, configuration, {model, code_mode}, workspace, agent_models \\ %{}) do
     path = Path.join(dir, "omunculus.toml")
 
     with %{"ok" => true} <-
@@ -72,7 +74,8 @@ defmodule EquivalentExchange.Project do
       File.mkdir_p!(Path.join(dir, "workspace"))
 
       with :ok <- import_packs(packs, path, model),
-           :ok <- compose(path, composition) do
+           :ok <- compose(path, composition),
+           :ok <- assign_models(path, agent_models, code_mode) do
         if workspace && File.dir?(workspace),
           do: File.cp_r!(workspace, Path.join(dir, "workspace"))
 
@@ -81,6 +84,37 @@ defmodule EquivalentExchange.Project do
     else
       %{"ok" => false, "output" => reason} -> {:error, {:preset, reason}}
       {:error, _reason} = error -> error
+    end
+  end
+
+  defp assign_models(path, agent_models, code_mode) do
+    data = Toml.decode_file!(path)
+    {:ok, config} = Omunculus.Config.load(path)
+
+    invalid =
+      Enum.find(agent_models, fn {agent, model} ->
+        not Map.has_key?(config.agents, agent) or not Map.has_key?(config.models, model)
+      end)
+
+    if invalid do
+      {:error, {:agent_model, invalid}}
+    else
+      data =
+        Enum.reduce(agent_models, data, fn {agent, model}, data ->
+          data =
+            update_in(data, ["agents"], fn agents ->
+              Map.update(agents, agent, %{"model" => model}, &Map.put(&1, "model", model))
+            end)
+
+          if code_mode, do: put_in(data, ["models", model, "code_mode"], true), else: data
+        end)
+
+      File.write!(path, ConfigToml.encode(data))
+
+      case Omunculus.Config.load(path) do
+        {:ok, _config} -> :ok
+        {:error, reason} -> {:error, {:agent_model, reason}}
+      end
     end
   end
 

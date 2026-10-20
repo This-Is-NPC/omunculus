@@ -43,7 +43,7 @@ results/            one folder per run, ignored by git
 | Riza | 1, workflow only | verifies the stage before hers, runs tests |
 | Alphonse | 1, workflow only | reviews the work against the goal |
 
-They all run on the model `--model` names, a `[models.<name>]` table of
+By default they run on the model `--model` names, a `[models.<name>]` table of
 `presets/amestris/omunculus.toml`; `fake` answers with the first line of its
 prompt and checks only the runner. The keys the preset's logins name come
 from `.env`. A model whose replies carry no cost needs its provider's id in
@@ -177,6 +177,13 @@ mix run eval/run.exs score eval/results/<run>    # score an old run again
 `--code-mode` turns on the model's `code_mode`, so the same tasks can be
 measured with and without the sandbox code bridge.
 
+`--agent-model <agent>=<model>` overrides one agent after the packs are
+imported. Repeat it to mix models; agent names and model aliases must exist
+in the resulting project. The manifest, execution and report record the
+overrides. Usage is priced using each agent's model, including when scoring
+the saved execution again. With `--code-mode`, overridden models also use
+the code bridge.
+
 The preset's `local` model uses the OpenAI-compatible llama.cpp server at
 `http://192.168.0.200:8081/v1`, with model id `bonsai2-27b`, no authentication
 and thinking disabled. Change that model table to use another local server.
@@ -194,6 +201,16 @@ for both runs. Once both finish, use `mise run eval:compare -- <haiku-result>
 <local-result>`; both paths are placeholders for their result folders.
 Local inference has no provider cost in the report; this does not measure
 electricity or hardware costs, or the separate person and decider calls.
+
+For a hybrid agency, keep Haiku on the coordinators and Bonsai on the workers:
+
+```sh
+mise run eval:run -- --model local --agent-model sales=haiku --agent-model seller=haiku --agent-model administrator=haiku --agent-model design-lead=haiku --configuration agency --task design-to-build --k 1 --jobs 1 --timeout 3600 --label comparison-hybrid
+```
+
+Design, implementation, review and publication agents keep the default
+`local` model. The task, permissions, simulated person and decider are the
+same as in the single-model runs.
 
 `eval:run` loads `.env` for the provider's key. Runs are isolated, so several
 may run at once, each on its own model; a run is compared only with the folder
