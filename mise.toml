@@ -44,14 +44,6 @@ run = "scripts/check-links"
 description = "Create each dev project's workspace with its packs' workspace files and seed its local administrator once"
 run = "scripts/dev-bootstrap"
 
-[tasks."dev:console"]
-description = "Open the console on the dev project of a running server"
-run = "scripts/dev-console"
-
-[tasks."dev:mailbox"]
-description = "Open the mailbox on the dev project of a running server"
-run = "scripts/dev-mailbox"
-
 [tasks."dev:reset"]
 description = "Delete the dev projects' stores and workspaces"
 run = "scripts/dev-reset"
@@ -60,10 +52,6 @@ run = "scripts/dev-reset"
 description = "Run the server on the dev registry, with the keys of .env, the deploy sockets and keys and your git identity"
 depends = ["dev:bootstrap"]
 run = "scripts/dev-serve"
-
-[tasks."dev:studio"]
-description = "Open the studio on the agency project of a running server; -- --project dev for the other"
-run = "scripts/dev-studio"
 
 [tasks."docs:cli"]
 description = "Write docs/cli.md from the binary's moduledoc and the cli tools' manifests"
@@ -82,21 +70,17 @@ description = "Equivalent Exchange: prove every task's check against its solutio
 run = "scripts/eval-selftest"
 
 [tasks.pre-commit]
-description = "Check the boundaries, formatting and documentation before a commit"
-run = ["scripts/validate-boundaries", "scripts/check-format", "scripts/docs-cli --check", "scripts/check-links"]
+description = "Check formatting and documentation before a commit"
+run = ["scripts/check-format", "scripts/docs-cli --check", "scripts/check-links"]
 
 [tasks.pre-push]
 description = "Run regular validation before a push"
 run = "scripts/validate-regular"
 
 [tasks.up]
-description = "Start the dev server, unless one already answers; open the apps with dev:console, dev:studio and dev:mailbox"
+description = "Start the dev server unless one already answers"
 depends = ["dev:bootstrap"]
 run = "scripts/up"
-
-[tasks."validate:boundaries"]
-description = "Check that the apps and the core share only the server's contract"
-run = "scripts/validate-boundaries"
 
 [tasks."validate:regular"]
 description = "Run the regular test suite"

@@ -1,10 +1,8 @@
 # How to run the server
 
-**The question:** how do I serve a project so the apps, or any HTTP client,
-can reach it?
+**The question:** how do I serve a project so an HTTP client can reach it?
 
-This page is enough on its own to serve one project on its local socket
-and open the console on it. Web users on a TCP listener, with tokens, are
+This page is enough on its own to serve one project on its local socket. Web users on a TCP listener, with tokens, are
 in [the server](server.md#tcp-listener).
 
 ## Before you start
@@ -13,8 +11,6 @@ in [the server](server.md#tcp-listener).
   ([how to start a project](how-to-start-a-project.md)).
 - `flock`, which the server and the command line take the project's lock
   with.
-- For the apps: Quickshell, `curl` with WebSocket support and a Wayland
-  session ([Requirements](../README.md#requirements)).
 - `<checkout>` is a placeholder for the folder of the omunculus checkout.
 
 ## Steps
@@ -83,19 +79,7 @@ in [the server](server.md#tcp-listener).
    {"items":[{"id":"7005136b5446fd6c0dce25c45b9a50e5","created_at":"2026-10-13T17:14:55.565875Z","created_issuer":"local","created_subject":"1000"}]}
    ```
 
-6. Open an app on it. `--project` may be left out while the registry holds
-   one project.
-
-   ```console
-   $ <checkout>/apps/kit/run console --config server.toml
-   ```
-
-   The console's window opens; [the screens](screens.md) walk it. The
-   mailbox and the studio open the same way, with `mailbox` or `studio` in
-   place of `console`. This step was not run for this page: it opens a
-   window on the desktop.
-
-7. Stop the server with SIGTERM (`kill <pid>`, `<pid>` the placeholder of
+6. Stop the server with SIGTERM (`kill <pid>`, `<pid>` the placeholder of
    its process id); it stops its projects and removes the socket.
 
 ## What can go wrong
@@ -109,13 +93,6 @@ in [the server](server.md#tcp-listener).
   :access_disabled
   ```
 
-- An app opened while no server holds the project:
-
-  ```console
-  $ <checkout>/apps/kit/run console --config server.toml
-  console: no socket at /tmp/omu-howto/served/.omunculus/store.sqlite3.omunculus.sock; start `omunculus serve` first
-  ```
-
 - The socket's path must fit in 107 bytes, or the server does not start;
   keep the store's path short.
 - A project held by a direct command that is still running is in use;
@@ -126,4 +103,3 @@ in [the server](server.md#tcp-listener).
 - [The server](server.md): the `/v1` contract, the event stream and the
   TCP listener.
 - [Clients](clients.md): what a client may rely on.
-- [The screens](screens.md): the console, the mailbox and the studio.

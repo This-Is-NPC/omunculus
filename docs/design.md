@@ -32,12 +32,6 @@ Read the modules of §3 in the order they are listed.
 
 ```text
 bin/omunculus        shell wrapper: mise exec -- mix omunculus
-apps/console/        the window: QML on Quickshell, a client of the server's local socket
-apps/mailbox/        the mailbox: a concept client
-apps/studio/         the studio: the project's settings
-apps/kit/            what the apps share: ui/, the theme and controls, client/, the curl
-                     requests to the server's sockets, the request helpers and the scripts
-                     that send and open attached files, and run, the launcher of every app
 lib/omunculus/       core, config, server, tool, tools, hooks, models, execution, store
 lib/mix/tasks/       the omunculus, omunculus.presets and omunculus.socket mix tasks
 priv/tools/          builtin tool and hook manifests
@@ -202,7 +196,7 @@ The store refuses an older request schema with
 - **The server's `/v1` contract.** HTTP on the project's local socket, as
   the local user, and on an optional TCP listener with signed JWTs; a
   WebSocket event stream; the OpenAPI 3.1 document at `/openapi.json`
-  ([the server](server.md)). It is the only thing the apps and the core
+  ([the server](server.md)). It is the only thing clients and the core
   share ([clients](clients.md)).
 - **The sandbox bridge.** `priv/sandbox.js` runs under Deno inside
   Bubblewrap and answers `tools.<name>(args)` calls of code the model
@@ -220,8 +214,7 @@ There is no release and no installer yet. Omunculus runs from a checkout:
 in the checkout, so the Elixir, OTP and Deno pins of `mise.toml` are the
 ones that run, and `mix omunculus.presets` prints the folder of the
 presets. Teams come as packs: the system team under `priv/packs/system`,
-the others under `packs/` ([packs](packs.md)). The apps run on Quickshell
-from `apps/`, each through `apps/kit/run` ([clients](clients.md)).
+the others under `packs/` ([packs](packs.md)).
 
 ## 8. Building and checking
 
@@ -229,7 +222,7 @@ from `apps/`, each through `apps/kit/run` ([clients](clients.md)).
 mise install                    # toolchain from mise.toml
 mix deps.get
 mix compile --warnings-as-errors
-mise run pre-commit             # validate:boundaries, mix format --check-formatted, check:cli, check:links
+mise run pre-commit             # mix format --check-formatted, check:cli, check:links
 mise run check                  # check:cli and check:links
 mise run docs:cli               # write docs/cli.md from the commands
 mise run validate:regular       # mix test --exclude cargo --exclude sandbox
@@ -238,13 +231,10 @@ mise run pre-push               # validate:regular
 bin/omunculus preset default --from priv/presets/default
 bin/omunculus send "text" --agent concierge
 bin/omunculus serve --config server.toml
-apps/kit/run console --config server.toml [--project <id>]
-apps/kit/run mailbox --config server.toml [--project <id>]
-apps/kit/run studio --config server.toml [--project <id>]
-mise run up                     # the dev server; the apps open with dev:console, dev:studio, dev:mailbox
+mise run up                     # the dev server
 ```
 
-`<id>` is a placeholder for a project id of the registry. Before a commit,
+Before a commit,
 `mise run pre-commit` and `mise run validate:regular` pass and
 `mix compile --warnings-as-errors` is clean. The development server and
 its tasks are on [the development environment](development.md).

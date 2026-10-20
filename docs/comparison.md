@@ -29,7 +29,6 @@ supports, not written yet · **K** needs a change in the harness core ·
 | | Multiple projects and workspaces | **P** registry + workspaces with their own model and ceiling | ◐ | **P** | **P** profiles |
 | | Decisions recorded as data | **P** requests, options, arbiter, grants | ◐ approval log | ◐ | ◐ logs |
 | **Interfaces** | CLI / API / real time | **P** / **P** OpenAPI / **P** WebSocket | **P** / ◐ / **P** | **P** / **P** / **P** | **P** / **P** / **P** SSE |
-| | Graphical client | **P** Quickshell apps: console, mailbox, studio | **P** | **P** | **P** |
 | | Messaging channels | **T** events + hooks; requests become buttons | ✗ | ✗ | **P** ~25 |
 | | IDE (ACP) | **T** | **P** | **P** | **P** |
 | | Installation | ◐ checkout + mise | **P** npm | **P** brew/npm | **P** |

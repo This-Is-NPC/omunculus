@@ -10,11 +10,7 @@ Every page, in the order somebody meets it, with the question it answers.
 | [How to start a project](how-to-start-a-project.md) | How do I get a project that answers a first message? |
 | [How to log in to a provider](how-to-log-in-to-a-provider.md) | How do I put the agents on a real model, with my key? |
 | [How to import a pack](how-to-import-a-pack.md) | How do I add a team that comes as a folder? |
-| [How to run the server](how-to-run-the-server.md) | How do I serve a project so the apps can reach it? |
-| [The screens](screens.md) | What does each screen of the apps show, and which keys does it take? |
-| [The console](console.md) | How does the window on a project work? |
-| [The mailbox](mailbox.md) | How does the mailbox over every project work? |
-| [The studio](studio.md) | How do the project's settings work? |
+| [How to run the server](how-to-run-the-server.md) | How do I serve a project over HTTP? |
 | [The command line](cli.md) | What does each command take and print? |
 | [The TOML](config.md) | What can `omunculus.toml` hold, and what does each key do? |
 | [Possibilities](possibilities.md) | What shapes can a project take? |
@@ -27,7 +23,7 @@ Every page, in the order somebody meets it, with the question it answers.
 | [Clients](clients.md) | What may a client of the server rely on? |
 | [What does not work](what-does-not-work.md) | Which defects are known, and what do I do meanwhile? |
 | [The design](design.md) | How is the code laid out, and why? For contributors. |
-| [The development environment](development.md) | How do I run the apps on my own dev projects? For contributors. |
+| [The development environment](development.md) | How do I run the server on my own dev projects? For contributors. |
 | [The comparison](comparison.md) | How does omunculus compare with other harnesses? |
 | [Equivalent Exchange](../eval/README.md) | How is the system's behaviour measured? |
 | [The capacity benchmark](../bench/README.md) | How many resident runs does one machine hold? |
@@ -38,8 +34,7 @@ Every page, in the order somebody meets it, with the question it answers.
    the `fake` model.
 2. [How to log in to a provider](how-to-log-in-to-a-provider.md): the
    agents on a real model.
-3. [How to run the server](how-to-run-the-server.md), then
-   [the screens](screens.md): the apps on it.
+3. [How to run the server](how-to-run-the-server.md): HTTP access to a project.
 
 ## When you know what you want
 

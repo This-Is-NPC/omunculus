@@ -13,15 +13,6 @@ OpenAPI document the server publishes at `/openapi.json`.
   `priv/`.
 - The core never names a client. No endpoint, field or behaviour exists for
   one app; what a client needs is added to the contract for every client.
-- `mise run validate:boundaries`, part of `mise run pre-commit`, refuses a
-  tracked line of `apps/` that names `lib/`, `priv/`, `omunculus.toml` or
-  the store, a line of `lib/` or `priv/` that names `apps/`, a line of
-  `apps/kit/ui` that imports the client, an import under `apps/` whose path
-  leaves its folder, and any link under `apps/` but an app's `kit` link. Since
-  Quickshell imports only from within the folder an app runs, an app reaches
-  no other app and the kit reaches no app.
-- Apps call each other only through Quickshell IPC
-  (`quickshell ipc --path apps/<app> call …`), never by importing.
 - A launcher may find a project's socket with `mix omunculus.socket
   <server.toml> [<id>]`, where the id may be left out while the registry
   holds one project; from there, `GET /v1/projects` lists every project
@@ -67,50 +58,3 @@ Two of them print a whole form for a client:
 
 The config tool loads the TOML in the harness's process; the sandbox hides
 the file from external tools.
-
-## The apps in this repository
-
-`apps/` holds the clients that come with Omunculus, each a folder that
-`apps/kit/run <app> --config <server.toml> [--project <id>]` opens on a
-project, given as `OMUNCULUS_PROJECT` and its local socket as
-`OMUNCULUS_SOCKET`:
-
-| App | Is |
-| --- | --- |
-| [`apps/console`](console.md) | the window on one project: its conversations, each as threads of its agents' runs, and the orchestration map of its agents, works and requests; and a board of the works of every project of the registry, by state |
-| [`apps/mailbox`](mailbox.md) | a mailbox over every project: a thread is a conversation with one agent of depth 0, and its requests to you are answered there |
-| [`apps/studio`](studio.md) | the settings of a project: its flowchart on a canvas, then one item of the config at a time |
-
-All are QML on Quickshell and share `apps/kit`:
-
-- `apps/kit/ui`: the theme and the controls more than one app uses, among
-  them `FlowCanvas`, a canvas that moves, zooms and pinches, and its
-  `ZoomControl`, and `TabRail`, an app's pages as a carousel down the left
-  edge, with `PageBar`, the commands of the page on screen beside it, ranked
-  — BACK apart, the page's actions in a `CommandRow`, and its tools at the
-  end as icons — and the app's readout, which the app gives it; `CommandRow`,
-  a bar's actions in their order, the main one solid, the others outlined,
-  those of one group joined as one control with the checked one lit, each
-  shortened to its short name or its icon when the names do not fit, which
-  the mailbox's command bar uses too; and `FilePicker` and `FileChip`,
-  the files a message carries and a file attached in a conversation;
-  `Portrait`, an agent's picture, which the app fetched, or while it has
-  none its initial in its colour, which the console and the mailbox show;
-  and `Prose`, what an agent wrote as Markdown as it was written, each line
-  break kept and a line after a list that is no item of it a paragraph of
-  its own, rather than more of the last item; its web addresses, bare or
-  linked, links in the accent that the pointer turns over, Tab reaches,
-  Left and Right pick and Enter opens with `xdg-open`, only http and https.
-  It knows nothing of Omunculus.
-- `apps/kit/client`: `Http`, which makes each request to a socket through
-  `curl` or saves its answer into a file, posts a message with files through
-  `post-with-files` and saves and opens an attached file through
-  `open-attachment`, the scripts beside it, `AgentImages`, which keeps the
-  agents' images in Quickshell's cache, and `Requests.js`, the helpers
-  that read a request's status and participants, the decisions it gathers
-  from below and the option a reply chose, whether the harness opened it
-  and the questions it then passes on, and build a reply.
-
-Each app reaches the kit through a `kit` link to `apps/kit/`, since
-Quickshell imports only from within the folder it runs. The kit imports no
-app, and a control moves into it only once two apps use it.

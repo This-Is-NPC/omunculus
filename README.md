@@ -5,11 +5,7 @@ A project is one `omunculus.toml` and one SQLite store: you send a message,
 a run opens, the model calls tools inside a Bubblewrap sandbox until it
 ends, every step is recorded as an event, and the store applies what those
 tools emit — works handed down to other agents, questions to you, grants.
-It runs from the command line, or behind an optional HTTP server that the
-console, the mailbox and the studio apps open on.
-
-There are no pictures of it working yet; [the screens](docs/screens.md#pictures)
-say why and walk every screen in words.
+It runs from the command line or behind an optional HTTP server.
 
 ## Install
 
@@ -55,32 +51,20 @@ name. [Tools](docs/tools.md).
 workspace files, imported at a depth on your models.
 [Packs](docs/packs.md).
 
-**The apps are clients of the server.** The server serves each project on a
+**Clients use the server contract.** The server serves each project on a
 local socket, and on TCP with signed tokens, under a versioned `/v1`
-contract that the apps and any other client share.
-[The server](docs/server.md), [clients](docs/clients.md).
+contract. [The server](docs/server.md), [clients](docs/clients.md).
 
 ## The interface
 
 The command line is `omunculus <command> [--key value]`; every command is
 in [the command line](docs/cli.md).
 
-The console, the window on a project, takes these keys everywhere; each
-screen's own are in [the screens](docs/screens.md):
-
-| Keys | What they do |
-| --- | --- |
-| 1 · 2 · … | the page of that number |
-| Ctrl+Tab · Ctrl+Shift+Tab | the next or the previous page |
-| Esc | let go of what the page holds, then back |
-| ? · F1 | every key, by where it works |
-
 ## What it does not do
 
 - It hosts no model: it calls a provider's API, a program or an Elixir
   module ([the compatible providers](docs/config.md#compatible-providers)).
-- The server has no chat page of its own; the apps and other clients are
-  its interface.
+- The server has no chat page of its own; HTTP clients use its API.
 - It does not protect you from your own tools and hooks: it guarantees the
   workflow sequence, the ceiling per stage and the store rules.
 - It installs neither Bubblewrap nor the runtimes commands use.
@@ -117,8 +101,6 @@ Contributors start at [the design](docs/design.md).
   OTP 27 and Deno 2.9.
 - `git`, only with `[store] changes`, which records the files each model
   call changed.
-- For the apps: [Quickshell](https://quickshell.org/), `curl` with
-  WebSocket support and a Wayland session.
 
 ## License
 
