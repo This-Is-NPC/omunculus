@@ -279,6 +279,12 @@ defmodule Omunculus.Tools.Out do
     end
   end
 
+  @doc "The question a reopen past `[policy] max_reopens` asks instead."
+  @spec reopen_limit(String.t(), String.t()) :: String.t()
+  def reopen_limit(work_id, instructions),
+    do:
+      "Work #{work_id} broke again after going back as many times in a row as [policy] max_reopens allows, so it does not go back once more on its own. Say how to go on: send it back anyway, retire it and hand out what must come first, or pass this work up. The instructions it would have gone back with: #{instructions}"
+
   @spec refused(term) :: String.t()
   def refused({:request, {:blocked, name}}),
     do:

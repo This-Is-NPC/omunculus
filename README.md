@@ -84,8 +84,8 @@ screen's own are in [the screens](docs/screens.md):
 - It does not protect you from your own tools and hooks: it guarantees the
   workflow sequence, the ceiling per stage and the store rules.
 - It installs neither Bubblewrap nor the runtimes commands use.
-- It does not migrate a store made by an older schema; such a store is
-  recreated.
+- It does not migrate a store made by an older schema: it refuses to open
+  it, and the store must be made again.
 
 ## Known limitations
 

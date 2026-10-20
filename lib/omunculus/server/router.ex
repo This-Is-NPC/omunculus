@@ -254,7 +254,8 @@ defmodule Omunculus.Server.Router do
                 :reply_request do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, command_id} <- command_id(conn),
-         :ok <- reply_answer(conn.body_params),
+         {:ok, _body} <- required_string(conn.body_params, "body"),
+         {:ok, _option} <- optional_string(conn.body_params, "option"),
          {:ok, result} <-
            Project.command(
              project_id,
@@ -445,26 +446,6 @@ defmodule Omunculus.Server.Router do
 
   defp required_string(_, _), do: {:error, :invalid}
 
-  defp reply_answer(answer) when is_map(answer) do
-    with {:ok, _} <- required_string(answer, "body"),
-         {:ok, _} <- optional_string(answer, "option") do
-      case Map.get(answer, "parts", %{}) do
-        parts when is_map(parts) ->
-          Enum.reduce_while(parts, :ok, fn {_part, value}, :ok ->
-            case reply_answer(value) do
-              :ok -> {:cont, :ok}
-              error -> {:halt, error}
-            end
-          end)
-
-        _ ->
-          {:error, :invalid}
-      end
-    end
-  end
-
-  defp reply_answer(_answer), do: {:error, :invalid}
-
   defp optional_string(map, key) do
     if Map.has_key?(map, key), do: required_string(map, key), else: {:ok, nil}
   end
@@ -492,7 +473,8 @@ defmodule Omunculus.Server.Router do
   # A message names the agent of depth 0 it is for, or the work it goes to.
   defp send_args(body) when is_map(body) do
     with {:ok, message} <- required_string(body, "message"),
-         [] <- Map.keys(body) -- ~w(message agent work_id) do
+         [] <- Map.keys(body) -- ~w(message agent work_id attachments),
+         {:ok, files} <- files(Map.get(body, "attachments", [])) do
       case body do
         %{"work_id" => work_id}
         when is_map_key(body, "agent") or not is_binary(work_id) or
@@ -500,11 +482,11 @@ defmodule Omunculus.Server.Router do
           {:error, :invalid}
 
         %{"work_id" => work_id} ->
-          {:ok, %{"message" => message, "work_id" => work_id}}
+          {:ok, %{"message" => message, "work_id" => work_id}, files}
 
         _addressed ->
           with {:ok, agent} <- required_string(body, "agent"),
-               do: {:ok, %{"message" => message, "agent" => agent}}
+               do: {:ok, %{"message" => message, "agent" => agent}, files}
       end
     else
       _ -> {:error, :invalid}
@@ -584,6 +566,9 @@ defmodule Omunculus.Server.Router do
 
   defp error_reply(conn, {:error, {action, _reason}}) when action in [:request, :escalate],
     do: reply(conn, 422, %{error: "request_refused"})
+
+  defp error_reply(conn, {:error, {:attachment, reason}}),
+    do: reply(conn, 422, %{error: "attachment_refused", message: inspect(reason)})
 
   defp error_reply(conn, {:error, {:prompt, _reason}}),
     do: reply(conn, 422, %{error: "message_refused"})

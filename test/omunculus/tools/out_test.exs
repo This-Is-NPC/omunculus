@@ -25,4 +25,27 @@ defmodule Omunculus.Tools.OutTest do
     assert Out.model_failed({:model_crashed, {:exit, :killed}}) ==
              "the model crashed: ** (exit) killed"
   end
+
+  test "unanswered names who asked, on which work, and the question, never an id" do
+    worker = ~s({"kind":"agent","agent":"worker"})
+    person = ~s({"kind":"human","issuer":"local","subject":"1000"})
+    long = String.duplicate("word ", 40) <> "\nsecond line"
+
+    assert Out.unanswered("lead", [%{requester: worker, reason: "Logo?", title: "Site"}], false) ==
+             ~s(lead left worker's question on the work "Site" unanswered: "Logo?")
+
+    assert Out.unanswered("sales", [%{requester: person, reason: long, title: nil}], true) ==
+             ~s(sales left a person's question unanswered: ") <>
+               String.trim(String.duplicate("word ", 32)) <> ~s(..." It is yours to answer now.)
+
+    assert Out.unanswered(
+             "root",
+             [
+               %{requester: worker, reason: "Logo?", title: "Site"},
+               %{requester: worker, reason: nil, title: nil}
+             ],
+             false
+           ) ==
+             ~s(root left 2 questions unanswered: worker's on the work "Site": "Logo?"; worker's.)
+  end
 end

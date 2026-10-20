@@ -1,5 +1,5 @@
 import QtQuick
-import "gui"
+import "kit/ui"
 
 // StatusNote is the masthead's readout: what the mailbox last said, fading
 // after a while unless it is a failure, or that the server does not answer.

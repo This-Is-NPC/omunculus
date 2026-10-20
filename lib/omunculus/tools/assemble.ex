@@ -394,34 +394,43 @@ defmodule Omunculus.Tools.Assemble do
 
   defp request_section(nil, _comments), do: []
 
-  defp request_section(request, comments) do
+  defp request_section(request, comments),
+    do: ["## Request\n" <> Enum.join(request_lines(request, comments, true), "\n")]
+
+  defp request_lines(request, comments, answer_instruction?) do
     header = "#{request.id} #{Out.requested_by(Omunculus.Participant.label(request.requester))}"
     comments = Enum.map(comments || [], & &1.body)
 
     if request.status == "closed" do
-      [
-        "## Request\n" <>
-          Enum.join(
-            [header <> ", " <> Out.answered(request.answer) | comments] ++
-              origin_lines(Map.get(request, :origins, %{})),
-            "\n"
-          )
-      ]
+      [header <> ", " <> Out.answered(request.answer)] ++
+        origin_context(request) ++
+        comments ++
+        origin_lines(Map.get(request, :origins, %{}))
     else
-      lines =
-        [header, Out.answer_request() | waiting_options(request)] ++
-          origin_lines(Map.get(request, :origins, %{})) ++ comments
-
-      ["## Request\n" <> Enum.join(lines, "\n")]
+      [header] ++
+        origin_context(request) ++
+        if(answer_instruction?, do: [Out.answer_request()], else: []) ++
+        waiting_options(request) ++ origin_lines(Map.get(request, :origins, %{})) ++ comments
     end
+  end
+
+  defp origin_context(request) do
+    fields =
+      for key <- [:work_id, :workflow, :stage],
+          value = Map.get(request, key),
+          is_binary(value),
+          do: "#{if key == :work_id, do: "work", else: key} #{value}"
+
+    if fields == [], do: [], else: ["origin: " <> Enum.join(fields, ", ")]
   end
 
   defp origin_lines(origins) do
     Enum.flat_map(Enum.sort(origins), fn {part, origin} ->
       [
-        "part #{part}: request #{origin.id} (#{origin.status})",
-        origin.reason || "" | waiting_options(origin)
+        "part #{part}: request #{origin.id} (#{origin.status}), #{Out.requested_by(Omunculus.Participant.label(origin.requester))}"
       ] ++
+        origin_context(origin) ++
+        [origin.reason || "" | waiting_options(origin)] ++
         origin_lines(origin.origins)
     end)
   end

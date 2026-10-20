@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic as C
-import "gui"
+import "kit/ui"
 
 // ThreadList is the threads of the folder, grouped by day under kickers. It
 // keeps a model of its own, of the threads' keys, in step with `Mail.shown`, so a thread that

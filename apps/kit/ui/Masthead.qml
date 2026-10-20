@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import "kit/ui"
 
 // Masthead is the window's top line: the name, a section, the readout on the
 // right, and a hairline that fades out from an accent notch. Tight, it packs

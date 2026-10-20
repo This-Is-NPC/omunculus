@@ -130,7 +130,7 @@ defmodule Omunculus.Store.SchemaTest do
   } do
     id = Fixtures.insert(conn, :requests)
 
-    for column <- ~w(requester) do
+    for column <- ~w(requester arbiter) do
       assert {:error, reason} =
                Query.exec(conn, "UPDATE requests SET #{column} = '{}' WHERE id = ?", [id])
 

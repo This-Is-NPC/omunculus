@@ -1,5 +1,4 @@
 import QtQuick
-import "kit/ui"
 
 // Kicker titles a group: a tracked label followed by a hairline to the edge.
 Item {

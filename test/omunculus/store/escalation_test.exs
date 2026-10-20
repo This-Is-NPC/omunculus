@@ -11,15 +11,15 @@ defmodule Omunculus.Store.EscalationTest do
   [agents.root]
   depth = 0
   text = "root"
-  tools = ["reply", "escalate", "end", "grant", "cancel"]
+  tools = ["reply", "escalate", "end", "grant", "cancel", "comment", "continue", "done"]
   [agents.lead]
   depth = 1
   text = "lead"
-  tools = ["reply", "escalate", "end", "grant", "cancel"]
+  tools = ["reply", "escalate", "end", "grant", "cancel", "comment", "continue", "done"]
   [agents.worker]
   depth = 2
   text = "worker"
-  tools = ["ask", "end"]
+  tools = ["ask", "end", "comment", "continue", "done"]
   """
   setup %{conn: conn} do
     config = Fixtures.config(@agents)
@@ -88,7 +88,7 @@ defmodule Omunculus.Store.EscalationTest do
         ceiling: %{
           have: ["ask", "reply", "escalate", "end", "grant"],
           askable: ["write"],
-          sealed: ["deploy"],
+          sealed: ["deploy", "promote"],
           blocked: [],
           uncited: "askable",
           overrides: %{}
@@ -234,6 +234,90 @@ defmodule Omunculus.Store.EscalationTest do
     assert {:ok, _} = reply(conn, ctx.lead_ctx, tone, %{"body" => "Calm tone."})
   end
 
+  test "a run resumed by a text answer passes on the origins it leaves pending",
+       %{conn: conn} = ctx do
+    {logo, tone, merged} = questions(conn, ctx)
+    assert {:ok, _} = reply(conn, ctx.root_ctx, merged, %{"body" => "Blue logo; calm tone."})
+
+    resumed =
+      Fixtures.open_run(conn, %{
+        agent: "lead",
+        work_id: ctx.lead,
+        depth: 1,
+        conversation_id: ctx.conversation,
+        request_id: merged
+      })
+
+    {:ok, _} = Store.close_run(conn, resumed.id)
+    {:ok, resumed} = Store.view(conn, "run", resumed.id)
+
+    assert {:ok, events} =
+             Store.unanswered(conn, resumed, ctx.config, &Omunculus.Tools.Out.unanswered/3)
+
+    again = Enum.find(events, &(&1.type == "request")).request_id
+    assert request(conn, logo).status == "escalated"
+    assert request(conn, tone).status == "escalated"
+    assert Jason.decode!(request(conn, again).arbiter) == Participant.agent("root")
+    assert request(conn, again).origins |> Map.keys() |> Enum.sort() == ~w(logo tone)
+
+    assert request(conn, again).reason ==
+             ~s(lead left 2 questions unanswered: worker's on the work "logo": "logo"; ) <>
+               ~s(worker's on the work "tone": "tone")
+  end
+
+  test "a run opened by the answer to its question does not put that question again",
+       %{conn: conn} = ctx do
+    {logo, tone, merged} = questions(conn, ctx)
+    assert {:ok, _} = reply(conn, ctx.root_ctx, merged, %{"body" => "I will think about it."})
+
+    resumed =
+      Fixtures.open_run(conn, %{
+        agent: "lead",
+        work_id: ctx.lead,
+        depth: 1,
+        conversation_id: ctx.conversation,
+        request_id: merged
+      })
+
+    lead_ctx = %{ctx.lead_ctx | run_id: resumed.id}
+    origins = %{"logo" => logo, "tone" => tone}
+
+    assert {:error, {:escalate, :asked_again}} =
+             apply_action(
+               conn,
+               "escalate",
+               %{"reason" => "Answer these named questions.\n", "origins" => origins},
+               lead_ctx
+             )
+
+    assert request(conn, logo).status == "pending"
+
+    assert {:ok, _} = reply(conn, lead_ctx, logo, %{"body" => "I will think about it."})
+    assert work(conn, hd(ctx.children)).state == "open"
+
+    worker =
+      Fixtures.open_run(conn, %{
+        agent: "worker",
+        work_id: hd(ctx.children),
+        depth: 2,
+        conversation_id: ctx.conversation,
+        request_id: logo
+      })
+
+    worker_ctx = %{hd(ctx.child_ctxs) | run_id: worker.id}
+
+    assert {:error, {:request, :asked_again}} =
+             apply_action(conn, "request", %{"reason" => "logo", "options" => %{}}, worker_ctx)
+
+    assert {:ok, _events} =
+             apply_action(
+               conn,
+               "request",
+               %{"reason" => "Which colour, then?", "options" => %{}},
+               worker_ctx
+             )
+  end
+
   test "partial named replies leave missing parts pending for another distribution round",
        %{conn: conn} = ctx do
     {logo, tone, merged} = questions(conn, ctx)
@@ -247,7 +331,9 @@ defmodule Omunculus.Store.EscalationTest do
     assert request(conn, logo).status == "closed"
     assert request(conn, tone).status == "pending"
     assert work(conn, List.last(ctx.children)).state == "waiting"
+    assert {:ok, []} = Store.received_inbox(conn, ctx.root_ctx.run_id)
     again = escalate(conn, ctx.lead_ctx, %{"tone" => tone})
+    assert {:ok, [%{requests: [%{id: ^again}]}]} = Store.received_inbox(conn, ctx.root_ctx.run_id)
     assert request(conn, again).origins["tone"].id == tone
     assert count(conn, "request_escalations") == 3
   end
@@ -262,8 +348,22 @@ defmodule Omunculus.Store.EscalationTest do
           %{"logo" => %{"body" => "Blue."}, "tone" => %{"body" => ""}},
           %{"logo" => %{"body" => "Blue.", "option" => "unknown"}},
           %{"logo" => %{"body" => "Blue.", "parts" => %{"nested" => %{"body" => "No."}}}},
+          %{"logo" => %{"body" => "Blue.", "parts" => nil}},
+          %{"logo" => %{"body" => "Blue.", "parts" => []}},
+          %{"logo" => %{"body" => "Blue.", "parts" => 42}},
           %{"logo" => %{"body" => "Blue.", "request_id" => tone}}
         ] do
+      assert {:ok, false} =
+               Omunculus.Store.Access.reply_needs_project_config?(
+                 %Omunculus.Project{
+                   conn: conn,
+                   dir: ctx.config.root,
+                   config_path: Path.join(ctx.config.root, "omunculus.toml")
+                 },
+                 merged,
+                 %{"body" => "Answers.", "parts" => parts}
+               )
+
       assert {:error, _} =
                reply(conn, ctx.root_ctx, merged, %{"body" => "Answers.", "parts" => parts})
 
@@ -393,6 +493,25 @@ defmodule Omunculus.Store.EscalationTest do
   end
 
   test "a human receiver can escalate to an agent without a synthetic run", %{conn: conn} = ctx do
+    config =
+      Fixtures.config(
+        @agents <>
+          """
+          [policy]
+          request_routes = [
+            { from = { kind = "agent", agent = "worker" }, via = ["origin"] },
+            { via = ["parent", "origin"] }
+          ]
+          """
+      )
+
+    ctx = %{
+      ctx
+      | config: config,
+        owner: %{ctx.owner | config: config},
+        child_ctxs: Enum.map(ctx.child_ctxs, &%{&1 | config: config})
+    }
+
     origin =
       ask(conn, hd(ctx.child_ctxs), "Deploy?", %{
         "grant" => [%{"name" => "grant", "args" => %{"kind" => "tool", "name" => "deploy"}}]
@@ -510,8 +629,11 @@ defmodule Omunculus.Store.EscalationTest do
 
           call.("end", %{})
 
+        {role, 3} when role in ["lead", "root"] ->
+          call.("done", %{"report" => "delivered"})
+
         {"worker", _} ->
-          call.("end", %{})
+          call.("done", %{"report" => "answered"})
 
         other ->
           flunk("unexpected resumed role: #{inspect(other)}")
@@ -539,10 +661,15 @@ defmodule Omunculus.Store.EscalationTest do
              reply(conn, ctx.owner, upstream, %{"body" => "Use blue and calm."})
 
     assert :ok = Omunculus.Harness.follow_up(project, answer_events)
-    assert Agent.get(turns, & &1) == %{"lead" => 2, "root" => 2, "worker" => 2}
-    assert work(conn, ctx.root).waiting == "child"
-    assert work(conn, ctx.lead).waiting == "child"
-    assert Enum.all?(ctx.children, &(work(conn, &1).state == "open"))
+    # The answered workers finish, which wakes the lead, whose work done
+    # wakes the root.
+    assert Agent.get(turns, & &1) == %{"lead" => 3, "root" => 3, "worker" => 2}
+
+    assert Enum.all?(
+             [ctx.root, ctx.lead | ctx.children],
+             &(work(conn, &1).state == "done")
+           )
+
     assert {:ok, []} = Query.all(conn, "SELECT id FROM requests WHERE status != 'closed'")
 
     assert {:ok, runs} =
@@ -555,16 +682,28 @@ defmodule Omunculus.Store.EscalationTest do
     assert Enum.count(runs, &(&1.type == "reply")) == 4
   end
 
-  test "the harness grants a named part only to its original work, with human authority",
+  test "sealed promote climbs two receivers and grants only the original work with human authority",
        %{conn: conn} = ctx do
     [child | _] = ctx.child_ctxs
 
     options = %{
-      "grant" => [%{"name" => "grant", "args" => %{"name" => "deploy", "kind" => "tool"}}]
+      "grant" => [%{"name" => "grant", "args" => %{"name" => "promote", "kind" => "tool"}}]
     }
 
     origin = ask(conn, child, "Deploy permission", options)
-    upstream = escalate(conn, Map.put(ctx.owner, :work_id, ctx.lead), %{"permission" => origin})
+    upstream = escalate(conn, ctx.lead_ctx, %{"permission" => origin})
+
+    assert {:error, {:grant, :not_authorized}} =
+             reply(conn, ctx.root_ctx, upstream, %{
+               "body" => "No",
+               "parts" => %{"permission" => %{"body" => "No"}}
+             })
+
+    assert request(conn, upstream).status == "pending"
+    top = escalate(conn, ctx.root_ctx, %{"release" => upstream})
+    assert Jason.decode!(request(conn, origin).arbiter) == Participant.agent("lead")
+    assert Jason.decode!(request(conn, upstream).arbiter) == Participant.agent("root")
+    assert Jason.decode!(request(conn, top).arbiter) == Participant.human("test", "owner")
     project = %Omunculus.Project{conn: conn, dir: ctx.config.root, config_path: ctx.config.path}
 
     answer = %{
@@ -579,6 +718,12 @@ defmodule Omunculus.Store.EscalationTest do
     assert work(conn, child.work_id).grants == nil
     human = Map.put(ctx.owner, :trigger, "cli")
 
+    answer = %{
+      "request_id" => top,
+      "body" => "Production approved",
+      "parts" => %{"release" => Map.take(answer, ["body", "parts"])}
+    }
+
     assert {:ok, %{ok: true}, events} =
              Omunculus.Harness.dispatch(project, "reply", answer, human)
 
@@ -586,7 +731,7 @@ defmodule Omunculus.Store.EscalationTest do
     assert grant.work_id == child.work_id
     assert grant.request_id == origin
     assert grant.actor_kind == "human"
-    assert Jason.decode!(work(conn, child.work_id).grants) == ["deploy"]
+    assert Jason.decode!(work(conn, child.work_id).grants) == ["promote"]
     assert work(conn, ctx.lead).grants == nil
     assert work(conn, ctx.root).grants == nil
   end
@@ -726,13 +871,13 @@ defmodule Omunculus.Store.EscalationTest do
     assert work(conn, first.work_id).grants == nil
   end
 
-  test "amestris works without routes for decisions, permissions and root retry exhaustion", %{
+  test "amestris configures routes for decisions, permissions and root retry exhaustion", %{
     conn: conn
   } do
     {:ok, config} =
       Omunculus.Config.load(Path.expand("../../../eval/presets/amestris/omunculus.toml", __DIR__))
 
-    refute Map.has_key?(config.data["policy"], "request_routes")
+    assert config.request_routes == [%{"via" => ["parent", "origin"]}]
 
     run =
       Fixtures.open_run(conn, %{
@@ -776,13 +921,203 @@ defmodule Omunculus.Store.EscalationTest do
                conn,
                stopped,
                0,
-               &Omunculus.Tools.Out.unreported/1,
-               &Omunculus.Tools.Out.request_inbox/3
+               &Omunculus.Tools.Out.unreported/3,
+               &Omunculus.Tools.Out.request_inbox/2,
+               config
              )
 
     assert request(conn, retry.request_id).status == "pending"
 
     assert Jason.decode!(request(conn, retry.request_id).options) |> Map.keys() |> Enum.sort() ==
              ~w(cancel retry)
+  end
+
+  test "unanswered receivers escalate through parents and notify the human exactly once",
+       %{conn: conn} = ctx do
+    origin = ask(conn, hd(ctx.child_ctxs), "Logo?")
+
+    incoming = fn agent, work_id, depth, request_id ->
+      run =
+        Fixtures.open_run(conn, %{
+          agent: agent,
+          work_id: work_id,
+          depth: depth,
+          conversation_id: ctx.conversation,
+          request_id: request_id
+        })
+
+      {:ok, _} = Store.close_run(conn, run.id)
+      {:ok, closed} = Store.view(conn, "run", run.id)
+      closed
+    end
+
+    lead_run = incoming.("lead", ctx.lead, 1, origin)
+
+    assert {:ok, first_events} =
+             Store.unanswered(conn, lead_run, ctx.config, &Omunculus.Tools.Out.unanswered/3)
+
+    merged = Enum.find(first_events, &(&1.type == "request")).request_id
+    assert request(conn, origin).status == "escalated"
+    assert Jason.decode!(request(conn, origin).arbiter) == Participant.agent("lead")
+    assert Jason.decode!(request(conn, merged).arbiter) == Participant.agent("root")
+    assert count(conn, "inbox") == 0
+    root_run = incoming.("root", ctx.root, 0, merged)
+
+    assert {:ok, last_events} =
+             Store.unanswered(conn, root_run, ctx.config, &Omunculus.Tools.Out.unanswered/3)
+
+    upstream = Enum.find(last_events, &(&1.type == "request")).request_id
+    assert Jason.decode!(request(conn, upstream).arbiter) == Participant.human("test", "owner")
+    assert count(conn, "inbox") == 1
+    assert Enum.any?(last_events, &(&1.type == "notify"))
+    assert {:ok, [note]} = Query.all(conn, "SELECT body FROM comments WHERE inbox_id IS NOT NULL")
+
+    assert note.body ==
+             ~s(root left worker's question on the work "logo" unanswered: "Logo?" It is yours to answer now.)
+
+    assert request(conn, merged) |> Map.get(:reason) ==
+             ~s(lead left worker's question on the work "logo" unanswered: "Logo?")
+
+    assert {:ok, []} =
+             Store.unanswered(conn, root_run, ctx.config, &Omunculus.Tools.Out.unanswered/3)
+
+    assert {:ok, []} =
+             Store.unanswered(conn, lead_run, ctx.config, &Omunculus.Tools.Out.unanswered/3)
+
+    assert count(conn, "request_escalations") == 2
+    assert count(conn, "inbox") == 1
+    assert work(conn, ctx.root).waiting == "child"
+    assert work(conn, ctx.lead).waiting == "child"
+  end
+
+  test "received inbox shows both root requests with canonical origins and isolates the run",
+       %{conn: conn} = ctx do
+    [first, second] = ctx.child_ctxs
+    logo = ask(conn, first, "Which logo?")
+    tone = ask(conn, second, "Which tone?")
+    left = escalate(conn, ctx.lead_ctx, %{"logo" => logo})
+    right = escalate(conn, ctx.lead_ctx, %{"tone" => tone})
+    views = %{"inbox" => %{"source" => "inbox", "relation" => "received"}}
+    {:ok, specs} = Omunculus.Tool.Views.parse(views)
+    scope = %{run_id: ctx.root_ctx.run_id}
+    before = {count(conn, "events"), count(conn, "comments")}
+
+    assert {:ok, %{"inbox" => [group]}} = Omunculus.Tool.Views.hydrate(conn, specs, scope)
+    assert group.conversation_id == ctx.conversation
+    assert MapSet.new(group.requests, & &1.id) == MapSet.new([left, right])
+    assert Enum.all?(group.requests, &(&1.status == "pending"))
+    by_id = Map.new(group.requests, &{&1.id, &1})
+    assert by_id[left].reason == "Answer these named questions."
+    assert by_id[left].work_id == ctx.lead
+    assert by_id[left].origins["logo"].id == logo
+    assert by_id[left].origins["logo"].work_id == first.work_id
+    assert by_id[left].origins["logo"].reason == "Which logo?"
+    assert by_id[right].origins["tone"].reason == "Which tone?"
+    assert before == {count(conn, "events"), count(conn, "comments")}
+
+    workless =
+      Fixtures.open_run(conn, %{agent: "root", depth: 0, conversation_id: ctx.conversation})
+
+    assert {:ok, %{"inbox" => [same]}} =
+             Omunculus.Tool.Views.hydrate(conn, specs, %{run_id: workless.id})
+
+    assert MapSet.new(same.requests, & &1.id) == MapSet.new([left, right])
+
+    for fields <- [
+          %{agent: "steward", depth: 0, conversation_id: ctx.conversation},
+          %{agent: "root", depth: 1, conversation_id: ctx.conversation},
+          %{agent: "root", depth: 0, conversation_id: nil}
+        ] do
+      run = Fixtures.open_run(conn, fields)
+
+      assert {:ok, %{"inbox" => []}} =
+               Omunculus.Tool.Views.hydrate(conn, specs, %{run_id: run.id})
+    end
+
+    other = Id.new()
+
+    :ok =
+      Query.insert(conn, :conversations, %{
+        id: other,
+        created_issuer: "test",
+        created_subject: "other",
+        created_at: "2026-01-01"
+      })
+
+    run = Fixtures.open_run(conn, %{agent: "root", depth: 0, conversation_id: other})
+    assert {:ok, %{"inbox" => []}} = Omunculus.Tool.Views.hydrate(conn, specs, %{run_id: run.id})
+    assert {:ok, %{}} = Omunculus.Tool.Views.hydrate(conn, specs, %{run_id: nil})
+
+    assert {:ok, _} =
+             reply(conn, ctx.root_ctx, left, %{
+               "body" => "Logo attached",
+               "parts" => %{"logo" => %{"body" => "Use this logo"}}
+             })
+
+    assert {:ok, [remaining]} = Store.received_inbox(conn, ctx.root_ctx.run_id)
+    assert Enum.map(remaining.requests, & &1.id) == [right]
+    assert request(conn, tone).status == "escalated"
+    assert work(conn, second.work_id).waiting == "request"
+    _upstream = escalate(conn, ctx.root_ctx, %{"tone" => right})
+    assert {:ok, []} = Store.received_inbox(conn, ctx.root_ctx.run_id)
+  end
+
+  test "reading a notice does not hide independent requests, including a human origin",
+       %{conn: conn} = ctx do
+    human = human_origin(conn, ctx, "client")
+    human_id = ask(conn, human, "Is the schedule available?")
+    child = hd(ctx.child_ctxs)
+    origin = ask(conn, child, "Which logo?")
+    agent_id = escalate(conn, ctx.lead_ctx, %{"logo" => origin})
+
+    assert {:ok, events} =
+             apply_action(conn, "notify", %{"body" => "Questions ready"}, ctx.lead_ctx)
+
+    note = Enum.find(events, &(&1.type == "notify")).inbox_id
+    assert {:ok, _} = apply_action(conn, "inbox.read", %{"inbox_id" => note}, ctx.owner)
+    assert {:ok, []} = Store.unread_inbox(conn, ctx.lead)
+
+    assert {:ok, [group]} = Store.received_inbox(conn, ctx.root_ctx.run_id)
+    assert MapSet.new(group.requests, & &1.id) == MapSet.new([human_id, agent_id])
+    received = Enum.find(group.requests, &(&1.id == human_id))
+    assert received.run_id == nil
+    assert Jason.decode!(received.requester) == Participant.human("test", "client")
+    assert received.reason == "Is the schedule available?"
+    assert {:ok, _} = reply(conn, ctx.root_ctx, human_id, %{"body" => "Yes, it is available."})
+    assert {:ok, [remaining]} = Store.received_inbox(conn, ctx.root_ctx.run_id)
+    assert Enum.map(remaining.requests, & &1.id) == [agent_id]
+    assert request(conn, origin).status == "escalated"
+    assert work(conn, child.work_id).waiting == "request"
+  end
+
+  test "the builtin assemble hydrates both received requests from two works",
+       %{conn: conn} = ctx do
+    [first, second] = ctx.child_ctxs
+    logo = ask(conn, first, "Which logo?")
+    tone = ask(conn, second, "Which tone?")
+    left = escalate(conn, ctx.lead_ctx, %{"logo" => logo})
+    right = escalate(conn, ctx.lead_ctx, %{"tone" => tone})
+    project = %Omunculus.Project{conn: conn, dir: ctx.config.root, config_path: ctx.config.path}
+    actor = Map.put(ctx.root_ctx, :trigger, "harness")
+
+    assert {:ok, out, _events} =
+             Omunculus.Harness.dispatch(
+               project,
+               "assemble",
+               %{"text" => "Collect the client questions.", "agent" => "root"},
+               actor
+             )
+
+    assert out.ok
+    assert out.output =~ "## Inbox\n### Conversation #{ctx.conversation}"
+
+    for id <- [left, right, logo, tone, first.work_id, second.work_id] do
+      assert out.output =~ id
+    end
+
+    assert out.output =~ "Which logo?"
+    assert out.output =~ "Which tone?"
+    assert request(conn, left).status == "pending"
+    assert request(conn, right).status == "pending"
   end
 end

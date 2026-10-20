@@ -1,5 +1,4 @@
 import QtQuick
-import "kit/ui"
 
 // Dot marks the chosen one of several: filled in its tone when it is, an
 // outline when it could be.

@@ -1,5 +1,4 @@
 import QtQuick
-import "kit/ui"
 
 // NewPill points to content that arrived out of view, below it or, `above`,
 // above it: a lit chip on an opaque backing that counts it. It slides in from

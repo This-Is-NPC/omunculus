@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import "gui"
+import "kit/ui"
 
 // Divider parts two columns with a hairline that fades out downwards, as the
 // masthead's rule fades out to the right.

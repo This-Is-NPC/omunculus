@@ -2,6 +2,35 @@ defmodule EquivalentExchange.Requests do
   @moduledoc "Answers eval requests through their linked named origins without changing permission targets."
   alias EquivalentExchange.Task
 
+  def answer(task, groups, request, project, reply) do
+    case choose(task, groups, request, project) do
+      nil ->
+        if requirements(request) == [] and question?(request) do
+          case reply.(request.reason) do
+            {:ok, :nothing} -> {:ok, nil}
+            {:ok, text} -> {:ok, %{"body" => text}}
+            {:error, _reason} = error -> error
+          end
+        else
+          {:ok, nil}
+        end
+
+      answer ->
+        {:ok, answer}
+    end
+  end
+
+  # What the person answers in words: a question, or a decision `leaf`
+  # picks no option of, as a person given choices may still write. The
+  # harness's retry is not theirs to answer.
+  defp question?(request) do
+    origins = Map.get(request, :origins, %{})
+
+    if map_size(origins) == 0,
+      do: not Map.has_key?(Jason.decode!(request.options), "retry"),
+      else: Enum.any?(origins, fn {_part, origin} -> question?(origin) end)
+  end
+
   def choose(task, groups, request, project) do
     origins = Map.get(request, :origins, %{})
 

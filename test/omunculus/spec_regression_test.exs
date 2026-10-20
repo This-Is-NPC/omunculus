@@ -158,8 +158,9 @@ defmodule Omunculus.SpecRegressionTest do
     assert {:ok, _} =
              Run.open(p, Fixtures.opening(nil, child))
 
-    assert {:ok, [%{arbiter: @human, status: "pending"}]} =
-             Query.all(p.conn, "SELECT * FROM requests")
+    assert {:ok,
+            [%{arbiter: @concierge, status: "escalated"}, %{arbiter: @human, status: "pending"}]} =
+             Query.all(p.conn, "SELECT * FROM requests ORDER BY created_at")
 
     assert {:ok, [_, _]} = Query.all(p.conn, "SELECT * FROM runs")
   end
@@ -203,8 +204,8 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} = Run.open(p, Fixtures.opening(nil, parent, %{request_id: request}))
-    # Its run closed without a reply, so the request is the person's now.
-    assert {:ok, %{status: "pending", arbiter: @human}} =
+    # Its run closed without a reply, so a linked request goes to the next receiver.
+    assert {:ok, %{status: "escalated", arbiter: @concierge}} =
              Store.view(p.conn, "request", request)
 
     assert {:ok, events} = Store.replay(p.conn, :project)
@@ -230,7 +231,7 @@ defmodule Omunculus.SpecRegressionTest do
     end)
 
     assert {:ok, _} = Run.open(p, Fixtures.opening(nil, parent, %{request_id: request}))
-    assert {:ok, %{status: "pending"}} = Store.view(p.conn, "request", request)
+    assert {:ok, %{status: "escalated"}} = Store.view(p.conn, "request", request)
     assert {:ok, %{state: "waiting"}} = Store.view(p.conn, "work", child)
   end
 

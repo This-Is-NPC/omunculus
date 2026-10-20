@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls.Basic as C
-import "kit/ui"
 
 // TextBox is a one-line input with a full outline that takes the accent on focus;
 // `dense` makes it a list row's height; `invalid` outlines it in the error colour.

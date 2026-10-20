@@ -1,5 +1,4 @@
 import QtQuick
-import "kit/ui"
 
 // Chip is a quiet button: a hairline box whose text lights on hover, with an
 // accent underline that grows from the left; it gives a little when pressed

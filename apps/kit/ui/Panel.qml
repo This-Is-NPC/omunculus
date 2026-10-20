@@ -1,5 +1,4 @@
 import QtQuick
-import "kit/ui"
 
 // Panel is a framed section with an index, title, tools, and content.
 SurfaceFrame {

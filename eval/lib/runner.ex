@@ -329,25 +329,17 @@ defmodule EquivalentExchange.Runner do
           else: {:ok, :nothing}
       end
 
-  defp play_person(config_path, project, task, groups, answers, rounds) do
-    case waiting_on_person(project) do
-      [] ->
-        {:ok, answers}
-
-      waiting ->
-        replies =
-          for request <- waiting,
-              answer = Requests.choose(task, groups, request, project),
-              not is_nil(answer),
-              do: {request, answer}
-
-        Enum.reduce_while(replies, {:ok, []}, fn {request, answer}, {:ok, given} ->
+      with {:ok, answer} <- Requests.answer(task, groups, request, project, reply) do
+        if is_nil(answer) do
+          {:cont, {:ok, played, count}}
+        else
           case CLI.run(Requests.arguments(config_path, request.id, answer), project) do
             {:ok, _said} ->
-              {:cont, {:ok, given ++ Requests.answers(request, answer)}}
-
-            {:error, _reason} = error ->
-              {:halt, error}
+              {:cont, {:ok, %{
+                answers: played.answers ++ Requests.answers(request, answer),
+                conversation: conversation ++ [{"person", answer["body"]}]
+              }, count + 1}}
+            {:error, _reason} = error -> {:halt, error}
           end
         end
       else

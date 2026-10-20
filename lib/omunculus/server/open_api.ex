@@ -333,10 +333,25 @@ defmodule Omunculus.Server.OpenAPI do
         object(%{issuer: string(), subject: string(), role: string()}, ~w(issuer subject role)),
       "SendMessage" => %{
         oneOf: [
-          object(%{message: string(), agent: string()}, ~w(message agent)),
-          object(%{message: string(), work_id: string()}, ~w(message work_id))
+          object(
+            %{message: string(), agent: string(), attachments: array(ref("Attachment"))},
+            ~w(message agent)
+          ),
+          object(
+            %{message: string(), work_id: string(), attachments: array(ref("Attachment"))},
+            ~w(message work_id)
+          )
         ]
       },
+      "Attachment" =>
+        object(
+          %{
+            name: string(),
+            media_type: string(),
+            data: %{type: "string", contentEncoding: "base64"}
+          },
+          ~w(name media_type data)
+        ),
       "CreateRequest" =>
         object(%{question: string(), options: array(string()), to: string()}, ~w(question)),
       "EscalateRequests" =>

@@ -1,5 +1,5 @@
 import QtQuick
-import "gui"
+import "kit/ui"
 
 // FolderTab is one folder, as eco's tabs are: its name, dim until hovered,
 // in the accent with an underline while current, and how many threads in it

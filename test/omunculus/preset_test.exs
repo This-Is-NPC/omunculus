@@ -139,8 +139,13 @@ defmodule Omunculus.PresetTest do
 
       project = open_project(dir)
 
-      assert {:ok, [%{arbiter: @human, status: "pending"}]} =
-               Query.all(project.conn, "SELECT * FROM requests")
+      assert {:ok, requests} =
+               Query.all(project.conn, "SELECT * FROM requests ORDER BY created_at")
+
+      assert [%{status: "escalated", arbiter: arbiter}, %{status: "pending", arbiter: @human}] =
+               requests
+
+      assert Jason.decode!(arbiter) == Omunculus.Participant.agent("concierge")
 
       Project.close(project)
     end

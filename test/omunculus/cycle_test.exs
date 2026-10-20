@@ -310,14 +310,24 @@ defmodule Omunculus.CycleTest do
     project = Fixtures.open_project(dir)
     assert all(project, "SELECT * FROM runs WHERE status != 'done'") == []
 
-    # The failed child is broken, which wakes the root once B is done.
+    # The failed child is broken, which wakes the root once B is done; the
+    # root cannot be done while A waits on it, so it breaks too.
     [failed] = all(project, "SELECT * FROM works WHERE goal = 'Goal A'")
 
     assert [_break] =
              all(project, "SELECT * FROM events WHERE type = 'break' AND work_id = ?", [failed.id])
 
     {root, runs} = root_runs(project)
-    assert root.state == "open"
+    assert root.state == "waiting"
+
+    assert [] =
+             all(project, "SELECT * FROM events WHERE type = 'continue' AND work_id = ?", [
+               root.id
+             ])
+
+    assert [_break] =
+             all(project, "SELECT * FROM events WHERE type = 'break' AND work_id = ?", [root.id])
+
     assert length(runs) == 3
     Project.close(project)
   end

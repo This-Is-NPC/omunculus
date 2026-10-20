@@ -18,3 +18,8 @@ type = "object"
 minProperties = 1
 [parameters.properties.origins.additionalProperties]
 type = "string"
+
+[parameters.properties.to]
+description = "Optional name of a route in the project's request_routes. Omit to to follow the default route."
+type = "string"
+minLength = 1

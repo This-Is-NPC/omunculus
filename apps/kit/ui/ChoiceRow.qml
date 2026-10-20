@@ -1,5 +1,4 @@
 import QtQuick
-import "kit/ui"
 
 // ChoiceRow is one option in a list of choices: its icon, or a dot when it is
 // the chosen one; its text; a tint of the accent when chosen and a lighter row

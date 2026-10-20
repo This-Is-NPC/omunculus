@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import "gui"
+import "kit/ui"
 
 // CommandBar is the mailbox's one row of actions, under the masthead, as a
 // mail client keeps them, ranked: the main action of where you are solid,
