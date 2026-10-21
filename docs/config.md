@@ -294,6 +294,17 @@ with `stream_options.include_usage`. The two OpenAI adapters also take an option
 the prompt's prefix to route requests to the server holding that prefix
 in cache.
 
+Every model takes an optional `handoff_tokens`, a positive integer: the
+size of a request, in the tokens the reply's `usage` reports, past which
+a work's own run on that model must report. From the first reply past it
+that is not the run's first, the run refuses every call but `comment`,
+`done`, `continue` and `break`, telling the model to comment what is done,
+what remains and the next step; that comment, or a second reply without
+it, stops the run, and the work's retry starts from the report as its
+last comment ([the cycle](cycle.md#a-run-whose-context-is-full)). Set it
+to about half the context the model's server allows, so the report fits.
+Without it a run's context grows until the server refuses the request.
+
 Every HTTP adapter takes an optional `body` table, merged over the
 request body it builds: a key of `body` replaces the request's key of the
 same name, and two tables merge key by key. It sets what the adapters

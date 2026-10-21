@@ -19,7 +19,7 @@ defmodule Omunculus.Config do
   own, so all agents share the start of their requests), the optional
   `[policy] session_ttl_ms` and `session_max_bytes` (together, they let a
   run continue its agent's paused session on the work), each agent's ceiling layer, the named `[models.<name>]`
-  adapters, the named workflows under `[workflows.<name>]`,
+  adapters, each with an optional `handoff_tokens` (`Omunculus.Run`), the named workflows under `[workflows.<name>]`,
   the MCP servers under `[[mcp.servers]]`, the `[auth]`
   providers, the `[secrets.<tool>]` binding each secret a
   tool's process receives to one of those providers, the required `[execution]` and `[store]`
@@ -243,6 +243,13 @@ defmodule Omunculus.Config do
       {:ok, %{model: name}} -> model(config, name)
       :error -> {:error, {:no_agent, agent_name}}
     end
+  end
+
+  @doc "The `handoff_tokens` of the model `agent_name` runs on, or nil."
+  @spec handoff_tokens(t, String.t()) :: pos_integer | nil
+  def handoff_tokens(%__MODULE__{} = config, agent_name) do
+    %{model: name} = Map.fetch!(config.agents, agent_name)
+    config.models |> Map.fetch!(name) |> Map.get(:handoff_tokens)
   end
 
   @doc "The adapter fun of the model `name`, with its provider's credential."
@@ -2071,14 +2078,26 @@ defmodule Omunculus.Config do
 
   defp parse_models(data, auth, config_dir) when is_map(data) do
     Enum.reduce_while(data, {:ok, %{}}, fn {name, spec}, {:ok, acc} ->
-      case parse_model(name, spec, auth, config_dir) do
-        {:ok, model} -> {:cont, {:ok, Map.put(acc, name, model)}}
+      with {:ok, handoff_tokens, spec} <- model_handoff(name, spec),
+           {:ok, model} <- parse_model(name, spec, auth, config_dir) do
+        {:cont, {:ok, Map.put(acc, name, Map.put(model, :handoff_tokens, handoff_tokens))}}
+      else
         {:error, _reason} = error -> {:halt, error}
       end
     end)
   end
 
   defp parse_models(_data, _auth, _config_dir), do: {:error, {:models, :invalid}}
+
+  # `handoff_tokens` belongs to the run, not to the adapter: it is taken out
+  # of the spec the adapter gets.
+  defp model_handoff(name, %{"handoff_tokens" => tokens} = spec) do
+    if is_integer(tokens) and tokens > 0,
+      do: {:ok, tokens, Map.delete(spec, "handoff_tokens")},
+      else: {:error, {:models, name, {:invalid, :handoff_tokens}}}
+  end
+
+  defp model_handoff(_name, spec), do: {:ok, nil, spec}
 
   defp parse_model(name, data, auth, config_dir) when is_map(data) do
     case Map.get(data, "api") do

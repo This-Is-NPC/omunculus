@@ -207,6 +207,12 @@ defmodule Omunculus.Tools.Out do
     do:
       "refused: #{name} is not one of your tools; if the work needs it, ask with one request_access for it and everything else the work lacks"
 
+  @doc "What a model reads of a call once its run's context passed `limit` tokens."
+  @spec context_full(pos_integer, pos_integer) :: String.t()
+  def context_full(tokens, limit),
+    do:
+      "refused: this run's context reached #{tokens} tokens, past its limit of #{limit}. Report now: comment on the work what is done, what remains and the next step; or, if the work is finished, conclude it as you would. The run ends with your report, and the next run on this work starts from it."
+
   @doc "What a model reads of done or break in a run without a work."
   @spec no_work() :: String.t()
   def no_work,

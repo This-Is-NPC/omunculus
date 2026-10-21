@@ -179,6 +179,23 @@ due) is not the model's: the run closes with an empty `end-run`, its work
 is not retried, since the call's actions are already applied, and the
 command fails with it.
 
+## A run whose context is full
+
+Within a run, every reply and every call's output stays in the request
+the model gets next, so a long run's context grows. A model with
+`handoff_tokens` ([config](config.md)) bounds it on a work's own run: the
+first reply whose request passed that many tokens, unless it is the
+run's first, makes the context full. From there the run refuses every
+call but `comment`, `done`, `continue` and `break`, each refused call
+answered with `refused: this run's context reached N tokens, past its
+limit of M. Report now: ...`. The model reports as it would at any end:
+a `comment` saying what is done, what remains and the next step stops the
+run; `done`, `continue` or `break` hand the work on as always. A model
+that replies twice more without reporting is stopped too. Either stop is
+a run without a report: the work's retry, a fresh run, has the report
+under `## Last comment` and the stopped run's calls under `## Last run`,
+and counts toward `max_retries` like any other.
+
 ## Assemble
 
 The default `assemble` tool joins, in this order, first the instructions,

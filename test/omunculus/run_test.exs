@@ -1232,6 +1232,106 @@ defmodule Omunculus.RunTest do
       Project.close(project)
     end
 
+    # Like `scripted/2`, with steps that record their own replies, on a model
+    # whose `handoff_tokens` is `limit`.
+    defp scripted_with_handoff(project, limit, steps) do
+      test_pid = self()
+      {:ok, script} = Agent.start_link(fn -> steps end)
+
+      Fixtures.use_model(project, fn assembled, _tools, call, record ->
+        send(test_pid, {:assembled, assembled})
+
+        step =
+          Agent.get_and_update(script, fn
+            [only] -> {only, [only]}
+            [step | rest] -> {step, rest}
+          end)
+
+        step.(call, record)
+      end)
+
+      path = Fixtures.config_path(project.dir)
+      data = Toml.decode_file!(path)
+      data = put_in(data, ["models", "scripted", "handoff_tokens"], limit)
+      File.write!(path, Omunculus.Config.Toml.encode(data))
+    end
+
+    defp reply(tokens), do: %{"role" => "assistant", "usage" => %{"prompt_tokens" => tokens}}
+
+    test "past handoff_tokens the run may only report, and its report opens a retry from it",
+         %{dir: dir} do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+
+      reporting = fn call, record ->
+        # The run's first reply is past the limit too, but only its prompt is.
+        :ok = record.(reply(500))
+        {:ok, _} = call.("comment", %{"body" => "started"})
+        :ok = record.(reply(400))
+        {:error, refused} = call.("ask", %{"question" => "Go on?"})
+        send(self(), {:refused, refused})
+        :ok = record.(reply(450))
+        call.("comment", %{"body" => "half done; next: finish"})
+        flunk("the report must end the run")
+      end
+
+      finishing = fn call, record ->
+        :ok = record.(reply(100))
+        call.("done", %{"report" => "finished"})
+        {:ok, "finished"}
+      end
+
+      scripted_with_handoff(project, 300, [reporting, finishing])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+      assert [first, retry] = runs_of(project, work_id)
+      assert first.via == nil
+      assert retry.via == "retry"
+      assert_received {:refused, refused}
+      assert refused == Out.context_full(400, 300)
+      assert_received {:assembled, _first}
+      assert_received {:assembled, assembled}
+      assert assembled =~ "## Last comment\nhalf done; next: finish"
+      assert {:ok, %{state: "done"}} = Store.view(project.conn, "work", work_id)
+      assert breaks_of(project, work_id) == []
+
+      Project.close(project)
+    end
+
+    test "past handoff_tokens a run that replies twice more without end stops by itself", %{
+      dir: dir
+    } do
+      retry_config(dir, "max_retries = 1")
+      project = open_project(dir)
+      work_id = Fixtures.insert(project.conn, :works)
+
+      ignoring = fn _call, record ->
+        :ok = record.(reply(100))
+        :ok = record.(reply(400))
+        :ok = record.(reply(450))
+        record.(reply(500))
+        flunk("the third reply past the limit must stop the run")
+      end
+
+      finishing = fn call, record ->
+        :ok = record.(reply(100))
+        call.("done", %{"report" => "finished"})
+        {:ok, "finished"}
+      end
+
+      scripted_with_handoff(project, 300, [ignoring, finishing])
+
+      assert {:ok, _run} = Run.open(project, opening(nil, work_id))
+
+      assert [_first, retry] = runs_of(project, work_id)
+      assert retry.via == "retry"
+      assert {:ok, %{state: "done"}} = Store.view(project.conn, "work", work_id)
+
+      Project.close(project)
+    end
+
     test "[policy] last_run_output_bytes cuts the outputs in the retry prompt", %{dir: dir} do
       retry_config(dir, "max_retries = 1\nlast_run_output_bytes = 2")
       project = open_project(dir)

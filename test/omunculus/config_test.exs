@@ -1926,6 +1926,21 @@ defmodule Omunculus.ConfigTest do
       assert {:error, {:models, "local", {:invalid, :timeout_ms}}} = load(dir)
     end
 
+    test "handoff_tokens is an optional positive integer the adapter does not get", %{dir: dir} do
+      write_http_model(dir, "openai-completions", "handoff_tokens = 72000")
+      assert {:ok, config} = load(dir)
+      assert config.models["local"].handoff_tokens == 72_000
+      refute Map.has_key?(config.models["local"].input, "handoff_tokens")
+      assert Config.handoff_tokens(config, "concierge") == 72_000
+
+      write_http_model(dir, "openai-completions", "")
+      assert {:ok, config} = load(dir)
+      assert Config.handoff_tokens(config, "concierge") == nil
+
+      write_http_model(dir, "openai-completions", "handoff_tokens = 0")
+      assert {:error, {:models, "local", {:invalid, :handoff_tokens}}} = load(dir)
+    end
+
     test "stream is an optional boolean of the HTTP adapters", %{dir: dir} do
       write_http_model(dir, "anthropic-messages", "stream = true")
       assert {:ok, config} = load(dir)

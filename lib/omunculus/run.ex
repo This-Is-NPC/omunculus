@@ -35,6 +35,14 @@ defmodule Omunculus.Run do
   not retried. A cancelled work does not open runs, and a work's own run
   (no named agent) does not open once its work is no longer open.
 
+  A work's own run whose model has `handoff_tokens` watches the tokens of
+  each request, as the reply's `usage` reports them. From the first reply
+  past the limit that is not the run's first, every call but `comment`,
+  `done`, `continue` and `break` is refused with `Out.context_full/2`,
+  which asks the model to report. The run stops as one that stops by
+  itself once its `comment` is written, or at its second reply after
+  that one without it; the retry starts from the report, its last comment.
+
   `recover/1` takes up what a process that stopped left: it closes the
   runs left open, then makes due the runs events asked for that never
   began (`Harness.lost/1`, a work's own ones as one), gives each work still
@@ -47,6 +55,13 @@ defmodule Omunculus.Run do
   alias Omunculus.Execution.{Limiter, Policy}
   alias Omunculus.Tool.{Catalog, Overrides}
   alias Omunculus.Tools.Out
+
+  # What a run whose context is full may still call: the tools that report.
+  @report_tools ~w(comment done continue break)
+  # The phases of a context watch: full at the reply that passed the limit,
+  # warned at the reply after it.
+  @full 1
+  @warned 2
 
   @spec recover(Project.t()) :: :ok | {:error, term}
   def recover(project) do
@@ -245,11 +260,19 @@ defmodule Omunculus.Run do
              execution
            ),
          cursor = :atomics.new(1, []),
+         context = context_watch(Config.handoff_tokens(config, name), agent, work),
          prepared = Harness.prepared(run.id, config, catalog),
-         call = build_call(project, run, names, config, prepared, execution, cursor) do
+         call = build_call(project, run, names, config, prepared, execution, cursor, context) do
       run_model(
         project,
-        %{run: run, config: config, prepared: prepared, execution: execution, cursor: cursor},
+        %{
+          run: run,
+          config: config,
+          prepared: prepared,
+          execution: execution,
+          cursor: cursor,
+          context: context
+        },
         if(agent, do: nil, else: work),
         assembled,
         tools,
@@ -435,44 +458,104 @@ defmodule Omunculus.Run do
     end)
   end
 
-  defp build_call(project, run, names, config, prepared, execution, cursor) do
+  defp build_call(project, run, names, config, prepared, execution, cursor, context) do
     allowed = MapSet.new(names)
 
     fn name, args ->
-      if MapSet.member?(allowed, name) do
-        ctx = %{
-          trigger: "model",
-          run_id: run.id,
-          author: "agent",
-          agent: run.agent,
-          execution: execution,
-          prepared: prepared
-        }
+      cond do
+        not MapSet.member?(allowed, name) ->
+          refuse(project, run, name, args, Out.not_yours(name))
 
-        result = Harness.dispatch(project, name, args, ctx)
-        # An action may have committed even when a hook after it failed.
-        follow_call(project, run, cursor)
+        full?(context) and name not in @report_tools ->
+          refuse(project, run, name, args, Out.context_full(full_at(context), context.limit))
 
-        case result do
-          {:ok, out, _events} -> {:ok, Out.cut(out.output, config.tool_output_bytes)}
-          {:error, _reason} = error -> error
-        end
-      else
-        refuse(project, run, name, args)
+        true ->
+          ctx = %{
+            trigger: "model",
+            run_id: run.id,
+            author: "agent",
+            agent: run.agent,
+            execution: execution,
+            prepared: prepared
+          }
+
+          result = Harness.dispatch(project, name, args, ctx)
+          # An action may have committed even when a hook after it failed.
+          follow_call(project, run, cursor)
+
+          case result do
+            {:ok, out, _events} ->
+              # Past the limit, the comment is the run's report: it ends the run.
+              if name == "comment" and full?(context), do: throw({:context_full, run.id})
+              {:ok, Out.cut(out.output, config.tool_output_bytes)}
+
+            {:error, _reason} = error ->
+              error
+          end
       end
     end
   end
 
-  # A call to a tool not its own is recorded, failed, with what the model is
+  # A call the run does not make is recorded, failed, with what the model is
   # told, so the run's record holds every call it made.
-  defp refuse(project, run, name, args) do
-    refused = Out.not_yours(name)
+  defp refuse(project, run, name, args, refused) do
     call = %{name: name, args: args, ok: false, output: refused}
     ctx = %{run_id: run.id, work_id: run.work_id, author: "agent", agent: run.agent}
 
     with {:ok, _events} <- Store.record_tools(project.conn, run.id, [{call, []}], ctx),
          do: {:error, refused}
   end
+
+  # A run of a work's own whose model has `handoff_tokens` watches its
+  # context: the replies so far, the phase and the tokens it was full at.
+  defp context_watch(nil, _agent, _work), do: nil
+  defp context_watch(_limit, agent, _work) when not is_nil(agent), do: nil
+  defp context_watch(_limit, _agent, nil), do: nil
+  defp context_watch(limit, nil, _work), do: %{limit: limit, counters: :atomics.new(3, [])}
+
+  defp full?(nil), do: false
+  defp full?(context), do: :atomics.get(context.counters, 2) > 0
+
+  defp full_at(context), do: :atomics.get(context.counters, 3)
+
+  # A reply past the limit, and not the run's first, makes the context
+  # full: from it, the model may only report. A second reply after it
+  # without the report stops the run.
+  defp watch_context(%{context: nil}, _reply), do: :ok
+
+  defp watch_context(%{context: context, run: run}, reply) do
+    replies = :atomics.add_get(context.counters, 1, 1)
+
+    case :atomics.get(context.counters, 2) do
+      0 ->
+        tokens = prompt_tokens(reply)
+
+        if replies > 1 and tokens >= context.limit do
+          :atomics.put(context.counters, 3, tokens)
+          :atomics.put(context.counters, 2, @full)
+        end
+
+        :ok
+
+      @full ->
+        :atomics.put(context.counters, 2, @warned)
+        :ok
+
+      _warned ->
+        throw({:context_full, run.id})
+    end
+  end
+
+  # The tokens of the request a reply answered, as each API reports them:
+  # Anthropic's `input_tokens` leave out the cache, the others' include it.
+  defp prompt_tokens(%{"usage" => usage}) when is_map(usage) do
+    ~w(input_tokens prompt_tokens cache_creation_input_tokens cache_read_input_tokens)
+    |> Enum.map(&usage[&1])
+    |> Enum.filter(&is_integer/1)
+    |> Enum.sum()
+  end
+
+  defp prompt_tokens(_reply), do: 0
 
   # The run's events since the last call: with `end` among them the run
   # stops; otherwise the runs their actions ask for open now, while this
@@ -512,7 +595,7 @@ defmodule Omunculus.Run do
 
     with {:ok, event} <- Store.record_model(project.conn, state.run.id, body),
          {:ok, _hooks} <- Harness.react(project, [event], [], state.execution, state.prepared),
-         do: :ok
+         do: watch_context(state, text)
   end
 
   defp publish_delta(project, run, text) do
@@ -561,6 +644,7 @@ defmodule Omunculus.Run do
         exception -> {:model_failed, {:model_crashed, exception}}
       catch
         :throw, {:run_ended, ^run_id} -> :ended
+        :throw, {:context_full, ^run_id} -> {:ok, ""}
         :throw, {:follow_up_failed, ^run_id, reason} -> {:error, reason}
         kind, reason -> {:model_failed, {:model_crashed, {kind, reason}}}
       end
