@@ -77,8 +77,10 @@ body = { max_tokens = 32000 }
 [models.local]
 api = "openai-completions"
 url = "http://192.168.0.200:8081/v1"
-model = "bonsai2-27b"
+model = "bonsai2-4b"
 timeout_ms = "infinity"
+# About half of the 131072 tokens each of the server's slots holds.
+handoff_tokens = 72000
 body = { max_tokens = 32000, chat_template_kwargs = { enable_thinking = false } }
 
 [models.sonnet]
