@@ -14,11 +14,22 @@ defmodule EquivalentExchange.Deploy do
   @deploy Path.expand("../../packs/dream-team/environment/.state", __DIR__)
   @ssh ~w(-F /dev/null -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 
-  @doc "Sets the variables the deploy tools read, or says why it cannot."
-  @spec environment() :: :ok | {:error, String.t()}
-  def environment do
-    sockets = Path.join(@deploy, "sockets")
-    keys = Path.join(@deploy, "keys")
+  @doc """
+  Sets the variables the deploy tools read from the environment's state in
+  `deploy`, or says why it cannot. The sockets are named by the target of
+  the `sockets` link: a unix socket address holds at most 107 bytes, which
+  a path through a deep copy of the tree exceeds.
+  """
+  @spec environment(String.t()) :: :ok | {:error, String.t()}
+  def environment(deploy \\ @deploy) do
+    link = Path.join(deploy, "sockets")
+    keys = Path.join(deploy, "keys")
+
+    sockets =
+      case :file.read_link_all(link) do
+        {:ok, target} -> Path.expand(to_string(target), deploy)
+        {:error, _not_a_link} -> link
+      end
 
     if Enum.all?(~w(homologation production), &File.exists?(Path.join(sockets, &1 <> ".sock"))) do
       System.put_env("OMUNCULUS_DEPLOY", sockets)

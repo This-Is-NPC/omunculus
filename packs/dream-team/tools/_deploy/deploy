@@ -36,6 +36,8 @@ def ssh_command(instance):
     socket = os.path.join(os.environ.get("OMUNCULUS_DEPLOY", ""), instance + ".sock")
     if not os.path.exists(socket):
         answer(False, f"no deploy socket at {socket}: is the deploy environment up?")
+    if len(os.fsencode(socket)) > 107:
+        answer(False, f"the deploy socket path {socket} is longer than the 107 bytes of a unix socket address: point OMUNCULUS_DEPLOY at a shorter path")
     return [
         "ssh", "-F", "/dev/null",
         "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",

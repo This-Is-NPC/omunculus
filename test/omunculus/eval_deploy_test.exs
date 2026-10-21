@@ -39,4 +39,31 @@ defmodule Omunculus.EvalDeployTest do
 
     assert length(Path.wildcard(Path.join(dir, "**/*.html"))) == 4
   end
+
+  test "environment names the sockets by the target of a link under a deep state folder" do
+    names = ~w(OMUNCULUS_DEPLOY OMUNCULUS_HOMOLOGATION_KEY OMUNCULUS_PRODUCTION_KEY)
+    saved = Map.new(names, &{&1, System.get_env(&1)})
+
+    on_exit(fn ->
+      for {name, value} <- saved,
+          do: if(value, do: System.put_env(name, value), else: System.delete_env(name))
+    end)
+
+    root = Omunculus.Fixtures.tmp_dir()
+    target = Path.join(root, "sockets")
+    state = Path.join([root | List.duplicate(String.duplicate("deep", 10), 4)] ++ [".state"])
+    File.mkdir_p!(target)
+    File.mkdir_p!(Path.join(state, "keys"))
+    File.ln_s!(target, Path.join(state, "sockets"))
+
+    for instance <- ~w(homologation production) do
+      File.write!(Path.join(target, instance <> ".sock"), "")
+      File.write!(Path.join([state, "keys", instance]), instance <> " key")
+    end
+
+    assert byte_size(Path.join([state, "sockets", "homologation.sock"])) > 107
+    assert :ok = EquivalentExchange.Deploy.environment(state)
+    assert System.get_env("OMUNCULUS_DEPLOY") == target
+    assert System.get_env("OMUNCULUS_PRODUCTION_KEY") == "production key"
+  end
 end
