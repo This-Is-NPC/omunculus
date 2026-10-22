@@ -2,8 +2,8 @@
 
 The design team makes the visual proposal a site starts from — a design
 system (`design/preview/system.css`: colours, fonts, type scale, spacing
-and components), a moodboard, the wireframes of the pages in scope and a
-mockup of the home page — and publishes it to homologation, where the
+and components), a moodboard, and the wireframes and a mockup of each
+page in scope — and publishes it to homologation, where the
 sales desk shows it to the client before anything is built. It builds no site: once the client
 and the owner approve, the builders work from its `design/handoff.md`.
 

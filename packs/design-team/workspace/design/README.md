@@ -13,13 +13,16 @@ work from `handoff.md` once the client and the owner approve it.
   step: `system.css`, the design system — colours, fonts, type scale,
   spacing and components as CSS custom properties and classes, which every
   page of the site is built from — `index.html`, `system/`, `moodboard/`,
-  `wireframes/`, `mockup/`. The
+  `wireframes/`, `mockup/` (`index.html` the home, `<page>.html` each
+  other page in scope). The
   workspace's `Dockerfile` serves it with nginx on port 80 until the site
   is built.
 
 A text the client has not sent is a short suggestion in the briefing's
 tone, marked `class="suggestion"` in the page and listed in `handoff.md`
-as texto sugerido, a confirmar; a photo or logo the client owes is a line
+as texto sugerido, a confirmar; the interface's own labels are not
+suggestions. `system.css` shows the mark only on preview pages (`body
+class="preview"`), so the built site keeps the class and no mark; a photo or logo the client owes is a line
 drawing in inline SVG, captioned with what is owed. Names, prices, dates,
 contacts and claims come only from the client, never invented. No secret,
 key or production address goes here.
