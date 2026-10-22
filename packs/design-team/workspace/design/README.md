@@ -17,6 +17,9 @@ work from `handoff.md` once the client and the owner approve it.
   workspace's `Dockerfile` serves it with nginx on port 80 until the site
   is built.
 
-Placeholders are named as placeholders, `[texto do cliente]`, never
-content invented as the client's. No secret, key or production address
-goes here.
+A text the client has not sent is a short suggestion in the briefing's
+tone, marked `class="suggestion"` in the page and listed in `handoff.md`
+as texto sugerido, a confirmar; a photo or logo the client owes is a line
+drawing in inline SVG, captioned with what is owed. Names, prices, dates,
+contacts and claims come only from the client, never invented. No secret,
+key or production address goes here.
