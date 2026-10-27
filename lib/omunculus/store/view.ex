@@ -73,7 +73,7 @@ defmodule Omunculus.Store.View do
     {state_filter, state_params} =
       case states do
         nil -> {"", []}
-        states -> {" AND state IN (#{Enum.map_join(states, ", ", fn _ -> "?" end)})", states}
+        states -> {" AND state IN (#{Query.placeholders(states)})", states}
       end
 
     with {:ok, since} <- since(conn, work_id, since_last_run) do

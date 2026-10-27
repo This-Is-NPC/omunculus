@@ -52,14 +52,17 @@ defmodule Omunculus.Store.Query do
   @spec insert(Connection.t(), atom, map) :: :ok | {:error, term}
   def insert(conn, table, row) do
     columns = Map.keys(row)
-    placeholders = Enum.map_join(columns, ", ", fn _ -> "?" end)
 
     exec(
       conn,
-      "INSERT INTO #{table} (#{Enum.join(columns, ", ")}) VALUES (#{placeholders})",
+      "INSERT INTO #{table} (#{Enum.join(columns, ", ")}) VALUES (#{placeholders(columns)})",
       Enum.map(columns, &Map.fetch!(row, &1))
     )
   end
+
+  @doc "One `?` per value, comma separated, for a statement's list of values."
+  @spec placeholders(list) :: String.t()
+  def placeholders(values), do: Enum.map_join(values, ", ", fn _value -> "?" end)
 
   @spec transaction(Connection.t(), (-> {:ok, term} | {:error, term})) ::
           {:ok, term} | {:error, term}

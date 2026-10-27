@@ -93,8 +93,7 @@ defmodule Omunculus.Store.Actions.Comments do
   defp delete_comments(_conn, []), do: :ok
 
   defp delete_comments(conn, ids) do
-    placeholders = Enum.map_join(ids, ", ", fn _id -> "?" end)
-    Query.exec(conn, "DELETE FROM comments WHERE id IN (#{placeholders})", ids)
+    Query.exec(conn, "DELETE FROM comments WHERE id IN (#{Query.placeholders(ids)})", ids)
   end
 
   defp apply_compact(conn, column, table, id, deleted, summary, ctx) do
