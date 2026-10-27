@@ -28,9 +28,7 @@ defmodule Omunculus.Tools.Grep do
          {:ok, absolute} <- Omunculus.Tools.Path.resolve(roots, path, permissions, policy) do
       absolute
       |> files()
-      |> Enum.filter(
-        &match?({:ok, _}, Omunculus.Tools.Path.resolve(roots, &1, permissions, policy))
-      )
+      |> Enum.filter(&Omunculus.Tools.Path.allowed?(roots, &1, permissions, policy))
       |> Enum.sort()
       |> Enum.flat_map(&matches(&1, absolute, regex))
       |> Out.listed(limit)

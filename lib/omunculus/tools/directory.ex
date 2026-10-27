@@ -12,11 +12,7 @@ defmodule Omunculus.Tools.Directory do
   def run(%{roots: roots} = input, %Policy{} = policy) do
     permissions = Omunculus.Tools.Path.permissions(input)
 
-    allowed =
-      Enum.filter(
-        roots,
-        &match?({:ok, _}, Omunculus.Tools.Path.resolve(roots, &1, permissions, policy))
-      )
+    allowed = Enum.filter(roots, &Omunculus.Tools.Path.allowed?(roots, &1, permissions, policy))
 
     Out.ok(Enum.map_join(allowed, "\n\n", &root_block/1))
   end
@@ -26,15 +22,11 @@ defmodule Omunculus.Tools.Directory do
       {:ok, entries} ->
         entries
         |> Enum.sort()
-        |> Enum.map(&("  " <> entry(root, &1)))
+        |> Enum.map(&("  " <> Omunculus.Tools.Path.entry(root, &1)))
         |> then(&Enum.join([root | &1], "\n"))
 
       {:error, _reason} ->
         root
     end
-  end
-
-  defp entry(root, name) do
-    if File.dir?(Path.join(root, name)), do: name <> "/", else: name
   end
 end

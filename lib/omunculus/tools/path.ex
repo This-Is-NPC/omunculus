@@ -23,6 +23,17 @@ defmodule Omunculus.Tools.Path do
     end
   end
 
+  @doc "Whether `path` resolves inside the roots, the permissions and the policy."
+  @spec allowed?([String.t()], String.t(), map, Policy.t()) :: boolean
+  def allowed?(roots, path, permissions, policy),
+    do: match?({:ok, _}, resolve(roots, path, permissions, policy))
+
+  @doc "The entry `name` of the directory `dir` as a listing shows it: a directory ends in `/`."
+  @spec entry(String.t(), String.t()) :: String.t()
+  def entry(dir, name) do
+    if File.dir?(Path.join(dir, name)), do: name <> "/", else: name
+  end
+
   @doc "Whether the policy lets a tool write the resolved `absolute`, named `path` in the error."
   @spec writable(Policy.t(), String.t(), String.t()) :: :ok | {:error, String.t()}
   def writable(%Policy{} = policy, absolute, path) do

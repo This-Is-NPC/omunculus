@@ -30,7 +30,7 @@ defmodule Omunculus.Tools.Find do
         |> Path.join(pattern)
         |> Path.wildcard(match_dot: true)
         |> Omunculus.Tools.Ignore.reject(absolute)
-        |> Enum.filter(&inside_roots?(roots, &1, permissions, policy))
+        |> Enum.filter(&Omunculus.Tools.Path.allowed?(roots, &1, permissions, policy))
         |> Enum.map(&Path.relative_to(&1, absolute))
         |> Enum.sort()
         |> Out.listed(limit)
@@ -39,9 +39,5 @@ defmodule Omunculus.Tools.Find do
       {:error, message} ->
         Out.fail(message)
     end
-  end
-
-  defp inside_roots?(roots, match, permissions, policy) do
-    match?({:ok, _}, Omunculus.Tools.Path.resolve(roots, match, permissions, policy))
   end
 end
