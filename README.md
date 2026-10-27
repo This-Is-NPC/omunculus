@@ -99,13 +99,15 @@ screen's own are in [the screens](docs/screens.md):
 
 ## What is broken
 
-Two defects are known; [what does not work](docs/what-does-not-work.md)
+Three defects are known; [what does not work](docs/what-does-not-work.md)
 says what to do meanwhile:
 
 1. Some refusals print as Elixir terms, as `send` without `--agent` in a
    project with several agents at depth 0.
 2. The codex-like preset's `cursor` model names a program the preset does
    not ship.
+3. Internal text replies can leave a permission unresolved and trigger a
+   repeated escalation cycle.
 
 Contributors start at [the design](docs/design.md).
 
