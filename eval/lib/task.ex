@@ -102,7 +102,10 @@ defmodule EquivalentExchange.Task do
     try do
       {said, status} =
         System.cmd(Path.join(task.dir, "check"), [workspace, file],
-          env: [{"PYTHONPATH", Path.join([@eval, "tasks", "_lib"])}],
+          env: [
+            {"PYTHONPATH", Path.join([@eval, "tasks", "_lib"])},
+            {"PYTHONDONTWRITEBYTECODE", "1"}
+          ],
           stderr_to_stdout: true
         )
 
