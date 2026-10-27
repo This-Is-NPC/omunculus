@@ -68,7 +68,8 @@ defmodule EquivalentExchange.Selftest do
   defp workspace(task, solution) do
     dir = Path.join(System.tmp_dir!(), "ee-selftest-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
-    File.cp_r!(Path.join(task.dir, "workspace"), dir)
+    start = Path.join(task.dir, "workspace")
+    if File.dir?(start), do: File.cp_r!(start, dir)
 
     if solution do
       files = Path.join([task.dir, "solution", "files"])
