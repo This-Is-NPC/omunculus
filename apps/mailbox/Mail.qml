@@ -60,6 +60,7 @@ Singleton {
 
   property string message: ""
   property bool messageIsError: false
+  property int noticeCount: 0
 
   // Thread key -> {cursor, events, snapshot}: what its thread is built from.
   property var cache: ({})
@@ -79,6 +80,7 @@ Singleton {
   function tell(text, isError) {
     message = text
     messageIsError = isError
+    noticeCount++
   }
 
   // Whether a thread holds what the search asks for: in its subject, agent,

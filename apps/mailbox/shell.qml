@@ -55,7 +55,13 @@ ShellRoot {
           Layout.fillWidth: true
           section: window.narrow && window.reading ? "thread"
             : ({ all: "all threads", waiting: "waiting for you", working: "working" })[Mail.folder]
-          StatusNote { maxWidth: Math.max(0, window.width - 520) }
+          StatusLine {
+            message: Mail.message
+            error: Mail.messageIsError
+            offline: !Mail.connected
+            count: Mail.noticeCount
+            maxWidth: Math.max(0, window.width - 520)
+          }
         }
 
         CommandBar {
