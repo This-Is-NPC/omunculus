@@ -1,6 +1,6 @@
 defmodule EquivalentExchange.Recovery do
   @moduledoc "Replays a saved coordination stall with and without the experimental steward overlay."
-  alias EquivalentExchange.{Project, Usage}
+  alias EquivalentExchange.{Project, Runner, Usage}
   alias Omunculus.{Config, Store}
 
   @repo Path.expand("../..", __DIR__)
@@ -49,7 +49,7 @@ defmodule EquivalentExchange.Recovery do
     source_project =
       Path.join(source, "executions/design-team__conversation__design-to-build/agency/1/project")
 
-    write_json(Path.join(folder, "manifest.json"), %{
+    Runner.write_json(Path.join(folder, "manifest.json"), %{
       source: Path.relative_to(source, @repo),
       snapshot: Path.relative_to(snapshot, @repo),
       overlay: Path.relative_to(overlay, @repo),
@@ -78,7 +78,7 @@ defmodule EquivalentExchange.Recovery do
         result
       end)
 
-    write_json(Path.join(folder, "summary.json"), %{trials: rows})
+    Runner.write_json(Path.join(folder, "summary.json"), %{trials: rows})
 
     text =
       [
@@ -172,18 +172,9 @@ defmodule EquivalentExchange.Recovery do
       # Record any response that completed while shutdown was being delivered.
       final = records(opened.conn)
 
-      collected =
-        Enum.reduce(final.events, collected, fn e, acc ->
-          if e.sequence > cursor, do: Map.put(acc, e.id, e), else: acc
-        end)
-
+      collected = collect(final.events, collected, cursor)
       new_events = collected |> Map.values() |> Enum.sort_by(& &1.sequence)
-
-      responses =
-        Enum.filter(
-          new_events,
-          &(&1.type == "model" and is_map(&1.body) and is_map(&1.body["usage"]))
-        )
+      responses = Enum.filter(new_events, &Usage.response?/1)
 
       usage =
         Usage.summarize(
@@ -216,7 +207,7 @@ defmodule EquivalentExchange.Recovery do
       }
 
       if grants != 0, do: raise("probe unexpectedly emitted a grant")
-      write_json(Path.join(result, "metrics.json"), row)
+      Runner.write_json(Path.join(result, "metrics.json"), row)
 
       File.write!(
         Path.join(result, "events.jsonl"),
@@ -234,19 +225,10 @@ defmodule EquivalentExchange.Recovery do
   end
 
   defp observe(port, log, conn, cursor, targets, budget, collected) do
-    latest = records(conn)
-
-    collected =
-      Enum.reduce(latest.events, collected, fn e, acc ->
-        if e.sequence > cursor, do: Map.put(acc, e.id, e), else: acc
-      end)
-
+    collected = collect(records(conn).events, collected, cursor)
     new = Map.values(collected)
-
     client = client_request(conn, new, targets)
-
-    count =
-      Enum.count(new, &(&1.type == "model" and is_map(&1.body) and is_map(&1.body["usage"])))
+    count = Enum.count(new, &Usage.response?/1)
 
     cond do
       client ->
@@ -263,12 +245,7 @@ defmodule EquivalentExchange.Recovery do
 
           {^port, {:exit_status, code}} ->
             # A settled worker may have just recorded the desired request.
-            last = records(conn)
-
-            collected =
-              Enum.reduce(last.events, collected, fn e, acc ->
-                if e.sequence > cursor, do: Map.put(acc, e.id, e), else: acc
-              end)
+            collected = collect(records(conn).events, collected, cursor)
 
             case client_request(conn, Map.values(collected), targets) do
               nil -> {"worker_exit_#{code}", collected, nil}
@@ -278,6 +255,11 @@ defmodule EquivalentExchange.Recovery do
           500 -> observe(port, log, conn, cursor, targets, budget, collected)
         end
     end
+  end
+
+  # The events after the checkpoint's cursor, by id, added to those collected.
+  defp collect(events, collected, cursor) do
+    for e <- events, e.sequence > cursor, into: collected, do: {e.id, e}
   end
 
   defp client_request(conn, events, targets) do
@@ -307,14 +289,7 @@ defmodule EquivalentExchange.Recovery do
       runs
       |> Enum.flat_map(& &1.events)
       |> Enum.uniq_by(& &1.id)
-      |> Enum.map(fn e ->
-        Map.update!(e, :body, fn text ->
-          case Jason.decode(text) do
-            {:ok, value} -> value
-            {:error, _} -> text
-          end
-        end)
-      end)
+      |> Enum.map(&Runner.decode_body/1)
 
     %{runs: runs, events: events}
   end
@@ -382,6 +357,4 @@ defmodule EquivalentExchange.Recovery do
         :ok
     end
   end
-
-  defp write_json(path, data), do: File.write!(path, Jason.encode!(data, pretty: true))
 end

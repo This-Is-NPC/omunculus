@@ -9,7 +9,8 @@ defmodule EquivalentExchange.Usage do
     agents = Map.new(facts.runs, &{&1.id, &1.agent})
 
     calls =
-      for %{type: "model", body: %{"usage" => usage}} = event <- facts.events, is_map(usage) do
+      for event <- facts.events, response?(event) do
+        usage = event.body["usage"]
         agent = agents[event.run_id]
         model = config.agents |> Map.fetch!(agent) |> Map.fetch!(:model)
         id = config.models |> Map.fetch!(model) |> get_in([:input, "model"])
@@ -30,6 +31,11 @@ defmodule EquivalentExchange.Usage do
         calls |> Enum.group_by(& &1.agent, & &1.usage) |> Map.new(fn {a, u} -> {a, cache(u)} end)
     }
   end
+
+  @doc "Whether `event` is a model call the provider reported usage for."
+  @spec response?(map) :: boolean
+  def response?(%{type: "model", body: %{"usage" => usage}}), do: is_map(usage)
+  def response?(_event), do: false
 
   # One call's tokens in one shape. OpenRouter sends the OpenAI fields and
   # the cost; Anthropic sends its own, with the cache apart from the

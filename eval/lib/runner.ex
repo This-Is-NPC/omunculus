@@ -692,7 +692,9 @@ defmodule EquivalentExchange.Runner do
     end)
   end
 
-  defp decode_body(event) do
+  @doc "An event with its body decoded from JSON; one with no body or another text as it is."
+  @spec decode_body(map) :: map
+  def decode_body(event) do
     case event.body && Jason.decode(event.body) do
       {:ok, body} -> Map.put(event, :body, body)
       _other -> event
@@ -901,5 +903,7 @@ defmodule EquivalentExchange.Runner do
     %{at: DateTime.utc_now(), commit: commit(), dirty: String.trim(status) != ""}
   end
 
-  defp write_json(path, data), do: File.write!(path, Jason.encode!(data, pretty: true))
+  @doc "Writes `data` to `path` as pretty JSON."
+  @spec write_json(Path.t(), term) :: :ok
+  def write_json(path, data), do: File.write!(path, Jason.encode!(data, pretty: true))
 end
