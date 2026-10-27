@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "kit/client"
+import "kit/client/Model.js" as Model
 import "kit/client/Requests.js" as Requests
 import "kit/ui"
 
@@ -539,22 +540,6 @@ Singleton {
     tones = next
   }
 
-  // The message text a model event carries: a plain string, an OpenAI or
-  // Anthropic message, or a Responses output; a tool call alone has none.
-  function text(body) {
-    if (typeof body === "string")
-      return body
-    if (body === null || typeof body !== "object" || body.type === "call")
-      return ""
-    if (typeof body.content === "string")
-      return body.content
-    for (const key of ["content", "output"]) {
-      if (Array.isArray(body[key]))
-        return body[key].map(part => typeof part.text === "string" ? part.text : text(part)).filter(part => part !== "").join("\n")
-    }
-    return ""
-  }
-
   // Streamed Markdown with its open marks closed — a fence, bold, inline
   // code — or dropped when nothing follows them yet.
   function closed(text) {
@@ -614,7 +599,7 @@ Singleton {
     case "comment":
       return line(body.body)
     case "model":
-      return line(text(body)) || json(body)
+      return line(Model.text(body)) || json(body)
     case "tool":
       return (body.via ? body.via + " → " : "") + body.name + " " + json(body.args || {}) + (body.ok ? "  ok" : "  failed")
         + (body.output ? "  ·  " + (typeof body.output === "string" ? line(body.output) : json(body.output)) : "")
@@ -758,7 +743,7 @@ Singleton {
     case "model": {
       if (body.usage)
         count(who, body.usage)
-      const said = text(body)
+      const said = Model.text(body)
       const place = rows[event.run_id]
       if (place !== undefined)
         update(place, "partial", "")

@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "kit/client"
+import "kit/client/Model.js" as Model
 import "kit/client/Requests.js" as Requests
 import "kit/ui"
 
@@ -370,7 +371,7 @@ Singleton {
       } else if (rootRuns[event.run_id] && ["model", "comment", "attach"].includes(event.type)) {
         // A reply that calls a tool is the agent acting: its text narrates the
         // call to itself, and only a reply that calls none speaks to you.
-        const words = (event.type === "model" ? (calls(body).length > 0 ? "" : text(body))
+        const words = (event.type === "model" ? (calls(body).length > 0 ? "" : Model.text(body))
           : event.type === "comment" ? String(body.body || "") : String(body.note || "")).trim()
         const files = event.type === "attach" ? body.attachments || [] : []
         if (words === "" && files.length === 0)
@@ -584,23 +585,6 @@ Singleton {
   function oneLine(value) {
     const line = String(value || "").replace(/^\s*(?:[#>|-]+|\d+\.)\s*/gm, "").replace(/[*`|]/g, "").replace(/\s+/g, " ").trim()
     return line.length > 140 ? line.slice(0, 137) + "..." : line
-  }
-
-  // The message text a model event carries: a plain string, an OpenAI or
-  // Anthropic message, a Responses output, or a command model's text turn; a
-  // tool call alone has none.
-  function text(body) {
-    if (typeof body === "string")
-      return body
-    if (body === null || typeof body !== "object" || body.type === "call")
-      return ""
-    for (const key of ["content", "output"])
-      if (typeof body[key] === "string")
-        return body[key]
-    for (const key of ["content", "output"])
-      if (Array.isArray(body[key]))
-        return body[key].map(part => typeof part.text === "string" ? part.text : text(part)).filter(part => part !== "").join("\n")
-    return ""
   }
 
   // When something happened: the time today, the day before.
