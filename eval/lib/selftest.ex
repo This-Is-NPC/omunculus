@@ -43,20 +43,26 @@ defmodule EquivalentExchange.Selftest do
 
   defp problems(task, configuration) do
     solution = Jason.decode!(File.read!(Path.join([task.dir, "solution", "outcome.json"])))
-    solved = workspace(task, solution)
-    untouched = workspace(task, nil)
 
-    passed = Task.check(task, solved, Map.merge(solution, %{"configuration" => configuration}))
+    [solved, untouched] =
+      for _ <- 1..2,
+          do: Path.join(System.tmp_dir!(), "ee-selftest-#{System.unique_integer([:positive])}")
 
-    claimed =
-      Task.check(task, untouched, %{
-        "outcome" => "done",
-        "report" => "Done.",
-        "configuration" => configuration
-      })
+    {passed, claimed} =
+      try do
+        workspace(task, solution, solved)
+        workspace(task, nil, untouched)
 
-    File.rm_rf!(solved)
-    File.rm_rf!(untouched)
+        {Task.check(task, solved, Map.merge(solution, %{"configuration" => configuration})),
+         Task.check(task, untouched, %{
+           "outcome" => "done",
+           "report" => "Done.",
+           "configuration" => configuration
+         })}
+      after
+        File.rm_rf!(solved)
+        File.rm_rf!(untouched)
+      end
 
     case {passed, claimed} do
       {{true, _, _}, {false, _, _}} -> []
@@ -65,8 +71,7 @@ defmodule EquivalentExchange.Selftest do
     end
   end
 
-  defp workspace(task, solution) do
-    dir = Path.join(System.tmp_dir!(), "ee-selftest-#{System.unique_integer([:positive])}")
+  defp workspace(task, solution, dir) do
     File.mkdir_p!(dir)
     start = Path.join(task.dir, "workspace")
     if File.dir?(start), do: File.cp_r!(start, dir)
@@ -76,7 +81,5 @@ defmodule EquivalentExchange.Selftest do
       if File.dir?(files), do: File.cp_r!(files, dir)
       Enum.each(solution["delete"] || [], &File.rm_rf!(Path.join(dir, &1)))
     end
-
-    dir
   end
 end
