@@ -8,10 +8,10 @@ underneath is in [console](console.md), [mailbox](mailbox.md) and
 
 ## Pictures
 
-There are no pictures yet, on any screen. They would be made by a mise
-task from the real apps, against an isolated server seeded with synthetic,
-versioned fixtures, and named `NN-<what>.png` in `docs/img` in the order
-this page walks the screens. That task does not exist, for two reasons:
+There are no pictures, on any screen. A picture here has to come from a
+mise task that drives the real apps against an isolated server seeded with
+synthetic, versioned fixtures, named `NN-<what>.png` in `docs/img` in the
+order this page walks the screens. There is no such task, for two reasons:
 
 - The apps are Quickshell windows. They need a Wayland session, and no
   task here starts a compositor of its own to draw them apart from the
@@ -22,7 +22,7 @@ this page walks the screens. That task does not exist, for two reasons:
   empty pages; fixtures that put a conversation's works and requests in
   the store do not exist.
 
-Until they do, each screen below says what it holds in words.
+So each screen below says what it holds in words.
 
 ## The console
 
