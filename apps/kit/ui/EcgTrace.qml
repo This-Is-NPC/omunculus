@@ -1,10 +1,10 @@
 import QtQuick
 import QtQuick.Shapes
 
-// EcgTrace draws an input like a monitor trace: a flat line in silence that
-// swings with the input's loudness, written by a bright head on the right and
-// fading out to the left. Brighter while it hears speech; a faint dashed line
-// when the input sends nothing.
+// EcgTrace draws a wave like a monitor trace: a sample every 32 ms frame,
+// swinging up and down by a fixed pattern, written by a bright head on the
+// right and fading out to the left. It enters already drawn, a full window of
+// samples behind it.
 //
 // The trace is laid out once, in pieces of a few samples each, on a strip that
 // slides left once per display frame by the time that passed. A new sample
@@ -13,21 +13,20 @@ import QtQuick.Shapes
 Item {
   id: trace
 
-  property InputSignal source: null
   property color tone: Theme.primary
-  // How much of the height a full-scale swing may use.
-  property real reach: 0.9
-  property bool glow: true
   // The colour behind the trace, which the left edge fades into.
   property color backdrop: Theme.background
-  readonly property bool alive: source !== null && source.alive
-  // Drawing runs this far behind the newest sample, to ride out socket bursts.
-  readonly property int delayMs: 70
+  // One sample per frame, about five seconds kept.
+  readonly property int frameMs: 32
+  readonly property int capacity: 160
   // Samples per piece: the most a new sample makes the CPU lay out again.
   readonly property int pieceSamples: 16
 
-  readonly property real strength: source !== null && source.speech ? 1 : 0.6
-  // When the strip's left edge was heard: positions on it never move.
+  // The samples' times, evenly spaced, oldest first, and the index of the
+  // first since the trace began.
+  property var times: []
+  property int firstIndex: 0
+  // When the strip's left edge was drawn: positions on it never move.
   property double origin: 0
   property real shift: 0
   property real headY: height / 2
@@ -44,28 +43,57 @@ Item {
 
   clip: true
 
-  function span() { return source.capacity * source.frameMs }
+  // How far sample `index` swings, from 0 to 1.
+  function level(index) {
+    return 0.12 + 0.62 * Math.abs(Math.sin(index * 0.29) * Math.cos(index * 0.11))
+  }
+
+  // A full window of samples, ending now.
+  function seed() {
+    const now = Date.now()
+    const times = []
+    for (let i = 0; i < capacity; i++)
+      times.push(now - (capacity - 1 - i) * frameMs)
+    firstIndex = 0
+    trace.times = times
+    rebuild()
+  }
+
+  // The next sample, one frame after the last unless that drifted too far
+  // from the clock.
+  function push() {
+    const now = Date.now()
+    const expected = times[times.length - 1] + frameMs
+    times.push(Math.abs(expected - now) > 250 ? now : expected)
+    if (times.length > capacity) {
+      times.shift()
+      firstIndex += 1
+    }
+    append()
+  }
+
+  function span() { return capacity * frameMs }
   function at(time) { return (time - origin) / span() * width }
 
-  // The point of sample `i` of a source, on the strip.
+  // The point of sample `i`, on the strip.
   function sample(i) {
-    const index = source.firstIndex + i
+    const index = firstIndex + i
     // Alternate up and down by the sample's own index, so it never flips sides.
     const sign = index % 2 === 0 ? 1 : -1
     const mid = height / 2
-    return { index: index, x: at(source.times[i]), y: mid - sign * source.levels[i] * mid * reach }
+    return { index: index, x: at(times[i]), y: mid - sign * level(index) * mid * 0.7 }
   }
 
-  // Lay the whole trace out again: a new source, size, or a gap in the samples.
+  // Lay the whole trace out again: a new size, or a gap in the frames.
   function rebuild() {
     for (const piece of pieces)
       piece.shape.destroy()
     pieces = []
     raw = []
-    if (!alive || source.levels.length === 0)
+    if (times.length === 0)
       return
-    origin = source.times[0]
-    for (let i = 0; i < source.levels.length; i++)
+    origin = times[0]
+    for (let i = 0; i < times.length; i++)
       raw.push(sample(i))
     for (let first = 0; first < raw.length - 1; first += pieceSamples)
       pieces.push({ first: first, shape: pieceShape.createObject(strip) })
@@ -80,8 +108,8 @@ Item {
       stale = true
       return
     }
-    const last = source.levels.length - 1
-    if (!alive || pieces.length === 0 || last < 0 || source.firstIndex + last !== raw[raw.length - 1].index + 1)
+    const last = times.length - 1
+    if (pieces.length === 0 || firstIndex + last !== raw[raw.length - 1].index + 1)
       return rebuild()
     raw.push(sample(last))
     let newest = pieces.length - 1
@@ -101,7 +129,7 @@ Item {
   function forget() {
     if (at(Date.now()) > 50 * width)
       return rebuild()
-    const gone = at(Date.now() - delayMs) - width - 4
+    const gone = at(Date.now() - 2 * frameMs) - width - 4
     while (pieces.length > 1 && raw[pieces[1].first].x < gone) {
       pieces[0].shape.destroy()
       const dropped = pieces[1].first
@@ -132,10 +160,11 @@ Item {
   }
 
   // Slide the strip by the time that passed, and keep the head on the trace.
+  // The head runs two frames behind the newest sample, so the line reaches it.
   function slide() {
-    if (!alive || raw.length < 2)
+    if (raw.length < 2)
       return
-    shift = width - 3 - at(Date.now() - delayMs)
+    shift = width - 3 - at(Date.now() - 2 * frameMs)
     const edge = width - 3 - shift
     for (let i = raw.length - 1; i > 0; i--) {
       if (raw[i - 1].x <= edge) {
@@ -147,11 +176,7 @@ Item {
     }
   }
 
-  Connections {
-    target: trace.source
-    function onUpdated() { trace.append() }
-  }
-  onAliveChanged: rebuild()
+  Component.onCompleted: seed()
   onWidthChanged: rebuild()
   onHeightChanged: rebuild()
   Component.onDestruction: {
@@ -159,8 +184,15 @@ Item {
       piece.shape.destroy()
   }
 
+  Timer {
+    interval: trace.frameMs
+    repeat: true
+    running: true
+    onTriggered: trace.push()
+  }
+
   FrameAnimation {
-    running: trace.visible && trace.alive
+    running: trace.visible
     onTriggered: {
       trace.drawnAt = Date.now()
       if (trace.stale) {
@@ -174,7 +206,6 @@ Item {
   Item {
     id: strip
     anchors.fill: parent
-    visible: trace.alive
     transform: Translate { x: trace.shift }
   }
 
@@ -188,16 +219,8 @@ Item {
       preferredRendererType: Shape.CurveRenderer
 
       ShapePath {
-        strokeWidth: trace.glow ? 5 : 0
-        strokeColor: Qt.alpha(trace.tone, 0.12 * trace.strength)
-        fillColor: "transparent"
-        joinStyle: ShapePath.RoundJoin
-        capStyle: ShapePath.FlatCap
-        PathPolyline { path: points }
-      }
-      ShapePath {
         strokeWidth: 1.4
-        strokeColor: Qt.alpha(trace.tone, trace.strength)
+        strokeColor: trace.tone
         fillColor: "transparent"
         joinStyle: ShapePath.RoundJoin
         capStyle: ShapePath.FlatCap
@@ -208,7 +231,6 @@ Item {
 
   // The older end fades into what lies behind.
   Rectangle {
-    visible: trace.alive
     width: parent.width * 0.45
     height: parent.height
     gradient: Gradient {
@@ -220,35 +242,18 @@ Item {
 
   // The writing head.
   Rectangle {
-    visible: trace.alive
     x: trace.width - 3 - width / 2
     y: trace.headY - height / 2
     width: 12
     height: 12
     radius: 6
-    color: Qt.alpha(trace.tone, 0.18 * trace.strength)
+    color: Qt.alpha(trace.tone, 0.18)
     Rectangle {
       anchors.centerIn: parent
       width: 4.4
       height: 4.4
       radius: 2.2
-      color: Qt.alpha(trace.tone, trace.strength)
-    }
-  }
-
-  // No audio: a faint dashed line.
-  Shape {
-    anchors.fill: parent
-    visible: !trace.alive
-    ShapePath {
-      strokeWidth: 1
-      strokeColor: Qt.alpha(trace.tone, 0.35)
-      strokeStyle: ShapePath.DashLine
-      dashPattern: [2, 6]
-      fillColor: "transparent"
-      startX: 0
-      startY: trace.height / 2
-      PathLine { x: trace.width; y: trace.height / 2 }
+      color: trace.tone
     }
   }
 }

@@ -11,7 +11,6 @@ Item {
   // The colour behind the trace, which its left edge fades into.
   property color backdrop: Theme.background
   property real progress: 0
-  property int frame: 0
 
   visible: running || finish.running
   clip: true
@@ -23,10 +22,6 @@ Item {
     fill.restart()
     if (body.item)
       body.item.seed()
-  }
-
-  function level(index) {
-    return 0.12 + 0.62 * Math.abs(Math.sin(index * 0.29) * Math.cos(index * 0.11))
   }
 
   onRunningChanged: {
@@ -46,46 +41,12 @@ Item {
     id: body
     anchors.fill: parent
     active: loading.visible
-    sourceComponent: Item {
-      // A full window of samples, so the trace enters already drawn.
-      function seed() {
-        const now = Date.now()
-        const levels = []
-        const times = []
-        for (let i = 0; i < signal.capacity; i++) {
-          levels.push(loading.level(i))
-          times.push(now - (signal.capacity - 1 - i) * signal.frameMs)
-        }
-        loading.frame = signal.capacity
-        signal.firstIndex = 0
-        signal.levels = levels
-        signal.times = times
-        signal.speech = true
-        signal.lastAt = now
-        signal.updated()
-      }
-
-      Component.onCompleted: seed()
-
-      InputSignal { id: signal }
-
-      Timer {
-        interval: signal.frameMs
-        repeat: true
-        running: true
-        onTriggered: signal.push(loading.level(loading.frame++), true)
-      }
-
-      EcgTrace {
-        x: loading.width * (loading.progress - 1)
-        width: loading.width
-        height: loading.height
-        source: signal
-        tone: loading.tone
-        backdrop: loading.backdrop
-        reach: 0.7
-        glow: false
-      }
+    sourceComponent: EcgTrace {
+      x: loading.width * (loading.progress - 1)
+      width: loading.width
+      height: loading.height
+      tone: loading.tone
+      backdrop: loading.backdrop
     }
   }
 }
