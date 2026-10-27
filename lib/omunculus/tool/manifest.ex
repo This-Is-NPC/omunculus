@@ -79,16 +79,7 @@ defmodule Omunculus.Tool.Manifest do
   end
 
   @spec card(t | map) :: String.t()
-  def card(%__MODULE__{name: name, description: description, tags: tags}) do
-    format_card(name, description, tags)
-  end
-
-  def card(%{name: name, description: description} = card) do
-    tags = Map.get(card, :tags) || Map.get(card, "tags") || []
-    format_card(name, description, tags)
-  end
-
-  defp format_card(name, description, tags) do
+  def card(%{name: name, description: description, tags: tags}) do
     lines =
       description
       |> String.split("\n")
@@ -99,7 +90,6 @@ defmodule Omunculus.Tool.Manifest do
   end
 
   defp tags_suffix([]), do: ""
-  defp tags_suffix(nil), do: ""
   defp tags_suffix(tags), do: " [tags: #{Enum.join(tags, ", ")}]"
 
   @spec triggered_by?(t, String.t()) :: boolean

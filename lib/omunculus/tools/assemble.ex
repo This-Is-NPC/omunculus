@@ -467,7 +467,6 @@ defmodule Omunculus.Tools.Assemble do
   defp pinned_subset?(cards), do: Enum.any?(cards, &(not pinned?(&1)))
 
   defp pinned?(%{pinned: false}), do: false
-  defp pinned?(%{"pinned" => false}), do: false
   defp pinned?(_card), do: true
 
   defp more_tools_line(n) when n > 0, do: [Out.more_tools(n)]
