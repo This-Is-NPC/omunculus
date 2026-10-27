@@ -17,6 +17,11 @@ defmodule Omunculus.WorkspaceTest do
         root
       end
 
+    on_exit(fn ->
+      Enum.each([one, two, three], &File.rm_rf!/1)
+      File.rmdir(Path.dirname(one))
+    end)
+
     %{dir: dir, one: one, two: two, three: three}
   end
 
