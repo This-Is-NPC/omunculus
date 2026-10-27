@@ -7,9 +7,8 @@ defmodule Omunculus.Server.Contract do
   @spec work_states() :: [String.t()]
   def work_states, do: ~w(open waiting done cancelled)
 
-  @spec cursor(non_neg_integer | nil) :: String.t() | nil
-  def cursor(nil), do: nil
-  def cursor(sequence), do: Base.url_encode64(<<sequence::unsigned-64>>, padding: false)
+  defp cursor(nil), do: nil
+  defp cursor(sequence), do: Base.url_encode64(<<sequence::unsigned-64>>, padding: false)
 
   @spec decode_cursor(String.t() | nil) :: {:ok, non_neg_integer} | {:error, :invalid}
   def decode_cursor(nil), do: {:ok, 0}

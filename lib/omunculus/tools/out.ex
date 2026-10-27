@@ -42,8 +42,7 @@ defmodule Omunculus.Tools.Out do
     kept <> "\n" <> bytes_cut(byte_size(text) - byte_size(kept))
   end
 
-  @spec bytes_cut(pos_integer) :: String.t()
-  def bytes_cut(count), do: "(#{count} bytes cut)"
+  defp bytes_cut(count), do: "(#{count} bytes cut)"
 
   @spec lines_shown(pos_integer, non_neg_integer, non_neg_integer) :: String.t()
   def lines_shown(first, last, total), do: "(lines #{first}-#{last} of #{total})"

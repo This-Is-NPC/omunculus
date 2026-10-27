@@ -289,18 +289,16 @@ defmodule Omunculus.Auth do
     end
   end
 
-  @doc false
-  @spec resolve_key(String.t()) :: {:ok, String.t()} | {:error, term}
-  def resolve_key(""), do: {:ok, ""}
+  defp resolve_key(""), do: {:ok, ""}
 
-  def resolve_key("$" <> var) do
+  defp resolve_key("$" <> var) do
     case System.get_env(var) do
       nil -> {:error, {:auth, :missing_env, var}}
       value -> {:ok, value}
     end
   end
 
-  def resolve_key("!" <> cmd) do
+  defp resolve_key("!" <> cmd) do
     cache_key = {:auth_cmd, cmd}
 
     case Process.get(cache_key) do
@@ -320,7 +318,7 @@ defmodule Omunculus.Auth do
     end
   end
 
-  def resolve_key(key), do: {:ok, key}
+  defp resolve_key(key), do: {:ok, key}
 
   defp read_store_file(path) do
     if File.regular?(path) do

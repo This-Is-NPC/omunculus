@@ -376,10 +376,10 @@ defmodule Omunculus.Tools.AssembleTest do
              """
              - tool read {} ok
              abc
-             #{Out.bytes_cut(3)}
+             (3 bytes cut)
              - tool read {} ok
              ab
-             #{Out.bytes_cut(3)}
+             (3 bytes cut)
              - tool read {} ok
              abc\
              """

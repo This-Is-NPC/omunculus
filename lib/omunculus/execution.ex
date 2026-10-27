@@ -39,9 +39,6 @@ defmodule Omunculus.Execution do
   @spec write(Handle.t(), iodata) :: :ok | {:error, term}
   def write(%Handle{pid: pid}, data), do: Process.write(pid, data)
 
-  @spec close_input(Handle.t()) :: :ok | {:error, term}
-  def close_input(%Handle{pid: pid}), do: Process.close_input(pid)
-
   @spec stop(Handle.t(), term) :: :ok | {:error, term}
   def stop(%Handle{pid: pid}, reason), do: Process.stop(pid, reason)
 
@@ -56,6 +53,8 @@ defmodule Omunculus.Execution do
       collect(handle, deadline, "", "")
     end
   end
+
+  defp close_input(%Handle{pid: pid}), do: Process.close_input(pid)
 
   defp collect(handle, deadline, stdout, stderr) do
     receive do
