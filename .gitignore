@@ -10,9 +10,7 @@ erl_crash.dump
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
-/test/support/openai_stub/target/
 /bench/results/
-/bench/*/target/
 /eval/results/
 __pycache__/
 /eval/.cache/
