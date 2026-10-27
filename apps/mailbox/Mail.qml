@@ -609,10 +609,7 @@ Singleton {
   }
 
   // An agent's colour, by its place among its project's agents.
-  function toneOf(project, name) {
-    const at = (rosters[project] || []).findIndex(agent => agent.name === name)
-    return at < 0 ? Theme.dim : Theme.agentPalette[at % Theme.agentPalette.length]
-  }
+  function toneOf(project, name) { return Theme.agentTone(rosters[project] || [], name) }
 
   // The file of an agent's picture, as a url, or "" while it has none.
   function imageOf(project, name) {

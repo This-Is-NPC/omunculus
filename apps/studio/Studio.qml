@@ -69,10 +69,7 @@ Singleton {
   }
 
   // An agent's colour, by its place among the setup's agents.
-  function toneOf(name) {
-    const at = setup ? setup.agents.findIndex(agent => agent.name === name) : -1
-    return at < 0 ? Theme.dim : Theme.agentPalette[at % Theme.agentPalette.length]
-  }
+  function toneOf(name) { return Theme.agentTone(setup ? setup.agents : [], name) }
 
   // Every project of the server's registry, the one on screen among them, as
   // {id, socket}, as GET /v1/projects lists them on this socket.

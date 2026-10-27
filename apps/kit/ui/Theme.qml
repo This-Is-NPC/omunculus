@@ -41,6 +41,13 @@ Singleton {
   // Colours at least this far apart in RGB (0 to √3) read as different.
   readonly property real apart: 0.15
 
+  // An agent's colour, by its place among `agents` ([{name}]); dim when it is
+  // not there.
+  function agentTone(agents, name) {
+    const at = agents.findIndex(agent => agent.name === name)
+    return at < 0 ? dim : agentPalette[at % agentPalette.length]
+  }
+
   function distinct(wanted, count) {
     const picked = []
     const values = [primary, success, warning, error].map(color => rgb(String(color)))
