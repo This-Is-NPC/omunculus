@@ -87,7 +87,7 @@ Discovers the catalog, checks the trigger, hydrates the views a manifest declare
 
 ### `Omunculus.Run`
 
-Opens one run, holding a slot of the execution limiter's `run` class (`[execution]` `max_concurrent`, `max_queue`, `queue_timeout_ms`): resolves the agent from the stage of the work's workflow, the work's assignee or, for a message without a work, the agent of depth 0 the message is for — the one it names (`send --agent`), else the one its conversation began with, else the only one, decided and recorded when the message is stored, which refuses it otherwise; a work that names no agent where its depth has several is refused too, and an unnamed root is its creating run's agent's — mounts the ceiling, builds the execution policy (with `[policy] send_catalog` the model is sent every model tool of the catalog, so all agents' requests start alike, and may call only its own; a call to another is refused and recorded as failed), begins the run with the event that made it due as its `cause_id`, dispatches the `assemble` tool, attaches `PROMPTS(assembled)` and, when the tool continues the agent's paused session on the work, a `session` event naming the run it continues and what it was told had happened since, drives the model until it calls `end` or stops — its calls and their reactions reuse the config and catalog it prepared (`Harness.prepared/3`) rather than loading them again — making the runs each call's actions ask for due at once, closes the run, then retries a work whose model stopped without `end`, a model that fails or crashes counting as one that stopped, its `end-run` carrying `error`, why in a sentence (`Out.model_failed/1`, one formatter for every adapter's errors); over `max_retries` it breaks a child work and opens a request along the configured route, with `retry` and `cancel` options and an inbox entry, for a root work. A cancelled work opens no run; a work's own run does not open once the work is no longer open. `recover/1`, when the server opens a project or a direct command takes its lock, closes the runs left open and makes due again what a stopped process lost: the runs events asked for and no run began for (`Harness.lost/1`), a retry decision never applied, a request left at an agent ([the cycle](cycle.md#a-process-that-stops)).
+Opens one run, holding a slot of the execution limiter's `run` class (`[execution]` `max_concurrent`, `max_queue`, `queue_timeout_ms`): resolves the agent from the stage of the work's workflow, the work's assignee or, for a message without a work, the agent of depth 0 the message is for — the one it names (`send --agent`), else the one its conversation began with, else the only one, decided and recorded when the message is stored, which refuses it otherwise; a work that names no agent where its depth has several is refused too, and an unnamed root is its creating run's agent's — mounts the ceiling, builds the execution policy (with `[policy] send_catalog` the model is sent every model tool of the catalog, so all agents' requests start alike, and may call only its own; a call to another is refused and recorded as failed), begins the run with the event that made it due as its `cause_id`, dispatches the `assemble` tool, attaches `PROMPTS(assembled)` and, when the tool continues the agent's paused session on the work, a `session` event naming the run it continues and what it was told had happened since, drives the model until it calls `end` or stops — its calls and their reactions reuse the config and catalog it prepared (`Harness.prepared/3`) rather than loading them again — making the runs each call's actions ask for due at once — on a work's own run whose model has `handoff_tokens`, past that many tokens of request, as the reply's `usage` reports them, only `comment`, `done`, `continue` and `break` run, and the comment, the run's report, stops it — closes the run, then retries a work whose model stopped without `end`, a model that fails or crashes counting as one that stopped, its `end-run` carrying `error`, why in a sentence (`Out.model_failed/1`, one formatter for every adapter's errors); over `max_retries` it breaks a child work and opens a request along the configured route, with `retry` and `cancel` options and an inbox entry, for a root work. A cancelled work opens no run; a work's own run does not open once the work is no longer open. `recover/1`, when the server opens a project or a direct command takes its lock, closes the runs left open and makes due again what a stopped process lost: the runs events asked for and no run began for (`Harness.lost/1`), a retry decision never applied, a request left at an agent ([the cycle](cycle.md#a-process-that-stops)).
 
 ### `Omunculus.Ceiling`
 
@@ -162,6 +162,8 @@ omunculus send "text"
       model → tool calls → EVENTS(tool) per call and chained step
               + emitted actions + hooks
         → a call without end: open_due/2 makes the runs its actions ask for due at once
+        → past the model's handoff_tokens: only comment, done, continue and break
+          run; the comment stops the run
       until the model calls end (EVENTS(end)), stops (EVENTS(model)) or fails
       EVENTS(end-run), with {"error": why} when the model failed, RUNS.status = done
   → follow_up/3 makes the runs the ending call asked for due, runs the hooks
@@ -258,3 +260,19 @@ its tasks are on [the development environment](development.md).
   capacity, adding one real run at a time, `mise run benchmark:run`.
 - [The comparison](comparison.md) with other harnesses, read from their
   sources and this tree at a pinned commit.
+- [Experimental steward recovery](how-to-measure-course-recovery.md): on
+  2026-10-20, three pairs replayed the frozen hybrid permission loop. The
+  steward recovered two of three trials in four model responses each. The
+  baseline recovered none within twenty responses per trial. Mean observed
+  cost was $0.007330 with supervision and $0.012143 without it. The failed
+  supervised trial repeated the false claim that a client request already
+  existed and ended with `no_route`. This measured coordination recovery,
+  not full task quality or new local-worker execution; the control was
+  censored at the response budget. The overlay remains optional.
+  A subsequent five-pair revision added a canonical origin map and checked
+  client-delivery receipts. It recovered five of five trials, versus zero
+  of five controls within twenty responses. The revision averaged 5.8
+  responses, 35.0 seconds and $0.008833 per trial. Five citations outside
+  the current origin map were refused and revised. This remains evidence
+  for one coordination checkpoint, not general reliability or full task
+  quality. The earlier steward comparison is historical, not interleaved.
