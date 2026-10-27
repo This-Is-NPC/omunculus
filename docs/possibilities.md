@@ -265,7 +265,7 @@ flowchart TB
         aagent["concierge — model fake"]
     end
     subgraph docsWs [workspace docs]
-        dagent["concierge — model battery"]
+        dagent["concierge — model router"]
     end
     store[(one store)]
     person --> send
@@ -283,9 +283,16 @@ root = "."
 api = "module"
 module = "Omunculus.Model.Fake"
 
-[models.battery]
-api = "module"
-module = "Omunculus.Model.Battery"
+[auth.openrouter]
+kind = "api_key"
+key = "$OPENROUTER_API_KEY"
+
+[models.router]
+provider = "openrouter"
+api = "openai-completions"
+url = "https://openrouter.ai/api/v1"
+model = "anthropic/claude-sonnet-4-5"
+timeout_ms = 120000
 
 [agents.concierge]
 depth = 0
@@ -312,7 +319,7 @@ root = "docs"
 deny = ["fs.write"]
 
 [workspaces.docs.agents.concierge]
-model = "battery"
+model = "router"
 text = "this is the docs tree"
 ```
 

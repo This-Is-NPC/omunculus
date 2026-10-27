@@ -1,7 +1,7 @@
 defmodule Omunculus.MatrixTest do
   @moduledoc """
   Walks the twelve D0/D1/D2 × H0/H1 × W0/W1 cells through the
-  same "count to 5" task, driven by `Omunculus.Model.Battery`.
+  same "count to 5" task, driven by `Omunculus.Test.Battery`.
   """
 
   use ExUnit.Case, async: true
@@ -32,7 +32,7 @@ defmodule Omunculus.MatrixTest do
     """
     [models.battery]
     api = "module"
-    module = "Omunculus.Model.Battery"
+    module = "Omunculus.Test.Battery"
 
     [agents.concierge]
     depth = 0
@@ -418,7 +418,7 @@ defmodule Omunculus.MatrixTest do
 
     [models.two]
     api = "module"
-    module = "Omunculus.Model.Battery"
+    module = "Omunculus.Test.Battery"
 
     [agents.concierge]
     depth = 0
@@ -451,7 +451,7 @@ defmodule Omunculus.MatrixTest do
     assert resolved_one.agents["concierge"].model == "one"
     assert resolved_two.agents["concierge"].model == "two"
     assert resolved_one.models["one"].module == Omunculus.Model.Fake
-    assert resolved_two.models["two"].module == Omunculus.Model.Battery
+    assert resolved_two.models["two"].module == Omunculus.Test.Battery
     assert resolved_one.store.path == resolved_two.store.path
 
     {:ok, project} = Project.open(config)

@@ -1890,7 +1890,7 @@ defmodule Omunculus.ConfigTest do
 
       [models.battery]
       api = "module"
-      module = "Omunculus.Model.Battery"
+      module = "Omunculus.Test.Battery"
 
       [agents.concierge]
       depth = 0
@@ -1907,7 +1907,7 @@ defmodule Omunculus.ConfigTest do
       assert config.agents["concierge"].model == "fake"
       assert config.agents["worker"].model == "battery"
       assert config.models["fake"].module == Omunculus.Model.Fake
-      assert config.models["battery"].module == Omunculus.Model.Battery
+      assert config.models["battery"].module == Omunculus.Test.Battery
     end
 
     test "openai-completions requires url, model and timeout_ms", %{dir: dir} do

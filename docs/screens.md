@@ -17,9 +17,8 @@ order this page walks the screens. There is no such task, for two reasons:
   task here starts a compositor of its own to draw them apart from the
   desktop of the person running it.
 - The screens worth a picture show works, requests, runs and costs. The
-  models that need no network, `fake` and the scripted `Battery`, hand no
-  work down and ask nothing, so a project seeded through them would show
-  empty pages; fixtures that put a conversation's works and requests in
+  model that needs no network, `fake`, hands no work down and asks
+  nothing, so a project seeded through it would show empty pages; fixtures that put a conversation's works and requests in
   the store do not exist.
 
 So each screen below says what it holds in words.

@@ -1,6 +1,6 @@
-defmodule Omunculus.Model.Battery do
+defmodule Omunculus.Test.Battery do
   @moduledoc """
-  The bench model, the "count to 5" scenario: decides only
+  The scripted model of the matrix tests, "count to 5": decides only
   from what it can see in the assembled prompt — the cards under
   `## Tools`, the presence of `## Work` and `## Results`, the text under
   `## Last comment` and the agent's own first line — opening the work with `work`
