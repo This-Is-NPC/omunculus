@@ -111,7 +111,7 @@ Singleton {
 
   Component.onCompleted: {
     if (socket === "" || project === "")
-      tell("OMUNCULUS_SOCKET and OMUNCULUS_PROJECT are not set; start through apps/kit/run console", true)
+      tell("this window was opened without a project to show", true)
     else
       check()
   }

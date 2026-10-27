@@ -69,7 +69,7 @@ Singleton {
 
   Component.onCompleted: {
     if (socket === "")
-      tell("OMUNCULUS_SOCKET is not set; start through apps/kit/run mailbox", true)
+      tell("this window was opened without a server to reach", true)
     else
       sweep()
   }
