@@ -98,7 +98,7 @@ description = "Check the experimental steward recovery tool contracts"
 run = "scripts/check-course-recovery"
 
 [tasks."eval:recovery"]
-description = "Measure steward recovery against a frozen hybrid coordination checkpoint"
+description = "Measure steward recovery against a frozen coordination checkpoint"
 run = "scripts/eval-recovery"
 usage = '''
 flag "--source <folder>" help="Result folder containing the frozen coordination checkpoint" required=#true

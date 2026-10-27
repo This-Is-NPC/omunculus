@@ -84,7 +84,7 @@ defmodule EquivalentExchange.Recovery do
       [
         "# Steward recovery experiment",
         "",
-        "Frozen hybrid coordination checkpoint; no client answer or deployment is executed.",
+        "Frozen coordination checkpoint; no client answer or deployment is executed.",
         "",
         "| Arm | Trial | Outcome | Model responses | Steward responses | USD | Seconds |",
         "|---|---:|---|---:|---:|---:|---:|"
