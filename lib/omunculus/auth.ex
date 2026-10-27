@@ -132,8 +132,8 @@ defmodule Omunculus.Auth do
   defp refresh_oauth(store, provider_id, provider, record) do
     refresh_token = Map.get(record, "refresh")
 
-    if is_binary(refresh_token) and refresh_token != "" do
-      token_url = refresh_token_url(provider)
+    if is_binary(refresh_token) and refresh_token != "" and is_map(provider.refresh) do
+      token_url = provider.refresh.token_url
       client_id = provider.client_id
 
       case Req.post(token_url,
@@ -160,9 +160,6 @@ defmodule Omunculus.Auth do
       {:error, {:auth, :not_logged_in, provider_id}}
     end
   end
-
-  defp refresh_token_url(%{refresh: %{token_url: url}}) when is_binary(url), do: url
-  defp refresh_token_url(%{token_url: url}), do: url
 
   defp refresh_tool(config, store, provider_id, %{refresh: refresh_name} = _provider, record) do
     catalog = Catalog.discover(config.tools, config.mcp, nil)

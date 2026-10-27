@@ -55,6 +55,7 @@ defmodule Omunculus.Tools.LoginTest do
       kind = "oauth-code"
       authorize_url = "http://localhost/authorize"
       token_url = "http://127.0.0.1:#{server.port}/token"
+      refresh = { token_url = "http://127.0.0.1:#{server.port}/token" }
       client_id = "client"
       scopes = ["read"]
       pkce = false

@@ -117,6 +117,7 @@ defmodule Omunculus.AuthTest do
                  kind = "oauth-code"
                  authorize_url = "http://localhost/authorize"
                  token_url = "http://localhost/token"
+                 refresh = { token_url = "http://localhost/token" }
                  client_id = "client"
                  scopes = ["read"]
                  pkce = false
@@ -135,6 +136,37 @@ defmodule Omunculus.AuthTest do
              )
 
     assert {:error, {:auth, :not_logged_in, "oauth"}} = Auth.credential(config, "oauth")
+  end
+
+  test "a refresh table goes with a credential that keeps a refresh token", %{dir: dir} do
+    provider = fn refresh, credential_refresh ->
+      auth_toml(".auth.json", """
+      [auth.oauth]
+      kind = "oauth-code"
+      authorize_url = "http://localhost/authorize"
+      token_url = "http://localhost/token"
+      #{refresh}
+      client_id = "client"
+      scopes = ["read"]
+      pkce = false
+
+      [auth.oauth.callback]
+      host = "127.0.0.1"
+      port = 9876
+      path = "/cb"
+
+      [auth.oauth.credential]
+      access = "access_token"
+      expires = "expires_in"
+      #{credential_refresh}
+      """)
+    end
+
+    assert {:error, {:auth, "oauth", {:missing, :refresh}}} =
+             load(dir, provider.("", ~s(refresh = "refresh_token")))
+
+    assert {:error, {:auth, "oauth", {:invalid, :refresh}}} =
+             load(dir, provider.(~s(refresh = { token_url = "http://localhost/token" }), ""))
   end
 
   test "put writes store mode 0600 and logout deletes", %{dir: dir} do
@@ -193,6 +225,7 @@ defmodule Omunculus.AuthTest do
                  kind = "oauth-code"
                  authorize_url = "http://localhost/authorize"
                  token_url = "http://127.0.0.1:#{server.port}/token"
+                 refresh = { token_url = "http://127.0.0.1:#{server.port}/token" }
                  client_id = "client"
                  scopes = ["read"]
                  pkce = false

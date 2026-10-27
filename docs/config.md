@@ -342,6 +342,16 @@ through to a stored login; a password kept by omapass is
 names). Credentials are the JSON file, mode 0600, not the project SQLite.
 `login` and `logout` write that file.
 
+An `oauth-code` provider exchanges the login code at `token_url`. When its
+`credential` keeps a refresh token (`credential.refresh`), the provider
+names where that token is refreshed in `refresh.token_url`; loading refuses
+one without the other:
+
+```toml
+credential = { access = "access_token", refresh = "refresh_token", expires = "expires_in" }
+refresh = { token_url = "https://console.anthropic.com/v1/oauth/token" }
+```
+
 ## Agents, policy, workflow
 
 ```toml

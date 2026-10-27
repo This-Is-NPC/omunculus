@@ -1930,7 +1930,8 @@ defmodule Omunculus.Config do
              {:ok, callback} <- parse_auth_callback(id, callback_raw),
              {:ok, credential} <- parse_auth_credential(id, credential_raw),
              {:ok, authorize_params} <- auth_params_map(authorize_params),
-             {:ok, refresh} <- parse_auth_refresh(refresh_raw) do
+             {:ok, refresh} <- parse_auth_refresh(refresh_raw),
+             :ok <- refresh_matches_credential(refresh, credential) do
           {:ok,
            %{
              kind: "oauth-code",
@@ -2020,6 +2021,12 @@ defmodule Omunculus.Config do
   end
 
   defp parse_auth_refresh(_data), do: {:error, {:invalid, :refresh}}
+
+  # A credential that keeps a refresh token names where it is refreshed, and only it.
+  defp refresh_matches_credential(nil, %{refresh: _}), do: {:error, {:missing, :refresh}}
+  defp refresh_matches_credential(nil, _credential), do: :ok
+  defp refresh_matches_credential(_refresh, %{refresh: _}), do: :ok
+  defp refresh_matches_credential(_refresh, _credential), do: {:error, {:invalid, :refresh}}
 
   defp auth_string(data, key) do
     case Map.get(data, key) do
