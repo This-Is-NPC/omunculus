@@ -82,7 +82,8 @@ CLIs. The database, page cache and all BEAM memory count against the budget.
 
 `bench/results/` holds only the latest run and is gitignored.
 A new run replaces that result. To keep a separate measurement, pass
-`--output NEW_DIRECTORY` explicitly.
+`--output NEW_DIRECTORY` explicitly. `NEW_DIRECTORY` is a placeholder for the
+directory that receives the new result.
 Binaries and build caches live in `_build/bench/native/`.
 
 Measurement files:
