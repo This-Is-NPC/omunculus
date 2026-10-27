@@ -40,6 +40,28 @@ defmodule Omunculus.EvalProjectTest do
     refute get_in(base, ["eval", "entry_agent"])
   end
 
+  test "course recovery's routed tools keep the builtins' contract and run them after the route" do
+    for name <- ~w(ask escalate request_access) do
+      {:ok, builtin} = Omunculus.Tool.Manifest.load("priv/tools/#{name}/tool.toml")
+
+      {:ok, routed} =
+        Omunculus.Tool.Manifest.load("packs/course-recovery/tools/#{name}/tool.toml")
+
+      {:ok, step} =
+        Omunculus.Tool.Manifest.load("packs/course-recovery/tools/route_#{name}_step/tool.toml")
+
+      for field <- ~w(triggers description tags groups parameters)a,
+          do: assert(Map.fetch!(routed, field) == Map.fetch!(builtin, field), "#{name} #{field}")
+
+      assert routed.chains == [step.name]
+      assert Enum.map(routed.views, & &1.key) == ["events"]
+
+      for field <- ~w(module chains then views)a,
+          do:
+            assert(Map.fetch!(step, field) == Map.fetch!(builtin, field), "#{step.name} #{field}")
+    end
+  end
+
   test "a hybrid agency overrides imported coordinators and keeps workers on the default model" do
     dir = Fixtures.tmp_dir()
     coordinators = Map.new(~w(sales seller administrator design-lead), &{&1, "haiku"})
