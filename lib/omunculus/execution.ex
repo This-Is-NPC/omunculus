@@ -49,8 +49,7 @@ defmodule Omunculus.Execution do
     with {:ok, handle} <- start(command, policy, self(), ref),
          :ok <- write(handle, input),
          :ok <- close_input(handle) do
-      deadline = System.monotonic_time(:millisecond) + policy.limits.timeout_ms
-      collect(handle, deadline, "", "")
+      collect(handle, Policy.deadline(policy), "", "")
     end
   end
 
