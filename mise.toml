@@ -12,6 +12,8 @@ MIX_REBAR3 = "rebar3"
 [tasks."benchmark:build"]
 description = "Build the linear benchmark, harness release and master Rust stub"
 run = "scripts/benchmark-build"
+sources = ["bench/lib/**/*.ex", "bench/runner/Cargo.*", "bench/runner/src/**/*.rs", "bench/stub/Cargo.*", "bench/stub/src/**/*.rs", "lib/**/*.ex", "priv/**/*", "mix.exs", "mix.lock", "mise.toml", "scripts/benchmark-build"]
+outputs = ["_build/bench/native/stub/release/benchmark_stub", "_build/bench/native/runner/release/capacity_benchmark", "_build/bench/rel/benchmark/bin/benchmark", "_build/bench/native/build.json"]
 
 [tasks."benchmark:check"]
 description = "Test the Rust benchmark controller and compile the BEAM driver"
