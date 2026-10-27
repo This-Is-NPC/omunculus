@@ -1,8 +1,8 @@
 # Design briefing: <client name>
 
 <!-- The briefing the designer writes in design/briefing.md before any
-design: labels in English, the client's words in Portuguese. Change this
-file to change the briefing or the rounds included. -->
+design: labels in English, the client's words in the language they write in.
+Change this file to change the briefing or the rounds included. -->
 
 Rounds of revision included: 2
 

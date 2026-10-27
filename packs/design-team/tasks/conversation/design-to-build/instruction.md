@@ -1,1 +1,1 @@
-Oi! Quero um site pra minha confeitaria, mas antes quero ver como ficaria.
+Hi! I want a website for my bakery, but first I want to see how it would look.

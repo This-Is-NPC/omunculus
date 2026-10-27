@@ -1,6 +1,6 @@
 {
   "outcome": "answer",
-  "report": "O site da Doce Ana está no ar, com as quatro páginas e o botão do WhatsApp.",
+  "report": "The Doce Ana site is live, with the four pages and the WhatsApp button.",
   "works": [
     {
       "title": "Doce Ana site",
@@ -68,32 +68,32 @@
     {
       "id": "p1",
       "parent_id": "w6",
-      "title": "page: inicio",
-      "goal": "Plan item page: inicio",
+      "title": "page: home",
+      "goal": "Plan item page: home",
       "assignee": "design-reviewer",
       "state": "done"
     },
     {
       "id": "p2",
       "parent_id": "w6",
-      "title": "page: cardapio",
-      "goal": "Plan item page: cardapio",
+      "title": "page: menu",
+      "goal": "Plan item page: menu",
       "assignee": "design-reviewer",
       "state": "done"
     },
     {
       "id": "p3",
       "parent_id": "w6",
-      "title": "page: sobre",
-      "goal": "Plan item page: sobre",
+      "title": "page: about",
+      "goal": "Plan item page: about",
       "assignee": "design-reviewer",
       "state": "done"
     },
     {
       "id": "p4",
       "parent_id": "w6",
-      "title": "page: contato",
-      "goal": "Plan item page: contato",
+      "title": "page: contact",
+      "goal": "Plan item page: contact",
       "assignee": "design-reviewer",
       "state": "done"
     }
@@ -101,11 +101,11 @@
   "conversation": [
     [
       "person",
-      "Oi! Quero um site pra minha confeitaria, mas antes quero ver como ficaria."
+      "Hi! I want a website for my bakery, but first I want to see how it would look."
     ],
     [
       "agent",
-      "O site está no ar."
+      "The site is live."
     ]
   ],
   "first_run_made_work": false,

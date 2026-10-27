@@ -3,14 +3,14 @@
 ## base
 - layout
 
-## page: inicio
+## page: home
 - home
 
-## page: cardapio
+## page: menu
 - menu
 
-## page: sobre
+## page: about
 - about
 
-## page: contato
+## page: contact
 - contact

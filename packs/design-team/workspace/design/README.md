@@ -21,7 +21,7 @@ work from `handoff.md` once the client and the owner approve it.
 A text the client has not sent is a short suggestion in the briefing's
 tone, only rearranging what the client said and adding no fact of its
 own, marked `class="suggestion"` in the page and listed in `handoff.md`
-as texto sugerido, a confirmar; the interface's own labels are not
+as suggested text, to confirm; the interface's own labels are not
 suggestions. `system.css` shows the mark only on preview pages (`body
 class="preview"`), so the built site keeps the class and no mark; a photo or logo the client owes is a line
 drawing in inline SVG, captioned with what is owed. Names, prices, dates,

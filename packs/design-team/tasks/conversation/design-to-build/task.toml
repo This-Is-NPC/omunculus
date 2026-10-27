@@ -19,7 +19,7 @@ decision = "approve"
 
 [person]
 facts = """
-Your bakery is Doce Ana, in Campinas, Brazil. Orders come by phone and get lost; you want clients to find the menu and order by WhatsApp. You decide alone, have no deadline and think of spending up to R$ 2.000.
+Your bakery is Doce Ana, in Campinas, Brazil. Orders come by phone and get lost; you want clients to find the menu and order by WhatsApp. You decide alone, have no deadline and think of spending up to R$ 2,000.
 You want a simple site with four pages: home, menu, about and contact, and a WhatsApp button.
 Menu: brigadeiro cake R$ 85, carrot cake R$ 60, box of 12 brigadeiros R$ 36.
 About: Ana has baked since 2009; everything is made to order.
@@ -27,6 +27,6 @@ Contact: WhatsApp (19) 99876-5432; orders at least two days ahead.
 You have no logo and no photos. You like warm colours, brown and cream; the tone is homely, sweet and simple.
 Before deciding anything, you want to see how the site would look.
 The first time you are shown a preview, you ask for one change: the WhatsApp button bigger and green. When you are shown it with that change, you approve the design.
-When you are given the price of R$ 1.500 for the four pages, you accept it.
+When you are given the price of R$ 1,500 for the four pages, you accept it.
 When the site is ready in homologation, you approve it going to production.
 """
