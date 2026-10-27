@@ -51,7 +51,6 @@ defmodule Omunculus.Store do
   defdelegate latest_run(conn), to: View
   defdelegate unread_inbox(conn, work_id), to: View
   defdelegate received_inbox(conn, run_id), to: View
-  defdelegate counter(conn), to: View
   defdelegate descends?(conn, work_id, ancestor_id), to: View
   defdelegate replay(conn, scope), to: View
   defdelegate attachments(conn, conversation_id), to: View

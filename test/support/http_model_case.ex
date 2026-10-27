@@ -10,6 +10,7 @@ defmodule Omunculus.HttpModelCase do
   use ExUnit.CaseTemplate
 
   alias Omunculus.{ExecutionPolicyFixtures, Fixtures, OpenAIStub, Project, Run, Store}
+  alias Omunculus.Test.CounterTool
   alias Omunculus.Tools.Out
 
   using opts do
@@ -185,11 +186,12 @@ defmodule Omunculus.HttpModelCase do
     tools = ["counter"]
     """)
 
+    CounterTool.write(dir)
     project = Fixtures.open_project(dir)
 
     try do
       {:ok, run} = Run.open(project, Fixtures.opening(nil))
-      {:ok, 1} = Store.counter(project.conn)
+      1 = CounterTool.value(project.conn)
       {:ok, events} = Store.replay(project.conn, {:run, run.id})
       events
     after

@@ -4,6 +4,7 @@ defmodule Omunculus.RunTest do
 
   alias Omunculus.{CLI, Fixtures, Harness, Id, Operations, Project, Run, Store}
   alias Omunculus.Store.Query
+  alias Omunculus.Test.CounterTool
   alias Omunculus.Tools.Out
 
   import Omunculus.Fixtures,
@@ -562,6 +563,7 @@ defmodule Omunculus.RunTest do
     tools = ["break", "catalog", "continue", "delegate", "end", "fs.read", "reply", "store", "work", "counter"]
     """)
 
+    CounterTool.write(dir)
     project = open_project(dir)
     test_pid = self()
 

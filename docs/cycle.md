@@ -79,7 +79,7 @@ the author's.
 ## Opening a run
 
 ```text
-omunculus send "count to 5"
+omunculus send "summarize README.md"
     emit prompt → PROMPTS(message) + EVENTS(prompt)
     open run → EVENTS(start-run) (prompt_id still empty)
     harness dispatches assemble (name in agents.<x>.assemble or [policy] assemble)
@@ -434,7 +434,7 @@ sequenceDiagram
     participant Sandbox
     participant Database
 
-    User->>Harness: omunculus send "count to 5"
+    User->>Harness: omunculus send "summarize README.md"
     Harness->>Database: open the store
     Harness->>Tool: send (trigger = cli)
     Tool-->>Harness: emit prompt
@@ -447,10 +447,10 @@ sequenceDiagram
     Tool-->>Harness: assembled text
     Harness->>Database: PROMPTS(assembled) + RUNS.prompt_id
     Harness->>Sandbox: model code, tools.* in the sandbox
-    Sandbox->>Harness: tools.counter({})
-    Harness->>Tool: counter (trigger = model)
+    Sandbox->>Harness: tools.read({path: "README.md"})
+    Harness->>Tool: read (trigger = model)
     Tool-->>Harness: output
-    Harness->>Database: EVENTS(tool: counter)
+    Harness->>Database: EVENTS(tool: read)
     Sandbox-->>Harness: result
     Harness->>Database: EVENTS(model), EVENTS(end-run)
     Note over Harness: follow_up — nothing asked for another run

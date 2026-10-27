@@ -374,7 +374,7 @@ defmodule Omunculus.ConfigTest do
     assert %{"delivery" => [_to_do, review]} = workflows
     assert review.name == "review"
     assert review.agent == "reviewer"
-    assert review.ceiling.deny == ["fs.write", "bench", "sandbox.write"]
+    assert review.ceiling.deny == ["fs.write", "sandbox.write"]
   end
 
   test "execution configuration is required", %{dir: dir} do

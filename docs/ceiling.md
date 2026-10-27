@@ -104,8 +104,8 @@ grants(W) = W.grants ∪ grants(W.parent) if there is a parent
 ```
 
 Not sideways, not to a cousin, not another `work_id`. `deny` on any layer
-still cuts. A grant of `counter` does not pierce a `review` stage that
-lists `deny = ["counter"]`.
+still cuts. A grant of `write` does not pierce a `review` stage that
+lists `deny = ["fs.write"]`.
 
 ## Sandbox resources
 

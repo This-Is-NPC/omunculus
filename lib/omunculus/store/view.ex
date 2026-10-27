@@ -7,8 +7,8 @@ defmodule Omunculus.Store.View do
   comments of a request or an inbox entry, a work's last closed run and
   the run that opened a request — each with the message that opened it and
   every event it recorded — the events of a run, the most recent run, the
-  unread inbox of the project or of a work, the pending requests received by
-  a depth-0 run in its conversation, and the bench counter. Also how
+  unread inbox of the project or of a work, and the pending requests
+  received by a depth-0 run in its conversation. Also how
   many of a work's latest closed runs in a row lack `end`, the depth of a
   work by walking `parent_id`, whether a work descends from another, and
   replay of `events` for a project, run, work, request, inbox or
@@ -289,15 +289,6 @@ defmodule Omunculus.Store.View do
     end
   end
 
-  @doc "The bench counter: `counter` calls minus `counter_decrement` calls."
-  @spec counter(Omunculus.Store.Connection.t()) :: {:ok, integer}
-  def counter(conn) do
-    with {:ok, events} <-
-           Query.all(conn, "SELECT body FROM events WHERE type = 'tool' ORDER BY sequence") do
-      {:ok, counter_value(events)}
-    end
-  end
-
   @spec work_depth(Omunculus.Store.Connection.t(), map) :: non_neg_integer
   def work_depth(_conn, %{parent_id: nil}), do: 0
 
@@ -404,16 +395,6 @@ defmodule Omunculus.Store.View do
          events: events
        })}
     end
-  end
-
-  defp counter_value(events) do
-    Enum.reduce(events, 0, fn %{body: body}, value ->
-      case Jason.decode(body) do
-        {:ok, %{"name" => "counter"}} -> value + 1
-        {:ok, %{"name" => "counter_decrement"}} -> value - 1
-        _ -> value
-      end
-    end)
   end
 
   defp request_origins(_conn, nil), do: {:ok, nil}

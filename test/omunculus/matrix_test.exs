@@ -7,15 +7,16 @@ defmodule Omunculus.MatrixTest do
   use ExUnit.Case, async: true
 
   alias Omunculus.{CLI, Config, Fixtures, Project, Store}
+  alias Omunculus.Test.CounterTool
   alias Omunculus.Store.Query
 
   import Omunculus.Fixtures, only: [open_project: 1]
 
-  @concierge_d0_tools ~w(bench break continue done end fs.read sandbox.network store work)
+  @concierge_d0_tools ~w(counter break continue done end fs.read sandbox.network store work)
   @concierge_d1_tools ~w(break catalog continue delegate done end fs.read sandbox.network store work)
   @concierge_d2_tools ~w(catalog fs.read sandbox.network sequence store)
-  @worker_tools ~w(bench break comment continue done end fs.read notify request_access sandbox.network)
-  @worker_d2_tools ~w(bench comment continue done end fs.read notify request_access sandbox.network)
+  @worker_tools ~w(counter break comment continue done end fs.read notify request_access sandbox.network)
+  @worker_d2_tools ~w(counter comment continue done end fs.read notify request_access sandbox.network)
   @manager_tools ~w(fs.read sandbox.network sequence store)
 
   @concierge_text "You are the project concierge. Read the message, use the tools in `tools.*` when you need them, and respond."
@@ -67,7 +68,7 @@ defmodule Omunculus.MatrixTest do
       [workflows.delivery]
       steps = [
         { name = "to_do", agent = "concierge" },
-        { name = "review", agent = "concierge", deny = ["bench"] },
+        { name = "review", agent = "concierge", deny = ["counter"] },
       ]
 
       [policy]
@@ -88,7 +89,7 @@ defmodule Omunculus.MatrixTest do
       [workflows.delivery]
       steps = [
         { name = "to_do", agent = "worker" },
-        { name = "review", agent = "concierge", deny = ["bench"] },
+        { name = "review", agent = "concierge", deny = ["counter"] },
       ]
 
       [policy.depth.0.overrides.work]
@@ -114,7 +115,7 @@ defmodule Omunculus.MatrixTest do
       [workflows.delivery]
       steps = [
         { name = "to_do", agent = "worker" },
-        { name = "review", agent = "manager", deny = ["bench"] },
+        { name = "review", agent = "manager", deny = ["counter"] },
       ]
 
       [policy.depth.1.overrides.work]
@@ -167,15 +168,11 @@ defmodule Omunculus.MatrixTest do
 
   defp run_cell(dir, depth, hook?, workflow?) do
     write_config(dir, depth, workflow?)
+    CounterTool.write(dir)
     if hook?, do: add_observer_hook(dir)
 
     # The observer is at depth 0 too: the person says whom they talk to.
     assert {:ok, ""} = CLI.run(["send", "--agent", "concierge", "count to 5"], dir)
-  end
-
-  defp counter_value(conn) do
-    assert {:ok, value} = Store.counter(conn)
-    Integer.to_string(value)
   end
 
   defp counted_work(conn) do
@@ -192,7 +189,7 @@ defmodule Omunculus.MatrixTest do
   end
 
   defp assert_counted_to_five(_dir, conn) do
-    assert counter_value(conn) == "5"
+    assert CounterTool.value(conn) == 5
     assert {:ok, []} = Query.all(conn, "SELECT * FROM runs WHERE via = 'retry'")
     counted_work(conn)
   end

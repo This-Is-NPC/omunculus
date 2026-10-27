@@ -204,7 +204,6 @@ argument of the call.
 | `requests` | the request named by the `request_id` argument, or the call's request | `from` |
 | `prompts` | `relation = "message"`: the prompt that opened the run; `"assembled"`: the assembled prompt of the run named by `from` (default `args.run`, then `latest_run`) | `relation` (required); `from` for `assembled` |
 | `inbox` | unread notifications (default), or pending canonical requests received by the current depth-0 agent in its conversation, grouped by conversation | `relation = "unread"` with optional `from = ["work"]`; `relation = "received"` from `run` |
-| `counter` | the value the `counter` tools keep in `EVENTS` | |
 | `catalog` | the cards of the run's effective `model` tools, each marked `pinned` or not | |
 | `workspaces` | every configured workspace, its `root` and whether it is the call's | |
 | `agents` | the agents and workflows a new work may name, below the run's work (depth 0 without one): the agents not `workflow_only`, none when that depth requires workflows, and each workflow as `{workflow, stages, required}` | `include = ["tools"]` gives each agent as `{name, tools}`, with the model tools its own ceiling has at that depth |
@@ -432,7 +431,6 @@ catalog   = tool_search
 skills    = skill, and every skill.<name> of [skills] paths
 cli       = send, inbox, inbox_read, prompt, config, configure, model_test, omapass, overview, tools, pack, login, logout, cursor_login, preset
 setup     = config, overview, propose_config, propose_pack
-bench     = counter, counter_decrement
 assembly  = assemble
 ```
 

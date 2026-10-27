@@ -44,7 +44,6 @@ defmodule Omunculus.Tool.Views do
     `relation = "received"`, from `run`, reads pending requests addressed
     to that depth-0 agent in its conversation, grouped by conversation,
     each with its canonical question and recursively linked origins.
-  - `counter`: the bench counter of the project.
   - `catalog`, `workspaces`, `agents`, `paths`, `grant_scopes`, `skills`:
     computed by the harness for the call, each only when a view asks for
     it, through a function of the view in `computed`. `agents` takes
@@ -205,7 +204,7 @@ defmodule Omunculus.Tool.Views do
          do: {:ok, %{spec | include: include || []}}
   end
 
-  defp source_spec(source, table, spec) when source in ["counter" | @computed] do
+  defp source_spec(source, table, spec) when source in @computed do
     with :ok <- only_keys(table, []), do: {:ok, spec}
   end
 
@@ -327,8 +326,6 @@ defmodule Omunculus.Tool.Views do
 
   defp read(_conn, %{source: source} = spec, scope) when source in @computed,
     do: {:ok, Map.fetch!(scope.computed, source).(spec)}
-
-  defp read(conn, %{source: "counter"}, _scope), do: Store.counter(conn)
 
   defp read(conn, %{source: "inbox", relation: "unread", from: []}, _scope),
     do: Store.unread_inbox(conn, nil)
