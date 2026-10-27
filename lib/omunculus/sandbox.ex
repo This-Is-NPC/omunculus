@@ -5,7 +5,7 @@ defmodule Omunculus.Sandbox do
   """
 
   alias Omunculus.Execution
-  alias Omunculus.Execution.{Command, Policy, Session}
+  alias Omunculus.Execution.{Command, Policy, Program, Session}
   alias Omunculus.Path, as: FilesystemPath
 
   @spec run(
@@ -60,15 +60,6 @@ defmodule Omunculus.Sandbox do
   defp ended(:timeout), do: {:error, :sandbox_timeout}
 
   defp resolve_program(program, policy) do
-    policy.runtimes
-    |> Enum.map(&Path.join([&1, "bin", program]))
-    |> Enum.find_value({:error, :deno_not_found}, fn path ->
-      with {:ok, canonical} <- FilesystemPath.canonical(path),
-           true <- File.regular?(canonical) do
-        {:ok, canonical}
-      else
-        _ -> false
-      end
-    end)
+    with :error <- Program.runtime(program, policy), do: {:error, :deno_not_found}
   end
 end

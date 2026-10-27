@@ -5,6 +5,7 @@ defmodule Omunculus.Execution.Policy do
   """
 
   alias Omunculus.{Ceiling, Config}
+  alias Omunculus.Execution.Program
   alias Omunculus.Path, as: FilesystemPath
 
   @enforce_keys [
@@ -323,13 +324,7 @@ defmodule Omunculus.Execution.Policy do
   end
 
   defp canonical_directory(path, label) do
-    with {:ok, canonical} <- FilesystemPath.canonical(path),
-         true <- File.dir?(canonical) do
-      {:ok, canonical}
-    else
-      false -> {:error, {label, :not_a_directory}}
-      {:error, reason} -> {:error, {label, reason}}
-    end
+    with {:error, reason} <- Program.directory(path), do: {:error, {label, reason}}
   end
 
   defp protected_paths(config) do

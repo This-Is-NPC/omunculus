@@ -6,8 +6,7 @@ defmodule Omunculus.Mcp do
   """
 
   alias Omunculus.Execution
-  alias Omunculus.Execution.{Command, Policy, Session}
-  alias Omunculus.Path, as: FilesystemPath
+  alias Omunculus.Execution.{Command, Policy, Program, Session}
 
   @type server :: Omunculus.Config.mcp_server()
   @type secrets :: %{String.t() => String.t()}
@@ -152,36 +151,21 @@ defmodule Omunculus.Mcp do
   end
 
   defp executable(program, policy) do
-    if Path.type(program) == :absolute or String.contains?(program, "/") do
-      external_executable(program, policy)
-    else
-      runtime_executable(program, policy)
-    end
-  end
-
-  defp external_executable(program, policy) do
-    with {:ok, executable} <- canonical_file(program),
-         true <- Policy.readable?(policy, executable) do
-      {:ok, executable}
-    else
-      false -> {:error, :command_outside_policy}
-      {:error, _reason} = error -> error
-    end
-  end
-
-  defp runtime_executable(program, policy) do
-    policy.runtimes
-    |> Enum.map(&Path.join([&1, "bin", program]))
-    |> Enum.find_value({:error, {:mcp, :not_found}}, fn path ->
-      case canonical_file(path) do
-        {:ok, executable} -> {:ok, executable}
-        {:error, _reason} -> false
+    if Program.path?(program) do
+      with {:ok, executable} <- canonical_file(program),
+           true <- Policy.readable?(policy, executable) do
+        {:ok, executable}
+      else
+        false -> {:error, :command_outside_policy}
+        {:error, _reason} = error -> error
       end
-    end)
+    else
+      with :error <- Program.runtime(program, policy), do: {:error, {:mcp, :not_found}}
+    end
   end
 
   defp implementation_root(program) do
-    if Path.type(program) == :absolute or String.contains?(program, "/") do
+    if Program.path?(program) do
       case canonical_file(program) do
         {:ok, executable} -> [Path.dirname(executable)]
         {:error, _reason} -> []
@@ -192,11 +176,9 @@ defmodule Omunculus.Mcp do
   end
 
   defp canonical_file(path) do
-    with {:ok, canonical} <- FilesystemPath.canonical(path),
-         true <- File.regular?(canonical) do
-      {:ok, canonical}
-    else
-      false -> {:error, {:mcp, :not_found}}
+    case Program.file(path) do
+      {:ok, _executable} = found -> found
+      {:error, :not_a_file} -> {:error, {:mcp, :not_found}}
       {:error, reason} -> {:error, {:mcp, reason}}
     end
   end

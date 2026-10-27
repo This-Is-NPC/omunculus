@@ -14,8 +14,7 @@ defmodule Omunculus.Model.Command do
   """
 
   alias Omunculus.Execution
-  alias Omunculus.Execution.{Command, Policy, Session}
-  alias Omunculus.Path, as: FilesystemPath
+  alias Omunculus.Execution.{Command, Policy, Program, Session}
   alias Omunculus.Prompt
 
   @spec new(map) ::
@@ -126,23 +125,10 @@ defmodule Omunculus.Model.Command do
   defp external_command(_argv, _policy), do: {:error, {:command, :invalid_command}}
 
   defp executable(program, policy) do
-    if Path.type(program) == :absolute or String.contains?(program, "/") do
-      case FilesystemPath.canonical(program) do
-        {:ok, path} ->
-          if File.regular?(path), do: {:ok, path}, else: {:error, :command_not_found}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+    if Program.path?(program) do
+      with {:error, :not_a_file} <- Program.file(program), do: {:error, :command_not_found}
     else
-      policy.runtimes
-      |> Enum.map(&Path.join([&1, "bin", program]))
-      |> Enum.find_value({:error, :command_not_found}, fn path ->
-        case FilesystemPath.canonical(path) do
-          {:ok, executable} -> {:ok, executable}
-          {:error, _reason} -> false
-        end
-      end)
+      with :error <- Program.runtime(program, policy), do: {:error, :command_not_found}
     end
   end
 end

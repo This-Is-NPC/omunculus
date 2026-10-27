@@ -14,7 +14,7 @@ defmodule Omunculus.Execution.Bubblewrap do
 
   alias Omunculus.Id
   alias Omunculus.Path, as: FilesystemPath
-  alias Omunculus.Execution.{Command, Policy}
+  alias Omunculus.Execution.{Command, Policy, Program}
 
   @minimum_version {0, 8, 0}
 
@@ -171,10 +171,10 @@ defmodule Omunculus.Execution.Bubblewrap do
 
   defp validate_command(%Command{} = command, policy) do
     with true <- Command.valid?(command),
-         {:ok, program} <- canonical_file(command.program),
+         {:ok, program} <- Program.file(command.program),
          true <- Enum.any?(policy.runtimes, &FilesystemPath.within?(&1, program)),
          cwd = command.cwd || policy.workspace.root,
-         {:ok, cwd} <- canonical_directory(cwd),
+         {:ok, cwd} <- Program.directory(cwd),
          true <- readable_directory?(policy, cwd) do
       {:ok, %{command | program: program, cwd: cwd}}
     else
@@ -188,26 +188,6 @@ defmodule Omunculus.Execution.Bubblewrap do
   defp readable_directory?(policy, path) do
     Policy.readable?(policy, path) or
       Enum.any?(policy.runtimes, &FilesystemPath.within?(&1, path))
-  end
-
-  defp canonical_file(path) do
-    with {:ok, canonical} <- FilesystemPath.canonical(path),
-         true <- File.regular?(canonical) do
-      {:ok, canonical}
-    else
-      false -> {:error, :not_a_file}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp canonical_directory(path) do
-    with {:ok, canonical} <- FilesystemPath.canonical(path),
-         true <- File.dir?(canonical) do
-      {:ok, canonical}
-    else
-      false -> {:error, :not_a_directory}
-      {:error, reason} -> {:error, reason}
-    end
   end
 
   defp temporary_dir do

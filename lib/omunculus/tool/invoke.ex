@@ -13,7 +13,7 @@ defmodule Omunculus.Tool.Invoke do
   """
 
   alias Omunculus.Execution
-  alias Omunculus.Execution.{Command, Policy}
+  alias Omunculus.Execution.{Command, Policy, Program}
   alias Omunculus.Mcp
   alias Omunculus.Path, as: FilesystemPath
   alias Omunculus.Tool.Manifest
@@ -110,10 +110,10 @@ defmodule Omunculus.Tool.Invoke do
   end
 
   defp executable(dir, program, policy) do
-    if Path.type(program) == :absolute or String.contains?(program, "/") do
+    if Program.path?(program) do
       tool_executable(dir, Path.expand(program, dir))
     else
-      runtime_executable(program, policy)
+      with :error <- Program.runtime(program, policy), do: {:error, :command_not_found}
     end
   end
 
@@ -128,33 +128,18 @@ defmodule Omunculus.Tool.Invoke do
     end
   end
 
-  defp runtime_executable(program, policy) do
-    policy.runtimes
-    |> Enum.map(&Path.join([&1, "bin", program]))
-    |> Enum.find_value({:error, :command_not_found}, fn path ->
-      case canonical_file(path) do
-        {:ok, executable} -> {:ok, executable}
-        {:error, _reason} -> false
-      end
-    end)
-  end
-
   defp canonical_directory(path) do
-    with {:ok, canonical} <- FilesystemPath.canonical(path),
-         true <- File.dir?(canonical) do
-      {:ok, canonical}
-    else
-      false -> {:error, :command_directory}
+    case Program.directory(path) do
+      {:ok, _root} = found -> found
+      {:error, :not_a_directory} -> {:error, :command_directory}
       {:error, reason} -> {:error, {:command_directory, reason}}
     end
   end
 
   defp canonical_file(path) do
-    with {:ok, canonical} <- FilesystemPath.canonical(path),
-         true <- File.regular?(canonical) do
-      {:ok, canonical}
-    else
-      false -> {:error, :command_not_found}
+    case Program.file(path) do
+      {:ok, _executable} = found -> found
+      {:error, :not_a_file} -> {:error, :command_not_found}
       {:error, reason} -> {:error, {:command, reason}}
     end
   end
