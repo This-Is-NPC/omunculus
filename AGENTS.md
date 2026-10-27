@@ -1,274 +1,131 @@
-# Agent rules
+# Agent instructions
 
-This file is the contract for anyone (human or agent) changing a
-repository that uses it. It is self-contained: do not look up an
-external skill to commit, and do not invent a second toolchain
-beside mise.
+## Applicability
 
-The premises, mise rules, documentation rules, and commit rules below
-are **not** project-specific. Copy them as-is. Architecture, layout, and
-constraints of *this* tree live only under **This project**.
+Apply each instruction according to the request, the affected files, the
+project's interfaces, and the impact of the change. Perform a step only when
+it contributes to completing or verifying the task. Create supporting
+artifacts only when the work calls for them.
 
-## Premises
+Read `README.md` to understand the project, then follow the links relevant to
+the task. Project behavior, architecture, setup, and commands belong in the
+README and its linked documentation. Treat setup instructions as preparation
+for work that needs that environment, rather than a prerequisite for every
+request.
 
-- **Performance is a reason to change.** If a change is correct and
-  makes sense, do it even when the measured gain is 0.01 ms. Do not
-  skip a worthwhile optimisation because the delta is small. Measure
-  when the cost of being wrong is high; do not use "nobody can
-  perceive it" as a veto.
-- **Zero dead code.** Delete unused functions, types, imports, flags,
-  and files. Do not leave a replacement beside the thing it replaces.
-- **Zero duplicated code.** One implementation of a behaviour. Extract
-  or share rather than copy.
-- **Zero legacy code.** No compatibility shims, deprecated aliases,
-  dual paths, or "keep the old one until later" leftovers. Finish the
-  cutover in the same change that introduces the new path.
-- **Comments state the code.** A comment names what the next lines
-  do, or a constraint the type system cannot. It is not a tutorial,
-  a history, or a design essay.
-- **Documentation lives in `docs/`.** Guides, measurements, language
-  traps, and "how this is meant to be used" go there — not in
-  comments, not in commit messages as a substitute for a doc, and not
-  in this file except as rules.
-- **Clean up after every run.** A test, run, evaluation or benchmark
-  ends by removing what it started, when it passes and when it fails:
-  stop the processes, servers and environments it brought up; remove the
-  containers, images, volumes and networks it created; delete the build
-  caches, temporary files and scratch folders it wrote. Keep only the
-  result it was meant to produce. Nothing it started is left using disk,
-  CPU or memory.
-- **English only.** Code, comments, commit messages, `docs/`,
-  `README.md`, this file, mise task names and descriptions: English.
+## Development
 
-## Tooling: mise
+- Keep changes focused on the request. Preserve existing user changes.
+- Prefer simple solutions and one implementation of each behavior. Remove
+  code, imports, files, and obsolete paths made redundant by the change.
+- Complete replacements within the agreed scope, including affected callers
+  and documentation. Introduce abstractions when concrete uses justify them.
+- Treat performance improvements as worthwhile even when the gain is small.
+  Measure when evidence is needed to support the decision.
+- Keep comments short: explain constraints, intent, or behavior that needs
+  clarification. Put extended explanations and guides in `docs/`.
+- Write code, comments, documentation, task descriptions, and commits in
+  English.
+- Continue authorized work through implementation and relevant verification.
+  Resolve routine choices independently; ask when missing information changes
+  the intended outcome or scope.
 
-mise owns the toolchain and every project command. Pin tools in
-`mise.toml`. Run `mise install` before work. Invoke tools through
-mise (`mise exec -- …` or, once defined, `mise run <task>`). Do not
-call a system compiler or helper that is not the pinned one. Do not
-add a parallel runner (Make, npm scripts, ad-hoc shell wrappers)
-that duplicates a mise task.
+## Workflow and verification
 
-### Tasks
+- Choose verification according to the behavior changed and the consequences
+  of a mistake. Start with the narrowest useful check. Broaden coverage when
+  integration impact or remaining uncertainty warrants it.
+- For text changes, review accuracy, structure, and affected links. Run
+  documentation tooling when the change depends on generated output or other
+  rules enforced by that tooling.
+- For behavior changes, exercise the affected paths. Add regression coverage
+  for fixes when useful, proving that the check detects the original defect.
+  Use mutation checks or benchmarks when they provide necessary evidence.
+- Review experiments and design alternatives with the smallest working
+  demonstration that makes them assessable. Apply production verification
+  when integrating the chosen behavior.
+- Batch related edits before running checks. Repeat checks when new changes,
+  failures, or unresolved concerns justify another run.
+- Tests wait for observable state, output, or signals. Timeouts bound failure.
+- Isolate checks that could affect user settings, accounts, files, or running
+  services. Use disposable environments and synthetic fixtures where needed.
+- Clean up temporary processes, sessions, sockets, and files started by the
+  task, including after failure. Keep the intended results.
 
-Work lives in **scripts**, not in `mise.toml` bodies and not in
-`mise-tasks/`. Each script is one job. mise **consumes** those
-scripts: a `[tasks.name]` entry names the script, sets
-`description` / `depends` / `env` / `sources` / `outputs` /
-`usage` / `confirm`, and runs it. Git hooks and any other caller
-run the same file. Do not duplicate the job as inline `run =`
-shell, a file task, and a script.
+## Tooling and scripts
 
-- Put scripts under `scripts/`. Make them executable, with a
-  shebang. Prefer `MISE_PROJECT_ROOT` when the script must know
-  the repo root; otherwise relative paths from the project root
-  (mise sets cwd to the directory of `mise.toml`).
-- **Atomic:** one script, one responsibility. Compose larger work
-  with `depends` (may run in parallel) or a `run` **array** of
-  script invocations (sequential; a failure stops the rest,
-  `set -e` for `sh`/`bash`/`zsh`). Aggregators (`check`, `bench`,
-  `build`) only wire scripts together. The documented entry is
-  `mise run <name>`; a hook calls `scripts/<name>`, not a second
-  copy of the logic.
-- **Idempotent:** running the same script twice with the same
-  inputs leaves the tree in the same good state. Safe to re-run
-  from a hook, CI, or `mise run`.
-- Give every task a `description`. Use `alias` only when the short
-  name is used often. Confirm destructive tasks with `confirm`.
-- Declare `sources` and `outputs` when a task is skippable if
-  inputs have not changed (builds). Use `sources` alone with
-  `mise watch`.
-- Arguments: a `usage` spec on the TOML task. Values arrive as
-  `usage_*` environment variables. Do not use the deprecated Tera
-  `arg()` / `option()` / `flag()` helpers.
-- Do not add file tasks under `mise-tasks/` (or the other mise
-  task directories). Do not keep a TOML task and a file task for
-  the same name.
-- List and inspect with `mise tasks ls` and
-  `mise tasks info <name>`. Run with `mise run <name>`. Do not
-  tell the user to `mise exec` a one-off that already has a task.
-  Do not tell them to invoke `scripts/` when a task exists, except
-  from git hooks and other non-mise entry points that must call
-  the script directly.
+- Where the repository uses mise, keep it as the entry point for project
+  commands and pinned tools. Install tools only when the task requires them
+  and the required versions are unavailable.
+- Reuse existing tasks. Invoke pinned tools through mise when needed.
+- Keep executable task implementations in `scripts/`, with a shebang and one
+  responsibility per script. Make scripts safe to rerun with the same inputs.
+- Declare tasks in `mise.toml`, with descriptions and relevant dependencies,
+  environment, arguments, inputs, and outputs. Compose existing tasks or
+  scripts for aggregate commands.
+- Keep one implementation shared by mise, hooks, and other callers.
 
 ## Documentation
 
-Documentation is written for somebody using the project, one question
-at a time, and kept true by the same tools that build it.
+Write for someone using the project, one question at a time. Use short,
+concrete sentences, verified facts, and real command output. Identify
+placeholders and distinguish observed behavior, measurements, and inference.
 
-### The pages
+Use the following conventions when the corresponding content is needed.
+Follow existing equivalent pages and names when updating a repository.
 
-- `README.md` is the front door, written for somebody installing the
-  released program: what the project is in one paragraph, pictures of
-  it working, Install (the release's installer, never development
-  commands), Start here, the big ideas as short bold-led paragraphs
-  each linking its page, the interface (keys, with a picture), What it
-  does not do, Known limitations, What is broken (only while a defect
-  is known), one line sending contributors to the design page,
-  Requirements, license. Development and build commands live in the
-  design page, not here.
-- `docs/README.md` is the map: every page in the order somebody meets
-  it, one line each on the question it answers, the shortest useful
-  path, a "when you know what you want" table, and the conventions
-  every page shares.
-- `docs/how-to-*.md` holds one task per page. Each opens with
-  "**The question:**" and says whether it is enough on its own, then
-  "Before you start", then numbered steps, each with the command or
-  the action and its real output, and ends with what can go wrong and
-  where to go next. A page never explains a task that has its own page;
-  it links it.
-- `docs/screens.md` walks every screen in the order of use, with
-  pictures, keys, and the screens that have none. It says how its
-  pictures are made and what in them is pinned.
-- `docs/cli.md` is generated from the program's own command
-  definitions by a mise task, never edited by hand; `mise run check`
-  fails when it is stale.
-- `docs/what-does-not-work.md` exists only while a known defect is not
-  fixed: every such defect, numbered, each with **What happens.** and
-  **What to do in the meantime.**, and whether it was seen running or
-  read in the code, with a "What is broken" section in `README.md`
-  sampling it. No other page names a defect that is not there. When
-  the last defect is fixed, the page and the README section go; when a
-  known defect is left unfixed, both come back in the same change.
-- Limits of the platform or of a provider are not defects: `README.md`
-  lists them under "Known limitations", and each is said again on the
-  page where somebody meets it.
-- `docs/design.md` is for contributors: the model, the architecture,
-  state on disk, protocols, packaging, what it is and is not, what was
-  measured. Its sections are numbered and the numbers do not move: code
-  and pages cite them as `docs/design.md §N`.
+- `README.md` is the front door: purpose, installation of the released
+  program, first steps, key concepts, interface, requirements, limitations,
+  license, and links to detailed documentation and contributor instructions.
+- `docs/README.md` maps the documentation in reading order, with one line
+  explaining the question each page answers and a short recommended path.
+- `docs/how-to-*.md` answers one practical question per page. Open with
+  **The question:** and say whether the guide stands alone. Include
+  prerequisites, numbered steps with commands or actions and expected
+  results, troubleshooting, and links to next steps. Link to existing guides
+  for tasks they already explain.
+- `docs/design.md` serves contributors: model, architecture, state,
+  protocols, packaging, constraints, and measurements. Keep numbered section
+  identifiers stable when used as references. Development and build
+  instructions belong in contributor documentation.
+- `docs/screens.md` explains graphical screens in order of use, including
+  controls, navigation, and relevant illustrations.
+- A CLI reference documents commands, options, examples, and output.
+  Generate reference material from command definitions when supported, and
+  verify freshness when those definitions change.
+- `docs/what-does-not-work.md` tracks known defects while they remain open.
+  Each entry explains what happens, the available workaround, and the
+  evidence. Link it from the README and remove resolved entries. Document
+  platform and provider limitations in the README and relevant guides.
 
-### Pictures
+Update documentation alongside the behavior it describes. Keep affected
+links, images, and anchors valid. Create pages when there is useful content
+for their readers.
 
-Pictures in `docs/img` are generated from the real program by a mise
-task, against an isolated instance seeded with synthetic, versioned
-fixtures — never the developer's own data, accounts or keys. Name them
-`NN-<what>.png` in the order the screens page walks them. Look at every
-picture a change produces. A picture that cannot be generated says so,
-and where it came from.
+### Images
 
-### Discipline
+Use images when they help explain graphical interfaces and visual behavior
+relevant to the task. Generate captures with synthetic data, inspect the
+results, and update images affected by the change. Store documentation images
+under `docs/img/`. Record their source and generation method so they can be
+reproduced where practical.
 
-- The documentation changes in the same change as the behaviour it
-  describes: a new or changed command, screen, setting or defect
-  updates its pages, pictures and `docs/cli.md` in that change.
-- Facts come from the code or from running it. Outputs are real
-  outputs. What was measured is said to be measured; what was only
-  argued or read is said so in those words.
-- Plain, short sentences: say what happens and what to do. No
-  marketing, no promises of future work outside the defects page.
-- Placeholders are named as placeholders the first time they appear.
-- Every relative link, image and anchor resolves; `mise run check`
-  runs a link check that fails when one does not.
+## Delivery, commits, and pull requests
 
-## Commits (okt-task-commit)
-
-Agents draft and create commits. The human owns publication: **never
-`git push`**. When the tree is clean, say that a push is ready.
-
-These rules inline the okt-task-commit playbook, the Conventional
-Commits 1.0.0 grammar used with it, and the conventional-commits law.
-There is nothing extra to fetch.
-
-### Procedure
-
-1. Read `git status` and `git diff --cached`. If nothing is staged,
-   read the unstaged diff (`git diff` and untracked files).
-2. Group hunks into **one intent per commit**. Split mixed trees with
-   non-interactive staging only: `git add <path>` and
-   `git restore --staged <path>`. Do not use `git add -p` or
-   `git add -i`.
-3. Derive **scope** from the paths touched (package, directory, or
-   feature slug).
-4. Draft the message (grammar below). Show every draft to the user
-   **before** `git commit`.
-5. Commit. Do not push. When the working tree is clean, suggest the
-   user push when ready.
-
-### Message grammar
-
-```
-<type>(<scope>)!: <subject>
-
-<body>
-
-<footer(s)>
-```
-
-- **type** (required): `feat`, `fix`, `docs`, `refactor`, `chore`,
-  `test`, `build`, `ci`, `perf`. `feat` and `fix` are
-  SemVer-significant. One type per commit: a feature and a fix are
-  two commits.
-- **scope**: noun in parentheses, from the paths. Omit only when no
-  scope is honest.
-- **!**: immediately before `:` for a breaking change
-  (`feat(api)!: …`). Pair with a `BREAKING CHANGE:` footer.
-- **subject**: English, imperative mood ("Add" not "Added"), ≤50
-  characters, no trailing period, lowercase after the colon.
-- **body** (optional): wrap at 72 columns. Explain the *why* the
-  diff does not. Not a paste of the patch.
-- **footers**: `Token: value` lines (`Refs: #123`,
-  `BREAKING CHANGE: drops X`).
-
-Never attribute a commit to an agent: no `Co-Authored-By: <model>`,
-no `Generated with <tool>`, no model name in trailer or body. The
-human running the session is the author. No opt-out. Other
-`Co-Authored-By` trailers only if the user asked for that person in
-this conversation.
-
-Bad: `feat: add filter and fix duplicate insert` (two intents).
-Good: `feat(filter): add priority option` then
-`fix(insert): prevent duplicates`.
-
-## This project
-
-Omunculus is a local harness that orchestrates tool-using language models,
-driven from a direct CLI or an optional HTTP server. It opens a SQLite store
-per project, assembles a prompt for one run, lets the model call tools inside
-the execution sandbox, records every step as an event, and applies the store
-actions those tools emit. Works, conversations, memberships, requests,
-notifications and workflow stages are state in the store; the harness only
-follows them. It targets Linux, Elixir 1.17, OTP 27, Deno 2.9 and Bubblewrap
-0.8 or newer, pinned in `mise.toml`.
-
-The core is `lib/omunculus/`: the CLI and the project's cycle of runs; the
-config loader; the harness, which discovers, authorizes, calls and records
-tools and applies their actions; the run, which drives one model until it
-ends; the ceiling, which decides what a run may call; the store, the only code
-that touches SQL; the server and its `/v1` contract; the tool catalog and the
-builtin tools under `priv/tools/`; the sandbox and every external process
-under Bubblewrap; MCP servers; and the model adapters. Teams come as packs
-(`priv/packs/system`, `packs/`); presets are in `priv/presets/`.
-
-All configuration comes from the user's TOML: no hardcoded default for
-anything the config file holds, and none stored in the database. Anything
-that searches, filters or formats for the model is a tool, never harness
-logic. The harness does not protect users from their own tools and hooks: it
-guarantees the workflow sequence, the ceiling per stage and the store rules.
-
-The apps (`apps/console`, `apps/mailbox`, `apps/studio`) are QML on Quickshell
-and share `apps/kit` (`ui/`, the theme and controls; `client/`, the requests
-to the server's sockets; `run`, the launcher). They reach a project only
-through the `/v1` contract on its socket and never read the store, the TOML,
-`lib/` or `priv/`; the core never names an app, and what one needs is added to
-the contract for every client, with its OpenAPI schema, tests and
-`docs/server.md`. `apps/kit/ui` imports nothing of `apps/kit/client`, the kit
-imports no app, and no app imports another; apps call each other only through
-Quickshell IPC.
-
-Commits stay local on the working branch; there are no pull requests. Before
-committing, `mise run pre-commit` and `mise run validate:regular` pass and
-`mix compile --warnings-as-errors` is clean. `mise run validate:sandbox`
-needs Bubblewrap namespaces. `mise run up` starts the development server
-(`dev/`); `mise run dev:console`, `dev:studio` and `dev:mailbox` open the
-apps on it.
-
-Guides: `docs/README.md` is the map of every page; `docs/design.md` (the
-model, each core module and the run cycle, in numbered sections), the
-`docs/how-to-*.md` task pages, `docs/screens.md`, `docs/cli.md` (generated by
-`mise run docs:cli`), `docs/config.md`, `docs/packs.md`, `docs/cycle.md`,
-`docs/ceiling.md`, `docs/tools.md`, `docs/requests.md`, `docs/server.md`,
-`docs/clients.md`, `docs/console.md`, `docs/mailbox.md`, `docs/studio.md`,
-`docs/development.md`, `docs/possibilities.md`, `docs/comparison.md`,
-`docs/what-does-not-work.md`; `eval/README.md` (the behaviour benchmark) and
-`bench/README.md` (the capacity benchmark). Setup: `README.md`.
+- Report what changed, the relevant verification results, and any material
+  limitations. State clearly when a check could not be completed.
+- When creating commits, inspect the working tree and staged diff, and group
+  changes by intent. Stage specific paths or hunks non-interactively while
+  preserving unrelated work.
+- Use Conventional Commits: `type(scope): subject`, with an English imperative
+  subject of at most 50 characters, lowercase after the colon, and no trailing
+  period. Mark breaking changes with `!` and a `BREAKING CHANGE:` footer.
+- Show the proposed commit message before committing. Explain non-obvious
+  reasons in the body.
+- Keep authorship with the human. Commit messages and pull request titles and
+  descriptions must contain no AI or agent attribution of any kind: trailers,
+  signatures, badges, credits, or generated-by links. This includes
+  `Co-Authored-By` entries naming agents or models, `Generated with` notices,
+  and equivalent wording. This rule applies whenever creating or editing a
+  commit or pull request.
+- Leave publication to the user: never run `git push`.
