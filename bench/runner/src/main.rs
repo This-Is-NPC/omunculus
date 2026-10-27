@@ -386,7 +386,7 @@ fn start_stub(root: &Path, output: &Path) -> Result<(OwnedChild, u16)> {
                 port,
                 "/control",
                 Some(
-                    json!({"delay_ms":86400000,"tool_rounds":0,"expected_in_flight":0,"payload_bytes":0}),
+                    json!({"delay_ms":86400000,"expected_in_flight":0,"payload_bytes":0}),
                 ),
             )?;
             return Ok((child, port));

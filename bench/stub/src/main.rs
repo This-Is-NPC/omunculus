@@ -6,7 +6,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use serde::Deserialize;
+use serde::{de::IgnoredAny, Deserialize};
 use serde_json::{json, Value};
 use std::{
     env,
@@ -27,7 +27,6 @@ use tokio::{
 #[derive(Clone, Debug)]
 struct Config {
     delay_ms: u64,
-    tool_rounds: u64,
     payload_bytes: usize,
     expected_in_flight: usize,
     barrier_timeout_ms: u64,
@@ -37,7 +36,6 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             delay_ms: 0,
-            tool_rounds: 1,
             payload_bytes: 0,
             expected_in_flight: 0,
             barrier_timeout_ms: 5_000,
@@ -151,7 +149,6 @@ impl RequestBarrier {
 
 struct Counters {
     requests: AtomicU64,
-    tool_requests: AtomicU64,
     bytes: AtomicU64,
     in_flight: AtomicU64,
     active_peak: AtomicU64,
@@ -164,7 +161,6 @@ impl Counters {
     fn new() -> Self {
         Self {
             requests: AtomicU64::new(0),
-            tool_requests: AtomicU64::new(0),
             bytes: AtomicU64::new(0),
             in_flight: AtomicU64::new(0),
             active_peak: AtomicU64::new(0),
@@ -177,7 +173,6 @@ impl Counters {
     fn reset(&self) {
         for counter in [
             &self.requests,
-            &self.tool_requests,
             &self.bytes,
             &self.active_peak,
             &self.completed,
@@ -208,9 +203,6 @@ impl AppState {
         let mut config = self.config.write().await;
         if let Some(value) = input.delay_ms {
             config.delay_ms = value;
-        }
-        if let Some(value) = input.tool_rounds {
-            config.tool_rounds = value;
         }
         if let Some(value) = input.payload_bytes {
             config.payload_bytes = value;
@@ -258,7 +250,6 @@ impl AppState {
     fn stats(&self) -> Value {
         json!({
             "requests": self.counters.requests.load(Ordering::Relaxed),
-            "tool_requests": self.counters.tool_requests.load(Ordering::Relaxed),
             "bytes": self.counters.bytes.load(Ordering::Relaxed),
             "in_flight": self.counters.in_flight.load(Ordering::Relaxed),
             "active_peak": self.counters.active_peak.load(Ordering::Relaxed),
@@ -306,37 +297,9 @@ impl Drop for RequestGuard {
 #[derive(Debug, Deserialize, Default)]
 struct ControlRequest {
     delay_ms: Option<u64>,
-    #[serde(alias = "rounds")]
-    tool_rounds: Option<u64>,
     payload_bytes: Option<usize>,
     expected_in_flight: Option<usize>,
     barrier_timeout_ms: Option<u64>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct ChatRequest {
-    #[serde(default)]
-    messages: Vec<Message>,
-    #[serde(default)]
-    tools: Vec<Tool>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct Message {
-    #[serde(default)]
-    role: String,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct Tool {
-    #[serde(default)]
-    function: Option<Function>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct Function {
-    #[serde(default)]
-    name: String,
 }
 
 async fn health() -> impl IntoResponse {
@@ -357,13 +320,10 @@ async fn control(
 
 async fn completions(State(state): State<Arc<AppState>>, body: Bytes) -> Response {
     let guard = state.begin_request(body.len());
-    let request: ChatRequest = match serde_json::from_slice(&body) {
-        Ok(request) => request,
-        Err(_) => {
-            guard.finish(false);
-            return error_response(StatusCode::BAD_REQUEST, "invalid json");
-        }
-    };
+    if serde_json::from_slice::<IgnoredAny>(&body).is_err() {
+        guard.finish(false);
+        return error_response(StatusCode::BAD_REQUEST, "invalid json");
+    }
     let config = state.config().await;
     match state
         .barrier
@@ -394,36 +354,11 @@ async fn completions(State(state): State<Arc<AppState>>, body: Bytes) -> Respons
         time::sleep(Duration::from_millis(config.delay_ms)).await;
     }
 
-    let tool_messages = request
-        .messages
-        .iter()
-        .filter(|message| message.role == "tool")
-        .count() as u64;
-    let has_counter = request.tools.iter().any(|tool| {
-        tool.function
-            .as_ref()
-            .map(|function| function.name == "counter")
-            .unwrap_or(false)
-    });
-
-    let message = if has_counter && tool_messages < config.tool_rounds {
-        state.counters.tool_requests.fetch_add(1, Ordering::Relaxed);
-        json!({
-            "role": "assistant",
-            "content": Value::Null,
-            "tool_calls": [{
-                "id": format!("benchmark-counter-{}", tool_messages + 1),
-                "type": "function",
-                "function": {"name": "counter", "arguments": "{}"}
-            }]
-        })
-    } else {
-        let mut content = "benchmark complete".to_owned();
-        if config.payload_bytes > content.len() {
-            content.extend(std::iter::repeat('x').take(config.payload_bytes - content.len()));
-        }
-        json!({"role": "assistant", "content": content})
-    };
+    let mut content = "benchmark complete".to_owned();
+    if config.payload_bytes > content.len() {
+        content.extend(std::iter::repeat('x').take(config.payload_bytes - content.len()));
+    }
+    let message = json!({"role": "assistant", "content": content});
 
     guard.finish(true);
     (
