@@ -99,7 +99,7 @@ screen's own are in [the screens](docs/screens.md):
 
 ## What is broken
 
-Three defects are known; [what does not work](docs/what-does-not-work.md)
+Five defects are known; [what does not work](docs/what-does-not-work.md)
 says what to do meanwhile:
 
 1. Some refusals print as Elixir terms, as `send` without `--agent` in a
@@ -108,6 +108,9 @@ says what to do meanwhile:
    not ship.
 3. Internal text replies can leave a permission unresolved and trigger a
    repeated escalation cycle.
+4. The console does not show an agent's reply as it arrives.
+5. A message in an empty conversation opened from the console's list is
+   refused.
 
 Contributors start at [the design](docs/design.md).
 
