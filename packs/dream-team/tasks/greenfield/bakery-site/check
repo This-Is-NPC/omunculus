@@ -18,8 +18,7 @@ pages = list(site.rglob("*.html"))
 if len(pages) < 4:
     fail(f"{len(pages)} pages published, not the four asked for")
 html = " ".join(p.read_text(errors="replace") for p in pages)
-# The person left the language to the team: English or Portuguese.
-for fact in ["Doce Ana", "brigadeiro", "carrot|cenoura", "85", "60", "36", "2009"]:
+for fact in ["Doce Ana", "brigadeiro", "carrot", "85", "60", "36", "2009"]:
     if not re.search(fact, html, re.I):
         fail(f"the published site does not show {fact}")
 if not re.search(r"wa\.me/(55)?19998765432|99876-?5432", html):
