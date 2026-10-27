@@ -1,104 +1,99 @@
-# Measure experimental steward recovery
+# How to measure course recovery
 
-**The question:** Can the steward recover an internal request loop while
-keeping the front desk responsible for client content? This page is enough
-when a frozen hybrid result already exists. It measures the coordination
-checkpoint, not the full site's acceptance or deployment.
+**The question:** how do I measure whether the steward recovers a stalled
+permission cycle while the front desk stays the one that asks the client?
+
+This page is enough on its own when you already hold a saved copy of a
+stalled store. It measures one coordination checkpoint, not the full task's
+acceptance or deployment. What the steward overlay changes is in
+[the design](design.md#9-what-was-measured); the pack is
+[course-recovery](../packs/course-recovery/README.md).
 
 ## Before you start
 
-Use the configured Anthropic credentials in `.env`. A source result must have
-`run-context/coordination-loop-at-cancellation.sqlite3`, its manifest and its
-execution workspace. The source is read only. `<result-folder>` below is a
-placeholder for that folder.
-
-The experimental pack is [course-recovery](../packs/course-recovery/README.md).
-The existing system pack supplies the steward. The overlay restricts its
-operational tools and adds the course-correction skill. No core module changes.
-The overlay selects the configured `haiku` model for this steward.
-
-Normal `ask`, `request_access` and `escalate` tools select named question routes.
-Private chain steps run their original builtin modules, preserving argument
-validation, grants and end behavior. A front-desk model escalation alone
-selects the client route. The unnamed route used by the harness fallback goes
-to the steward. It cannot deliver a raw fallback to the client.
-
-The steward reads the skill and `recovery_case`, then uses `correct_course`
-to escalate corrective instructions and the original permission envelope back
-to the front desk. The front desk writes the client question. Neither the
-skill nor the correction tool grants permission or changes configuration.
-
-`recovery_case` separates the canonical origin map, recorded routing events and
-agent claims. Its recent window is not complete history. A claim that the
-client was asked needs an explicit canonical request receipt: a pending human
-request from the front desk, linked to the original permissions, with its
-recorded event ID. Supply `client_request_id` to inspect that receipt even
-when it is outside the recent window.
-
-`correct_course` requires a successful evidence read, cited origin event IDs
-and a `client_delivery` classification. `pending` requires a verified receipt;
-`unverified` must not claim that the client is already waiting. A refusal emits
-no action and does not end the steward's run, allowing it to revise the claim.
-These checks validate structured claims; free-text interpretation by the
-steward and front desk is still measured, not guaranteed by those checks.
+- A checkout with `mise install` and `mix deps.get` run in it
+  ([the design](design.md#8-building-and-checking)).
+- In `.env`, the keys of the providers whose models the source result's
+  manifest and `eval/overlays/course-recovery.toml` name
+  ([how to log in to a provider](how-to-log-in-to-a-provider.md)).
+- A source result folder of a design-to-build run under the agency
+  configuration of [Equivalent Exchange](../eval/README.md). It needs its
+  `manifest.json`, the workspace of the execution at
+  `executions/design-team__conversation__design-to-build/agency/1/project`,
+  and `run-context/coordination-loop-at-cancellation.sqlite3`. That path is
+  fixed in `eval/lib/recovery.ex`.
+- No code writes `coordination-loop-at-cancellation.sqlite3`. It is a copy of
+  the execution's store, taken by hand while the run was stalled in the
+  cycle of [defect 3](what-does-not-work.md#3-unresolved-permissions-can-cycle-through-internal-text-replies),
+  before it was cancelled.
+- `<result-folder>` below is a placeholder for that source folder. The source
+  is only read.
 
 ## Steps
 
 1. Check the routing and isolation contracts:
 
-   ```sh
-   mise run eval:recovery:check
+   ```console
+   $ mise run eval:recovery:check
+   [eval:recovery:check] $ scripts/check-course-recovery
+   running 12 tests from ./packs/course-recovery/tools/_recovery/recovery_test.js
+   normal requests use named routes while front-desk questions use the client route ... ok (507µs)
+   routing reuses builtin steps and preserves every original tool argument ... ok (62µs)
+   a correction is an internal linked escalation, never a grant or client prompt ... ok (317µs)
+   the supervisor must hold the pending canonical request ... ok (56µs)
+   cross-conversation requests, other callers and resolved origins are refused ... ok (106µs)
+   evidence includes only events from the current conversation ... ok (117µs)
+   direct CLI projects without a conversation ID retain project-local request scope ... ok (69µs)
+   routing facts, agent claims and delivery receipts are separate ... ok (120µs)
+   unsupported pending-client claims are refused without effects and can be revised ... ok (135µs)
+   canonical client receipts outside the recent window are accepted ... ok (7ms)
+   closed, foreign, unrelated and non-front-desk receipts are refused ... ok (2ms)
+   corrections require a successful evidence read and canonical origin citations ... ok (213µs)
+
+   ok | 12 passed | 0 failed (19ms)
    ```
 
-   The current contract suite reports `12 passed | 0 failed`.
-
-2. Compare isolated copies of the same checkpoint:
+2. Replay isolated copies of the checkpoint, with and without the overlay:
 
    ```sh
    mise run eval:recovery --source <result-folder> --overlay eval/overlays/course-recovery.toml --k 5 --budget 20
    ```
 
-   Each trial prints its arm, outcome, recorded model responses, provider USD
-   and seconds. Trials alternate which arm runs first. The result folder keeps
-   the configuration, new events, worker log, metrics, manifest and report.
+   The output is not reproduced here: the replay needs a saved checkpoint
+   and a provider, and neither is part of the tree.
+
+   `--k` is the number of trials per arm (3 by default). `--budget` is the
+   number of recorded model responses a trial may make (20 by default).
+   Each trial prints a line: its arm, its number, its outcome, its model
+   responses, its provider cost in USD and its seconds. Trials alternate
+   which arm runs first. The outcome is `recovered`,
+   `response_budget_exhausted` or `worker_exit_<code>`. The last line is
+   the new result folder under `eval/results/`. It holds `manifest.json`,
+   `summary.json`, `report.md`, and one folder per trial with its
+   `omunculus.toml`, `events.jsonl`, `worker.log` and `metrics.json`.
    Trial projects and their processes are removed when the trial ends.
 
-3. Read the report. Recovery requires a new question authored by `sales` whose
-   linked origins include the original unresolved permission. No client answer
-   or production grant is executed. Compare success counts, response counts,
-   provider cost and time. A response budget bounds only this diagnostic probe;
-   it is not an elapsed-time limit or a rejection of slow local inference.
+3. Read `report.md`. A trial recovers when `sales` authors a new question
+   whose linked origins include the original unresolved permission. No
+   client answer or production grant is executed. Compare the outcomes,
+   response counts, costs and times of the two arms.
 
 ## What can go wrong
 
-A `worker_exit_*` result without the expected client request is a failed
-recovery or execution error; inspect its worker log and events. The worker
-exit code alone is not success. A response-budget exhaustion is censored: it
-says recovery was not observed within that many responses. It says nothing
-about how long a model is allowed to take. Cold sessions and provider caching
-can influence the measurements. The full hybrid quality eval remains a
-separate measurement with unchanged task checks.
+- `source needs its frozen cancellation snapshot`: the source folder has no
+  `run-context/coordination-loop-at-cancellation.sqlite3`.
+- A `worker_exit_*` outcome without the expected client request is a failed
+  recovery or an execution error. Read that trial's worker log and events.
+  The worker's exit code alone is not success.
+- A trial that runs out of its budget is censored: recovery was not seen
+  within that many responses. It says nothing about how long a model may
+  take.
+- Cold sessions and provider caching can change the measurements.
 
 ## Where to go next
 
-Use [the eval guide](../eval/README.md) for the full task. Enable the overlay
-explicitly and put the coordinators on Haiku. The overlay assigns the steward
-to Haiku. Keep
-`--timeout infinity` and the local model's `timeout_ms = "infinity"`.
-
-To run the complete design-to-build case with the validated recovery pack,
-start the deploy environment described in the eval guide, then run these in
-separate terminals:
-
-```sh
-mise run eval:run -- --model haiku --overlay eval/overlays/course-recovery.toml --configuration agency --task design-to-build --k 1 --jobs 1 --timeout infinity --label recovery-full-haiku
-mise run eval:run -- --model local --agent-model sales=haiku --agent-model seller=haiku --agent-model administrator=haiku --agent-model design-lead=haiku --agent-model steward=haiku --agent-model auditor=haiku --agent-model refiner=haiku --overlay eval/overlays/course-recovery.toml --configuration agency --task design-to-build --k 1 --jobs 1 --timeout infinity --label recovery-full-hybrid
-```
-
-The overlay removes receive deadlines for both Haiku and the local model.
-It forwards `MISE_STATE_DIR` so sandboxed tools use the same trust state when
-the runner uses a private mise directory. Sandbox command limits remain configured. Each run has its own store,
-workspace and configuration; deployed app names are scoped to its project.
-The full case keeps the original task, simulated person, permission decisions,
-production mirror and acceptance checks. Its quality result is separate from
-the checkpoint recovery measurement above.
+To run the whole design-to-build task with the overlay, pass
+`--overlay eval/overlays/course-recovery.toml` to `mise run eval:run`, as
+[the eval guide](../eval/README.md) describes. That run keeps the original
+task, simulated person, permission decisions and acceptance checks; its
+result is separate from the checkpoint measurement above.

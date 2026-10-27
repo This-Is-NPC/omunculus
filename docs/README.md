@@ -30,7 +30,7 @@ Every page, in the order somebody meets it, with the question it answers.
 | [The development environment](development.md) | How do I run the apps on my own dev projects? For contributors. |
 | [The comparison](comparison.md) | How does omunculus compare with other harnesses? |
 | [Equivalent Exchange](../eval/README.md) | How is the system's behaviour measured? |
-| [Experimental steward recovery](how-to-measure-course-recovery.md) | Can supervision recover a recorded request loop efficiently? |
+| [How to measure course recovery](how-to-measure-course-recovery.md) | Does the steward recover a saved permission cycle, and at what cost? |
 | [The capacity benchmark](../bench/README.md) | How many resident runs does one machine hold? |
 
 ## The shortest useful path

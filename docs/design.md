@@ -260,19 +260,39 @@ its tasks are on [the development environment](development.md).
   capacity, adding one real run at a time, `mise run benchmark:run`.
 - [The comparison](comparison.md) with other harnesses, read from their
   sources and this tree at a pinned commit.
-- [Experimental steward recovery](how-to-measure-course-recovery.md): on
-  2026-10-20, three pairs replayed the frozen hybrid permission loop. The
-  steward recovered two of three trials in four model responses each. The
-  baseline recovered none within twenty responses per trial. Mean observed
-  cost was $0.007330 with supervision and $0.012143 without it. The failed
-  supervised trial repeated the false claim that a client request already
-  existed and ended with `no_route`. This measured coordination recovery,
-  not full task quality or new local-worker execution; the control was
-  censored at the response budget. The overlay remains optional.
-  A subsequent five-pair revision added a canonical origin map and checked
-  client-delivery receipts. It recovered five of five trials, versus zero
-  of five controls within twenty responses. The revision averaged 5.8
-  responses, 35.0 seconds and $0.008833 per trial. Five citations outside
-  the current origin map were refused and revised. This remains evidence
-  for one coordination checkpoint, not general reliability or full task
-  quality. The earlier steward comparison is historical, not interleaved.
+- [Experimental steward recovery](how-to-measure-course-recovery.md):
+  five pairs replayed one saved copy of the permission cycle of
+  [defect 3](what-does-not-work.md#3-unresolved-permissions-can-cycle-through-internal-text-replies),
+  with the steward overlay and without it. With it, five of five trials
+  recovered, in 5.8 responses, 35.0 seconds and $0.008833 per trial on
+  average. Without it, none of five recovered within twenty responses; those
+  trials were censored at the response budget. `correct_course` refused five
+  citations outside the current origin map, and the steward revised them.
+  This measured coordination recovery at one checkpoint, not general
+  reliability or full task quality. The overlay is optional.
+
+The steward overlay, `eval/overlays/course-recovery.toml`, adds the
+[course-recovery](../packs/course-recovery/README.md) pack and changes no
+core module. It limits the steward's tools to the course-correction skill,
+`recovery_case`, `correct_course` and `end`. Its policy gives `ask`,
+`request_access` and `escalate` named question routes, which run the
+original builtin steps with their argument checks, grants and ends. A
+front-desk escalation takes the client route; the unnamed route the
+harness falls back to goes to the steward, which cannot deliver a raw
+fallback to the client.
+
+`recovery_case` keeps apart the canonical origin map, the recorded routing
+events and the agents' claims; its recent window is not the whole history.
+A claim that the client was asked needs a canonical request receipt: a
+pending human request from the front desk, linked to the original
+permissions, with its recorded event ID. `client_request_id` reads that
+receipt even outside the recent window. `correct_course` needs a
+successful evidence read, cited origin event IDs and a `client_delivery`:
+`pending` needs a verified receipt, and `unverified` must not claim the
+client is already waiting. It escalates the corrective instructions and the
+original permission envelope back to the front desk, which writes the
+client question. A refusal emits no action and leaves the steward's run
+open to revise the claim. Neither the skill nor the tool grants a
+permission or changes the configuration. These checks cover structured
+claims; how the steward and the front desk read free text is measured, not
+checked.
