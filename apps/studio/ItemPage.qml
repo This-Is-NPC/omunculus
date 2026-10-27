@@ -44,7 +44,7 @@ Item {
 
   // A titled frame the read columns share; what it holds scrolls inside it
   // when it is given less height than it needs.
-  component Panel: Rectangle {
+  component ReadFrame: Rectangle {
     id: panel
     property string title
     default property alias fields: inner.data
@@ -193,7 +193,7 @@ Item {
             mipmap: true
             Rectangle { anchors.fill: parent; color: "transparent"; border.color: Theme.line }
           }
-          Panel {
+          ReadFrame {
             title: "about"
             Layout.fillWidth: true
             Layout.fillHeight: page.fits
@@ -221,7 +221,7 @@ Item {
           }
         }
 
-        Panel {
+        ReadFrame {
           title: "description"
           Layout.fillWidth: true
           Layout.fillHeight: page.fits
@@ -234,7 +234,7 @@ Item {
           }
         }
 
-        Panel {
+        ReadFrame {
           title: "related"
           Layout.preferredWidth: page.wide ? 360 : content.width
           Layout.maximumWidth: Layout.preferredWidth
