@@ -30,82 +30,34 @@ defmodule Omunculus.Sandbox do
             Jason.encode!(%{code: code, names: Enum.map(tools, & &1.name)}) <> "\n"
           )
 
-        receive_output(handle, "", MapSet.new(tools, & &1.name), call, Policy.deadline(policy))
+        allowed = MapSet.new(tools, & &1.name)
+        Session.serve(handle, Policy.deadline(policy), &line(&1, allowed, call), &ended/1)
       after
         Session.stop(handle)
       end
     end
   end
 
-  defp receive_output(handle, buffer, allowed, call, deadline) do
-    case String.split(buffer, "\n", parts: 2) do
-      [line, rest] ->
-        handle_message(handle, rest, allowed, call, deadline, Jason.decode(line))
+  defp line(line, allowed, call) do
+    case Jason.decode(line) do
+      {:ok, %{"type" => "call", "id" => id, "name" => name, "args" => args}}
+      when is_binary(name) and is_map(args) ->
+        {:reply, Session.answer(id, name, args, allowed, call)}
 
-      [_partial] ->
-        receive do
-          {:execution, ref, {:stdout, bytes}} when ref == handle.ref ->
-            receive_output(handle, buffer <> bytes, allowed, call, deadline)
+      {:ok, %{"type" => "result", "output" => output}} when is_binary(output) ->
+        {:halt, {:ok, output}}
 
-          {:execution, ref, {:stderr, _bytes}} when ref == handle.ref ->
-            receive_output(handle, buffer, allowed, call, deadline)
+      {:ok, %{"type" => "error", "output" => output}} when is_binary(output) ->
+        {:halt, {:error, {:javascript, output}}}
 
-          {:execution, ref, {:exit, status}} when ref == handle.ref ->
-            {:error, {:sandbox_exit, status}}
-
-          {:execution, ref, {:error, reason}} when ref == handle.ref ->
-            {:error, reason}
-        after
-          max(deadline - System.monotonic_time(:millisecond), 0) ->
-            {:error, :sandbox_timeout}
-        end
+      _message ->
+        {:halt, {:error, :invalid_sandbox_output}}
     end
   end
 
-  defp handle_message(handle, rest, allowed, call, deadline, {
-         :ok,
-         %{"type" => "call", "id" => id, "name" => name, "args" => args}
-       })
-       when is_binary(name) and is_map(args) do
-    response =
-      if MapSet.member?(allowed, name) do
-        case call.(name, args) do
-          {:ok, output} -> %{id: id, ok: true, output: output}
-          {:error, reason} -> %{id: id, ok: false, output: Omunculus.Tools.Out.failure(reason)}
-        end
-      else
-        %{id: id, ok: false, output: Omunculus.Tools.Out.not_yours(name)}
-      end
-
-    with :ok <- Execution.write(handle, Jason.encode!(response) <> "\n") do
-      receive_output(handle, rest, allowed, call, deadline)
-    end
-  end
-
-  defp handle_message(
-         _handle,
-         _rest,
-         _allowed,
-         _call,
-         _deadline,
-         {:ok, %{"type" => "result", "output" => output}}
-       )
-       when is_binary(output),
-       do: {:ok, output}
-
-  defp handle_message(
-         _handle,
-         _rest,
-         _allowed,
-         _call,
-         _deadline,
-         {:ok, %{"type" => "error", "output" => output}}
-       )
-       when is_binary(output),
-       do: {:error, {:javascript, output}}
-
-  defp handle_message(_handle, _rest, _allowed, _call, _deadline, _message),
-    do: {:error, :invalid_sandbox_output}
+  defp ended({:exit, status}), do: {:error, {:sandbox_exit, status}}
+  defp ended({:error, reason}), do: {:error, reason}
+  defp ended(:timeout), do: {:error, :sandbox_timeout}
 
   defp resolve_program(program, policy) do
     policy.runtimes

@@ -51,15 +51,10 @@ defmodule Omunculus.Model.Command do
                 params: spec["params"] || %{}
               })
 
-            turn =
-              Map.merge(turn, %{
-                handle: handle,
-                allowed: MapSet.new(tools, & &1.name),
-                deadline: Policy.deadline(execution)
-              })
+            turn = Map.put(turn, :allowed, MapSet.new(tools, & &1.name))
 
             with :ok <- Execution.write(handle, payload <> "\n") do
-              receive_output(turn, "")
+              Session.serve(handle, Policy.deadline(execution), &line(&1, turn), &ended/1)
             end
           after
             Session.stop(handle)
@@ -79,97 +74,45 @@ defmodule Omunculus.Model.Command do
     end
   end
 
-  defp receive_output(%{handle: handle} = turn, buffer) do
-    case String.split(buffer, "\n", parts: 2) do
-      [line, rest] ->
-        handle_message(turn, rest, decode_line(line))
+  defp line("", _turn), do: :cont
+  defp line(line, turn), do: message(Jason.decode(line), turn)
 
-      [_partial] ->
-        receive do
-          {:execution, ref, {:stdout, bytes}} when ref == handle.ref ->
-            receive_output(turn, buffer <> bytes)
-
-          {:execution, ref, {:stderr, _bytes}} when ref == handle.ref ->
-            receive_output(turn, buffer)
-
-          {:execution, ref, {:exit, 0}} when ref == handle.ref ->
-            {:error, {:command, :closed}}
-
-          {:execution, ref, {:exit, status}} when ref == handle.ref ->
-            {:error, {:command, {:exit, status}}}
-
-          {:execution, ref, {:error, reason}} when ref == handle.ref ->
-            {:error, {:command, reason}}
-        after
-          max(turn.deadline - System.monotonic_time(:millisecond), 0) ->
-            {:error, {:command, :timeout}}
-        end
-    end
-  end
-
-  defp decode_line(""), do: :skip
-
-  defp decode_line(line) do
-    case Jason.decode(line) do
-      {:ok, message} -> {:ok, message}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp handle_message(turn, rest, :skip), do: receive_output(turn, rest)
-
-  defp handle_message(turn, rest, {:ok, %{"type" => "call", "name" => name} = message})
+  defp message({:ok, %{"type" => "call", "name" => name} = message}, turn)
        when is_binary(name) do
     args = Map.get(message, "args") || %{}
     args = if is_map(args), do: args, else: %{}
 
-    with :ok <- turn.record.(message) do
-      response = answer(message, name, args, turn.allowed, turn.call)
-
-      with :ok <- Execution.write(turn.handle, Jason.encode!(response) <> "\n") do
-        receive_output(turn, rest)
-      end
+    case turn.record.(message) do
+      :ok -> {:reply, Session.answer(Map.get(message, "id"), name, args, turn.allowed, turn.call)}
+      error -> {:halt, error}
     end
   end
 
-  defp handle_message(turn, rest, {:ok, %{"type" => "delta", "text" => text}})
-       when is_binary(text) do
+  defp message({:ok, %{"type" => "delta", "text" => text}}, turn) when is_binary(text) do
     :ok = turn.delta.(text)
-    receive_output(turn, rest)
+    :cont
   end
 
-  defp handle_message(turn, _rest, {:ok, %{"type" => type, "output" => output} = message})
+  defp message({:ok, %{"type" => type, "output" => output} = message}, turn)
        when type in ["text", "result"] and is_binary(output) do
-    with :ok <- turn.record.(message) do
-      {:ok, output}
+    case turn.record.(message) do
+      :ok -> {:halt, {:ok, output}}
+      error -> {:halt, error}
     end
   end
 
-  defp handle_message(_turn, _rest, {:ok, %{"type" => "error", "output" => output}})
-       when is_binary(output),
-       do: {:error, {:command, output}}
+  defp message({:ok, %{"type" => "error", "output" => output}}, _turn) when is_binary(output),
+    do: {:halt, {:error, {:command, output}}}
 
-  defp handle_message(_turn, _rest, {:error, reason}),
-    do: {:error, {:command, {:invalid_json, reason}}}
+  defp message({:error, reason}, _turn),
+    do: {:halt, {:error, {:command, {:invalid_json, reason}}}}
 
-  defp handle_message(_turn, _rest, _message), do: {:error, {:command, :invalid_output}}
+  defp message(_message, _turn), do: {:halt, {:error, {:command, :invalid_output}}}
 
-  defp answer(message, name, args, allowed, call) do
-    result =
-      if MapSet.member?(allowed, name) do
-        case call.(name, args) do
-          {:ok, output} -> %{ok: true, output: output}
-          {:error, reason} -> %{ok: false, output: Omunculus.Tools.Out.failure(reason)}
-        end
-      else
-        %{ok: false, output: Omunculus.Tools.Out.not_yours(name)}
-      end
-
-    case Map.get(message, "id") do
-      nil -> result
-      id -> Map.put(result, :id, id)
-    end
-  end
+  defp ended({:exit, 0}), do: {:error, {:command, :closed}}
+  defp ended({:exit, status}), do: {:error, {:command, {:exit, status}}}
+  defp ended({:error, reason}), do: {:error, {:command, reason}}
+  defp ended(:timeout), do: {:error, {:command, :timeout}}
 
   defp external_command([program | args], policy) when is_binary(program) do
     with {:ok, executable} <- executable(program, policy),
