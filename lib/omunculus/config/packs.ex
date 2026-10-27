@@ -40,7 +40,7 @@ defmodule Omunculus.Config.Packs do
       Enum.reduce_while(packs, {:ok, data, %{}, %{}}, fn entry, {:ok, data, owners, required} ->
         with {:ok, dir, pack} <- load(entry, config_dir),
              {:ok, name} <- name(pack),
-             {:ok, pack} <- shift(name, pack, Map.get(entry, "depth", 0)),
+             {:ok, pack} <- shift(name, pack, depth(entry)),
              {:ok, pack} <- bind(name, pack, entry, dir),
              {:ok, data, owners} <- lay(name, pack, data, owners) do
           required = Map.put(required, name, requires(pack.pack))
@@ -100,7 +100,13 @@ defmodule Omunculus.Config.Packs do
     end
   end
 
-  defp load(%{"path" => path} = entry, config_dir) when is_binary(path) and path != "" do
+  @doc "The depth a `[[packs]]` entry lays its team at: its `depth`, 0 without one."
+  @spec depth(map) :: term
+  def depth(entry), do: Map.get(entry, "depth", 0)
+
+  @doc "The folder and the pack a `[[packs]]` entry imports, relative to `config_dir`."
+  @spec load(map, String.t()) :: {:ok, String.t(), map} | {:error, term}
+  def load(%{"path" => path} = entry, config_dir) when is_binary(path) and path != "" do
     dir = Path.expand(path, config_dir)
 
     case Map.keys(entry) -- @import_keys do
@@ -109,7 +115,7 @@ defmodule Omunculus.Config.Packs do
     end
   end
 
-  defp load(_entry, _config_dir), do: {:error, {:invalid, :path}}
+  def load(_entry, _config_dir), do: {:error, {:invalid, :path}}
 
   defp name(%{"pack" => %{"name" => name}}) when is_binary(name) and name != "", do: {:ok, name}
   defp name(_pack), do: {:error, {:invalid, :name}}

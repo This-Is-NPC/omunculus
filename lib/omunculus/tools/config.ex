@@ -178,12 +178,11 @@ defmodule Omunculus.Tools.Config do
     dir = Path.dirname(Path.expand(path))
 
     for entry <- Map.get(Toml.decode_file!(path), "packs", []),
-        folder = Path.expand(entry["path"], dir),
-        {:ok, pack} <- [Config.Packs.read(folder)] do
+        {:ok, folder, pack} <- [Config.Packs.load(entry, dir)] do
       %{
         name: pack["pack"]["name"],
         path: folder,
-        depth: Map.get(entry, "depth", 0),
+        depth: Config.Packs.depth(entry),
         models: Map.get(entry, "models", %{}),
         auth: Map.get(entry, "auth", %{}),
         agents: pack |> Map.get("agents", %{}) |> Map.keys() |> Enum.sort(),
