@@ -118,7 +118,7 @@ defmodule Omunculus.Tool.Manifest do
          {:ok, secrets} <- secrets(raw, command),
          {:ok, {triggers, events, agent}} <- kind_fields(raw, kind),
          {:ok, config} <- optional_bool(raw, "config", true),
-         :ok <- check_config_flag(name, kind, triggers, config) do
+         :ok <- check_config_flag(kind, triggers, config) do
       {:ok,
        %__MODULE__{
          name: name,
@@ -172,9 +172,9 @@ defmodule Omunculus.Tool.Manifest do
     end
   end
 
-  defp check_config_flag(_name, _kind, _triggers, true), do: :ok
-  defp check_config_flag("preset", "tool", ["cli"], false), do: :ok
-  defp check_config_flag(_name, _kind, _triggers, false), do: {:error, {:invalid, :config}}
+  defp check_config_flag(_kind, _triggers, true), do: :ok
+  defp check_config_flag("tool", ["cli"], false), do: :ok
+  defp check_config_flag(_kind, _triggers, false), do: {:error, {:invalid, :config}}
 
   defp kind_fields(raw, "tool") do
     with :ok <- forbidden(raw, "events"),

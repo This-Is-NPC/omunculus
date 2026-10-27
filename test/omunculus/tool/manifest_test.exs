@@ -422,7 +422,7 @@ defmodule Omunculus.Tool.ManifestTest do
     assert {:ok, %{config: true}} = Manifest.load(path)
   end
 
-  test "config = false is valid only on the preset cli tool", %{dir: dir} do
+  test "config = false is valid on a tool only the cli triggers", %{dir: dir} do
     path =
       write_toml(dir, """
       name = "preset"
@@ -448,12 +448,12 @@ defmodule Omunculus.Tool.ManifestTest do
     assert Manifest.load(path) == {:error, {:invalid, :config}}
   end
 
-  test "config = false on a tool other than preset is rejected", %{dir: dir} do
+  test "config = false on a cli tool with another trigger is rejected", %{dir: dir} do
     path =
       write_toml(dir, """
       name = "send"
       kind = "tool"
-      triggers = ["cli"]
+      triggers = ["cli", "model"]
       config = false
       module = "Omunculus.Tools.Send"
       """)

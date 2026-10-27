@@ -95,6 +95,12 @@ A layer of the TOML picks one with `overrides.<tool>.schema`
 the tool's `parameters`. The store rules on the arguments stay the same
 whichever schema the model saw.
 
+A tool only the CLI triggers (`triggers = ["cli"]`) may set
+`config = false`; any other tool that sets it is refused. The command line
+looks such a tool up among the package's own tools, before any config is
+read, and runs it without a config file or a store, as `preset`, which
+writes the file.
+
 `run` reads JSON on stdin and prints JSON on stdout, in any language.
 The next run that walks `[tools] paths` sees the folder. Builtin tools
 may be an Elixir `module` returning the same `out`.
