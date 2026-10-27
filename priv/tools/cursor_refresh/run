@@ -4,68 +4,10 @@
 import json
 import os
 import sys
-import urllib.error
-import urllib.request
-from datetime import datetime, timedelta, timezone
 
-EXCHANGE_URL = os.environ.get(
-    "OMUNCULUS_CURSOR_EXCHANGE_URL",
-    "https://api2.cursor.sh/auth/exchange_user_api_key",
-)
-
-
-def emit(ok, output):
-    json.dump({"ok": ok, "output": output, "emit": []}, sys.stdout)
-    sys.stdout.write("\n")
-
-
-def credential_from(body, previous):
-    access = (
-        body.get("access")
-        or body.get("accessToken")
-        or body.get("access_token")
-        or body.get("token")
-    )
-    if not isinstance(access, str) or not access:
-        return None
-    refresh = (
-        body.get("refresh")
-        or body.get("refreshToken")
-        or body.get("refresh_token")
-        or previous.get("refresh")
-        or previous.get("key")
-    )
-    expires = body.get("expires_at") or body.get("expiresAt")
-    if not expires:
-        seconds = body.get("expires_in") or body.get("expiresIn") or 3600
-        try:
-            seconds = int(seconds)
-        except (TypeError, ValueError):
-            seconds = 3600
-        expires = (
-            datetime.now(timezone.utc) + timedelta(seconds=seconds)
-        ).strftime("%Y-%m-%dT%H:%M:%SZ")
-    record = {"access": access, "expires_at": expires}
-    if isinstance(refresh, str) and refresh:
-        record["refresh"] = refresh
-    return record
-
-
-def http_json(url, body):
-    data = json.dumps(body).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=data,
-        headers={
-            "accept": "application/json",
-            "content-type": "application/json",
-            "connection": "close",
-        },
-        method="POST",
-    )
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    with opener.open(request, timeout=2) as response:
-        return json.loads(response.read().decode("utf-8"))
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "_cursor"))
+from cursor import EXCHANGE_URL, credential_from, emit, http_json  # noqa: E402
 
 
 def main():
@@ -84,14 +26,12 @@ def main():
         emit(False, "missing refresh token")
         return
     try:
-        body = http_json(EXCHANGE_URL, {"apiKey": token})
-        updated = credential_from(body, record)
+        body = http_json(EXCHANGE_URL, method="POST", body={"apiKey": token})
+        updated = credential_from(body, record) if isinstance(body, dict) else None
         if not updated:
             emit(False, "invalid exchange response")
             return
         emit(True, json.dumps(updated))
-    except urllib.error.HTTPError as error:
-        emit(False, f"http {error.code}")
     except Exception as error:  # noqa: BLE001
         emit(False, str(error))
 

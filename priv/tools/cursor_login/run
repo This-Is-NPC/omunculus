@@ -7,11 +7,12 @@ import os
 import secrets
 import sys
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 import uuid
-from datetime import datetime, timedelta, timezone
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "_cursor"))
+from cursor import EXCHANGE_URL, credential_from, emit, http_json  # noqa: E402
 
 LOGIN_URL = os.environ.get(
     "OMUNCULUS_CURSOR_LOGIN_URL", "https://cursor.com/loginDeepControl"
@@ -19,17 +20,8 @@ LOGIN_URL = os.environ.get(
 POLL_URL = os.environ.get(
     "OMUNCULUS_CURSOR_POLL_URL", "https://api2.cursor.sh/auth/poll"
 )
-EXCHANGE_URL = os.environ.get(
-    "OMUNCULUS_CURSOR_EXCHANGE_URL",
-    "https://api2.cursor.sh/auth/exchange_user_api_key",
-)
 NO_BROWSER = os.environ.get("OMUNCULUS_CURSOR_NO_BROWSER", "") == "1"
 POLL_SECONDS = int(os.environ.get("OMUNCULUS_CURSOR_POLL_SECONDS", "120"))
-
-
-def emit(ok, output):
-    json.dump({"ok": ok, "output": output, "emit": []}, sys.stdout)
-    sys.stdout.write("\n")
 
 
 def read_input():
@@ -58,52 +50,6 @@ def open_browser(url):
             return
 
 
-def http_json(url, method="GET", body=None):
-    data = None if body is None else json.dumps(body).encode("utf-8")
-    headers = {"accept": "application/json", "connection": "close"}
-    if data is not None:
-        headers["content-type"] = "application/json"
-    request = urllib.request.Request(url, data=data, headers=headers, method=method)
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    try:
-        with opener.open(request, timeout=2) as response:
-            raw = response.read()
-            if not raw:
-                return None
-            return json.loads(raw.decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        if error.code in {204, 404, 202}:
-            return None
-        detail = error.read().decode("utf-8", "replace")
-        raise RuntimeError(f"http {error.code}: {detail}") from error
-
-
-def credential_from(body):
-    access = (
-        body.get("access")
-        or body.get("accessToken")
-        or body.get("access_token")
-        or body.get("token")
-    )
-    if not isinstance(access, str) or not access:
-        return None
-    refresh = body.get("refresh") or body.get("refreshToken") or body.get("refresh_token")
-    expires = body.get("expires_at") or body.get("expiresAt")
-    if not expires:
-        seconds = body.get("expires_in") or body.get("expiresIn") or 3600
-        try:
-            seconds = int(seconds)
-        except (TypeError, ValueError):
-            seconds = 3600
-        expires = (
-            datetime.now(timezone.utc) + timedelta(seconds=seconds)
-        ).strftime("%Y-%m-%dT%H:%M:%SZ")
-    record = {"access": access, "expires_at": expires}
-    if isinstance(refresh, str) and refresh:
-        record["refresh"] = refresh
-    return record
-
-
 def poll(uuid_value, verifier):
     query = urllib.parse.urlencode({"uuid": uuid_value, "verifier": verifier})
     url = POLL_URL + ("&" if "?" in POLL_URL else "?") + query
@@ -111,7 +57,7 @@ def poll(uuid_value, verifier):
     while time.time() < deadline:
         body = http_json(url)
         if isinstance(body, dict):
-            record = credential_from(body)
+            record = credential_from(body, {})
             if record:
                 return record
         time.sleep(0.2)
@@ -128,12 +74,7 @@ def maybe_exchange(record):
         return record
     if not isinstance(body, dict):
         return record
-    exchanged = credential_from(body)
-    if not exchanged:
-        return record
-    if "refresh" not in exchanged and "refresh" in record:
-        exchanged["refresh"] = record["refresh"]
-    return exchanged
+    return credential_from(body, record) or record
 
 
 def main():
