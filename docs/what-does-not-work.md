@@ -40,22 +40,18 @@ not there.
 
 ## 3. Unresolved permissions can cycle through internal text replies
 
-Seen running in the hybrid design-to-build eval.
+Seen running, in the design-to-build task of
+[Equivalent Exchange](../eval/README.md).
 
 **What happens.** An intermediary replies that a client question was already
 sent, although no client request was recorded. The permission origin remains
 unresolved. When its receiver ends without resolving it, automatic escalation
 can select the same intermediary again. The cycle makes model calls without
-advancing the work. This is independent of local inference speed.
+advancing the work.
 
 **What to do in the meantime.** Inspect the recorded request origins and
 replies, interrupt the cycle and preserve its events. Have the front desk
 present the actual pending permission through its configured client route.
-The optional [steward experiment](how-to-measure-course-recovery.md) measures a
-configuration and tool approach to recovery; the baseline agency is unchanged.
-The first version recovered two of three measured replays. In the other
-replay the steward accepted the same false claim and the worker ended with
-`no_route`; enabling that supervision did not ensure recovery. A revised optional version with
-canonical evidence and receipt checks recovered five of five replays of the
-same checkpoint. The full quality task and other failure cases have not been
-validated by this measurement; the default agency still has the cycle above.
+An optional steward overlay can recover a saved copy of the cycle; the
+default agency still has it.
+[How to measure course recovery](how-to-measure-course-recovery.md) runs it.
