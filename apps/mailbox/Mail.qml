@@ -205,9 +205,9 @@ Singleton {
     tell("opening " + file.name, false)
   }
 
-  // Answers a request of a thread: an option it offers, text, or both.
-  // Answers a request with words and an option, of the request itself or, by
-  // the parts of path, of the decision below it that the option is of.
+  // Answers a request of a thread with words, an option, or both: an option
+  // of the request itself or, by the parts of path, of the decision below it
+  // that the option is of.
   function decide(key, requestId, option, body, path) {
     const thread = threads[key]
     if (!thread || (!option && body.trim() === ""))

@@ -42,7 +42,6 @@ Item {
   // A work that broke waits on its parent without waiting on anything named.
   function stateOf(work) { return work.state === "waiting" && !work.waiting ? "broken" : work.state }
 
-
   readonly property var shown: {
     const words = filter.toLowerCase().split(/\s+/).filter(word => word)
     return Omunculus.board

@@ -11,8 +11,9 @@ import "kit/ui"
 // its conversations, and the one on screen folded into threads a person can
 // follow. The main thread is yours with the root agent; each work handed down
 // has a thread of its own, where its agent says and does what it does. A run
-// at depth 0 belongs to the main thread, a deeper one to its work's. Every read and command goes to the server's local
-// socket through curl; the event stream is the conversation's WebSocket.
+// at depth 0 belongs to the main thread, a deeper one to its work's. Every
+// read and command goes to the server's local socket through curl; the event
+// stream is the conversation's WebSocket.
 Singleton {
   id: root
 
@@ -115,7 +116,6 @@ Singleton {
   readonly property int pending: waiting.length + unread.length
   // Requests still waiting, on you or on an agent.
   readonly property var asking: requests.filter(request => Requests.pending(request))
-
 
   // copy puts text on the Wayland clipboard, as it is, and says so.
   function copy(text) {
@@ -449,9 +449,10 @@ Singleton {
     return works.find(item => item.id === id) || null
   }
 
-  // The workflow a work goes through, as its project's setup has it, as its lane: {name, steps, at}, the
-  // stage it is at among the steps, whose agent runs it; null for a work in
-  // none, or at a stage its workflow no longer has.
+  // The workflow a work goes through, as its project's setup has it, as its
+  // lane: {name, steps, at}, the stage it is at among the steps, whose agent
+  // runs it; null for a work in none, or at a stage its workflow no longer
+  // has.
   function laneOf(work) {
     const known = work.project && work.project !== project ? boardSetups[work.project] : setup
     const flow = known && work.workflow ? known.workflows.find(each => each.name === work.workflow) : null
@@ -485,10 +486,8 @@ Singleton {
   function asked(id) { return asking.filter(request => (request.work_id || "") === id) }
   function unreadFrom(id) { return unread.filter(item => (item.work_id || "") === id) }
 
-  // The thread of a work: its own when it was handed down, the main one for a
-  // work the root agent opened for itself.
   // The thread a work's runs show in: its own for a work handed down, the
-  // main one for the root agent's.
+  // main one for a work the root agent opened for itself.
   function threadOf(work) {
     return work && (parentOf[work] !== undefined || works.some(item => item.id === work && item.parent_id)) ? work : ""
   }
@@ -624,8 +623,6 @@ Singleton {
     next[key] = value
     root[map] = next
   }
-
-
 
   // How long ago a stamp was, as of `now` in milliseconds: now, 5m, 3h, 2d.
   function ago(stamp, now) {

@@ -234,7 +234,6 @@ Item {
     ]
   }
 
-
   // Whether the decision of a request is open over the page.
   readonly property bool dialogOpen: decision.visible
 
@@ -348,7 +347,6 @@ Item {
       onLeave: view.back()
     }
   }
-
 
   Stage {
     anchors.fill: parent
