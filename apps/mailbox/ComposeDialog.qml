@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
 
-// ComposeDialog writes a new thread, as eco's dialogs do: To is required, one
+// ComposeDialog writes a new thread: To is required, one
 // agent of depth 0 of one project, which the thread keeps; then what you
 // need and the files it needs. Esc or CANCEL leaves it as it was written.
 ModalDialog {

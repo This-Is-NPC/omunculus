@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
 
-// ColumnHead heads one column of the window, as eco's panels are headed: the
+// ColumnHead heads one column of the window: the
 // column's name, dim and tracked, its count beside it, and at its right edge
 // the arrow that folds the column. Folded, only the arrow that unfolds it
 // shows, centred.

@@ -3,7 +3,7 @@ import QtQuick
 import "kit/ui"
 
 // ProjectFilter narrows the list to one project, or shows every project, as
-// a strip of eco's chips.
+// a strip of chips.
 Flow {
   id: filter
   spacing: 6

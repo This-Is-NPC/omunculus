@@ -6,7 +6,7 @@ import Quickshell.Io
 import "kit/ui"
 
 ShellRoot {
-  // The mailbox, laid out as eco is: the masthead on top, whose notch sweeps
+  // The mailbox: the masthead on top, whose notch sweeps
   // when the section changes, then the folders, the threads of the one picked
   // and the thread open, parted by hairlines that fade downwards, under a
   // command bar whose actions follow where you are. Each column is headed by

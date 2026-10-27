@@ -1,7 +1,7 @@
 import QtQuick
 import "kit/ui"
 
-// SearchBox finds threads as eco's history does: `/` puts the keyboard in it,
+// SearchBox finds threads: `/` puts the keyboard in it,
 // what is typed applies a quarter of a second after the last key, a trace runs
 // meanwhile, Esc empties it or, already empty, goes on to the list, and Down
 // or Enter goes on to the list too.

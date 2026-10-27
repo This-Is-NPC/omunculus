@@ -1,11 +1,11 @@
 import QtQuick
 import QtQuick.Controls.Basic as C
 
-// ModalDialog is the frame every eco dialog shares: centred in the window
+// ModalDialog is the frame every dialog shares: centred in the window
 // wherever it is declared, at most `maxWidth` wide, over a dimmed window,
 // fading and settling in. Its top edge stays where it opened while it grows or
-// shrinks, unless it would leave the window. It takes the keyboard — Esc closes it — and gives it
-// back to what had it.
+// shrinks, unless it would leave the window. It takes the keyboard — Esc
+// closes it — and gives it back to what had it.
 C.Popup {
   id: modal
   property int maxWidth: 520

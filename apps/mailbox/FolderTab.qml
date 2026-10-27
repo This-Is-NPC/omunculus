@@ -1,7 +1,7 @@
 import QtQuick
 import "kit/ui"
 
-// FolderTab is one folder, as eco's tabs are: its name, dim until hovered,
+// FolderTab is one folder: its name, dim until hovered,
 // in the accent with an underline while current, and how many threads in it
 // want you, behind a dot when any does. Choosing it nudges it. Folded to a
 // rail, only its icon shows, the count on a badge.

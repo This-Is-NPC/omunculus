@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
 
-// ThreadRow is one thread in the list, as a row of eco's tables: a hairline
+// ThreadRow is one thread in the list, as a row of a table: a hairline
 // outline at rest, a faint wash under the pointer, and the highlight with an
 // accent outline when it is the thread on screen. A dot marks it unread; its
 // subject decodes when it arrives while the list is on screen. Under it, its
