@@ -68,6 +68,7 @@ run = "scripts/dev-mailbox"
 [tasks."dev:reset"]
 description = "Delete the dev projects' stores and workspaces"
 run = "scripts/dev-reset"
+confirm = "Delete every dev project's store and workspace?"
 
 [tasks."dev:serve"]
 description = "Run the server on the dev registry, with the keys of .env, the deploy sockets and keys and your git identity"
