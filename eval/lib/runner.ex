@@ -57,8 +57,26 @@ defmodule EquivalentExchange.Runner do
 
   @spec run(keyword) :: {:ok, String.t()}
   def run(options) do
+    case Keyword.fetch(options, :resume) do
+      {:ok, folder} ->
+        unless Keyword.keys(options) == [:resume],
+          do:
+            raise(
+              ArgumentError,
+              "--resume uses the saved manifest; other run options are refused"
+            )
+
+        resume(Path.expand(folder))
+
+      :error ->
+        fresh(options)
+    end
+  end
+
+  defp fresh(options) do
     model = Keyword.get(options, :model, "luna")
     code_mode = Keyword.get(options, :code_mode, false)
+    overlay = if options[:overlay], do: Path.expand(options[:overlay])
 
     agent_models =
       options
@@ -103,6 +121,7 @@ defmodule EquivalentExchange.Runner do
       model: model,
       agent_models: agent_models,
       code_mode: code_mode,
+      overlay: overlay,
       repetitions: k,
       configurations: plan |> Enum.map(&elem(&1, 1)) |> Enum.uniq(),
       tasks: Enum.map(tasks, & &1.id),
@@ -116,13 +135,70 @@ defmodule EquivalentExchange.Runner do
     # Executions share nothing — each has its own project — so `jobs` of them
     # run at once; a line is printed as each one ends.
     jobs = Keyword.get(options, :jobs, 1)
+    run_plan(folder, plan, {model, code_mode, agent_models, overlay}, timeout, jobs, false)
+  end
+
+  defp resume(folder) do
+    manifest_path = Path.join(folder, "manifest.json")
+    manifest = manifest_path |> File.read!() |> Jason.decode!()
+    tasks = Map.new(Task.all(), &{&1.id, &1})
+
+    plan =
+      for id <- manifest["tasks"],
+          configuration <- manifest["configurations"],
+          configuration in Map.fetch!(tasks, id).configurations,
+          n <- 1..manifest["repetitions"],
+          not File.exists?(
+            Path.join(execution_dir(folder, id, configuration, n), "execution.json")
+          ),
+          do: {Map.fetch!(tasks, id), configuration, n}
+
+    for {task, configuration, n} <- plan do
+      project = Path.join(execution_dir(folder, task.id, configuration, n), "project")
+      {:ok, config} = Omunculus.Config.load(Path.join(project, "omunculus.toml"))
+
+      unless File.regular?(config.store.path),
+        do: raise(ArgumentError, "cannot resume: missing store at #{config.store.path}")
+
+      {:ok, lock} = Omunculus.Store.Lock.acquire(config.store.path)
+      Omunculus.Store.Lock.release(lock)
+    end
+
+    if Enum.any?(plan, fn {task, _, _} -> task.deploy end) do
+      with {:error, reason} <- Deploy.environment(), do: raise(reason)
+    end
+
+    manifest =
+      Map.update(
+        manifest,
+        "resumptions",
+        [resumption()],
+        fn prior ->
+          prior ++ [resumption()]
+        end
+      )
+
+    write_json(manifest_path, manifest)
+
+    run_plan(
+      folder,
+      plan,
+      {manifest["model"], manifest["code_mode"], manifest["agent_models"] || %{},
+       manifest["overlay"]},
+      Deadline.parse(to_string(manifest["timeout_s"])),
+      manifest["jobs"],
+      true
+    )
+  end
+
+  defp run_plan(folder, plan, models, timeout, jobs, resume?) do
     sampler = Resources.start()
 
     plan
     |> Elixir.Task.async_stream(
       fn {task, configuration, n} ->
         {task, configuration, n,
-         execute(folder, task, configuration, n, {model, code_mode, agent_models}, timeout)}
+         execute(folder, task, configuration, n, models, timeout, resume?)}
       end,
       max_concurrency: jobs,
       ordered: false,
@@ -140,7 +216,17 @@ defmodule EquivalentExchange.Runner do
       )
     end)
 
-    write_json(Path.join(folder, "resources.json"), Resources.stop(sampler))
+    samples = Resources.stop(sampler)
+    resource_path = Path.join(folder, "resources.json")
+
+    if resume? and File.exists?(resource_path) do
+      previous = resource_path |> File.read!() |> Jason.decode!()
+      samples = Map.merge(previous, samples, fn _key, old, new -> old ++ new end)
+      write_json(resource_path, samples)
+    else
+      write_json(resource_path, samples)
+    end
+
     EquivalentExchange.Report.write(folder)
     {:ok, folder}
   end
@@ -152,56 +238,86 @@ defmodule EquivalentExchange.Runner do
   defp wanted?(_id, []), do: true
   defp wanted?(id, filters), do: Enum.any?(filters, &String.contains?(id, &1))
 
-  defp execute(folder, task, configuration, n, {model, code_mode, agent_models}, timeout_s) do
-    dir =
-      Path.join([
-        folder,
-        "executions",
-        String.replace(task.id, "/", "__"),
-        configuration,
-        Integer.to_string(n)
-      ])
+  defp execution_dir(folder, task_id, configuration, n) do
+    Path.join([
+      folder,
+      "executions",
+      String.replace(task_id, "/", "__"),
+      configuration,
+      to_string(n)
+    ])
+  end
+
+  defp execute(
+         folder,
+         task,
+         configuration,
+         n,
+         {model, code_mode, agent_models, overlay},
+         timeout_s,
+         resume?
+       ) do
+    dir = execution_dir(folder, task.id, configuration, n)
 
     project = Path.join(dir, "project")
     File.mkdir_p!(project)
 
-    {:ok, config_path} =
-      Project.build(
-        project,
-        configuration,
-        {model, code_mode},
-        Path.join(task.dir, "workspace"),
-        agent_models
-      )
+    config_path = Path.join(project, "omunculus.toml")
+
+    unless resume? do
+      {:ok, ^config_path} =
+        Project.build(
+          project,
+          configuration,
+          {model, code_mode},
+          Path.join(task.dir, "workspace"),
+          agent_models,
+          overlay
+        )
+    end
 
     groups = groups(config_path)
     workspace = Path.join(project, "workspace")
     # What truly changed, told apart the way the harness tells each call's.
     truth = Path.join(project, "truth")
-    {:ok, before} = Omunculus.Changes.snapshot(truth, workspace, [])
-    person = %{facts: task.person && task.person["facts"], task: task}
+    {before, elapsed} = execution_start(dir, project, truth, workspace, resume?)
+    {:ok, settings} = Project.configuration(configuration, overlay)
+    entry_agent = get_in(settings, ["eval", "entry_agent"])
+    person = %{facts: task.person && task.person["facts"], task: task, entry_agent: entry_agent}
     instruction = task.instruction
     started = System.monotonic_time(:millisecond)
 
     {status, played} =
-      Deadline.run(timeout_s, fn ->
-        with {:ok, _said} <- CLI.run(["--config", config_path, "send", instruction], project),
-             {:ok, played} <-
-               play_person(config_path, project, task, groups, %{
-                 answers: [],
-                 conversation: [{"person", instruction}]
-               }) do
-          converse(
-            {config_path, project, groups, person},
-            played,
-            (task.person && task.person["follow_ups"]) || []
-          )
-        end
-      end)
+      Deadline.run(
+        timeout_s,
+        fn ->
+          played =
+            if resume?,
+              do: Person.restore(facts(project), task, &last_words/2),
+              else: %{
+                answers: [],
+                conversation: [{"person", instruction}],
+                follow_ups: (task.person && task.person["follow_ups"]) || []
+              }
+
+          opening = if resume?, do: ["overview"], else: send_arguments(instruction, entry_agent)
+
+          with {:ok, _said} <- CLI.run(["--config", config_path | opening], project),
+               {:ok, played} <-
+                 play_person(config_path, project, task, groups, played) do
+            converse(
+              {config_path, project, groups, person},
+              played,
+              played.follow_ups
+            )
+          end
+        end,
+        elapsed
+      )
 
     answers = (played && played.answers) || []
     conversation = Enum.map((played && played.conversation) || [], &Tuple.to_list/1)
-    duration = System.monotonic_time(:millisecond) - started
+    duration = elapsed + System.monotonic_time(:millisecond) - started
     facts = facts(project)
 
     if task.deploy do
@@ -276,6 +392,59 @@ defmodule EquivalentExchange.Runner do
     execution = assess(execution, task, workspace)
     write_json(Path.join(dir, "execution.json"), execution)
     execution
+  end
+
+  defp execution_start(dir, project, truth, workspace, resume?) do
+    checkpoint = Path.join(dir, "continuation.json")
+    previous = if File.exists?(checkpoint), do: checkpoint |> File.read!() |> Jason.decode!()
+
+    {before, elapsed} =
+      if resume? do
+        facts = facts(project)
+
+        last =
+          facts.events |> List.last() |> Map.fetch!(:at) |> DateTime.from_iso8601() |> elem(1)
+
+        first =
+          if previous,
+            do: previous["segment_started_at"],
+            else: facts.events |> hd() |> Map.fetch!(:at)
+
+        {:ok, first, _} = DateTime.from_iso8601(first)
+
+        elapsed =
+          ((previous && previous["elapsed_ms"]) || 0) +
+            max(DateTime.diff(last, first, :millisecond), 0)
+
+        before =
+          if previous do
+            previous["before"]
+          else
+            index = :crypto.hash(:sha256, workspace) |> Base.encode16(case: :lower)
+
+            {:ok, tree} =
+              Omunculus.Git.run(["--git-dir", truth, "write-tree"], project, [
+                {"GIT_INDEX_FILE", Path.join(truth, "index-" <> index)}
+              ])
+
+            String.trim(tree)
+          end
+
+        {before, elapsed}
+      else
+        {:ok, before} = Omunculus.Changes.snapshot(truth, workspace, [])
+        {before, 0}
+      end
+
+    write_json(checkpoint <> ".tmp", %{
+      before: before,
+      elapsed_ms: elapsed,
+      segment_started_at: DateTime.utc_now()
+    })
+
+    File.rename!(checkpoint <> ".tmp", checkpoint)
+
+    {before, elapsed}
   end
 
   @doc """
@@ -375,8 +544,9 @@ defmodule EquivalentExchange.Runner do
               {:cont,
                {:ok,
                 %{
-                  answers: played.answers ++ Requests.answers(request, answer),
-                  conversation: conversation ++ [{"person", answer["body"]}]
+                  played
+                  | answers: played.answers ++ Requests.answers(request, answer),
+                    conversation: conversation ++ [{"person", answer["body"]}]
                 }, count + 1}}
 
             {:error, _reason} = error ->
@@ -422,7 +592,8 @@ defmodule EquivalentExchange.Runner do
       end
 
     with {:ok, text, follow_ups} <- message,
-         {:ok, _said} <- CLI.run(["--config", config_path, "send", text], project),
+         {:ok, _said} <-
+           CLI.run(["--config", config_path | send_arguments(text, person.entry_agent)], project),
          {:ok, played} <-
            play_person(config_path, project, person.task, groups, %{
              played
@@ -434,6 +605,9 @@ defmodule EquivalentExchange.Runner do
       error -> error
     end
   end
+
+  defp send_arguments(message, nil), do: ["send", message]
+  defp send_arguments(message, agent), do: ["send", message, "--agent", agent]
 
   # The task's check on what the execution left: its workspace, its works,
   # what was said and, for a task that publishes, the published copy.
@@ -720,6 +894,11 @@ defmodule EquivalentExchange.Runner do
       {sha, 0} -> String.trim(sha)
       _other -> nil
     end
+  end
+
+  defp resumption do
+    {status, 0} = System.cmd("git", ["status", "--porcelain"], stderr_to_stdout: true)
+    %{at: DateTime.utc_now(), commit: commit(), dirty: String.trim(status) != ""}
   end
 
   defp write_json(path, data), do: File.write!(path, Jason.encode!(data, pretty: true))

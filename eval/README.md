@@ -181,6 +181,36 @@ measured with and without the sandbox code bridge.
 `--timeout infinity` waits until the conversation ends without an elapsed-time
 limit. The manifest records `timeout_s` as `"infinity"`. HTTP models have their
 own receive timeout: use `timeout_ms = "infinity"` in a model table to remove it.
+
+After a stopped process or reboot, start the same deploy environment when the
+task publishes, then continue the saved result folder:
+
+```sh
+mise run eval:run -- --resume eval/results/<run-folder>
+```
+
+`<run-folder>` is a placeholder for the existing result folder. Completed
+executions are kept. An unfinished execution uses its existing config, store,
+workspace and initial file snapshot. The CLI recovers interrupted work; recorded
+client messages and decisions rebuild the simulated person's conversation.
+Already sent follow-ups are not sent again. Models, task checks and time limits
+come from the saved manifest; other run options are refused with `--resume`.
+The manifest records each resumption, its code commit and whether the tree had
+uncommitted changes. A finite deadline keeps its remaining budget. Duration includes
+recorded activity before interruption and the resumed segment, excluding the
+offline gap. Resource samples lost with the stopped process cannot be recovered;
+the resumed segment is sampled. Local model prompt caches may be cold after a
+server restart, so elapsed time and cache rates are not directly comparable to
+an uninterrupted run.
+
+`--overlay <file>` applies an experimental TOML overlay without changing the
+base configuration. Its `[eval] extra_packs` adds packs (`name` under `packs/`,
+or `path` relative to `eval/`); `agent_overrides` applies agent settings after
+import, with `append_text` extending the original instructions; `tool_paths`
+appends project overrides relative to `eval/`; and `entry_agent` names the
+depth-zero recipient for each client send. The manifest records the overlay.
+The optional [steward recovery experiment](../docs/how-to-measure-course-recovery.md)
+uses these settings; it does not change the baseline agency.
 The preset's `local` model uses that setting so inference speed does not end
 its calls. Sandbox command limits remain configured under `[execution]`.
 

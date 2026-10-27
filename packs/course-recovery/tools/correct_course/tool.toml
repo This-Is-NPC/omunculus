@@ -1,0 +1,45 @@
+name = "correct_course"
+kind = "tool"
+triggers = ["model"]
+description = "Returns an internal correction to the agent responsible for an unresolved request. It grants nothing and sends no question to the client."
+command = ["./run", "steward", "questions", "sales"]
+chains = ["end"]
+then = ["end"]
+
+[parameters]
+type = "object"
+required = ["request_id", "instructions", "evidence_event_ids", "client_delivery"]
+
+[parameters.properties.request_id]
+type = "string"
+
+[parameters.properties.instructions]
+type = "string"
+
+[parameters.properties.evidence_event_ids]
+type = "array"
+minItems = 1
+items = { type = "string" }
+description = "Recorded origin event IDs from recovery_case.routing_map."
+
+[parameters.properties.client_delivery]
+type = "string"
+enum = ["unverified", "pending"]
+description = "Pending requires a canonical client request receipt, never an agent claim."
+
+[parameters.properties.client_request_id]
+type = "string"
+
+[parameters.properties.client_event_id]
+type = "string"
+
+[views.delivery]
+source = "requests"
+from = ["args.client_request_id"]
+
+[views.request]
+source = "requests"
+
+[views.events]
+source = "events"
+relation = "run"

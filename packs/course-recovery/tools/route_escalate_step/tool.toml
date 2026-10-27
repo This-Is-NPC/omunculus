@@ -1,0 +1,7 @@
+name = "route_escalate_step"
+kind = "tool"
+triggers = ["chain"]
+description = "Runs the builtin escalate after the experimental route was selected."
+module = "Omunculus.Tools.Escalate"
+chains = ["end"]
+then = ["end"]

@@ -73,6 +73,20 @@ run = "scripts/docs-cli"
 description = "Equivalent Exchange: compare two result folders (mise run eval:compare -- <before> <now>)"
 run = "scripts/eval-compare"
 
+[tasks."eval:recovery:check"]
+description = "Check the experimental steward recovery tool contracts"
+run = "scripts/check-course-recovery"
+
+[tasks."eval:recovery"]
+description = "Measure steward recovery against a frozen hybrid coordination checkpoint"
+run = "scripts/eval-recovery"
+usage = '''
+flag "--source <folder>" help="Result folder containing the frozen coordination checkpoint" required=#true
+flag "--overlay <file>" help="Experimental supervision TOML overlay" required=#true
+flag "--k <count>" help="Repetitions per arm" default="3"
+flag "--budget <responses>" help="Recorded model responses per diagnostic trial" default="20"
+'''
+
 [tasks."eval:run"]
 description = "Equivalent Exchange: run the behaviour benchmark (mise run eval:run -- --model <model> --k 2)"
 run = "scripts/eval-run"

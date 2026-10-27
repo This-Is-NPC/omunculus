@@ -1,0 +1,9 @@
+[pack]
+name = "course-recovery"
+version = "0.1.0"
+description = "Experimental steward supervision of unanswered internal requests."
+roles = []
+
+[pack.requires]
+skill = "Builtin skill reader"
+end = "Builtin run ending step"

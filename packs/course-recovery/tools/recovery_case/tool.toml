@@ -1,0 +1,32 @@
+name = "recovery_case"
+kind = "tool"
+triggers = ["model"]
+description = "Reads a recovery request, its original unresolved permissions and structured routing evidence in this conversation."
+command = ["./run", "sales"]
+
+[parameters]
+type = "object"
+required = ["request_id"]
+
+[parameters.properties.request_id]
+type = "string"
+
+[parameters.properties.client_request_id]
+type = "string"
+description = "Optional claimed client request ID to validate against the canonical store record."
+
+[views.delivery]
+source = "requests"
+from = ["args.client_request_id"]
+
+[views.request]
+source = "requests"
+
+[views.history]
+source = "runs"
+relation = "recent"
+limit = 32
+
+[views.events]
+source = "events"
+relation = "run"

@@ -1,0 +1,35 @@
+[eval]
+extra_packs = [{ path = "../priv/packs/system" }, { name = "course-recovery" }]
+entry_agent = "sales"
+tool_paths = ["../packs/course-recovery/tools"]
+
+[eval.agent_overrides.steward]
+model = "haiku"
+tools = ["skill", "skill.course-correction", "recovery_case", "correct_course", "end"]
+append_text = """
+This experiment enables an operational course-recovery mode instead of project maintenance.
+For every recovery message or received fallback request, read skill course-correction first,
+then inspect the request with recovery_case and return concrete instructions with correct_course.
+Do not propose configuration changes, ask the client, grant permissions or publish.
+A statement that a client was asked is not evidence: check the recorded request events.
+"""
+
+[models.haiku]
+timeout_ms = "infinity"
+
+[models.local]
+timeout_ms = "infinity"
+
+[execution]
+environment = ["LANG", "LC_ALL", "TERM", "HOME", "PATH", "OMUNCULUS_DEPLOY", "MISE_STATE_DIR"]
+
+# Model tools select named question routes. Harness fallback has no name.
+[policy]
+tools = ["route_ask_step", "route_request_access_step", "route_escalate_step"]
+request_routes = [
+  { name = "owner", via = ["origin"] },
+  { name = "client", from = { kind = "agent", agent = "sales" }, via = ["origin"] },
+  { name = "questions", workflow = "release", stage = "promote", via = [{ kind = "agent", agent = "seller" }, { kind = "agent", agent = "sales" }] },
+  { name = "questions", via = ["parent", { kind = "agent", agent = "sales" }] },
+  { via = [{ kind = "agent", agent = "steward" }] },
+]

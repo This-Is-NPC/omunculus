@@ -5,6 +5,16 @@ defmodule Omunculus.EvalDeadlineTest do
 
   alias EquivalentExchange.Deadline
 
+  test "resuming a finite deadline does not renew an exhausted budget" do
+    assert Deadline.run(1, fn -> flunk("an exhausted conversation must not run") end, 1000) ==
+             {{:error, :timeout}, nil}
+  end
+
+  test "unlimited continuations keep waiting regardless of earlier elapsed time" do
+    assert Deadline.run(:infinity, fn -> {:ok, :continued} end, 86_400_000) ==
+             {{:ok, :continued}, :continued}
+  end
+
   test "an unlimited conversation stays alive until it returns" do
     parent = self()
 

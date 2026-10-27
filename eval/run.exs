@@ -3,15 +3,29 @@
 #   run        run the suite: --model luna --k 2 --label <name> [--task <part>]...
 #              [--configuration <name>]... [--timeout <seconds|infinity>] [--jobs <n>]
 #              [--against <result folder>] [--code-mode] [--agent-model <agent>=<model>]...
+#              --resume <result folder> continues unfinished saved executions
+#              --overlay <file> applies an experimental TOML configuration overlay
+#   recovery   replay a frozen coordination checkpoint with control and supervision
 #   score      judge and score again every execution of a result folder, then its report
 #   report     write a result folder's summary, report and comparison; --against
 #              <result folder> sets what it is compared with
 #   compare    compare two result folders, the earlier first
 for file <-
-      ~w(project task judge person deploy score resources report selftest requests usage deadline runner),
+      ~w(project task requests judge person deploy score resources report selftest usage deadline runner recovery),
     do: Code.require_file("lib/#{file}.ex", __DIR__)
 
 case System.argv() do
+  ["recovery-worker", project] ->
+    EquivalentExchange.Recovery.worker(project)
+
+  ["recovery" | argv] ->
+    {options, [], []} =
+      OptionParser.parse(argv,
+        strict: [source: :string, overlay: :string, k: :integer, budget: :integer]
+      )
+
+    EquivalentExchange.Recovery.run(options)
+
   ["selftest"] ->
     case EquivalentExchange.Selftest.run() do
       :ok ->
@@ -27,6 +41,8 @@ case System.argv() do
       OptionParser.parse(argv,
         strict: [
           model: :string,
+          resume: :string,
+          overlay: :string,
           agent_model: :keep,
           k: :integer,
           label: :string,
@@ -89,7 +105,7 @@ case System.argv() do
 
   _other ->
     IO.puts(
-      "usage: mix run eval/run.exs selftest | run [options] | score <folder> | report <folder> [--against <folder>] | compare <before> <now>"
+      "usage: mix run eval/run.exs selftest | run [options] | recovery --source <folder> --overlay <file> [--k <count>] [--budget <responses>] | score <folder> | report <folder> [--against <folder>] | compare <before> <now>"
     )
 
     System.halt(1)

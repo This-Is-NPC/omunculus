@@ -1,0 +1,7 @@
+name = "route_ask_step"
+kind = "tool"
+triggers = ["chain"]
+description = "Runs the builtin ask after the experimental route was selected."
+module = "Omunculus.Tools.Ask"
+chains = ["end"]
+then = ["end"]

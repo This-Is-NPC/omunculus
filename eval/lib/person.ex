@@ -18,6 +18,63 @@ defmodule EquivalentExchange.Person do
   Write only the message you send, with nothing before or after it: no reasoning, no notes.
   """
 
+  @doc "Restores the person's recorded messages, decisions and unsent follow-ups after an interruption."
+  def restore(facts, task, last_words) do
+    requests = Map.new(facts.requests, &{&1.id, &1})
+    replied = facts.events |> Enum.filter(&(&1.type == "reply")) |> MapSet.new(& &1.request_id)
+
+    initial = %{
+      answers: [],
+      conversation: [],
+      follow_ups: (task.person && task.person["follow_ups"]) || []
+    }
+
+    facts.events
+    |> Enum.with_index()
+    |> Enum.reduce(initial, fn {event, index}, played ->
+      case event do
+        %{type: "prompt", actor_kind: "human", body: %{"message" => message}} ->
+          conversation = played.conversation
+          said = last_words.(facts, Enum.take(facts.events, index))
+
+          conversation =
+            if conversation != [] and String.trim(said) != "" and
+                 {"agent", said} not in conversation,
+               do: conversation ++ [{"agent", said}],
+               else: conversation
+
+          remaining =
+            case {conversation, played.follow_ups} do
+              {[_ | _], [^message | rest]} -> rest
+              _ -> played.follow_ups
+            end
+
+          %{played | conversation: conversation ++ [{"person", message}], follow_ups: remaining}
+
+        %{
+          type: "tool",
+          actor_kind: "human",
+          body: %{"name" => "reply", "ok" => true, "args" => args}
+        } ->
+          if MapSet.member?(replied, args["request_id"]) do
+            request = Map.fetch!(requests, args["request_id"])
+
+            %{
+              played
+              | answers: played.answers ++ EquivalentExchange.Requests.answers(request, args),
+                conversation:
+                  played.conversation ++ [{"agent", request.reason}, {"person", args["body"]}]
+            }
+          else
+            played
+          end
+
+        _ ->
+          played
+      end
+    end)
+  end
+
   @doc "The person's reply to the `conversation` ([{who, text}]), or :nothing when they were asked nothing."
   @spec reply(String.t(), [{String.t(), String.t()}]) ::
           {:ok, String.t() | :nothing} | {:error, term}

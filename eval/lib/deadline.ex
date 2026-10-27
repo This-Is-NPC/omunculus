@@ -11,9 +11,13 @@ defmodule EquivalentExchange.Deadline do
     end
   end
 
-  @spec run(pos_integer | :infinity, (-> {:ok, term} | {:error, term})) :: tuple
-  def run(seconds, fun) do
-    timeout = if seconds == :infinity, do: :infinity, else: seconds * 1000
+  @spec run(pos_integer | :infinity, (-> {:ok, term} | {:error, term}), non_neg_integer) :: tuple
+  def run(seconds, fun, elapsed_ms \\ 0) do
+    timeout = if seconds == :infinity, do: :infinity, else: max(seconds * 1000 - elapsed_ms, 0)
+    if timeout == 0, do: {{:error, :timeout}, nil}, else: within(timeout, fun)
+  end
+
+  defp within(timeout, fun) do
     work = Task.async(fun)
 
     case Task.yield(work, timeout) || Task.shutdown(work, :brutal_kill) do

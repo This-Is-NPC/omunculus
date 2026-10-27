@@ -9,6 +9,37 @@ defmodule Omunculus.EvalProjectTest do
   alias Omunculus.Store.Query
   alias Omunculus.Tools.RequestAccess
 
+  test "an experimental overlay reuses the system steward and preserves baseline agency", %{
+    conn: _conn
+  } do
+    overlay = Path.expand("../../eval/overlays/course-recovery.toml", __DIR__)
+    overrides = Map.new(~w(sales seller administrator design-lead), &{&1, "haiku"})
+
+    assert {:ok, path} =
+             EquivalentExchange.Project.build(
+               Fixtures.tmp_dir(),
+               "agency",
+               {"local", false},
+               nil,
+               overrides,
+               overlay
+             )
+
+    assert {:ok, config} = Config.load(path)
+    assert config.agents["steward"].depth == 0
+    assert config.agents["steward"].model == "haiku"
+    assert config.agents["steward"].text =~ "You are the steward of this Omunculus project"
+    assert config.agents["steward"].text =~ "operational course-recovery"
+    assert "correct_course" in config.agents["steward"].ceiling.granted
+    catalog = config.tools |> Omunculus.Tool.Catalog.discover()
+    assert catalog["escalate"].dir =~ "packs/course-recovery/tools/escalate"
+    assert Map.has_key?(catalog, "skill.course-correction")
+    assert {:ok, settings} = EquivalentExchange.Project.configuration("agency", overlay)
+    assert settings["eval"]["entry_agent"] == "sales"
+    assert {:ok, base} = EquivalentExchange.Project.configuration("agency")
+    refute get_in(base, ["eval", "entry_agent"])
+  end
+
   test "a hybrid agency overrides imported coordinators and keeps workers on the default model" do
     dir = Fixtures.tmp_dir()
     coordinators = Map.new(~w(sales seller administrator design-lead), &{&1, "haiku"})
@@ -25,6 +56,170 @@ defmodule Omunculus.EvalProjectTest do
     data = Toml.decode_file!(path)
     assert data["models"]["local"]["code_mode"]
     assert data["models"]["haiku"]["code_mode"]
+  end
+
+  test "steward recovery preserves permission origins and returns client presentation to sales",
+       %{conn: conn} do
+    overlay = Path.expand("../../eval/overlays/course-recovery.toml", __DIR__)
+
+    assert {:ok, path} =
+             EquivalentExchange.Project.build(
+               Fixtures.tmp_dir(),
+               "agency",
+               {"fake", false},
+               nil,
+               %{},
+               overlay
+             )
+
+    assert {:ok, config} = Config.load(path)
+    conversation = conversation(conn)
+    project = %Omunculus.Project{conn: conn, dir: config.root, config_path: path}
+
+    root =
+      Fixtures.insert(conn, :works, %{
+        assignee: "seller",
+        conversation_id: conversation,
+        workflow: "sale",
+        stage: "build",
+        state: "waiting",
+        waiting: "child"
+      })
+
+    child =
+      Fixtures.insert(conn, :works, %{
+        assignee: "clerk",
+        parent_id: root,
+        conversation_id: conversation,
+        workflow: "release",
+        stage: "promote"
+      })
+
+    stage = Enum.find(config.workflows["release"], &(&1.name == "promote")).ceiling
+    clerk = configured_actor(conn, config, conversation, "clerk", child, 2, stage)
+
+    assert {:ok, %{ok: true}, made} =
+             Harness.dispatch(
+               project,
+               "request_access",
+               %{
+                 "report" => "Built",
+                 "reason" => "Approve production at http://site.homologation.localhost:8080",
+                 "access" => [%{"kind" => "tool", "name" => "promote"}]
+               },
+               clerk
+             )
+
+    origin = Enum.find(made, &(&1.type == "request")).request_id
+    seller = configured_actor(conn, config, conversation, "seller", root, 0)
+
+    assert {:ok, %{ok: true}, made} =
+             Harness.dispatch(
+               project,
+               "escalate",
+               %{"reason" => "Approve the built site?", "origins" => %{"production" => origin}},
+               seller
+             )
+
+    envelope = Enum.find(made, &(&1.type == "request")).request_id
+    sales = configured_actor(conn, config, conversation, "sales", nil, 0)
+
+    assert {:ok, %{ok: true}, _} =
+             Harness.dispatch(
+               project,
+               "reply",
+               %{"request_id" => envelope, "body" => "The client has already been asked; wait."},
+               sales
+             )
+
+    assert {:ok, _} = Store.close_run(conn, seller.run_id)
+    assert {:ok, _} = Store.close_run(conn, sales.run_id)
+    resumed = configured_actor(conn, config, conversation, "seller", root, 0, nil, envelope)
+    assert {:ok, _} = Store.close_run(conn, resumed.run_id)
+    assert {:ok, run} = Store.view(conn, "run", resumed.run_id)
+
+    assert {:ok, fallback} =
+             Store.unanswered(conn, run, config, &Omunculus.Tools.Out.unanswered/3)
+
+    pending = Enum.find(fallback, &(&1.type == "request")).request_id
+    assert {:ok, request} = Store.view(conn, "request", pending)
+    assert Jason.decode!(request.arbiter) == Participant.agent("steward")
+    assert {:ok, []} = Store.unanswered(conn, run, config, &Omunculus.Tools.Out.unanswered/3)
+
+    assert {:ok, []} =
+             Query.all(
+               conn,
+               "SELECT * FROM requests WHERE json_extract(arbiter, '$.kind') = 'human'"
+             )
+
+    steward = configured_actor(conn, config, conversation, "steward", nil, 0, nil, pending)
+
+    assert {:ok, %{ok: true}, _} =
+             Harness.dispatch(project, "skill", %{"name" => "course-correction"}, steward)
+
+    assert {:ok, %{ok: true, output: evidence}, _} =
+             Harness.dispatch(project, "recovery_case", %{"request_id" => pending}, steward)
+
+    assert evidence =~ origin
+    assert evidence =~ "already been asked"
+    assert Jason.decode!(evidence)["client_delivery"]["state"] == "unverified"
+    assert Jason.decode!(evidence)["evidence_scope"]["recent"] =~ "not a complete history"
+
+    assert {:ok, %{ok: false, output: refusal}, rejected} =
+             Harness.dispatch(
+               project,
+               "correct_course",
+               %{
+                 "request_id" => pending,
+                 "instructions" => "The client has already been asked; wait.",
+                 "client_delivery" => "pending",
+                 "client_request_id" => envelope,
+                 "client_event_id" => request.event_id,
+                 "evidence_event_ids" => [request.event_id]
+               },
+               steward
+             )
+
+    assert refusal =~ "Internal escalation and agent text are not proof"
+    refute Enum.any?(rejected, &(&1.type in ~w(request escalate end grant)))
+    assert {:ok, %{status: "pending"}} = Store.view(conn, "request", pending)
+
+    assert {:ok, %{ok: true}, correction} =
+             Harness.dispatch(
+               project,
+               "correct_course",
+               %{
+                 "request_id" => pending,
+                 "client_delivery" => "unverified",
+                 "evidence_event_ids" => [request.event_id],
+                 "instructions" =>
+                   "Inspect your Inbox and escalate the production approval to the client with its exact homologation address."
+               },
+               steward
+             )
+
+    assert [corrected] = Enum.filter(correction, &(&1.type == "request"))
+    assert Jason.decode!(corrected.body)["arbiter"] == Participant.agent("sales")
+    refute Enum.any?(correction, &(&1.type in ~w(grant prompt)))
+    sales = configured_actor(conn, config, conversation, "sales", nil, 0)
+
+    assert {:ok, %{ok: true}, made} =
+             Harness.dispatch(
+               project,
+               "escalate",
+               %{
+                 "reason" =>
+                   "Você aprova publicar as quatro páginas em http://site.homologation.localhost:8080?",
+                 "origins" => %{"production" => corrected.request_id}
+               },
+               sales
+             )
+
+    human = Enum.find(made, &(&1.type == "request")).request_id
+    assert {:ok, question} = Store.view(conn, "request", human)
+    assert Jason.decode!(question.arbiter) == Participant.human("test", "owner")
+    assert question.origins["production"].origins["recovery"].origins["production"].id == origin
+    assert {:ok, %{grants: nil}} = Store.view(conn, "work", child)
   end
 
   test "model overrides reject unknown agents and model aliases" do
@@ -634,7 +829,16 @@ defmodule Omunculus.EvalProjectTest do
     assert {:ok, []} = Store.received_inbox(conn, sales.run_id)
   end
 
-  defp configured_actor(conn, config, conversation, agent, work, depth, stage \\ nil) do
+  defp configured_actor(
+         conn,
+         config,
+         conversation,
+         agent,
+         work,
+         depth,
+         stage \\ nil,
+         request_id \\ nil
+       ) do
     ceiling =
       Ceiling.mount(
         config,
@@ -655,7 +859,14 @@ defmodule Omunculus.EvalProjectTest do
           "reply",
           "escalate",
           "end",
-          "grant"
+          "grant",
+          "correct_course",
+          "recovery_case",
+          "skill",
+          "skill.course-correction",
+          "route_ask_step",
+          "route_request_access_step",
+          "route_escalate_step"
         ]
       )
 
@@ -665,6 +876,7 @@ defmodule Omunculus.EvalProjectTest do
         work_id: work,
         depth: depth,
         conversation_id: conversation,
+        request_id: request_id,
         ceiling: ceiling
       })
 

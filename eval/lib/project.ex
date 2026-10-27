@@ -37,9 +37,23 @@ defmodule EquivalentExchange.Project do
   end
 
   @doc "Builds the project in `dir` and returns the path of its omunculus.toml."
-  @spec build(String.t(), String.t(), {String.t(), boolean}, String.t() | nil, map) ::
+  @spec build(
+          String.t(),
+          String.t(),
+          {String.t(), boolean},
+          String.t() | nil,
+          map,
+          String.t() | nil
+        ) ::
           {:ok, String.t()} | {:error, term}
-  def build(dir, configuration, {model, code_mode}, workspace, agent_models \\ %{}) do
+  def build(
+        dir,
+        configuration,
+        {model, code_mode},
+        workspace,
+        agent_models \\ %{},
+        overlay_path \\ nil
+      ) do
     path = Path.join(dir, "omunculus.toml")
 
     with %{"ok" => true} <-
@@ -47,10 +61,9 @@ defmodule EquivalentExchange.Project do
              args: %{"name" => "amestris", "from" => Path.join([@eval, "presets", "amestris"])},
              config_path: path
            }),
-         {:ok, overlay} <-
-           Toml.decode_file(Path.join([@eval, "configs", configuration <> ".toml"])) do
+         {:ok, overlay} <- configuration(configuration, overlay_path) do
       {eval, overlay} = Map.pop(overlay, "eval", %{})
-      packs = Map.get(eval, "packs", [])
+      packs = Map.get(eval, "packs", []) ++ Map.get(eval, "extra_packs", [])
       {composition, overlay} = if packs == [], do: {%{}, overlay}, else: composition(overlay)
 
       data =
@@ -75,6 +88,7 @@ defmodule EquivalentExchange.Project do
 
       with :ok <- import_packs(packs, path, model),
            :ok <- compose(path, composition),
+           :ok <- adapt_agents(path, eval),
            :ok <- assign_models(path, agent_models, code_mode) do
         if workspace && File.dir?(workspace),
           do: File.cp_r!(workspace, Path.join(dir, "workspace"))
@@ -85,6 +99,42 @@ defmodule EquivalentExchange.Project do
       %{"ok" => false, "output" => reason} -> {:error, {:preset, reason}}
       {:error, _reason} = error -> error
     end
+  end
+
+  @doc "Loads an eval configuration with an optional experimental TOML overlay."
+  def configuration(name, overlay_path \\ nil) do
+    with {:ok, base} <- Toml.decode_file(Path.join([@eval, "configs", name <> ".toml"])) do
+      if overlay_path do
+        with {:ok, extra} <- Toml.decode_file(overlay_path), do: {:ok, merge(base, extra)}
+      else
+        {:ok, base}
+      end
+    end
+  end
+
+  defp adapt_agents(path, eval) do
+    {:ok, config} = Omunculus.Config.load(path)
+    data = Toml.decode_file!(path)
+
+    agents =
+      Enum.reduce(Map.get(eval, "agent_overrides", %{}), data["agents"], fn {name, override},
+                                                                            agents ->
+        original = Map.fetch!(config.agents, name)
+        {append, override} = Map.pop(override, "append_text")
+
+        override =
+          if append,
+            do: Map.put(override, "text", original.text <> "\n\n" <> append),
+            else: override
+
+        Map.put(agents, name, Map.merge(Map.get(agents, name, %{}), override))
+      end)
+
+    data = Map.put(data, "agents", agents)
+    extra_paths = Enum.map(Map.get(eval, "tool_paths", []), &Path.expand(&1, @eval))
+    data = update_in(data, ["tools", "paths"], &((&1 || []) ++ extra_paths))
+    File.write!(path, ConfigToml.encode(data))
+    :ok
   end
 
   defp assign_models(path, agent_models, code_mode) do
@@ -127,8 +177,12 @@ defmodule EquivalentExchange.Project do
     end)
   end
 
-  defp import_pack(%{"name" => name} = entry, path, model) do
-    dir = Path.join(@packs, name)
+  defp import_pack(entry, path, model) do
+    dir =
+      if entry["path"],
+        do: Path.expand(entry["path"], @eval),
+        else: Path.join(@packs, entry["name"])
+
     {:ok, pack} = Omunculus.Config.Packs.read(dir)
     pairs = fn names, to -> Enum.map_join(names || [], ",", &"#{&1}=#{to.(&1)}") end
 
