@@ -26,9 +26,6 @@ defmodule EquivalentExchange.Recovery do
     unless File.regular?(snapshot),
       do: raise(ArgumentError, "source needs its frozen cancellation snapshot")
 
-    source_project =
-      Path.join(source, "executions/design-team__conversation__design-to-build/agency/1/project")
-
     folder =
       Path.join(
         @repo,
@@ -38,6 +35,19 @@ defmodule EquivalentExchange.Recovery do
     temp = Path.join(@repo, ".temp/course-recovery/replays")
     File.mkdir_p!(folder)
     File.mkdir_p!(temp)
+
+    # The replays go when the experiment ends or raises; their parent too, once empty.
+    try do
+      experiment(folder, temp, source, snapshot, overlay, manifest, repetitions, budget)
+    after
+      erase(temp)
+      File.rmdir(Path.dirname(temp))
+    end
+  end
+
+  defp experiment(folder, temp, source, snapshot, overlay, manifest, repetitions, budget) do
+    source_project =
+      Path.join(source, "executions/design-team__conversation__design-to-build/agency/1/project")
 
     write_json(Path.join(folder, "manifest.json"), %{
       source: Path.relative_to(source, @repo),
@@ -90,7 +100,6 @@ defmodule EquivalentExchange.Recovery do
         ]
 
     File.write!(Path.join(folder, "report.md"), Enum.join(text, "\n") <> "\n")
-    File.rmdir(temp)
     IO.puts(folder)
     {:ok, folder}
   end
