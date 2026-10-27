@@ -91,18 +91,30 @@ defmodule Omunculus.OpenAIStub do
     error -> {:error, {:stub_build_failed, Exception.message(error)}}
   end
 
+  # The binary of the current source, under the build path; one build at a
+  # time, as test modules start stubs concurrently.
   defp build(cargo, source) do
+    stubs = Path.join(Mix.Project.build_path(), "openai_stub")
     fingerprint = fingerprint(source)
-    cache = Path.join(System.tmp_dir!(), "omunculus-openai-stub")
-    target_dir = Path.join(cache, "target-" <> fingerprint)
-    binary = Path.join([target_dir, "release", binary_name()])
+    binary = Path.join([stubs, fingerprint, binary_name()])
 
-    if File.exists?(binary) do
-      {:ok, binary}
-    else
-      File.mkdir_p!(target_dir)
-      manifest = Path.join(source, "Cargo.toml")
+    :global.trans({{__MODULE__, :build}, self()}, fn ->
+      if File.exists?(binary),
+        do: {:ok, binary},
+        else: compile(cargo, source, stubs, fingerprint, binary)
+    end)
+  end
 
+  # Builds in a scratch target dir that is removed afterwards, keeps only
+  # the binary and drops the binaries of earlier sources.
+  defp compile(cargo, source, stubs, fingerprint, binary) do
+    target_dir =
+      Path.join(System.tmp_dir!(), "omunculus-openai-stub-#{System.unique_integer([:positive])}")
+
+    built = Path.join([target_dir, "release", binary_name()])
+    manifest = Path.join(source, "Cargo.toml")
+
+    try do
       case System.cmd(
              cargo,
              ["build", "--release", "--manifest-path", manifest, "--target-dir", target_dir],
@@ -111,13 +123,21 @@ defmodule Omunculus.OpenAIStub do
              env: [{"CARGO_TERM_COLOR", "never"}]
            ) do
         {_output, 0} ->
-          if File.exists?(binary),
-            do: {:ok, binary},
-            else: {:error, {:stub_binary_missing, binary}}
+          if File.exists?(built) do
+            File.mkdir_p!(Path.dirname(binary))
+            for old <- File.ls!(stubs), old != fingerprint, do: File.rm_rf!(Path.join(stubs, old))
+            File.cp!(built, binary <> ".part")
+            File.rename!(binary <> ".part", binary)
+            {:ok, binary}
+          else
+            {:error, {:stub_binary_missing, built}}
+          end
 
         {output, status} ->
           {:error, {:stub_build_failed, status, output}}
       end
+    after
+      File.rm_rf(target_dir)
     end
   end
 
