@@ -1,6 +1,7 @@
 defmodule Omunculus.Tools.PathTest do
   use ExUnit.Case, async: true
 
+  alias Omunculus.ExecutionPolicyFixtures
   alias Omunculus.Tools.Path, as: PathAuth
 
   setup do
@@ -12,25 +13,25 @@ defmodule Omunculus.Tools.PathTest do
   end
 
   test "resolves a relative path against the first root", %{root: root} do
-    assert PathAuth.resolve([root], "sub/file.txt") == {:ok, Path.join(root, "sub/file.txt")}
+    assert resolve([root], "sub/file.txt") == {:ok, Path.join(root, "sub/file.txt")}
   end
 
   test "resolves an absolute path inside a root", %{root: root} do
     absolute = Path.join(root, "sub/file.txt")
-    assert PathAuth.resolve([root], absolute) == {:ok, absolute}
+    assert resolve([root], absolute) == {:ok, absolute}
   end
 
   test "resolves the root itself", %{root: root} do
-    assert PathAuth.resolve([root], ".") == {:ok, root}
+    assert resolve([root], ".") == {:ok, root}
   end
 
   test "refuses a .. that escapes the root", %{root: root} do
-    assert PathAuth.resolve([root], "../escape") ==
+    assert resolve([root], "../escape") ==
              {:error, "path outside roots: ../escape"}
   end
 
   test "refuses an absolute path outside every root", %{root: root} do
-    assert PathAuth.resolve([root], "/etc/passwd") ==
+    assert resolve([root], "/etc/passwd") ==
              {:error, "path outside roots: /etc/passwd"}
   end
 
@@ -38,10 +39,13 @@ defmodule Omunculus.Tools.PathTest do
     other = Omunculus.Fixtures.tmp_dir()
 
     absolute = Path.join(root, "sub/file.txt")
-    assert PathAuth.resolve([other, root], absolute) == {:ok, absolute}
+    assert resolve([other, root], absolute) == {:ok, absolute}
   end
 
   test "refuses when there are no roots" do
-    assert PathAuth.resolve([], "anything") == {:error, "no roots"}
+    assert resolve([], "anything") == {:error, "path outside roots: anything"}
   end
+
+  defp resolve(roots, path),
+    do: PathAuth.resolve(roots, path, %{}, ExecutionPolicyFixtures.policy(roots))
 end

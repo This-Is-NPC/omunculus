@@ -6,25 +6,16 @@ defmodule Omunculus.Tools.Path do
 
   def permissions(input), do: input |> Map.get(:view, %{}) |> Map.get("paths", %{})
 
-  def resolve(roots, path, permissions \\ %{})
-  def resolve([], _path, _permissions), do: {:error, "no roots"}
+  @spec resolve([String.t()], String.t(), map, Policy.t()) ::
+          {:ok, String.t()} | {:error, String.t()}
+  def resolve([], path, _permissions, _policy), do: {:error, "path outside roots: #{path}"}
 
-  def resolve(roots, path, permissions) do
+  def resolve(roots, path, permissions, %Policy{} = policy) do
     absolute = Path.expand(path, hd(roots))
 
     with {:ok, real} <- FilesystemPath.canonical(absolute),
          true <- permitted?(absolute, roots, permissions),
-         true <- permitted?(real, canonical_paths(roots), canonical_permissions(permissions)) do
-      {:ok, real}
-    else
-      _ -> {:error, "path outside roots: #{path}"}
-    end
-  end
-
-  @spec resolve([String.t()], String.t(), map, Policy.t()) ::
-          {:ok, String.t()} | {:error, String.t()}
-  def resolve(roots, path, permissions, %Policy{} = policy) do
-    with {:ok, real} <- resolve(roots, path, permissions),
+         true <- permitted?(real, canonical_paths(roots), canonical_permissions(permissions)),
          true <- Policy.readable?(policy, real) do
       {:ok, real}
     else
