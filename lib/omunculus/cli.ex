@@ -181,7 +181,7 @@ defmodule Omunculus.CLI do
   def format_error(:project_in_use), do: "project is in use by another Omunculus process"
 
   def format_error(:store_requires_recreation),
-    do: "store schema predates conversations; recreate the store"
+    do: "store tables differ from this schema; recreate the store"
 
   def format_error(:not_project_owner),
     do: "only the owner of the project config may bootstrap access"

@@ -24,7 +24,7 @@ without one.
 | `origins` | Canonical linked requests keyed by escalation part names, including their questions, options and original targets. |
 
 The store has twelve tables, including append-only `request_escalations`.
-Older request schemas without participant columns or escalation links are
+A store whose tables differ from that schema, or that lacks one of them, is
 refused with `store_requires_recreation`; there is no compatibility schema.
 Request identities and options are immutable. The canonical request view
 hydrates origins recursively and is shared by tools and authorized API reads.

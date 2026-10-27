@@ -521,7 +521,7 @@ needs what is missing:
 | `overrides.<tool>.schema names <variant>, which the <tool> manifest does not declare` | an override names an unknown schema |
 | `pack <pack> requires tools the project lacks: …` | an imported pack names tools no `[tools] path` holds |
 | `` not logged in to <id>; run `omunculus login --provider <id>` `` | credential missing |
-| `store schema predates conversations; recreate the store` | a store older than the schema |
+| `store tables differ from this schema; recreate the store` | a store whose tables differ from the schema |
 | `project is in use by another Omunculus process` | another direct command holds the project |
 
 A reason without a sentence of its own prints as the Elixir term.

@@ -215,10 +215,17 @@ defmodule Omunculus.Store.Schema do
     {"inbox", "created_at"}
   ]
 
+  # Each table's definition as sqlite_master keeps it, whitespace collapsed.
+  @tables Map.new(
+            for "CREATE TABLE IF NOT EXISTS " <> rest <- @statements do
+              [name | _] = String.split(rest, " ", parts: 2)
+              {name, ("CREATE TABLE " <> rest) |> String.split() |> Enum.join(" ")}
+            end
+          )
+
   @spec create(Omunculus.Store.Connection.t()) :: :ok | {:error, term}
   def create(conn) do
-    with :ok <- compatible_existing(conn),
-         :ok <- compatible_requests(conn) do
+    with :ok <- current(conn) do
       statements =
         @statements ++
           Enum.map(@system_columns, &system_column_trigger/1) ++
@@ -235,48 +242,19 @@ defmodule Omunculus.Store.Schema do
     end
   end
 
-  defp compatible_existing(conn) do
-    required = %{
-      "events" => ~w(conversation_id actor_kind origin_issuer origin_subject),
-      "prompts" => ~w(conversation_id actor_issuer actor_subject),
-      "runs" => ~w(conversation_id origin_issuer origin_subject cause_id),
-      "works" => ~w(conversation_id),
-      "requests" => ~w(requester arbiter)
-    }
+  # A store holds none of the schema's tables, or all of them as defined here.
+  defp current(conn) do
+    with {:ok, rows} <-
+           Query.all(conn, "SELECT name, sql FROM sqlite_master WHERE type = 'table'") do
+      tables =
+        for %{name: name, sql: sql} <- rows,
+            Map.has_key?(@tables, name),
+            into: %{},
+            do: {name, sql |> String.split() |> Enum.join(" ")}
 
-    Enum.reduce_while(required, :ok, fn {table, columns_required}, :ok ->
-      case Query.all(conn, "PRAGMA table_info(#{table})") do
-        {:ok, []} ->
-          {:cont, :ok}
-
-        {:ok, columns} ->
-          names = Enum.map(columns, & &1.name)
-
-          if Enum.all?(columns_required, &(&1 in names)),
-            do: {:cont, :ok},
-            else: {:halt, {:error, :store_requires_recreation}}
-
-        error ->
-          {:halt, error}
-      end
-    end)
-  end
-
-  defp compatible_requests(conn) do
-    with {:ok, requests} <-
-           Query.one(
-             conn,
-             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'requests'"
-           ),
-         {:ok, links} <- Query.all(conn, "PRAGMA table_info(request_escalations)") do
-      if is_nil(requests) or
-           (String.contains?(requests.sql, "'pending', 'escalated', 'closed'") and
-              Enum.all?(
-                ~w(origin_id escalated_id part event_id),
-                &(&1 in Enum.map(links, fn column -> column.name end))
-              )),
-         do: :ok,
-         else: {:error, :store_requires_recreation}
+      if tables == %{} or tables == @tables,
+        do: :ok,
+        else: {:error, :store_requires_recreation}
     end
   end
 

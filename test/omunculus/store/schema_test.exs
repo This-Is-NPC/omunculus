@@ -109,7 +109,7 @@ defmodule Omunculus.Store.SchemaTest do
              )
   end
 
-  test "rejects the previous request schema without silently upgrading it" do
+  test "rejects a table that differs from the schema without changing it" do
     {:ok, conn} = Omunculus.Store.Connection.open(":memory:")
     on_exit(fn -> Omunculus.Store.Connection.close(conn) end)
 
@@ -125,7 +125,7 @@ defmodule Omunculus.Store.SchemaTest do
              Query.all(conn, "SELECT name FROM sqlite_master WHERE type = 'table'")
   end
 
-  test "rejects missing escalation relation and keeps participant identities immutable", %{
+  test "rejects a store missing one of the tables and keeps identities immutable", %{
     conn: conn
   } do
     id = Fixtures.insert(conn, :requests)
