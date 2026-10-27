@@ -6,7 +6,7 @@ defmodule Omunculus.Mcp do
   """
 
   alias Omunculus.Execution
-  alias Omunculus.Execution.{Command, Policy}
+  alias Omunculus.Execution.{Command, Policy, Session}
   alias Omunculus.Path, as: FilesystemPath
 
   @type server :: Omunculus.Config.mcp_server()
@@ -49,7 +49,7 @@ defmodule Omunculus.Mcp do
 
             with {:ok, state} <- initialize(state), do: fun.(state)
           after
-            stop(handle)
+            Session.stop(handle)
           end
 
         {:error, reason} ->
@@ -97,7 +97,7 @@ defmodule Omunculus.Mcp do
 
     with :ok <-
            send_message(state.handle, %{jsonrpc: "2.0", id: id, method: method, params: params}) do
-      await(state, id, deadline(state.policy))
+      await(state, id, Policy.deadline(state.policy))
     end
   end
 
@@ -199,14 +199,6 @@ defmodule Omunculus.Mcp do
       false -> {:error, {:mcp, :not_found}}
       {:error, reason} -> {:error, {:mcp, reason}}
     end
-  end
-
-  defp deadline(policy), do: System.monotonic_time(:millisecond) + policy.limits.timeout_ms
-
-  defp stop(handle) do
-    Execution.stop(handle, :completed)
-  catch
-    :exit, _reason -> :ok
   end
 
   defp to_tool(tool) do

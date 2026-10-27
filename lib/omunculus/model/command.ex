@@ -14,7 +14,7 @@ defmodule Omunculus.Model.Command do
   """
 
   alias Omunculus.Execution
-  alias Omunculus.Execution.{Command, Policy}
+  alias Omunculus.Execution.{Command, Policy, Session}
   alias Omunculus.Path, as: FilesystemPath
   alias Omunculus.Prompt
 
@@ -55,14 +55,14 @@ defmodule Omunculus.Model.Command do
               Map.merge(turn, %{
                 handle: handle,
                 allowed: MapSet.new(tools, & &1.name),
-                deadline: deadline(execution)
+                deadline: Policy.deadline(execution)
               })
 
             with :ok <- Execution.write(handle, payload <> "\n") do
               receive_output(turn, "")
             end
           after
-            stop(handle)
+            Session.stop(handle)
           end
 
         {:error, reason} ->
@@ -201,13 +201,5 @@ defmodule Omunculus.Model.Command do
         end
       end)
     end
-  end
-
-  defp deadline(policy), do: System.monotonic_time(:millisecond) + policy.limits.timeout_ms
-
-  defp stop(handle) do
-    Execution.stop(handle, :completed)
-  catch
-    :exit, _reason -> :ok
   end
 end

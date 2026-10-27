@@ -5,7 +5,7 @@ defmodule Omunculus.Sandbox do
   """
 
   alias Omunculus.Execution
-  alias Omunculus.Execution.{Command, Policy}
+  alias Omunculus.Execution.{Command, Policy, Session}
   alias Omunculus.Path, as: FilesystemPath
 
   @spec run(
@@ -30,9 +30,9 @@ defmodule Omunculus.Sandbox do
             Jason.encode!(%{code: code, names: Enum.map(tools, & &1.name)}) <> "\n"
           )
 
-        receive_output(handle, "", MapSet.new(tools, & &1.name), call, deadline(policy))
+        receive_output(handle, "", MapSet.new(tools, & &1.name), call, Policy.deadline(policy))
       after
-        stop(handle)
+        Session.stop(handle)
       end
     end
   end
@@ -118,13 +118,5 @@ defmodule Omunculus.Sandbox do
         _ -> false
       end
     end)
-  end
-
-  defp deadline(policy), do: System.monotonic_time(:millisecond) + policy.limits.timeout_ms
-
-  defp stop(handle) do
-    Execution.stop(handle, :completed)
-  catch
-    :exit, _reason -> :ok
   end
 end

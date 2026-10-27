@@ -163,6 +163,11 @@ defmodule Omunculus.Execution.Policy do
     }
   end
 
+  @doc "The monotonic millisecond by which a process started now must end."
+  @spec deadline(t) :: integer
+  def deadline(%__MODULE__{} = policy),
+    do: System.monotonic_time(:millisecond) + policy.limits.timeout_ms
+
   @spec readable?(t, String.t()) :: boolean
   def readable?(%__MODULE__{} = policy, path) when is_binary(path) do
     with {:ok, canonical} <- FilesystemPath.canonical(path) do
