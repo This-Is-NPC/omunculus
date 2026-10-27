@@ -1,7 +1,7 @@
 defmodule Omunculus.Model.Fake do
   @moduledoc """
-  The model of stage 1: never calls a tool, echoes back the first
-  non-empty line of the assembled prompt it was given.
+  A model that never calls a tool: it records and returns
+  `fake model: ` followed by the first non-empty line of its prompt.
   """
 
   @spec new(map) ::
