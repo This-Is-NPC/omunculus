@@ -1,6 +1,8 @@
 defmodule Omunculus.Server.OpenAPI do
   @moduledoc "Builds the OpenAPI document from the HTTP router's route declarations."
 
+  alias Omunculus.Maps
+
   @operations %{
     health: %{summary: "Check server health", status: 200, response: :health, public: true},
     openapi: %{
@@ -189,8 +191,8 @@ defmodule Omunculus.Server.OpenAPI do
       parameters: parameters(path, spec),
       responses: responses(spec)
     }
-    |> maybe_put(:requestBody, spec[:request] && request(spec.request))
-    |> maybe_put(:security, if(spec[:public], do: [], else: nil))
+    |> Maps.maybe_put(:requestBody, spec[:request] && request(spec.request))
+    |> Maps.maybe_put(:security, if(spec[:public], do: [], else: nil))
   end
 
   defp parameters(path, spec) do
@@ -289,8 +291,6 @@ defmodule Omunculus.Server.OpenAPI do
   defp request(name), do: %{required: true, content: json(ref(name))}
   defp json(schema), do: %{"application/json" => %{schema: schema}}
   defp ref(name), do: %{"$ref" => "#/components/schemas/#{name}"}
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
   defp maybe_append(list, nil), do: list
   defp maybe_append(list, value), do: list ++ [value]
 

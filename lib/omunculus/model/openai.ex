@@ -23,6 +23,7 @@ defmodule Omunculus.Model.OpenAI do
   arrives, and `stream_options.include_usage` asks for the `usage` chunk.
   """
 
+  alias Omunculus.Maps
   alias Omunculus.Model.{Body, EventStream, HTTP}
   alias Omunculus.Prompt
 
@@ -104,7 +105,7 @@ defmodule Omunculus.Model.OpenAI do
 
   defp loop(client, tools, messages, call, record, catalog, execution) do
     with {:ok, message} <- post(client, request_body(client, tools, messages)),
-         :ok <- record.(HTTP.maybe_put(strip_message(message), "usage", message["usage"])) do
+         :ok <- record.(Maps.maybe_put(strip_message(message), "usage", message["usage"])) do
       case message do
         %{"tool_calls" => [_ | _] = tool_calls} ->
           tool_messages = Enum.map(tool_calls, &run_tool_call(&1, call, catalog, execution))
@@ -127,10 +128,10 @@ defmodule Omunculus.Model.OpenAI do
 
   defp request_body(client, tools, messages) do
     %{model: client.model, messages: messages, tools: tools}
-    |> HTTP.maybe_put(:temperature, client.temperature)
-    |> HTTP.maybe_put(:prompt_cache_key, client.prompt_cache_key)
-    |> HTTP.maybe_put(:stream, client.stream || nil)
-    |> HTTP.maybe_put(:stream_options, if(client.stream, do: %{include_usage: true}))
+    |> Maps.maybe_put(:temperature, client.temperature)
+    |> Maps.maybe_put(:prompt_cache_key, client.prompt_cache_key)
+    |> Maps.maybe_put(:stream, client.stream || nil)
+    |> Maps.maybe_put(:stream_options, if(client.stream, do: %{include_usage: true}))
     |> Body.merge(client.body)
   end
 
@@ -151,7 +152,7 @@ defmodule Omunculus.Model.OpenAI do
   end
 
   defp extract_message(%{"choices" => [%{"message" => message} | _]} = body),
-    do: {:ok, HTTP.maybe_put(message, "usage", body["usage"])}
+    do: {:ok, Maps.maybe_put(message, "usage", body["usage"])}
 
   defp extract_message(body), do: {:error, {:openai, {:invalid_response, body}}}
 
@@ -198,7 +199,7 @@ defmodule Omunculus.Model.OpenAI do
   defp chunk_tool_calls(reply, _calls), do: reply
 
   defp streamed_message(%{content: content, tool_calls: calls, usage: usage}) do
-    message = HTTP.maybe_put(%{"role" => "assistant", "content" => content}, "usage", usage)
+    message = Maps.maybe_put(%{"role" => "assistant", "content" => content}, "usage", usage)
 
     case calls |> Enum.sort_by(&elem(&1, 0)) |> Enum.map(&elem(&1, 1)) do
       [] -> message

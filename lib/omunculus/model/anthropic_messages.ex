@@ -21,6 +21,7 @@ defmodule Omunculus.Model.AnthropicMessages do
   host.
   """
 
+  alias Omunculus.Maps
   alias Omunculus.Model.{Body, EventStream, HTTP}
   alias Omunculus.Prompt
 
@@ -116,9 +117,9 @@ defmodule Omunculus.Model.AnthropicMessages do
       messages: mark_last(messages),
       tools: tools
     }
-    |> HTTP.maybe_put(:system, system)
-    |> HTTP.maybe_put(:temperature, client.temperature)
-    |> HTTP.maybe_put(:stream, client.stream || nil)
+    |> Maps.maybe_put(:system, system)
+    |> Maps.maybe_put(:temperature, client.temperature)
+    |> Maps.maybe_put(:stream, client.stream || nil)
     |> Body.merge(client.body)
   end
 

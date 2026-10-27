@@ -91,8 +91,4 @@ defmodule Omunculus.Model.HTTP do
         {:error, reason}
     end
   end
-
-  @spec maybe_put(map, term, term) :: map
-  def maybe_put(map, _key, nil), do: map
-  def maybe_put(map, key, value), do: Map.put(map, key, value)
 end

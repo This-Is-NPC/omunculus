@@ -19,6 +19,7 @@ defmodule Omunculus.Model.OpenAIResponses do
   module names a host.
   """
 
+  alias Omunculus.Maps
   alias Omunculus.Model.{Body, EventStream, HTTP}
   alias Omunculus.Prompt
 
@@ -85,10 +86,10 @@ defmodule Omunculus.Model.OpenAIResponses do
 
   defp request_body(client, tools, input) do
     %{model: client.model, input: input, tools: tools}
-    |> HTTP.maybe_put(:instructions, if(client.instructions != "", do: client.instructions))
-    |> HTTP.maybe_put(:temperature, client.temperature)
-    |> HTTP.maybe_put(:prompt_cache_key, client.prompt_cache_key)
-    |> HTTP.maybe_put(:stream, client.stream || nil)
+    |> Maps.maybe_put(:instructions, if(client.instructions != "", do: client.instructions))
+    |> Maps.maybe_put(:temperature, client.temperature)
+    |> Maps.maybe_put(:prompt_cache_key, client.prompt_cache_key)
+    |> Maps.maybe_put(:stream, client.stream || nil)
     |> Body.merge(client.body)
   end
 
@@ -111,7 +112,7 @@ defmodule Omunculus.Model.OpenAIResponses do
   defp extract_output(body), do: {:error, {:openai, {:invalid_response, body}}}
 
   defp reply(response),
-    do: HTTP.maybe_put(%{"output" => response["output"]}, "usage", response["usage"])
+    do: Maps.maybe_put(%{"output" => response["output"]}, "usage", response["usage"])
 
   defp event(%{"type" => "response.output_text.delta", "delta" => text}, output, client)
        when is_binary(text) do

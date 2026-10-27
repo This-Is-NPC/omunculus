@@ -34,7 +34,7 @@ defmodule Omunculus.Config do
   `[workspaces.<name>]` tables.
   """
 
-  alias Omunculus.Auth
+  alias Omunculus.{Auth, Maps}
   alias Omunculus.Config.{Layer, Packs}
   alias Omunculus.Tool.{Catalog, Manifest, Overrides}
 
@@ -2162,14 +2162,14 @@ defmodule Omunculus.Config do
               "model" => model,
               "timeout_ms" => timeout_ms
             }
-            |> maybe_put_model("temperature", temperature)
-            |> maybe_put_model("headers", headers)
-            |> maybe_put_model("body", body)
-            |> maybe_put_model("stream", stream)
-            |> maybe_put_model("retries", retries)
-            |> maybe_put_model("code_mode", code_mode)
-            |> maybe_put_model("prompt_cache_key", prompt_cache_key)
-            |> maybe_put_model("provider", provider)
+            |> Maps.maybe_put("temperature", temperature)
+            |> Maps.maybe_put("headers", headers)
+            |> Maps.maybe_put("body", body)
+            |> Maps.maybe_put("stream", stream)
+            |> Maps.maybe_put("retries", retries)
+            |> Maps.maybe_put("code_mode", code_mode)
+            |> Maps.maybe_put("prompt_cache_key", prompt_cache_key)
+            |> Maps.maybe_put("provider", provider)
 
           {:ok,
            %{
@@ -2209,7 +2209,7 @@ defmodule Omunculus.Config do
               "model" => model,
               "params" => params
             }
-            |> maybe_put_model("provider", provider)
+            |> Maps.maybe_put("provider", provider)
 
           {:ok, %{api: "command", module: Omunculus.Model.Command, input: input}}
         else
@@ -2337,9 +2337,6 @@ defmodule Omunculus.Config do
       {:error, {:unknown_module, name}}
     end
   end
-
-  defp maybe_put_model(map, _key, nil), do: map
-  defp maybe_put_model(map, key, value), do: Map.put(map, key, value)
 
   defp parse_agents(agents, models, config_dir) when is_map(agents) do
     Enum.reduce_while(agents, {:ok, %{}}, fn {name, data}, {:ok, acc} ->
