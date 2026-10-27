@@ -18,10 +18,21 @@ Singleton {
 
   // The project the window is on and its socket: the one it was opened on,
   // until a card of another project's is opened on the board.
-  property string socket: Quickshell.env("OMUNCULUS_SOCKET")
-  property string project: Quickshell.env("OMUNCULUS_PROJECT")
-  readonly property string base: "/v1/projects/" + project
-  property bool connected: false
+  Project {
+    id: client
+    onReached: {
+      root.loadConversations()
+      root.loadSetup()
+    }
+  }
+  property alias socket: client.socket
+  property alias project: client.project
+  property alias base: client.base
+  property alias connected: client.connected
+  property alias message: client.message
+  property alias messageIsError: client.messageIsError
+  property alias noticeCount: client.noticeCount
+  readonly property Http http: client.http
   property var conversations: []
   // Conversation id -> {title, running, waiting}, read from its snapshot.
   property var summaries: ({})
@@ -97,10 +108,6 @@ Singleton {
   // Agent name -> its colour, in the order agents first appear.
   property var tones: ({})
 
-  property string message: ""
-  property bool messageIsError: false
-  property int noticeCount: 0
-
   readonly property var running: runs.filter(run => run.status === "open")
   readonly property var waiting: requests.filter(request => Requests.pending(request) && Requests.human(request.arbiter))
   readonly property var unread: inbox.filter(item => !item.read_at)
@@ -110,52 +117,27 @@ Singleton {
   readonly property var asking: requests.filter(request => Requests.pending(request))
 
 
-  Component.onCompleted: {
-    if (socket === "" || project === "")
-      tell("this window was opened without a project to show", true)
-    else
-      check()
-  }
-
-  // Whether the server answers, asked again every few seconds.
-  function check() {
-    call("GET", "/v1/identity", null, false, () => {
-      if (!connected) {
-        connected = true
-        loadConversations()
-        loadSetup()
-      }
-    }, () => connected = false)
-  }
-  Timer { interval: 5000; repeat: true; running: root.socket !== ""; onTriggered: root.check() }
-
-  function tell(text, isError) {
-    message = text
-    messageIsError = isError
-    noticeCount++
-  }
-
   // copy puts text on the Wayland clipboard, as it is, and says so.
   function copy(text) {
     clipboard.command = ["wl-copy", "--", text]
     clipboard.startDetached()
-    tell("copied", false)
+    client.tell("copied", false)
   }
   Process { id: clipboard }
 
   // Reads the project's setup through the config tool on the local socket.
   function loadSetup() {
     const on = project
-    cli(["config", "--whole", "true"], output => {
+    http.setup(socket, read => {
       if (on === project)
-        setup = JSON.parse(output)
+        setup = read
     })
   }
 
   // Runs a command line on the local socket, as `omunculus <argv>` would;
   // `done` gets what it printed, and `failed`, when given, why it failed.
   function cli(argv, done, failed) {
-    call("POST", "/v1/cli", { argv: argv }, false, data => done(data.output), failed)
+    http.cli(socket, argv, done, failed)
   }
 
   // The model id an agent runs on, as configured, or "" before the setup.
@@ -178,7 +160,7 @@ Singleton {
 
   function loadConversations() {
     const on = project
-    call("GET", base + "/conversations", null, false, data => {
+    client.call("GET", base + "/conversations", null, false, data => {
       if (on !== project)
         return
       conversations = data.items.slice().sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -223,14 +205,14 @@ Singleton {
     if (!on)
       return
     boardRuns = {}
-    call("GET", "/v1/projects", null, false, data => {
+    client.call("GET", "/v1/projects", null, false, data => {
       if (!boardWanted)
         return
       boardProjects = data.items
       for (const place of data.items) {
         loadWorks(place)
         loadBoardConversations(place)
-        http.call(place.socket, "POST", "/v1/cli", { argv: ["config", "--whole", "true"] }, false, answer => keep("boardSetups", place.id, JSON.parse(answer.output)))
+        http.setup(place.socket, read => keep("boardSetups", place.id, read))
       }
       watching = true
     })
@@ -316,7 +298,7 @@ Singleton {
   }
 
   function createConversation(name) {
-    call("POST", base + "/conversations", {}, true, data => {
+    client.call("POST", base + "/conversations", {}, true, data => {
       loadConversations()
       open(data.id)
       agent = name
@@ -333,7 +315,7 @@ Singleton {
   }
   AgentImages {
     id: images
-    http: http
+    http: root.http
     socket: root.socket
     base: root.base
     agents: root.setup ? root.setup.agents : []
@@ -343,8 +325,7 @@ Singleton {
     model: root.boardProjects
     delegate: AgentImages {
       required property var modelData
-      // The window's Http, which `http` here would name this property.
-      http: images.http
+      http: root.http
       socket: modelData.socket
       base: "/v1/projects/" + modelData.id
       agents: (root.boardSetups[modelData.id] || { agents: [] }).agents
@@ -373,7 +354,7 @@ Singleton {
     logBuffer = []
     conversationStream.stop()
     // The history comes in one read, before the stream resumes after it.
-    call("GET", base + "/conversations/" + id + "/events", null, false, data => {
+    client.call("GET", base + "/conversations/" + id + "/events", null, false, data => {
       if (id !== conversationId)
         return
       replaying = true
@@ -398,7 +379,7 @@ Singleton {
     if (conversationId === "")
       return
     const id = conversationId
-    call("GET", base + "/conversations/" + id + "/snapshot", null, false, data => {
+    client.call("GET", base + "/conversations/" + id + "/snapshot", null, false, data => {
       if (id !== conversationId)
         return
       works = data.works
@@ -430,7 +411,7 @@ Singleton {
   // opens it.
   function openAttachment(file) {
     http.openAttachment(socket, base + "/conversations/" + conversationId + "/attachments/" + file.sha256, file)
-    tell("opening " + file.name, false)
+    client.tell("opening " + file.name, false)
   }
 
   // A note on a work: context its agents read, not a new run.
@@ -438,14 +419,14 @@ Singleton {
     const value = text.trim()
     if (value === "" || !work)
       return
-    call("POST", base + "/conversations/" + conversationId + "/comments", { body: value, work_id: work }, true, () => tell("noted", false))
+    client.call("POST", base + "/conversations/" + conversationId + "/comments", { body: value, work_id: work }, true, () => client.tell("noted", false))
   }
 
   // Answers a request with words and an option, of the request itself or, by
   // the parts of path, of the decision it gathers that the option is of.
   function reply(requestId, option, body, path) {
-    call("POST", base + "/conversations/" + conversationId + "/requests/" + requestId + "/reply",
-      Requests.answer(option, body, path), true, () => tell(option ? "replied " + option : "replied", false))
+    client.call("POST", base + "/conversations/" + conversationId + "/requests/" + requestId + "/reply",
+      Requests.answer(option, body, path), true, () => client.tell(option ? "replied " + option : "replied", false))
   }
 
   // Raises a request waiting on you to whoever decides above you, as one
@@ -456,12 +437,12 @@ Singleton {
       return
     const origins = {}
     origins[Requests.label(request.requester)] = requestId
-    call("POST", base + "/conversations/" + conversationId + "/requests/escalate",
-      { reason: reason, origins: origins }, true, () => tell("escalated", false))
+    client.call("POST", base + "/conversations/" + conversationId + "/requests/escalate",
+      { reason: reason, origins: origins }, true, () => client.tell("escalated", false))
   }
 
   function markRead(inboxId) {
-    call("POST", base + "/conversations/" + conversationId + "/inbox/" + inboxId + "/read", {}, true, () => refresh())
+    client.call("POST", base + "/conversations/" + conversationId + "/inbox/" + inboxId + "/read", {}, true, () => refresh())
   }
 
   function work(id) {
@@ -809,15 +790,5 @@ Singleton {
     id: refreshTimer
     interval: 250
     onTriggered: root.refresh()
-  }
-
-  // One HTTP request on the project's socket, as `Http.call` makes it.
-  function call(method, path, body, idempotent, done, failed) {
-    http.call(socket, method, path, body, idempotent, done, failed)
-  }
-
-  Http {
-    id: http
-    onRefused: reason => root.tell(reason, true)
   }
 }

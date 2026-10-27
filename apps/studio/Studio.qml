@@ -11,61 +11,43 @@ import "kit/ui"
 Singleton {
   id: root
 
-  readonly property string socket: Quickshell.env("OMUNCULUS_SOCKET")
-  readonly property string project: Quickshell.env("OMUNCULUS_PROJECT")
-  readonly property string base: "/v1/projects/" + project
-
-  property bool connected: false
+  // Once the server answers, everything the settings show is read.
+  Project {
+    id: client
+    onReached: {
+      root.loadSetup()
+      root.loadOmapass()
+      root.loadOverviews()
+      root.loadCatalog()
+    }
+  }
+  property alias socket: client.socket
+  property alias project: client.project
+  property alias connected: client.connected
+  property alias message: client.message
+  property alias messageIsError: client.messageIsError
+  property alias noticeCount: client.noticeCount
+  readonly property Http http: client.http
   // The project's setup, as the config tool prints it: {root, agents, models,
   // workspaces, workspace, workflows, document, literal_keys, revision, names};
   // null until it answers.
   property var setup: null
 
-  property string message: ""
-  property bool messageIsError: false
-  property int noticeCount: 0
-
-  Component.onCompleted: {
-    if (socket === "" || project === "")
-      tell("this window was opened without a project to show", true)
-    else
-      check()
-  }
-
-  // Whether the server answers, asked again every few seconds; once it does,
-  // everything the settings show is read.
-  function check() {
-    call("GET", "/v1/identity", null, false, () => {
-      if (!connected) {
-        connected = true
-        loadSetup()
-        loadOmapass()
-        loadOverviews()
-        loadCatalog()
-      }
-    }, () => connected = false)
-  }
-  Timer { interval: 5000; repeat: true; running: root.socket !== ""; onTriggered: root.check() }
-
-  function tell(text, isError) {
-    message = text
-    messageIsError = isError
-    noticeCount++
-  }
+  function tell(text, isError) { client.tell(text, isError) }
 
   // The file of an agent's image, as a url, or "" while it has none or it
   // is being fetched.
   function imageOf(agent) { return images.source(agent) }
   AgentImages {
     id: images
-    http: http
+    http: root.http
     socket: root.socket
-    base: root.base
+    base: client.base
     agents: root.setup ? root.setup.agents : []
   }
 
   function loadSetup() {
-    call("POST", "/v1/cli", { argv: ["config", "--whole", "true"] }, false, data => setup = JSON.parse(data.output))
+    http.setup(socket, read => setup = read)
   }
 
   // An agent's colour, by its place among the setup's agents.
@@ -82,7 +64,7 @@ Singleton {
     const argv = ["configure", "--item", item, "--value", JSON.stringify(value), "--revision", setup.revision]
     if (from)
       argv.push("--from", from)
-    call("POST", "/v1/cli", { argv: argv }, false, () => {
+    http.cli(socket, argv, () => {
       loadSetup()
       loadOverviews()
       done()
@@ -95,15 +77,14 @@ Singleton {
   // Sends one short prompt to the model `name` as `value` would make it, and
   // hands its {reply, ms}, or the reason it failed.
   function testModel(name, value, done, failed) {
-    call("POST", "/v1/cli", { argv: ["model_test", "--name", name, "--value", JSON.stringify(value)] }, false,
-      data => done(JSON.parse(data.output)), failed)
+    http.cli(socket, ["model_test", "--name", name, "--value", JSON.stringify(value)], output => done(JSON.parse(output)), failed)
   }
 
   // Whether omapass is installed, its program and its passwords, as the omapass
   // tool prints them; null until it answers.
   property var omapass: null
   function loadOmapass() {
-    call("POST", "/v1/cli", { argv: ["omapass"] }, false, data => omapass = JSON.parse(data.output))
+    http.cli(socket, ["omapass"], output => omapass = JSON.parse(output))
   }
 
   // The skills of the project on screen, by name, from its catalog.
@@ -171,7 +152,7 @@ Singleton {
   // until it answers.
   property var catalog: null
   function loadCatalog() {
-    call("POST", "/v1/cli", { argv: ["tools"] }, false, data => catalog = JSON.parse(data.output))
+    http.cli(socket, ["tools"], output => catalog = JSON.parse(output))
   }
 
   // Project id -> the project as it runs in each of its workspaces, as the
@@ -180,26 +161,14 @@ Singleton {
   // Project id -> the packs it imports, as its config tool lists them.
   property var packsOf: ({})
   function loadOverviews() {
-    call("GET", "/v1/projects", null, false, data => {
+    client.call("GET", "/v1/projects", null, false, data => {
       projects = data.items
       for (const each of projects) {
-        http.call(each.socket, "POST", "/v1/cli", { argv: ["overview", "--whole", "true"] }, false, data => {
-          overviews = Object.assign({}, overviews, { [each.id]: JSON.parse(data.output) })
+        http.cli(each.socket, ["overview", "--whole", "true"], output => {
+          overviews = Object.assign({}, overviews, { [each.id]: JSON.parse(output) })
         }, reason => overviews = Object.assign({}, overviews, { [each.id]: { error: reason } }))
-        http.call(each.socket, "POST", "/v1/cli", { argv: ["config", "--whole", "true"] }, false, data => {
-          packsOf = Object.assign({}, packsOf, { [each.id]: JSON.parse(data.output).packs })
-        }, () => {})
+        http.setup(each.socket, read => packsOf = Object.assign({}, packsOf, { [each.id]: read.packs }), () => {})
       }
     })
-  }
-
-  // One HTTP request on the project's socket, as `Http.call` makes it.
-  function call(method, path, body, idempotent, done, failed) {
-    http.call(socket, method, path, body, idempotent, done, failed)
-  }
-
-  Http {
-    id: http
-    onRefused: reason => root.tell(reason, true)
   }
 }

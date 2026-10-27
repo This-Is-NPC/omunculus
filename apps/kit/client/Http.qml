@@ -28,6 +28,17 @@ QtObject {
     run(args, on, done, failed)
   }
 
+  // Runs a command line on the socket `on`, as `omunculus <argv>` would;
+  // `done` gets what it printed, and `failed`, when given, why it failed.
+  function cli(on, argv, done, failed) {
+    call(on, "POST", "/v1/cli", { argv: argv }, false, data => done(data.output), failed)
+  }
+
+  // The setup of the project on the socket `on`, as the config tool prints it.
+  function setup(on, done, failed) {
+    cli(on, ["config", "--whole", "true"], output => done(JSON.parse(output)), failed)
+  }
+
   // Runs `command`, which prints an answer and its status as curl -w does
   // above, and reads it as `call` does.
   function run(command, on, done, failed) {
