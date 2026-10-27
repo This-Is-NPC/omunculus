@@ -319,7 +319,7 @@ Item {
       id: picker
       anchors.fill: parent
       focus: parent.shown
-      onPicked: name => Omunculus.createConversation(name)
+      onPicked: name => Omunculus.createConversation(name, () => view.page = "chat")
       onBack: view.back()
     }
   }

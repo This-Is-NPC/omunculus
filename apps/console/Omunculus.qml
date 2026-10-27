@@ -297,11 +297,14 @@ Singleton {
     loadSetup()
   }
 
-  function createConversation(name) {
+  // A new conversation with the agent `name`, open once the server made it;
+  // `opened` follows.
+  function createConversation(name, opened) {
     client.call("POST", base + "/conversations", {}, true, data => {
       loadConversations()
       open(data.id)
       agent = name
+      opened()
     })
   }
 
