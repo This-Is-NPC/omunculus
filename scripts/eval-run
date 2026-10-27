@@ -8,4 +8,20 @@ if [[ -f .env ]]; then
   source .env
   set +a
 fi
-exec mix run eval/run.exs run "$@"
+
+# The task's flags, from the usage_* variables mise sets.
+args=()
+for flag in model k label timeout jobs against overlay resume; do
+  value=usage_$flag
+  [[ -z ${!value:-} ]] || args+=("--$flag" "${!value}")
+done
+# A repeatable flag: mise joins its values, shell-quoted, in one variable.
+for flag in agent-model task configuration; do
+  value=usage_${flag//-/_}
+  eval "values=(${!value:-})"
+  for each in "${values[@]}"; do
+    args+=("--$flag" "$each")
+  done
+done
+[[ ${usage_code_mode:-} != true ]] || args+=(--code-mode)
+exec mix run eval/run.exs run "${args[@]}"

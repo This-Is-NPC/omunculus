@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
-exec _build/bench/native/runner/release/capacity_benchmark run "$@"
+
+# The task's flags, from the usage_* variables mise sets.
+args=()
+for flag in profiles interval-ms context-bytes max-agents output; do
+  value=usage_${flag//-/_}
+  [[ -z ${!value:-} ]] || args+=("--$flag" "${!value}")
+done
+[[ ${usage_pin_cpus:-} != true ]] || args+=(--pin-cpus)
+exec _build/bench/native/runner/release/capacity_benchmark run "${args[@]}"

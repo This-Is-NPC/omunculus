@@ -25,10 +25,21 @@ run = "scripts/benchmark-preflight"
 [tasks."benchmark:report"]
 description = "Linear resident benchmark: report"
 run = "scripts/benchmark-report"
+usage = '''
+arg "[folder]" help="Result folder to report; bench/results when left out"
+'''
 
 [tasks."benchmark:run"]
 description = "Linear resident benchmark: run"
 run = "scripts/benchmark-run"
+usage = '''
+flag "--profiles <profiles>" help="Hardware profiles to run, comma-separated: A, B or A,B"
+flag "--interval-ms <ms>" help="Minimum interval between two agent creations"
+flag "--context-bytes <bytes>" help="Context each agent holds"
+flag "--max-agents <count>" help="Stop after this many agents"
+flag "--pin-cpus" help="Pin each profile to its CPUs; requires the cpuset controller"
+flag "--output <folder>" help="Result folder"
+'''
 
 [tasks.check]
 description = "Check that docs/cli.md is current and the documentation's links resolve"
@@ -74,6 +85,10 @@ run = "scripts/docs-cli"
 [tasks."eval:compare"]
 description = "Equivalent Exchange: compare two result folders (mise run eval:compare -- <before> <now>)"
 run = "scripts/eval-compare"
+usage = '''
+arg "<before>" help="The earlier result folder"
+arg "<now>" help="The later result folder"
+'''
 
 [tasks."eval:recovery:check"]
 description = "Check the experimental steward recovery tool contracts"
@@ -92,6 +107,20 @@ flag "--budget <responses>" help="Recorded model responses per diagnostic trial"
 [tasks."eval:run"]
 description = "Equivalent Exchange: run the behaviour benchmark (mise run eval:run -- --model <model> --k 2)"
 run = "scripts/eval-run"
+usage = '''
+flag "--model <model>" help="Model every agent runs on"
+flag "--agent-model <agent=model>" var=#true help="Model one agent runs on instead"
+flag "--k <count>" help="Repetitions per task and configuration"
+flag "--label <name>" help="Name of the result folder"
+flag "--task <part>" var=#true help="Run only the tasks whose id holds this part"
+flag "--configuration <name>" var=#true help="Run only this configuration"
+flag "--timeout <seconds>" help="Seconds an execution may take, or infinity"
+flag "--jobs <count>" help="Executions run at once"
+flag "--against <folder>" help="Result folder the report compares with"
+flag "--code-mode" help="Turn on the model's code_mode"
+flag "--overlay <file>" help="Experimental TOML configuration overlay"
+flag "--resume <folder>" help="Continue the unfinished executions of a result folder; takes no other flag"
+'''
 
 [tasks."eval:selftest"]
 description = "Equivalent Exchange: prove every task's check against its solution"
