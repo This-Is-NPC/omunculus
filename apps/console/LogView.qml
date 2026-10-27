@@ -56,22 +56,12 @@ Item {
     RowLayout {
       Layout.fillWidth: true
       spacing: 10
-      TextBox {
+      FilterBox {
         id: filterBox
         Layout.fillWidth: true
-        dense: true
         placeholderText: "filter by kind, agent, run, work or text"
-        onTextEdited: view.filter = text
-        Keys.onEscapePressed: {
-          if (text) {
-            clear()
-            view.filter = ""
-          } else {
-            table.focusRows()
-          }
-        }
-        Keys.onDownPressed: table.focusRows()
-        Keys.onReturnPressed: table.focusRows()
+        onApplied: value => view.filter = value
+        onLeave: table.focusRows()
       }
       Label {
         text: view.rows.length + (view.filter.trim() ? " of " + Omunculus.log.length : "") + " events"

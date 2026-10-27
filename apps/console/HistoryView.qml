@@ -40,28 +40,12 @@ ColumnLayout {
   RowLayout {
     Layout.fillWidth: true
     spacing: 10
-    TextBox {
+    FilterBox {
       id: searchBox
       Layout.fillWidth: true
-      dense: true
       placeholderText: "search what was said first"
-      onTextEdited: typing.restart()
-      // The filter follows once typing pauses.
-      Timer { id: typing; interval: 250; onTriggered: history.search = searchBox.text }
-      Keys.onEscapePressed: {
-        if (searchBox.text) {
-          searchBox.clear()
-          history.search = ""
-        } else {
-          table.focusRows()
-        }
-      }
-      Keys.onDownPressed: table.focusRows()
-      Keys.onReturnPressed: {
-        typing.stop()
-        history.search = searchBox.text
-        table.focusRows()
-      }
+      onApplied: value => history.search = value
+      onLeave: table.focusRows()
     }
     Label {
       text: history.shown.length + (history.shown.length === 1 ? " conversation" : " conversations")

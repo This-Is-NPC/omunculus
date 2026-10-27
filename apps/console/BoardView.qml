@@ -132,28 +132,12 @@ Item {
     RowLayout {
       Layout.fillWidth: true
       spacing: 10
-      TextBox {
+      FilterBox {
         id: filterBox
         Layout.fillWidth: true
-        dense: true
         placeholderText: "filter by title, project, conversation, workflow, stage or agent"
-        onTextEdited: typing.restart()
-        // The board follows once typing pauses.
-        Timer { id: typing; interval: 250; onTriggered: board.filter = filterBox.text }
-        Keys.onEscapePressed: {
-          if (text) {
-            clear()
-            board.filter = ""
-          } else {
-            board.focusEntry()
-          }
-        }
-        Keys.onDownPressed: board.focusEntry()
-        Keys.onReturnPressed: {
-          typing.stop()
-          board.filter = text
-          board.focusEntry()
-        }
+        onApplied: value => board.filter = value
+        onLeave: board.focusEntry()
       }
       Label {
         text: board.shown.length + (board.filter.trim() ? " of " + Omunculus.board.length : "") + (Omunculus.board.length === 1 ? " work" : " works")

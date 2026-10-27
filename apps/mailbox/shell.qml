@@ -68,10 +68,12 @@ ShellRoot {
         }
 
         // The one search box: in the command bar, or over the list on a narrow window.
-        SearchBox {
+        FilterBox {
           id: searchBox
           parent: window.narrow ? narrowSearch : commands.searchSlot
           anchors.fill: parent
+          placeholderText: "search threads  /"
+          onApplied: value => Mail.query = value.trim().toLowerCase()
           onLeave: threads.enter()
         }
 
