@@ -21,7 +21,7 @@ defmodule Omunculus.Model.AnthropicMessages do
   host.
   """
 
-  alias Omunculus.Model.{Arguments, Body, EventStream}
+  alias Omunculus.Model.{Body, EventStream, HTTP}
   alias Omunculus.Prompt
 
   @spec new(map) ::
@@ -33,27 +33,13 @@ defmodule Omunculus.Model.AnthropicMessages do
            Omunculus.Execution.Policy.t() ->
              {:ok, String.t()} | {:error, term})
   def new(spec) when is_map(spec) do
-    client = %{
-      url: spec["url"] <> "/messages",
-      model: spec["model"],
-      timeout: spec["timeout_ms"],
-      retries: spec["retries"],
-      code_mode: spec["code_mode"] == true,
-      headers: request_headers(spec),
-      temperature: spec["temperature"],
-      stream: spec["stream"] == true,
-      body: spec["body"] || %{}
-    }
+    client = HTTP.client(spec, "/messages", request_headers(spec))
 
     fn %Prompt{} = prompt, tools, call, record, delta, execution ->
-      function_tools =
-        Enum.map(tools, &anthropic_tool/1) ++
-          if(client.code_mode, do: [executor_tool()], else: [])
-
       loop(
         Map.put(client, :delta, delta),
         system(prompt.instructions),
-        function_tools,
+        HTTP.tools(client, tools, &anthropic_tool/1),
         conversation(prompt),
         call,
         record,
@@ -89,34 +75,14 @@ defmodule Omunculus.Model.AnthropicMessages do
           []
       end
 
-    base ++ cred ++ headers_list(Map.get(spec, "headers"))
-  end
-
-  defp headers_list(nil), do: []
-  defp headers_list(headers) when is_list(headers), do: headers
-
-  defp headers_list(headers) when is_map(headers),
-    do: Enum.map(headers, fn {key, value} -> {key, value} end)
-
-  defp executor_tool do
-    anthropic_tool(%{
-      name: "__omunculus_execute",
-      description:
-        "Execute JavaScript with await tools.<name>(args). Return the result. No direct filesystem, network or process access.",
-      parameters: %{
-        type: "object",
-        properties: %{code: %{type: "string"}},
-        required: ["code"],
-        additionalProperties: false
-      }
-    })
+    base ++ cred ++ HTTP.headers_list(Map.get(spec, "headers"))
   end
 
   defp anthropic_tool(%{name: name, description: description, parameters: parameters}) do
     %{
       name: name,
       description: description,
-      input_schema: Omunculus.Model.OpenAI.parameters_schema(parameters)
+      input_schema: HTTP.parameters_schema(parameters)
     }
   end
 
@@ -150,9 +116,9 @@ defmodule Omunculus.Model.AnthropicMessages do
       messages: mark_last(messages),
       tools: tools
     }
-    |> maybe_put(:system, system)
-    |> maybe_put(:temperature, client.temperature)
-    |> maybe_put(:stream, client.stream || nil)
+    |> HTTP.maybe_put(:system, system)
+    |> HTTP.maybe_put(:temperature, client.temperature)
+    |> HTTP.maybe_put(:stream, client.stream || nil)
     |> Body.merge(client.body)
   end
 
@@ -197,9 +163,6 @@ defmodule Omunculus.Model.AnthropicMessages do
     earlier ++ [%{last | content: before ++ [Map.put(block, :cache_control, @cache)]}]
   end
 
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
-
   defp post(%{stream: true} = client, body) do
     reply = %{message: nil, blocks: %{}, json: %{}}
 
@@ -216,19 +179,9 @@ defmodule Omunculus.Model.AnthropicMessages do
   end
 
   defp post(client, body) do
-    case Req.post(
-           client.url,
-           [json: body, headers: client.headers, receive_timeout: client.timeout] ++
-             Omunculus.Model.Retry.options(client.retries)
-         ) do
-      {:ok, %Req.Response{status: status, body: response_body}} when status in 200..299 ->
-        extract_message(response_body)
-
-      {:ok, %Req.Response{status: status, body: response_body}} ->
-        {:error, {:anthropic, {:http, status, response_body}}}
-
-      {:error, reason} ->
-        {:error, {:anthropic, reason}}
+    case HTTP.post(client, body) do
+      {:ok, response_body} -> extract_message(response_body)
+      {:error, reason} -> {:error, {:anthropic, reason}}
     end
   end
 
@@ -341,18 +294,8 @@ defmodule Omunculus.Model.AnthropicMessages do
   defp text_chunks(_item), do: []
 
   defp run_tool_use(%{"id" => id, "name" => name, "input" => input}, call, catalog, execution) do
-    result =
-      with {:ok, args} <- Arguments.decode(input),
-           do: invoke(name, args, call, catalog, execution)
-
-    tool_result(id, result)
+    tool_result(id, HTTP.run(name, input, call, catalog, execution))
   end
-
-  defp invoke("__omunculus_execute", %{"code" => code}, call, catalog, execution)
-       when is_binary(code),
-       do: Omunculus.Sandbox.run(code, catalog, call, execution)
-
-  defp invoke(name, args, call, _catalog, _execution), do: call.(name, args)
 
   defp tool_result(id, {:ok, output}),
     do: %{type: "tool_result", tool_use_id: id, content: output}

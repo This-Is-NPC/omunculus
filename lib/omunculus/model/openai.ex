@@ -23,7 +23,7 @@ defmodule Omunculus.Model.OpenAI do
   arrives, and `stream_options.include_usage` asks for the `usage` chunk.
   """
 
-  alias Omunculus.Model.{Arguments, Body, EventStream}
+  alias Omunculus.Model.{Body, EventStream, HTTP}
   alias Omunculus.Prompt
 
   @spec new(map) ::
@@ -35,26 +35,12 @@ defmodule Omunculus.Model.OpenAI do
            Omunculus.Execution.Policy.t() ->
              {:ok, String.t()} | {:error, term})
   def new(spec) when is_map(spec) do
-    client = %{
-      url: spec["url"] <> "/chat/completions",
-      model: spec["model"],
-      timeout: spec["timeout_ms"],
-      retries: spec["retries"],
-      code_mode: spec["code_mode"] == true,
-      headers: request_headers(spec),
-      temperature: spec["temperature"],
-      stream: spec["stream"] == true,
-      prompt_cache_key: spec["prompt_cache_key"],
-      body: spec["body"] || %{}
-    }
+    client = HTTP.client(spec, "/chat/completions", request_headers(spec))
 
     fn prompt, tools, call, record, delta, execution ->
-      function_tools =
-        Enum.map(tools, &function_tool/1) ++ if(client.code_mode, do: [executor_tool()], else: [])
-
       loop(
         Map.put(client, :delta, delta),
-        function_tools,
+        HTTP.tools(client, tools, &function_tool/1),
         messages(prompt),
         call,
         record,
@@ -66,7 +52,7 @@ defmodule Omunculus.Model.OpenAI do
 
   @doc false
   def request_headers(spec) do
-    explicit = headers_list(Map.get(spec, "headers"))
+    explicit = HTTP.headers_list(Map.get(spec, "headers"))
 
     case Map.get(spec, "credential") do
       %{"access" => access} when is_binary(access) and access != "" ->
@@ -79,12 +65,6 @@ defmodule Omunculus.Model.OpenAI do
         explicit
     end
   end
-
-  defp headers_list(nil), do: []
-  defp headers_list(headers) when is_list(headers), do: headers
-
-  defp headers_list(headers) when is_map(headers),
-    do: Enum.map(headers, fn {key, value} -> {key, value} end)
 
   # The instructions are a message of their own: a server caches whole
   # messages, so the next run's request reuses them though its context differs.
@@ -111,36 +91,20 @@ defmodule Omunculus.Model.OpenAI do
   defp tool_message({%{"id" => id}, output}),
     do: %{role: "tool", tool_call_id: id, content: output}
 
-  defp executor_tool do
-    function_tool(%{
-      name: "__omunculus_execute",
-      description:
-        "Execute JavaScript with await tools.<name>(args). Return the result. No direct filesystem, network or process access.",
-      parameters: %{
-        type: "object",
-        properties: %{code: %{type: "string"}},
-        required: ["code"],
-        additionalProperties: false
-      }
-    })
-  end
-
   defp function_tool(%{name: name, description: description, parameters: parameters}) do
     %{
       type: "function",
-      function: %{name: name, description: description, parameters: parameters_schema(parameters)}
+      function: %{
+        name: name,
+        description: description,
+        parameters: HTTP.parameters_schema(parameters)
+      }
     }
   end
 
-  @doc false
-  def parameters_schema(parameters) when map_size(parameters) == 0,
-    do: %{type: "object", properties: %{}}
-
-  def parameters_schema(parameters), do: parameters
-
   defp loop(client, tools, messages, call, record, catalog, execution) do
     with {:ok, message} <- post(client, request_body(client, tools, messages)),
-         :ok <- record.(maybe_put(strip_message(message), "usage", message["usage"])) do
+         :ok <- record.(HTTP.maybe_put(strip_message(message), "usage", message["usage"])) do
       case message do
         %{"tool_calls" => [_ | _] = tool_calls} ->
           tool_messages = Enum.map(tool_calls, &run_tool_call(&1, call, catalog, execution))
@@ -163,15 +127,12 @@ defmodule Omunculus.Model.OpenAI do
 
   defp request_body(client, tools, messages) do
     %{model: client.model, messages: messages, tools: tools}
-    |> maybe_put(:temperature, client.temperature)
-    |> maybe_put(:prompt_cache_key, client.prompt_cache_key)
-    |> maybe_put(:stream, client.stream || nil)
-    |> maybe_put(:stream_options, if(client.stream, do: %{include_usage: true}))
+    |> HTTP.maybe_put(:temperature, client.temperature)
+    |> HTTP.maybe_put(:prompt_cache_key, client.prompt_cache_key)
+    |> HTTP.maybe_put(:stream, client.stream || nil)
+    |> HTTP.maybe_put(:stream_options, if(client.stream, do: %{include_usage: true}))
     |> Body.merge(client.body)
   end
-
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp post(%{stream: true} = client, body) do
     reply = %{content: nil, tool_calls: %{}, usage: nil}
@@ -183,24 +144,14 @@ defmodule Omunculus.Model.OpenAI do
   end
 
   defp post(client, body) do
-    case Req.post(
-           client.url,
-           [json: body, headers: client.headers, receive_timeout: client.timeout] ++
-             Omunculus.Model.Retry.options(client.retries)
-         ) do
-      {:ok, %Req.Response{status: status, body: response_body}} when status in 200..299 ->
-        extract_message(response_body)
-
-      {:ok, %Req.Response{status: status, body: response_body}} ->
-        {:error, {:openai, {:http, status, response_body}}}
-
-      {:error, reason} ->
-        {:error, {:openai, reason}}
+    case HTTP.post(client, body) do
+      {:ok, response_body} -> extract_message(response_body)
+      {:error, reason} -> {:error, {:openai, reason}}
     end
   end
 
   defp extract_message(%{"choices" => [%{"message" => message} | _]} = body),
-    do: {:ok, maybe_put(message, "usage", body["usage"])}
+    do: {:ok, HTTP.maybe_put(message, "usage", body["usage"])}
 
   defp extract_message(body), do: {:error, {:openai, {:invalid_response, body}}}
 
@@ -247,7 +198,7 @@ defmodule Omunculus.Model.OpenAI do
   defp chunk_tool_calls(reply, _calls), do: reply
 
   defp streamed_message(%{content: content, tool_calls: calls, usage: usage}) do
-    message = maybe_put(%{"role" => "assistant", "content" => content}, "usage", usage)
+    message = HTTP.maybe_put(%{"role" => "assistant", "content" => content}, "usage", usage)
 
     case calls |> Enum.sort_by(&elem(&1, 0)) |> Enum.map(&elem(&1, 1)) do
       [] -> message
@@ -261,18 +212,8 @@ defmodule Omunculus.Model.OpenAI do
          catalog,
          execution
        ) do
-    result =
-      with {:ok, args} <- Arguments.decode(arguments),
-           do: invoke(name, args, call, catalog, execution)
-
-    tool_result_message(id, result)
+    tool_result_message(id, HTTP.run(name, arguments, call, catalog, execution))
   end
-
-  defp invoke("__omunculus_execute", %{"code" => code}, call, catalog, execution)
-       when is_binary(code),
-       do: Omunculus.Sandbox.run(code, catalog, call, execution)
-
-  defp invoke(name, args, call, _catalog, _execution), do: call.(name, args)
 
   defp tool_result_message(id, {:ok, output}),
     do: %{role: "tool", tool_call_id: id, content: output}

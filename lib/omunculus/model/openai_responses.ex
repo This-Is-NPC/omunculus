@@ -19,7 +19,7 @@ defmodule Omunculus.Model.OpenAIResponses do
   module names a host.
   """
 
-  alias Omunculus.Model.{Arguments, Body, EventStream}
+  alias Omunculus.Model.{Body, EventStream, HTTP}
   alias Omunculus.Prompt
 
   @spec new(map) ::
@@ -31,26 +31,12 @@ defmodule Omunculus.Model.OpenAIResponses do
            Omunculus.Execution.Policy.t() ->
              {:ok, String.t()} | {:error, term})
   def new(spec) when is_map(spec) do
-    client = %{
-      url: spec["url"] <> "/responses",
-      model: spec["model"],
-      timeout: spec["timeout_ms"],
-      retries: spec["retries"],
-      code_mode: spec["code_mode"] == true,
-      headers: Omunculus.Model.OpenAI.request_headers(spec),
-      temperature: spec["temperature"],
-      stream: spec["stream"] == true,
-      prompt_cache_key: spec["prompt_cache_key"],
-      body: spec["body"] || %{}
-    }
+    client = HTTP.client(spec, "/responses", Omunculus.Model.OpenAI.request_headers(spec))
 
     fn %Prompt{} = prompt, tools, call, record, delta, execution ->
-      function_tools =
-        Enum.map(tools, &function_tool/1) ++ if(client.code_mode, do: [executor_tool()], else: [])
-
       loop(
         Map.merge(client, %{delta: delta, instructions: prompt.instructions}),
-        function_tools,
+        HTTP.tools(client, tools, &function_tool/1),
         input(prompt),
         call,
         record,
@@ -74,26 +60,12 @@ defmodule Omunculus.Model.OpenAIResponses do
       Enum.map(calls, fn {call, out} -> function_call_output(call["call_id"], {:ok, out}) end)
   end
 
-  defp executor_tool do
-    function_tool(%{
-      name: "__omunculus_execute",
-      description:
-        "Execute JavaScript with await tools.<name>(args). Return the result. No direct filesystem, network or process access.",
-      parameters: %{
-        type: "object",
-        properties: %{code: %{type: "string"}},
-        required: ["code"],
-        additionalProperties: false
-      }
-    })
-  end
-
   defp function_tool(%{name: name, description: description, parameters: parameters}) do
     %{
       type: "function",
       name: name,
       description: description,
-      parameters: Omunculus.Model.OpenAI.parameters_schema(parameters)
+      parameters: HTTP.parameters_schema(parameters)
     }
   end
 
@@ -113,15 +85,12 @@ defmodule Omunculus.Model.OpenAIResponses do
 
   defp request_body(client, tools, input) do
     %{model: client.model, input: input, tools: tools}
-    |> maybe_put(:instructions, if(client.instructions != "", do: client.instructions))
-    |> maybe_put(:temperature, client.temperature)
-    |> maybe_put(:prompt_cache_key, client.prompt_cache_key)
-    |> maybe_put(:stream, client.stream || nil)
+    |> HTTP.maybe_put(:instructions, if(client.instructions != "", do: client.instructions))
+    |> HTTP.maybe_put(:temperature, client.temperature)
+    |> HTTP.maybe_put(:prompt_cache_key, client.prompt_cache_key)
+    |> HTTP.maybe_put(:stream, client.stream || nil)
     |> Body.merge(client.body)
   end
-
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp post(%{stream: true} = client, body) do
     case EventStream.post(client, body, nil, &event(&1, &2, client)) do
@@ -132,19 +101,9 @@ defmodule Omunculus.Model.OpenAIResponses do
   end
 
   defp post(client, body) do
-    case Req.post(
-           client.url,
-           [json: body, headers: client.headers, receive_timeout: client.timeout] ++
-             Omunculus.Model.Retry.options(client.retries)
-         ) do
-      {:ok, %Req.Response{status: status, body: response_body}} when status in 200..299 ->
-        extract_output(response_body)
-
-      {:ok, %Req.Response{status: status, body: response_body}} ->
-        {:error, {:openai, {:http, status, response_body}}}
-
-      {:error, reason} ->
-        {:error, {:openai, reason}}
+    case HTTP.post(client, body) do
+      {:ok, response_body} -> extract_output(response_body)
+      {:error, reason} -> {:error, {:openai, reason}}
     end
   end
 
@@ -152,7 +111,7 @@ defmodule Omunculus.Model.OpenAIResponses do
   defp extract_output(body), do: {:error, {:openai, {:invalid_response, body}}}
 
   defp reply(response),
-    do: maybe_put(%{"output" => response["output"]}, "usage", response["usage"])
+    do: HTTP.maybe_put(%{"output" => response["output"]}, "usage", response["usage"])
 
   defp event(%{"type" => "response.output_text.delta", "delta" => text}, output, client)
        when is_binary(text) do
@@ -197,18 +156,8 @@ defmodule Omunculus.Model.OpenAIResponses do
          catalog,
          execution
        ) do
-    result =
-      with {:ok, args} <- Arguments.decode(arguments),
-           do: invoke(name, args, call, catalog, execution)
-
-    function_call_output(id, result)
+    function_call_output(id, HTTP.run(name, arguments, call, catalog, execution))
   end
-
-  defp invoke("__omunculus_execute", %{"code" => code}, call, catalog, execution)
-       when is_binary(code),
-       do: Omunculus.Sandbox.run(code, catalog, call, execution)
-
-  defp invoke(name, args, call, _catalog, _execution), do: call.(name, args)
 
   defp function_call_output(id, {:ok, output}),
     do: %{type: "function_call_output", call_id: id, output: output}
