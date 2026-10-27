@@ -163,6 +163,10 @@ claims `done`.
 
 ## Running
 
+In these commands, `<model>` is a placeholder for a model alias of the
+preset. `<before>`, `<now>` and `<run>` are placeholders for folder names
+under `eval/results/`: an earlier result, a later one, and any one.
+
 ```sh
 mise run eval:selftest                       # checks and scoring
 mise run eval:run -- --model <model> --k 3 --jobs 24 --label pilot
@@ -181,6 +185,8 @@ measured with and without the sandbox code bridge.
 `--timeout infinity` waits until the conversation ends without an elapsed-time
 limit. The manifest records `timeout_s` as `"infinity"`. HTTP models have their
 own receive timeout: use `timeout_ms = "infinity"` in a model table to remove it.
+The preset's `local` model uses that setting so a slow server does not end its
+calls. Sandbox command limits remain configured under `[execution]`.
 
 After a stopped process or reboot, start the same deploy environment when the
 task publishes, then continue the saved result folder:
@@ -211,8 +217,6 @@ appends project overrides relative to `eval/`; and `entry_agent` names the
 depth-zero recipient for each client send. The manifest records the overlay.
 The optional [steward recovery experiment](../docs/how-to-measure-course-recovery.md)
 uses these settings; it does not change the baseline agency.
-The preset's `local` model uses that setting so inference speed does not end
-its calls. Sandbox command limits remain configured under `[execution]`.
 
 `--agent-model <agent>=<model>` overrides one agent after the packs are
 imported. Repeat it to mix models; agent names and model aliases must exist
@@ -221,33 +225,42 @@ overrides. Usage is priced using each agent's model, including when scoring
 the saved execution again. With `--code-mode`, overridden models also use
 the code bridge.
 
-The preset's `local` model uses the OpenAI-compatible llama.cpp server at
-`http://192.168.0.200:8081/v1`, with model id `bonsai2-27b`, no authentication
-and thinking disabled. Change that model table to use another local server.
-To compare it with Haiku on the same task, run these in separate terminals:
+The preset has a `local` model table for an OpenAI-compatible server, such as
+llama.cpp, vLLM or Ollama. Before using it, set its `url` to your server's
+`/v1` address and its `model` to the id that server serves. The table sends no
+authentication. It sets `timeout_ms = "infinity"`, a `handoff_tokens` near
+half of what one server slot holds, and `chat_template_kwargs` that turn
+thinking off; change them to fit your server. [docs/config.md](../docs/config.md)
+describes every key of a model table.
+
+To compare two models on the same task, run each in its own terminal.
+`<model-a>` and `<model-b>` are placeholders for two model aliases of the
+preset:
 
 ```sh
-mise run eval:run -- --model haiku --configuration agency --task design-to-build --k 1 --jobs 1 --timeout 3600 --label comparison-haiku
-mise run eval:run -- --model local --configuration agency --task design-to-build --k 1 --jobs 1 --timeout infinity --label comparison-local
+mise run eval:run -- --model <model-a> --configuration agency --task design-to-build --k 1 --jobs 1 --timeout infinity --label comparison-a
+mise run eval:run -- --model <model-b> --configuration agency --task design-to-build --k 1 --jobs 1 --timeout infinity --label comparison-b
 ```
 
 Each run has its own projects and result folder. Deploy tasks require the
 dream team's environment; published app names are scoped to each project.
-The simulated person and the decider keep their configured external models
-for both runs. Once both finish, use `mise run eval:compare -- <haiku-result>
-<local-result>`; both paths are placeholders for their result folders.
-Local inference has no provider cost in the report; this does not measure
-electricity or hardware costs, or the separate person and decider calls.
+The simulated person and the decider keep their configured models for both
+runs. Once both finish, run `mise run eval:compare -- <result-a> <result-b>`.
+`<result-a>` and `<result-b>` are placeholders for the two result folders.
+A model with no price, such as a local one, has no provider cost in the
+report. The report does not measure electricity or hardware costs. It does
+not count the person's and the decider's calls either.
 
-For a hybrid agency, keep Haiku on the coordinators and Bonsai on the workers:
+To mix models, give the coordinators one model and the workers another.
+`<coordinator-model>` is a placeholder for a model alias:
 
 ```sh
-mise run eval:run -- --model local --agent-model sales=haiku --agent-model seller=haiku --agent-model administrator=haiku --agent-model design-lead=haiku --configuration agency --task design-to-build --k 1 --jobs 1 --timeout infinity --label comparison-hybrid
+mise run eval:run -- --model <model-b> --agent-model sales=<coordinator-model> --agent-model seller=<coordinator-model> --agent-model administrator=<coordinator-model> --agent-model design-lead=<coordinator-model> --configuration agency --task design-to-build --k 1 --jobs 1 --timeout infinity --label comparison-mixed
 ```
 
-Design, implementation, review and publication agents keep the default
-`local` model. The task, permissions, simulated person and decider are the
-same as in the single-model runs.
+Design, implementation, review and publication agents keep the `--model`
+model. The task, permissions, simulated person and decider are the same as
+in the single-model runs.
 
 `eval:run` loads `.env` for the provider's key. Runs are isolated, so several
 may run at once, each on its own model; a run is compared only with the folder
@@ -255,11 +268,23 @@ may run at once, each on its own model; a run is compared only with the folder
 once (one by default): each has a project of its own, so they share nothing
 but the provider's rate limits, which each model's `retries` rides out; a
 provider that limits the requests in flight fails past that many executions
-at once, so keep `--jobs` under it. Each execution gets a fresh project; the instruction goes through the CLI, which returns once every run
-has finished; then the runner plays the person, answering what waits on them
-as the task says, until no answer is made or the execution timeout. Free-text requests, and decisions offering neither the task's `decision` nor `deny`, which a person given choices may still answer in words, use the simulated person from the task facts, once per received envelope; the harness's `retry` waits. A linked text answer returns origins to the intermediary for distribution; the conversation records one question and one client message per envelope. It grants a request only when the
-task grants everything asked; denying, it says what it would not grant and
-what it would.
+at once, so keep `--jobs` under it.
+
+Each execution gets a fresh project. The instruction goes through the CLI,
+which returns once every run has finished. Then the runner plays the person.
+It answers what waits on them as the task says, until no answer is made or
+the execution times out.
+
+Some requests get no scripted answer: free-text requests, and decisions that
+offer neither the task's `decision` nor its `deny`. A person given choices may
+still answer those in words. For them the runner uses the simulated person,
+which answers from the task facts once per received envelope. The harness's
+`retry` waits.
+
+A linked text answer returns origins to the intermediary, which distributes
+them. The conversation records one question and one client message per
+envelope. The runner grants a request only when the task grants everything
+asked. When it denies, it says what it would not grant and what it would.
 
 The teamwork report's `network_to_person` counts request envelopes about
 `sandbox.network` addressed to a human, including linked escalations. In
