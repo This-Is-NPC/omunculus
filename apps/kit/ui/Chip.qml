@@ -10,12 +10,8 @@ Rectangle {
   property string text
   // Optional icon before the text, from Icon's set.
   property string icon
-  // Optional colour before the text, as a small square, as a person's.
-  property color swatch: "transparent"
   // Room kept on the right for something drawn over the chip, like a chevron.
   property real trailing: 0
-  // A chip that leads to another view slides right as the view leaves left.
-  property bool departs: false
   property bool checked: false
   property bool dim: false
   property color accent: Theme.primary
@@ -34,7 +30,6 @@ Rectangle {
   border.color: checked ? accent : (hovered ? Theme.dim : Theme.line)
   opacity: off ? 0.35 : (dim && !hovered ? 0.6 : 1)
   scale: mouse.pressed && !off ? 0.96 : 1
-  transform: Translate { id: nudge }
 
   Behavior on color { ColorAnimation { duration: 140 } }
   Behavior on border.color { ColorAnimation { duration: 140 } }
@@ -51,14 +46,7 @@ Rectangle {
     id: content
     anchors.centerIn: parent
     anchors.horizontalCenterOffset: -chip.trailing / 2
-    spacing: (chip.icon || chip.swatch.a > 0) && chip.text ? 8 : 0
-    Rectangle {
-      anchors.verticalCenter: parent.verticalCenter
-      visible: chip.swatch.a > 0
-      width: 6
-      height: 6
-      color: chip.swatch
-    }
+    spacing: chip.icon && chip.text ? 8 : 0
     Icon {
       anchors.verticalCenter: parent.verticalCenter
       visible: chip.icon.length > 0
@@ -91,20 +79,10 @@ Rectangle {
     onClicked: chip.press()
   }
 
-  // Run the chip as if clicked: keys reuse it so they move the same way.
+  // Run the chip as if clicked, from the pointer or a key.
   function press() {
-    if (chip.off)
-      return
-    if (chip.departs)
-      depart.restart()
-    chip.clicked()
-  }
-
-  SequentialAnimation {
-    id: depart
-    NumberAnimation { target: nudge; property: "x"; from: 0; to: 22; duration: 200; easing.type: Easing.OutCubic }
-    PauseAnimation { duration: 200 }
-    NumberAnimation { target: nudge; property: "x"; to: 0; duration: 0 }
+    if (!chip.off)
+      chip.clicked()
   }
 
   FocusRing {}

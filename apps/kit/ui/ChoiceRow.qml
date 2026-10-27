@@ -13,7 +13,6 @@ Rectangle {
   property bool guarded: false
   // The row the keyboard is on.
   property bool current: false
-  property int elide: Text.ElideRight
   readonly property color tone: guarded ? Theme.error : Theme.foreground
   signal picked()
 
@@ -40,7 +39,7 @@ Rectangle {
     color: row.chosen ? Theme.primary : (row.lit ? row.tone : (row.guarded ? Qt.alpha(Theme.error, 0.8) : Theme.dim))
     font.pixelSize: 11
     font.letterSpacing: 1
-    elide: row.elide
+    elide: Text.ElideRight
   }
   MouseArea {
     id: pick

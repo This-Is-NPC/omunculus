@@ -11,7 +11,6 @@ Item {
   property var options: []
   property string current
   property var describe: option => option
-  property bool emphasized: false
   property bool dim: false
   property bool invalid: false
   // What the button shows; the current option's description when empty.
@@ -24,7 +23,7 @@ Item {
   Chip {
     id: button
     text: dropdown.label || dropdown.describe(dropdown.current)
-    checked: list.opened || dropdown.emphasized || dropdown.invalid
+    checked: list.opened || dropdown.invalid
     accent: dropdown.invalid ? Theme.error : Theme.primary
     dim: dropdown.dim
     onClicked: list.opened ? list.close() : list.open()

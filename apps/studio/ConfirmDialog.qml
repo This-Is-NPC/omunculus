@@ -15,7 +15,6 @@ ModalDialog {
   property string question
   property string warning
   property string confirmText
-  property string confirmIcon: "close"
   property string cancelText: "CANCEL"
   signal confirmed()
 
@@ -62,7 +61,7 @@ ModalDialog {
         TraceButton {
           dense: true
           role: "guarded"
-          icon: dialog.confirmIcon
+          icon: "close"
           text: dialog.confirmText
           armed: true
           onClicked: {

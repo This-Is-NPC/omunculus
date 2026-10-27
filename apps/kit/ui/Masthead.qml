@@ -2,35 +2,31 @@ import QtQuick
 import QtQuick.Layouts
 
 // Masthead is the window's top line: the name, a section, the readout on the
-// right, and a hairline that fades out from an accent notch. Tight, it packs
-// closer to give its height and width to what is below and on the right.
+// right, and a hairline that fades out from an accent notch.
 ColumnLayout {
   id: mast
   property string section
-  property bool tight: false
-  // Whether the name leads the line; without it, the section does.
-  property bool branded: true
   default property alias trailing: tail.data
-  spacing: tight ? 6 : 10
+  spacing: 10
   onSectionChanged: sweep.restart()
 
   RowLayout {
     Layout.fillWidth: true
     spacing: 10
-    Label { visible: mast.branded; text: "OMUNCULUS"; font.pixelSize: 15; font.bold: true; font.letterSpacing: 6 }
-    Label { visible: mast.branded; text: "╱"; color: Theme.primary; font.pixelSize: 13 }
+    Label { text: "OMUNCULUS"; font.pixelSize: 15; font.bold: true; font.letterSpacing: 6 }
+    Label { text: "╱"; color: Theme.primary; font.pixelSize: 13 }
     DecodeLabel {
       Layout.fillWidth: true
       // The section name keeps its room before the readout on the right, but
       // elides on a narrow window: a wider minimum would widen the whole view.
-      Layout.minimumWidth: Math.min(implicitWidth, mast.tight ? 0 : 60)
+      Layout.minimumWidth: Math.min(implicitWidth, 60)
       value: mast.section.toUpperCase()
       color: Theme.dim
       font.pixelSize: 10
       font.letterSpacing: 3
       elide: Text.ElideRight
     }
-    RowLayout { id: tail; spacing: mast.tight ? 8 : 14 }
+    RowLayout { id: tail; spacing: 14 }
   }
 
   Item {

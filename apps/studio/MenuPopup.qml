@@ -2,20 +2,16 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "kit/ui"
 
-// MenuPopup is the list a menu button opens below itself: one ChoiceRow per entry ({text, icon, chosen, guarded}), `picked` giving its
-// index. As wide as its longest entry and at least `minimumWidth`, aligned to
-// the button's right edge when `alignRight`, above it when `above`; long lists
-// scroll. The keyboard starts on the chosen entry: Up/Down/Home/End move, Enter
-// or Space picks. A completion list leaves the keyboard in its field
-// (`takesKeyboard: false`), which drives it with move() and pick().
+// MenuPopup is the list a menu button opens below itself: one ChoiceRow per
+// entry ({text, icon, chosen, guarded}), `picked` giving its index. As wide as
+// its longest entry and at least `minimumWidth`; long lists scroll. The
+// keyboard starts on the chosen entry: Up/Down/Home/End move, Enter or Space
+// picks.
 PopupFrame {
   id: menu
 
   property var entries: []
   property real minimumWidth: 0
-  property bool alignRight: false
-  property bool above: false
-  property bool takesKeyboard: true
   signal picked(int index)
   // The entry the keyboard is on.
   property int current: 0
@@ -38,8 +34,8 @@ PopupFrame {
     font.letterSpacing: 1
   }
 
-  focus: takesKeyboard
-  y: above ? -height - 4 : parent.height + 4
+  focus: true
+  y: parent.height + 4
   padding: 4
   // Measured when it opens: measuring inside a binding would loop.
   onAboutToShow: {
@@ -49,7 +45,6 @@ PopupFrame {
       widest = Math.max(widest, metrics.advanceWidth)
     }
     width = Math.max(minimumWidth, widest + (entries.some(entry => entry.icon) ? 50 : 42))
-    x = alignRight ? parent.width - width : 0
     current = Math.max(0, entries.findIndex(entry => entry.chosen))
     scroll.contentY = -scroll.topMargin
   }

@@ -21,7 +21,6 @@ Singleton {
   property color foreground: fallback.foreground
   property color primary: fallback.accent
   property color secondary: fallback.cyan
-  property color border: fallback.muted
   property color success: fallback.green
   property color warning: fallback.yellow
   property color error: fallback.red
@@ -156,7 +155,6 @@ Singleton {
     foreground = colors.foreground || fallback.foreground
     primary = readable(colors.accent || fallback.accent, background, foreground)
     secondary = readable(colors.cyan || fallback.cyan, background, foreground)
-    border = colors.muted || fallback.muted
     success = readable(colors.green || fallback.green, background, foreground)
     warning = readable(colors.yellow || fallback.yellow, background, foreground)
     error = readable(colors.red || fallback.red, background, foreground)

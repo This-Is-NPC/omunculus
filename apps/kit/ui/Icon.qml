@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Shapes
 
-// Icon is eco's one icon set: thin line drawings on a 16-unit grid, one
+// Icon is the apps' one icon set: thin line drawings on a 16-unit grid, one
 // stroke weight, round ends, so every glyph matches the hairline UI instead of
 // borrowing whatever a fallback font draws.
 Item {
@@ -10,14 +10,9 @@ Item {
   property string name
   property color color: Theme.foreground
   property real size: 14
-  // Stroke weight in screen pixels, the same at every size.
-  property real weight: 1.25
 
   readonly property var paths: ({
-    settings: "M2 4.5h7 M12 4.5h2 M10.5 3v3 M2 11.5h2 M7 11.5h7 M5.5 10v3",
     play: "M5 3.5v9l7.5-4.5z",
-    pause: "M5.5 3.5v9 M10.5 3.5v9",
-    stop: "M4 4h8v8h-8z",
     list: "M3 4.5h10 M3 8h10 M3 11.5h10",
     search: "M7 2.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9z M10.3 10.3l3.2 3.2",
     board: "M2.5 3h3v10h-3z M6.5 3h3v6h-3z M10.5 3h3v8h-3z",
@@ -39,8 +34,6 @@ Item {
     more: "M3.5 8h0.01 M8 8h0.01 M12.5 8h0.01",
     check: "M3.5 8.5l3 3 6-7",
     send: "M13.5 2.5l-11 4.5 4.5 2 2 4.5z M7 9l6.5-6.5",
-    translate: "M2 3.5h7 M5.5 2v1.5 M3.5 3.5c0.6 2.2 2.2 3.8 4.5 4.8 M7.5 3.5c-0.6 2.2-2.2 3.8-4.5 4.8 M8.5 14l2.5-6.5 2.5 6.5 M9.3 12h3.4",
-    merge: "M4 2.5v3c0 2.5 4 2.5 4 5v3 M12 2.5v3c0 2.5-4 2.5-4 5",
     map: "M2.5 3.5h4v3h-4z M9.5 9.5h4v3h-4z M9.5 3.5h4v3h-4z M6.5 5h3 M4.5 6.5v3.5c0 .6.4 1 1 1h4",
     cost: "M8 2v12 M11 4.5c0-1-1.3-1.5-3-1.5s-3 .7-3 2c0 3 6 1.5 6 4.5 0 1.3-1.3 2-3 2s-3-.6-3-1.7",
     key: "M2 8a2.75 2.75 0 1 0 5.5 0a2.75 2.75 0 1 0 -5.5 0 M7.5 8h6.5 M11.5 8v2.5 M14 8v2"
@@ -57,7 +50,8 @@ Item {
 
     ShapePath {
       strokeColor: icon.color
-      strokeWidth: icon.weight * 16 / icon.size
+      // 1.25 screen pixels at every size.
+      strokeWidth: 1.25 * 16 / icon.size
       fillColor: "transparent"
       capStyle: ShapePath.RoundCap
       joinStyle: ShapePath.RoundJoin

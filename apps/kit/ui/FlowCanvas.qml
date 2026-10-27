@@ -5,10 +5,10 @@ import QtQuick
 // every fifth, move with it; dragging moves it, a wheel zooms around the
 // pointer, a touchpad's two fingers move it and zoom with Ctrl, two fingers
 // pinch it. It frames the chart in the room its insets leave, whole unless
-// that is smaller than `readable`, then from its top left, and frames it
-// again when it changes size until it is moved by hand. Below its actual
-// size the chart is drawn at that size and reduced through mipmaps, so its
-// outlines, lines and text stay smooth.
+// that takes a scale below 0.45, where it no longer reads, then at 0.45 from
+// its top left, and frames it again when it changes size until it is moved by
+// hand. Below its actual size the chart is drawn at that size and reduced
+// through mipmaps, so its outlines, lines and text stay smooth.
 Item {
   id: canvas
 
@@ -20,8 +20,6 @@ Item {
   property real topInset: 0
   property real rightInset: 0
   property real bottomInset: 0
-  // The smallest scale framing goes to: below it the chart no longer reads.
-  property real readable: 0.45
   // Whether it was moved or zoomed by hand since it was framed.
   property bool moved: false
   readonly property real zoomLevel: world.scale
@@ -37,7 +35,7 @@ Item {
     const room = Qt.size(width - leftInset - rightInset - 40, height - topInset - bottomInset - 40)
     if (contentWidth <= 0 || room.width <= 0 || room.height <= 0)
       return
-    const scale = Math.max(readable, Math.min(1.2, room.width / contentWidth, room.height / contentHeight))
+    const scale = Math.max(0.45, Math.min(1.2, room.width / contentWidth, room.height / contentHeight))
     world.scale = scale
     world.x = leftInset + 20 + Math.max(0, (room.width - contentWidth * scale) / 2)
     world.y = topInset + 20 + Math.max(0, (room.height - contentHeight * scale) / 2)

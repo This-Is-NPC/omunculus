@@ -14,7 +14,7 @@ Item {
   required property var tabs
   property int current: 0
   // The height of the stretched tab, which the command bar shares.
-  property real headHeight: 44
+  readonly property real headHeight: 44
 
   signal chosen(int index)
 

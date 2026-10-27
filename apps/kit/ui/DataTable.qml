@@ -4,10 +4,8 @@ import QtQuick
 // DataTable lists records as rows of columns under a header; below 700 px each
 // row stacks its cells into lines instead. A row opens on click or Enter, or,
 // when the table `picks`, a click picks it and a double click opens it; ↑/↓
-// move, ↑ on the first asks to leave upward, Delete asks to remove it, Esc asks
-// to go back. Each row may carry tools on its right, from `tools` (its root gets
-// the row's record as `entry`): Tab reaches those of the selected row only. Rows
-// may also carry a status cell, and be listed under group titles.
+// move, Delete asks to remove it, Esc asks to go back. Rows may also carry a
+// status cell.
 Item {
   id: table
 
@@ -22,22 +20,11 @@ Item {
   property var stacked: [[0]]
   // The column shown at the top right of a stacked row, or -1.
   property int status: -1
-  // A record whose status shows a dot before it, as one going on now.
-  property var dotted: entry => false
-  // The field of a record naming the group it is listed under, or "" for none:
-  // a title opens each run of records sharing it.
-  property string section: ""
-  property Component tools
-  property real toolsWidth: 0
-  // A record that steps back, as when it cannot be picked.
-  property var dimmed: entry => false
   property var idOf: entry => entry.id
   property string selectedId: ""
   // Whether a click picks a row rather than opening it.
   property bool picks: false
   property string emptyText
-  // What the empty list offers to do about it, or "".
-  property string emptyAction
   // Whether the records are still to come: the empty list shows it loads.
   property bool loading: false
   property bool active: false
@@ -46,9 +33,6 @@ Item {
   // Whether the list keeps to its newest row while it is read at its end.
   property bool followsEnd: false
   readonly property bool compact: width < 700
-  // Below this a row shows its tools only when pointed at or selected, so its
-  // text keeps the room.
-  readonly property bool narrow: width < 360
   readonly property int headerHeight: compact ? 0 : 32
   // The ids of the records listed last, so a change decodes only the new ones.
   property var listed: new Set()
@@ -57,8 +41,6 @@ Item {
   signal picked(var entry)
   signal removeRequested(var entry)
   signal backRequested()
-  signal topLeft()
-  signal emptyActed()
 
   implicitHeight: headerHeight + (compact ? 0 : 10) + list.topMargin + list.bottomMargin + Math.max(52, list.contentHeight)
   onActiveChanged: if (active) list.forceActiveFocus()
@@ -82,7 +64,7 @@ Item {
   function focusRows() { list.forceActiveFocus() }
 
   function columnWidth(index) {
-    return Math.max(0, width - 24 - toolsWidth) * columns[index].weight
+    return Math.max(0, width - 24) * columns[index].weight
   }
 
   Rectangle {
@@ -122,13 +104,6 @@ Item {
     bottomMargin: 1
     spacing: 2
     model: table.rows
-    section.property: table.section
-    section.delegate: Kicker {
-      required property string section
-      width: ListView.view.width
-      height: 26
-      text: section
-    }
     keyNavigationEnabled: true
     activeFocusOnTab: true
     // At the end when last moved, so a new row keeps it there.
@@ -153,7 +128,6 @@ Item {
         return
       }
       positionViewAtBeginning()
-      table.topLeft()
     }
 
     delegate: Rectangle {
@@ -161,13 +135,10 @@ Item {
       required property var modelData
       required property int index
       readonly property var texts: table.cells(modelData)
-      readonly property bool dot: table.dotted(modelData)
       // The stacked lines that hold text: the title's always.
       readonly property int lineCount: table.stacked.filter((line, i) => i === 0 || line.some(column => texts[column])).length
       readonly property bool current: ListView.isCurrentItem
-      readonly property bool marked: table.selectedId !== "" && table.selectedId === table.idOf(modelData) || (current && (list.activeFocus || toolScope.activeFocus))
-      readonly property bool tooled: table.tools !== null && (!table.narrow || hover.hovered || marked)
-      readonly property real reserved: tooled ? table.toolsWidth : 0
+      readonly property bool marked: table.selectedId !== "" && table.selectedId === table.idOf(modelData) || (current && list.activeFocus)
 
       function open() {
         list.currentIndex = index
@@ -194,17 +165,13 @@ Item {
 
       width: list.width
       height: table.compact ? 22 + lineCount * 20 : table.rowHeight
-      opacity: table.dimmed(modelData) ? 0.4 : 1
       color: marked ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
       border.color: marked ? Theme.primary : Theme.line
       Behavior on color { ColorAnimation { duration: 120 } }
-      Behavior on opacity { NumberAnimation { duration: 140 } }
-
-      HoverHandler { id: hover }
 
       Row {
         visible: !table.compact
-        anchors { fill: parent; leftMargin: 12; rightMargin: 12 + row.reserved }
+        anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
         Repeater {
           id: wide
           model: row.texts
@@ -219,15 +186,9 @@ Item {
             value: modelData
             soft: true
             revealOnStage: !table.compact
-            leftPadding: index === table.status && row.dot ? 11 : 0
             color: row.color(index)
             font.pixelSize: index === 0 ? 11 : 10
             elide: Text.ElideRight
-            Dot {
-              visible: parent.leftPadding > 0
-              anchors.verticalCenter: parent.verticalCenter
-              tone: parent.color
-            }
           }
         }
       }
@@ -259,18 +220,12 @@ Item {
       Label {
         id: statusLabel
         visible: table.compact && table.status >= 0
-        anchors { right: parent.right; rightMargin: 12 + row.reserved; top: parent.top; topMargin: 12 }
+        anchors { right: parent.right; rightMargin: 12; top: parent.top; topMargin: 12 }
         width: visible ? implicitWidth : 0
-        leftPadding: row.dot ? 11 : 0
         text: table.status >= 0 ? row.texts[table.status] : ""
         color: table.tone(row.modelData, table.status) || Theme.primary
         font.pixelSize: 9
         font.letterSpacing: 1
-        Dot {
-          visible: row.dot
-          anchors.verticalCenter: parent.verticalCenter
-          tone: parent.color
-        }
       }
 
       MouseArea {
@@ -280,22 +235,6 @@ Item {
         cursorShape: Qt.PointingHandCursor
         onClicked: table.picks ? row.pick() : row.open()
         onDoubleClicked: if (table.picks) row.open()
-      }
-
-      // Only the selected row's tools are Tab stops; the pointer reaches any.
-      FocusScope {
-        id: toolScope
-        visible: row.tooled
-        enabled: row.current || hover.hovered
-        anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
-        width: tools.width
-        height: tools.height
-        Loader {
-          id: tools
-          sourceComponent: table.tools
-          onLoaded: item.entry = Qt.binding(() => row.modelData)
-        }
-        Keys.onEscapePressed: list.forceActiveFocus()
       }
     }
   }
@@ -318,15 +257,6 @@ Item {
       width: 120
       height: 16
       running: table.loading
-    }
-    TraceButton {
-      anchors.horizontalCenter: parent.horizontalCenter
-      visible: table.emptyAction !== ""
-      dense: true
-      role: "action"
-      icon: "close"
-      text: table.emptyAction
-      onClicked: table.emptyActed()
     }
   }
 }
