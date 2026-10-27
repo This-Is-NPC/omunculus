@@ -2,7 +2,9 @@
 deno = "2.9.6"
 elixir = "1.17.3-otp-27"
 erlang = "27.3.4.17"
+python = "3.14.8"
 rebar = "3.27.0"
+rust = "1.99.1"
 
 [env]
 MIX_REBAR3 = "rebar3"
