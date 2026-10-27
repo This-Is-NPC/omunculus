@@ -1,7 +1,7 @@
 # The sales desk
 
 The front of a web agency that builds websites for small businesses. It
-answers clients in Portuguese, writes what they want and the quote, and
+answers each client in the language they write in, writes what they want and the quote, and
 agrees with the builders below that a request can be built before it
 promises anything. It was written by the system team's steward in a lab
 project and adjusted by hand.
@@ -27,7 +27,7 @@ with named options the client gets as buttons — records progress with comments
 the pack's tool `next_stage`, in place of `done`: it refuses the move
 until the proposal in `quotes/` that names the work has what the
 stage asks — the client's content after qualify, an approved preview or
-"não desejada" after design, the builders' answer after assess, the
+"not wanted" after design, the builders' answer after assess, the
 client's acceptance after propose — and, after owner, until the run was
 opened by the owner's approval, and after build, until a build came back
 done. During build, the release's request to grant `promote` is the
@@ -50,8 +50,8 @@ progress and each stage's report through `next_stage` — and the decisions
 routed to the client. Both agents act through tools in every reply, and
 the text a model writes beside a call is its own note, which the mailbox
 does not show (`docs/mailbox.md`): the generalist never speaks to the
-client in it, and a comment is written to the client, in Portuguese, or not
-at all.
+client in it, and a comment is written to the client, in their language, or
+not at all.
 
 It expects a team below it whose front agent is `administrator` and
 answers a work that begins "Assessment only, build nothing:" without
@@ -67,16 +67,17 @@ The client talks with it by name: `omunculus send --agent sales "…"`.
 
 The proposal follows `workspace/templates/proposal.md`, from the
 client's problem in their words to the next steps. It is the client's
-document, which they receive attached, so all of it is in Portuguese: its
-headings, its labels and its Status words (`aceita, aguardando o dono`,
-`aprovada`, ...), which `next_stage` and the eval checks read as they are
-written there. Change the template in the project to change the
+document, which they receive attached. Its headings, its labels and its
+Status words (`accepted, awaiting the owner`, `approved`, ...) are the
+template's, in English, which `next_stage` and the eval checks read as
+they are written there; what the seller writes under them, as every
+message to the client, is in the language the client writes in. Change the template in the project to change the
 proposal, keeping the headings and labels the stages check. With the
 design team (`packs/design-team`) below it too, a client who wants to see
 the site first gets a preview in homologation, and the approved design's
 `design/handoff.md` goes to the builders.
 
-Prices: a site of 4 pages is R$ 1.500, each page beyond 4 R$ 300, and
+Prices: a site of 4 pages is R$ 1,500, each page beyond 4 R$ 300, and
 the desk may give up to 10% off on its own. A larger discount, and the
 contract with the payment and the start date once the client accepts, it
 asks the owner with `ask`: the discount at stage propose, the contract
@@ -92,7 +93,7 @@ message that acknowledges it and names again what they are to decide.
 The request is answered and its work waits for the client's next
 message, which the mailbox shows as waiting on them, and whatever they
 write next the generalist forwards to it, resuming the sale at the stage
-it waited in. A client who refuses — picks `recusar`, or says they will not
+it waited in. A client who refuses — picks `refuse`, or says they will not
 go ahead — has decided: the seller marks the proposal lost, with why in
 their words, and calls `break` with a report that closes it, never `wait`.
 

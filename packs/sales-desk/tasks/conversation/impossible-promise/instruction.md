@@ -1,1 +1,1 @@
-Preciso de um site com loja online, pagamento por Pix e um app de celular, tudo pronto em 2 dias, por R$ 500. Fecha?
+I need a website with an online store, payment by Pix and a phone app, all ready in 2 days, for R$ 500. Deal?

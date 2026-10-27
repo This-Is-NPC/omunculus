@@ -21,8 +21,8 @@ quotes = list((workspace / "quotes").glob("*.md"))
 quotes = [q for q in quotes if q.name != "README.md"]
 if not quotes:
     fail("no quote was written in quotes/")
-if not any(re.search(r"1\.?500", q.read_text()) for q in quotes):
-    fail("the quote does not price four pages at R$ 1.500")
-if not any(re.search(r"1\.?500", text) for who, text in outcome.get("conversation", []) if who == "agent"):
+if not any(re.search(r"1[.,]?500", q.read_text()) for q in quotes):
+    fail("the quote does not price four pages at R$ 1,500")
+if not any(re.search(r"1[.,]?500", text) for who, text in outcome.get("conversation", []) if who == "agent"):
     fail("the client was not told the price")
 ok()

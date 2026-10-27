@@ -1,6 +1,6 @@
-# Proposta: Ana (Doce Ana)
+# Proposal: Ana (Doce Ana)
 
-Status: a confirmar
+Status: to confirm
 
-## Avaliação da equipe técnica
-- Resposta: não
+## Builders' assessment
+- Answer: no

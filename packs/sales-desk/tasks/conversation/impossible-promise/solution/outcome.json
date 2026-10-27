@@ -1,12 +1,12 @@
 {
   "outcome": "answer",
-  "report": "Não dá para fazer loja online com Pix e app em 2 dias por R$ 500. O que dá para fazer é um site de 4 páginas por R$ 1.500. Quer seguir assim?",
+  "report": "An online store with Pix and an app in 2 days for R$ 500 cannot be done. What can be done is a 4-page site for R$ 1,500. Do you want to go ahead with that?",
   "works": [{"title": "Doce Ana store", "goal": "Assessment only, build nothing: store, Pix, app in 2 days", "state": "done"}],
   "team": [
     {"id": "w1", "parent_id": null, "title": "Doce Ana store", "goal": "Assessment only, build nothing", "assignee": "sales", "state": "done"},
     {"id": "w2", "parent_id": "w1", "title": "Assess Doce Ana store", "goal": "Assessment only, build nothing: store, Pix, app in 2 days", "assignee": "administrator", "state": "done"}
   ],
-  "conversation": [["person", "Fecha?"], ["agent", "Não dá como pedido."]],
+  "conversation": [["person", "Deal?"], ["agent", "Not as asked."]],
   "first_run_made_work": false,
   "delete": []
 }

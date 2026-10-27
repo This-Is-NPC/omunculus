@@ -1,7 +1,7 @@
-# Proposta: Ana (Doce Ana)
+# Proposal: Ana (Doce Ana)
 
-Status: aprovada
+Status: approved
 
-## 6. Preço
-- Base (4 páginas): R$ 1.500
-- Total: R$ 1.500
+## 6. Price
+- Base (4 pages): R$ 1,500
+- Total: R$ 1,500
