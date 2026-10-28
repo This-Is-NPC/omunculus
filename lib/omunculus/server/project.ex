@@ -8,7 +8,7 @@ defmodule Omunculus.Server.Project do
 
   use GenServer
 
-  alias Omunculus.{Attachments, CLI, Config, Cycle, Operations, Project, Run, Store}
+  alias Omunculus.{Attachments, Config, Cycle, Operations, Project, Run, Store}
   alias Omunculus.Store.Access
 
   def start_link({id, config_path, global_limits}) do
@@ -105,10 +105,15 @@ defmodule Omunculus.Server.Project do
   def subscribe(id), do: Store.subscribe(project(id).conn)
 
   @doc """
-  Runs a command line in the calling process as one command of the
-  project's cycle, returning once the runs it opened have finished.
+  Runs the tool `name` as the local principal in the calling process, as
+  one command of the project's cycle, returning once the runs it opened
+  have finished.
   """
-  def cli(id, argv), do: Cycle.command(project(id), nil, &CLI.in_project(&1, argv))
+  def local_command(id, name, args),
+    do: Cycle.command(project(id), nil, &Operations.command(&1, name, args))
+
+  @doc "Seeds the first project administrator, for the owner of the project config."
+  def bootstrap_access(id, target), do: Operations.bootstrap_access(project(id), target)
 
   def list(id, principal, conversation_id, kind),
     do: Access.list(project(id), principal, conversation_id, kind)

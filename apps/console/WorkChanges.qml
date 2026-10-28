@@ -31,7 +31,7 @@ Item {
       return
     const token = ++asked
     loading = true
-    Omunculus.cli(["changes", "--work_id", key].concat(patch ? ["--patch", "true"] : []), text => {
+    Omunculus.command("changes", { work_id: key, patch: patch }, text => {
       if (token !== asked)
         return
       loading = false

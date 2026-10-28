@@ -12,11 +12,17 @@ defmodule Omunculus.Server.OpenAPI do
       public: true
     },
     identity: %{summary: "Read the token principal", status: 200, response: "Principal"},
-    cli: %{
-      summary: "Run a command line on the local socket's project",
+    local_command: %{
+      summary: "Run a tool on the local socket's project as the local user",
       status: 200,
-      response: "CliOutput",
-      request: "CliCommand"
+      response: "CommandOutput",
+      request: "LocalCommand"
+    },
+    bootstrap_access: %{
+      summary: "Seed the first administrator of the local socket's project",
+      status: 200,
+      response: "Bootstrapped",
+      request: "Principal"
     },
     create_conversation: %{
       summary: "Create a conversation",
@@ -325,8 +331,9 @@ defmodule Omunculus.Server.OpenAPI do
           ["status", "cursor"]
         ),
       "Error" => object(%{error: string(), message: string()}, ["error"]),
-      "CliCommand" => object(%{argv: array(string())}, ["argv"]),
-      "CliOutput" => object(%{output: string()}, ["output"]),
+      "LocalCommand" => object(%{name: string(), args: %{type: "object"}}, ["name"]),
+      "CommandOutput" => object(%{output: string()}, ["output"]),
+      "Bootstrapped" => object(%{status: %{type: "string", const: "bootstrapped"}}, ["status"]),
       "Updated" => object(%{status: %{type: "string", const: "updated"}}, ["status"]),
       "Removed" => object(%{status: %{type: "string", const: "removed"}}, ["status"]),
       "Membership" =>

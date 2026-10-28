@@ -3,7 +3,7 @@ defmodule Omunculus.CLITest do
   @concierge Jason.encode!(Omunculus.Participant.agent("concierge"))
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Fixtures, Project, Store}
+  alias Omunculus.{CLI, Errors, Fixtures, Project, Store}
   alias Omunculus.Store.Query
   alias Omunculus.Tools.Out
 
@@ -52,7 +52,7 @@ defmodule Omunculus.CLITest do
 
     assert {:error, reason} = CLI.run(["send", "hi"], dir)
     assert reason == {:policy, {:required, :request_routes}}
-    assert CLI.format_error(reason) =~ "request_routes is required"
+    assert Errors.format(reason) =~ "request_routes is required"
   end
 
   test "CLI refuses unknown and looping routes without creating a request", %{dir: dir} do
@@ -88,9 +88,11 @@ defmodule Omunculus.CLITest do
     Project.close(project)
   end
 
-  test "format_error for not_logged_in", _ctx do
-    assert CLI.format_error({:auth, :not_logged_in, "openai"}) =~
-             "omunculus login --provider openai"
+  test "a missing login reads with the command that logs in", _ctx do
+    assert Errors.format({:auth, :not_logged_in, "openai"}) == "not logged in to openai"
+
+    assert CLI.message({:auth, :not_logged_in, "openai"}) ==
+             "not logged in to openai; run `omunculus login --provider openai`"
   end
 
   test "send delivers a message, opens a run and the run reaches done", %{dir: dir} do
@@ -288,27 +290,27 @@ defmodule Omunculus.CLITest do
 
   test "prompt without runs is a clear error", %{dir: dir} do
     assert {:error, :no_runs} = CLI.run(["prompt"], dir)
-    assert CLI.format_error(:no_runs) == "no runs"
+    assert Errors.format(:no_runs) == "no runs"
   end
 
   test "prompt --run with an unknown id is a clear error", %{dir: dir} do
     assert {:error, {:unknown_run, "missing"}} = CLI.run(["prompt", "--run", "missing"], dir)
 
-    assert CLI.format_error({:unknown_run, "missing"}) == "unknown run missing"
+    assert Errors.format({:unknown_run, "missing"}) == "unknown run missing"
   end
 
   test "a failed tool's error is its own output", _ctx do
-    assert CLI.format_error({:tool_failed, "message required"}) == "message required"
+    assert Errors.format({:tool_failed, "message required"}) == "message required"
   end
 
   test "an override that does not fit its manifest is a clear error" do
-    assert CLI.format_error({:overrides, "done", {:not_chainable, "work"}}) ==
+    assert Errors.format({:overrides, "done", {:not_chainable, "work"}}) ==
              "overrides.done.chains names work, which the done manifest does not chain"
 
-    assert CLI.format_error({:overrides, "done", {:invalid, :then}}) ==
+    assert Errors.format({:overrides, "done", {:invalid, :then}}) ==
              "overrides of done leave a then outside its chains or with end not last"
 
-    assert CLI.format_error({:overrides, "done", {:unknown_schema, "short"}}) ==
+    assert Errors.format({:overrides, "done", {:unknown_schema, "short"}}) ==
              "overrides.done.schema names short, which the done manifest does not declare"
   end
 
@@ -319,8 +321,8 @@ defmodule Omunculus.CLITest do
     assert CLI.run(["send", "x"], dir) == {:error, {:config, :missing, path}}
     refute File.dir?(Path.join(dir, ".omunculus"))
 
-    assert CLI.format_error({:config, :missing, path}) =~
-             "run `omunculus preset <name> --from <dir>`"
+    assert CLI.message({:config, :missing, path}) ==
+             "no config at #{path}; run `omunculus preset <name> --from <dir>`"
   end
 
   test "preset default writes the config file without opening the store", %{dir: dir} do
@@ -411,21 +413,21 @@ defmodule Omunculus.CLITest do
       "resources"
     ]
 
-    message = CLI.format_error({:execution, :missing, keys})
+    message = Errors.format({:execution, :missing, keys})
     assert message =~ "backend"
     assert message =~ "queue_timeout_ms"
     refute message =~ ":missing"
   end
 
   test "a missing [execution.sandbox] table is named in the error" do
-    assert CLI.format_error({:execution, {:sandbox, :missing}}) =~ "[execution.sandbox]"
-    assert CLI.format_error({:policy, {:invalid, :max_retries}}) =~ "[policy] max_retries"
-    assert CLI.format_error({:policy, {:invalid, :max_reopens}}) =~ "[policy] max_reopens"
+    assert Errors.format({:execution, {:sandbox, :missing}}) =~ "[execution.sandbox]"
+    assert Errors.format({:policy, {:invalid, :max_retries}}) =~ "[policy] max_retries"
+    assert Errors.format({:policy, {:invalid, :max_reopens}}) =~ "[policy] max_reopens"
 
-    assert CLI.format_error({:policy, {:invalid, :last_run_output_bytes}}) =~
+    assert Errors.format({:policy, {:invalid, :last_run_output_bytes}}) =~
              "[policy] last_run_output_bytes"
 
-    assert CLI.format_error({:policy, {:invalid, :tool_output_bytes}}) =~
+    assert Errors.format({:policy, {:invalid, :tool_output_bytes}}) =~
              "[policy] tool_output_bytes"
   end
 

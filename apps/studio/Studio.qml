@@ -61,10 +61,10 @@ Singleton {
   // "policy"), or removes it for a null value, renaming `from` when given; then
   // reads the setup again. `failed` gets the server's reason.
   function configure(item, value, from, done, failed) {
-    const argv = ["configure", "--item", item, "--value", JSON.stringify(value), "--revision", setup.revision]
+    const args = { item: item, value: JSON.stringify(value), revision: setup.revision }
     if (from)
-      argv.push("--from", from)
-    http.cli(socket, argv, () => {
+      args.from = from
+    http.command(socket, "configure", args, () => {
       loadSetup()
       loadOverviews()
       done()
@@ -77,14 +77,14 @@ Singleton {
   // Sends one short prompt to the model `name` as `value` would make it, and
   // hands its {reply, ms}, or the reason it failed.
   function testModel(name, value, done, failed) {
-    http.cli(socket, ["model_test", "--name", name, "--value", JSON.stringify(value)], output => done(JSON.parse(output)), failed)
+    http.command(socket, "model_test", { name: name, value: JSON.stringify(value) }, output => done(JSON.parse(output)), failed)
   }
 
   // Whether omapass is installed, its program and its passwords, as the omapass
   // tool prints them; null until it answers.
   property var omapass: null
   function loadOmapass() {
-    http.cli(socket, ["omapass"], output => omapass = JSON.parse(output))
+    http.command(socket, "omapass", {}, output => omapass = JSON.parse(output))
   }
 
   // The skills of the project on screen, by name, from its catalog.
@@ -152,7 +152,7 @@ Singleton {
   // until it answers.
   property var catalog: null
   function loadCatalog() {
-    http.cli(socket, ["tools"], output => catalog = JSON.parse(output))
+    http.command(socket, "tools", {}, output => catalog = JSON.parse(output))
   }
 
   // Project id -> the project as it runs in each of its workspaces, as the
@@ -164,7 +164,7 @@ Singleton {
     client.call("GET", "/v1/projects", null, false, data => {
       projects = data.items
       for (const each of projects) {
-        http.cli(each.socket, ["overview", "--whole", "true"], output => {
+        http.command(each.socket, "overview", { whole: true }, output => {
           overviews = Object.assign({}, overviews, { [each.id]: JSON.parse(output) })
         }, reason => overviews = Object.assign({}, overviews, { [each.id]: { error: reason } }))
         http.setup(each.socket, read => packsOf = Object.assign({}, packsOf, { [each.id]: read.packs }), () => {})

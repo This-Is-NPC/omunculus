@@ -35,7 +35,7 @@ Item {
       return
     const token = ++asked
     loading = true
-    Omunculus.cli(["prompt", "--run", shown], text => {
+    Omunculus.command("prompt", { run: shown }, text => {
       if (token !== asked)
         return
       loading = false

@@ -37,7 +37,7 @@ Item {
   function load() {
     const token = ++asked
     loading = true
-    Omunculus.cli(["runs"], output => {
+    Omunculus.command("runs", {}, output => {
       if (token !== asked)
         return
       loading = false
@@ -72,7 +72,7 @@ Item {
     if (own.some(run => run.id === id && run.status === "open"))
       return
     const token = ++asked
-    Omunculus.cli(["runs", "--run", id], output => {
+    Omunculus.command("runs", { run: id }, output => {
       if (token === asked)
         detail = output
     }, reason => {

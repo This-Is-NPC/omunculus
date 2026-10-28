@@ -10,7 +10,7 @@ defmodule Omunculus.Tools.Configure do
   otherwise it stays as it is.
   """
 
-  alias Omunculus.{CLI, Config}
+  alias Omunculus.{Config, Errors}
   alias Omunculus.Tools.Out
 
   @spec run(map) :: map
@@ -23,8 +23,8 @@ defmodule Omunculus.Tools.Configure do
          :ok <- Config.edit(path, revision, Config.item(item), value, args["from"]) do
       Out.ok()
     else
-      {:error, %Jason.DecodeError{}} -> Out.fail(CLI.format_error({:config, :invalid_item}))
-      {:error, reason} -> Out.fail(CLI.format_error(reason))
+      {:error, %Jason.DecodeError{}} -> Out.fail(Errors.format({:config, :invalid_item}))
+      {:error, reason} -> Out.fail(Errors.format(reason))
     end
   end
 

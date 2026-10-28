@@ -8,7 +8,7 @@ defmodule Omunculus.Tools.ModelTest do
   ceiling makes, so only a run tests it.
   """
 
-  alias Omunculus.{CLI, Config}
+  alias Omunculus.{Config, Errors}
   alias Omunculus.Tools.Out
 
   @prompt %Omunculus.Prompt{
@@ -31,10 +31,10 @@ defmodule Omunculus.Tools.ModelTest do
           Out.ok(Jason.encode!(%{reply: reply, ms: ms}))
 
         {:error, reason} ->
-          Out.fail(CLI.format_error(reason))
+          Out.fail(Errors.format(reason))
       end
     else
-      {:error, reason} -> Out.fail(CLI.format_error(reason))
+      {:error, reason} -> Out.fail(Errors.format(reason))
     end
   end
 

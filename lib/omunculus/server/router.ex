@@ -5,7 +5,7 @@ defmodule Omunculus.Server.Router do
   use Plug.ErrorHandler
   require Logger
 
-  alias Omunculus.{CLI, Operations}
+  alias Omunculus.{Errors, Operations}
   alias Omunculus.Server.{Auth, Contract, EventStream, OpenAPI, Project}
   require OpenAPI
 
@@ -46,16 +46,26 @@ defmodule Omunculus.Server.Router do
     end
   end
 
-  OpenAPI.route :post, "/v1/cli", :cli do
+  OpenAPI.route :post, "/v1/call", :local_command do
     with {:ok, project_id} <- Keyword.fetch(conn.assigns.server_opts, :local),
-         %{"argv" => [_ | _] = argv} <- conn.body_params,
-         true <- Enum.all?(argv, &is_binary/1) do
-      case Project.cli(project_id, argv) do
-        {:ok, output} ->
-          reply(conn, 200, %{output: output})
+         %{"name" => name} = body when is_binary(name) <- conn.body_params,
+         args when is_map(args) <- Map.get(body, "args", %{}) do
+      case Project.local_command(project_id, name, args) do
+        {:ok, output} -> reply(conn, 200, %{output: output})
+        {:error, reason} -> command_failed(conn, reason)
+      end
+    else
+      :error -> reply(conn, 404, %{error: "not_found"})
+      _invalid -> reply(conn, 400, %{error: "invalid"})
+    end
+  end
 
-        {:error, reason} ->
-          reply(conn, 422, %{error: "command_failed", message: CLI.format_error(reason)})
+  OpenAPI.route :post, "/v1/access/bootstrap", :bootstrap_access do
+    with {:ok, project_id} <- Keyword.fetch(conn.assigns.server_opts, :local),
+         {:ok, target} <- target(conn.body_params) do
+      case Project.bootstrap_access(project_id, target) do
+        :ok -> reply(conn, 200, %{status: "bootstrapped"})
+        {:error, reason} -> command_failed(conn, reason)
       end
     else
       :error -> reply(conn, 404, %{error: "not_found"})
@@ -586,6 +596,10 @@ defmodule Omunculus.Server.Router do
   # A request that crashes still answers with the contract's error body.
   @impl Plug.ErrorHandler
   def handle_errors(conn, _failure), do: reply(conn, conn.status, %{error: "internal_error"})
+
+  # A refused command of the local socket: the reason as a sentence.
+  defp command_failed(conn, reason),
+    do: reply(conn, 422, %{error: "command_failed", message: Errors.format(reason)})
 
   defp reply(conn, status, body) do
     conn

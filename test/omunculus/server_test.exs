@@ -145,11 +145,13 @@ defmodule Omunculus.ServerTest do
     assert Req.get!(projects_url, headers: auth(outsider)).body == %{"items" => []}
     assert Req.get!(projects_url, headers: auth("invalid")).status == 401
 
-    assert Req.post!("http://127.0.0.1:#{port}/v1/cli",
-             headers: auth(admin),
-             json: %{argv: ["send", "x"]}
-           ).status ==
-             404
+    for {path, body} <- [
+          {"/v1/call", %{name: "send", args: %{message: "x"}}},
+          {"/v1/access/bootstrap", %{issuer: "test", subject: "x"}}
+        ] do
+      assert Req.post!("http://127.0.0.1:#{port}" <> path, headers: auth(admin), json: body).status ==
+               404
+    end
 
     create_headers = auth(admin) ++ [{"idempotency-key", "create-1"}]
     created = Req.post!(base <> "/conversations", headers: create_headers, json: %{})
@@ -944,8 +946,24 @@ defmodule Omunculus.ServerTest do
 
     assert Enum.all?(runs, &(&1["status"] == "done"))
 
-    assert {:error, {:forwarded, message}} = CLI.run(["no_such_tool"], dir)
-    assert message =~ "no_such_tool"
+    assert {:error, reason} = CLI.run(["no_such_tool"], dir)
+    assert CLI.message(reason) =~ "no_such_tool"
+
+    assert %{status: 200, body: %{"output" => output}} =
+             local.(:post, "/v1/call", json: %{name: "runs", args: %{}})
+
+    assert output =~ "runs, newest first"
+
+    assert local.(:post, "/v1/call", json: %{name: "no_such_tool"}).body["message"] =~
+             "no_such_tool"
+
+    assert local.(:post, "/v1/call", json: %{argv: ["runs"]}).status == 400
+    assert local.(:post, "/v1/call", json: %{name: "runs", args: ["x"]}).status == 400
+
+    assert {:error, {:forwarded, _members_exist}} =
+             CLI.run(["access", "bootstrap", "--issuer", "test", "--subject", "late"], dir)
+
+    assert local.(:post, "/v1/access/bootstrap", json: %{issuer: "test"}).status == 400
 
     :ok = Supervisor.stop(server)
     refute File.exists?(socket)

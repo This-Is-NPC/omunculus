@@ -106,7 +106,7 @@ stages in order, those passed checked, the current lit), the work, and its
 runs, what it said and did.
 
 Beside WORK, its other sections read the core's tools through
-`POST /v1/cli`:
+`POST /v1/call`:
 
 - RUNS, the work's runs as `runs` sums up the project's last closed ones,
   matched by id with the snapshot's — how each ended, its calls, those that

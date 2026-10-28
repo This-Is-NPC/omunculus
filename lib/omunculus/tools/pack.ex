@@ -10,7 +10,7 @@ defmodule Omunculus.Tools.Pack do
   pack needs and what its `environment/` holds, which it does not run.
   """
 
-  alias Omunculus.{CLI, Config}
+  alias Omunculus.{Config, Errors}
   alias Omunculus.Config.Packs
   alias Omunculus.Tools.{Args, Out}
 
@@ -70,7 +70,7 @@ defmodule Omunculus.Tools.Pack do
           Out.ok(Enum.join([imported(pack) | copied(dir, config)] ++ environment(dir), "\n"))
 
         {:error, {:packs, {_pack, :requires, _lacked}} = reason} ->
-          Out.fail(CLI.format_error(reason))
+          Out.fail(Errors.format(reason))
 
         {:error, reason} ->
           Out.fail("cannot import #{entry["path"]}: #{inspect(reason)}")

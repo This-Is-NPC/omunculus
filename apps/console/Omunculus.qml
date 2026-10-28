@@ -134,10 +134,10 @@ Singleton {
     })
   }
 
-  // Runs a command line on the local socket, as `omunculus <argv>` would;
-  // `done` gets what it printed, and `failed`, when given, why it failed.
-  function cli(argv, done, failed) {
-    http.cli(socket, argv, done, failed)
+  // Runs the tool `name` with `args` on the local socket, as the local user;
+  // `done` gets its output, and `failed`, when given, why it failed.
+  function command(name, args, done, failed) {
+    http.command(socket, name, args, done, failed)
   }
 
   // The model id an agent runs on, as configured, or "" before the setup.

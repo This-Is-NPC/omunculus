@@ -50,9 +50,10 @@ defmodule Omunculus.Harness do
   alias Omunculus.Tool.{Catalog, Invoke, Manifest, Overrides, Views}
   alias Omunculus.Tools.Out
 
-  @spec manifest(Project.t(), String.t()) :: {:ok, Manifest.t()} | {:error, term}
-  def manifest(%Project{} = project, name) do
-    with {:ok, config} <- resolved_config(project, nil),
+  @doc "The manifest a human command of `name` dispatches, read from the config alone."
+  @spec manifest(Config.t(), String.t()) :: {:ok, Manifest.t()} | {:error, term}
+  def manifest(%Config{} = config, name) do
+    with {:ok, config} <- Config.for_workspace(config, Config.effective_workspace(config, nil)),
          {:ok, catalog} <- catalog(nil, nil, config, workspace_context(config, nil, nil), nil) do
       fetch_dispatch_manifest(catalog, name, "cli")
     end

@@ -27,13 +27,14 @@ OpenAPI document the server publishes at `/openapi.json`.
   holds one project; from there, `GET /v1/projects` lists every project
   of the registry with its socket.
 
-## The setup, read through `/v1/cli`
+## The setup, read through `/v1/call`
 
 A client reads a project's setup by running the core's tools over
-`POST /v1/cli` on the project's local socket ([the command line](cli.md)).
-Two of them print a whole form for a client:
+`POST /v1/call` on the project's local socket ([the server](server.md)),
+`{"name": <tool>, "args": {…}}`, with the arguments the
+[command line](cli.md) lists. Two of them print a whole form for a client:
 
-- `config --whole true` prints the setup as one JSON object: its `root`,
+- `config` with `{"whole": true}` prints the setup as one JSON object: its `root`,
   `agents` (name, depth, model, `workflow_only`, the `granted`,
   `negotiable`, `human` and `deny` lists of its own layer, its text and
   the SHA-256 of its `image`, or null), `models` (name, `api`,
@@ -46,7 +47,7 @@ Two of them print a whole form for a client:
   the providers that have one. It adds `revision`, the SHA-256 of the
   file's bytes, which `configure` takes back, and `names`, what a ceiling
   list may hold: the model tools, their groups and the sandbox resources.
-- `overview --whole true` prints the project as it runs in each place a
+- `overview` with `{"whole": true}` prints the project as it runs in each place a
   work can run. `places` holds each workspace, and the project root while
   no workspace is the default; a place has its `root`, whether it is the
   `default` and whether it lies `outside` the project, its own ceiling

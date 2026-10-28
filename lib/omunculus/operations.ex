@@ -32,6 +32,30 @@ defmodule Omunculus.Operations do
     end
   end
 
+  @doc """
+  Runs the tool `name` as the local principal and follows up its events:
+  `{:ok, output}`, or `{:error, {:tool_failed, output}}` when the tool
+  refuses.
+  """
+  @spec command(Omunculus.Project.t(), String.t(), map, boolean) ::
+          {:ok, String.t()} | {:error, term}
+  def command(project, name, args, follow_up? \\ true) do
+    with {:ok, out, _events} <- call(project, name, args, %{}, follow_up?) do
+      if out.ok, do: {:ok, out.output}, else: {:error, {:tool_failed, out.output}}
+    end
+  end
+
+  @doc """
+  Seeds the first project administrator; only the owner of the project
+  config may, and only while the project has no member.
+  """
+  @spec bootstrap_access(Omunculus.Project.t(), Access.principal()) :: :ok | {:error, term}
+  def bootstrap_access(project, target) do
+    if File.stat!(project.config_path).uid == File.stat!("/proc/self").uid,
+      do: Access.bootstrap(project, target),
+      else: {:error, :not_project_owner}
+  end
+
   defp authorize(%{conn: nil}, _name, _args, _actor, _principal),
     do: {:ok, %{capability: nil, conversation_id: nil}}
 

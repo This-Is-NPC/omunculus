@@ -877,7 +877,7 @@ defmodule EquivalentExchange.Runner do
   end
 
   defp error({:error, :timeout}), do: "timeout"
-  defp error({:error, reason}), do: CLI.format_error(reason)
+  defp error({:error, reason}), do: CLI.message(reason)
   defp error({:ok, _answers}), do: nil
 
   defp with_store(project, fun) do

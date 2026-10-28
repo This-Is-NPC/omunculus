@@ -10,7 +10,7 @@ defmodule EquivalentExchange.Recovery do
 
     case Omunculus.CLI.run(["--config", Path.join(project, "omunculus.toml"), "config"], project) do
       {:ok, _output} -> :ok
-      {:error, reason} -> raise Omunculus.CLI.format_error(reason)
+      {:error, reason} -> raise Omunculus.CLI.message(reason)
     end
   end
 

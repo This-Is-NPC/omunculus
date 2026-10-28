@@ -13,7 +13,7 @@ defmodule Omunculus.Tools.ProposePack do
   `then` appends `end`.
   """
 
-  alias Omunculus.{CLI, Config, RequestRoutes}
+  alias Omunculus.{Config, Errors, RequestRoutes}
   alias Omunculus.Config.Packs
   alias Omunculus.Tools.{Args, Out, Steps}
 
@@ -30,7 +30,7 @@ defmodule Omunculus.Tools.ProposePack do
       Out.ok("", [%{"type" => "request", "body" => request(args, dir, pack, entry, config)}])
     else
       {:error, {:packs, {_pack, :requires, _lacked}} = reason} ->
-        Out.fail(CLI.format_error(reason))
+        Out.fail(Errors.format(reason))
 
       {:error, reason} ->
         Out.fail("the config would not load with it: #{inspect(reason)}")

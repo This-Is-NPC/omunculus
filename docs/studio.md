@@ -11,7 +11,7 @@ be left out when the registry holds one project.
 The `Studio` singleton reads the setup through the `config` tool, the
 catalog through `tools`, the passwords through `omapass` and, for every
 project `GET /v1/projects` lists, its `overview` on that project's own
-socket, all through `/v1/cli`, and tries a model through `model_test`.
+socket, all through `POST /v1/call`, and tries a model through `model_test`.
 
 ## The sections and the bar
 

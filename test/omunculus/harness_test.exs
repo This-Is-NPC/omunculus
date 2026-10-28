@@ -1005,7 +1005,8 @@ defmodule Omunculus.HarnessTest do
 
       assert {:ok, _run} = Run.open(project, opening(message_id, work_id))
       assert_received {:tools, %{"alpha" => %{}, "delta" => %{"type" => "object"}}}
-      assert {:ok, manifest} = Harness.manifest(project, "delta")
+      assert {:ok, config} = Omunculus.Config.load(project.config_path)
+      assert {:ok, manifest} = Harness.manifest(config, "delta")
       assert manifest.parameters == %{"type" => "object"}
     end
   end

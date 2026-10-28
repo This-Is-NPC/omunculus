@@ -534,4 +534,6 @@ needs what is missing:
 | `store tables differ from this schema; recreate the store` | a store whose tables differ from the schema |
 | `project is in use by another Omunculus process` | another direct command holds the project |
 
-A reason without a sentence of its own prints as the Elixir term.
+A reason without a sentence of its own prints as the Elixir term. Over
+the server's socket and in a tool's output the same sentences come
+without the `; run …` part, which only the command line adds.

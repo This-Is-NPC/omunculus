@@ -18,7 +18,7 @@ an agent in a thread not on screen is announced with `notify-send`.
 ## A new thread
 
 A new thread needs its To, one agent of depth 0 that is not workflow-only,
-of one project, as the config tool prints them through `/v1/cli`. Its first
+of one project, as the config tool prints them through `POST /v1/call`. Its first
 message names that agent, and every later one names it again.
 
 ## What a thread shows

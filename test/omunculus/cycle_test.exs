@@ -1,7 +1,7 @@
 defmodule Omunculus.CycleTest do
   use ExUnit.Case, async: true
 
-  alias Omunculus.{CLI, Cycle, Fixtures, Operations, Project}
+  alias Omunculus.{CLI, Cycle, Errors, Fixtures, Operations, Project}
   alias Omunculus.Store.Query
 
   import Omunculus.Fixtures, only: [last_comment: 1, role: 1]
@@ -346,7 +346,7 @@ defmodule Omunculus.CycleTest do
 
     assert {:error, {:runs, reasons}} = CLI.run(["send", "go"], dir)
     assert Enum.sort(reasons) == [:a_failed, :b_failed]
-    assert CLI.format_error({:runs, [:a_failed, :b_failed]}) == ":a_failed\n:b_failed"
+    assert Errors.format({:runs, [:a_failed, :b_failed]}) == ":a_failed\n:b_failed"
   end
 
   test "the run of send that creates the root and goes on holds the root's turn until it finishes",
