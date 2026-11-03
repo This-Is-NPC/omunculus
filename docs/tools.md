@@ -323,6 +323,22 @@ schema = "staged"
 workflows = ["delivery"]
 ```
 
+## Workspaces of projects
+
+`project` tells an existing project from a new one. `list` prints the
+workspaces as JSON, each with its `name`, `path` and the `client` and
+`summary` of its table. `create` takes a `name` (lowercase letters,
+digits, `-` and `_`) and optionally a `client` and a `summary`: it makes
+the folder `<[project] workspaces_dir>/<name>`, runs `git init` there and
+writes `[workspaces.<name>]` with the same write `configure` makes
+([config](config.md#workspaces)). It is refused without `workspaces_dir`,
+for a name already a workspace or a folder, and when the config would not
+load with the new workspace; then nothing is left behind. Every run reads
+the config again, so the next run sees the workspace. The agent binds
+work to it by naming it as the `workspace` of the work it opens with
+`work` ([Creating works](#creating-works)), or of a `delegate`.
+`project` is in no group: list it in an agent's tools.
+
 ## Handing control away
 
 Every model tool that hands the work to someone else carries a `report`

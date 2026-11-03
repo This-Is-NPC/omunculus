@@ -1,0 +1,26 @@
+name = "project"
+kind = "tool"
+triggers = ["model"]
+description = "Tells an existing project from a new one. action list prints the project's workspaces as JSON: name, path, and the client and summary each was created for. action create makes a workspace for a new project under the folder the config names, starts a repository in it and writes it to the config; then name it as the workspace of the work you open."
+tags = ["config", "work"]
+module = "Omunculus.Tools.Project"
+
+[parameters]
+type = "object"
+required = ["action"]
+
+[parameters.properties.action]
+type = "string"
+enum = ["list", "create"]
+
+[parameters.properties.name]
+type = "string"
+description = "create: the new workspace's name, lowercase letters, digits, - and _; also its folder's name."
+
+[parameters.properties.client]
+type = "string"
+description = "create: who the project is for."
+
+[parameters.properties.summary]
+type = "string"
+description = "create: what the project is, in a line."

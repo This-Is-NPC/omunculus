@@ -5,10 +5,13 @@ defmodule Omunculus.Config do
   take the file path. The project root is the file's directory, or
   `[project] root` resolved against it; `[project] conversations`, when
   set, is the folder, relative to each workspace's root, where each
-  conversation works in a folder of its own (`Omunculus.ConversationRoot`). Parses the policy layer, the
+  conversation works in a folder of its own (`Omunculus.ConversationRoot`);
+  `[project] workspaces_dir`, when set, is the folder where the `project`
+  tool creates workspaces. Parses the policy layer, the
   per-depth layers under `[policy.depth.N]`, the workspaces under
   `[workspaces.<name>]` — each a directory `root` (resolved against the
-  project root) plus a ceiling layer — the `[policy] workspace`
+  project root), optionally the `client` and a `summary` that say what it
+  is for, plus a ceiling layer — the `[policy] workspace`
   default, the required `[policy] max_retries` and `request_routes`, the
   optional `[policy] max_reopens` (how many times in a row a parent may
   reopen one work below it before its next reopen asks instead), the optional `[policy]
@@ -41,6 +44,7 @@ defmodule Omunculus.Config do
   @enforce_keys [
     :root,
     :conversations,
+    :workspaces_dir,
     :policy,
     :depths,
     :workspaces,
@@ -86,6 +90,8 @@ defmodule Omunculus.Config do
   @type step :: %{name: String.t(), agent: String.t(), ceiling: Layer.t()}
   @type workspace :: %{
           root: String.t(),
+          client: String.t() | nil,
+          summary: String.t() | nil,
           config: String.t() | nil,
           ceiling: Layer.t(),
           overlay: map,
@@ -122,6 +128,7 @@ defmodule Omunculus.Config do
   @type t :: %__MODULE__{
           root: String.t(),
           conversations: String.t() | nil,
+          workspaces_dir: String.t() | nil,
           policy: Layer.t(),
           depths: %{non_neg_integer => Layer.t()},
           workspaces: %{String.t() => workspace},
@@ -703,7 +710,7 @@ defmodule Omunculus.Config do
         config_path = Path.expand(path)
         config_dir = Path.dirname(config_path)
 
-        with {:ok, root, conversations} <-
+        with {:ok, root, conversations, workspaces_dir} <-
                parse_project(Map.get(data, "project"), config_dir),
              {:ok, execution} <- parse_execution(Map.get(data, "execution"), config_dir),
              {:ok, auth} <- parse_auth(Map.get(data, "auth"), config_dir),
@@ -737,6 +744,7 @@ defmodule Omunculus.Config do
             config = %__MODULE__{
               root: root,
               conversations: conversations,
+              workspaces_dir: workspaces_dir,
               policy: policy,
               depths: depths,
               workspaces: workspaces,
@@ -823,17 +831,19 @@ defmodule Omunculus.Config do
     end)
   end
 
-  defp parse_project(nil, config_dir), do: {:ok, config_dir, nil}
+  defp parse_project(nil, config_dir), do: {:ok, config_dir, nil, nil}
 
   defp parse_project(data, config_dir) when is_map(data) do
-    case Map.keys(data) -- ["root", "conversations"] do
+    case Map.keys(data) -- ["root", "conversations", "workspaces_dir"] do
       [key | _] ->
         {:error, {:project, {:unknown_key, key}}}
 
       [] ->
         with {:ok, root} <- project_root(Map.fetch(data, "root"), config_dir),
-             {:ok, conversations} <- conversations(Map.fetch(data, "conversations")) do
-          {:ok, root, conversations}
+             {:ok, conversations} <- conversations(Map.fetch(data, "conversations")),
+             {:ok, workspaces_dir} <-
+               workspaces_dir(Map.fetch(data, "workspaces_dir"), config_dir) do
+          {:ok, root, conversations, workspaces_dir}
         end
     end
   end
@@ -846,6 +856,13 @@ defmodule Omunculus.Config do
     do: {:ok, Path.expand(root, config_dir)}
 
   defp project_root(_root, _config_dir), do: {:error, {:project, {:invalid, :root}}}
+
+  defp workspaces_dir(:error, _config_dir), do: {:ok, nil}
+
+  defp workspaces_dir({:ok, dir}, config_dir) when is_binary(dir) and dir != "",
+    do: {:ok, Path.expand(dir, config_dir)}
+
+  defp workspaces_dir(_dir, _config_dir), do: {:error, {:project, {:invalid, :workspaces_dir}}}
 
   # A folder inside the workspace: relative, neither the workspace itself
   # nor above it.
@@ -1456,18 +1473,23 @@ defmodule Omunculus.Config do
   defp parse_workspace(data, project_dir) when is_map(data) do
     {overlays, rest} = Map.split(data, @workspace_overlay_keys)
 
-    case Map.keys(rest) -- ["root", "config" | @layer_keys] do
+    case Map.keys(rest) -- ["root", "client", "summary", "config" | @layer_keys] do
       [key | _] ->
         {:error, {:unknown_key, key}}
 
       [] ->
         with {:ok, root} <- fetch_root(rest, project_dir),
+             {:ok, client} <- optional_text(rest, "client"),
+             {:ok, summary} <- optional_text(rest, "summary"),
              {:ok, config} <- fetch_workspace_config_path(rest),
-             {:ok, ceiling} <- parse_layer(Map.drop(rest, ["root", "config"]), nil),
+             {:ok, ceiling} <-
+               parse_layer(Map.drop(rest, ["root", "client", "summary", "config"]), nil),
              {:ok, overlay} <- parse_workspace_overlay(overlays) do
           {:ok,
            %{
              root: root,
+             client: client,
+             summary: summary,
              config: config,
              ceiling: ceiling,
              overlay: overlay,
@@ -1478,6 +1500,14 @@ defmodule Omunculus.Config do
   end
 
   defp parse_workspace(_data, _project_dir), do: {:error, {:invalid, :table}}
+
+  defp optional_text(data, key) do
+    case Map.fetch(data, key) do
+      :error -> {:ok, nil}
+      {:ok, text} when is_binary(text) and text != "" -> {:ok, text}
+      _ -> {:error, {:invalid, String.to_atom(key)}}
+    end
+  end
 
   defp parse_workspace_overlay(overlays) do
     Enum.reduce_while(overlays, {:ok, %{}}, fn {key, value}, {:ok, acc} ->

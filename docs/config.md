@@ -479,7 +479,9 @@ deny = ["delete"]
 config = "omunculus.toml"
 ```
 
-`root` is a directory, relative to the project root. Ceiling keys and
+`root` is a directory, relative to the project root. `client` and
+`summary`, both optional text, say who the workspace is for and what it
+holds; the `project` tool prints them. Ceiling keys and
 `overrides` on the section are a layer. Any other global table
 (`execution`, `models`, `agents`, `workflows`, `tools`, `policy`, `mcp`,
 `auth`) overlays the global file: the workspace wins, a list replaces
@@ -494,6 +496,19 @@ section, then the file. The ceiling keys and `overrides` of the file's
 `[policy]` join the section's layer, the file's `overrides` winning per
 key. Missing file is an error. A permanent grant with
 `scope = workspace` writes that file when it exists.
+
+### Creating workspaces
+
+```toml
+[project]
+workspaces_dir = "workspaces"
+```
+
+`[project] workspaces_dir`, a folder relative to the config file, is
+where the `project` tool's `create` makes the folder of a new workspace
+and the `[workspaces.<name>]` table that names it
+([tools](tools.md#workspaces-of-projects)). It is optional, and `create`
+is refused without it.
 
 ### A folder per conversation
 
