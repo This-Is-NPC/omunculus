@@ -90,6 +90,10 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | --- | --- |
 | `GET /v1/identity` | Return the token principal. |
 | `GET /v1/projects` | List the projects you see: over HTTP, those whose conversations you may read or where you are a member of one; on a local socket, every project of the registry with its `socket`. |
+| `GET /config?whole=true` | Read the project's setup as the `config` tool prints it: without `whole`, its index (the revision and the size of each item); with it, the whole setup for an editor, with its `revision`. Needs `project.manage_config`. |
+| `GET /config/{section}`, `GET /config/{section}/{name}` | Read one section (`agents`, `workflows`, `models`, `workspaces`, `auth`, `secrets`, `packs`, `policy`, `access`, `names`) or one item of a named section, with the `revision` it was read at. An unknown section or item is `404`. |
+| `PUT /config/{section}/{name}`, `PUT /config/{section}` | Write an item of `agents`, `workflows`, `models`, `workspaces`, `auth` or `secrets`, or the `policy` or `access` table, from `{"revision":"…","value":{…}}`; `"from":"old"` renames the item of the same section in the same write. It is the `configure` tool's write, `Config.edit/5`, which refuses a result that does not load. Needs `project.manage_config`. |
+| `DELETE /config/{section}/{name}?revision={revision}`, `DELETE /config/{section}?revision={revision}` | Remove the item or table. |
 | `GET /agents/{agent}/image` | Read an agent's `image`, with its media type, if the project is visible to you; `404` for an agent without one. |
 | `GET, POST /conversations` | List visible conversations or create one. |
 | `GET /works?state={state}` | List the works of every conversation you may read, oldest first, each with its `conversation_id`; `state` (`open`, `waiting`, `done` or `cancelled`) keeps those in it alone, and any other value is `400`. |
@@ -107,7 +111,7 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `POST /members`, `DELETE /members/{issuer}/{subject}` | Assign or revoke a project role. |
 | `POST /conversations/{id}/members`, `DELETE /conversations/{id}/members/{issuer}/{subject}` | Assign or revoke a conversation role. |
 
-Membership `POST` bodies are `{"issuer":"my-idp","subject":"bob","role":"reader"}`. Create a conversation, then send a message with an idempotency key. Fetch its snapshot and resume with `/events?after=<snapshot.cursor>` or `/stream?after=<snapshot.cursor>`. Each event includes version `v`, `cursor`, `project`, `conversation_id`, `type`, `at`, `actor`, `origin`, resource IDs and `body`. A caller without access gets `404` for conversation resources.
+Membership `POST` bodies are `{"issuer":"my-idp","subject":"bob","role":"reader"}`. Create a conversation, then send a message with an idempotency key. Fetch its snapshot and resume with `/events?after=<snapshot.cursor>` or `/stream?after=<snapshot.cursor>`. Each event includes version `v`, `cursor`, `project`, `conversation_id`, `type`, `at`, `actor`, `origin`, resource IDs and `body`. A caller without access gets `404` for conversation resources, and for the config routes without `project.manage_config`. A config write against a file that changed since `revision` was read is `409 stale_revision`; one whose result does not load, or whose section is not one of those above, is `422 config_refused` with the reason in `message`, and the file stays as it was. Config writes take no `Idempotency-Key`.
 
 Request resources expose `requester` and `arbiter` as participant objects:
 `{"kind":"agent","agent":"name"}` or

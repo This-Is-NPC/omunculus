@@ -125,6 +125,46 @@ defmodule Omunculus.Server.OpenAPI do
       response: "Updated",
       request: "Membership"
     },
+    get_config: %{
+      summary: "Read the project's config index, or all of it with whole=true",
+      status: 200,
+      response: "ConfigView",
+      whole: true
+    },
+    get_config_section: %{
+      summary: "Read one section of the project's config",
+      status: 200,
+      response: "ConfigView"
+    },
+    get_config_item: %{
+      summary: "Read one item of the project's config",
+      status: 200,
+      response: "ConfigView"
+    },
+    put_config_table: %{
+      summary: "Write the policy or access table of the project's config",
+      status: 200,
+      response: "Updated",
+      request: "ConfigWrite"
+    },
+    put_config_item: %{
+      summary: "Write one item of the project's config, or rename it with from",
+      status: 200,
+      response: "Updated",
+      request: "ConfigWrite"
+    },
+    delete_config_table: %{
+      summary: "Remove the policy or access table of the project's config",
+      status: 200,
+      response: "Updated",
+      revision: true
+    },
+    delete_config_item: %{
+      summary: "Remove one item of the project's config",
+      status: 200,
+      response: "Updated",
+      revision: true
+    },
     remove_project_member: %{summary: "Remove a project member", status: 200, response: "Removed"},
     put_conversation_member: %{
       summary: "Assign a conversation member",
@@ -140,7 +180,7 @@ defmodule Omunculus.Server.OpenAPI do
   }
 
   defmacro route(method, path, operation, do: body) do
-    unless method in [:get, :post, :delete] and is_binary(path) and
+    unless method in [:get, :post, :put, :delete] and is_binary(path) and
              Map.has_key?(@operations, operation) do
       raise ArgumentError, "invalid OpenAPI route #{inspect({method, path, operation})}"
     end
@@ -221,6 +261,20 @@ defmodule Omunculus.Server.OpenAPI do
           in: "query",
           schema: %{type: "string"},
           description: "Opaque event cursor"
+        }
+    )
+    |> maybe_append(
+      spec[:whole] &&
+        %{name: "whole", in: "query", schema: %{type: "boolean"}, description: "The whole setup"}
+    )
+    |> maybe_append(
+      spec[:revision] &&
+        %{
+          name: "revision",
+          in: "query",
+          required: true,
+          schema: %{type: "string"},
+          description: "The revision the item was read at"
         }
     )
     |> maybe_append(
@@ -338,6 +392,13 @@ defmodule Omunculus.Server.OpenAPI do
       "Removed" => object(%{status: %{type: "string", const: "removed"}}, ["status"]),
       "Membership" =>
         object(%{issuer: string(), subject: string(), role: string()}, ~w(issuer subject role)),
+      "ConfigView" =>
+        object(%{revision: string()}, ["revision"]) |> Map.put(:additionalProperties, true),
+      "ConfigWrite" =>
+        object(
+          %{revision: string(), value: %{type: "object"}, from: string()},
+          ~w(revision value)
+        ),
       "SendMessage" => %{
         oneOf: [
           object(

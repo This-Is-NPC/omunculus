@@ -34,9 +34,10 @@ QtObject {
     call(on, "POST", "/v1/call", { name: name, args: args }, false, data => done(data.output), failed)
   }
 
-  // The setup of the project on the socket `on`, as the config tool prints it.
-  function setup(on, done, failed) {
-    command(on, "config", { whole: true }, output => done(JSON.parse(output)), failed)
+  // The setup of the project `project` on the socket `on`, as
+  // GET /v1/projects/{id}/config?whole=true gives it.
+  function setup(on, project, done, failed) {
+    call(on, "GET", "/v1/projects/" + encodeURIComponent(project) + "/config?whole=true", null, false, done, failed)
   }
 
   // Runs `command`, which prints an answer and its status as curl -w does

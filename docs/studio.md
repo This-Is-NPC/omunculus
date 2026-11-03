@@ -8,8 +8,9 @@ be left out when the registry holds one project.
 
 ## How it reads the project
 
-The `Studio` singleton reads the setup through the `config` tool, the
-catalog through `tools`, the passwords through `omapass` and, for every
+The `Studio` singleton reads the setup and writes each item of it through the
+config routes (`GET`, `PUT` and `DELETE` on `/v1/projects/{id}/config`). It reads
+the catalog through `tools`, the passwords through `omapass` and, for every
 project `GET /v1/projects` lists, its `overview` on that project's own
 socket, all through `POST /v1/call`, and tries a model through `model_test`.
 
@@ -95,7 +96,7 @@ each scrolling by itself:
 On a narrow window the columns are stacked, and the page scrolls.
 
 Its bar goes back, edits (Ctrl+E), deletes and, editing, saves (Ctrl+S)
-through `configure`, discards or cancels.
+through the config routes, discards or cancels.
 
 The policy's screen edits `assemble`, `max_retries`, `max_reopens` — left
 empty, a parent reopens a work as often as it likes —

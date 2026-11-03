@@ -24,7 +24,7 @@ Singleton {
   // Every project, as {id, socket, agents}: the agents of depth 0 a thread
   // can be with.
   property var projects: []
-  // Project id -> every agent of its config, as the config tool lists them:
+  // Project id -> every agent of its config, as the config route lists them:
   // the agents whose pictures and colours the threads show.
   property var rosters: ({})
   // "project/conversation" -> its thread: {key, project, id, agent, subject,
@@ -268,7 +268,7 @@ Singleton {
     for (const item of items) {
       if (known.some(other => other.id === item.id))
         continue
-      http.setup(item.socket, setup => {
+      http.setup(item.socket, item.id, setup => {
         const roster = setup.agents
         const agents = roster.filter(agent => agent.depth === 0 && !agent.workflow_only).map(agent => agent.name)
         projects = projects.map(other => other.id === item.id ? Object.assign({}, other, { agents: agents }) : other)

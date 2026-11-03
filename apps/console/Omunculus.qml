@@ -75,7 +75,7 @@ Singleton {
   // Request id -> true for each request the harness opened, passing on a
   // question someone left unanswered; the snapshot does not say.
   property var noted: ({})
-  // The project's setup, as the config tool prints it: {root, agents, models,
+  // The project's setup, as the config route gives it: {root, agents, models,
   // workspaces, workspace, workflows, ...}; null until it answers.
   property var setup: null
   // What the open conversation's model calls used, as their providers reported
@@ -89,7 +89,7 @@ Singleton {
   property var logBuffer: []
 
   // The board: every project the window's socket lists, as {id, socket},
-  // and by project id its works, its setup as the config tool prints it,
+  // and by project id its works, its setup as the config route gives it,
   // its conversations, and the runs open on its works (run id -> work id),
   // all kept from each project's stream while the board is watched. A work
   // on the board carries its `project`.
@@ -125,10 +125,10 @@ Singleton {
   }
   Process { id: clipboard }
 
-  // Reads the project's setup through the config tool on the local socket.
+  // Reads the project's setup on the local socket.
   function loadSetup() {
     const on = project
-    http.setup(socket, read => {
+    http.setup(socket, on, read => {
       if (on === project)
         setup = read
     })
@@ -212,7 +212,7 @@ Singleton {
       for (const place of data.items) {
         loadWorks(place)
         loadBoardConversations(place)
-        http.setup(place.socket, read => keep("boardSetups", place.id, read))
+        http.setup(place.socket, place.id, read => keep("boardSetups", place.id, read))
       }
       watching = true
     })

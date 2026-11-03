@@ -2,12 +2,12 @@ import QtQuick
 import Quickshell
 
 // AgentImages keeps the agents' images of one project: each fetched once,
-// by its SHA-256 as the config tool gives it, into Quickshell's cache.
+// by its SHA-256 as the config route gives it, into Quickshell's cache.
 QtObject {
   id: root
 
   // The Http the images are fetched through, the project's socket and its
-  // base path, and its agents as the config tool lists them.
+  // base path, and its agents as the config route lists them.
   required property Http http
   property string socket
   property string base

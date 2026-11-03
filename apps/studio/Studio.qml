@@ -7,7 +7,7 @@ import "kit/ui"
 // Studio is the project as its settings see it: whether the server answers,
 // its setup, catalog and passwords, and every project of the registry as its
 // overview tool prints it. Every read and write goes to the server's local
-// socket through curl, the writes through the configure tool.
+// socket through curl, the config through the typed /v1 routes.
 Singleton {
   id: root
 
@@ -28,7 +28,7 @@ Singleton {
   property alias messageIsError: client.messageIsError
   property alias noticeCount: client.noticeCount
   readonly property Http http: client.http
-  // The project's setup, as the config tool prints it: {root, agents, models,
+  // The project's setup, as GET /v1/projects/{id}/config?whole=true gives it: {root, agents, models,
   // workspaces, workspace, workflows, document, literal_keys, revision, names};
   // null until it answers.
   property var setup: null
@@ -47,7 +47,7 @@ Singleton {
   }
 
   function loadSetup() {
-    http.setup(socket, read => setup = read)
+    http.setup(socket, project, read => setup = read)
   }
 
   // An agent's colour, by its place among the setup's agents.
@@ -57,14 +57,26 @@ Singleton {
   // {id, socket}, as GET /v1/projects lists them on this socket.
   property var projects: []
 
-  // Writes one item of the config through the configure tool ("agents.worker",
-  // "policy"), or removes it for a null value, renaming `from` when given; then
+  // Writes one item of the config ("agents.worker", "policy") with PUT, or
+  // removes it with DELETE for a null value, renaming `from` when given; then
   // reads the setup again. `failed` gets the server's reason.
   function configure(item, value, from, done, failed) {
-    const args = { item: item, value: JSON.stringify(value), revision: setup.revision }
-    if (from)
-      args.from = from
-    http.command(socket, "configure", args, () => {
+    const dot = item.indexOf(".")
+    const section = dot < 0 ? item : item.slice(0, dot)
+    let path = "/v1/projects/" + encodeURIComponent(project) + "/config/" + section
+    if (dot >= 0)
+      path += "/" + encodeURIComponent(item.slice(dot + 1))
+    let method = "DELETE"
+    let body = null
+    if (value === null) {
+      path += "?revision=" + setup.revision
+    } else {
+      method = "PUT"
+      body = { revision: setup.revision, value: value }
+      if (from)
+        body.from = from
+    }
+    http.call(socket, method, path, body, false, () => {
       loadSetup()
       loadOverviews()
       done()
@@ -158,7 +170,7 @@ Singleton {
   // Project id -> the project as it runs in each of its workspaces, as the
   // overview tool prints it, read from that project's own socket.
   property var overviews: ({})
-  // Project id -> the packs it imports, as its config tool lists them.
+  // Project id -> the packs it imports, as its config route lists them.
   property var packsOf: ({})
   function loadOverviews() {
     client.call("GET", "/v1/projects", null, false, data => {
@@ -167,7 +179,7 @@ Singleton {
         http.command(each.socket, "overview", { whole: true }, output => {
           overviews = Object.assign({}, overviews, { [each.id]: JSON.parse(output) })
         }, reason => overviews = Object.assign({}, overviews, { [each.id]: { error: reason } }))
-        http.setup(each.socket, read => packsOf = Object.assign({}, packsOf, { [each.id]: read.packs }), () => {})
+        http.setup(each.socket, each.id, read => packsOf = Object.assign({}, packsOf, { [each.id]: read.packs }), () => {})
       }
     })
   }

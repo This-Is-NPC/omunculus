@@ -135,6 +135,36 @@ defmodule Omunculus.Server.Router do
     end
   end
 
+  OpenAPI.route :get, "/v1/projects/:project_id/config", :get_config do
+    show_config(conn, opts, project_id, Map.take(conn.params, ["whole"]))
+  end
+
+  OpenAPI.route :get, "/v1/projects/:project_id/config/:section", :get_config_section do
+    show_config(conn, opts, project_id, %{"section" => section})
+  end
+
+  OpenAPI.route :get, "/v1/projects/:project_id/config/:section/:name", :get_config_item do
+    show_config(conn, opts, project_id, %{"section" => section, "item" => name})
+  end
+
+  OpenAPI.route :put, "/v1/projects/:project_id/config/:section", :put_config_table do
+    write_config(conn, opts, project_id, {section})
+  end
+
+  OpenAPI.route :put, "/v1/projects/:project_id/config/:section/:name", :put_config_item do
+    write_config(conn, opts, project_id, {section, name})
+  end
+
+  OpenAPI.route :delete, "/v1/projects/:project_id/config/:section", :delete_config_table do
+    write_config(conn, opts, project_id, {section})
+  end
+
+  OpenAPI.route :delete,
+                "/v1/projects/:project_id/config/:section/:name",
+                :delete_config_item do
+    write_config(conn, opts, project_id, {section, name})
+  end
+
   OpenAPI.route :get,
                 "/v1/projects/:project_id/conversations/:conversation_id",
                 :get_conversation do
@@ -440,6 +470,40 @@ defmodule Omunculus.Server.Router do
     end
   end
 
+  defp show_config(conn, opts, project_id, args) do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, shown} <- Project.config(project_id, principal, args) do
+      reply(conn, 200, shown)
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  # A PUT writes `value` to the item; a DELETE removes it. Both name the
+  # `revision` read, and a PUT may rename from `from`.
+  defp write_config(conn, opts, project_id, item) do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, revision} <- required_string(conn.params, "revision"),
+         {:ok, value, from} <- config_value(conn),
+         :ok <- Project.edit_config(project_id, principal, revision, item, value, from) do
+      reply(conn, 200, %{status: "updated"})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  defp config_value(%{method: "DELETE"}), do: {:ok, nil, nil}
+
+  defp config_value(%{body_params: body}) do
+    with [] <- Map.keys(body) -- ~w(revision value from),
+         %{} = value <- body["value"],
+         {:ok, from} <- optional_string(body, "from") do
+      {:ok, value, from}
+    else
+      _ -> {:error, :invalid}
+    end
+  end
+
   defp command_id(conn) do
     case get_req_header(conn, "idempotency-key") do
       [id] when byte_size(id) in 1..128 -> {:ok, id}
@@ -570,6 +634,15 @@ defmodule Omunculus.Server.Router do
 
   defp error_reply(conn, {:error, :command_id_conflict}),
     do: reply(conn, 409, %{error: "command_id_conflict"})
+
+  defp error_reply(conn, {:error, {:config, :stale}}),
+    do: reply(conn, 409, %{error: "stale_revision"})
+
+  defp error_reply(conn, {:error, {:config_refused, reason}}),
+    do: reply(conn, 422, %{error: "config_refused", message: Errors.format(reason)})
+
+  defp error_reply(conn, {:error, {:not_found, _message}}),
+    do: reply(conn, 404, %{error: "not_found"})
 
   defp error_reply(conn, {:error, :last_administrator}),
     do: reply(conn, 409, %{error: "last_administrator"})

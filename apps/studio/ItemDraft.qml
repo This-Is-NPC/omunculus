@@ -2,7 +2,7 @@ import QtQuick
 
 // ItemDraft is the draft of one item of the config — an agent, a model, a
 // provider, or a whole table as the policy — as the file holds it, saved alone
-// through the configure tool or put back. A rename is saved in the same write.
+// through the config routes or put back. A rename is saved in the same write.
 // A new item, not in the file yet, starts from `fresh`. While its draft is
 // unchanged it follows the file; when the file changes under a changed draft,
 // it saves no more until it is put back.

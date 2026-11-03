@@ -33,25 +33,35 @@ defmodule Omunculus.Tools.Config do
 
   @spec run(map) :: map
   def run(%{config_path: path} = input) when is_binary(path) do
-    args = Map.get(input, :args) || %{}
-
-    with {:ok, config} <- Config.load(path),
-         {:ok, editable} <- Config.document(path),
-         whole =
-           config
-           |> describe()
-           |> Map.merge(editable)
-           |> Map.put(:names, names(config))
-           |> Map.put(:packs, packs(path)),
-         {:ok, shown} <- read(whole, args) do
-      shown |> Jason.encode!() |> Out.ok()
-    else
+    case show(path, Map.get(input, :args) || %{}) do
+      {:ok, shown} -> shown |> Jason.encode!() |> Out.ok()
+      {:error, {:not_found, message}} -> Out.fail(message)
       {:error, reason} when is_binary(reason) -> Out.fail(reason)
       {:error, reason} -> Out.fail(inspect(reason))
     end
   end
 
   def run(_input), do: Out.fail("config_path required")
+
+  @doc """
+  What `run/1` prints for `args` (`whole`, `section`, `item`), as a map,
+  for the config at `path`. An unknown section or item is
+  `{:error, {:not_found, message}}`.
+  """
+  @spec show(String.t(), map) :: {:ok, map} | {:error, term}
+  def show(path, args) do
+    with {:ok, config} <- Config.load(path),
+         {:ok, editable} <- Config.document(path) do
+      whole =
+        config
+        |> describe()
+        |> Map.merge(editable)
+        |> Map.put(:names, names(config))
+        |> Map.put(:packs, packs(path))
+
+      read(whole, args)
+    end
+  end
 
   defp read(whole, args) do
     sections = sections(whole)
@@ -105,7 +115,8 @@ defmodule Omunculus.Tools.Config do
 
   defp unknown(what),
     do:
-      "no #{what}; the sections are #{Enum.join(@named ++ @single, ", ")}, and config without arguments lists their items"
+      {:not_found,
+       "no #{what}; the sections are #{Enum.join(@named ++ @single, ", ")}, and config without arguments lists their items"}
 
   defp bytes(part), do: byte_size(Jason.encode!(part))
 

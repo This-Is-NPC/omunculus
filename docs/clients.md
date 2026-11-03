@@ -27,14 +27,16 @@ OpenAPI document the server publishes at `/openapi.json`.
   holds one project; from there, `GET /v1/projects` lists every project
   of the registry with its socket.
 
-## The setup, read through `/v1/call`
+## The setup, read through the config routes
 
-A client reads a project's setup by running the core's tools over
-`POST /v1/call` on the project's local socket ([the server](server.md)),
+A client reads a project's setup with `GET /v1/projects/{id}/config?whole=true`
+and edits it item by item with `PUT` and `DELETE` on
+`/v1/projects/{id}/config/{section}/{name}` ([the server](server.md)).
+Other tools run over `POST /v1/call` on the project's local socket,
 `{"name": <tool>, "args": {…}}`, with the arguments the
-[command line](cli.md) lists. Two of them print a whole form for a client:
+[command line](cli.md) lists. Two forms are printed whole for a client:
 
-- `config` with `{"whole": true}` prints the setup as one JSON object: its `root`,
+- the config route prints the setup as one JSON object: its `root`,
   `agents` (name, depth, model, `workflow_only`, the `granted`,
   `negotiable`, `human` and `deny` lists of its own layer, its text and
   the SHA-256 of its `image`, or null), `models` (name, `api`,
@@ -45,7 +47,7 @@ A client reads a project's setup by running the core's tools over
   `policy` and `access` tables, as the file writes them, but for a
   provider's literal `key`, which stays in the file; `literal_keys` names
   the providers that have one. It adds `revision`, the SHA-256 of the
-  file's bytes, which `configure` takes back, and `names`, what a ceiling
+  file's bytes, which a write takes back, and `names`, what a ceiling
   list may hold: the model tools, their groups and the sandbox resources.
 - `overview` with `{"whole": true}` prints the project as it runs in each place a
   work can run. `places` holds each workspace, and the project root while
@@ -72,7 +74,7 @@ A client reads a project's setup by running the core's tools over
   provider or an agent that is not declared never shows, since the config
   does not load. `unused_workflows` are those no place runs.
 
-The config tool loads the TOML in the harness's process; the sandbox hides
+The config route loads the TOML in the harness's process; the sandbox hides
 the file from external tools.
 
 ## The apps in this repository

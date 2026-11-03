@@ -561,6 +561,136 @@ defmodule Omunculus.ServerTest do
     :ok = Supervisor.stop(server)
   end
 
+  test "the config is read and edited item by item on the local socket" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(project_path, File.read!(project_path) <> "\n" <> @access)
+    {server, local} = serve_local(dir, project_path)
+    config = "/v1/projects/solo/config"
+
+    index = local.(:get, config, [])
+    assert index.status == 200
+    assert index.body["sections"]["models"]["fake"]
+
+    whole = local.(:get, config <> "?whole=true", [])
+    assert whole.body["document"]["models"]["fake"]["api"] == "module"
+    revision = whole.body["revision"]
+
+    assert local.(:get, config <> "/models", []).body["items"]["fake"]
+    item = local.(:get, config <> "/models/fake", [])
+    assert %{"item" => "models.fake", "file" => %{"api" => "module"}} = item.body
+    assert item.body["revision"] == revision
+    assert local.(:get, config <> "/access", []).body["items"]["file"]["roles"]["admin"]
+    assert local.(:get, config <> "/models/nobody", []).status == 404
+    assert local.(:get, config <> "/nothing", []).status == 404
+
+    table = %{"api" => "module", "module" => "Omunculus.Model.Fake"}
+    put = local.(:put, config <> "/models/extra", json: %{revision: revision, value: table})
+    assert put.status == 200
+    assert put.body == %{"status" => "updated"}
+    assert local.(:get, config <> "/models/extra", []).body["file"] == table
+
+    stale = local.(:put, config <> "/models/other", json: %{revision: revision, value: table})
+    assert stale.status == 409
+    assert stale.body == %{"error" => "stale_revision"}
+    assert local.(:get, config <> "/models/other", []).status == 404
+
+    revision = local.(:get, config, []).body["revision"]
+
+    refused = local.(:put, config <> "/bogus/x", json: %{revision: revision, value: table})
+    assert refused.status == 422
+    assert refused.body["error"] == "config_refused"
+    assert local.(:get, config, []).body["revision"] == revision
+
+    for body <- [
+          %{revision: revision},
+          %{revision: revision, value: table, extra: 1},
+          %{value: table}
+        ] do
+      assert local.(:put, config <> "/models/extra", json: body).status == 400
+    end
+
+    renamed =
+      local.(:put, config <> "/models/renamed",
+        json: %{revision: revision, value: table, from: "extra"}
+      )
+
+    assert renamed.status == 200
+    assert local.(:get, config <> "/models/extra", []).status == 404
+
+    revision = local.(:get, config, []).body["revision"]
+    assert local.(:delete, config <> "/models/renamed", []).status == 400
+    removed = local.(:delete, config <> "/models/renamed?revision=#{revision}", [])
+    assert removed.status == 200
+    assert local.(:get, config <> "/models/renamed", []).status == 404
+
+    :ok = Supervisor.stop(server)
+  end
+
+  test "the config needs the capability that manages it" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(project_path, File.read!(project_path) <> "\n" <> @access)
+
+    assert {:ok, "access bootstrapped"} =
+             CLI.run(
+               ["--config", project_path, "access", "bootstrap"] ++
+                 ["--issuer", "test", "--subject", "admin"],
+               dir
+             )
+
+    private_key = JOSE.JWK.generate_key({:rsa, 2048})
+    {_fields, public_pem} = JOSE.JWK.to_pem(JOSE.JWK.to_public(private_key))
+    File.write!(Path.join(dir, "public.pem"), public_pem)
+    port = free_port()
+    server_path = Path.join(dir, "server.toml")
+
+    File.write!(server_path, """
+    [server]
+    host = "127.0.0.1"
+    port = #{port}
+    max_concurrent = 4
+    max_queue = 64
+    queue_timeout_ms = 30000
+    max_connections = 1
+
+    [auth]
+    issuer = "test"
+    audience = "omunculus"
+    algorithm = "RS256"
+    public_key = "public.pem"
+
+    [projects.alpha]
+    config = "omunculus.toml"
+    """)
+
+    {:ok, server} = Server.start_link(server_path)
+    base = "http://127.0.0.1:#{port}/v1/projects/alpha"
+    admin = auth(token(private_key, "admin"))
+    outsider = auth(token(private_key, "outsider"))
+
+    for path <- ["/config", "/config/models/fake"] do
+      assert Req.get!(base <> path, headers: admin).status == 200
+      assert Req.get!(base <> path, headers: outsider).status == 404
+      assert Req.get!(base <> path, headers: auth("invalid")).status == 401
+    end
+
+    revision = Req.get!(base <> "/config", headers: admin).body["revision"]
+    table = %{"api" => "module", "module" => "Omunculus.Model.Fake"}
+    body = %{revision: revision, value: table}
+    assert Req.put!(base <> "/config/models/extra", headers: outsider, json: body).status == 404
+
+    assert Req.delete!(base <> "/config/models/fake?revision=#{revision}", headers: outsider).status ==
+             404
+
+    assert Req.get!(base <> "/config/models/extra", headers: admin).status == 404
+    assert Req.put!(base <> "/config/models/extra", headers: admin, json: body).status == 200
+
+    :ok = Supervisor.stop(server)
+  end
+
   defmodule HeldHook do
     @moduledoc "A hook that, while a process is registered as `:held_hook`, waits for its `:release`."
 

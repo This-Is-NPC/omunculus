@@ -93,6 +93,29 @@ defmodule Omunculus.Server.OpenAPITest do
     assert schemas["EscalateRequests"]["required"] == ~w(reason origins)
   end
 
+  test "the config of a project is documented" do
+    document = Router.openapi_routes() |> OpenAPI.document() |> Jason.encode!() |> Jason.decode!()
+    paths = document["paths"]
+    config = "/v1/projects/{project_id}/config"
+
+    assert paths[config]["get"]["operationId"] == "get_config"
+    assert Enum.any?(paths[config]["get"]["parameters"], &(&1["name"] == "whole"))
+    assert paths[config <> "/{section}"]["get"]["operationId"] == "get_config_section"
+    assert paths[config <> "/{section}"]["put"]["requestBody"]
+    assert paths[config <> "/{section}"]["delete"]["operationId"] == "delete_config_table"
+
+    item = paths[config <> "/{section}/{name}"]
+    assert Map.keys(item) |> Enum.sort() == ~w(delete get put)
+
+    assert item["put"]["requestBody"]["content"]["application/json"]["schema"]["$ref"] =~
+             "ConfigWrite"
+
+    revision = Enum.find(item["delete"]["parameters"], &(&1["name"] == "revision"))
+    assert revision["in"] == "query" and revision["required"]
+
+    assert document["components"]["schemas"]["ConfigWrite"]["required"] == ~w(revision value)
+  end
+
   defp local_references(%{"$ref" => "#/components/schemas/" <> name} = map),
     do: [name | nested_references(Map.delete(map, "$ref"))]
 

@@ -9,8 +9,8 @@ import "kit/ui"
 // skills of the catalog, and the project's own policy, workspaces and
 // access, one section at a time. Each section is a table of its items; a
 // click picks one, a double click or Enter opens it on a screen of its kind,
-// read, where it may be edited and saved on its own through the configure
-// tool, which writes it only if the result loads. What is picked or open
+// read, where it may be edited and saved on its own through the config
+// routes, which write it only if the result loads. What is picked or open
 // decides the commands the bar shows.
 Item {
   id: view

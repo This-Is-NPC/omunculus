@@ -127,6 +127,27 @@ defmodule Omunculus.Server.Project do
   def remove_member(id, actor, target, conversation_id),
     do: Access.remove_member(project(id), actor, target, conversation_id)
 
+  @doc "What the `config` tool shows for `args`, for a principal who manages the project's config."
+  def config(id, principal, args) do
+    project = project(id)
+
+    with :ok <- Access.check(project, principal, "project.manage_config"),
+         do: Omunculus.Tools.Config.show(project.config_path, args)
+  end
+
+  @doc "Writes or, for a nil `value`, removes one config item as `Config.edit/5` does."
+  def edit_config(id, principal, revision, item, value, from) do
+    project = project(id)
+
+    with :ok <- Access.check(project, principal, "project.manage_config") do
+      case Config.edit(project.config_path, revision, item, value, from) do
+        :ok -> :ok
+        {:error, {:config, :stale}} = stale -> stale
+        {:error, reason} -> {:error, {:config_refused, reason}}
+      end
+    end
+  end
+
   defp via(id), do: {:via, Registry, {Omunculus.Server.Registry, id}}
 
   # The project the process opened, which it keeps as its registry value.
