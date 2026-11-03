@@ -27,7 +27,12 @@ defmodule Omunculus.EvalResumeTest do
 
     events = [
       event("prompt", %{"message" => "Build a site"}),
-      event("tool", %{"name" => "reply", "ok" => true, "args" => answer}),
+      # The person replies through the command line, whose --parts is JSON text.
+      event("tool", %{
+        "name" => "reply",
+        "ok" => true,
+        "args" => Map.update!(answer, "parts", &Jason.encode!/1)
+      }),
       Map.put(event("reply", answer), :request_id, "envelope"),
       Map.put(event("reply", %{"body" => "Yes"}), :request_id, "leaf")
     ]

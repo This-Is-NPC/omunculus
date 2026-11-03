@@ -63,11 +63,16 @@ defmodule EquivalentExchange.Requests do
   def answers(request, answer) do
     [
       %{request: request.id, option: answer["option"], body: answer["body"]}
-      | Enum.flat_map(Map.get(answer, "parts", %{}), fn {part, value} ->
+      | Enum.flat_map(parts(answer["parts"]), fn {part, value} ->
           answers(request.origins[part], value)
         end)
     ]
   end
+
+  # A reply sent through the command line records its parts as JSON text.
+  defp parts(nil), do: %{}
+  defp parts(text) when is_binary(text), do: Jason.decode!(text)
+  defp parts(parts), do: parts
 
   def requirements(request) do
     Enum.uniq(
