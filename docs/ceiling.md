@@ -138,7 +138,9 @@ files; it does not mount the workspace.
 Every process a command starts, a server left in the background included,
 ends when the command does. A run's commands that see the host share one
 home overlay; they take it one at a time, a command waiting for the one
-before it within its own timeout.
+before it within its own timeout. Where the filesystem keeps an overlay
+busy a while after its last process has gone, as btrfs does, a command
+tries for up to ten seconds more before it fails.
 
 The `bash` tool hands its command to `sh` as a file in the command's private
 temporary directory, so the command's text is on no process's command line:

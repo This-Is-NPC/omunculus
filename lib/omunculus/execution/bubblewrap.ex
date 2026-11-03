@@ -273,14 +273,15 @@ defmodule Omunculus.Execution.Bubblewrap do
   # that has it waits, under `flock`, for the one that holds it; the wait
   # counts against its timeout. The lock goes with the sandbox, whose
   # processes all end with its command. On a filesystem such as btrfs an
-  # overlay still goes on being in use a few milliseconds after the last
-  # process of the sandbox that mounted it has gone, so bwrap may find it
-  # busy once the lock is free. It then fails before the runner starts, with
+  # overlay goes on being in use after the last process of the sandbox that
+  # mounted it has gone — milliseconds mostly, more than a second after a
+  # headless browser — so bwrap may find it busy once the lock is free, and
+  # tries again for up to ten seconds. It then fails before the runner starts, with
   # the input and stderr fifos not yet opened, so starting it again is safe.
   # bwrap's own messages, apart from the command's stderr, tell that case
   # apart.
   @setup ~S"""
-  setup=$1; shift; tries=100
+  setup=$1; shift; tries=1000
   while :; do
     "$@" 2> "$setup"; status=$?
     if [ "$status" -ne 0 ] && [ "$tries" -gt 0 ] &&
