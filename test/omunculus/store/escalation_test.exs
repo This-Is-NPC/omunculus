@@ -265,6 +265,35 @@ defmodule Omunculus.Store.EscalationTest do
                ~s(worker's on the work "tone": "tone")
   end
 
+  test "an unanswered request with no route left notifies a person once and stays pending",
+       %{conn: conn} = ctx do
+    client = human_origin(conn, ctx, "owner")
+    origin = ask(conn, client, "Budget?")
+
+    run =
+      Fixtures.open_run(conn, %{
+        agent: "root",
+        work_id: ctx.root,
+        depth: 0,
+        conversation_id: ctx.conversation,
+        request_id: origin
+      })
+
+    {:ok, _} = Store.close_run(conn, run.id)
+    {:ok, closed} = Store.view(conn, "run", run.id)
+    unanswered = &Omunculus.Tools.Out.unanswered/3
+
+    assert {:ok, [%{type: "notify"}]} = Store.unanswered(conn, closed, ctx.config, unanswered)
+    assert request(conn, origin).status == "pending"
+    assert count(conn, "request_escalations") == 0
+    assert {:ok, [note]} = Query.all(conn, "SELECT body FROM comments WHERE inbox_id IS NOT NULL")
+    assert note.body =~ ~s(root left)
+    assert note.body =~ "No arbiter is left on its route"
+
+    assert {:ok, []} = Store.unanswered(conn, closed, ctx.config, unanswered)
+    assert count(conn, "inbox") == 1
+  end
+
   test "a permission an agent answered with text, escalating nothing, is not passed to it again",
        %{conn: conn} = ctx do
     [first, _second] = ctx.child_ctxs

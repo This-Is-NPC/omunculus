@@ -120,9 +120,10 @@ defmodule Omunculus.Tools.Out do
   question it holds (`%{requester, reason, title}`, the title of the
   asker's work, nil without one) with who asked it and on which work, the
   question shortened. With `note`, it is the inbox note of the request it
-  links, which reached a person.
+  links, which reached a person, or `:no_route`, the inbox note of a
+  request no agent or person on its route could receive.
   """
-  @spec unanswered(String.t(), [map], boolean) :: String.t()
+  @spec unanswered(String.t(), [map], boolean | :no_route) :: String.t()
   def unanswered(agent, questions, note) do
     text =
       case questions do
@@ -136,7 +137,11 @@ defmodule Omunculus.Tools.Out do
             end)
       end
 
-    if note, do: text <> " It is yours to answer now.", else: text
+    case note do
+      false -> text
+      true -> text <> " It is yours to answer now."
+      :no_route -> text <> " No arbiter is left on its route, so it stays pending."
+    end
   end
 
   defp on(nil), do: ""

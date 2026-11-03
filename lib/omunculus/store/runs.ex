@@ -327,25 +327,50 @@ defmodule Omunculus.Store.Runs do
     }
 
     with {:ok, questions} <- questions(conn, parts),
-         text = &reason_text.(run.agent, questions, &1),
-         {:ok, events} <-
-           Actions.run(
-             conn,
-             [
-               %{
-                 "type" => "escalate",
-                 "body" => %{
-                   "reason" => text.(false),
-                   "origins" => Map.new(parts, fn {part, request} -> {part, request.id} end)
-                 }
-               }
-             ],
-             ctx
-           ),
-         upstream = Enum.find(events, &(&1.type == "request")),
-         {:ok, linked} <- View.view(conn, "request", upstream.request_id),
-         {:ok, notified} <- notify_unanswered(conn, linked, ctx, text.(true)) do
-      {:ok, events ++ notified}
+         text = &reason_text.(run.agent, questions, &1) do
+      case escalate(conn, ctx, parts, text.(false)) do
+        {:ok, events} ->
+          upstream = Enum.find(events, &(&1.type == "request"))
+
+          with {:ok, linked} <- View.view(conn, "request", upstream.request_id),
+               {:ok, notified} <- notify_unanswered(conn, linked, ctx, text.(true)),
+               do: {:ok, events ++ notified}
+
+        # Nobody is left on the route: a person is told, once, and the
+        # request stays pending where it is.
+        {:error, {:request, :no_route}} ->
+          notify_once(conn, ctx, text.(:no_route))
+
+        error ->
+          error
+      end
+    end
+  end
+
+  defp escalate(conn, ctx, parts, reason) do
+    Actions.run(
+      conn,
+      [
+        %{
+          "type" => "escalate",
+          "body" => %{
+            "reason" => reason,
+            "origins" => Map.new(parts, fn {part, request} -> {part, request.id} end)
+          }
+        }
+      ],
+      ctx
+    )
+  end
+
+  defp notify_once(conn, ctx, note) do
+    with {:ok, same} <-
+           Query.all(conn, "SELECT 1 FROM comments WHERE inbox_id IS NOT NULL AND body = ?", [
+             note
+           ]) do
+      if same == [],
+        do: Actions.run(conn, [%{"type" => "notify", "body" => %{"body" => note}}], ctx),
+        else: {:ok, []}
     end
   end
 

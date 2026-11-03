@@ -98,7 +98,7 @@ without, it follows the default route.
 | `promote` approval | The release agent requests permission with `request_access`; it follows the configured chain. Intermediaries must escalate: an agent cannot answer a request containing a sealed grant option, including with deny or text. Only the human decides; the pack's `promote` tool publishes once its grant makes it available. |
 | `propose_config`, `propose_pack` | Validated proposals whose apply option calls configure or pack with revision checks, always on the logical `owner` route. A text reply records advice without applying the proposal. |
 | Harness retry/cancel | A routed request after root retry exhaustion, on the logical `owner` route where the project configures it, else the default route. Retry is a named decision with no calls; cancel chains cancellation. Child retry exhaustion remains a stopping break. |
-| Unanswered receiver | Linked escalation through the same action and routing, of the request the run was opened for or, for an intermediary resumed by a text answer, of the origins the answer returned to it; an upstream human request gets an inbox notification. An origin never goes again to an agent that answered it with text without escalating it (see below). |
+| Unanswered receiver | Linked escalation through the same action and routing, of the request the run was opened for or, for an intermediary resumed by a text answer, of the origins the answer returned to it; an upstream human request gets an inbox notification. When no destination is left on the route (every one excluded, see below), nothing is escalated: the request stays pending and an inbox note, once, names the question and says no arbiter is left on its route, for a person to answer. An origin never goes again to an agent that answered it with text without escalating it (see below). |
 
 An agent's run opened by the answer to its own question — a reply to its
 request, or an upstream answer resuming an intermediary — does not put that
@@ -141,7 +141,8 @@ origin to its intermediary, and the next route destination takes it, so an
 unresolved permission cannot circle between the same agents. An agent that
 escalated the origin upward and then relayed the upstream text down stays
 eligible. When no destination is left, the escalation is refused with
-`no_route`.
+`no_route`; the automatic one of an unanswered request then records an inbox
+note (once) and leaves the request pending.
 
 An upstream request may itself be escalated. Its reply can return answers in
 two ways:
