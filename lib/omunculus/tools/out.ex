@@ -354,6 +354,17 @@ defmodule Omunculus.Tools.Out do
     do:
       "refused: #{inspect(option)} is not an option of this request; give option as one of: #{Enum.join(options, ", ")}"
 
+  def refused({:reply, :closed}),
+    do:
+      "refused: that request is closed, it was answered already; a question its answer left open is a request still pending for you: reply to that one, by its own id"
+
+  def refused({:reply, :escalated}),
+    do:
+      "refused: you passed that request up, so it takes no reply from you until its answer comes back"
+
+  def refused({:reply, :not_arbiter}),
+    do: "refused: that request is not addressed to you; reply only to the requests you received"
+
   def refused({:reopen, {:only_person, name}}),
     do:
       "refused: only the person may grant #{name}: reopen without granting it and have the agent ask for it with request_access"
