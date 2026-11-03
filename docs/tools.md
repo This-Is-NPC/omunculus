@@ -354,6 +354,20 @@ of each of its closed runs as `## Last run` shows one, without the call
 that assembled each run's prompt. `## Children` and `## Results` name
 each child's work id.
 
+## Merging a work below
+
+`merge` takes a `work_id`: a done work handed down from the run's own
+that worked in a git worktree ([config](config.md#a-worktree-per-work)).
+It merges the branch `work/<work_id>` into the run's root with a merge
+commit: the run's worktree when its own work is isolated too, else the
+workspace's checkout. The root must be writable in the run (`sandbox.write`).
+When the merge conflicts, `merge` undoes it, so nothing merges, and the
+call fails naming the conflicting paths. Other refusals (a work that is
+not done, or not below the run's, or a root git cannot merge into, such
+as one with uncommitted changes the merge would overwrite) fail the call
+with the reason. Like every tool, it reaches an agent only through the
+ceiling; no preset includes it.
+
 ## A work below that broke
 
 A child that broke waits on its parent's run, which decides it with one

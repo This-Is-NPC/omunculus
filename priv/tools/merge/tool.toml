@@ -1,0 +1,21 @@
+name = "merge"
+kind = "tool"
+triggers = ["model"]
+description = "Merges the branch of a finished work below this run's, one that worked in a git worktree, into this run's workspace. A conflict is undone, nothing merges, and the conflicting paths come back as a failure. Needs sandbox.write."
+tags = ["files", "git", "work"]
+module = "Omunculus.Tools.Merge"
+
+[parameters]
+type = "object"
+required = ["work_id"]
+
+[parameters.properties.work_id]
+type = "string"
+
+[views.own]
+source = "works"
+
+[views.target]
+source = "works"
+from = ["args.work_id"]
+within = "descendants"
