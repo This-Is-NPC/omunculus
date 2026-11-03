@@ -170,6 +170,30 @@ defmodule Omunculus.Tools.OverviewTest do
              read(path, %{"agent" => "worker"})
   end
 
+  test "an agent and the overview name what the catalog lacks", %{path: path} do
+    healthy = path |> overview() |> place("site") |> depth(1) |> first_stage()
+    assert healthy["agent"]["broken"] == []
+    assert overview(path)["broken"] == []
+
+    data =
+      path
+      |> Toml.decode_file!()
+      |> update_in(["agents", "worker", "tools"], &(&1 ++ ["ghost", "skill.nothing"]))
+      |> put_in(["secrets", "phantom"], %{"PHANTOM_TOKEN" => "gh"})
+
+    File.write!(path, ConfigToml.encode(data))
+    overview = overview(path)
+
+    assert [
+             %{"kind" => "tool", "name" => "ghost", "why" => "no tool ghost in the catalog"},
+             %{"kind" => "skill", "name" => "skill.nothing"}
+           ] =
+             overview |> place("site") |> depth(1) |> first_stage() |> get_in(["agent", "broken"])
+
+    assert [%{"kind" => "secret", "name" => "phantom", "binding" => %{"PHANTOM_TOKEN" => "gh"}}] =
+             overview["broken"]
+  end
+
   test "the builtin catalog discovers overview for the command line and models" do
     assert %{"overview" => manifest} = Catalog.unconfigured()
     assert manifest.triggers == ["cli", "model"]

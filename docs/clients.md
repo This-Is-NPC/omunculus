@@ -64,7 +64,13 @@ A client reads a project's setup by running the core's tools over
   `blocked`), a group's `members` and the `secrets` the config binds to
   it, the names its layer denies (`deny`) and, apart, its `skills`, each
   with its `description`, `state` and the tools its `allowed-tools` names
-  (`uses`). `unused_workflows` are those no place runs.
+  (`uses`). Its `broken` lists, each with a `kind` (`tool` or `skill`), the
+  `name` and the reason (`why`), what its layers name that the catalog
+  lacks. The overview's own `broken` lists the `[secrets.<tool>]` bindings
+  of a tool the catalog lacks. Neither checks tools while an `[[mcp.servers]]`
+  entry exists, since a server's tools are known only by asking it; a model, a
+  provider or an agent that is not declared never shows, since the config
+  does not load. `unused_workflows` are those no place runs.
 
 The config tool loads the TOML in the harness's process; the sandbox hides
 the file from external tools.

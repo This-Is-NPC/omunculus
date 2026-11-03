@@ -13,7 +13,11 @@ defmodule Omunculus.Tools.Overview do
   `askable`, `sealed`, `blocked`), a group with its members, a tool with
   the secrets the config binds to it; the names its layer denies; and,
   apart from them, the skills it has there, each with its description,
-  state and the tools its `allowed-tools` names. Workflows no place runs are listed apart. That
+  state and the tools its `allowed-tools` names; and `broken`, the tools and
+  skills its layers name that the catalog lacks, each with a reason. The
+  overview's own `broken` lists the `[secrets.<tool>]` bindings of a tool the
+  catalog lacks (not checked while an MCP server lists tools). Workflows no
+  place runs are listed apart. That
   whole project is what `whole` prints, for a client.
 
   A model reads it in parts, since a real project's overview outgrows
@@ -47,7 +51,14 @@ defmodule Omunculus.Tools.Overview do
 
   defp overview(config) do
     catalog = Catalog.discover(config.tools)
-    known = %{groups: Catalog.groups(catalog), skills: skills(catalog)}
+
+    known = %{
+      groups: Catalog.groups(catalog),
+      skills: skills(catalog),
+      names: MapSet.new(Map.keys(catalog)),
+      # A server's tools are known only by asking it, so none is called missing.
+      mcp: config.mcp != []
+    }
 
     places =
       for name <- places(config), {:ok, here} <- [Config.for_workspace(config, name)] do
@@ -62,9 +73,41 @@ defmodule Omunculus.Tools.Overview do
 
     %{
       root: config.root,
+      broken: orphan_secrets(config, known),
       places: places,
       unused_workflows: config.workflows |> Map.keys() |> Enum.reject(&(&1 in run)) |> Enum.sort()
     }
+  end
+
+  # Config load already refuses a model, a workflow stage or a secret naming
+  # an undeclared model, agent or provider; what a loaded config can still
+  # hold is a name the catalog lacks.
+  defp orphan_secrets(config, known) do
+    for {tool, binding} <- Enum.sort(config.secrets), missing(tool, known) != nil do
+      %{
+        kind: "secret",
+        name: tool,
+        why: "[secrets.#{tool}] binds a tool the catalog lacks",
+        binding: binding
+      }
+    end
+  end
+
+  # What an agent's layers list that the catalog lacks: the kind it was
+  # taken for and why.
+  defp broken(names, known) do
+    for name <- Enum.uniq(names), kind = missing(name, known) do
+      %{kind: kind, name: name, why: "no #{kind} #{name} in the catalog"}
+    end
+  end
+
+  defp missing(name, known) do
+    cond do
+      name == "skills" or name in known.names or Map.has_key?(known.groups, name) -> nil
+      String.starts_with?(name, "skill.") -> "skill"
+      String.starts_with?(name, ["sandbox.", "/", ".", "~"]) or known.mcp -> nil
+      true -> "tool"
+    end
   end
 
   defp read(whole, args) do
@@ -238,10 +281,9 @@ defmodule Omunculus.Tools.Overview do
       workspace: layer
     }
 
+    named = layer_names(agent.ceiling) ++ ((layer && layer.human) || [])
     # Skills show apart, as cards: the names the layers list stay tools.
-    listed =
-      (layer_names(agent.ceiling) ++ ((layer && layer.human) || []))
-      |> Enum.reject(&(&1 == "skills" or String.starts_with?(&1, "skill.")))
+    listed = Enum.reject(named, &(&1 == "skills" or String.starts_with?(&1, "skill.")))
 
     snapshot = Ceiling.mount(here, context, listed ++ Enum.map(known.skills, & &1.name))
 
@@ -266,6 +308,7 @@ defmodule Omunculus.Tools.Overview do
       tools:
         (listed ++ reader) |> Enum.uniq() |> Enum.map(&tool(here, snapshot, &1, known.groups)),
       deny: agent.ceiling.deny,
+      broken: broken(named, known),
       skills:
         for skill <- Enum.sort_by(known.skills, & &1.name),
             state = Ceiling.classify(snapshot, skill.name),

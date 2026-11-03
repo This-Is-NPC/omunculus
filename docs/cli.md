@@ -241,7 +241,7 @@ Prints, as JSON, what a client needs to take a provider's key from omapass, the 
 omunculus overview [--agent <agent>] [--whole true] [--workspace <workspace>]
 ```
 
-Reads, as JSON, the project as it runs in each workspace. Without arguments, each depth's workflows with their stages and its agents, each named with its size in bytes; with agent, where that agent runs and, for each, its model, its key and its tools and skills classified by the ceiling there.
+Reads, as JSON, the project as it runs in each workspace. Without arguments, each depth's workflows with their stages and its agents, each named with its size in bytes; with agent, where that agent runs and, for each, its model, its key and its tools and skills classified by the ceiling there, and the names it lists that the catalog lacks.
 
 Also called by a model.
 
