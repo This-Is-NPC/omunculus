@@ -6,6 +6,7 @@ defmodule Omunculus.Server.Router do
   require Logger
 
   alias Omunculus.{Errors, Operations}
+  alias Omunculus.Server
   alias Omunculus.Server.{Auth, Contract, EventStream, OpenAPI, Project}
   require OpenAPI
 
@@ -43,6 +44,21 @@ defmodule Omunculus.Server.Router do
     else
       {:error, :unauthorized} -> reply(conn, 401, %{error: "unauthorized"})
       error -> error_reply(conn, error)
+    end
+  end
+
+  # Only the local user, who owns the registry file, may add to it.
+  OpenAPI.route :post, "/v1/projects", :register_project do
+    with {:ok, _project_id} <- Keyword.fetch(conn.assigns.server_opts, :local),
+         %{"id" => id, "config" => config} when is_binary(id) and is_binary(config) <-
+           conn.body_params do
+      case Server.register(Keyword.fetch!(conn.assigns.server_opts, :stream_key), id, config) do
+        :ok -> reply(conn, 201, %{id: id})
+        {:error, reason} -> command_failed(conn, reason)
+      end
+    else
+      :error -> reply(conn, 404, %{error: "not_found"})
+      _invalid -> reply(conn, 400, %{error: "invalid"})
     end
   end
 
@@ -480,7 +496,8 @@ defmodule Omunculus.Server.Router do
     case Keyword.fetch(opts, :local) do
       {:ok, _id} ->
         opts
-        |> Keyword.fetch!(:registry)
+        |> Keyword.fetch!(:stream_key)
+        |> Server.project_ids()
         |> Enum.sort()
         |> Enum.reduce_while({:ok, []}, fn id, {:ok, items} ->
           case Project.socket(id) do
@@ -491,7 +508,8 @@ defmodule Omunculus.Server.Router do
 
       :error ->
         opts
-        |> Keyword.fetch!(:projects)
+        |> Keyword.fetch!(:stream_key)
+        |> Server.project_ids()
         |> Enum.sort()
         |> Enum.reduce_while({:ok, []}, fn id, {:ok, items} ->
           case Project.visible?(id, principal) do
@@ -507,7 +525,7 @@ defmodule Omunculus.Server.Router do
     opts = Keyword.merge(opts, conn.assigns.server_opts)
 
     with {:ok, principal} <- authenticate(conn, opts),
-         true <- id in Keyword.fetch!(opts, :projects) do
+         true <- id in served(opts) do
       {:ok, principal}
     else
       false -> {:error, :not_found}
@@ -548,6 +566,10 @@ defmodule Omunculus.Server.Router do
       _ -> {:error, :invalid}
     end
   end
+
+  # A local socket serves its own project; the TCP listener, every running one.
+  defp served(opts),
+    do: Keyword.get_lazy(opts, :projects, fn -> Server.project_ids(opts[:stream_key]) end)
 
   defp command_id(conn) do
     case get_req_header(conn, "idempotency-key") do

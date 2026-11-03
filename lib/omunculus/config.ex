@@ -411,7 +411,9 @@ defmodule Omunculus.Config do
     with {:ok, config} <- parse(data, path, true), do: {:ok, data, config}
   end
 
-  defp replace(path, data) do
+  @doc "Writes `data` as TOML to `path` in one rename, so a reader sees the old file or the new one."
+  @spec replace(String.t(), map) :: :ok | {:error, File.posix()}
+  def replace(path, data) do
     temporary = "#{path}.#{Omunculus.Id.new()}"
 
     with :ok <- File.write(temporary, Omunculus.Config.Toml.encode(data)) do

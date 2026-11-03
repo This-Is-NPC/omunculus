@@ -57,7 +57,7 @@ Each project is served on a Unix socket next to its SQLite file, `<store path>.o
 curl --unix-socket .omunculus/store.sqlite3.omunculus.sock http://localhost/v1/projects/demo/conversations
 ```
 
-Only the socket serves two routes for the local user. `POST /v1/call` runs one tool, `{"name": "runs", "args": {}}`, and answers `{"output": …}` once the runs it opened have finished; a refusal answers `422` with its `message`. `POST /v1/access/bootstrap` seeds the first administrator, `{"issuer": …, "subject": …}`, for the owner of the project config. While the server owns the project, `bin/omunculus <command>` sends its tool and arguments, or its `access bootstrap`, there.
+Only the socket serves three routes for the local user. `POST /v1/call` runs one tool, `{"name": "runs", "args": {}}`, and answers `{"output": …}` once the runs it opened have finished; a refusal answers `422` with its `message`. `POST /v1/access/bootstrap` seeds the first administrator, `{"issuer": …, "subject": …}`, for the owner of the project config. `POST /v1/projects` registers a project while the server runs, `{"id": …, "config": "/path/to/omunculus.toml"}`: the id must be unused, the config must load with an `[access]` table, and the server starts the project and its socket without restarting the others, then writes `[projects.<id>]` into its registry file, whose other entries stay. It answers `201` with the id; a refused id or config answers `422` with its `message`. The TCP listener serves the new project at once. While the server owns the project, `bin/omunculus <command>` sends its tool and arguments, or its `access bootstrap`, there.
 
 The socket path must fit in 107 bytes; a longer one keeps the server from starting. The server removes the socket when it stops, and a socket left by a server that crashed is replaced by the next one.
 
@@ -89,7 +89,7 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | Method and path | Purpose |
 | --- | --- |
 | `GET /v1/identity` | Return the token principal. |
-| `GET /v1/projects` | List the projects you see: over HTTP, those whose conversations you may read or where you are a member of one; on a local socket, every project of the registry with its `socket`. |
+| `GET /v1/projects` | List the projects you see: over HTTP, those whose conversations you may read or where you are a member of one; on a local socket, every project the server serves with its `socket`. |
 | `GET /config?whole=true` | Read the project's setup as the `config` tool prints it: without `whole`, its index (the revision and the size of each item); with it, the whole setup for an editor, with its `revision`. Needs `project.manage_config`. |
 | `GET /config/{section}`, `GET /config/{section}/{name}` | Read one section (`agents`, `workflows`, `models`, `workspaces`, `auth`, `secrets`, `packs`, `policy`, `access`, `names`) or one item of a named section, with the `revision` it was read at. An unknown section or item is `404`. |
 | `PUT /config/{section}/{name}`, `PUT /config/{section}` | Write an item of `agents`, `workflows`, `models`, `workspaces`, `auth` or `secrets`, or the `policy` or `access` table, from `{"revision":"…","value":{…}}`; `"from":"old"` renames the item of the same section in the same write. It is the `configure` tool's write, `Config.edit/5`, which refuses a result that does not load. Needs `project.manage_config`. |

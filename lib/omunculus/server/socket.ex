@@ -3,7 +3,7 @@ defmodule Omunculus.Server.Socket do
   Serves one project's HTTP entry on a Unix socket next to its store,
   `<store>.omunculus.sock`, which only the server's user can open.
   Requests on it act as the local principal, the one the direct CLI uses,
-  and list every project of the server's registry with its socket.
+  and list every project the server serves with its socket.
   The socket is bound inside a private directory and moved into place
   once its mode is set. It starts after the project runtime, which holds
   the store's lock, so a socket file left by an earlier server is removed.
@@ -20,14 +20,14 @@ defmodule Omunculus.Server.Socket do
   @spec path(String.t()) :: String.t()
   def path(store), do: store <> ".omunculus.sock"
 
-  def start_link({id, config_path, stream_key, registry}),
-    do: GenServer.start_link(__MODULE__, {id, config_path, stream_key, registry})
+  def start_link({id, config_path, stream_key}),
+    do: GenServer.start_link(__MODULE__, {id, config_path, stream_key})
 
   @impl true
-  def init({id, config_path, stream_key, registry}) do
+  def init({id, config_path, stream_key}) do
     Process.flag(:trap_exit, true)
 
-    endpoint = [local: id, projects: [id], registry: registry, stream_key: stream_key]
+    endpoint = [local: id, projects: [id], stream_key: stream_key]
 
     with {:ok, config} <- Config.load(config_path),
          path = path(config.store.path),

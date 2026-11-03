@@ -1,7 +1,8 @@
 defmodule Omunculus.Server do
   @moduledoc """
   Starts one runtime and one local socket per configured project, and the
-  TCP listener when the registry names a `host` and `port`.
+  TCP listener when the registry names a `host` and `port`. `register/3`
+  adds a project to the running server and to the registry file.
   """
 
   alias Omunculus.Server.{Auth, Config, Endpoint, Project, Socket, StreamLimiter}
@@ -10,23 +11,83 @@ defmodule Omunculus.Server do
   def start_link(path) do
     with {:ok, config} <- Config.load(path),
          {:ok, http} <- http_listener(config, Path.expand(path)) do
-      limits = Map.put(config.limits, :scope, {:server, Path.expand(path)})
       stream_key = Path.expand(path)
 
       children =
         [{StreamLimiter, {stream_key, config.max_connections}}] ++
           Enum.flat_map(config.projects, fn {id, project_path} ->
-            [
-              Supervisor.child_spec({Project, {id, project_path, limits}}, id: {:project, id}),
-              Supervisor.child_spec(
-                {Socket, {id, project_path, stream_key, Map.keys(config.projects)}},
-                id: {:socket, id}
-              )
-            ]
+            project_children(id, project_path, config.limits, stream_key)
           end) ++ http
 
-      Supervisor.start_link(children, strategy: :one_for_one)
+      Supervisor.start_link(children, strategy: :one_for_one, name: via(stream_key))
     end
+  end
+
+  defp via(stream_key), do: {:via, Registry, {Omunculus.Server.Registry, {:server, stream_key}}}
+
+  defp project_children(id, project_path, limits, stream_key) do
+    limits = Map.put(limits, :scope, {:server, stream_key})
+
+    [
+      Supervisor.child_spec({Project, {id, project_path, limits}}, id: {:project, id}),
+      Supervisor.child_spec({Socket, {id, project_path, stream_key}}, id: {:socket, id})
+    ]
+  end
+
+  @doc "The ids of the projects the server at `stream_key` serves."
+  @spec project_ids(String.t()) :: [String.t()]
+  def project_ids(stream_key) do
+    for {{:project, id}, _pid, _type, _modules} <- Supervisor.which_children(via(stream_key)),
+        do: id
+  end
+
+  @doc """
+  Starts the project `id` on the running server whose registry file is
+  `stream_key`, then writes it into that file. The project must load with
+  an `[access]` table; the other projects keep running.
+  """
+  @spec register(String.t(), term, String.t()) :: :ok | {:error, term}
+  def register(stream_key, id, config) do
+    :global.trans({{__MODULE__, stream_key}, self()}, fn ->
+      with :ok <- unused(stream_key, id),
+           {:ok, server} <- Config.load(stream_key),
+           config = Path.expand(config, Path.dirname(stream_key)),
+           true <- File.regular?(config) || {:error, {:server, :invalid_project, id}},
+           :ok <- start(stream_key, id, config, server.limits) do
+        with {:error, _reason} = error <- Config.add_project(stream_key, id, config) do
+          stop(stream_key, id)
+          error
+        end
+      end
+    end)
+  end
+
+  defp unused(stream_key, id) do
+    if is_binary(id) and id != "" and id not in project_ids(stream_key),
+      do: :ok,
+      else: {:error, {:server, :invalid_project, id}}
+  end
+
+  defp start(stream_key, id, config, limits) do
+    Enum.reduce_while(project_children(id, config, limits, stream_key), :ok, fn spec, :ok ->
+      case Supervisor.start_child(via(stream_key), spec) do
+        {:ok, _pid} ->
+          {:cont, :ok}
+
+        {:error, reason} ->
+          stop(stream_key, id)
+          {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp stop(stream_key, id) do
+    for key <- [{:socket, id}, {:project, id}] do
+      Supervisor.terminate_child(via(stream_key), key)
+      Supervisor.delete_child(via(stream_key), key)
+    end
+
+    :ok
   end
 
   defp http_listener(%Config{http: nil}, _stream_key), do: {:ok, []}
@@ -36,10 +97,7 @@ defmodule Omunculus.Server do
       {:ok,
        [
          {Bandit,
-          plug:
-            {Endpoint, auth: auth, projects: Map.keys(config.projects), stream_key: stream_key},
-          ip: http.host,
-          port: http.port}
+          plug: {Endpoint, auth: auth, stream_key: stream_key}, ip: http.host, port: http.port}
        ]}
     end
   end

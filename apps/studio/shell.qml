@@ -53,7 +53,7 @@ ShellRoot {
     // The flow's commands: everything the project can be given. The other
     // sections' come from what is picked or open in them.
     readonly property var commands: page === 0
-      ? [adding("AGENT", 3, "agents", "primary"), adding("WORKFLOW", 4, "workflows"), adding("MODEL", 2, "models"), adding("PROVIDER", 1, "auth"), adding("WORKSPACE", 7, "workspaces")]
+      ? [adding("AGENT", 3, "agents", "primary"), adding("WORKFLOW", 4, "workflows"), adding("MODEL", 2, "models"), adding("PROVIDER", 1, "auth"), adding("WORKSPACE", 7, "workspaces"), { text: "NEW PROJECT", short: "PROJECT", icon: "plus", run: () => newProject.open() }]
       : settings.commands
 
     // Chooses a section and gives it the keyboard, so the carousel folds
@@ -170,6 +170,11 @@ ShellRoot {
             }
           }
         }
+      }
+
+      NewProjectDialog {
+        id: newProject
+        onRegistered: id => { flow.projectId = id; window.page = 0 }
       }
 
       ZoomControl {

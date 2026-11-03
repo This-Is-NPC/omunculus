@@ -18,6 +18,12 @@ defmodule Omunculus.Server.OpenAPI do
       response: "CommandOutput",
       request: "LocalCommand"
     },
+    register_project: %{
+      summary: "Add a project to the running server and its registry, on a local socket",
+      status: 201,
+      response: "RegisteredProject",
+      request: "RegisterProject"
+    },
     bootstrap_access: %{
       summary: "Seed the first administrator of the local socket's project",
       status: 200,
@@ -408,6 +414,8 @@ defmodule Omunculus.Server.OpenAPI do
         ),
       "Error" => object(%{error: string(), message: string()}, ["error"]),
       "LocalCommand" => object(%{name: string(), args: %{type: "object"}}, ["name"]),
+      "RegisterProject" => object(%{id: string(), config: string()}, ~w(id config)),
+      "RegisteredProject" => object(%{id: string()}, ["id"]),
       "CommandOutput" => object(%{output: string()}, ["output"]),
       "Bootstrapped" => object(%{status: %{type: "string", const: "bootstrapped"}}, ["status"]),
       "Updated" => object(%{status: %{type: "string", const: "updated"}}, ["status"]),

@@ -85,6 +85,18 @@ defmodule Omunculus.Server.Config do
 
   defp auth(_, _http, _dir), do: {:error, {:server, :missing_auth}}
 
+  @doc """
+  Writes `[projects.<id>] config = "<config>"` into the registry file at
+  `path`; the rest of the file keeps what it holds.
+  """
+  @spec add_project(String.t(), String.t(), String.t()) :: :ok | {:error, term}
+  def add_project(path, id, config) do
+    with {:ok, data} <- Toml.decode_file(path) do
+      projects = data |> Map.get("projects", %{}) |> Map.put(id, %{"config" => config})
+      Omunculus.Config.replace(path, Map.put(data, "projects", projects))
+    end
+  end
+
   defp projects(data, dir) when is_map(data) and map_size(data) > 0 do
     Enum.reduce_while(data, {:ok, %{}}, fn {id, project}, {:ok, acc} ->
       with true <- is_binary(id) and id != "",

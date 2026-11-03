@@ -1152,6 +1152,66 @@ defmodule Omunculus.ServerTest do
     refute File.exists?(socket)
   end
 
+  test "the local socket registers a project into the running server and its registry" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(project_path, File.read!(project_path) <> "\n" <> @access)
+    {server, local} = serve_local(dir, project_path)
+
+    second_dir = Fixtures.tmp_dir()
+    Fixtures.install_default(second_dir)
+    second_path = Fixtures.config_path(second_dir)
+    File.write!(second_path, File.read!(second_path) <> "\n" <> @access)
+
+    bare_dir = Fixtures.tmp_dir()
+    Fixtures.install_default(bare_dir)
+
+    uid = Operations.local_principal().subject
+
+    assert {:ok, "access bootstrapped"} =
+             CLI.run(
+               ["--config", second_path, "access", "bootstrap"] ++
+                 ["--issuer", "local", "--subject", uid],
+               second_dir
+             )
+
+    registry = Path.join(dir, "server.toml")
+
+    register = fn id, config -> local.(:post, "/v1/projects", json: %{id: id, config: config}) end
+
+    assert %{status: 201, body: %{"id" => "second"}} = register.("second", second_path)
+
+    # Refused: a used id, a config without [access], a missing file, no config.
+    assert register.("second", second_path).status == 422
+    assert register.("solo", second_path).status == 422
+    assert register.("bare", Fixtures.config_path(bare_dir)).status == 422
+    assert register.("gone", Path.join(dir, "missing.toml")).status == 422
+    assert local.(:post, "/v1/projects", json: %{id: "x"}).status == 400
+
+    # The registry keeps its other entries and reads again as a server's.
+    {:ok, registered} = Server.Config.load(registry)
+    assert registered.projects == %{"solo" => project_path, "second" => second_path}
+    assert registered.limits.max_concurrent == 4
+
+    # Both projects are listed and the new one answers on its own socket.
+    assert %{status: 200, body: %{"items" => items}} = local.(:get, "/v1/projects", [])
+    assert Enum.map(items, & &1["id"]) == ["second", "solo"]
+    second_socket = Enum.find(items, &(&1["id"] == "second"))["socket"]
+
+    assert %{status: 200} =
+             Req.request!(
+               method: :get,
+               url: "http://localhost/v1/projects/second/conversations",
+               unix_socket: second_socket,
+               retry: false
+             )
+
+    assert local.(:get, "/v1/projects/solo/conversations", []).status == 200
+
+    :ok = Supervisor.stop(server)
+  end
+
   # Bootstraps the local administrator of the project at `project_path`, serves
   # it alone as "solo", and gives a request on its local socket.
   defp serve_local(dir, project_path) do

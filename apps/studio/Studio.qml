@@ -59,6 +59,15 @@ Singleton {
   // {id, socket}, as GET /v1/projects lists them on this socket.
   property var projects: []
 
+  // Adds the project `id`, whose config is the file at `config`, to the
+  // running server, then reads every project again. `failed` gets the reason.
+  function registerProject(id, config, done, failed) {
+    client.call("POST", "/v1/projects", { id: id, config: config }, false, () => {
+      loadOverviews()
+      done()
+    }, failed)
+  }
+
   // Writes one item of the config ("agents.worker", "policy") with PUT, or
   // removes it with DELETE for a null value, renaming `from` when given; then
   // reads the setup again. `failed` gets the server's reason.
