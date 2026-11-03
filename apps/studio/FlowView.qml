@@ -343,6 +343,15 @@ Item {
     color: flow.overview ? Theme.warning : Theme.dim
   }
 
+  // Secret bindings of a tool the catalog lacks; they have no node.
+  Label {
+    anchors { left: parent.left; leftMargin: flow.leftInset + 16; bottom: parent.bottom; bottomMargin: flow.bottomInset + 12 }
+    visible: !!flow.overview && !!flow.overview.broken && flow.overview.broken.length > 0
+    text: (flow.overview && flow.overview.broken ? flow.overview.broken : []).map(item => "BROKEN · " + item.why).join("\n")
+    color: Theme.error
+    font.pixelSize: 12
+  }
+
   // The agent picked, beside the canvas, as it runs in its place.
   Rectangle {
     id: inspector
@@ -379,6 +388,18 @@ Item {
             color: Theme.magenta
             font.pixelSize: 9
             font.letterSpacing: 2
+          }
+        }
+        // What the agent names that the catalog lacks; EDIT AGENT fixes it.
+        Repeater {
+          model: inspector.open && flow.picked.agent.broken ? flow.picked.agent.broken : []
+          delegate: Label {
+            required property var modelData
+            width: details.width
+            text: "BROKEN · " + modelData.why
+            color: Theme.error
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
           }
         }
         // First, so it is in view on a short window.

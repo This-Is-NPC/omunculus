@@ -40,7 +40,15 @@ window:
   `delegate`, or a workflow one of whose stages has it) to every place
   below;
 - each workspace a zone with its own lists;
-- each agent or workflow a pack brings marked with the pack's name.
+- each agent or workflow a pack brings marked with the pack's name;
+- broken references marked in the error tone: an agent that names a tool or
+  a skill the catalog lacks is outlined with its count of BROKEN, and
+  picking it lists each with its reason, from where EDIT AGENT opens the
+  screen that fixes it; a `[secrets.<tool>]` binding of a tool the catalog
+  lacks is listed at the foot of the canvas. The `overview` tool computes
+  them (`broken`), so every client shares them. A model, a provider or an
+  agent that is not declared cannot show: the config does not load. None
+  of the tools is checked while an `[[mcp.servers]]` entry exists.
 
 Below its actual size the chart is drawn at that size and reduced through
 mipmaps, so it stays smooth. It frames itself again when the window changes

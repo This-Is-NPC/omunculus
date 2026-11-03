@@ -4,7 +4,8 @@ import "kit/ui"
 // FlowNode is one box of the flowchart: you, an agent a work goes to, or a
 // stage of a workflow with the agent that runs it. Its name decodes when it
 // comes into view; picked, it is outlined in the accent. An agent no stage
-// and no depth runs shows hollow.
+// and no depth runs shows hollow. One naming what the catalog lacks is
+// outlined in the error tone and counts what is broken.
 Item {
   id: node
 
@@ -24,7 +25,8 @@ Item {
   readonly property var agent: spec.agent || null
   readonly property bool person: spec.kind === "person"
   readonly property color tone: person ? Theme.primary : agent ? Studio.toneOf(agent.name) : Theme.dim
-  readonly property color edge: picked ? Theme.primary : pointer.containsMouse ? Qt.alpha(tone, 0.9) : Qt.alpha(tone, 0.45)
+  readonly property int broken: agent && agent.broken ? agent.broken.length : 0
+  readonly property color edge: picked ? Theme.primary : broken > 0 ? Theme.error : pointer.containsMouse ? Qt.alpha(tone, 0.9) : Qt.alpha(tone, 0.45)
   readonly property int tools: agent ? agent.tools.filter(tool => tool.state === "have").length : 0
   readonly property int asks: agent ? agent.tools.filter(tool => tool.state === "askable" || tool.state === "sealed").length : 0
 
@@ -126,6 +128,7 @@ Item {
           font.pixelSize: 12
           font.letterSpacing: 1.5
         }
+        Label { renderType: Text.CurveRendering; visible: node.broken > 0; text: node.broken + " BROKEN"; color: Theme.error; font.pixelSize: 12; font.letterSpacing: 1.5 }
         Label { renderType: Text.CurveRendering; visible: !!node.agent && node.agent.idle; text: "IDLE"; color: Theme.warning; font.pixelSize: 12; font.letterSpacing: 1.5 }
       }
     }
