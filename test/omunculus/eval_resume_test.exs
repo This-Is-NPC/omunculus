@@ -15,6 +15,10 @@ defmodule Omunculus.EvalResumeTest do
     end
   end
 
+  test "a fresh run names its model" do
+    assert_raise ArgumentError, ~r/--model/, fn -> EquivalentExchange.Runner.run(k: 1) end
+  end
+
   test "restores client replies and linked decisions without replaying tools" do
     leaf = %{id: "leaf", origins: %{}}
     request = %{id: "envelope", reason: "Approve the preview?", origins: %{"design" => leaf}}

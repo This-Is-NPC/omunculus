@@ -74,7 +74,11 @@ defmodule EquivalentExchange.Runner do
   end
 
   defp fresh(options) do
-    model = Keyword.get(options, :model, "luna")
+    model =
+      Keyword.get_lazy(options, :model, fn ->
+        raise ArgumentError, "--model names the preset's model the run uses"
+      end)
+
     code_mode = Keyword.get(options, :code_mode, false)
     overlay = if options[:overlay], do: Path.expand(options[:overlay])
 

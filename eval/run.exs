@@ -1,6 +1,6 @@
 # Equivalent Exchange: `mix run eval/run.exs <command>`.
 #   selftest   prove every task's check against its solution
-#   run        run the suite: --model luna --k 2 --label <name> [--task <part>]...
+#   run        run the suite: --model <model> --k 2 --label <name> [--task <part>]...
 #              [--configuration <name>]... [--timeout <seconds|infinity>] [--jobs <n>]
 #              [--against <result folder>] [--code-mode] [--agent-model <agent>=<model>]...
 #              --resume <result folder> continues unfinished saved executions
@@ -37,7 +37,7 @@ case System.argv() do
     end
 
   ["run" | argv] ->
-    {options, _rest, _invalid} =
+    {options, rest, invalid} =
       OptionParser.parse(argv,
         strict: [
           model: :string,
@@ -54,6 +54,15 @@ case System.argv() do
           code_mode: :boolean
         ]
       )
+
+    unless rest == [] and invalid == [] do
+      IO.puts(
+        :stderr,
+        "unknown arguments: #{Enum.join(rest ++ Enum.map(invalid, &elem(&1, 0)), " ")}"
+      )
+
+      System.halt(1)
+    end
 
     {:ok, folder} = EquivalentExchange.Runner.run(options)
     IO.puts(folder)
