@@ -26,22 +26,3 @@ server refuses it; the console shows `invalid`.
 
 **What to do in the meantime.** Start the conversation with NEW CONVERSATION,
 which asks whom it is with.
-
-## 3. Some sandboxed commands fail to set up their overlay
-
-Seen running, in the benchmark with Bubblewrap
-([Equivalent Exchange](../eval/README.md)).
-
-**What happens.** Now and then a `bash` call fails before it runs, with
-`execution failed: {:bubblewrap, :setup_failed}`, and Bubblewrap prints
-`Can't make overlay mount on (null) … Device or resource busy`. In a run of
-the whole benchmark at `--jobs 24` it happened in 7 of 133 executions, six
-of them in tasks that start servers in the background: the FastAPI tasks
-and the agency's design-to-build. Run again at `--jobs 4`, it happened in 7 of those
-9 executions; 32 executions of other tasks at `--jobs 12` had none. A run of
-2026-10-21 shows it too. Why the mount is busy is not established.
-
-**What to do in the meantime.** The model sees the failure and may call
-the command again, which sometimes works. Before reading a failed
-measurement of those tasks as the model's, look in its events for
-`setup_failed`.

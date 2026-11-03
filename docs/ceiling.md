@@ -135,6 +135,11 @@ MCP discovery and MCP calls are separate sandboxed sessions. Discovery
 mounts the server implementation, runtime roots and private execution
 files; it does not mount the workspace.
 
+Every process a command starts, a server left in the background included,
+ends when the command does. A run's commands that see the host share one
+home overlay; they take it one at a time, a command waiting for the one
+before it within its own timeout.
+
 External grants are read-only. Runs that can write share the real
 workspace, so concurrent changes to the same files are not isolated. The
 executor enforces concurrency, queue, timeout and output limits. CPU,

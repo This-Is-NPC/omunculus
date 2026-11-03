@@ -43,21 +43,26 @@ defmodule Omunculus.Execution.BubblewrapTest do
              )
   end
 
-  test "a command whose run's home overlay is still in use waits for it", %{workspace: workspace} do
+  test "a command waits as long as the one holding the run's home overlay runs",
+       %{workspace: workspace} do
     policy =
       Policy.with_scratch(
-        policy(workspace, host: true, max_concurrent: 2),
+        policy(workspace, host: true, max_concurrent: 2, timeout_ms: 10_000),
         Omunculus.Fixtures.tmp_dir()
       )
 
-    {:ok, holding} = Command.new("/usr/bin/sh", ["-c", "sleep 0.3"])
+    {:ok, holding} = Command.new("/usr/bin/sh", ["-c", "(sleep 30 &); sleep 2"])
     {:ok, next} = Command.new("/usr/bin/sh", ["-c", "echo mounted"])
 
     held = Elixir.Task.async(fn -> Omunculus.Execution.run(holding, policy) end)
-    Process.sleep(100)
+    Process.sleep(500)
 
     assert {:ok, %{stdout: "mounted\n"}} = Omunculus.Execution.run(next, policy)
     assert {:ok, %{status: 0}} = Elixir.Task.await(held)
+
+    # What the holder left running ended with its command.
+    {:ok, left} = Command.new("/usr/bin/sh", ["-c", "ps -e | grep -c sleep || true"])
+    assert {:ok, %{stdout: "0\n"}} = Omunculus.Execution.run(left, policy)
   end
 
   test "a command that sees the host reads it as the person does and writes only where let",

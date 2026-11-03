@@ -257,12 +257,17 @@ defmodule Omunculus.Execution.Bubblewrap do
     end
   end
 
-  # On a filesystem such as btrfs, an overlay goes on being in use a few
-  # milliseconds after the last process of the sandbox that mounted it has
-  # gone, so the run's next command may find its home overlay busy. bwrap
-  # then fails before the runner starts, with the input and stderr fifos not
-  # yet opened, so starting it again is safe. bwrap's own messages, apart
-  # from the command's stderr, tell that case apart.
+  # The kernel lets one mount at a time use an overlay's upper and work
+  # directories, and a run's commands share its home overlay, so a command
+  # that has it waits, under `flock`, for the one that holds it; the wait
+  # counts against its timeout. The lock goes with the sandbox, whose
+  # processes all end with its command. On a filesystem such as btrfs an
+  # overlay still goes on being in use a few milliseconds after the last
+  # process of the sandbox that mounted it has gone, so bwrap may find it
+  # busy once the lock is free. It then fails before the runner starts, with
+  # the input and stderr fifos not yet opened, so starting it again is safe.
+  # bwrap's own messages, apart from the command's stderr, tell that case
+  # apart.
   @setup ~S"""
   setup=$1; shift; tries=100
   while :; do
@@ -281,12 +286,17 @@ defmodule Omunculus.Execution.Bubblewrap do
        :binary,
        :exit_status,
        args:
-         ["-c", @setup, "omunculus-bwrap", Path.join(temp_dir, "setup"), bwrap] ++
-           arguments(command, policy, temp_dir)
+         ["-c", @setup, "omunculus-bwrap", Path.join(temp_dir, "setup")] ++
+           home_lock(policy) ++ [bwrap] ++ arguments(command, policy, temp_dir)
      ])}
   rescue
     error in ArgumentError -> {:error, {:bubblewrap, Exception.message(error)}}
   end
+
+  defp home_lock(%Policy{host: true, scratch: scratch}) when is_binary(scratch),
+    do: ["/usr/bin/flock", Path.join(scratch, ".home-lock")]
+
+  defp home_lock(_policy), do: []
 
   defp network_args("host"), do: ["--share-net"]
   defp network_args("none"), do: []
