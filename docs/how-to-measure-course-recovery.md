@@ -24,7 +24,7 @@ acceptance or deployment. What the steward overlay changes is in
   fixed in `eval/lib/recovery.ex`.
 - No code writes `coordination-loop-at-cancellation.sqlite3`. It is a copy of
   the execution's store, taken by hand while the run was stalled in the
-  cycle of [defect 3](what-does-not-work.md#3-unresolved-permissions-can-cycle-through-internal-text-replies),
+  cycle seen before escalation skipped agents that had answered the origin with text,
   before it was cancelled.
 - `<result-folder>` below is a placeholder for that source folder. The source
   is only read.

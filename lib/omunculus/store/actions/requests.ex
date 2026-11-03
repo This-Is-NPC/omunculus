@@ -5,6 +5,9 @@ defmodule Omunculus.Store.Actions.Requests do
   preserves the receiving work's existing wait. Replies close their request and
   return named parts transactionally through the same reply path. Grants always
   target the original requester and retain the actual answering identity.
+  An origin is never escalated to its requesters, nor to an agent it was
+  already escalated to that answered with text alone, naming no part, without
+  escalating it further.
   An agent's run opened by the answer to its request cannot ask or escalate
   with that request's reason again: the answer stands.
   """
@@ -52,7 +55,9 @@ defmodule Omunculus.Store.Actions.Requests do
          {:ok, work} <- Helpers.fetch_work(conn, ctx.work_id),
          {:ok, origins} <-
            origins(conn, body["origins"], participant, conversation(ctx, run, work)),
-         forbidden = Enum.flat_map(origins, fn {_part, origin} -> requesters(origin) end),
+         {:ok, upstream} <- held_upstream(conn, origins),
+         forbidden =
+           upstream ++ Enum.flat_map(origins, fn {_part, origin} -> requesters(origin) end),
          {:ok, arbiter, arbiter_work_id} <-
            RequestRoutes.resolve(conn, ctx, run, work, participant, body["to"], forbidden),
          {:ok, request} <-
@@ -251,6 +256,36 @@ defmodule Omunculus.Store.Actions.Requests do
       Jason.decode!(request.requester)
       | Enum.flat_map(request.origins, fn {_part, origin} -> requesters(origin) end)
     ]
+
+  # The agents an origin was escalated to, however many links up, that
+  # answered it with text alone, no part named, without escalating it
+  # further. A reply naming parts leaves the rest for another round.
+  defp held_upstream(conn, origins) do
+    ids = Enum.map(origins, fn {_part, origin} -> origin.id end)
+
+    with {:ok, rows} <-
+           Query.all(
+             conn,
+             """
+             WITH RECURSIVE up(id) AS (
+               SELECT escalated_id FROM request_escalations
+               WHERE origin_id IN (#{Query.placeholders(ids)})
+               UNION
+               SELECT e.escalated_id FROM request_escalations e JOIN up ON e.origin_id = up.id)
+             SELECT requests.arbiter FROM requests JOIN up ON requests.id = up.id
+             WHERE requests.status = 'closed'
+               AND json_extract(requests.arbiter, '$.kind') = 'agent'
+               AND NOT EXISTS (
+                 SELECT 1 FROM request_escalations WHERE origin_id = requests.id)
+               AND EXISTS (
+                 SELECT 1 FROM events
+                 WHERE events.request_id = requests.id AND events.type = 'reply'
+                   AND coalesce(json_extract(events.body, '$.parts'), '{}') = '{}')
+             """,
+             ids
+           ),
+         do: {:ok, Enum.map(rows, &Jason.decode!(&1.arbiter))}
+  end
 
   defp link_origins(conn, origins, upstream, event_id) do
     Enum.reduce_while(origins, :ok, fn {part, request}, :ok ->

@@ -38,25 +38,7 @@ not there.
 `command` at a program of your own that speaks the sandbox NDJSON protocol
 ([the TOML](config.md#the-adapters)).
 
-## 3. Unresolved permissions can cycle through internal text replies
-
-Seen running, in the design-to-build task of
-[Equivalent Exchange](../eval/README.md).
-
-**What happens.** An intermediary replies that a client question was already
-sent, although no client request was recorded. The permission origin remains
-unresolved. When its receiver ends without resolving it, automatic escalation
-can select the same intermediary again. The cycle makes model calls without
-advancing the work.
-
-**What to do in the meantime.** Inspect the recorded request origins and
-replies, interrupt the cycle and preserve its events. Have the front desk
-present the actual pending permission through its configured client route.
-An optional steward overlay can recover a saved copy of the cycle; the
-default agency still has it.
-[How to measure course recovery](how-to-measure-course-recovery.md) runs it.
-
-## 4. The console does not show an agent's reply as it arrives
+## 3. The console does not show an agent's reply as it arrives
 
 Seen running, on the console's chat page.
 
@@ -68,7 +50,7 @@ every reply.
 **What to do in the meantime.** Press BACK and open the conversation again
 from the conversations page, or read the reply in the mailbox.
 
-## 5. A message in an empty conversation opened from the list is refused
+## 4. A message in an empty conversation opened from the list is refused
 
 Seen running, on the console's chat page.
 

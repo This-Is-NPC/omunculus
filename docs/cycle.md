@@ -399,7 +399,9 @@ work still waits on children. A cancelled origin work never runs again.
 An agent receiver that closes without answering a pending request uses the
 same linked escalation action. So does an intermediary resumed by a text
 answer that closes leaving pending the origins the answer returned to it:
-they go on together, under the part names they had. At the root it reaches
+they go on together, under the part names they had, to the next route
+destination: an agent they were already escalated to that answered them with
+text alone, naming no part, without escalating them further is skipped. At the root it reaches
 the authenticated human and writes an inbox notification naming that
 upstream request. An already escalated origin does not trigger a second
 escalation. Opening a project, the server or a direct command does the same for every request

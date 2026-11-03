@@ -98,7 +98,7 @@ without, it follows the default route.
 | `promote` approval | The release agent requests permission with `request_access`; it follows the configured chain. Intermediaries must escalate: an agent cannot answer a request containing a sealed grant option, including with deny or text. Only the human decides; the pack's `promote` tool publishes once its grant makes it available. |
 | `propose_config`, `propose_pack` | Validated proposals whose apply option calls configure or pack with revision checks, always on the logical `owner` route. A text reply records advice without applying the proposal. |
 | Harness retry/cancel | A routed request after root retry exhaustion, on the logical `owner` route where the project configures it, else the default route. Retry is a named decision with no calls; cancel chains cancellation. Child retry exhaustion remains a stopping break. |
-| Unanswered receiver | Linked escalation through the same action and routing, of the request the run was opened for or, for an intermediary resumed by a text answer, of the origins the answer returned to it; an upstream human request gets an inbox notification. |
+| Unanswered receiver | Linked escalation through the same action and routing, of the request the run was opened for or, for an intermediary resumed by a text answer, of the origins the answer returned to it; an upstream human request gets an inbox notification. An origin never goes again to an agent that answered it with text without escalating it (see below). |
 
 An agent's run opened by the answer to its own question — a reply to its
 request, or an upstream answer resuming an intermediary — does not put that
@@ -131,6 +131,17 @@ invalid part names, already escalated requests, cross-conversation merges and
 routes back into linked requesters are refused. Creation of the upstream
 request and immutable links is one transaction. Original work waits remain
 on their own requests. Escalation preserves the intermediary's child wait.
+
+An origin is never escalated, explicitly or automatically, to an agent it was
+already escalated to that answered with text alone, naming no part, without
+escalating it further (a person is never skipped for that). A reply that
+answers some named parts leaves the others for another round with the same
+arbiter. A text answer like that returns the
+origin to its intermediary, and the next route destination takes it, so an
+unresolved permission cannot circle between the same agents. An agent that
+escalated the origin upward and then relayed the upstream text down stays
+eligible. When no destination is left, the escalation is refused with
+`no_route`.
 
 An upstream request may itself be escalated. Its reply can return answers in
 two ways:

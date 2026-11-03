@@ -257,12 +257,76 @@ defmodule Omunculus.Store.EscalationTest do
     again = Enum.find(events, &(&1.type == "request")).request_id
     assert request(conn, logo).status == "escalated"
     assert request(conn, tone).status == "escalated"
-    assert Jason.decode!(request(conn, again).arbiter) == Participant.agent("root")
+    assert Jason.decode!(request(conn, again).arbiter) == Participant.human("test", "owner")
     assert request(conn, again).origins |> Map.keys() |> Enum.sort() == ~w(logo tone)
 
     assert request(conn, again).reason ==
              ~s(lead left 2 questions unanswered: worker's on the work "logo": "logo"; ) <>
                ~s(worker's on the work "tone": "tone")
+  end
+
+  test "a permission an agent answered with text, escalating nothing, is not passed to it again",
+       %{conn: conn} = ctx do
+    [first, _second] = ctx.child_ctxs
+
+    permission =
+      ask(conn, first, "Write?", %{
+        "grant" => [%{"name" => "grant", "args" => %{"kind" => "tool", "name" => "write"}}],
+        "deny" => []
+      })
+
+    merged = escalate(conn, ctx.lead_ctx, %{"permission" => permission})
+
+    assert {:ok, _} =
+             reply(conn, ctx.root_ctx, merged, %{"body" => "Already sent to the client."})
+
+    assert request(conn, permission).status == "pending"
+
+    resumed =
+      Fixtures.open_run(conn, %{
+        agent: "lead",
+        work_id: ctx.lead,
+        depth: 1,
+        conversation_id: ctx.conversation,
+        request_id: merged
+      })
+
+    {:ok, _} = Store.close_run(conn, resumed.id)
+    {:ok, resumed} = Store.view(conn, "run", resumed.id)
+    unanswered = &Omunculus.Tools.Out.unanswered/3
+
+    assert {:ok, events} = Store.unanswered(conn, resumed, ctx.config, unanswered)
+    upstream = Enum.find(events, &(&1.type == "request")).request_id
+    assert Jason.decode!(request(conn, upstream).arbiter) == Participant.human("test", "owner")
+    assert request(conn, permission).status == "escalated"
+  end
+
+  test "an agent that relayed an upstream text answer down may receive the permission again",
+       %{conn: conn} = ctx do
+    [first, _second] = ctx.child_ctxs
+
+    permission =
+      ask(conn, first, "Write?", %{
+        "grant" => [%{"name" => "grant", "args" => %{"kind" => "tool", "name" => "write"}}],
+        "deny" => []
+      })
+
+    at_lead = escalate(conn, ctx.lead_ctx, %{"permission" => permission})
+    at_owner = escalate(conn, ctx.root_ctx, %{"permission" => at_lead})
+    assert Jason.decode!(request(conn, at_owner).arbiter) == Participant.human("test", "owner")
+    assert {:ok, _} = reply(conn, ctx.owner, at_owner, %{"body" => "Which file?"})
+    assert request(conn, at_lead).status == "pending"
+
+    assert {:ok, _} =
+             reply(conn, ctx.root_ctx, at_lead, %{"body" => "The client asks which file."})
+
+    assert request(conn, permission).status == "pending"
+
+    again = escalate(conn, ctx.lead_ctx, %{"permission" => permission})
+    assert Jason.decode!(request(conn, again).arbiter) == Participant.agent("root")
+
+    to_owner = escalate(conn, ctx.root_ctx, %{"permission" => again})
+    assert Jason.decode!(request(conn, to_owner).arbiter) == Participant.human("test", "owner")
   end
 
   test "a run opened by the answer to its question does not put that question again",
