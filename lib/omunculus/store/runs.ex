@@ -26,6 +26,8 @@ defmodule Omunculus.Store.Runs do
   stopped without `end` on a work still open and that no own run of the
   work followed: their retry, or what follows it, was never decided or
   never began.
+  `unended_messages/1` lists the open runs of a message that did not
+  end, which recovery opens again for the message.
   `left/1` lists the closed runs that left a request pending at their
   agent: each pending request's last run of its receiver opened for it or
   for a request it was escalated into, unless an answer to that request
@@ -45,6 +47,27 @@ defmodule Omunculus.Store.Runs do
   @spec open_runs(Connection.t()) :: {:ok, [map]} | {:error, term}
   def open_runs(conn),
     do: Query.all(conn, "SELECT * FROM runs WHERE status = 'open' ORDER BY started_at, id")
+
+  @doc """
+  The open runs of a message that did not end, each with the `prompt_id` of
+  its cause and how many runs that cause has had (`attempts`): they have
+  no work, so no retry covers them.
+  """
+  @spec unended_messages(Connection.t()) :: {:ok, [map]} | {:error, term}
+  def unended_messages(conn) do
+    Query.all(
+      conn,
+      """
+      SELECT runs.*, cause.prompt_id AS cause_prompt_id,
+        (SELECT count(*) FROM runs AS same WHERE same.cause_id = runs.cause_id) AS attempts
+      FROM runs JOIN events AS cause ON cause.id = runs.cause_id
+      WHERE runs.status = 'open' AND runs.work_id IS NULL AND runs.request_id IS NULL
+        AND cause.type = 'prompt'
+        AND NOT EXISTS (SELECT 1 FROM events WHERE events.run_id = runs.id AND events.type = 'end')
+      ORDER BY runs.started_at, runs.id
+      """
+    )
+  end
 
   @spec uncaused(Connection.t()) :: {:ok, [map]} | {:error, term}
   def uncaused(conn) do

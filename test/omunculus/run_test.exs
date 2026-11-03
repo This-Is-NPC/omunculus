@@ -2226,6 +2226,73 @@ defmodule Omunculus.RunTest do
     end
   end
 
+  describe "a message's run left open" do
+    defp message_run(project) do
+      assert {:ok, _out, events} =
+               Operations.call(project, "send", %{"message" => "hi"}, %{}, false)
+
+      prompt = Enum.find(events, &(&1.type == "prompt"))
+      {prompt, due_run(project, %{agent: "lead", cause_id: prompt.id})}
+    end
+
+    defp ended?(project, run_id) do
+      {:ok, ended} =
+        Query.all(project.conn, "SELECT 1 FROM events WHERE run_id = ? AND type = 'end'", [run_id])
+
+      ended != []
+    end
+
+    test "recovery opens it again for its message, once", %{dir: dir} do
+      project = due_config(dir)
+      {prompt, run} = message_run(project)
+
+      assert :ok = Run.recover(project)
+      assert :ok = Run.recover(project)
+
+      assert {:ok, [first, second]} =
+               Query.all(
+                 project.conn,
+                 "SELECT * FROM runs WHERE cause_id = ? ORDER BY started_at, id",
+                 [prompt.id]
+               )
+
+      assert first.id == run.id
+      assert first.status == "done"
+      assert %{agent: "lead", status: "done", work_id: nil} = second
+      assert ended?(project, second.id)
+
+      Project.close(project)
+    end
+
+    test "recovery does not reopen it past max_retries", %{dir: dir} do
+      project = due_config(dir)
+      {prompt, _run} = message_run(project)
+      due_run(project, %{agent: "lead", cause_id: prompt.id})
+      due_run(project, %{agent: "lead", cause_id: prompt.id})
+
+      assert :ok = Run.recover(project)
+
+      assert {:ok, [_first, _second, _third]} =
+               Query.all(project.conn, "SELECT * FROM runs WHERE cause_id = ?", [prompt.id])
+
+      Project.close(project)
+    end
+
+    test "recovery does not reopen one that ended its turn", %{dir: dir} do
+      project = due_config(dir)
+      {prompt, run} = message_run(project)
+      ctx = %{trigger: "model", run_id: run.id, author: "agent", agent: "lead"}
+      assert {:ok, %{ok: true}, _events} = Harness.dispatch(project, "end", %{}, ctx)
+
+      assert :ok = Run.recover(project)
+
+      assert {:ok, [_only]} =
+               Query.all(project.conn, "SELECT * FROM runs WHERE cause_id = ?", [prompt.id])
+
+      Project.close(project)
+    end
+  end
+
   describe "a parent past [policy] max_reopens" do
     test "asks along its route instead of reopening, and its run ends", %{dir: dir} do
       write_config(dir, """

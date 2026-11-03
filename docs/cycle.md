@@ -290,6 +290,9 @@ order:
 
 ```text
 every run left open: a model event saying it was interrupted, then end-run
+every run left open that has no work and no request, was caused by a
+  message and did not end: a new run for the same message and agent,
+  while the message has had no more than max_retries runs
 every event that may ask for a run (prompt, reply, continue, break, cancel,
   delegate, reopen, request, work) and that no run names as its cause:
     the runs its action asks for now, as the follow-up does, kept when the
@@ -304,7 +307,7 @@ every request still pending at an agent whose last run for it closed,
   and no answer to the request it escalated came after that run began
   (the answer's run, found above, resumes the agent): on along its
   route, as an unanswered one goes
-then the runs found are due
+then the runs found are due, the reopened message runs first
 ```
 
 A run found that the store refuses when it begins — its work cancelled,

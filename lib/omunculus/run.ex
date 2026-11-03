@@ -48,7 +48,9 @@ defmodule Omunculus.Run do
   began (`Harness.lost/1`, a work's own ones as one), gives each work still
   open whose last own run stopped without `end`, and no run found for it,
   what that run's close decides, passes on the requests left at an agent,
-  as `unanswered` does, and opens the runs found last.
+  as `unanswered` does, and opens the runs found last, with a new run for
+  each message whose run, without a work, was left open before it ended (up
+  to `max_retries` runs per message).
   """
 
   alias Omunculus.{
@@ -80,6 +82,7 @@ defmodule Omunculus.Run do
     Cycle.run(project, nil, fn project ->
       with {:ok, runs} <- Store.open_runs(project.conn),
            {:ok, config} <- Config.load(project.config_path),
+           {:ok, messages} <- Store.unended_messages(project.conn),
            :ok <- each(runs, &interrupt(project, &1)),
            :ok <- settle(project, config),
            {:ok, lost} <- Harness.lost(project),
@@ -92,9 +95,28 @@ defmodule Omunculus.Run do
            # A process that stopped between a run's close and its follow-up
            # left a request pending at an agent that no run will answer.
            :ok <- each(left, &unanswered(project, %{run: &1, config: config, execution: nil})) do
+        # A message's run has no work to retry: it is opened again for its
+        # message, up to max_retries runs.
+        messages
+        |> Enum.filter(&(&1.attempts <= config.max_retries))
+        |> Enum.each(&Cycle.open(project, reopening(&1)))
+
         Enum.each(lost, &Cycle.open(project, &1))
       end
     end)
+  end
+
+  defp reopening(run) do
+    %{
+      prompt_id: run.cause_prompt_id,
+      work_id: nil,
+      request_id: nil,
+      via: run.via,
+      agent: run.agent,
+      cause_id: run.cause_id,
+      origin_issuer: run.origin_issuer,
+      origin_subject: run.origin_subject
+    }
   end
 
   # A work's own runs due together are one run, as in the cycle.
