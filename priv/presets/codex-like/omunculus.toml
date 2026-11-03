@@ -50,11 +50,6 @@ callback = { host = "localhost", port = 1455, path = "/auth/callback" }
 credential = { access = "access_token", refresh = "refresh_token", expires = "expires_in" }
 refresh = { token_url = "https://auth.openai.com/oauth/token" }
 
-[auth.cursor]
-kind = "tool"
-login = "cursor_login"
-refresh = "cursor_refresh"
-
 [models.fake]
 api = "module"
 module = "Omunculus.Model.Fake"
@@ -65,12 +60,6 @@ api = "openai-responses"
 url = "https://chatgpt.com/backend-api/codex"
 model = "gpt-5-codex"
 timeout_ms = 120000
-
-[models.cursor]
-provider = "cursor"
-api = "command"
-command = ["./bridges/cursor-agent"]
-model = "composer-2.5"
 
 [agents.codex]
 depth = 0

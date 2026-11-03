@@ -2965,17 +2965,13 @@ defmodule Omunculus.ConfigAuthTest do
     assert config.models["local"].input["model"] == "composer-2.5"
   end
 
-  test "codex-like preset loads public Codex oauth and Cursor tools" do
+  test "codex-like preset loads public Codex oauth" do
     path = Application.app_dir(:omunculus, "priv/presets/codex-like/omunculus.toml")
     assert {:ok, config} = Config.load(path)
     provider = config.auth.providers["openai-codex"]
     assert provider.kind == "oauth-code"
     assert provider.authorize_url == "https://auth.openai.com/oauth/authorize"
-    assert config.auth.providers["cursor"].kind == "tool"
-    assert config.auth.providers["cursor"].login == "cursor_login"
     assert config.models["codex"].api == "openai-responses"
-    assert config.models["cursor"].api == "command"
-    assert config.models["cursor"].module == Omunculus.Model.Command
   end
 
   test "openai-responses loads the responses adapter", %{dir: dir} do
