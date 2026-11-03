@@ -43,6 +43,7 @@ defmodule Omunculus.Execution.Bubblewrap do
 
   defp start_in_temp(bwrap, command, policy, temp_dir) do
     with :ok <- write_secrets(temp_dir, command.secrets),
+         :ok <- write_script(temp_dir, command.script),
          :ok <- write_identity(temp_dir, policy),
          {:ok, created_hidden} <- prepare_hidden(policy, temp_dir) do
       case start_process(bwrap, command, policy, temp_dir, created_hidden) do
@@ -107,10 +108,20 @@ defmodule Omunculus.Execution.Bubblewrap do
   end
 
   @impl true
-  def exit_status(%Handle{temp_dir: temp_dir}, _fallback) do
+  def exit_status(%Handle{temp_dir: temp_dir}, fallback) do
     case File.read(Path.join(temp_dir, "status")) do
-      {:ok, value} -> parse_exit_status(value)
-      {:error, _reason} -> {:error, {:bubblewrap, :setup_failed}}
+      {:ok, value} -> parse_exit_status(value, temp_dir, fallback)
+      {:error, _reason} -> without_status(temp_dir, fallback)
+    end
+  end
+
+  # Without a status the runner did not finish: bwrap said why it never
+  # started it, or something killed it, and `fallback` is how the sandbox
+  # ended (128 plus the signal, when it was one).
+  defp without_status(temp_dir, fallback) do
+    case File.read(Path.join(temp_dir, "setup")) do
+      {:ok, ""} -> {:error, {:bubblewrap, {:killed, fallback}}}
+      _ -> {:error, {:bubblewrap, :setup_failed}}
     end
   end
 
@@ -133,7 +144,7 @@ defmodule Omunculus.Execution.Bubblewrap do
         Path.join(temp_dir, "input"),
         Path.join(temp_dir, "stderr"),
         Path.join(temp_dir, "status"),
-        command.program | command.args
+        command.program | command.args ++ script_args(command.script, temp_dir)
       ]
   end
 
@@ -535,6 +546,16 @@ defmodule Omunculus.Execution.Bubblewrap do
     end
   end
 
+  defp write_script(_temp_dir, nil), do: :ok
+
+  defp write_script(temp_dir, script) do
+    path = Path.join(temp_dir, "script")
+    with :ok <- File.write(path, script), do: File.chmod(path, 0o400)
+  end
+
+  defp script_args(nil, _temp_dir), do: []
+  defp script_args(_script, temp_dir), do: [Path.join(temp_dir, "script")]
+
   defp secret_args(secrets, _temp_dir) when map_size(secrets) == 0, do: []
 
   defp secret_args(secrets, temp_dir) do
@@ -667,10 +688,10 @@ defmodule Omunculus.Execution.Bubblewrap do
     end
   end
 
-  defp parse_exit_status(value) do
+  defp parse_exit_status(value, temp_dir, fallback) do
     case Integer.parse(String.trim(value)) do
       {status, ""} when status >= 0 -> status
-      _ -> {:error, {:bubblewrap, :setup_failed}}
+      _ -> without_status(temp_dir, fallback)
     end
   end
 end

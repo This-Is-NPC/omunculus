@@ -1,7 +1,7 @@
 defmodule Omunculus.Tools.Bash do
   @moduledoc """
   `bash` tool, shipped only by the `codex-like` preset: runs
-  `command` through `sh -c` in the immutable run policy and returns the
+  `command` as an `sh` script, kept off every command line, in the immutable run policy and returns the
   captured output. It starts in `workdir`, relative to the workspace root,
   or in that root without one. A command that fails in a run without `sandbox.write`
   is told the workspace is read-only there.
@@ -35,7 +35,7 @@ defmodule Omunculus.Tools.Bash do
   defp workdir(_policy, _path), do: {:error, "workdir must be a path"}
 
   defp exec(policy, source, workdir) do
-    with {:ok, command} <- Command.new("/usr/bin/sh", ["-c", source], cwd: workdir),
+    with {:ok, command} <- Command.new("/usr/bin/sh", [], cwd: workdir, script: source),
          {:ok, result} <- Execution.run(command, policy) do
       output = result.stdout <> result.stderr
       Out.ok(output <> refused_write(policy, output) <> closed_network(policy, output))

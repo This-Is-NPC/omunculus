@@ -140,6 +140,14 @@ ends when the command does. A run's commands that see the host share one
 home overlay; they take it one at a time, a command waiting for the one
 before it within its own timeout.
 
+The `bash` tool hands its command to `sh` as a file in the command's private
+temporary directory, so the command's text is on no process's command line:
+`pkill -f` and `pgrep -f` match only what the command itself started. When
+the runner is killed before it reports, the call fails with
+`{:bubblewrap, {:killed, status}}` (128 plus the signal), and
+`{:bubblewrap, :setup_failed}` is left to Bubblewrap failing before the
+runner starts.
+
 External grants are read-only. Runs that can write share the real
 workspace, so concurrent changes to the same files are not isolated. The
 executor enforces concurrency, queue, timeout and output limits. CPU,

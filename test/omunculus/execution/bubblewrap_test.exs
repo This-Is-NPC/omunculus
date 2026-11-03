@@ -65,6 +65,25 @@ defmodule Omunculus.Execution.BubblewrapTest do
     assert {:ok, %{stdout: "0\n"}} = Omunculus.Execution.run(left, policy)
   end
 
+  test "a script's text is on no command line, so pkill -f from it spares the sandbox",
+       %{workspace: workspace} do
+    {:ok, command} =
+      Command.new("/usr/bin/sh", [],
+        script: "sleep 5 & pkill -f 'sleep 5'; wait; echo survived; exit 3"
+      )
+
+    assert {:error, {:exit, 3, "survived\n", _stderr}} =
+             Omunculus.Execution.run(command, policy(workspace))
+  end
+
+  test "a runner killed before it reports says so, not that the setup failed",
+       %{workspace: workspace} do
+    {:ok, command} = Command.new("/usr/bin/sh", ["-c", "kill -9 $PPID; sleep 1"])
+
+    assert {:error, {:bubblewrap, {:killed, _status}}} =
+             Omunculus.Execution.run(command, policy(workspace))
+  end
+
   test "a command that sees the host reads it as the person does and writes only where let",
        %{workspace: workspace} do
     home = System.user_home!()
