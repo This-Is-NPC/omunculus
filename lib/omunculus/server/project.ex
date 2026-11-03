@@ -52,6 +52,9 @@ defmodule Omunculus.Server.Project do
   def project_events(id, principal, cursor),
     do: Access.project_events(project(id), principal, cursor)
 
+  @doc "The capabilities `principal`'s project role grants."
+  def capabilities(id, principal), do: Access.capabilities(project(id), principal)
+
   @doc "The works of every conversation `principal` may read, those in `state` alone when given."
   def works(id, principal, state), do: Access.works(project(id), principal, state)
 
@@ -223,6 +226,9 @@ defmodule Omunculus.Server.Project do
   defp capability("reply"), do: "conversation.reply"
   defp capability("comment"), do: "conversation.comment"
   defp capability("inbox_read"), do: "conversation.read"
+  defp capability("revert"), do: "project.manage_config"
+
+  defp ensure_target_conversation(_project, "revert", _args, _conversation_id), do: :ok
 
   defp ensure_target_conversation(project, "escalate", args, conversation_id) do
     with {:ok, origins} <- Omunculus.Tools.Args.object(args, "origins") do
@@ -320,7 +326,7 @@ defmodule Omunculus.Server.Project do
   defp receipt_result(%{result: result}) do
     case Jason.decode!(result) do
       %{"ok" => true} = response -> {:ok, Map.delete(response, "ok")}
-      %{"ok" => false} -> {:error, :tool_failed}
+      %{"ok" => false, "message" => message} -> {:error, {:tool_failed, message}}
     end
   end
 

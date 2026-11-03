@@ -152,6 +152,9 @@ defmodule Omunculus.Operations do
   defp operation(project, _config, "changes", %{"work_id" => id}, _actor, _principal),
     do: scoped(project, :work, id, "conversation.read")
 
+  defp operation(project, _config, "revert", %{"work_id" => id}, _actor, _principal),
+    do: scoped(project, :work, id, "project.manage_config")
+
   defp operation(project, _config, "prompt", %{"run" => id}, _actor, _principal),
     do: scoped(project, :run, id, "conversation.read")
 

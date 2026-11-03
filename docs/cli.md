@@ -312,6 +312,20 @@ Also called by a model.
 | `option` | string | no |  |
 | `parts` | JSON object | no |  |
 
+### `omunculus revert`
+
+```text
+omunculus revert [--work_id <work_id>]
+```
+
+Puts the files a work's calls changed back as they were before it, removing those it added: of this run's work, or of a work below it. Refuses, restoring nothing, when one changed since. Needs sandbox.write. From the command line, of the work named, in the workspace it ran in, under that workspace's write rules.
+
+Also called by a model.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `work_id` | string | no |  |
+
 ### `omunculus runs`
 
 ```text

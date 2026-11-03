@@ -186,15 +186,17 @@ defmodule Omunculus.Store.Runs do
           subject: ctx.subject,
           command_id: command_id,
           operation: ctx.command_hash,
-          result:
-            Jason.encode!(%{
-              cursor: last && last.sequence,
-              ok: calls |> hd() |> elem(0) |> Map.fetch!(:ok)
-            }),
+          result: Jason.encode!(receipt_result(last, calls |> hd() |> elem(0))),
           created_at: Events.now()
         })
     end
   end
+
+  # A refused call keeps its sentence, for the replay to read it.
+  defp receipt_result(last, %{ok: true}), do: %{cursor: last && last.sequence, ok: true}
+
+  defp receipt_result(last, %{ok: false, output: output}),
+    do: %{cursor: last && last.sequence, ok: false, message: output}
 
   defp record_call(conn, run_id, call, emits, ctx) do
     with :ok <- authorize_human(conn, ctx),

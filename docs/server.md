@@ -99,6 +99,8 @@ On the TCP listener, send `Authorization: Bearer <JWT>` on every request. Use `/
 | `GET /agents/{agent}/image` | Read an agent's `image`, with its media type, if the project is visible to you; `404` for an agent without one. |
 | `GET, POST /conversations` | List visible conversations or create one. |
 | `GET /works?state={state}` | List the works of every conversation you may read, oldest first, each with its `conversation_id`; `state` (`open`, `waiting`, `done` or `cancelled`) keeps those in it alone, and any other value is `400`. |
+| `GET /capabilities` | List the project capabilities your role grants. |
+| `POST /works/{id}/revert` | Put back the files the work's calls changed, as they were before it, in the root of the workspace the work ran in; it needs `project.manage_config` and an `Idempotency-Key`. The workspace's write rules decide which files may change, as for a run, with `sandbox.write` taken as granted unless the workspace or policy denies it. A refusal (a file changed since the work's last change, or is not writable) is `422 tool_failed` with the sentence in `message`, and nothing is restored. |
 | `GET /stream?after={cursor}` | Open a WebSocket of the later events of every conversation you may read; see [Event stream](#event-stream). |
 | `GET /conversations/{id}` | Read one visible conversation. |
 | `GET /conversations/{id}/snapshot` | Read works (each with the `workflow` it goes through and its `stage`), runs, prompts, requests and inbox at one event cursor. |

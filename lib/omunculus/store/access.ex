@@ -35,6 +35,18 @@ defmodule Omunculus.Store.Access do
     end
   end
 
+  @doc "The capabilities `principal`'s project role grants, in the order the role lists them."
+  @spec capabilities(Project.t(), principal) :: {:ok, [String.t()]} | {:error, term}
+  def capabilities(project, principal) do
+    with {:ok, config} <- Config.load(project.config_path),
+         {:ok, role} <- project_role(project.conn, principal) do
+      case config.access && Map.get(config.access.roles, role) do
+        %{capabilities: capabilities} -> {:ok, capabilities}
+        _ -> {:ok, []}
+      end
+    end
+  end
+
   @spec conversation_for(Project.t(), :work | :run | :request | :inbox | :prompt, String.t()) ::
           {:ok, String.t()} | {:error, term}
   def conversation_for(project, type, id) do

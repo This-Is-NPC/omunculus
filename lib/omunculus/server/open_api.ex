@@ -47,6 +47,17 @@ defmodule Omunculus.Server.OpenAPI do
       response: "Works",
       states: true
     },
+    list_capabilities: %{
+      summary: "List the project capabilities you hold",
+      status: 200,
+      response: "Capabilities"
+    },
+    revert_work: %{
+      summary: "Put back the files a work changed, in the workspace it ran in",
+      status: 202,
+      response: "Accepted",
+      idempotent: true
+    },
     project_stream: %{
       summary: "Subscribe to later events of the conversations you may read",
       status: 101,
@@ -389,6 +400,7 @@ defmodule Omunculus.Server.OpenAPI do
       "Conversations" => object(%{items: array(ref("Conversation"))}, ["items"]),
       "Projects" =>
         object(%{items: array(object(%{id: string(), socket: string()}, ["id"]))}, ["items"]),
+      "Capabilities" => object(%{items: array(string())}, ["items"]),
       "Accepted" =>
         object(
           %{status: %{type: "string", const: "accepted"}, cursor: %{type: ["string", "null"]}},

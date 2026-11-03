@@ -141,7 +141,7 @@ defmodule Omunculus.Harness do
   defp dispatch_with_config(project, name, args, ctx) do
     with {:ok, run} <- resolve_run(project, ctx.run_id),
          work_id = run_work_id(run),
-         {:ok, work} <- fetch_work(project, work_id),
+         {:ok, work} <- fetch_work(project, work_id || named_work_id(ctx, args)),
          {:ok, config, catalog} <- prepared(project, run, work, ctx),
          workspace = workspace_context(config, work, conversation_id(run, work, ctx)),
          {:ok, manifest} <- fetch_dispatch_manifest(catalog, name, ctx.trigger),
@@ -457,6 +457,13 @@ defmodule Omunculus.Harness do
 
   defp run_work_id(nil), do: nil
   defp run_work_id(run), do: run.work_id
+
+  # A command of a person outside a run works in the workspace of the work
+  # it names.
+  defp named_work_id(%{trigger: "cli", run_id: nil}, %{"work_id" => id}) when is_binary(id),
+    do: id
+
+  defp named_work_id(_ctx, _args), do: nil
 
   defp fetch_work(_project, nil), do: {:ok, nil}
 
@@ -872,7 +879,7 @@ defmodule Omunculus.Harness do
        when is_binary(module) do
     with {:ok, mod} <- module(module) do
       if function_exported?(mod, :run, 2) do
-        Policy.restricted(config, workspace, project_dir, Catalog.implementation_roots(catalog))
+        workspace_policy(config, workspace, project_dir, catalog)
       else
         {:ok, nil}
       end
@@ -881,6 +888,29 @@ defmodule Omunculus.Harness do
 
   defp execution_context(_manifest, _ctx, _config, _workspace, _project_dir, _catalog),
     do: {:ok, nil}
+
+  # What a person's command outside a run may write: the workspace's write
+  # rules as the config declares them, the person granting `sandbox.write`
+  # unless a layer denies it.
+  defp workspace_policy(config, workspace, project_dir, catalog) do
+    context = %{
+      agent: nil,
+      depth: nil,
+      grants: ["sandbox.write"],
+      stage: nil,
+      groups: Catalog.groups(catalog),
+      workspace: workspace.layer
+    }
+
+    Policy.build(
+      config,
+      Ceiling.mount(config, context, ["sandbox.write"]),
+      workspace,
+      project_dir,
+      [],
+      Catalog.implementation_roots(catalog)
+    )
+  end
 
   defp module(name) do
     atom = String.to_existing_atom("Elixir." <> name)

@@ -244,6 +244,54 @@ defmodule Omunculus.WorkspaceTest do
     refute File.exists?(Path.join(one, "note.txt"))
   end
 
+  test "from the command line, revert puts back a named work's files in its workspace, under that workspace's write rules",
+       %{dir: dir, one: one, two: two, three: three} do
+    toml =
+      base_toml(one, two, three) <>
+        """
+
+        [store]
+        path = ".omunculus/store.sqlite3"
+        changes = ".omunculus/changes"
+        """
+
+    write_config(dir, toml)
+
+    project = open_project(dir)
+
+    work_id =
+      Fixtures.insert(project.conn, :works, %{
+        title: "Note",
+        assignee: "concierge",
+        workspace: "three"
+      })
+
+    Project.close(project)
+
+    model = fn _assembled, _tools, call ->
+      assert {:ok, ""} = call.("write", %{"path" => "note.txt", "content" => "hi\n"})
+      {:ok, "done"}
+    end
+
+    Fixtures.use_model(dir, model)
+    assert {:ok, ""} = CLI.run(["send", "--work_id", work_id, "hi"], dir)
+    assert File.exists?(Path.join(three, "note.txt"))
+
+    denied =
+      String.replace(toml, ~s(root = "#{three}"), ~s(root = "#{three}"\ndeny = ["sandbox.write"]))
+
+    write_config(dir, denied)
+
+    assert {:error, {:tool_failed, "path is not writable: note.txt; writing needs sandbox.write"}} =
+             CLI.run(["revert", "--work_id", work_id], dir)
+
+    assert File.exists?(Path.join(three, "note.txt"))
+
+    write_config(dir, toml)
+    assert {:ok, "Removed: note.txt"} = CLI.run(["revert", "--work_id", work_id], dir)
+    refute File.exists?(Path.join(three, "note.txt"))
+  end
+
   test "a run's scratch goes when it ends, and what a run left is swept when the project opens",
        %{dir: dir, one: one, two: two, three: three} do
     write_config(dir, base_toml(one, two, three))

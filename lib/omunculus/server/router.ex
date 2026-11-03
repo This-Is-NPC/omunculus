@@ -102,6 +102,33 @@ defmodule Omunculus.Server.Router do
     end
   end
 
+  OpenAPI.route :get, "/v1/projects/:project_id/capabilities", :list_capabilities do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, capabilities} <- Project.capabilities(project_id, principal) do
+      reply(conn, 200, %{items: capabilities})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  OpenAPI.route :post, "/v1/projects/:project_id/works/:work_id/revert", :revert_work do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, command_id} <- command_id(conn),
+         {:ok, result} <-
+           Project.command(
+             project_id,
+             "revert",
+             %{"work_id" => work_id},
+             principal,
+             nil,
+             command_id
+           ) do
+      reply(conn, 202, Contract.accepted(result))
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
   OpenAPI.route :get, "/v1/projects/:project_id/stream", :project_stream do
     with {:ok, principal} <- project_principal(conn, opts, project_id),
          {:ok, cursor} <- Contract.decode_cursor(conn.params["after"]),
@@ -674,7 +701,8 @@ defmodule Omunculus.Server.Router do
   defp error_reply(conn, {:error, {:prompt, _reason}}),
     do: reply(conn, 422, %{error: "message_refused"})
 
-  defp error_reply(conn, {:error, :tool_failed}), do: reply(conn, 422, %{error: "tool_failed"})
+  defp error_reply(conn, {:error, {:tool_failed, message}}),
+    do: reply(conn, 422, %{error: "tool_failed", message: message})
 
   defp error_reply(conn, {:error, reason}) when reason in [:forbidden, :not_found],
     do: reply(conn, 404, %{error: "not_found"})

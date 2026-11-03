@@ -7,6 +7,11 @@ defmodule Omunculus.Tools.Revert do
   file the work added is removed. When any of them changed after the
   work's last change to it, by another run, a command or a person, it
   restores nothing and names them. Each file must be writable in the run.
+
+  A person reverts from a client as well (`POST /v1/projects/{id}/works/
+  {work}/revert`, needing `project.manage_config`): the work named, in the
+  root of the workspace it ran in, where each file must be writable under
+  that workspace's write rules (`Harness`, `workspace_policy`).
   """
 
   alias Omunculus.{Changes, Config}
