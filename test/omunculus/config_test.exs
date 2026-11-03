@@ -1226,6 +1226,40 @@ defmodule Omunculus.ConfigTest do
       assert review_ceiling == %Layer{deny: ["counter", "write"]}
     end
 
+    test "isolate = \"worktree\" marks the workflow isolated; absent, none", %{dir: dir} do
+      write_toml(
+        dir,
+        workers_toml() <>
+          """
+          [workflows.delivery]
+          isolate = "worktree"
+          steps = [{ name = "to_do", agent = "worker" }]
+
+          [workflows.review]
+          steps = [{ name = "look", agent = "reviewer" }]
+          """
+      )
+
+      assert {:ok, %Config{isolated: ["delivery"], workflows: workflows}} = load(dir)
+      assert Map.keys(workflows) == ["delivery", "review"]
+    end
+
+    test "any other isolate value is invalid", %{dir: dir} do
+      for value <- ["\"container\"", "true", "\"\""] do
+        write_toml(
+          dir,
+          workers_toml() <>
+            """
+            [workflows.delivery]
+            isolate = #{value}
+            steps = [{ name = "to_do", agent = "worker" }]
+            """
+        )
+
+        assert {:error, {:workflow, "delivery", {:invalid, :isolate}}} = load(dir)
+      end
+    end
+
     test "missing steps is :no_steps", %{dir: dir} do
       write_toml(
         dir,

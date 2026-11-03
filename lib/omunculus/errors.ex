@@ -101,6 +101,8 @@ defmodule Omunculus.Errors do
     "pack #{pack} requires tools the project lacks: #{tools}; add a [tools] path that holds them or import the pack that brings them"
   end
 
+  def format({:worktree, reason}) when is_binary(reason), do: reason
+
   def format(:no_runs), do: "no runs"
   def format(:project_in_use), do: "project is in use by another Omunculus process"
 

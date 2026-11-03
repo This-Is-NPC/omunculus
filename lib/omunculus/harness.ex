@@ -42,7 +42,8 @@ defmodule Omunculus.Harness do
     Project,
     Secrets,
     Skills,
-    Store
+    Store,
+    Worktree
   }
 
   alias Omunculus.Execution.Policy
@@ -62,7 +63,8 @@ defmodule Omunculus.Harness do
   @doc """
   The workspace a call of `work` in `conversation_id` works in: its name,
   root and ceiling layer. With `[project] conversations`, a conversation's
-  root is its own folder in the workspace (`ConversationRoot`).
+  root is its own folder in the workspace (`ConversationRoot`); a work of
+  an isolating workflow has its worktree (`Worktree`) as the root.
   """
   @spec workspace_context(Config.t(), map | nil, String.t() | nil) :: %{
           name: String.t() | nil,
@@ -71,12 +73,19 @@ defmodule Omunculus.Harness do
         }
   def workspace_context(config, work, conversation_id) do
     name = Config.effective_workspace(config, work)
+    root = root(config, Config.workspace_root(config, name), conversation_id)
 
     %{
       name: name,
-      root: root(config, Config.workspace_root(config, name), conversation_id),
+      root: isolated_root(config, work, root),
       layer: Config.workspace_ceiling(config, name)
     }
+  end
+
+  defp isolated_root(config, work, root) do
+    if Worktree.isolated?(config, work),
+      do: Worktree.path(root || config.root, work.id),
+      else: root
   end
 
   defp root(%Config{conversations: nil}, root, _conversation_id), do: root
@@ -695,7 +704,7 @@ defmodule Omunculus.Harness do
         if Policy.writable?(policy, root),
           do:
             with(
-              {:ok, tree} <- Changes.snapshot(dir, root, [config.store.path, dir]),
+              {:ok, tree} <- Changes.snapshot(dir, root, excluded(config, root)),
               do: {:ok, {root, tree}}
             ),
           else: {:ok, nil}
@@ -707,12 +716,17 @@ defmodule Omunculus.Harness do
 
   defp snapshot(_env), do: {:ok, nil}
 
+  # Not part of the workspace's files: the store and its changes, and the
+  # worktrees of the works below.
+  defp excluded(config, root),
+    do: [config.store.path, config.store.changes, Worktree.dir(root)]
+
   defp changed(_env, nil), do: {:ok, nil}
 
   defp changed(env, {root, before}) do
     dir = env.config.store.changes
 
-    with {:ok, after_} <- Changes.snapshot(dir, root, [env.config.store.path, dir]),
+    with {:ok, after_} <- Changes.snapshot(dir, root, excluded(env.config, root)),
          {:ok, files} <- Changes.files(dir, before, after_) do
       if files == [],
         do: {:ok, nil},

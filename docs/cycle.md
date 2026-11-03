@@ -356,6 +356,27 @@ or request, and the last child back still wakes the work. A root work is only cl
 parked, waiting on its person or cancelled. A cancelled work never opens a run again.
 `continue` does not name a stage, an agent or a model — the TOML does.
 
+## A worktree per work
+
+A work of a workflow with `isolate = "worktree"` ([config](config.md#a-worktree-per-work))
+works in a git worktree, `<workspace root>/.omunculus-worktrees/<work id>`
+on the branch `work/<work id>`. The harness creates it when a run of the
+work opens, if it is not there: from the branch of the parent work when
+the parent is isolated too, so it sees what the parent committed, and
+otherwise from the workspace's `HEAD`. Uncommitted files of the parent or
+of the workspace are not in it. The worktree is the work's root for its
+runs and calls, and `[store] changes` records the work's changes against
+it.
+
+The worktree goes when the work ends: after a run closes, and when a
+process recovers, the harness removes the worktree of each such work that
+is done, cancelled or parked by `break` (including a break after
+`max_retries`) and has no run open. Before removing it, the harness commits
+what the work left there on its branch. The branch stays. A parked work
+that its parent reopens gets its worktree back from that branch.
+
+A parent merges a finished child with the `merge` tool ([tools](tools.md#merging-a-work-below)).
+
 ## Request and inbox
 
 A decision goes through `REQUESTS`. A `request` carries a `reason` and

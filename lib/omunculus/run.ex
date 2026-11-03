@@ -51,7 +51,19 @@ defmodule Omunculus.Run do
   as `unanswered` does, and opens the runs found last.
   """
 
-  alias Omunculus.{Ceiling, Config, Cycle, Harness, Mcp, Project, Prompt, Secrets, Store}
+  alias Omunculus.{
+    Ceiling,
+    Config,
+    Cycle,
+    Harness,
+    Mcp,
+    Project,
+    Prompt,
+    Secrets,
+    Store,
+    Worktree
+  }
+
   alias Omunculus.Execution.{Limiter, Policy}
   alias Omunculus.Tool.{Catalog, Overrides}
   alias Omunculus.Tools.Out
@@ -69,6 +81,7 @@ defmodule Omunculus.Run do
       with {:ok, runs} <- Store.open_runs(project.conn),
            {:ok, config} <- Config.load(project.config_path),
            :ok <- each(runs, &interrupt(project, &1)),
+           :ok <- settle(project, config),
            {:ok, lost} <- Harness.lost(project),
            lost = Enum.uniq_by(lost, &turn/1),
            {:ok, stopped} <- Store.stopped(project.conn),
@@ -185,6 +198,7 @@ defmodule Omunculus.Run do
            (work && work.conversation_id) || (message && message.conversation_id) ||
              Map.get(opening, :conversation_id),
          workspace = Harness.workspace_context(config, work, conversation_id),
+         :ok <- Worktree.prepare(project.conn, config, work, workspace.root),
          context = %{
            agent: name,
            depth: depth,
@@ -679,8 +693,20 @@ defmodule Omunculus.Run do
 
     with :ok <- Harness.follow_up(project, events, opened),
          :ok <- unreported(project, state, work, stopped?),
+         :ok <- settle(project, state.config),
          :ok <- unanswered(project, state) do
       {:ok, state.run}
+    end
+  end
+
+  # The worktree of a work that ended goes; its branch stays to be merged.
+  defp settle(_project, %{isolated: []}), do: :ok
+
+  defp settle(project, config) do
+    with {:ok, works} <- Store.settled(project.conn, config.isolated) do
+      each(works, fn work ->
+        Worktree.remove(Harness.workspace_context(config, work, work.conversation_id).root)
+      end)
     end
   end
 

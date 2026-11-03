@@ -63,6 +63,24 @@ defmodule Omunculus.Store.View do
   def view(_conn, name, _id), do: {:error, {:unknown_view, name}}
 
   @doc """
+  The works of `workflows` that have ended — done, cancelled, or parked by
+  a break — and have no run open.
+  """
+  @spec settled(Omunculus.Store.Connection.t(), [String.t()]) :: {:ok, [map]} | {:error, term}
+  def settled(conn, workflows) do
+    Query.all(
+      conn,
+      """
+      SELECT * FROM works
+      WHERE workflow IN (#{Enum.map_join(workflows, ", ", fn _ -> "?" end)})
+        AND (state IN ('done', 'cancelled') OR (state = 'waiting' AND waiting IS NULL))
+        AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.work_id = works.id AND runs.status = 'open')
+      """,
+      workflows
+    )
+  end
+
+  @doc """
   The children of a work, oldest first: only those in `states` when given,
   and, with `since_last_run`, only those changed after the work's last
   closed run finished.

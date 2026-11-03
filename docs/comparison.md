@@ -61,7 +61,7 @@ supports, not written yet · **K** needs a change in the harness core ·
 | | One model per stage and per workspace | **P** | ◐ | ◐ | ◐ |
 | | The agent cannot quit silently | **P** retry → break or request | ◐ goals | ✗ | ◐ `/goal` |
 | | Parallel subagents | **P** works + `max_concurrent` | **P** | **P** | **P** |
-| | Isolated writers (worktree) | **T** deterministic: the tool opens the worktree when the run starts and merges into the parent branch when it ends | ? | ◐ plugin | ✗ |
+| | Isolated writers (worktree) | **P** `isolate = "worktree"` on a workflow: the harness opens a worktree per work and removes it when the work ends; the parent merges the branch with `merge` | ? | ◐ plugin | ✗ |
 | | Message during a run | ◐ goes to the work's next run | **P** | **P** | **P** |
 | | Undo / checkpoints | **P** `changes` records each call's files; `revert` puts a work's back | ◐ fork | **P** git | **P** `/rollback` |
 | | Reply shown on the CLI | **T** (`send` prints nothing today) | **P** | **P** | **P** |

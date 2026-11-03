@@ -40,6 +40,7 @@ defmodule Omunculus.Store do
   defdelegate publish(conn, message), to: Connection
 
   defdelegate view(conn, name, id), to: View
+  defdelegate settled(conn, workflows), to: View
   defdelegate children(conn, work_id, states, since_last_run), to: View
   defdelegate comments(conn, target, id), to: View
   defdelegate last_closed_run(conn, work_id), to: View

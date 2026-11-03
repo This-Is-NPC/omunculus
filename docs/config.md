@@ -396,6 +396,33 @@ the rule.
 `text` is what the assemble tool puts first in the prompt. It is not a
 system role and it is not the message from `send`.
 
+### A worktree per work
+
+```toml
+[workflows.delivery]
+isolate = "worktree"
+steps = [{ name = "to_do", agent = "worker" }]
+```
+
+`isolate` is optional. Absent, a workflow's works share the workspace.
+`"worktree"` is the only value; any other fails the load with
+`{:workflow, "delivery", {:invalid, :isolate}}`. A work of such a
+workflow runs, and its commands and tools run, in its own git worktree,
+its root in place of the workspace's: `<workspace root>/.omunculus-worktrees/<work id>`
+on the branch `work/<work id>`. See [the cycle](cycle.md#a-worktree-per-work)
+for when it is created and removed.
+
+The workspace root must be the root of a git repository with a commit; a
+work of an isolating workflow in any other workspace opens no run, and the
+command fails saying so. The harness lists `.omunculus-worktrees/` in the
+repository's `.git/info/exclude`, so the worktrees are never committed or
+shown by `git status`, and `[store] changes` leaves them out of the
+files it records for the workspace. The commits the harness makes in a
+worktree, and the merge commit, take the identity of its environment's
+`GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and
+`GIT_COMMITTER_EMAIL`; without them git refuses and the work's command fails
+with git's reason.
+
 ## Overrides
 
 Each ceiling layer, and a workflow, may override three keys of a tool's

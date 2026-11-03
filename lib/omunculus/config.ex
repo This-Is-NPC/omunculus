@@ -46,6 +46,7 @@ defmodule Omunculus.Config do
     :workspaces,
     :agents,
     :workflows,
+    :isolated,
     :assemble,
     :max_retries,
     :max_reopens,
@@ -126,6 +127,7 @@ defmodule Omunculus.Config do
           workspaces: %{String.t() => workspace},
           agents: %{String.t() => agent},
           workflows: %{String.t() => [step]},
+          isolated: [String.t()],
           assemble: String.t() | nil,
           max_retries: non_neg_integer,
           max_reopens: non_neg_integer | nil,
@@ -708,7 +710,8 @@ defmodule Omunculus.Config do
              {:ok, store} <- parse_store(Map.get(data, "store"), config_dir),
              {:ok, workspaces} <- parse_workspaces(Map.get(data, "workspaces", %{}), root),
              {:ok, agents} <- parse_agents(Map.get(data, "agents", %{}), models, config_dir),
-             {:ok, workflows} <- parse_workflows(Map.get(data, "workflows", %{}), agents),
+             {:ok, workflows, isolated} <-
+               parse_workflows(Map.get(data, "workflows", %{}), agents),
              {:ok, policy, depths, policy_workflows, policy_workspace, depth_workflows, assemble,
               max_retries, max_reopens, last_run_output_bytes, tool_output_bytes,
               conversation_bytes, send_catalog,
@@ -737,6 +740,7 @@ defmodule Omunculus.Config do
               workspaces: workspaces,
               agents: agents,
               workflows: workflows,
+              isolated: isolated,
               assemble: assemble,
               max_retries: max_retries,
               max_reopens: max_reopens,
@@ -2437,25 +2441,46 @@ defmodule Omunculus.Config do
   end
 
   defp parse_workflows(data, agents) when is_map(data) do
-    Enum.reduce_while(data, {:ok, %{}}, fn {name, value}, {:ok, acc} ->
+    Enum.reduce_while(data, {:ok, %{}, []}, fn {name, value}, {:ok, acc, isolated} ->
       case parse_workflow(name, value, agents) do
-        {:ok, steps} -> {:cont, {:ok, Map.put(acc, name, steps)}}
+        {:ok, steps, true} -> {:cont, {:ok, Map.put(acc, name, steps), [name | isolated]}}
+        {:ok, steps, false} -> {:cont, {:ok, Map.put(acc, name, steps), isolated}}
         {:error, _reason} = error -> {:halt, error}
       end
     end)
+    |> case do
+      {:ok, workflows, isolated} -> {:ok, workflows, Enum.sort(isolated)}
+      error -> error
+    end
   end
 
   defp parse_workflow(name, data, agents) when is_map(data) do
-    case Map.keys(data) -- ["steps", "overrides"] do
+    case Map.keys(data) -- ["steps", "overrides", "isolate"] do
       [key | _] ->
         {:error, {:workflow, name, {:unknown_key, key}}}
 
       [] ->
-        case {Overrides.parse(Map.get(data, "overrides", %{})), Map.get(data, "steps")} do
-          {{:error, reason}, _steps} -> {:error, {:workflow, name, reason}}
-          {{:ok, overrides}, [_ | _] = steps} -> parse_steps(name, steps, agents, overrides)
-          {{:ok, _overrides}, _steps} -> {:error, {:workflow, name, :no_steps}}
+        with {:ok, isolate} <- fetch_isolate(name, data),
+             {:ok, steps} <- parse_workflow_steps(name, data, agents) do
+          {:ok, steps, isolate}
         end
+    end
+  end
+
+  # `isolate = "worktree"` is the only isolation; absent, none.
+  defp fetch_isolate(name, data) do
+    case Map.fetch(data, "isolate") do
+      :error -> {:ok, false}
+      {:ok, "worktree"} -> {:ok, true}
+      {:ok, _other} -> {:error, {:workflow, name, {:invalid, :isolate}}}
+    end
+  end
+
+  defp parse_workflow_steps(name, data, agents) do
+    case {Overrides.parse(Map.get(data, "overrides", %{})), Map.get(data, "steps")} do
+      {{:error, reason}, _steps} -> {:error, {:workflow, name, reason}}
+      {{:ok, overrides}, [_ | _] = steps} -> parse_steps(name, steps, agents, overrides)
+      {{:ok, _overrides}, _steps} -> {:error, {:workflow, name, :no_steps}}
     end
   end
 
