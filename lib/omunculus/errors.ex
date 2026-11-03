@@ -5,6 +5,8 @@ defmodule Omunculus.Errors do
   error; a term without a sentence of its own reads as itself.
   """
 
+  alias Omunculus.Tools.Out
+
   @spec format(term) :: String.t()
   def format({:config, :missing, path}), do: "no config at #{path}"
 
@@ -114,6 +116,30 @@ defmodule Omunculus.Errors do
   def format({:assemble, :empty}), do: "assemble returned an empty prompt"
 
   def format({:runs, reasons}), do: Enum.map_join(reasons, "\n", &format/1)
+
+  def format({:prompt, {:agent_required, depth, names}}),
+    do: "several agents have depth #{depth}: #{Enum.join(names, ", ")}"
+
+  def format({:prompt, {:no_agent_at_depth, depth}}), do: "no agent has depth #{depth}"
+  def format({:prompt, {:not_at_depth_0, name}}), do: "#{name} is not an agent of depth 0"
+  def format(:access_disabled), do: "omunculus.toml has no [access] table"
+
+  def format({adapter, {:http, status, _body}} = reason)
+      when adapter in [:anthropic, :openai] and status in [401, 403],
+      do: Out.model_failed(reason) <> "; the key is missing or wrong"
+
+  def format({adapter, {:http, _status, _body}} = reason) when adapter in [:anthropic, :openai],
+    do: Out.model_failed(reason)
+
+  def format({:reply, :escalated}), do: "the request was passed up, so it takes no reply here"
+  def format({:reply, :closed}), do: "the request is closed"
+  def format({:reply, :not_arbiter}), do: "only the request's arbiter may reply to it"
+
+  def format({:reply, {:unknown_option, option, options}}),
+    do: "#{option} is not an option of the request; choose one of: #{Enum.join(options, ", ")}"
+
+  def format({:escalate, reason}) when reason in [:invalid_origin, :invalid_origins],
+    do: "the requests to pass up must be pending, distinct, and yours to arbitrate"
 
   def format(reason), do: inspect(reason)
 end

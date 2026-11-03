@@ -77,12 +77,11 @@ on the `fake` model. Putting the agents on a real model is
 
 ## What can go wrong
 
-- `send` without `--agent` is refused, printed as an Elixir term
-  ([defect 1](what-does-not-work.md#1-some-refusals-print-as-elixir-terms)):
+- `send` without `--agent` is refused:
 
   ```console
   $ <checkout>/bin/omunculus send "count to 5"
-  {:prompt, {:agent_required, 0, ["auditor", "concierge", "refiner", "steward"]}}
+  several agents have depth 0: auditor, concierge, refiner, steward; name one with --agent
   ```
 
   The list is the agents of depth 0; name one with `--agent`.

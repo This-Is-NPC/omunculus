@@ -75,6 +75,12 @@ defmodule Omunculus.CLI do
   def message({:auth, :not_logged_in, id} = reason),
     do: Errors.format(reason) <> "; run `omunculus login --provider #{id}`"
 
+  def message({:prompt, {:agent_required, _depth, _names}} = reason),
+    do: Errors.format(reason) <> "; name one with --agent"
+
+  def message(:no_tool), do: "no command given; name a tool, as `omunculus send \"hello\"`"
+  def message({:missing_value, key}), do: "--#{key} needs a value"
+  def message({:positional, value}), do: "unexpected argument #{value}"
   def message(reason), do: Errors.format(reason)
 
   defp split_config(["--config"], _cwd), do: {:error, {:missing_value, "config"}}

@@ -600,7 +600,7 @@ model = "composer-2.5"
 
 `./bridges/cursor-agent` is the codex-like preset's path, and the preset
 does not ship that program
-([defect 2](what-does-not-work.md#2-the-codex-like-presets-cursor-model-has-no-program)):
+([defect 1](what-does-not-work.md#1-the-codex-like-presets-cursor-model-has-no-program)):
 point `command` at a program of your own that speaks the protocol.
 
 An agent may name a different assemble tool than `[policy]`:

@@ -85,12 +85,11 @@ APIs a model can speak, and the other kinds of login, are in
   ```
 
 - No key stored and an empty `key`: the request goes without one and the
-  provider refuses it; the reason prints as an Elixir term
-  ([defect 1](what-does-not-work.md#1-some-refusals-print-as-elixir-terms)):
+  provider refuses it:
 
   ```console
   $ <checkout>/bin/omunculus model_test claude
-  {:anthropic, {:http, 401, %{"error" => %{"message" => "x-api-key header is required", "type" => "authentication_error"}, "request_id" => "req_011CfzcY3HwwgQE47DrSHTwM", "type" => "error"}}}
+  the model's server answered 401: x-api-key header is required; the key is missing or wrong
   ```
 
 - `logout` removes the stored key and leaves the TOML as it is:

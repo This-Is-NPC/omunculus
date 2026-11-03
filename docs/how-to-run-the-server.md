@@ -100,13 +100,11 @@ in [the server](server.md#tcp-listener).
 
 ## What can go wrong
 
-- A project without `[access]` cannot be bootstrapped, and the reason
-  prints as an Elixir term
-  ([defect 1](what-does-not-work.md#1-some-refusals-print-as-elixir-terms)):
+- A project without `[access]` cannot be bootstrapped:
 
   ```console
   $ <checkout>/bin/omunculus access bootstrap --issuer local --subject "$(id -u)"
-  :access_disabled
+  omunculus.toml has no [access] table
   ```
 
 - An app opened while no server holds the project:

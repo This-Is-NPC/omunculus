@@ -293,6 +293,37 @@ defmodule Omunculus.CLITest do
     assert Errors.format(:no_runs) == "no runs"
   end
 
+  test "refusals a person can hit read as sentences", _ctx do
+    assert CLI.message({:prompt, {:agent_required, 0, ["desk", "front"]}}) ==
+             "several agents have depth 0: desk, front; name one with --agent"
+
+    assert Errors.format({:prompt, {:no_agent_at_depth, 0}}) == "no agent has depth 0"
+    assert Errors.format({:prompt, {:not_at_depth_0, "ghost"}}) =~ "ghost is not an agent"
+    assert Errors.format(:access_disabled) =~ "no [access] table"
+    assert CLI.message(:no_tool) =~ "no command given"
+    assert CLI.message({:missing_value, "agent"}) == "--agent needs a value"
+    assert CLI.message({:positional, "extra"}) == "unexpected argument extra"
+    assert Errors.format({:reply, :escalated}) =~ "passed up"
+    assert Errors.format({:reply, :closed}) =~ "closed"
+    assert Errors.format({:reply, :not_arbiter}) =~ "arbiter"
+    assert Errors.format({:reply, {:unknown_option, "z", ["a", "b"]}}) =~ "one of: a, b"
+    assert Errors.format({:escalate, :invalid_origin}) =~ "pending"
+    assert Errors.format({:escalate, :invalid_origins}) =~ "pending"
+  end
+
+  test "a provider's HTTP refusal says its status and message", _ctx do
+    body = %{"error" => %{"message" => "x-api-key header is required"}}
+
+    assert Errors.format({:anthropic, {:http, 401, body}}) ==
+             "the model's server answered 401: x-api-key header is required; " <>
+               "the key is missing or wrong"
+
+    assert Errors.format({:openai, {:http, 403, body}}) =~ "the key is missing or wrong"
+
+    assert Errors.format({:openai, {:http, 500, %{"message" => "down"}}}) ==
+             "the model's server answered 500: down"
+  end
+
   test "prompt --run with an unknown id is a clear error", %{dir: dir} do
     assert {:error, {:unknown_run, "missing"}} = CLI.run(["prompt", "--run", "missing"], dir)
 

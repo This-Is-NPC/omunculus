@@ -99,15 +99,13 @@ screen's own are in [the screens](docs/screens.md):
 
 ## What is broken
 
-Four defects are known; [what does not work](docs/what-does-not-work.md)
+Three defects are known; [what does not work](docs/what-does-not-work.md)
 says what to do meanwhile:
 
-1. Some refusals print as Elixir terms, as `send` without `--agent` in a
-   project with several agents at depth 0.
-2. The codex-like preset's `cursor` model names a program the preset does
+1. The codex-like preset's `cursor` model names a program the preset does
    not ship.
-3. The console does not show an agent's reply as it arrives.
-4. A message in an empty conversation opened from the console's list is
+2. The console does not show an agent's reply as it arrives.
+3. A message in an empty conversation opened from the console's list is
    refused.
 
 Contributors start at [the design](docs/design.md).
