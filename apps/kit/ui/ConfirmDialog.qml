@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import "kit/ui"
 
 // ConfirmDialog asks before something that cannot be undone: a question, an
 // optional warning, what else it offers on the left, a way back and the guarded
