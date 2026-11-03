@@ -1,6 +1,9 @@
 defmodule Omunculus.Model.BodyTest do
   use ExUnit.Case, async: true
 
+  # Under the whole suite an adapter can take seconds to connect.
+  @wait 30_000
+
   alias Omunculus.{ExecutionPolicyFixtures, Prompt}
   alias Omunculus.Model.{AnthropicMessages, Body, OpenAI, OpenAIResponses}
 
@@ -168,7 +171,7 @@ defmodule Omunculus.Model.BodyTest do
       ExecutionPolicyFixtures.policy(Application.app_dir(:omunculus, "priv"), network: "none")
     )
 
-    assert_receive {:request, request}, 5_000
+    assert_receive {:request, request}, @wait
     request
   end
 
@@ -264,7 +267,7 @@ defmodule Omunculus.Model.BodyTest do
 
     spawn_link(fn ->
       for response <- responses do
-        case :gen_tcp.accept(listen, 5_000) do
+        case :gen_tcp.accept(listen, @wait) do
           {:ok, socket} ->
             read_body(socket, "")
             :gen_tcp.send(socket, response)
@@ -290,7 +293,7 @@ defmodule Omunculus.Model.BodyTest do
     {:ok, port} = :inet.port(listen)
 
     spawn_link(fn ->
-      {:ok, socket} = :gen_tcp.accept(listen, 5_000)
+      {:ok, socket} = :gen_tcp.accept(listen, @wait)
       send(test, {:request, read_body(socket, "")})
       :gen_tcp.send(socket, "HTTP/1.1 500 Internal Server Error\r\ncontent-length: 0\r\n\r\n")
       :gen_tcp.close(socket)
