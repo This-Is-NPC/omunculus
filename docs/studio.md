@@ -9,7 +9,8 @@ be left out when the registry holds one project.
 ## How it reads the project
 
 The `Studio` singleton reads the setup and writes each item of it through the
-config routes (`GET`, `PUT` and `DELETE` on `/v1/projects/{id}/config`). It reads
+config routes (`GET`, `PUT` and `DELETE` on `/v1/projects/{id}/config`), the
+members through `GET /members` and the usage through `GET /usage`. It reads
 the catalog through `tools`, the passwords through `omapass` and, for every
 project `GET /v1/projects` lists, its `overview` on that project's own
 socket, all through `POST /v1/call`, and tries a model through `model_test`.
@@ -82,7 +83,7 @@ delete.
 
 A double click or Enter opens the item on a screen of its kind
 (`ProviderView`, `ModelView`, `AgentView`, `WorkflowView`, `ToolView`,
-`SkillView`, `PolicyView`, `AccessView`, `WorkspaceView`, each an `ItemPage`
+`SkillView`, `PolicyView`, `AccessView`, `UsageView`, `WorkspaceView`, each an `ItemPage`
 over an `ItemDraft`). It reads as three columns the height of the window,
 each scrolling by itself:
 
@@ -102,6 +103,14 @@ The policy's screen edits `assemble`, `max_retries`, `max_reopens` — left
 empty, a parent reopens a work as often as it likes —
 `last_run_output_bytes` and `tool_output_bytes`, the default workspace and
 workflow, and the ceiling of every run.
+
+The access screen also lists the project's members, with the issuer, the
+subject and the project role of each, and adds or removes one through
+`POST` and `DELETE` on `/members`; only someone who manages the project's
+access sees them. The usage screen, in the project section beside the policy
+and the access, reads what the project's model replies used — replies, tokens
+read, from cache and written, and the cost where a provider reported one — in
+all and for each agent with its model.
 
 What a pack brings, the tools and the skills are only read; a skill's screen
 gives it to the project's agents.

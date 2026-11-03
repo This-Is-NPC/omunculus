@@ -12,6 +12,7 @@ defmodule Omunculus.Tools.Runs do
   """
 
   alias Omunculus.Tools.Out
+  alias Omunculus.Usage
 
   @output_chars 240
   @text_chars 400
@@ -146,35 +147,16 @@ defmodule Omunculus.Tools.Runs do
   end
 
   defp usage(events) do
-    replies = for event <- events, event.type == "model", do: reply(event.body)
-
     totals =
-      Enum.reduce(replies, %{input: 0, cached: 0, output: 0, cost: 0.0}, fn reply, acc ->
-        usage = reply["usage"] || %{}
+      for(event <- events, event.type == "model", do: Usage.reply(event.body)) |> Usage.sum()
 
-        %{
-          input:
-            acc.input + number(usage["input_tokens"] || usage["prompt_tokens"]) +
-              number(usage["cache_creation_input_tokens"]) +
-              number(usage["cache_read_input_tokens"]),
-          cached:
-            acc.cached + number(usage["cache_read_input_tokens"]) +
-              number(get_in(usage, ["prompt_tokens_details", "cached_tokens"])),
-          output: acc.output + number(usage["output_tokens"] || usage["completion_tokens"]),
-          cost: acc.cost + number(usage["cost"])
-        }
-      end)
-
-    "#{length(replies)} replies · #{totals.input} tokens in (#{totals.cached} cached) · " <>
+    "#{totals.replies} replies · #{totals.input} tokens in (#{totals.cached} cached) · " <>
       "#{totals.output} out" <>
       if(totals.cost > 0,
         do: " · $" <> :erlang.float_to_binary(totals.cost * 1.0, decimals: 4),
         else: ""
       )
   end
-
-  defp number(value) when is_number(value), do: value
-  defp number(_value), do: 0
 
   defp details(events) do
     events
@@ -183,17 +165,8 @@ defmodule Omunculus.Tools.Runs do
     |> Enum.map(fn {event, at} -> "#{at}. " <> detail(event.type, decoded(event)) end)
   end
 
-  defp decoded(%{type: "model", body: body}), do: reply(body)
+  defp decoded(%{type: "model", body: body}), do: Usage.reply(body)
   defp decoded(%{body: body}), do: Jason.decode!(body)
-
-  # A model event's body is the reply as JSON, or plain text, as the
-  # harness records a run whose process stopped.
-  defp reply(body) do
-    case Jason.decode(body) do
-      {:ok, reply} when is_map(reply) -> reply
-      _text -> %{"content" => body}
-    end
-  end
 
   defp detail("model", reply) do
     case text(reply) do

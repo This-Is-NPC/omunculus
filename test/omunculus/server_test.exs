@@ -628,7 +628,60 @@ defmodule Omunculus.ServerTest do
     :ok = Supervisor.stop(server)
   end
 
-  test "the config needs the capability that manages it" do
+  test "members and usage are listed to whoever manages the project" do
+    dir = Fixtures.tmp_dir()
+    Fixtures.install_default(dir)
+    project_path = Fixtures.config_path(dir)
+    File.write!(project_path, File.read!(project_path) <> "\n" <> @access)
+
+    project = Fixtures.open_project(dir)
+    run = Fixtures.open_run(project.conn)
+
+    for usage <- [
+          %{prompt_tokens: 10, completion_tokens: 4, cost: 0.5},
+          %{input_tokens: 7, cache_read_input_tokens: 3, output_tokens: 2}
+        ] do
+      {:ok, _event} =
+        Omunculus.Store.Events.append(project.conn, %{
+          type: "model",
+          actor_kind: "agent",
+          run_id: run.id,
+          body: Jason.encode!(%{usage: usage})
+        })
+    end
+
+    # A run left open is closed as interrupted when the server opens the project.
+    {:ok, _closed} = Omunculus.Store.close_run(project.conn, run.id)
+    Project.close(project)
+    {server, local} = serve_local(dir, project_path)
+    uid = Operations.local_principal().subject
+    members = "/v1/projects/solo/members"
+
+    names = fn ->
+      Enum.map(local.(:get, members, []).body["items"], &Map.take(&1, ~w(issuer subject role)))
+    end
+
+    assert names.() == [%{"issuer" => "local", "subject" => uid, "role" => "admin"}]
+
+    alice = %{issuer: "test", subject: "alice", role: "admin"}
+    assert local.(:post, members, json: alice).status == 200
+    assert %{"issuer" => "test", "subject" => "alice", "role" => "admin"} in names.()
+    assert local.(:delete, members <> "/test/alice", []).status == 200
+    assert length(names.()) == 1
+
+    totals = %{"replies" => 2, "input" => 20, "cached" => 3, "output" => 6, "cost" => 0.5}
+    usage = local.(:get, "/v1/projects/solo/usage", [])
+    assert usage.status == 200
+
+    assert usage.body == %{
+             "agents" => [Map.merge(%{"agent" => "concierge", "model" => "fake"}, totals)],
+             "total" => totals
+           }
+
+    :ok = Supervisor.stop(server)
+  end
+
+  test "config, members and usage need the capabilities that manage them" do
     dir = Fixtures.tmp_dir()
     Fixtures.install_default(dir)
     project_path = Fixtures.config_path(dir)
@@ -671,7 +724,7 @@ defmodule Omunculus.ServerTest do
     admin = auth(token(private_key, "admin"))
     outsider = auth(token(private_key, "outsider"))
 
-    for path <- ["/config", "/config/models/fake"] do
+    for path <- ["/config", "/config/models/fake", "/members", "/usage"] do
       assert Req.get!(base <> path, headers: admin).status == 200
       assert Req.get!(base <> path, headers: outsider).status == 404
       assert Req.get!(base <> path, headers: auth("invalid")).status == 401

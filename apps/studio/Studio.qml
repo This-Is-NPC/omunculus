@@ -16,6 +16,8 @@ Singleton {
     id: client
     onReached: {
       root.loadSetup()
+      root.loadMembers()
+      root.loadUsage()
       root.loadOmapass()
       root.loadOverviews()
       root.loadCatalog()
@@ -84,6 +86,35 @@ Singleton {
       loadSetup()
       failed(reason)
     })
+  }
+
+  // The project's members, as GET .../members lists them: [{issuer, subject,
+  // role, updated_at}]; null until it answers, or while this window may not
+  // manage the project's access.
+  property var members: null
+  function loadMembers() {
+    client.call("GET", client.base + "/members", null, false, data => members = data.items, () => members = null)
+  }
+
+  // Assigns `role` to the member, or removes the member for a null role; then
+  // reads the members again. `failed` gets the server's reason.
+  function setMember(issuer, subject, role, done, failed) {
+    const done_ = () => {
+      loadMembers()
+      done()
+    }
+    if (role === null)
+      client.call("DELETE", client.base + "/members/" + encodeURIComponent(issuer) + "/" + encodeURIComponent(subject), null, false, done_, failed)
+    else
+      client.call("POST", client.base + "/members", { issuer: issuer, subject: subject, role: role }, false, done_, failed)
+  }
+
+  // What the project's model replies used, as GET .../usage gives it:
+  // {agents: [{agent, model, replies, input, cached, output, cost}], total};
+  // null until it answers, or while this window may not manage the config.
+  property var usage: null
+  function loadUsage() {
+    client.call("GET", client.base + "/usage", null, false, data => usage = data, () => usage = null)
   }
 
   // Sends one short prompt to the model `name` as `value` would make it, and

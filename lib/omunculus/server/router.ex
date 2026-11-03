@@ -165,6 +165,24 @@ defmodule Omunculus.Server.Router do
     write_config(conn, opts, project_id, {section, name})
   end
 
+  OpenAPI.route :get, "/v1/projects/:project_id/members", :list_project_members do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, members} <- Project.members(project_id, principal) do
+      reply(conn, 200, %{items: Enum.map(members, &Contract.member/1)})
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
+  OpenAPI.route :get, "/v1/projects/:project_id/usage", :get_usage do
+    with {:ok, principal} <- project_principal(conn, opts, project_id),
+         {:ok, usage} <- Project.usage(project_id, principal) do
+      reply(conn, 200, usage)
+    else
+      error -> error_reply(conn, error)
+    end
+  end
+
   OpenAPI.route :get,
                 "/v1/projects/:project_id/conversations/:conversation_id",
                 :get_conversation do

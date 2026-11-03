@@ -92,6 +92,20 @@ defmodule Omunculus.Server.Contract do
   def item(:inbox, row),
     do: Map.take(row, ~w(id run_id agent work_id read_at created_at)a)
 
+  def member(row), do: Map.take(row, ~w(issuer subject role updated_at)a)
+
+  @doc "Usage per agent, each with the model it is configured with, and their sum."
+  def usage(per_agent, models) do
+    agents =
+      for {agent, totals} <- per_agent,
+          do: Map.merge(%{agent: agent, model: models[agent]}, totals)
+
+    %{
+      agents: agents,
+      total: Omunculus.Usage.total(Enum.map(agents, &Map.drop(&1, [:agent, :model])))
+    }
+  end
+
   def conversation(row),
     do: Map.take(row, ~w(id created_at created_issuer created_subject)a)
 

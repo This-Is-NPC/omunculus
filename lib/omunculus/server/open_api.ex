@@ -125,6 +125,16 @@ defmodule Omunculus.Server.OpenAPI do
       response: "Updated",
       request: "Membership"
     },
+    list_project_members: %{
+      summary: "List the project's members",
+      status: 200,
+      response: "Members"
+    },
+    get_usage: %{
+      summary: "Read the tokens and cost of the project's model replies, per agent",
+      status: 200,
+      response: "Usage"
+    },
     get_config: %{
       summary: "Read the project's config index, or all of it with whole=true",
       status: 200,
@@ -392,6 +402,37 @@ defmodule Omunculus.Server.OpenAPI do
       "Removed" => object(%{status: %{type: "string", const: "removed"}}, ["status"]),
       "Membership" =>
         object(%{issuer: string(), subject: string(), role: string()}, ~w(issuer subject role)),
+      "Member" =>
+        object(
+          %{issuer: string(), subject: string(), role: string(), updated_at: string()},
+          ~w(issuer subject role updated_at)
+        ),
+      "Members" => object(%{items: array(ref("Member"))}, ["items"]),
+      "UsageTotals" =>
+        object(
+          %{
+            replies: %{type: "integer"},
+            input: %{type: "number"},
+            cached: %{type: "number"},
+            output: %{type: "number"},
+            cost: %{type: "number"}
+          },
+          ~w(replies input cached output cost)
+        ),
+      "Usage" =>
+        object(
+          %{
+            agents:
+              array(%{
+                allOf: [
+                  ref("UsageTotals"),
+                  object(%{agent: string(), model: nullable_string()}, ["agent"])
+                ]
+              }),
+            total: ref("UsageTotals")
+          },
+          ~w(agents total)
+        ),
       "ConfigView" =>
         object(%{revision: string()}, ["revision"]) |> Map.put(:additionalProperties, true),
       "ConfigWrite" =>

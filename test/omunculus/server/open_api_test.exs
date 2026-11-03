@@ -93,7 +93,7 @@ defmodule Omunculus.Server.OpenAPITest do
     assert schemas["EscalateRequests"]["required"] == ~w(reason origins)
   end
 
-  test "the config of a project is documented" do
+  test "the config, the members and the usage of a project are documented" do
     document = Router.openapi_routes() |> OpenAPI.document() |> Jason.encode!() |> Jason.decode!()
     paths = document["paths"]
     config = "/v1/projects/{project_id}/config"
@@ -114,6 +114,13 @@ defmodule Omunculus.Server.OpenAPITest do
     assert revision["in"] == "query" and revision["required"]
 
     assert document["components"]["schemas"]["ConfigWrite"]["required"] == ~w(revision value)
+
+    assert paths["/v1/projects/{project_id}/members"]["get"]["operationId"] ==
+             "list_project_members"
+
+    assert paths["/v1/projects/{project_id}/members"]["post"]
+    assert paths["/v1/projects/{project_id}/usage"]["get"]["operationId"] == "get_usage"
+    assert document["components"]["schemas"]["Usage"]["required"] == ~w(agents total)
   end
 
   defp local_references(%{"$ref" => "#/components/schemas/" <> name} = map),

@@ -227,7 +227,9 @@ adds an agent, a workflow, a model, a provider or a workspace.
 ### 16. Secrets, models, agents, workflows, tools, skills, project
 
 A table of the section's items. A click picks a row; a double click or
-Enter opens it.
+Enter opens it. The project section holds the policy, the access (with the
+project's members, which it adds and removes), the usage of the model
+replies, and the workspaces.
 
 ### 17. An item
 

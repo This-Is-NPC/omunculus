@@ -367,6 +367,37 @@ defmodule Omunculus.Store.Access do
     end
   end
 
+  @doc "The project's members with their roles, for a principal who manages its access."
+  @spec members(Project.t(), principal) :: {:ok, [map]} | {:error, term}
+  def members(project, actor) do
+    with :ok <- check(project, actor, "project.manage_access") do
+      Query.all(
+        project.conn,
+        "SELECT issuer, subject, role, updated_at FROM project_members ORDER BY issuer, subject"
+      )
+    end
+  end
+
+  @doc """
+  The tokens and cost of every model reply recorded in the project, per
+  agent, for a principal who manages the project's config.
+  """
+  @spec usage(Project.t(), principal) :: {:ok, [map]} | {:error, term}
+  def usage(project, actor) do
+    with :ok <- check(project, actor, "project.manage_config"),
+         {:ok, rows} <-
+           Query.all(
+             project.conn,
+             "SELECT runs.agent AS agent, events.body AS body FROM events JOIN runs ON runs.id = events.run_id WHERE events.type = 'model' ORDER BY runs.agent, events.sequence"
+           ) do
+      {:ok,
+       rows
+       |> Enum.group_by(& &1.agent, &Omunculus.Usage.reply(&1.body))
+       |> Enum.sort()
+       |> Enum.map(fn {agent, replies} -> {agent, Omunculus.Usage.sum(replies)} end)}
+    end
+  end
+
   @spec put_member(Project.t(), principal, principal, String.t(), String.t() | nil) ::
           :ok | {:error, term}
   def put_member(project, actor, target, role, conversation_id \\ nil) do

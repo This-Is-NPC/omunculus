@@ -127,6 +127,22 @@ defmodule Omunculus.Server.Project do
   def remove_member(id, actor, target, conversation_id),
     do: Access.remove_member(project(id), actor, target, conversation_id)
 
+  def members(id, principal), do: Access.members(project(id), principal)
+
+  @doc "The usage of the project's recorded model replies, per agent with its configured model."
+  def usage(id, principal) do
+    project = project(id)
+
+    with {:ok, per_agent} <- Access.usage(project, principal),
+         {:ok, config} <- Config.load(project.config_path) do
+      {:ok,
+       Omunculus.Server.Contract.usage(
+         per_agent,
+         Map.new(config.agents, fn {name, agent} -> {name, agent.model} end)
+       )}
+    end
+  end
+
   @doc "What the `config` tool shows for `args`, for a principal who manages the project's config."
   def config(id, principal, args) do
     project = project(id)

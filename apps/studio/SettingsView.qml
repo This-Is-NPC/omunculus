@@ -7,7 +7,8 @@ import "kit/ui"
 // each other: the secrets of the providers, the models that use them, the
 // agents on those models, the workflows of those agents, the tools and the
 // skills of the catalog, and the project's own policy, workspaces and
-// access, one section at a time. Each section is a table of its items; a
+// access, and the usage of its model replies, one section at a time. Each
+// section is a table of its items; a
 // click picks one, a double click or Enter opens it on a screen of its kind,
 // read, where it may be edited and saved on its own through the config
 // routes, which write it only if the result loads. What is picked or open
@@ -266,6 +267,9 @@ Item {
           "max retries " + (policy.max_retries === undefined ? "unset" : policy.max_retries) + (policy.workspace ? "  ·  workspace " + policy.workspace : "")] }]
         if (document.access)
           rows.push({ id: "access", name: "access", editable: true, file: "AccessView.qml", cells: ["access", "access", Object.keys(document.access.roles || {}).join(", ")] })
+        if (Studio.usage)
+          rows.push({ id: "usage", name: "usage", editable: false, file: "UsageView.qml", cells: ["usage", "usage",
+            Studio.usage.total.replies + " model replies"] })
         return rows.concat(listed.workspaces.map(name => ({ id: "workspace:" + name, name: name, editable: true, removable: true, file: "WorkspaceView.qml",
           cells: [name, "workspace", (stored("workspaces", name) || {}).root || "new"] })))
       },

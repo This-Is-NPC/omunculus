@@ -4,8 +4,9 @@ import QtQuick.Layouts
 import "kit/ui"
 
 // AccessView is the project's [access]: who may do what, by role, the role a
-// conversation's creator takes and the one of the first administrator. The
-// members of each role are in the store, not here.
+// conversation's creator takes and the one of the first administrator; and
+// the project's members, each with its role, who can be added and removed
+// as the server allows.
 ItemPage {
   id: page
 
@@ -15,6 +16,10 @@ ItemPage {
   readonly property var roles: table.roles || {}
   readonly property var capabilities: ["project.manage_access", "project.manage_config", "conversation.create", "conversation.read",
     "conversation.send", "conversation.comment", "conversation.reply", "conversation.manage_access", "conversation.manage"]
+
+  // The roles a project member may take.
+  readonly property var memberRoles: Object.keys(roles).filter(role => roles[role].scope === "project")
+  property string newRole: memberRoles[0] || ""
 
   function renamed(from, to) {
     const next = {}
@@ -111,6 +116,55 @@ ItemPage {
       for (let n = 2; page.roles[name] !== undefined; n++)
         name = "role_" + n
       item.put(["roles", name], { scope: "conversation", capabilities: ["conversation.read"] })
+    }
+  }
+
+  Kicker { Layout.fillWidth: true; text: "members" }
+  Note { value: Studio.members === null ? "The members are listed to those who manage the project's access." : "Who holds a project role. A role named here applies to every conversation." }
+  Repeater {
+    model: Studio.members || []
+    delegate: SurfaceFrame {
+      id: member
+      required property var modelData
+      Layout.fillWidth: true
+      implicitHeight: memberRow.implicitHeight + 20
+      RowLayout {
+        id: memberRow
+        anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 10 }
+        spacing: 12
+        Label { text: member.modelData.issuer; color: Theme.dim; font.pixelSize: 12 }
+        Label { Layout.fillWidth: true; text: member.modelData.subject; font.pixelSize: 12; elide: Text.ElideRight }
+        Label { text: member.modelData.role; color: Theme.primary; font.pixelSize: 12 }
+        IconButton {
+          name: "close"
+          tone: Theme.error
+          tip: "remove the member"
+          onClicked: Studio.setMember(member.modelData.issuer, member.modelData.subject, null, () => {}, reason => Studio.tell(reason, true))
+        }
+      }
+    }
+  }
+  RowLayout {
+    Layout.fillWidth: true
+    visible: Studio.members !== null
+    spacing: 12
+    Field { id: issuer; Layout.fillWidth: true; label: "issuer" }
+    Field { id: subject; Layout.fillWidth: true; label: "subject" }
+    PickRow {
+      text: "ROLE"
+      options: page.memberRoles
+      current: page.newRole
+      onPicked: role => page.newRole = role
+    }
+    Chip {
+      Layout.alignment: Qt.AlignBottom
+      text: "ADD MEMBER"
+      icon: "plus"
+      reason: issuer.input.text.trim() === "" || subject.input.text.trim() === "" || page.newRole === "" ? "name the issuer, the subject and a project role" : ""
+      onClicked: Studio.setMember(issuer.input.text.trim(), subject.input.text.trim(), page.newRole, () => {
+        issuer.input.text = ""
+        subject.input.text = ""
+      }, reason => Studio.tell(reason, true))
     }
   }
 }
