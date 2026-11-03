@@ -99,12 +99,13 @@ screen's own are in [the screens](docs/screens.md):
 
 ## What is broken
 
-Two defects are known; [what does not work](docs/what-does-not-work.md)
+Three defects are known; [what does not work](docs/what-does-not-work.md)
 says what to do meanwhile:
 
 1. The console does not show an agent's reply as it arrives.
 2. A message in an empty conversation opened from the console's list is
    refused.
+3. Some sandboxed commands fail to set up their overlay.
 
 Contributors start at [the design](docs/design.md).
 
