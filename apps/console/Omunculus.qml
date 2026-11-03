@@ -42,7 +42,7 @@ Singleton {
   property var summaries: ({})
   property string conversationId: ""
   // The agent the conversation on screen is with: the one its first message
-  // named, or the one picked for a new one; every message names it again.
+  // named, or the one picked for a new or an empty one; every message names it again.
   property string agent: ""
   // Whom a new conversation may be with: the agents of depth 0 not only in workflows.
   readonly property var talkable: setup ? setup.agents.filter(each => each.depth === 0 && !each.workflow_only) : []
@@ -54,8 +54,9 @@ Singleton {
   property var inbox: []
   // The latest event cursor of the open conversation; the stream resumes after it.
   property string cursor: ""
-  // While the history of the conversation opened is read in.
+  // While the history of the conversation opened is read in, and once it was.
   property bool replaying: false
+  property bool loaded: false
   // Thread key ("" or a work id) -> its ListModel. Each entry: kind (speech,
   // turn or request), key, who, text, mine, stamp, at (seconds), work,
   // streaming, partial (the text its model is writing), steps (JSON), and
@@ -64,6 +65,9 @@ Singleton {
   // Every request and every note to you also shows in the main thread, where
   // it was made, keyed by its request or inbox id.
   property var threads: ({})
+  // Whether the conversation on screen is empty and several agents could take
+  // it, so the first message must say which. With one, the server names it.
+  readonly property bool whomAsked: loaded && agent === "" && talkable.length > 1 && thread("").count === 0
   // Run id -> {thread, row}.
   property var rows: ({})
   // Work id -> the work it was handed down from, and run id -> its thread.
@@ -360,6 +364,7 @@ Singleton {
   function open(id) {
     conversationId = id
     agent = ""
+    loaded = false
     cursor = ""
     rows = {}
     parentOf = {}
@@ -385,6 +390,7 @@ Singleton {
       replaying = true
       data.events.forEach(handle)
       replaying = false
+      loaded = true
       log = logBuffer
       logBuffer = []
       refresh()
@@ -395,6 +401,7 @@ Singleton {
   // Closes the conversation on screen; its agents go on without the window.
   function close() {
     conversationId = ""
+    loaded = false
     conversationStream.stop()
     threads = {}
     loadConversations()

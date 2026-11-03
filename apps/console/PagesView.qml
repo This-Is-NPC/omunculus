@@ -42,9 +42,11 @@ Item {
   // conversation open and its page, or the page.
   readonly property string heading: page === "board" ? page
     : Omunculus.project + "  ·  " + (inConversation.includes(page) ? Omunculus.title + "  ·  " + page : title)
-  // Whether the page takes the digits alone, as the picker of a new
-  // conversation does; Ctrl with them still chooses a page.
-  readonly property bool digitsTaken: page === "new"
+  // Whether the chat asks whom an empty conversation is with.
+  readonly property bool asking: page === "chat" && Omunculus.whomAsked
+  // Whether the page takes the digits alone, as the pickers of whom a
+  // conversation is with do; Ctrl with them still chooses a page.
+  readonly property bool digitsTaken: page === "new" || asking
 
   // Where the window was before each move, the last last, as {page,
   // project, socket, conversation, picked}.
@@ -252,6 +254,8 @@ Item {
       cost.forceActiveFocus()
     else if (page === "work")
       workPage.forceActiveFocus()
+    else if (asking)
+      whom.forceActiveFocus()
     else
       mainComposer.focusEntry()
   }
@@ -260,6 +264,7 @@ Item {
   onActiveChanged: if (active) focusEntry()
   Keys.onEscapePressed: back()
   onPageChanged: Qt.callLater(focusEntry)
+  onAskingChanged: Qt.callLater(focusEntry)
   Connections {
     target: Omunculus
     function onConversationIdChanged() {
@@ -296,13 +301,25 @@ Item {
 
       TimelineView {
         id: timeline
+        visible: !view.asking
         Layout.fillWidth: true
         Layout.fillHeight: true
         thread: ""
       }
 
+      // An empty conversation opened from the list names no agent yet.
+      AgentPicker {
+        id: whom
+        visible: view.asking
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        onPicked: name => Omunculus.agent = name
+        onBack: view.back()
+      }
+
       Composer {
         id: mainComposer
+        visible: !view.asking
         Layout.fillWidth: true
         compact: view.compact
         onPendingChosen: view.showPending()

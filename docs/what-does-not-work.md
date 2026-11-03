@@ -15,14 +15,3 @@ every reply.
 
 **What to do in the meantime.** Press BACK and open the conversation again
 from the conversations page, or read the reply in the mailbox.
-
-## 2. A message in an empty conversation opened from the list is refused
-
-Seen running, on the console's chat page.
-
-**What happens.** A conversation that has no message yet names no agent. Opened
-from the conversations page, the message you send to it carries none, and the
-server refuses it; the console shows `invalid`.
-
-**What to do in the meantime.** Start the conversation with NEW CONVERSATION,
-which asks whom it is with.

@@ -82,7 +82,10 @@ first said.
 
 The chat between you and the root agent: what each of you said and, on a
 line below each run, what the agent did. The composer under it counts what
-waits on you.
+waits on you. A conversation with no message yet, opened from the
+conversations, first asks whom it is with, on the cards of
+[a new conversation](#2-a-new-conversation) when several agents of depth 0
+may take it.
 
 | Keys | What they do |
 | --- | --- |

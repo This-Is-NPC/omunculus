@@ -33,6 +33,11 @@ portrait (fetched by `apps/kit/client`'s `AgentImages`, which the studio
 shares). The conversation keeps the agent its first message named, and
 every message names it again.
 
+A conversation opened from CONVERSATIONS that has no message yet names no
+agent. When several agents of depth 0 may take it, its chat shows the same
+cards in place of the timeline and the composer, and the card chosen is the
+agent its first message names; Esc goes back. With one, the server names it.
+
 ## Threads
 
 The console folds the events into threads: the main one, yours with the root
