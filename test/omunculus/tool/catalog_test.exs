@@ -24,9 +24,11 @@ defmodule Omunculus.Tool.CatalogTest do
   defp mcp_policy do
     implementation_root = Path.expand("test/support")
 
+    # A sandboxed server can take seconds to start while the whole suite runs.
     ExecutionPolicyFixtures.policy(implementation_root,
       read_only: [implementation_root],
-      network: "host"
+      network: "host",
+      limits: %{timeout_ms: 15_000}
     )
   end
 
