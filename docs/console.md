@@ -115,7 +115,13 @@ Beside WORK, its other sections read the core's tools through
   by call (`runs --run`, Esc back);
 - CHANGES, the files its calls changed (`changes --work_id`) or, with DIFF,
   their unified diff, added and removed lines coloured, or why there is
-  none, as the project not recording changes;
+  none, as the project not recording changes. REVERT, shown to a member
+  holding `project.manage_config` (`GET /capabilities`), asks first and then
+  puts the work's files back as they were before it, removing those it
+  added, in the workspace the work ran in and under that workspace's write
+  rules (`POST /works/{id}/revert`). It restores nothing when a file changed
+  since the work's last change to it or is not writable there, and says
+  why;
 - PROMPT, the prompt its last run, or the run opened, was given
   (`prompt --run`), or that it recorded none.
 

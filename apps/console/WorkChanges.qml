@@ -7,7 +7,9 @@ import "kit/ui"
 // as the changes command lists them from what [store] changes recorded:
 // each call, and under it each file with what was done to it — added,
 // modified or deleted — and its lines. DIFF shows the unified diff instead,
-// its added and removed lines coloured. Why there is nothing to show — the
+// its added and removed lines coloured. REVERT, for a member holding
+// project.manage_config, puts the files back after a confirmation, in the
+// workspace the work ran in. Why there is nothing to show — the
 // project records no changes, or no call changed a file — reads as text.
 Item {
   id: section
@@ -62,6 +64,8 @@ Item {
     return { A: Theme.success, D: Theme.error }[line.trim().charAt(0)] || Theme.foreground
   }
 
+  readonly property bool canRevert: Omunculus.capabilities.includes("project.manage_config")
+
   onVisibleChanged: if (visible) load()
   onKeyChanged: {
     output = ""
@@ -95,6 +99,16 @@ Item {
         tip: section.patch ? "the files each call changed" : "the unified diff of each call"
         onClicked: section.patch = !section.patch
       }
+      TraceButton {
+        dense: true
+        role: "guarded"
+        icon: "close"
+        visible: section.canRevert
+        enabled: section.key !== "" && section.failure === "" && section.output !== "" && !section.output.startsWith("No call changed")
+        text: "REVERT"
+        tip: "put the files of this work back as they were before it"
+        onClicked: confirmRevert.open()
+      }
       IconButton { name: "copy"; tip: "copy what is shown"; visible: section.output !== ""; onClicked: Omunculus.copy(section.output) }
     }
 
@@ -120,5 +134,14 @@ Item {
     }
 
     Item { Layout.fillHeight: true; visible: section.output === "" }
+  }
+
+  ConfirmDialog {
+    id: confirmRevert
+    title: "revert the work"
+    question: "Put back the files this work changed, as they were before it, in the workspace it ran in? Files it added are removed."
+    warning: "Refused, restoring nothing, when a file changed since the work's last change to it."
+    confirmText: "REVERT"
+    onConfirmed: Omunculus.revert(section.key, () => section.load())
   }
 }

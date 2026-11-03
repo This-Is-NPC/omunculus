@@ -24,6 +24,7 @@ Singleton {
     onReached: {
       root.loadConversations()
       root.loadSetup()
+      root.loadCapabilities()
     }
   }
   property alias socket: client.socket
@@ -34,6 +35,8 @@ Singleton {
   property alias messageIsError: client.messageIsError
   property alias noticeCount: client.noticeCount
   readonly property Http http: client.http
+  // The project capabilities the member holds, such as project.manage_config.
+  property var capabilities: []
   property var conversations: []
   // Conversation id -> {title, running, waiting}, read from its snapshot.
   property var summaries: ({})
@@ -131,6 +134,23 @@ Singleton {
     http.setup(socket, on, read => {
       if (on === project)
         setup = read
+    })
+  }
+
+  function loadCapabilities() {
+    const on = project
+    client.call("GET", base + "/capabilities", null, false, data => {
+      if (on === project)
+        capabilities = data.items
+    })
+  }
+
+  // Puts back the files the work `key` changed, in the workspace it ran in;
+  // `done` follows once it did; a refusal is told as a sentence.
+  function revert(key, done) {
+    client.call("POST", base + "/works/" + key + "/revert", {}, true, () => {
+      client.tell("reverted", false)
+      done()
     })
   }
 
@@ -292,9 +312,11 @@ Singleton {
     project = place.id
     socket = place.socket
     setup = null
+    capabilities = []
     conversations = []
     loadConversations()
     loadSetup()
+    loadCapabilities()
   }
 
   // A new conversation with the agent `name`, open once the server made it;
