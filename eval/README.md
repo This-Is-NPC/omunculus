@@ -197,7 +197,8 @@ mise run eval:run -- --resume eval/results/<run-folder>
 
 `<run-folder>` is a placeholder for the existing result folder. Completed
 executions are kept. An unfinished execution uses its existing config, store,
-workspace and initial file snapshot. The CLI recovers interrupted work; recorded
+workspace and initial file snapshot; one stopped before its store was made
+starts over. The CLI recovers interrupted work; recorded
 client messages and decisions rebuild the simulated person's conversation.
 Already sent follow-ups are not sent again. Models, task checks and time limits
 come from the saved manifest; other run options are refused with `--resume`.

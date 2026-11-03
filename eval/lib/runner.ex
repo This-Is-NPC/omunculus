@@ -135,7 +135,8 @@ defmodule EquivalentExchange.Runner do
     # Executions share nothing — each has its own project — so `jobs` of them
     # run at once; a line is printed as each one ends.
     jobs = Keyword.get(options, :jobs, 1)
-    run_plan(folder, plan, {model, code_mode, agent_models, overlay}, timeout, jobs, false)
+    plan = Enum.map(plan, fn {task, configuration, n} -> {task, configuration, n, false} end)
+    run_plan(folder, plan, {model, code_mode, agent_models, overlay}, timeout, jobs)
   end
 
   defp resume(folder) do
@@ -153,18 +154,25 @@ defmodule EquivalentExchange.Runner do
           ),
           do: {Map.fetch!(tasks, id), configuration, n}
 
-    for {task, configuration, n} <- plan do
-      project = Path.join(execution_dir(folder, task.id, configuration, n), "project")
-      {:ok, config} = Omunculus.Config.load(Path.join(project, "omunculus.toml"))
+    # An execution stopped before its store held anything starts over; one
+    # that began continues from its store.
+    plan =
+      for {task, configuration, n} <- plan do
+        dir = execution_dir(folder, task.id, configuration, n)
 
-      unless File.regular?(config.store.path),
-        do: raise(ArgumentError, "cannot resume: missing store at #{config.store.path}")
+        case begun(dir) do
+          {:ok, store} ->
+            {:ok, lock} = Omunculus.Store.Lock.acquire(store)
+            Omunculus.Store.Lock.release(lock)
+            {task, configuration, n, true}
 
-      {:ok, lock} = Omunculus.Store.Lock.acquire(config.store.path)
-      Omunculus.Store.Lock.release(lock)
-    end
+          :none ->
+            File.rm_rf!(dir)
+            {task, configuration, n, false}
+        end
+      end
 
-    if Enum.any?(plan, fn {task, _, _} -> task.deploy end) do
+    if Enum.any?(plan, fn {task, _configuration, _n, _resume?} -> task.deploy end) do
       with {:error, reason} <- Deploy.environment(), do: raise(reason)
     end
 
@@ -186,17 +194,25 @@ defmodule EquivalentExchange.Runner do
       {manifest["model"], manifest["code_mode"], manifest["agent_models"] || %{},
        manifest["overlay"]},
       Deadline.parse(to_string(manifest["timeout_s"])),
-      manifest["jobs"],
-      true
+      manifest["jobs"]
     )
   end
 
-  defp run_plan(folder, plan, models, timeout, jobs, resume?) do
+  defp begun(dir) do
+    with {:ok, config} <- Omunculus.Config.load(Path.join([dir, "project", "omunculus.toml"])),
+         true <- File.regular?(config.store.path) do
+      {:ok, config.store.path}
+    else
+      _not_begun -> :none
+    end
+  end
+
+  defp run_plan(folder, plan, models, timeout, jobs) do
     sampler = Resources.start()
 
     plan
     |> Elixir.Task.async_stream(
-      fn {task, configuration, n} ->
+      fn {task, configuration, n, resume?} ->
         {task, configuration, n,
          execute(folder, task, configuration, n, models, timeout, resume?)}
       end,
@@ -219,7 +235,8 @@ defmodule EquivalentExchange.Runner do
     samples = Resources.stop(sampler)
     resource_path = Path.join(folder, "resources.json")
 
-    if resume? and File.exists?(resource_path) do
+    # A resumed run adds its samples to those of the runs before it.
+    if File.exists?(resource_path) do
       previous = resource_path |> File.read!() |> Jason.decode!()
       samples = Map.merge(previous, samples, fn _key, old, new -> old ++ new end)
       write_json(resource_path, samples)
