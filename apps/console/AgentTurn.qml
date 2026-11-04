@@ -7,7 +7,7 @@ import "kit/ui"
 // AgentTurn is one run of an agent in the conversation, said like a line of
 // chat: on the left, under a heading of the agent's tone dot, its name, the
 // time and how long it has worked ("Working 0:12" while the run is open,
-// "Worked 1 min" after), its words drawn as they stream in a box tinted with
+// "Worked 1 minute" after), its words drawn as they stream in a box tinted with
 // its colour, the files it attached, and the group of its tool calls
 // (ToolCalls). Until the agent says or does anything the turn is not drawn.
 // A turn that continues the same agent's drops its heading. Once it has
@@ -43,7 +43,7 @@ Item {
   }
   readonly property string worked: started <= 0 ? ""
     : streaming ? "Working " + Progress.clock(Math.max(0, Omunculus.tick - started))
-    : ended > 0 ? "Worked " + Progress.span(Math.max(0, ended - started)) : ""
+    : ended > 0 ? "Worked " + Progress.duration(Math.max(0, ended - started)) : ""
   readonly property string said: text + (partial !== "" ? (text !== "" ? "\n\n" : "") + partial : "")
   readonly property color tone: Omunculus.toneOf(who)
   // A run that has said and done nothing so far leaves no trace in the

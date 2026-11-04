@@ -1,5 +1,6 @@
 .pragma library
 .import "Requests.js" as Requests
+.import "Questions.js" as Questions
 .import "Phrases.js" as Phrases
 .import "Usage.js" as Usage
 .import "Time.js" as Time
@@ -33,6 +34,16 @@ function span(total) {
   if (s < 60) return s + " s";
   if (s < 3600) return Math.floor(s / 60) + " min";
   return Math.floor(s / 3600) + " h " + Time.two(Math.floor(s % 3600 / 60)) + " min";
+}
+
+// A duration in plain words: "8 seconds", "1 minute", "1 hour 5 minutes".
+function duration(total) {
+  const s = Math.max(0, Math.floor(total));
+  const said = (count, unit) => count + " " + unit + (count === 1 ? "" : "s");
+  if (s < 60) return said(s, "second");
+  if (s < 3600) return said(Math.floor(s / 60), "minute");
+  const minutes = Math.floor(s % 3600 / 60);
+  return said(Math.floor(s / 3600), "hour") + (minutes > 0 ? " " + said(minutes, "minute") : "");
 }
 
 // A running clock: "0:42", "12:05", "1:02:03".
@@ -126,13 +137,14 @@ function intervals(lane, journey, created, end) {
 }
 
 // The conversation's progress, {state, roots, focus, flat, path, now,
-// forYou, counts, spoken}: one node per work, nested under the stage that
-// handed it down, with what it does, what it waits on and what its branch
-// spent; the root to show, the path to the work active below it, and what
-// waits on you.
+// forYou, agents, counts, spoken}: one node per work, nested under the stage
+// that handed it down, with what it does, what it waits on and what its
+// branch spent; the root to show, the path to the work active below it, what
+// waits on you, as its card asks it, and the agents that ran, first first.
 // input: {works, lanes (work id -> laneOf), runs (with error), requests,
-// calling, callArgs, runStarts, journeys, rootAgent, now, usage (work id ->
-// Usage tally), calls (work id -> {count, failed, last: {text, at}})}.
+// noted (request id -> true for one the harness passed on), calling,
+// callArgs, runStarts, journeys, rootAgent, now, usage (work id -> Usage
+// tally), calls (work id -> {count, failed, last: {text, at}})}.
 function build(input) {
   const works = input.works || [];
   const lanes = input.lanes || {};
@@ -143,6 +155,7 @@ function build(input) {
   const journeys = input.journeys || {};
   const usage = input.usage || {};
   const callsOf = input.calls || {};
+  const noted = input.noted || {};
   const now = input.now || 0;
   // Per node, while building: the latest end in its branch, its agents and
   // the requests holding its questions.
@@ -320,9 +333,18 @@ function build(input) {
   }
 
   const hidden = Requests.contained(requests);
+  // A request the harness passed on asks what its origins asked; a numbered
+  // question asks each of its items.
   const forYou = pending.filter(request => Requests.human(request.arbiter) && !hidden.has(request.id)).map(request => {
     const of = askerOf(request);
-    return { id: request.id, asker: Requests.label(request.requester), work: of ? of.work : "", title: of ? of.title : "", question: request.reason || "" };
+    const passed = noted[request.id] ? Requests.passedOn(request) : [];
+    const question = passed.length > 0 ? passed.map(origin => origin.reason).join("\n\n") : request.reason || "";
+    const kind = Requests.kind(request);
+    const form = kind === "needs-you" ? Questions.parse(question) : null;
+    return {
+      id: request.id, asker: Requests.label(passed.length > 0 ? passed[0].requester : request.requester),
+      work: of ? of.work : "", title: of ? of.title : "", question: question, kind: kind, asks: form ? form.items.length : 1
+    };
   });
 
   const focus = roots.length === 0 ? null : roots[0];
@@ -352,13 +374,26 @@ function build(input) {
   else if (flat.some(each => each.state === "failed") || (lastRun && lastRun.error)) state = "failed";
   else if (roots.length > 0 && roots.every(each => closed(each.state)) && roots.some(each => each.state === "done")) state = "done";
 
+  const agents = Array.from(new Set(runs.map(run => run.agent).filter(name => name)));
   const counts = counted(flat);
-  counts.agents = new Set(runs.map(run => run.agent)).size;
+  counts.agents = agents.length;
   let spoken = "";
   if (state === "needs-you") spoken = forYou[0].asker + " asks you: " + firstLine(forYou[0].question);
   else if (state !== "idle") spoken = word(state) + ". " + (path.length > 1 ? path.map(each => each.agent).join(", ") : doing.agent) + (doing.doing ? ": " + doing.doing : "");
 
-  return { state: state, roots: roots, focus: focus, flat: flat, path: path, now: doing, forYou: forYou, counts: counts, spoken: spoken };
+  return { state: state, roots: roots, focus: focus, flat: flat, path: path, now: doing, forYou: forYou, agents: agents, counts: counts, spoken: spoken };
+}
+
+// What requests for you ask (forYou entries), in words after "asks you":
+// "7 questions", "to decide", "for a permission"; mixed or several of a
+// kind, counted: "7 questions, 2 decisions".
+function asking(asks) {
+  const count = kind => asks.filter(ask => ask.kind === kind).reduce((sum, ask) => sum + ask.asks, 0);
+  const counted = [["needs-you", "question"], ["decision", "decision"], ["permission", "permission"]]
+    .map(([kind, noun]) => ({ kind: kind, noun: noun, n: count(kind) })).filter(each => each.n > 0);
+  if (counted.length === 1 && counted[0].n === 1 && counted[0].kind !== "needs-you")
+    return counted[0].kind === "decision" ? "to decide" : "for a permission";
+  return counted.map(each => each.n + " " + each.noun + (each.n === 1 ? "" : "s")).join(", ");
 }
 
 // A node's children in tree order: by stage for a work in a workflow.

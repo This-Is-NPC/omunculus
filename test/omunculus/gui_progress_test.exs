@@ -3,7 +3,7 @@ defmodule Omunculus.GuiProgressTest do
 
   alias Omunculus.GuiModules
 
-  @modules ["Requests", "Phrases", "Usage", "Time", "Progress"]
+  @modules ["Requests", "Questions", "Phrases", "Usage", "Time", "Progress"]
 
   # A sale at its design stage (w1), a design-lead work handed down in it
   # waiting on its child (w2), and a design work sent back once from review
@@ -99,7 +99,7 @@ defmodule Omunculus.GuiProgressTest do
     const ask = {id: "q1", status: "pending", arbiter: human, requester: agent("seller"), work_id: "w1", reason: "What is the bakery called?\\nAnd where?"};
     const out = Progress.build(Object.assign({}, base, {requests: [ask]}));
     check(out.state === "needs-you" && nodes(out).w1.state === "needs-you" && nodes(out).w1.doing === "Waiting for your answer", "needs-you", out.state);
-    check(JSON.stringify(out.forYou) === JSON.stringify([{id: "q1", asker: "seller", work: "w1", title: "Bakery website", question: ask.reason}]), "forYou", out.forYou);
+    check(JSON.stringify(out.forYou) === JSON.stringify([{id: "q1", asker: "seller", work: "w1", title: "Bakery website", question: ask.reason, kind: "needs-you", asks: 1}]), "forYou", out.forYou);
     check(out.spoken === "seller asks you: What is the bakery called?", "spoken", out.spoken);
     check(out.path.map(each => each.agent).join() === "seller,design-lead,designer", "path keeps going down", out.path);
     const broken = [{id: "w9", title: "Menu", state: "waiting", assignee: "designer", created_at: iso(1000), updated_at: iso(1100)}];
@@ -255,8 +255,37 @@ defmodule Omunculus.GuiProgressTest do
     """)
   end
 
-  test "span and clock" do
+  test "what you are asked is counted as its card counts it" do
     run!("""
+    const form = {id: "q1", status: "pending", arbiter: human, requester: agent("seller"), work_id: "w1", reason: "Tell us:\\n1. The name?\\n2. The city?\\n3. The budget?"};
+    const out = Progress.build(Object.assign({}, base, {requests: [form]}));
+    check(out.forYou[0].kind === "needs-you" && out.forYou[0].asks === 3, "form items", out.forYou);
+    check(Progress.asking(out.forYou) === "3 questions", "asking form", Progress.asking(out.forYou));
+    const passed = {id: "q2", status: "pending", arbiter: human, requester: {kind: "harness"}, work_id: "w1", reason: "passed on",
+      origins: {a: {requester: agent("designer"), reason: "1. Colours?\\n2. Fonts?"}}};
+    const relayed = Progress.build(Object.assign({}, base, {requests: [passed], noted: {q2: true}}));
+    check(relayed.forYou[0].asker === "designer" && relayed.forYou[0].asks === 2, "passed on", relayed.forYou);
+    const one = kind => [{kind: kind, asks: 1}];
+    check(Progress.asking(one("needs-you")) === "1 question", "one question", Progress.asking(one("needs-you")));
+    check(Progress.asking(one("decision")) === "to decide", "decision", Progress.asking(one("decision")));
+    check(Progress.asking(one("permission")) === "for a permission", "permission", Progress.asking(one("permission")));
+    const mixed = [{kind: "needs-you", asks: 7}, {kind: "decision", asks: 1}, {kind: "decision", asks: 1}];
+    check(Progress.asking(mixed) === "7 questions, 2 decisions", "mixed", Progress.asking(mixed));
+    """)
+  end
+
+  test "agents are named in the order they first ran" do
+    run!("""
+    const runs = [run("r1", "sales", ""), run("r2", "designer", "w3", {status: "done"}), run("r3", "sales", "")];
+    const out = Progress.build(Object.assign({}, base, {runs: runs}));
+    check(out.agents.join() === "sales,designer" && out.counts.agents === 2, "agents", out.agents);
+    """)
+  end
+
+  test "span, duration and clock" do
+    run!("""
+    const durations = [[0, "0 seconds"], [1, "1 second"], [8, "8 seconds"], [60, "1 minute"], [180, "3 minutes"], [3600, "1 hour"], [3900, "1 hour 5 minutes"], [7260, "2 hours 1 minute"], [-5, "0 seconds"]];
+    for (const [s, text] of durations) check(Progress.duration(s) === text, "duration " + s, Progress.duration(s));
     const spans = [[0, "0 s"], [42, "42 s"], [59.9, "59 s"], [180, "3 min"], [3599, "59 min"], [3900, "1 h 05 min"], [-5, "0 s"]];
     for (const [s, text] of spans) check(Progress.span(s) === text, "span " + s, Progress.span(s));
     const clocks = [[42, "0:42"], [725, "12:05"], [3723, "1:02:03"], [0, "0:00"]];

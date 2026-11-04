@@ -1,5 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
+import "kit/client/Progress.js" as Progress
 import "kit/client/Requests.js" as Requests
 import "kit/ui/focus.js" as Focus
 import "kit/ui"
@@ -17,8 +19,11 @@ import "kit/ui"
 // bubble, and what the team asked among itself is an exchange (TeamRow). A
 // work handed down is a SubWorkBlock where it was, which unfolds into its own
 // thread nested here. A question for you that arrives while the view follows
-// is held by its top. Its implicit height is its entries', for a thread nested
-// in a block.
+// is held by its top. While agents work and what you said or answered is
+// still the newest thing the thread draws, a working row under it says who
+// works, from the agent you wrote to down to the one at work, what that one
+// does and for how long. Its implicit height is its entries', for a thread
+// nested in a block, which says itself that its agents work.
 Item {
   id: root
 
@@ -34,6 +39,8 @@ Item {
   // Counts changes to the entries, so each line knows again whether it
   // continues the turn before it.
   property int revision: 0
+  // Counts every change to the entries, a turn streaming included.
+  property int changes: 0
 
   // Entries that arrived while the view was not following, counted once each.
   property int unseen: 0
@@ -186,6 +193,7 @@ Item {
     // A turn growing as it streams changes no one's turn, but it is new again
     // when it finishes.
     function onDataChanged(topLeft) {
+      root.changes++
       const entry = root.model.get(topLeft.row)
       if (entry.streaming)
         root.streams[entry.key] = true
@@ -196,6 +204,7 @@ Item {
     }
     function onRowsInserted(parent, first, last) {
       root.revision++
+      root.changes++
       for (let row = first; row <= last; row++) {
         const entry = root.model.get(row)
         if (entry.streaming)
@@ -203,11 +212,48 @@ Item {
         root.arrived(entry.key)
       }
     }
-    function onRowsRemoved() { root.revision++ }
+    function onRowsRemoved() {
+      root.revision++
+      root.changes++
+    }
+  }
+
+  // Whether what you said or answered is the newest thing the thread
+  // draws: a turn that has said and done nothing yet draws nothing.
+  readonly property bool yoursLast: {
+    if (changes < 0 || revision < 0)
+      return false
+    for (let row = model.count - 1; row >= 0; row--) {
+      const entry = model.get(row)
+      if (entry.kind === "turn" && entry.text === "" && entry.partial === "" && entry.steps === "[]" && entry.files === "[]")
+        continue
+      const role = roleAt(row)
+      if (role !== "none")
+        return role === "answer" || (role === "speech" && entry.mine)
+    }
+    return false
+  }
+
+  // Who works in this thread while what you said is its newest line, as
+  // {chain, agent, doing, since}: the agents above the one at work, that
+  // one, what it does and since when; null otherwise.
+  readonly property var working: {
+    const progress = Omunculus.progress
+    if (nesting > 0 || !yoursLast || !progress)
+      return null
+    if (thread === "") {
+      const now = progress.now
+      return progress.state === "working" && now.agent
+        ? { chain: progress.path.map(step => step.agent).filter(agent => agent && agent !== now.agent), agent: now.agent, doing: now.doing, since: now.since }
+        : null
+    }
+    const node = progress.flat.find(each => each.work === thread)
+    return node && node.state === "working" ? { chain: [], agent: node.agent, doing: node.doing, since: node.since } : null
   }
 
   // Another thread on screen starts at its end.
   onModelChanged: {
+    changes++
     timeline.following = true
     unseen = 0
     seen = {}
@@ -272,6 +318,7 @@ Item {
     bottomMargin: 1
     spacing: 0
     model: root.model
+    footer: workingRow
     onMovementEnded: following = atYEnd
     onContentHeightChanged: if (following) Qt.callLater(follow)
     onCountChanged: if (following) Qt.callLater(follow)
@@ -456,8 +503,112 @@ Item {
     }
   }
 
+  // The working row: the names over a box in the tone of the one at work,
+  // its trace beside what it does.
+  Component {
+    id: workingRow
+    Item {
+      id: row
+      readonly property var live: root.working
+      readonly property color tone: live ? Omunculus.toneOf(live.agent) : Theme.dim
+      readonly property string clock: live && live.since !== null ? Progress.clock(Math.max(0, Math.round(Omunculus.tick - live.since))) : ""
+      width: timeline.width
+      height: live ? body.y + body.height + Theme.space.row : 0
+      visible: live !== null
+      Accessible.role: Accessible.StaticText
+      Accessible.name: live ? live.chain.concat([live.agent]).join(", ") + " working: " + live.doing : ""
+
+      Column {
+        id: body
+        y: Theme.space.inset
+        width: parent.width
+        spacing: Theme.space.line
+
+        Row {
+          spacing: Theme.space.tight
+          Dot { anchors.verticalCenter: parent.verticalCenter; tone: row.tone }
+          Repeater {
+            model: row.live ? row.live.chain.concat([row.live.agent]) : []
+            delegate: Label {
+              required property string modelData
+              required property int index
+              text: (index > 0 ? "› " : "") + modelData.toUpperCase()
+              color: Omunculus.toneOf(modelData)
+              font.pixelSize: Theme.type.name.size
+              font.letterSpacing: Theme.type.name.tracking
+            }
+          }
+          Label {
+            anchors.verticalCenter: parent.verticalCenter
+            text: ("Working" + (row.clock !== "" ? " " + row.clock : "")).toUpperCase()
+            color: Qt.alpha(row.tone, Theme.type.stamp.opacity)
+            font.pixelSize: Theme.type.stamp.size
+            font.letterSpacing: Theme.type.stamp.tracking
+          }
+        }
+
+        Rectangle {
+          width: Math.min(parent.width, line.implicitWidth + 2 * Theme.size.bubbleInset)
+          height: line.implicitHeight + Theme.space.inset
+          color: Qt.tint(Theme.background, Qt.alpha(row.tone, 0.1))
+          RowLayout {
+            id: line
+            x: Theme.size.bubbleInset
+            width: parent.width - 2 * Theme.size.bubbleInset
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Theme.space.gap
+            Item {
+              Layout.preferredWidth: 2 * Theme.size.gutter
+              Layout.preferredHeight: Theme.type.body.size
+              Layout.alignment: Qt.AlignVCenter
+              LoadingTrace {
+                anchors.fill: parent
+                running: row.live !== null && !Theme.reducedMotion
+                tone: row.tone
+                backdrop: Qt.tint(Theme.background, Qt.alpha(row.tone, 0.1))
+              }
+              Dot {
+                anchors.centerIn: parent
+                visible: Theme.reducedMotion
+                tone: row.tone
+              }
+            }
+            Label {
+              Layout.fillWidth: true
+              Layout.minimumWidth: 0
+              Layout.maximumWidth: implicitWidth
+              text: row.live ? row.live.doing : ""
+              color: Theme.dim
+              font.pixelSize: Theme.type.body.size
+              elide: Text.ElideRight
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Whether the newest question's form ends below the view, where its
+  // actions float on the bottom edge (QuestionForm); the pill goes above them.
+  readonly property bool formFloats: {
+    // Read first, so the view's scrolling and size update it.
+    const shown = timeline.contentY
+    const tall = timeline.height
+    const row = newestCard !== "" ? rowOf(newestCard) : -1
+    const entry = row >= 0 ? timeline.itemAtIndex(row) : null
+    if (!entry || !entry.content || !entry.content.form)
+      return false
+    const top = entry.y - shown
+    return top < tall && top + entry.height > tall
+  }
+
   NewPill {
-    anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: Theme.space.gap }
+    anchors {
+      horizontalCenter: parent.horizontalCenter
+      bottom: parent.bottom
+      // Over a floating form's actions: a row of them, two when narrow.
+      bottomMargin: Theme.space.gap + (root.formFloats ? Theme.size.control + Theme.space.gap + (root.width < Theme.size.measureFrom ? Theme.size.control : 0) : 0)
+    }
     count: root.unseen
     onClicked: root.jump()
   }
