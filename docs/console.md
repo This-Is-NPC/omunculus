@@ -73,11 +73,20 @@ An agent's turn says what it did in plain phrases from the kit's
 `Phrases` ("Read 6 files", "Opened work: Bakery website +2 more"), never a
 tool's name; calls that failed are counted apart, in the error tone, and open
 to the call and why it failed. A turn that has said and done nothing yet is
-not drawn: the working line says the team works.
+not drawn: the working line says the team works. An entry that draws nothing
+takes no room, not even the gap between entries, and words with no text and
+no files are not added to the thread.
 
 In the main thread a request is a card only while it waits on you. Your answer
-reads as a right-aligned bubble (`AnswerBubble`) with the question as one dim
-line above it. What the team asked among itself, and a request another
+reads as a bubble on the right (`AnswerBubble`), its text left aligned with
+the line breaks kept and the bubble as wide as the text, up to 620 px. Above
+it the question is one dim line at the thread's left margin, "Asked by SALES:
+" and its first line with words, cut at 120 characters, with " (N questions)"
+when it is a numbered list; Enter, Space or a click opens it in place to its
+full text. Sending an answer, like sending a message, takes the view to the
+end, so it never counts as news; when the answer comes and the keyboard was in
+the card, it moves to the composer. A reply says nothing in the bar when it
+succeeds; the card shows it. What the team asked among itself, and a request another
 gathers (`Requests.contained`), is not a card: it is one muted `TeamRow`
 that opens to the question and the answer, and a stretch of them folds under
 a "Team activity" line that shows the last three rows while the team works.
@@ -87,7 +96,10 @@ whether the team works, waits on you or on itself, failed or is done, with the
 step and the time; it is hidden when idle. While the team works its headline
 reads "BAKERY WEBSITE  -  SELLER: WRITING FILES  -  STEP 1 OF 6: QUALIFY": the
 first work's title (YOUR REQUEST before one exists), the agent and what it
-does ("SELLER IS GETTING STARTED" before its first call), and the step. Its
+does ("SELLER IS GETTING STARTED" before its first call), and the step. The title is the only part that gives way: it elides, is dropped
+under 700 px, and under 520 px the step is only its number ("1/6"); the agent,
+what it does and the clock are never cut (the screen reader hears the whole
+headline). Its
 SHOW button, while a question waits on you, brings the question's card into view and puts the keyboard in
 its words; a click anywhere else on the line opens the team.
 

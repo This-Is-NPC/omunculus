@@ -105,7 +105,8 @@ QtObject {
           const status = parseInt(text.slice(split + 1))
           const payload = text.slice(0, split)
           if (status >= 200 && status < 300) {
-            process.done(payload === "" ? {} : JSON.parse(payload))
+            if (process.done)
+              process.done(payload === "" ? {} : JSON.parse(payload))
           } else {
             let reason = "the server does not answer on " + process.on
             try {

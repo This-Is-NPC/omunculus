@@ -457,6 +457,9 @@ Singleton {
     })
   }
 
+  // The person sent a message or answered a request: views follow the end.
+  signal acted()
+
   // A message to the root agent, or, with a work, to that work's agent, with
   // the files at the paths `files` lists. `done` follows once the server took
   // it, `failed` if it did not.
@@ -469,6 +472,7 @@ Singleton {
         failed()
       return
     }
+    acted()
     const body = { message: value }
     if (work)
       body.work_id = work
@@ -503,11 +507,12 @@ Singleton {
 
   // Answers a request with words and an option, of the request itself or, by
   // the parts of path, of the decision it gathers that the option is of.
+  // The card shows the result, so success says nothing more.
   function reply(requestId, option, body, path) {
     keep("sending", requestId, "sending")
+    acted()
     client.call("POST", base + "/conversations/" + conversationId + "/requests/" + requestId + "/reply",
-      Requests.answer(option, body, path), true, () => client.tell(option ? "replied " + option : "replied", false),
-      reason => failedSend(requestId, reason))
+      Requests.answer(option, body, path), true, null, reason => failedSend(requestId, reason))
   }
 
   // Marks the answer to a request as not sent, and says why.
@@ -525,6 +530,7 @@ Singleton {
     const origins = {}
     origins[Requests.label(request.requester)] = requestId
     keep("sending", requestId, "sending")
+    acted()
     client.call("POST", base + "/conversations/" + conversationId + "/requests/escalate",
       { reason: reason, origins: origins }, true, () => client.tell("escalated", false),
       why => failedSend(requestId, why))
@@ -690,6 +696,9 @@ Singleton {
   }
 
   function append(key, entry) {
+    // Words with no text and no files draw nothing.
+    if (!entry.kind && !entry.text && (entry.files || "[]") === "[]")
+      return null
     if (!threads[key]) {
       const next = Object.assign({}, threads)
       next[key] = threadModel.createObject(root)

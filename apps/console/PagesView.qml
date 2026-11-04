@@ -366,6 +366,7 @@ Item {
           Layout.fillWidth: true
           Layout.fillHeight: true
           thread: ""
+          onAnswered: mainComposer.focusEntry()
         }
 
         // An empty conversation opened from the list names no agent yet.

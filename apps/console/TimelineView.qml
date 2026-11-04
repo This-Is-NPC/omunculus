@@ -42,6 +42,10 @@ Item {
   property string released: ""
   // Whether `held` is a question for you rather than a streaming turn.
   property bool holdingCard: false
+  // The question whose card the keyboard was in when it was answered.
+  property string typing: ""
+  // The answer to a question the keyboard was in has come: focus belongs elsewhere.
+  signal answered()
   // The activity of the conversation, or null before it is wired in.
   readonly property var activity: Omunculus.activity || null
   // The requests no other request gathers; the rest are its climb.
@@ -79,7 +83,7 @@ Item {
   function cardItem() {
     const row = newestCard !== "" ? rowOf(newestCard) : -1
     const entry = row >= 0 ? timeline.itemAtIndex(row) : null
-    return entry ? entry.item : null
+    return entry ? entry.content : null
   }
 
   // Brings the newest question into view and puts the keyboard in its words.
@@ -195,6 +199,12 @@ Item {
     timeline.positionViewAtEnd()
   }
 
+  // What the person sends or answers is seen at once, never as news.
+  Connections {
+    target: Omunculus
+    function onActed() { root.jump() }
+  }
+
   Connections {
     target: root.model
     // A turn growing as it streams changes no one's turn, but it is new again
@@ -280,7 +290,7 @@ Item {
     // would cut it.
     topMargin: 1
     bottomMargin: 1
-    spacing: 4
+    spacing: 0
     model: root.model
     onMovementEnded: following = atYEnd
     onContentHeightChanged: if (following) Qt.callLater(follow)
@@ -313,7 +323,7 @@ Item {
       NumberAnimation { property: "y"; duration: 180; easing.type: Easing.OutCubic }
     }
 
-    delegate: Loader {
+    delegate: Item {
       id: entry
 
       required property int index
@@ -331,12 +341,26 @@ Item {
       required property string files
       required property bool fresh
 
-      width: timeline.width
+      // Entries are set apart by a margin above each one, so one that draws
+      // nothing leaves no gap.
+      readonly property int gap: 4
       readonly property string role: root.revision >= 0 && kind === "request" && root.requestsShown ? root.roleAt(index) : kind
-      sourceComponent: ({ card: request, answer: answer, team: team, turn: turn, speech: speech })[role] || null
+      readonly property alias content: slot.item
+      readonly property bool drawn: !!slot.item && slot.item.visible && slot.item.implicitHeight > 0
       readonly property bool selected: ListView.isCurrentItem && root.keyboard
 
-      FocusRing { shown: entry.selected; anchors.margins: 0 }
+      width: timeline.width
+      height: drawn ? slot.height + gap : 0
+      visible: drawn
+
+      Loader {
+        id: slot
+        y: entry.gap
+        width: entry.width
+        sourceComponent: ({ card: request, answer: answer, team: team, turn: turn, speech: speech })[entry.role] || null
+
+        FocusRing { shown: entry.selected; anchors.margins: 0 }
+      }
 
       // A new line slides in from its speaker's side, a request rises from
       // below. What the conversation held before it opened is just there.
@@ -375,6 +399,7 @@ Item {
           width: entry.width
           key: entry.key
           stamp: entry.stamp
+          onSent: keyboard => root.typing = keyboard ? entry.key : ""
         }
       }
 
@@ -382,6 +407,13 @@ Item {
         id: answer
         AnswerBubble {
           id: said
+          // The keyboard was in the card that this answer replaces.
+          Component.onCompleted: if (root.typing === entry.key) {
+            root.typing = ""
+            timeline.currentIndex = -1
+            root.jump()
+            root.answered()
+          }
           readonly property var asked: Omunculus.requests.find(item => item.id === entry.key) || null
           readonly property var reply: Omunculus.replies[entry.key] || null
           width: entry.width
