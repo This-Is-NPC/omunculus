@@ -4,8 +4,8 @@ import "Breakpoints.js" as Breakpoints
 // IconButton is a square button that is only an icon, its name in the tip;
 // taller on a narrow window, where it is touched rather than pointed at.
 // With a `reason` it is off: it reads disabled and does nothing, but says why
-// on hover. `quiet`, it has no frame and a fainter glyph until hovered or
-// highlighted, for a button repeated on every row of a list.
+// on hover. `quiet`, it has no frame until hovered or highlighted, for a
+// button repeated on every row of a list.
 Rectangle {
   id: button
 
@@ -49,7 +49,7 @@ Rectangle {
     anchors.centerIn: parent
     name: button.name
     size: button.size
-    color: button.hovered || button.highlighted ? button.tone : button.quiet ? Qt.alpha(Theme.dim, 0.6) : Theme.dim
+    color: button.hovered || button.highlighted ? button.tone : Theme.dim
     Behavior on color { ColorAnimation { duration: 150 } }
   }
 

@@ -47,8 +47,8 @@ These keys work on every screen of the console:
 Under 700 px there is no rail of pages: the bar's page switcher names the
 page and lists the others, and the commands that do not fit are in its `⋯`
 menu. In a conversation there is neither rail nor bar: tabs under its head
-choose its pages, and the masthead's `$`, `⋯` and × open its cost, its rarer
-actions and the conversations. The window is at least 360 by 480 px.
+choose its pages, and the masthead's `⋯` and × open its rarer
+actions and the conversations; its cost is the COST tab. The window is at least 360 by 480 px.
 
 Typed text never runs a command: nothing that sends, answers, grants, denies,
 escalates, reverts, deletes or cancels has a key of its own outside a field,
@@ -65,7 +65,9 @@ call omunculus <function>`): `start`, `page <name>`, `projects`,
 On a project, its name and four ways in: NEW CONVERSATION, CONVERSATIONS,
 BOARD and PROJECTS. On the registry alone, how many projects it holds and
 two: PROJECTS and BOARD. Under them, in the warning tone, the projects
-where conversations need you and how many. The ⓘ at the top right opens the
+where conversations need you and how many, each a way into that project's
+conversations with NEEDS YOU lit (a line says it is reading until every
+project is). The ⓘ at the top right opens the
 keys.
 
 | Keys | What they do |
@@ -78,7 +80,7 @@ Every project of the server's registry, under a rule of its state (NEEDS
 YOU, WORKING, IDLE), two lines each: its id, OPEN beside the one the window
 is on, and its state at the top right — NEEDS YOU, WORKING, IDLE, NOT
 REACHABLE or READING…; under it its conversations, how many need you and
-how many agents work in, its works not finished and its last activity.
+how many agents work in and its last activity.
 Under the search line, chips keep those needing you or working. NEW PROJECT
 registers another with the server: its id and the path of its config file.
 The masthead names the way to every page from here on; the project's name
@@ -97,7 +99,7 @@ picked out.
 
 "Who do you want to talk with?": a card for each of the project's agents a
 conversation can be with, its portrait, its name and its role; under FOR
-THE PROJECT ITSELF, a smaller line for each agent that changes how the
+THE PROJECT ITSELF, a smaller line with the role too for each agent that changes how the
 project works, each change only once you approve it. The keyboard is on the
 first card, its ring showing it; a card's tooltip gives its number. The
 conversation keeps the agent its first message names.

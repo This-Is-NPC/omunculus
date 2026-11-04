@@ -55,6 +55,8 @@ FocusScope {
   // lines of its role.
   readonly property real portraitHeight: Math.round(Math.min(cardWidth * 0.75, 3 * cardMinimum / 4))
   readonly property real info: 2 * Theme.space.insetTop + nameFont.height + Theme.space.line + 3 * roleFont.height
+  // A line of the second group: its name and two lines of its role.
+  readonly property real lineHeight: 2 * Theme.space.insetTop + nameFont.height + Theme.space.line + 2 * roleFont.height
   FontMetrics { id: nameFont; font.family: Theme.fontFamily; font.pixelSize: Theme.type.cardBody.size }
   FontMetrics { id: roleFont; font.family: Theme.fontFamily; font.pixelSize: Theme.type.body.size }
 
@@ -63,10 +65,10 @@ FocusScope {
     const sentence = (text || "").split(/[.:\n]/)[0].replace(/^\s*You are( the| an?)?\s+/i, "").trim()
     return sentence.charAt(0).toUpperCase() + sentence.slice(1)
   }
-  // A card's tip: what it does when the card does not say it, and its key.
-  function tipOf(agent, index, said) {
+  // A card's tip: the model it runs on, and its key.
+  function tipOf(agent, index) {
     const key = index < Shortcuts.keys("pick").length ? "press " + Shortcuts.keys("pick")[index] : ""
-    return [said ? "" : role(agent.text), "runs on " + Omunculus.modelOf(agent.name), key].filter(text => text !== "").join("  ·  ")
+    return ["runs on " + Omunculus.modelOf(agent.name), key].filter(text => text !== "").join("  ·  ")
   }
 
   // The arrows move along the agents; up and down by a row of the group, and
@@ -231,7 +233,7 @@ FocusScope {
                 onPressed: hint.dismiss()
                 onClicked: picker.picked(cardItem.modelData.name)
               }
-              Hint { id: hint; active: pointer.containsMouse; text: picker.tipOf(cardItem.modelData, cardItem.index, true) }
+              Hint { id: hint; active: pointer.containsMouse; text: picker.tipOf(cardItem.modelData, cardItem.index) }
               FocusRing { shown: cardItem.current }
             }
           }
@@ -268,7 +270,7 @@ FocusScope {
               readonly property int place: picker.front.length + index
               readonly property bool current: picker.at === place && cards.activeFocus
               width: picker.lineWidth
-              height: Theme.size.control + Theme.space.gap
+              height: picker.lineHeight
               color: current || linePointer.containsMouse ? Theme.highlight : "transparent"
               border.color: linePointer.containsMouse ? Qt.alpha(Theme.primary, 0.5) : Theme.line
               Behavior on border.color { ColorAnimation { duration: 140 } }
@@ -281,20 +283,33 @@ FocusScope {
                 source: Omunculus.imageOf(line.modelData.name)
                 tone: Omunculus.toneOf(line.modelData.name)
               }
-              Row {
+              Column {
                 anchors { left: face.right; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset }
-                spacing: Theme.space.tight
-                Dot {
-                  anchors.verticalCenter: parent.verticalCenter
-                  tone: Omunculus.toneOf(line.modelData.name)
+                spacing: Theme.space.line
+                Row {
+                  width: parent.width
+                  spacing: Theme.space.tight
+                  Dot {
+                    anchors.verticalCenter: parent.verticalCenter
+                    tone: Omunculus.toneOf(line.modelData.name)
+                  }
+                  Label {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - x
+                    text: line.modelData.name.toUpperCase() + (line.modelData.name === Omunculus.lastAgent ? Theme.type.meta.separator + "LAST USED" : "")
+                    color: Theme.foreground
+                    font.pixelSize: Theme.type.tab.size
+                    font.letterSpacing: Theme.type.name.tracking
+                    elide: Text.ElideRight
+                  }
                 }
                 Label {
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: parent.width - x
-                  text: line.modelData.name.toUpperCase() + (line.modelData.name === Omunculus.lastAgent ? Theme.type.meta.separator + "LAST USED" : "")
-                  color: Theme.foreground
-                  font.pixelSize: Theme.type.tab.size
-                  font.letterSpacing: Theme.type.name.tracking
+                  width: parent.width
+                  text: picker.role(line.modelData.text)
+                  color: Theme.dim
+                  font.pixelSize: Theme.type.body.size
+                  wrapMode: Text.Wrap
+                  maximumLineCount: 2
                   elide: Text.ElideRight
                 }
               }
@@ -307,7 +322,7 @@ FocusScope {
                 onPressed: lineHint.dismiss()
                 onClicked: picker.picked(line.modelData.name)
               }
-              Hint { id: lineHint; active: linePointer.containsMouse; text: picker.tipOf(line.modelData, line.place, false) }
+              Hint { id: lineHint; active: linePointer.containsMouse; text: picker.tipOf(line.modelData, line.place) }
               FocusRing { shown: line.current }
             }
           }

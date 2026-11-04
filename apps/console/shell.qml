@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import "kit/client/Projects.js" as Projects
 import "kit/client/Shortcuts.js" as Shortcuts
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
@@ -73,7 +74,7 @@ ShellRoot {
     // pages'; at the start, the project, or, on the registry, whether the
     // server answers.
     readonly property var crumbs: started ? pagesView.crumbs
-      : Omunculus.registry ? [{ text: Omunculus.connected ? "ready" : "offline" }] : [{ text: Omunculus.project }]
+      : Omunculus.registry ? [{ text: !Omunculus.connected ? "offline" : Projects.reading(Omunculus.projectRows) ? "reading" : "ready" }] : [{ text: Omunculus.project }]
 
     // Whether a dialog holds the keyboard, so the keys of the pages wait.
     readonly property bool dialogOpen: shortcuts.visible || pagesView.dialogOpen
@@ -154,13 +155,6 @@ ShellRoot {
             name: "info"
             tip: "the keys  " + Shortcuts.label("help")
             onClicked: shortcuts.open()
-          }
-          IconButton {
-            visible: panel.started && pagesView.inside && pagesView.open
-            name: "cost"
-            tip: "what it cost"
-            highlighted: pagesView.page === "cost"
-            onClicked: pagesView.go("cost")
           }
           ActionMenu {
             visible: panel.started && pagesView.inside
@@ -243,19 +237,44 @@ ShellRoot {
                 font.pixelSize: Theme.type.meta.size
                 font.letterSpacing: Theme.type.meta.tracking
               }
-              // The projects where conversations need you, most first.
-              DecodeLabel {
+              // The projects where conversations need you, most first, each
+              // a way into its conversations; none is said before every
+              // project is read.
+              Column {
                 readonly property var needing: Omunculus.connected ? Omunculus.projectRows.filter(row => row.needsYou > 0) : []
+                readonly property bool reading: Omunculus.connected && Projects.reading(Omunculus.projectRows)
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Math.max(0, panel.width - 2 * panel.margin)
-                visible: needing.length > 0
-                value: needing.map(row => row.id + " · " + row.needsYou + (row.needsYou === 1 ? " needs you" : " need you")).join("   ")
-                soft: true
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.Wrap
-                color: Theme.warning
-                font.pixelSize: Theme.type.meta.size
-                font.letterSpacing: Theme.type.meta.tracking
+                spacing: Theme.space.line
+                DecodeLabel {
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  visible: parent.reading
+                  value: "reading what waits for you…"
+                  soft: true
+                  color: Theme.dim
+                  font.pixelSize: Theme.type.meta.size
+                  font.letterSpacing: Theme.type.meta.tracking
+                }
+                Repeater {
+                  model: parent.reading ? [] : parent.needing
+                  delegate: LinkLabel {
+                    id: need
+                    required property var modelData
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(implicitWidth, parent.width)
+                    value: need.modelData.id + " · " + need.modelData.needsYou + (need.modelData.needsYou === 1 ? " needs you" : " need you")
+                    soft: true
+                    elide: Text.ElideRight
+                    color: over.hovered || activeFocus ? Theme.foreground : Theme.warning
+                    font.pixelSize: Theme.type.meta.size
+                    font.letterSpacing: Theme.type.meta.tracking
+                    onClicked: {
+                      panel.enter("projects")
+                      pagesView.openProject({ id: need.modelData.id, socket: need.modelData.socket }, "needs-you")
+                    }
+                    HoverHandler { id: over }
+                  }
+                }
               }
             }
           }

@@ -59,7 +59,6 @@ ColumnLayout {
     Chip {
       text: "ALL"
       checked: list.filter === ""
-      dim: list.filter !== ""
       onClicked: list.filter = ""
     }
     Chip {
@@ -70,7 +69,6 @@ ColumnLayout {
       alert: list.waiting > 0
       tip: "the projects where a conversation needs you"
       checked: list.filter === "waiting"
-      dim: list.filter !== "waiting"
       onClicked: list.filter = "waiting"
     }
     Chip {
@@ -79,7 +77,6 @@ ColumnLayout {
       icon: "play"
       tip: "the projects where agents work and nothing needs you"
       checked: list.filter === "working"
-      dim: list.filter !== "working"
       onClicked: list.filter = "working"
     }
   }

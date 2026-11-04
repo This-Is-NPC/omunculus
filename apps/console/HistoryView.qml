@@ -66,7 +66,6 @@ ColumnLayout {
     Chip {
       text: "ALL"
       checked: history.filter === ""
-      dim: history.filter !== ""
       onClicked: history.filter = ""
     }
     Chip {
@@ -77,7 +76,6 @@ ColumnLayout {
       alert: true
       tip: "the conversations where something waits on you"
       checked: history.filter === "needs-you"
-      dim: history.filter !== "needs-you"
       onClicked: history.filter = "needs-you"
     }
     Chip {
@@ -86,7 +84,6 @@ ColumnLayout {
       icon: "play"
       tip: "the conversations agents work in and nothing waits on you"
       checked: history.filter === "working"
-      dim: history.filter !== "working"
       onClicked: history.filter = "working"
     }
     Chip {
@@ -94,7 +91,6 @@ ColumnLayout {
       text: "NOT STARTED  " + history.fresh
       tip: "the conversations nothing was said in yet"
       checked: history.filter === "not-started"
-      dim: history.filter !== "not-started"
       onClicked: history.filter = "not-started"
     }
   }
