@@ -101,7 +101,19 @@ All are QML on Quickshell and share `apps/kit`:
   a bar's actions in their order, the main one solid, the others outlined,
   those of one group joined as one control with the checked one lit, each
   shortened to its short name or its icon when the names do not fit, which
-  the mailbox's command bar uses too; and `FilePicker` and `FileChip`,
+  the mailbox's command bar uses too. When even the short names do not fit,
+  `PageBar` moves its tools, then its lowest ranked actions, into a
+  `CommandMenu` under a `⋯` button; BACK and the main action stay. Under
+  700 px the rail is hidden, BACK is only its icon, the bar's page switcher
+  (when the app gives it its pages) lists the pages in a `CommandMenu`, every
+  command but the main one is in the menu, and the readout is only its dot,
+  its message in the tip. `Breakpoints.js` holds the widths the apps change
+  their layout at (narrow under 700 px, wide from 1100, tight under 420) and
+  the margins, control heights and indents at each; buttons, chips, captions
+  and tips never grow past what holds them or the window, eliding or
+  wrapping instead. `TextAudit`, when an app loads it, logs each text that
+  escapes its box, the window or a clipping item, as a `text-fit:` line;
+  and `FilePicker` and `FileChip`,
   the files a message carries and a file attached in a conversation;
   `Portrait`, an agent's picture, which the app fetched, or while it has
   none its initial in its colour, which the console and the mailbox show;

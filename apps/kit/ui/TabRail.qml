@@ -1,12 +1,15 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "Breakpoints.js" as Breakpoints
 
 // TabRail is an app's pages in a fixed order down the left edge, the one on
 // screen marked in its place. Folded, it takes only the width of the pages'
-// numbers; on a wide window it always shows their names; on a narrow one,
+// numbers; on a wide window it always shows their names; on a medium one,
 // under the pointer or with the keyboard in it, it unfolds as an opaque panel
-// over what is beside it. One click chooses a page and folds the rail, which
-// stays folded until the pointer has left and come back; Esc folds it too.
+// over what is beside it; on a narrow one it is hidden and takes no width,
+// the bar's page switcher choosing the pages instead. One click chooses a
+// page and folds the rail, which stays folded until the pointer has left and
+// come back; Esc folds it too.
 Item {
   id: rail
 
@@ -23,10 +26,11 @@ Item {
   readonly property real tabHeight: 36
   readonly property real gap: 8
   readonly property real unfoldedWidth: 220
+  readonly property string size: Breakpoints.size(Window.window ? Window.window.width : 0)
   // The window is wide enough to keep the names on screen.
-  readonly property bool wide: (Window.window ? Window.window.width : 0) >= 1100
+  readonly property bool wide: size === "wide"
   // The width it keeps folded, which what is beside it leaves room for.
-  readonly property real foldedWidth: wide ? 190 : 52
+  readonly property real foldedWidth: wide ? 160 : size === "medium" ? 52 : 0
   // How many of its tabs hold the keyboard: one, or none.
   property int focusedTabs: 0
   // Folded by a choice or Esc until the pointer and the keyboard have left.
@@ -50,6 +54,7 @@ Item {
 
   HoverHandler { id: hover }
 
+  visible: size !== "narrow"
   // Wide enough that the pointer on the unfolded panel is still over the rail.
   width: unfolded ? unfoldedWidth : foldedWidth
   height: tabs.length * tabHeight + (tabs.length - 1) * gap
@@ -105,6 +110,9 @@ Item {
         Label {
           anchors.verticalCenter: parent.verticalCenter
           visible: rail.named
+          // Elided short of the tab's right edge.
+          width: Math.max(0, Math.min(implicitWidth, tab.width - 12 - digit.width - parent.spacing - 8))
+          elide: Text.ElideRight
           text: tab.modelData.name.toUpperCase()
           color: tab.tone
           font.pixelSize: 12

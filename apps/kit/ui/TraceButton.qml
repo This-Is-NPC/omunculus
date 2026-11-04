@@ -1,10 +1,12 @@
 import QtQuick
+import "Breakpoints.js" as Breakpoints
 
 // TraceButton is a view's button. Its role says what pressing it does:
 // "navigation" leaves for another view and slides away; "primary" is the
 // view's main action, outlined and washed in the accent; "guarded" takes the
 // error tone; any other ("progress", "action") stays in place. `filled`
-// draws it solid in its tone, as a bar's main action is.
+// draws it solid in its tone, as a bar's main action is. It is never wider
+// than `maximumWidth`, its caption eliding instead.
 Rectangle {
   id: button
 
@@ -16,6 +18,7 @@ Rectangle {
   property bool armed: false
   property bool filled: false
   property bool busy: false
+  property real maximumWidth: Breakpoints.room(parent)
   property color tone: role === "guarded" ? Theme.error : Theme.primary
   readonly property bool primary: role === "primary"
   readonly property bool running: busy
@@ -28,7 +31,10 @@ Rectangle {
   readonly property real side: dense ? 10 : 14
   readonly property real iconRoom: icon ? (dense ? 12 : 14) + content.spacing : 0
   implicitWidth: Math.max(dense ? 72 : 150, iconRoom + caption.implicitWidth + 2 * side)
-  implicitHeight: dense ? 28 : 44
+  implicitHeight: dense ? Breakpoints.target(Window.width) : 44
+  // The width, not the implicit width, is bounded: what sizes itself from the
+  // button's implicit width never depends on its own.
+  width: Math.min(implicitWidth, maximumWidth)
   activeFocusOnTab: true
   opacity: enabled ? 1 : 0.35
   color: armed || filled ? tone : (primary ? Qt.alpha(tone, 0.08) : "transparent")

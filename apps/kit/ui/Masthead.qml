@@ -1,11 +1,14 @@
 import QtQuick
 import QtQuick.Layouts
+import "Breakpoints.js" as Breakpoints
 
 // Masthead is the window's top line: the name, a section, the readout on the
-// right, and a hairline that fades out from an accent notch.
+// right, and a hairline that fades out from an accent notch. On a narrow
+// window the name is smaller and less tracked, leaving the section its room.
 ColumnLayout {
   id: mast
   property string section
+  readonly property bool narrow: Breakpoints.size(Window.width) === "narrow"
   default property alias trailing: tail.data
   spacing: 10
   onSectionChanged: if (!Theme.reducedMotion) sweep.restart()
@@ -13,7 +16,7 @@ ColumnLayout {
   RowLayout {
     Layout.fillWidth: true
     spacing: 10
-    Label { text: "OMUNCULUS"; font.pixelSize: 15; font.bold: true; font.letterSpacing: 6 }
+    Label { text: "OMUNCULUS"; font.pixelSize: mast.narrow ? 12 : 15; font.bold: true; font.letterSpacing: mast.narrow ? 3 : 6 }
     Label { text: "╱"; color: Theme.primary; font.pixelSize: 13 }
     Label {
       Layout.fillWidth: true
