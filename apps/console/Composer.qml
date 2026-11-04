@@ -7,17 +7,14 @@ import "kit/ui"
 // which Enter leaves while the box is noting. A message carries the files
 // picked under the box; a note carries none.
 // Sending shows the trace while the agent you write to is working; the agents
-// below it never hold it. In the box, while anything waits on you, how much
-// does, and the way to the agents map where it is answered.
+// below it never hold it. The words stay in the box, dimmed, until the server
+// took the message, and come back to be sent again if it did not.
 ColumnLayout {
   id: composer
 
   property bool compact: false
   // The work written to, or "" for the main thread.
   property string work: ""
-  // Whether it leads to what waits on you; not where that is answered.
-  property bool pendingShown: true
-
   // Whether the agent written to has a run open: the root agent's, at depth 0,
   // in the main thread; the work's own in a work.
   readonly property bool busy: work === "" ? Omunculus.running.some(run => String(run.depth) === "0") : Omunculus.busy(work)
@@ -25,8 +22,6 @@ ColumnLayout {
   // Whether Enter leaves a note rather than sends; once a note is left, or
   // on Esc, the box writes to the agent again.
   property bool noting: false
-
-  signal pendingChosen()
 
   spacing: 10
 
@@ -45,12 +40,22 @@ ColumnLayout {
   }
 
   function submit() {
-    const value = take()
-    if (!value)
+    const value = entry.text.trim()
+    if (!value || entry.sending)
       return
     if (composer.busy)
       sendButton.restartTrace()
-    Omunculus.send(value, composer.work, files.take())
+    const picked = files.take()
+    entry.sending = true
+    Omunculus.send(value, composer.work, picked, () => {
+      entry.clear()
+      entry.sending = false
+      entry.focusBox()
+    }, () => {
+      files.paths = picked
+      entry.sending = false
+      entry.focusBox()
+    })
   }
 
   function note() {
@@ -83,27 +88,6 @@ ColumnLayout {
             composer.noting = false
           else
             event.accepted = false
-        }
-      }
-      TraceButton {
-        id: pendingButton
-        dense: true
-        Layout.alignment: Qt.AlignBottom
-        Layout.bottomMargin: 7
-        role: "navigation"
-        visible: composer.pendingShown && Omunculus.pending > 0
-        tone: Theme.warning
-        armed: true
-        icon: "warning"
-        text: composer.compact ? String(Omunculus.pending) : Omunculus.pending + " PENDING"
-        tip: "what waits on you, on the map"
-        onClicked: composer.pendingChosen()
-        // It breathes while something waits.
-        SequentialAnimation on opacity {
-          running: pendingButton.visible
-          loops: Animation.Infinite
-          NumberAnimation { to: 0.6; duration: 900; easing.type: Easing.InOutSine }
-          NumberAnimation { to: 1; duration: 900; easing.type: Easing.InOutSine }
         }
       }
       TraceButton {

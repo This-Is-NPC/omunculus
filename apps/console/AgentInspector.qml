@@ -156,7 +156,6 @@ Rectangle {
         id: composer
         Layout.fillWidth: true
         compact: true
-        pendingShown: false
         work: inspector.key
       }
     }

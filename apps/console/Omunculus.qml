@@ -3,8 +3,10 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "kit/client"
+import "kit/client/Activity.js" as Activity
 import "kit/client/Model.js" as Model
 import "kit/client/Requests.js" as Requests
+import "kit/client/Usage.js" as Usage
 import "kit/ui"
 
 // Omunculus is the project as the window sees it: whether the server answers,
@@ -88,12 +90,22 @@ Singleton {
   // What the open conversation's model calls used, as their providers reported
   // it: {calls, input, cached, output, cost, priced}, in all and by agent. Shown
   // only when asked for.
-  property var usage: ({ all: tally(), agents: {} })
-  // Every event of the open conversation, oldest first, as a line of its log:
-  // {id, at, time, type, who, run, work, what, event}.
-  property var log: []
-  // The lines of the history while it is read in, given to `log` at once.
-  property var logBuffer: []
+  property var usage: ({ all: Usage.tally(), agents: {} })
+  // Every event of the open conversation as a row of the log page.
+  property EventLog eventLog: EventLog {}
+  // Run id -> when its run started (seconds), and run id -> why it ended, when
+  // it ended in an error.
+  property var runStarts: ({})
+  property var runErrors: ({})
+  // Run id -> its agent's depth.
+  property var runDepth: ({})
+  // Request id -> "sending" while its answer goes, "failed" when it did not
+  // reach the server; cleared once the answer is read back.
+  property var sending: ({})
+  // The time of the newest event of the open conversation, in seconds.
+  property real lastEventAt: 0
+  // What the team is doing now, as Activity.status derives it.
+  property var activity: Activity.status({})
 
   // The board: every project the window's socket lists, as {id, socket},
   // and by project id its works, its setup as the config route gives it,
@@ -375,13 +387,17 @@ Singleton {
     replies = {}
     noted = {}
     tones = {}
-    usage = { all: tally(), agents: {} }
+    usage = { all: Usage.tally(), agents: {} }
+    runStarts = {}
+    runErrors = {}
+    runDepth = {}
+    sending = {}
+    lastEventAt = 0
     works = []
     runs = []
     requests = []
     inbox = []
-    log = []
-    logBuffer = []
+    eventLog.clear()
     conversationStream.stop()
     // The history comes in one read, before the stream resumes after it.
     client.call("GET", base + "/conversations/" + id + "/events", null, false, data => {
@@ -391,8 +407,10 @@ Singleton {
       data.events.forEach(handle)
       replaying = false
       loaded = true
-      log = logBuffer
-      logBuffer = []
+      eventLog.flush()
+      const newest = data.events[data.events.length - 1]
+      if (newest)
+        lastEventAt = Date.parse(newest.at) / 1000
       refresh()
       conversationStream.start()
     })
@@ -418,6 +436,9 @@ Singleton {
       runs = data.runs
       requests = data.requests
       inbox = data.inbox
+      const unsettled = Object.keys(sending).filter(key => requests.some(request => request.id === key && Requests.pending(request)))
+      if (unsettled.length !== Object.keys(sending).length)
+        sending = Object.fromEntries(unsettled.map(key => [key, sending[key]]))
       meet(works.map(work => work.assignee))
       const next = Object.assign({}, summaries)
       next[id] = summary(data)
@@ -426,8 +447,9 @@ Singleton {
   }
 
   // A message to the root agent, or, with a work, to that work's agent, with
-  // the files at the paths `files` lists.
-  function send(text, work, files) {
+  // the files at the paths `files` lists. `done` follows once the server took
+  // it, `failed` if it did not.
+  function send(text, work, files, done, failed) {
     const value = text.trim()
     if (value === "" || conversationId === "")
       return
@@ -436,7 +458,14 @@ Singleton {
       body.work_id = work
     else if (agent !== "")
       body.agent = agent
-    http.post(socket, base + "/conversations/" + conversationId + "/messages", body, files, () => {})
+    http.post(socket, base + "/conversations/" + conversationId + "/messages", body, files || [], () => {
+      if (done)
+        done()
+    }, reason => {
+      client.tell("could not send: " + reason, true)
+      if (failed)
+        failed()
+    })
   }
 
   // Saves a file attached in the conversation to the downloads directory and
@@ -457,8 +486,16 @@ Singleton {
   // Answers a request with words and an option, of the request itself or, by
   // the parts of path, of the decision it gathers that the option is of.
   function reply(requestId, option, body, path) {
+    keep("sending", requestId, "sending")
     client.call("POST", base + "/conversations/" + conversationId + "/requests/" + requestId + "/reply",
-      Requests.answer(option, body, path), true, () => client.tell(option ? "replied " + option : "replied", false))
+      Requests.answer(option, body, path), true, () => client.tell(option ? "replied " + option : "replied", false),
+      reason => failedSend(requestId, reason))
+  }
+
+  // Marks the answer to a request as not sent, and says why.
+  function failedSend(requestId, reason) {
+    keep("sending", requestId, "failed")
+    client.tell(reason, true)
   }
 
   // Raises a request waiting on you to whoever decides above you, as one
@@ -469,8 +506,10 @@ Singleton {
       return
     const origins = {}
     origins[Requests.label(request.requester)] = requestId
+    keep("sending", requestId, "sending")
     client.call("POST", base + "/conversations/" + conversationId + "/requests/escalate",
-      { reason: reason, origins: origins }, true, () => client.tell("escalated", false))
+      { reason: reason, origins: origins }, true, () => client.tell("escalated", false),
+      why => failedSend(requestId, why))
   }
 
   function markRead(inboxId) {
@@ -581,10 +620,11 @@ Singleton {
     return line.length > 120 ? line.slice(0, 117) + "..." : line
   }
 
-  // The event as a line of the log; while the history is read in, kept aside.
+  // The event as a row of the log page.
   function record(event) {
     const body = event.body || {}
-    const line = {
+    const failed = event.type === "break" || (event.type === "tool" && body.ok === false) || (event.type === "end-run" && !!body.error)
+    eventLog.append({
       id: event.cursor || event.at + event.type,
       at: event.at,
       time: event.at.slice(11, 23),
@@ -593,12 +633,11 @@ Singleton {
       run: event.run_id || "",
       work: event.work_id || "",
       what: what(event.type, body),
-      event: event
-    }
-    if (replaying)
-      logBuffer.push(line)
-    else
-      log = log.concat([line])
+      ok: !failed,
+      asks: event.type === "request" && !!body.arbiter && Requests.human(body.arbiter),
+      depth: Number(event.type === "start-run" ? body.depth : runDepth[event.run_id]) || 0,
+      raw: JSON.stringify(event)
+    })
   }
 
   // What an event says, on one line.
@@ -667,26 +706,12 @@ Singleton {
     return "US$ " + (spent < 0.01 ? spent.toFixed(4) : spent.toFixed(2))
   }
 
-  function tally() {
-    return { calls: 0, input: 0, cached: 0, output: 0, cost: 0, priced: 0 }
-  }
-
   // Adds one model call's reported usage to the conversation's and its agent's.
   function count(who, reported) {
-    const add = into => {
-      into.calls++
-      into.input += reported.prompt_tokens || reported.input_tokens || 0
-      into.cached += (reported.prompt_tokens_details || reported.input_tokens_details || {}).cached_tokens || 0
-      into.output += reported.completion_tokens || reported.output_tokens || 0
-      if (typeof reported.cost === "number") {
-        into.cost += reported.cost
-        into.priced++
-      }
-    }
     const next = { all: Object.assign({}, usage.all), agents: Object.assign({}, usage.agents) }
-    next.agents[who] = Object.assign(tally(), next.agents[who] || {})
-    add(next.all)
-    add(next.agents[who])
+    next.agents[who] = Object.assign(Usage.tally(), next.agents[who] || {})
+    Usage.add(next.all, reported)
+    Usage.add(next.agents[who], reported)
     usage = next
   }
 
@@ -732,8 +757,11 @@ Singleton {
     const work = event.work_id || ""
     if (event.type === "delegate" && work)
       keep("parentOf", work, body.parent_id || "")
-    if (event.type === "start-run")
+    if (event.type === "start-run") {
       keep("runThread", event.run_id, Number(body.depth) > 0 && work ? work : "")
+      keep("runStarts", event.run_id, at)
+      keep("runDepth", event.run_id, Number(body.depth) || 0)
+    }
     // Where the event shows: its run's thread, else its work's.
     const key = runThread[event.run_id] !== undefined ? runThread[event.run_id] : threadOf(work)
     meet([who, body.agent])
@@ -765,6 +793,8 @@ Singleton {
       keep("rows", event.run_id, append(key, { kind: "turn", key: event.run_id, who: body.agent, work: work, streaming: true, stamp: stamp, at: at }))
       break
     case "end-run": {
+      if (body.error)
+        keep("runErrors", event.run_id, String(body.error))
       const place = rows[event.run_id]
       if (place !== undefined) {
         update(place, "streaming", false)
@@ -795,6 +825,11 @@ Singleton {
       break
     case "reply":
       keep("replies", event.request_id, { option: Requests.chosen(body), who: who, body: body.body || "" })
+      if (sending[event.request_id] !== undefined) {
+        const rest = Object.assign({}, sending)
+        delete rest[event.request_id]
+        sending = rest
+      }
       break
     case "notify":
       if (event.inbox_id)
@@ -803,8 +838,10 @@ Singleton {
       append("", { key: event.inbox_id || "", who: who, note: who === "harness", text: body.body || "", stamp: stamp, at: at, work: work })
       break
     }
-    if (!replaying)
+    if (!replaying) {
+      lastEventAt = at
       refreshTimer.restart()
+    }
   }
 
   // The open conversation's events, after the last one read.
@@ -813,6 +850,37 @@ Singleton {
     socket: root.socket
     path: root.base + "/conversations/" + root.conversationId + "/stream" + (root.cursor !== "" ? "?after=" + root.cursor : "")
     onReceived: event => root.handle(event)
+  }
+
+  // Derives what the team is doing from the state, soon after it changes and
+  // each second while a run is open, so elapsed times keep moving.
+  function recompute() {
+    activityTimer.stop()
+    const lanes = {}
+    for (const item of works)
+      lanes[item.id] = laneOf(item)
+    activity = Activity.status({
+      runs: runs.map(run => runErrors[run.id] ? Object.assign({}, run, { error: runErrors[run.id] }) : run),
+      works: works, requests: requests, lanes: lanes, calling: calling, runStarts: runStarts, now: Date.now() / 1000
+    })
+  }
+  onWorksChanged: activityTimer.restart()
+  onRunsChanged: activityTimer.restart()
+  onRequestsChanged: activityTimer.restart()
+  onCallingChanged: activityTimer.restart()
+  onRunStartsChanged: activityTimer.restart()
+  onRunErrorsChanged: activityTimer.restart()
+  onSetupChanged: activityTimer.restart()
+  Timer {
+    id: activityTimer
+    interval: 50
+    onTriggered: root.recompute()
+  }
+  Timer {
+    interval: 1000
+    repeat: true
+    running: root.running.length > 0
+    onTriggered: root.recompute()
   }
 
   Timer {
