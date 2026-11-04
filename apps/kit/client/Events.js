@@ -140,7 +140,7 @@ function what(type, body, who, asked, requestId, askers) {
     const said = first(unid(given.body));
     const option = Requests.chosen(given);
     const asker = (askers || {})[requestId];
-    return option ? "chose " + option + (said && said !== option ? colon(said) : "") : "answered" + (asker ? " " + asker : "") + colon(said);
+    return option ? "chose " + option + (asker ? " for " + asker : "") + (said && said !== option ? colon(said) : "") : "answered" + (asker ? " " + asker : "") + colon(said);
   }
   case "grant":
     return "granted " + flat(given.name) + (given.scope ? " for the " + given.scope : " for this work");
@@ -181,7 +181,7 @@ function what(type, body, who, asked, requestId, askers) {
 
 // Tools whose result is an event row of its own (note, delegate, question,
 // move on...): their step row only repeats it.
-const echoed = ["comment", "delegate", "ask", "escalate", "continue", "next_stage", "work", "reply", "break", "reopen", "send"];
+const echoed = ["comment", "delegate", "ask", "escalate", "continue", "next_stage", "work", "reply", "grant", "break", "reopen", "send"];
 
 // Whether an event is plumbing: it carries no news for the person — a run's
 // start and end, a hook, a model reply without text, a call whose result has
@@ -194,6 +194,9 @@ function minor(type, body) {
   case "start-run":
   case "end":
     return true;
+  case "reply":
+    // The same answer passed down a level: the leaf reply is the one.
+    return !!given.parts && Object.keys(given.parts).length > 0;
   case "end-run":
     return !given.error;
   case "tool":
