@@ -32,7 +32,79 @@ Singleton {
   readonly property color line: Qt.alpha(foreground, 0.12)
   readonly property color dim: readable(palette.muted || foreground, background, foreground)
   readonly property color badgeForeground: background
+  readonly property color placeholder: Qt.alpha(dim, 0.55)
   readonly property string fontFamily: "monospace"
+
+  // The spacing every layout reads instead of a number of its own; the
+  // `…Short` values are for a window under 560 px tall.
+  readonly property QtObject space: QtObject {
+    // The window's margin, the one margin everywhere.
+    readonly property int page: 20
+    readonly property int pageShort: 10
+    // Between the masthead, a header strip, tabs and the content.
+    readonly property int section: 18
+    readonly property int sectionShort: 8
+    // Between the blocks of a page: search, chips, list.
+    readonly property int block: 14
+    readonly property int blockShort: 8
+    // Inside a framed block (strip, card, composer): across, and above.
+    readonly property int inset: 14
+    readonly property int insetTop: 12
+    // Before a trailing button in a strip or a row.
+    readonly property int trail: 6
+    // Between controls on a line, and paragraphs in a card.
+    readonly property int gap: 10
+    // Between chips, and a card's sub-lines.
+    readonly property int tight: 6
+    // Between a heading and its bubble, and timeline entries.
+    readonly property int line: 4
+    // Between list rows, and a row's cell padding.
+    readonly property int row: 2
+    readonly property int cell: 12
+  }
+
+  readonly property QtObject size: QtObject {
+    // A header strip.
+    readonly property int strip: 40
+    // A list row, and a stacked one: its top and each line.
+    readonly property int row: 52
+    readonly property int stackedRow: 22
+    readonly property int stackedLine: 20
+    // A section rule (Kicker).
+    readonly property int rule: 26
+    readonly property int control: 44
+    readonly property int controlDense: 28
+    readonly property int chip: 26
+    // Room beside a bubble for its tools, and the bubble's own inset.
+    readonly property int gutter: 24
+    readonly property int bubbleInset: 10
+    // A bubble's measure: this share of the width from `measureFrom` px,
+    // under it the width less the gutter.
+    readonly property real measure: 0.78
+    readonly property int measureFrom: 520
+  }
+
+  // Each text role: its pixel size and letter spacing, and what else it needs.
+  readonly property QtObject type: QtObject {
+    // The agent's name over a bubble, and the time beside it, dimmed.
+    readonly property QtObject name: QtObject { readonly property int size: 10; readonly property real tracking: 2.5 }
+    readonly property QtObject stamp: QtObject { readonly property int size: 9; readonly property real tracking: 1; readonly property real opacity: 0.7 }
+    // A bubble, and a card's body.
+    readonly property QtObject body: QtObject { readonly property int size: 12; readonly property real lineHeight: 1.2 }
+    readonly property QtObject cardBody: QtObject { readonly property int size: 13; readonly property real lineHeight: 1.2 }
+    // A card's kind, in the accent.
+    readonly property QtObject kicker: QtObject { readonly property int size: 10; readonly property real tracking: 3 }
+    // A strip's meta, uppercase, its parts joined by `separator`.
+    readonly property QtObject meta: QtObject { readonly property int size: 10; readonly property real tracking: 2; readonly property string separator: "  ·  " }
+    // A table header and a row's status.
+    readonly property QtObject header: QtObject { readonly property int size: 9; readonly property real tracking: 1 }
+    readonly property QtObject section: QtObject { readonly property int size: 10; readonly property real tracking: 3 }
+    // A tab: its digit, then its name.
+    readonly property QtObject tabDigit: QtObject { readonly property int size: 10; readonly property real tracking: 2 }
+    readonly property QtObject tab: QtObject { readonly property int size: 11; readonly property real tracking: 3 }
+    // The composer's line, with its padding, and its chevron.
+    readonly property QtObject input: QtObject { readonly property int size: 13; readonly property int padding: 10; readonly property int chevron: 14; readonly property int chevronTop: 12 }
+  }
   // The desktop asks for no animation: read once at start; motion stays on
   // when the setting cannot be read.
   property bool reducedMotion: false
