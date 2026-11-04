@@ -26,6 +26,9 @@ the team tree. It keeps when each run started and why it ended (`runStarts`,
 from the events), and, for each request being answered, `sending` or `failed`
 until the answer is read back.
 
+Every time shown is local, formatted by the kit's `Time.js`: a chat stamp is
+"21:59" today, "Yesterday 21:59" or "03 Nov 21:59".
+
 The theme and the controls more than one app uses are in `apps/kit/ui`, a
 copy of eco's overlay, Omarchy's voice session app. Every request goes
 through `apps/kit/client`'s `Http`, which finds the scripts beside it. Each
@@ -142,7 +145,10 @@ work of the question's origin when the harness passed it up.
 sentence case and a full-width box that grows with its text; the toggle "I
 DON'T KNOW YET" on the box's row fills it and, switched off, restores what was
 typed. Enter moves to the next box, Enter in the last and Ctrl+Enter in any
-send, and a box that takes the keyboard scrolls into view.
+send, and a box that takes the keyboard scrolls into view. A line continues
+its item when no blank line precedes it or it is indented; an unindented line
+after a blank one ends the list, and the closing paragraph shows after the
+last box and is not sent.
 
 While it is pending it has its options as buttons, and so are those of
 every decision it gathers from below — an origin still waiting whose options
@@ -231,7 +237,10 @@ The window opens on its start, clean: NEW CONVERSATION (N), CONVERSATIONS
 The project's level:
 
 - CONVERSATIONS, the project's, filtered by what agents do there and what
-  was first said, which it opens from;
+  was first said, which it opens from. Each has a state: NOT STARTED (nothing
+  was said; hidden under ALL, shown by its chip), WAITING FOR YOU, WORKING,
+  DONE (every work done or cancelled) or IDLE. It began "Today 21:59",
+  "Yesterday 21:59" or "03 Nov 21:59";
 - BOARD, the works of every project the window's socket lists
   (`GET /v1/projects`), each read on its own socket through `GET /works`
   and kept live by its project stream (`GET /stream`) while the board is on
@@ -243,7 +252,9 @@ A conversation's level, in place of the project's once one is opened:
 - TEAM, the team tree and the orchestration map. Its OPEN IN LOG opens the
   LOG kept to that work, and BACK returns;
 - LOG, every event a row of a table that filters by text and opens an event
-  whole;
+  whole. A row's time is local (`hh:mm:ss.zzz`), a divider names the day on
+  the first row of each, and the event opened shows its local time and the
+  server's ISO stamp as UTC;
 - COST, what the conversation used, in all and then by agent, the busiest
   first: model calls, tokens read by the model (with those from cache),
   tokens written and cost. One note says when the provider sends no price
