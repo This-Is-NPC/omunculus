@@ -12,6 +12,23 @@ defmodule Omunculus.GuiRequestsTest do
     assert {"", 0} = GuiModules.run(modules, @fixtures <> assertions)
   end
 
+  test "pending, human, answer and label use participant-neutral fields" do
+    run!(["Requests"], """
+    const owner = {kind: "human", issuer: "local", subject: "1000"};
+    const requests = [
+      {status: "pending", arbiter: agent("worker")}, {status: "pending", arbiter: owner},
+      {status: "closed", arbiter: owner}, {status: "escalated", arbiter: agent("worker")}
+    ];
+    if (requests.filter(Requests.pending).length !== 2) throw Error("pending requests missing");
+    if (requests.filter(r => Requests.pending(r) && Requests.human(r.arbiter)).length !== 1) throw Error("human count");
+    if (JSON.stringify(Requests.answer("", "Logo attached")) !== JSON.stringify({body: "Logo attached"}))
+      throw Error("text replies must omit option");
+    if (JSON.stringify(Requests.answer("approve", "")) !== JSON.stringify({body: "approve", option: "approve"}))
+      throw Error("decision replies must retain option");
+    if (Requests.label(agent("worker")) !== "worker" || Requests.label(owner) !== "local:1000") throw Error("participant label");
+    """)
+  end
+
   test "contained hides the lower requests of a climb; kind and chain" do
     run!(["Requests"], """
     const low = {id: "a", status: "escalated", arbiter: agent("lead"), requester: agent("designer"), reason: "which font?", origins: {}};
