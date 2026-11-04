@@ -73,13 +73,14 @@ Item {
     }
     Icon { visible: line.working && Theme.reducedMotion; Layout.alignment: Qt.AlignVCenter; name: "more"; size: 12; color: line.tone }
     Label {
-      Layout.fillWidth: true
       Layout.alignment: Qt.AlignVCenter
+      Layout.maximumWidth: line.width * 0.7
       text: line.activity ? line.activity.headline : ""
       color: Theme.foreground
-      font.pixelSize: 11
+      font.pixelSize: 12
       elide: Text.ElideRight
     }
+    Label { visible: line.working; Layout.alignment: Qt.AlignVCenter; text: line.clock(line.elapsed); color: Theme.dim; font.pixelSize: 12 }
     Label {
       visible: line.working && !!line.activity.loop
       Layout.alignment: Qt.AlignVCenter
@@ -89,7 +90,7 @@ Item {
     }
     Label { visible: line.step !== ""; Layout.alignment: Qt.AlignVCenter; text: line.step; color: Theme.dim; font.pixelSize: 11 }
     Label { visible: line.stalled; Layout.alignment: Qt.AlignVCenter; text: "NO NEWS FOR 10 MIN"; color: Theme.warning; font.pixelSize: 11 }
-    Label { visible: line.working; Layout.alignment: Qt.AlignVCenter; text: line.clock(line.elapsed); color: Theme.dim; font.pixelSize: 11 }
+    Item { Layout.fillWidth: true }
     Chip {
       visible: line.waitsOnYou
       Layout.alignment: Qt.AlignVCenter

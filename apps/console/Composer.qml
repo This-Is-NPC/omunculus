@@ -43,8 +43,6 @@ ColumnLayout {
     const value = entry.text.trim()
     if (!value || entry.sending)
       return
-    if (composer.busy)
-      sendButton.restartTrace()
     const picked = files.take()
     entry.sending = true
     Omunculus.send(value, composer.work, picked, () => {
@@ -109,8 +107,6 @@ ColumnLayout {
         Layout.bottomMargin: 7
         role: "progress"
         implicitWidth: composer.compact ? 32 : 86
-        busy: composer.busy
-        allowClickWhileBusy: true
         icon: "enter"
         text: composer.compact ? "" : "SEND"
         tip: "SEND"
