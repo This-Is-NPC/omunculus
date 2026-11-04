@@ -25,9 +25,6 @@ Label {
 
   text: parsed.text
   textFormat: plain ? Text.PlainText : Text.MarkdownText
-  // The links the markdown makes itself, an e-mail address among them, take
-  // the accent like the web addresses linked here.
-  linkColor: Theme.primary
   activeFocusOnTab: links.length > 0
   onLinksChanged: chosen = 0
   onLinkActivated: link => open(link)
@@ -59,9 +56,9 @@ Label {
     return text
   }
 
-  // `value` with each web address it links or holds bare as an anchor in the
-  // accent, which Markdown would draw in the system's colour, and every one of
-  // them, in order; code is left as it is.
+  // `value` with each web or e-mail address it links or holds bare as an
+  // anchor in the accent, which Markdown would draw in the system's colour,
+  // and every one of them, in order; code is left as it is.
   function linked(value) {
     const links = []
     const escape = part => part.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
@@ -69,10 +66,12 @@ Label {
       links.push(url)
       return "<a href=\"" + escape(url) + "\" style=\"color:" + Theme.primary + "\">" + label + "</a>"
     }
-    const text = String(value || "").replace(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)|<(https?:\/\/[^>\s]+)>|\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>`"'\[\]]+)/gi,
-      (match, code, auto, label, target, bare) => {
+    const text = String(value || "").replace(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)|<(https?:\/\/[^>\s]+)>|\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>`"'\[\]]+)|([A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})/gi,
+      (match, code, auto, label, target, bare, mail) => {
         if (code)
           return match
+        if (mail)
+          return anchor("mailto:" + mail, escape(mail))
         if (auto)
           return anchor(auto, escape(auto))
         if (target)
@@ -86,7 +85,7 @@ Label {
   }
 
   function open(link) {
-    if (/^https?:\/\//i.test(link))
+    if (/^(https?:\/\/|mailto:)/i.test(link))
       Quickshell.execDetached(["xdg-open", link])
   }
 
