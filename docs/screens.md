@@ -64,7 +64,9 @@ call omunculus <function>`): `start`, `page <name>`, `projects`,
 
 On a project, its name and four ways in: NEW CONVERSATION, CONVERSATIONS,
 BOARD and PROJECTS. On the registry alone, how many projects it holds and
-two: PROJECTS and BOARD.
+two: PROJECTS and BOARD. Under them, in the warning tone, the projects
+where conversations need you and how many. The ⓘ at the top right opens the
+keys.
 
 | Keys | What they do |
 | --- | --- |

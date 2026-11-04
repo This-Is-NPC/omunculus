@@ -393,12 +393,14 @@ picked shows in the same detail, beside the map.
 
 ## Pages
 
-The window opens on its start, clean. On a project: NEW CONVERSATION (N),
+The window opens on its start, clean: the ways in, centred, with the
+masthead's ⓘ opening the keys dialog. On a project: NEW CONVERSATION (N),
 CONVERSATIONS (H), BOARD (B) and PROJECTS (P), keys of this screen only,
-and "Project agency · its agents wait for a word". On the registry alone:
-PROJECTS and BOARD, and "3 projects · pick one to talk with its agents".
-When the server does not answer, the ways in are disabled and the line says
-so. Entered by one of them, its pages (`PagesView`) are in three levels
+and "Project agency · its agents wait for a word". On the registry alone,
+the masthead says READY: PROJECTS and BOARD, and "3 projects · open
+PROJECTS to choose one". Under the line, in the warning tone, each project
+where conversations need you, "agency · 13 need you". When the server does
+not answer, the ways in are disabled and the line says so. Entered by one of them, its pages (`PagesView`) are in three levels
 (`level`), only those of the level on screen showing.
 
 The registry's level:
@@ -541,8 +543,8 @@ registry's level; the project, then the page, on a project's; the project and
 the conversation open (the title of its first work, else what was first said
 in it), and on a thread its work's title, in a conversation, whose tabs name
 its page. At the start it names the
-project, or nothing on the registry alone, and the slash after OMUNCULUS
-shows only before a crumb; under 560 px OMUNCULUS is left out, leaving the
+project, or, on the registry alone, READY (OFFLINE while the server does not
+answer), and the slash after OMUNCULUS shows only before a crumb; under 560 px OMUNCULUS is left out, leaving the
 crumbs its room. The project's crumb opens PROJECTS, and the
 conversation's its chat. Crumbs that do not fit elide from the left, the
 project's never below 8 characters. While a project is open and requests

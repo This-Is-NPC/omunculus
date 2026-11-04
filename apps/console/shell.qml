@@ -70,8 +70,10 @@ ShellRoot {
     }
 
     // The way to the page on screen, as the masthead takes it: entered, the
-    // pages'; at the start, the project, or nothing on the registry.
-    readonly property var crumbs: started ? pagesView.crumbs : Omunculus.registry ? [] : [{ text: Omunculus.project }]
+    // pages'; at the start, the project, or, on the registry, whether the
+    // server answers.
+    readonly property var crumbs: started ? pagesView.crumbs
+      : Omunculus.registry ? [{ text: Omunculus.connected ? "ready" : "offline" }] : [{ text: Omunculus.project }]
 
     // Whether a dialog holds the keyboard, so the keys of the pages wait.
     readonly property bool dialogOpen: shortcuts.visible || pagesView.dialogOpen
@@ -148,6 +150,12 @@ ShellRoot {
             onCountChanged: panel.notesKept = -1
           }
           IconButton {
+            visible: !panel.started
+            name: "info"
+            tip: "the keys  " + Shortcuts.label("help")
+            onClicked: shortcuts.open()
+          }
+          IconButton {
             visible: panel.started && pagesView.inside && pagesView.open
             name: "cost"
             tip: "what it cost"
@@ -172,13 +180,20 @@ ShellRoot {
           Layout.fillWidth: true
           Layout.fillHeight: true
 
-          // Start: the ways in, and nothing else.
+          // Start: the ways in, centred, and under them what the server
+          // holds: the projects, or the project, and the conversations that
+          // need you in each, read while the start is on screen too.
           Stage {
             id: start
             anchors.fill: parent
             shown: !panel.started
             focus: shown
-            onShownChanged: if (shown) forceActiveFocus()
+            // After the pages let the registry go.
+            onShownChanged: if (shown) {
+              forceActiveFocus()
+              Qt.callLater(() => Omunculus.watchRegistry(true))
+            }
+            Component.onCompleted: Omunculus.watchRegistry(true)
             Keys.onPressed: event => {
               if (!Typing.idle)
                 return
@@ -190,8 +205,8 @@ ShellRoot {
             Column {
               anchors.horizontalCenter: parent.horizontalCenter
               // Whole pixels, or the first button's top hairline is not drawn;
-              // never past the view's edges on a short window.
-              y: Math.round(Math.max(0, Math.min(parent.height - height, (parent.height - height) / 2 + Math.min(90, Math.max(0, parent.height / 6)))))
+              // never past the view's top on a short window.
+              y: Math.round(Math.max(0, (parent.height - height) / 2))
               spacing: panel.short ? Theme.space.blockShort : Theme.space.block
               // The first way in is the main one, and stands taller.
               Repeater {
@@ -219,12 +234,26 @@ ShellRoot {
                 width: Math.max(0, panel.width - 2 * panel.margin)
                 value: !Omunculus.connected ? "The server does not answer"
                   : !Omunculus.registry ? "Project " + Omunculus.project + " · its agents wait for a word"
-                  : count > 0 ? count + (count === 1 ? " project" : " projects") + " · pick one to talk with its agents"
-                  : "Pick a project to talk with its agents"
+                  : count > 0 ? count + (count === 1 ? " project" : " projects") + " · open PROJECTS to choose one"
+                  : "No project yet · open PROJECTS to add one"
                 soft: true
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 color: Omunculus.connected ? Theme.dim : Theme.warning
+                font.pixelSize: Theme.type.meta.size
+                font.letterSpacing: Theme.type.meta.tracking
+              }
+              // The projects where conversations need you, most first.
+              DecodeLabel {
+                readonly property var needing: Omunculus.connected ? Omunculus.projectRows.filter(row => row.needsYou > 0) : []
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(0, panel.width - 2 * panel.margin)
+                visible: needing.length > 0
+                value: needing.map(row => row.id + " · " + row.needsYou + (row.needsYou === 1 ? " needs you" : " need you")).join("   ")
+                soft: true
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                color: Theme.warning
                 font.pixelSize: Theme.type.meta.size
                 font.letterSpacing: Theme.type.meta.tracking
               }
