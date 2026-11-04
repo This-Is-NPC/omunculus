@@ -247,6 +247,9 @@ Item {
     show("map")
   }
 
+  // Opens a work of the conversation open on its team page.
+  function openInTeam(key) { openWork({ id: key, project: Omunculus.project, conversation_id: Omunculus.conversationId }) }
+
   // Opens the log kept to the events of a work; BACK returns.
   function showLog(work) {
     remember()
@@ -368,14 +371,6 @@ Item {
         { text: "BOARD", icon: "board", tip: "the works of the project", run: () => view.go("board") },
         { text: "PROJECTS", icon: "folder", tip: "every project of the server  " + Shortcuts.label("projects"), run: () => view.showProjects("") }
       ]
-    if (page === "work")
-      return [
-        back,
-        { text: "ANSWER", icon: "enter", tone: Theme.warning, key: Shortcuts.chord("reply"), tip: "answer what it asked you  " + Shortcuts.label("reply"),
-          shown: workAsks.length > 0, run: () => view.answer() },
-        { text: "OPEN IN TEAM", short: "TEAM", icon: "people", key: Shortcuts.chord("open-team"), tip: "its conversation's team, the work picked  " + Shortcuts.label("open-team"),
-          run: () => view.openWork({ id: workKey, project: Omunculus.project, conversation_id: Omunculus.conversationId }) }
-      ]
     if (page === "board")
       return [
         back,
@@ -416,7 +411,7 @@ Item {
     if (page === "log" && events && (events.picked !== null || events.source.count > 0))
       add("copy", "copy", events.picked !== null ? "COPY THE EVENT" : "COPY THE LOG", () => view.events.copy())
     if (page === "thread") {
-      add("open-team", "people", "OPEN IN TEAM", () => view.openWork({ id: view.threadWork, project: Omunculus.project, conversation_id: Omunculus.conversationId }))
+      add("open-team", "people", "OPEN IN TEAM", () => view.openInTeam(view.threadWork))
       add("log", "list", "ITS LOG", () => view.showLog(view.threadWork))
     }
     add("new", "plus", "NEW CONVERSATION", () => view.newConversation())
@@ -441,13 +436,15 @@ Item {
     return options.concat([{ text: "PROGRESS", tip: (progressShown ? "close" : "open") + " the progress of the works", run: () => view.toggleProgress(true) }])
   }
 
-  // The chords of the page that no command of its bar has: those of a
-  // conversation's pages, its menu's and the quick chips', which a field
-  // being written leaves to them. None is a bare key.
+  // The chords of the page that no command of its bar has: those of a work's
+  // page, of a conversation's pages, its menu's and the quick chips', which a
+  // field being written leaves to them. None is a bare key.
   readonly property var chords: {
+    const chord = (id, run) => ({ key: Shortcuts.chord(id), run: run })
+    if (page === "work")
+      return [chord("reply", () => view.answer()), chord("open-team", () => view.openInTeam(view.workKey))]
     if (!inside)
       return []
-    const chord = (id, run) => ({ key: Shortcuts.chord(id), run: run })
     const all = [chord("reply", () => view.answer()), chord("progress", () => view.toggleProgress(true))]
     if (page === "chat" && Omunculus.unread.length > 0)
       all.push(chord("mark-read", () => view.readNote()))
@@ -458,7 +455,7 @@ Item {
       more.filter(item => ["write", "comment", "escalate", "mark-read", "fit"].includes(item.id)).forEach(item => all.push(chord(item.id, item.run)))
     }
     if (page === "thread")
-      all.push(chord("open-team", more.find(item => item.id === "open-team").run))
+      all.push(chord("open-team", () => view.openInTeam(view.threadWork)))
     return all
   }
 
@@ -715,7 +712,7 @@ Item {
             onOpenMap: work => {
               // The team shows the map where there is room for it.
               view.teamShownAs = "map"
-              view.openWork({ id: work, project: Omunculus.project, conversation_id: Omunculus.conversationId })
+              view.openInTeam(work)
             }
           }
         }
@@ -796,6 +793,7 @@ Item {
         sourceComponent: TeamView {
           onLeave: view.back()
           onOpenLog: work => view.showLog(work)
+          onDecide: (id, escalating) => decision.show(id, escalating)
         }
       }
       // The work picked and the view shown are kept here, so they outlive the page.
@@ -874,6 +872,8 @@ Item {
         key: view.workKey
         onLeave: view.back()
         onPicked: key => view.showOther(key)
+        onAnswer: id => decision.show(id, false)
+        onOpenTeam: view.openInTeam(view.workKey)
       }
     }
   }

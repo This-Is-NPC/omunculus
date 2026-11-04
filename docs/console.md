@@ -503,7 +503,8 @@ the conversation's agent, the works it handed down, each opening on its
 page, what comes next — the next stage or whom it reports to — where it
 works, and how long ago it began and last changed.
 
-Opening its team, the window turns to the work's project first when it is
+Its bar has BACK alone; Alt+R answers what it asked you and Alt+O opens its
+team. Opening its team, the window turns to the work's project first when it is
 another one (`Omunculus.switchProject`).
 
 ## The masthead, the rail and the bar
@@ -550,9 +551,9 @@ named so. When the desktop setting `enable-animations` is off, nothing in the
 window slides, sweeps or decodes.
 
 The bar ranks the commands — BACK apart, the page's main action solid on the
-left (NEW CONVERSATION on CONVERSATIONS, REPLY where something waits on you),
-the others outlined on the right, OUTLINE and MAP, and BY STATE, BY AGENT and
-BY PROJECT, joined as one control. When the names do not fit, BACK is only
+left (NEW CONVERSATION on CONVERSATIONS, NEW PROJECT on PROJECTS), the
+others outlined on the right, BY STATE, BY AGENT and BY PROJECT joined as one
+control. When the names do not fit, BACK is only
 its chevron and the commands take their short names, then all but the main
 one their icons; when even those do not fit, the lowest ranked commands move
 into the menu of a `⋯` button.
@@ -613,6 +614,8 @@ logs each text drawn out of its box, the window or a clipping item as a
 - On a work's thread, OPEN IN TEAM (Alt+O) and ITS LOG in `⋯`.
 - On LOG, `/` filters, and `⋯` copies the event picked or else the rows shown.
 - On BOARD, its groupings (Alt+S, Alt+A, Alt+J) and FILTER (`/`).
+- On a work's page, BACK alone; ANSWER in its header strip (Alt+R) and its
+  team's tool (Alt+O).
 
 ## Keys and IPC
 
