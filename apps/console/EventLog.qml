@@ -56,9 +56,11 @@ QtObject {
       let head = ""
       if (line.run !== "" && line.run !== lastRun) {
         const runs = runsOf[line.who] || (runsOf[line.who] = [])
-        if (!runs.includes(line.run))
+        // A run shown again after another's lines goes on, it does not start.
+        const again = runs.includes(line.run)
+        if (!again)
           runs.push(line.run)
-        head = (line.who || "run").toUpperCase() + " · run " + (runs.indexOf(line.run) + 1) + " · " + line.time.slice(0, 8)
+        head = (line.who || "run").toUpperCase() + " · run " + (runs.indexOf(line.run) + 1) + (again ? " · continued" : "") + " · " + line.time.slice(0, 8)
       }
       lastRun = line.run
       const day = Time.day(line.at, Date.now())

@@ -236,7 +236,9 @@ and the masthead does not already say it; then who works on it, from its
 agent down to the one at work, what that one does and its clock: "seller ›
 design-lead › designer: Thinking · wrote site/index.html · 4:12". A call is
 known only once it finished, so the line says the last one in the past, after
-"Thinking", and never claims a call still runs while the run's clock goes on. Once you have written, both lines keep their
+"Thinking", and never claims a call still runs while the run's clock goes on;
+a run that has made no call for 15 s reads "Thinking", not "Getting started".
+The chain names only the agents the one at work works under, from the top. Once you have written, both lines keep their
 room, blank until there is something to say, so the tabs below hold their
 place from the first message. While a question waits on you
 that line counts what you are asked as its card does: "sales asks you 7

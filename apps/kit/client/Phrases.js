@@ -136,10 +136,11 @@ function touched(line) {
       if (skip > 0) { skip--; continue; }
       args.push(word);
     }
-    const found = args.filter((word, at) => !/^\d+$/.test(word) && word !== "/dev/null" && !remote(word) && (/\/|\.\w+$/.test(word) || (at === 0 && (listers.includes(command) || readers.includes(command)) && /^[\w.~-]+$/.test(word))))
+    // A quoted argument with spaces is words, not a file.
+    const found = args.filter((word, at) => !/\s/.test(word) && !/^\d+$/.test(word) && word !== "/dev/null" && !remote(word) && (/\/|\.\w+$/.test(word) || (at === 0 && (listers.includes(command) || readers.includes(command)) && /^[\w.~-]+$/.test(word))))
       .map(word => listers.includes(command) && !/\/$|\.\w+$/.test(word) ? word + "/" : word);
     if (found.length === 0) continue;
-    found.map(word => [".", "./"].includes(word) ? "the project" : relative(word)).forEach(word => { if (!names.includes(word)) names.push(word); });
+    found.map(word => [".", "./"].includes(word) ? "the project" : relative(word.replace(/^\.\//, ""))).forEach(word => { if (!names.includes(word)) names.push(word); });
     verbs.add(readers.includes(command) ? "looked at" : listers.includes(command) ? "looked in" : "");
   }
   return { verb: verbs.size === 1 && !verbs.has("") ? [...verbs][0] : tools.bash.past, names: names };

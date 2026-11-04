@@ -654,7 +654,7 @@ Item {
               id: doing
               Layout.fillWidth: true
               Layout.minimumWidth: 0
-              text: row.live ? row.live.doing : ""
+              text: row.live ? Progress.lively(row.live.doing, row.live.since, Omunculus.tick) : ""
               color: Theme.dim
               font.pixelSize: Theme.type.body.size
               elide: Text.ElideRight

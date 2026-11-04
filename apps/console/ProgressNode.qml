@@ -66,7 +66,8 @@ FocusScope {
   readonly property string shownState: busy ? "working" : node.state
   readonly property string asWords: busy
     ? Array.from(new Set(underway.map(each => each.agent))).join(", ") + " working"
-    : node.state === "waiting" || node.state === "working" ? node.doing : ""
+    : node.state === "working" ? Progress.lively(node.doing, node.since, now)
+    : node.state === "waiting" ? node.doing : ""
   // The state's words, the state's own when who works does not fit its room.
   readonly property string saying: asWords !== "" && markFont.advanceWidth(asWords) <= rowBody.width * 0.55 - Theme.space.cell - Theme.space.line ? asWords : ""
   readonly property string clock: node.state === "working" && node.since !== null

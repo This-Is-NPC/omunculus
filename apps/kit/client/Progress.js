@@ -46,6 +46,19 @@ function duration(total) {
   return said(Math.floor(s / 3600), "hour") + (minutes > 0 ? " " + said(minutes, "minute") : "");
 }
 
+// What a run does at `now` (seconds): one that has made no call for a while
+// thinks, it is past getting started.
+function lively(doing, since, now) {
+  return doing === "Getting started" && since !== null && now - since > 15 ? "Thinking" : doing;
+}
+
+// The agents of `path` above `agent`, from the top: those it works under.
+function above(path, agent) {
+  const names = path.map(step => step.agent).filter(name => name);
+  const at = names.indexOf(agent);
+  return (at >= 0 ? names.slice(0, at) : names.filter(name => name !== agent)).filter((name, index, all) => all.indexOf(name) === index);
+}
+
 // A running clock: "0:42", "12:05", "1:02:03".
 function clock(total) {
   const s = Math.max(0, Math.floor(total));
@@ -411,7 +424,7 @@ function build(input) {
   counts.agents = agents.length;
   let spoken = "";
   if (state === "needs-you") spoken = forYou[0].asker + " asks you: " + firstLine(forYou[0].question);
-  else if (state !== "idle") spoken = word(state) + ". " + (path.length > 1 ? path.map(each => each.agent).join(", ") : doing.agent) + (doing.doing ? ": " + doing.doing : "");
+  else if (state !== "idle") spoken = word(state) + ". " + above(path, doing.agent).concat([doing.agent]).join(", ") + (doing.doing ? ": " + doing.doing : "");
 
   // The agent that talks with the person, when its works are other agents':
   // the root of the team, what it asks the person and its own state.

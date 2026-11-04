@@ -394,4 +394,15 @@ defmodule Omunculus.GuiProgressTest do
     check(n.w1.own.usage.calls === 2 && n.w1.own.agentSeconds === 100, "w1 own", n.w1.own);
     """)
   end
+
+  test "the agents above a run are those it works under, and a long start thinks" do
+    run!("""
+    const path = [{agent: "seller"}, {agent: "design-lead"}, {agent: "designer"}];
+    check(JSON.stringify(Progress.above(path, "designer")) === JSON.stringify(["seller", "design-lead"]), "leaf", Progress.above(path, "designer"));
+    check(JSON.stringify(Progress.above(path, "design-lead")) === JSON.stringify(["seller"]), "a parent woken", Progress.above(path, "design-lead"));
+    check(JSON.stringify(Progress.above(path, "seller")) === JSON.stringify([]), "the top", Progress.above(path, "seller"));
+    check(Progress.lively("Getting started", 100, 110) === "Getting started" && Progress.lively("Getting started", 100, 130) === "Thinking", "lively", "");
+    check(Progress.lively("Thinking · read a file", 100, 500) === "Thinking · read a file" && Progress.lively("Getting started", null, 500) === "Getting started", "lively other", "");
+    """)
+  end
 end

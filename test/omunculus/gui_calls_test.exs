@@ -98,6 +98,8 @@ defmodule Omunculus.GuiCallsTest do
     same(Phrases.step("ls", {path: "."}), "looked in the project");
     same(Phrases.step("bash", {command: "npx build --prod\\necho done"}), "ran a command");
     same(Phrases.step("bash", {command: "cat design/README.md 2>/dev/null; echo ---; ls -la"}), "looked at design/README.md");
+    same(Phrases.step("bash", {command: "grep -rn 'pink and cream' design/preview ./.git"}), "looked at design/preview, .git");
+    same(Phrases.step("bash", {command: "echo x > notes/a.md; python3 build.py \x27pink and cream (rosa e creme)\x27"}), "ran a command on build.py");
     same(Phrases.step("bash", {command: "ls -la quotes; find quotes -type f | head; cat templates/pr.md"}), "ran a command on quotes/, templates/pr.md");
     same(Phrases.step("bash", {command: "cat quotes/doce-ana.md; echo; grep -n -i 'design\\|preview' quotes/a.md notes.txt"}), "looked at quotes/doce-ana.md, quotes/a.md +1 more");
     same(Phrases.step("bash", {command: "find quotes -type f"}), "looked in quotes/");
