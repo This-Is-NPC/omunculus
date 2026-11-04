@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import "kit/client/Progress.js" as Progress
 import "kit/ui"
 
-// AgentNode is one work on the TEAM page's map, a card of fixed size: the
+// AgentNode is one work on the TEAM page's map, a card the map sizes: the
 // portrait and name of the agent that has it, its state, its title and its
 // stages; under them a badge for what it waits on (⇡) and one for what it is
 // asked (⇣). Its border is its state's tone; picked, or at one end of the
@@ -28,8 +28,6 @@ Rectangle {
   readonly property string clock: node.state === "working" && node.since !== null
     ? Progress.clock(Math.max(0, Math.round(now - node.since))) : ""
 
-  width: 240
-  height: 96
   activeFocusOnTab: true
   Keys.onReturnPressed: chosen()
   Keys.onSpacePressed: chosen()
@@ -51,8 +49,8 @@ Rectangle {
   }
 
   RowLayout {
-    anchors { fill: parent; margins: 8 }
-    spacing: 8
+    anchors { fill: parent; margins: Theme.space.tight }
+    spacing: Theme.space.tight
 
     Portrait {
       Layout.alignment: Qt.AlignTop
@@ -68,11 +66,11 @@ Rectangle {
       Layout.fillWidth: true
       Layout.fillHeight: true
       Layout.minimumWidth: 0
-      spacing: 2
+      spacing: Theme.space.row
 
       RowLayout {
         Layout.fillWidth: true
-        spacing: 6
+        spacing: Theme.space.tight
         Label {
           Layout.fillWidth: true
           Layout.minimumWidth: 0
@@ -105,7 +103,7 @@ Rectangle {
       RowLayout {
         Layout.fillWidth: true
         visible: card.asks.length > 0 || card.asked.length > 0
-        spacing: 10
+        spacing: Theme.space.gap
         Label {
           visible: card.asks.length > 0
           Layout.fillWidth: true

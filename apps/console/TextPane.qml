@@ -28,7 +28,7 @@ Rectangle {
 
   ListView {
     id: list
-    anchors { fill: parent; margins: 10 }
+    anchors { fill: parent; margins: Theme.space.gap }
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     model: pane.lines

@@ -23,7 +23,7 @@ ColumnLayout {
   readonly property var parentWork: work ? Omunculus.work(work.parent_id || "") : null
   readonly property var place: Omunculus.workspaceOf(work ? work.workspace || "" : "")
 
-  spacing: 10
+  spacing: Theme.space.gap
 
   Label {
     Layout.fillWidth: true
@@ -95,13 +95,13 @@ ColumnLayout {
       id: note
       required property var modelData
       Layout.fillWidth: true
-      implicitHeight: noted.implicitHeight + 20
+      implicitHeight: noted.implicitHeight + Theme.space.insetTop * 2
       variant: "filled"
       tone: Theme.warning
       RowLayout {
         id: noted
-        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; leftMargin: 12 }
-        spacing: 8
+        anchors { left: parent.left; right: parent.right; top: parent.top; margins: Theme.space.insetTop; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset }
+        spacing: Theme.space.tight
         Prose {
           Layout.fillWidth: true
           source: Omunculus.inline(Omunculus.notes[note.modelData.id] || "")

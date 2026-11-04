@@ -164,20 +164,22 @@ menu holds ESCALATE, which makes the words the reason it goes up.
 
 ### 7. Team
 
-Every work of the conversation, one row each, nested under the stage of the
-work that handed it down, siblings handed down together headed "N in
-parallel": its agent and state, title, stages, what it does, what it waits on
-(⇡) and what it is asked (⇣), and its branch's time, calls and cost. Chips
-keep the works that need you or work. The work picked shows in full, in the
-tabs OVERVIEW, THREAD, REQUESTS, CHANGES, RUNS and LOG: beside the outline
-from 1100 px, as a page over it from 700 px; under 700 px each level is a
-page under a breadcrumb, a row going one level down. From 900 px MAP shows
-the works as a chart, one card per work, the work picked beside it.
+The works of the conversation a level at a time, under a breadcrumb: a
+work's own row, then the works it handed down under a rule for the stage
+that handed them down ("STAGE DESIGN · 2 IN PARALLEL"), those done folded
+into one rule. A row is the work's title and state, its agent, stages and
+branch's time, calls and cost, and a badge for what it waits on (⇡) and
+what it is asked (⇣); its tool goes down a level. Chips keep the works that
+need you or work. The work picked shows in full under a header strip with
+ANSWER or OPEN THREAD, in the tabs OVERVIEW, THREAD, REQUESTS, CHANGES, RUNS
+and LOG: beside the outline from 1100 px, as a page over it narrower. From
+900 px OUTLINE and MAP, beside the search line, show the works as a chart,
+one card per work, the work picked beside it.
 
 | Keys | What they do |
 | --- | --- |
 | ↑ · ↓ | move between the works; the detail follows |
-| → · ← | unfold, fold; on a folded work, go to its parent |
+| → · ← | down a level or unfold; fold or up a level |
 | Enter | open its detail, or its tabs beside the outline |
 | [ · ] | the previous or next tab |
 | / | filter the works |
@@ -199,14 +201,15 @@ Every event of the conversation, a row each, which opens whole.
 | / | filter the events |
 | Esc | empty the filter, then back to the rows |
 
-Chips keep the events that ask you, the failed ones, one agent's or one
-depth's; a title row begins each run. Opened from a work of the team, it is
-kept to that work.
+Each row is what the event says over when, what kind, who and on which
+work. Chips keep the events that ask you or failed, and pickers one agent's
+or one level's; a rule names each day and each run. Opened from a work of
+the team, it is kept to that work.
 
 ### 9. Cost
 
-What the conversation used: model calls, tokens and cost, in all and by
-agent. It has no keys of its own.
+What the conversation used: model calls, tokens and cost in all in a
+header strip, then a row per agent. It has no keys of its own.
 
 ### 10. Board
 
@@ -225,7 +228,8 @@ of their state.
 
 ### 11. A work
 
-One work read as an issue: where it is and its title on top; its
+One work read as an issue: where it is and its title on top, then a header
+strip of its state with ANSWER and a tool to its team; its
 description, goal, questions and notes, then its RUNS, CHANGES and PROMPT on
 the left; its state, workflow, agent, parent, children and times on the
 right.

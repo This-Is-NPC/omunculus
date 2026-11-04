@@ -34,7 +34,7 @@ Item {
     return Math.max(0, first)
   }
 
-  implicitHeight: metrics.height + 8
+  implicitHeight: metrics.height + Theme.space.line * 2
   visible: trail.length > 0
 
   FontMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: crumb.size }

@@ -190,7 +190,9 @@ An open work is a framed card: its agent and state, its title, its stages,
 what it calls, the round with who sent it back and why, the questions it
 asked and its tool calls; a done, cancelled or coming one is one line, what
 is below it folded. Siblings handed down in one stage are headed "N in
-parallel". Picking a work shows its agent's last words, its questions in
+parallel", and the done and cancelled works of each place fold into one
+row, "✓ 2 sub-works done · 18 min", unless a question waiting on you
+climbed from there. Picking a work shows its agent's last words, its questions in
 full, and OPEN (its thread as a page), LOG (the log kept to it) and MAP (the
 team page's map, the work picked). ↑/↓ move, → unfolds, ← folds, Enter opens
 or folds, Esc returns to the composer.
@@ -297,32 +299,48 @@ reason through
 
 ## The team
 
-The team page (`TeamView`) is every work of the conversation, one row each
-(`ProgressNode` in full: with its team's portraits, the requests waiting
-between it and others and its branch's time, agents, calls and cost), nested
-under the stage of the work that handed it down; siblings handed down in one
-stage are headed "N in parallel", and the root works done before an open one
-fold under "N done earlier". The done and cancelled sub-works of each stage,
-or of a work without a workflow, fold into one row, "✓ 2 sub-works done ·
-18 min" (and "· 1 cancelled"), which a click, Enter or → unfolds into their
-one-line rows and ← folds again; it stays folded while the conversation waits
-on you, unless the question climbed from there. Chips keep the works that
-need you or work, with the works above them, and `/` filters by title, agent
-or stage; a filter shows a done row only on the way to a work it keeps. The
-chips' counts are of works, folded ones included. A
-waiting badge (`⇡ waiting for design-lead`, `⇣ 1 question from designer`)
-lights both ends of its request, brings the other into view and opens the
-request in the detail; `⇣ needs you below`, on the works above one that
-needs you, does the same with that work's question.
+The team page (`TeamView`) shows the works of the conversation a level at a
+time, under a breadcrumb ("Conversation › Bakery website › Design
+preview"), each crumb going back up. A level is a work's own row, then the
+works it handed down, a row each, under a rule naming the stage that handed
+them down and, when several run side by side, "2 in parallel · 1 working";
+the conversation's level is its root works, the one root's own level when
+there is a single one, the roots done before an open one folded under "N
+done earlier". The done and cancelled works of each stage, or of a work
+without a workflow, fold into one rule, "✓ 2 sub-works done · 18 min" (and
+"· 1 cancelled"), which a click, Enter or → unfolds into their rows and ←
+folds again; it stays folded while the conversation waits on you, unless
+the question climbed from there.
 
-The work picked shows in full (`NodeDetail`): its agent, title, way down
-(`Breadcrumb`) and stages, then the tabs OVERVIEW (what it does now and did
-last, a send-back or a stop and why, whom it waits on and who asks it, its
-team, each stage's time, its branch's totals, and the work itself: goal,
-workspace, where it came from, what it asked and the notes it left you),
-THREAD (what its agents said and did, with a composer to write to its agent
-or leave it a note), REQUESTS (what it asked and what it is asked, each with
-the way it climbed, to answer in place), CHANGES, RUNS and LOG.
+A row (`ProgressNode` in full) is a table row: the work's title with its
+state at the top right, a meta line of its agent, its stages (`Stepper`;
+under 700 px a track filled to the stage it is at, and that stage) and its
+branch's works below, time, calls and cost, and a badge per request
+between it and others. A row with works below it has a tool at its right
+that goes down to them. The keyboard's row has the focus ring. Chips keep
+the works that need you or work, with the works above them, and `/`
+filters by title, agent or stage; a filter shows a done row only on the
+way to a work it keeps. The chips' counts are of works, folded ones
+included. A waiting badge (`⇡ waiting for you`, lit, the one to answer;
+`⇡ waiting for design-lead`; `⇣ 1 question from designer`) goes to the
+other end of its request, lights both rows and opens the request in the
+detail; `⇣ needs you below`, on the works above one that needs you, does
+the same with that work's question.
+
+The work picked shows in full (`NodeDetail`). Its header strip names its
+agent, title, round and state, with its action at the right: ANSWER, in
+the warning tone, while it or a work below it waits on you, which opens the
+decision (`decide` for the page to open `RequestDialog`), else OPEN THREAD;
+then LOG and, from 900 px, MAP, and behind "more" ESCALATE, while it asked
+you something, and MARK READ, while it left you notes. Under it are its way
+down (`Breadcrumb`), its stages and the tabs OVERVIEW (what it does now and
+did last, a send-back or a stop and why, whom it waits on and who asks it,
+its team with their portraits, each stage's time, its branch's totals, and
+the work itself: goal, workspace, where it came from, what it asked and the
+notes it left you), THREAD (what its agents said and did, with a composer
+to write to its agent or leave it a note), REQUESTS (what it asked and what
+it is asked, each with the way it climbed, to answer in place), CHANGES,
+RUNS and LOG; `[` and `]`, or ← and → on the tabs, move between them.
 
 - RUNS, the work's runs as `runs` sums up the project's last closed ones,
   matched by id with the snapshot's — how each ended, its calls, those that
@@ -341,21 +359,19 @@ the way it climbed, to answer in place), CHANGES, RUNS and LOG.
   why.
 
 From 1100 px the outline and the detail sit side by side, the focus work
-picked at first. From 700 px the outline takes the page and the detail opens
-as a page over it; BACK or Esc returns to the same row. Under 700 px each
-level is a page, under a breadcrumb: the work's card, then its sub-works
-grouped by stage, a row going one level down.
+picked at first. Narrower, the outline takes the page and the detail opens
+as a page over it; BACK or Esc returns to the same row.
 
-From 900 px the bar's OUTLINE and MAP switch the outline for the map
-(`AgentsView`, on the kit's `FlowCanvas`, which moves and zooms as the
-studio's flow does), remembered while the conversation is open. You are on
-top; each work is one card (`AgentNode`): the portrait and name of its
-agent, its state, title and stages, and its waiting badges, its children
-under it grouped by the stage that handed them down. Only the requests of
-the work picked are drawn, from the asker to whoever decides; agents with
-nothing to do show only with SHOW IDLE AGENTS. The map is never framed below
-its actual size; the canvas scrolls. The work picked shows in the same
-detail, beside the map.
+From 900 px OUTLINE and MAP, a chip group at the right of the search line,
+switch the outline for the map (`AgentsView`, on the kit's `FlowCanvas`,
+which moves and zooms as the studio's flow does), remembered while the
+conversation is open. You are on top; each work is one card (`AgentNode`):
+the portrait and name of its agent, its state, title and stages, and its
+waiting badges, its children under it grouped by the stage that handed them
+down. Only the requests of the work picked are drawn, from the asker to
+whoever decides; agents with nothing to do show only with SHOW IDLE AGENTS.
+The map is never framed below its actual size; the canvas scrolls. The work
+picked shows in the same detail, beside the map.
 
 ## Pages
 
@@ -413,14 +429,19 @@ A conversation's level, in place of the project's once one is opened:
 - CHAT, the chat with the root agent, its progress and its composer;
 - TEAM, the works of the conversation and the work picked in full. Its SHOW
   IN LOG opens the LOG kept to that work, and BACK returns;
-- LOG, every event a row of a table that filters by text and opens an event
-  whole. A row's time is local (`hh:mm:ss.zzz`), a divider names the day on
-  the first row of each, and the event opened shows its local time and the
-  server's ISO stamp as UTC;
-- COST, what the conversation used, in all and then by agent, the busiest
-  first: model calls, tokens read by the model (with those from cache),
-  tokens written and cost. One note says when the provider sends no price
-  (`CostView`).
+- LOG, every event a table row: what it says, then when (local,
+  `hh:mm:ss.zzz`), what kind, who and on which work, FAILED or ASKS YOU at
+  its top right, under rules naming the day and each run. A search line, the
+  chips ASKS ME and FAILED and an agent and a level picker filter it; the
+  count of rows and a "more" menu with COPY, the event picked or else the
+  rows shown, sit at the filters' right. The event opened shows in a card
+  under the list, with its local time and the server's ISO stamp as UTC and
+  its copy and close tools at the top right;
+- COST, what the conversation used (`CostView`): a header strip with the
+  model calls and the tokens read by the model (with those from cache) and
+  written in all, and the cost at its right; then a row per agent, the
+  busiest first, its cost at the top right, "-" when its provider reported
+  none. One note says when the provider sends no price.
 
 A work's thread also opens as a page of the chat, from a sub-work block's
 OPEN or the progress: the way down to it (`Breadcrumb`, "Conversation ›
@@ -466,9 +487,14 @@ A work's page (`WorkView`), reached from the board as BACK shows, reads as
 an issue. On top are where it is — its project, its conversation, the work
 it came from, which opens — and its title.
 
+Under them a header strip says its state, stage and age, with ANSWER, in
+the warning tone, while it asked you something (`answer`, for the page to
+open the decision), and a tool to its conversation's team, the work picked
+(`openTeam`).
+
 On the left are its description, the goal it was given, what it asked and
-the notes it left (`WorkSummary`), and under them its RUNS, CHANGES and
-PROMPT. Under 700 px its properties stack under them.
+the notes it left (`WorkSummary`), and under them the tabs RUNS, CHANGES
+and PROMPT. Under 700 px its properties stack under them.
 
 On the right are its properties: its state, its project, its workflow with
 each stage beside the agent that takes it, those passed checked and the one
@@ -477,9 +503,8 @@ the conversation's agent, the works it handed down, each opening on its
 page, what comes next — the next stage or whom it reports to — where it
 works, and how long ago it began and last changed.
 
-Its bar has ANSWER (Alt+R), in the warning tone, while it asked you something, and OPEN IN TEAM
-(Alt+O), its conversation's team page with it picked. The window turns to the work's project
-first when it is another one (`Omunculus.switchProject`).
+Opening its team, the window turns to the work's project first when it is
+another one (`Omunculus.switchProject`).
 
 ## The masthead, the rail and the bar
 

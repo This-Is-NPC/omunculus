@@ -136,7 +136,7 @@ Item {
 
   ColumnLayout {
     anchors.fill: parent
-    spacing: 10
+    spacing: Theme.space.gap
     visible: runsPane.opened === ""
 
     Label {
@@ -167,7 +167,7 @@ Item {
       Layout.fillWidth: true
       Layout.fillHeight: true
       clip: true
-      spacing: 8
+      spacing: Theme.space.row
       boundsBehavior: Flickable.StopAtBounds
       keyNavigationEnabled: true
       activeFocusOnTab: true
@@ -183,19 +183,18 @@ Item {
         readonly property var lines: runsPane.summaries[modelData.id] || null
         readonly property bool current: list.activeFocus && list.currentIndex === index
         width: ListView.view.width
-        implicitHeight: facts.implicitHeight + 20
-        color: pointer.containsMouse ? Theme.highlight : "transparent"
+        implicitHeight: facts.implicitHeight + Theme.space.insetTop * 2
+        color: current ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
         border.color: current ? Theme.primary : Theme.line
-        border.width: current ? 2 : 1
 
         ColumnLayout {
           id: facts
-          anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; leftMargin: 12 }
-          spacing: 4
+          anchors { left: parent.left; right: parent.right; top: parent.top; margins: Theme.space.insetTop; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset }
+          spacing: Theme.space.line
 
           RowLayout {
             Layout.fillWidth: true
-            spacing: 8
+            spacing: Theme.space.tight
             Label {
               text: String(card.modelData.started_at || "").slice(5, 16).replace("T", " ")
               color: Theme.dim
@@ -259,12 +258,12 @@ Item {
   // The run opened, call by call.
   ColumnLayout {
     anchors.fill: parent
-    spacing: 10
+    spacing: Theme.space.gap
     visible: runsPane.opened !== ""
 
     RowLayout {
       Layout.fillWidth: true
-      spacing: 8
+      spacing: Theme.space.tight
       IconButton { name: "chevron-left"; tip: "back to the runs  esc"; onClicked: runsPane.back() }
       Label {
         Layout.fillWidth: true

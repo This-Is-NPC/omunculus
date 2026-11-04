@@ -78,11 +78,11 @@ Item {
 
   ColumnLayout {
     anchors.fill: parent
-    spacing: 10
+    spacing: Theme.space.gap
 
     RowLayout {
       Layout.fillWidth: true
-      spacing: 8
+      spacing: Theme.space.tight
       Label {
         Layout.fillWidth: true
         text: section.patch ? "THE DIFF, CALL BY CALL" : "THE FILES, CALL BY CALL"
@@ -94,22 +94,25 @@ Item {
       TraceButton {
         dense: true
         role: "action"
-        enabled: section.key !== "" && section.failure === ""
+        reason: section.key === "" ? "changes are kept by work" : section.failure !== "" ? "the changes could not be read" : ""
         text: section.patch ? "FILES" : "DIFF"
         tip: section.patch ? "the files each call changed" : "the unified diff of each call"
         onClicked: section.patch = !section.patch
       }
+      IconButton { name: "copy"; tip: "copy what is shown"; visible: section.output !== ""; onClicked: Omunculus.copy(section.output) }
       TraceButton {
         dense: true
         role: "guarded"
         icon: "close"
         visible: section.canRevert
-        enabled: section.key !== "" && section.failure === "" && section.output !== "" && !section.output.startsWith("No call changed")
+        reason: section.key === "" ? "changes are kept by work"
+          : section.failure !== "" ? "the changes could not be read"
+          : section.output === "" ? "the changes are still being read"
+          : section.output.startsWith("No call changed") ? "no call of this work changed a file" : ""
         text: "REVERT"
         tip: "put the files of this work back as they were before it"
         onClicked: confirmRevert.open()
       }
-      IconButton { name: "copy"; tip: "copy what is shown"; visible: section.output !== ""; onClicked: Omunculus.copy(section.output) }
     }
 
     Label {

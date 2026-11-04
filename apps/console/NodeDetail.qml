@@ -2,18 +2,23 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/client/Progress.js" as Progress
+import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
-// NodeDetail is one work of the TEAM page in full: its agent, title, way
-// down and stages on top, then tabs. OVERVIEW: what it does now and did
-// last, a send-back or a stop and why, whom it waits on and who asks it,
-// its team, each stage's time, its branch's time, calls and cost, and the
-// work itself — goal, workspace, where it came from, what it asked and the
-// notes it left you. THREAD: what its agents said and did, and a composer to
-// write to its agent or leave it a note. REQUESTS: what it asked and what it
-// is asked, each with the way it climbed, to answer in place. CHANGES: the
-// files it changed. RUNS: its runs, and the prompt each was given. LOG: the
-// log kept to its events. `[` and `]` move between the tabs.
+// NodeDetail is one work of the TEAM page in full. A header strip says its
+// agent, title, round and state, with its action at the right — ANSWER, in
+// the warning tone, while it or a work below it waits on you, else OPEN
+// THREAD — then LOG and MAP and, behind "more", ESCALATE and MARK READ. Under
+// it are its way down (Breadcrumb), its stages and the tabs. OVERVIEW: what
+// it does now and did last, a send-back or a stop and why, whom it waits on
+// and who asks it, its team, each stage's time, its branch's time, calls and
+// cost, and the work itself — goal, workspace, where it came from, what it
+// asked and the notes it left you. THREAD: what its agents said and did, and
+// a composer to write to its agent or leave it a note. REQUESTS: what it
+// asked and what it is asked, each with the way it climbed, to answer in
+// place. CHANGES: the files it changed. RUNS: its runs, and the prompt each
+// was given. LOG: the log kept to its events. `[` and `]`, or ←/→ on the
+// tabs, move between them.
 FocusScope {
   id: pane
 
@@ -31,15 +36,11 @@ FocusScope {
   signal picked(string key)
   signal openLog(string work)
   signal openMap(string work)
+  // A request's decision, over the page: to answer it or, `escalating`, to
+  // raise it.
+  signal decide(string id, bool escalating)
 
-  readonly property var tabs: [
-    { name: "overview", tip: "what it does, whom it waits on, its team, time and cost" },
-    { name: "thread", tip: "what its agents said and did; write to it" },
-    { name: "requests", tip: "what it asked and what it is asked" },
-    { name: "changes", tip: "the files it changed" },
-    { name: "runs", tip: "its runs, and the prompt each was given" },
-    { name: "log", tip: "the log kept to its events" }
-  ]
+  readonly property var tabs: ["overview", "thread", "requests", "changes", "runs", "log"]
   property string tab: "overview"
   // The run whose prompt shows on RUNS, or "" for the list.
   property string promptRun: ""
@@ -55,24 +56,41 @@ FocusScope {
   readonly property var asks: node ? node.asks : []
   readonly property var asked: node ? node.asked : []
   readonly property var steps: node ? node.steps : []
+  // What waits on you: its own question, else one below it.
+  readonly property var askedOfYou: asks.filter(ask => ask.human)
+  readonly property string answering: askedOfYou.length > 0 ? askedOfYou[0].id : node ? node.below : ""
+  readonly property var notes: key !== "" ? Omunculus.unreadFrom(key) : []
   readonly property real now: Omunculus.tick
   readonly property string clock: node && node.state === "working" && node.since !== null
     ? Progress.clock(Math.max(0, Math.round(now - node.since))) : ""
+  // Its strip's action shows its icon alone.
+  readonly property bool tight: Breakpoints.tight(width)
 
-  // The tab `step` places away, wrapping.
-  function cycle(step) {
-    const at = tabs.findIndex(each => each.name === tab)
-    tab = tabs[(at + step + tabs.length) % tabs.length].name
+  // The tab `step` places away, wrapping; `focusing`, the keyboard follows.
+  function cycle(step, focusing) {
+    const at = tabs.indexOf(tab)
+    tab = tabs[(at + step + tabs.length) % tabs.length]
+    if (focusing)
+      tabsLater.restart()
   }
   function show(name) { tab = name }
-  function focusTabs() { tabBar.forceActiveFocus() }
+  function focusTabs() {
+    const item = tabRow.itemAt(tabs.indexOf(tab))
+    if (item)
+      item.forceActiveFocus()
+  }
 
   // Shows its thread and puts the keyboard in the composer, to write to its
   // agent or, `noting`, to leave it a note.
   function write(noting) {
     tab = "thread"
-    Qt.callLater(() => composer.focusEntry(noting))
+    composerLater.noting = noting
+    composerLater.restart()
   }
+
+  // Once the tab shows; timers go with the pane, never running on what is gone.
+  Timer { id: tabsLater; interval: 0; onTriggered: pane.focusTabs() }
+  Timer { id: composerLater; property bool noting; interval: 0; onTriggered: composer.focusEntry(noting) }
 
   // A tally's money when the provider priced it, with its tokens.
   function cost(usage) {
@@ -104,7 +122,7 @@ FocusScope {
   Keys.onPressed: event => {
     if (!Typing.idle || (event.text !== "[" && event.text !== "]"))
       return
-    cycle(event.text === "]" ? 1 : -1)
+    cycle(event.text === "]" ? 1 : -1, false)
     event.accepted = true
   }
 
@@ -115,86 +133,95 @@ FocusScope {
     default property alias body: value.data
     Layout.fillWidth: true
     columns: width < 360 ? 1 : 2
-    columnSpacing: 12
-    rowSpacing: 2
+    columnSpacing: Theme.space.cell
+    rowSpacing: Theme.space.row
     Label {
       Layout.preferredWidth: fact.columns === 1 ? -1 : 80
       Layout.alignment: Qt.AlignTop
       text: fact.name
       color: Theme.dim
-      font.pixelSize: 11
+      font.pixelSize: Theme.type.tab.size
       elide: Text.ElideRight
     }
     ColumnLayout {
       id: value
       Layout.fillWidth: true
       Layout.minimumWidth: 0
-      spacing: 2
+      spacing: Theme.space.row
     }
   }
   component Value: Label {
     Layout.fillWidth: true
-    font.pixelSize: 12
+    font.pixelSize: Theme.type.body.size
     wrapMode: Text.Wrap
   }
 
   ColumnLayout {
     anchors.fill: parent
-    spacing: 10
+    spacing: Theme.space.block
 
-    // Who and what, the way down, the stages.
-    RowLayout {
+    // The header strip: who and what, and what to do with it.
+    Rectangle {
       Layout.fillWidth: true
-      spacing: 8
-      IconButton {
-        visible: pane.closable
-        Layout.alignment: Qt.AlignTop
-        name: "chevron-left"
-        tip: "back to the outline  Esc"
-        onClicked: pane.closed()
-      }
-      Portrait {
-        Layout.alignment: Qt.AlignTop
-        Layout.preferredWidth: 32
-        Layout.preferredHeight: 32
-        agent: pane.agent
-        source: Omunculus.imageOf(pane.agent)
-        tone: pane.agentTone
-        framed: true
-      }
-      ColumnLayout {
-        Layout.fillWidth: true
-        Layout.minimumWidth: 0
-        spacing: 2
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: 8
-          Label {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 0
-            text: pane.agent
-            color: pane.agentTone
-            font.pixelSize: 12
-            font.bold: true
-            elide: Text.ElideRight
-          }
-          StateMark {
-            visible: pane.node !== null
-            Layout.maximumWidth: 160
-            state: pane.node ? pane.node.state : ""
-            clock: pane.clock
-          }
+      implicitHeight: Theme.size.strip
+      color: "transparent"
+      border.color: Theme.line
+
+      RowLayout {
+        anchors { fill: parent; leftMargin: pane.closable ? Theme.space.trail : Theme.space.inset; rightMargin: Theme.space.trail }
+        spacing: Theme.space.gap
+        IconButton {
+          visible: pane.closable
+          name: "chevron-left"
+          tip: "back to the outline  Esc"
+          onClicked: pane.closed()
         }
         Label {
           Layout.fillWidth: true
-          text: pane.node ? pane.node.title : pane.work ? pane.work.title : ""
-          font.pixelSize: 12
-          wrapMode: Text.Wrap
-          maximumLineCount: 2
+          Layout.minimumWidth: 0
+          text: [
+            pane.agent,
+            pane.node ? pane.node.title : pane.work ? pane.work.title : "",
+            pane.node && pane.node.round > 0 ? "round " + pane.node.round : "",
+            pane.node ? Progress.word(pane.node.state) + (pane.clock !== "" ? " " + pane.clock : "") : ""
+          ].filter(part => part).join(Theme.type.meta.separator).toUpperCase()
+          color: Theme.dim
+          font.pixelSize: Theme.type.meta.size
+          font.letterSpacing: Theme.type.meta.tracking
           elide: Text.ElideRight
+        }
+        // Urgent, never the main: its tone says so.
+        TraceButton {
+          dense: true
+          role: "progress"
+          tone: pane.answering !== "" ? Theme.warning : Theme.primary
+          icon: pane.answering !== "" ? "enter" : "send"
+          text: pane.tight ? "" : pane.answering !== "" ? "ANSWER" : "OPEN THREAD"
+          Layout.preferredWidth: pane.tight ? Breakpoints.target(Window.width) : -1
+          tip: pane.answering !== "" ? (pane.askedOfYou.length > 0 ? "answer what it asked you" : "answer what a work below it asked you")
+            : "what its agents said and did"
+          onClicked: pane.answering !== "" ? pane.decide(pane.answering, false) : pane.show("thread")
+        }
+        IconButton { name: "list"; tip: "the log page, kept to its events"; onClicked: pane.openLog(pane.key) }
+        IconButton { visible: pane.mappable; name: "map"; tip: "the team's map, this work picked"; onClicked: pane.openMap(pane.key) }
+        ActionMenu {
+          readonly property var entries: [
+            { id: "escalate", icon: "chevron-up", text: "ESCALATE", shown: pane.askedOfYou.length > 0 },
+            { id: "read", icon: "check", text: pane.notes.length > 1 ? "MARK " + pane.notes.length + " NOTES READ" : "MARK READ", shown: pane.notes.length > 0 }
+          ]
+          visible: items.length > 0
+          items: entries.filter(entry => entry.shown)
+          tip: "more on this work"
+          onChosen: id => {
+            if (id === "escalate")
+              pane.decide(pane.askedOfYou[0].id, true)
+            else
+              pane.notes.forEach(note => Omunculus.markRead(note.id))
+          }
         }
       }
     }
+
     Breadcrumb {
       Layout.fillWidth: true
       trail: pane.trail
@@ -207,29 +234,27 @@ FocusScope {
       tip: pane.work && pane.work.workflow ? pane.work.workflow : ""
     }
 
-    // The tabs; REQUESTS counts what waits.
+    // The tabs; REQUESTS counts what waits, and is marked while you are asked.
     Flow {
-      id: tabBar
       Layout.fillWidth: true
-      spacing: 6
-      activeFocusOnTab: true
-      Keys.onLeftPressed: pane.cycle(-1)
-      Keys.onRightPressed: pane.cycle(1)
-      FocusRing {}
+      spacing: Theme.space.section
       Repeater {
+        id: tabRow
         model: pane.tabs
-        delegate: TraceButton {
-          required property var modelData
-          dense: true
-          role: pane.tab === modelData.name ? "primary" : "action"
-          text: modelData.name.toUpperCase()
-            + (modelData.name === "requests" && pane.asks.length + pane.asked.length > 0 ? " " + (pane.asks.length + pane.asked.length) : "")
-          tip: modelData.tip
-          onClicked: pane.tab = modelData.name
+        delegate: Tab {
+          required property string modelData
+          required property int index
+          readonly property int waiting: modelData === "requests" ? pane.asks.length + pane.asked.length : 0
+          label: modelData + (waiting > 0 ? " " + waiting : "")
+          digit: String(index + 1).padStart(2, "0")
+          current: pane.tab === modelData
+          alert: modelData === "requests" && pane.askedOfYou.length > 0
+          onChosen: pane.tab = modelData
+          Keys.onLeftPressed: pane.cycle(-1, true)
+          Keys.onRightPressed: pane.cycle(1, true)
         }
       }
     }
-    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.line }
 
     // OVERVIEW.
     ScrollPage {
@@ -242,21 +267,21 @@ FocusScope {
       ColumnLayout {
         id: facts
         width: overview.width
-        spacing: 8
+        spacing: Theme.space.tight
 
         Fact {
           name: "Now"
-          visible: pane.node !== null && pane.node.state !== "done" && pane.node.state !== "cancelled"
+          visible: pane.node !== null && !Progress.closed(pane.node.state)
           RowLayout {
             Layout.fillWidth: true
-            spacing: 8
+            spacing: Theme.space.tight
             Label {
               visible: !!(pane.node && pane.node.lastCall)
               Layout.maximumWidth: implicitWidth
               Layout.fillWidth: true
               Layout.minimumWidth: 0
               text: pane.node && pane.node.lastCall ? pane.node.lastCall.name : ""
-              font.pixelSize: 12
+              font.pixelSize: Theme.type.body.size
               elide: Text.ElideRight
             }
             Label {
@@ -264,10 +289,10 @@ FocusScope {
               Layout.minimumWidth: 0
               text: pane.node ? (pane.node.lastCall ? pane.node.lastCall.brief : pane.node.doing) : ""
               color: Theme.dim
-              font.pixelSize: 12
+              font.pixelSize: Theme.type.body.size
               elide: Text.ElideRight
             }
-            Label { visible: pane.clock !== ""; text: pane.clock; color: Theme.dim; font.pixelSize: 11 }
+            Label { visible: pane.clock !== ""; text: pane.clock; color: Theme.dim; font.pixelSize: Theme.type.tab.size }
           }
         }
         Fact {
@@ -324,37 +349,38 @@ FocusScope {
             color: pane.asked.length > 0 ? Theme.foreground : Theme.dim
           }
         }
+        // Each portrait beside its agent's name, the one with the stage ringed.
         Fact {
           name: "Team"
           visible: !!pane.node && pane.node.team.length > 0
           Flow {
             Layout.fillWidth: true
-            spacing: 10
+            spacing: Theme.space.gap
             Repeater {
               model: pane.node ? pane.node.team : []
               delegate: Row {
                 id: member
                 required property var modelData
-                spacing: 4
+                spacing: Theme.space.line
                 Rectangle {
                   width: 20
-                  height: 20
+                  height: width
                   color: "transparent"
                   border.color: member.modelData.current ? Omunculus.toneOf(member.modelData.agent) : "transparent"
                   Portrait {
                     anchors.centerIn: parent
                     width: 16
-                    height: 16
+                    height: width
                     agent: member.modelData.agent
                     source: Omunculus.imageOf(member.modelData.agent)
                     tone: Omunculus.toneOf(member.modelData.agent)
                   }
                 }
                 Label {
-                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.verticalCenter: parent ? parent.verticalCenter : undefined
                   text: member.modelData.agent
                   color: member.modelData.current ? Omunculus.toneOf(member.modelData.agent) : Theme.dim
-                  font.pixelSize: 11
+                  font.pixelSize: Theme.type.tab.size
                   elide: Text.ElideRight
                   width: Math.min(implicitWidth, Math.max(0, facts.width - 130))
                 }
@@ -372,26 +398,26 @@ FocusScope {
               required property var modelData
               readonly property bool current: modelData.status === "current"
               Layout.fillWidth: true
-              spacing: 8
+              spacing: Theme.space.tight
               Label {
                 text: stage.modelData.status === "done" ? "✓" : stage.current ? "●" : "○"
                 color: stage.modelData.status === "done" ? Theme.success : stage.current ? Theme.primary : Theme.dim
-                font.pixelSize: 12
+                font.pixelSize: Theme.type.body.size
               }
               Label {
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
                 text: stage.modelData.name + (stage.current && pane.node.round > 0 ? " · round " + pane.node.round : "")
                 color: stage.current ? Theme.primary : stage.modelData.status === "done" ? Theme.foreground : Theme.dim
-                font.pixelSize: 12
+                font.pixelSize: Theme.type.body.size
                 font.bold: stage.current
                 elide: Text.ElideRight
               }
               Label {
-                Layout.maximumWidth: stage.width * 0.5
+                Layout.maximumWidth: facts.width * 0.4
                 text: stage.modelData.agent + (stage.modelData.seconds > 0 ? " · " + Progress.span(Math.round(stage.modelData.seconds)) + (stage.current ? " so far" : "") : "")
                 color: Theme.dim
-                font.pixelSize: 11
+                font.pixelSize: Theme.type.tab.size
                 elide: Text.ElideRight
               }
             }
@@ -413,24 +439,7 @@ FocusScope {
           Value { id: spent; text: pane.node ? pane.cost(pane.node.branch.usage) : ""; color: Theme.dim }
         }
 
-        Flow {
-          Layout.fillWidth: true
-          Layout.topMargin: 4
-          spacing: 6
-          TraceButton { role: "action"; dense: true; icon: "enter"; text: "OPEN THREAD"; tip: "what its agents said and did"; onClicked: pane.tab = "thread" }
-          TraceButton { role: "action"; dense: true; icon: "list"; text: "SHOW IN LOG"; tip: "the log page, kept to its events"; onClicked: pane.openLog(pane.key) }
-          TraceButton {
-            visible: pane.mappable
-            role: "action"
-            dense: true
-            icon: "map"
-            text: "SHOW ON MAP"
-            tip: "the team's map, this work picked"
-            onClicked: pane.openMap(pane.key)
-          }
-        }
-
-        Kicker { Layout.fillWidth: true; Layout.topMargin: 6; text: "the work" }
+        Kicker { Layout.fillWidth: true; Layout.topMargin: Theme.space.tight; text: "the work" }
         WorkSummary {
           Layout.fillWidth: true
           key: pane.key
@@ -444,7 +453,7 @@ FocusScope {
       Layout.fillWidth: true
       Layout.fillHeight: true
       visible: pane.tab === "thread"
-      spacing: 10
+      spacing: Theme.space.gap
       TimelineView {
         Layout.fillWidth: true
         Layout.fillHeight: true
@@ -472,7 +481,7 @@ FocusScope {
       ColumnLayout {
         id: requestList
         width: requestsPage.width
-        spacing: 10
+        spacing: Theme.space.gap
 
         Kicker { Layout.fillWidth: true; text: "it asked"; visible: pane.asks.length > 0 }
         Repeater {
@@ -481,13 +490,13 @@ FocusScope {
             id: ask
             required property var modelData
             Layout.fillWidth: true
-            spacing: 4
+            spacing: Theme.space.line
             Label {
               Layout.fillWidth: true
               text: "⇡ " + (ask.modelData.chain && ask.modelData.chain.length > 0 ? ask.modelData.chain.join(" › ") : ask.modelData.to)
                 + " · " + (ask.modelData.human ? "you decide" : ask.modelData.to + " decides")
               color: Theme.dim
-              font.pixelSize: 11
+              font.pixelSize: Theme.type.tab.size
               wrapMode: Text.Wrap
             }
             RequestDecision { Layout.fillWidth: true; key: ask.modelData.id }
@@ -500,16 +509,16 @@ FocusScope {
             id: incoming
             required property var modelData
             Layout.fillWidth: true
-            spacing: 4
+            spacing: Theme.space.line
             RowLayout {
               Layout.fillWidth: true
-              spacing: 8
+              spacing: Theme.space.tight
               Label {
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
                 text: "⇣ from " + incoming.modelData.from + " · " + pane.agent + " decides, or you instead"
                 color: Theme.dim
-                font.pixelSize: 11
+                font.pixelSize: Theme.type.tab.size
                 elide: Text.ElideRight
               }
               Chip {
@@ -527,7 +536,7 @@ FocusScope {
           visible: pane.asks.length === 0 && pane.asked.length === 0
           text: "Nothing waits between it and anyone."
           color: Theme.dim
-          font.pixelSize: 12
+          font.pixelSize: Theme.type.body.size
           wrapMode: Text.Wrap
         }
       }
@@ -556,7 +565,7 @@ FocusScope {
       Layout.fillWidth: true
       Layout.fillHeight: true
       visible: pane.tab === "runs" && pane.prompting
-      spacing: 8
+      spacing: Theme.space.tight
       Chip { text: "‹ RUNS"; tip: "back to its runs"; onClicked: pane.prompting = false }
       WorkPrompt {
         Layout.fillWidth: true

@@ -13,7 +13,9 @@ import "kit/client/Time.js" as Time
 // per row, and under each stage the works handed down while it was current,
 // nested by level. Siblings run in parallel under one heading. A done stage,
 // and a done, cancelled or coming work, keeps what is below it folded until
-// unfolded, unless a question waiting on you climbed from there. ↑/↓ move
+// unfolded, unless a question waiting on you climbed from there; the done
+// and cancelled works of each place fold into one row, "✓ 2 sub-works done ·
+// 18 min". ↑/↓ move
 // between rows, → unfolds, ← folds, Enter opens a work's details or folds a
 // row, Esc leaves.
 Item {
@@ -62,9 +64,12 @@ Item {
     const out = []
     if (!progress)
       return out
-    const place = (parent, kids, level) => {
+    // The open works of a place, then those done or cancelled folded into
+    // one row, unless a question of yours climbed from one of them; a done
+    // stage unfolded, `whole`, lists them all.
+    function place(parent, kids, level, whole) {
       let group = null
-      for (const kid of kids) {
+      for (const kid of whole ? kids : kids.filter(kid => !Progress.closed(kid.state))) {
         const found = parent.groups.find(each => each.parallel && each.nodes.some(node => node.work === kid.work)) || null
         if (found && found !== group) {
           const key = "group:" + found.nodes[0].work
@@ -75,8 +80,17 @@ Item {
           continue
         work(kid, level)
       }
+      const finished = whole ? [] : kids.filter(kid => Progress.closed(kid.state))
+      if (finished.length === 0)
+        return
+      const key = "done:" + parent.work + ":" + finished[0].work
+      const quiet = !finished.some(kid => kid.below !== "")
+      const shut = folded(key, quiet)
+      out.push({ kind: "done", key: key, level: level, text: Progress.finished(finished), folds: true, folded: shut, fold: quiet })
+      if (!shut)
+        finished.forEach(kid => work(kid, level))
     }
-    const work = (node, level) => {
+    function work(node, level) {
       const kids = Progress.kidsOf(node)
       // Folded unless a question of yours climbed from below it.
       const quiet = ["done", "cancelled", "up-next"].includes(node.state) && node.below === ""
@@ -105,7 +119,7 @@ Item {
         const shut = kids.length > 0 && folded(key, quiet)
         out.push({ kind: "stage", key: key, level: 0, node: root, step: step, folds: kids.length > 0, folded: shut, fold: quiet })
         if (!shut) {
-          place(root, kids, 1)
+          place(root, kids, 1, step.status === "done")
         } else {
           const done = kids.filter(kid => kid.state === "done").length
           out.push({ kind: "more", key: key + "+", level: 1, of: key, fold: quiet,
@@ -147,14 +161,14 @@ Item {
   Column {
     id: body
     width: tree.width
-    spacing: 4
+    spacing: Theme.space.line
 
     Label {
       width: parent.width
       visible: tree.rows.length === 0
       text: "No one is working on this conversation yet."
       color: Theme.dim
-      font.pixelSize: 12
+      font.pixelSize: Theme.type.body.size
       wrapMode: Text.Wrap
     }
 
@@ -214,7 +228,7 @@ Item {
           x: entry.inset + (entry.modelData.level > 3 ? 12 : 0)
           width: entry.width - x
           focus: true
-          sourceComponent: ({ needs: needsRow, now: nowRow, head: headRow, stage: stageRow, group: foldRow, more: foldRow })[entry.modelData.kind] || nodeRow
+          sourceComponent: ({ needs: needsRow, now: nowRow, head: headRow, stage: stageRow, group: foldRow, more: foldRow, done: foldRow })[entry.modelData.kind] || nodeRow
         }
 
         Component {
@@ -240,22 +254,22 @@ Item {
           SurfaceFrame {
             tone: Theme.warning
             active: true
-            implicitHeight: needs.implicitHeight + 16
+            implicitHeight: needs.implicitHeight + Theme.space.insetTop * 2
             ColumnLayout {
               id: needs
-              anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
-              spacing: 4
+              anchors { left: parent.left; right: parent.right; top: parent.top; margins: Theme.space.insetTop; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset }
+              spacing: Theme.space.tight
               RowLayout {
                 Layout.fillWidth: true
-                spacing: 8
+                spacing: Theme.space.tight
                 Icon { name: "warning"; size: 12; color: Theme.warning }
                 Label {
                   Layout.fillWidth: true
                   Layout.minimumWidth: 0
-                  text: "Needs you · " + entry.modelData.ask.asker + " asks"
+                  text: ("Needs you · " + entry.modelData.ask.asker + " asks").toUpperCase()
                   color: Theme.warning
-                  font.pixelSize: 12
-                  font.bold: true
+                  font.pixelSize: Theme.type.kicker.size
+                  font.letterSpacing: Theme.type.kicker.tracking
                   elide: Text.ElideRight
                 }
               }
@@ -263,17 +277,20 @@ Item {
                 Layout.fillWidth: true
                 text: entry.modelData.ask.question.split("\n")[0]
                 color: Theme.foreground
-                font.pixelSize: 12
+                font.pixelSize: Theme.type.cardBody.size
+                lineHeight: Theme.type.cardBody.lineHeight
                 wrapMode: Text.Wrap
                 maximumLineCount: 2
                 elide: Text.ElideRight
               }
+              // Urgent, never the main: its tone says so.
               TraceButton {
-                role: "primary"
+                role: "progress"
                 dense: true
                 tone: Theme.warning
                 text: "ANSWER"
                 icon: "enter"
+                tip: "the question, to answer it"
                 onClicked: tree.answer(entry.modelData.ask.id)
               }
             }
@@ -286,7 +303,7 @@ Item {
           RowLayout {
             id: run
             readonly property var now: tree.progress.now
-            spacing: 8
+            spacing: Theme.space.tight
             Label {
               Layout.maximumWidth: run.width * 0.4
               text: run.now.agent
@@ -313,10 +330,10 @@ Item {
             id: head
             readonly property var node: entry.modelData.node
             readonly property var work: Omunculus.work(node.work)
-            spacing: 2
+            spacing: Theme.space.row
             Label {
               Layout.fillWidth: true
-              Layout.topMargin: 6
+              Layout.topMargin: Theme.space.tight
               text: head.node.title
               color: Theme.foreground
               font.pixelSize: 13
@@ -353,13 +370,13 @@ Item {
             readonly property bool now: step.status === "current"
             readonly property int round: now ? entry.modelData.node.round : 0
             readonly property string time: step.seconds > 0 ? Progress.span(step.seconds) : ""
-            implicitHeight: 26
+            implicitHeight: Theme.size.rule
             color: entry.activeFocus || stageHover.hovered ? Theme.highlight : "transparent"
             HoverHandler { id: stageHover }
             TapHandler { onTapped: { entry.forceActiveFocus(); entry.enter() } }
             RowLayout {
-              anchors { fill: parent; leftMargin: 4; rightMargin: 4 }
-              spacing: 8
+              anchors { fill: parent; leftMargin: Theme.space.line; rightMargin: Theme.space.line }
+              spacing: Theme.space.tight
               Label {
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
@@ -392,18 +409,24 @@ Item {
           }
         }
 
-        // The heading of works that run side by side, or a done stage's
-        // works, folded.
+        // The heading of works that run side by side, a done stage's works,
+        // folded, or the done and cancelled works of a place.
         Component {
           id: foldRow
           Rectangle {
-            implicitHeight: 24
+            implicitHeight: Theme.size.rule
             color: entry.activeFocus || foldHover.hovered ? Theme.highlight : "transparent"
             HoverHandler { id: foldHover }
             TapHandler { onTapped: { entry.forceActiveFocus(); entry.enter() } }
             RowLayout {
-              anchors { fill: parent; leftMargin: 4; rightMargin: 4 }
-              spacing: 6
+              anchors { fill: parent; leftMargin: Theme.space.line; rightMargin: Theme.space.line }
+              spacing: Theme.space.tight
+              Label {
+                visible: entry.modelData.kind === "done"
+                text: "✓"
+                color: Theme.success
+                font.pixelSize: Theme.type.tab.size
+              }
               Label {
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
