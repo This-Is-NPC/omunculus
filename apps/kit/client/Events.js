@@ -15,10 +15,13 @@ function first(value) {
 }
 
 // Why a failed call failed, on one line: a command's error is the last line
-// of its output, any other tool's the first.
+// of its output before the "(exit N)" trailer the bash tool adds (kept only
+// when nothing else was printed), any other tool's the first.
 function reason(name, output) {
   const lines = String(output === undefined || output === null ? "" : output).split("\n").map(flat).filter(line => line !== "");
-  return (name === "bash" ? lines[lines.length - 1] : lines[0]) || "";
+  if (name !== "bash") return lines[0] || "";
+  const printed = lines.filter(line => !/^\(exit \d+\)$/.test(line));
+  return (printed.length > 0 ? printed : lines).slice(-1)[0] || "";
 }
 
 function plural(count, one, many) { return count + " " + (count === 1 ? one : many); }

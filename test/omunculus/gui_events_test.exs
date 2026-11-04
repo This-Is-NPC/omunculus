@@ -58,6 +58,8 @@ defmodule Omunculus.GuiEventsTest do
     says("tool", {name: "ask", args: {question: "Hi"}, ok: true, output: ""}, "seller", "asked a teammate");
     says("tool", {name: "bash", args: {command: "ls"}, ok: true, output: ""}, "design-lead", "ran a command");
     says("tool", {name: "bash", args: {command: "ls -la quotes"}, ok: false, output: "total 4\\nls: cannot access quotes: No such file\\n"}, "design-lead", "could not run a command on quotes/: ls: cannot access quotes: No such file");
+    says("tool", {name: "bash", args: {command: "cat quotes"}, ok: false, output: "cat: quotes: No such file\\n\\n(exit 1)"}, "design-lead", "could not run a command on quotes: cat: quotes: No such file");
+    says("tool", {name: "bash", args: {command: "false"}, ok: false, output: "\\n(exit 1)"}, "design-lead", "could not run a command: (exit 1)");
     says("tool", {name: "deploy_preview", args: {}, ok: true, output: ""}, "design-lead", "made a call");
     for (const name of ["comment", "continue", "delegate", "work", "escalate", "ask", "next_stage", "reply"])
       check(Events.minor("tool", {name, args: {}, ok: true}) && !Events.minor("tool", {name, args: {}, ok: false, output: "refused"}), "echoed " + name, "");
