@@ -25,9 +25,9 @@ function diff(name, args) {
 }
 
 // A turn's steps ({name, ok, text, args, output, outcome, hook?}) as one
-// group: how many calls and how many failed (outcomes are not calls), and one
-// row per step. Hooks that passed fold into one row, where the first of them
-// ran.
+// group: how many calls and how many failed (outcomes and hooks are not
+// calls), and one row per step. Hooks that passed fold into one row, where
+// the first of them ran.
 function group(steps) {
   const rows = [];
   let calls = 0;
@@ -35,7 +35,7 @@ function group(steps) {
   let hooks = null;
   for (const step of steps) {
     const ok = step.ok !== false;
-    if (!step.outcome) {
+    if (!step.outcome && !step.hook) {
       calls++;
       if (!ok) failed++;
     }
