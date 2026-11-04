@@ -49,7 +49,7 @@ Item {
 
   function matches(line) {
     const wanted = filter.trim().toLowerCase()
-    return (!asksOnly || line.asks) && (!failedOnly || !line.ok) && (agent === "" || line.who === agent)
+    return (!asksOnly || line.asks) && (!failedOnly || (!line.ok && !line.retried)) && (agent === "" || line.who === agent)
       && (showMinor || !line.minor || line.head !== "")
       && (wanted === "" || [line.kind, line.who, line.run, line.work, line.what].join(" ").toLowerCase().includes(wanted))
   }
@@ -124,6 +124,11 @@ Item {
         view.refilter()
       else
         view.extend()
+    }
+    // A failure settled as retried leaves the FAILED rows.
+    function onDataChanged() {
+      if (view.failedOnly)
+        view.refilter()
     }
   }
 
@@ -220,7 +225,9 @@ Item {
         readonly property var line: model
         readonly property var kind: view.kinds[model.type] || ({ icon: "more", tone: Theme.dim })
         readonly property bool marked: (view.picked !== null && view.picked.id === model.id) || (ListView.isCurrentItem && list.activeFocus)
-        readonly property string status: !model.ok ? "FAILED" : model.asks ? "NEEDS YOU" : ""
+        readonly property string status: !model.ok ? (model.retried ? "RETRIED" : "FAILED") : model.asks ? "NEEDS YOU" : ""
+        // A failure a later call settled is dim, not red.
+        readonly property bool bad: !model.ok && !model.retried
 
         width: list.width
         height: (model.day !== "" ? Theme.size.rule : 0) + (model.head !== "" ? Theme.size.rule : 0) + box.height
@@ -275,7 +282,7 @@ Item {
               Layout.fillWidth: true
               Layout.minimumWidth: 0
               text: row.model.what
-              color: row.model.ok ? (row.model.minor ? Theme.dim : Theme.foreground) : Theme.error
+              color: row.bad ? Theme.error : row.model.ok && !row.model.minor ? Theme.foreground : Theme.dim
               font.pixelSize: Theme.type.body.size
               elide: Text.ElideRight
             }
@@ -290,7 +297,7 @@ Item {
             Label {
               visible: row.status !== ""
               text: row.status
-              color: row.model.ok ? Theme.warning : Theme.error
+              color: row.bad ? Theme.error : row.model.ok ? Theme.warning : Theme.dim
               font.pixelSize: Theme.type.header.size
               font.letterSpacing: Theme.type.header.tracking
             }

@@ -737,6 +737,7 @@ Singleton {
       work: event.work_id || "",
       what: Events.what(event.type, body, who, questionsOf, event.request_id, askersOf),
       ok: !failed,
+      tool: event.type === "tool" && !Events.hook(body) ? body.name : "",
       asks: event.type === "request" && !!body.arbiter && Requests.human(body.arbiter),
       raw: JSON.stringify(event)
     })
@@ -815,7 +816,7 @@ Singleton {
     keep("callsOf", work, {
       firstFailed: was.firstFailed || (fails ? line.name : ""),
       firstArgs: was.firstFailed ? was.firstArgs : fails ? line.args : {},
-      firstError: was.firstFailed ? was.firstError : fails ? (String(line.output || "").split("\n").find(each => each.trim() !== "") || "").trim() : "",
+      firstError: was.firstFailed ? was.firstError : fails ? Events.reason(line.name, line.output) : "",
       count: was.count + (call ? 1 : 0),
       failed: was.failed + (fails ? 1 : 0),
       open: open,
