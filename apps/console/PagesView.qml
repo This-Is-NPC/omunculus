@@ -797,17 +797,20 @@ Item {
         function onPickedChanged() { view.pickedNode = view.team.picked }
         function onShownAsChanged() { view.teamShownAs = view.team.shownAs }
       }
+      // A team going away keeps its values, so nothing is written back from it.
       Binding {
         target: view.team
         property: "picked"
         value: view.pickedNode
         when: view.team !== null
+        restoreMode: Binding.RestoreNone
       }
       Binding {
         target: view.team
         property: "shownAs"
         value: view.teamShownAs
         when: view.team !== null
+        restoreMode: Binding.RestoreNone
       }
     }
 
