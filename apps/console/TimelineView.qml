@@ -524,7 +524,11 @@ Item {
           asker: asked ? Requests.asker(asked) : ""
           route: asked ? Requests.route(asked, Omunculus.noted[entry.key]) : []
           question: asked ? Requests.question(asked, Omunculus.noted[entry.key]) : ""
-          choice: reply ? Requests.chose(reply.option) : ""
+          readonly property var wanted: asked ? Requests.granted(asked) : null
+          readonly property var job: asked ? Omunculus.work(asked.work_id || "") : null
+          readonly property var place: Omunculus.workspaceOf(job ? job.workspace || "" : "")
+          unlock: Requests.unlocks(wanted, place.root)
+          choice: reply ? Requests.chose(reply.option, wanted !== null, asked ? { who: Requests.label(asked.requester), stage: job && job.stage ? job.stage : "", folder: place.name || "" } : undefined) : ""
           body: reply && reply.body !== reply.option ? reply.body : ""
           stamp: reply && reply.stamp ? reply.stamp : entry.stamp
         }

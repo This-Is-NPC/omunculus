@@ -1,4 +1,5 @@
 .pragma library
+.import "Phrases.js" as Phrases
 
 function pending(request) { return request.status === "pending"; }
 function human(participant) { return participant.kind === "human"; }
@@ -77,11 +78,25 @@ function once(options, permission) {
 function ordered(options, permission) { return once(options, permission).concat(options.filter(guarded)); }
 
 // What the heading of your answer says of the option you chose; "" for an
-// answer in words. Adjusting is asking for changes, not choosing.
-function chose(option) {
+// answer in words. Adjusting is asking for changes, not choosing. A grant
+// keeps its scope: `of` ({who, stage, folder}) says where a saved one applies.
+function chose(option, permission, of) {
   if (!option) return "";
   if (option === "adjust") return "YOU ASKED TO ADJUST";
-  return option === "grant" ? "YOU GRANTED" : "YOU CHOSE " + optionText(option);
+  if (option === "grant") return "YOU GRANTED  \u00b7  THIS WORK ONLY";
+  if (scoped(option, permission)) return "YOU GRANTED  \u00b7  " + optionLabel(option, of);
+  return "YOU CHOSE " + optionText(option);
+}
+
+// What a granted name, as {kind, name}, lets the agent do; `root` is its
+// workspace's folder.
+function unlocks(granted, root) {
+  if (!granted) return "";
+  if (granted.kind === "resource")
+    return { "sandbox.write": "write files in " + (root || "its workspace"), "sandbox.network": "use the network" }[granted.name] || "use " + granted.name;
+  if (granted.kind === "tool")
+    return Phrases.act(granted.name) || granted.name.replace(/_/g, " ");
+  return "reach " + granted.name;
 }
 
 // The first name a grant among a request's decisions gives, as {kind, name};

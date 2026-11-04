@@ -3,7 +3,6 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/client/Questions.js" as Questions
 import "kit/client/Events.js" as Events
-import "kit/client/Phrases.js" as Phrases
 import "kit/client/Requests.js" as Requests
 import "kit/ui/focus.js" as Focus
 import "kit/ui"
@@ -166,17 +165,6 @@ SurfaceFrame {
       answerInWords(words.text)
   }
 
-  // What the granted name lets the agent do.
-  function unlocks(granted) {
-    if (!granted)
-      return ""
-    if (granted.kind === "resource")
-      return { "sandbox.write": "write files in " + (place.root || "its workspace"), "sandbox.network": "use the network" }[granted.name] || "use " + granted.name
-    if (granted.kind === "tool")
-      return Phrases.act(granted.name) || granted.name.replace(/_/g, " ")
-    return "reach " + granted.name
-  }
-
   // How an option of the request, or of a decision it gathers, reads on its
   // button: a grant's scope is that of whoever asked it.
   function labelOf(option, of) {
@@ -296,7 +284,7 @@ SurfaceFrame {
     Label {
       Layout.fillWidth: true
       visible: card.wanted !== null && !card.settled
-      text: card.asker + " wants to " + card.unlocks(card.wanted)
+      text: card.asker + " wants to " + Requests.unlocks(card.wanted, card.place.root)
       color: Theme.foreground
       font.pixelSize: Theme.type.cardBody.size
       lineHeight: Theme.type.cardBody.lineHeight

@@ -19,6 +19,8 @@ Item {
   // Who passed the question on toward you, the asker first.
   property var route: []
   property string question
+  // What a permission you answered lets the agent do, as "use the network".
+  property string unlock
   // The heading when an option was chosen, as YOU CHOSE APPROVE.
   property string choice
   property string body
@@ -35,7 +37,9 @@ Item {
     return line.length > 120 ? line.slice(0, 119) + "…" : line
   }
   readonly property string via: route.length > 1 ? " · via " + route.slice(1).join(" › ") : ""
-  readonly property string summary: asker + " asked" + via + (form ? " · " + form.items.length + " questions" : "") + ": " + first
+  // Who asked and how it came; a permission says what it was for.
+  readonly property string lead: " asked" + via + (unlock !== "" ? " to " + unlock : form ? " · " + form.items.length + " questions" : "")
+  readonly property string summary: asker + lead + (unlock !== "" ? "" : ": " + first)
 
   implicitHeight: column.y + column.height + Theme.space.row + Theme.space.gap
 
@@ -80,10 +84,10 @@ Item {
         width: parent.width - x
         readonly property color ink: pointer.containsMouse ? Theme.foreground : Theme.dim
         Label { id: who; text: bubble.asker; color: Omunculus.toneOf(bubble.asker); font.pixelSize: 11 }
-        Label { id: by; text: " asked" + bubble.via + (bubble.form ? " · " + bubble.form.items.length + " questions" : ""); color: line.ink; font.pixelSize: 11 }
+        Label { id: by; text: bubble.lead; color: line.ink; font.pixelSize: 11 }
         Label {
           width: Math.max(0, line.width - by.width - who.width)
-          text: ": " + bubble.first
+          text: bubble.unlock !== "" ? "" : ": " + bubble.first
           color: line.ink
           font.pixelSize: 11
           maximumLineCount: 1

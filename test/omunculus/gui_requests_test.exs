@@ -35,7 +35,20 @@ defmodule Omunculus.GuiRequestsTest do
     if (Requests.chose("grant_agent") !== "YOU CHOSE GRANT AGENT") throw Error("underscore");
     if (Requests.chose("adjust") !== "YOU ASKED TO ADJUST") throw Error("adjust");
     if (Requests.chose("") !== "") throw Error("words only");
-    if (Requests.chose("grant") !== "YOU GRANTED") throw Error("grant");
+    if (Requests.chose("grant") !== "YOU GRANTED  \u00b7  THIS WORK ONLY") throw Error("grant keeps its scope");
+    if (Requests.chose("grant_agent", true, {who: "clerk"}) !== "YOU GRANTED  \u00b7  FOR CLERK") throw Error("saved scope");
+    if (Requests.chose("grant_network", false) !== "YOU CHOSE GRANT NETWORK") throw Error("a decision's own option");
+    """)
+  end
+
+  test "unlocks says what a granted name lets the agent do" do
+    run!(["Phrases", "Requests"], """
+    if (Requests.unlocks(null, "") !== "") throw Error("nothing");
+    if (Requests.unlocks({kind: "resource", name: "sandbox.network"}, "") !== "use the network") throw Error("network");
+    if (Requests.unlocks({kind: "resource", name: "sandbox.write"}, "/site") !== "write files in /site") throw Error("write");
+    if (Requests.unlocks({kind: "resource", name: "sandbox.write"}, "") !== "write files in its workspace") throw Error("write default");
+    if (Requests.unlocks({kind: "tool", name: "publish_site"}, "") !== "publish site") throw Error("tool");
+    if (Requests.unlocks({kind: "other", name: "x"}, "") !== "reach x") throw Error("reach");
     """)
   end
 
