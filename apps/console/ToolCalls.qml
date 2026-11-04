@@ -36,9 +36,11 @@ Column {
   // The header in characters of its font, so it never runs past the width,
   // with room for the separators between its parts.
   readonly property int budget: Math.max(8, Math.floor((width - 18) / metrics.advanceWidth("M")) - 1)
+  // A lone call that went well is named by what it did, not counted.
+  readonly property var lone: count === 1 && summary.failed === 0 ? steps.find(step => !step.outcome && !step.hook) || null : null
   readonly property string failedPrefix: summary.failed + " failed"
   readonly property var header: Progress.fit([
-    { text: count === 1 ? "1 step" : count + " steps", short: count + " steps", keep: true },
+    { text: lone ? Phrases.did(lone.name, lone.args) : count === 1 ? "1 step" : count + " steps", short: lone ? Phrases.did(lone.name) : count + " steps", keep: true },
     summary.failed > 0 ? { text: failedPrefix + ": " + (failedRow ? Phrases.failure(failedRow.name) : ""), short: failedPrefix, keep: true } : null
   ].filter(part => part !== null), budget - 6).filter(text => text !== "")
 

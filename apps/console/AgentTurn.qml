@@ -10,7 +10,7 @@ import "kit/ui"
 // "Worked 1 minute" after), its words drawn as they stream in a box tinted with
 // its colour, the files it attached, and the group of its tool calls
 // (ToolCalls). Until the agent says or does anything the turn is not drawn.
-// A turn that continues the same agent's drops its heading. Once it has
+// A turn that continues the same agent's and says something drops its heading. Once it has
 // said something, the "more" button beside the words, in a gutter they never
 // take, copies them or shows the run's work in the log.
 Item {
@@ -52,18 +52,20 @@ Item {
   // About 70 characters at most per line, the gutter kept for the menu.
   readonly property real widest: Math.min(620, turn.width < Theme.size.measureFrom ? turn.width - Theme.size.gutter : Math.min(turn.width * Theme.size.measure, turn.width - Theme.size.gutter))
   readonly property real inset: Theme.size.bubbleInset
+  // Steps alone never stand under no name.
+  readonly property bool headed: !continued || said === ""
 
   visible: !empty
   implicitHeight: empty ? 0 : body.y + body.height + Theme.space.row
 
   Column {
     id: body
-    y: turn.continued ? Theme.space.row : Theme.space.inset
+    y: turn.headed ? Theme.space.inset : Theme.space.row : Theme.space.inset
     width: turn.widest
     spacing: Theme.space.line
 
     RowLayout {
-      visible: !turn.continued
+      visible: turn.headed
       width: turn.widest
       spacing: Theme.space.tight
       Dot { Layout.alignment: Qt.AlignVCenter; tone: turn.tone }
@@ -78,10 +80,20 @@ Item {
         elide: Text.ElideRight
       }
       Label {
+        Layout.minimumWidth: 0
+        text: turn.stamp.toUpperCase()
+        color: Qt.alpha(turn.tone, Theme.type.stamp.opacity)
+        font.pixelSize: Theme.type.stamp.size
+        font.letterSpacing: Theme.type.stamp.tracking
+        elide: Text.ElideRight
+      }
+      // How long it worked reads at the dim text's contrast.
+      Label {
         Layout.fillWidth: true
         Layout.minimumWidth: 0
-        text: (turn.stamp + (turn.worked !== "" ? Theme.type.meta.separator + turn.worked : "")).toUpperCase()
-        color: Qt.alpha(turn.tone, Theme.type.stamp.opacity)
+        text: (Theme.type.meta.separator + turn.worked).toUpperCase()
+        visible: turn.worked !== ""
+        color: Theme.dim
         font.pixelSize: Theme.type.stamp.size
         font.letterSpacing: Theme.type.stamp.tracking
         elide: Text.ElideRight

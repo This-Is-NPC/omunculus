@@ -75,6 +75,7 @@ defmodule Omunculus.GuiCallsTest do
     if (Phrases.phrase("work", several) !== "Opening work: Bakery website +2 more") throw Error("several phrase");
     if (Phrases.phrase("work", titled) !== "Opening work: Bakery website" || Phrases.phrase("work", {works: []}) !== "Opening work") throw Error("titled phrase");
     if (Phrases.phrase("read") !== "Reading files" || Phrases.phrase("mystery") !== "Working") throw Error("phrase");
+    if (Phrases.did("escalate") !== "Passed a question up" || Phrases.did("mystery") !== "Made a call" || Phrases.did("work", titled) !== "Opened work: Bakery website") throw Error("did");
     if (Phrases.failure("next_stage") !== "moving to the next stage" || Phrases.failure("mystery") !== "a call") throw Error("failure");
     """)
   end
