@@ -146,7 +146,8 @@ ShellRoot {
             delegate: LinkLabel {
               id: projectName
               required property string modelData
-              anchors.verticalCenter: parent.verticalCenter
+              // A delegate torn down has no parent.
+              anchors.verticalCenter: parent ? parent.verticalCenter : undefined
               value: modelData.toUpperCase()
               current: modelData === flow.projectId
               onClicked: { flow.projectId = projectName.modelData; window.page = 0 }

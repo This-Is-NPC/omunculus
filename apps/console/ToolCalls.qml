@@ -67,7 +67,8 @@ Column {
         delegate: Label {
           required property string modelData
           required property int index
-          anchors.verticalCenter: parent.verticalCenter
+          // A delegate torn down has no parent.
+          anchors.verticalCenter: parent ? parent.verticalCenter : undefined
           text: (index > 0 ? "· " : "") + modelData
           color: modelData.startsWith(group.failedPrefix) && group.summary.failed > 0 ? Theme.error
             : pointer.containsMouse ? Theme.foreground : Theme.dim

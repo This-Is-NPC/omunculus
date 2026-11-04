@@ -176,7 +176,8 @@ ShellRoot {
                 delegate: TraceButton {
                   required property var modelData
                   required property int index
-                  anchors.horizontalCenter: parent.horizontalCenter
+                  // A delegate torn down has no parent.
+                  anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
                   implicitWidth: Math.min(260, panel.width - 40)
                   implicitHeight: index === 0 ? 48 : 44
                   role: "navigation"
