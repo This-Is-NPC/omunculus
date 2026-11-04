@@ -19,7 +19,8 @@ RowLayout {
     "failed": { icon: "close", tone: Theme.error },
     "done": { icon: "check", tone: Theme.success },
     "cancelled": { icon: "close", tone: Theme.dim },
-    "up-next": { icon: "more", tone: Theme.dim }
+    "up-next": { icon: "more", tone: Theme.dim },
+    "idle": { icon: "more", tone: Theme.dim }
   })[state] || { icon: "more", tone: Theme.primary }
   readonly property color tone: look.tone
   // The words' font, to measure them.

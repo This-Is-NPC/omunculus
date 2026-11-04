@@ -211,8 +211,8 @@ once done, the stage's name being the stepper's under it; "WAITING FOR YOU
 SINCE 22:43", in the warning tone, in place of the clock while a question
 waits on you; before any work, "● SALES · STARTING" while its first run goes,
 NOT STARTED before any, the agent giving way as the width shrinks. From 700 px of its own width the counts
-follow: "· 2 AGENTS · 212 REPLIES", shown when more than one agent ran and
-once the model replied (a reply is one model call; a step is a tool call); each opens what it counts, the team and the cost, and
+follow: "· 2 AGENTS · US$ 0.04", shown when more than one agent ran and
+once the provider priced a call; each opens what it counts, the team and the cost, and
 the agents' tip names them. At its right the chevron, which opens the full
 view, and ANSWER, in the warning tone and with the count when more than one
 waits, while a question waits on you, which puts the keyboard in the newest
@@ -364,7 +364,9 @@ The team page (`TeamView`) shows the works of the conversation a level at a
 time, under a breadcrumb once it has gone down into a work ("Conversation
 › Bakery website › Design preview"), each crumb going back up. At the
 conversation's level the agent that talks with you heads the team ("sales ·
-talks with you · 2 agents", with "⇡ asks you 5 questions" while it does)
+talks with you · 2 agents", with its own state at the right, as the rows
+show theirs: "Answering 0:05" while its run is open, "Needs you" while a
+question waits on you, "Idle", and "⇡ asks you 5 questions" while it does)
 and the works nest under it, each level one block further in: a work's
 own row, then the rule naming the stage that handed works down (at the
 indent of the rows it heads) and those works. A level is a work's own row,
@@ -372,7 +374,7 @@ then the works it handed down, a row each, under that rule and, when
 several run side by side, "2 in parallel · 1 working". A work at work, on
 the way to it, or with a question for you below shows its open works under
 it, one level deeper, without going down: the agent at work is always on
-screen, and WORKING counts those rows;
+screen, and WORKING counts those rows and the head when its run is open;
 the conversation's level is its root works, the one root's own level when
 there is a single one, the roots done before an open one folded under "N
 done earlier". The done and cancelled works of each stage, or of a work
@@ -386,7 +388,8 @@ state at the top right (a work that waits on works at work reads "designer
 working", in the working tone), a meta line of its agent, its stages (`Stepper`;
 under 700 px a track filled to the stage it is at, and that stage) and its
 branch's works below in words ("1 sub-work done", "2 sub-works, 1
-working"), time, steps (tool calls; hook runs are not counted) and cost
+working"), time, the work's own steps (tool calls; hook runs and the
+sub-works' steps are not counted) and cost
 (tokens as "40k read · 2k written", as the cost page words them), and a
 badge per request between it and
 others. Short of room, the branch's totals give way first, a part at a

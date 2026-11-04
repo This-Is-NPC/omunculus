@@ -142,7 +142,7 @@ function intervals(lane, journey, created, end) {
 // branch spent; the root to show, the path to the work active below it, what
 // waits on you, as its card asks it, and the agents that ran, first first;
 // `front`, the agent that talks with the person when the works are other
-// agents' ({agent, agents, asking, ask}), else null. A node's `calls` are its
+// agents' ({agent, agents, asking, ask, asker, state, doing, since}), else null. A node's `calls` are its
 // tool calls, shown as steps: the model calls are in `usage`.
 // input: {works, lanes (work id -> laneOf), runs (with error), requests,
 // noted (request id -> true for one the harness passed on), calling,
@@ -264,10 +264,9 @@ function build(input) {
     const branch = kids.reduce((sum, kid) => ({
       agentSeconds: sum.agentSeconds + kid.branch.agentSeconds,
       works: sum.works + kid.branch.works,
-      calls: sum.calls + kid.branch.calls,
       usage: plus(sum.usage, kid.branch.usage),
       running: sum.running + kid.branch.running
-    }), { agentSeconds: agentSeconds, works: 1, calls: tally.count, usage: own.usage, running: mine.filter(each => each.status === "open").length });
+    }), { agentSeconds: agentSeconds, works: 1, usage: own.usage, running: mine.filter(each => each.status === "open").length });
     branch.seconds = Math.max(0, reach - created);
     branch.agents = agents.size;
 
@@ -397,9 +396,15 @@ function build(input) {
   else if (state !== "idle") spoken = word(state) + ". " + (path.length > 1 ? path.map(each => each.agent).join(", ") : doing.agent) + (doing.doing ? ": " + doing.doing : "");
 
   // The agent that talks with the person, when its works are other agents':
-  // the root of the team, and what it asks the person.
+  // the root of the team, what it asks the person and its own state.
+  const talking = input.rootAgent ? open.find(run => run.agent === input.rootAgent) : null;
   const front = input.rootAgent && roots.some(each => each.agent !== input.rootAgent)
-    ? { agent: input.rootAgent, agents: agents.length, asking: asking(forYou), ask: forYou.length > 0 ? forYou[0].id : "", asker: forYou.length > 0 ? forYou[0].asker : "" }
+    ? {
+      agent: input.rootAgent, agents: agents.length, asking: asking(forYou), ask: forYou.length > 0 ? forYou[0].id : "", asker: forYou.length > 0 ? forYou[0].asker : "",
+      state: talking ? "working" : forYou.length > 0 ? "needs-you" : "idle",
+      doing: talking ? (calling[talking.work_id || ""] ? Phrases.phrase(calling[talking.work_id || ""], callArgs[talking.work_id || ""]) : "Getting started") : "",
+      since: talking ? runStart(talking) : null
+    }
     : null;
 
   return { state: state, roots: roots, focus: focus, flat: flat, path: path, now: doing, forYou: forYou, agents: agents, counts: counts, spoken: spoken, front: front };

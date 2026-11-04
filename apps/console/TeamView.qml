@@ -75,7 +75,7 @@ FocusScope {
   // The agent that talks with the person, at the conversation's level.
   readonly property var front: progress && progress.front && (here === "" || byWork[here].parent === "") ? progress.front : null
   readonly property int needsYou: progress ? progress.forYou.length : 0
-  readonly property int working: flat.filter(node => node.state === "working").length
+  readonly property int working: flat.filter(node => node.state === "working").length + (front !== null && front.state === "working" ? 1 : 0)
 
   function closed(node) { return Progress.closed(node.state) }
   // The fold the done and cancelled works of a parent's group `at` go in.
@@ -462,6 +462,14 @@ FocusScope {
               color: line.modelData.front ? Omunculus.toneOf(line.modelData.front.agent) : Theme.dim
               font.pixelSize: Theme.type.body.size
               elide: Text.ElideRight
+            }
+            StateMark {
+              visible: !!line.modelData.front
+              Layout.maximumWidth: line.width * 0.4
+              state: line.modelData.front ? line.modelData.front.state : ""
+              text: !line.modelData.front ? "" : line.modelData.front.state === "working" ? line.modelData.front.doing : line.modelData.front.state === "idle" ? "Idle" : ""
+              clock: line.modelData.front && line.modelData.front.state === "working" && line.modelData.front.since !== null
+                ? Progress.clock(Math.max(0, Math.round(Omunculus.tick - line.modelData.front.since))) : ""
             }
             Chip {
               visible: !!line.modelData.front && line.modelData.front.asking !== ""
