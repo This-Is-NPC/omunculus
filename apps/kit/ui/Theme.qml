@@ -123,7 +123,7 @@ Singleton {
   ], 8)
   // Colours at least this far apart in RGB (0 to √3) read as different from
   // the accent, the states and the text; agents differ by `hueGap` of a turn
-  // in hue (1 is 360°).
+  // in hue (1 is 360°) from each other, the accent and the states.
   readonly property real apart: 0.15
   readonly property real hueGap: 1 / 12
 
@@ -135,29 +135,9 @@ Singleton {
   }
 
   function distinct(wanted, count) {
-    const picked = []
-    const states = [primary, success, warning, error, foreground].map(color => rgb(String(color)))
-    const take = color => {
-      if (!color || picked.length === count)
-        return
-      const hex = String(readable(color, background, foreground))
-      const value = rgb(hex)
-      if (states.some(other => Math.hypot(value[0] - other[0], value[1] - other[1], value[2] - other[2]) < apart))
-        return
-      if (picked.some(other => Colour.hueApart(Colour.hue(hex), Colour.hue(other)) < hueGap - 0.001))
-        return
-      picked.push(hex)
-    }
-    wanted.forEach(take)
-    const own = picked.slice()
-    for (let turn = 1; turn < 10; turn++)
-      for (const hex of own) {
-        const value = rgb(hex)
-        const color = Qt.rgba(value[0], value[1], value[2], 1)
-        if (color.hslSaturation > 0.05)
-          take(String(Qt.hsla((color.hslHue + turn / 10) % 1, color.hslSaturation, color.hslLightness, 1)))
-      }
-    return Colour.spread(picked)
+    const hexOf = color => String(color)
+    return Colour.palette(wanted.filter(color => color).map(hexOf), count, hexOf(background), hexOf(foreground),
+      [primary, success, warning, error].map(hexOf), apart, hueGap)
   }
 
   Process {

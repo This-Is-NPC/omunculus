@@ -46,6 +46,59 @@ defmodule Omunculus.GuiColourTest do
     assert {"", 0} = Omunculus.GuiModules.run(["Colour"], script)
   end
 
+  test "palette keeps every agent tone a hue gap from the accent and the states" do
+    themes = [
+      %{
+        bg: "#140c09",
+        fg: "#dccbb2",
+        accent: "#c65c49",
+        green: "#7fae6b",
+        yellow: "#c79a42",
+        red: "#cd5440",
+        wanted: ["#4f9ea8", "#c4a7e7", "#d98e48", "#5b8bd0", "#6fc4cc", "#d9a0e8", "#8fb4f0"]
+      },
+      %{
+        bg: "#ffffff",
+        fg: "#202020",
+        accent: "#2f6fdb",
+        green: "#2e8b3d",
+        yellow: "#b07a00",
+        red: "#c62828",
+        wanted: ["#00838f", "#8e24aa", "#ef6c00", "#6a1b9a", "#00acc1", "#ab47bc", "#5c6bc0"]
+      },
+      %{
+        bg: "#1e1e2e",
+        fg: "#cdd6f4",
+        accent: "#89b4fa",
+        green: "#a6e3a1",
+        yellow: "#f9e2af",
+        red: "#f38ba8",
+        wanted: ["#89dceb", "#cba6f7", "#fab387", "#74c7ec", "#94e2d5", "#f5c2e7", "#b4befe"]
+      }
+    ]
+
+    script = """
+    const themes = #{Jason.encode!(themes)};
+    for (const t of themes) {
+      const states = [t.accent, t.green, t.yellow, t.red];
+      const tones = Colour.palette(t.wanted, 8, t.bg, t.fg, states, 0.15, 1 / 12);
+      if (tones.length < 3) throw Error("fewer than 3 tones " + tones.length + " " + JSON.stringify(t));
+      for (const tone of tones) {
+        if (Colour.contrast(Colour.rgb(tone), Colour.rgb(t.bg)) < 4.5) throw Error("unreadable " + tone);
+        for (const other of states.concat(tones.filter(x => x !== tone)))
+          if (Colour.hueApart(Colour.hue(tone), Colour.hue(other)) < 1 / 12 - 0.002) throw Error(tone + " near " + other);
+      }
+    }
+    // the salmon that shares the accent's hue is refused
+    const salmon = Colour.palette(["#ad6c64"], 8, "#140c09", "#dccbb2", ["#c65c49", "#7fae6b", "#c79a42", "#cd5440"], 0.15, 1 / 12);
+    if (salmon.includes("#ad6c64")) throw Error("salmon kept");
+    // turning a hue moves it by that turn and keeps grey
+    if (Math.abs(Colour.hue(Colour.turn("#ff0000", 1 / 3)) - 1 / 3) > 0.01) throw Error("turn");
+    """
+
+    assert {"", 0} = Omunculus.GuiModules.run(["Colour"], script)
+  end
+
   test "dim and foreground reach 4.5:1 on every surface the thread uses" do
     themes = [
       fallback(),

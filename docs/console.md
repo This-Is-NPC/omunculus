@@ -125,7 +125,8 @@ while it is open, "Worked 3 min" after. An agent's name and dot take its tone (`
 it is named: the turns, the header strip, its lines and the cards. Tones go
 by the order agents first appear in the conversation on screen, from the
 agent you wrote to, and stay while it is open; no two are within 30° of
-hue. The board's agents have their own, in the order the window meets them.
+hue, and none within 30° of the accent, success, warning or error. A theme
+whose colours leave little room yields fewer tones, and they then repeat. The board's agents have their own, in the order the window meets them.
 While
 agents work and what you said or answered is still the newest thing in the
 thread, a working row under it, in the tone of the agent at work, names the
