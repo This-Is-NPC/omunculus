@@ -50,6 +50,14 @@ SurfaceFrame {
   readonly property string about: subject !== Omunculus.subject ? subject : ""
   // Who passed it up, from the asker up, and how each level worded it.
   readonly property var climb: request ? Requests.chain(request).reverse() : []
+  // Who it climbed through to reach you, the asker first: seller › sales.
+  readonly property var askers: {
+    const names = climb.map(level => Requests.label(level.requester))
+    if (request && !Omunculus.noted[key])
+      names.push(Requests.label(request.requester))
+    const unique = names.filter((name, at) => name && names.indexOf(name) === at)
+    return unique.length > 0 ? unique : asker !== "" ? [asker] : []
+  }
   readonly property string passers: climb.slice(1).map(level => Requests.label(level.requester)).join(" › ")
   readonly property var options: request ? Object.keys(request.options || {}) : []
   // Its own options, then those of the decisions it gathers from below still
@@ -230,7 +238,7 @@ SurfaceFrame {
         visible: !card.stacked
         Layout.alignment: Qt.AlignVCenter
         Layout.maximumWidth: content.width * 0.3
-        who: card.asker
+        names: card.askers
         dim: card.dim
       }
       Label {
@@ -268,7 +276,7 @@ SurfaceFrame {
       spacing: Theme.space.tight
       Asks {
         Layout.maximumWidth: content.width * 0.6
-        who: card.asker
+        names: card.askers
         dim: card.dim
       }
       Label {
@@ -598,21 +606,38 @@ SurfaceFrame {
     font.letterSpacing: Theme.type.meta.tracking
   }
 
-  // Who asks, in their tone, then "asks"; the name elides first.
+  // Who asks, in their tone, from the asker up ("seller › sales"), then
+  // "asks"; the names elide first.
   component Asks: RowLayout {
     id: asks
-    property string who
+    property var names: []
     property color dim
     Layout.fillWidth: false
     spacing: 0
-    Label {
-      Layout.fillWidth: true
-      Layout.minimumWidth: 0
-      text: asks.who
-      color: Omunculus.toneOf(asks.who)
-      font.pixelSize: Theme.type.meta.size
-      font.letterSpacing: 1
-      elide: Text.ElideRight
+    Repeater {
+      model: asks.names
+      delegate: RowLayout {
+        id: who
+        required property string modelData
+        required property int index
+        spacing: 0
+        Label {
+          visible: who.index > 0
+          text: " › "
+          color: asks.dim
+          font.pixelSize: Theme.type.meta.size
+          font.letterSpacing: 1
+        }
+        Label {
+          Layout.fillWidth: true
+          Layout.minimumWidth: 0
+          text: who.modelData
+          color: Omunculus.toneOf(who.modelData)
+          font.pixelSize: Theme.type.meta.size
+          font.letterSpacing: 1
+          elide: Text.ElideRight
+        }
+      }
     }
     Label {
       text: " asks"
