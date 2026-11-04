@@ -33,6 +33,10 @@ SurfaceFrame {
   // its own reason is then only how it came here.
   readonly property var passed: request && Omunculus.noted[key] ? Requests.passedOn(request) : []
   readonly property string asker: passed.length > 0 ? Requests.label(passed[0].requester) : request ? Requests.label(request.requester) : ""
+  // The work it concerns: the origin's when the harness passed it up, else the
+  // conversation's own subject.
+  readonly property var origin: passed.length > 0 ? Omunculus.work(passed[0].work_id || "") : null
+  readonly property string subject: origin ? origin.title : work ? work.title : Omunculus.subject
   readonly property var options: request ? Object.keys(request.options || {}) : []
   // Its own options, then those of the decisions it gathers from below still
   // waiting, each {part, path, options, request}, as an escalation keeps a
@@ -168,7 +172,7 @@ SurfaceFrame {
       Label {
         Layout.fillWidth: true
         Layout.alignment: Qt.AlignVCenter
-        text: card.work ? card.work.title : Omunculus.title
+        text: card.subject
         color: card.dim
         font.pixelSize: 11
         elide: Text.ElideRight
@@ -351,6 +355,7 @@ SurfaceFrame {
         parsed: card.form
         sending: card.busy
         onSubmitted: text => card.answerInWords(text)
+        onDeclined: card.cannotAnswer()
       }
     }
 
@@ -399,7 +404,7 @@ SurfaceFrame {
       visible: card.open
       spacing: 6
       TraceButton {
-        visible: card.kind === "needs-you"
+        visible: card.kind === "needs-you" && !formLoader.active
         dense: true
         role: "progress"
         text: "I CAN'T ANSWER THIS"

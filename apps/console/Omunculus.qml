@@ -52,6 +52,12 @@ Singleton {
   readonly property var talkable: setup ? setup.agents.filter(each => each.depth === 0 && !each.workflow_only) : []
   readonly property var conversation: conversations.find(item => item.id === conversationId) || null
   readonly property string title: conversationId === "" ? "" : (summaries[conversationId] || {}).title || "new conversation"
+  // What the conversation is called: its first root work's title, else what
+  // was first said in it.
+  readonly property string subject: {
+    const first = works.find(work => !work.parent_id)
+    return first && first.title ? first.title : title
+  }
   property var works: []
   property var runs: []
   property var requests: []
