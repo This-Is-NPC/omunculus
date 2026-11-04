@@ -545,10 +545,11 @@ until another comes.
 
 On the registry's and a project's levels, as in the studio, the pages of the level are a rail down the left
 edge (the kit's `TabRail`) in a fixed order, the one on screen marked in its
-place, beside the bar of its commands (the kit's `PageBar`). From 1100 px the
-rail shows the pages' names; from 700 px it is folded to their numbers and
-unfolds as an opaque panel over the page while the pointer or the keyboard is
-in it. One click chooses a page and folds the rail, which stays folded until
+place, beside the bar of its commands (the kit's `PageBar`). While the rail
+with the pages' names takes at most a fifth of the window's width (from
+about 860 px for CONVERSATIONS), it shows them beside their numbers; from
+700 px it is folded to their numbers and unfolds as an opaque panel over the
+page while the pointer or the keyboard is in it. One click chooses a page and folds the rail, which stays folded until
 the pointer has left and come back, and the page takes the keyboard; Esc
 folds it too. Under 700 px there is no rail: the bar's page switcher names
 the page and lists the four in a menu. The chat, team, log and cost pages are
