@@ -85,7 +85,7 @@ ColumnLayout {
 
   Shortcut {
     sequences: ["Ctrl+Return", "Ctrl+Enter"]
-    enabled: Focus.within(Window.activeFocusItem, form)
+    enabled: Focus.within(form.Window.activeFocusItem, form)
     onActivated: form.send()
   }
 
