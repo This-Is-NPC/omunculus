@@ -416,7 +416,7 @@ state at the top right (a work that waits on works at work reads "designer
 working", in the working tone), a meta line of its agent, its stages (`Stepper`;
 under 700 px a track filled to the stage it is at, and that stage) and its
 branch's works below in words ("1 sub-work done", "2 sub-works, 1
-working, 1 done"), time, the work's own steps (tool calls; hook runs and the
+working, 1 done", "4 sub-works, 1 working, 2 done, 1 cancelled"), time, the work's own steps (tool calls; hook runs and the
 sub-works' steps are not counted) and cost
 (tokens as "40k read · 2k written", as the cost page words them), and a
 badge per request between it and

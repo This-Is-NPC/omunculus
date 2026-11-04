@@ -384,14 +384,18 @@ function build(input) {
   const leaf = path.length > 0 ? byWork[path[path.length - 1].work] : null;
   const open = runs.filter(run => run.status === "open");
   const loose = open.filter(run => !(run.work_id || "")).pop() || null;
-  let doing = { agent: input.rootAgent || "", doing: "", since: null };
-  if (leaf && (leaf.state === "working" || leaf.state === "needs-you")) doing = { agent: leaf.agent, doing: leaf.doing, since: leaf.since };
+  let doing = { agent: input.rootAgent || "", doing: "", since: null, state: "idle" };
+  if (leaf && (leaf.state === "working" || leaf.state === "needs-you")) doing = { agent: leaf.agent, doing: leaf.doing, since: leaf.since, state: leaf.state };
   else if (loose) doing = {
     agent: loose.agent || input.rootAgent || "",
     doing: phrasing(""),
-    since: runStart(loose), loose: true
+    since: runStart(loose), loose: true, state: "working"
   };
-  else if (leaf) doing = { agent: leaf.agent, doing: leaf.doing, since: leaf.since };
+  else if (open.length > 0) {
+    // An open run outranks a closed leaf: the agent that works now.
+    const run = open[open.length - 1];
+    doing = { agent: run.agent || input.rootAgent || "", doing: phrasing(run.work_id || ""), since: runStart(run), state: "working" };
+  } else if (leaf) doing = { agent: leaf.agent, doing: leaf.doing, since: leaf.since, state: leaf.state };
 
   const lastRun = runs[runs.length - 1];
   let state = "idle";
@@ -458,16 +462,18 @@ function opened(node, path) {
 }
 
 // The works a node handed down, in words: "1 sub-work done", "2 sub-works,
-// 1 working", "3 sub-works, 1 done", "4 sub-works, 1 working, 3 done"; "" when it has none. Cancelled ones
-// count as finished.
+// 1 working", "3 sub-works, 1 done", "4 sub-works, 1 working, 3 done", "10 sub-works, 1 working, 8 done, 1
+// cancelled"; "" when it has none.
 function below(kids) {
   if (kids.length === 0) return "";
   const works = kids.length + (kids.length === 1 ? " sub-work" : " sub-works");
   const working = kids.filter(kid => kid.state === "working").length;
-  const finished = kids.filter(kid => kid.state === "done" || kid.state === "cancelled").length;
-  if (finished === kids.length) return works + " done";
-  if (working > 0) return works + ", " + working + " working" + (finished > 0 ? ", " + finished + " done" : "");
-  return finished > 0 ? works + ", " + finished + " done" : works;
+  const done = kids.filter(kid => kid.state === "done").length;
+  const cancelled = kids.filter(kid => kid.state === "cancelled").length;
+  if (done === kids.length) return works + " done";
+  if (cancelled === kids.length) return works + " cancelled";
+  const parts = (working > 0 ? [working + " working"] : []).concat(done > 0 ? [done + " done"] : [], cancelled > 0 ? [cancelled + " cancelled"] : []);
+  return [works].concat(parts).join(", ");
 }
 
 // A group of works handed down together, in words: "3 in parallel · 1

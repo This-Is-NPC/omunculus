@@ -88,7 +88,7 @@ defmodule Omunculus.GuiProgressTest do
     check(n.w3.steps.map(step => step.status).join() === "current,next,next", "w3 statuses", n.w3.steps);
     check(out.path.map(each => each.agent).join(" › ") === "seller › design-lead › designer", "path", out.path);
     check(out.path[2].title === "Home page" && out.path[2].work === "w3", "path leaf", out.path[2]);
-    check(JSON.stringify(out.now) === JSON.stringify({agent: "designer", doing: "Thinking · wrote files", since: 1900}), "now", out.now);
+    check(JSON.stringify(out.now) === JSON.stringify({agent: "designer", doing: "Thinking · wrote files", since: 1900, state: "working"}), "now", out.now);
     check(out.counts.working === 1 && out.counts.waiting === 2 && out.counts.total === 3 && out.counts.agents === 1, "counts", out.counts);
     check(out.spoken === "Working. seller, design-lead, designer: Thinking · wrote files", "spoken", out.spoken);
     """)
@@ -108,6 +108,8 @@ defmodule Omunculus.GuiProgressTest do
     const s = stopped.flat[0];
     check(stopped.state === "stopped" && s.state === "stopped" && s.doing === "Stopped by designer: no menu given", "stopped", s);
     check(s.stopped.by === "designer" && s.since === 1100, "stopped by", s.stopped);
+    const other = Progress.build({works: broken, lanes: {}, journeys: stopJournal, runs: [run("r9", "designer", "w9", {status: "done"}), run("r8", "administrator", "", {depth: 1})], runStarts: {r8: 1900}, now: 2000});
+    check(other.state === "working" && other.now.agent === "administrator" && other.now.state === "working" && other.now.since === 1900, "open run beats a stopped leaf", other.now);
     const failed = Progress.build({works: broken, lanes: {}, runs: [run("r9", "designer", "w9", {status: "done", error: "model refused\\nmore"})], now: 2000});
     check(failed.state === "failed" && failed.flat[0].doing === "Failed: model refused" && failed.flat[0].stopped === null, "failed", failed.flat[0]);
     const done = Progress.build({works: [{id: "w9", title: "Menu", state: "done", created_at: iso(1000), updated_at: iso(1720)}], now: 2000});
@@ -197,11 +199,13 @@ defmodule Omunculus.GuiProgressTest do
     const kids = states => states.map(state => ({state}));
     check(Progress.below([]) === "", "none", "");
     check(Progress.below(kids(["done"])) === "1 sub-work done", "one done", "");
-    check(Progress.below(kids(["done", "cancelled"])) === "2 sub-works done", "all finished", "");
-    check(Progress.below(kids(["working", "done"])) === "2 sub-works, 1 working, 1 done", "working", "");
+        check(Progress.below(kids(["working", "done"])) === "2 sub-works, 1 working, 1 done", "working", "");
     check(Progress.below(kids(["working", "waiting"])) === "2 sub-works, 1 working", "working only", "");
     check(Progress.below(kids(["waiting", "done", "up-next"])) === "3 sub-works, 1 done", "some done", "");
     check(Progress.below(kids(["waiting"])) === "1 sub-work", "open", "");
+    check(Progress.below(kids(["done", "cancelled"])) === "2 sub-works, 1 done, 1 cancelled", "cancelled apart", "");
+    check(Progress.below(kids(["cancelled", "cancelled"])) === "2 sub-works cancelled", "all cancelled", "");
+    check(Progress.below(kids(["working", "done", "done", "cancelled"])) === "4 sub-works, 1 working, 2 done, 1 cancelled", "mixed", "");
     """)
   end
 
@@ -240,7 +244,7 @@ defmodule Omunculus.GuiProgressTest do
     run!("""
     const out = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], runStarts: {r0: 50}, rootAgent: "sales", now: 60});
     check(out.state === "working" && out.focus === null && out.roots.length === 0 && out.path.length === 0, "working", out);
-    check(JSON.stringify(out.now) === JSON.stringify({agent: "sales", doing: "Getting started", since: 50, loose: true}), "now", out.now);
+    check(JSON.stringify(out.now) === JSON.stringify({agent: "sales", doing: "Getting started", since: 50, loose: true, state: "working"}), "now", out.now);
     const asking = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], calling: {"": "ask"}, rootAgent: "sales", now: 60});
     check(asking.now.doing === "Thinking · asked a teammate", "calling", asking.now);
     const answer = {id: "q9", status: "answered", arbiter: human, requester: agent("seller"), work_id: null, reason: "x", origins: {}};

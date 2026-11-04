@@ -42,7 +42,7 @@ SurfaceFrame {
   // The questions it passes on when the harness opened it, each its asker's;
   // its own reason is then only how it came here.
   readonly property var passed: request && Omunculus.noted[key] ? Requests.passedOn(request) : []
-  readonly property string asker: passed.length > 0 ? Requests.label(passed[0].requester) : request ? Requests.label(request.requester) : ""
+  readonly property string asker: passed.length > 0 ? Requests.label(passed[0].requester) : request ? Requests.asker(request) : ""
   // The work it concerns: the origin's when the harness passed it up, else the
   // conversation's own subject.
   readonly property var origin: passed.length > 0 ? Omunculus.work(passed[0].work_id || "") : null
@@ -228,7 +228,7 @@ SurfaceFrame {
         Layout.fillWidth: true
         Layout.minimumWidth: 0
         Layout.alignment: Qt.AlignVCenter
-        text: card.about
+        text: "·  " + card.about
         color: card.dim
         font.pixelSize: Theme.type.meta.size
         font.letterSpacing: 1

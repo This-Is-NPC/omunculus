@@ -301,7 +301,7 @@ Item {
       return null
     if (thread === "") {
       const now = progress.now
-      if (progress.state !== "working" || !now.agent)
+      if (progress.state !== "working" || now.state !== "working" || !now.agent)
         return null
       // The front agent heads the chain of the works below it; its own run,
       // outside any work, stands alone.
