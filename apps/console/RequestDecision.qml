@@ -105,7 +105,7 @@ SurfaceFrame {
     const form = formLoader.item as QuestionForm
     if (form && formLoader.active)
       form.focusBox()
-    else
+    else if (!formLoader.active)
       words.forceActiveFocus()
   }
   function focusDecision() {
