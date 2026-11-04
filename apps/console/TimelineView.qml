@@ -32,7 +32,7 @@ Item {
   // How deep this thread is nested in sub-work blocks: 0 for a page's own.
   property int nesting: 0
   readonly property ListModel model: Omunculus.thread(thread)
-  property string emptyText: "SAY WHAT YOU NEED"
+  property string emptyText: ""
   // Whether requests show where they were made; beside the map they show on
   // the node that asked instead.
   property bool requestsShown: true
@@ -511,7 +511,7 @@ Item {
       id: row
       readonly property var live: root.working
       readonly property color tone: live ? Omunculus.toneOf(live.agent) : Theme.dim
-      readonly property string clock: live && live.since !== null ? Progress.clock(Math.max(0, Math.round(Omunculus.tick - live.since))) : ""
+      readonly property string clock: live && live.since !== null ? Progress.span(Omunculus.tick - live.since) : ""
       width: timeline.width
       height: live ? body.y + body.height + Theme.space.row : 0
       visible: live !== null

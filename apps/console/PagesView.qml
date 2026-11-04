@@ -107,6 +107,9 @@ Item {
   // The work whose thread is on the thread page.
   property string threadWork: ""
 
+  // Whether the conversation has said nothing yet, or is not made.
+  readonly property bool fresh: Omunculus.drafting || (open && Omunculus.thread("").count === 0)
+
   // Where the window was before each move, the last last, as {page, level,
   // project, socket, conversation, picked, work, thread}.
   property var history: []
@@ -145,8 +148,14 @@ Item {
     Qt.callLater(focusEntry)
   }
 
-  // Leaves the conversation for the list of the project's; BACK returns.
-  function leave() { go("conversations") }
+  // Leaves the conversation: a fresh one for the picker it began on, one
+  // with something said for the list of the project's; BACK returns.
+  function leave() {
+    if (fresh)
+      back()
+    else
+      go("conversations")
+  }
 
   // Enters the pages from the start, at a page, with nothing behind it.
   function enter(name) {
@@ -177,7 +186,6 @@ Item {
   // picker it began on; one that has is not returned to it. Leaving makes
   // nothing.
   function back() {
-    const fresh = Omunculus.drafting || (open && Omunculus.thread("").count === 0)
     if (!fresh)
       while (history.length > 0 && history[history.length - 1].page === "new")
         history = history.slice(0, -1)
@@ -377,7 +385,6 @@ Item {
         back,
         { text: "NEW CONVERSATION", short: "NEW", icon: "plus", role: "primary", tip: "start another conversation  " + Shortcuts.label("new-conversation"),
           run: () => view.newConversation() },
-        { text: "BOARD", icon: "board", tip: "the works of the project", run: () => view.go("board") },
         { text: "PROJECTS", icon: "folder", tip: "every project of the server  " + Shortcuts.label("projects"), run: () => view.showProjects("") }
       ]
     if (page === "board")
@@ -492,6 +499,8 @@ Item {
       threadComposer.focusEntry()
     else if (asking)
       whom.forceActiveFocus()
+    else if (mainComposer.formWaits && mainComposer.empty)
+      timeline.focusCard()
     else
       mainComposer.focusEntry()
   }
@@ -530,6 +539,14 @@ Item {
     Qt.callLater(focusEntry)
   }
   onAskingChanged: Qt.callLater(focusEntry)
+  // A form that arrives takes the keyboard from an empty box.
+  Connections {
+    target: mainComposer
+    function onFormWaitsChanged() {
+      if (mainComposer.formWaits && mainComposer.empty && view.page === "chat")
+        Qt.callLater(view.focusEntry)
+    }
+  }
   Connections {
     target: Omunculus
     function onLoadedChanged() {
@@ -564,14 +581,17 @@ Item {
       calls: Omunculus.usage.all.calls
       heading: view.named
       expanded: view.progressShown && view.page === "chat"
+      threadWorking: view.page === "chat" && timeline.working !== null
       onToggle: view.toggleProgress(false)
       onAnswer: view.answer()
       onOpenTeam: view.go("map")
       onOpenCost: view.go("cost")
     }
 
+    // Before there is more than the chat, a lone tab gives no choice.
     Flow {
       Layout.fillWidth: true
+      visible: view.pages.length > 1
       spacing: Theme.space.section
       Repeater {
         model: view.inside ? view.pages : []
@@ -663,6 +683,7 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             thread: ""
+            emptyText: Omunculus.agent ? "WITH " + Omunculus.agent.toUpperCase() : ""
             onAnswered: mainComposer.focusEntry()
             onOpenWork: work => view.openThread(work)
             onOpenLog: work => view.showLog(work)

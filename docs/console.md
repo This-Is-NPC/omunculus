@@ -122,8 +122,10 @@ after. An agent's name and dot take its tone (`Omunculus.toneOf`) wherever
 it is named: the turns, the header strip, its lines and the cards. While
 agents work and what you said or answered is still the newest thing in the
 thread, a working row under it, in the tone of the agent at work, names the
-agents from the one you wrote to down to that one, with its clock, and its
-trace beside what it does: "● SALES WORKING 0:06" over "Getting started".
+agents from the one you wrote to down to that one, with how long it has
+worked, and its trace beside what it does: "● SALES WORKING 6 s" over
+"Getting started". The header strip does not say it again then: its state
+word and its now line stay off the chat while the row shows.
 Once its words are whole, the "more" button beside them, in a gutter
 they never take, copies them or shows the log of the run's work (the
 thread's `openLog`).
@@ -186,10 +188,11 @@ lower ones of a question passed up, is not shown on its own.
 A conversation's pages share its head (`ProgressStrip`), over the tabs. First
 a 40 px header strip with its meta — the agent it is with, its dot and name
 in its tone, the stage of the work in focus and how long it has run, in
-words: "● SALES · STAGE 2 OF 6 DESIGN · 18 MINUTES SO FAR", "TOOK 3 MINUTES"
-once done; before any work, "● SALES · STARTING" while its first run goes,
-NOT STARTED before any, the stage shortened to "STAGE 2/6" and then the agent
-giving way as the width shrinks. From 700 px of its own width the counts
+words: "● SALES · STAGE 2/6 · 18 MINUTES SO FAR", "TOOK 3 MINUTES"
+once done, the stage's name being the stepper's under it; "WAITING FOR YOU
+SINCE 22:43", in the warning tone, in place of the clock while a question
+waits on you; before any work, "● SALES · STARTING" while its first run goes,
+NOT STARTED before any, the agent giving way as the width shrinks. From 700 px of its own width the counts
 follow: "· 2 AGENTS · 212 CALLS", shown when more than one agent ran and
 once a call was made; each opens what it counts, the team and the cost, and
 the agents' tip names them. At its right the chevron, which opens the full
@@ -257,10 +260,11 @@ which comes into view and shows the option chosen while it goes. On a window und
 The composer is the kit's `TextArea` in a frame with a chevron: one line that
 grows with the text up to eight lines, then scrolls. Enter sends, Shift+Enter
 breaks the line, and a pasted text keeps its line breaks. While the agent
-written to works, SEND keeps its caption over a faint trace across the
-whole button, its tip says "sales is working; SEND still sends", and it
-still sends. While a numbered form waits on you, the box says "answer the
-questions above, or say to sales what you need", and the count of what
+written to works, SEND keeps its caption with the trace along its foot, its
+tip says "sales is working; SEND still sends", and it still sends. SEND is
+dim while the box is empty. While a numbered form waits on you, the keyboard
+goes to the form's first unanswered field, not the box, and the box says "or
+say something else to sales"; the count of what
 arrived out of view rises above the form's floating actions. Under 420 px its
 buttons show their icons only.
 
@@ -578,10 +582,10 @@ count, it does not show.
 
 In a conversation there is no rail and no bar. Its pages are eco's tabs under
 its head, `01 CHAT  02 TEAM  03 LOG  04 COST`, wrapping on a narrow window,
-LOG marked while a work failed; the digits and Ctrl with them choose them as
+LOG marked while a work failed, and shown once there is more than the chat; the digits and Ctrl with them choose them as
 they choose the rail's pages. The masthead's right has, after the notices,
-`$` (COST), `⋯` and × (back to the conversations; BACK and Esc still return
-in history). The menu `⋯` holds the page's rarer actions that the page does
+`$` (COST), `⋯` and × (back to the conversations; on a conversation that has
+said nothing, back to the picker it began on, as BACK and Esc do). The menu `⋯` holds the page's rarer actions that the page does
 not show itself, and NEW CONVERSATION: on TEAM, FIT THE MAP on the map, and
 WRITE TO ITS AGENT and LEAVE A NOTE with a work picked; on a thread, OPEN IN
 TEAM and ITS LOG. While notes to you are unread, a notice `1 NOTE`
