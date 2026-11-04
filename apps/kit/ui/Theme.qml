@@ -112,16 +112,20 @@ Singleton {
   // when the setting cannot be read.
   property bool reducedMotion: false
 
-  // Eight colours for agents, as "#rrggbb": the theme's own made readable, then
-  // their hues turned when it has fewer. None is near another, the accent, or
-  // the colours of success, warning and failure, or the text's own ink, so no
-  // agent reads as a state or as body text.
+  // Up to eight colours for agents, as "#rrggbb": the theme's own made
+  // readable, then their hues turned when it has fewer. Each is a turn of
+  // `hueGap` from every other, and none is near the accent, the colours of
+  // success, warning and failure, or the text's own ink, so no agent reads as
+  // a state or as body text.
   readonly property var agentPalette: distinct([
     secondary, magenta, palette.orange, palette.blue, palette.bright_cyan,
     palette.bright_magenta, palette.bright_blue
   ], 8)
-  // Colours at least this far apart in RGB (0 to √3) read as different.
+  // Colours at least this far apart in RGB (0 to √3) read as different from
+  // the accent, the states and the text; agents differ by `hueGap` of a turn
+  // in hue (1 is 360°).
   readonly property real apart: 0.15
+  readonly property real hueGap: 1 / 12
 
   // An agent's colour, by its place among `agents` ([{name}]); dim when it is
   // not there.
@@ -132,27 +136,28 @@ Singleton {
 
   function distinct(wanted, count) {
     const picked = []
-    const values = [primary, success, warning, error, foreground].map(color => rgb(String(color)))
+    const states = [primary, success, warning, error, foreground].map(color => rgb(String(color)))
     const take = color => {
       if (!color || picked.length === count)
         return
       const hex = String(readable(color, background, foreground))
       const value = rgb(hex)
-      if (values.some(other => Math.hypot(value[0] - other[0], value[1] - other[1], value[2] - other[2]) < apart))
+      if (states.some(other => Math.hypot(value[0] - other[0], value[1] - other[1], value[2] - other[2]) < apart))
+        return
+      if (picked.some(other => Colour.hueApart(Colour.hue(hex), Colour.hue(other)) < hueGap - 0.001))
         return
       picked.push(hex)
-      values.push(value)
     }
     wanted.forEach(take)
     const own = picked.slice()
-    for (let turn = 1; turn < 12; turn++)
+    for (let turn = 1; turn < 10; turn++)
       for (const hex of own) {
         const value = rgb(hex)
         const color = Qt.rgba(value[0], value[1], value[2], 1)
         if (color.hslSaturation > 0.05)
-          take(String(Qt.hsla((color.hslHue + turn / 12) % 1, color.hslSaturation, color.hslLightness, 1)))
+          take(String(Qt.hsla((color.hslHue + turn / 10) % 1, color.hslSaturation, color.hslLightness, 1)))
       }
-    return picked
+    return Colour.spread(picked)
   }
 
   Process {

@@ -36,3 +36,34 @@ function readable(wanted, base, ink, ratio) {
   }
   return ink;
 }
+
+// The hue of "#rrggbb" as a turn (0 to 1), or -1 for a grey, which has none.
+function hue(color) {
+  const [r, g, b] = rgb(color);
+  const top = Math.max(r, g, b);
+  const spread = top - Math.min(r, g, b);
+  if (spread === 0 || spread / (1 - Math.abs(top + Math.min(r, g, b) - 1)) <= 0.05) return -1;
+  const sector = top === r ? ((g - b) / spread + 6) % 6 : top === g ? (b - r) / spread + 2 : (r - g) / spread + 4;
+  return sector / 6;
+}
+
+// How far apart two hues are, as a turn (0 to 0.5); 0 when either is grey.
+function hueApart(a, b) {
+  if (a < 0 || b < 0) return 0;
+  const gap = Math.abs(a - b);
+  return Math.min(gap, 1 - gap);
+}
+
+// `colors` reordered so each takes the hue furthest from those before it,
+// the first kept: its first few are the most different.
+function spread(colors) {
+  const chosen = colors.slice(0, 1);
+  const rest = colors.slice(1);
+  const nearest = color => Math.min.apply(null, chosen.map(other => hueApart(hue(color), hue(other))));
+  while (rest.length > 0) {
+    const far = rest.reduce((best, color) => nearest(color) > nearest(best) ? color : best);
+    chosen.push(far);
+    rest.splice(rest.indexOf(far), 1);
+  }
+  return chosen;
+}
