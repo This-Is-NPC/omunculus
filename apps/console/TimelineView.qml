@@ -245,9 +245,13 @@ Item {
       return null
     if (thread === "") {
       const now = progress.now
-      return progress.state === "working" && now.agent
-        ? { chain: progress.path.map(step => step.agent).filter(agent => agent && agent !== now.agent), agent: now.agent, doing: now.doing, since: now.since }
-        : null
+      if (progress.state !== "working" || !now.agent)
+        return null
+      // The front agent heads the chain of the works below it; its own run,
+      // outside any work, stands alone.
+      const leaf = progress.path.length > 0 ? progress.path[progress.path.length - 1].agent : ""
+      const chain = now.agent === leaf ? [Omunculus.agent || Omunculus.lastAgent].concat(progress.path.map(step => step.agent)) : []
+      return { chain: chain.filter((agent, at) => agent && agent !== now.agent && chain.indexOf(agent) === at), agent: now.agent, doing: now.doing, since: now.since }
     }
     const node = progress.flat.find(each => each.work === thread)
     return node && node.state === "working" ? { chain: [], agent: node.agent, doing: node.doing, since: node.since } : null
