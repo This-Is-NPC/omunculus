@@ -92,8 +92,12 @@ for you in other projects, opens it with those waiting picked out.
 
 ### 3. A new conversation
 
-A card for each agent of depth 0 a conversation can be with: its portrait,
-its name in its colour and its role, its number at the top left. The conversation keeps the agent its first message names.
+"Who do you want to talk with?": a card for each of the project's agents a
+conversation can be with, its portrait, its name and its role; under FOR
+THE PROJECT ITSELF, a smaller line for each agent that changes how the
+project works, each change only once you approve it. The keyboard is on the
+first card, its ring showing it; a card's tooltip gives its number. The
+conversation keeps the agent its first message names.
 
 | Keys | What they do |
 | --- | --- |

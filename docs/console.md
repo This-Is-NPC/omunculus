@@ -92,12 +92,19 @@ agent. When several agents of depth 0 may take it, its chat shows the same
 cards in place of the timeline and the composer, and the card chosen is the
 agent its first message names; Esc goes back. With one, the server names it.
 
-Each card shows the agent's role, the first sentence of its text without a
-leading "You are the", and the model it runs on in a tooltip. The first time
-no card is chosen and Enter does nothing until one is (a click, its number, or
-the arrows and Enter). Afterwards the agent last talked to in the window comes
-first, chosen and marked LAST USED; the others follow in the order of the
-setup.
+The page asks "Who do you want to talk with?" and groups the agents. FOR
+YOUR WORK, the project's own agents, a card each filling the width, as many
+a row as 200 px allow: the portrait, the name and the role, the first
+sentence of its text without a leading "You are the". FOR THE PROJECT
+ITSELF, smaller, a line each with the portrait and the name: the agents of
+the system pack (the setup's pack named `system`), which change how the
+project's agents work, each change only once you approve it; their role is
+in the tooltip. A card's tooltip also gives the model it runs on and the
+number that picks it; no number is drawn on the cards. The agent last
+talked to in the window comes first in its group, marked LAST USED; the
+others follow in the order of the setup. The keyboard starts on it, else
+on the first card, its focus ring showing which one Enter picks; the arrows
+move along a group's rows and between the groups.
 
 ## Threads
 
