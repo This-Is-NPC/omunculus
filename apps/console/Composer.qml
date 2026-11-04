@@ -31,9 +31,9 @@ ColumnLayout {
   // them are the window's. `chipsShown` false keeps their room, not their keys.
   property var quick: []
   property bool chipsShown: true
-  // Whether the agent written to has a run open: the root agent's, at depth 0,
+  // Whether the agent written to has a run open: the front agent's own,
   // in the main thread; the work's own in a work.
-  readonly property bool busy: work === "" ? Omunculus.running.some(run => String(run.depth) === "0") : Omunculus.busy(work)
+  readonly property bool busy: work === "" ? Omunculus.busy("") : Omunculus.busy(work)
   // The agent written to, "" when none is known yet.
   readonly property string addressee: work === "" ? Omunculus.agent : (Omunculus.work(work) || {}).assignee || ""
   // Whether a question waits on you in the main thread: its answer goes in
