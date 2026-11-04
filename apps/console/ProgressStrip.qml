@@ -17,7 +17,8 @@ import "kit/client/Shortcuts.js" as Shortcuts
 // the work in focus, or its title where the masthead does not already say
 // it; and who works on it, from its agent down to the one at work, what that
 // one does and for how long; what waits on you takes that line, counted as
-// its card counts it, and a finished work says how long it took. Every agent
+// its card counts it. A finished conversation says so in the meta, "✓ DONE"
+// and how long it took, in the success tone, and leaves that line blank. Every agent
 // is named in its own tone. Every line is fitted in characters to its width.
 // The two lines are hidden while nothing was handed to anyone and no agent
 // runs; the second also while the thread under the strip shows its own
@@ -89,7 +90,9 @@ ColumnLayout {
   readonly property var meta: {
     const focus = focusNode
     const segments = who !== "" ? [{ text: who.toUpperCase(), tone: Omunculus.toneOf(who), lead: true }] : []
-    if (focus && focus.count > 0) {
+    if (phase === "done") {
+      segments.push({ text: "✓ DONE", tone: Theme.success, keep: true })
+    } else if (focus && focus.count > 0) {
       const at = Math.min(focus.at, focus.count - 1)
       // The stepper under the strip names the stage.
       segments.push({ text: "STAGE " + (at + 1) + "/" + focus.count, keep: true })
@@ -99,15 +102,16 @@ ColumnLayout {
       segments.push({ text: opening, keep: true })
     }
     if (focus) {
-      const took = focus.finishedIn !== null
+      const took = focus.finishedIn !== null || phase === "done"
       const open = !Progress.closed(focus.state)
-      const lasted = Progress.duration(took ? focus.finishedIn : open ? Math.max(0, tick - focus.created) : focus.branch.seconds).toUpperCase()
+      const lasted = Progress.duration(focus.finishedIn !== null ? focus.finishedIn : open ? Math.max(0, tick - focus.created) : focus.branch.seconds).toUpperCase()
       // Waiting on you stops the clock: it says since when, in the warning tone.
       const since = lastEvent > 0 ? " SINCE " + Time.clock(new Date(lastEvent * 1000).toISOString(), Date.now()) : ""
       if (focus.state === "needs-you" || focus.waitingOn === "you")
         segments.push({ text: "WAITING FOR YOU" + since, short: "WAITING", tone: Theme.warning, keep: true })
       else
-        segments.push({ text: took ? "TOOK " + lasted : focus.state === "cancelled" ? lasted : lasted + " SO FAR", short: lasted, keep: true })
+        segments.push({ text: took ? "TOOK " + lasted : focus.state === "cancelled" ? lasted : lasted + " SO FAR", short: lasted, keep: true,
+          tone: phase === "done" ? Theme.success : undefined })
     }
     // The agent carries the separator after it, so it goes with it; the
     // others carry the one before them.
@@ -130,10 +134,6 @@ ColumnLayout {
       const named = askers.map((name, index) => ({ text: name + (index < askers.length - 1 ? ", " : ""), tone: Omunculus.toneOf(name),
         pieces: index < askers.length - 1 ? [{ text: name, tone: Omunculus.toneOf(name) }, { text: ", " }] : undefined, elide: index === 0, keep: true }))
       return named.concat([{ text: (askers.length > 1 ? " ask you " : " asks you ") + Progress.asking(forYou), tone: Theme.warning, keep: true }])
-    }
-    if (phase === "done") {
-      const took = focusNode ? focusNode.finishedIn || focusNode.branch.seconds : 0
-      return [{ text: "Finished", keep: true }, { text: " · took " + Progress.duration(took) }]
     }
     if (!now || !now.agent)
       return [{ text: focusNode ? focusNode.doing : "", elide: true, keep: true }]
@@ -347,7 +347,7 @@ ColumnLayout {
     Layout.fillWidth: true
     Layout.leftMargin: Theme.space.line
     visible: strip.moving || strip.said
-    opacity: strip.moving && !strip.threadWorking ? 1 : 0
+    opacity: strip.moving && !strip.threadWorking && strip.phase !== "done" ? 1 : 0
     spacing: Theme.space.tight
 
     // The state: the trace while working, unless motion is reduced.

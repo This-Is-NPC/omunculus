@@ -179,8 +179,9 @@ failed; when each failed tool later succeeded, a dim "5 retried" instead,
 its stages when it has a workflow, and the round with
 who sent it back. A comment on a work of the conversation's own (not one nested below it) also
 appears in the main thread at its own time, as a compact line: the agent in its
-tone, "noted", and the text in two lines, unfolding when long. It is the team's
-news, not a message to you. Until the work's data arrives, it shows the title the event
+tone, "noted", and the text in two lines, unfolding when long, and unfolded for
+the newest note once the conversation's work is done. Its addresses are links
+in the accent. It is the team's news, not a message to you. Until the work's data arrives, it shows the title the event
 named and "Handing down…", or nothing when the event named none. A work that
 waits on a branch says who works below it ("● designer working", in the
 working tone) and else what it waits for. Waiting on you reads "⚠ NEEDS YOU",
@@ -238,8 +239,9 @@ room, blank until there is something to say, so the tabs below hold their
 place from the first message. While a question waits on you
 that line counts what you are asked as its card does: "sales asks you 7
 questions" for a numbered form, "to decide", "for a permission"
-(`Progress.asking`); a finished work says how long it took, and a team
-working with no event for ten minutes says so. The two lines are hidden
+(`Progress.asking`); a team working with no event for ten minutes says so.
+A finished conversation says "✓ DONE · TOOK 1 HOUR 20 MINUTES" in the success
+tone in the strip's top line, and the second line stays blank. The two lines are hidden
 while no work exists and no agent runs.
 
 The chevron and Alt+P open the full view, on the chat
