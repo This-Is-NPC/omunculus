@@ -255,7 +255,7 @@ SurfaceFrame {
       Label {
         Layout.alignment: Qt.AlignVCenter
         text: card.stamp
-        color: Theme.line
+        color: Theme.faint
         font.pixelSize: Theme.type.stamp.size
         font.letterSpacing: Theme.type.stamp.tracking
       }
