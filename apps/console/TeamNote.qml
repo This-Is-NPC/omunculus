@@ -6,7 +6,8 @@ import "kit/ui"
 // TeamNote is a note a work's agent left on its work, where it was left: its
 // agent named in its tone, "noted", and the text in a line or two, dim. It is
 // the team's news, not a message to you: only the front agent talks to the
-// client. A long note unfolds by choosing its line, or is unfolded by the
+// client. The newest note of a done conversation is its result: "delivered",
+// whole, at the body size in the full tone. A long note unfolds by choosing its line, or is unfolded by the
 // thread, once the work is done. Its text is Prose: an address in it is a link.
 Item {
   id: note
@@ -14,6 +15,8 @@ Item {
   required property string who
   required property string text
   property string stamp
+  // The delivered result of a done conversation.
+  property bool result: false
 
   // Unfolded by the thread; `chosen` flips it, the person's own fold.
   property bool unfolded: false
@@ -33,7 +36,7 @@ Item {
       implicitHeight: Theme.size.stackedRow
       activeFocusOnTab: note.long
       Accessible.role: Accessible.Button
-      Accessible.name: note.who + " noted: " + note.text
+      Accessible.name: note.who + (note.result ? " delivered: " : " noted: ") + note.text
       Keys.onPressed: event => {
         if (note.long && [Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space].includes(event.key)) {
           note.chosen = !note.chosen
@@ -46,7 +49,7 @@ Item {
         spacing: Theme.space.tight
         Icon { name: "edit"; size: 11; color: Theme.dim }
         Label { text: note.who; color: Omunculus.toneOf(note.who); font.pixelSize: 11 }
-        Label { Layout.fillWidth: true; text: "noted"; color: Theme.dim; font.pixelSize: 11 }
+        Label { Layout.fillWidth: true; text: note.result ? "DELIVERED" : "noted"; color: note.result ? Theme.foreground : Theme.dim; font.pixelSize: note.result ? Theme.type.kicker.size : 11; font.letterSpacing: note.result ? Theme.type.kicker.tracking : 0 }
         Label { text: note.stamp; color: Theme.faint; font.pixelSize: Theme.type.stamp.size; font.letterSpacing: Theme.type.stamp.tracking }
         Icon { visible: note.long; name: note.open ? "chevron-down" : "chevron-right"; size: 10; color: Theme.dim }
       }
@@ -63,10 +66,10 @@ Item {
       id: words
       Layout.fillWidth: true
       Layout.leftMargin: Theme.space.block + Theme.space.line
-      Layout.maximumWidth: 620
+      Layout.maximumWidth: note.result ? Number.POSITIVE_INFINITY : 620
       source: Omunculus.inline(note.text)
-      color: Theme.dim
-      font.pixelSize: 11
+      color: note.result ? Theme.foreground : Theme.dim
+      font.pixelSize: note.result ? Theme.type.body.size : 11
       wrapMode: Text.Wrap
       maximumLineCount: note.open ? 1000 : 2
       elide: Text.ElideRight

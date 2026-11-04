@@ -179,8 +179,9 @@ failed; when each failed tool later succeeded, a dim "5 retried" instead,
 its stages when it has a workflow, and the round with
 who sent it back. A comment on a work of the conversation's own (not one nested below it) also
 appears in the main thread at its own time, as a compact line: the agent in its
-tone, "noted", and the text in two lines, unfolding when long, and unfolded for
-the newest note once the conversation's work is done. Its addresses are links
+tone, "noted", and the text in two lines, unfolding when long, and, for the
+newest note once the conversation's work is done, its result: "DELIVERED", whole, at the body size in the full tone,
+without the width cap. The strip's "✓ DONE" then takes the chat to it. Its addresses are links
 in the accent. It is the team's news, not a message to you. Until the work's data arrives, it shows the title the event
 named and "Handing down…", or nothing when the event named none. A work that
 waits on a branch says who works below it ("● designer working", in the
@@ -196,10 +197,10 @@ The open glyph at its top right shows the work's thread as a page of its own
 A request is a card only while it waits on you, and it is in the main
 thread. Your answer reads as a bubble on the right (`AnswerBubble`) under
 YOU ANSWERED and the time (YOU CHOSE APPROVE for a chosen option, YOU ASKED TO
-ADJUST for adjust, the note in the bubble, none when there is no note), its text left aligned with the line breaks kept
+ADJUST for adjust, YOU GRANTED · THIS WORK ONLY, or the saved scope, for a grant; the note in the bubble, none when there is no note), its text left aligned with the line breaks kept
 and the bubble as wide as the text, up to 620 px. Above it the question is one dim line at the thread's left
 margin, "seller asked · via sales · 4 questions: " (whoever first asked it, in their tone, then the way it came, the count of a numbered list
-kept whole) and its first line with words, cut at 120 characters; Enter, Space or
+kept whole) and its first line with words, cut at 120 characters; a permission reads instead "clerk asked · via seller › sales to publish the site to production"; Enter, Space or
 a click opens it in place to its full text. Sending an answer, like sending
 a message, takes the view to the end, so it never counts as news; when the
 answer comes and the keyboard was in the card, it moves to the composer. A
@@ -238,7 +239,7 @@ design-lead › designer: Thinking · wrote site/index.html · 4:12". A call is
 known only once it finished, so the line says the last one in the past, after
 "Thinking", and never claims a call still runs while the run's clock goes on;
 a run that has made no call for 15 s reads "Thinking", not "Getting started".
-The chain names only the agents the one at work works under, from the top. Once you have written, both lines keep their
+The chain names only the agents the one at work works under, from the top, also for an agent that picks up an answer when it is on the path. Once you have written, both lines keep their
 room, blank until there is something to say, so the tabs below hold their
 place from the first message. While a question waits on you
 that line counts what you are asked as its card does: "sales asks you 7

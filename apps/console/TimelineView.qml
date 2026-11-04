@@ -99,6 +99,12 @@ Item {
     timeline.positionViewAtIndex(row, top || (entry && entry.height > timeline.height * 0.6) ? ListView.Beginning : ListView.Center)
   }
 
+  // Brings the delivered result, the newest note of a done conversation, into view.
+  function showResult() {
+    if (newestNote >= 0)
+      reveal(model.get(newestNote).key, true)
+  }
+
   // The card of the newest question for you, once its entry exists.
   function cardItem() {
     const row = newestCard !== "" ? rowOf(newestCard) : -1
@@ -524,7 +530,11 @@ Item {
           asker: asked ? Requests.asker(asked) : ""
           route: asked ? Requests.route(asked, Omunculus.noted[entry.key]) : []
           question: asked ? Requests.question(asked, Omunculus.noted[entry.key]) : ""
-          choice: reply ? Requests.chose(reply.option) : ""
+          readonly property var wanted: asked ? Requests.granted(asked) : null
+          readonly property var job: asked ? Omunculus.work(asked.work_id || "") : null
+          readonly property var place: Omunculus.workspaceOf(job ? job.workspace || "" : "")
+          unlock: Requests.unlocks(wanted, place.root)
+          choice: reply ? Requests.chose(reply.option, wanted !== null, asked ? { who: Requests.label(asked.requester), stage: job && job.stage ? job.stage : "", folder: place.name || "" } : undefined) : ""
           body: reply && reply.body !== reply.option ? reply.body : ""
           stamp: reply && reply.stamp ? reply.stamp : entry.stamp
         }
@@ -558,6 +568,7 @@ Item {
           text: entry.text
           stamp: entry.stamp
           unfolded: root.finished && entry.index === root.newestNote
+          result: root.finished && entry.index === root.newestNote
         }
       }
 
