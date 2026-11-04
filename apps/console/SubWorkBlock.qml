@@ -81,14 +81,14 @@ SurfaceFrame {
     node && condition === "working" ? { text: Progress.clock(Math.max(0, now - node.since)), keep: true }
       : node && typeof node.finishedIn === "number" ? { text: "in " + Progress.span(node.finishedIn) }
       : null,
-    node ? { text: block.steps, short: block.steps } : null,
+    block.steps !== "" ? { text: block.steps, short: block.steps } : null,
     node && node.failed > 0 ? failures : null
   ].filter(part => part !== null), budget - 15).filter(text => text !== "")
   readonly property var tally: Omunculus.callsOf[work] || {}
   // Its own steps, and with those of the works it handed down, so the count
   // moves while its team works.
   readonly property string steps: {
-    if (!node)
+    if (!node || (node.branch ? node.branch.calls : node.calls) === 0)
       return ""
     const all = node.branch ? node.branch.calls : node.calls
     const said = count => count === 1 ? "1 step" : count + " steps"
