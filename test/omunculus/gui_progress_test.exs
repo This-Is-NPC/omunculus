@@ -155,6 +155,15 @@ defmodule Omunculus.GuiProgressTest do
     """)
   end
 
+  test "finished folds done and cancelled sub-works into one line" do
+    run!("""
+    const node = (state, created, seconds) => ({state, created, branch: {seconds}});
+    check(Progress.finished([node("done", 100, 300), node("done", 200, 980)]) === "2 sub-works done · 18 min", "two", "");
+    check(Progress.finished([node("done", 100, 42), node("cancelled", 110, 10)]) === "1 sub-work done · 42 s · 1 cancelled", "cancelled", "");
+    check(Progress.finished([node("cancelled", 100, 5)]) === "1 sub-work cancelled · 5 s", "only cancelled", "");
+    """)
+  end
+
   test "step seconds count a stage visited twice, and again marks a stage due again" do
     run!("""
     const n = nodes(Progress.build(base));

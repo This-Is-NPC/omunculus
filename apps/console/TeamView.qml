@@ -7,7 +7,9 @@ import "kit/ui"
 
 // TeamView is the TEAM page: every work of the conversation, one row each,
 // nested under the stage of the work that handed it down, siblings handed
-// down in the same stage headed "N in parallel"; and the work picked in full
+// down in the same stage headed "N in parallel", those done or cancelled
+// folded into one row per stage, "✓ 2 sub-works done · 18 min", unless a
+// question waiting on you climbed from there; and the work picked in full
 // (NodeDetail). Wide, the outline and the detail sit side by side; medium,
 // the detail opens as a page over the outline and BACK returns to the same
 // row; narrow, each level is a page — the work's card, then its sub-works —
@@ -65,6 +67,13 @@ FocusScope {
   readonly property int working: flat.filter(node => node.state === "working").length
 
   function closed(node) { return node.state === "done" || node.state === "cancelled" }
+  // A work's sub-works start folded when it is done, cancelled or coming,
+  // unless a question waiting on you climbed from below it.
+  function foldsAlone(node) { return (closed(node) || node.state === "up-next") && node.below === "" }
+  // The row the done and cancelled sub-works of `child`'s place fold into.
+  function doneKey(parent, child) {
+    return "done:" + parent.work + ":" + parent.groups.findIndex(group => group.nodes.some(node => node.work === child.work))
+  }
 
   // The works the filters keep: those that match, and every work above one.
   readonly property var kept: {
@@ -91,7 +100,8 @@ FocusScope {
   }
 
   // The outline's rows, in order: works, the stage and parallel headings
-  // between them, level headings in a long list, and the works done earlier.
+  // between them, the done sub-works of each place folded into one row,
+  // level headings in a long list, and the works done earlier.
   readonly property var rows: {
     const list = []
     const filtering = kept !== null
@@ -99,7 +109,7 @@ FocusScope {
       if (!keeps(node))
         return
       const kids = Progress.kidsOf(node).filter(keeps)
-      const folded = kids.length > 0 && isFolded(node.work, closed(node) || node.state === "up-next")
+      const folded = kids.length > 0 && isFolded(node.work, foldsAlone(node))
       list.push({ kind: "work", key: node.work, node: node, indent: indent, folds: kids.length > 0, folded: folded && !filtering })
       if (folded && !filtering)
         return
@@ -110,15 +120,15 @@ FocusScope {
         let inner = indent + 1
         if (group.step) {
           const key = "stage:" + node.work + ":" + at
-          const done = shown.every(closed)
-          const stageFolded = !filtering && isFolded(key, done)
-          list.push({ kind: "stage", key: key, indent: indent + 1, folds: true, folded: stageFolded,
-            text: group.step + " stage" + (stageFolded && done ? " · " + shown.length + (shown.length === 1 ? " sub-work" : " sub-works") + " done" : "") })
+          const stageFolded = !filtering && isFolded(key, false)
+          list.push({ kind: "stage", key: key, indent: indent + 1, folds: true, folded: stageFolded, text: group.step + " stage" })
           if (stageFolded)
             return
           inner = indent + 2
         }
-        if (group.parallel) {
+        const going = shown.filter(kid => !closed(kid))
+        const finished = shown.filter(closed)
+        if (group.parallel && going.length > 0) {
           const key = "group:" + node.work + ":" + at
           const groupFolded = !filtering && isFolded(key, false)
           list.push({ kind: "group", key: key, indent: inner, folds: true, folded: groupFolded,
@@ -127,7 +137,14 @@ FocusScope {
             return
           inner++
         }
-        shown.forEach(kid => walk(kid, inner))
+        going.forEach(kid => walk(kid, inner))
+        if (finished.length > 0) {
+          const key = "done:" + node.work + ":" + at
+          const doneFolded = !filtering && isFolded(key, !finished.some(kid => kid.below !== ""))
+          list.push({ kind: "done", key: key, indent: inner, folds: true, folded: doneFolded, text: Progress.finished(finished) })
+          if (!doneFolded)
+            finished.forEach(kid => walk(kid, inner + 1))
+        }
       })
     }
     const open = roots.filter(node => !closed(node))
@@ -168,15 +185,21 @@ FocusScope {
     return chain
   }
 
-  // Picks a work: its row comes into view, its folded ancestors open.
+  // Picks a work: its row comes into view, its folded ancestors and the
+  // done rows on its way open.
   function pick(work) {
     picked = work
     let next = null
-    for (let at = byWork[byWork[work] ? byWork[work].parent : ""]; at; at = byWork[at.parent]) {
-      if (isFolded(at.work, closed(at) || at.state === "up-next")) {
-        next = next || Object.assign({}, opened)
-        next[at.work] = true
-      }
+    const unfold = key => {
+      next = next || Object.assign({}, opened)
+      next[key] = true
+    }
+    for (let at = byWork[work]; at && byWork[at.parent]; at = byWork[at.parent]) {
+      const parent = byWork[at.parent]
+      if (closed(at) && opened[doneKey(parent, at)] !== true)
+        unfold(doneKey(parent, at))
+      if (isFolded(parent.work, foldsAlone(parent)))
+        unfold(parent.work)
     }
     if (next)
       opened = next
@@ -308,16 +331,23 @@ FocusScope {
       color: Qt.alpha(Theme.primary, 0.07)
     }
 
-    // A heading: a stage, a parallel group, a level, the works done earlier.
+    // A heading: a stage, a parallel group, the done sub-works of a place,
+    // a level, the works done earlier.
     RowLayout {
       visible: line.row.kind !== "work"
       anchors { fill: parent; leftMargin: 4 + Math.min(line.row.indent, team.deepest) * team.indentStep; rightMargin: 4 }
       spacing: 6
       Icon {
-        visible: line.row.folds
+        visible: line.row.folds && line.row.kind !== "done"
         name: line.row.folded ? "chevron-right" : "chevron-down"
         size: 12
         color: Theme.dim
+      }
+      Label {
+        visible: line.row.kind === "done"
+        text: "✓"
+        color: Theme.success
+        font.pixelSize: 11
       }
       Label {
         Layout.fillWidth: true
@@ -327,6 +357,12 @@ FocusScope {
         font.pixelSize: 11
         font.letterSpacing: line.row.kind === "level" ? 1 : 0
         elide: Text.ElideRight
+      }
+      Icon {
+        visible: line.row.kind === "done"
+        name: line.row.folded ? "chevron-right" : "chevron-down"
+        size: 12
+        color: Theme.dim
       }
       TapHandler {
         enabled: line.row.folds

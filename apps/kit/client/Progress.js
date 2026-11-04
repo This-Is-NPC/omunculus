@@ -377,6 +377,19 @@ function together(group) {
     .join(" · ");
 }
 
+// Sub-works done and cancelled, folded into one line, in words: "2 sub-works
+// done · 18 min · 1 cancelled", the time from the first one's start to the
+// last end in their branches.
+function finished(nodes) {
+  const done = nodes.filter(node => node.state === "done").length;
+  const cancelled = nodes.length - done;
+  const from = Math.min.apply(null, nodes.map(node => node.created));
+  const to = Math.max.apply(null, nodes.map(node => node.created + node.branch.seconds));
+  const works = count => count + (count === 1 ? " sub-work " : " sub-works ");
+  return [done > 0 ? works(done) + "done" : works(cancelled) + "cancelled", span(to - from)]
+    .concat(done > 0 && cancelled > 0 ? [cancelled + " cancelled"] : []).join(" · ");
+}
+
 function token(text, status) { return { text: text, status: status }; }
 
 function joined(tokens) { return tokens.map(each => each.text).join(""); }

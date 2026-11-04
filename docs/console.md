@@ -270,8 +270,14 @@ The team page (`TeamView`) is every work of the conversation, one row each
 between it and others and its branch's time, agents, calls and cost), nested
 under the stage of the work that handed it down; siblings handed down in one
 stage are headed "N in parallel", and the root works done before an open one
-fold under "N done earlier". Chips keep the works that need you or work,
-with the works above them, and `/` filters by title, agent or stage. A
+fold under "N done earlier". The done and cancelled sub-works of each stage,
+or of a work without a workflow, fold into one row, "✓ 2 sub-works done ·
+18 min" (and "· 1 cancelled"), which a click, Enter or → unfolds into their
+one-line rows and ← folds again; it stays folded while the conversation waits
+on you, unless the question climbed from there. Chips keep the works that
+need you or work, with the works above them, and `/` filters by title, agent
+or stage; a filter shows a done row only on the way to a work it keeps. The
+chips' counts are of works, folded ones included. A
 waiting badge (`⇡ waiting for design-lead`, `⇣ 1 question from designer`)
 lights both ends of its request, brings the other into view and opens the
 request in the detail; `⇣ needs you below`, on the works above one that
