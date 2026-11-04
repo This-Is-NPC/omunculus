@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
 // BoardView is the works of every project the window reaches, those of
@@ -8,7 +9,8 @@ import "kit/ui"
 // open, waiting on a child, a request or your next message, broken and
 // waiting on its parent to decide, done, cancelled — the latest changed
 // first, each card a work. By agent or by project, the columns are crossed
-// by a lane of each; with several projects, chips keep one. It follows each project's stream while
+// by a lane of each; with several projects, chips keep one. On a narrow board
+// the columns stack: each state's heading over its cards, full width. It follows each project's stream while
 // it is on screen. A card opened opens its conversation's map with the work
 // picked, on its project. `/` goes to the filter, which keeps the works
 // whose title, project, conversation, workflow, stage or agent holds it;
@@ -51,12 +53,14 @@ Item {
       })
       .sort((a, b) => (b.updated_at || b.created_at).localeCompare(a.updated_at || a.created_at))
   }
+  // Whether the states stack, one under the other, rather than side by side.
+  readonly property bool stacked: Breakpoints.size(width) === "narrow"
   // Every state where there is room for them all, else those with a work.
   readonly property var columns: {
     const used = states.filter(state => shown.some(work => stateOf(work) === state.key))
-    return width >= states.length * (narrowest + gap) || used.length === 0 ? states : used
+    return !stacked && width >= states.length * (narrowest + gap) || used.length === 0 ? states : used
   }
-  readonly property real columnWidth: Math.floor((width - (columns.length - 1) * gap) / columns.length)
+  readonly property real columnWidth: stacked ? width : Math.floor((width - (columns.length - 1) * gap) / columns.length)
   // The lane of a work: its agent's, or its project's.
   function laneOf(work) { return group === "agent" ? Omunculus.agentOf(work) : work.project }
   // The lanes: one for every work, or one per agent or project with a work
@@ -66,8 +70,10 @@ Item {
     return shown.filter(work => stateOf(work) === state && (lane === null || laneOf(work) === lane))
   }
   // The work ids of each column, top to bottom across the lanes, as the
-  // arrows go.
-  readonly property var grid: columns.map(column => [].concat(...lanes.map(lane => cell(lane, column.key).map(work => work.id))))
+  // arrows go; stacked, one column in the order shown.
+  readonly property var grid: stacked
+    ? [[].concat(...lanes.map(lane => [].concat(...columns.map(column => cell(lane, column.key).map(work => work.id)))))]
+    : columns.map(column => [].concat(...lanes.map(lane => cell(lane, column.key).map(work => work.id))))
   readonly property var first: grid.reduce((found, ids) => found || ids[0] || "", "")
 
   // Work id -> its card, and the one the keyboard was on last.
@@ -124,6 +130,39 @@ Item {
     event.accepted = true
   }
 
+  // A state's head: its name, what it means where there is room, and how
+  // many works are in it.
+  component StateHead: Rectangle {
+    id: head
+    required property var column
+    required property int count
+    width: board.columnWidth
+    height: 34
+    color: "transparent"
+    border.color: Theme.line
+    RowLayout {
+      anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
+      spacing: 8
+      Dot { tone: Omunculus.stateTone(head.column.key); size: 7; filled: head.count > 0 }
+      DecodeLabel {
+        value: head.column.key.toUpperCase()
+        color: head.count > 0 ? Theme.foreground : Theme.dim
+        font.pixelSize: 11
+        font.letterSpacing: 3
+      }
+      Label {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        text: head.column.tip
+        color: Theme.dim
+        font.pixelSize: 11
+        elide: Text.ElideRight
+        visible: board.columnWidth > 260
+      }
+      Label { text: head.count; color: Theme.dim; font.pixelSize: 11 }
+    }
+  }
+
   ColumnLayout {
     anchors.fill: parent
     spacing: 10
@@ -172,37 +211,14 @@ Item {
     // The columns' heads: each state, with how many works are in it.
     Row {
       Layout.fillWidth: true
+      visible: !board.stacked
       spacing: board.gap
       Repeater {
-        model: board.columns
-        delegate: Rectangle {
-          id: head
+        model: board.stacked ? [] : board.columns
+        delegate: StateHead {
           required property var modelData
-          readonly property int count: board.shown.filter(work => board.stateOf(work) === modelData.key).length
-          width: board.columnWidth
-          height: 34
-          color: "transparent"
-          border.color: Theme.line
-          RowLayout {
-            anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
-            spacing: 8
-            Dot { tone: Omunculus.stateTone(head.modelData.key); size: 7; filled: head.count > 0 }
-            DecodeLabel {
-              value: head.modelData.key.toUpperCase()
-              color: head.count > 0 ? Theme.foreground : Theme.dim
-              font.pixelSize: 11
-              font.letterSpacing: 3
-            }
-            Label {
-              Layout.fillWidth: true
-              text: head.modelData.tip
-              color: Theme.dim
-              font.pixelSize: 9
-              elide: Text.ElideRight
-              visible: board.columnWidth > 260
-            }
-            Label { text: head.count; color: Theme.dim; font.pixelSize: 11 }
-          }
+          column: modelData
+          count: board.shown.filter(work => board.stateOf(work) === modelData.key).length
         }
       }
     }
@@ -266,25 +282,35 @@ Item {
               }
             }
 
-            Row {
-              spacing: board.gap
+            // Side by side, or stacked: each state's head over its cards.
+            Grid {
+              columns: board.stacked ? 1 : board.columns.length
+              columnSpacing: board.gap
+              rowSpacing: 12
               Repeater {
                 model: board.columns
                 delegate: Column {
-                  id: column
+                  id: stateColumn
                   required property var modelData
+                  readonly property var works: board.cell(lane.modelData, modelData.key)
                   width: board.columnWidth
-                  // Never empty to the Row, which places only what has a size.
+                  // Never empty to the Grid, which places only what has a size.
                   height: Math.max(1, implicitHeight)
+                  visible: !board.stacked || works.length > 0
                   spacing: 8
+                  StateHead {
+                    visible: board.stacked
+                    column: stateColumn.modelData
+                    count: stateColumn.works.length
+                  }
                   Repeater {
-                    model: board.cell(lane.modelData, column.modelData.key)
+                    model: stateColumn.works
                     delegate: BoardCard {
                       id: card
                       required property var modelData
                       work: modelData
                       now: board.now
-                      width: column.width
+                      width: stateColumn.width
                       Keys.onPressed: event => event.accepted = board.move(work.id, event.key)
                       Keys.onEscapePressed: board.leave()
                       onActiveFocusChanged: if (activeFocus) board.current = work.id
