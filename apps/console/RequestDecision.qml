@@ -224,15 +224,12 @@ SurfaceFrame {
         font.pixelSize: Theme.type.kicker.size
         font.letterSpacing: Theme.type.kicker.tracking
       }
-      Label {
+      Asks {
         visible: !card.stacked
         Layout.alignment: Qt.AlignVCenter
         Layout.maximumWidth: content.width * 0.3
-        text: card.asker + " asks"
-        color: Omunculus.toneOf(card.asker)
-        font.pixelSize: Theme.type.meta.size
-        font.letterSpacing: 1
-        elide: Text.ElideRight
+        who: card.asker
+        dim: card.dim
       }
       Label {
         visible: !card.stacked
@@ -267,13 +264,10 @@ SurfaceFrame {
       visible: card.stacked
       Layout.fillWidth: true
       spacing: Theme.space.tight
-      Label {
+      Asks {
         Layout.maximumWidth: content.width * 0.6
-        text: card.asker + " asks"
-        color: Omunculus.toneOf(card.asker)
-        font.pixelSize: Theme.type.meta.size
-        font.letterSpacing: 1
-        elide: Text.ElideRight
+        who: card.asker
+        dim: card.dim
       }
       Label {
         Layout.fillWidth: true
@@ -346,14 +340,23 @@ SurfaceFrame {
       wrapMode: Text.Wrap
     }
 
-    Label {
+    Flow {
+      id: decides
+      readonly property string decider: card.request ? Requests.label(card.request.arbiter) : ""
       Layout.fillWidth: true
       visible: card.open && !card.yours
-      text: card.request ? Requests.label(card.request.arbiter).toUpperCase() + " DECIDES" + Theme.type.meta.separator + "YOU CAN DECIDE INSTEAD" : ""
-      color: card.dim
-      font.pixelSize: Theme.type.meta.size
-      font.letterSpacing: Theme.type.meta.tracking
-      wrapMode: Text.Wrap
+      Label {
+        text: decides.decider.toUpperCase()
+        color: Omunculus.toneOf(decides.decider)
+        font.pixelSize: Theme.type.meta.size
+        font.letterSpacing: Theme.type.meta.tracking
+      }
+      Label {
+        text: " DECIDES" + Theme.type.meta.separator + "YOU CAN DECIDE INSTEAD"
+        color: card.dim
+        font.pixelSize: Theme.type.meta.size
+        font.letterSpacing: Theme.type.meta.tracking
+      }
     }
 
     // Your answer, or what the agent above chose, as a bubble on the right with
@@ -590,6 +593,30 @@ SurfaceFrame {
   component Counted: Label {
     font.pixelSize: Theme.type.header.size
     font.letterSpacing: Theme.type.meta.tracking
+  }
+
+  // Who asks, in their tone, then "asks"; the name elides first.
+  component Asks: RowLayout {
+    id: asks
+    property string who
+    property color dim
+    Layout.fillWidth: false
+    spacing: 0
+    Label {
+      Layout.fillWidth: true
+      Layout.minimumWidth: 0
+      text: asks.who
+      color: Omunculus.toneOf(asks.who)
+      font.pixelSize: Theme.type.meta.size
+      font.letterSpacing: 1
+      elide: Text.ElideRight
+    }
+    Label {
+      text: " asks"
+      color: asks.dim
+      font.pixelSize: Theme.type.meta.size
+      font.letterSpacing: 1
+    }
   }
 
   // Always: each scope a grant saved in the project settings, as chips.

@@ -5,8 +5,8 @@ import "kit/client/Requests.js" as Requests
 import "kit/ui"
 
 // TeamRow is an exchange between agents, where it was asked: who asked whom
-// and who decides, the question in its first three lines, and once answered
-// who answered and what. It is open while it waits, and then DECIDE INSTEAD
+// and who decides, each agent named in its tone, the question in its first
+// three lines, and once answered who answered and what. It is open while it waits, and then DECIDE INSTEAD
 // opens the request's card in place, so you can answer it yourself, and its
 // close folds it back; choosing its line folds and unfolds the rest of the
 // question and the answer.
@@ -25,8 +25,11 @@ Item {
   readonly property bool forYou: !!asked && Requests.human(asked.arbiter)
   readonly property string question: asked ? String(asked.reason || "") : ""
   readonly property string answer: reply ? String(reply.body || reply.option || "") : ""
-  readonly property string summary: reply && reply.who !== "you" && forYou ? reply.who + " answered this for you"
-    : by + " asked " + to + (pending ? "  ·  " + to + " decides" : asked && asked.status === "escalated" ? "  ·  passed up" : "")
+  // The summary line as its parts, each {text, agent} with the agent it names.
+  readonly property var parts: reply && reply.who !== "you" && forYou ? [{ text: reply.who, agent: reply.who }, { text: " answered this for you" }]
+    : [{ text: by, agent: by }, { text: " asked " }, { text: to, agent: to }]
+      .concat(pending ? [{ text: "  ·  " }, { text: to, agent: to }, { text: " decides" }] : asked && asked.status === "escalated" ? [{ text: "  ·  passed up" }] : [])
+  readonly property string summary: parts.map(part => part.text).join("")
   property bool open: pending
   property bool deciding: false
 
@@ -54,13 +57,24 @@ Item {
         anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
         spacing: Theme.space.tight
         Icon { name: "people"; size: 11; color: Theme.dim }
-        Label {
+        // Each agent named in its tone, the words between them dim.
+        RowLayout {
           Layout.fillWidth: true
           Layout.minimumWidth: 0
-          text: row.summary
-          color: pointer.containsMouse ? Theme.foreground : Theme.dim
-          font.pixelSize: 11
-          elide: Text.ElideRight
+          spacing: 0
+          Repeater {
+            model: row.parts
+            delegate: Label {
+              required property var modelData
+              required property int index
+              Layout.fillWidth: index === row.parts.length - 1
+              Layout.minimumWidth: 0
+              text: modelData.text
+              color: modelData.agent ? Omunculus.toneOf(modelData.agent) : pointer.containsMouse ? Theme.foreground : Theme.dim
+              font.pixelSize: 11
+              elide: Text.ElideRight
+            }
+          }
         }
         Label { text: row.stamp; color: Theme.faint; font.pixelSize: Theme.type.stamp.size; font.letterSpacing: Theme.type.stamp.tracking }
         Icon { name: row.open ? "chevron-down" : "chevron-right"; size: 10; color: Theme.dim }

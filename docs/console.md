@@ -145,8 +145,8 @@ A request is a card only while it waits on you, and it is in the main
 thread. Your answer reads as a bubble on the right (`AnswerBubble`) under
 YOU ANSWERED and the time, its text left aligned with the line breaks kept
 and the bubble as wide as the text, up to 620 px. Above it the question is one dim line at the thread's left
-margin, "Asked by SALES: " and its first line with words, cut at 120
-characters, with " (N questions)" when it is a numbered list; Enter, Space or
+margin, "Asked by SALES: " (the asker in its tone) and its first line with
+words, cut at 120 characters, with " (N questions)" when it is a numbered list; Enter, Space or
 a click opens it in place to its full text. Sending an answer, like sending
 a message, takes the view to the end, so it never counts as news; when the
 answer comes and the keyboard was in the card, it moves to the composer. A
@@ -154,10 +154,10 @@ reply says nothing in the bar when it succeeds; the card shows it. A
 question for you that arrives while the view follows is held by its top.
 
 What an agent asks another is an exchange (`TeamRow`) in the thread it was
-asked in: "seller asked design-lead · design-lead decides", the question in
-its first three lines and, once answered, who answered and what. It is open
-while it waits, and DECIDE INSTEAD opens the request's card in place, to
-answer it yourself. A request another gathers (`Requests.contained`), as the
+asked in: "seller asked design-lead · design-lead decides", each agent in its
+tone, the question in its first three lines and, once answered, who answered
+and what. It is open while it waits, and DECIDE INSTEAD opens the request's
+card in place, to answer it yourself. A request another gathers (`Requests.contained`), as the
 lower ones of a question passed up, is not shown on its own.
 
 ## The progress
@@ -243,8 +243,9 @@ mailbox.
 ## Requests
 
 A request's card (`RequestDecision`) is built as eco's answer card. Its
-heading names the kind, who asks and on which work, and the time, on two
-lines when the card is under 520 px, with its tools at the top right: copy
+heading names the kind, who asks (the name in the agent's tone, as
+everywhere it appears) and on which work, and the time, on two lines when
+the card is under 520 px, with its tools at the top right: copy
 the question, the "more" menu that holds ESCALATE while it waits on you, and
 close where the card opened in place of another (DECIDE INSTEAD). Its kinds:
 NEEDS YOU (an answer in words; a numbered list of questions has a box

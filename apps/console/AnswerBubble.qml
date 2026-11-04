@@ -6,7 +6,8 @@ import "kit/ui"
 // AnswerBubble is what you answered a question: your words in a bubble on the
 // right, left aligned with their line breaks kept, under a heading of your
 // tone dot, YOU ANSWERED and the time. Over them the question is one dim
-// line, who asked and its first words, that opens in place to its full text.
+// line, who asked in their tone and its first words, that opens in place to
+// its full text.
 Item {
   id: bubble
 
@@ -62,16 +63,23 @@ Item {
         size: 10
         color: bubble.open ? ask.dim : pointer.containsMouse ? Theme.foreground : Theme.dim
       }
-      Label {
+      // Who asked in their tone, between the dim words.
+      Row {
         id: line
         visible: !bubble.open
         x: Theme.space.block
         width: parent.width - x
-        text: bubble.summary
-        color: pointer.containsMouse ? Theme.foreground : Theme.dim
-        font.pixelSize: 11
-        maximumLineCount: 1
-        elide: Text.ElideRight
+        readonly property color ink: pointer.containsMouse ? Theme.foreground : Theme.dim
+        Label { id: by; text: "Asked by "; color: line.ink; font.pixelSize: 11 }
+        Label { id: who; text: bubble.asker.toUpperCase(); color: Omunculus.toneOf(bubble.asker); font.pixelSize: 11 }
+        Label {
+          width: Math.max(0, line.width - by.width - who.width)
+          text: ": " + bubble.first + (bubble.form ? " (" + bubble.form.items.length + " questions)" : "")
+          color: line.ink
+          font.pixelSize: 11
+          maximumLineCount: 1
+          elide: Text.ElideRight
+        }
       }
       Prose {
         id: full
