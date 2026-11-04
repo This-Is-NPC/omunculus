@@ -393,8 +393,11 @@ FocusScope {
           // A level in, what it groups sits one block further.
           readonly property real indent: (modelData.depth || 0) * Theme.space.block
 
+          // Where a level begins, a gap sets its first card apart from the one above.
+          readonly property real lead: modelData.kind === "work" && index > 0 && (modelData.depth || 0) > (team.rows[index - 1].depth || 0) ? Theme.space.gap : 0
+
           width: outline.width
-          height: modelData.kind === "work" ? (node.item ? node.item.implicitHeight : 0)
+          height: modelData.kind === "work" ? (node.item ? node.item.implicitHeight : 0) + lead
             : modelData.kind === "front" ? Theme.size.strip : Theme.size.rule
 
           // A stage, a parallel group.
@@ -485,6 +488,7 @@ FocusScope {
             id: node
             active: line.modelData.kind === "work"
             x: line.indent
+            y: line.lead
             width: parent.width - x
             sourceComponent: ProgressNode {
               node: line.modelData.node
