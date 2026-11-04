@@ -52,14 +52,6 @@ const table = [
   { id: "cancel", keys: [], tier: 0, mutates: true, where: [], what: "cancel a work" }
 ]
 
-// The bare keys the window may answer to: pure navigation.
-const bareKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "/", "[", "]", "?", "F1", "Esc", "N", "H", "B", "P"]
-
-// Whether a key sequence is a single key with no Ctrl, Alt or Meta.
-function isBare(sequence) {
-  return !/^(Ctrl|Alt|Meta)\+/.test(sequence)
-}
-
 function find(id) {
   return table.find(entry => entry.id === id)
 }

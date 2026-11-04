@@ -2,7 +2,8 @@ defmodule Omunculus.GuiModules do
   @moduledoc """
   Runs assertions in `deno` against the pure `.pragma library` modules of the
   GUI client. Each module is bound to its file name (`Requests.js` becomes
-  `Requests`) with its functions exported, as QML's `.import` gives it.
+  `Requests`) with its top-level functions and constants exported, as QML's
+  `.import` gives it.
   """
 
   # The client's pure modules, and the ui's own (`Colour.js`, which the theme imports).
@@ -28,7 +29,9 @@ defmodule Omunculus.GuiModules do
       |> String.replace(~r/^\.import .*$/m, "")
 
     exports =
-      ~r/^function (\w+)/m |> Regex.scan(source, capture: :all_but_first) |> List.flatten()
+      ~r/^(?:function|const) (\w+)/m
+      |> Regex.scan(source, capture: :all_but_first)
+      |> List.flatten()
 
     "const #{name} = (() => {\n#{source}\nreturn {#{Enum.join(exports, ", ")}};\n})();"
   end

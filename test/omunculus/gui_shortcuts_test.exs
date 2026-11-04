@@ -1,12 +1,18 @@
 defmodule Omunculus.GuiShortcutsTest do
   use ExUnit.Case, async: true
 
-  defp run(assertions) do
-    script =
-      File.read!(Path.expand("../../apps/kit/client/Shortcuts.js", __DIR__))
-      |> String.replace(".pragma library", "")
+  alias Omunculus.GuiModules
 
-    assert {"", 0} = System.cmd("deno", ["eval", script <> assertions], stderr_to_stdout: true)
+  # The bare keys the window may answer to, pure navigation, and whether a
+  # key sequence is a single key with no Ctrl, Alt or Meta.
+  @fixtures """
+  const bareKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "/", "[", "]", "?", "F1", "Esc", "N", "H", "B", "P"];
+  const isBare = sequence => !/^(Ctrl|Alt|Meta)\\+/.test(sequence);
+  const table = Shortcuts.table;
+  """
+
+  defp run(assertions) do
+    assert {"", 0} = GuiModules.run(["Shortcuts"], @fixtures <> assertions)
   end
 
   test "no action that changes something has a bare key" do
@@ -37,10 +43,11 @@ defmodule Omunculus.GuiShortcutsTest do
     run("""
     const ids = table.map(entry => entry.id);
     if (new Set(ids).size !== ids.length) throw Error("duplicate id");
-    if (chord("reply") !== "Alt+R" || label("page") !== "1 · 2 · …") throw Error("lookups");
-    if (rows("team").length === 0) throw Error("rows");
-    if (chord("projects") !== "Ctrl+P" || find("projects").mutates) throw Error("projects");
-    if (keys("start-projects")[0] !== "P" || find("start-projects").tier !== 1) throw Error("start-projects");
+    if (Shortcuts.chord("reply") !== "Alt+R" || Shortcuts.label("page") !== "1 · 2 · …") throw Error("lookups");
+    if (Shortcuts.rows("team").length === 0) throw Error("rows");
+    if (Shortcuts.rows("everywhere")[0][0] !== "1 · 2 · …") throw Error("rows label");
+    if (Shortcuts.chord("projects") !== "Ctrl+P" || Shortcuts.find("projects").mutates) throw Error("projects");
+    if (Shortcuts.keys("start-projects")[0] !== "P" || Shortcuts.find("start-projects").tier !== 1) throw Error("start-projects");
     """)
   end
 end
