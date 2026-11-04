@@ -4,14 +4,15 @@ import QtQuick.Layouts
 import "kit/ui"
 
 // HistoryView filters the project's conversations — those agents work in,
-// those waiting on you, and what was first said in them — and opens a selected
-// row. `/` goes to the search; ↓ or Enter back to the rows; Esc on them leaves.
+// those waiting for you, those not started, and what was first said in them —
+// and opens a selected row. Conversations not started stay out of ALL. `/`
+// goes to the search; ↓ or Enter back to the rows; Esc on them leaves.
 ColumnLayout {
   id: history
   spacing: 14
 
   property bool active: false
-  // "", "working" or "waiting".
+  // "", or a state of the table: "WORKING", "WAITING FOR YOU" or "NOT STARTED".
   property string filter: ""
   property string search: ""
   signal opened(string id)
@@ -20,12 +21,15 @@ ColumnLayout {
   function focusEntry() { table.focusRows() }
 
   function known(conversation) { return Omunculus.summaries[conversation.id] || null }
-  readonly property int working: Omunculus.conversations.filter(item => { const s = known(item); return s && s.running > 0 }).length
-  readonly property int waiting: Omunculus.conversations.filter(item => { const s = known(item); return s && s.waiting > 0 }).length
+  function count(state) { return Omunculus.conversations.filter(item => table.state(item) === state).length }
+  readonly property int working: count("WORKING")
+  readonly property int waiting: count("WAITING FOR YOU")
+  readonly property int fresh: count("NOT STARTED")
   readonly property var shown: Omunculus.conversations.filter(item => {
     const s = known(item)
+    const state = table.state(item)
     const words = history.search.toLowerCase().split(/\s+/).filter(word => word)
-    return (history.filter === "" || (s && (history.filter === "working" ? s.running > 0 : s.waiting > 0)))
+    return (history.filter === "" ? state !== "NOT STARTED" || words.length > 0 : state === history.filter)
       && words.every(word => s && s.title.toLowerCase().includes(word))
   })
 
@@ -57,7 +61,7 @@ ColumnLayout {
 
   Flow {
     Layout.fillWidth: true
-    visible: history.working > 0 || history.waiting > 0
+    visible: history.working > 0 || history.waiting > 0 || history.fresh > 0
     spacing: 6
     Chip {
       text: "ALL"
@@ -69,18 +73,25 @@ ColumnLayout {
       visible: history.working > 0
       text: "WORKING  " + history.working
       icon: "play"
-      checked: history.filter === "working"
-      dim: history.filter !== "working"
-      onClicked: history.filter = "working"
+      checked: history.filter === "WORKING"
+      dim: history.filter !== "WORKING"
+      onClicked: history.filter = "WORKING"
     }
     Chip {
       visible: history.waiting > 0
-      text: "WAITING ON YOU  " + history.waiting
+      text: "WAITING FOR YOU  " + history.waiting
       icon: "warning"
       accent: Theme.warning
-      checked: history.filter === "waiting"
-      dim: history.filter !== "waiting"
-      onClicked: history.filter = "waiting"
+      checked: history.filter === "WAITING FOR YOU"
+      dim: history.filter !== "WAITING FOR YOU"
+      onClicked: history.filter = "WAITING FOR YOU"
+    }
+    Chip {
+      visible: history.fresh > 0
+      text: "NOT STARTED  " + history.fresh
+      checked: history.filter === "NOT STARTED"
+      dim: history.filter !== "NOT STARTED"
+      onClicked: history.filter = "NOT STARTED"
     }
   }
 

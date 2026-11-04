@@ -477,7 +477,7 @@ Singleton {
       const request = pending[0]
       const question = asking(request, notes)
       const asks = (question.note ? "note: " : question.from + " asks: ") + oneLine(question.text || "a decision")
-      return { state: "waiting", label: "WAITING ON YOU", brief: asks, line: asks + (pending.length > 1 ? "  (+" + (pending.length - 1) + " more)" : ""),
+      return { state: "waiting", label: "WAITING FOR YOU", brief: asks, line: asks + (pending.length > 1 ? "  (+" + (pending.length - 1) + " more)" : ""),
         next: "Nothing in this thread moves until you decide: DECIDE takes you to the question." }
     }
 
@@ -516,7 +516,7 @@ Singleton {
     if (awaited) {
       const by = runs.filter(run => run.work_id === awaited.id).pop()
       const who = by ? by.agent : awaited.assignee || agent
-      return { state: "awaited", label: "WAITING ON YOU", brief: who + " waits for your word",
+      return { state: "awaited", label: "WAITING FOR YOU", brief: who + " waits for your word",
         line: who + " waits for your next message on “" + awaited.title + "”" + (awaited.stage ? " · " + awaited.stage : "") + ".",
         next: "Nothing in this thread moves until you write to " + agent + ": REPLY picks it up." }
     }
