@@ -398,11 +398,12 @@ function build(input) {
   // The agent that talks with the person, when its works are other agents':
   // the root of the team, what it asks the person and its own state.
   const talking = input.rootAgent ? open.find(run => run.agent === input.rootAgent) : null;
+  const delegated = Array.from(new Set(roots.filter(each => !closed(each.state) && each.agent !== input.rootAgent).map(each => each.agent)));
   const front = input.rootAgent && roots.some(each => each.agent !== input.rootAgent)
     ? {
       agent: input.rootAgent, agents: agents.length, asking: asking(forYou), ask: forYou.length > 0 ? forYou[0].id : "", asker: forYou.length > 0 ? forYou[0].asker : "",
-      state: talking ? "working" : forYou.length > 0 ? "needs-you" : "idle",
-      doing: talking ? (calling[talking.work_id || ""] ? Phrases.phrase(calling[talking.work_id || ""], callArgs[talking.work_id || ""]) : "Getting started") : "",
+      state: talking ? "working" : forYou.length > 0 ? "needs-you" : delegated.length > 0 ? "waiting" : "idle",
+      doing: talking ? (calling[talking.work_id || ""] ? Phrases.phrase(calling[talking.work_id || ""], callArgs[talking.work_id || ""]) : "Getting started") : delegated.length > 0 && forYou.length === 0 ? "Waiting for " + delegated.join(", ") : "",
       since: talking ? runStart(talking) : null
     }
     : null;

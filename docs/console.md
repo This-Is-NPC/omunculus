@@ -211,7 +211,7 @@ in its tone, the stage of the work in focus and how long it has run, in
 words: "● SALES · STAGE 2/6 · 18 MINUTES SO FAR", "TOOK 3 MINUTES"
 once done, the stage's name being the stepper's under it; "WAITING FOR YOU
 SINCE 22:43", in the warning tone, in place of the clock while a question
-waits on you; before any work, "● SALES · STARTING" while its first run goes,
+waits on you; before any work, "● SALES · STARTING" while its first run goes or the person has written,
 NOT STARTED before any, the agent giving way as the width shrinks. From 700 px of its own width the counts
 follow: "· 2 AGENTS · US$ 0.04", shown when more than one agent ran and
 once the provider priced a call; each opens what it counts, the team and the cost, and
@@ -331,7 +331,7 @@ form grows in the thread; the view starts at the card's top. While
 that end is below the view, the two float on the view's bottom edge over the
 card's fill and a hairline, with what passes under them fading out above, with "N MORE QUESTIONS BELOW" at the right
 (above them under 520 px) while items start under them; the chip brings the
-first of those into view with the keyboard in its box. Each item is its
+first of those into view with the keyboard in its box; the last box scrolls into view with the asker's closing paragraph. The form's dim words use the card's lifted dim tone. Each item is its
 number, its question wrapped in sentence case at a 620 px measure and a box
 (`TextBlock`) as wide as the card's text that grows with its text, with the toggle chip "I DON'T
 KNOW YET" under it, which fills the box and, switched off, restores what was
@@ -368,7 +368,7 @@ time, under a breadcrumb once it has gone down into a work ("Conversation
 conversation's level the agent that talks with you heads the team ("sales ·
 talks with you · 2 agents", with its own state at the right, as the rows
 show theirs: "Answering 0:05" while its run is open, "Needs you" while a
-question waits on you, "Idle", and "⇡ asks you 5 questions" while it does)
+question waits on you, "Waiting for seller" while a work of the team is open and no run is its own, "Idle" once nothing is open, and "⇡ asks you 5 questions" while it does)
 and the works nest under it, each level one block further in: a work's
 own row, then the rule naming the stage that handed works down (at the
 indent of the rows it heads) and those works. A level is a work's own row,

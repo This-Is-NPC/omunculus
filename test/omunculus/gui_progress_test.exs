@@ -225,7 +225,9 @@ defmodule Omunculus.GuiProgressTest do
     const out = Progress.build(base);
     check(out.front && out.front.agent === "sales" && out.front.agents === 1 && out.front.asking === "" && out.front.ask === "", "front", out.front);
     const same = Progress.build(Object.assign({}, base, {rootAgent: "seller"}));
-    check(out.front.state === "idle" && out.front.doing === "" && out.front.since === null, "front idle", out.front);
+    check(out.front.state === "waiting" && out.front.doing === "Waiting for seller" && out.front.since === null, "front waits for its team", out.front);
+    const finished = Progress.build(Object.assign({}, base, {runs: [], works: works.map(work => Object.assign({}, work, {state: "done"}))}));
+    check(finished.front.state === "idle" && finished.front.doing === "", "front idle once nothing is open", finished.front);
     const talking = Progress.build(Object.assign({}, base, {runs: base.runs.concat([run("rf", "sales", "")])}));
     check(talking.front.state === "working" && talking.front.doing === "Getting started" && talking.front.since === null, "front working", talking.front);
     check(same.front === null, "root work is the front agent's own", same.front);

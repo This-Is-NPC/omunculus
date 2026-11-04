@@ -467,7 +467,7 @@ FocusScope {
               visible: !!line.modelData.front
               Layout.maximumWidth: line.width * 0.4
               state: line.modelData.front ? line.modelData.front.state : ""
-              text: !line.modelData.front ? "" : line.modelData.front.state === "working" ? line.modelData.front.doing : line.modelData.front.state === "idle" ? "Idle" : ""
+              text: !line.modelData.front ? "" : line.modelData.front.state === "working" || line.modelData.front.state === "waiting" ? line.modelData.front.doing : line.modelData.front.state === "idle" ? "Idle" : ""
               clock: line.modelData.front && line.modelData.front.state === "working" && line.modelData.front.since !== null
                 ? Progress.clock(Math.max(0, Math.round(Omunculus.tick - line.modelData.front.since))) : ""
             }

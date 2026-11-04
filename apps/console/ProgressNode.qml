@@ -52,6 +52,7 @@ FocusScope {
   signal requestPicked(string id)
 
   readonly property bool full: mode === "full"
+  readonly property bool ongoing: !["done", "cancelled"].includes(node.state)
   readonly property bool quiet: ["done", "cancelled", "up-next"].includes(node.state)
   readonly property real now: Omunculus.tick
   readonly property color agentTone: Omunculus.toneOf(node.agent)
@@ -65,7 +66,7 @@ FocusScope {
   readonly property string shownState: busy ? "working" : node.state
   readonly property string asWords: busy
     ? Array.from(new Set(underway.map(each => each.agent))).join(", ") + " working"
-    : node.state === "waiting" ? node.doing : ""
+    : node.state === "waiting" || node.state === "working" ? node.doing : ""
   // The state's words, the state's own when who works does not fit its room.
   readonly property string saying: asWords !== "" && markFont.advanceWidth(asWords) <= rowBody.width * 0.55 - Theme.space.cell - Theme.space.line ? asWords : ""
   readonly property string clock: node.state === "working" && node.since !== null
@@ -101,7 +102,8 @@ FocusScope {
     const branch = node.branch
     const below = Progress.below(Progress.kidsOf(node))
     const parts = below !== "" ? [below] : []
-    parts.push(node.finishedIn !== null ? "took " + Progress.span(node.finishedIn) : Progress.span(branch.seconds))
+    parts.push(node.finishedIn !== null ? "took " + Progress.span(node.finishedIn)
+      : Progress.span(ongoing ? Math.max(0, now - node.created) : branch.seconds))
     if (node.calls > 0)
       parts.push(node.calls + (node.calls === 1 ? " step" : " steps"))
     const money = spent(branch.usage)
