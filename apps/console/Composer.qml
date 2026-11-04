@@ -15,7 +15,8 @@ import "kit/ui"
 // they were written in, and come back when it is open again.
 // SEND keeps its caption over the trace while the agent you write to is
 // working, says so on hover, and still sends; the agents below it never
-// hold it. The words stay in the box,
+// hold it. It is dim while the box is empty. While a form waits, the
+// keyboard goes to the form, and the box offers to say something else. The words stay in the box,
 // dimmed, until the server took the message, and come back to be sent again
 // if it did not. Under 420 px of its own width its buttons show their icons
 // only.
@@ -37,6 +38,9 @@ ColumnLayout {
   // Whether a numbered form waits on you in the main thread: its answers go
   // in its card, so the box does not invite them.
   readonly property bool formWaits: work === "" && Omunculus.waiting.some(request => Questions.parse(request.reason) !== null)
+
+  // Whether the box holds nothing to send.
+  readonly property bool empty: entry.text.trim() === ""
 
   // Whether Enter leaves a note rather than sends; once a note is left, or
   // on Esc, the box writes to the agent again.
@@ -139,7 +143,7 @@ ColumnLayout {
         id: entry
         Layout.fillWidth: true
         framed: false
-        placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? (composer.formWaits ? "answer the questions above, or " : "") + (composer.addressee ? "say to " + composer.addressee + " what you need" : "say what you need") : "write to " + (composer.addressee || "this work")
+        placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? composer.formWaits ? "or say something else" + (composer.addressee ? " to " + composer.addressee : "") : composer.addressee ? "say to " + composer.addressee + " what you need" : "say what you need" : "write to " + (composer.addressee || "this work")
         onSubmitted: composer.noting ? composer.note() : composer.submit()
         onTextChanged: if (composer.work === "" && Omunculus.conversationId !== "") Omunculus.composerDrafts[Omunculus.conversationId] = text
         Keys.onEscapePressed: event => {
@@ -178,6 +182,7 @@ ColumnLayout {
         implicitWidth: composer.compact ? Breakpoints.target(Window.width) : 86
         busy: composer.busy
         allowClickWhileBusy: true
+        reason: composer.empty ? "write something first" : ""
         icon: "enter"
         text: composer.compact ? "" : "SEND"
         tip: composer.busy ? (composer.addressee || "the agent") + " is working; SEND still sends" : "SEND"
