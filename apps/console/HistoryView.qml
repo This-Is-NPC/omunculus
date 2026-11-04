@@ -3,11 +3,11 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
 
-// HistoryView filters the project's conversations — those agents work in,
-// those waiting for you, those not started, and their titles and what was
+// HistoryView filters the project's conversations — those needing you,
+// those agents work in, those not started, and their titles and what was
 // first said in them — and opens a selected row, at its chat or, from its
-// menu, its team or its log. Conversations not started stay out of ALL. Its
-// readout counts what it lists, for the bar. `/` goes to the search; ↓ or
+// menu, its team or its log. ALL lists every one, and its readout, for the
+// bar, counts what it lists. `/` goes to the search; ↓ or
 // Enter back to the rows, ↑ on the first row back to the search; Esc on
 // them leaves.
 ColumnLayout {
@@ -15,7 +15,7 @@ ColumnLayout {
   spacing: Theme.space.block
 
   property bool active: false
-  // "", or a state of the table: "WORKING", "WAITING FOR YOU" or "NOT STARTED".
+  // "", or a state of the table: "needs-you", "working" or "not-started".
   property string filter: ""
   property string search: ""
   // The page it opens at: "" for the chat, "map" or "log".
@@ -33,16 +33,14 @@ ColumnLayout {
   }
 
   function count(state) { return Omunculus.conversations.filter(item => table.stateOf(item) === state).length }
-  readonly property int working: count("WORKING")
-  readonly property int waiting: count("WAITING FOR YOU")
-  readonly property int fresh: count("NOT STARTED")
+  readonly property int working: count("working")
+  readonly property int waiting: count("needs-you")
+  readonly property int fresh: count("not-started")
   readonly property var shown: Omunculus.conversations.filter(item => {
     const known = Omunculus.summaries[item.id]
     const said = [table.titleOf(item), known ? known.title : ""].join(" ").toLowerCase()
-    const state = table.stateOf(item)
     const words = history.search.toLowerCase().split(/\s+/).filter(word => word)
-    return (history.filter === "" ? state !== "NOT STARTED" || words.length > 0 : state === history.filter)
-      && words.every(word => said.includes(word))
+    return (history.filter === "" || table.stateOf(item) === history.filter) && words.every(word => said.includes(word))
   })
 
   Keys.onPressed: event => {
@@ -73,27 +71,31 @@ ColumnLayout {
     }
     Chip {
       visible: history.waiting > 0
-      text: "WAITING FOR YOU  " + history.waiting
+      text: "NEEDS YOU  " + history.waiting
       icon: "warning"
       accent: Theme.warning
-      checked: history.filter === "WAITING FOR YOU"
-      dim: history.filter !== "WAITING FOR YOU"
-      onClicked: history.filter = "WAITING FOR YOU"
+      alert: true
+      tip: "the conversations where something waits on you"
+      checked: history.filter === "needs-you"
+      dim: history.filter !== "needs-you"
+      onClicked: history.filter = "needs-you"
     }
     Chip {
       visible: history.working > 0
       text: "WORKING  " + history.working
       icon: "play"
-      checked: history.filter === "WORKING"
-      dim: history.filter !== "WORKING"
-      onClicked: history.filter = "WORKING"
+      tip: "the conversations agents work in and nothing waits on you"
+      checked: history.filter === "working"
+      dim: history.filter !== "working"
+      onClicked: history.filter = "working"
     }
     Chip {
       visible: history.fresh > 0
       text: "NOT STARTED  " + history.fresh
-      checked: history.filter === "NOT STARTED"
-      dim: history.filter !== "NOT STARTED"
-      onClicked: history.filter = "NOT STARTED"
+      tip: "the conversations nothing was said in yet"
+      checked: history.filter === "not-started"
+      dim: history.filter !== "not-started"
+      onClicked: history.filter = "not-started"
     }
   }
 

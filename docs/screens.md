@@ -102,10 +102,14 @@ its name in its colour and its role, its number at the top left. The conversatio
 
 ### 4. Conversations
 
-The project's conversations under a rule of the day each began: its title,
-under it the agent, when it began, its works and stage, and its state at the
-top right. Under the search line, chips filter by what agents do there; a
-row's `⋯` opens it at its team or its log.
+The project's conversations, those needing you first, the longest waiting
+first, then the others under a rule of the day each began: its title and
+its state at the top right, what waits on you ("7 QUESTIONS", "A
+DECISION"); under it since when it waits, whom it is with and which agent
+holds its work at which stage ("sales · seller is at design (2/6)"), when
+it began and its works; then what the newest request asks. Under the
+search line, chips filter by state, ALL listing every one; a row's `⋯`
+opens it at its team or its log.
 
 | Keys | What they do |
 | --- | --- |

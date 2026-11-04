@@ -418,19 +418,26 @@ The registry's level:
 
 The project's level:
 
-- CONVERSATIONS (`HistoryView`, `ConversationsTable`), the project's, under
-  a rule of the day each began, newest first, filtered by what agents do
-  there and by their titles and what was first said in them, which it opens
-  from. A row's title is its first work's, else what was first said; under
-  it, the agent that work is with, when it began ("Today 21:59", "Yesterday
-  21:59" or "03 Nov 21:59"), how many works it holds and the stage its first
-  work is at (read from the project's works, which the window follows while
-  entered). Its state is at the top right: NOT STARTED (nothing was said;
-  hidden under ALL, shown by its chip), WAITING FOR YOU, WORKING (behind a
-  dot), DONE (every work done or cancelled) or IDLE. Each row's `⋯` opens
-  the conversation at its TEAM or its LOG instead of its chat. A list the
-  filters empty offers CLEAR FILTERS; ↑ on the first row goes back to the
-  search. The view's `readout`, "12 CONVERSATIONS", counts the rows listed;
+- CONVERSATIONS (`HistoryView`, `ConversationsTable`), the project's: those
+  needing you first under NEEDS YOU, the one waiting longest first, then the
+  others under a rule of the day each began, newest first; filtered by
+  their state (chips NEEDS YOU, WORKING, NOT STARTED; ALL lists every one)
+  and by their titles and what was first said in them, which it opens from.
+  Each row is two or three lines at every width, with no header. Its title
+  is its first work's, else what was first said, with its state at the top
+  right: what waits on you ("7 QUESTIONS", "A DECISION", "A PERMISSION",
+  joined when several do), NOT STARTED (nothing was said), WORKING (behind
+  a dot), DONE (every work done or cancelled) or IDLE. Under it, dim:
+  "waiting since 22:43" while something does, whom it is with and the agent
+  its first work is with at its stage ("sales · seller is at design (2/6)",
+  or "sales is at qualify (1/6)" when they are the same; read from the
+  project's works, which the window follows while entered), when it began
+  ("Today 21:59", "Yesterday 21:59" or "03 Nov 21:59") and how many works it
+  holds. The third line quotes what the newest request asks, or, under a
+  work's title, what was first said. Each row's `⋯` opens the conversation
+  at its TEAM or its LOG instead of its chat. A list the filters empty
+  offers CLEAR FILTERS; ↑ on the first row goes back to the search. The
+  view's `readout`, "16 CONVERSATIONS", counts the rows listed;
 - BOARD, the same board, opened kept to the project's works, every
   project's one click away.
 
