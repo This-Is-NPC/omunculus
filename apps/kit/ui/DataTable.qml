@@ -36,6 +36,9 @@ Item {
   property string section: ""
   property Component tools
   property real toolsWidth: 0
+  // What the tools take past a row's padding: the row's text, its status
+  // too, ends a gap before them, so the two never share room.
+  readonly property real toolsRoom: toolsWidth > 0 ? toolsWidth + Theme.space.trail + Theme.space.gap - Theme.space.cell : 0
   // The title over the tools in the header, or "".
   property string toolsTitle: ""
   // The tools stay on every row however narrow the table.
@@ -146,7 +149,7 @@ Item {
 
   // A column the columns lost before the rows were rebuilt takes no room.
   function columnWidth(index) {
-    return index < columns.length ? Math.max(0, width - 24 - toolsWidth) * columns[index].weight : 0
+    return index < columns.length ? Math.max(0, width - Theme.space.cell * 2 - toolsRoom) * columns[index].weight : 0
   }
 
   Rectangle {
@@ -175,8 +178,10 @@ Item {
       }
       Label {
         visible: table.toolsTitle !== ""
-        width: table.toolsWidth
+        width: table.toolsRoom
         height: header.height
+        // Over the tools, past the gap before them.
+        leftPadding: Theme.space.gap
         verticalAlignment: Text.AlignVCenter
         text: table.toolsTitle.toUpperCase()
         color: Theme.dim
@@ -238,7 +243,7 @@ Item {
       readonly property bool current: ListView.isCurrentItem
       readonly property bool marked: table.selectedId !== "" && table.selectedId === table.idOf(modelData) || (current && (list.activeFocus || toolScope.activeFocus))
       readonly property bool tooled: table.tools !== null && (!table.narrow || table.toolsAlways || hover.hovered || marked)
-      readonly property real reserved: tooled ? table.toolsWidth : 0
+      readonly property real reserved: tooled ? table.toolsRoom : 0
 
       function open() {
         list.currentIndex = index
