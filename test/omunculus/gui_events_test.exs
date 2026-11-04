@@ -41,8 +41,8 @@ defmodule Omunculus.GuiEventsTest do
     check(leaked === "answered seller: The client answered the questions, id kept", "ids", leaked);
     // One grant, three replies (one per hop) as stored: the leaf is the answer, the relays are behind the scenes.
     const hop = (body, asker) => Events.what("reply", body, "you", {}, "r", {r: asker});
-    check(hop({request_id: "r", body: "grant", parts: {approval: {body: "grant", parts: {promote: {body: "grant", option: "grant"}}}}}, "sales") === "chose grant for sales", "relay", "");
-    check(hop({request_id: "r", body: "grant", option: "grant"}, "clerk") === "chose grant for clerk", "leaf", "");
+    check(hop({request_id: "r", body: "grant", parts: {approval: {body: "grant", parts: {promote: {body: "grant", option: "grant"}}}}}, "sales") === "granted for sales", "relay", "");
+    check(hop({request_id: "r", body: "grant", option: "grant"}, "clerk") === "granted for clerk", "leaf", "");
     check(Events.minor("reply", {body: "grant", parts: {promote: {body: "grant", option: "grant"}}}) && !Events.minor("reply", {body: "grant", option: "grant"}) && !Events.minor("reply", {body: "yes"}), "relayed", "");
     check(Events.minor("tool", {name: "grant", args: {kind: "tool", name: "promote"}, via: "reply", ok: true}), "grant step", "");
     says("tool", {name: "ls", args: {path: "quotes"}, ok: false, output: "no such directory: quotes"}, "seller", "found no quotes yet");
@@ -89,7 +89,7 @@ defmodule Omunculus.GuiEventsTest do
     says("delegate", {title: "Logo", goal: "g", parent_id: "p"}, "sales", "handed down: Logo");
     says("work", {works: [{title: "Bakery"}, {title: "Menu"}], start: true}, "sales", "opened Bakery +1 more");
     says("work", {state: "open", reason: "reopened_by_prompt"}, "", "reopened by a message");
-    says("grant", {name: "bash", kind: "tool"}, "you", "granted bash for this work");
+    says("grant", {name: "bash", kind: "tool"}, "you", "granted: run a command, for this work");
     says("attach", {attachments: [{}, {}]}, "sales", "attached 2 files");
     says("comment.delete", {ids: ["a"]}, "sales", "deleted 1 comment");
     says("inbox.read", {inbox_id: "i"}, "sales", "read a notice");

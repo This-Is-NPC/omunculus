@@ -47,9 +47,14 @@ Item {
   property int seen: 0
   signal leave()
 
+  // Whether the line is a question that still waits on the person.
+  function waits(line) {
+    return line.request !== "" && Omunculus.waiting.some(request => request.id === line.request)
+  }
+
   function matches(line) {
     const wanted = filter.trim().toLowerCase()
-    return (!asksOnly || line.asks) && (!failedOnly || (!line.ok && !line.retried)) && (agent === "" || line.who === agent)
+    return (!asksOnly || waits(line)) && (!failedOnly || (!line.ok && !line.retried)) && (agent === "" || line.who === agent)
       && (showMinor || !line.minor || line.head !== "")
       && (wanted === "" || [line.kind, line.who, line.run, line.work, line.what].join(" ").toLowerCase().includes(wanted))
   }
@@ -111,6 +116,10 @@ Item {
   Component.onCompleted: refilter()
   onFilterChanged: refilter()
   onAsksOnlyChanged: refilter()
+  Connections {
+    target: Omunculus
+    function onWaitingChanged() { if (view.asksOnly) view.refilter() }
+  }
   onFailedOnlyChanged: refilter()
   onAgentChanged: refilter()
   onShowMinorChanged: refilter()
@@ -225,7 +234,7 @@ Item {
         readonly property var line: model
         readonly property var kind: view.kinds[model.type] || ({ icon: "more", tone: Theme.dim })
         readonly property bool marked: (view.picked !== null && view.picked.id === model.id) || (ListView.isCurrentItem && list.activeFocus)
-        readonly property string status: !model.ok ? (model.retried ? "RETRIED" : "FAILED") : model.asks ? "NEEDS YOU" : ""
+        readonly property string status: !model.ok ? (model.retried ? "RETRIED" : "FAILED") : view.waits(model) ? "NEEDS YOU" : ""
         // Its width is that of the longest status, so the agent column aligns.
         TextMetrics {
           id: statusWidth

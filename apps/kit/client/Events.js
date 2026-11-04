@@ -145,10 +145,12 @@ function what(type, body, who, asked, requestId, askers) {
     const said = first(unid(given.body));
     const option = Requests.chosen(given);
     const asker = (askers || {})[requestId];
-    return option ? "chose " + option + (asker ? " for " + asker : "") + (said && said !== option ? colon(said) : "") : "answered" + (asker ? " " + asker : "") + colon(said);
+    const words = option ? Requests.optionText(option).toLowerCase() : "";
+    if (option === "grant") return "granted" + (asker ? " for " + asker : "");
+    return option ? "chose " + words + (asker ? " for " + asker : "") + (said && said !== option ? colon(said) : "") : "answered" + (asker ? " " + asker : "") + colon(said);
   }
   case "grant":
-    return "granted " + flat(given.name) + (given.scope ? " for the " + given.scope : " for this work");
+    return "granted: " + (Phrases.act(given.name) || flat(given.name)) + (given.scope ? ", for the " + given.scope : ", for this work");
   case "cancel":
     return "cancelled" + colon(first(given.body));
   case "continue":

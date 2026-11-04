@@ -748,7 +748,7 @@ Singleton {
       what: Events.what(event.type, body, who, questionsOf, event.request_id, askersOf),
       ok: !failed,
       tool: event.type === "tool" && !Events.hook(body) ? body.name : event.type === "break" || event.type === "reopen" ? "break" : "",
-      asks: event.type === "request" && !!body.arbiter && Requests.human(body.arbiter),
+      request: event.type === "request" && !!body.arbiter && Requests.human(body.arbiter) ? event.request_id : "",
       raw: JSON.stringify(event)
     })
   }

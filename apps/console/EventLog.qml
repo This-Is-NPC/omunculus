@@ -21,7 +21,7 @@ import "kit/client/Time.js" as Time
 //   ok    bool    false for a failed tool call or a break
 //   tool  string  the tool a call made, "" for any other event; "break" on a
 //                 break (failed) and on a reopen (settles it)
-//   asks  bool    a request whose arbiter is the person
+//   request string  the id of a request whose arbiter is the person, "" for any other event
 //   raw   string  the event's JSON text, parsed only when a row is opened
 // Rows hold these roles (but `tool`) plus `retried`, true on a failed call
 // once a later call of the same tool on the same work succeeded; `head`, a run's title ("DESIGNER · run 3 · 14:02:11")
@@ -69,7 +69,7 @@ QtObject {
       if (line.who !== "" && !agents.includes(line.who))
         agents.push(line.who)
       rows.append({ id: line.id, at: line.at, time: line.time, type: line.type, kind: line.kind, minor: line.minor, who: line.who, run: line.run, work: line.work,
-        what: line.what, ok: line.ok, retried: false, asks: line.asks, raw: line.raw, head: head, day: dayHead })
+        what: line.what, ok: line.ok, retried: false, request: line.request, raw: line.raw, head: head, day: dayHead })
       if (line.tool !== "")
         settle(line.work + " " + line.tool, line.ok, rows.count - 1)
     }
@@ -104,7 +104,7 @@ QtObject {
   function row(index) {
     const r = rows.get(index)
     return { id: r.id, at: r.at, time: r.time, type: r.type, kind: r.kind, minor: r.minor, who: r.who, run: r.run, work: r.work,
-      what: r.what, ok: r.ok, retried: r.retried, asks: r.asks, raw: r.raw, head: r.head, day: r.day }
+      what: r.what, ok: r.ok, retried: r.retried, request: r.request, raw: r.raw, head: r.head, day: r.day }
   }
 
   property Timer flushing: Timer {
