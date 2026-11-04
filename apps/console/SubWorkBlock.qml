@@ -88,6 +88,8 @@ SurfaceFrame {
   // The failed calls: said as retried, in dim, when each of their tools
   // succeeded later; else what was attempted and why the first one failed.
   readonly property var failures: {
+    if (!node)
+      return null
     const failed = node.failed
     if ((tally.retried || 0) >= failed)
       return { text: failed + " retried" }
