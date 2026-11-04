@@ -15,9 +15,9 @@ ShellRoot {
   // and board, or the chat, team, log and cost of the conversation open —
   // the one on screen beside the bar of its commands, and the page under
   // them; on a narrow window the rail is hidden and the bar's page switcher
-  // lists the pages. The masthead names the way to the page, and says how
-  // many requests wait for you in the other projects. Back from the first
-  // page entered is back to the start.
+  // lists the pages. The masthead names the way to the page, and, while a
+  // project is open, says how many requests wait for you in the other
+  // projects. Back from the first page entered is back to the start.
   FloatingWindow {
     id: panel
 
@@ -120,10 +120,10 @@ ShellRoot {
           Layout.fillWidth: true
           Layout.fillHeight: false
           crumbs: panel.crumbs
-          // Requests waiting for you in the other projects; it opens them,
-          // the waiting ones picked out.
+          // Requests waiting for you in the other projects, while one is
+          // open; it opens them, the waiting ones picked out.
           RowLayout {
-            visible: panel.started && Omunculus.elsewhere > 0
+            visible: panel.started && pagesView.level !== "registry" && Omunculus.elsewhere > 0
             spacing: 6
             Icon { name: "warning"; size: 10; color: Theme.warning }
             LinkLabel {

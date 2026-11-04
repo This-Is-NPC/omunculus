@@ -429,11 +429,15 @@ first when it is another one (`Omunculus.switchProject`).
 The masthead names the way to the page in crumbs: PROJECTS or BOARD on the
 registry's level; the project, then the page, on a project's; the project,
 the conversation open (the title of its first work, else what was first
-said in it) and its page in a conversation. The project's crumb opens
-PROJECTS, and the conversation's its chat. Crumbs that do not fit elide from
-the left, the project's never below 8 characters. While requests wait for
-you in other projects, the masthead's right shows `▲ 2 ELSEWHERE` (only
-`▲ 2` under 700 px), which opens PROJECTS with WAITING FOR YOU lit. As in the studio, the pages of the level are a rail down the left
+said in it) and its page in a conversation. At the start it names the
+project, or nothing on the registry alone, and the slash after OMUNCULUS
+shows only before a crumb. The project's crumb opens PROJECTS, and the
+conversation's its chat. Crumbs that do not fit elide from the left, the
+project's never below 8 characters. While a project is open and requests
+wait for you in the other ones, the masthead's right shows `▲ 2 ELSEWHERE`
+(only `▲ 2` under 700 px), which opens PROJECTS with WAITING FOR YOU lit; at
+the start and on the registry's level, where the projects' list carries the
+count, it does not show. As in the studio, the pages of the level are a rail down the left
 edge (the kit's `TabRail`) in a fixed order, the one on screen marked in its
 place, beside the bar of its commands (the kit's `PageBar`). From 1100 px the
 rail shows the pages' names; from 700 px it is folded to their numbers and
