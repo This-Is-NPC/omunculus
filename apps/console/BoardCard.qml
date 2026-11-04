@@ -2,118 +2,87 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
 
-// BoardCard is one work on the board, the work first: the project it is of
-// and its title; in a workflow, the stage it is at, of how many, and,
-// waiting, what on; the conversation it is in and the work it came from;
-// then, smaller, the agent it is with and how long since it last changed. Its border is the accent
-// while an agent runs on it; a work that is done or cancelled shows faded.
-// The keyboard reaches it; Enter or Space, or a click, opens it.
+// BoardCard is one work on the board, framed as a list row: its title, and
+// at the top right how long since it last changed, or RUNNING behind a dot
+// while an agent runs on it; under it the agent it is with, behind a dot in
+// its colour, the project, and, in a workflow, the stage it is at, of how
+// many, and, waiting, what on; then the conversation it is in and the work
+// it came from. A work that is done or cancelled steps back. The keyboard
+// reaches it; Enter or Space, or a click, opens it.
 Rectangle {
   id: card
 
   required property var work
-  // The time now, in milliseconds, which the age follows.
-  property real now: Date.now()
+  // What the board says of it: the meta line under its title, where it came
+  // from, its age, and whether an agent runs on it now.
+  required property string meta
+  required property string origin
+  required property string age
+  required property bool running
   signal opened()
 
-  readonly property string agent: Omunculus.agentOf(work)
-  readonly property var lane: Omunculus.laneOf(work)
-  readonly property bool running: Omunculus.boardBusy.includes(work.project + "/" + work.id)
-  readonly property var parentWork: work.parent_id ? Omunculus.board.find(item => item.project === work.project && item.id === work.parent_id) || null : null
-  readonly property string where: [
-    lane ? lane.name.toUpperCase() + " " + String(lane.at + 1).padStart(2, "0") + "/" + String(lane.steps.length).padStart(2, "0") + " " + lane.steps[lane.at].name.toUpperCase() : "",
-    work.state === "waiting" && work.waiting ? "ON A " + work.waiting.toUpperCase() : ""
-  ].filter(part => part !== "").join("  ·  ")
-  readonly property string age: Omunculus.ago(work.updated_at || work.created_at, now)
-
-  implicitHeight: details.implicitHeight + 24
+  implicitHeight: details.implicitHeight + Theme.space.cell * 2
   activeFocusOnTab: true
   Keys.onReturnPressed: opened()
   Keys.onSpacePressed: opened()
-  color: pointer.containsMouse ? Theme.highlight : Theme.background
-  border.color: running ? Theme.primary : Theme.line
-  border.width: running ? 2 : 1
-  opacity: work.state === "done" || work.state === "cancelled" ? 0.6 : 1
-  Behavior on color { ColorAnimation { duration: 140 } }
+  color: activeFocus ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
+  border.color: activeFocus || running ? Theme.primary : Theme.line
+  opacity: work.state === "done" || work.state === "cancelled" ? 0.4 : 1
+  Behavior on color { ColorAnimation { duration: 120 } }
   Behavior on border.color { ColorAnimation { duration: 200 } }
 
   ColumnLayout {
     id: details
-    anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
-    spacing: 5
+    anchors { left: parent.left; right: parent.right; top: parent.top; margins: Theme.space.cell }
+    spacing: Theme.space.tight
 
-    Label {
+    RowLayout {
       Layout.fillWidth: true
-      text: card.work.project.toUpperCase()
-      color: Theme.dim
-      font.pixelSize: 9
-      font.letterSpacing: 2
-      elide: Text.ElideRight
-    }
-    Label {
-      Layout.fillWidth: true
-      text: card.work.title
-      color: Theme.foreground
-      font.pixelSize: 15
-      wrapMode: Text.Wrap
-      maximumLineCount: 3
-      elide: Text.ElideRight
-    }
-    Label {
-      Layout.fillWidth: true
-      visible: card.where !== ""
-      text: card.where
-      color: Theme.primary
-      font.pixelSize: 9
-      font.letterSpacing: 1.5
-      elide: Text.ElideRight
-    }
-    Label {
-      Layout.fillWidth: true
-      text: "in " + Omunculus.conversationLabel(card.work.conversation_id)
-      color: Theme.dim
-      font.pixelSize: 10
-      elide: Text.ElideRight
-    }
-    Label {
-      Layout.fillWidth: true
-      visible: card.parentWork !== null
-      text: card.parentWork ? "under " + card.parentWork.title : ""
-      color: Theme.dim
-      font.pixelSize: 10
-      elide: Text.ElideRight
+      spacing: Theme.space.gap
+      Label {
+        Layout.fillWidth: true
+        Layout.alignment: Qt.AlignTop
+        text: card.work.title
+        color: Theme.foreground
+        font.pixelSize: Theme.type.body.size
+        lineHeight: Theme.type.body.lineHeight
+        wrapMode: Text.Wrap
+        maximumLineCount: 2
+        elide: Text.ElideRight
+      }
+      Row {
+        Layout.alignment: Qt.AlignTop
+        spacing: Theme.space.tight
+        Dot {
+          visible: card.running
+          anchors.verticalCenter: parent.verticalCenter
+        }
+        Label {
+          text: card.running ? "RUNNING" : card.age
+          color: card.running ? Theme.primary : Theme.dim
+          font.pixelSize: Theme.type.header.size
+          font.letterSpacing: Theme.type.header.tracking
+        }
+      }
     }
     RowLayout {
       Layout.fillWidth: true
-      Layout.topMargin: 3
-      spacing: 6
-      Portrait {
-        Layout.preferredWidth: 18
-        Layout.preferredHeight: 18
-        agent: card.agent
-        source: Omunculus.imageOf(card.agent, card.work.project)
-        tone: Omunculus.toneOf(card.agent)
-        initialSize: 9
-      }
+      spacing: Theme.space.tight
+      Dot { tone: Omunculus.toneOf(Omunculus.agentOf(card.work)) }
       Label {
         Layout.fillWidth: true
-        text: card.agent
-        color: Omunculus.toneOf(card.agent)
-        font.pixelSize: 10
+        text: card.meta
+        color: Theme.dim
+        font.pixelSize: Theme.type.meta.size
         elide: Text.ElideRight
       }
-      Label {
-        visible: card.running
-        text: "RUNNING"
-        color: Theme.primary
-        font.pixelSize: 9
-        font.letterSpacing: 2
-      }
-      Label {
-        text: card.age
-        color: Theme.dim
-        font.pixelSize: 10
-      }
+    }
+    Label {
+      Layout.fillWidth: true
+      text: card.origin
+      color: Theme.dim
+      font.pixelSize: Theme.type.meta.size
+      elide: Text.ElideRight
     }
   }
 
