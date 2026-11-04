@@ -38,14 +38,14 @@ Item {
 
   onEngagedChanged: if (!engaged) dismissed = false
   function fold() { dismissed = true }
-  function escape() {
+  function escapeRail() {
     fold()
     escaped()
   }
   Shortcut {
     enabled: rail.unfolded
     sequence: "Escape"
-    onActivated: rail.escape()
+    onActivated: rail.escapeRail()
   }
 
   HoverHandler { id: hover }
@@ -88,7 +88,7 @@ Item {
       onActiveFocusChanged: rail.focusedTabs += activeFocus ? 1 : -1
       Keys.onReturnPressed: pointer.choose()
       Keys.onSpacePressed: pointer.choose()
-      Keys.onEscapePressed: rail.escape()
+      Keys.onEscapePressed: rail.escapeRail()
       FocusRing {}
 
       Row {

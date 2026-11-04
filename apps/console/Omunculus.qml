@@ -451,8 +451,13 @@ Singleton {
   // it, `failed` if it did not.
   function send(text, work, files, done, failed) {
     const value = text.trim()
-    if (value === "" || conversationId === "")
+    if (value === "" || conversationId === "") {
+      if (value !== "")
+        client.tell("could not send: no conversation is open", true)
+      if (failed)
+        failed()
       return
+    }
     const body = { message: value }
     if (work)
       body.work_id = work
