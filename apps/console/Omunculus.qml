@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "kit/client"
+import "kit/client/Events.js" as Events
 import "kit/client/Model.js" as Model
 import "kit/client/Phrases.js" as Phrases
 import "kit/client/Projects.js" as Projects
@@ -715,43 +716,21 @@ Singleton {
   function record(event) {
     const body = event.body || {}
     const failed = event.type === "break" || (event.type === "tool" && body.ok === false) || (event.type === "end-run" && !!body.error)
+    const who = event.type === "start-run" ? body.agent || "" : Progress.actorOf(event)
     eventLog.append({
       id: event.cursor || event.at + event.type,
       at: event.at,
       time: Time.precise(event.at),
       type: event.type,
-      who: event.type === "start-run" ? body.agent || "" : Progress.actorOf(event),
+      who: who,
       run: event.run_id || "",
       work: event.work_id || "",
-      what: what(event.type, body),
+      what: Events.what(event.type, body, who),
       ok: !failed,
       asks: event.type === "request" && !!body.arbiter && Requests.human(body.arbiter),
       depth: Number(event.type === "start-run" ? body.depth : runDepth[event.run_id]) || 0,
       raw: JSON.stringify(event)
     })
-  }
-
-  // What an event says, on one line.
-  function what(type, body) {
-    const line = value => String(value === undefined || value === null ? "" : value).replace(/\s+/g, " ").trim()
-    const json = value => line(JSON.stringify(value))
-    switch (type) {
-    case "prompt":
-      return line(body.message)
-    case "comment":
-      return line(body.body)
-    case "model":
-      return line(Model.text(body)) || json(body)
-    case "tool":
-      return (body.via ? body.via + " → " : "") + body.name + " " + json(body.args || {}) + (body.ok ? "  ok" : "  failed")
-        + (body.output ? "  ·  " + (typeof body.output === "string" ? line(body.output) : json(body.output)) : "")
-    case "start-run":
-      return (body.agent || "") + (body.depth !== undefined ? " at depth " + body.depth : "") + (body.via ? " via " + body.via : "")
-    case "end-run":
-      return ""
-    default:
-      return json(body)
-    }
   }
 
   function append(key, entry) {
@@ -917,9 +896,9 @@ Singleton {
       break
     }
     case "tool": {
-      // The prompt and the end have entries of their own. A hook is called
-      // with the event alone; the turn folds those that passed.
-      const hook = !!body.args && typeof body.args.event === "object" && Object.keys(body.args).length === 1
+      // The prompt and the end have entries of their own; the turn folds the
+      // hooks that passed.
+      const hook = Events.hook(body)
       if (!["assemble", "send", "end"].includes(body.name)) {
         step(event.run_id, work, { name: body.name, ok: body.ok !== false, text: "", args: body.args || {}, output: body.ok === false ? String(body.output || "") : "", outcome: false, hook: hook, at: at })
         if (!hook) {

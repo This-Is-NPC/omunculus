@@ -172,7 +172,8 @@ All are QML on Quickshell and share `apps/kit`:
   spent, and fits one-line stages and phrases to a width in characters;
   `Calls.js`, which groups a run's tool calls into rows and reads the diff
   of an edit or a write from its args; `Phrases.js`, which says a tool call
-  in plain words and in brief; `Project`, the project a window is on, or
+  in plain words and in brief; `Events.js`, which says any event in one
+  plain sentence for the log, and tells a hook's call from a tool's; `Project`, the project a window is on, or
   only the registry it was opened on, and whether the server answers, which
   the console and the studio share; `Notices`, what a window tells, as its
   `ToastStack` shows them, with a pinned error while the server does not

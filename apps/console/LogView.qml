@@ -5,17 +5,17 @@ import "kit/client/Time.js" as Time
 import "kit/ui"
 
 // LogView is the open conversation as a log: every event, oldest first, a
-// row each, as a table row — what it says, then when, what kind, who and on
-// which work, FAILED or ASKS YOU at its top right — under a rule naming the
-// day, and one naming each run where it begins. The search line keeps the
-// rows whose text holds it; chips keep the ones that ask you or failed, and
-// two pickers one agent's or one level's. The count of rows sits at the
-// filters' right end, or under them when they would not fit beside it, and
-// "more" copies the event picked, else the rows shown. A row picked shows
-// its event in a card below, as the server sent it, the first 20 KB unless
-// all is asked. The list follows the newest row while it is at the end. `/`
-// goes to the search; Esc there empties it, then goes back to the rows; Esc
-// on them closes the event picked, then leaves.
+// row each, as a table row — what it says in a plain sentence, then when,
+// what kind, who and on which work, FAILED or ASKS YOU at its top right —
+// under a rule naming the day, and one naming each run where it begins. The
+// search line keeps the rows whose text holds it; chips keep the ones that
+// ask you or failed, and two pickers one agent's or one level's. The count
+// of rows sits at the filters' right end, or under them when they would not
+// fit beside it, and "more" copies the event picked, else the rows shown. A
+// row picked shows its event in a card below, as the server sent it, the
+// first 20 KB unless all is asked. The list follows the newest row while it
+// is at the end. `/` goes to the search; Esc there empties it, then goes
+// back to the rows; Esc on them closes the event picked, then leaves.
 Item {
   id: view
 

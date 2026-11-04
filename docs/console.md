@@ -432,7 +432,9 @@ A conversation's level, in place of the project's once one is opened:
 - CHAT, the chat with the root agent, its progress and its composer;
 - TEAM, the works of the conversation and the work picked in full. Its SHOW
   IN LOG opens the LOG kept to that work, and BACK returns;
-- LOG, every event a table row: what it says, then when (local,
+- LOG, every event a table row: what it says as one plain sentence ("sales
+  asks you: …", "passed 1 question up from design", "on-request hook ran",
+  "ended"; the event's JSON only in its card), then when (local,
   `hh:mm:ss.zzz`), what kind, who and on which work, FAILED or ASKS YOU at
   its top right, under rules naming the day and each run. A search line, the
   chips ASKS ME and FAILED and an agent and a level picker filter it; the
