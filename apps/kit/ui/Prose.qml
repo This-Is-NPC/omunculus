@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import "Markdown.js" as Markdown
 
 // Prose is what an agent wrote, shown as Markdown as it was written: each
 // line break kept, and a line after a list that is no item of it a paragraph
@@ -7,8 +8,8 @@ import Quickshell
 // becomes one, the pointer turns over one and its address shows beside it,
 // and choosing one opens it in the desktop's browser. With links, it is a
 // stop of the keyboard: Left and Right pick one, Enter or Space opens it.
-// Only http and https addresses open. Plain, it is the text as it was
-// written, with no marks and no links.
+// Only http and https addresses open. An image shows as its alt text, never
+// loaded. Plain, it is the text as it was written, with no marks and no links.
 Label {
   id: prose
 
@@ -18,7 +19,7 @@ Label {
   // The link the keyboard is on.
   property int chosen: 0
 
-  readonly property var parsed: plain ? { text: source, links: [] } : linked(written(source))
+  readonly property var parsed: plain ? { text: source, links: [] } : linked(written(Markdown.imageless(String(source || ""))))
   readonly property var links: parsed.links
   readonly property string pointed: hoveredLink !== "" ? hoveredLink : activeFocus && links.length > 0 ? links[Math.min(chosen, links.length - 1)] : ""
 
