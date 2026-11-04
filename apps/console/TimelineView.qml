@@ -14,9 +14,8 @@ import "kit/ui"
 // it on the newest entry: ↑/↓ and PgUp/PgDn move, Home goes to the first and
 // End back to the newest, and Tab moves into the tools of the entry it is on.
 // A request is a card only while it waits on you; your answer reads as a
-// bubble, and what the team asked among itself is one muted line, the lines of
-// a stretch gathered under "Team activity". A question for you that arrives
-// while the view follows is held by its top.
+// bubble, and what the team asked among itself is an exchange (TeamRow). A
+// question for you that arrives while the view follows is held by its top.
 Item {
   id: root
 
@@ -46,12 +45,8 @@ Item {
   property string typing: ""
   // The answer to a question the keyboard was in has come: focus belongs elsewhere.
   signal answered()
-  // The activity of the conversation, or null before it is wired in.
-  readonly property var activity: Omunculus.activity || null
   // The requests no other request gathers; the rest are its climb.
   readonly property var contained: Requests.contained(Omunculus.requests)
-  // Which stretches of team rows the person opened (true) or closed (false), by first key.
-  property var opened: ({})
 
   // Counts a new entry when the view is away from the end; speech has no key.
   function arrived(key) {
@@ -128,46 +123,6 @@ Item {
     return answer && answer.who === "you" ? "answer" : "team"
   }
 
-  // The stretch of team rows around `row`: where it starts, how many rows it
-  // has, which of them this is, and whether the team is still at work in it.
-  function stretch(row) {
-    if (revision < 0 || row < 0 || row >= model.count)
-      return null
-    let first = row
-    let last = row
-    for (let at = row - 1; at >= 0 && ["team", "none"].includes(roleAt(at)); at--)
-      if (roleAt(at) === "team") first = at
-    for (let at = row + 1; at < model.count && ["team", "none"].includes(roleAt(at)); at++)
-      if (roleAt(at) === "team") last = at
-    let size = 0
-    let place = 0
-    for (let at = first; at <= last; at++) {
-      if (roleAt(at) !== "team")
-        continue
-      size++
-      if (at < row) place++
-    }
-    let live = !!activity && activity.state === "working"
-    for (let at = last + 1; live && at < model.count; at++)
-      live = roleAt(at) === "none"
-    return { first: model.get(first).key, size: size, place: place, live: live, span: model.get(last).at - model.get(first).at }
-  }
-
-  // The header of a stretch: while the team works, for how long; after, how long it did.
-  function stretchTitle(group) {
-    const minutes = Math.round(group.span / 60)
-    if (group.live)
-      return "Team is working  " + Math.floor(Math.max(0, group.span) / 60) + ":" + String(Math.floor(Math.max(0, group.span) % 60)).padStart(2, "0")
-    return (minutes < 1 ? "Worked under a minute" : "Worked " + minutes + " min") + "  ·  Team activity (" + group.size + " steps)"
-  }
-
-  // Whether the row at `place` of a stretch shows: all when opened, none when
-  // closed, and by default the last three while the team works.
-  function stretchShows(group) {
-    const choice = opened[group.first]
-    return choice !== undefined ? choice : group.live && group.size - group.place <= 3
-  }
-
   // The newest question waiting on you, by key; "" when none.
   readonly property string newestCard: {
     if (revision < 0)
@@ -241,7 +196,6 @@ Item {
     held = ""
     released = ""
     holdingCard = false
-    opened = ({})
   }
 
   // The keyboard is inside an entry, in a form being written, not on the list.
@@ -439,58 +393,10 @@ Item {
 
       Component {
         id: team
-        Column {
-          id: stretched
-          readonly property var group: root.stretch(entry.index)
-          readonly property var asked: Omunculus.requests.find(item => item.id === entry.key) || null
-          readonly property var reply: Omunculus.replies[entry.key] || null
-          readonly property string by: asked ? Requests.label(asked.requester) : ""
-          readonly property string to: asked ? Requests.label(asked.arbiter) : ""
-          readonly property string work: asked ? (Omunculus.work(asked.work_id || "") || { title: "" }).title : ""
-          readonly property bool forYou: !!asked && Requests.human(asked.arbiter)
+        TeamRow {
           width: entry.width
-          spacing: 2
-
-          Item {
-            visible: !!stretched.group && stretched.group.place === 0
-            width: parent.width
-            height: visible ? 24 : 0
-            Row {
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: 6
-              Icon { anchors.verticalCenter: parent.verticalCenter; name: stretched.group && root.stretchShows(stretched.group) ? "chevron-down" : "chevron-right"; size: 10; color: Theme.dim }
-              Label { anchors.verticalCenter: parent.verticalCenter; text: stretched.group ? root.stretchTitle(stretched.group) : ""; color: Theme.dim; font.pixelSize: 11 }
-            }
-            MouseArea {
-              anchors.fill: parent
-              cursorShape: Qt.PointingHandCursor
-              onClicked: {
-                const next = Object.assign({}, root.opened)
-                next[stretched.group.first] = !root.stretchShows(stretched.group)
-                root.opened = next
-              }
-            }
-          }
-
-          TeamRow {
-            visible: !!stretched.group && root.stretchShows(stretched.group)
-            width: parent.width
-            height: visible ? implicitHeight : 0
-            summary: stretched.reply && stretched.reply.who !== "you" && stretched.forYou
-              ? stretched.reply.who.toUpperCase() + " answered this for you: " + stretched.reply.body
-              : stretched.by.toUpperCase() + " asked " + stretched.to.toUpperCase() + (stretched.work !== "" ? " about " + stretched.work : "")
-                + (stretched.reply ? "  -  answered by " + stretched.reply.who.toUpperCase() : "")
-            question: stretched.asked ? String(stretched.asked.reason || "") : ""
-            answer: stretched.reply ? stretched.reply.body : ""
-            stamp: entry.stamp
-            // An open question the agent above decides can still be answered by you.
-            RequestDecision {
-              visible: !!stretched.asked && Requests.pending(stretched.asked)
-              width: parent.width
-              key: entry.key
-              stamp: entry.stamp
-            }
-          }
+          key: entry.key
+          stamp: entry.stamp
         }
       }
 
