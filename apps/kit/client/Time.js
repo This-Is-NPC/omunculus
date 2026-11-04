@@ -32,7 +32,13 @@ function began(iso, now) {
   return dayWord(date, now) + " " + hm(date);
 }
 
-// A log time: "21:59:07.123".
+// A log time to the second: "21:59:07".
+function second(iso) {
+  const date = new Date(iso);
+  return hm(date) + ":" + two(date.getSeconds());
+}
+
+// A precise log time: "21:59:07.123".
 function precise(iso) {
   const date = new Date(iso);
   return hm(date) + ":" + two(date.getSeconds()) + "." + String(date.getMilliseconds()).padStart(3, "0");

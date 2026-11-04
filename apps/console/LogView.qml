@@ -5,15 +5,16 @@ import "kit/client/Time.js" as Time
 import "kit/ui"
 
 // LogView is the open conversation as a log: every event, oldest first, a
-// row each, as a table row — what it says in a plain sentence, then when,
-// what kind, who and on which work, FAILED or ASKS YOU at its top right —
-// under a rule naming the day, and one naming each run where it begins. The
-// search line keeps the rows whose text holds it; chips keep the ones that
-// ask you or failed, and two pickers one agent's or one level's. The count
+// line each: when, its kind, what it says in a plain sentence and who, FAILED
+// or NEEDS YOU at the right — under a rule naming the day, and one naming each
+// run where it begins. Plumbing (run starts and ends, hooks, empty replies)
+// is dimmer and hidden until BEHIND THE SCENES is on. The search line keeps
+// the rows whose text holds it; chips keep the ones that need you or failed,
+// and a picker one agent's. The count
 // of rows sits at the filters' right end, or under them when they would not
 // fit beside it, and "more" copies the event picked, else the rows shown. A
 // row picked shows its event in a card below, as the server sent it, the
-// first 20 KB unless all is asked. The list follows the newest row while it
+// first 20 KB unless all is asked, its raw type in the card's title. The list follows the newest row while it
 // is at the end. `/` goes to the search; Esc there empties it, then goes
 // back to the rows; Esc on them closes the event picked, then leaves.
 Item {
@@ -36,12 +37,12 @@ Item {
   property bool asksOnly: false
   property bool failedOnly: false
   property string agent: ""
-  property int depth: -1
+  property bool showMinor: false
   // The row picked as a plain object, and its event as text.
   property var picked: null
   property string detail: ""
   property bool showAll: false
-  readonly property bool filtered: filter.trim() !== "" || asksOnly || failedOnly || agent !== "" || depth >= 0
+  readonly property bool filtered: filter.trim() !== "" || asksOnly || failedOnly || agent !== "" || !showMinor
   readonly property var source: filtered ? shown : Omunculus.eventLog.rows
   property int seen: 0
   signal leave()
@@ -49,8 +50,8 @@ Item {
   function matches(line) {
     const wanted = filter.trim().toLowerCase()
     return (!asksOnly || line.asks) && (!failedOnly || !line.ok) && (agent === "" || line.who === agent)
-      && (depth < 0 || line.depth === depth)
-      && (wanted === "" || [line.type, line.who, line.run, line.work, line.what].join(" ").toLowerCase().includes(wanted))
+      && (showMinor || !line.minor || line.head !== "")
+      && (wanted === "" || [line.kind, line.who, line.run, line.work, line.what].join(" ").toLowerCase().includes(wanted))
   }
 
   // The rows the filters keep, rebuilt when a filter changes and extended as
@@ -95,7 +96,7 @@ Item {
     const lines = []
     for (let i = 0; i < source.count; i++) {
       const line = source.get(i)
-      lines.push([line.time, line.type, line.who, short(line.run), short(line.work), line.what].join("\t"))
+      lines.push([line.time, line.kind, line.who, short(line.run), short(line.work), line.what].join("\t"))
     }
     Omunculus.copy(lines.join("\n"))
   }
@@ -111,7 +112,7 @@ Item {
   onAsksOnlyChanged: refilter()
   onFailedOnlyChanged: refilter()
   onAgentChanged: refilter()
-  onDepthChanged: refilter()
+  onShowMinorChanged: refilter()
 
   ListModel { id: shown }
 
@@ -141,7 +142,7 @@ Item {
     FilterBox {
       id: filterBox
       Layout.fillWidth: true
-      placeholderText: "Search kinds, agents, runs, works and text…  /"
+      placeholderText: "Search kinds, agents and text…  /"
       onApplied: value => view.filter = value
       onLeave: list.forceActiveFocus()
     }
@@ -161,22 +162,15 @@ Item {
         Layout.columnSpan: filters.stacked ? 2 : 1
         Layout.fillWidth: true
         Layout.preferredHeight: implicitHeight
-        Chip { text: "ASKS ME"; checked: view.asksOnly; accent: Theme.warning; onClicked: view.asksOnly = !view.asksOnly }
+        Chip { text: "NEEDS YOU"; checked: view.asksOnly; accent: Theme.warning; tip: "the questions waiting on you"; onClicked: view.asksOnly = !view.asksOnly }
         Chip { text: "FAILED"; checked: view.failedOnly; accent: Theme.error; onClicked: view.failedOnly = !view.failedOnly }
+        Chip { text: "BEHIND THE SCENES"; checked: view.showMinor; tip: "run starts and ends, hooks, empty replies"; onClicked: view.showMinor = !view.showMinor }
         Dropdown {
           options: [""].concat(Omunculus.eventLog.agents)
           current: view.agent
           emphasized: view.agent !== ""
           describe: option => option === "" ? "ALL AGENTS" : option.toUpperCase()
           onPicked: option => view.agent = option
-        }
-        Dropdown {
-          visible: Omunculus.eventLog.depths.length > 1
-          options: ["-1"].concat(Omunculus.eventLog.depths.map(String))
-          current: String(view.depth)
-          emphasized: view.depth >= 0
-          describe: option => option === "-1" ? "ALL LEVELS" : "LEVEL " + option
-          onPicked: option => view.depth = Number(option)
         }
       }
       Label {
@@ -225,7 +219,7 @@ Item {
         readonly property var line: model
         readonly property var kind: view.kinds[model.type] || ({ icon: "more", tone: Theme.dim })
         readonly property bool marked: (view.picked !== null && view.picked.id === model.id) || (ListView.isCurrentItem && list.activeFocus)
-        readonly property string status: !model.ok ? "FAILED" : model.asks ? "ASKS YOU" : ""
+        readonly property string status: !model.ok ? "FAILED" : model.asks ? "NEEDS YOU" : ""
 
         width: list.width
         height: (model.day !== "" ? Theme.size.rule : 0) + (model.head !== "" ? Theme.size.rule : 0) + box.height
@@ -246,71 +240,59 @@ Item {
           tone: Theme.primary
         }
 
+        // A row is one line; plumbing is dimmer and shorter.
         Rectangle {
           id: box
           anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-          height: Theme.size.stackedRow + Theme.size.stackedLine * 2
+          height: Theme.size.stackedRow + (row.model.minor ? 0 : Theme.space.line)
           color: row.marked ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
-          border.color: row.marked ? Theme.primary : Theme.line
+          border.color: row.marked ? Theme.primary : "transparent"
 
-          ColumnLayout {
-            anchors { left: parent.left; right: statusLabel.left; top: parent.top; leftMargin: Theme.space.cell; rightMargin: Theme.space.gap; topMargin: Theme.space.cell }
-            spacing: Theme.space.tight
+          RowLayout {
+            anchors { fill: parent; leftMargin: Theme.space.cell; rightMargin: Theme.space.cell }
+            spacing: Theme.space.gap
+            opacity: row.model.minor && !row.marked ? 0.6 : 1
+            Label {
+              text: row.model.time
+              color: Theme.dim
+              font.pixelSize: Theme.type.meta.size
+            }
+            Icon {
+              name: row.kind.icon
+              size: 10
+              color: row.kind.tone
+            }
+            Label {
+              Layout.preferredWidth: Theme.size.control * 1.4
+              text: row.model.kind.toUpperCase()
+              color: row.kind.tone
+              font.pixelSize: Theme.type.header.size
+              font.letterSpacing: Theme.type.header.tracking
+              elide: Text.ElideRight
+            }
             Label {
               Layout.fillWidth: true
+              Layout.minimumWidth: 0
               text: row.model.what
-              color: row.model.ok ? Theme.foreground : Theme.error
+              color: row.model.ok ? (row.model.minor ? Theme.dim : Theme.foreground) : Theme.error
               font.pixelSize: Theme.type.body.size
               elide: Text.ElideRight
             }
-            // When, what kind, who, on which work.
-            RowLayout {
-              Layout.fillWidth: true
-              spacing: 0
-              Label {
-                text: row.model.time + Theme.type.meta.separator
-                color: Theme.dim
-                font.pixelSize: Theme.type.meta.size
-              }
-              Icon {
-                Layout.rightMargin: Theme.space.line
-                name: row.kind.icon
-                size: 10
-                color: row.kind.tone
-              }
-              Label {
-                text: row.model.type
-                color: row.kind.tone
-                font.pixelSize: Theme.type.meta.size
-              }
-              Label {
-                visible: row.model.who !== ""
-                Layout.maximumWidth: implicitWidth
-                Layout.fillWidth: true
-                Layout.minimumWidth: 0
-                text: Theme.type.meta.separator + row.model.who
-                color: Omunculus.toneOf(row.model.who)
-                font.pixelSize: Theme.type.meta.size
-                elide: Text.ElideRight
-              }
-              Label {
-                Layout.fillWidth: true
-                Layout.minimumWidth: 0
-                text: row.model.work ? Theme.type.meta.separator + view.short(row.model.work) : ""
-                color: Theme.dim
-                font.pixelSize: Theme.type.meta.size
-                elide: Text.ElideRight
-              }
+            Label {
+              visible: row.model.who !== "" && row.model.who !== "harness"
+              Layout.maximumWidth: box.width * 0.2
+              text: row.model.who
+              color: Omunculus.toneOf(row.model.who)
+              font.pixelSize: Theme.type.meta.size
+              elide: Text.ElideRight
             }
-          }
-
-          Label {
-            id: statusLabel
-            anchors { right: parent.right; rightMargin: Theme.space.cell; top: parent.top; topMargin: Theme.space.cell }
-            text: row.status
-            color: row.model.ok ? Theme.warning : Theme.error
-            font.pixelSize: Theme.type.header.size
-            font.letterSpacing: Theme.type.header.tracking
+            Label {
+              visible: row.status !== ""
+              text: row.status
+              color: row.model.ok ? Theme.warning : Theme.error
+              font.pixelSize: Theme.type.header.size
+              font.letterSpacing: Theme.type.header.tracking
+            }
           }
 
           MouseArea {
