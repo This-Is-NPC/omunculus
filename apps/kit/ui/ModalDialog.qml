@@ -2,7 +2,8 @@ import QtQuick
 import QtQuick.Controls.Basic as C
 
 // ModalDialog is the frame every dialog shares: centred in the window
-// wherever it is declared, at most `maxWidth` wide, over a dimmed window,
+// wherever it is declared, at most `maxWidth` wide and short of the window's
+// edges by 24 px (8 on a window under 480 px), over a dimmed window,
 // fading and settling in. Its top edge stays where it opened while it grows or
 // shrinks, unless it would leave the window. It takes the keyboard — Esc
 // closes it — and gives it back to what had it.
@@ -17,7 +18,7 @@ C.Popup {
   parent: C.Overlay.overlay
   x: Math.round((parent.width - width) / 2)
   y: Math.round(Math.max(24, Math.min(openedTop < 0 ? (parent.height - height) / 2 : openedTop, parent.height - height - 24)))
-  width: Math.min(parent.width - 48, maxWidth)
+  width: Math.min(parent.width - (parent.width < 480 ? 16 : 48), maxWidth)
   onAboutToShow: openedTop = -1
   onOpened: openedTop = y
   modal: true

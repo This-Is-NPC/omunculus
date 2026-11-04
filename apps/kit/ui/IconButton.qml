@@ -1,5 +1,8 @@
 import QtQuick
+import "Breakpoints.js" as Breakpoints
 
+// IconButton is a square button that is only an icon, its name in the tip;
+// taller on a narrow window, where it is touched rather than pointed at.
 Rectangle {
   id: button
 
@@ -14,8 +17,8 @@ Rectangle {
 
   signal clicked()
 
-  implicitWidth: 28
-  implicitHeight: 28
+  implicitWidth: Breakpoints.target(Window.width)
+  implicitHeight: implicitWidth
   activeFocusOnTab: true
   color: hovered || highlighted ? Qt.alpha(tone, 0.1) : "transparent"
   border.color: hovered || highlighted ? tone : Theme.line

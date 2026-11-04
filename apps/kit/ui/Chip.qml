@@ -1,9 +1,11 @@
 import QtQuick
+import "Breakpoints.js" as Breakpoints
 
 // Chip is a quiet button: a hairline box whose text lights on hover, with an
 // accent underline that grows from the left; it gives a little when pressed
 // and takes the accent, with a faint wash, when on. With a `reason` it is off:
-// it reads disabled and does nothing, but says why on hover.
+// it reads disabled and does nothing, but says why on hover. It is never
+// wider than `maximumWidth`, its text eliding instead.
 Rectangle {
   id: chip
 
@@ -18,13 +20,18 @@ Rectangle {
   property string tip
   // Why it cannot be pressed now; empty while it can.
   property string reason
+  property real maximumWidth: Breakpoints.room(parent)
   readonly property bool off: !enabled || reason !== ""
   readonly property bool hovered: mouse.containsMouse && reason === ""
 
   signal clicked()
 
-  implicitWidth: content.implicitWidth + 20 + trailing
+  readonly property real iconRoom: icon ? 12 + content.spacing : 0
+  implicitWidth: iconRoom + label.implicitWidth + 20 + trailing
   implicitHeight: 26
+  // The width, not the implicit width, is bounded: what sizes itself from the
+  // chip's implicit width never depends on its own.
+  width: Math.min(implicitWidth, maximumWidth)
   activeFocusOnTab: !off
   color: checked ? Qt.alpha(accent, 0.12) : (hovered ? Qt.alpha(accent, 0.05) : "transparent")
   border.color: checked ? accent : (hovered ? Theme.dim : Theme.line)
@@ -55,7 +62,10 @@ Rectangle {
       color: chip.ink
     }
     Label {
+      id: label
       anchors.verticalCenter: parent.verticalCenter
+      width: Math.max(0, Math.min(implicitWidth, chip.width - 20 - chip.trailing - chip.iconRoom))
+      elide: Text.ElideRight
       text: chip.text
       color: chip.ink
       font.pixelSize: 11
