@@ -58,8 +58,7 @@ function tool(body) {
     return (body.via === "escalate" ? "finished after passing up" : "finished") + (failed ? ", failed" + colon(output) : "");
   if (body.name === "assemble")
     return "got ready" + (failed ? ", failed" + colon(output) : "");
-  const brief = Phrases.brief(body.name, body.args);
-  return flat([body.name, brief].join(" ")) + (body.via ? ", after " + body.via : "") + (failed ? " failed" + colon(output) : "");
+  return failed ? Phrases.stepFailure(body.name, body.args) + colon(output) : Phrases.step(body.name, body.args);
 }
 
 // The works a root `work` event opens, by their titles.
@@ -74,8 +73,9 @@ function opened(body) {
 // What an event says, as one plain sentence for the log: who asks whom what,
 // what was passed up, what a tool or hook did. `who` is the event's actor;
 // the event itself stays whole in the detail card, never on this line.
-// `asked` maps a request id to how many questions it asked.
-function what(type, body, who, asked) {
+// `asked` maps a request id to how many questions it asked; `requestId` is
+// the event's own request.
+function what(type, body, who, asked, requestId) {
   const given = body && typeof body === "object" ? body : {};
   switch (type) {
   case "prompt":
@@ -102,8 +102,11 @@ function what(type, body, who, asked) {
     return asker + (asker === "you" ? " ask " : " asks ") + (arbiter || "the team") + how + colon(count > 1 ? first(Questions.parse(given.reason).intro) : first(given.reason));
   }
   case "escalate": {
+    // The question it asks, as asked: the same count at each hop, whatever the
+    // origins' own wording counted.
     const known = asked || {};
-    const total = Object.values(given.origins || {}).reduce((sum, id) => sum + (known[id] || 1), 0);
+    const own = given.reason ? questions(given.reason) : known[requestId];
+    const total = own || Object.values(given.origins || {}).reduce((sum, id) => sum + (known[id] || 1), 0);
     return "passed " + plural(total, "question", "questions") + " up";
   }
   case "reply": {
@@ -148,8 +151,13 @@ function what(type, body, who, asked) {
   }
 }
 
+// Tools whose result is an event row of its own (note, delegate, question,
+// move on...): their step row only repeats it.
+const echoed = ["comment", "delegate", "ask", "escalate", "continue", "next_stage", "work", "reply", "break", "reopen", "send"];
+
 // Whether an event is plumbing: it carries no news for the person — a run's
-// start and end, a hook, a model reply without text.
+// start and end, a hook, a model reply without text, a call whose result has
+// an event row of its own.
 function minor(type, body) {
   const given = body && typeof body === "object" ? body : {};
   switch (type) {
@@ -159,7 +167,7 @@ function minor(type, body) {
   case "end-run":
     return !given.error;
   case "tool":
-    return hook(given) ? given.ok !== false : ["end", "assemble"].includes(given.name) && given.ok !== false;
+    return given.ok !== false && (hook(given) || ["end", "assemble"].concat(echoed).includes(given.name));
   case "model":
     return !Model.text(body);
   default:

@@ -727,7 +727,7 @@ Singleton {
       who: who,
       run: event.run_id || "",
       work: event.work_id || "",
-      what: Events.what(event.type, body, who, questionsOf),
+      what: Events.what(event.type, body, who, questionsOf, event.request_id),
       ok: !failed,
       asks: event.type === "request" && !!body.arbiter && Requests.human(body.arbiter),
       raw: JSON.stringify(event)

@@ -27,6 +27,10 @@ defmodule Omunculus.GuiEventsTest do
     check(Events.questions("1. a\\n2. b") === 2 && Events.questions("Which logo?") === 1, "questions", "");
     check(Events.what("escalate", {origins: {design: "r1", copy: "r2"}}, "sales", {r1: 5}) === "passed 6 questions up", "escalate", "");
     says("escalate", {origins: {design: "55346c4c"}}, "sales", "passed 1 question up");
+    // The same questions count the same at each hop: by the escalate's own reason, else its request.
+    const three = "Intro\\n\\n1. Name?\\n2. Price?\\n3. Date?";
+    check(Events.what("escalate", {reason: three, origins: {design: "r9"}}, "seller", {r9: 1}) === "passed 3 questions up", "reason", "");
+    check(Events.what("escalate", {origins: {design: "r9"}}, "seller", {r9: 1, r10: 3}, "r10") === "passed 3 questions up", "request", "");
     says("reply", {request_id: "r", option: "approve", body: "approve"}, "you", "chose approve");
     says("reply", {request_id: "r", option: "adjust", body: "darker brown"}, "you", "chose adjust: darker brown");
     says("reply", {request_id: "r", body: "", parts: {design: {body: "", option: "approve"}}}, "you", "chose approve");
@@ -38,7 +42,21 @@ defmodule Omunculus.GuiEventsTest do
     run!("""
     says("tool", {name: "read", args: {path: "templates/a.md"}, ok: true, output: "x"}, "sales", "read templates/a.md");
     says("tool", {name: "end", via: "escalate", args: {}, ok: true}, "sales", "finished after passing up");
-    says("tool", {name: "next_stage", args: {}, ok: false, output: "gate: Price missing\\nmore"}, "sales", "next_stage failed: gate: Price missing");
+    says("tool", {name: "next_stage", args: {}, ok: false, output: "gate: Price missing\\nmore"}, "sales", "could not move to the next stage: gate: Price missing");
+    says("tool", {name: "read", args: {path: "design/rounds.md"}, ok: false, output: "no such file"}, "design-lead", "could not read design/rounds.md: no such file");
+    says("tool", {name: "comment", args: {body: "Thank you, Ana."}, via: "work", ok: true, output: ""}, "sales", "wrote a note");
+    says("tool", {name: "continue", args: {}, via: "next_stage", ok: true, output: ""}, "sales", "moved the work on");
+    says("tool", {name: "delegate", args: {agent: "design-lead", goal: "Briefing"}, via: "work", ok: true, output: ""}, "seller", "handed work down");
+    says("tool", {name: "work", args: {report: "x", works: [{title: "Bakery website", workflow: "sale"}]}, ok: true, output: ""}, "sales", "opened work: Bakery website");
+    says("tool", {name: "escalate", args: {reason: "Before we start", origins: {a: "r1"}}, ok: true, output: ""}, "seller", "passed a question up");
+    says("tool", {name: "ask", args: {question: "Hi"}, ok: true, output: ""}, "seller", "asked a teammate");
+    says("tool", {name: "bash", args: {command: "ls"}, ok: true, output: ""}, "design-lead", "ran a command");
+    says("tool", {name: "deploy_preview", args: {}, ok: true, output: ""}, "design-lead", "made a call");
+    for (const name of ["comment", "continue", "delegate", "work", "escalate", "ask", "next_stage", "reply"])
+      check(Events.minor("tool", {name, args: {}, ok: true}) && !Events.minor("tool", {name, args: {}, ok: false, output: "refused"}), "echoed " + name, "");
+    check(!Events.minor("tool", {name: "bash", args: {command: "ls"}, ok: true}), "bash", "");
+    for (const [type, body] of [["tool", {name: "comment", args: {body: "x"}, via: "work", ok: true}], ["tool", {name: "continue", args: {}, via: "next_stage", ok: true}], ["tool", {name: "next_stage", args: {report: "r"}, ok: false, output: "stage qualify does not hold yet: write the proposal"}]])
+      check(!/next_stage|after |comment|continue/.test(Events.what(type, body, "sales")), "raw words", Events.what(type, body, "sales"));
     says("tool", {name: "on-request", args: {event: {actor_id: "sales"}}, ok: true}, "sales", "on-request hook ran");
     says("tool", {name: "on-break", args: {event: {}}, ok: false, output: "exit 1"}, "harness", "on-break hook failed: exit 1");
     check(Events.hook({args: {event: {}}}) && !Events.hook({args: {event: {}, path: "a"}}) && !Events.hook({}), "hook", "");

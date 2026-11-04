@@ -520,8 +520,10 @@ A conversation's level, in place of the project's once one is opened:
   sentence ("sales asks you 5 questions: …", "passed 5 questions up"; the
   event's raw type, JSON and milliseconds only in its card), who, and FAILED
   or NEEDS YOU at the right, under rules naming the day and each run.
-  Plumbing (a run's start and end, hooks, replies without text) is dimmer and
-  hidden until BEHIND THE SCENES is on. A search line, the chips NEEDS YOU,
+  A call reads in plain words ("read design/rounds.md", "could not read
+  design/rounds.md: no such file"), never by its tool name. Plumbing (a run's
+  start and end, hooks, replies without text, and a call whose result has a
+  row of its own, such as a note or a question) is dimmer and hidden until BEHIND THE SCENES is on. A search line, the chips NEEDS YOU,
   FAILED and BEHIND THE SCENES and an agent picker filter it; the
   count of rows and a "more" menu with COPY, the event picked or else the
   rows shown, sit at the filters' right, or under them when they do not fit

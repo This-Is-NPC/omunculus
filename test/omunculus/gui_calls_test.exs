@@ -79,4 +79,20 @@ defmodule Omunculus.GuiCallsTest do
     if (Phrases.failure("next_stage") !== "moving to the next stage" || Phrases.failure("mystery") !== "a call") throw Error("failure");
     """)
   end
+
+  test "step and stepFailure say a call for the log in plain words" do
+    run!(["Phrases"], """
+    const same = (got, want) => { if (got !== want) throw Error(got + " != " + want); };
+    same(Phrases.step("read", {path: "design/rounds.md"}), "read design/rounds.md");
+    same(Phrases.step("read", {}), "read files");
+    same(Phrases.step("comment", {body: "Thank you"}), "wrote a note");
+    same(Phrases.step("delegate", {agent: "design-lead"}), "handed work down");
+    same(Phrases.step("work", {works: [{title: "Bakery website"}]}), "opened work: Bakery website");
+    same(Phrases.step("ask", {to: "sales"}), "asked sales");
+    same(Phrases.step("mystery", {}), "made a call");
+    same(Phrases.stepFailure("read", {path: "design/rounds.md"}), "could not read design/rounds.md");
+    same(Phrases.stepFailure("continue", {}), "could not move the work on");
+    same(Phrases.stepFailure("mystery", {}), "could not make a call");
+    """)
+  end
 end
