@@ -14,9 +14,7 @@ ColumnLayout {
   id: mast
   // Where the window is, outermost first: [{text, run}], `run` optional.
   property var crumbs: []
-  // One crumb without a link, for a caller that has not moved to `crumbs`.
-  property string section
-  readonly property var trail: crumbs.length > 0 ? crumbs : section !== "" ? [{ text: section }] : []
+  readonly property var trail: crumbs
   readonly property bool narrow: Breakpoints.size(Window.width) === "narrow"
   default property alias trailing: tail.data
   spacing: 10
