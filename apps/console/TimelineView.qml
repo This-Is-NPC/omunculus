@@ -470,6 +470,7 @@ Item {
           readonly property var reply: Omunculus.replies[entry.key] || null
           width: entry.width
           asker: asked ? Requests.asker(asked) : ""
+          route: asked ? Requests.route(asked, Omunculus.noted[entry.key]) : []
           question: asked ? String(asked.reason || "") : ""
           body: reply ? reply.body || reply.option : ""
           stamp: entry.stamp

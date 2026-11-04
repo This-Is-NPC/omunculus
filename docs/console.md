@@ -167,8 +167,10 @@ A work handed down is a block (`SubWorkBlock`) in the thread of the run that
 handed it down, where it did; so is a root work a run opened. A card headed
 SUB-WORK with its agent, title and time, it says its state, for how long and
 how many steps (tool calls; hook runs are not steps, here and in the turn),
-and, when some failed, how many and the first in plain words ("5 failed:
-moving to the next stage"), in the error tone only if the work itself failed,
+(the work's own, not those of the works it handed down) and, when some
+failed, how many, what was attempted and why the first failed ("5 failed:
+moving to the next stage (reason)"), in the error tone only if the work itself
+failed; when each failed tool later succeeded, a dim "5 retried" instead,
 its stages when it has a workflow, and the round with
 who sent it back. Until the work's data arrives, it shows the title the event
 named and "Handing down…", or nothing when the event named none. A work that
@@ -186,7 +188,7 @@ A request is a card only while it waits on you, and it is in the main
 thread. Your answer reads as a bubble on the right (`AnswerBubble`) under
 YOU ANSWERED and the time, its text left aligned with the line breaks kept
 and the bubble as wide as the text, up to 620 px. Above it the question is one dim line at the thread's left
-margin, "Asked by SALES · 4 questions: " (whoever first asked it, in their tone, the count of a numbered list
+margin, "seller asked · via sales · 4 questions: " (whoever first asked it, in their tone, then the way it came, the count of a numbered list
 kept whole) and its first line with words, cut at 120 characters; Enter, Space or
 a click opens it in place to its full text. Sending an answer, like sending
 a message, takes the view to the end, so it never counts as news; when the
