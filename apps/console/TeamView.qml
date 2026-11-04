@@ -112,11 +112,27 @@ FocusScope {
     const isFolded = (key, unless) => kept !== null ? false : opened[key] !== undefined ? !opened[key] : unless
     const head = front !== null ? 1 : 0
     const workRow = (node, self, depth) => ({ kind: "work", key: node.work, node: node, depth: depth, drills: !self && Progress.kidsOf(node).length > 0 })
+    // The works done of a group, folded into one row, then the works themselves
+    // unless it stays folded.
+    const foldDone = (node, at, finished, depth) => {
+      const key = doneKey(node, at)
+      const folded = isFolded(key, !finished.some(kid => kid.below !== ""))
+      list.push({ kind: "done", key: key, depth: depth, folded: folded, text: Progress.finished(finished) })
+      if (!folded)
+        finished.forEach(kid => list.push(workRow(kid, false, depth)))
+    }
     // A work, then the open works under it that are at work or on the way to
-    // it, each one level deeper.
+    // it, each one level deeper, and its done ones folded after them.
     const place = (node, depth) => {
       list.push(workRow(node, false, depth))
-      Progress.opened(node, progress.path).filter(keeps).forEach(kid => place(kid, depth + 1))
+      const open = Progress.opened(node, progress.path).filter(keeps)
+      open.forEach(kid => place(kid, depth + 1))
+      if (open.length > 0)
+        node.groups.forEach((group, at) => {
+          const finished = group.nodes.filter(keeps).filter(closed)
+          if (finished.length > 0)
+            foldDone(node, at, finished, depth + 1)
+        })
     }
     const node = byWork[here] || null
     if (front !== null)
@@ -145,13 +161,8 @@ FocusScope {
         .filter(part => part).join(" · ")
       list.push({ kind: "rule", key: "rule:" + at, depth: head + 1, text: title || "sub-works" })
       going.forEach(kid => place(kid, head + 1))
-      if (finished.length > 0) {
-        const key = doneKey(node, at)
-        const folded = isFolded(key, !finished.some(kid => kid.below !== ""))
-        list.push({ kind: "done", key: key, depth: head + 1, folded: folded, text: Progress.finished(finished) })
-        if (!folded)
-          finished.forEach(kid => list.push(workRow(kid, false, head + 1)))
-      }
+      if (finished.length > 0)
+        foldDone(node, at, finished, head + 1)
     })
     return list
   }

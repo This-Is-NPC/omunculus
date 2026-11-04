@@ -198,7 +198,8 @@ defmodule Omunculus.GuiProgressTest do
     check(Progress.below([]) === "", "none", "");
     check(Progress.below(kids(["done"])) === "1 sub-work done", "one done", "");
     check(Progress.below(kids(["done", "cancelled"])) === "2 sub-works done", "all finished", "");
-    check(Progress.below(kids(["working", "done"])) === "2 sub-works, 1 working", "working", "");
+    check(Progress.below(kids(["working", "done"])) === "2 sub-works, 1 working, 1 done", "working", "");
+    check(Progress.below(kids(["working", "waiting"])) === "2 sub-works, 1 working", "working only", "");
     check(Progress.below(kids(["waiting", "done", "up-next"])) === "3 sub-works, 1 done", "some done", "");
     check(Progress.below(kids(["waiting"])) === "1 sub-work", "open", "");
     """)
