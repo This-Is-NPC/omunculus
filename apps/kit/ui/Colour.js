@@ -67,3 +67,43 @@ function spread(colors) {
   }
   return chosen;
 }
+
+// `hex` with its hue turned by `by` of a turn, saturation and lightness kept.
+function turn(color, by) {
+  const [r, g, b] = rgb(color);
+  const top = Math.max(r, g, b);
+  const low = Math.min(r, g, b);
+  const light = (top + low) / 2;
+  const spread = top - low;
+  const saturation = spread === 0 ? 0 : spread / (1 - Math.abs(2 * light - 1));
+  const at = (((hue(color) + by) % 1) + 1) % 1 * 6;
+  const chroma = (1 - Math.abs(2 * light - 1)) * saturation;
+  const second = chroma * (1 - Math.abs(at % 2 - 1));
+  const parts = [[chroma, second, 0], [second, chroma, 0], [0, chroma, second], [0, second, chroma], [second, 0, chroma], [chroma, 0, second]][Math.floor(at) % 6];
+  return hex(parts.map(part => part + light - chroma / 2));
+}
+
+// Up to `count` agent colours from `wanted`, each made readable on `base`.
+// One is kept only when it is `apart` away in RGB from every colour of
+// `states` (accent, success, warning, error) and `ink`, and a `gap` of hue from those of `states`
+// and from the ones already kept. Turns of the hues kept fill the rest, then
+// the result is ordered by `spread`.
+function palette(wanted, count, base, ink, states, apart, gap) {
+  const picked = [];
+  const avoid = states.concat([ink]).map(rgb);
+  const take = color => {
+    if (picked.length === count) return;
+    const readableColor = readable(color, base, ink);
+    const value = rgb(readableColor);
+    if (avoid.some(other => Math.hypot(value[0] - other[0], value[1] - other[1], value[2] - other[2]) < apart)) return;
+    const near = other => hueApart(hue(readableColor), hue(other)) < gap - 0.001;
+    if (states.some(near) || picked.some(near)) return;
+    picked.push(readableColor);
+  };
+  wanted.forEach(take);
+  const own = picked.slice();
+  for (let step = 1; step < 10; step++)
+    for (const color of own)
+      if (hue(color) >= 0) take(turn(color, step / 10));
+  return spread(picked);
+}

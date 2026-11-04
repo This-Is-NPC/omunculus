@@ -306,7 +306,7 @@ Item {
       Behavior on opacity { NumberAnimation { duration: 140 } }
 
       HoverHandler { id: hover }
-      FocusRing { shown: row.current && list.activeFocus && table.keyed }
+      FocusRing { shown: row.current && list.activeFocus && !toolScope.activeFocus && table.keyed }
 
       Row {
         visible: !table.compact
