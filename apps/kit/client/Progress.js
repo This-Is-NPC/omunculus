@@ -168,6 +168,14 @@ function build(input) {
   const known = new Set(works.map(work => work.id));
   const runStart = run => starts[run.id] !== undefined ? starts[run.id] : seconds(run.started_at);
   const runsOf = id => runs.filter(run => (run.work_id || "") === id);
+  // What the call in flight on a work says; a reply says what the finished
+  // one will, by whom it answers.
+  const phrasing = id => {
+    if (!calling[id]) return "Getting started";
+    if (calling[id] !== "reply") return Phrases.phrase(calling[id], callArgs[id]);
+    const answered = requests.find(request => request.id === (callArgs[id] || {}).request_id);
+    return Phrases.replied(answered && answered.requester ? answered.requester.agent || "" : "", requests.some(request => Requests.human(request.arbiter) && !Requests.pending(request)));
+  };
 
   const node = (work, level) => {
     const id = work.id;
@@ -217,13 +225,14 @@ function build(input) {
     const ownSeconds = Math.max(0, end - created);
     const finishedIn = state === "done" ? ownSeconds : null;
     let doing = "";
-    if (state === "working") doing = calling[id] ? Phrases.phrase(calling[id], callArgs[id]) : "Getting started";
+    if (state === "working") doing = phrasing(id);
     else if (state === "needs-you") doing = "Waiting for your answer";
     else if (state === "waiting") doing = "Waiting for " + (waitingOn || "the team");
     else if (state === "stopped") doing = stopped ? "Stopped by " + stopped.by + (stopped.why ? ": " + stopped.why : "") : "Stopped";
     else if (state === "failed") doing = "Failed: " + firstLine(lastRun.error);
     else if (state === "done") doing = "Done in " + span(finishedIn);
     else if (state === "cancelled") doing = "Cancelled";
+    else if (state === "up-next") doing = "Up next";
 
     // Stages, and the children each was current for.
     const spans = lane ? intervals(lane, journey, created, end) : [];
@@ -374,7 +383,7 @@ function build(input) {
   if (leaf && (leaf.state === "working" || leaf.state === "needs-you")) doing = { agent: leaf.agent, doing: leaf.doing, since: leaf.since };
   else if (loose) doing = {
     agent: loose.agent || input.rootAgent || "",
-    doing: calling[""] ? Phrases.phrase(calling[""], callArgs[""]) : "Getting started",
+    doing: phrasing(""),
     since: runStart(loose), loose: true
   };
   else if (leaf) doing = { agent: leaf.agent, doing: leaf.doing, since: leaf.since };
@@ -403,7 +412,7 @@ function build(input) {
     ? {
       agent: input.rootAgent, agents: agents.length, asking: asking(forYou), ask: forYou.length > 0 ? forYou[0].id : "", asker: forYou.length > 0 ? forYou[0].asker : "",
       state: talking ? "working" : forYou.length > 0 ? "needs-you" : delegated.length > 0 ? "waiting" : "idle",
-      doing: talking ? (calling[talking.work_id || ""] ? Phrases.phrase(calling[talking.work_id || ""], callArgs[talking.work_id || ""]) : "Getting started") : delegated.length > 0 && forYou.length === 0 ? "Waiting for " + delegated.join(", ") : "",
+      doing: talking ? phrasing(talking.work_id || "") : delegated.length > 0 && forYou.length === 0 ? "Waiting for " + delegated.join(", ") : "",
       since: talking ? runStart(talking) : null
     }
     : null;

@@ -104,7 +104,8 @@ ColumnLayout {
     }
     if (focus) {
       const took = focus.finishedIn !== null
-      const lasted = Progress.duration(took ? focus.finishedIn : focus.branch.seconds).toUpperCase()
+      const open = !Progress.closed(focus.state)
+      const lasted = Progress.duration(took ? focus.finishedIn : open ? Math.max(0, tick - focus.created) : focus.branch.seconds).toUpperCase()
       // Waiting on you stops the clock: it says since when, in the warning tone.
       const since = lastEvent > 0 ? " SINCE " + Time.clock(new Date(lastEvent * 1000).toISOString(), Date.now()) : ""
       if (focus.state === "needs-you")
@@ -144,7 +145,7 @@ ColumnLayout {
     const clock = now.since !== null && working ? Progress.clock(Math.max(0, Math.round(tick - now.since))) : ""
     const chain = above.reduce((all, agent) => all.concat([{ text: agent, tone: Omunculus.toneOf(agent) }, { text: " › " }]), [])
     return (above.length > 0 ? [{ text: chain.map(piece => piece.text).join(""), short: "…› ", pieces: chain }] : [])
-      .concat([{ text: now.agent, tone: Omunculus.toneOf(now.agent), keep: true }, { text: ": " + now.doing, elide: true }])
+      .concat([{ text: now.agent, tone: Omunculus.toneOf(now.agent), keep: true }, { text: now.doing !== "" ? ": " + now.doing : "", elide: true }])
       .concat(clock !== "" ? [{ text: " · " + clock, keep: true }] : [])
   }
 

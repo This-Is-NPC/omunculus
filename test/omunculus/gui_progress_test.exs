@@ -113,8 +113,8 @@ defmodule Omunculus.GuiProgressTest do
     const done = Progress.build({works: [{id: "w9", title: "Menu", state: "done", created_at: iso(1000), updated_at: iso(1720)}], now: 2000});
     check(done.state === "done" && done.flat[0].doing === "Done in 12 min" && done.flat[0].finishedIn === 720 && done.flat[0].since === null, "done", done.flat[0]);
     const waiting = Progress.build(Object.assign({}, base, {runs: []}));
-    check(waiting.state === "waiting" && nodes(waiting).w3.state === "up-next" && nodes(waiting).w3.doing === "", "no run", waiting.state);
-    check(waiting.now.agent === "designer" && waiting.now.doing === "" && waiting.now.since === 1700, "now at the leaf", waiting.now);
+    check(waiting.state === "waiting" && nodes(waiting).w3.state === "up-next" && nodes(waiting).w3.doing === "Up next", "no run", waiting.state);
+    check(waiting.now.agent === "designer" && waiting.now.doing === "Up next" && waiting.now.since === 1700, "now at the leaf", waiting.now);
     check(Progress.build({works: [], now: 1}).state === "idle", "idle", "");
     """)
   end
@@ -242,6 +242,9 @@ defmodule Omunculus.GuiProgressTest do
     check(JSON.stringify(out.now) === JSON.stringify({agent: "sales", doing: "Getting started", since: 50, loose: true}), "now", out.now);
     const asking = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], calling: {"": "ask"}, rootAgent: "sales", now: 60});
     check(asking.now.doing === "Asking a teammate", "calling", asking.now);
+    const answer = {id: "q9", status: "answered", arbiter: human, requester: agent("seller"), work_id: null, reason: "x", origins: {}};
+    const replying = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], calling: {"": "reply"}, callArgs: {"": {request_id: "q9"}}, requests: [answer], rootAgent: "sales", now: 60});
+    check(replying.now.doing === "Passed your answers to seller", "live reply says what the finished one will", replying.now);
     const idle = Progress.build({works: [], rootAgent: "sales", now: 60});
     check(idle.state === "idle" && idle.now.agent === "sales" && idle.now.doing === "" && idle.spoken === "", "idle", idle);
     """)
