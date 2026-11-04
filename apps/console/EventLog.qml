@@ -19,7 +19,8 @@ import "kit/client/Time.js" as Time
 //   work  string  work id, "" if none
 //   what  string  the event on one line
 //   ok    bool    false for a failed tool call or a break
-//   tool  string  the tool a call made, "" for any other event
+//   tool  string  the tool a call made, "" for any other event; "break" on a
+//                 break (failed) and on a reopen (settles it)
 //   asks  bool    a request whose arbiter is the person
 //   raw   string  the event's JSON text, parsed only when a row is opened
 // Rows hold these roles (but `tool`) plus `retried`, true on a failed call

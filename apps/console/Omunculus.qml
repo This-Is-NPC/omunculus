@@ -747,7 +747,7 @@ Singleton {
       work: event.work_id || "",
       what: Events.what(event.type, body, who, questionsOf, event.request_id, askersOf),
       ok: !failed,
-      tool: event.type === "tool" && !Events.hook(body) ? body.name : "",
+      tool: event.type === "tool" && !Events.hook(body) ? body.name : event.type === "break" || event.type === "reopen" ? "break" : "",
       asks: event.type === "request" && !!body.arbiter && Requests.human(body.arbiter),
       raw: JSON.stringify(event)
     })
@@ -833,9 +833,10 @@ Singleton {
     return "US$ " + (spent < 0.01 ? spent.toFixed(4) : spent.toFixed(2))
   }
 
-  // A count of tokens, in thousands from a thousand: 950, 12k.
+  // A count of tokens, in thousands from a thousand and millions from a
+  // million: 950, 12k, 5.7M.
   function tokens(count) {
-    return count >= 1000 ? Math.round(count / 1000) + "k" : String(count)
+    return count >= 1e6 ? (count / 1e6).toFixed(1) + "M" : count >= 1000 ? Math.round(count / 1000) + "k" : String(count)
   }
 
   // Adds one model call's reported usage to the conversation's, its agent's

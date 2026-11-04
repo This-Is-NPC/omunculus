@@ -24,6 +24,12 @@ function reason(name, output) {
   return (printed.length > 0 ? printed : lines).slice(-1)[0] || "";
 }
 
+// A failure's reason with no harness ids; the refusal of a work still broken
+// below the caller reads as what it means.
+function plain(text) {
+  return /^refused: work \S+ below yours broke/.test(text) ? "a work below is still open" : flat(unid(text));
+}
+
 function plural(count, one, many) { return count + " " + (count === 1 ? one : many); }
 
 // A participant as the log names it: "you" for a person, else the agent.
@@ -72,11 +78,11 @@ function tool(body) {
   if (body.ok === false && Phrases.missed(body.name, body.output))
     return Phrases.miss(body.args);
   const failed = body.ok === false;
-  const output = typeof body.output === "string" ? reason(body.name, body.output) : "";
+  const output = typeof body.output === "string" ? plain(reason(body.name, body.output)) : "";
   if (hook(body))
     return body.name + " hook " + (failed ? "failed" + colon(output) : "ran");
   if (body.name === "end")
-    return (body.via === "escalate" ? "finished after passing up" : "finished") + (failed ? ", failed" + colon(output) : "");
+    return failed ? "could not finish" + colon(output) : body.via === "escalate" ? "finished after passing up" : "finished";
   if (body.name === "assemble")
     return "got ready" + (failed ? ", failed" + colon(output) : "");
   return failed ? Phrases.stepFailure(body.name, body.args) + colon(output) : Phrases.step(body.name, body.args);

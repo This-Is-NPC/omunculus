@@ -104,6 +104,9 @@ defmodule Omunculus.GuiCallsTest do
     same(Phrases.did("bash", {command: "ls quotes"}), "Looked in quotes/");
     same(Phrases.step("bash", {command: "ls ."}), "looked in the project");
     same(Phrases.step("bash", {command: "cat design/README.md; ls ./"}), "ran a command on design/README.md, the project");
+    same(Phrases.step("bash", {command: "cd /home/x/proj/workspace && cat design/README.md"}), "looked at design/README.md");
+    same(Phrases.step("bash", {command: "cd /home/x/proj/workspace; ls design"}), "looked in design/");
+    same(Phrases.step("done", {}), "finished its part");
     same(Phrases.stepFailure("bash", {command: "npx build"}), "could not run a command");
     same(Phrases.stepFailure("bash", {command: "rm quotes/a.md"}), "could not run a command on quotes/a.md");
     same(Phrases.stepFailure("bash", {}), "could not run a command");
