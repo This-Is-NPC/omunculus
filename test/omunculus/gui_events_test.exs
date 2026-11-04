@@ -70,6 +70,8 @@ defmodule Omunculus.GuiEventsTest do
     says("tool", {name: "on-break", args: {event: {}}, ok: false, output: "exit 1"}, "harness", "on-break hook failed: exit 1");
     check(Events.hook({args: {event: {}}}) && !Events.hook({args: {event: {}, path: "a"}}) && !Events.hook({}), "hook", "");
     says("end", {}, "sales", "finished");
+    says("tool", {name: "end", args: {}, ok: false, output: "refused: work 3cb71b446f56d82a451f4caa6b5cb220 below yours broke and waits on you: reopen it"}, "sales", "could not finish: a work below is still open");
+    says("tool", {name: "end", args: {}, ok: false, output: "refused: see request 3cb71b446f56d82a451f4caa6b5cb220 now"}, "sales", "could not finish: refused: see now");
     says("end-run", {}, "harness", "run finished");
     says("end-run", {error: "timeout\\ntrace"}, "harness", "run failed: timeout");
     says("start-run", {agent: "sales", depth: 1}, "sales", "sales started");
