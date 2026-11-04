@@ -85,6 +85,9 @@ Singleton {
     // under it the width less the gutter.
     readonly property real measure: 0.78
     readonly property int measureFrom: 520
+    // The column a thread's system row (a step, a sub-work, a live line)
+    // keeps for its icon; its words start after it.
+    readonly property int mark: 18
   }
 
   // Each text role: its pixel size and letter spacing, and what else it needs.
@@ -95,6 +98,8 @@ Singleton {
     // A bubble, and a card's body.
     readonly property QtObject body: QtObject { readonly property int size: 12; readonly property real lineHeight: 1.2 }
     readonly property QtObject cardBody: QtObject { readonly property int size: 13; readonly property real lineHeight: 1.2 }
+    // A thread's system rows: steps, sub-works, the live line; the log, not messages.
+    readonly property QtObject log: QtObject { readonly property int size: 11 }
     // A card's kind, in the accent.
     readonly property QtObject kicker: QtObject { readonly property int size: 10; readonly property real tracking: 3 }
     // A strip's meta, uppercase, its parts joined by `separator`.
@@ -197,6 +202,12 @@ Singleton {
   // 4.5:1 (Colour.js).
   function readable(wanted, base, ink, ratio) {
     return Colour.readable(String(wanted), String(base), String(ink), ratio)
+  }
+
+  // A speech bubble's fill: the speaker's tone over the background, or, for
+  // the person's own words (no tone), the text's ink.
+  function bubble(tone) {
+    return Qt.tint(background, Qt.alpha(tone === undefined ? foreground : tone, tone === undefined ? 0.09 : 0.14))
   }
 
   // The dim tone, adjusted to read on `fill`, a surface over the background.

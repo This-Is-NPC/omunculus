@@ -41,7 +41,13 @@ Item {
     cost: "M8 2v12 M11 4.5c0-1-1.3-1.5-3-1.5s-3 .7-3 2c0 3 6 1.5 6 4.5 0 1.3-1.3 2-3 2s-3-.6-3-1.7",
     attach: "M11 4.5v7a3 3 0 0 1 -6 0v-8a2 2 0 0 1 4 0v7",
     key: "M2 8a2.75 2.75 0 1 0 5.5 0a2.75 2.75 0 1 0 -5.5 0 M7.5 8h6.5 M11.5 8v2.5 M14 8v2",
-    info: "M2.5 8a5.5 5.5 0 1 0 11 0a5.5 5.5 0 1 0 -11 0 M8 7.5v3.5 M8 5.2v0.01"
+    info: "M2.5 8a5.5 5.5 0 1 0 11 0a5.5 5.5 0 1 0 -11 0 M8 7.5v3.5 M8 5.2v0.01",
+    // A prompt and its line: a step an agent took.
+    step: "M3 4.5l3.5 3.5-3.5 3.5 M8.5 11.5h4.5",
+    // A line that branches off: a work handed down.
+    branch: "M4.5 2.5v11 M4.5 5.5c0 3 2 4 5 4h3 M10.5 7.5l2 2-2 2",
+    // Two quote marks: words quoted from someone.
+    quote: "M3 8h3.5v3.5h-3.5z M3 8c0-2.2 1-3.5 3-4 M9.5 8h3.5v3.5h-3.5z M9.5 8c0-2.2 1-3.5 3-4"
   })
 
   implicitWidth: size
