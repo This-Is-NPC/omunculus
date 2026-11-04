@@ -71,7 +71,7 @@ FocusScope {
     const at = tabs.indexOf(tab)
     tab = tabs[(at + step + tabs.length) % tabs.length]
     if (focusing)
-      Qt.callLater(focusTabs)
+      tabsLater.restart()
   }
   function show(name) { tab = name }
   function focusTabs() {
@@ -84,8 +84,13 @@ FocusScope {
   // agent or, `noting`, to leave it a note.
   function write(noting) {
     tab = "thread"
-    Qt.callLater(() => composer.focusEntry(noting))
+    composerLater.noting = noting
+    composerLater.restart()
   }
+
+  // Once the tab shows; timers go with the pane, never running on what is gone.
+  Timer { id: tabsLater; interval: 0; onTriggered: pane.focusTabs() }
+  Timer { id: composerLater; property bool noting; interval: 0; onTriggered: composer.focusEntry(noting) }
 
   // A tally's money when the provider priced it, with its tokens.
   function cost(usage) {

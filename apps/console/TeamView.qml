@@ -162,13 +162,8 @@ FocusScope {
       else if (!parent && closed(node) && roots.some(root => !closed(root)))
         setOpen("earlier", true)
     }
-    Qt.callLater(() => {
-      const at = rowOf(work)
-      if (at >= 0) {
-        outline.currentIndex = at
-        outline.positionViewAtIndex(at, ListView.Contain)
-      }
-    })
+    reveal.key = work
+    reveal.restart()
   }
 
   // A row chosen: picked, and narrower than wide, its detail opened.
@@ -182,17 +177,15 @@ FocusScope {
   function open(work) {
     choose(work)
     if (wide)
-      Qt.callLater(() => detail.focusTabs())
+      tabsLater.restart()
   }
 
   // Goes down to the works a work handed down.
   function drill(work) {
     level = work
     picked = work
-    Qt.callLater(() => {
-      outline.currentIndex = 0
-      outline.positionViewAtBeginning()
-    })
+    reveal.key = work
+    reveal.restart()
   }
 
   // Goes up a level, the work it was on picked; false at the top.
@@ -251,7 +244,7 @@ FocusScope {
   function focusFilter() {
     shownAs = "outline"
     detailOpen = false
-    Qt.callLater(() => filterBox.forceActiveFocus())
+    filterLater.restart()
   }
 
   // Lets go of one thing: the detail page, the keyboard in the detail, then
@@ -259,7 +252,7 @@ FocusScope {
   function back() {
     if (detailOpen) {
       detailOpen = false
-      Qt.callLater(() => outline.forceActiveFocus())
+      outlineLater.restart()
       return true
     }
     if (detail.activeFocus) {
@@ -274,7 +267,37 @@ FocusScope {
   onWideChanged: if (wide) detailOpen = false
   // Wide, a work is always in the detail: the focus one at first.
   readonly property bool wantsPick: wide && picked === "" && progress !== null && progress.focus !== null
-  onWantsPickChanged: if (wantsPick) Qt.callLater(() => { if (team.wantsPick) team.picked = team.progress.focus.work })
+  onWantsPickChanged: if (wantsPick) firstPick.restart()
+
+  // What waits for the rows to be made again. Timers, not Qt.callLater: they
+  // go with the page when it is let go, never running on what is gone.
+  Timer { id: firstPick; interval: 0; onTriggered: if (team.wantsPick) team.picked = team.progress.focus.work }
+  Timer { id: tabsLater; interval: 0; onTriggered: detail.focusTabs() }
+  Timer { id: filterLater; interval: 0; onTriggered: filterBox.forceActiveFocus() }
+  Timer { id: outlineLater; interval: 0; onTriggered: outline.forceActiveFocus() }
+  // The row of the work `key` into view, the keyboard on it.
+  Timer {
+    id: reveal
+    property string key
+    interval: 0
+    onTriggered: {
+      const at = team.rowOf(key)
+      if (at >= 0) {
+        outline.currentIndex = at
+        outline.positionViewAtIndex(at, ListView.Contain)
+      }
+    }
+  }
+  // The scroll and the keyboard's row back where they were.
+  Timer {
+    id: restore
+    interval: 0
+    onTriggered: {
+      outline.contentY = Math.max(outline.originY, Math.min(outline.keptY, outline.originY + outline.contentHeight - outline.height))
+      outline.currentIndex = team.rowOf(team.picked)
+      outline.remaking = false
+    }
+  }
 
   // Wide: the outline, or the map, beside the detail. Narrower: the outline
   // or the map, the detail over them, or beside the map.
@@ -433,11 +456,7 @@ FocusScope {
         onContentYChanged: if (!remaking) keptY = contentY
         onModelChanged: {
           remaking = true
-          Qt.callLater(() => {
-            outline.contentY = Math.max(outline.originY, Math.min(outline.keptY, outline.originY + outline.contentHeight - outline.height))
-            outline.currentIndex = team.rowOf(team.picked)
-            outline.remaking = false
-          })
+          restore.restart()
         }
         // Moves the keyboard `by` rows past the rules; the detail follows a work.
         function step(by) {
