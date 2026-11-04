@@ -419,7 +419,7 @@ SurfaceFrame {
       visible: card.open && !formLoader.active
       spacing: Theme.space.tight
       Caption {
-        text: card.escalating ? "WHY IT GOES UP" : card.kind === "permission" ? "REASON FOR A NO (OPTIONAL)"
+        text: card.escalating ? "WHY IT GOES UP" : card.kind === "permission" ? (card.wanted && card.wanted.kind === "tool" ? "IF NOT, WHAT TO CHANGE (OPTIONAL)" : "REASON FOR A NO (OPTIONAL)")
           : card.kind === "decision" ? "YOUR NOTE OR ANSWERS (OPTIONAL)" : "YOUR ANSWER"
       }
       TextBlock {
@@ -472,7 +472,7 @@ SurfaceFrame {
                 required property string modelData
                 dense: true
                 role: Requests.guarded(modelData) ? "guarded" : "progress"
-                icon: modelData === "grant" ? "check" : ""
+                icon: modelData === "grant" ? "check" : Requests.guarded(modelData) ? "close" : ""
                 text: card.labelOf(modelData, choice.modelData.request)
                 onClicked: choice.decide(modelData)
               }
