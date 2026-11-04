@@ -602,6 +602,7 @@ Item {
       heading: view.named
       expanded: view.progressShown && view.page === "chat"
       threadWorking: view.page === "chat" && timeline.working !== null
+      sending: mainComposer.sending
       onToggle: view.toggleProgress(false)
       onAnswer: view.answer()
       onOpenTeam: view.go("map")

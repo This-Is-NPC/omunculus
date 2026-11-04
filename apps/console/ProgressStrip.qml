@@ -66,9 +66,13 @@ ColumnLayout {
   // The focus work's title, when it says what the masthead does not.
   readonly property string title: focusNode && focusNode.steps.length === 0 && focusNode.title !== heading ? focusNode.title : ""
 
-  // Whether the person's message is in the thread: the conversation is
-  // starting even before its first run shows.
+  // Whether a message of the person's is on its way.
+  property bool sending: false
+  // Whether the person's message is in the thread or on its way: the
+  // conversation is starting even before its first run shows.
   readonly property bool said: {
+    if (sending)
+      return true
     const entries = Omunculus.thread("")
     for (let at = 0; at < entries.count; at++) {
       if (entries.get(at).mine)

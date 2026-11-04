@@ -41,6 +41,8 @@ ColumnLayout {
 
   // Whether the box holds nothing to send.
   readonly property bool empty: entry.text.trim() === ""
+  // Whether a message is on its way to the server.
+  readonly property bool sending: entry.sending
 
   // Whether Enter leaves a note rather than sends; once a note is left, or
   // on Esc, the box writes to the agent again.
