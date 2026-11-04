@@ -58,19 +58,23 @@ function optionLabel(option, of) {
 // A no or a cancel: given last and never as a quick first choice.
 function guarded(option) { return option === "deny" || option === "cancel"; }
 
-// The scopes a grant is saved for, always. The depth scope names an agent's
-// level, not anyone the person knows, so it is not offered.
-function always(options) { return options.filter(option => option.startsWith("grant_") && option !== "grant_depth"); }
+// Whether an option is a scope a grant is saved for: only a permission's
+// grant_* options are; a decision may name its own options so.
+function scoped(option, permission) { return !!permission && option.startsWith("grant_"); }
+
+// The scopes a grant is saved for, always, of a permission. The depth scope
+// names an agent's level, not anyone the person knows, so it is not offered.
+function always(options, permission) { return options.filter(option => scoped(option, permission) && option !== "grant_depth"); }
 
 // A decision's options given once, as its card shows them: a grant first,
 // then the rest in order, apart from a no or a cancel and the saved scopes.
-function once(options) {
-  const rest = options.filter(option => option !== "grant" && !option.startsWith("grant_") && !guarded(option));
+function once(options, permission) {
+  const rest = options.filter(option => option !== "grant" && !scoped(option, permission) && !guarded(option));
   return (options.includes("grant") ? ["grant"] : []).concat(rest);
 }
 
 // Every option in the card's order: those given once, then a no or a cancel.
-function ordered(options) { return once(options).concat(options.filter(guarded)); }
+function ordered(options, permission) { return once(options, permission).concat(options.filter(guarded)); }
 
 // What the heading of your answer says of the option you chose; "" for an
 // answer in words. Adjusting is asking for changes, not choosing.

@@ -456,7 +456,7 @@ Item {
     // The card's own buttons decide it; the strip opens the progress.
     if (timeline.decidingShown)
       return []
-    const options = [].concat(...Requests.choices(request).map(choice => Requests.ordered(choice.options.filter(option => !option.startsWith("grant_")))
+    const options = [].concat(...Requests.choices(request).map(choice => Requests.ordered(choice.options, Requests.kind(choice.request) === "permission")
       .map(option => ({
         text: Requests.optionLabel(option),
         tip: option.replace(/_/g, " ") + ", to what " + Requests.label(choice.request.requester) + " asks",

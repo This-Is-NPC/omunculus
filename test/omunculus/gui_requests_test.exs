@@ -42,8 +42,12 @@ defmodule Omunculus.GuiRequestsTest do
   test "options read and order the same on the card and its chips" do
     run!(["Requests"], """
     const all = ["deny", "grant_agent", "grant_depth", "grant", "grant_workspace"];
-    if (Requests.ordered(all).join() !== "grant,deny") throw Error("order " + Requests.ordered(all));
-    if (Requests.always(all).join() !== "grant_agent,grant_workspace") throw Error("always");
+    if (Requests.ordered(all, true).join() !== "grant,deny") throw Error("order " + Requests.ordered(all, true));
+    if (Requests.always(all, true).join() !== "grant_agent,grant_workspace") throw Error("always");
+    // A decision that names an option grant_* offers it once, like any other.
+    const decision = ["confirm_by_hand", "grant_network"];
+    if (Requests.ordered(decision, false).join() !== "confirm_by_hand,grant_network") throw Error("decision order " + Requests.ordered(decision, false));
+    if (Requests.always(decision, false).length !== 0) throw Error("a decision has no saved scopes");
     if (Requests.optionLabel("grant") !== "GRANT\u00a0\u00b7\u00a0THIS WORK ONLY") throw Error("grant label");
     if (Requests.optionLabel("grant_agent", {who: "clerk"}) !== "FOR CLERK") throw Error("agent label");
     if (Requests.optionLabel("approve") !== "APPROVE") throw Error("plain label");

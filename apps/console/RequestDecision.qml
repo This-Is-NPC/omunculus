@@ -455,7 +455,7 @@ SurfaceFrame {
     ColumnLayout {
       id: decisions
       Layout.fillWidth: true
-      visible: card.open && (card.gathered.length > 0 || actions.shown || (!!card.own && Requests.always(card.own.options).length > 0))
+      visible: card.open && (card.gathered.length > 0 || actions.shown || (!!card.own && Requests.always(card.own.options, card.kind === "permission").length > 0))
       enabled: !card.busy
       spacing: Theme.space.gap
 
@@ -479,7 +479,7 @@ SurfaceFrame {
             Layout.fillWidth: true
             spacing: Theme.space.tight
             Repeater {
-              model: Requests.ordered(choice.options.filter(option => !option.startsWith("grant_")))
+              model: Requests.ordered(choice.options, Requests.kind(choice.request) === "permission")
               delegate: TraceButton {
                 required property string modelData
                 dense: true
@@ -491,7 +491,7 @@ SurfaceFrame {
             }
           }
           AlwaysChips {
-            options: Requests.always(choice.options)
+            options: Requests.always(choice.options, Requests.kind(choice.request) === "permission")
             labels: options.map(option => card.labelOf(option, choice.modelData.request))
             onChosen: option => choice.decide(option)
           }
@@ -505,7 +505,7 @@ SurfaceFrame {
         spacing: Theme.space.tight
         Repeater {
           id: ownOptions
-          model: card.open && card.own && !card.escalating ? Requests.once(card.own.options) : []
+          model: card.open && card.own && !card.escalating ? Requests.once(card.own.options, card.kind === "permission") : []
           delegate: TraceButton {
             required property string modelData
             dense: true
@@ -561,7 +561,7 @@ SurfaceFrame {
       }
 
       AlwaysChips {
-        options: card.open && card.own && !card.escalating ? Requests.always(card.own.options) : []
+        options: card.open && card.own && !card.escalating ? Requests.always(card.own.options, card.kind === "permission") : []
         labels: options.map(option => card.labelOf(option))
         onChosen: option => card.decide(option, card.note, [])
       }
