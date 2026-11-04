@@ -537,7 +537,7 @@ Singleton {
     const value = text.trim()
     const refuse = reason => {
       if (!work)
-        dropPending()
+        dropPending(value)
       connection.tell("could not send: " + reason, true)
       if (failed)
         failed()
@@ -764,11 +764,13 @@ Singleton {
     return { thread: key, row: model.count - 1 }
   }
 
-  // The row of the person's words not yet echoed by the server, or -1.
-  function pendingRow() {
+  // The oldest row of these words of the person's not yet echoed by the
+  // server, or -1: each message sent waits for its own copy.
+  function pendingRow(text) {
     const model = threads[""]
-    for (let at = model ? model.count - 1 : -1; at >= 0; at--) {
-      if (model.get(at).pending)
+    for (let at = 0; model && at < model.count; at++) {
+      const entry = model.get(at)
+      if (entry.pending && entry.text === text)
         return at
     }
     return -1
@@ -777,12 +779,12 @@ Singleton {
   // Shows the words just sent in the main thread, dim, until the server's copy
   // takes their place.
   function showPending(text) {
-    dropPending()
-    append("", { who: "you", mine: true, text: text, pending: true })
+    if (pendingRow(text) < 0)
+      append("", { who: "you", mine: true, text: text, pending: true })
   }
 
-  function dropPending() {
-    const at = pendingRow()
+  function dropPending(text) {
+    const at = pendingRow(text)
     if (at >= 0)
       threads[""].remove(at)
   }
@@ -913,8 +915,8 @@ Singleton {
     case "prompt":
       if (agent === "" && body.agent)
         agent = body.agent
-      const waiting = key === "" ? pendingRow() : -1
-      if (waiting >= 0 && threads[""].get(waiting).text === (body.message || "")) {
+      const waiting = key === "" ? pendingRow(body.message || "") : -1
+      if (waiting >= 0) {
         // The server's copy takes the place of the words shown while sending.
         threads[""].set(waiting, { stamp: stamp, at: at, files: JSON.stringify(body.attachments || []), pending: false })
       } else {
