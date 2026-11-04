@@ -74,7 +74,7 @@ is with: a card for each agent of depth 0 not only in workflows, with its
 portrait (fetched by `apps/kit/client`'s `AgentImages`, which the studio
 shares). Choosing a card makes nothing on the server: the chat opens empty
 with that agent, and the first message makes the conversation and then
-sends. If making it fails, the words stay in the box and the status line
+sends. If making it fails, the words stay in the box and a toast
 says so; BACK after a choice returns to the cards having made nothing. The
 conversation keeps the agent its first message named, and every message
 names it again.
@@ -435,7 +435,8 @@ registry's level; the project, then the page, on a project's; the project,
 the conversation open (the title of its first work, else what was first
 said in it) and its page in a conversation. At the start it names the
 project, or nothing on the registry alone, and the slash after OMUNCULUS
-shows only before a crumb. The project's crumb opens PROJECTS, and the
+shows only before a crumb; under 560 px OMUNCULUS is left out, leaving the
+crumbs its room. The project's crumb opens PROJECTS, and the
 conversation's its chat. Crumbs that do not fit elide from the left, the
 project's never below 8 characters. While a project is open and requests
 wait for you in the other ones, the masthead's right shows `▲ 2 ELSEWHERE`
@@ -453,15 +454,18 @@ the page and lists the four in a menu. The chat, team, log and cost pages are
 named so. When the desktop setting `enable-animations` is off, nothing in the
 window slides, sweeps or decodes.
 
-The bar ranks the commands — BACK apart, the page's main action solid (NEW
-CONVERSATION on CONVERSATIONS, REPLY where something waits on you), the
-others outlined, OUTLINE and MAP, and BY STATE, BY AGENT and BY PROJECT,
-joined as one control, and FILTER, COPY and FIT as icons at its end. It
-carries the readout and shortens the commands' names when they do not fit;
-when even the short names do not fit, the tools and then the lowest ranked
-commands move into the menu of a `⋯` button. Under 700 px BACK is only its
-icon, every command but the main one is in that menu, and the readout is its
-dot.
+The bar ranks the commands — BACK apart, the page's main action solid on the
+left (NEW CONVERSATION on CONVERSATIONS, REPLY where something waits on you),
+the others outlined on the right, OUTLINE and MAP, and BY STATE, BY AGENT and
+BY PROJECT, joined as one control. When the names do not fit, BACK is only
+its chevron and the commands take their short names, then all but the main
+one their icons; when even those do not fit, the lowest ranked commands move
+into the menu of a `⋯` button.
+
+What the window tells — copied, sent, refused — shows as a toast at its
+bottom right: information closes itself after a few seconds, an error stays
+until closed, and while the server does not answer an error says so until it
+answers again.
 
 The window is at least 360 by 480 px; its margins shrink with its width.
 
