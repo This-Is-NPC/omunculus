@@ -440,17 +440,6 @@ Item {
     }
   }
 
-  // A cut line reads as continuing.
-  Rectangle {
-    anchors { left: parent.left; right: parent.right; top: parent.top }
-    height: 16
-    visible: !timeline.atYBeginning
-    gradient: Gradient {
-      GradientStop { position: 0; color: Theme.background }
-      GradientStop { position: 1; color: Qt.alpha(Theme.background, 0) }
-    }
-  }
-
   NewPill {
     anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 10 }
     count: root.unseen
