@@ -42,8 +42,8 @@ Item {
     return record && record.finished_at ? Date.parse(record.finished_at) / 1000 : 0
   }
   readonly property string worked: started <= 0 ? ""
-    : streaming ? "Working " + Progress.clock(Math.max(0, Omunculus.tick - started))
-    : ended > 0 ? "Worked " + Progress.duration(Math.max(0, ended - started)) : ""
+    : streaming ? "Working " + Progress.span(Omunculus.tick - started)
+    : ended > 0 ? "Worked " + Progress.span(ended - started) : ""
   readonly property string said: text + (partial !== "" ? (text !== "" ? "\n\n" : "") + partial : "")
   readonly property color tone: Omunculus.toneOf(who)
   // A run that has said and done nothing so far leaves no trace in the
