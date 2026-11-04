@@ -113,6 +113,9 @@ Item {
   // Where the window was before each move, the last last, as {page, level,
   // project, socket, conversation, picked, work, thread}.
   property var history: []
+  // The place the start was on when a project was entered from it, to go
+  // back to with the start; null when the start was on the same one.
+  property var startPlace: null
 
   function here() {
     return { page: page, level: level, project: Omunculus.project, socket: Omunculus.socket, conversation: Omunculus.conversationId, picked: pickedNode, work: workKey, thread: threadWork }
@@ -160,6 +163,7 @@ Item {
   // Enters the pages from the start, at a page, with nothing behind it.
   function enter(name) {
     history = []
+    startPlace = null
     level = Omunculus.registry ? "registry" : "project"
     show(name)
   }
@@ -181,6 +185,7 @@ Item {
   // nothing behind it: BACK returns to the start.
   function enterProject(place, chip) {
     history = []
+    startPlace = { id: Omunculus.project, socket: Omunculus.socket }
     land(place, chip)
   }
 
@@ -202,6 +207,9 @@ Item {
       while (history.length > 0 && history[history.length - 1].page === "new")
         history = history.slice(0, -1)
     if (history.length === 0) {
+      if (startPlace)
+        Omunculus.switchProject(startPlace)
+      startPlace = null
       startWanted()
       return
     }

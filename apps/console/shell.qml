@@ -265,8 +265,8 @@ ShellRoot {
                   delegate: LinkLabel {
                     id: need
                     required property var modelData
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: Math.min(implicitWidth, parent.width)
+                    anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
+                    width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
                     value: need.modelData.id + " · " + need.modelData.needsYou + (need.modelData.needsYou === 1 ? " needs you" : " need you")
                     soft: true
                     elide: Text.ElideRight
