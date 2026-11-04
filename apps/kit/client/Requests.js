@@ -63,3 +63,34 @@ function passedOn(request) {
   return Object.keys(request.origins || {}).map(part => request.origins[part])
     .filter(origin => String(origin.reason || "").trim() !== "");
 }
+
+// The ids of every request some other request gathers from below through its
+// `origins`, at any depth: they are one question climbing, shown once, on the
+// request at the top.
+function contained(requests) {
+  const ids = new Set();
+  const visit = request => Object.values(request.origins || {}).forEach(origin => {
+    if (origin.id) ids.add(origin.id);
+    visit(origin);
+  });
+  requests.forEach(visit);
+  return ids;
+}
+
+// What a request asks of you: "permission" when a decision grants, "decision"
+// when it offers options, "needs-you" for a free answer; "team" when it is not
+// pending on a person.
+function kind(request) {
+  if (!pending(request) || !human(request.arbiter)) return "team";
+  if (granted(request) !== null) return "permission";
+  return choices(request).length > 0 ? "decision" : "needs-you";
+}
+
+// The climb of a request, nearest origin first: each origin's requester and
+// question, depth first.
+function chain(request) {
+  return Object.keys(request.origins || {}).reduce((all, part) => {
+    const origin = request.origins[part];
+    return all.concat([{ requester: origin.requester, reason: origin.reason }], chain(origin));
+  }, []);
+}
