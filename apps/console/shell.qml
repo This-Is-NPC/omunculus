@@ -47,6 +47,11 @@ ShellRoot {
       pagesView.enter(page)
       started = true
     }
+    // Enters the pages at a project's conversations; BACK returns to the start.
+    function enterProject(place, chip) {
+      pagesView.enterProject(place, chip)
+      started = true
+    }
 
     // The window's margin, and the room between its masthead and the rest.
     readonly property int margin: short ? Theme.space.pageShort : Theme.space.page
@@ -269,8 +274,7 @@ ShellRoot {
                     font.pixelSize: Theme.type.meta.size
                     font.letterSpacing: Theme.type.meta.tracking
                     onClicked: {
-                      panel.enter("projects")
-                      pagesView.openProject({ id: need.modelData.id, socket: need.modelData.socket }, "needs-you")
+                      panel.enterProject({ id: need.modelData.id, socket: need.modelData.socket }, "needs-you")
                     }
                     HoverHandler { id: over }
                   }
@@ -433,9 +437,10 @@ ShellRoot {
       const place = Omunculus.boardProjects.find(item => item.id === id)
       if (!place)
         return
-      if (!panel.started)
-        panel.enter("projects")
-      pagesView.openProject(place)
+      if (panel.started)
+        pagesView.openProject(place)
+      else
+        panel.enterProject(place)
     }
     // A page by its name: projects, conversations or board, or, with a
     // conversation open, chat, map, log or cost.

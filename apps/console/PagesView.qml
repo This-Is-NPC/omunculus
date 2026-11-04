@@ -174,6 +174,17 @@ Item {
   // another one closes, and BACK returns to it; `chip` lights a filter.
   function openProject(place, chip) {
     remember()
+    land(place, chip)
+  }
+
+  // Enters the pages from the start at a project's conversations, with
+  // nothing behind it: BACK returns to the start.
+  function enterProject(place, chip) {
+    history = []
+    land(place, chip)
+  }
+
+  function land(place, chip) {
     Omunculus.switchProject(place)
     conversations.filter = chip || ""
     show("conversations")
