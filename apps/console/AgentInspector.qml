@@ -71,22 +71,22 @@ Rectangle {
         Layout.fillWidth: true
         Layout.alignment: Qt.AlignTop
         spacing: 4
-        DecodeLabel { value: inspector.agent; color: inspector.agentTone; font.pixelSize: 17; font.letterSpacing: 2 }
+        Label { text: inspector.agent; color: inspector.agentTone; font.pixelSize: 17; font.letterSpacing: 2 }
         Label {
           Layout.fillWidth: true
           text: Omunculus.modelOf(inspector.agent)
           color: Theme.dim
-          font.pixelSize: 10
+          font.pixelSize: 11
           elide: Text.ElideRight
         }
         Label {
           Layout.fillWidth: true
-          text: inspector.running ? "RUNNING  ·  " + inspector.seconds + " S"
+          text: inspector.running ? "WORKING  ·  " + inspector.seconds + " S"
             + (Omunculus.calling[inspector.key] ? "  ·  NOW " + String(Omunculus.calling[inspector.key]).toUpperCase() : "")
             : inspector.work ? String(inspector.work.state).toUpperCase() : "IDLE"
           color: inspector.running ? inspector.agentTone : Omunculus.stateTone(inspector.work ? inspector.work.state : "")
-          font.pixelSize: 10
-          font.letterSpacing: 2
+          font.pixelSize: 11
+          font.letterSpacing: 1
           elide: Text.ElideRight
         }
       }

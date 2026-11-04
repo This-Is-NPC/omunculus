@@ -107,7 +107,20 @@ alone, omitting `option`; DENY gives them as the reason of a no; and, when
 it waits on you, ESCALATE raises it with them as the reason through
 `POST …/requests/escalate`, as one part named after its asker.
 
-## The orchestration map
+## The team and the orchestration map
+
+The team page opens on the team tree (`TeamPanel`): the step the root work
+is at and the next one, then a row per work, indented by level, with its
+state (icon and word: working, waiting for you, waiting for the team, done,
+failed, idle), agent, task, what it is doing and for how long. A team folds
+with the chevron or the Left and Right keys, and shows `(+N)` for the rows
+hidden. A finished row stays 30 s and then folds into its parent; a failed
+one stays. Picking a row shows under the tree what the agent said last, what
+it asked and still waits for, and OPEN IN LOG. The rows come from the
+window's `activity`.
+
+Below the tree, a line says what runs, what waits and how many are idle,
+with a legend, and the map follows.
 
 Requests and unread notes are not in threads: they hang from the work that
 made them on the orchestration map, a flowchart on the kit's `FlowCanvas`,
@@ -117,7 +130,9 @@ You are on top, with a row per depth named at its left. Each work is a card
 with its agent's portrait, model, title, state and the tool it calls while
 it runs, laid out as a tree, each under the one it came from, parents
 centred over their children. Running agents are ringed and their links
-flow; idle ones are hollow. On the map, a card the keyboard reaches comes
+flow; idle ones are hollow, smaller, in the dim tone. The map is never
+framed below its actual size, so its text keeps its size and the canvas
+scrolls. On the map, a card the keyboard reaches comes
 into view.
 
 A work that goes through a workflow is a lane instead (`WorkflowLane`), as

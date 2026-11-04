@@ -42,14 +42,14 @@ Rectangle {
     : Theme.line
 
   width: 320
-  height: 150
+  height: idle ? 100 : 150
   activeFocusOnTab: !idle
   Keys.onReturnPressed: chosen()
   Keys.onSpacePressed: chosen()
   color: selected ? Qt.tint(Theme.background, Qt.alpha(Theme.primary, 0.1)) : pointer.containsMouse ? Theme.highlight : Theme.background
   border.color: selected ? Theme.primary : passed ? Qt.alpha(Theme.success, 0.5) : stateTone
   border.width: selected || toYou > 0 || running ? 2 : 1
-  opacity: passed ? 0.6 : idle ? 0.45 : workState === "done" || workState === "cancelled" ? 0.6 : 1
+  opacity: passed ? 0.6 : workState === "done" || workState === "cancelled" ? 0.6 : 1
   Behavior on color { ColorAnimation { duration: 140 } }
   Behavior on border.color { ColorAnimation { duration: 200 } }
   Behavior on opacity { NumberAnimation { duration: 200 } }
@@ -102,9 +102,9 @@ Rectangle {
     RowLayout {
       Layout.fillWidth: true
       spacing: 8
-      DecodeLabel {
+      Label {
         Layout.fillWidth: true
-        value: node.agent
+        text: node.agent
         color: node.agentTone
         font.pixelSize: 15
         font.letterSpacing: 1.5
@@ -122,7 +122,7 @@ Rectangle {
           anchors.centerIn: parent
           text: Math.max(node.asks.length, node.toYou)
           color: node.toYou > 0 ? Theme.badgeForeground : Theme.dim
-          font.pixelSize: 10
+          font.pixelSize: 11
           font.bold: true
         }
       }
@@ -131,7 +131,7 @@ Rectangle {
       Layout.fillWidth: true
       text: Omunculus.modelOf(node.agent)
       color: Theme.dim
-      font.pixelSize: 10
+      font.pixelSize: 11
       elide: Text.ElideMiddle
     }
     Label {
@@ -148,10 +148,10 @@ Rectangle {
     Label {
       Layout.fillWidth: true
       visible: !node.idle
-      text: node.running ? "RUNNING" + (Omunculus.calling[node.key] ? "  ·  " + Omunculus.calling[node.key] : "") : node.workState.toUpperCase()
+      text: node.running ? "WORKING" + (Omunculus.calling[node.key] ? "  ·  " + Omunculus.calling[node.key] : "") : node.workState.toUpperCase()
       color: node.running ? node.agentTone : node.toYou > 0 ? Theme.warning : Theme.dim
-      font.pixelSize: 9
-      font.letterSpacing: 2
+      font.pixelSize: 11
+      font.letterSpacing: 1
       elide: Text.ElideRight
     }
     Label {
@@ -159,8 +159,8 @@ Rectangle {
       visible: node.stage !== ""
       text: (node.passed ? "✓ " : "") + String(node.stageIndex + 1).padStart(2, "0") + " · " + node.stage.toUpperCase()
       color: node.passed ? Theme.success : node.idle ? Theme.secondary : node.agentTone
-      font.pixelSize: 9
-      font.letterSpacing: 2
+      font.pixelSize: 11
+      font.letterSpacing: 1
       elide: Text.ElideRight
     }
   }

@@ -23,6 +23,26 @@ Item {
   // null for none.
   property var picked: null
   signal leave()
+  signal openLog(string work)
+
+  // Activity.status's result, which the window keeps; null until it does.
+  readonly property var activity: Omunculus.activity || null
+  readonly property var rows: activity && activity.rows ? activity.rows : []
+  // The map's text summary: who works, who waits, how many are idle.
+  readonly property string now: {
+    const names = states => rows.filter(row => states.includes(row.state)).map(row => row.agent.toLowerCase())
+    const parts = []
+    const working = names(["working"])
+    const waiting = names(["waiting-you", "waiting-team"])
+    const idle = rows.filter(row => row.state === "idle").length + nodes.filter(node => node.idle).length
+    if (working.length > 0)
+      parts.push("working " + working.join(", "))
+    if (waiting.length > 0)
+      parts.push("waiting " + waiting.join(", "))
+    if (idle > 0)
+      parts.push("idle " + idle)
+    return "Now: " + (parts.length > 0 ? parts.join("; ") : "nothing is running")
+  }
 
   function pick(key) { picked = key }
 
@@ -65,7 +85,7 @@ Item {
     const placed = top.concat(works)
     const idle = (Omunculus.setup ? Omunculus.setup.agents : [])
       .filter(agent => !agent.workflow_only && !placed.some(node => node.depth === agent.depth && node.agent === agent.name))
-      .map(agent => ({ key: "idle:" + agent.name, parent: null, agent: agent.name, title: "idle", depth: agent.depth, idle: true, lane: null, width: nodeWidth }))
+      .map(agent => ({ key: "idle:" + agent.name, parent: null, agent: agent.name, title: "Idle", depth: agent.depth, idle: true, lane: null, width: nodeWidth }))
     return placed.concat(idle)
   }
 
@@ -197,15 +217,57 @@ Item {
   // conversation opens comes onto it.
   onPickedChanged: if (picked !== null && cardOf(picked)) Qt.callLater(() => map.bringIntoView(cardOf(picked)))
 
+  // The team as a tree, then the map below it.
+  TeamPanel {
+    id: team
+    anchors { left: parent.left; right: inspector.visible ? inspector.left : parent.right; top: parent.top; margins: 14 }
+    height: Math.min(view.height * 0.4, 360)
+    activity: view.activity
+    onOpenLog: work => view.openLog(work)
+  }
+
+  Row {
+    id: summary
+    anchors { left: parent.left; right: parent.right; top: team.bottom; margins: 14 }
+    spacing: 18
+    Label { text: view.now; color: Theme.foreground; font.pixelSize: 12; width: Math.max(0, parent.width - legend.width - parent.spacing); elide: Text.ElideRight }
+    Row {
+      id: legend
+      spacing: 14
+      Repeater {
+        model: [
+          { word: "Working", tone: Theme.primary },
+          { word: "Waiting", tone: Theme.warning },
+          { word: "Idle", tone: Theme.dim }
+        ]
+        delegate: Row {
+          required property var modelData
+          spacing: 6
+          Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; color: "transparent"; border.color: parent.modelData.tone; border.width: 2 }
+          Label { text: parent.modelData.word; color: Theme.dim; font.pixelSize: 11 }
+        }
+      }
+    }
+  }
+
   FlowCanvas {
     id: map
-    anchors.fill: parent
+    anchors { left: parent.left; right: parent.right; top: summary.bottom; bottom: parent.bottom; topMargin: 8 }
     contentWidth: view.wide
     contentHeight: view.tall + 40
     rightInset: inspector.visible ? inspector.width + 14 : 0
     bottomInset: zoom.height + 16
     onBackgroundClicked: view.picked = null
-    onFramed: if (view.picked !== null && view.cardOf(view.picked)) bringIntoView(view.cardOf(view.picked))
+    // Fitting never goes below the actual size, where the text stays at its
+    // size; the canvas scrolls instead.
+    onFramed: {
+      if (world.scale < 1) {
+        world.scale = 1
+        world.x = leftInset + 20
+        world.y = topInset + 20
+      }
+      if (view.picked !== null && view.cardOf(view.picked)) bringIntoView(view.cardOf(view.picked))
+    }
     // A conversation is framed when it is drawn, and again as it grows,
     // until it is moved by hand.
     onContentWidthChanged: if (!moved) Qt.callLater(fit)
@@ -226,8 +288,8 @@ Item {
             x: 20
             y: view.youHeight + view.down + modelData * (view.nodeHeight + view.down) + 10
             spacing: 4
-            Label { text: "DEPTH"; color: Theme.dim; font.pixelSize: 10; font.letterSpacing: 3 }
-            DecodeLabel { value: String(modelData).padStart(2, "0"); color: Theme.primary; font.pixelSize: 36; font.letterSpacing: 2 }
+            Label { text: "DEPTH"; color: Theme.dim; font.pixelSize: 11; font.letterSpacing: 2 }
+            Label { text: String(modelData).padStart(2, "0"); color: Theme.primary; font.pixelSize: 36; font.letterSpacing: 2 }
           }
         }
 
@@ -286,13 +348,13 @@ Item {
           ColumnLayout {
             anchors { fill: parent; margins: 10; leftMargin: 14; rightMargin: 14 }
             spacing: 4
-            DecodeLabel { value: "YOU"; color: Theme.primary; font.pixelSize: 18; font.letterSpacing: 6 }
+            Label { text: "YOU"; color: Theme.primary; font.pixelSize: 18; font.letterSpacing: 4 }
             Label {
               Layout.fillWidth: true
               readonly property var place: Omunculus.workspaceOf("")
               text: (place.name ? place.name + "  ·  " : "") + place.root
               color: Theme.dim
-              font.pixelSize: 10
+              font.pixelSize: 11
               elide: Text.ElideMiddle
             }
           }
@@ -387,7 +449,7 @@ Item {
                 anchors.centerIn: parent
                 text: arrow.modelData.label
                 color: arrow.tone
-                font.pixelSize: 9
+                font.pixelSize: 11
                 font.letterSpacing: 1
               }
             }
