@@ -75,6 +75,35 @@ Item {
     timeline.positionViewAtIndex(row, ListView.Center)
   }
 
+  // The card of the newest question for you, once its entry exists.
+  function cardItem() {
+    const row = newestCard !== "" ? rowOf(newestCard) : -1
+    const entry = row >= 0 ? timeline.itemAtIndex(row) : null
+    return entry ? entry.item : null
+  }
+
+  // Brings the newest question into view and puts the keyboard in its words.
+  function focusCard() {
+    if (newestCard === "")
+      return
+    reveal(newestCard)
+    Qt.callLater(() => {
+      const card = cardItem()
+      if (!card)
+        return
+      if (card.kind === "needs-you")
+        card.focusWords()
+      else
+        card.focusDecision()
+    })
+  }
+
+  // Whether the keyboard is inside the card of a question.
+  function cardFocused() {
+    const card = cardItem()
+    return !!card && Focus.within(Window.activeFocusItem, card)
+  }
+
   // How the entry at `row` shows: "card" for a request waiting on you,
   // "answer" for one you answered, "team" for the rest, "none" for one
   // another gathers; "turn" and "speech" for the rest of the thread.
