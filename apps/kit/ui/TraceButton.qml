@@ -9,8 +9,7 @@ import "Breakpoints.js" as Breakpoints
 // off: it reads disabled and does nothing, but says why on hover. It is never
 // wider than `maximumWidth`, its caption eliding instead. `busy`, the trace
 // runs in place of its caption; one that still acts while busy
-// (`allowClickWhileBusy`) keeps its caption over a faint trace that crosses
-// the whole button.
+// (`allowClickWhileBusy`) keeps its caption, with the trace along its foot.
 Rectangle {
   id: button
 
@@ -87,10 +86,9 @@ Rectangle {
       fill: parent
       leftMargin: button.captioned ? 0 : Theme.space.cell
       rightMargin: button.captioned ? 0 : Theme.space.cell
-      topMargin: 7
-      bottomMargin: 7
+      topMargin: button.captioned ? button.height - 3 : 7
+      bottomMargin: button.captioned ? 0 : 7
     }
-    opacity: button.captioned ? 0.3 : 1
     running: button.running
     tone: button.tone
     backdrop: button.color
