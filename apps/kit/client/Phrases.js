@@ -150,6 +150,8 @@ function object(name, args) {
     return shown.length > nameLimit ? shown.slice(0, nameLimit - 1) + "…" : shown;
   }
   const path = given.replace(/\s+/g, " ").trim();
+  if (tool.folder && ["", ".", "./"].includes(path))
+    return "the project";
   return tool.folder && path !== "" && !path.endsWith("/") ? path + "/" : path;
 }
 

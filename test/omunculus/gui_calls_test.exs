@@ -95,6 +95,7 @@ defmodule Omunculus.GuiCallsTest do
     same(Phrases.stepFailure("mystery", {}), "could not make a call");
     same(Phrases.step("ls", {path: "design"}), "looked in design/");
     same(Phrases.step("ls", {path: "design/"}), "looked in design/");
+    same(Phrases.step("ls", {path: "."}), "looked in the project");
     same(Phrases.step("bash", {command: "npx build --prod\\necho done"}), "ran a command");
     same(Phrases.step("bash", {command: "cat design/README.md 2>/dev/null; echo ---; ls -la"}), "looked at design/README.md");
     same(Phrases.step("bash", {command: "ls -la quotes; find quotes -type f | head; cat templates/pr.md"}), "ran a command on quotes/, templates/pr.md");

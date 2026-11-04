@@ -138,7 +138,7 @@ ColumnLayout {
     if (!now || !now.agent)
       return [{ text: focusNode ? focusNode.doing : "", elide: true, keep: true }]
     const above = now.loose ? [] : path.map(step => step.agent).filter(agent => agent && agent !== now.agent)
-    const clock = now.since !== null && working ? Progress.clock(Math.max(0, Math.round(tick - now.since))) : ""
+    const clock = now.since !== null && working ? Progress.clock(Math.max(0, tick - now.since)) : ""
     const chain = above.reduce((all, agent) => all.concat([{ text: agent, tone: Omunculus.toneOf(agent) }, { text: " › " }]), [])
     return (above.length > 0 ? [{ text: chain.map(piece => piece.text).join(""), short: "…› ", pieces: chain }] : [])
       .concat([{ text: now.agent, tone: Omunculus.toneOf(now.agent), keep: true }, { text: now.doing !== "" ? ": " + now.doing : "", elide: true }])
