@@ -10,7 +10,8 @@ import "kit/client/Progress.js" as Progress
 // questions it asked and its tool calls. A done, cancelled or coming work is
 // one line. Picked, it shows its details: its agent's last words, its
 // questions in full and the ways to its thread, log and map. "full" adds its
-// team, the requests waiting between it and others, and its branch's totals.
+// team, the requests waiting between it and others, whether a work below it
+// needs you, and its branch's totals.
 FocusScope {
   id: row
 
@@ -305,8 +306,15 @@ FocusScope {
     }
     Flow {
       Layout.fillWidth: true
-      visible: row.full && (row.asks.length > 0 || row.askedBy.length > 0)
+      visible: row.full && (row.asks.length > 0 || row.askedBy.length > 0 || row.node.below !== "")
       spacing: 6
+      // A work below waits on you; this one keeps its own state.
+      Chip {
+        visible: row.full && row.node.below !== ""
+        text: "⇣ needs you below"
+        accent: Theme.warning
+        onClicked: row.requestPicked(row.node.below)
+      }
       Repeater {
         model: row.full ? row.asks : []
         delegate: Chip {

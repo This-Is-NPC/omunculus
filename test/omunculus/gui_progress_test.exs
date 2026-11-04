@@ -119,6 +119,42 @@ defmodule Omunculus.GuiProgressTest do
     """)
   end
 
+  # c1-05: the sale at its design stage waits on a request; the seller's
+  # request was escalated by sales, whose run has no work, to you.
+  test "a work's state follows its question up the escalation climb" do
+    run!("""
+    const doneWorks = works.map(work => work.id === "w1"
+      ? Object.assign({}, work, {waiting: "request"}) : Object.assign({}, work, {state: "done"}));
+    const seller = {id: "s1", status: "escalated", arbiter: agent("sales"), requester: agent("seller"), work_id: "w1", reason: "Approve the design preview?", origins: {}};
+    const sales = {id: "p1", status: "pending", arbiter: human, requester: agent("sales"), work_id: null, reason: "Do you approve the preview?", origins: {seller: seller}};
+    const at = requests => Progress.build(Object.assign({}, base, {works: doneWorks, runs: [], requests}));
+    const asked = at([seller, sales]);
+    const n = nodes(asked);
+    check(asked.state === "needs-you" && n.w1.state === "needs-you" && n.w1.doing === "Waiting for your answer", "needs you", n.w1);
+    check(asked.forYou.length === 1 && asked.forYou[0].work === "w1" && asked.forYou[0].title === "Bakery website" && asked.forYou[0].asker === "sales", "forYou", asked.forYou);
+    check(n.w1.asks.length === 1 && n.w1.asks[0].id === "p1" && n.w1.asks[0].human, "asks", n.w1.asks);
+    check(n.w2.state === "done" && n.w3.state === "done", "done below", [n.w2.state, n.w3.state]);
+    const toSales = nodes(at([seller, Object.assign({}, sales, {arbiter: agent("sales")})]));
+    check(toSales.w1.state === "waiting" && toSales.w1.waitingOn === "sales", "waiting on the holder", toSales.w1);
+    const unheld = nodes(at([seller]));
+    check(unheld.w1.state === "waiting" && unheld.w1.doing === "Waiting for an answer", "a question not found yet", unheld.w1);
+    """)
+  end
+
+  test "the deepest work of a climb asks; the works above say it needs you below" do
+    run!("""
+    const low = {id: "a", status: "escalated", arbiter: agent("design-lead"), requester: agent("designer"), work_id: "w3", reason: "Which logo?", origins: {}};
+    const top = {id: "c", status: "pending", arbiter: human, requester: agent("sales"), work_id: null, reason: "Which logo?", origins: {p: low}};
+    const out = Progress.build(Object.assign({}, base, {runs: [], requests: [low, top]}));
+    const n = nodes(out);
+    check(n.w3.state === "needs-you" && out.forYou[0].work === "w3" && out.forYou[0].title === "Home page", "deepest", out.forYou);
+    check(n.w2.state === "waiting" && n.w2.waitingOn === "designer" && n.w2.below === "c", "child keeps waiting", n.w2);
+    check(n.w1.state === "waiting" && n.w1.below === "c" && n.w3.below === "", "below", [n.w1.below, n.w3.below]);
+    const plain = nodes(Progress.build(base));
+    check(plain.w1.below === "" && plain.w2.below === "", "nothing below", plain.w1.below);
+    """)
+  end
+
   test "step seconds count a stage visited twice, and again marks a stage due again" do
     run!("""
     const n = nodes(Progress.build(base));

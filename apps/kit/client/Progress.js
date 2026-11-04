@@ -144,9 +144,11 @@ function build(input) {
   const usage = input.usage || {};
   const callsOf = input.calls || {};
   const now = input.now || 0;
-  // Per node, while building: the latest end in its branch and its agents.
+  // Per node, while building: the latest end in its branch, its agents and
+  // the requests holding its questions.
   const inner = new Map();
-  const pending = (input.requests || []).filter(Requests.pending);
+  const requests = input.requests || [];
+  const pending = requests.filter(Requests.pending);
   const known = new Set(works.map(work => work.id));
   const runStart = run => starts[run.id] !== undefined ? starts[run.id] : seconds(run.started_at);
   const runsOf = id => runs.filter(run => (run.work_id || "") === id);
@@ -158,7 +160,12 @@ function build(input) {
     const mine = runsOf(id);
     const run = mine.filter(each => each.status === "open").pop() || null;
     const lastRun = mine[mine.length - 1] || null;
-    const asking = pending.filter(request => (request.work_id || "") === id);
+    // Its open questions, each as the request that holds it now.
+    const asking = [];
+    for (const request of requests) {
+      const holder = (request.work_id || "") === id ? Requests.holder(request, requests) : null;
+      if (holder && !asking.includes(holder)) asking.push(holder);
+    }
     const created = seconds(work.created_at) || 0;
     const finishedAt = journey && journey.finishedAt !== null ? journey.finishedAt : null;
     const end = finishedAt !== null ? finishedAt
@@ -184,6 +191,9 @@ function build(input) {
     } else if (work.state === "waiting" && work.waiting === "message") {
       state = "waiting";
       waitingOn = "a message";
+    } else if (work.state === "waiting" && work.waiting) {
+      state = "waiting";
+      waitingOn = "an answer";
     }
 
     const agent = run ? run.agent : lane ? lane.steps[lane.at].agent : work.assignee || "";
@@ -256,11 +266,11 @@ function build(input) {
       steps: steps, at: lane ? lane.at : -1, count: lane ? lane.steps.length : 0,
       round: journey && journey.rounds > 0 ? journey.rounds + 1 : 0,
       sentBack: journey ? journey.sentBack : null, stopped: state === "stopped" ? stopped : null,
-      asks: [], asked: [], calls: tally.count, failed: tally.failed,
+      asks: [], asked: [], below: "", calls: tally.count, failed: tally.failed,
       children: lane ? [] : kids, groups: groups, team: team, last: tally.last || null,
       own: own, branch: branch, finishedIn: finishedIn, created: created
     };
-    inner.set(made, { reach: reach, agents: agents });
+    inner.set(made, { reach: reach, agents: agents, asking: asking });
     return made;
   };
 
@@ -274,11 +284,17 @@ function build(input) {
   const byWork = {};
   flat.forEach(each => { byWork[each.work] = each; });
 
-  // Each pending request: on the node that asks, and on the nearest node at
-  // or above it whose agent decides it.
+  // The work a pending request's climb started from: the deepest of the
+  // works it climbed from.
+  const askerOf = request => Requests.works(request).map(id => byWork[id]).filter(each => each)
+    .reduce((deepest, each) => !deepest || each.level > deepest.level ? each : deepest, null);
+
+  // Each pending request: on every node it holds a question of, and on the
+  // nearest node at or above the asking one whose agent decides it.
   for (const request of pending) {
-    const asker = byWork[request.work_id || ""];
-    if (!asker) continue;
+    const asker = askerOf(request);
+    const holding = flat.filter(each => inner.get(each).asking.includes(request));
+    if (!asker || holding.length === 0) continue;
     const human = Requests.human(request.arbiter);
     let to = null;
     if (!human) {
@@ -287,17 +303,26 @@ function build(input) {
     }
     const chain = Requests.chain(request).map(origin => Requests.label(origin.requester)).reverse()
       .concat([Requests.label(request.requester), human ? "you" : Requests.label(request.arbiter)]);
-    asker.asks.push({
-      id: request.id, to: human ? "you" : Requests.label(request.arbiter), human: human,
-      question: request.reason || "", toWork: to ? to.work : null, chain: chain
-    });
+    for (const each of holding)
+      each.asks.push({
+        id: request.id, to: human ? "you" : Requests.label(request.arbiter), human: human,
+        question: request.reason || "", toWork: to ? to.work : null, chain: chain
+      });
     if (to) to.asked.push({ id: request.id, from: Requests.label(request.requester), fromWork: asker.work, question: request.reason || "" });
   }
 
-  const hidden = Requests.contained(input.requests || []);
+  // Above a work that needs you, each work says so, keeping its own state.
+  for (const each of flat) {
+    if (each.state !== "needs-you") continue;
+    const ask = each.asks.find(item => item.human);
+    for (let at = byWork[each.parent]; at && ask; at = byWork[at.parent])
+      if (at.below === "") at.below = ask.id;
+  }
+
+  const hidden = Requests.contained(requests);
   const forYou = pending.filter(request => Requests.human(request.arbiter) && !hidden.has(request.id)).map(request => {
-    const of = byWork[request.work_id || ""];
-    return { id: request.id, asker: Requests.label(request.requester), work: request.work_id || "", title: of ? of.title : "", question: request.reason || "" };
+    const of = askerOf(request);
+    return { id: request.id, asker: Requests.label(request.requester), work: of ? of.work : "", title: of ? of.title : "", question: request.reason || "" };
   });
 
   const focus = roots.length === 0 ? null : roots[0];

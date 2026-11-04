@@ -134,7 +134,8 @@ All are QML on Quickshell and share `apps/kit`:
   `open-attachment`, the scripts beside it, `AgentImages`, which keeps the
   agents' images in Quickshell's cache, and `Requests.js`, the helpers
   that read a request's status and participants, the decisions it gathers
-  from below and the option a reply chose, whether the harness opened it
+  from below and the option a reply chose, the request holding a question
+  as it climbs and the works it climbed from, whether the harness opened it
   and the questions it then passes on, and build a reply; `Progress.js`,
   which derives from a conversation's state and stage events where its
   works are, nested by stage and level, with what each does, waits on and

@@ -13,8 +13,9 @@ import "kit/client/Time.js" as Time
 // per row, and under each stage the works handed down while it was current,
 // nested by level. Siblings run in parallel under one heading. A done stage,
 // and a done, cancelled or coming work, keeps what is below it folded until
-// unfolded. ↑/↓ move between rows, → unfolds, ← folds, Enter opens a work's
-// details or folds a row, Esc leaves.
+// unfolded, unless a question waiting on you climbed from there. ↑/↓ move
+// between rows, → unfolds, ← folds, Enter opens a work's details or folds a
+// row, Esc leaves.
 Item {
   id: tree
 
@@ -77,7 +78,8 @@ Item {
     }
     const work = (node, level) => {
       const kids = Progress.kidsOf(node)
-      const quiet = ["done", "cancelled", "up-next"].includes(node.state)
+      // Folded unless a question of yours climbed from below it.
+      const quiet = ["done", "cancelled", "up-next"].includes(node.state) && node.below === ""
       const shut = kids.length > 0 && folded(node.work, quiet)
       out.push({ kind: "node", key: node.work, level: level, node: node, folds: kids.length > 0, folded: shut, fold: quiet })
       if (!shut)
@@ -99,7 +101,7 @@ Item {
       steps.forEach((step, at) => {
         const key = root.work + "#" + at
         const kids = step.children
-        const quiet = step.status === "done"
+        const quiet = step.status === "done" && !kids.some(kid => kid.below !== "" || kid.state === "needs-you")
         const shut = kids.length > 0 && folded(key, quiet)
         out.push({ kind: "stage", key: key, level: 0, node: root, step: step, folds: kids.length > 0, folded: shut, fold: quiet })
         if (!shut) {

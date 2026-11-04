@@ -77,6 +77,32 @@ function contained(requests) {
   return ids;
 }
 
+// Whether a request gathers the request `id` through its origins, at any depth.
+function gathers(request, id) {
+  return Object.values(request.origins || {}).some(origin => origin.id === id || gathers(origin, id));
+}
+
+// Who holds an open question now: the request itself while it is pending,
+// else the pending request of `requests` that gathers it, at any depth, as
+// one escalated climbs; null when it is not open or nothing holds it yet.
+function holder(request, requests) {
+  if (pending(request)) return request;
+  if (request.status !== "escalated") return null;
+  return requests.find(other => pending(other) && gathers(other, request.id)) || null;
+}
+
+// The works a question climbed from: its own and those of its origins, at
+// any depth, each once, its own first.
+function works(request) {
+  const found = [];
+  const visit = each => {
+    if (each.work_id && !found.includes(each.work_id)) found.push(each.work_id);
+    Object.values(each.origins || {}).forEach(visit);
+  };
+  visit(request);
+  return found;
+}
+
 // What a request asks of you: "permission" when a decision grants, "decision"
 // when it offers options, "needs-you" for a free answer; "team" when it is not
 // pending on a person.

@@ -180,6 +180,16 @@ full, and OPEN (its thread as a page), LOG (the log kept to it) and MAP (the
 team page's map, the work picked). ↑/↓ move, → unfolds, ← folds, Enter opens
 or folds, Esc returns to the composer.
 
+A work's state follows its questions up their climb. An escalated question
+is held by the pending request that gathers it, at any depth
+(`Requests.holder`): a work whose question climbed to you needs you, even
+when the request now waiting on you belongs to no work, as one an agent at
+depth 0 escalated; one whose question an agent holds waits on that agent. A
+question for you counts for the deepest work it climbed from
+(`Requests.works`). A work waiting for an answer that is not read yet says
+"Waiting for an answer". The works above one that needs you keep their own
+state, and a done or coming one there is not folded.
+
 Where it opens depends on the window's width: from 1100 px it is docked
 beside the thread, 380 px wide and the page's height, and open from the
 start once the conversation has a work; from 700 px it is a card under the
@@ -264,7 +274,8 @@ fold under "N done earlier". Chips keep the works that need you or work,
 with the works above them, and `/` filters by title, agent or stage. A
 waiting badge (`⇡ waiting for design-lead`, `⇣ 1 question from designer`)
 lights both ends of its request, brings the other into view and opens the
-request in the detail.
+request in the detail; `⇣ needs you below`, on the works above one that
+needs you, does the same with that work's question.
 
 The work picked shows in full (`NodeDetail`): its agent, title, way down
 (`Breadcrumb`) and stages, then the tabs OVERVIEW (what it does now and did

@@ -49,4 +49,20 @@ defmodule Omunculus.GuiRequestsTest do
     if (Requests.kind(Object.assign({}, other, {options: grant})) !== "permission") throw Error("permission");
     """)
   end
+
+  test "holder follows a question up its climb; works are where it climbed from" do
+    run!(["Requests"], """
+    const low = {id: "a", status: "escalated", arbiter: agent("lead"), requester: agent("designer"), work_id: "w3", origins: {}};
+    const mid = {id: "b", status: "escalated", arbiter: agent("seller"), requester: agent("lead"), work_id: "w2", origins: {p: low}};
+    const top = {id: "c", status: "pending", arbiter: human, requester: agent("sales"), work_id: null, origins: {q: mid}};
+    const loose = {id: "d", status: "escalated", arbiter: agent("seller"), requester: agent("lead"), work_id: "w2", origins: {}};
+    const done = {id: "e", status: "closed", arbiter: human, requester: agent("sales"), work_id: "w1"};
+    const all = [low, mid, top, loose, done];
+    if (Requests.holder(low, all) !== top || Requests.holder(mid, all) !== top || Requests.holder(top, all) !== top)
+      throw Error("holder of the climb");
+    if (Requests.holder(loose, all) !== null || Requests.holder(done, all) !== null) throw Error("no holder");
+    if (Requests.works(top).join() !== "w2,w3") throw Error("works " + Requests.works(top));
+    if (Requests.works(done).join() !== "w1" || Requests.works(loose).join() !== "w2") throw Error("own work");
+    """)
+  end
 end
