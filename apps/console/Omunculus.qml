@@ -792,12 +792,25 @@ Singleton {
   // Adds a line to the turn of the run it happened in, and makes it the
   // newest thing done on its work; a call is counted too.
   function step(runId, work, line) {
-    const was = callsOf[work] || { count: 0, failed: 0, firstFailed: "", last: null }
-    const fails = !line.outcome && !line.hook && !line.ok
+    const was = callsOf[work] || { count: 0, failed: 0, firstFailed: "", firstError: "", open: {}, retried: 0, last: null }
+    const call = !line.outcome && !line.hook
+    const fails = call && !line.ok
+    // A later success of the same tool settles its earlier failures as retried.
+    const open = Object.assign({}, was.open)
+    let retried = was.retried
+    if (call && line.ok && open[line.name]) {
+      retried += open[line.name]
+      delete open[line.name]
+    }
+    if (fails)
+      open[line.name] = (open[line.name] || 0) + 1
     keep("callsOf", work, {
       firstFailed: was.firstFailed || (fails ? line.name : ""),
-      count: was.count + (line.outcome || line.hook ? 0 : 1),
+      firstError: was.firstFailed ? was.firstError : fails ? (String(line.output || "").split("\n").find(each => each.trim() !== "") || "").trim() : "",
+      count: was.count + (call ? 1 : 0),
       failed: was.failed + (fails ? 1 : 0),
+      open: open,
+      retried: retried,
       last: line.hook ? was.last : { text: line.outcome ? line.text : (line.name + "  " + Phrases.brief(line.name, line.args)).trim(), at: line.at }
     })
     const place = rows[runId]

@@ -91,6 +91,8 @@ Item {
       return
     if (!inEntry)
       timeline.following = false
+    // A row added while the view was hidden has no item until it lays out.
+    timeline.forceLayout()
     const entry = timeline.itemAtIndex(row)
     timeline.positionViewAtIndex(row, top || (entry && entry.height > timeline.height * 0.6) ? ListView.Beginning : ListView.Center)
   }
@@ -103,14 +105,19 @@ Item {
   }
 
   // Brings the newest question into view and puts the keyboard in its words.
-  function focusCard() {
-    if (newestCard === "")
+  // Hidden, it waits for the view to show (the page calls it again then); a
+  // card whose row is not built yet is looked for again a few times.
+  function focusCard(tries = 5) {
+    if (newestCard === "" || !visible)
       return
     reveal(newestCard, true)
     Qt.callLater(() => {
       const card = cardItem()
-      if (!card)
+      if (!card) {
+        if (tries > 0)
+          focusCard(tries - 1)
         return
+      }
       if (card.kind === "needs-you")
         card.focusWords()
       else
@@ -463,6 +470,7 @@ Item {
           readonly property var reply: Omunculus.replies[entry.key] || null
           width: entry.width
           asker: asked ? Requests.asker(asked) : ""
+          route: asked ? Requests.route(asked, Omunculus.noted[entry.key]) : []
           question: asked ? String(asked.reason || "") : ""
           body: reply ? reply.body || reply.option : ""
           stamp: entry.stamp
@@ -548,7 +556,7 @@ Item {
           Label {
             anchors.verticalCenter: parent.verticalCenter
             text: ("Working" + (row.clock !== "" ? " " + row.clock : "")).toUpperCase()
-            color: Qt.alpha(row.tone, Theme.type.stamp.opacity)
+            color: Theme.dim
             font.pixelSize: Theme.type.stamp.size
             font.letterSpacing: Theme.type.stamp.tracking
           }

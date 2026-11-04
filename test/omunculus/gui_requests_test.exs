@@ -41,6 +41,8 @@ defmodule Omunculus.GuiRequestsTest do
     if (names.join() !== "lead,designer") throw Error("chain " + names);
     if (Requests.chain(other).length !== 0) throw Error("empty chain");
     if (Requests.asker(top) !== "designer" || Requests.asker(other) !== "sales") throw Error("asker");
+    if (Requests.route(top, false).join() !== "designer,lead,seller" || Requests.route(top, true).join() !== "designer,lead") throw Error("route");
+    if (Requests.route(other, false).join() !== "sales") throw Error("route alone");
     if (Requests.kind(top) !== "needs-you" || Requests.kind(other) !== "needs-you") throw Error("needs-you");
     if (Requests.kind(low) !== "team") throw Error("team");
     if (Requests.kind(Object.assign({}, other, {status: "closed"})) !== "team") throw Error("closed");

@@ -52,10 +52,7 @@ SurfaceFrame {
   readonly property var climb: request ? Requests.chain(request).reverse() : []
   // The asker first, then who passed it on toward you: design-lead, seller, sales.
   readonly property var askers: {
-    const names = climb.map(level => Requests.label(level.requester))
-    if (request && !Omunculus.noted[key])
-      names.push(Requests.label(request.requester))
-    const unique = names.filter((name, at) => name && names.indexOf(name) === at)
+    const unique = request ? Requests.route(request, Omunculus.noted[key]) : []
     return unique.length > 0 ? unique : asker !== "" ? [asker] : []
   }
   readonly property string passers: climb.slice(1).map(level => Requests.label(level.requester)).join(" › ")

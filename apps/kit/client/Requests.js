@@ -127,3 +127,12 @@ function asker(request) {
   const climb = chain(request);
   return label((climb.length > 0 ? climb[climb.length - 1] : request).requester);
 }
+
+// The asker first, then who passed the question on toward you ("design-lead",
+// "seller", "sales"); the request's own requester only closes the line unless
+// `noted` says the person already saw it as a note.
+function route(request, noted) {
+  const names = chain(request).reverse().map(level => label(level.requester));
+  if (!noted) names.push(label(request.requester));
+  return names.filter((name, at) => name && names.indexOf(name) === at);
+}

@@ -13,6 +13,8 @@ Item {
 
   // Who asked, what they asked and what you said.
   property string asker
+  // Who passed the question on toward you, the asker first.
+  property var route: []
   property string question
   property string body
   property string stamp
@@ -26,9 +28,10 @@ Item {
     const line = (question.split("\n").find(each => each.trim() !== "") || "").replace(/\s+/g, " ").trim()
     return line.length > 120 ? line.slice(0, 119) + "…" : line
   }
-  readonly property string summary: "Asked by " + asker.toUpperCase() + (form ? " · " + form.items.length + " questions" : "") + ": " + first
+  readonly property string via: route.length > 1 ? " · via " + route.slice(1).join(" › ") : ""
+  readonly property string summary: asker + " asked" + via + (form ? " · " + form.items.length + " questions" : "") + ": " + first
 
-  implicitHeight: column.y + column.height + Theme.space.row
+  implicitHeight: column.y + column.height + Theme.space.row + Theme.space.gap
 
   Column {
     id: column
@@ -70,11 +73,10 @@ Item {
         x: Theme.space.block
         width: parent.width - x
         readonly property color ink: pointer.containsMouse ? Theme.foreground : Theme.dim
-        Label { id: by; text: "Asked by "; color: line.ink; font.pixelSize: 11 }
-        Label { id: who; text: bubble.asker.toUpperCase(); color: Omunculus.toneOf(bubble.asker); font.pixelSize: 11 }
-        Label { id: count; visible: !!bubble.form; text: bubble.form ? " · " + bubble.form.items.length + " questions" : ""; color: line.ink; font.pixelSize: 11 }
+        Label { id: who; text: bubble.asker; color: Omunculus.toneOf(bubble.asker); font.pixelSize: 11 }
+        Label { id: by; text: " asked" + bubble.via + (bubble.form ? " · " + bubble.form.items.length + " questions" : ""); color: line.ink; font.pixelSize: 11 }
         Label {
-          width: Math.max(0, line.width - by.width - who.width - (count.visible ? count.width : 0))
+          width: Math.max(0, line.width - by.width - who.width)
           text: ": " + bubble.first
           color: line.ink
           font.pixelSize: 11

@@ -110,7 +110,10 @@ ColumnLayout {
     for (const view of views)
       bottom = Math.min(bottom, view.height - form.mapToItem(view, 0, 0).y)
     const natural = dock.y
-    const top = Math.max(0, Math.min(natural, bottom - dock.height))
+    // The bar never covers the first question.
+    const first = boxes.itemAt(0)
+    const floor = first ? first.y + first.height : 0
+    const top = Math.min(natural, Math.max(floor, bottom - dock.height))
     // The bar's top, with the room the count takes over the actions when
     // narrow, once anything starts under them.
     const shown = top - Theme.space.tight - (narrow ? hint.height + Theme.space.tight : 0)
