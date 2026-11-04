@@ -305,7 +305,10 @@ Item {
     currentIndex: -1
     activeFocusOnTab: true
     keyNavigationEnabled: true
-    onActiveFocusChanged: if (activeFocus && (currentIndex < 0 || currentIndex >= count)) currentIndex = count - 1
+    // Only the list itself taking the keyboard picks an entry: a field inside
+    // an entry also makes the list's activeFocus true, and making an entry
+    // current would take the keyboard from that field.
+    onActiveFocusChanged: if (activeFocus && Window.activeFocusItem === timeline && (currentIndex < 0 || currentIndex >= count)) currentIndex = count - 1
     onCurrentIndexChanged: if (!root.inEntry) following = currentIndex === count - 1
     // Entries beyond the view are kept for two views each way, so a form
     // scrolled away from while written in is not rebuilt.
@@ -356,9 +359,6 @@ Item {
       readonly property alias content: slot.item
       readonly property bool drawn: !!slot.item && slot.item.visible && slot.item.implicitHeight > 0
       readonly property bool selected: ListView.isCurrentItem && root.keyboard
-      // The entry the keyboard is in is the current one, so the list keeps it.
-      readonly property bool holdsKeyboard: Focus.within(Window.activeFocusItem, entry)
-      onHoldsKeyboardChanged: if (holdsKeyboard && timeline.currentIndex !== index) timeline.currentIndex = index
 
       width: timeline.width
       height: drawn ? slot.height + gap : 0
