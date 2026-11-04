@@ -41,7 +41,8 @@ Item {
     "idle": { icon: "more", word: "IDLE", tone: Theme.dim }
   })
 
-  function millis(since) { return typeof since === "number" ? since : Date.parse(since) }
+  // Seconds, as the activity gives them, or milliseconds or an ISO stamp.
+  function millis(since) { return typeof since === "number" ? (since < 1e11 ? since * 1000 : since) : Date.parse(since) }
 
   function elapsed(since) {
     const seconds = Math.max(0, Math.round((now - millis(since)) / 1000))
@@ -112,7 +113,7 @@ Item {
       spacing: 2
       Label {
         Layout.fillWidth: true
-        text: panel.stage ? "Step " + (panel.stage.index + 1) + " of " + panel.stage.count + "  ·  " + panel.stage.name : ""
+        text: panel.stage ? "Step " + panel.stage.index + " of " + panel.stage.count + "  ·  " + panel.stage.name : ""
         color: Theme.foreground
         font.pixelSize: 13
         font.bold: true

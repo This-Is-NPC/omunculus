@@ -27,7 +27,8 @@ Item {
   readonly property int elapsed: activity && activity.since ? Math.max(0, Math.round(now / 1000 - activity.since)) : 0
   readonly property bool stalled: working && lastEvent > 0 && now / 1000 - lastEvent > quiet
   readonly property var stage: activity ? activity.stage || null : null
-  readonly property string step: stage && stage.count > 0 ? "STEP " + (stage.index + 1) + " OF " + stage.count : ""
+  // The headline of a working team already names its step.
+  readonly property string step: !working && stage && stage.count > 0 ? "STEP " + stage.index + " OF " + stage.count : ""
   readonly property color tone: ({ working: Theme.primary, "waiting-you": Theme.warning, "waiting-team": Theme.warning, done: Theme.success, failed: Theme.error })[state] || Theme.dim
   readonly property string word: ({ working: "Working", "waiting-you": "Waiting for you", "waiting-team": "Waiting for the team", done: "Done", failed: "Failed" })[state] || ""
   readonly property string icon: ({ working: "spark", "waiting-you": "warning", "waiting-team": "people", done: "check", failed: "close" })[state] || ""
@@ -66,10 +67,11 @@ Item {
       Layout.alignment: Qt.AlignVCenter
       Layout.preferredWidth: 56
       Layout.preferredHeight: 14
-      visible: line.working
-      running: line.working
+      visible: line.working && !Theme.reducedMotion
+      running: line.working && !Theme.reducedMotion
       tone: line.tone
     }
+    Icon { visible: line.working && Theme.reducedMotion; Layout.alignment: Qt.AlignVCenter; name: "more"; size: 12; color: line.tone }
     Label {
       Layout.fillWidth: true
       Layout.alignment: Qt.AlignVCenter

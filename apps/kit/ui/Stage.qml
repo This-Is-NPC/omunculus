@@ -46,11 +46,11 @@ Item {
   ParallelAnimation {
     id: enter
     NumberAnimation { target: stage; property: "opacity"; to: 1; duration: 220; easing.type: Easing.OutCubic }
-    NumberAnimation { target: stage; property: "offset"; from: 28; to: 0; duration: 280; easing.type: Easing.OutCubic }
+    NumberAnimation { target: stage; property: "offset"; from: Theme.reducedMotion ? 0 : 28; to: 0; duration: 280; easing.type: Easing.OutCubic }
   }
   ParallelAnimation {
     id: leave
     NumberAnimation { target: stage; property: "opacity"; to: 0; duration: 160 }
-    NumberAnimation { target: stage; property: "offset"; to: -28; duration: 200; easing.type: Easing.InCubic }
+    NumberAnimation { target: stage; property: "offset"; to: Theme.reducedMotion ? 0 : -28; duration: 200; easing.type: Easing.InCubic }
   }
 }

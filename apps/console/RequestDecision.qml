@@ -42,6 +42,8 @@ SurfaceFrame {
   readonly property var wanted: request ? Requests.granted(request) : null
   readonly property var place: Omunculus.workspaceOf(work ? work.workspace || "" : "")
 
+  // The dim tone, kept readable on the card's own fill.
+  readonly property color dim: Theme.readableOn(fill)
   readonly property string kind: request ? Requests.kind(request) : ""
   // The question as its asker wrote it.
   readonly property string question: passed.length > 0 ? passed.map(origin => origin.reason).join("\n\n") : request ? String(request.reason || "") : ""
@@ -154,11 +156,11 @@ SurfaceFrame {
     RowLayout {
       Layout.fillWidth: true
       spacing: 10
-      Icon { Layout.alignment: Qt.AlignVCenter; name: card.open ? card.badge.icon : "check"; size: 12; color: card.open ? Theme.warning : Theme.dim }
+      Icon { Layout.alignment: Qt.AlignVCenter; name: card.open ? card.badge.icon : "check"; size: 12; color: card.open ? Theme.warning : card.dim }
       Label {
         Layout.alignment: Qt.AlignVCenter
         text: card.open ? card.badge.text : card.answer ? "ANSWERED" : "CLOSED"
-        color: card.open && card.yours ? Theme.warning : Theme.dim
+        color: card.open && card.yours ? Theme.warning : card.dim
         font.pixelSize: 11
         font.letterSpacing: 1.5
       }
@@ -167,11 +169,11 @@ SurfaceFrame {
         Layout.fillWidth: true
         Layout.alignment: Qt.AlignVCenter
         text: card.work ? card.work.title : Omunculus.title
-        color: Theme.dim
+        color: card.dim
         font.pixelSize: 11
         elide: Text.ElideRight
       }
-      Label { Layout.alignment: Qt.AlignVCenter; text: card.stamp; color: Theme.dim; font.pixelSize: 11 }
+      Label { Layout.alignment: Qt.AlignVCenter; text: card.stamp; color: card.dim; font.pixelSize: 11 }
     }
 
     Label {
@@ -200,7 +202,7 @@ SurfaceFrame {
       Layout.maximumWidth: 620
       visible: card.settled
       text: card.question.replace(/\s+/g, " ")
-      color: Theme.dim
+      color: card.dim
       font.pixelSize: 12
       maximumLineCount: 2
       elide: Text.ElideRight
@@ -219,7 +221,7 @@ SurfaceFrame {
       Layout.maximumWidth: 620
       visible: card.passed.length > 0 && card.wording && !card.settled
       text: card.request ? card.request.reason || "" : ""
-      color: Theme.dim
+      color: card.dim
       font.pixelSize: 11
       wrapMode: Text.Wrap
     }
@@ -228,7 +230,7 @@ SurfaceFrame {
       Layout.fillWidth: true
       visible: card.open && !card.yours
       text: card.request ? Requests.label(card.request.arbiter).toUpperCase() + " DECIDES  ·  YOU CAN DECIDE INSTEAD" : ""
-      color: Theme.dim
+      color: card.dim
       font.pixelSize: 11
       wrapMode: Text.Wrap
     }
@@ -251,7 +253,7 @@ SurfaceFrame {
           id: said
           anchors { fill: parent; margins: 8; leftMargin: 12; rightMargin: 12 }
           text: card.busy ? card.sentText : !card.answer ? "" : (card.answer.option ? card.labelOf(card.answer.option) : "") + (card.answer.option && card.answer.body && card.answer.body !== card.answer.option ? ": " : "") + (card.answer.body && card.answer.body !== card.answer.option ? card.answer.body : "")
-          color: card.busy ? Theme.dim : Theme.foreground
+          color: card.busy ? card.dim : Theme.foreground
           font.pixelSize: 12
           wrapMode: Text.Wrap
         }
@@ -259,7 +261,7 @@ SurfaceFrame {
       Label {
         Layout.alignment: Qt.AlignRight
         text: card.busy ? "Sending..." : card.answer ? (card.answer.who === "you" ? "You answered" : card.answer.who.toUpperCase() + " answered") : ""
-        color: Theme.dim
+        color: card.dim
         font.pixelSize: 11
       }
     }
