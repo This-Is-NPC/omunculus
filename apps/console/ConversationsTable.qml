@@ -4,10 +4,11 @@ import "kit/ui"
 
 // ConversationsTable lists conversations in the DataTable: what was first
 // said in each, when it began, and its state — toned only while agents work
-// in it or something waits on you.
+// in it or something waits for you. Its cells decode into view.
 DataTable {
   id: table
 
+  decode: true
   property alias conversations: table.rows
 
   function summary(conversation) {
@@ -18,7 +19,7 @@ DataTable {
     const known = summary(conversation)
     if (known === null)
       return ""
-    return known.waiting > 0 ? "WAITING ON YOU" : known.running > 0 ? "WORKING" : "IDLE"
+    return known.waiting > 0 ? "WAITING FOR YOU" : known.running > 0 ? "WORKING" : "DONE"
   }
 
   columns: [
@@ -35,7 +36,7 @@ DataTable {
     ]
   }
   tone: (conversation, column) => column === 2
-    ? ({ "WAITING ON YOU": Theme.warning, WORKING: Theme.primary })[state(conversation)] || Theme.dim
+    ? ({ "WAITING FOR YOU": Theme.warning, WORKING: Theme.primary })[state(conversation)] || Theme.dim
     : ""
   stacked: [[0], [1]]
   status: 2
