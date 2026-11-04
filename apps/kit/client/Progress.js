@@ -343,7 +343,8 @@ function build(input) {
       id: request.id, to: human ? "you" : Requests.label(request.arbiter), human: human,
       question: request.reason || "", toWork: to ? to.work : null, chain: chain
     });
-    if (to) to.asked.push({ id: request.id, from: Requests.label(request.requester), fromWork: asker.work, question: request.reason || "" });
+    const form = Questions.parse(request.reason || "");
+    if (to) to.asked.push({ id: request.id, from: Requests.label(request.requester), fromWork: asker.work, question: request.reason || "", asks: form ? form.items.length : 1 });
   }
 
   // Above a work that needs you, each work that does not hold its question
@@ -360,8 +361,7 @@ function build(input) {
   // question asks each of its items.
   const forYou = pending.filter(request => Requests.human(request.arbiter) && !hidden.has(request.id)).map(request => {
     const of = askerOf(request);
-    const passed = noted[request.id] ? Requests.passedOn(request) : [];
-    const question = passed.length > 0 ? passed.map(origin => origin.reason).join("\n\n") : request.reason || "";
+    const question = Requests.question(request, noted[request.id]);
     const kind = Requests.kind(request);
     const form = kind === "needs-you" ? Questions.parse(question) : null;
     return {

@@ -64,6 +64,14 @@ function passedOn(request) {
     .filter(origin => String(origin.reason || "").trim() !== "");
 }
 
+// What a request asks, in its asker's words: when `noted` says the harness
+// opened it, the questions it passes on, joined with a blank line; else its
+// own reason.
+function question(request, noted) {
+  const passed = noted ? passedOn(request) : [];
+  return passed.length > 0 ? passed.map(origin => origin.reason).join("\n\n") : String(request.reason || "");
+}
+
 // The ids of every request some other request gathers from below through its
 // `origins`, at any depth: they are one question climbing, shown once, on the
 // request at the top.

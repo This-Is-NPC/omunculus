@@ -29,6 +29,17 @@ defmodule Omunculus.GuiRequestsTest do
     """)
   end
 
+  test "question is what the origins asked when the harness opened the request" do
+    run!(["Requests"], """
+    const low = {id: "a", requester: agent("designer"), reason: "1. font?\\n2. colour?", origins: {}};
+    const mute = {id: "m", requester: agent("x"), reason: "  ", origins: {}};
+    const top = {id: "c", requester: agent("sales"), reason: "sales left it unanswered", origins: {p: low, q: mute}};
+    if (Requests.question(top, true) !== "1. font?\\n2. colour?") throw Error("noted: " + Requests.question(top, true));
+    if (Requests.question(top, false) !== "sales left it unanswered") throw Error("own reason");
+    if (Requests.question(low, true) !== "1. font?\\n2. colour?") throw Error("no origins keeps its reason");
+    """)
+  end
+
   test "contained hides the lower requests of a climb; kind and chain" do
     run!(["Requests"], """
     const low = {id: "a", status: "escalated", arbiter: agent("lead"), requester: agent("designer"), reason: "which font?", origins: {}};

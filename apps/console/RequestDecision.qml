@@ -75,7 +75,7 @@ SurfaceFrame {
   readonly property color dim: Theme.readableOn(fill)
   readonly property string kind: request ? Requests.kind(request) : ""
   // The question as its asker wrote it.
-  readonly property string question: passed.length > 0 ? passed.map(origin => origin.reason).join("\n\n") : request ? String(request.reason || "") : ""
+  readonly property string question: request ? Requests.question(request, Omunculus.noted[key]) : ""
   // The question as a numbered list, when it is one a person answers. Its
   // model is held by value: it changes only when the words of the question do,
   // so the boxes being written in are never rebuilt by a refresh.

@@ -117,7 +117,7 @@ FocusScope {
     const by = {}
     for (const request of asked)
       (by[request.from] = by[request.from] || []).push(request)
-    return Object.keys(by).map(from => ({ from: from, requests: by[from] }))
+    return Object.keys(by).map(from => ({ from: from, requests: by[from], asks: by[from].reduce((sum, request) => sum + request.asks, 0) }))
   }
 
   readonly property string stageTip: {
@@ -292,7 +292,7 @@ FocusScope {
         model: row.full ? row.askedBy : []
         delegate: Chip {
           required property var modelData
-          text: "⇣ " + modelData.requests.length + (modelData.requests.length === 1 ? " question" : " questions") + " from " + modelData.from
+          text: "⇣ " + modelData.asks + (modelData.asks === 1 ? " question" : " questions") + " from " + modelData.from
           tip: modelData.requests[0].question.split("\n")[0]
           onClicked: row.requestPicked(modelData.requests[0].id)
         }

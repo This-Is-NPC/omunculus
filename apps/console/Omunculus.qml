@@ -119,6 +119,11 @@ Singleton {
   // Request id -> true for each request the harness opened, passing on a
   // question someone left unanswered; the snapshot does not say.
   property var noted: ({})
+  // Request id -> the request that gathers it (from the escalate events), and
+  // inbox id -> the request a harness note is about, for each note whose
+  // question the person already sees as a card.
+  property var gatheredBy: ({})
+  property var cardNotes: ({})
   // The project's setup, as the config route gives it: {root, agents, models,
   // workspaces, workspace, workflows, ...}; null until it answers.
   property var setup: null
@@ -192,7 +197,7 @@ Singleton {
 
   readonly property var running: runs.filter(run => run.status === "open")
   readonly property var waiting: requests.filter(request => Requests.pending(request) && Requests.human(request.arbiter))
-  readonly property var unread: inbox.filter(item => !item.read_at)
+  readonly property var unread: inbox.filter(item => !item.read_at && !cardNotes[item.id])
   // The newest request waiting on you that offers options, none gathering
   // it from below; null for none.
   readonly property var deciding: {
@@ -461,6 +466,8 @@ Singleton {
     notes = {}
     replies = {}
     noted = {}
+    gatheredBy = {}
+    cardNotes = {}
     drafts = {}
     tones = {}
     usage = { all: Usage.tally(), agents: {}, works: {} }
@@ -792,6 +799,23 @@ Singleton {
   function entryAt(place) { return threads[place.thread].get(place.row) }
   function update(place, role, value) { threads[place.thread].setProperty(place.row, role, value) }
 
+  // Whether a request is, or climbs into, one the harness opened: its
+  // question reaches the person as a card.
+  function isCard(id) {
+    for (let at = id; at; at = gatheredBy[at])
+      if (noted[at])
+        return true
+    return false
+  }
+
+  // Whether `id` is `top` or climbs into it.
+  function climbsTo(id, top) {
+    for (let at = id; at; at = gatheredBy[at])
+      if (at === top)
+        return true
+    return false
+  }
+
   function keep(map, key, value) {
     const next = Object.assign({}, root[map])
     next[key] = value
@@ -962,7 +986,8 @@ Singleton {
       // The prompt and the end have entries of their own; the turn folds the
       // hooks that passed.
       const hook = Events.hook(body)
-      if (!["assemble", "send", "end"].includes(body.name)) {
+      // The person's own calls (a reply, a read) are no agent's work.
+      if (who !== "you" && !["assemble", "send", "end"].includes(body.name)) {
         step(event.run_id, work, { name: body.name, ok: body.ok !== false || Phrases.missed(body.name, body.output), text: "", args: body.args || {}, output: body.ok === false ? String(body.output || "") : "", outcome: false, hook: hook, at: at })
         if (!hook) {
           keep("calling", work, body.name)
@@ -993,8 +1018,13 @@ Singleton {
         keep("noted", event.request_id, true)
       append(!body.arbiter || Requests.human(body.arbiter) ? "" : key, { kind: "request", key: event.request_id, who: who, stamp: stamp, at: at, work: work })
       break
+    case "escalate":
+      Object.values(body.origins || {}).forEach(origin => keep("gatheredBy", origin, event.request_id))
+      break
     case "reply":
-      keep("replies", event.request_id, { option: Requests.chosen(body), who: who, body: body.body || "" })
+      keep("replies", event.request_id, { option: Requests.chosen(body), who: who, body: body.body || "", stamp: stamp })
+      if (!replaying)
+        Object.keys(cardNotes).filter(id => climbsTo(cardNotes[id], event.request_id)).filter(id => inbox.some(item => item.id === id && !item.read_at)).forEach(id => markRead(id))
       if (sending[event.request_id] !== undefined) {
         const rest = Object.assign({}, sending)
         delete rest[event.request_id]
@@ -1002,6 +1032,11 @@ Singleton {
       }
       break
     case "notify":
+      // A note about a question already on a card says nothing new.
+      if (event.inbox_id && who === "harness" && isCard(event.request_id)) {
+        keep("cardNotes", event.inbox_id, event.request_id)
+        break
+      }
       if (event.inbox_id)
         keep("notes", event.inbox_id, body.body || "")
       // A note the harness left is no one's words.

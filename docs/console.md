@@ -143,6 +143,9 @@ thread's `openLog`).
 A note the harness left, as when it stopped a work and tells you so, is no
 one's words: it reads NOTE, muted, where a speaker's name would be, as in
 the mailbox, and the log names its events' actor `harness`.
+A harness note about a question you already see as a card (its request is
+one the harness opened or gathers) says nothing new: it is not shown, not
+counted as unread, and marked read when you answer.
 
 What an agent says, a request's reason and a work's goal and notes are the
 kit's `Prose`, their web addresses links that open in the browser.

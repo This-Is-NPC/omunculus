@@ -8,13 +8,6 @@
 // summary. Every count of conversations comes from `state`, so the pages
 // agree.
 
-// What a request waiting on you asks, in its asker's words: the questions it
-// passes on, else its own.
-function asking(request) {
-  const passed = Requests.passedOn(request);
-  return passed.length > 0 ? passed.map(origin => origin.reason).join("\n\n") : String(request.reason || "");
-}
-
 // A conversation as its snapshot says it, for its line in the lists:
 //   title: what was first said in it, on one line; agent: whom it is with,
 //   the agent of its first run at depth 0, "" before one; started;
@@ -35,7 +28,7 @@ function summary(data) {
     if (kind === "permission") asks.permissions += 1;
     else if (kind === "decision") asks.decisions += 1;
     else {
-      const form = Questions.parse(asking(request));
+      const form = Questions.parse(Requests.question(request, true));
       asks.questions += form ? form.items.length : 1;
     }
   }
@@ -49,7 +42,7 @@ function summary(data) {
     waiting: waiting.length,
     asks: asks,
     since: waiting.length > 0 ? waiting[0].created_at : "",
-    question: newest ? asking(newest).replace(/\s+/g, " ").trim() : ""
+    question: newest ? Requests.question(newest, true).replace(/\s+/g, " ").trim() : ""
   };
 }
 

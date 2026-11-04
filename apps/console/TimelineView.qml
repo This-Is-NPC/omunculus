@@ -476,9 +476,9 @@ Item {
           width: entry.width
           asker: asked ? Requests.asker(asked) : ""
           route: asked ? Requests.route(asked, Omunculus.noted[entry.key]) : []
-          question: asked ? String(asked.reason || "") : ""
+          question: asked ? Requests.question(asked, Omunculus.noted[entry.key]) : ""
           body: reply ? reply.body || reply.option : ""
-          stamp: entry.stamp
+          stamp: reply && reply.stamp ? reply.stamp : entry.stamp
         }
       }
 

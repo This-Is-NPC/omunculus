@@ -358,10 +358,13 @@ defmodule Omunculus.GuiProgressTest do
       origins: {p: {id: "q0", status: "escalated", requester: agent("design-lead"), reason: "Budget?"}}};
     const n = nodes(Progress.build(Object.assign({}, base, {requests: [ask, you]})));
     check(JSON.stringify(n.w3.asks) === JSON.stringify([{id: "q2", to: "design-lead", human: false, question: "Which logo file?", toWork: "w2", chain: ["designer", "design-lead"]}]), "asks", n.w3.asks);
-    check(JSON.stringify(n.w2.asked) === JSON.stringify([{id: "q2", from: "designer", fromWork: "w3", question: "Which logo file?"}]), "asked", n.w2.asked);
+    check(JSON.stringify(n.w2.asked) === JSON.stringify([{id: "q2", from: "designer", fromWork: "w3", question: "Which logo file?", asks: 1}]), "asked", n.w2.asked);
     check(n.w1.asks.length === 1 && n.w1.asks[0].to === "you" && n.w1.asks[0].human && n.w1.asks[0].toWork === null, "you", n.w1.asks);
     check(n.w1.asks[0].chain.join(" › ") === "design-lead › seller › you", "chain", n.w1.asks[0].chain);
     check(n.w1.asked.length === 0 && n.w3.asked.length === 0, "none asked", "");
+    const many = Object.assign({}, ask, {reason: "1. Which logo?\\n2. Which colour?\\n3. Which font?"});
+    const m = nodes(Progress.build(Object.assign({}, base, {requests: [many]})));
+    check(m.w2.asked.length === 1 && m.w2.asked[0].asks === 3, "numbered asks", m.w2.asked);
     """)
   end
 

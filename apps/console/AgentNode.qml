@@ -23,6 +23,7 @@ Rectangle {
   readonly property color agentTone: Omunculus.toneOf(node.agent)
   readonly property var asks: node.asks
   readonly property var asked: node.asked
+  readonly property int askedCount: asked.reduce((sum, request) => sum + request.asks, 0)
   readonly property bool quiet: ["done", "cancelled"].includes(node.state)
   readonly property real now: Omunculus.tick
   readonly property string clock: node.state === "working" && node.since !== null
@@ -120,7 +121,7 @@ Rectangle {
           Layout.fillWidth: true
           Layout.maximumWidth: implicitWidth
           Layout.minimumWidth: 0
-          text: "⇣ " + card.asked.length + (card.asked.length === 1 ? " question" : " questions")
+          text: "⇣ " + card.askedCount + (card.askedCount === 1 ? " question" : " questions")
           color: Theme.foreground
           font.pixelSize: 11
           elide: Text.ElideRight
