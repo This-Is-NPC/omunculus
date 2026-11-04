@@ -76,7 +76,7 @@ defmodule Omunculus.GuiCallsTest do
     if (Phrases.phrase("work", titled) !== "Opening work: Bakery website" || Phrases.phrase("work", {works: []}) !== "Opening work") throw Error("titled phrase");
     if (Phrases.phrase("read") !== "Reading files" || Phrases.phrase("mystery") !== "Working") throw Error("phrase");
     if (Phrases.did("escalate") !== "Passed a question up" || Phrases.did("mystery") !== "Made a call" || Phrases.did("work", titled) !== "Opened work: Bakery website") throw Error("did");
-    if (Phrases.did("ls", {path: "design"}) !== "Looked in design/" || Phrases.did("bash", {command: "npx build\\nmore"}) !== "Ran: npx build" || Phrases.did("bash") !== "Ran a command") throw Error("did folder and command");
+    if (Phrases.did("ls", {path: "design"}) !== "Looked in design/" || Phrases.did("bash", {command: "cat a/b.md\\nmore"}) !== "Looked at a/b.md" || Phrases.did("bash") !== "Ran a command") throw Error("did folder and command");
     """)
   end
 
@@ -95,9 +95,14 @@ defmodule Omunculus.GuiCallsTest do
     same(Phrases.stepFailure("mystery", {}), "could not make a call");
     same(Phrases.step("ls", {path: "design"}), "looked in design/");
     same(Phrases.step("ls", {path: "design/"}), "looked in design/");
-    same(Phrases.step("bash", {command: "npx build --prod\\necho done"}), "ran: npx build --prod");
-    same(Phrases.step("bash", {command: "x".repeat(100)}), "ran: " + "x".repeat(59) + "…");
-    same(Phrases.stepFailure("bash", {command: "npx build"}), "could not run: npx build");
+    same(Phrases.step("bash", {command: "npx build --prod\\necho done"}), "ran a command");
+    same(Phrases.step("bash", {command: "cat design/README.md 2>/dev/null; echo ---; ls -la"}), "looked at design/README.md");
+    same(Phrases.step("bash", {command: "ls -la quotes; find quotes -type f | head; cat templates/pr.md"}), "ran a command on quotes/, templates/pr.md");
+    same(Phrases.step("bash", {command: "cat quotes/doce-ana.md; echo; grep -n -i 'design\\|preview' quotes/a.md notes.txt"}), "looked at quotes/doce-ana.md, quotes/a.md +1 more");
+    same(Phrases.step("bash", {command: "find quotes -type f"}), "looked in quotes/");
+    same(Phrases.did("bash", {command: "ls quotes"}), "Looked in quotes/");
+    same(Phrases.stepFailure("bash", {command: "npx build"}), "could not run a command");
+    same(Phrases.stepFailure("bash", {command: "rm quotes/a.md"}), "could not run a command on quotes/a.md");
     same(Phrases.stepFailure("bash", {}), "could not run a command");
     const gone = "no such directory: quotes";
     if (!Phrases.missed("ls", gone) || !Phrases.missed("read", "Error: file not found") || Phrases.missed("write", gone) || Phrases.missed("read", "permission denied")) throw Error("missed");

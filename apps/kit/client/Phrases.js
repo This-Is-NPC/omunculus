@@ -11,7 +11,7 @@ const tools = {
   ls: { now: "Looking at the project", done: "Looked at the project", act: "look at", past: "looked in", folder: true },
   grep: { now: "Searching the project", done: "Searched the project", act: "search", past: "searched" },
   find: { now: "Looking for files", done: "Looked for files", act: "look for files in", past: "looked for files in" },
-  bash: { now: "Running a command", done: "Ran a command", act: "run a command", past: "ran:", line: true },
+  bash: { now: "Running a command", done: "Ran a command", act: "run a command", past: "ran a command on", command: true },
   ask: { now: "Asking a teammate", done: "Asked a teammate", act: "ask a teammate", past: "asked" },
   escalate: { now: "Passing a question up", done: "Passed a question up", act: "pass a question up", past: "passed a question up to" },
   reply: { now: "Answering", done: "Answered", act: "answer" },
@@ -25,7 +25,13 @@ const tools = {
   reopen: { now: "Sending work back", done: "Sent work back", act: "send work back" },
   send: { now: "Sending a message", done: "Sent a message", act: "send a message" }
 };
-const lineLimit = 60;
+const nameLimit = 60;
+// The commands that read what they name, and those that list it; a pattern
+// command takes its first argument as the pattern, not a file.
+const readers = ["cat", "head", "tail", "less", "more", "wc", "grep", "egrep", "fgrep", "rg", "sed", "awk", "file", "stat"];
+const listers = ["ls", "find", "tree", "du"];
+const patterned = ["grep", "egrep", "fgrep", "rg", "sed", "awk"];
+const talkers = ["echo", "printf"];
 const unknown = { now: "Working", done: "Made a call" };
 // The arg a tool row shows for the tools that name their object by it.
 const briefKeys = { read: "path", write: "path", edit: "path", ls: "path", bash: "command", grep: "path", find: "path", ask: "to", escalate: "to" };
@@ -52,8 +58,11 @@ function phrase(name, args) {
 function did(name, args) {
   const tool = tools[name] || unknown;
   const title = titleOf(tool, args);
-  const named = tool.folder || tool.line ? object(name, args) : "";
-  if (named) return tool.past.charAt(0).toUpperCase() + tool.past.slice(1) + " " + named;
+  const named = tool.folder || tool.command ? object(name, args) : "";
+  if (named) {
+    const past = verb(name, args);
+    return past.charAt(0).toUpperCase() + past.slice(1) + " " + named;
+  }
   return title ? tool.done + ": " + title : tool.done;
 }
 
@@ -69,17 +78,76 @@ function brief(name, args) {
   return shown.replace(/\s+/g, " ").trim();
 }
 
+// A command's words, one array per command: quotes dropped, commands split
+// at ; & | and line ends outside quotes.
+function commands(line) {
+  const list = [[]];
+  let word = "";
+  let quote = "";
+  const end = () => { if (word !== "") list[list.length - 1].push(word); word = ""; };
+  for (const char of line) {
+    if (quote) {
+      if (char === quote) quote = ""; else word += char;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+    } else if (/\s/.test(char) && char !== "\n") {
+      end();
+    } else if (/[;&|\n]/.test(char)) {
+      end();
+      if (list[list.length - 1].length > 0) list.push([]);
+    } else {
+      word += char;
+    }
+  }
+  end();
+  return list.filter(each => each.length > 0);
+}
+
+// What a shell command touches, as {verb, names}: the files and folders it
+// names ("design/README.md", "quotes/"), and how it treats them.
+function touched(line) {
+  const names = [];
+  const verbs = new Set();
+  for (const words of commands(line)) {
+    const command = words[0].split("/").pop();
+    if (talkers.includes(command)) continue;
+    const args = [];
+    let skip = patterned.includes(command) ? 1 : 0;
+    for (let at = 1; at < words.length; at++) {
+      const word = words[at];
+      if (/^\d*[<>]+$/.test(word)) { at++; continue; }
+      if (/^\d*[<>]/.test(word) || word.startsWith("-")) continue;
+      if (skip > 0) { skip--; continue; }
+      args.push(word);
+    }
+    const found = args.filter((word, at) => !/^\d+$/.test(word) && word !== "/dev/null" && (/\/|\.\w+$/.test(word) || (at === 0 && (listers.includes(command) || readers.includes(command)) && /^[\w.~-]+$/.test(word))))
+      .map(word => listers.includes(command) && !/\/$|\.\w+$/.test(word) ? word + "/" : word);
+    if (found.length === 0) continue;
+    found.forEach(word => { if (!names.includes(word)) names.push(word); });
+    verbs.add(readers.includes(command) ? "looked at" : listers.includes(command) ? "looked in" : "");
+  }
+  return { verb: verbs.size === 1 && !verbs.has("") ? [...verbs][0] : tools.bash.past, names: names };
+}
+
+// What a call did to its object, as a verb ("read", "looked at"): a
+// command's depends on what it runs.
+function verb(name, args) {
+  const tool = tools[name];
+  return tool.command ? touched(args && typeof args.command === "string" ? args.command : "").verb : tool.past;
+}
+
 // The object a call names by its arg, for the tools that have a `past` form
-// ("design/rounds.md" for a read, "design/" for a folder, the first line of a
-// command, elided); "" when it names none.
+// ("design/rounds.md" for a read, "design/" for a folder, the first files a
+// command touches, elided); "" when it names none.
 function object(name, args) {
   const tool = tools[name];
   const key = briefKeys[name];
   const given = args && key && typeof args[key] === "string" ? args[key] : "";
   if (!tool || !tool.past) return "";
-  if (tool.line) {
-    const line = given.trim().split("\n")[0].replace(/\s+/g, " ");
-    return line.length > lineLimit ? line.slice(0, lineLimit - 1) + "…" : line;
+  if (tool.command) {
+    const names = touched(given).names;
+    const shown = names.slice(0, 2).join(", ") + (names.length > 2 ? " +" + (names.length - 2) + " more" : "");
+    return shown.length > nameLimit ? shown.slice(0, nameLimit - 1) + "…" : shown;
   }
   const path = given.replace(/\s+/g, " ").trim();
   return tool.folder && path !== "" && !path.endsWith("/") ? path + "/" : path;
@@ -107,7 +175,7 @@ function replied(asker, yours) {
 // "moved to the next stage").
 function step(name, args) {
   const named = object(name, args);
-  if (named) return tools[name].past + " " + named;
+  if (named) return verb(name, args) + " " + named;
   const text = did(name, args);
   return text.charAt(0).toLowerCase() + text.slice(1);
 }
@@ -118,6 +186,5 @@ function stepFailure(name, args) {
   const tool = tools[name];
   if (!tool) return "could not make a call";
   const named = object(name, args);
-  if (tool.line && named) return "could not run: " + named;
-  return "could not " + tool.act + (named ? " " + named : "");
+  return "could not " + tool.act + (named ? (tool.command ? " on " : " ") + named : "");
 }
