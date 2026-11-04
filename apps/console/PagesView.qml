@@ -562,7 +562,7 @@ Item {
   // A question that arrives takes the keyboard from an empty box.
   Connections {
     target: mainComposer
-    function onFormWaitsChanged() {
+    function onAnswerWaitsChanged() {
       if (mainComposer.answerWaits && mainComposer.empty && view.page === "chat")
         Qt.callLater(view.focusEntry)
     }
