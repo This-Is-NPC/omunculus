@@ -98,8 +98,10 @@ and the studio ask for `--project`:
 All are QML on Quickshell and share `apps/kit`:
 
 - `apps/kit/ui`: the theme and the controls of the apps, taken from eco's
-  kit and kept to what Omunculus shows. `Theme` holds the colours and the
-  layout tokens every layout reads instead of numbers of its own:
+  kit and kept to what Omunculus shows. `Theme` holds the colours — text
+  tones lifted to 4.5:1 on the background, `faint`, for a mark beside a
+  text naming the same thing, as a tab's digit, to 3:1 — and the layout
+  tokens every layout reads instead of numbers of its own:
   `Theme.space` (the window's margin `page`, `section`, `block`, `inset`,
   `insetTop`, `trail`, `gap`, `tight`, `line`, `row` and `cell`, with
   `pageShort`, `sectionShort` and `blockShort` for a window under 560 px

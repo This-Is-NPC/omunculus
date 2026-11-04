@@ -23,6 +23,9 @@ defmodule Omunculus.GuiColourTest do
     const lifted = Colour.readable("#333333", "#000000", "#ffffff");
     if (Colour.contrast(Colour.rgb(lifted), Colour.rgb("#000000")) < 4.5) throw Error("lifted");
     if (Colour.readable("#ffffff", "#000000", "#ffffff") !== "#ffffff") throw Error("already readable");
+    const faint = Colour.readable("#333333", "#000000", "#ffffff", 3);
+    const ratio = Colour.contrast(Colour.rgb(faint), Colour.rgb("#000000"));
+    if (ratio < 3 || ratio >= Colour.contrast(Colour.rgb(lifted), Colour.rgb("#000000"))) throw Error("faint");
     """
 
     assert {"", 0} = Omunculus.GuiModules.run(["Colour"], script)

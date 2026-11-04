@@ -21,16 +21,18 @@ function hex(color) {
   return "#" + color.map(channel => Math.round(channel * 255).toString(16).padStart(2, "0")).join("");
 }
 
-// `wanted` moved toward `ink` until it reads at least 4.5:1 on `base`; `ink`
-// itself when the colours are not hex or none of the steps does.
-function readable(wanted, base, ink) {
+// `wanted` moved toward `ink` until it reads at least `ratio` (4.5:1 when
+// not given) on `base`; `ink` itself when the colours are not hex or none of
+// the steps does.
+function readable(wanted, base, ink, ratio) {
+  const least = ratio || 4.5;
   const color = rgb(wanted);
   const backgroundColor = rgb(base);
   const foregroundColor = rgb(ink);
   if (!color || !backgroundColor || !foregroundColor) return ink;
   for (let step = 0; step <= 20; step++) {
     const mixed = hex(color.map((channel, index) => channel + (foregroundColor[index] - channel) * step / 20));
-    if (contrast(rgb(mixed), backgroundColor) >= 4.5) return mixed;
+    if (contrast(rgb(mixed), backgroundColor) >= least) return mixed;
   }
   return ink;
 }

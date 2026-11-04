@@ -31,6 +31,9 @@ Singleton {
   readonly property color highlight: Qt.tint(background, Qt.alpha(foreground, mode === "light" ? 0.07 : 0.05))
   readonly property color line: Qt.alpha(foreground, 0.12)
   readonly property color dim: readable(palette.muted || foreground, background, foreground)
+  // Dimmer than `dim`, for marks beside a text that names the same thing, as
+  // a tab's digit: 3:1 on the background.
+  readonly property color faint: readable(palette.muted || foreground, background, foreground, 3)
   readonly property color badgeForeground: background
   readonly property color placeholder: Qt.alpha(dim, 0.55)
   readonly property string fontFamily: "monospace"
@@ -204,9 +207,10 @@ Singleton {
     return match ? [1, 2, 3].map(i => parseInt(match[i], 16) / 255) : null
   }
 
-  // `wanted` moved toward `ink` until it reads on `base` (Colour.js).
-  function readable(wanted, base, ink) {
-    return Colour.readable(String(wanted), String(base), String(ink))
+  // `wanted` moved toward `ink` until it reads on `base`, at `ratio` or
+  // 4.5:1 (Colour.js).
+  function readable(wanted, base, ink, ratio) {
+    return Colour.readable(String(wanted), String(base), String(ink), ratio)
   }
 
   // The dim tone, adjusted to read on `fill`, a surface over the background.

@@ -31,8 +31,8 @@ Item {
   Row {
     id: body
     spacing: 8
-    Label { text: tab.digit; color: tab.current ? Theme.primary : Theme.line; font.pixelSize: 10; font.letterSpacing: 2 }
-    Label { text: tab.label.toUpperCase(); color: tab.tone; font.pixelSize: 11; font.letterSpacing: 3 }
+    Label { text: tab.digit; color: tab.current ? Theme.primary : Theme.faint; font.pixelSize: Theme.type.tabDigit.size; font.letterSpacing: Theme.type.tabDigit.tracking }
+    Label { text: tab.label.toUpperCase(); color: tab.tone; font.pixelSize: Theme.type.tab.size; font.letterSpacing: Theme.type.tab.tracking }
   }
   // In the gap after the name, so the tabs keep their places.
   Dot { visible: tab.alert; x: body.width + 4; y: (body.height - height) / 2; tone: Theme.error }
