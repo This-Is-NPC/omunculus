@@ -25,6 +25,10 @@ FocusScope {
   // The card chosen to begin with: the first when it is the last used.
   readonly property int start: Omunculus.lastAgent !== "" && agents.length > 0 && agents[0].name === Omunculus.lastAgent ? 0 : -1
   readonly property real card: 220
+  // Under a card's portrait: its name, then three lines of its role.
+  readonly property real info: 2 * Theme.space.insetTop + nameFont.height + Theme.space.line + 3 * roleFont.height
+  FontMetrics { id: nameFont; font.family: Theme.fontFamily; font.pixelSize: 15 }
+  FontMetrics { id: roleFont; font.family: Theme.fontFamily; font.pixelSize: Theme.type.body.size }
 
   // The role of an agent: the first sentence of its text without "You are the".
   function role(text) {
@@ -49,14 +53,14 @@ FocusScope {
 
   ColumnLayout {
     anchors.fill: parent
-    spacing: 18
+    spacing: Theme.space.section
 
     DecodeLabel {
       Layout.alignment: Qt.AlignHCenter
       value: "WHO DO YOU WANT TO TALK WITH"
       color: Theme.dim
-      font.pixelSize: 11
-      font.letterSpacing: 4
+      font.pixelSize: Theme.type.kicker.size
+      font.letterSpacing: Theme.type.kicker.tracking
     }
 
     GridView {
@@ -66,8 +70,8 @@ FocusScope {
       // Centred: as many cards a row as fit.
       readonly property int across: Math.max(1, Math.min(picker.agents.length, Math.floor(width / cellWidth)))
       leftMargin: (width - across * cellWidth) / 2
-      cellWidth: picker.card + 16
-      cellHeight: picker.card + 116
+      cellWidth: picker.card + Theme.space.gap
+      cellHeight: picker.card + picker.info + Theme.space.gap
       clip: true
       focus: true
       currentIndex: picker.start
@@ -89,7 +93,7 @@ FocusScope {
         required property int index
         readonly property bool current: GridView.isCurrentItem && grid.activeFocus
         width: picker.card
-        height: picker.card + 100
+        height: picker.card + picker.info
         color: current || pointer.containsMouse ? Theme.highlight : "transparent"
         border.color: current ? Theme.primary : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.5) : Theme.line
         Behavior on border.color { ColorAnimation { duration: 140 } }
@@ -106,28 +110,29 @@ FocusScope {
           initialSize: 72
         }
         Label {
-          anchors { right: parent.right; top: parent.top; margins: 8 }
+          anchors { right: parent.right; top: parent.top; margins: Theme.space.tight }
           visible: cardItem.modelData.name === Omunculus.lastAgent
           text: "LAST USED"
           color: Theme.primary
-          font.pixelSize: 11
-          padding: 4
+          font.pixelSize: Theme.type.header.size
+          font.letterSpacing: Theme.type.header.tracking
+          padding: Theme.space.line
           Rectangle { anchors.fill: parent; z: -1; color: Theme.background; border.color: Theme.line }
         }
         Label {
-          x: 8
-          y: 8
+          anchors { left: parent.left; top: parent.top; margins: Theme.space.tight }
           visible: cardItem.index < 9
           text: String(cardItem.index + 1)
           color: Theme.primary
-          font.pixelSize: 11
-          padding: 4
+          font.pixelSize: Theme.type.header.size
+          font.letterSpacing: Theme.type.header.tracking
+          padding: Theme.space.line
           Rectangle { anchors.fill: parent; z: -1; color: Theme.background; border.color: Theme.line }
         }
 
         Column {
-          anchors { left: parent.left; right: parent.right; top: portrait.bottom; margins: 12 }
-          spacing: 4
+          anchors { left: parent.left; right: parent.right; top: portrait.bottom; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset; topMargin: Theme.space.insetTop }
+          spacing: Theme.space.line
           DecodeLabel {
             width: parent.width
             value: cardItem.modelData.name
@@ -140,7 +145,7 @@ FocusScope {
             width: parent.width
             text: picker.role(cardItem.modelData.text)
             color: Theme.foreground
-            font.pixelSize: 12
+            font.pixelSize: Theme.type.body.size
             wrapMode: Text.Wrap
             maximumLineCount: 3
             elide: Text.ElideRight
