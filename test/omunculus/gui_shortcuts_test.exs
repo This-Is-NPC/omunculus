@@ -50,4 +50,13 @@ defmodule Omunculus.GuiShortcutsTest do
     if (Shortcuts.keys("start-projects")[0] !== "P" || Shortcuts.find("start-projects").tier !== 1) throw Error("start-projects");
     """)
   end
+
+  test "the quick chips answer to Alt and their number alone" do
+    run("""
+    const quick = Shortcuts.find("quick");
+    if (quick.tier !== 2 || !quick.mutates) throw Error("quick tier");
+    if (quick.keys.join(" ") !== "Alt+1 Alt+2 Alt+3 Alt+4 Alt+5 Alt+6 Alt+7 Alt+8 Alt+9") throw Error("quick keys");
+    if (Shortcuts.rows("chat").every(row => row[0] !== "Alt+1 … Alt+9")) throw Error("quick row");
+    """)
+  end
 end
