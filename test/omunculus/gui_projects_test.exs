@@ -15,48 +15,50 @@ defmodule Omunculus.GuiProjectsTest do
   """
 
   defp run!(assertions) do
-    assert {"", 0} = GuiModules.run(["Projects"], @fixtures <> assertions)
+    assert {"", 0} =
+             GuiModules.run(["Requests", "Questions", "Projects"], @fixtures <> assertions)
   end
 
-  test "rows count conversations, open works and the latest activity" do
+  test "rows count conversations, unfinished works and the latest activity" do
     run!("""
     const rows = Projects.rows(input({
       projects: [place("agency")],
       conversations: {agency: [conversation("c1", "2026-11-03T10:00:00Z"), conversation("c2", "2026-11-03T12:00:00Z")]},
       works: {agency: [work("open", "2026-11-03T13:00:00Z"), work("done", "2026-11-03T09:00:00Z"), work("cancelled", "2026-11-03T08:00:00Z"), work("broken", "2026-11-03T11:00:00Z")]},
-      summaries: {c1: {running: 1, waiting: 0}, c2: {running: 0, waiting: 0}},
+      summaries: {c1: {started: true, running: 1, waiting: 0}, c2: {started: true, running: 0, waiting: 0}},
       current: "agency"
     }));
     const row = rows[0];
     check(row.id === "agency" && row.socket === "/run/agency.sock", "place");
     check(row.current && row.reachable, "current " + JSON.stringify(row));
-    check(row.conversations === 2 && row.openWorks === 2, "counts " + JSON.stringify(row));
+    check(row.conversations === 2 && row.unfinished === 2, "counts " + JSON.stringify(row));
     check(row.last === "2026-11-03T13:00:00Z", "last " + row.last);
-    check(row.working === 1 && row.waiting === 0 && row.state === "working", "state " + row.state);
+    check(row.working === 1 && row.needsYou === 0 && row.state === "working", "state " + row.state);
     """)
   end
 
-  test "state: unreachable, then reading, then waiting over working, then idle" do
+  test "rows count conversations by the state the conversations page shows" do
     run!("""
-    const busy = [conversation("w", "2026-11-03T10:00:00Z")];
-    const rows = byId(Projects.rows(input({
-      projects: [place("gone"), place("fresh"), place("asks"), place("works"), place("quiet")],
-      conversations: {gone: busy, asks: [conversation("a", "2026-11-03T10:00:00Z")], works: busy, quiet: []},
-      summaries: {w: {running: 2, waiting: 3}, a: {running: 1, waiting: 2}},
-      unreachable: new Set(["gone"])
-    })));
-    check(rows.gone.state === "unreachable" && !rows.gone.reachable, "unreachable " + rows.gone.state);
-    check(rows.gone.waiting === 0 && rows.gone.working === 0 && rows.gone.conversations === 1, "stale " + JSON.stringify(rows.gone));
-    check(rows.fresh.state === "reading" && rows.fresh.conversations === 0 && rows.fresh.last === "", "reading " + rows.fresh.state);
-    check(rows.asks.state === "waiting" && rows.asks.waiting === 2 && rows.asks.working === 1, "waiting " + rows.asks.state);
-    check(rows.works.state === "waiting" && rows.works.waiting === 3, "waiting first " + rows.works.state);
-    check(rows.quiet.state === "idle" && !rows.quiet.current, "idle " + rows.quiet.state);
+    const c = id => conversation(id, "2026-11-03T10:00:00Z");
+    const row = Projects.rows(input({
+      projects: [place("agency")],
+      conversations: {agency: [c("asks"), c("asks-too"), c("both"), c("runs"), c("fresh"), c("unread")]},
+      summaries: {
+        asks: {started: true, running: 0, waiting: 3},
+        "asks-too": {started: true, running: 0, waiting: 1},
+        both: {started: true, running: 2, waiting: 1},
+        runs: {started: true, running: 2, waiting: 0},
+        fresh: {started: false, running: 0, waiting: 0}
+      }
+    }))[0];
+    check(row.needsYou === 3 && row.working === 1, "one count per conversation " + JSON.stringify(row));
+    check(row.conversations === 6 && row.state === "waiting", "state " + row.state);
     """)
   end
 
   test "sort: waiting, working, the latest activity, then the id" do
     run!("""
-    const row = (id, waiting, working, last) => ({id, waiting, working, last});
+    const row = (id, needsYou, working, last) => ({id, needsYou, working, last});
     const rows = [
       row("b-idle", 0, 0, "2026-11-03T10:00:00Z"),
       row("a-idle", 0, 0, "2026-11-03T10:00:00Z"),
@@ -88,31 +90,81 @@ defmodule Omunculus.GuiProjectsTest do
     """)
   end
 
-  test "conversationsText picks the longest candidate that fits its budget" do
+  test "meta drops the works, the working, the activity, then shortens, to fit its budget" do
     run!("""
-    const texts = budget => Projects.conversationsText(15, 14, budget);
-    check(texts(40) === "15 conversations · 14 open works", "40 " + texts(40));
-    check(texts(26) === "15 conversations · 14 open", "26 " + texts(26));
-    check(texts(16) === "15 conversations", "16 " + texts(16));
-    check(texts(8) === "15 conv.", "8 " + texts(8));
-    check(texts(3) === "15", "3 " + texts(3));
-    for (const budget of [40, 26, 16, 8, 3]) check(texts(budget).length <= budget, "fits " + budget);
-    check(Projects.conversationsText(1, 1, 40) === "1 conversation · 1 open work", "one");
-    check(Projects.conversationsText(2, 0, 40) === "2 conversations", "no open works");
-    check(Projects.conversationsText(15, 0, 1) === "", "nothing fits");
+    const row = {conversations: 15, needsYou: 12, working: 1, unfinished: 14};
+    const meta = budget => Projects.meta(row, "Yesterday 22:43", budget, " · ");
+    check(meta(200) === "15 conversations · 12 need you · 1 working · 14 works not finished · Yesterday 22:43", "200 " + meta(200));
+    check(meta(60) === "15 conversations · 12 need you · 1 working · Yesterday 22:43", "60 " + meta(60));
+    check(meta(50) === "15 conversations · 12 need you · Yesterday 22:43", "50 " + meta(50));
+    check(meta(30) === "15 conversations · 12 need you", "30 " + meta(30));
+    check(meta(22) === "15 conv. · 12 need you", "22 " + meta(22));
+    check(meta(5) === "15 conv. · 12 need you", "the last candidate, to elide " + meta(5));
+    for (const budget of [200, 60, 50, 30, 22]) check(meta(budget).length <= budget, "fits " + budget);
+    const one = {conversations: 1, needsYou: 1, working: 0, unfinished: 1};
+    check(Projects.meta(one, "", 200, " · ") === "1 conversation · 1 needs you · 1 work not finished", "one " + Projects.meta(one, "", 200, " · "));
+    const quiet = {conversations: 2, needsYou: 0, working: 0, unfinished: 0};
+    check(Projects.meta(quiet, "Today 09:00", 200, " · ") === "2 conversations · Today 09:00", "nothing to count");
     """)
   end
 
-  test "elsewhere sums the waiting of every project but the open one" do
+  test "summary says whom a conversation is with and what waits on you, oldest first" do
+    run!("""
+    const human = {kind: "human", issuer: "local", subject: "me"};
+    const agent = {kind: "agent", agent: "seller"};
+    const request = (id, created_at, fields) => Object.assign({id, created_at, status: "pending", arbiter: human, options: {}, origins: {}}, fields);
+    const summary = Projects.summary({
+      prompts: [{kind: "message", body: "Hi!\\n  I want a website"}],
+      runs: [
+        {agent: "seller", depth: "1", status: "open", started_at: "2026-11-03T10:01:00Z"},
+        {agent: "sales", depth: "0", status: "done", started_at: "2026-11-03T10:00:00Z"},
+        {agent: "sales", depth: "0", status: "open", started_at: "2026-11-03T10:05:00Z"}
+      ],
+      works: [{state: "open"}],
+      requests: [
+        request("form", "2026-11-03T10:20:00Z", {reason: "Tell me:\\n1. pages?\\n2. colours?\\n3. deadline?"}),
+        request("one", "2026-11-03T10:30:00Z", {reason: "Which domain?"}),
+        request("pick", "2026-11-03T10:10:00Z", {reason: "Approve the preview?", options: {approve: [], adjust: []}}),
+        request("grant", "2026-11-03T10:40:00Z", {reason: "May I publish?", options: {grant_once: [{name: "grant", args: {kind: "tool", name: "publish"}}], deny: []}}),
+        request("theirs", "2026-11-03T09:00:00Z", {arbiter: agent, reason: "for an agent"}),
+        request("closed", "2026-11-03T09:00:00Z", {status: "closed", reason: "done"})
+      ]
+    });
+    check(summary.title === "Hi! I want a website" && summary.agent === "sales", "who " + JSON.stringify(summary));
+    check(summary.started && !summary.finished && summary.running === 2, "runs " + JSON.stringify(summary));
+    check(summary.waiting === 4 && summary.since === "2026-11-03T10:10:00Z", "waiting " + JSON.stringify(summary));
+    check(JSON.stringify(summary.asks) === JSON.stringify({questions: 4, decisions: 1, permissions: 1}), "asks " + JSON.stringify(summary.asks));
+    check(summary.question === "May I publish?", "newest " + summary.question);
+    check(Projects.state(summary) === "needs-you", "state " + Projects.state(summary));
+    check(Projects.waitsFor(summary.asks) === "A PERMISSION · A DECISION · 4 QUESTIONS", "waits " + Projects.waitsFor(summary.asks));
+    check(Projects.waitsFor({questions: 1, decisions: 2, permissions: 0}) === "2 DECISIONS · A QUESTION", "plural");
+    const empty = Projects.summary({prompts: [], runs: [], works: [], requests: []});
+    check(empty.agent === "" && empty.since === "" && empty.question === "" && Projects.state(empty) === "not-started", "empty " + JSON.stringify(empty));
+    """)
+  end
+
+  test "state: not started, needs you over working, done, idle, unread" do
+    run!("""
+    const s = fields => Object.assign({started: true, running: 0, waiting: 0, finished: false}, fields);
+    check(Projects.state(null) === "", "unread");
+    check(Projects.state(s({started: false, waiting: 1})) === "not-started", "not started");
+    check(Projects.state(s({waiting: 1, running: 2})) === "needs-you", "needs you");
+    check(Projects.state(s({running: 1, finished: true})) === "working", "working");
+    check(Projects.state(s({finished: true})) === "done", "done");
+    check(Projects.state(s({})) === "idle", "idle");
+    """)
+  end
+
+  test "elsewhere sums the conversations needing you of every project but the open one" do
     run!("""
     const rows = Projects.rows(input({
       projects: [place("agency"), place("dev"), place("down")],
-      conversations: {agency: [conversation("a", "")], dev: [conversation("d", "")], down: [conversation("x", "")]},
-      summaries: {a: {waiting: 2}, d: {waiting: 1}, x: {waiting: 5}},
+      conversations: {agency: [conversation("a", "")], dev: [conversation("d", ""), conversation("e", "")], down: [conversation("x", "")]},
+      summaries: {a: {started: true, waiting: 2}, d: {started: true, waiting: 1}, e: {started: true, waiting: 4}, x: {started: true, waiting: 5}},
       unreachable: new Set(["down"]),
       current: "agency"
     }));
-    check(Projects.elsewhere(rows) === 1, "elsewhere " + Projects.elsewhere(rows));
+    check(Projects.elsewhere(rows) === 2, "elsewhere " + Projects.elsewhere(rows));
     """)
   end
 end

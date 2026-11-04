@@ -73,11 +73,11 @@ two: PROJECTS and BOARD.
 ### 2. Projects
 
 Every project of the server's registry, under a rule of its state (NEEDS
-YOU, WORKING, IDLE): its id, OPEN beside the one the window is on, its
-conversations and open works, its last activity, and its state at the top
-right — WAITING FOR YOU, WORKING, IDLE, NOT REACHABLE or READING… — waiting
-for you first. Under the search line, chips keep those waiting for you or
-working. NEW PROJECT
+YOU, WORKING, IDLE), two lines each: its id, OPEN beside the one the window
+is on, and its state at the top right — NEEDS YOU, WORKING, IDLE, NOT
+REACHABLE or READING…; under it its conversations, how many need you and
+how many agents work in, its works not finished and its last activity.
+Under the search line, chips keep those needing you or working. NEW PROJECT
 registers another with the server: its id and the path of its config file.
 The masthead names the way to every page from here on; the project's name
 in it opens this page, and `▲ 2 ELSEWHERE` on its right, while requests wait

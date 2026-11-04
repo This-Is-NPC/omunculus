@@ -56,10 +56,18 @@ stream. An event re-summarizes only the conversation it is of and reads
 again only its project's works, once events pause for 250 ms; a new
 conversation reads its project's conversations again. A project whose
 socket does not answer is marked not reachable. The kit's `Projects.js`
-turns all of it into `projectRows`, one per project, sorted waiting for you
-first, then working, then the latest activity, then the id, and
-`elsewhere`, the requests waiting for you in the projects the window is not
-on.
+turns all of it into `projectRows`, one per project, sorted by the
+conversations needing you first, then those working, then the latest
+activity, then the id, and `elsewhere`, the conversations needing you in
+the projects the window is not on. A conversation's state comes from its
+summary (`Projects.state`): NOT STARTED, NEEDS YOU while a request waits on
+you, WORKING while its agents run, DONE, or IDLE; every count of
+conversations on the start, PROJECTS and CONVERSATIONS is of those states,
+so they agree. The summary (`Projects.summary`) also keeps whom the
+conversation is with (the agent of its first run at depth 0), what waits
+on you by kind (each item of a numbered question counted), since when, and
+what the newest request asks. The start follows the projects too, while it
+is on screen, for its count of what needs you.
 
 `switchProject` moves the window to another project: the conversation on
 screen closes (its agents go on), and the project's conversations, setup
@@ -390,23 +398,22 @@ The registry's level:
 
 - PROJECTS (`ProjectsView`, `ProjectsTable`), every project of the
   registry, under a rule of its state (NEEDS YOU, WORKING, IDLE, NOT
-  REACHABLE, READING): its id, `· OPEN` after the one the window is on, its
-  conversations and open works (not done or cancelled), its last activity
-  (the newest conversation begun or work changed, "Today 22:22") and its
-  state: WAITING FOR YOU and how many, WORKING and how many, IDLE, NOT
-  REACHABLE when its socket did not answer, or READING… until its
-  conversations are read. The search line (`/`) searches the ids; the chips
-  ALL, WAITING FOR YOU and WORKING, shown while a project is in either
-  state, keep those, on one line that scrolls sideways (`ChipStrip`). A
-  list the filters empty offers CLEAR FILTERS. Enter or a click opens the
-  project at its conversations; ↑ on the first row goes back to the search.
-  The conversations cell says as much as fits, never cut: "15 conversations
-  · 14 open works", "15 conversations · 14 open", "15 conversations", "15
-  conv.", then "15" (`Projects.conversationsText`). Under 700 px a row
-  stacks: the id, then its conversations and last activity, its state at
-  the top right; the last activity goes before the conversations would
-  shorten past "15 conversations". The view's `readout`, "3 PROJECTS",
-  counts the rows listed;
+  REACHABLE, READING), each row two lines at every width, with no header:
+  its id, `· OPEN` after the one the window is on, and its state at the top
+  right: NEEDS YOU, WORKING (behind a dot), IDLE, NOT REACHABLE when its
+  socket did not answer, or READING… until its conversations are read.
+  Under it, dim, as much as fits, never cut: "16 conversations · 13 need
+  you · 1 working · 15 works not finished · Today 22:22", the works not
+  done or cancelled and the last activity (the newest conversation begun or
+  work changed); the works go first, then the working, then the last
+  activity, then the conversations shorten to "16 conv." (`Projects.meta`).
+  The search line (`/`) searches the ids; the chips ALL, NEEDS YOU and
+  WORKING, shown while a project is in either state, keep those, on one
+  line that scrolls sideways (`ChipStrip`); NEEDS YOU reads in the warning
+  tone while it counts any. A list the filters empty offers CLEAR FILTERS.
+  Enter or a click opens the project at its conversations; ↑ on the first
+  row goes back to the search. The view's `readout`, "3 PROJECTS", counts
+  the rows listed;
 - BOARD, the works of every project.
 
 The project's level:
