@@ -82,10 +82,18 @@ SurfaceFrame {
       : node && typeof node.finishedIn === "number" ? { text: "in " + Progress.span(node.finishedIn) }
       : null,
     node ? { text: node.calls === 1 ? "1 step" : node.calls + " steps", short: node.calls + " steps" } : null,
-    node && node.failed > 0 ? { text: node.failed + " failed" + (firstFailed !== "" ? ": " + Phrases.failure(firstFailed) : ""), short: node.failed + " failed", keep: true } : null
+    node && node.failed > 0 ? failures : null
   ].filter(part => part !== null), budget - 15).filter(text => text !== "")
-  // The tool of its first failed call; "" when none is known.
-  readonly property string firstFailed: (Omunculus.callsOf[work] || {}).firstFailed || ""
+  readonly property var tally: Omunculus.callsOf[work] || {}
+  // The failed calls: said as retried, in dim, when each of their tools
+  // succeeded later; else what was attempted and why the first one failed.
+  readonly property var failures: {
+    const failed = node.failed
+    if ((tally.retried || 0) >= failed)
+      return { text: failed + " retried" }
+    const attempt = failed + " failed" + (tally.firstFailed ? ": " + Phrases.failure(tally.firstFailed) : "")
+    return { text: attempt + (tally.firstError ? " (" + tally.firstError + ")" : ""), short: attempt, keep: true }
+  }
   readonly property var stepper: node && staged && node.steps.length > 0 ? Progress.stepper(node.steps, node.round, budget) : null
 
   readonly property bool showsTranscript: expanded && tab === "transcript"
