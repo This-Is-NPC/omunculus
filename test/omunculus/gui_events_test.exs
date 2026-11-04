@@ -39,6 +39,12 @@ defmodule Omunculus.GuiEventsTest do
     check(named({request_id: "r", body: "yes, go"}) === "answered seller: yes, go", "asker", named({request_id: "r", body: "yes, go"}));
     const leaked = named({request_id: "r", body: "The client answered (request bfd1bf41dcc7571d82223c6433001ab2) the questions, id 0123456789abcdef9 kept"});
     check(leaked === "answered seller: The client answered the questions, id kept", "ids", leaked);
+    // One grant, three replies (one per hop) as stored: the leaf is the answer, the relays are behind the scenes.
+    const hop = (body, asker) => Events.what("reply", body, "you", {}, "r", {r: asker});
+    check(hop({request_id: "r", body: "grant", parts: {approval: {body: "grant", parts: {promote: {body: "grant", option: "grant"}}}}}, "sales") === "chose grant for sales", "relay", "");
+    check(hop({request_id: "r", body: "grant", option: "grant"}, "clerk") === "chose grant for clerk", "leaf", "");
+    check(Events.minor("reply", {body: "grant", parts: {promote: {body: "grant", option: "grant"}}}) && !Events.minor("reply", {body: "grant", option: "grant"}) && !Events.minor("reply", {body: "yes"}), "relayed", "");
+    check(Events.minor("tool", {name: "grant", args: {kind: "tool", name: "promote"}, via: "reply", ok: true}), "grant step", "");
     says("tool", {name: "ls", args: {path: "quotes"}, ok: false, output: "no such directory: quotes"}, "seller", "found no quotes yet");
     check(Events.minor("tool", {name: "ls", args: {path: "quotes"}, ok: false, output: "no such directory: quotes"}) && !Events.minor("tool", {name: "write", args: {path: "q"}, ok: false, output: "disk full"}), "miss is minor", "");
     """)
@@ -60,7 +66,7 @@ defmodule Omunculus.GuiEventsTest do
     says("tool", {name: "bash", args: {command: "ls -la quotes"}, ok: false, output: "total 4\\nls: cannot access quotes: No such file\\n"}, "design-lead", "could not run a command on quotes/: ls: cannot access quotes: No such file");
     says("tool", {name: "bash", args: {command: "cat quotes"}, ok: false, output: "cat: quotes: No such file\\n\\n(exit 1)"}, "design-lead", "could not run a command on quotes: cat: quotes: No such file");
     says("tool", {name: "bash", args: {command: "false"}, ok: false, output: "\\n(exit 1)"}, "design-lead", "could not run a command: (exit 1)");
-    says("tool", {name: "deploy_preview", args: {}, ok: true, output: ""}, "design-lead", "made a call");
+    says("tool", {name: "deploy_preview", args: {}, ok: true, output: ""}, "design-lead", "published a preview");
     for (const name of ["comment", "continue", "delegate", "work", "escalate", "ask", "next_stage", "reply"])
       check(Events.minor("tool", {name, args: {}, ok: true}) && !Events.minor("tool", {name, args: {}, ok: false, output: "refused"}), "echoed " + name, "");
     check(!Events.minor("tool", {name: "bash", args: {command: "ls"}, ok: true}), "bash", "");

@@ -106,6 +106,14 @@ defmodule Omunculus.GuiCallsTest do
     same(Phrases.step("bash", {command: "cat design/README.md; ls ./"}), "ran a command on design/README.md, the project");
     same(Phrases.step("bash", {command: "cd /home/x/proj/workspace && cat design/README.md"}), "looked at design/README.md");
     same(Phrases.step("bash", {command: "cd /home/x/proj/workspace; ls design"}), "looked in design/");
+    const root = "/home/howl/p/dev/agency/workspace/clients/922610b3576cd2757ce772c32381c4cc";
+    same(Phrases.step("bash", {command: "cat " + root + "/dist/menu.html; ls " + root}), "ran a command on dist/menu.html, the project");
+    same(Phrases.step("bash", {command: "cat /home/x/proj/workspace/design/a.md"}), "looked at design/a.md");
+    same(Phrases.step("bash", {command: 'curl -s -H "Host: doce-ana.localhost" -H "Content-Type: text/html" http://127.0.0.1:8080/ localhost:8080/x'}), "ran a command");
+    same(Phrases.act("promote"), "publish the site to production");
+    same(Phrases.act("deploy_preview"), "publish a preview of the site");
+    same(Phrases.act("bash"), "run a command");
+    same(Phrases.act("mystery"), "");
     same(Phrases.step("done", {}), "finished its part");
     same(Phrases.stepFailure("bash", {command: "npx build"}), "could not run a command");
     same(Phrases.stepFailure("bash", {command: "rm quotes/a.md"}), "could not run a command on quotes/a.md");

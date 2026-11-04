@@ -403,14 +403,15 @@ done earlier". The done and cancelled works of each stage, or of a work
 without a workflow, fold into one rule, "✓ 2 sub-works done · 18 min" (and
 "· 1 cancelled"), which a click, Enter or → unfolds into their rows and ←
 folds again; it stays folded while the conversation waits on you, unless
-the question climbed from there.
+the question climbed from there. A work opened under another in the outline
+gets the same fold for its done sub-works after its open ones.
 
 A row (`ProgressNode` in full) is a table row: the work's title with its
 state at the top right (a work that waits on works at work reads "designer
 working", in the working tone), a meta line of its agent, its stages (`Stepper`;
 under 700 px a track filled to the stage it is at, and that stage) and its
 branch's works below in words ("1 sub-work done", "2 sub-works, 1
-working"), time, the work's own steps (tool calls; hook runs and the
+working, 1 done"), time, the work's own steps (tool calls; hook runs and the
 sub-works' steps are not counted) and cost
 (tokens as "40k read · 2k written", as the cost page words them), and a
 badge per request between it and
@@ -548,13 +549,15 @@ A conversation's level, in place of the project's once one is opened:
   A call reads in plain words ("read design/rounds.md", "looked in design/",
   "looked at design/README.md", "ran a command on quotes/", "could not read
   design/rounds.md: permission denied"), never by its tool name; a command
-  is worded by the files it touches and its raw line is in the row's card; a
+  is worded by the files it touches, named relative to the workspace (never a
+  header or a URL), and its raw line is in the row's card; a
   failed command gives the last line of its output as the reason; a failure
   a later call of the same tool settled is dim with RETRIED, not red; a lookup that found nothing is dim ("found no
   quotes yet"), not FAILED. An answer names whom it answers ("answered
-  seller: …") and leaves out the request ids the agent echoed. Plumbing (a run's
-  start and end, hooks, replies without text, and a call whose result has a
-  row of its own, such as a note or a question) is dimmer and hidden until BEHIND THE SCENES is on. A search line, the chips NEEDS YOU,
+  seller: …", "chose grant for clerk") and leaves out the request ids the agent
+  echoed. Plumbing (a run's start and end, hooks, replies without text, an
+  answer passed down a level on its way to the one asked, and a call whose
+  result has a row of its own, such as a note, a question or a grant) is dimmer and hidden until BEHIND THE SCENES is on. A search line, the chips NEEDS YOU,
   FAILED and BEHIND THE SCENES and an agent picker filter it; the
   count of rows and a "more" menu with COPY, the event picked or else the
   rows shown, sit at the filters' right, or under them when they do not fit

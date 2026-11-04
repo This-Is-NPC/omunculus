@@ -454,7 +454,7 @@ function opened(node, path) {
 }
 
 // The works a node handed down, in words: "1 sub-work done", "2 sub-works,
-// 1 working", "3 sub-works, 1 done"; "" when it has none. Cancelled ones
+// 1 working", "3 sub-works, 1 done", "4 sub-works, 1 working, 3 done"; "" when it has none. Cancelled ones
 // count as finished.
 function below(kids) {
   if (kids.length === 0) return "";
@@ -462,7 +462,7 @@ function below(kids) {
   const working = kids.filter(kid => kid.state === "working").length;
   const finished = kids.filter(kid => kid.state === "done" || kid.state === "cancelled").length;
   if (finished === kids.length) return works + " done";
-  if (working > 0) return works + ", " + working + " working";
+  if (working > 0) return works + ", " + working + " working" + (finished > 0 ? ", " + finished + " done" : "");
   return finished > 0 ? works + ", " + finished + " done" : works;
 }
 
