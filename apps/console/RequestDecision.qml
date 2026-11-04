@@ -224,7 +224,7 @@ SurfaceFrame {
         dim: card.dim
       }
       Label {
-        visible: !card.stacked && text !== ""
+        visible: !card.stacked && card.about !== ""
         Layout.fillWidth: true
         Layout.minimumWidth: 0
         Layout.alignment: Qt.AlignVCenter
