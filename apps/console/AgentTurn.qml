@@ -1,13 +1,15 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "kit/client/Phrases.js" as Phrases
 import "kit/ui"
 
 // AgentTurn is one run of an agent in the conversation, said like a line of
 // chat: on the left, under the agent's portrait and name in its colour, its
 // words drawn as they stream, and the files it attached.
-// Below them, one dim line says what it did — the calls it made,
-// which failed, the work it closed or the access it granted; clicking it lists
-// the calls in place, with why a failed one failed. Until the agent says or
+// Below them, one dim line says what it did in plain phrases — "Read 6
+// files", how many attempts did not work, the work it closed or the access it
+// granted; clicking it lists the calls in place, with why a failed one
+// failed. Until the agent says or
 // does anything, that line is the loading trace and how long it has worked.
 // A turn that continues the same agent's drops its name and time. Hovering
 // the words shows the way to copy them, in a gutter they never take.
@@ -30,7 +32,8 @@ Item {
   readonly property var calls: lines.filter(line => !line.outcome)
   readonly property var outcomes: lines.filter(line => line.outcome)
   readonly property var attached: JSON.parse(files)
-  readonly property var failed: calls.filter(call => !call.ok)
+  readonly property var summary: Phrases.summarize(calls)
+  readonly property string did: [summary.text].concat(outcomes.map(outcome => outcome.text)).filter(part => part !== "").join("  ·  ")
   readonly property string said: text + (partial !== "" ? (text !== "" ? "\n\n" : "") + partial : "")
   readonly property color tone: Omunculus.toneOf(who)
   // A run that said and did nothing leaves no trace in the conversation.
@@ -39,7 +42,8 @@ Item {
   readonly property int worked: Math.max(0, Math.round(now / 1000 - at))
   // Room beside the words kept for the copy button.
   readonly property real gutter: copy.implicitWidth + 12
-  readonly property real widest: turn.width < 520 ? turn.width - gutter : Math.min(turn.width * 0.78, turn.width - gutter)
+  // About 70 characters at most per line.
+  readonly property real widest: Math.min(620, turn.width < 520 ? turn.width - gutter : Math.min(turn.width * 0.78, turn.width - gutter))
   readonly property real inset: 10
 
   visible: !empty
@@ -70,8 +74,8 @@ Item {
       visible: !turn.continued
       spacing: 8
       Portrait { width: 20; height: 20; anchors.verticalCenter: parent.verticalCenter; agent: turn.who; source: Omunculus.imageOf(turn.who); tone: Omunculus.toneOf(turn.who) }
-      Label { text: turn.who.toUpperCase(); color: turn.tone; font.pixelSize: 10; font.letterSpacing: 2.5 }
-      Label { text: turn.stamp; color: Qt.alpha(turn.tone, 0.7); font.pixelSize: 9; font.letterSpacing: 1 }
+      Label { text: turn.who.toUpperCase(); color: turn.tone; font.pixelSize: 11; font.letterSpacing: 2 }
+      Label { text: turn.stamp; color: Theme.dim; font.pixelSize: 11 }
     }
 
     Rectangle {
@@ -121,12 +125,12 @@ Item {
         running: parent.visible
         tone: turn.tone
       }
-      Label { anchors.verticalCenter: parent.verticalCenter; text: "WORKING " + turn.worked + "S"; color: turn.tone; font.pixelSize: 9; font.letterSpacing: 2 }
+      Label { anchors.verticalCenter: parent.verticalCenter; text: "Working " + turn.worked + "s"; color: turn.tone; font.pixelSize: 11; font.letterSpacing: 1 }
     }
 
     // What it did, on one dim line; the calls open below it.
     Item {
-      visible: turn.lines.length > 0
+      visible: turn.did !== "" || turn.summary.failed
       width: Math.min(turn.widest, did.implicitWidth + 18)
       height: did.implicitHeight + 4
       Row {
@@ -136,11 +140,18 @@ Item {
         Label {
           anchors.verticalCenter: parent.verticalCenter
           width: Math.min(implicitWidth, turn.widest - 24)
-          text: turn.calls.map(call => call.name + (call.ok ? "" : " ✗")).concat(turn.outcomes.map(outcome => outcome.text)).join("  ·  ")
-            + (turn.streaming ? "  ·  working " + turn.worked + "s" : "")
+          text: turn.did + (turn.streaming ? (turn.did !== "" ? "  ·  " : "") + "working " + turn.worked + "s" : "")
           color: pointer.containsMouse ? Theme.foreground : Theme.dim
           font.pixelSize: 11
           elide: Text.ElideRight
+        }
+        Icon { visible: turn.summary.failed; anchors.verticalCenter: parent.verticalCenter; name: "close"; size: 10; color: Theme.error }
+        Label {
+          visible: turn.summary.failed
+          anchors.verticalCenter: parent.verticalCenter
+          text: turn.summary.failedText
+          color: Theme.error
+          font.pixelSize: 11
         }
       }
       MouseArea {
@@ -168,7 +179,7 @@ Item {
           Row {
             spacing: 8
             Icon { anchors.verticalCenter: parent.verticalCenter; name: call.modelData.ok ? "check" : "close"; size: 10; color: call.modelData.ok ? Theme.success : Theme.error }
-            Label { text: call.modelData.name; color: Theme.foreground; font.pixelSize: 11 }
+            Label { text: Phrases.phrase(call.modelData.name); color: Theme.foreground; font.pixelSize: 11 }
           }
           Label {
             visible: call.modelData.text !== ""
