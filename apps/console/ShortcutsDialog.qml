@@ -6,18 +6,20 @@ import "kit/ui"
 
 // ShortcutsDialog lists every key the window answers to, by where it works,
 // each key beside what it does, or above it in a dialog under 480 px wide;
-// ? or F1 opens it and the arrows or PgUp/PgDn scroll it.
+// ? or F1 opens it and the arrows or PgUp/PgDn scroll it. It stays short of
+// the window's edges as ModalDialog keeps it.
 ModalDialog {
   id: dialog
 
   maxWidth: 620
-  height: Math.min(parent.height - 48, panel.implicitHeight)
+  height: Math.min(parent.height - Theme.size.gutter * 2, panel.implicitHeight)
   onOpened: scroll.forceActiveFocus()
 
   // [group, [[keys, what they do]…]]; keys are written as they are pressed.
   // Those with a key of the table are read from it; the others are the keys
   // of the controls themselves. Nothing that sends, answers, grants, denies,
-  // escalates, reverts, deletes or cancels has a key of its own.
+  // escalates, reverts, deletes or cancels has a key of its own; a quick chip
+  // over the composer that decides is chosen by its chord.
   readonly property var groups: [
     ["everywhere", [
       ["Tab · Shift+Tab", "move between controls"],
@@ -80,7 +82,6 @@ ModalDialog {
   contentItem: DialogPanel {
     id: panel
     dialogOpen: dialog.visible
-    implicitHeight: list.implicitHeight + 56
     index: "?"
     title: "keys"
     active: true
@@ -88,19 +89,21 @@ ModalDialog {
     ScrollPage {
       id: scroll
       anchors.fill: parent
+      // The panel is as tall as its list, up to the dialog's height.
+      implicitHeight: list.implicitHeight
       contentHeight: list.implicitHeight
 
       ColumnLayout {
         id: list
         width: scroll.width
-        spacing: 14
+        spacing: Theme.space.block
         Repeater {
           model: dialog.groups
           delegate: ColumnLayout {
             id: group
             required property var modelData
             Layout.fillWidth: true
-            spacing: 6
+            spacing: Theme.space.tight
             Kicker { Layout.fillWidth: true; text: group.modelData[0] }
             Repeater {
               model: group.modelData[1]
@@ -109,11 +112,14 @@ ModalDialog {
                 required property var modelData
                 Layout.fillWidth: true
                 columns: list.width < 480 ? 1 : 2
-                columnSpacing: 14
-                rowSpacing: 2
+                columnSpacing: Theme.space.block
+                rowSpacing: Theme.space.row
+                // A long chord wraps within its column rather than running over what it does.
                 Label {
-                  Layout.preferredWidth: key.columns === 1 ? -1 : 200
+                  Layout.preferredWidth: key.columns === 1 ? -1 : 170
+                  Layout.maximumWidth: key.columns === 1 ? -1 : 170
                   Layout.fillWidth: key.columns === 1
+                  Layout.alignment: Qt.AlignTop
                   text: key.modelData[0]
                   color: Theme.primary
                   font.pixelSize: 11
