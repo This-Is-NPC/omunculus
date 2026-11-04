@@ -576,7 +576,7 @@ Item {
         }
 
         Rectangle {
-          width: Math.min(parent.width, line.implicitWidth + 2 * Theme.size.bubbleInset)
+          width: Math.min(parent.width, 2 * Theme.size.gutter + Theme.space.gap + doing.implicitWidth + 2 * Theme.size.bubbleInset)
           height: line.implicitHeight + Theme.space.inset
           color: Qt.tint(Theme.background, Qt.alpha(row.tone, 0.1))
           RowLayout {
@@ -602,9 +602,9 @@ Item {
               }
             }
             Label {
+              id: doing
               Layout.fillWidth: true
               Layout.minimumWidth: 0
-              Layout.maximumWidth: implicitWidth
               text: row.live ? row.live.doing : ""
               color: Theme.dim
               font.pixelSize: Theme.type.body.size
