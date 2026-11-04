@@ -163,25 +163,31 @@ lower ones of a question passed up, is not shown on its own.
 ## The progress
 
 A conversation's pages share its head (`ProgressStrip`), over the tabs. First
-a 40 px header strip with its meta — the agent it is with, the stage of the
-work in focus, how long it has run, how many agents ran and how many model
-calls were made: "SALES · STAGE 2 OF 6 DESIGN · 18 MIN · 4 AGENTS · 212
-CALLS", the counts and then the agent giving way as the width shrinks, the
-stage shortened to "STAGE 2/6" — and its action at the right: ANSWER, in the
-warning tone and with the count when more than one waits, while a question
-waits on you, which puts the keyboard in the newest question's card on the
-chat; else PROGRESS, once there is a work. Under it, unframed, two lines: the
-stages of the work in focus, the newest open root work (`Stepper`: "✓
-qualify › ● design · round 2 › ○ assess …", shorter forms as the width
-shrinks, down to one dot per stage and the current name), with the chevron
-that opens the full view; then who works on it, from its agent down to the
-one at work, what that one does and its clock: "seller › design-lead ›
-designer: Writing files · 4:12". While a question waits on you that line is
-"sales asks you · 1 question"; a finished work says how long it took, and a
-team working with no event for ten minutes says so. The two lines are hidden
+a 40 px header strip with its meta — the agent it is with, its dot and name
+in its tone, the stage of the work in focus and how long it has run, in
+words: "● SALES · STAGE 2 OF 6 DESIGN · 18 MINUTES SO FAR", "TOOK 3 MINUTES"
+once done; before any work, "● SALES · STARTING" while its first run goes,
+NOT STARTED before any, the stage shortened to "STAGE 2/6" and then the agent
+giving way as the width shrinks. From 700 px of its own width the counts
+follow: "· 2 AGENTS · 212 CALLS", shown when more than one agent ran and
+once a call was made; each opens what it counts, the team and the cost, and
+the agents' tip names them. At its right the chevron, which opens the full
+view, and ANSWER, in the warning tone and with the count when more than one
+waits, while a question waits on you, which puts the keyboard in the newest
+question's card on the chat. Under it, unframed, two lines: the stages of
+the work in focus, the newest open root work (`Stepper`: "✓ qualify › ●
+design · round 2 › ○ assess …", shorter forms as the width shrinks, down to
+one dot per stage and the current name), or its title when it has no stages
+and the masthead does not already say it; then who works on it, from its
+agent down to the one at work, what that one does and its clock: "seller ›
+design-lead › designer: Writing files · 4:12". While a question waits on you
+that line counts what you are asked as its card does: "sales asks you 7
+questions" for a numbered form, "to decide", "for a permission"
+(`Progress.asking`); a finished work says how long it took, and a team
+working with no event for ten minutes says so. The two lines are hidden
 while no work exists and no agent runs.
 
-The chevron, PROGRESS and Alt+P open the full view, on the chat
+The chevron and Alt+P open the full view, on the chat
 (`ProgressSheet`, holding a `ProgressTree`): what waits on you with ANSWER,
 then each root work, newest open first, with its title, start and length,
 its stages one per row with their agent and time, and under each stage the
@@ -519,8 +525,9 @@ another one (`Omunculus.switchProject`).
 
 The masthead names the way to the page in crumbs: PROJECTS or BOARD on the
 registry's level; the project, then the page, on a project's; the project and
-the conversation open (the title of its first work, else what was first said
-in it), and on a thread its work's title, in a conversation, whose tabs name
+the conversation open (the title of its first work, else "conversation with
+sales", never what was first said, which the chat shows), and on a thread
+its work's title, in a conversation, whose tabs name
 its page. At the start it names the
 project, or nothing on the registry alone, and the slash after OMUNCULUS
 shows only before a crumb; under 560 px OMUNCULUS is left out, leaving the
@@ -603,8 +610,9 @@ logs each text drawn out of its box, the window or a clipping item as a
   project).
 - In a conversation, from any of its pages: ANSWER (Alt+R) in the header
   strip, which brings the newest question into view on the chat and puts the
-  keyboard in its card; PROGRESS and the chevron (Alt+P), which open or close
-  the progress on the chat and put the keyboard in it; the `1 NOTE` notice
+  keyboard in its card; the strip's chevron (Alt+P), which opens or closes
+  the progress on the chat and puts the keyboard in it; its counts, which
+  open TEAM and COST; the `1 NOTE` notice
   (Alt+M on the chat); the quick chips (Alt+1 … Alt+9) on the chat; and NEW
   CONVERSATION (Ctrl+N) in `⋯`. Elsewhere than on the chat a request is
   answered in its decision (`RequestDialog`, the card over the page).

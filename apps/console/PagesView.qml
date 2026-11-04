@@ -16,8 +16,9 @@ import "kit/ui"
 // conversation is with is chosen on a screen of the conversations. Each page
 // of these two levels gives the commands of its bar and the count of its
 // readout. A conversation's, once one is open, in place of the project's,
-// under its head: the header strip, with the conversation's meta, ANSWER
-// while something waits on you and its progress on two lines, and its tabs.
+// under its head: the header strip, with the conversation's meta, whose
+// counts open the team and the cost, ANSWER while something waits on you
+// and its progress on two lines, and its tabs.
 // The chat, yours with the root agent, where each question for you is a
 // card, the quick chips of the newest decision over the composer, and,
 // opened, the progress beside the thread (a card over it on a medium window,
@@ -63,9 +64,17 @@ Item {
   readonly property string title: page === "new" ? "new conversation" : page
   // What a page is called on its tab and the rail: the map is the team.
   function nameOf(name) { return name === "map" ? "team" : name }
+  // What the masthead calls the conversation: the title of its first work
+  // once it has one; before, whom it is with, never what was first said,
+  // which its chat already shows.
+  readonly property string named: {
+    const first = Omunculus.works.find(work => !work.parent_id)
+    const who = Omunculus.agent || Omunculus.lastAgent
+    return first && first.title ? first.title : open && who !== "" ? "conversation with " + who : "new conversation"
+  }
   // The way to the page, for the masthead, as {text, run}: on the registry
   // the page; on a project its id, which opens the projects, then the page;
-  // in a conversation, then its subject, which opens its chat, and on a
+  // in a conversation, then its name, which opens its chat, and on a
   // thread its work's title. A conversation's tabs name its page.
   readonly property var crumbs: {
     if (level === "registry")
@@ -73,7 +82,7 @@ Item {
     const place = [{ text: Omunculus.project, run: () => view.go("projects") }]
     if (level === "project")
       return place.concat([{ text: title }])
-    const subject = { text: Omunculus.subject || "new conversation" }
+    const subject = { text: named }
     if (page !== "chat")
       subject.run = () => view.go("chat")
     return place.concat([subject], page === "thread" ? [{ text: Omunculus.titleOf(threadWork) }] : [])
@@ -553,9 +562,12 @@ Item {
       lastEvent: Omunculus.lastEventAt
       waiting: Omunculus.waiting.length
       calls: Omunculus.usage.all.calls
+      heading: view.named
       expanded: view.progressShown && view.page === "chat"
       onToggle: view.toggleProgress(false)
       onAnswer: view.answer()
+      onOpenTeam: view.go("map")
+      onOpenCost: view.go("cost")
     }
 
     Flow {
