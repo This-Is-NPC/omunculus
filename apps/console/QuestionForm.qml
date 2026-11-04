@@ -6,15 +6,16 @@ import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
 // QuestionForm answers a numbered list of questions item by item. Each item
-// is its number, its question wrapped in sentence case, a full-width box that
-// grows with its text, and under it the toggle "I DON'T KNOW YET", which
-// fills the box and, off, restores what was typed. Enter moves to the next
-// box, Enter in the last and Ctrl+Enter in any send; a box taking the
-// keyboard scrolls into view in the view around the form. After the last
-// item, the card's actions: SEND, which joins the answers into one text
-// reply, and "I can't answer this". The closing paragraph of the message, if
-// any, shows after the last box and is not sent. How many are answered is
-// `answered`, for the card's heading. What was typed stays after a failure.
+// is its number, its question wrapped in sentence case at a readable measure,
+// a box as wide as the card's text that grows with its text, and under it the
+// toggle "I DON'T KNOW YET", which fills the box and, off, restores what was
+// typed. Enter moves to the next box, Enter in the last and Ctrl+Enter in any
+// send; a box taking the keyboard scrolls into view in the view around the
+// form. After the last item, the card's actions: SEND, which joins the
+// answers into one text reply, and "I can't answer this". The closing
+// paragraph of the message, if any, shows after the last box and is not
+// sent. How many are answered is `answered`, for the card's heading. What was
+// typed stays after a failure.
 ColumnLayout {
   id: form
 
@@ -122,7 +123,6 @@ ColumnLayout {
           Qt.callLater(row.focusBox)
       }
       Layout.fillWidth: true
-      Layout.maximumWidth: 620
       spacing: Theme.space.tight
 
       Label {
@@ -141,6 +141,7 @@ ColumnLayout {
         Label {
           Layout.fillWidth: true
           Layout.preferredWidth: 0
+          Layout.maximumWidth: 620
           text: row.modelData.text
           color: Theme.foreground
           font.pixelSize: Theme.type.body.size

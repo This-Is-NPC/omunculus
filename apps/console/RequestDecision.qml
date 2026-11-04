@@ -407,7 +407,6 @@ SurfaceFrame {
     // to a choice or, escalating, why it goes up.
     ColumnLayout {
       Layout.fillWidth: true
-      Layout.maximumWidth: 620
       visible: card.open && !formLoader.active
       spacing: Theme.space.tight
       Caption {
