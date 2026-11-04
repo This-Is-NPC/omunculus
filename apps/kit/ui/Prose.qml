@@ -25,6 +25,9 @@ Label {
 
   text: parsed.text
   textFormat: plain ? Text.PlainText : Text.MarkdownText
+  // The links the markdown makes itself, an e-mail address among them, take
+  // the accent like the web addresses linked here.
+  linkColor: Theme.primary
   activeFocusOnTab: links.length > 0
   onLinksChanged: chosen = 0
   onLinkActivated: link => open(link)
