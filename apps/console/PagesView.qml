@@ -38,7 +38,7 @@ Item {
   // The pages of the level on screen, in their order: the project's, or the
   // conversation's open.
   readonly property var inConversation: ["chat", "map", "log", "cost"]
-  readonly property var pages: inConversation.includes(page) ? inConversation : ["conversations", "board"]
+  readonly property var pages: inConversation.includes(page) ? (open ? inConversation : ["chat"]) : ["conversations", "board"]
   // The one on screen: a page, or "new", whom a new conversation is with,
   // a screen of the conversations.
   property string page: "conversations"
@@ -47,7 +47,7 @@ Item {
   // What the masthead names: the board, or the project, then the
   // conversation open and its page, or the page; the map is the team.
   readonly property string heading: page === "board" ? page
-    : Omunculus.project + "  /  " + (inConversation.includes(page) ? Omunculus.subject + "  /  " + (page === "map" ? "team" : page) : title)
+    : Omunculus.project + "  /  " + (inConversation.includes(page) ? (Omunculus.subject || "new conversation") + "  /  " + (page === "map" ? "team" : page) : title)
   // Whether the chat asks whom an empty conversation is with.
   readonly property bool asking: page === "chat" && Omunculus.whomAsked
   // Whether the page takes the digits alone, as the pickers of whom a
@@ -86,10 +86,11 @@ Item {
   }
 
   // Back to where the window was before its last move, or to the start. A
-  // conversation that has said nothing is left for the picker it was made on;
-  // one that has is not returned to it.
+  // conversation that has said nothing, or is not made yet, is left for the
+  // picker it began on; one that has is not returned to it. Leaving makes
+  // nothing.
   function back() {
-    const fresh = open && Omunculus.thread("").count === 0
+    const fresh = Omunculus.drafting || (open && Omunculus.thread("").count === 0)
     if (!fresh)
       while (history.length > 0 && history[history.length - 1].page === "new")
         history = history.slice(0, -1)
@@ -427,9 +428,11 @@ Item {
       id: picker
       anchors.fill: parent
       focus: parent.shown
+      // The conversation is made by its first message, not by the pick.
       onPicked: name => {
         view.remember()
-        Omunculus.createConversation(name, () => view.page = "chat")
+        Omunculus.agent = name
+        view.page = "chat"
       }
       onBack: view.back()
     }

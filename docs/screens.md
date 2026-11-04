@@ -68,7 +68,7 @@ on it. The conversation keeps the agent its first message names.
 | Keys | What they do |
 | --- | --- |
 | ← · → · ↑ · ↓ | choose whom it is with |
-| 1 … 9 · Enter | start it with them |
+| 1 … 9 · Enter | choose them; the conversation is made by the first message, not by the choice |
 
 ### 3. Conversations
 

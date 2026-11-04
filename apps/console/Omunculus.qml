@@ -76,6 +76,9 @@ Singleton {
   // Every request and every note to you also shows in the main thread, where
   // it was made, keyed by its request or inbox id.
   property var threads: ({})
+  // Whether the first message will make the conversation: it is with an agent
+  // picked and none exists on the server yet.
+  readonly property bool drafting: conversationId === "" && agent !== ""
   // Whether the conversation on screen is empty and several agents could take
   // it, so the first message must say which. With one, the server names it.
   readonly property bool whomAsked: loaded && agent === "" && talkable.length > 1 && thread("").count === 0
@@ -348,17 +351,6 @@ Singleton {
     loadCapabilities()
   }
 
-  // A new conversation with the agent `name`, open once the server made it;
-  // `opened` follows.
-  function createConversation(name, opened) {
-    client.call("POST", base + "/conversations", {}, true, data => {
-      loadConversations()
-      open(data.id)
-      agent = name
-      opened()
-    })
-  }
-
   // The file of an agent's image, of the window's project or of another one
   // on the board, as a url, or "" while it has none or it is being fetched.
   function imageOf(name, place) {
@@ -386,7 +378,8 @@ Singleton {
     }
   }
 
-  function open(id) {
+  // Leaves the conversation on screen for `id`, or for none, with nothing of it.
+  function clear(id) {
     conversationId = id
     agent = ""
     loaded = false
@@ -413,6 +406,10 @@ Singleton {
     inbox = []
     eventLog.clear()
     conversationStream.stop()
+  }
+
+  function open(id) {
+    clear(id)
     // The history comes in one read, before the stream resumes after it.
     client.call("GET", base + "/conversations/" + id + "/events", null, false, data => {
       if (id !== conversationId)
@@ -432,10 +429,7 @@ Singleton {
 
   // Closes the conversation on screen; its agents go on without the window.
   function close() {
-    conversationId = ""
-    loaded = false
-    conversationStream.stop()
-    threads = {}
+    clear("")
     loadConversations()
   }
 
@@ -464,17 +458,35 @@ Singleton {
   signal acted()
 
   // A message to the root agent, or, with a work, to that work's agent, with
-  // the files at the paths `files` lists. `done` follows once the server took
-  // it, `failed` if it did not.
+  // the files at the paths `files` lists. A conversation not yet made, with
+  // an agent picked, is made by its first message. `done` follows once the
+  // server took it, `failed` if it did not.
   function send(text, work, files, done, failed) {
     const value = text.trim()
-    if (value === "" || conversationId === "") {
-      if (value !== "")
-        client.tell("could not send: no conversation is open", true)
+    const refuse = reason => {
+      client.tell("could not send: " + reason, true)
+      if (failed)
+        failed()
+    }
+    if (value === "") {
       if (failed)
         failed()
       return
     }
+    if (conversationId !== "")
+      return deliver(value, work, files, done, refuse)
+    if (agent === "")
+      return refuse("no conversation is open")
+    const name = agent
+    client.call("POST", base + "/conversations", {}, true, data => {
+      loadConversations()
+      open(data.id)
+      agent = name
+      deliver(value, work, files, done, refuse)
+    }, refuse)
+  }
+
+  function deliver(value, work, files, done, refuse) {
     acted()
     const body = { message: value }
     if (work)
@@ -486,11 +498,7 @@ Singleton {
     http.post(socket, base + "/conversations/" + conversationId + "/messages", body, files || [], () => {
       if (done)
         done()
-    }, reason => {
-      client.tell("could not send: " + reason, true)
-      if (failed)
-        failed()
-    })
+    }, refuse)
   }
 
   // Says something on the status line.

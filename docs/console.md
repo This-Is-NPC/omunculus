@@ -40,8 +40,12 @@ imports only from within the folder it runs.
 A new conversation starts, on a screen of CONVERSATIONS, by choosing whom it
 is with: a card for each agent of depth 0 not only in workflows, with its
 portrait (fetched by `apps/kit/client`'s `AgentImages`, which the studio
-shares). The conversation keeps the agent its first message named, and
-every message names it again.
+shares). Choosing a card makes nothing on the server: the chat opens empty
+with that agent, and the first message makes the conversation and then
+sends. If making it fails, the words stay in the box and the status line
+says so; BACK after a choice returns to the cards having made nothing. The
+conversation keeps the agent its first message named, and every message
+names it again.
 
 A conversation opened from CONVERSATIONS that has no message yet names no
 agent. When several agents of depth 0 may take it, its chat shows the same
@@ -329,8 +333,8 @@ move into another level, conversation or project is remembered. BACK
 returns to exactly where it was, its page, project, conversation and the
 node picked, and from the first page entered to the start, the board
 keeping its grouping, filter and the card the keyboard was on. A conversation
-that has no message yet is left for the picker it was made on, or for the
-list; a page of a conversation is never shown without one.
+that has no message yet, or is not made yet, is left for the picker it began
+on, or for the list; a page of a conversation is never shown without one.
 
 A tooltip shows below its control after 450 ms of pointer or Tab focus. A
 press, Esc on the control, or the control being hidden or disabled closes it,
