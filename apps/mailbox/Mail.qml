@@ -568,7 +568,7 @@ Singleton {
   function asking(request, notes) {
     const passed = notes[request.id] ? Requests.passedOn(request) : []
     if (passed.length > 0)
-      return { from: Requests.label(passed[0].requester), text: passed.map(origin => origin.reason).join("\n\n"),
+      return { from: Requests.label(passed[0].requester), text: Requests.question(request, true),
         fine: request.reason || "", origins: [], note: false }
     const plain = value => String(value || "").replace(/\s+/g, " ").trim().toLowerCase()
     const origins = Object.keys(request.origins || {}).map(part => ({ part: part, reason: request.origins[part].reason || "" }))
