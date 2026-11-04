@@ -102,8 +102,14 @@ heading of its speaker's tone dot, name and time, as in eco: yours on the
 right, an agent's on the left tinted with its colour; a line that continues
 the same speaker's turn drops the heading. The chat shows no portraits; they
 stay in the agent picker and on the team page. A turn's heading says how
-long the run has worked: "Working 0:12" while it is open, "Worked 1 min"
-after. Once its words are whole, the "more" button beside them, in a gutter
+long the run has worked: "Working 0:12" while it is open, "Worked 1 minute"
+after. An agent's name and dot take its tone (`Omunculus.toneOf`) wherever
+it is named: the turns, the header strip, its lines and the cards. While
+agents work and what you said or answered is still the newest thing in the
+thread, a working row under it, in the tone of the agent at work, names the
+agents from the one you wrote to down to that one, with its clock, and its
+trace beside what it does: "● SALES WORKING 0:06" over "Getting started".
+Once its words are whole, the "more" button beside them, in a gutter
 they never take, copies them or shows the log of the run's work (the
 thread's `openLog`).
 

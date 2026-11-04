@@ -123,10 +123,13 @@ which unfolds into its own transcript, changes and runs. A question for you
 is a card in the thread; what an agent asked another is an exchange in the
 thread it was asked in, which DECIDE INSTEAD lets you answer. Over the tabs
 of every page of the conversation, a header strip says whom it is with, the
-stage, how long, how many agents and calls, with ANSWER while a question
-waits on you, else PROGRESS; under it two lines say the stages of the work in
-focus and who works on it, doing what, for how long. The chevron, PROGRESS or
-Alt+P open the progress: the works nested by stage and level, beside the
+stage, or that the conversation is starting, how long, and how many agents
+and calls, each count opening the team or the cost, with the chevron and
+ANSWER while a question waits on you; under it two lines say the stages of
+the work in focus and who works on it, doing what, for how long, or what you
+are asked ("sales asks you 7 questions"). While agents work after your
+message, a working row in the thread says who works and on what. The
+chevron or Alt+P open the progress: the works nested by stage and level, beside the
 thread from 1100 px, a card over it from 700 px, a sheet over the chat below.
 While a decision waits on you, its options are numbered chips over the
 composer, then PROGRESS; one pressed decides it. The clip in the composer
