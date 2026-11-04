@@ -18,7 +18,7 @@ ShellRoot {
   // its pages under its own head and tabs (PagesView), with no rail and no
   // bar: the masthead's buttons open its cost, its menu of rarer actions and
   // close it, back to the list. The masthead names the way to the page; while
-  // a project is open, a notice says how many requests wait for you in the
+  // a project is open, a notice says how many conversations need you in the
   // other projects, and in a conversation, how many notes to you are unread.
   // Back from the first page entered is back to the start.
   FloatingWindow {
@@ -130,8 +130,8 @@ ShellRoot {
           NoticeChip {
             readonly property int count: Omunculus.elsewhere
             shown: panel.started && pagesView.level !== "registry" && count > 0 && panel.elsewhereKept < 0
-            text: count + (panel.size === "narrow" ? " ELSEWHERE" : " WAITING ELSEWHERE")
-            tip: "the projects where requests wait for you"
+            text: count + (panel.size === "narrow" ? " ELSEWHERE" : " NEED YOU ELSEWHERE")
+            tip: "the projects where conversations need you"
             closeTip: "put it away until it changes"
             onOpened: pagesView.showProjects("waiting")
             onDismissed: panel.elsewhereKept = count

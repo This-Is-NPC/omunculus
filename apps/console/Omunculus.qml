@@ -171,7 +171,7 @@ Singleton {
   property bool registryWanted: false
   property bool watching: false
   // Each project as a row of the projects page, in its order, and how many
-  // requests wait for you in the projects the window is not on.
+  // conversations need you in the projects the window is not on.
   readonly property var projectRows: Projects.sort(Projects.rows({
     projects: boardProjects, conversations: boardConversations, works: boardWorks, summaries: summaries,
     unreachable: new Set(Object.keys(unreachable)), current: project
@@ -273,21 +273,10 @@ Singleton {
       return
     http.call(place.socket, "GET", "/v1/projects/" + place.id + "/conversations/" + ids[0] + "/snapshot", null, false, data => {
       const next = Object.assign({}, summaries)
-      next[ids[0]] = summary(data)
+      next[ids[0]] = Projects.summary(data)
       summaries = next
       summarize(place, ids.slice(1))
     }, () => summarize(place, ids.slice(1)))
-  }
-
-  function summary(data) {
-    const said = data.prompts.find(prompt => prompt.kind === "message")
-    return {
-      title: said ? String(said.body).replace(/\s+/g, " ") : "",
-      started: data.prompts.length > 0,
-      finished: data.works.length > 0 && data.works.every(work => work.state === "done" || work.state === "cancelled"),
-      running: data.runs.filter(run => run.status === "open").length,
-      waiting: data.requests.filter(request => Requests.pending(request) && Requests.human(request.arbiter)).length
-    }
   }
 
   // What a conversation is called: what was first said in it, or when it began.
@@ -526,7 +515,7 @@ Singleton {
         sending = Object.fromEntries(unsettled.map(key => [key, sending[key]]))
       meet(works.map(work => work.assignee))
       const next = Object.assign({}, summaries)
-      next[id] = summary(data)
+      next[id] = Projects.summary(data)
       summaries = next
     })
   }

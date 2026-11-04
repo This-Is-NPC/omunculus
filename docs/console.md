@@ -571,7 +571,7 @@ crumbs its room. The project's crumb opens PROJECTS, and the
 conversation's its chat. Crumbs that do not fit elide from the left, the
 project's never below 8 characters. While a project is open and
 conversations need you in the other ones, the masthead's right shows their
-count in the notice `2 WAITING ELSEWHERE` (`2 ELSEWHERE` under 700 px),
+count in the notice `2 NEED YOU ELSEWHERE` (`2 ELSEWHERE` under 700 px),
 which opens PROJECTS with NEEDS YOU lit, and its × puts it away until the count changes; at the
 start and on the registry's level, where the projects' list carries the
 count, it does not show.
