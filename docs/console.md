@@ -111,20 +111,22 @@ move along a group's rows and between the groups.
 ## Threads
 
 The console folds the events into threads: the main one, yours with the root
-agent, and one per work handed down, where its agent's runs show. A run at
-depth 0 belongs to the main thread, a deeper one to its work's.
+agent, and one per work drawn as a block in a thread (handed down, or a root work a
+run opened), where its agent's runs show. A run on any other work, or none,
+belongs to the main thread.
 
 Each line (`SpeechTurn`) and each agent's turn (`AgentTurn`) is a box under a
 heading of its speaker's tone dot, name and time, as in eco: yours on the
 right, an agent's on the left tinted with its colour; a line that continues
 the same speaker's turn drops the heading. The chat shows no portraits; they
 stay in the agent picker and on the team page. A turn's heading says how
-long the run has worked: "Working 0:12" while it is open, "Worked 1 minute"
-after. An agent's name and dot take its tone (`Omunculus.toneOf`) wherever
+long the run has worked, in the short form used everywhere: "Working 12 s"
+while it is open, "Worked 3 min" after. An agent's name and dot take its tone (`Omunculus.toneOf`) wherever
 it is named: the turns, the header strip, its lines and the cards. While
 agents work and what you said or answered is still the newest thing in the
 thread, a working row under it, in the tone of the agent at work, names the
-agents from the one you wrote to down to that one, with how long it has
+agents from the one you wrote to down to that one ("SALES › SELLER"; a run
+of the front agent outside any work stands alone), with how long it has
 worked, and its trace beside what it does: "● SALES WORKING 6 s" over
 "Getting started". The header strip does not say it again then: its state
 word and its now line stay off the chat while the row shows.
@@ -141,7 +143,7 @@ kit's `Prose`, their web addresses links that open in the browser.
 
 Under its words, a turn's tool calls are one group (`ToolCalls`, from the
 kit's `Calls.group`). Folded, one line counts them, how many failed and the
-first that did: "9 steps · 1 failed: next_stage"; how long the run
+first that did, in plain words: "9 steps · 1 failed: moving to the next stage"; how long the run
 worked is the turn's to say. While the run is open its last three calls show
 live under it. Unfolded, each call is a row with the raw tool name and its args
 in brief (`Phrases.brief`: the path of a file tool, whom an `ask` or
@@ -159,8 +161,15 @@ text and no files are not added to the thread.
 A work handed down is a block (`SubWorkBlock`) in the thread of the run that
 handed it down, where it did; so is a root work a run opened. A card headed
 SUB-WORK with its agent, title and time, it says its state, for how long and
-how many steps (tool calls), its stages when it has a workflow, and the round with
-who sent it back. Choosing it unfolds it in place, indented, into the tabs
+how many steps (tool calls; hook runs are not steps, here and in the turn),
+its stages when it has a workflow, and the round with
+who sent it back. Until the work's data arrives, it shows the title the event
+named and "Handing down…", or nothing when the event named none. A work that
+waits on a branch says who works below it ("● designer working", in the
+working tone) and else what it waits for. Waiting on you reads "⚠ NEEDS YOU",
+as everywhere, in the line's frame, since only the card can be acted on; the
+conversation's own work leaves out its title and stages, which the masthead
+and the strip show. Choosing it unfolds it in place, indented, into the tabs
 01 TRANSCRIPT (the work's own thread, at most 480 px tall with its own
 scroll), 02 CHANGES and 03 RUNS; a block two levels down does not unfold.
 The open tool at its top right shows the work's thread as a page of its own
@@ -170,8 +179,8 @@ A request is a card only while it waits on you, and it is in the main
 thread. Your answer reads as a bubble on the right (`AnswerBubble`) under
 YOU ANSWERED and the time, its text left aligned with the line breaks kept
 and the bubble as wide as the text, up to 620 px. Above it the question is one dim line at the thread's left
-margin, "Asked by SALES: " (the asker in its tone) and its first line with
-words, cut at 120 characters, with " (N questions)" when it is a numbered list; Enter, Space or
+margin, "Asked by SALES · 4 questions: " (the asker in its tone, the count of a numbered list
+kept whole) and its first line with words, cut at 120 characters; Enter, Space or
 a click opens it in place to its full text. Sending an answer, like sending
 a message, takes the view to the end, so it never counts as news; when the
 answer comes and the keyboard was in the card, it moves to the composer. A
@@ -280,8 +289,9 @@ mailbox.
 ## Requests
 
 A request's card (`RequestDecision`) is built as eco's answer card. Its
-heading names the kind, who asks (the name in the agent's tone, as
-everywhere it appears) and on which work, and the time, on two lines when
+heading names the kind, who asks (the names in the agents' tones, as
+everywhere they appear, from the asker up when the question climbed:
+"seller › sales asks") and on which work, and the time, on two lines when
 the card is under 520 px, with its tools at the top right: copy
 the question, the "more" menu that holds ESCALATE while it waits on you, and
 close where the card opened in place of another (DECIDE INSTEAD). Its kinds:
@@ -307,9 +317,10 @@ the masthead: the first root work's title, else the first message), or the
 work of the question's origin when the harness passed it up.
 
 `QuestionForm` puts "N OF M ANSWERED" in the card's heading (on its second
-line under 520 px), and SEND (outlined, readable while it waits, with "answer at least one to send" beside it) and a quiet "I CAN'T ANSWER THIS" at the end of the form, after the last item. While
+line under 520 px), and SEND (off with "answer at least one to send" beside it; solid once one is answered) and a quiet "I CAN'T ANSWER THIS" at the end of the form, after the last item. The
+form grows in the thread; the view starts at the card's top. While
 that end is below the view, the two float on the view's bottom edge over the
-card's fill and a hairline, with "N MORE QUESTIONS BELOW" at the right
+card's fill and a hairline, with what passes under them fading out above, with "N MORE QUESTIONS BELOW" at the right
 (above them under 520 px) while items start under them; the chip brings the
 first of those into view with the keyboard in its box. Each item is its
 number, its question wrapped in sentence case at a 620 px measure and a box

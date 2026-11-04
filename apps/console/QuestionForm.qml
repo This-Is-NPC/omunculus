@@ -15,7 +15,8 @@ import "kit/ui"
 // last box and is not sent. The form's actions, SEND, which joins the answers
 // into one text reply, and "I can't answer this", end the form; while that
 // end is below what the views show, they float on the bottom edge of the
-// view with how many questions start under them, which leads to the next.
+// view with how many questions start under them, which leads to the next;
+// what passes under them fades out above.
 // How many are answered is `answered`, for the card's heading. What was typed
 // stays after a failure.
 ColumnLayout {
@@ -305,6 +306,17 @@ ColumnLayout {
         height: 1
         color: Theme.line
       }
+      // What passes under the floating actions fades out above them.
+      Rectangle {
+        visible: form.floating
+        anchors.bottom: parent.top
+        width: parent.width
+        height: Theme.space.section
+        gradient: Gradient {
+          GradientStop { position: 0; color: Qt.alpha(bar.color, 0) }
+          GradientStop { position: 1; color: bar.color }
+        }
+      }
       // What lies under the floating actions takes no clicks through them.
       MouseArea {
         anchors.fill: parent
@@ -317,7 +329,7 @@ ColumnLayout {
       y: -form.lift
       width: dock.width - (form.narrow || !hint.visible ? 0 : hint.width + Theme.space.gap)
       spacing: Theme.space.tight
-      // The main action: it stays readable while it waits for an answer.
+      // The main action: solid once there is an answer to send.
       TraceButton {
         dense: true
         role: "primary"
@@ -326,8 +338,8 @@ ColumnLayout {
         tip: "send your answers  Ctrl+Enter"
         busy: form.sending
         reason: form.sending ? "" : form.ready ? "" : "answer at least one question first"
+        filled: form.ready && !form.sending
         enabled: !form.sending
-        opacity: form.ready || form.sending ? 1 : 0.75
         onClicked: form.send()
       }
       Label {

@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/client/Calls.js" as Calls
+import "kit/client/Phrases.js" as Phrases
 import "kit/client/Progress.js" as Progress
 import "kit/ui"
 
@@ -38,7 +39,7 @@ Column {
   readonly property string failedPrefix: summary.failed + " failed"
   readonly property var header: Progress.fit([
     { text: count === 1 ? "1 step" : count + " steps", short: count + " steps", keep: true },
-    summary.failed > 0 ? { text: failedPrefix + ": " + (failedRow ? failedRow.name : ""), short: failedPrefix, keep: true } : null
+    summary.failed > 0 ? { text: failedPrefix + ": " + (failedRow ? Phrases.failure(failedRow.name) : ""), short: failedPrefix, keep: true } : null
   ].filter(part => part !== null), budget - 6).filter(text => text !== "")
 
   visible: rows.length > 0

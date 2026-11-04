@@ -26,7 +26,7 @@ Item {
     const line = (question.split("\n").find(each => each.trim() !== "") || "").replace(/\s+/g, " ").trim()
     return line.length > 120 ? line.slice(0, 119) + "…" : line
   }
-  readonly property string summary: "Asked by " + asker.toUpperCase() + ": " + first + (form ? " (" + form.items.length + " questions)" : "")
+  readonly property string summary: "Asked by " + asker.toUpperCase() + (form ? " · " + form.items.length + " questions" : "") + ": " + first
 
   implicitHeight: column.y + column.height + Theme.space.row
 
@@ -72,9 +72,10 @@ Item {
         readonly property color ink: pointer.containsMouse ? Theme.foreground : Theme.dim
         Label { id: by; text: "Asked by "; color: line.ink; font.pixelSize: 11 }
         Label { id: who; text: bubble.asker.toUpperCase(); color: Omunculus.toneOf(bubble.asker); font.pixelSize: 11 }
+        Label { id: count; visible: !!bubble.form; text: bubble.form ? " · " + bubble.form.items.length + " questions" : ""; color: line.ink; font.pixelSize: 11 }
         Label {
-          width: Math.max(0, line.width - by.width - who.width)
-          text: ": " + bubble.first + (bubble.form ? " (" + bubble.form.items.length + " questions)" : "")
+          width: Math.max(0, line.width - by.width - who.width - (count.visible ? count.width : 0))
+          text: ": " + bubble.first
           color: line.ink
           font.pixelSize: 11
           maximumLineCount: 1

@@ -12,7 +12,7 @@ defmodule Omunculus.GuiCallsTest do
     assert {"", 0} = GuiModules.run(modules, @fixtures <> assertions)
   end
 
-  test "group counts every call, folds passed hooks and keeps outcomes as rows" do
+  test "group counts the calls, not hooks or outcomes, folds passed hooks and keeps outcomes as rows" do
     run!(["Phrases", "Calls"], """
     const steps = [
       {name: "read", ok: true, args: {path: "templates/proposal.md"}, output: "", outcome: false},
@@ -24,7 +24,7 @@ defmodule Omunculus.GuiCallsTest do
       {name: "continue", ok: true, text: "moved the work to design", output: "", outcome: true}
     ];
     const out = Calls.group(steps);
-    check(out.calls === 6 && out.failed === 2, "counts", out);
+    check(out.calls === 3 && out.failed === 1, "counts", out);
     check(out.rows.map(row => row.name).join() === "read,hook,next_stage,on-break,edit,continue", "rows", out.rows.map(row => row.name));
     check(out.rows[0].brief === "templates/proposal.md" && out.rows[0].ok && out.rows[0].diff === null, "read", out.rows[0]);
     check(out.rows[1].hook && out.rows[1].count === 2 && out.rows[1].brief === "2 hooks ran", "hooks", out.rows[1]);
@@ -75,6 +75,7 @@ defmodule Omunculus.GuiCallsTest do
     if (Phrases.phrase("work", several) !== "Opening work: Bakery website +2 more") throw Error("several phrase");
     if (Phrases.phrase("work", titled) !== "Opening work: Bakery website" || Phrases.phrase("work", {works: []}) !== "Opening work") throw Error("titled phrase");
     if (Phrases.phrase("read") !== "Reading files" || Phrases.phrase("mystery") !== "Working") throw Error("phrase");
+    if (Phrases.failure("next_stage") !== "moving to the next stage" || Phrases.failure("mystery") !== "a call") throw Error("failure");
     """)
   end
 end
