@@ -52,6 +52,8 @@ Item {
   signal answered()
   // A work is wanted as a transcript of its own.
   signal openWork(string work)
+  // The log of a work is wanted ("" for the conversation's own).
+  signal openLog(string work)
   // The requests no other request gathers; the rest are its climb.
   readonly property var contained: Requests.contained(Omunculus.requests)
 
@@ -314,10 +316,11 @@ Item {
       required property string steps
       required property string files
       required property bool fresh
+      required property string work
 
       // Entries are set apart by a margin above each one, so one that draws
       // nothing leaves no gap.
-      readonly property int gap: 4
+      readonly property int gap: Theme.space.line
       readonly property string role: root.revision >= 0 && kind === "request" && root.requestsShown ? root.roleAt(index) : kind
       readonly property alias content: slot.item
       readonly property bool drawn: !!slot.item && slot.item.visible && slot.item.implicitHeight > 0
@@ -435,13 +438,16 @@ Item {
           files: entry.files
           stamp: entry.stamp
           continued: root.revision >= 0 && root.continues(entry.index)
+          work: entry.work
+          selected: entry.selected
+          onLogged: work => root.openLog(work)
         }
       }
     }
   }
 
   NewPill {
-    anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 10 }
+    anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: Theme.space.gap }
     count: root.unseen
     onClicked: root.jump()
   }
@@ -451,7 +457,7 @@ Item {
     visible: timeline.count === 0
     text: root.emptyText
     color: Theme.dim
-    font.pixelSize: 11
-    font.letterSpacing: 2
+    font.pixelSize: Theme.type.meta.size
+    font.letterSpacing: Theme.type.meta.tracking
   }
 }

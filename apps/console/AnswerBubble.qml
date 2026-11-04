@@ -4,9 +4,9 @@ import "kit/client/Questions.js" as Questions
 import "kit/ui"
 
 // AnswerBubble is what you answered a question: your words in a bubble on the
-// right, left aligned with their line breaks kept, under a caption saying
-// when. Over them the question is one dim line, who asked and its first
-// words, that opens in place to its full text.
+// right, left aligned with their line breaks kept, under a heading of your
+// tone dot, YOU ANSWERED and the time. Over them the question is one dim
+// line, who asked and its first words, that opens in place to its full text.
 Item {
   id: bubble
 
@@ -17,7 +17,8 @@ Item {
   property string stamp
   property bool open: false
 
-  readonly property real widest: Math.min(620, bubble.width < 520 ? bubble.width : bubble.width * 0.78)
+  readonly property real widest: Math.min(620, bubble.width < Theme.size.measureFrom ? bubble.width : bubble.width * Theme.size.measure)
+  readonly property color tone: Omunculus.toneOf("you")
   readonly property var form: Questions.parse(question)
   // The first line with words, its whitespace collapsed and cut at 120 characters.
   readonly property string first: {
@@ -26,20 +27,20 @@ Item {
   }
   readonly property string summary: "Asked by " + asker.toUpperCase() + ": " + first + (form ? " (" + form.items.length + " questions)" : "")
 
-  implicitHeight: column.y + column.height + 2
+  implicitHeight: column.y + column.height + Theme.space.row
 
   Column {
     id: column
-    y: 6
+    y: Theme.space.tight
     width: bubble.width
-    spacing: 4
+    spacing: Theme.space.line
 
     Rectangle {
       id: ask
       readonly property color dim: Theme.readableOn(color)
       visible: bubble.question !== ""
       width: bubble.open ? Math.min(620, parent.width) : parent.width
-      height: (bubble.open ? full.implicitHeight + 16 : line.implicitHeight) + 2
+      height: (bubble.open ? full.implicitHeight + Theme.space.tight * 2 : line.implicitHeight) + Theme.space.row
       color: bubble.open ? Qt.alpha(Theme.foreground, 0.06) : "transparent"
       activeFocusOnTab: true
       Accessible.role: Accessible.Button
@@ -55,8 +56,8 @@ Item {
       FocusRing { anchors.margins: 0 }
 
       Icon {
-        x: bubble.open ? 8 : 0
-        y: bubble.open ? 10 : 2
+        x: bubble.open ? Theme.space.tight : 0
+        y: bubble.open ? Theme.space.gap : Theme.space.row
         name: bubble.open ? "chevron-down" : "chevron-right"
         size: 10
         color: bubble.open ? ask.dim : pointer.containsMouse ? Theme.foreground : Theme.dim
@@ -64,8 +65,8 @@ Item {
       Label {
         id: line
         visible: !bubble.open
-        x: 16
-        width: parent.width - 16
+        x: Theme.space.block
+        width: parent.width - x
         text: bubble.summary
         color: pointer.containsMouse ? Theme.foreground : Theme.dim
         font.pixelSize: 11
@@ -75,12 +76,12 @@ Item {
       Prose {
         id: full
         visible: bubble.open
-        x: 24
-        y: 8
-        width: parent.width - 32
+        x: Theme.size.gutter
+        y: Theme.space.tight
+        width: parent.width - x - Theme.space.tight
         source: bubble.question
         color: ask.dim
-        font.pixelSize: 12
+        font.pixelSize: Theme.type.body.size
         wrapMode: Text.Wrap
       }
       MouseArea {
@@ -95,33 +96,38 @@ Item {
       }
     }
 
+    Row {
+      x: bubble.width - width
+      spacing: Theme.space.tight
+      Dot { anchors.verticalCenter: parent.verticalCenter; tone: bubble.tone }
+      Label { text: "YOU ANSWERED"; color: bubble.tone; font.pixelSize: Theme.type.name.size; font.letterSpacing: Theme.type.name.tracking }
+      Label {
+        anchors.verticalCenter: parent.verticalCenter
+        text: bubble.stamp
+        color: Qt.alpha(bubble.tone, Theme.type.stamp.opacity)
+        font.pixelSize: Theme.type.stamp.size
+        font.letterSpacing: Theme.type.stamp.tracking
+      }
+    }
+
     Rectangle {
       x: bubble.width - width
-      width: Math.min(bubble.widest, said.contentWidth + 20)
-      height: said.implicitHeight + 14
+      width: Math.min(bubble.widest, said.contentWidth + 2 * Theme.size.bubbleInset)
+      height: said.implicitHeight + Theme.space.inset
       color: Theme.highlight
       Prose {
         id: said
         anchors.verticalCenter: parent.verticalCenter
-        x: 10
-        width: bubble.widest - 20
+        x: Theme.size.bubbleInset
+        width: bubble.widest - 2 * Theme.size.bubbleInset
         horizontalAlignment: Text.AlignLeft
         plain: true
         source: bubble.body
         color: Theme.foreground
-        font.pixelSize: 12
-        lineHeight: 1.2
+        font.pixelSize: Theme.type.body.size
+        lineHeight: Theme.type.body.lineHeight
         wrapMode: Text.Wrap
       }
-    }
-
-    Label {
-      id: caption
-      width: parent.width
-      text: "You answered, " + bubble.stamp
-      color: Theme.dim
-      font.pixelSize: 11
-      horizontalAlignment: Text.AlignRight
     }
   }
 }

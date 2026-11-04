@@ -97,10 +97,15 @@ The console folds the events into threads: the main one, yours with the root
 agent, and one per work handed down, where its agent's runs show. A run at
 depth 0 belongs to the main thread, a deeper one to its work's.
 
-Each agent's turn (`AgentTurn`) shows its portrait, small, beside its name, or
-its initial in its colour while it has none (`Portrait`); yours shows none.
-Its header says how long the run has worked: "Working 0:12" while it is
-open, "Worked 1 min" after.
+Each line (`SpeechTurn`) and each agent's turn (`AgentTurn`) is a box under a
+heading of its speaker's tone dot, name and time, as in eco: yours on the
+right, an agent's on the left tinted with its colour; a line that continues
+the same speaker's turn drops the heading. The chat shows no portraits; they
+stay in the agent picker and on the team page. A turn's heading says how
+long the run has worked: "Working 0:12" while it is open, "Worked 1 min"
+after. Once its words are whole, the "more" button beside them, in a gutter
+they never take, copies them or shows the log of the run's work (the
+thread's `openLog`).
 
 A note the harness left, as when it stopped a work and tells you so, is no
 one's words: it reads NOTE, muted, where a speaker's name would be, as in
@@ -114,7 +119,8 @@ kit's `Calls.group`). Folded, one line counts them, how many failed and the
 first that did: "9 tool calls · 1 failed: next_stage"; how long the run
 worked is the turn's to say. While the run is open its last three calls show
 live under it. Unfolded, each call is a row with the raw tool name and its args
-in brief (`Phrases.brief`: the path of a file tool, whom an `ask` goes to,
+in brief (`Phrases.brief`: the path of a file tool, whom an `ask` or
+`escalate` goes to and never its question, which its card or exchange shows,
 the first work a `work` call opens), and a failed call shows its output, six
 lines and then all on demand. An `edit` opens a small diff of the lines it
 replaced, a `write` the first lines it wrote. Every call is shown, those
@@ -126,18 +132,19 @@ nothing takes no room, not even the gap between entries, and words with no
 text and no files are not added to the thread.
 
 A work handed down is a block (`SubWorkBlock`) in the thread of the run that
-handed it down, where it did; so is a root work a run opened. Headed
-SUB-WORK with its agent and title, it says its state, for how long and how
-many tool calls, its stages when it has a workflow, and the round with who
-sent it back. Choosing it unfolds it in place, indented, into TRANSCRIPT (the
-work's own thread, at most 480 px tall with its own scroll), CHANGES and
-RUNS; a block two levels down only has OPEN. OPEN shows the work's thread as
-a page of its own (see [Pages](#pages)).
+handed it down, where it did; so is a root work a run opened. A card headed
+SUB-WORK with its agent, title and time, it says its state, for how long and
+how many tool calls, its stages when it has a workflow, and the round with
+who sent it back. Choosing it unfolds it in place, indented, into the tabs
+01 TRANSCRIPT (the work's own thread, at most 480 px tall with its own
+scroll), 02 CHANGES and 03 RUNS; a block two levels down does not unfold.
+The open tool at its top right shows the work's thread as a page of its own
+(see [Pages](#pages)).
 
 A request is a card only while it waits on you, and it is in the main
-thread. Your answer reads as a bubble on the right (`AnswerBubble`), its text
-left aligned with the line breaks kept and the bubble as wide as the text,
-up to 620 px. Above it the question is one dim line at the thread's left
+thread. Your answer reads as a bubble on the right (`AnswerBubble`) under
+YOU ANSWERED and the time, its text left aligned with the line breaks kept
+and the bubble as wide as the text, up to 620 px. Above it the question is one dim line at the thread's left
 margin, "Asked by SALES: " and its first line with words, cut at 120
 characters, with " (N questions)" when it is a numbered list; Enter, Space or
 a click opens it in place to its full text. Sending an answer, like sending
@@ -232,30 +239,37 @@ mailbox.
 
 ## Requests
 
-A request's card (`RequestDecision`) is one of three kinds, named in its
-header with who asks and on which work, on two lines when the card is under
-520 px: NEEDS YOU (an answer in words; a numbered list of questions has a box
+A request's card (`RequestDecision`) is built as eco's answer card. Its
+heading names the kind, who asks and on which work, and the time, on two
+lines when the card is under 520 px, with its tools at the top right: copy
+the question, the "more" menu that holds ESCALATE while it waits on you, and
+close where the card opened in place of another (DECIDE INSTEAD). Its kinds:
+NEEDS YOU (an answer in words; a numbered list of questions has a box
 for each, `QuestionForm`), YOUR DECISION (a button per option and an optional
 note) and PERMISSION (the scopes that grant it — THIS WORK ONLY, FOR
 <AGENT>, FOR ITS LEVEL, IN THE <STAGE> STAGE, IN FOLDER <name> or IN THE
 PROJECT, and ALWAYS · SAVED
-IN THE PROJECT SETTINGS — and a no with a reason). Its question shows as its
-asker wrote it, in full contrast; one passed up has a chip naming through
-whom, in order, that opens the wordings of each level and the harness's own
-sentence. "I can't answer this" tells the team so in a plain reply, and
-ESCALATE sits under MORE. Sending shows your answer dimmed with "Sending...";
-answered, the card shrinks to the question and your answer; a failure reopens
-it with your words kept and an error line.
+IN THE PROJECT SETTINGS — and a no with a reason). Its question shows once,
+as its asker wrote it, in full contrast; one passed up has a chip naming
+through whom, in order, that opens the wordings of each level and the
+harness's own sentence. Its actions sit at its bottom left: its options,
+SEND while words are written, "I can't answer this", which tells the team so
+in a plain reply, and DENY last. ESCALATE, from the menu, turns the words
+into the reason it goes up and the action into ESCALATE; ANSWER INSTEAD
+turns it back. Sending shows your answer dimmed under SENDING…; answered,
+the card shrinks to the question and your answer; a failure reopens it with
+your words kept and an error line. The words are written in the kit's
+`TextBlock`, one line tall and growing with its text.
 
 The header's title is the conversation's subject (`Omunculus.subject`, as in
 the masthead: the first root work's title, else the first message), or the
 work of the question's origin when the harness passed it up.
 
-`QuestionForm` shows, at the top of the card, "N of M answered" with SEND and
-"I CAN'T ANSWER THIS", which wrap onto lines when narrow. Each item is its
-number, its question wrapped in sentence case and a full-width box that grows
-with its text; the toggle "I DON'T KNOW YET", beside the box or under it when
-the form is under 480 px, fills it and, switched off, restores what was
+`QuestionForm` puts "N OF M" answered in the card's heading, and SEND and
+"I CAN'T ANSWER THIS" at the bottom of the card, after the last item. Each
+item is its number, its question wrapped in sentence case and a full-width
+box (`TextBlock`) that grows with its text, with the toggle chip "I DON'T
+KNOW YET" under it, which fills the box and, switched off, restores what was
 typed. Enter moves to the next box that can take the keyboard (it stays in
 the box when none can), Enter in the last and Ctrl+Enter in any send, and a
 box that takes the keyboard scrolls into view without changing whether the
@@ -277,7 +291,8 @@ in the mailbox).
 
 Every option carries the words of its field: SEND replies with them
 alone, omitting `option`; DENY gives them as the reason of a no; and, when
-it waits on you, ESCALATE raises it with them as the reason through
+it waits on you, ESCALATE (from the card's menu) raises it with them as the
+reason through
 `POST …/requests/escalate`, as one part named after its asker.
 
 ## The team

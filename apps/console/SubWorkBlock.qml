@@ -8,9 +8,10 @@ import "kit/ui"
 // down, where it did: a frame headed SUB-WORK with its agent and title, one
 // line with its state, how long and how many tool calls, its stages when it
 // has a workflow, and the round with who sent it back when it was. Choosing
-// it unfolds it in place, indented, into tabs: TRANSCRIPT, the work's own
-// thread at most 480 px tall with its own scroll, CHANGES and RUNS. A block
-// two levels down only opens; OPEN shows the work as a transcript of its own.
+// it unfolds it in place, indented, into tabs (01 TRANSCRIPT, the work's own
+// thread at most 480 px tall with its own scroll, 02 CHANGES and 03 RUNS). A
+// block two levels down only opens. The open tool at its top right shows the
+// work as a transcript of its own.
 SurfaceFrame {
   id: block
 
@@ -68,7 +69,7 @@ SurfaceFrame {
       opened(work)
   }
 
-  implicitHeight: content.implicitHeight + 16
+  implicitHeight: content.implicitHeight + Theme.space.insetTop + Theme.space.inset
   variant: "outline"
   tone: stateTone
   active: condition === "needs-you"
@@ -77,13 +78,14 @@ SurfaceFrame {
 
   ColumnLayout {
     id: content
-    anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8; leftMargin: 12; rightMargin: 12 }
-    spacing: 4
+    anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: Theme.space.insetTop; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset }
+    spacing: Theme.space.tight
 
     Item {
       id: head
       Layout.fillWidth: true
-      implicitHeight: heading.implicitHeight + lines.implicitHeight + 4
+      Layout.rightMargin: opener.width + Theme.space.gap
+      implicitHeight: heading.implicitHeight + lines.implicitHeight + Theme.space.line
       activeFocusOnTab: true
       Accessible.role: Accessible.Button
       Accessible.name: "sub-work " + block.title
@@ -97,9 +99,9 @@ SurfaceFrame {
       RowLayout {
         id: heading
         width: parent.width
-        spacing: 6
+        spacing: Theme.space.tight
         Icon { visible: block.expandable; name: block.expanded ? "chevron-down" : "chevron-right"; size: 10; color: pointer.containsMouse ? Theme.foreground : Theme.dim }
-        Label { text: "SUB-WORK"; color: Theme.dim; font.pixelSize: 10; font.letterSpacing: 1.5 }
+        Label { text: "SUB-WORK"; color: Theme.dim; font.pixelSize: Theme.type.kicker.size; font.letterSpacing: Theme.type.kicker.tracking }
         Label {
           Layout.minimumWidth: 0
           Layout.maximumWidth: implicitWidth
@@ -118,14 +120,14 @@ SurfaceFrame {
           font.pixelSize: 11
           elide: Text.ElideRight
         }
-        Label { visible: block.stamp !== ""; text: block.stamp; color: Theme.dim; font.pixelSize: 11 }
+        Label { visible: block.stamp !== ""; text: block.stamp; color: Theme.line; font.pixelSize: Theme.type.stamp.size; font.letterSpacing: Theme.type.stamp.tracking }
       }
 
       Column {
         id: lines
-        y: heading.height + 4
+        y: heading.height + Theme.space.line
         width: parent.width
-        spacing: 2
+        spacing: Theme.space.row
 
         Row {
           spacing: 0
@@ -177,47 +179,32 @@ SurfaceFrame {
         cursorShape: Qt.PointingHandCursor
         onClicked: block.choose()
       }
-      FocusRing { anchors.margins: -4 }
+      FocusRing { anchors.margins: -Theme.space.line }
     }
 
-    // Unfolded: the tabs, OPEN, and what the tab shows, indented.
+    // Unfolded: the tabs, and what the tab shows, indented.
     Flow {
       Layout.fillWidth: true
+      Layout.topMargin: Theme.space.line
       visible: block.expanded
-      spacing: 6
+      spacing: Theme.space.block
       Repeater {
         model: [{ name: "transcript", text: "TRANSCRIPT" }, { name: "changes", text: "CHANGES" }, { name: "runs", text: "RUNS" }]
-        delegate: Chip {
+        delegate: Tab {
           required property var modelData
-          text: modelData.text
-          checked: block.tab === modelData.name
-          onClicked: block.tab = modelData.name
+          required property int index
+          label: modelData.text
+          digit: "0" + (index + 1)
+          current: block.tab === modelData.name
+          onChosen: block.tab = modelData.name
         }
       }
-      TraceButton {
-        dense: true
-        role: "progress"
-        icon: "chevron-right"
-        text: "OPEN"
-        tip: "show this work as a transcript of its own"
-        onClicked: block.opened(block.work)
-      }
-    }
-
-    TraceButton {
-      visible: !block.expandable
-      dense: true
-      role: "progress"
-      icon: "chevron-right"
-      text: "OPEN"
-      tip: "show this work as a transcript of its own"
-      onClicked: block.opened(block.work)
     }
 
     Loader {
       id: transcript
       Layout.fillWidth: true
-      Layout.leftMargin: 16
+      Layout.leftMargin: Theme.space.block
       Layout.preferredHeight: Math.min(480, implicitHeight)
       visible: block.showsTranscript
     }
@@ -229,7 +216,7 @@ SurfaceFrame {
 
     Loader {
       Layout.fillWidth: true
-      Layout.leftMargin: 16
+      Layout.leftMargin: Theme.space.block
       Layout.preferredHeight: active ? 320 : 0
       active: block.expanded && block.tab === "changes"
       visible: active
@@ -238,11 +225,19 @@ SurfaceFrame {
 
     Loader {
       Layout.fillWidth: true
-      Layout.leftMargin: 16
+      Layout.leftMargin: Theme.space.block
       Layout.preferredHeight: active ? 320 : 0
       active: block.expanded && block.tab === "runs"
       visible: active
       sourceComponent: WorkRuns { key: block.work }
     }
+  }
+
+  IconButton {
+    id: opener
+    anchors { right: parent.right; top: parent.top; rightMargin: Theme.space.inset; topMargin: Theme.space.insetTop }
+    name: "chevron-right"
+    tip: "show this work as a transcript of its own"
+    onClicked: block.opened(block.work)
   }
 }
