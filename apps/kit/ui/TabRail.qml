@@ -9,7 +9,8 @@ import "Breakpoints.js" as Breakpoints
 // over what is beside it; on a narrow one it is hidden and takes no width,
 // the bar's page switcher choosing the pages instead. One click chooses a
 // page and folds the rail, which stays folded until the pointer has left and
-// come back; Esc folds it too.
+// come back; Esc folds it too. Each page is a stop of the Tab chain: ↑ ↓ Home
+// End move the keyboard along the rail, Enter or Space chooses.
 Item {
   id: rail
 
@@ -54,6 +55,11 @@ Item {
 
   HoverHandler { id: hover }
 
+  // Gives the keyboard to the tab at `index`, kept within the rail.
+  function reach(index) {
+    tabRepeater.itemAt(Math.max(0, Math.min(tabs.length - 1, index))).forceActiveFocus(Qt.TabFocusReason)
+  }
+
   visible: size !== "narrow"
   // Wide enough that the pointer on the unfolded panel is still over the rail.
   width: unfolded ? unfoldedWidth : foldedWidth
@@ -71,6 +77,7 @@ Item {
   }
 
   Repeater {
+    id: tabRepeater
     model: rail.tabs
     delegate: Rectangle {
       id: tab
@@ -94,11 +101,22 @@ Item {
       Keys.onReturnPressed: pointer.choose()
       Keys.onSpacePressed: pointer.choose()
       Keys.onEscapePressed: rail.escapeRail()
+      Keys.onUpPressed: rail.reach(tab.index - 1)
+      Keys.onDownPressed: rail.reach(tab.index + 1)
+      Keys.onPressed: event => {
+        if (event.key === Qt.Key_Home)
+          rail.reach(0)
+        else if (event.key === Qt.Key_End)
+          rail.reach(rail.tabs.length - 1)
+        else
+          return
+        event.accepted = true
+      }
       FocusRing {}
 
       Row {
-        anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: rail.named ? 12 : (rail.foldedWidth - digit.implicitWidth) / 2 }
-        spacing: 10
+        anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: rail.named ? Theme.space.cell : (rail.foldedWidth - digit.implicitWidth) / 2 }
+        spacing: Theme.space.gap
         Label {
           id: digit
           anchors.verticalCenter: parent.verticalCenter

@@ -1,30 +1,31 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import "Breakpoints.js" as Breakpoints
 
 // Masthead is the window's top line: the name, the crumbs of where the window
 // is, the readout on the right, and a hairline that fades out from an accent
 // notch. Crumbs without text are left out, and the name's slash shows only
 // before a crumb. A crumb with `run` is a link that runs it. When the crumbs
 // do not fit they elide from the left: the first, the project, down to 8
-// characters and no further, then the middle ones, then the last. On a
-// narrow window the name is smaller and less tracked, leaving the crumbs
-// their room.
+// characters and no further, then the middle ones, then the last. Under
+// 560 px the name is left out, leaving the crumbs its room. Tight, it packs
+// closer to give its height and width to what is below and on the right.
 ColumnLayout {
   id: mast
   // Where the window is, outermost first: [{text, run}], `run` optional.
   property var crumbs: []
+  property bool tight: false
+  // Whether the name leads the line; without it, the crumbs do.
+  property bool branded: Window.width >= 560
   readonly property var shown: crumbs.filter(crumb => String(crumb.text) !== "")
-  readonly property bool narrow: Breakpoints.size(Window.width) === "narrow"
   default property alias trailing: tail.data
-  spacing: 10
+  spacing: tight ? Theme.space.tight : Theme.space.gap
 
   readonly property string heading: shown.map(crumb => crumb.text).join(" / ")
   onHeadingChanged: if (!Theme.reducedMotion) sweep.restart()
 
   // The font is monospace, so the room is counted in characters.
-  readonly property real advance: Math.max(1, metrics.advanceWidth("0") + 2)
+  readonly property real advance: Math.max(1, metrics.advanceWidth("0") + Theme.type.section.tracking)
   readonly property real gap: 8
   readonly property real separatorWidth: advance + 2 * gap
   // The fewest characters each crumb keeps.
@@ -48,13 +49,13 @@ ColumnLayout {
   readonly property real fullWidth: shown.reduce((sum, crumb) => sum + String(crumb.text).length * advance, 0) + separatorWidth * Math.max(0, shown.length - 1)
   readonly property real floorWidth: shown.reduce((sum, crumb, index) => sum + floorOf(index, String(crumb.text).length) * advance, 0) + separatorWidth * Math.max(0, shown.length - 1)
 
-  FontMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: 11 }
+  FontMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: Theme.type.section.size }
 
   RowLayout {
     Layout.fillWidth: true
-    spacing: 10
-    Label { text: "OMUNCULUS"; font.pixelSize: mast.narrow ? 12 : 15; font.bold: true; font.letterSpacing: mast.narrow ? 3 : 6 }
-    Label { visible: mast.shown.length > 0; text: "╱"; color: Theme.primary; font.pixelSize: 13 }
+    spacing: Theme.space.gap
+    Label { visible: mast.branded; text: "OMUNCULUS"; font.pixelSize: 15; font.bold: true; font.letterSpacing: 6 }
+    Label { visible: mast.branded && mast.shown.length > 0; text: "╱"; color: Theme.primary; font.pixelSize: 13 }
     Item {
       id: area
       Layout.fillWidth: true
@@ -82,22 +83,23 @@ ColumnLayout {
               visible: crumb.index > 0
               text: "/"
               color: Theme.dim
-              font.pixelSize: 11
+              font.pixelSize: Theme.type.section.size
             }
             Label {
               visible: !crumb.link
               width: Math.min(implicitWidth, crumb.room)
               text: String(crumb.item.text).toUpperCase()
               color: Theme.dim
-              font.pixelSize: 11
-              font.letterSpacing: 2
+              font.pixelSize: Theme.type.section.size
+              font.letterSpacing: Theme.type.section.tracking
               elide: crumb.elision
             }
             LinkLabel {
               visible: crumb.link
               width: Math.min(implicitWidth, crumb.room)
               value: String(crumb.item.text).toUpperCase()
-              font.letterSpacing: 2
+              font.pixelSize: Theme.type.section.size
+              font.letterSpacing: Theme.type.section.tracking
               elide: crumb.elision
               onClicked: crumb.item.run()
             }
@@ -105,7 +107,7 @@ ColumnLayout {
         }
       }
     }
-    RowLayout { id: tail; spacing: 14 }
+    RowLayout { id: tail; spacing: mast.tight ? 8 : Theme.space.block }
   }
 
   Item {

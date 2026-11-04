@@ -10,6 +10,8 @@ Item {
   property string name
   property color color: Theme.foreground
   property real size: 14
+  // Stroke weight in screen pixels, the same at every size.
+  property real weight: 1.25
 
   readonly property var paths: ({
     play: "M5 3.5v9l7.5-4.5z",
@@ -36,7 +38,8 @@ Item {
     send: "M13.5 2.5l-11 4.5 4.5 2 2 4.5z M7 9l6.5-6.5",
     map: "M2.5 3.5h4v3h-4z M9.5 9.5h4v3h-4z M9.5 3.5h4v3h-4z M6.5 5h3 M4.5 6.5v3.5c0 .6.4 1 1 1h4",
     cost: "M8 2v12 M11 4.5c0-1-1.3-1.5-3-1.5s-3 .7-3 2c0 3 6 1.5 6 4.5 0 1.3-1.3 2-3 2s-3-.6-3-1.7",
-    key: "M2 8a2.75 2.75 0 1 0 5.5 0a2.75 2.75 0 1 0 -5.5 0 M7.5 8h6.5 M11.5 8v2.5 M14 8v2"
+    key: "M2 8a2.75 2.75 0 1 0 5.5 0a2.75 2.75 0 1 0 -5.5 0 M7.5 8h6.5 M11.5 8v2.5 M14 8v2",
+    info: "M2.5 8a5.5 5.5 0 1 0 11 0a5.5 5.5 0 1 0 -11 0 M8 7.5v3.5 M8 5.2v0.01"
   })
 
   implicitWidth: size
@@ -50,8 +53,7 @@ Item {
 
     ShapePath {
       strokeColor: icon.color
-      // 1.25 screen pixels at every size.
-      strokeWidth: 1.25 * 16 / icon.size
+      strokeWidth: icon.weight * 16 / icon.size
       fillColor: "transparent"
       capStyle: ShapePath.RoundCap
       joinStyle: ShapePath.RoundJoin

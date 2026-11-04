@@ -5,8 +5,9 @@ import "Breakpoints.js" as Breakpoints
 // "navigation" leaves for another view and slides away; "primary" is the
 // view's main action, outlined and washed in the accent; "guarded" takes the
 // error tone; any other ("progress", "action") stays in place. `filled`
-// draws it solid in its tone, as a bar's main action is. It is never wider
-// than `maximumWidth`, its caption eliding instead.
+// draws it solid in its tone, as a bar's main action is. With a `reason` it is
+// off: it reads disabled and does nothing, but says why on hover. It is never
+// wider than `maximumWidth`, its caption eliding instead.
 Rectangle {
   id: button
 
@@ -14,15 +15,19 @@ Rectangle {
   property string text
   property string icon
   property string tip
+  // Why it cannot be pressed now; empty while it can.
+  property string reason
   property bool dense: false
   property bool armed: false
   property bool filled: false
   property bool busy: false
+  property bool allowClickWhileBusy: false
   property real maximumWidth: Breakpoints.room(parent)
   property color tone: role === "guarded" ? Theme.error : Theme.primary
   readonly property bool primary: role === "primary"
   readonly property bool running: busy
-  readonly property bool hovered: pointer.containsMouse
+  readonly property bool off: !enabled || reason !== ""
+  readonly property bool hovered: pointer.containsMouse && reason === ""
   readonly property color ink: armed || filled ? Theme.readable(Theme.background, tone, Theme.foreground) : tone
 
   signal clicked()
@@ -31,15 +36,15 @@ Rectangle {
   readonly property real side: dense ? 10 : 14
   readonly property real iconRoom: icon ? (dense ? 12 : 14) + content.spacing : 0
   implicitWidth: Math.max(dense ? 72 : 150, iconRoom + caption.implicitWidth + 2 * side)
-  implicitHeight: dense ? Breakpoints.target(Window.width) : 44
+  implicitHeight: dense ? Breakpoints.target(Window.width) : Theme.size.control
   // The width, not the implicit width, is bounded: what sizes itself from the
   // button's implicit width never depends on its own.
   width: Math.min(implicitWidth, maximumWidth)
   activeFocusOnTab: true
-  opacity: enabled ? 1 : 0.35
+  opacity: off ? 0.35 : 1
   color: armed || filled ? tone : (primary ? Qt.alpha(tone, 0.08) : "transparent")
   border.color: primary || filled ? tone : Theme.line
-  scale: pointer.pressed ? 0.97 : 1
+  scale: pointer.pressed && !off ? 0.97 : 1
   transform: Translate { id: departure }
 
   Behavior on color { ColorAnimation { duration: 180 } }
@@ -53,7 +58,7 @@ Rectangle {
   onArmedChanged: if (armed) guardNudge.restart()
 
   function press() {
-    if (!enabled || running)
+    if (off || (running && !allowClickWhileBusy))
       return
     hint.dismiss()
     if (role === "navigation") {
@@ -73,7 +78,7 @@ Rectangle {
 
   LoadingTrace {
     id: trace
-    anchors { fill: parent; leftMargin: 12; rightMargin: 12; topMargin: 7; bottomMargin: 7 }
+    anchors { fill: parent; leftMargin: Theme.space.cell; rightMargin: Theme.space.cell; topMargin: 7; bottomMargin: 7 }
     running: button.running
     tone: button.tone
     backdrop: button.color
@@ -89,7 +94,7 @@ Rectangle {
       // Back once the trace has reached the end and gone.
       visible: !trace.visible
       anchors.centerIn: parent
-      spacing: 10
+      spacing: Theme.space.gap
       transform: Translate { id: contentShift }
 
       Icon {
@@ -128,12 +133,12 @@ Rectangle {
     id: pointer
     anchors { fill: parent; margins: -4 }
     hoverEnabled: true
-    cursorShape: Qt.PointingHandCursor
+    cursorShape: button.off ? Qt.ArrowCursor : Qt.PointingHandCursor
     onPressed: hint.dismiss()
     onClicked: button.press()
   }
 
   GuardNudge { id: guardNudge; targetObject: contentShift }
-  FocusRing { border.color: button.armed ? Theme.background : Theme.primary }
-  Hint { id: hint; active: button.hovered || button.activeFocus; text: button.tip }
+  FocusRing { border.color: button.armed || button.filled ? Theme.background : Theme.primary }
+  Hint { id: hint; active: pointer.containsMouse || button.activeFocus; text: button.reason || button.tip }
 }
