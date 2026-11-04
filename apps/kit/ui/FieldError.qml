@@ -1,5 +1,4 @@
 import QtQuick
-import "kit/ui"
 
 // FieldError says what is wrong with the field above it; left out while empty.
 Label {

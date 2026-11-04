@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/ui"
 
 // CeilingFields edits the ceiling of one layer — an agent, a workspace, the
 // policy: its mode and the names it has, may ask for, asks you for and never

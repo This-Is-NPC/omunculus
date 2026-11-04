@@ -1,10 +1,10 @@
 import QtQuick
 import QtQuick.Layouts
-import "kit/ui"
 
 // PickRow names a choice with a Caption and picks it with the Dropdown under it,
 // as a Field names its input. A `dim` pick, one that only inherits, reads
-// dimmer; an `invalid` one, in the error colour.
+// dimmer; an `invalid` one, in the error colour; one with a `reason` is off
+// and says why on hover.
 ColumnLayout {
   id: row
 
@@ -14,9 +14,10 @@ ColumnLayout {
   property alias describe: pick.describe
   property alias dim: pick.dim
   property alias invalid: pick.invalid
+  property alias reason: pick.reason
   property alias label: pick.label
   signal picked(string option)
-  spacing: 6
+  spacing: Theme.space.tight
 
   Caption { text: row.text }
   Dropdown {
