@@ -445,13 +445,16 @@ Item {
   }
 
   // The quick chips over the chat's composer: the options of the newest
-  // decision waiting on you, which decide it as they are, without words —
-  // a grant saved for good is chosen on its card — then PROGRESS; none while
-  // no decision waits.
+  // decision waiting on you, which decide it with the card's note — a grant
+  // saved for good is chosen on its card — while its buttons are out of view,
+  // then PROGRESS; none while no decision waits.
   readonly property var quick: {
     const request = Omunculus.deciding
     if (!request)
       return []
+    const progress = { text: "PROGRESS", tip: (progressShown ? "close" : "open") + " the progress of the works", run: () => view.toggleProgress(true) }
+    if (timeline.decidingShown)
+      return [progress]
     const options = [].concat(...Requests.choices(request).map(choice => choice.options
       .filter(option => !option.startsWith("grant_"))
       .map(option => ({
@@ -459,7 +462,7 @@ Item {
         tip: option.replace(/_/g, " ") + ", to what " + Requests.label(choice.request.requester) + " asks",
         run: () => timeline.decide(request.id, option, choice.path)
       }))))
-    return options.concat([{ text: "PROGRESS", tip: (progressShown ? "close" : "open") + " the progress of the works", run: () => view.toggleProgress(true) }])
+    return options.concat([progress])
   }
 
   // The chords of the page that no command of its bar has: those of a work's

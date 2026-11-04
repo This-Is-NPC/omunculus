@@ -21,7 +21,7 @@ ModalDialog {
     open()
   }
 
-  onOpened: card.escalating ? card.focusWords() : card.focusDecision()
+  onOpened: card.focusWords()
 
   contentItem: DialogPanel {
     dialogOpen: dialog.visible

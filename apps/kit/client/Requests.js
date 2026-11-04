@@ -39,6 +39,16 @@ function chosen(answer) {
   return parts.length > 0 ? parts[0] : "";
 }
 
+// An option as a button reads it: its words in capitals.
+function optionText(option) { return option.replace(/_/g, " ").toUpperCase(); }
+
+// What the heading of your answer says of the option you chose; "" for an
+// answer in words. Adjusting is asking for changes, not choosing.
+function chose(option) {
+  if (!option) return "";
+  return option === "adjust" ? "YOU ASKED TO ADJUST" : "YOU CHOSE " + optionText(option);
+}
+
 // The first name a grant among a request's decisions gives, as {kind, name};
 // null when none grants.
 function granted(request) {

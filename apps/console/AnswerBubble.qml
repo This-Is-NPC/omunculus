@@ -5,7 +5,8 @@ import "kit/ui"
 
 // AnswerBubble is what you answered a question: your words in a bubble on the
 // right, left aligned with their line breaks kept, under a heading of your
-// tone dot, YOU ANSWERED and the time. Over them the question is one dim
+// tone dot, YOU ANSWERED (YOU CHOSE and the option, when you chose one) and
+// the time; a choice made without words has no bubble. Over them the question is one dim
 // line, who asked in their tone and its first words, that opens in place to
 // its full text.
 Item {
@@ -16,6 +17,8 @@ Item {
   // Who passed the question on toward you, the asker first.
   property var route: []
   property string question
+  // The heading when an option was chosen, as YOU CHOSE APPROVE.
+  property string choice
   property string body
   property string stamp
   property bool open: false
@@ -111,7 +114,7 @@ Item {
       x: bubble.width - width
       spacing: Theme.space.tight
       Dot { anchors.verticalCenter: parent.verticalCenter; tone: bubble.tone }
-      Label { text: "YOU ANSWERED"; color: bubble.tone; font.pixelSize: Theme.type.name.size; font.letterSpacing: Theme.type.name.tracking }
+      Label { text: bubble.choice !== "" ? bubble.choice : "YOU ANSWERED"; color: bubble.tone; font.pixelSize: Theme.type.name.size; font.letterSpacing: Theme.type.name.tracking }
       Label {
         anchors.verticalCenter: parent.verticalCenter
         text: bubble.stamp
@@ -122,6 +125,7 @@ Item {
     }
 
     Rectangle {
+      visible: bubble.body !== ""
       x: bubble.width - width
       width: Math.min(bubble.widest, said.contentWidth + 2 * Theme.size.bubbleInset)
       height: said.implicitHeight + Theme.space.inset

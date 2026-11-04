@@ -161,7 +161,7 @@ OPEN IN TEAM (Alt+O) shows it on the team page.
 | --- | --- |
 | Alt+R | put the keyboard in the words of the newest question waiting on you |
 | Alt+P | open or close the progress, the keyboard in it |
-| Alt+1 … Alt+9 | the quick chip of that number: an option of the newest decision, which decides it, then the progress |
+| Alt+1 … Alt+9 | the quick chip of that number: an option of the newest decision (with the card's note) when its card is out of view, then the progress |
 | Alt+M | show the oldest note to you and mark it read |
 | Ctrl+N | new conversation |
 | Enter, in the composer | send |

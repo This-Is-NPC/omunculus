@@ -98,7 +98,8 @@ SurfaceFrame {
   // What was sent, shown while it goes.
   property string sentText: ""
   property bool wording: false
-  readonly property bool hasWords: words.text.trim() !== ""
+  readonly property string note: words.text.trim()
+  readonly property bool hasWords: note !== ""
 
   // Put the keyboard in the words, or on the first way to decide.
   function focusWords() {
@@ -107,13 +108,6 @@ SurfaceFrame {
       form.focusBox()
     else if (!formLoader.active)
       words.forceActiveFocus()
-  }
-  function focusDecision() {
-    const first = decisions.nextItemInFocusChain(true)
-    if (first && Focus.within(first, decisions))
-      first.forceActiveFocus()
-    else
-      focusWords()
   }
 
   onDeliveryChanged: if (delivery === "failed") focusWords()
@@ -147,7 +141,7 @@ SurfaceFrame {
 
   // Raises it, with the words as the reason, to whoever decides above you.
   function escalate() {
-    const reason = words.text.trim()
+    const reason = card.note
     if (reason === "" || !yours)
       return
     sentText = reason
@@ -190,7 +184,7 @@ SurfaceFrame {
       grant_stage: "IN THE " + String(job && job.stage ? job.stage : "").toUpperCase() + " STAGE",
       grant_workspace: where.name ? "IN FOLDER " + where.name : "IN THE PROJECT",
       deny: "DENY"
-    })[option] || option.replace(/_/g, " ").toUpperCase()
+    })[option] || Requests.optionText(option)
   }
 
   // A decision's options given once, apart from a no or a cancel, which go
@@ -436,7 +430,7 @@ SurfaceFrame {
       spacing: Theme.space.tight
       Caption {
         text: card.escalating ? "WHY IT GOES UP" : card.kind === "permission" ? "REASON FOR A NO (OPTIONAL)"
-          : card.kind === "decision" ? "ADD A NOTE (OPTIONAL)" : "YOUR ANSWER"
+          : card.kind === "decision" ? "YOUR NOTE OR ANSWERS (OPTIONAL)" : "YOUR ANSWER"
       }
       TextBlock {
         id: words
@@ -445,9 +439,10 @@ SurfaceFrame {
         implicitHeight: contentHeight + topPadding + bottomPadding
         readOnly: card.busy
         opacity: readOnly ? 0.5 : 1
-        placeholderText: card.escalating ? "why it goes up, for whoever decides above" : card.kind === "needs-you" ? "an answer in words" : ""
+        placeholderText: card.escalating ? "why it goes up, for whoever decides above" : card.kind === "needs-you" ? "an answer in words" : card.kind === "decision" ? "answer its questions or add a note" : ""
         Accessible.name: card.escalating ? "why it goes up" : "your words"
         Keys.onPressed: Typing.mark()
+        submits: card.kind !== "decision"
         onAccepted: card.submitWords()
       }
     }
@@ -468,12 +463,13 @@ SurfaceFrame {
           id: choice
           required property var modelData
           readonly property var options: modelData.options
-          function decide(option) { card.decide(option, words.text.trim(), modelData.path) }
+          function decide(option) { card.decide(option, card.note, modelData.path) }
           Layout.fillWidth: true
           spacing: Theme.space.tight
 
           Caption {
             Layout.fillWidth: true
+            visible: card.gathered.length > 1
             wrapMode: Text.Wrap
             text: choice.modelData.part.replace(/_/g, " ").toUpperCase() + Theme.type.meta.separator + Requests.label(choice.modelData.request.requester).toUpperCase() + " ASKS"
           }
@@ -514,7 +510,7 @@ SurfaceFrame {
             role: "progress"
             icon: modelData === "grant" ? "check" : ""
             text: card.labelOf(modelData)
-            onClicked: card.decide(modelData, words.text.trim(), [])
+            onClicked: card.decide(modelData, card.note, [])
           }
         }
         TraceButton {
@@ -547,7 +543,7 @@ SurfaceFrame {
             dense: true
             role: "guarded"
             text: card.labelOf(modelData)
-            onClicked: card.decide(modelData, words.text.trim(), [])
+            onClicked: card.decide(modelData, card.note, [])
           }
         }
         TraceButton {
@@ -558,14 +554,14 @@ SurfaceFrame {
           icon: "close"
           text: "DENY"
           tip: "say no, with your words as the reason"
-          onClicked: card.decide("deny", words.text.trim())
+          onClicked: card.decide("deny", card.note)
         }
       }
 
       AlwaysChips {
         options: card.open && card.own && !card.escalating ? card.always(card.own.options) : []
         labels: options.map(option => card.labelOf(option))
-        onChosen: option => card.decide(option, words.text.trim(), [])
+        onChosen: option => card.decide(option, card.note, [])
       }
     }
   }

@@ -121,12 +121,8 @@ Item {
   function tryFocusCard() {
     reveal(newestCard, true)
     const card = cardItem()
-    if (card) {
-      if (card.kind === "needs-you")
-        card.focusWords()
-      else
-        card.focusDecision()
-    }
+    if (card)
+      card.focusWords()
     if (cardFocused() || --focusTries <= 0)
       focusRetry.stop()
   }
@@ -144,7 +140,16 @@ Item {
     const row = rowOf(key)
     const entry = row >= 0 ? timeline.itemAtIndex(row) : null
     if (entry && entry.content)
-      (entry.content as RequestDecision).decide(option, "", path)
+      (entry.content as RequestDecision).decide(option, (entry.content as RequestDecision).note, path)
+  }
+
+  // Whether the newest decision waiting on you shows whole, its buttons with
+  // it, so the quick chips need not offer its options again.
+  readonly property bool decidingShown: {
+    timeline.contentY; timeline.height; timeline.contentHeight; revision
+    const row = Omunculus.deciding ? rowOf(Omunculus.deciding.id) : -1
+    const entry = row >= 0 ? timeline.itemAtIndex(row) : null
+    return !!entry && entry.y >= timeline.contentY && entry.y + entry.height <= timeline.contentY + timeline.height
   }
 
   // Whether the keyboard is inside the card of a question.
@@ -491,7 +496,8 @@ Item {
           asker: asked ? Requests.asker(asked) : ""
           route: asked ? Requests.route(asked, Omunculus.noted[entry.key]) : []
           question: asked ? Requests.question(asked, Omunculus.noted[entry.key]) : ""
-          body: reply ? reply.body || reply.option : ""
+          choice: reply ? Requests.chose(reply.option) : ""
+          body: reply && reply.body !== reply.option ? reply.body : ""
           stamp: reply && reply.stamp ? reply.stamp : entry.stamp
         }
       }

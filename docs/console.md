@@ -194,7 +194,8 @@ The open glyph at its top right shows the work's thread as a page of its own
 
 A request is a card only while it waits on you, and it is in the main
 thread. Your answer reads as a bubble on the right (`AnswerBubble`) under
-YOU ANSWERED and the time, its text left aligned with the line breaks kept
+YOU ANSWERED and the time (YOU CHOSE APPROVE for a chosen option, YOU ASKED TO
+ADJUST for adjust, the note in the bubble, none when there is no note), its text left aligned with the line breaks kept
 and the bubble as wide as the text, up to 620 px. Above it the question is one dim line at the thread's left
 margin, "seller asked · via sales · 4 questions: " (whoever first asked it, in their tone, then the way it came, the count of a numbered list
 kept whole) and its first line with words, cut at 120 characters; Enter, Space or
@@ -284,8 +285,10 @@ While a decision waits on you, numbered quick chips sit over the composer:
 the options of the newest one (`Omunculus.deciding`, from
 `Requests.choices`, without the grants saved for good, which are chosen on
 its card), then PROGRESS: "1 ADJUST  2 APPROVE  3 PROGRESS". Pressing an
-option, or Alt and its number, decides it, without words, through its card,
-which comes into view and shows the option chosen while it goes. On a window under
+option, or Alt and its number, decides it with the note written in the card,
+through that card, which comes into view and shows the option chosen while it
+goes. While the card shows whole, with its own buttons, the chips offer only
+PROGRESS. On a window under
 560 px tall the chips are hidden; their chords still answer.
 
 The composer is the kit's `TextArea` in a frame with a chevron: one line that
@@ -332,7 +335,10 @@ into the reason it goes up and the action into ESCALATE; ANSWER INSTEAD
 turns it back. Sending shows your answer dimmed under SENDING…; answered,
 the card shrinks to the question and your answer; a failure reopens it with
 your words kept and an error line. The words are written in the kit's
-`TextBlock`, one line tall and growing with its text.
+`TextBlock`, one line tall and growing with its text; on a decision it is
+captioned YOUR NOTE OR ANSWERS (OPTIONAL), Enter breaks the line there (a
+button decides), and the keyboard arrives in it. Under a decision that gathers
+only one, the buttons carry no caption of their own.
 
 The header's title is the conversation's subject (`Omunculus.subject`, as in
 the masthead: the first root work's title, else the first message), or the

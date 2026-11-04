@@ -29,6 +29,15 @@ defmodule Omunculus.GuiRequestsTest do
     """)
   end
 
+  test "chose heads an answer by the option, apart from asking to adjust" do
+    run!(["Requests"], """
+    if (Requests.chose("approve") !== "YOU CHOSE APPROVE") throw Error("approve");
+    if (Requests.chose("grant_agent") !== "YOU CHOSE GRANT AGENT") throw Error("underscore");
+    if (Requests.chose("adjust") !== "YOU ASKED TO ADJUST") throw Error("adjust");
+    if (Requests.chose("") !== "") throw Error("words only");
+    """)
+  end
+
   test "question is what the origins asked when the harness opened the request" do
     run!(["Requests"], """
     const low = {id: "a", requester: agent("designer"), reason: "1. font?\\n2. colour?", origins: {}};
