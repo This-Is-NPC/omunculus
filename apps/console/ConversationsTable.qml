@@ -11,9 +11,9 @@ import "kit/ui"
 // title — its first work's, else what was first said in it — with its state
 // at the top right, toned only while something waits for you or agents work
 // in it, saying what waits: questions, a decision, a permission; under it,
-// dim, since when it waits, whom it is with and which agent holds its first
-// work at which stage of how many, when it began and how many works it
-// holds; then what the newest request asks, or, under a work's title, what
+// dim, whom it is with, "with sales › seller · qualify 1/6" when another
+// agent holds its first work, at which stage of how many, and since when it
+// waits, else when it began; then what the newest request asks, or, under a work's title, what
 // was first said. Each row's menu opens it at its team or its log. Its cells
 // decode into view.
 DataTable {
@@ -51,18 +51,17 @@ DataTable {
       : ({ "not-started": "NOT STARTED", working: "WORKING", done: "DONE", idle: "IDLE" })[state] || ""
   }
 
-  // Whom it is with, and the agent its first work is with, at its stage of
-  // the workflow while the work goes on: "sales · seller is at design (2/6)",
-  // or "sales is at qualify (1/6)" when they are the same.
+  // Whom it is with, the agent its first work is with when another, and the
+  // stage of the workflow while the work goes on: "with sales › seller ·
+  // design 2/6".
   function whoOf(conversation, root) {
     const known = summary(conversation)
     const partner = known ? known.agent : ""
     const holder = root ? Omunculus.agentOf(root) : ""
     const lane = root && root.state !== "done" && root.state !== "cancelled" ? Omunculus.laneOf(root) : null
-    const at = lane ? " is at " + lane.steps[lane.at].name + " (" + (lane.at + 1) + "/" + lane.steps.length + ")" : ""
-    if (holder === "" || holder === partner)
-      return partner !== "" ? partner + at : ""
-    return [partner, holder + at].filter(text => text !== "").join(table.separator)
+    const at = lane ? lane.steps[lane.at].name + " " + (lane.at + 1) + "/" + lane.steps.length : ""
+    const names = holder === "" || holder === partner ? partner : partner + " › " + holder
+    return [names !== "" ? "with " + names : "", at].filter(text => text !== "").join(table.separator)
   }
 
   // Needing you first, the longest waiting first, under NEEDS YOU; the others
@@ -87,10 +86,8 @@ DataTable {
     return [
       titleOf(conversation),
       [
-        needing ? "waiting since " + Time.clock(known.since, now) : "",
         whoOf(conversation, root),
-        Time.began(conversation.created_at, now),
-        works.length > 0 ? works.length + (works.length === 1 ? " work" : " works") : ""
+        needing ? "waiting since " + Time.clock(known.since, now) : "began " + Time.began(conversation.created_at, now)
       ].filter(text => text !== "").join(table.separator),
       stateText(conversation),
       said ? "“" + said + "”" : ""
