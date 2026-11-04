@@ -33,7 +33,7 @@ ColumnLayout {
   property real lastEvent: 0
   // How many requests wait on you.
   property int waiting: 0
-  // The model calls of the conversation.
+  // The model replies of the conversation.
   property int calls: 0
   // What the masthead calls the conversation; a title saying the same is not
   // repeated under the strip.
@@ -124,7 +124,7 @@ ColumnLayout {
     }
     if (!now || !now.agent)
       return [{ text: focusNode ? focusNode.doing : "", elide: true, keep: true }]
-    const above = path.map(step => step.agent).filter(agent => agent && agent !== now.agent)
+    const above = now.loose ? [] : path.map(step => step.agent).filter(agent => agent && agent !== now.agent)
     const clock = now.since !== null && working ? Progress.clock(Math.max(0, Math.round(tick - now.since))) : ""
     const chain = above.reduce((all, agent) => all.concat([{ text: agent, tone: Omunculus.toneOf(agent) }, { text: " › " }]), [])
     return (above.length > 0 ? [{ text: chain.map(piece => piece.text).join(""), short: "…› ", pieces: chain }] : [])
@@ -269,8 +269,8 @@ ColumnLayout {
         }
         Count {
           visible: strip.calls > 0
-          text: strip.calls + (strip.calls === 1 ? " CALL" : " CALLS")
-          tip: "the model calls and what they cost; open the cost"
+          text: strip.calls + (strip.calls === 1 ? " REPLY" : " REPLIES")
+          tip: "the model replies and what they cost; open the cost"
           onChosen: strip.openCost()
         }
       }

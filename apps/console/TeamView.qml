@@ -74,7 +74,7 @@ FocusScope {
 
   // The agent that talks with the person, at the conversation's level.
   readonly property var front: progress && progress.front && (here === "" || byWork[here].parent === "") ? progress.front : null
-  readonly property int needsYou: flat.filter(node => node.state === "needs-you").length
+  readonly property int needsYou: progress ? progress.forYou.length : 0
   readonly property int working: flat.filter(node => node.state === "working").length
 
   function closed(node) { return Progress.closed(node.state) }
@@ -465,7 +465,7 @@ FocusScope {
             }
             Chip {
               visible: !!line.modelData.front && line.modelData.front.asking !== ""
-              text: line.modelData.front ? "⇡ " + (line.width < 480 ? "" : "asks you ") + line.modelData.front.asking : ""
+              text: line.modelData.front ? "⇡ " + (line.width < 480 ? "" : line.modelData.front.asker + " asks you ") + line.modelData.front.asking : ""
               accent: Theme.warning
               alert: true
               onClicked: team.requestPicked("", line.modelData.front.ask)
