@@ -41,8 +41,9 @@ ColumnLayout {
 
   // Whether the box holds nothing to send.
   readonly property bool empty: entry.text.trim() === ""
-  // Whether a message is on its way to the server.
-  readonly property bool sending: entry.sending
+  // Whether a message is on its way to the server: the box is already empty,
+  // and SEND shows busy, until the server takes it or refuses it.
+  property bool sending: false
 
   // Whether Enter leaves a note rather than sends; once a note is left, or
   // on Esc, the box writes to the agent again.
@@ -50,12 +51,12 @@ ColumnLayout {
 
   spacing: Theme.space.tight
 
-  // A message on its way keeps its words in the box, whatever opens.
+  // A message on its way is not in the box, whatever opens.
   Connections {
     target: Omunculus
     enabled: composer.work === ""
     function onConversationIdChanged() {
-      if (!entry.sending)
+      if (!composer.sending)
         entry.text = Omunculus.composerDrafts[Omunculus.conversationId] || ""
     }
   }
@@ -76,17 +77,18 @@ ColumnLayout {
 
   function submit() {
     const value = entry.text.trim()
-    if (!value || entry.sending)
+    if (!value || composer.sending)
       return
     const picked = files.take()
-    entry.sending = true
+    entry.clear()
+    composer.sending = true
     Omunculus.send(value, composer.work, picked, () => {
-      entry.clear()
-      entry.sending = false
-      entry.focusBox()
+      composer.sending = false
     }, () => {
+      // Refused: the words come back, ahead of anything typed since.
+      entry.text = entry.text.trim() === "" ? value : value + "\n" + entry.text
       files.paths = picked
-      entry.sending = false
+      composer.sending = false
       entry.focusBox()
     })
   }
@@ -182,7 +184,7 @@ ColumnLayout {
         Layout.bottomMargin: (Theme.size.control - height) / 2
         role: "progress"
         implicitWidth: composer.compact ? Breakpoints.target(Window.width) : 86
-        busy: composer.busy
+        busy: composer.busy || composer.sending
         allowClickWhileBusy: true
         reason: composer.empty ? "write something first" : ""
         icon: "enter"
