@@ -390,6 +390,7 @@ Item {
       required property string steps
       required property string files
       required property bool fresh
+      required property bool pending
       required property string work
 
       // Entries are set apart by a margin above each one, so one that draws
@@ -441,6 +442,7 @@ Item {
           who: entry.who
           text: entry.text
           mine: entry.mine
+          pending: entry.pending
           note: entry.note
           stamp: entry.stamp
           files: entry.files

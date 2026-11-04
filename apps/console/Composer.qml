@@ -16,9 +16,10 @@ import "kit/ui"
 // SEND keeps its caption over the trace while the agent you write to is
 // working, says so on hover, and still sends; the agents below it never
 // hold it. It is dim while the box is empty. While a form waits, the
-// keyboard goes to the form, and the box offers to say something else. The words stay in the box,
-// dimmed, until the server took the message, and come back to be sent again
-// if it did not. Under 420 px of its own width its buttons show their icons
+// keyboard goes to the form, and the box offers to say something else. The
+// box empties at once and the words show in the thread, dim, until the
+// server's copy takes their place; they come back to the box to be sent
+// again if the server refused them. Under 420 px of its own width its buttons show their icons
 // only.
 ColumnLayout {
   id: composer
@@ -41,8 +42,9 @@ ColumnLayout {
 
   // Whether the box holds nothing to send.
   readonly property bool empty: entry.text.trim() === ""
-  // Whether a message is on its way to the server: the box is already empty,
-  // and SEND shows busy, until the server takes it or refuses it.
+  // Whether a message is on its way to the server: the box is already empty
+  // and the thread shows the words, and SEND shows busy, until the server
+  // takes it or refuses it.
   property bool sending: false
 
   // Whether Enter leaves a note rather than sends; once a note is left, or

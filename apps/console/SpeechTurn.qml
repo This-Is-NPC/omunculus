@@ -15,6 +15,8 @@ Item {
   required property string text
   required property bool mine
   property bool note: false
+  // Yours, still on its way: dim, SENDING… where the time goes.
+  property bool pending: false
   required property string stamp
   // The files attached with it, as JSON.
   required property string files
@@ -35,6 +37,7 @@ Item {
     width: Math.min(turn.widest, Math.max(heading.implicitWidth, line.implicitWidth + 2 * turn.inset))
     x: turn.mine ? turn.width - width : 0
     spacing: Theme.space.line
+    opacity: turn.pending ? 0.55 : 1
 
     Row {
       id: heading
@@ -45,7 +48,7 @@ Item {
       Label { text: turn.note ? "NOTE" : turn.who.toUpperCase(); color: turn.tone; font.pixelSize: Theme.type.name.size; font.letterSpacing: Theme.type.name.tracking }
       Label {
         anchors.verticalCenter: parent.verticalCenter
-        text: turn.stamp
+        text: turn.pending ? "SENDING…" : turn.stamp
         color: Qt.alpha(turn.tone, Theme.type.stamp.opacity)
         font.pixelSize: Theme.type.stamp.size
         font.letterSpacing: Theme.type.stamp.tracking

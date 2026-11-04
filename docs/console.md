@@ -228,7 +228,9 @@ design · round 2 › ○ assess …", shorter forms as the width shrinks, down 
 one dot per stage and the current name), or its title when it has no stages
 and the masthead does not already say it; then who works on it, from its
 agent down to the one at work, what that one does and its clock: "seller ›
-design-lead › designer: Writing files · 4:12". While a question waits on you
+design-lead › designer: Writing files · 4:12". Once you have written, both lines keep their
+room, blank until there is something to say, so the tabs below hold their
+place from the first message. While a question waits on you
 that line counts what you are asked as its card does: "sales asks you 7
 questions" for a numbered form, "to decide", "for a permission"
 (`Progress.asking`); a finished work says how long it took, and a team
@@ -287,7 +289,10 @@ grows with the text up to eight lines, then scrolls. Enter sends, Shift+Enter
 breaks the line, and a pasted text keeps its line breaks. While the agent
 written to works, SEND keeps its caption with the trace along its foot, its
 tip says "sales is working; SEND still sends", and it still sends. SEND is
-dim while the box is empty. While a question waits on you, form or not, the keyboard
+dim while the box is empty. A sent message empties the box at once and shows
+in the thread as your bubble, dim, with SENDING… where the time goes, until the
+server's copy replaces it in place; if the server refuses it, the bubble goes
+and the words come back to the box. While a question waits on you, form or not, the keyboard
 goes to its card (a form's first unanswered field), not the box, and the box says "or
 say something else to sales"; the count of what
 arrived out of view rises above the form's floating actions. Under 420 px its
