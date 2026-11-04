@@ -647,10 +647,10 @@ Singleton {
   function asked(id) { return asking.filter(request => (request.work_id || "") === id) }
   function unreadFrom(id) { return unread.filter(item => (item.work_id || "") === id) }
 
-  // The thread a work's runs show in: its own for a work handed down, the
-  // main one for a work the root agent opened for itself.
+  // The thread a work's runs show in: its own for a work drawn as a block in
+  // the thread (handed down, or opened by a run), else the main one.
   function threadOf(work) {
-    return work && (parentOf[work] !== undefined || works.some(item => item.id === work && item.parent_id)) ? work : ""
+    return work && (titles[work] !== undefined || parentOf[work] !== undefined || works.some(item => item.id === work && item.parent_id)) ? work : ""
   }
 
   // The model of a thread; an empty one until the thread has entries.
@@ -843,7 +843,7 @@ Singleton {
     if (made)
       keep("titles", work, body.title || "")
     if (event.type === "start-run") {
-      keep("runThread", event.run_id, Number(body.depth) > 0 && work ? work : "")
+      keep("runThread", event.run_id, threadOf(work))
       keep("runStarts", event.run_id, at)
     }
     // Where the event shows: its run's thread, else its work's.
