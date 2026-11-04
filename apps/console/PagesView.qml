@@ -90,8 +90,14 @@ Item {
     page = name
   }
 
-  // Back to where the window was before its last move, or to the start.
+  // Back to where the window was before its last move, or to the start. A
+  // conversation that has said nothing is left for the picker it was made on;
+  // one that has is not returned to it.
   function back() {
+    const fresh = open && Omunculus.thread("").count === 0
+    if (!fresh)
+      while (history.length > 0 && history[history.length - 1].page === "new")
+        history = history.slice(0, -1)
     if (history.length === 0) {
       startWanted()
       return
@@ -106,7 +112,8 @@ Item {
       else
         Omunculus.open(at.conversation)
     }
-    page = at.page
+    // A page of a conversation has one open.
+    page = inConversation.includes(at.page) && at.conversation === "" ? "conversations" : at.page
     pickedNode = at.picked
     workKey = at.work
   }
@@ -418,7 +425,10 @@ Item {
       id: picker
       anchors.fill: parent
       focus: parent.shown
-      onPicked: name => Omunculus.createConversation(name, () => view.page = "chat")
+      onPicked: name => {
+        view.remember()
+        Omunculus.createConversation(name, () => view.page = "chat")
+      }
       onBack: view.back()
     }
   }
