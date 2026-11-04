@@ -10,19 +10,21 @@
 // `where` names the groups of the keys dialog the entry is listed in.
 const table = [
   { id: "page", keys: ["1", "2", "3", "4"], tier: 1, mutates: false, label: "1 · 2 · …", where: ["everywhere"],
-    what: "the page of that number: the conversations and the board, or, in a conversation, its chat, team, log and cost" },
+    what: "the page of that number: the projects and the board, a project's conversations and the board, or, in a conversation, its chat, team, log and cost" },
   { id: "page-chord", keys: ["Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4"], tier: 2, mutates: false, label: "Ctrl+1 · Ctrl+2 · …", where: ["everywhere"],
     what: "the same, from a field being written or the picker" },
   { id: "next-page", keys: ["Ctrl+Tab"], tier: 2, mutates: false, where: ["everywhere"], what: "the next page" },
   { id: "previous-page", keys: ["Ctrl+Shift+Tab", "Ctrl+Backtab"], tier: 2, mutates: false, label: "Ctrl+Shift+Tab", where: ["everywhere"], what: "the previous page" },
   { id: "back", keys: ["Esc"], tier: 1, mutates: false, where: ["everywhere"],
     what: "let go of what the page holds, then back to where you were, at last the start" },
-  { id: "filter", keys: ["/"], tier: 1, mutates: false, where: ["conversations", "board", "team", "log"], what: "search or filter" },
+  { id: "filter", keys: ["/"], tier: 1, mutates: false, where: ["projects", "conversations", "board", "team", "log"], what: "search or filter" },
   { id: "tab", keys: ["[", "]"], tier: 1, mutates: false, where: ["team"], what: "the previous or next tab of the work picked" },
   { id: "help", keys: ["?", "F1"], tier: 1, mutates: false, where: ["everywhere"], what: "these keys" },
   { id: "start-new", keys: ["N"], tier: 1, mutates: false, where: ["start"], what: "a new conversation" },
   { id: "start-history", keys: ["H"], tier: 1, mutates: false, where: ["start"], what: "the conversations" },
   { id: "start-board", keys: ["B"], tier: 1, mutates: false, where: ["start"], what: "the board" },
+  { id: "start-projects", keys: ["P"], tier: 1, mutates: false, where: ["start"], what: "the projects" },
+  { id: "projects", keys: ["Ctrl+P"], tier: 2, mutates: false, where: ["everywhere"], what: "the projects, also from a field being written" },
   { id: "pick", keys: ["1", "2", "3", "4", "5", "6", "7", "8", "9"], tier: 1, mutates: false, label: "1 … 9", where: ["new conversation"],
     what: "choose whom it is with, from the cards" },
   { id: "new-conversation", keys: ["Ctrl+N"], tier: 2, mutates: false, where: ["conversations", "chat"], what: "new conversation" },
@@ -51,7 +53,7 @@ const table = [
 ]
 
 // The bare keys the window may answer to: pure navigation.
-const bareKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "/", "[", "]", "?", "F1", "Esc", "N", "H", "B"]
+const bareKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "/", "[", "]", "?", "F1", "Esc", "N", "H", "B", "P"]
 
 // Whether a key sequence is a single key with no Ctrl, Alt or Meta.
 function isBare(sequence) {
