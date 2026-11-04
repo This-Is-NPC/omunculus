@@ -555,7 +555,7 @@ Item {
           Label {
             anchors.verticalCenter: parent.verticalCenter
             text: ("Working" + (row.clock !== "" ? " " + row.clock : "")).toUpperCase()
-            color: Qt.alpha(row.tone, Theme.type.stamp.opacity)
+            color: Theme.dim
             font.pixelSize: Theme.type.stamp.size
             font.letterSpacing: Theme.type.stamp.tracking
           }
