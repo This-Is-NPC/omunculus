@@ -40,7 +40,6 @@ Item {
   // too, ends a gap before them, so the two never share room.
   readonly property real toolsRoom: toolsWidth > 0 ? toolsWidth + Theme.space.trail + Theme.space.gap - Theme.space.cell : 0
   // The title over the tools in the header, or "".
-  property string toolsTitle: ""
   // The tools stay on every row however narrow the table.
   property bool toolsAlways: false
   // Every row's tools work, as values do, rather than the selected row's
@@ -175,19 +174,6 @@ Item {
           font.letterSpacing: 1
           elide: Text.ElideRight
         }
-      }
-      Label {
-        visible: table.toolsTitle !== ""
-        width: table.toolsRoom
-        height: header.height
-        // Over the tools, past the gap before them.
-        leftPadding: Theme.space.gap
-        verticalAlignment: Text.AlignVCenter
-        text: table.toolsTitle.toUpperCase()
-        color: Theme.dim
-        font.pixelSize: 9
-        font.letterSpacing: 1
-        elide: Text.ElideRight
       }
     }
   }
