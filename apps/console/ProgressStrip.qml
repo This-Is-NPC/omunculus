@@ -66,10 +66,22 @@ ColumnLayout {
   // The focus work's title, when it says what the masthead does not.
   readonly property string title: focusNode && focusNode.steps.length === 0 && focusNode.title !== heading ? focusNode.title : ""
 
+  // Whether the person's message is in the thread: the conversation is
+  // starting even before its first run shows.
+  readonly property bool said: {
+    const entries = Omunculus.thread("")
+    for (let at = 0; at < entries.count; at++) {
+      if (entries.get(at).mine)
+        return true
+    }
+    return false
+  }
+
   // Where the conversation is before any work: starting while its first run
-  // goes, working on later ones, not started before any; else its state.
+  // goes or once the person has written, working on later ones, not started
+  // before any; else its state.
   readonly property string opening: working ? (threadWorking ? "" : Omunculus.runs.length <= 1 ? "STARTING" : "WORKING")
-    : phase === "idle" ? (Omunculus.runs.length === 0 ? "NOT STARTED" : "")
+    : phase === "idle" ? (Omunculus.runs.length > 0 ? "" : said ? "STARTING" : "NOT STARTED")
     : phase === "needs-you" ? "" : Progress.word(phase).toUpperCase()
 
   // The meta's parts, for Progress.fit: the stage gives way to its short
