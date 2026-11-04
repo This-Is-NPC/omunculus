@@ -141,7 +141,7 @@ kit's `Prose`, their web addresses links that open in the browser.
 
 Under its words, a turn's tool calls are one group (`ToolCalls`, from the
 kit's `Calls.group`). Folded, one line counts them, how many failed and the
-first that did: "9 tool calls · 1 failed: next_stage"; how long the run
+first that did: "9 steps · 1 failed: next_stage"; how long the run
 worked is the turn's to say. While the run is open its last three calls show
 live under it. Unfolded, each call is a row with the raw tool name and its args
 in brief (`Phrases.brief`: the path of a file tool, whom an `ask` or
@@ -159,7 +159,7 @@ text and no files are not added to the thread.
 A work handed down is a block (`SubWorkBlock`) in the thread of the run that
 handed it down, where it did; so is a root work a run opened. A card headed
 SUB-WORK with its agent, title and time, it says its state, for how long and
-how many tool calls, its stages when it has a workflow, and the round with
+how many steps (tool calls), its stages when it has a workflow, and the round with
 who sent it back. Choosing it unfolds it in place, indented, into the tabs
 01 TRANSCRIPT (the work's own thread, at most 480 px tall with its own
 scroll), 02 CHANGES and 03 RUNS; a block two levels down does not unfold.

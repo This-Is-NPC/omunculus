@@ -37,7 +37,7 @@ Column {
   readonly property int budget: Math.max(8, Math.floor((width - 18) / metrics.advanceWidth("M")) - 1)
   readonly property string failedPrefix: summary.failed + " failed"
   readonly property var header: Progress.fit([
-    { text: count === 1 ? "1 tool call" : count + " tool calls", short: count + " calls", keep: true },
+    { text: count === 1 ? "1 step" : count + " steps", short: count + " steps", keep: true },
     summary.failed > 0 ? { text: failedPrefix + ": " + (failedRow ? failedRow.name : ""), short: failedPrefix, keep: true } : null
   ].filter(part => part !== null), budget - 6).filter(text => text !== "")
 

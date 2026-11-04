@@ -49,7 +49,7 @@ SurfaceFrame {
     node && condition === "working" ? { text: Progress.clock(Math.max(0, now - node.since)), keep: true }
       : node && typeof node.finishedIn === "number" ? { text: "in " + Progress.span(node.finishedIn) }
       : null,
-    node ? { text: node.calls === 1 ? "1 tool call" : node.calls + " tool calls", short: node.calls + " calls" } : null,
+    node ? { text: node.calls === 1 ? "1 step" : node.calls + " steps", short: node.calls + " steps" } : null,
     node && node.failed > 0 ? { text: node.failed + " failed", keep: true } : null
   ].filter(part => part !== null), budget - 15).filter(text => text !== "")
   readonly property var stepper: node && node.steps.length > 0 ? Progress.stepper(node.steps, node.round, budget) : null
