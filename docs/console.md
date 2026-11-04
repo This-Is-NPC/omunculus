@@ -59,7 +59,9 @@ socket does not answer is marked not reachable. The kit's `Projects.js`
 turns all of it into `projectRows`, one per project, sorted by the
 conversations needing you first, then those working, then the latest
 activity, then the id, and `elsewhere`, the conversations needing you in
-the projects the window is not on. A conversation's state comes from its
+the projects the window is not on. A project whose conversations, or any
+summary of them, are not read yet is `reading` and counts none, so no count
+shows partial: `elsewhere` is 0 while another project is read. A conversation's state comes from its
 summary (`Projects.state`): NOT STARTED, NEEDS YOU while a request waits on
 you, WORKING while its agents run, DONE, or IDLE; every count of
 conversations on the start, PROJECTS and CONVERSATIONS is of those states,
@@ -96,10 +98,10 @@ The page asks "Who do you want to talk with?" and groups the agents. FOR
 YOUR WORK, the project's own agents, a card each filling the width, as many
 a row as 200 px allow: the portrait, the name and the role, the first
 sentence of its text without a leading "You are the". FOR THE PROJECT
-ITSELF, smaller, a line each with the portrait and the name: the agents of
+ITSELF, smaller, a line each with the portrait, the name and the role under
+it: the agents of
 the system pack (the setup's pack named `system`), which change how the
-project's agents work, each change only once you approve it; their role is
-in the tooltip. A card's tooltip also gives the model it runs on and the
+project's agents work, each change only once you approve it. A card's tooltip also gives the model it runs on and the
 number that picks it; no number is drawn on the cards. The agent last
 talked to in the window comes first in its group, marked LAST USED; the
 others follow in the order of the setup. The keyboard starts on it, else
@@ -418,9 +420,11 @@ The window opens on its start, clean: the ways in, centred, with the
 masthead's ⓘ opening the keys dialog. On a project: NEW CONVERSATION (N),
 CONVERSATIONS (H), BOARD (B) and PROJECTS (P), keys of this screen only,
 and "Project agency · its agents wait for a word". On the registry alone,
-the masthead says READY: PROJECTS and BOARD, and "3 projects · open
+the masthead says READY, or READING while a project is read: PROJECTS and BOARD, and "3 projects · open
 PROJECTS to choose one". Under the line, in the warning tone, each project
-where conversations need you, "agency · 13 need you". When the server does
+where conversations need you, "agency · 13 need you", a link that opens
+that project's conversations with NEEDS YOU lit; until every project is
+read the line says "reading what waits for you…" instead. When the server does
 not answer, the ways in are disabled and the line says so. Entered by one of them, its pages (`PagesView`) are in three levels
 (`level`), only those of the level on screen showing.
 
@@ -433,9 +437,8 @@ The registry's level:
   right: NEEDS YOU, WORKING (behind a dot), IDLE, NOT REACHABLE when its
   socket did not answer, or READING… until its conversations are read.
   Under it, dim, as much as fits, never cut: "16 conversations · 13 need
-  you · 1 working · 15 works not finished · Today 22:22", the works not
-  done or cancelled and the last activity (the newest conversation begun or
-  work changed); the works go first, then the working, then the last
+  you · 1 working · Today 22:22", with the last activity (the newest
+  conversation begun or work changed); the working goes first, then the last
   activity, then the conversations shorten to "16 conv." (`Projects.meta`).
   The search line (`/`) searches the ids; the chips ALL, NEEDS YOU and
   WORKING, shown while a project is in either state, keep those, on one
@@ -459,11 +462,10 @@ The project's level:
   joined when several do), NOT STARTED (nothing was said), WORKING (behind
   a dot), DONE (every work done or cancelled) or IDLE. Under it, dim:
   "waiting since 22:43" while something does, whom it is with and the agent
-  its first work is with at its stage ("sales · seller is at design (2/6)",
-  or "sales is at qualify (1/6)" when they are the same; read from the
-  project's works, which the window follows while entered), when it began
-  ("Today 21:59", "Yesterday 21:59" or "03 Nov 21:59") and how many works it
-  holds. The third line quotes what the newest request asks, or, under a
+  its first work is with at its stage ("with sales › seller · design 2/6",
+  or "with sales · qualify 1/6" when they are the same; read from the
+  project's works, which the window follows while entered), then since when
+  it waits, else "began Today 21:59" ("Yesterday 21:59" or "03 Nov 21:59"). The third line quotes what the newest request asks, or, under a
   work's title, what was first said. Each row's `⋯` opens the conversation
   at its TEAM or its LOG instead of its chat. A list the filters empty
   offers CLEAR FILTERS; ↑ on the first row goes back to the search. The
@@ -580,7 +582,7 @@ In a conversation there is no rail and no bar. Its pages are eco's tabs under
 its head, `01 CHAT  02 TEAM  03 LOG  04 COST`, wrapping on a narrow window,
 LOG marked while a work failed; the digits and Ctrl with them choose them as
 they choose the rail's pages. The masthead's right has, after the notices,
-`$` (COST), `⋯` and × (back to the conversations; BACK and Esc still return
+`⋯` and × (back to the conversations; BACK and Esc still return
 in history). The menu `⋯` holds the page's rarer actions that the page does
 not show itself, and NEW CONVERSATION: on TEAM, FIT THE MAP on the map, and
 WRITE TO ITS AGENT and LEAVE A NOTE with a work picked; on a thread, OPEN IN
