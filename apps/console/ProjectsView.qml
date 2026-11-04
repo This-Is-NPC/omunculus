@@ -6,11 +6,12 @@ import "kit/ui"
 
 // ProjectsView filters the projects of the server's registry — those
 // waiting for you, those agents work in, and their ids — and opens a
-// selected row at its conversations. `/` goes to the search; ↓ or Enter
-// back to the rows; Esc on them leaves.
+// selected row at its conversations. Its readout counts what it lists, for
+// the bar. `/` goes to the search; ↓ or Enter back to the rows, ↑ on the
+// first row back to the search; Esc on them leaves.
 ColumnLayout {
   id: list
-  spacing: 14
+  spacing: Theme.space.block
 
   property bool active: false
   // "", or the state kept: "waiting" or "working".
@@ -21,8 +22,16 @@ ColumnLayout {
   signal opened(var place)
   signal leave()
 
+  readonly property string readout: shown.length + (shown.length === 1 ? " PROJECT" : " PROJECTS")
+
   function focusEntry() { table.focusRows() }
   function focusFilter() { searchBox.forceActiveFocus() }
+
+  function clearFilters() {
+    filter = ""
+    search = ""
+    searchBox.clear()
+  }
 
   readonly property int waiting: Projects.filter(Omunculus.projectRows, "", "waiting").length
   readonly property int working: Projects.filter(Omunculus.projectRows, "", "working").length
@@ -36,30 +45,17 @@ ColumnLayout {
   }
   Keys.onEscapePressed: leave()
 
-  RowLayout {
+  FilterBox {
+    id: searchBox
     Layout.fillWidth: true
-    spacing: 10
-    FilterBox {
-      id: searchBox
-      Layout.fillWidth: true
-      placeholderText: "search projects"
-      onApplied: value => list.search = value
-      onLeave: table.focusRows()
-    }
-    Label {
-      Layout.maximumWidth: Math.max(48, list.width / 4)
-      text: list.shown.length + (list.shown.length === 1 ? " project" : " projects")
-      color: Theme.dim
-      font.pixelSize: 10
-      font.letterSpacing: 1
-      elide: Text.ElideRight
-    }
+    placeholderText: "Search projects…  /"
+    onApplied: value => list.search = value
+    onLeave: table.focusRows()
   }
 
-  Flow {
+  ChipStrip {
     Layout.fillWidth: true
     visible: list.waiting > 0 || list.working > 0 || list.filter !== ""
-    spacing: 6
     Chip {
       text: "ALL"
       checked: list.filter === ""
@@ -94,7 +90,14 @@ ColumnLayout {
     selectedId: list.selected
     loading: !Omunculus.watching
     emptyText: !Omunculus.watching ? "reading the projects"
-      : list.search ? "no project matches “" + list.search + "”" : "no project in this server's registry"
+      : list.search ? "no project matches “" + list.search + "”"
+      : list.filter !== "" ? "no project in this state" : "no project in this server's registry"
+    emptyAction: Omunculus.watching && (list.search || list.filter !== "") ? "CLEAR FILTERS" : ""
+    onEmptyActed: {
+      list.clearFilters()
+      table.focusRows()
+    }
+    onTopLeft: list.focusFilter()
     onOpened: row => list.opened({ id: row.id, socket: row.socket })
     onBackRequested: list.leave()
   }
