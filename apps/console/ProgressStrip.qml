@@ -47,6 +47,8 @@ ColumnLayout {
 
   signal toggle()
   signal answer()
+  // The result of a done conversation is wanted.
+  signal openResult()
   // The agents counted, or the cost, are wanted.
   signal openTeam()
   signal openCost()
@@ -270,6 +272,21 @@ ColumnLayout {
         parts: strip.meta
         font.pixelSize: Theme.type.meta.size
         font.letterSpacing: Theme.type.meta.tracking
+        // Done, the meta leads to what was delivered.
+        activeFocusOnTab: strip.phase === "done"
+        Accessible.role: strip.phase === "done" ? Accessible.Link : Accessible.StaticText
+        Keys.onReturnPressed: if (strip.phase === "done") strip.openResult()
+        Keys.onSpacePressed: if (strip.phase === "done") strip.openResult()
+        FocusRing { shown: parent.activeFocus; anchors.margins: -Theme.space.row }
+        MouseArea {
+          id: delivered
+          anchors.fill: parent
+          enabled: strip.phase === "done"
+          hoverEnabled: true
+          cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+          onClicked: strip.openResult()
+        }
+        Hint { active: delivered.containsMouse; text: "show what was delivered" }
       }
       // The counts go on with the meta's line, at its own separator.
       Row {

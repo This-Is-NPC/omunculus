@@ -335,6 +335,12 @@ Item {
     }
   }
 
+  // Takes the chat to the delivered result.
+  function showResult() {
+    go("chat")
+    Qt.callLater(timeline.showResult)
+  }
+
   // Opens or closes the progress; opened, the keyboard goes to its tree
   // when `focusing`, or always over a narrow chat, where it covers the
   // composer; closed, back to the composer. From another page of the
@@ -607,6 +613,7 @@ Item {
       threadWorking: view.page === "chat" && timeline.working !== null
       onToggle: view.toggleProgress(false)
       onAnswer: view.answer()
+      onOpenResult: view.showResult()
       onOpenTeam: view.go("map")
       onOpenCost: view.go("cost")
     }

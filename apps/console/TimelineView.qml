@@ -99,6 +99,12 @@ Item {
     timeline.positionViewAtIndex(row, top || (entry && entry.height > timeline.height * 0.6) ? ListView.Beginning : ListView.Center)
   }
 
+  // Brings the delivered result, the newest note of a done conversation, into view.
+  function showResult() {
+    if (newestNote >= 0)
+      reveal(model.get(newestNote).key, true)
+  }
+
   // The card of the newest question for you, once its entry exists.
   function cardItem() {
     const row = newestCard !== "" ? rowOf(newestCard) : -1
@@ -562,6 +568,7 @@ Item {
           text: entry.text
           stamp: entry.stamp
           unfolded: root.finished && entry.index === root.newestNote
+          result: root.finished && entry.index === root.newestNote
         }
       }
 
