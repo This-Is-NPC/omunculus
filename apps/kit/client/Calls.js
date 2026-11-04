@@ -24,10 +24,10 @@ function diff(name, args) {
   return null;
 }
 
-// A turn's steps ({name, ok, text, args, output, outcome, hook?, at?}) as one
-// group: how many calls and how many failed (outcomes are not calls), the
-// seconds between the first and last step when they carry `at`, and one row
-// per step. Hooks that passed fold into one row, where the first of them ran.
+// A turn's steps ({name, ok, text, args, output, outcome, hook?}) as one
+// group: how many calls and how many failed (outcomes are not calls), and one
+// row per step. Hooks that passed fold into one row, where the first of them
+// ran.
 function group(steps) {
   const rows = [];
   let calls = 0;
@@ -60,8 +60,5 @@ function group(steps) {
       count: 1
     });
   }
-  const timed = steps.filter(step => typeof step.at === "number");
-  const out = { calls: calls, failed: failed, rows: rows };
-  if (timed.length > 0) out.seconds = Math.max(0, timed[timed.length - 1].at - timed[0].at);
-  return out;
+  return { calls: calls, failed: failed, rows: rows };
 }

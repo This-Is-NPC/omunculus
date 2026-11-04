@@ -111,9 +111,9 @@ kit's `Prose`, their web addresses links that open in the browser.
 
 Under its words, a turn's tool calls are one group (`ToolCalls`, from the
 kit's `Calls.group`). Folded, one line counts them, how many failed and the
-first that did, and how long they took: "9 tool calls · 1 failed:
-next_stage · 42 s"; while the run is open its last three calls show live
-under it. Unfolded, each call is a row with the raw tool name and its args
+first that did: "9 tool calls · 1 failed: next_stage"; how long the run
+worked is the turn's to say. While the run is open its last three calls show
+live under it. Unfolded, each call is a row with the raw tool name and its args
 in brief (`Phrases.brief`: the path of a file tool, whom an `ask` goes to,
 the first work a `work` call opens), and a failed call shows its output, six
 lines and then all on demand. An `edit` opens a small diff of the lines it

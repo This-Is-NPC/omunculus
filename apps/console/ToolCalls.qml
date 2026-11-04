@@ -6,8 +6,8 @@ import "kit/client/Progress.js" as Progress
 import "kit/ui"
 
 // ToolCalls is what one run called, as a group under its words. Folded, one
-// line counts the calls, how many failed and the first that did, and how long
-// they took; while the run is open its last three calls show live below it.
+// line counts the calls, how many failed and the first that did; while the
+// run is open its last three calls show live below it.
 // Unfolded, one row per call: the raw tool name, its args in brief, and under
 // a failed call its output, six lines and then all on demand. An edit opens a
 // small diff of what it replaced, a write the first lines it wrote. Outcomes
@@ -35,8 +35,7 @@ Column {
   readonly property string failedPrefix: summary.failed + " failed"
   readonly property var header: Progress.fit([
     { text: count === 1 ? "1 tool call" : count + " tool calls", short: count + " calls", keep: true },
-    summary.failed > 0 ? { text: failedPrefix + ": " + (failedRow ? failedRow.name : ""), short: failedPrefix, keep: true } : null,
-    summary.seconds !== undefined ? { text: Progress.span(summary.seconds) } : null
+    summary.failed > 0 ? { text: failedPrefix + ": " + (failedRow ? failedRow.name : ""), short: failedPrefix, keep: true } : null
   ].filter(part => part !== null), budget - 6).filter(text => text !== "")
 
   visible: rows.length > 0

@@ -15,16 +15,16 @@ defmodule Omunculus.GuiCallsTest do
   test "group counts every call, folds passed hooks and keeps outcomes as rows" do
     run!(["Phrases", "Calls"], """
     const steps = [
-      {name: "read", ok: true, args: {path: "templates/proposal.md"}, output: "", outcome: false, at: 10},
-      {name: "on-continue", ok: true, args: {event: {}}, output: "", outcome: false, hook: true, at: 12},
-      {name: "next_stage", ok: false, args: {}, output: "gate: \\"Price\\" missing", outcome: false, at: 20},
-      {name: "on-notify", ok: true, args: {event: {}}, output: "", outcome: false, hook: true, at: 25},
-      {name: "on-break", ok: false, args: {event: {}}, output: "hook failed", outcome: false, hook: true, at: 30},
-      {name: "edit", ok: true, args: {path: "proposal.md", edits: [{old: "a\\nb", new: "a\\nB\\nc"}]}, output: "", outcome: false, at: 40},
-      {name: "continue", ok: true, text: "moved the work to design", output: "", outcome: true, at: 52}
+      {name: "read", ok: true, args: {path: "templates/proposal.md"}, output: "", outcome: false},
+      {name: "on-continue", ok: true, args: {event: {}}, output: "", outcome: false, hook: true},
+      {name: "next_stage", ok: false, args: {}, output: "gate: \\"Price\\" missing", outcome: false},
+      {name: "on-notify", ok: true, args: {event: {}}, output: "", outcome: false, hook: true},
+      {name: "on-break", ok: false, args: {event: {}}, output: "hook failed", outcome: false, hook: true},
+      {name: "edit", ok: true, args: {path: "proposal.md", edits: [{old: "a\\nb", new: "a\\nB\\nc"}]}, output: "", outcome: false},
+      {name: "continue", ok: true, text: "moved the work to design", output: "", outcome: true}
     ];
     const out = Calls.group(steps);
-    check(out.calls === 6 && out.failed === 2 && out.seconds === 42, "counts", out);
+    check(out.calls === 6 && out.failed === 2, "counts", out);
     check(out.rows.map(row => row.name).join() === "read,hook,next_stage,on-break,edit,continue", "rows", out.rows.map(row => row.name));
     check(out.rows[0].brief === "templates/proposal.md" && out.rows[0].ok && out.rows[0].diff === null, "read", out.rows[0]);
     check(out.rows[1].hook && out.rows[1].count === 2 && out.rows[1].brief === "2 hooks ran", "hooks", out.rows[1]);
@@ -32,8 +32,8 @@ defmodule Omunculus.GuiCallsTest do
     check(out.rows[3].hook && !out.rows[3].ok && out.rows[3].output === "hook failed", "failed hook", out.rows[3]);
     check(JSON.stringify(out.rows[4].diff) === JSON.stringify({removed: ["a", "b"], added: ["a", "B", "c"]}), "edit diff", out.rows[4].diff);
     check(out.rows[5].outcome && out.rows[5].brief === "moved the work to design" && out.rows[5].diff === null, "outcome", out.rows[5]);
-    const untimed = Calls.group([ok("ls")]);
-    check(untimed.seconds === undefined && untimed.calls === 1 && untimed.rows[0].brief === "", "untimed", untimed);
+    const one = Calls.group([ok("ls")]);
+    check(one.calls === 1 && one.rows[0].brief === "", "one call", one);
     """)
   end
 
