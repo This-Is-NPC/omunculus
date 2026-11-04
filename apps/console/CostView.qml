@@ -25,24 +25,36 @@ FocusScope {
 
   Keys.onEscapePressed: leave()
 
+  // A figure's name, set apart from the one above when stacked, and its value.
+  component Name: Label {
+    Layout.topMargin: parent && parent.columns === 1 ? 6 : 0
+    color: Theme.dim
+    font.pixelSize: 11
+  }
+  component Value: Label {
+    Layout.fillWidth: true
+    font.pixelSize: 11
+    wrapMode: Text.Wrap
+  }
+
+  // Each figure's name beside its value, or above it under 480 px.
   component Figures: GridLayout {
     id: figures
     required property var used
-    columns: 2
+    columns: width < 480 ? 1 : 2
     columnSpacing: 14
-    rowSpacing: 6
-    Label { text: "model calls"; color: Theme.dim; font.pixelSize: 11 }
-    Label { text: String(figures.used.calls); font.pixelSize: 11 }
-    Label { text: "read by the model"; color: Theme.dim; font.pixelSize: 11 }
-    Label { text: view.tokens(figures.used.input) + (figures.used.cached > 0 ? "  ·  (" + view.tokens(figures.used.cached) + " from cache)" : ""); font.pixelSize: 11 }
-    Label { text: "written by the model"; color: Theme.dim; font.pixelSize: 11 }
-    Label { text: view.tokens(figures.used.output); font.pixelSize: 11 }
-    Label { text: "cost"; color: Theme.dim; font.pixelSize: 11 }
-    Label {
+    rowSpacing: columns === 1 ? 2 : 6
+    Name { text: "model calls" }
+    Value { text: String(figures.used.calls) }
+    Name { text: "read by the model" }
+    Value { text: view.tokens(figures.used.input) + (figures.used.cached > 0 ? "  ·  (" + view.tokens(figures.used.cached) + " from cache)" : "") }
+    Name { text: "written by the model" }
+    Value { text: view.tokens(figures.used.output) }
+    Name { text: "cost" }
+    Value {
       text: figures.used.priced === 0 ? "-" : Omunculus.money(figures.used.cost)
         + (figures.used.priced < figures.used.calls ? "  ·  " + figures.used.priced + " of " + figures.used.calls + " calls priced" : "")
       color: figures.used.priced === 0 ? Theme.dim : Theme.primary
-      font.pixelSize: 11
     }
   }
 
@@ -77,6 +89,7 @@ FocusScope {
         text: "The provider sends no price."
         color: Theme.dim
         font.pixelSize: 11
+        wrapMode: Text.Wrap
       }
     }
   }
