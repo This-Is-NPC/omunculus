@@ -9,7 +9,9 @@ import "kit/ui"
 // line counts the calls, how many failed and the first that did; while the
 // run is open its last three calls show live below it.
 // Unfolded, one row per call: the raw tool name, its args in brief, and under
-// a failed call its output, six lines and then all on demand. An edit opens a
+// a failed call its output, six lines and then all on demand. An ask or an
+// escalate names whom it goes to, never its question: the request's card or
+// exchange shows that once. An edit opens a
 // small diff of what it replaced, a write the first lines it wrote. Outcomes
 // (moved on, sent back, stopped, granted) are rows in plain words, and the
 // hooks that ran without trouble are one row.
@@ -22,7 +24,8 @@ Column {
   property bool live: false
   property bool open: false
 
-  readonly property var summary: Calls.group(steps)
+  readonly property var summary: Calls.group(steps.map(step => ["ask", "escalate"].includes(step.name) && !step.outcome
+    ? Object.assign({}, step, { args: { to: step.args && typeof step.args.to === "string" ? step.args.to : "" } }) : step))
   readonly property int count: summary.calls
   readonly property var failedRow: summary.rows.find(row => !row.outcome && !row.ok) || null
   readonly property var rows: summary.rows
@@ -39,14 +42,14 @@ Column {
   ].filter(part => part !== null), budget - 6).filter(text => text !== "")
 
   visible: rows.length > 0
-  spacing: 4
+  spacing: Theme.space.line
 
   FontMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: 11 }
 
   Item {
     id: head
-    width: Math.min(group.width, line.implicitWidth + 4)
-    height: 20
+    width: Math.min(group.width, line.implicitWidth + Theme.space.line)
+    height: Theme.size.stackedLine
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
     Accessible.name: group.header.join(" · ")
@@ -60,7 +63,7 @@ Column {
     Row {
       id: line
       anchors.verticalCenter: parent.verticalCenter
-      spacing: 6
+      spacing: Theme.space.tight
       Icon { anchors.verticalCenter: parent.verticalCenter; name: group.open ? "chevron-down" : "chevron-right"; size: 10; color: pointer.containsMouse ? Theme.foreground : Theme.dim }
       Repeater {
         model: group.header
@@ -95,13 +98,13 @@ Column {
       readonly property bool failed: !modelData.outcome && !modelData.ok
       property bool diffOpen: false
       property bool outputAll: false
-      x: 16
-      width: group.width - 16
-      spacing: 2
+      x: Theme.space.block
+      width: group.width - x
+      spacing: Theme.space.row
 
       RowLayout {
         width: parent.width
-        spacing: 8
+        spacing: Theme.space.tight
         Label {
           Layout.alignment: Qt.AlignTop
           text: call.modelData.outcome ? ({ continue: "→", reopen: "↩", break: "✕" })[call.modelData.name] || "✓" : call.failed ? "✕" : "✓"
@@ -143,8 +146,8 @@ Column {
       Label {
         id: output
         visible: call.failed && call.modelData.output !== ""
-        x: 18
-        width: parent.width - 18
+        x: Theme.space.section
+        width: parent.width - x
         text: call.modelData.output
         color: Theme.error
         font.pixelSize: 11
@@ -154,7 +157,7 @@ Column {
       }
       Label {
         visible: output.visible && (output.truncated || call.outputAll)
-        x: 18
+        x: Theme.space.section
         text: call.outputAll ? "show less" : "show all"
         color: allPointer.containsMouse ? Theme.foreground : Theme.dim
         font.pixelSize: 11
@@ -171,16 +174,16 @@ Column {
       // What an edit removed and added, or the first lines a write wrote.
       Rectangle {
         visible: call.diffOpen && call.diff !== null
-        x: 18
-        width: parent.width - 18
-        height: visible ? lines.implicitHeight + 12 : 0
+        x: Theme.space.section
+        width: parent.width - x
+        height: visible ? lines.implicitHeight + Theme.space.cell : 0
         color: Theme.highlight
         border.color: Theme.line
         Column {
           id: lines
-          x: 8
-          y: 6
-          width: parent.width - 16
+          x: Theme.space.tight
+          y: Theme.space.tight
+          width: parent.width - 2 * Theme.space.tight
           Repeater {
             model: call.diffOpen && call.diff ? (call.diff.removed || []).map(text => ({ text: text, added: false }))
               .concat(call.diff.added.map(text => ({ text: text, added: true }))) : []

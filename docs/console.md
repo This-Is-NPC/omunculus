@@ -119,7 +119,8 @@ kit's `Calls.group`). Folded, one line counts them, how many failed and the
 first that did: "9 tool calls · 1 failed: next_stage"; how long the run
 worked is the turn's to say. While the run is open its last three calls show
 live under it. Unfolded, each call is a row with the raw tool name and its args
-in brief (`Phrases.brief`: the path of a file tool, whom an `ask` goes to,
+in brief (`Phrases.brief`: the path of a file tool, whom an `ask` or
+`escalate` goes to and never its question, which its card or exchange shows,
 the first work a `work` call opens), and a failed call shows its output, six
 lines and then all on demand. An `edit` opens a small diff of the lines it
 replaced, a `write` the first lines it wrote. Every call is shown, those
