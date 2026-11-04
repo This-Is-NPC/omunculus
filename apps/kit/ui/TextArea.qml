@@ -25,6 +25,8 @@ ColumnLayout {
 
   function focusBox() { input.forceActiveFocus() }
   function clear() { input.clear() }
+  // Focus given to the area, as forceActiveFocus() on it, goes to its box.
+  onActiveFocusChanged: if (activeFocus) input.forceActiveFocus()
 
   spacing: 6
   opacity: sending ? 0.5 : 1
