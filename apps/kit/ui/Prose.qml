@@ -19,7 +19,7 @@ Label {
   // The link the keyboard is on.
   property int chosen: 0
 
-  readonly property var parsed: plain ? { text: source, links: [] } : linked(written(Markdown.imageless(String(source || ""))))
+  readonly property var parsed: plain ? { text: source, links: [] } : Markdown.linked(written(Markdown.imageless(String(source || ""))), Theme.primary, Qt.tint(Theme.background, Qt.alpha(Theme.foreground, 0.1)))
   readonly property var links: parsed.links
   readonly property string pointed: hoveredLink !== "" ? hoveredLink : activeFocus && links.length > 0 ? links[Math.min(chosen, links.length - 1)] : ""
 
@@ -54,38 +54,6 @@ Label {
       before = line
     }
     return text
-  }
-
-  // `value` with each web or e-mail address it links or holds bare as an
-  // anchor in the accent, which Markdown would draw in the system's colour,
-  // and every one of them, in order; code is left as it is.
-  function linked(value) {
-    const links = []
-    const escape = part => part.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
-    const anchor = (url, label) => {
-      links.push(url)
-      return "<a href=\"" + escape(url) + "\" style=\"color:" + Theme.primary + "\">" + label + "</a>"
-    }
-    const text = String(value || "").replace(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)|<(https?:\/\/[^>\s]+)>|\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>`"'\[\]]+)|([A-Za-z0-9._%+-]+@[A-Za-z][A-Za-z0-9-]*(?:\.[A-Za-z][A-Za-z0-9-]*)*\.[A-Za-z]{2,})(?![\w.-]*\d)|([^\s<>`]+@[^\s<>`]+)/gi,
-      (match, code, auto, label, target, bare, mail, at) => {
-        if (code)
-          return match
-        if (mail)
-          return anchor("mailto:" + mail, escape(mail))
-        // A name with an @ that is no address ("node@22.23.3") is not one
-        // for Markdown either.
-        if (at)
-          return at.replace(/@/g, "&#64;")
-        if (auto)
-          return anchor(auto, escape(auto))
-        if (target)
-          return anchor(target, label)
-        // Punctuation that ends a sentence ends the address too.
-        const tail = bare.match(/[.,;:!?)'"]+$/)
-        const url = tail ? bare.slice(0, -tail[0].length) : bare
-        return anchor(url, escape(url)) + (tail ? tail[0] : "")
-      })
-    return { text: text, links: links.filter((link, at) => links.indexOf(link) === at) }
   }
 
   function open(link) {

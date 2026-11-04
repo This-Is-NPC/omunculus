@@ -28,3 +28,48 @@ function imageless(text) {
     .join("")
     .replace(/!\[/g, "!​[")
 }
+
+const escapeHtml = part => part.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+
+// `value` with each web or e-mail address it links or holds bare as an
+// anchor in `ink`, which Markdown would draw in the system's colour, and
+// every one of them, in order. An inline code span gets the background
+// `tint`; code is never linked. A name with an @ that is no address
+// ("node@22.23.3") has its @ escaped, so Markdown links it no more than we do.
+function linked(value, ink, tint) {
+  const links = []
+  const anchor = (url, label) => {
+    links.push(url)
+    return "<a href=\"" + escapeHtml(url) + "\" style=\"color:" + ink + "\">" + label + "</a>"
+  }
+  const text = String(value || "").replace(/(```[\s\S]*?(?:```|$))|`([^`\n]*)`|<(https?:\/\/[^>\s]+)>|\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>`"'\[\]]+)|([A-Za-z0-9._%+-]+@[A-Za-z][A-Za-z0-9-]*(?:\.[A-Za-z][A-Za-z0-9-]*)*\.[A-Za-z]{2,})(?![\w.-]*\d)|(\w[\w.%+-]*@[^\s<>`()"'\[\]]+)/gi,
+    (match, fence, code, auto, label, target, bare, mail, at) => {
+      if (fence)
+        return match
+      if (code !== undefined)
+        return "<span style=\"background-color:" + tint + "\">" + escapeHtml(code).replace(/[\\*_\[\]!~#|@]/g, c => "&#" + c.charCodeAt(0) + ";") + "</span>"
+      if (mail)
+        return anchor("mailto:" + mail, escapeHtml(mail))
+      if (at)
+        return at.replace(/@/g, "&#64;")
+      if (auto)
+        return anchor(auto, escapeHtml(auto))
+      if (target)
+        return anchor(target, label)
+      // Punctuation that ends a sentence ends the address too.
+      const tail = bare.match(/[.,;:!?)'"]+$/)
+      const url = tail ? bare.slice(0, -tail[0].length) : bare
+      return anchor(url, escapeHtml(url)) + (tail ? tail[0] : "")
+    })
+  return { text: text, links: links.filter((link, at) => links.indexOf(link) === at) }
+}
+
+// `text` with its inline marks removed: code ticks, bold and italic marks,
+// and links down to their label.
+function plain(text) {
+  return String(text || "")
+    .replace(/\[([^\]\n]*)\]\([^)\s]*\)/g, "$1")
+    .replace(/`([^`\n]*)`/g, "$1")
+    .replace(/(\*\*|__)(?=\S)([^\n]*?\S)\1/g, "$2")
+    .replace(/(^|[\s(])([*_])(?=\S)([^*_\n]*?\S)\2(?=[\s).,:;!?]|$)/g, "$1$3")
+}
