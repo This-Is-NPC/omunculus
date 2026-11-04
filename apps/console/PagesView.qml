@@ -385,31 +385,21 @@ Item {
   }
 
   // The rarer actions of a conversation's page, as the masthead's ActionMenu
-  // takes them, each with what it runs.
+  // takes them, each with what it runs; those the page shows itself are not
+  // repeated here.
   readonly property var more: {
     if (!inside)
       return []
     const items = []
-    const add = (id, icon, text, run, chosen) => items.push({ id: id, icon: icon, text: text, run: run, chosen: !!chosen })
+    const add = (id, icon, text, run) => items.push({ id: id, icon: icon, text: text, run: run })
     if (page === "map" && team) {
-      if (team.mapAllowed) {
-        add("outline", "list", "AS AN OUTLINE", () => view.teamShownAs = "outline", teamShownAs !== "map")
-        add("map", "map", "AS A MAP", () => view.teamShownAs = "map", teamShownAs === "map")
-      }
       if (teamShownAs === "map" && team.mapAllowed)
         add("fit", "map", "FIT THE MAP", () => view.team.fit())
       if (node !== "") {
         add("write", "edit", "WRITE TO ITS AGENT", () => view.team.write(false))
         add("comment", "plus", "LEAVE A NOTE", () => view.team.write(true))
       }
-      if (askedOfYou.length > 0)
-        add("escalate", "chevron-up", "ESCALATE", () => decision.show(view.askedOfYou[0].id, true))
-      if (notesHere.length > 0)
-        add("mark-read", "check", notesHere.length > 1 ? "MARK " + notesHere.length + " NOTES READ" : "MARK ITS NOTE READ",
-          () => view.notesHere.forEach(note => Omunculus.markRead(note.id)))
     }
-    if (page === "log" && events && (events.picked !== null || events.source.count > 0))
-      add("copy", "copy", events.picked !== null ? "COPY THE EVENT" : "COPY THE LOG", () => view.events.copy())
     if (page === "thread") {
       add("open-team", "people", "OPEN IN TEAM", () => view.openInTeam(view.threadWork))
       add("log", "list", "ITS LOG", () => view.showLog(view.threadWork))
@@ -452,7 +442,12 @@ Item {
       quick.slice(0, Shortcuts.keys("quick").length).forEach((chip, index) => all.push({ key: Shortcuts.keys("quick")[index], run: chip.run }))
     if (page === "map" && team) {
       all.push(chord("team-log", () => view.team.showTab("log")), chord("team-changes", () => view.team.showTab("changes")))
-      more.filter(item => ["write", "comment", "escalate", "mark-read", "fit"].includes(item.id)).forEach(item => all.push(chord(item.id, item.run)))
+      more.filter(item => ["write", "comment", "fit"].includes(item.id)).forEach(item => all.push(chord(item.id, item.run)))
+      // The detail's menu has these too.
+      if (askedOfYou.length > 0)
+        all.push(chord("escalate", () => decision.show(view.askedOfYou[0].id, true)))
+      if (notesHere.length > 0)
+        all.push(chord("mark-read", () => view.notesHere.forEach(note => Omunculus.markRead(note.id))))
     }
     if (page === "thread")
       all.push(chord("open-team", () => view.openInTeam(view.threadWork)))

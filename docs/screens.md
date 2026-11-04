@@ -184,10 +184,10 @@ one card per work, the work picked beside it.
 | [ · ] | the previous or next tab |
 | / | filter the works |
 | Alt+R | answer what waits on you nearest the work picked |
-| Alt+E | open the decision of what it asked you, to escalate (`⋯` ESCALATE) |
+| Alt+E | open the decision of what it asked you, to escalate (the detail's `⋯` ESCALATE) |
 | Alt+W | write to its agent (`⋯` WRITE TO ITS AGENT) |
 | Alt+C | leave it a note, without a run (`⋯` LEAVE A NOTE) |
-| Alt+M | mark its notes read |
+| Alt+M | mark its notes read (the detail's `⋯` MARK READ) |
 | Alt+L · Alt+G | its LOG and CHANGES tabs |
 | Alt+F | the whole map in view |
 | Esc | the detail, then the outline, then back |

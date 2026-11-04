@@ -530,11 +530,10 @@ its head, `01 CHAT  02 TEAM  03 LOG  04 COST`, wrapping on a narrow window,
 LOG marked while a work failed; the digits and Ctrl with them choose them as
 they choose the rail's pages. The masthead's right has, after the notices,
 `$` (COST), `⋯` and × (back to the conversations; BACK and Esc still return
-in history). The menu `⋯` holds the page's rarer actions and NEW
-CONVERSATION: on TEAM, AS AN OUTLINE and AS A MAP from 900 px, FIT THE MAP,
-WRITE TO ITS AGENT and LEAVE A NOTE with a work picked, ESCALATE and the
-notes to mark read; on LOG, COPY THE EVENT or COPY THE LOG; on a thread,
-OPEN IN TEAM and ITS LOG. While notes to you are unread, a notice `1 NOTE`
+in history). The menu `⋯` holds the page's rarer actions that the page does
+not show itself, and NEW CONVERSATION: on TEAM, FIT THE MAP on the map, and
+WRITE TO ITS AGENT and LEAVE A NOTE with a work picked; on a thread, OPEN IN
+TEAM and ITS LOG. While notes to you are unread, a notice `1 NOTE`
 shows the oldest on the chat and marks it read (Alt+M); its × puts it away
 until another comes.
 
@@ -606,13 +605,15 @@ logs each text drawn out of its box, the window or a clipping item as a
   the work asked, instead of whoever decides. The items of `⋯` answer to
   their chords: WRITE TO ITS AGENT (Alt+W), the composer of its THREAD tab
   writing to its agent, and LEAVE A NOTE (Alt+C), the same composer leaving a
-  note (Esc back to writing); ESCALATE (Alt+E) while it asked you something,
-  which opens the decision with Enter escalating; the notes marked read
-  (Alt+M), all of them; FIT THE MAP (Alt+F). Alt+L and Alt+G open its LOG and
+  note (Esc back to writing); FIT THE MAP (Alt+F). Those of the detail's `⋯`
+  too: ESCALATE (Alt+E) while it asked you something, which opens the
+  decision with Enter escalating, and the notes marked read (Alt+M), all of
+  them. Alt+L and Alt+G open its LOG and
   CHANGES tabs, `[` and `]` the previous and next tab, `/` the filter. The
   in-place cards and the note's check still answer and mark one.
 - On a work's thread, OPEN IN TEAM (Alt+O) and ITS LOG in `⋯`.
-- On LOG, `/` filters, and `⋯` copies the event picked or else the rows shown.
+- On LOG, `/` filters, and its own `⋯` copies the event picked or else the
+  rows shown.
 - On BOARD, its groupings (Alt+S, Alt+A, Alt+J) and FILTER (`/`).
 - On a work's page, BACK alone; ANSWER in its header strip (Alt+R) and its
   team's tool (Alt+O).
