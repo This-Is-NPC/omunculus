@@ -2,7 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "../client/Colour.js" as Colour
+import "Colour.js" as Colour
 
 Singleton {
   id: root

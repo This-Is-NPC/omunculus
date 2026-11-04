@@ -5,7 +5,11 @@ defmodule Omunculus.GuiModules do
   `Requests`) with its functions exported, as QML's `.import` gives it.
   """
 
-  @client Path.expand("../../apps/kit/client", __DIR__)
+  # The client's pure modules, and the ui's own (`Colour.js`, which the theme imports).
+  @folders [
+    Path.expand("../../apps/kit/client", __DIR__),
+    Path.expand("../../apps/kit/ui", __DIR__)
+  ]
 
   @doc "Runs `assertions` with `modules` loaded in order; returns deno's output and status."
   @spec run([String.t()], String.t()) :: {String.t(), non_neg_integer}
@@ -16,8 +20,9 @@ defmodule Omunculus.GuiModules do
 
   defp wrap(name) do
     source =
-      @client
-      |> Path.join(name <> ".js")
+      @folders
+      |> Enum.map(&Path.join(&1, name <> ".js"))
+      |> Enum.find(&File.exists?/1)
       |> File.read!()
       |> String.replace(~r/^\.pragma .*$/m, "")
       |> String.replace(~r/^\.import .*$/m, "")
