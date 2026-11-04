@@ -11,7 +11,7 @@ const tools = {
   escalate: { now: "Passing a question up" },
   reply: { now: "Answering" },
   work: { now: "Opening work", titled: true },
-  next_stage: { now: "Moving to the next step" },
+  next_stage: { now: "Moving to the next stage" },
   grant: { now: "Granting a permission" },
   continue: { now: "Moving the work on" }
 };
@@ -34,6 +34,13 @@ function phrase(name, args) {
   const tool = tools[name] || unknown;
   const title = titleOf(tool, args);
   return title ? tool.now + ": " + title : tool.now;
+}
+
+// What a failed call was doing, in plain words after "failed:" ("moving to
+// the next stage"); "a call" for a tool not in the table.
+function failure(name) {
+  const tool = tools[name];
+  return tool ? tool.now.charAt(0).toLowerCase() + tool.now.slice(1) : "a call";
 }
 
 // What a tool row shows after the tool's name: the path for the file tools,
