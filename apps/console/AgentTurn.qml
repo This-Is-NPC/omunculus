@@ -87,6 +87,7 @@ Item {
         font.letterSpacing: Theme.type.stamp.tracking
         elide: Text.ElideRight
       }
+      Item { visible: turn.worked === ""; Layout.fillWidth: true }
       // How long it worked reads at the dim text's contrast.
       Label {
         Layout.fillWidth: true
