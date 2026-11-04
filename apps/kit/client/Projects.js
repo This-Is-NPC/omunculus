@@ -82,15 +82,16 @@ function waitsFor(asks) {
 //    unreachable: Set of project ids, current: the window's project id}
 // `needsYou` and `working` count its conversations in those states; a
 // project whose socket did not answer counts none: what was read of it may
-// be stale. `unfinished` counts its works not done or cancelled. One whose
-// conversations are not read yet is "reading".
+// be stale. One whose conversations, or any summary of them, are not read
+// yet is "reading" and counts none: a partial count would be a wrong one.
 function rows(input) {
   return input.projects.map(place => {
     const conversations = input.conversations[place.id];
     const works = input.works[place.id] || [];
     const reachable = !input.unreachable.has(place.id);
     const states = (conversations || []).map(conversation => state(input.summaries[conversation.id] || null));
-    const count = wanted => reachable ? states.filter(each => each === wanted).length : 0;
+    const reading = reachable && (conversations === undefined || states.includes(""));
+    const count = wanted => reachable && !reading ? states.filter(each => each === wanted).length : 0;
     const needsYou = count("needs-you");
     const working = count("working");
     const stamps = (conversations || []).map(conversation => conversation.created_at)
@@ -102,12 +103,11 @@ function rows(input) {
       current: place.id === input.current,
       reachable: reachable,
       conversations: (conversations || []).length,
-      unfinished: works.filter(work => work.state !== "done" && work.state !== "cancelled").length,
       needsYou: needsYou,
       working: working,
       last: stamps.reduce((newest, stamp) => stamp > newest ? stamp : newest, ""),
       state: !reachable ? "unreachable"
-        : conversations === undefined ? "reading"
+        : reading ? "reading"
         : needsYou > 0 ? "waiting"
         : working > 0 ? "working"
         : "idle"
@@ -131,25 +131,30 @@ function filter(rows, text, chip) {
     && words.every(word => row.id.toLowerCase().includes(word)));
 }
 
-// The conversations needing you in the projects the window is not on.
+// Whether any project of `rows` is still being read.
+function reading(rows) {
+  return rows.some(row => row.state === "reading");
+}
+
+// The conversations needing you in the projects the window is not on, none
+// while one of them is still being read.
 function elsewhere(rows) {
-  return rows.filter(row => !row.current).reduce((sum, row) => sum + row.needsYou, 0);
+  const others = rows.filter(row => !row.current);
+  return reading(others) ? 0 : others.reduce((sum, row) => sum + row.needsYou, 0);
 }
 
 // A project's line under its id in at most `budget` characters, its parts
-// joined by `separator`: "15 conversations · 12 need you · 1 working · 14
-// works not finished · Yesterday 22:43", `last` its last activity. What
-// does not fit goes first: the works, then the working, then the last
-// activity, then the conversations shorten to "15 conv."; what needs you
-// stays. Parts with nothing to count are left out.
+// joined by `separator`: "15 conversations · 12 need you · 1 working ·
+// Yesterday 22:43", `last` its last activity. What does not fit goes first:
+// the working, then the last activity, then the conversations shorten to
+// "15 conv."; what needs you stays. Parts with nothing to count are left
+// out.
 function meta(row, last, budget, separator) {
   const named = row.conversations + (row.conversations === 1 ? " conversation" : " conversations");
   const needs = row.needsYou > 0 ? [row.needsYou + (row.needsYou === 1 ? " needs you" : " need you")] : [];
   const working = row.working > 0 ? [row.working + " working"] : [];
-  const works = row.unfinished > 0 ? [row.unfinished + (row.unfinished === 1 ? " work not finished" : " works not finished")] : [];
   const stamp = last ? [last] : [];
   const candidates = [
-    [named].concat(needs, working, works, stamp),
     [named].concat(needs, working, stamp),
     [named].concat(needs, stamp),
     [named].concat(needs),

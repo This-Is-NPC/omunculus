@@ -19,7 +19,7 @@ defmodule Omunculus.GuiProjectsTest do
              GuiModules.run(["Requests", "Questions", "Projects"], @fixtures <> assertions)
   end
 
-  test "rows count conversations, unfinished works and the latest activity" do
+  test "rows count conversations and the latest activity" do
     run!("""
     const rows = Projects.rows(input({
       projects: [place("agency")],
@@ -31,7 +31,7 @@ defmodule Omunculus.GuiProjectsTest do
     const row = rows[0];
     check(row.id === "agency" && row.socket === "/run/agency.sock", "place");
     check(row.current && row.reachable, "current " + JSON.stringify(row));
-    check(row.conversations === 2 && row.unfinished === 2, "counts " + JSON.stringify(row));
+    check(row.conversations === 2, "counts " + JSON.stringify(row));
     check(row.last === "2026-11-03T13:00:00Z", "last " + row.last);
     check(row.working === 1 && row.needsYou === 0 && row.state === "working", "state " + row.state);
     """)
@@ -48,7 +48,8 @@ defmodule Omunculus.GuiProjectsTest do
         "asks-too": {started: true, running: 0, waiting: 1},
         both: {started: true, running: 2, waiting: 1},
         runs: {started: true, running: 2, waiting: 0},
-        fresh: {started: false, running: 0, waiting: 0}
+        fresh: {started: false, running: 0, waiting: 0},
+        unread: {started: true, running: 0, waiting: 0}
       }
     }))[0];
     check(row.needsYou === 3 && row.working === 1, "one count per conversation " + JSON.stringify(row));
@@ -90,20 +91,19 @@ defmodule Omunculus.GuiProjectsTest do
     """)
   end
 
-  test "meta drops the works, the working, the activity, then shortens, to fit its budget" do
+  test "meta drops the working, the activity, then shortens, to fit its budget" do
     run!("""
-    const row = {conversations: 15, needsYou: 12, working: 1, unfinished: 14};
+    const row = {conversations: 15, needsYou: 12, working: 1};
     const meta = budget => Projects.meta(row, "Yesterday 22:43", budget, " · ");
-    check(meta(200) === "15 conversations · 12 need you · 1 working · 14 works not finished · Yesterday 22:43", "200 " + meta(200));
-    check(meta(60) === "15 conversations · 12 need you · 1 working · Yesterday 22:43", "60 " + meta(60));
+    check(meta(200) === "15 conversations · 12 need you · 1 working · Yesterday 22:43", "200 " + meta(200));
     check(meta(50) === "15 conversations · 12 need you · Yesterday 22:43", "50 " + meta(50));
     check(meta(30) === "15 conversations · 12 need you", "30 " + meta(30));
     check(meta(22) === "15 conv. · 12 need you", "22 " + meta(22));
     check(meta(5) === "15 conv. · 12 need you", "the last candidate, to elide " + meta(5));
-    for (const budget of [200, 60, 50, 30, 22]) check(meta(budget).length <= budget, "fits " + budget);
-    const one = {conversations: 1, needsYou: 1, working: 0, unfinished: 1};
-    check(Projects.meta(one, "", 200, " · ") === "1 conversation · 1 needs you · 1 work not finished", "one " + Projects.meta(one, "", 200, " · "));
-    const quiet = {conversations: 2, needsYou: 0, working: 0, unfinished: 0};
+    for (const budget of [200, 50, 30, 22]) check(meta(budget).length <= budget, "fits " + budget);
+    const one = {conversations: 1, needsYou: 1, working: 0};
+    check(Projects.meta(one, "", 200, " · ") === "1 conversation · 1 needs you", "one " + Projects.meta(one, "", 200, " · "));
+    const quiet = {conversations: 2, needsYou: 0, working: 0};
     check(Projects.meta(quiet, "Today 09:00", 200, " · ") === "2 conversations · Today 09:00", "nothing to count");
     """)
   end
@@ -152,6 +152,29 @@ defmodule Omunculus.GuiProjectsTest do
     check(Projects.state(s({running: 1, finished: true})) === "working", "working");
     check(Projects.state(s({finished: true})) === "done", "done");
     check(Projects.state(s({})) === "idle", "idle");
+    """)
+  end
+
+  test "a project stays reading, counting none, until every summary is read" do
+    run!("""
+    const rows = Projects.rows(input({
+      projects: [place("agency"), place("dev"), place("bare")],
+      conversations: {agency: [conversation("a", ""), conversation("b", "")], dev: [conversation("d", "")]},
+      summaries: {a: {started: true, waiting: 2}, d: {started: true, waiting: 1}},
+      current: "bare"
+    }));
+    const by = byId(rows);
+    check(by.agency.state === "reading" && by.agency.needsYou === 0, "partial " + JSON.stringify(by.agency));
+    check(by.bare.state === "reading", "no list " + by.bare.state);
+    check(by.dev.state === "waiting" && by.dev.needsYou === 1, "read " + JSON.stringify(by.dev));
+    check(Projects.reading(rows) && Projects.elsewhere(rows) === 0, "no partial elsewhere");
+    const done = Projects.rows(input({
+      projects: [place("agency"), place("dev")],
+      conversations: {agency: [conversation("a", "")], dev: [conversation("d", "")]},
+      summaries: {a: {started: true, waiting: 2}, d: {started: true, waiting: 1}},
+      current: "dev"
+    }));
+    check(!Projects.reading(done) && Projects.elsewhere(done) === 1, "complete " + Projects.elsewhere(done));
     """)
   end
 
