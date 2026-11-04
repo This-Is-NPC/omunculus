@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "kit/client/Events.js" as Events
 import "kit/client/Questions.js" as Questions
 import "kit/ui"
 import "kit/ui/Markdown.js" as Markdown
@@ -27,9 +28,10 @@ Item {
   readonly property real widest: Math.min(620, bubble.width < Theme.size.measureFrom ? bubble.width : bubble.width * Theme.size.measure)
   readonly property color tone: Omunculus.toneOf("you")
   readonly property var form: Questions.parse(question)
-  // The first line with words, its whitespace collapsed and cut at 120 characters.
+  // The first line with words, with no ids, its whitespace collapsed and cut
+  // at 120 characters.
   readonly property string first: {
-    const line = Markdown.plain(question.split("\n").find(each => each.trim() !== "") || "").replace(/\s+/g, " ").trim()
+    const line = Events.unid(Markdown.plain(question.split("\n").find(each => each.trim() !== "") || "")).replace(/\bon work\s+(?=[,.;)]|$)/gi, "").replace(/\s+/g, " ").trim()
     return line.length > 120 ? line.slice(0, 119) + "…" : line
   }
   readonly property string via: route.length > 1 ? " · via " + route.slice(1).join(" › ") : ""
