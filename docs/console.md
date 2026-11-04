@@ -63,11 +63,17 @@ mailbox.
 
 ## Requests
 
-A request's card (`RequestDecision`) says who asked, what for and who
-decides, you or an agent you can overrule. One the harness opened, passing
-on a question an agent left unanswered, leads with that question as its
-asker wrote it, under the asker's name, the harness's sentence in small
-print beneath, as in the mailbox.
+A request's card (`RequestDecision`) is one of three kinds, named in its
+header with who asks and on which work: NEEDS YOU (an answer in words; a
+numbered list of questions has a box for each, `QuestionForm`), YOUR DECISION
+(a button per option and an optional note) and PERMISSION (the scopes that
+grant it, and a no with a reason). Its question shows as its asker wrote it,
+in full contrast; one the harness opened, passing on a question an agent left
+unanswered, has a line "Passed up by ..." that opens the harness's own
+sentence. "I can't answer this" tells the team so in a plain reply, and
+ESCALATE sits under MORE. Sending shows your answer dimmed with "Sending...";
+answered, the card shrinks to the question and your answer; a failure reopens
+it with your words kept and an error line.
 
 While it is pending it has its options as buttons, and so are those of
 every decision it gathers from below — an origin still waiting whose options
@@ -77,7 +83,7 @@ origin's asker and work, an option of an origin given through the reply's
 `parts`, down to it (the kit's `Requests.choices` and `Requests.answer`, as
 in the mailbox).
 
-Every option carries the words of its field: ANSWER replies with them
+Every option carries the words of its field: SEND replies with them
 alone, omitting `option`; DENY gives them as the reason of a no; and, when
 it waits on you, ESCALATE raises it with them as the reason through
 `POST …/requests/escalate`, as one part named after its asker.

@@ -1,20 +1,23 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Questions.js" as Questions
 import "kit/client/Requests.js" as Requests
 import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
-// RequestDecision is one request, wherever it shows: who asked, on which work,
-// what for and what that lets it do, a question the harness passed on as its
-// asker wrote it, with the harness's sentence under it in small print; and who
-// decides, you, or the agent above, whom you can always overrule. While it
-// waits, the answers come grouped: for this work only, always (each scope
-// saying where it is written), or no, with a reason, and so for each decision
-// it gathers from below, under its part, an option carrying the words
-// written; or an answer in words, choosing none; or, when it waits on you,
-// the words go up to whoever decides above you. Answered, it says what was
-// chosen and by whom.
+// RequestDecision is one request, wherever it shows, as a card of one of
+// three kinds: NEEDS YOU, a question for an answer in words (a numbered list
+// of questions has a box for each); YOUR DECISION, with a button for each
+// option and an optional note; or PERMISSION, with the scopes that grant it
+// and a no with a reason. The header says the kind, who asks and on which
+// work. The question is shown as its asker wrote it; when the harness passed
+// it up, a line says through whom and opens the harness's own sentence. Who
+// decides, you or an agent you can overrule, and each decision it gathers
+// from below, under its part, are shown as before. "I can't answer this"
+// sends the team a plain reply. Sending shows the answer dimmed at once,
+// answered it collapses to the question and your answer, and a failure
+// reopens it with the words kept. ESCALATE is under MORE.
 SurfaceFrame {
   id: card
 
@@ -39,32 +42,63 @@ SurfaceFrame {
   readonly property var wanted: request ? Requests.granted(request) : null
   readonly property var place: Omunculus.workspaceOf(work ? work.workspace || "" : "")
 
+  readonly property string kind: request ? Requests.kind(request) : ""
+  // The question as its asker wrote it.
+  readonly property string question: passed.length > 0 ? passed.map(origin => origin.reason).join("\n\n") : request ? String(request.reason || "") : ""
+  // The question as a numbered list, when it is one a person answers.
+  readonly property var form: kind === "needs-you" ? Questions.parse(question) : null
+  // Where the answer is: sending, failed, or neither.
+  readonly property string state: (Omunculus.sending || {})[key] || ""
+  readonly property bool busy: state === "sending"
+  // Answered by you or on your behalf, and no longer waiting.
+  readonly property bool settled: !open && answer !== null
+  readonly property var badge: ({
+    "needs-you": { text: "NEEDS YOU", icon: "warning" },
+    decision: { text: "YOUR DECISION", icon: "warning" },
+    permission: { text: "PERMISSION", icon: "key" },
+    team: { text: "TEAM", icon: "people" }
+  })[kind] || { text: "", icon: "warning" }
+
   // Whether the words written escalate it rather than answer it.
   property bool escalating: false
-  // An answer or an escalation was sent.
-  signal sent()
+  // What was sent, shown while it goes.
+  property string sentText: ""
+  property bool more: false
+  // The words are the reason it goes up, not an answer.
+  readonly property bool raising: escalating || (form !== null && more)
+  property bool wording: false
 
   // Put the keyboard in the words, or on the first way to decide.
-  function focusWords() { words.forceActiveFocus() }
+  function focusWords() { (formLoader.item || words).focusBox() }
   function focusDecision() {
     const first = content.nextItemInFocusChain(true)
-    ;(first && Focus.within(first, content) ? first : words).forceActiveFocus()
+    if (first && Focus.within(first, content))
+      first.forceActiveFocus()
+    else
+      focusWords()
   }
+
+  onStateChanged: if (state === "failed") focusWords()
 
   // Chooses an option, with the words as its body: the request's own or, by
   // the parts of path, that of a decision it gathers.
   function decide(option, body, path) {
+    sentText = body !== "" ? body : labelOf(option)
     Omunculus.reply(key, option, body, path)
-    sent()
   }
 
-  // Answers in the words written, choosing no option.
-  function answerInWords() {
-    const body = words.text.trim()
+  // Answers in words, choosing no option.
+  function answerInWords(text) {
+    const body = text.trim()
     if (body === "")
       return
+    sentText = body
     Omunculus.reply(key, "", body)
-    sent()
+  }
+
+  // Tells the team that you cannot answer, in words they read as any answer.
+  function cannotAnswer() {
+    answerInWords("I can't answer this one; please sort it out with the team.")
   }
 
   // Raises it, with the words as the reason, to whoever decides above you.
@@ -72,8 +106,8 @@ SurfaceFrame {
     const reason = words.text.trim()
     if (reason === "" || !yours)
       return
+    sentText = reason
     Omunculus.escalate(key, reason)
-    sent()
   }
 
   // What the granted name lets the agent do.
@@ -120,17 +154,24 @@ SurfaceFrame {
     RowLayout {
       Layout.fillWidth: true
       spacing: 10
-      Icon { Layout.alignment: Qt.AlignVCenter; name: "warning"; size: 11; color: card.open ? Theme.warning : Theme.dim }
-      Label { Layout.alignment: Qt.AlignVCenter; text: card.asker.toUpperCase(); color: Omunculus.toneOf(card.asker); font.pixelSize: 10; font.letterSpacing: 3 }
+      Icon { Layout.alignment: Qt.AlignVCenter; name: card.open ? card.badge.icon : "check"; size: 12; color: card.open ? Theme.warning : Theme.dim }
+      Label {
+        Layout.alignment: Qt.AlignVCenter
+        text: card.open ? card.badge.text : card.answer ? "ANSWERED" : "CLOSED"
+        color: card.open && card.yours ? Theme.warning : Theme.dim
+        font.pixelSize: 11
+        font.letterSpacing: 1.5
+      }
+      Label { Layout.alignment: Qt.AlignVCenter; text: card.asker + " asks"; color: Omunculus.toneOf(card.asker); font.pixelSize: 12 }
       Label {
         Layout.fillWidth: true
         Layout.alignment: Qt.AlignVCenter
-        text: card.work ? card.work.title : ""
+        text: card.work ? card.work.title : Omunculus.title
         color: Theme.dim
-        font.pixelSize: 10
+        font.pixelSize: 11
         elide: Text.ElideRight
       }
-      Label { Layout.alignment: Qt.AlignVCenter; text: card.stamp; color: Theme.line; font.pixelSize: 9; font.letterSpacing: 1 }
+      Label { Layout.alignment: Qt.AlignVCenter; text: card.stamp; color: Theme.dim; font.pixelSize: 11 }
     }
 
     Label {
@@ -142,35 +183,92 @@ SurfaceFrame {
       wrapMode: Text.Wrap
     }
 
+    // What the person is asked, in full contrast and at a readable measure.
     Prose {
       Layout.fillWidth: true
-      visible: !!card.request && !!card.request.reason
-      source: card.passed.length > 0 ? Omunculus.inline(card.passed.map(origin => origin.reason).join("\n\n"))
-        : card.request ? Omunculus.inline(String(card.request.reason || "")) : ""
+      Layout.maximumWidth: 620
+      visible: !!card.request && card.question !== "" && !card.settled && card.form === null
+      source: Omunculus.inline(card.question)
+      color: Theme.foreground
+      font.pixelSize: 13
+      wrapMode: Text.Wrap
+    }
+
+    // Answered: only the first line of the question stays.
+    Label {
+      Layout.fillWidth: true
+      Layout.maximumWidth: 620
+      visible: card.settled
+      text: card.question.replace(/\s+/g, " ")
       color: Theme.dim
       font.pixelSize: 12
+      maximumLineCount: 2
+      elide: Text.ElideRight
       wrapMode: Text.Wrap
+    }
+
+    Chip {
+      visible: card.passed.length > 0 && !card.settled
+      text: "Passed up by " + card.passed.map(origin => Requests.label(origin.requester)).join(", ")
+      icon: card.wording ? "chevron-up" : "chevron-down"
+      onClicked: card.wording = !card.wording
     }
 
     Label {
       Layout.fillWidth: true
-      visible: card.passed.length > 0
+      Layout.maximumWidth: 620
+      visible: card.passed.length > 0 && card.wording && !card.settled
       text: card.request ? card.request.reason || "" : ""
       color: Theme.dim
-      font.pixelSize: 10
+      font.pixelSize: 11
       wrapMode: Text.Wrap
     }
 
     Label {
       Layout.fillWidth: true
-      text: !card.request ? ""
-        : card.open ? (card.yours ? "YOU DECIDE" : Requests.label(card.request.arbiter).toUpperCase() + " DECIDES  ·  YOU CAN DECIDE INSTEAD")
-        : card.answer ? (card.answer.option ? card.labelOf(card.answer.option) : "ANSWERED") + " — BY " + card.answer.who.toUpperCase() + (card.answer.body && card.answer.body !== card.answer.option ? ": " + card.answer.body : "")
-        : "CLOSED"
-      color: card.yours ? Theme.warning : Theme.dim
-      font.pixelSize: 10
-      font.letterSpacing: 2
+      visible: card.open && !card.yours
+      text: card.request ? Requests.label(card.request.arbiter).toUpperCase() + " DECIDES  ·  YOU CAN DECIDE INSTEAD" : ""
+      color: Theme.dim
+      font.pixelSize: 11
       wrapMode: Text.Wrap
+    }
+
+    // Your answer, or what the agent above chose, as a bubble: dim while it
+    // goes.
+    ColumnLayout {
+      Layout.fillWidth: true
+      visible: card.busy || card.settled
+      spacing: 4
+      Rectangle {
+        Layout.alignment: Qt.AlignRight
+        Layout.maximumWidth: 620
+        implicitWidth: Math.min(620, said.implicitWidth + 24)
+        implicitHeight: said.implicitHeight + 16
+        color: Qt.alpha(Theme.foreground, 0.06)
+        border.color: Theme.line
+        opacity: card.busy ? 0.6 : 1
+        Label {
+          id: said
+          anchors { fill: parent; margins: 8; leftMargin: 12; rightMargin: 12 }
+          text: card.busy ? card.sentText : !card.answer ? "" : (card.answer.option ? card.labelOf(card.answer.option) : "") + (card.answer.option && card.answer.body && card.answer.body !== card.answer.option ? ": " : "") + (card.answer.body && card.answer.body !== card.answer.option ? card.answer.body : "")
+          color: card.busy ? Theme.dim : Theme.foreground
+          font.pixelSize: 12
+          wrapMode: Text.Wrap
+        }
+      }
+      Label {
+        Layout.alignment: Qt.AlignRight
+        text: card.busy ? "Sending..." : card.answer ? (card.answer.who === "you" ? "You answered" : card.answer.who.toUpperCase() + " answered") : ""
+        color: Theme.dim
+        font.pixelSize: 11
+      }
+    }
+
+    StatusMessage {
+      Layout.fillWidth: true
+      visible: card.state === "failed"
+      kind: "error"
+      message: "Could not send this. Try again."
     }
 
     // Each decision as buttons, given with the words written: the request's
@@ -188,6 +286,7 @@ SurfaceFrame {
         readonly property var always: options.filter(option => option.startsWith("grant_"))
         function decide(option) { card.decide(option, words.text.trim(), modelData.path) }
         Layout.fillWidth: true
+        enabled: !card.busy
         spacing: 6
 
         Caption {
@@ -204,7 +303,6 @@ SurfaceFrame {
             role: "primary"
             icon: "check"
             text: card.labelOf("grant", choice.modelData.request)
-            tip: words.text.trim() !== "" ? "with what you wrote" : ""
             onClicked: choice.decide("grant")
           }
           Repeater {
@@ -214,8 +312,7 @@ SurfaceFrame {
               dense: true
               role: modelData === "deny" || modelData === "cancel" ? "guarded" : "progress"
               text: card.labelOf(modelData, choice.modelData.request)
-              tip: words.text.trim() !== "" ? "with what you wrote" : ""
-              onClicked: choice.decide(modelData)
+                onClicked: choice.decide(modelData)
             }
           }
         }
@@ -240,31 +337,48 @@ SurfaceFrame {
       }
     }
 
-    // In words: an answer that chooses no option, the reason of a no, or,
-    // when it waits on you, why it goes up to whoever decides above you.
+    // In words: an answer that chooses no option, the reason of a no, a note
+    // to a choice or, when it waits on you, why it goes up. A numbered list of
+    // questions has a form instead.
+    Loader {
+      id: formLoader
+      Layout.fillWidth: true
+      active: card.open && card.form !== null && !card.raising
+      visible: active
+      sourceComponent: QuestionForm {
+        parsed: card.form
+        sending: card.busy
+        onSubmitted: text => card.answerInWords(text)
+      }
+    }
+
     ColumnLayout {
       Layout.fillWidth: true
-      visible: card.open
+      visible: card.open && (card.form === null || card.raising)
       spacing: 6
-      TextBox {
+      TextArea {
         id: words
         Layout.fillWidth: true
+        Layout.maximumWidth: 620
         dense: true
-        placeholderText: card.escalating ? "why it goes up, for whoever decides above"
-          : card.choices.length > 0 ? "words to go with a choice above, or an answer of your own" : "an answer in words"
-        onAccepted: card.escalating ? card.escalate() : card.answerInWords()
+        sending: card.busy
+        invalid: card.state === "failed"
+        label: card.raising ? "WHY IT GOES UP" : card.kind === "permission" ? "REASON FOR A NO (OPTIONAL)"
+          : card.kind === "decision" ? "ADD A NOTE (OPTIONAL)" : "YOUR ANSWER"
+        placeholderText: card.raising ? "why it goes up, for whoever decides above" : card.kind === "needs-you" ? "an answer in words" : ""
+        onSubmitted: text => card.raising ? card.escalate() : card.kind !== "permission" && card.answerInWords(text)
       }
       Flow {
         Layout.fillWidth: true
         spacing: 6
         TraceButton {
+          visible: card.kind !== "permission" && !card.raising
           dense: true
-          role: card.escalating ? "progress" : "primary"
+          role: "primary"
           icon: "enter"
-          text: "ANSWER"
-          tip: "answer in words, choosing no option"
-          enabled: words.text.trim() !== ""
-          onClicked: card.answerInWords()
+          text: "SEND"
+          enabled: words.text.trim() !== "" && !card.busy
+          onClicked: card.answerInWords(words.text)
         }
         TraceButton {
           visible: card.options.includes("deny")
@@ -272,19 +386,40 @@ SurfaceFrame {
           role: "guarded"
           icon: "close"
           text: "DENY"
-          tip: "no, with the reason written, if any"
+          enabled: !card.busy
           onClicked: card.decide("deny", words.text.trim())
         }
-        TraceButton {
-          visible: card.yours
-          dense: true
-          role: card.escalating ? "primary" : "progress"
-          icon: "chevron-up"
-          text: "ESCALATE"
-          tip: "raise it to whoever decides above you, with the reason written"
-          enabled: words.text.trim() !== ""
-          onClicked: card.escalate()
-        }
+      }
+    }
+
+    Flow {
+      Layout.fillWidth: true
+      visible: card.open
+      spacing: 6
+      TraceButton {
+        visible: card.kind === "needs-you"
+        dense: true
+        role: "progress"
+        text: "I CAN'T ANSWER THIS"
+        enabled: !card.busy
+        onClicked: card.cannotAnswer()
+      }
+      TraceButton {
+        visible: card.yours && !card.escalating
+        dense: true
+        role: "progress"
+        icon: "more"
+        text: "MORE"
+        onClicked: card.more = !card.more
+      }
+      TraceButton {
+        visible: card.yours && (card.more || card.escalating)
+        dense: true
+        role: card.raising ? "primary" : "progress"
+        icon: "chevron-up"
+        text: "ESCALATE"
+        enabled: words.text.trim() !== "" && !card.busy
+        onClicked: card.escalate()
       }
     }
   }
