@@ -11,11 +11,11 @@ defmodule Omunculus.GuiModules do
     Path.expand("../../apps/kit/ui", __DIR__)
   ]
 
-  @doc "Runs `assertions` with `modules` loaded in order; returns deno's output and status."
-  @spec run([String.t()], String.t()) :: {String.t(), non_neg_integer}
-  def run(modules, assertions) do
+  @doc "Runs `assertions` with `modules` loaded in order, under `env`; returns deno's output and status."
+  @spec run([String.t()], String.t(), [{String.t(), String.t()}]) :: {String.t(), non_neg_integer}
+  def run(modules, assertions, env \\ []) do
     script = Enum.map_join(modules, "\n", &wrap/1) <> "\n" <> assertions
-    System.cmd("deno", ["eval", script], stderr_to_stdout: true)
+    System.cmd("deno", ["eval", script], env: env, stderr_to_stdout: true)
   end
 
   defp wrap(name) do

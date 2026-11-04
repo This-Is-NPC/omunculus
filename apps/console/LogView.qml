@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Time.js" as Time
 import "kit/ui"
 
 // LogView is the open conversation as a log: every event, oldest first, a row
@@ -205,10 +206,23 @@ Item {
         readonly property real cell: Math.max(0, width - 24)
 
         width: list.width
-        height: (model.head !== "" ? 26 : 0) + 28
+        height: (model.day !== "" ? 26 : 0) + (model.head !== "" ? 26 : 0) + 28
+
+        Label {
+          visible: row.model.day !== ""
+          x: 12
+          width: parent.width - 24
+          height: 22
+          verticalAlignment: Text.AlignBottom
+          text: row.model.day
+          color: Theme.dim
+          font.pixelSize: 11
+          font.letterSpacing: 1
+        }
 
         Label {
           visible: row.model.head !== ""
+          y: row.model.day !== "" ? 26 : 0
           x: 12
           width: parent.width - 24
           height: 22
@@ -309,7 +323,7 @@ Item {
         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; leftMargin: 12 }
         spacing: 10
         Label { text: view.picked ? view.picked.type.toUpperCase() : ""; color: Theme.primary; font.pixelSize: 11; font.letterSpacing: 2 }
-        Label { Layout.fillWidth: true; text: view.picked ? view.picked.at : ""; color: Theme.dim; font.pixelSize: 11 }
+        Label { Layout.fillWidth: true; text: view.picked ? Time.full(view.picked.at) + "  ·  UTC " + view.picked.at : ""; color: Theme.dim; font.pixelSize: 11 }
         Chip {
           visible: view.detail.length > view.detailLimit && !view.showAll
           text: "SHOW ALL"

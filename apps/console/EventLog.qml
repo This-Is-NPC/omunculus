@@ -1,4 +1,5 @@
 import QtQuick
+import "kit/client/Time.js" as Time
 
 // EventLog holds the open conversation's events as the rows of its log page.
 // `append(line)` takes a line at any rate; a timer moves what was taken into
@@ -9,7 +10,7 @@ import QtQuick
 // A line is a plain object with these fields, all required:
 //   id    string  the event's cursor, unique
 //   at    string  ISO timestamp
-//   time  string  "hh:mm:ss.mmm"
+//   time  string  local "hh:mm:ss.zzz"
 //   type  string  event type (prompt, model, tool, start-run, end-run, ...)
 //   who   string  agent or actor name, "" if none
 //   run   string  run id, "" if none
@@ -20,7 +21,8 @@ import QtQuick
 //   depth number  the agent's depth in the team, 0 if unknown
 //   raw   string  the event's JSON text, parsed only when a row is opened
 // Rows hold these roles plus `head`, a run's title ("DESIGNER · run 3 · 14:02:11")
-// on the run's first row after another run's, else "".
+// on the run's first row after another run's, else "", and `day`, the local
+// day ("Today", "03 Nov") on the first row of each day, else "".
 QtObject {
   id: log
 
@@ -31,6 +33,7 @@ QtObject {
 
   property var taken: []
   property string lastRun: ""
+  property string lastDay: ""
   // Agent -> the runs seen of it, in order.
   property var runsOf: ({})
 
@@ -54,12 +57,15 @@ QtObject {
         head = (line.who || "run").toUpperCase() + " · run " + (runs.indexOf(line.run) + 1) + " · " + line.time.slice(0, 8)
       }
       lastRun = line.run
+      const day = Time.day(line.at, Date.now())
+      const dayHead = day !== lastDay ? day : ""
+      lastDay = day
       if (line.who !== "" && !agents.includes(line.who))
         agents.push(line.who)
       if (!depths.includes(line.depth))
         depths.push(line.depth)
       rows.append({ id: line.id, at: line.at, time: line.time, type: line.type, who: line.who, run: line.run, work: line.work,
-        what: line.what, ok: line.ok, asks: line.asks, depth: line.depth, raw: line.raw, head: head })
+        what: line.what, ok: line.ok, asks: line.asks, depth: line.depth, raw: line.raw, head: head, day: dayHead })
     }
     if (agents.length !== log.agents.length)
       log.agents = agents
@@ -71,6 +77,7 @@ QtObject {
     flushing.stop()
     taken = []
     lastRun = ""
+    lastDay = ""
     runsOf = ({})
     agents = []
     depths = []
@@ -81,7 +88,7 @@ QtObject {
   function row(index) {
     const r = rows.get(index)
     return { id: r.id, at: r.at, time: r.time, type: r.type, who: r.who, run: r.run, work: r.work,
-      what: r.what, ok: r.ok, asks: r.asks, depth: r.depth, raw: r.raw, head: r.head }
+      what: r.what, ok: r.ok, asks: r.asks, depth: r.depth, raw: r.raw, head: r.head, day: r.day }
   }
 
   property Timer flushing: Timer {

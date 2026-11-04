@@ -6,6 +6,7 @@ import "kit/client"
 import "kit/client/Activity.js" as Activity
 import "kit/client/Model.js" as Model
 import "kit/client/Requests.js" as Requests
+import "kit/client/Time.js" as Time
 import "kit/client/Usage.js" as Usage
 import "kit/ui"
 
@@ -231,6 +232,8 @@ Singleton {
     const said = data.prompts.find(prompt => prompt.kind === "message")
     return {
       title: said ? String(said.body).replace(/\s+/g, " ") : "",
+      started: data.prompts.length > 0,
+      finished: data.works.length > 0 && data.works.every(work => work.state === "done" || work.state === "cancelled"),
       running: data.runs.filter(run => run.status === "open").length,
       waiting: data.requests.filter(request => Requests.pending(request) && Requests.human(request.arbiter)).length
     }
@@ -240,7 +243,7 @@ Singleton {
   function conversationLabel(id) {
     const said = (summaries[id] || {}).title
     const began = [].concat(conversations, ...Object.values(boardConversations)).find(item => item.id === id)
-    return said || (began ? "conversation of " + Qt.formatDateTime(new Date(began.created_at), "dd MMM hh:mm") : "a conversation")
+    return said || (began ? "conversation of " + Time.began(began.created_at, Date.now()) : "a conversation")
   }
 
   // Follows every project's works while the board is on screen, from what
@@ -651,7 +654,7 @@ Singleton {
     eventLog.append({
       id: event.cursor || event.at + event.type,
       at: event.at,
-      time: event.at.slice(11, 23),
+      time: Time.precise(event.at),
       type: event.type,
       who: event.type === "start-run" ? body.agent || "" : actorName(event.actor),
       run: event.run_id || "",
@@ -779,7 +782,7 @@ Singleton {
     record(event)
     const body = event.body || {}
     const who = actorName(event.actor)
-    const stamp = event.at.slice(11, 16)
+    const stamp = Time.clock(event.at, Date.now())
     const at = Date.parse(event.at) / 1000
     const work = event.work_id || ""
     if (event.type === "delegate" && work)

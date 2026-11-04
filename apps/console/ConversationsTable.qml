@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "kit/client/Time.js" as Time
 import "kit/ui"
 
 // ConversationsTable lists conversations in the DataTable: what was first
@@ -19,7 +20,7 @@ DataTable {
     const known = summary(conversation)
     if (known === null)
       return ""
-    return known.waiting > 0 ? "WAITING FOR YOU" : known.running > 0 ? "WORKING" : "DONE"
+    return !known.started ? "NOT STARTED" : known.waiting > 0 ? "WAITING FOR YOU" : known.running > 0 ? "WORKING" : known.finished ? "DONE" : "IDLE"
   }
 
   columns: [
@@ -31,7 +32,7 @@ DataTable {
     const known = summary(conversation)
     return [
       known && known.title ? known.title : "new conversation",
-      Qt.formatDateTime(new Date(conversation.created_at), "dd MMM yyyy  hh:mm"),
+      Time.began(conversation.created_at, Date.now()),
       state(conversation)
     ]
   }

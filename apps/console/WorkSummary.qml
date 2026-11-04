@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Time.js" as Time
 import "kit/ui"
 
 // WorkSummary is a work as the map's inspector and the work's page show it:
@@ -84,7 +85,7 @@ ColumnLayout {
       required property var modelData
       Layout.fillWidth: true
       key: modelData.id
-      stamp: String(modelData.created_at).slice(11, 16)
+      stamp: Time.clock(modelData.created_at, Date.now())
     }
   }
 
