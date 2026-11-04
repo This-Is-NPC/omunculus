@@ -2,33 +2,48 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
+import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/client/Progress.js" as Progress
 
-// ProgressNode is one work of a Progress tree. An open work (working, needs
-// you, waiting, stopped, failed) is a framed card: its agent and state, its
+// ProgressNode is one work of a Progress tree, in one of two forms.
+//
+// "compact", in the chat's progress: an open work (working, needs you,
+// waiting, stopped, failed) is a framed card — its agent and state, its
 // title, its stages, what it calls or does, a send-back with its reason, the
-// questions it asked and its tool calls. A done, cancelled or coming work is
-// one line. Picked, it shows its details: its agent's last words, its
-// questions in full and the ways to its thread, log and map. "full" adds its
-// team, the requests waiting between it and others, whether a work below it
-// needs you, and its branch's totals.
+// questions it asked and its tool calls; a done, cancelled or coming work is
+// one line. Picked, it shows its details instead of the questions' first
+// lines: its agent's last words, its questions in full and the ways to its
+// thread, log and map.
+//
+// "full", a row of the TEAM page, as a table row: its title with its state at
+// the top right, a meta line of its agent, its stages (a track on a narrow
+// window), its branch's time, calls and cost and what is below it, and a
+// badge for each request between it and others — "⇡ waiting for you" is the
+// one to answer — and for a work below it that needs you. A row with works
+// below it has a tool at its right that goes down to them.
 FocusScope {
   id: row
 
   // A node of Omunculus.progress.
   required property var node
   property string mode: "compact"
-  // On the path from the focus root to the active leaf.
+  // Compact: on the path from the focus root to the active leaf. Full: the
+  // row picked.
   property bool active: false
   // At one end of the request picked elsewhere, as on the TEAM page.
   property bool highlighted: false
+  // Compact: its details show.
   property bool expanded: false
-  // It has works below it, and they are folded away.
+  // It has works below it: compact, folded away or not; full, a level down.
   property bool folds: false
   property bool folded: false
+  // Full: the keyboard is on this row of its list.
+  property bool focused: false
 
   signal toggled()
   signal foldToggled()
+  // Full: its row tool, to the works below it.
+  signal drilled()
   signal openThread(string work)
   signal openLog(string work)
   signal openMap(string work)
@@ -45,7 +60,6 @@ FocusScope {
   readonly property string clock: node.state === "working" && node.since !== null
     ? Progress.clock(Math.max(0, Math.round(now - node.since))) : ""
 
-  // The state's icon, word and tone, as every progress view shows them.
   // The newest words in the work's thread, newest last, while its details show.
   readonly property ListModel said: Omunculus.thread(expanded ? Omunculus.threadOf(node.work) : "")
   readonly property var words: {
@@ -67,11 +81,18 @@ FocusScope {
     return usage.priced > 0 ? Omunculus.money(usage.cost) : Omunculus.tokens(usage.input + usage.output) + " tokens"
   }
 
-  readonly property string branchLine: {
+  // Full: the branch's time, calls and cost, and what is below it.
+  readonly property string totals: {
+    if (!full)
+      return ""
     const branch = node.branch
-    const parts = [Progress.span(branch.seconds)]
-    if (branch.agents > 1)
-      parts.push(branch.agents + " agents")
+    const kids = Progress.kidsOf(node)
+    const going = kids.filter(kid => kid.state !== "done" && kid.state !== "cancelled")
+    const working = kids.filter(kid => kid.state === "working").length
+    const parts = []
+    if (kids.length > 0)
+      parts.push(kids.length + " below" + (working > 0 ? " · " + working + " working" : going.length === 0 ? " · done" : ""))
+    parts.push(node.finishedIn !== null ? "took " + Progress.span(node.finishedIn) : Progress.span(branch.seconds))
     if (branch.calls > 0)
       parts.push(branch.calls + (branch.calls === 1 ? " call" : " calls"))
     const money = spent(branch.usage)
@@ -88,233 +109,136 @@ FocusScope {
     return Object.keys(by).map(from => ({ from: from, requests: by[from] }))
   }
 
+  readonly property string stageTip: {
+    const lane = Omunculus.laneOf(Omunculus.work(node.work) || {})
+    const at = steps.findIndex(step => step.status === "current")
+    return lane && at >= 0 ? lane.name + " · stage " + (at + 1) + " of " + steps.length + ": " + steps[at].name : ""
+  }
+
   implicitWidth: 240
-  implicitHeight: (quiet ? line.implicitHeight + 8 : card.implicitHeight + 16)
-    + (expanded ? more.implicitHeight + 8 : 0)
-  activeFocusOnTab: true
+  implicitHeight: full ? rowBody.implicitHeight + Theme.space.cell * 2
+    : (quiet ? line.implicitHeight + Theme.space.tight * 2 : card.implicitHeight + Theme.space.gap * 2)
+      + (expanded ? more.implicitHeight + Theme.space.gap : 0)
+  // A row of the TEAM page is moved over by its list, never a Tab stop.
+  activeFocusOnTab: !full
   Accessible.role: Accessible.Button
   Accessible.name: node.agent + ", " + node.word + (node.title ? ", " + node.title : "")
   Keys.onReturnPressed: toggled()
   Keys.onSpacePressed: toggled()
-
-  SurfaceFrame {
-    id: frame
-    anchors.fill: parent
-    visible: !row.quiet || row.expanded || row.highlighted
-    tone: row.highlighted ? Theme.warning : head.tone
-    active: row.active || row.highlighted
-    color: pointer.containsMouse ? Theme.highlight : fill
-  }
-  Rectangle {
-    anchors.fill: parent
-    visible: row.quiet && !frame.visible && pointer.containsMouse
-    color: Theme.highlight
-  }
 
   MouseArea {
     id: pointer
     anchors.fill: parent
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
-    onClicked: { row.forceActiveFocus(); row.toggled() }
-  }
-
-  // A done, cancelled or coming work: one line.
-  RowLayout {
-    id: line
-    visible: row.quiet
-    anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 8; rightMargin: 4; topMargin: 4 }
-    spacing: 8
-    StateMark { state: row.node.state; showWord: false }
-    Label {
-      Layout.maximumWidth: line.width * 0.4
-      text: row.node.agent
-      color: row.agentTone
-      font.pixelSize: 12
-      font.bold: true
-      elide: Text.ElideRight
-    }
-    Label {
-      Layout.fillWidth: true
-      Layout.minimumWidth: 0
-      readonly property string said: row.node.doing || row.node.word
-      text: row.node.title + (said !== "" ? " · " + said.charAt(0).toLowerCase() + said.slice(1) : "")
-      color: Theme.dim
-      font.pixelSize: 11
-      elide: Text.ElideRight
-    }
-    Fold { visible: row.folds; folded: row.folded; onPressed: { row.forceActiveFocus(); row.foldToggled() } }
-  }
-
-  // The fold of the works below it.
-  component Fold: Item {
-    id: fold
-    property bool folded: false
-    signal pressed()
-    Layout.preferredWidth: 24
-    Layout.preferredHeight: 24
-    Layout.alignment: Qt.AlignTop
-    Icon {
-      anchors.centerIn: parent
-      name: fold.folded ? "chevron-right" : "chevron-down"
-      size: 12
-      color: Theme.dim
-    }
-    MouseArea {
-      anchors { fill: parent; margins: -4 }
-      cursorShape: Qt.PointingHandCursor
-      onClicked: fold.pressed()
+    onClicked: {
+      if (!row.full)
+        row.forceActiveFocus()
+      row.toggled()
     }
   }
 
-  // An open work: the card.
+  // Full: a row of the TEAM page.
+  Rectangle {
+    visible: row.full
+    anchors.fill: parent
+    color: row.active ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
+    border.color: row.highlighted ? Theme.warning : row.active ? Theme.primary : Theme.line
+    Behavior on color { ColorAnimation { duration: 120 } }
+  }
+
   ColumnLayout {
-    id: card
-    visible: !row.quiet
-    anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
-    spacing: 3
+    id: rowBody
+    visible: row.full
+    anchors {
+      left: parent.left; right: parent.right; top: parent.top
+      leftMargin: Theme.space.cell; topMargin: Theme.space.cell
+      rightMargin: Theme.space.cell + (drill.visible ? drill.width + Theme.space.trail : 0)
+    }
+    spacing: Theme.space.tight
 
     RowLayout {
       Layout.fillWidth: true
-      spacing: 8
-      Portrait {
-        Layout.preferredWidth: 20
-        Layout.preferredHeight: 20
-        agent: row.node.agent
-        source: Omunculus.imageOf(row.node.agent)
-        tone: row.agentTone
-      }
+      spacing: Theme.space.gap
       Label {
         Layout.fillWidth: true
         Layout.minimumWidth: 0
-        text: row.node.agent
-        color: row.agentTone
-        font.pixelSize: 12
-        font.bold: true
+        text: row.node.title || row.node.agent
+        color: Theme.foreground
+        font.pixelSize: Theme.type.body.size
         elide: Text.ElideRight
       }
+      // The state, at the top right.
       StateMark {
-        id: head
-        Layout.maximumWidth: card.width * 0.55
+        Layout.alignment: Qt.AlignTop
+        Layout.maximumWidth: rowBody.width * 0.45
         state: row.node.state
         clock: row.clock
       }
-      Fold { visible: row.folds; folded: row.folded; onPressed: { row.forceActiveFocus(); row.foldToggled() } }
     }
 
-    Label {
-      Layout.fillWidth: true
-      visible: text !== ""
-      text: row.node.title
-      color: Theme.foreground
-      font.pixelSize: 12
-      wrapMode: Text.Wrap
-      maximumLineCount: 2
-      elide: Text.ElideRight
-    }
-
-    Stepper {
-      Layout.fillWidth: true
-      steps: row.steps
-      round: row.node.round
-      tip: {
-        const lane = Omunculus.laneOf(Omunculus.work(row.node.work) || {})
-        const at = row.steps.findIndex(step => step.status === "current")
-        return lane && at >= 0 ? lane.name + " · stage " + (at + 1) + " of " + row.steps.length + ": " + row.steps[at].name : ""
-      }
-    }
-
-    // The tool it called last, else what it is doing.
+    // Its agent, its stages, its branch.
     RowLayout {
+      id: meta
+      // A narrow window shows the stages as a track.
+      readonly property bool tight: Breakpoints.size(row.Window.width) === "narrow"
       Layout.fillWidth: true
-      spacing: 8
+      spacing: 0
       Label {
-        visible: !!row.node.lastCall
-        Layout.maximumWidth: card.width * 0.4
-        text: row.node.lastCall ? row.node.lastCall.name : ""
-        color: Theme.foreground
-        font.pixelSize: 11
+        Layout.maximumWidth: rowBody.width * 0.3
+        text: row.node.agent
+        color: row.agentTone
+        font.pixelSize: Theme.type.meta.size
         elide: Text.ElideRight
       }
       Label {
+        visible: row.steps.length > 0
+        text: Theme.type.meta.separator
+        color: Theme.dim
+        font.pixelSize: Theme.type.meta.size
+      }
+      Stepper {
         Layout.fillWidth: true
         Layout.minimumWidth: 0
-        text: row.node.lastCall ? row.node.lastCall.brief : row.node.doing
-        color: row.node.state === "failed" ? Theme.error : row.node.state === "stopped" || row.node.state === "needs-you" ? Theme.warning : Theme.dim
-        font.pixelSize: 11
+        visible: row.steps.length > 0 && !meta.tight
+        steps: row.steps
+        round: row.node.round
+        size: Theme.type.meta.size
+        tip: row.stageTip
+      }
+      // The stages as a track, and the stage it is at.
+      ProgressTrack {
+        visible: row.steps.length > 0 && meta.tight
+        Layout.preferredWidth: Theme.size.control
+        Layout.preferredHeight: Theme.space.tight
+        Layout.rightMargin: Theme.space.tight
+        fraction: row.node.state === "done" ? 1 : row.node.count > 0 ? row.node.at / row.node.count : 0
+      }
+      Label {
+        visible: row.steps.length > 0 && meta.tight
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        text: row.node.at >= 0 ? (row.node.at + 1) + "/" + row.node.count + " " + row.steps[row.node.at].name
+          + (row.node.round > 0 ? " r" + row.node.round : "") : ""
+        color: Theme.primary
+        font.pixelSize: Theme.type.meta.size
+        elide: Text.ElideRight
+      }
+      Item { Layout.fillWidth: true; visible: row.steps.length === 0 }
+      Label {
+        Layout.preferredWidth: Math.min(implicitWidth, rowBody.width * 0.5)
+        text: Theme.type.meta.separator + row.totals
+        color: Theme.dim
+        font.pixelSize: Theme.type.meta.size
         elide: Text.ElideRight
       }
     }
 
-    Label {
-      Layout.fillWidth: true
-      visible: row.node.round > 0
-      text: "↩ Round " + row.node.round + (row.node.sentBack ? " · sent back by " + row.node.sentBack.by
-        + (row.node.sentBack.why ? ": \"" + row.node.sentBack.why + "\"" : "") : "")
-      color: Theme.dim
-      font.pixelSize: 11
-      wrapMode: Text.Wrap
-      maximumLineCount: 3
-      elide: Text.ElideRight
-    }
-
-    Repeater {
-      model: row.asks
-      delegate: RowLayout {
-        id: ask
-        required property var modelData
-        Layout.fillWidth: true
-        spacing: 8
-        Label {
-          Layout.fillWidth: true
-          Layout.minimumWidth: 0
-          text: "? asked " + (ask.modelData.human ? "you" : ask.modelData.to) + ": \"" + ask.modelData.question.split("\n")[0] + "\""
-          color: ask.modelData.human ? Theme.warning : Theme.foreground
-          font.pixelSize: 11
-          elide: Text.ElideRight
-        }
-        Label { text: "waiting"; color: Theme.dim; font.pixelSize: 11 }
-      }
-    }
-
-    // "full": the team, with whoever holds the stage ringed, and the requests.
+    // What waits between it and others, and below it.
     Flow {
       Layout.fillWidth: true
-      visible: row.full && row.node.team.length > 0
-      spacing: 4
-      Repeater {
-        model: row.full ? row.node.team : []
-        delegate: Rectangle {
-          id: member
-          required property var modelData
-          width: 20
-          height: 20
-          color: "transparent"
-          border.color: modelData.current ? head.tone : "transparent"
-          Portrait {
-            anchors.centerIn: parent
-            width: 16
-            height: 16
-            agent: member.modelData.agent
-            source: Omunculus.imageOf(member.modelData.agent)
-            tone: Omunculus.toneOf(member.modelData.agent)
-          }
-          HoverHandler { id: memberHover }
-          Hint { active: memberHover.hovered; text: member.modelData.agent + (member.modelData.current ? " · has the stage" : "") }
-        }
-      }
-    }
-    Flow {
-      Layout.fillWidth: true
-      visible: row.full && (row.asks.length > 0 || row.askedBy.length > 0 || row.node.below !== "")
-      spacing: 6
-      // A work below waits on you; this one keeps its own state.
-      Chip {
-        visible: row.full && row.node.below !== ""
-        text: "⇣ needs you below"
-        accent: Theme.warning
-        onClicked: row.requestPicked(row.node.below)
-      }
+      visible: row.asks.length > 0 || row.askedBy.length > 0 || row.node.below !== ""
+      spacing: Theme.space.tight
       Repeater {
         model: row.full ? row.asks : []
         delegate: Chip {
@@ -335,14 +259,194 @@ FocusScope {
           onClicked: row.requestPicked(modelData.requests[0].id)
         }
       }
+      // A work below waits on you; this one keeps its own state.
+      Chip {
+        visible: row.full && row.node.below !== ""
+        text: "⇣ needs you below"
+        accent: Theme.warning
+        onClicked: row.requestPicked(row.node.below)
+      }
+    }
+  }
+
+  IconButton {
+    id: drill
+    visible: row.full && row.folds
+    anchors { right: parent.right; rightMargin: Theme.space.trail; verticalCenter: parent.verticalCenter }
+    name: "chevron-right"
+    quiet: true
+    highlighted: row.active
+    tip: "the works it handed down"
+    // A row is moved over by its list; its tool is pointed at.
+    activeFocusOnTab: false
+    onClicked: row.drilled()
+  }
+
+  // Full: the keyboard's row.
+  FocusRing { visible: row.full; shown: row.focused }
+
+  // Compact: the card's frame, or a wash over a one-line work.
+  SurfaceFrame {
+    id: frame
+    anchors.fill: parent
+    visible: !row.full && (!row.quiet || row.expanded || row.highlighted)
+    tone: row.highlighted ? Theme.warning : head.tone
+    active: row.active || row.highlighted
+    color: pointer.containsMouse ? Theme.highlight : fill
+  }
+  Rectangle {
+    anchors.fill: parent
+    visible: !row.full && row.quiet && !frame.visible && pointer.containsMouse
+    color: Theme.highlight
+  }
+
+  // A done, cancelled or coming work: one line.
+  RowLayout {
+    id: line
+    visible: !row.full && row.quiet
+    anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: Theme.space.gap; rightMargin: Theme.space.line; topMargin: Theme.space.tight }
+    spacing: Theme.space.tight
+    StateMark { state: row.node.state; showWord: false }
+    Label {
+      Layout.maximumWidth: line.width * 0.4
+      text: row.node.agent
+      color: row.agentTone
+      font.pixelSize: Theme.type.body.size
+      font.bold: true
+      elide: Text.ElideRight
     }
     Label {
       Layout.fillWidth: true
-      visible: row.full && row.branchLine !== ""
-      text: row.branchLine
+      Layout.minimumWidth: 0
+      readonly property string said: row.node.doing || row.node.word
+      text: row.node.title + (said !== "" ? " · " + said.charAt(0).toLowerCase() + said.slice(1) : "")
       color: Theme.dim
-      font.pixelSize: 11
+      font.pixelSize: Theme.type.tab.size
       elide: Text.ElideRight
+    }
+    Fold { visible: row.folds; folded: row.folded; onPressed: { row.forceActiveFocus(); row.foldToggled() } }
+  }
+
+  // The fold of the works below it.
+  component Fold: Item {
+    id: fold
+    property bool folded: false
+    signal pressed()
+    Layout.preferredWidth: Theme.size.gutter
+    Layout.preferredHeight: Theme.size.gutter
+    Layout.alignment: Qt.AlignTop
+    Icon {
+      anchors.centerIn: parent
+      name: fold.folded ? "chevron-right" : "chevron-down"
+      size: 12
+      color: Theme.dim
+    }
+    MouseArea {
+      anchors { fill: parent; margins: -4 }
+      cursorShape: Qt.PointingHandCursor
+      onClicked: fold.pressed()
+    }
+  }
+
+  // An open work: the card.
+  ColumnLayout {
+    id: card
+    visible: !row.full && !row.quiet
+    anchors { left: parent.left; right: parent.right; top: parent.top; margins: Theme.space.gap }
+    spacing: Theme.space.line
+
+    RowLayout {
+      Layout.fillWidth: true
+      spacing: Theme.space.tight
+      Dot { Layout.alignment: Qt.AlignVCenter; tone: row.agentTone }
+      Label {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        text: row.node.agent.toUpperCase()
+        color: row.agentTone
+        font.pixelSize: Theme.type.name.size
+        font.letterSpacing: Theme.type.name.tracking
+        elide: Text.ElideRight
+      }
+      StateMark {
+        id: head
+        Layout.maximumWidth: card.width * 0.55
+        state: row.node.state
+        clock: row.clock
+      }
+      Fold { visible: row.folds; folded: row.folded; onPressed: { row.forceActiveFocus(); row.foldToggled() } }
+    }
+
+    Label {
+      Layout.fillWidth: true
+      visible: text !== ""
+      text: row.node.title
+      color: Theme.foreground
+      font.pixelSize: Theme.type.body.size
+      wrapMode: Text.Wrap
+      maximumLineCount: 2
+      elide: Text.ElideRight
+    }
+
+    Stepper {
+      Layout.fillWidth: true
+      steps: row.steps
+      round: row.node.round
+      tip: row.stageTip
+    }
+
+    // The tool it called last, else what it is doing.
+    RowLayout {
+      Layout.fillWidth: true
+      spacing: Theme.space.tight
+      Label {
+        visible: !!row.node.lastCall
+        Layout.maximumWidth: card.width * 0.4
+        text: row.node.lastCall ? row.node.lastCall.name : ""
+        color: Theme.foreground
+        font.pixelSize: Theme.type.tab.size
+        elide: Text.ElideRight
+      }
+      Label {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        text: row.node.lastCall ? row.node.lastCall.brief : row.node.doing
+        color: row.node.state === "failed" ? Theme.error : row.node.state === "stopped" || row.node.state === "needs-you" ? Theme.warning : Theme.dim
+        font.pixelSize: Theme.type.tab.size
+        elide: Text.ElideRight
+      }
+    }
+
+    Label {
+      Layout.fillWidth: true
+      visible: row.node.round > 0
+      text: "↩ Round " + row.node.round + (row.node.sentBack ? " · sent back by " + row.node.sentBack.by
+        + (row.node.sentBack.why ? ": \"" + row.node.sentBack.why + "\"" : "") : "")
+      color: Theme.dim
+      font.pixelSize: Theme.type.tab.size
+      wrapMode: Text.Wrap
+      maximumLineCount: 3
+      elide: Text.ElideRight
+    }
+
+    // The first line of each question it asked; its details show them whole.
+    Repeater {
+      model: row.expanded ? [] : row.asks
+      delegate: RowLayout {
+        id: ask
+        required property var modelData
+        Layout.fillWidth: true
+        spacing: Theme.space.tight
+        Label {
+          Layout.fillWidth: true
+          Layout.minimumWidth: 0
+          text: "? asked " + (ask.modelData.human ? "you" : ask.modelData.to) + ": \"" + ask.modelData.question.split("\n")[0] + "\""
+          color: ask.modelData.human ? Theme.warning : Theme.foreground
+          font.pixelSize: Theme.type.tab.size
+          elide: Text.ElideRight
+        }
+        Label { text: "waiting"; color: Theme.dim; font.pixelSize: Theme.type.tab.size }
+      }
     }
 
     RowLayout {
@@ -352,13 +456,13 @@ FocusScope {
       Label {
         text: row.node.calls + (row.node.calls === 1 ? " tool call" : " tool calls")
         color: Theme.dim
-        font.pixelSize: 11
+        font.pixelSize: Theme.type.tab.size
       }
       Label {
         visible: row.node.failed > 0
         text: " · " + row.node.failed + " failed"
         color: Theme.error
-        font.pixelSize: 11
+        font.pixelSize: Theme.type.tab.size
       }
       Item { Layout.fillWidth: true }
       Icon { name: row.expanded ? "chevron-down" : "chevron-right"; size: 12; color: Theme.dim }
@@ -368,9 +472,9 @@ FocusScope {
   // The details: the agent's last words, the questions in full, the ways on.
   ColumnLayout {
     id: more
-    visible: row.expanded
-    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 8 }
-    spacing: 4
+    visible: !row.full && row.expanded
+    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: Theme.space.gap }
+    spacing: Theme.space.line
 
     Repeater {
       model: row.words
@@ -379,7 +483,7 @@ FocusScope {
         Layout.fillWidth: true
         text: modelData
         color: Theme.foreground
-        font.pixelSize: 12
+        font.pixelSize: Theme.type.body.size
         wrapMode: Text.Wrap
         maximumLineCount: 3
         elide: Text.ElideRight
@@ -390,7 +494,7 @@ FocusScope {
       visible: row.words.length === 0
       text: "Nothing said here yet."
       color: Theme.dim
-      font.pixelSize: 12
+      font.pixelSize: Theme.type.body.size
       wrapMode: Text.Wrap
     }
     Repeater {
@@ -400,18 +504,18 @@ FocusScope {
         Layout.fillWidth: true
         text: "Asked " + (modelData.human ? "you" : modelData.to) + ": " + modelData.question
         color: modelData.human ? Theme.warning : Theme.foreground
-        font.pixelSize: 12
+        font.pixelSize: Theme.type.body.size
         wrapMode: Text.Wrap
       }
     }
     Flow {
       Layout.fillWidth: true
-      spacing: 6
-      TraceButton { role: "action"; dense: true; text: "OPEN"; icon: "enter"; onClicked: row.openThread(row.node.work) }
-      TraceButton { role: "action"; dense: true; text: "LOG"; icon: "list"; onClicked: row.openLog(row.node.work) }
-      TraceButton { role: "action"; dense: true; text: "MAP"; icon: "map"; onClicked: row.openMap(row.node.work) }
+      spacing: Theme.space.tight
+      TraceButton { role: "action"; dense: true; text: "OPEN"; icon: "enter"; tip: "its thread, as a page"; onClicked: row.openThread(row.node.work) }
+      TraceButton { role: "action"; dense: true; text: "LOG"; icon: "list"; tip: "the log kept to it"; onClicked: row.openLog(row.node.work) }
+      TraceButton { role: "action"; dense: true; text: "MAP"; icon: "map"; tip: "the team's map, it picked"; onClicked: row.openMap(row.node.work) }
     }
   }
 
-  FocusRing {}
+  FocusRing { visible: !row.full }
 }

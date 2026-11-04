@@ -5,22 +5,24 @@ import "kit/client/Progress.js" as Progress
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
-// TeamView is the TEAM page: every work of the conversation, one row each,
-// nested under the stage of the work that handed it down, siblings handed
-// down in the same stage headed "N in parallel", those done or cancelled
-// folded into one row per stage, "✓ 2 sub-works done · 18 min", unless a
-// question waiting on you climbed from there; and the work picked in full
-// (NodeDetail). Wide, the outline and the detail sit side by side; medium,
-// the detail opens as a page over the outline and BACK returns to the same
-// row; narrow, each level is a page — the work's card, then its sub-works —
-// with a breadcrumb, a row going one level down. From 900 px the outline may
-// give way to the map (AgentsView), the detail still beside it. Chips keep
-// the works that need you or work, with the works above them; `/` filters
-// by title, agent or stage. A ⇡/⇣ badge lights both ends of its request,
-// brings the other into view and opens the request in the detail. ↑/↓ move,
-// →/← unfold and fold (on a folded row, go to its parent), Enter opens the
-// detail or its tabs, `[`/`]` change the tab, Esc goes detail, outline,
-// back.
+// TeamView is the TEAM page: the works of the conversation a level at a
+// time, under a breadcrumb, and the work picked in full (NodeDetail). A level
+// is a work's own row, then the works it handed down, a row each, under a
+// rule for the stage that handed them down ("STAGE DESIGN · 2 IN PARALLEL");
+// those done or cancelled fold into one rule per stage, "✓ 2 sub-works done ·
+// 18 min", unless a question waiting on you climbed from there. A row's tool
+// goes down to the works below it; the conversation's level is its root
+// works, the one work's own when there is a single one, those done before
+// an open one folded under "N done earlier". Wide, the outline and the
+// detail sit side by side; narrower, the detail opens as a page over the
+// outline and BACK returns to the same row. From 900 px OUTLINE and MAP, at
+// the right of the filters, switch the outline for the map (AgentsView), the
+// detail still beside it. Chips keep the works that need you or work, with
+// the works above them; `/` filters by title, agent or stage. A ⇡/⇣ badge
+// goes to the other end of its request, lights both and opens the request
+// in the detail. ↑/↓ move, → goes down a level or unfolds, ← folds or goes up
+// one, Enter opens the detail or its tabs, `[`/`]` change the tab, Esc goes
+// detail, outline, a level up, back.
 FocusScope {
   id: team
 
@@ -30,6 +32,9 @@ FocusScope {
   property string shownAs: "outline"
   signal leave()
   signal openLog(string work)
+  // A request's decision, over the page: to answer it or, `escalating`, to
+  // raise it to whoever decides above you.
+  signal decide(string id, bool escalating)
 
   readonly property var progress: Omunculus.progress
   readonly property var roots: progress ? progress.roots : []
@@ -42,23 +47,22 @@ FocusScope {
   }
   readonly property var pickedNode: byWork[picked] || null
 
-  // The chrome decides by the window: two panes wide, a page over the
-  // outline medium, a page per level narrow; the map from 900 px.
-  readonly property string size: Breakpoints.size(Window.width)
+  // The chrome decides by the window: two panes wide, the detail as a page
+  // otherwise; the map from 900 px.
+  readonly property bool wide: Breakpoints.size(Window.width) === "wide"
   readonly property bool mapAllowed: Window.width >= 900
   readonly property bool mapShown: shownAs === "map" && mapAllowed
-  readonly property real indentStep: Breakpoints.indent(Window.width)
-  // Deeper rows stay at this indent, so a deep tree keeps its width.
-  readonly property int deepest: 6
-  // Medium and narrow: the detail is a page of its own.
+  // Narrower than wide: the detail is a page of its own.
   property bool detailOpen: false
-  // Narrow: the work whose level shows, "" for the conversation's.
+  // The work whose level shows, "" for the conversation's, which is the one
+  // root work's own when there is only one.
   property string level: ""
+  readonly property string here: byWork[level] ? level : roots.length === 1 ? roots[0].work : ""
 
   // The outline's filters: "all", "needs-you" or "working", and the text.
   property string chip: "all"
   property string filter: ""
-  // The rows unfolded (true) or folded (false) by hand, by key.
+  // The folds unfolded (true) or folded (false) by hand.
   property var opened: ({})
   // The two works at the ends of the request whose badge was picked.
   property var linked: []
@@ -66,14 +70,9 @@ FocusScope {
   readonly property int needsYou: flat.filter(node => node.state === "needs-you").length
   readonly property int working: flat.filter(node => node.state === "working").length
 
-  function closed(node) { return node.state === "done" || node.state === "cancelled" }
-  // A work's sub-works start folded when it is done, cancelled or coming,
-  // unless a question waiting on you climbed from below it.
-  function foldsAlone(node) { return (closed(node) || node.state === "up-next") && node.below === "" }
-  // The row the done and cancelled sub-works of `child`'s place fold into.
-  function doneKey(parent, child) {
-    return "done:" + parent.work + ":" + parent.groups.findIndex(group => group.nodes.some(node => node.work === child.work))
-  }
+  function closed(node) { return Progress.closed(node.state) }
+  // The fold the done and cancelled works of a parent's group `at` go in.
+  function doneKey(parent, at) { return "done:" + parent.work + ":" + at }
 
   // The works the filters keep: those that match, and every work above one.
   readonly property var kept: {
@@ -92,88 +91,53 @@ FocusScope {
   }
   function keeps(node) { return kept === null || !!kept[node.work] }
 
-  function isFolded(key, unless) { return opened[key] !== undefined ? !opened[key] : unless }
   function setOpen(key, value) {
     const next = Object.assign({}, opened)
     next[key] = value
     opened = next
   }
 
-  // The outline's rows, in order: works, the stage and parallel headings
-  // between them, the done sub-works of each place folded into one row,
-  // level headings in a long list, and the works done earlier.
+  // The outline's rows, in order: the level's own work, then each group of
+  // the works it handed down under its rule, those done folded after them.
   readonly property var rows: {
     const list = []
-    const filtering = kept !== null
-    const walk = (node, indent) => {
-      if (!keeps(node))
-        return
-      const kids = Progress.kidsOf(node).filter(keeps)
-      const folded = kids.length > 0 && isFolded(node.work, foldsAlone(node))
-      list.push({ kind: "work", key: node.work, node: node, indent: indent, folds: kids.length > 0, folded: folded && !filtering })
-      if (folded && !filtering)
-        return
-      node.groups.forEach((group, at) => {
-        const shown = group.nodes.filter(keeps)
-        if (shown.length === 0)
-          return
-        let inner = indent + 1
-        if (group.step) {
-          const key = "stage:" + node.work + ":" + at
-          const stageFolded = !filtering && isFolded(key, false)
-          list.push({ kind: "stage", key: key, indent: indent + 1, folds: true, folded: stageFolded, text: group.step + " stage" })
-          if (stageFolded)
-            return
-          inner = indent + 2
-        }
-        const going = shown.filter(kid => !closed(kid))
-        const finished = shown.filter(closed)
-        if (group.parallel && going.length > 0) {
-          const key = "group:" + node.work + ":" + at
-          const groupFolded = !filtering && isFolded(key, false)
-          list.push({ kind: "group", key: key, indent: inner, folds: true, folded: groupFolded,
-            text: Progress.together(group) })
-          if (groupFolded)
-            return
-          inner++
-        }
-        going.forEach(kid => walk(kid, inner))
-        if (finished.length > 0) {
-          const key = "done:" + node.work + ":" + at
-          const doneFolded = !filtering && isFolded(key, !finished.some(kid => kid.below !== ""))
-          list.push({ kind: "done", key: key, indent: inner, folds: true, folded: doneFolded, text: Progress.finished(finished) })
-          if (!doneFolded)
-            finished.forEach(kid => walk(kid, inner + 1))
-        }
-      })
-    }
-    const open = roots.filter(node => !closed(node))
-    const earlier = open.length > 0 ? roots.filter(closed).filter(keeps) : []
-    for (const root of open.length > 0 ? open : roots)
-      walk(root, 0)
-    if (earlier.length > 0) {
-      const folded = !filtering && isFolded("earlier", true)
-      list.push({ kind: "earlier", key: "earlier", indent: 0, folds: true, folded: folded, text: earlier.length + " done earlier" })
-      if (!folded)
-        earlier.forEach(root => walk(root, 0))
-    }
-    // In a long list, a thin heading where the level changes.
-    if (list.filter(row => row.kind === "work").length <= 12)
-      return list
-    const perLevel = {}
-    for (const node of flat)
-      perLevel[node.level] = (perLevel[node.level] || 0) + 1
-    const headed = []
-    let last = -1
-    for (const row of list) {
-      if (row.kind === "work" && row.node.level !== last) {
-        last = row.node.level
-        headed.push({ kind: "level", key: "level:" + headed.length, indent: row.indent, folds: false, folded: false,
-          text: "Level " + last + " · " + perLevel[last] + (perLevel[last] === 1 ? " work" : " works") })
+    // A filter shows every row it keeps.
+    const isFolded = (key, unless) => kept !== null ? false : opened[key] !== undefined ? !opened[key] : unless
+    const workRow = (node, self) => ({ kind: "work", key: node.work, node: node, drills: !self && Progress.kidsOf(node).length > 0 })
+    const node = byWork[here] || null
+    if (node === null) {
+      const open = roots.filter(each => !closed(each))
+      const earlier = open.length > 0 ? roots.filter(closed).filter(keeps) : []
+      for (const root of (open.length > 0 ? open : roots).filter(keeps))
+        list.push(workRow(root, false))
+      if (earlier.length > 0) {
+        const folded = isFolded("earlier", true)
+        list.push({ kind: "done", key: "earlier", folded: folded, text: earlier.length + " done earlier" })
+        if (!folded)
+          earlier.forEach(root => list.push(workRow(root, false)))
       }
-      headed.push(row)
+      return list
     }
-    return headed
+    list.push(workRow(node, true))
+    node.groups.forEach((group, at) => {
+      const shown = group.nodes.filter(keeps)
+      if (shown.length === 0)
+        return
+      const going = shown.filter(kid => !closed(kid))
+      const finished = shown.filter(closed)
+      const title = [group.step ? "stage " + group.step : "", group.parallel && going.length > 1 ? Progress.together(group) : ""]
+        .filter(part => part).join(" · ")
+      list.push({ kind: "rule", key: "rule:" + at, text: title || "sub-works" })
+      going.forEach(kid => list.push(workRow(kid, false)))
+      if (finished.length > 0) {
+        const key = doneKey(node, at)
+        const folded = isFolded(key, !finished.some(kid => kid.below !== ""))
+        list.push({ kind: "done", key: key, folded: folded, text: Progress.finished(finished) })
+        if (!folded)
+          finished.forEach(kid => list.push(workRow(kid, false)))
+      }
+    })
+    return list
   }
   function rowOf(key) { return rows.findIndex(row => row.key === key) }
 
@@ -185,24 +149,19 @@ FocusScope {
     return chain
   }
 
-  // Picks a work: its row comes into view, its folded ancestors and the
-  // done rows on its way open.
+  // Picks a work: its level shows, the fold it is in opens, its row comes
+  // into view.
   function pick(work) {
     picked = work
-    let next = null
-    const unfold = key => {
-      next = next || Object.assign({}, opened)
-      next[key] = true
+    const node = byWork[work]
+    if (node && work !== here) {
+      const parent = byWork[node.parent] || null
+      level = parent ? parent.work : ""
+      if (parent && closed(node))
+        setOpen(doneKey(parent, parent.groups.findIndex(group => group.nodes.includes(node))), true)
+      else if (!parent && closed(node) && roots.some(root => !closed(root)))
+        setOpen("earlier", true)
     }
-    for (let at = byWork[work]; at && byWork[at.parent]; at = byWork[at.parent]) {
-      const parent = byWork[at.parent]
-      if (closed(at) && opened[doneKey(parent, at)] !== true)
-        unfold(doneKey(parent, at))
-      if (isFolded(parent.work, foldsAlone(parent)))
-        unfold(parent.work)
-    }
-    if (next)
-      opened = next
     Qt.callLater(() => {
       const at = rowOf(work)
       if (at >= 0) {
@@ -212,36 +171,49 @@ FocusScope {
     })
   }
 
+  // A row chosen: picked, and narrower than wide, its detail opened.
+  function choose(work) {
+    pick(work)
+    if (!wide)
+      detailOpen = true
+  }
+
   // Opens a work's detail: beside the outline wide, as a page otherwise.
   function open(work) {
-    pick(work)
-    if (size === "narrow") {
-      const node = byWork[work]
-      level = node ? node.parent : ""
-    }
-    if (size !== "wide")
-      detailOpen = true
-    else
+    choose(work)
+    if (wide)
       Qt.callLater(() => detail.focusTabs())
   }
 
-  // A request's badge: both its ends lit, the other end into view, the
-  // request open in the detail of the row whose badge it was.
+  // Goes down to the works a work handed down.
+  function drill(work) {
+    level = work
+    picked = work
+    Qt.callLater(() => {
+      outline.currentIndex = 0
+      outline.positionViewAtBeginning()
+    })
+  }
+
+  // Goes up a level, the work it was on picked; false at the top.
+  function up() {
+    const node = byWork[here]
+    if (!node || (node.parent === "" && roots.length === 1))
+      return false
+    pick(node.work)
+    level = node.parent
+    return true
+  }
+
+  // A request's badge: both its ends lit, the other end picked, the request
+  // open in the detail.
   function requestPicked(from, id) {
     const asker = flat.find(node => node.asks.some(ask => ask.id === id))
     const ask = asker ? asker.asks.find(each => each.id === id) : null
     const decider = ask && ask.toWork ? ask.toWork : ""
     linked = [asker ? asker.work : "", decider].filter(work => work !== "")
     const other = from === (asker ? asker.work : "") ? decider : asker ? asker.work : ""
-    if (size === "narrow" && other !== "") {
-      open(other)
-    } else {
-      if (other !== "")
-        pick(other)
-      pick(from)
-      if (size !== "wide")
-        detailOpen = true
-    }
+    choose(other !== "" ? other : from)
     detail.show("requests")
   }
 
@@ -264,184 +236,102 @@ FocusScope {
   function write(noting) {
     if (picked === "")
       return
-    if (size !== "wide")
+    if (!wide)
       detailOpen = true
     detail.write(noting)
   }
   function showTab(name) {
     if (picked === "")
       return
-    if (size !== "wide")
+    if (!wide)
       detailOpen = true
     detail.show(name)
   }
   function fit() { if (mapLoader.item) mapLoader.item.fit() }
   function focusFilter() {
-    if (size !== "narrow") {
-      shownAs = "outline"
-      wideFilters.focusBox()
-      return
-    }
+    shownAs = "outline"
     detailOpen = false
-    level = ""
-    Qt.callLater(() => narrowFilters.focusBox())
+    Qt.callLater(() => filterBox.forceActiveFocus())
   }
 
-  // Lets go of one thing: the detail page, then a level; false when there
-  // is nothing more to let go of.
+  // Lets go of one thing: the detail page, the keyboard in the detail, then
+  // a level; false when there is nothing more to let go of.
   function back() {
     if (detailOpen) {
       detailOpen = false
-      Qt.callLater(() => size === "narrow" ? levelList.forceActiveFocus() : outline.forceActiveFocus())
-      return true
-    }
-    if (size === "narrow" && level !== "") {
-      const node = byWork[level]
-      level = node ? node.parent : ""
+      Qt.callLater(() => outline.forceActiveFocus())
       return true
     }
     if (detail.activeFocus) {
       outline.forceActiveFocus()
       return true
     }
-    return false
+    return !mapShown && up()
   }
 
   Keys.onEscapePressed: if (!back()) leave()
-  onActiveFocusChanged: if (activeFocus && !detailOpen) (size === "narrow" ? levelList : outline).forceActiveFocus()
-  onSizeChanged: if (size === "wide") detailOpen = false
+  onActiveFocusChanged: if (activeFocus && !detailOpen) outline.forceActiveFocus()
+  onWideChanged: if (wide) detailOpen = false
   // Wide, a work is always in the detail: the focus one at first.
-  readonly property bool wantsPick: size === "wide" && picked === "" && progress !== null && progress.focus !== null
-  onWantsPickChanged: if (wantsPick) picked = progress.focus.work
+  readonly property bool wantsPick: wide && picked === "" && progress !== null && progress.focus !== null
+  onWantsPickChanged: if (wantsPick) Qt.callLater(() => { if (team.wantsPick) team.picked = team.progress.focus.work })
 
-  // A row of the outline, as ListView shows it.
-  component OutlineRow: Item {
-    id: line
-    required property var row
-    required property int index
-    readonly property bool current: line.row.kind === "work" && team.picked === line.row.key
-
-    width: outline.width
-    height: line.row.kind === "work" ? node.implicitHeight + 6 : 26
-
-    // The row picked: a wash over its whole width.
-    Rectangle {
-      anchors.fill: parent
-      visible: line.current || (line.row.kind !== "work" && outline.activeFocus && outline.currentIndex === line.index)
-      color: Qt.alpha(Theme.primary, 0.07)
-    }
-
-    // A heading: a stage, a parallel group, the done sub-works of a place,
-    // a level, the works done earlier.
-    RowLayout {
-      visible: line.row.kind !== "work"
-      anchors { fill: parent; leftMargin: 4 + Math.min(line.row.indent, team.deepest) * team.indentStep; rightMargin: 4 }
-      spacing: 6
-      Icon {
-        visible: line.row.folds && line.row.kind !== "done"
-        name: line.row.folded ? "chevron-right" : "chevron-down"
-        size: 12
-        color: Theme.dim
-      }
-      Label {
-        visible: line.row.kind === "done"
-        text: "✓"
-        color: Theme.success
-        font.pixelSize: 11
-      }
-      Label {
-        Layout.fillWidth: true
-        Layout.minimumWidth: 0
-        text: line.row.text || ""
-        color: Theme.dim
-        font.pixelSize: 11
-        font.letterSpacing: line.row.kind === "level" ? 1 : 0
-        elide: Text.ElideRight
-      }
-      Icon {
-        visible: line.row.kind === "done"
-        name: line.row.folded ? "chevron-right" : "chevron-down"
-        size: 12
-        color: Theme.dim
-      }
-      TapHandler {
-        enabled: line.row.folds
-        onTapped: {
-          outline.currentIndex = line.index
-          outline.forceActiveFocus()
-          team.setOpen(line.row.key, line.row.folded)
-        }
-      }
-    }
-
-    // A work.
-    Loader {
-      id: node
-      active: line.row.kind === "work"
-      x: Math.min(line.row.indent, team.deepest) * team.indentStep
-      y: 3
-      width: Math.max(0, parent.width - x)
-      sourceComponent: ProgressNode {
-        node: line.row.node
-        mode: "full"
-        active: line.current
-        highlighted: team.linked.includes(line.row.key)
-        folds: line.row.folds
-        folded: line.row.folded
-        onToggled: {
-          outline.currentIndex = line.index
-          outline.forceActiveFocus()
-          team.picked = line.row.key
-          if (team.size !== "wide")
-            team.open(line.row.key)
-        }
-        onFoldToggled: team.setOpen(line.row.key, line.row.folded)
-        onRequestPicked: id => team.requestPicked(line.row.key, id)
-        onOpenThread: work => { team.open(work); detail.show("thread") }
-        onOpenLog: work => team.openLog(work)
-        onOpenMap: work => { team.shownAs = "map"; team.pick(work) }
-      }
-    }
-  }
-
-  // The filters over the outline.
-  component Filters: ColumnLayout {
-    function focusBox() { box.forceActiveFocus() }
-    spacing: 6
-    FilterBox {
-      id: box
-      Layout.fillWidth: true
-      placeholderText: "filter works, agents, stages"
-      onApplied: value => team.filter = value
-      onLeave: (team.size === "narrow" ? levelList : outline).forceActiveFocus()
-    }
-    Flow {
-      Layout.fillWidth: true
-      spacing: 6
-      Chip { text: "NEEDS YOU " + team.needsYou; checked: team.chip === "needs-you"; accent: Theme.warning; onClicked: team.chip = checked ? "all" : "needs-you" }
-      Chip { text: "WORKING " + team.working; checked: team.chip === "working"; onClicked: team.chip = checked ? "all" : "working" }
-      Chip { text: "ALL " + team.flat.length; checked: team.chip === "all"; onClicked: team.chip = "all" }
-    }
-  }
-
-  // Wide and medium: the outline, or the map, and the detail.
+  // Wide: the outline, or the map, beside the detail. Narrower: the outline
+  // or the map, the detail over them, or beside the map.
   RowLayout {
     anchors.fill: parent
-    visible: team.size !== "narrow"
-    spacing: 14
+    spacing: Theme.space.block
 
     ColumnLayout {
       Layout.fillHeight: true
-      Layout.fillWidth: team.size !== "wide" || team.mapShown
-      Layout.preferredWidth: team.size === "wide" && !team.mapShown ? 440 : -1
-      Layout.minimumWidth: team.size === "wide" && !team.mapShown ? 380 : 0
+      Layout.fillWidth: !team.wide || team.mapShown
+      Layout.preferredWidth: team.wide && !team.mapShown ? 440 : -1
+      Layout.minimumWidth: team.wide && !team.mapShown ? 380 : 0
       visible: !team.detailOpen
-      spacing: 8
+      spacing: Theme.space.block
 
-      Filters {
-        id: wideFilters
+      // The search line, and the view at its right end.
+      RowLayout {
         Layout.fillWidth: true
+        spacing: Theme.space.gap
+        FilterBox {
+          id: filterBox
+          Layout.fillWidth: true
+          visible: !team.mapShown
+          placeholderText: "Search works, agents, stages…  /"
+          onApplied: value => team.filter = value
+          onLeave: outline.forceActiveFocus()
+        }
+        Item { Layout.fillWidth: true; visible: team.mapShown }
+        // One joined control: its borders overlap.
+        Row {
+          visible: team.mapAllowed
+          spacing: -1
+          Chip { text: "OUTLINE"; icon: "list"; checked: !team.mapShown; tip: "the works as an outline"; onClicked: team.shownAs = "outline" }
+          Chip { text: "MAP"; icon: "map"; checked: team.mapShown; tip: "the works as a map, one card each"; onClicked: team.shownAs = "map" }
+        }
+      }
+
+      ChipStrip {
+        Layout.fillWidth: true
+        Layout.preferredHeight: implicitHeight
         visible: !team.mapShown
+        Chip { text: "NEEDS YOU " + team.needsYou; checked: team.chip === "needs-you"; accent: Theme.warning; onClicked: team.chip = checked ? "all" : "needs-you" }
+        Chip { text: "WORKING " + team.working; checked: team.chip === "working"; onClicked: team.chip = checked ? "all" : "working" }
+        Chip { text: "ALL " + team.flat.length; checked: team.chip === "all"; onClicked: team.chip = "all" }
+      }
+
+      Breadcrumb {
+        Layout.fillWidth: true
+        visible: !team.mapShown && team.here !== ""
+        trail: [{ text: "Conversation" }].concat(team.trailOf(team.here).map(node => ({ text: node.title || node.agent })))
+        onChosen: index => {
+          const chain = team.trailOf(team.here)
+          if (index === 0)
+            team.level = ""
+          else
+            team.drill(chain[index - 1].work)
+        }
       }
 
       ListView {
@@ -450,16 +340,92 @@ FocusScope {
         Layout.fillHeight: true
         visible: !team.mapShown
         clip: true
-        spacing: 4
+        spacing: Theme.space.row
         boundsBehavior: Flickable.StopAtBounds
         model: team.rows
         activeFocusOnTab: true
         keyNavigationEnabled: false
         currentIndex: -1
-        delegate: OutlineRow {
+        delegate: Item {
+          id: line
           required property var modelData
-          row: modelData
+          required property int index
+          readonly property bool focused: outline.activeFocus && outline.currentIndex === index
+
+          width: outline.width
+          height: modelData.kind === "work" ? (node.item ? node.item.implicitHeight : 0) : Theme.size.rule
+
+          // A stage, a parallel group.
+          Kicker {
+            visible: line.modelData.kind === "rule"
+            anchors.fill: parent
+            text: line.modelData.text || ""
+          }
+
+          // The done and cancelled works of a place, or the works done
+          // earlier, folded or not.
+          Item {
+            visible: line.modelData.kind === "done"
+            anchors.fill: parent
+            RowLayout {
+              anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: Theme.space.line }
+              spacing: Theme.space.gap
+              Label {
+                text: "✓"
+                color: Theme.success
+                font.pixelSize: Theme.type.section.size
+              }
+              Label {
+                Layout.maximumWidth: implicitWidth
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                text: (line.modelData.text || "").toUpperCase()
+                color: Theme.dim
+                font.pixelSize: Theme.type.section.size
+                font.letterSpacing: Theme.type.section.tracking
+                elide: Text.ElideRight
+              }
+              Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.line }
+              Icon {
+                name: line.modelData.folded ? "chevron-right" : "chevron-down"
+                size: 12
+                color: foldHover.hovered || line.focused ? Theme.primary : Theme.dim
+              }
+            }
+            HoverHandler { id: foldHover; cursorShape: Qt.PointingHandCursor }
+            TapHandler {
+              onTapped: {
+                outline.currentIndex = line.index
+                outline.forceActiveFocus()
+                team.setOpen(line.modelData.key, line.modelData.folded)
+              }
+            }
+            FocusRing { shown: line.focused }
+          }
+
+          // A work.
+          Loader {
+            id: node
+            active: line.modelData.kind === "work"
+            width: parent.width
+            sourceComponent: ProgressNode {
+              node: line.modelData.node
+              mode: "full"
+              active: team.picked === line.modelData.key
+              highlighted: team.linked.includes(line.modelData.key)
+              folds: line.modelData.drills
+              focused: line.focused
+              onToggled: {
+                outline.currentIndex = line.index
+                outline.forceActiveFocus()
+                team.choose(line.modelData.key)
+              }
+              onDrilled: team.drill(line.modelData.key)
+              onRequestPicked: id => team.requestPicked(line.modelData.key, id)
+            }
+          }
         }
+
         // The rows are made again on each change: the scroll and the row the
         // keyboard is on stay where they were.
         property real keptY: 0
@@ -473,37 +439,40 @@ FocusScope {
             outline.remaking = false
           })
         }
-        // Moves the keyboard `by` rows; the detail follows a work.
+        // Moves the keyboard `by` rows past the rules; the detail follows a work.
         function step(by) {
-          currentIndex = Math.max(0, Math.min(count - 1, currentIndex + by))
-          positionViewAtIndex(currentIndex, ListView.Contain)
-          const row = team.rows[currentIndex]
-          if (row && row.kind === "work")
-            team.picked = row.key
+          let at = currentIndex + by
+          while (at >= 0 && at < count && team.rows[at].kind === "rule")
+            at += by
+          if (at < 0 || at >= count)
+            return
+          currentIndex = at
+          positionViewAtIndex(at, ListView.Contain)
+          if (team.rows[at].kind === "work")
+            team.picked = team.rows[at].key
         }
-        onActiveFocusChanged: if (activeFocus && currentIndex < 0) currentIndex = Math.max(0, team.rowOf(team.picked))
+        onActiveFocusChanged: if (activeFocus && currentIndex < 0 && count > 0) currentIndex = Math.max(0, team.rowOf(team.picked))
         Keys.onUpPressed: step(-1)
         Keys.onDownPressed: step(1)
         Keys.onRightPressed: {
           const row = team.rows[currentIndex]
-          if (row && row.folds && row.folded)
+          if (row && row.kind === "work" && row.drills)
+            team.drill(row.key)
+          else if (row && row.kind === "done" && row.folded)
             team.setOpen(row.key, true)
         }
         Keys.onLeftPressed: {
           const row = team.rows[currentIndex]
-          if (!row)
-            return
-          if (row.folds && !row.folded) {
+          if (row && row.kind === "done" && !row.folded)
             team.setOpen(row.key, false)
-          } else if (row.kind === "work" && row.node.parent !== "") {
-            team.pick(row.node.parent)
-          }
+          else
+            team.up()
         }
         Keys.onReturnPressed: {
           const row = team.rows[currentIndex]
           if (row && row.kind === "work")
             team.open(row.key)
-          else if (row && row.folds)
+          else if (row && row.kind === "done")
             team.setOpen(row.key, row.folded)
         }
         Keys.onPressed: event => {
@@ -517,7 +486,6 @@ FocusScope {
             return
           event.accepted = true
         }
-        FocusRing { shown: outline.activeFocus && outline.currentIndex < 0 }
       }
 
       Loader {
@@ -526,6 +494,8 @@ FocusScope {
         Layout.fillHeight: true
         visible: team.mapShown
         active: team.mapShown
+        // The canvas moves under the pane's edge, never over the detail.
+        clip: true
         sourceComponent: AgentsView {
           picked: team.picked
           highlighted: team.linked
@@ -533,7 +503,7 @@ FocusScope {
             if (work === "")
               return
             team.picked = work
-            if (team.size !== "wide")
+            if (!team.wide)
               team.detailOpen = true
           }
           onRequestPicked: id => {
@@ -545,171 +515,44 @@ FocusScope {
 
       Label {
         Layout.fillWidth: true
-        visible: team.flat.length === 0 && !team.mapShown
-        text: team.progress ? "No work in this conversation yet." : "Reading the conversation."
+        visible: team.rows.length === 0 && !team.mapShown
+        text: team.progress === null ? "Reading the conversation."
+          : team.flat.length === 0 ? "No work in this conversation yet." : "No work matches."
         color: Theme.dim
-        font.pixelSize: 12
+        font.pixelSize: Theme.type.body.size
         wrapMode: Text.Wrap
       }
     }
 
     Rectangle {
-      visible: team.size === "wide" || (team.mapShown && team.picked !== "")
+      visible: detailSlot.visible
       Layout.fillHeight: true
       implicitWidth: 1
       color: Theme.line
     }
 
-    // Where the detail sits beside the outline or the map, or over it.
+    // Where the detail sits beside the outline or the map.
     Item {
       id: detailSlot
       Layout.fillHeight: true
-      Layout.fillWidth: team.size === "wide" && !team.mapShown || team.detailOpen
-      Layout.preferredWidth: team.mapShown && !team.detailOpen ? (team.size === "wide" ? 420 : team.width * 0.45) : -1
-      visible: detail.visible
+      Layout.fillWidth: team.wide && !team.mapShown
+      Layout.preferredWidth: team.mapShown ? (team.wide ? 420 : team.width * 0.45) : -1
+      visible: detail.visible && !detail.whole
     }
   }
 
-  // Narrow: a page per level, or the detail of a work.
-  ColumnLayout {
-    anchors.fill: parent
-    visible: team.size === "narrow"
-    spacing: 8
-
-    Breadcrumb {
-      Layout.fillWidth: true
-      visible: !team.detailOpen
-      trail: [{ text: "Conversation" }].concat(team.trailOf(team.level).map(node => ({ text: node.title })))
-      onChosen: index => team.level = index === 0 ? "" : team.trailOf(team.level)[index - 1].work
-    }
-    Filters {
-      id: narrowFilters
-      Layout.fillWidth: true
-      visible: !team.detailOpen && team.level === ""
-    }
-
-    ListView {
-      id: levelList
-      Layout.fillWidth: true
-      Layout.fillHeight: true
-      visible: !team.detailOpen
-      clip: true
-      spacing: 6
-      boundsBehavior: Flickable.StopAtBounds
-      activeFocusOnTab: true
-      keyNavigationEnabled: true
-      // The level's own card first, then its sub-works, each group headed.
-      model: {
-        const here = team.byWork[team.level] || null
-        const list = here ? [{ kind: "self", node: here }] : []
-        if (here) {
-          here.groups.forEach(group => {
-            const shown = group.nodes.filter(team.keeps)
-            if (shown.length === 0)
-              return
-            list.push({ kind: "head", text: "Sub-works" + (group.step ? " · " + group.step + " stage" : "")
-              + (group.parallel ? " · " + Progress.together(group) : "") })
-            shown.forEach(node => list.push({ kind: "work", node: node }))
-          })
-        } else {
-          team.roots.filter(team.keeps).forEach(node => list.push({ kind: "work", node: node }))
-        }
-        return list
-      }
-      Keys.onReturnPressed: if (currentItem) currentItem.enter()
-      Keys.onPressed: event => {
-        if (Typing.idle && event.text === "/") {
-          team.focusFilter()
-          event.accepted = true
-        }
-      }
-      delegate: Item {
-        id: entry
-        required property var modelData
-        required property int index
-        readonly property bool drills: modelData.kind === "work" && Progress.kidsOf(modelData.node).length > 0
-        width: levelList.width
-        height: modelData.kind === "head" ? 26 : card.implicitHeight
-
-        // A work row goes a level down, or to its detail when nothing is below.
-        function enter() {
-          if (modelData.kind === "head")
-            return
-          if (drills)
-            team.level = modelData.node.work
-          else
-            team.open(modelData.node.work)
-        }
-
-        Label {
-          visible: entry.modelData.kind === "head"
-          anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: 4 }
-          text: entry.modelData.text || ""
-          color: Theme.dim
-          font.pixelSize: 11
-          elide: Text.ElideRight
-        }
-        RowLayout {
-          id: card
-          visible: entry.modelData.kind !== "head"
-          width: parent.width
-          spacing: 4
-          Loader {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 0
-            active: entry.modelData.kind !== "head"
-            sourceComponent: ProgressNode {
-              node: entry.modelData.node
-              mode: "full"
-              active: levelList.activeFocus && levelList.currentIndex === entry.index
-              highlighted: team.linked.includes(entry.modelData.node.work)
-              onToggled: {
-                levelList.currentIndex = entry.index
-                if (entry.modelData.kind === "self")
-                  team.open(entry.modelData.node.work)
-                else
-                  entry.enter()
-              }
-              onRequestPicked: id => team.requestPicked(entry.modelData.node.work, id)
-              onOpenThread: work => { team.open(work); detail.show("thread") }
-              onOpenLog: work => team.openLog(work)
-              onOpenMap: work => team.open(work)
-            }
-          }
-          Icon {
-            visible: entry.drills
-            Layout.alignment: Qt.AlignVCenter
-            name: "chevron-right"
-            size: 12
-            color: Theme.dim
-          }
-        }
-      }
-
-      Label {
-        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
-        visible: levelList.count === 0
-        text: team.progress ? "No work in this conversation yet." : "Reading the conversation."
-        color: Theme.dim
-        font.pixelSize: 12
-        wrapMode: Text.Wrap
-      }
-    }
-
-  }
-
-  // The work picked in full: in its slot, or over the whole page when narrow.
+  // The work picked in full: in its slot, or over the whole page.
   NodeDetail {
     id: detail
-    readonly property bool whole: team.size === "narrow"
+    readonly property bool whole: team.detailOpen
     x: whole ? 0 : detailSlot.x
     y: whole ? 0 : detailSlot.y
     width: whole ? team.width : detailSlot.width
     height: whole ? team.height : detailSlot.height
-    visible: team.picked !== "" && (team.size === "narrow" ? team.detailOpen : team.size === "wide" || team.detailOpen || team.mapShown)
+    visible: team.picked !== "" && (team.wide || team.detailOpen || team.mapShown)
     key: team.picked
     node: team.pickedNode
-    trail: (whole ? [{ text: "Conversation" }] : []).concat(team.trailOf(team.picked).map(node => ({ text: node.title })))
+    trail: (whole ? [{ text: "Conversation" }] : []).concat(team.trailOf(team.picked).map(node => ({ text: node.title || node.agent })))
     closable: team.detailOpen
     mappable: team.mapAllowed && !team.mapShown
     onClosed: team.back()
@@ -720,14 +563,18 @@ FocusScope {
         return
       }
       team.detailOpen = false
-      team.level = index === 0 ? "" : chain[index - 1].work
+      if (index === 0)
+        team.level = ""
+      else
+        team.drill(chain[index - 1].work)
     }
-    onPicked: key => team.size === "narrow" ? team.open(key) : team.pick(key)
+    onPicked: key => team.wide ? team.pick(key) : team.choose(key)
     onOpenLog: work => team.openLog(work)
     onOpenMap: work => {
       team.detailOpen = false
       team.shownAs = "map"
       team.pick(work)
     }
+    onDecide: (id, escalating) => team.decide(id, escalating)
   }
 }
