@@ -226,6 +226,13 @@ Item {
         readonly property var kind: view.kinds[model.type] || ({ icon: "more", tone: Theme.dim })
         readonly property bool marked: (view.picked !== null && view.picked.id === model.id) || (ListView.isCurrentItem && list.activeFocus)
         readonly property string status: !model.ok ? (model.retried ? "RETRIED" : "FAILED") : model.asks ? "NEEDS YOU" : ""
+        // Its width is that of the longest status, so the agent column aligns.
+        TextMetrics {
+          id: statusWidth
+          text: "NEEDS YOU"
+          font.pixelSize: Theme.type.header.size
+          font.letterSpacing: Theme.type.header.tracking
+        }
         // A failure a later call settled is dim, not red.
         readonly property bool bad: !model.ok && !model.retried
 
@@ -295,7 +302,8 @@ Item {
               elide: Text.ElideRight
             }
             Label {
-              visible: row.status !== ""
+              Layout.preferredWidth: statusWidth.advanceWidth
+              horizontalAlignment: Text.AlignRight
               text: row.status
               color: row.bad ? Theme.error : row.model.ok ? Theme.warning : Theme.dim
               font.pixelSize: Theme.type.header.size
