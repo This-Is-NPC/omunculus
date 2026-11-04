@@ -459,7 +459,6 @@ Item {
           streaming: entry.streaming
           steps: entry.steps
           files: entry.files
-          at: entry.at
           stamp: entry.stamp
           continued: root.revision >= 0 && root.continues(entry.index)
         }

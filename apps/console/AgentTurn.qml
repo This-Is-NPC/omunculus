@@ -9,8 +9,7 @@ import "kit/ui"
 // Below them, one dim line says what it did in plain phrases — "Read 6
 // files", how many attempts did not work, the work it closed or the access it
 // granted; clicking it lists the calls in place, with why a failed one
-// failed. Until the agent says or
-// does anything, that line is the loading trace and how long it has worked.
+// failed. Until the agent says or does anything the turn is not drawn.
 // A turn that continues the same agent's drops its name and time. Hovering
 // the words shows the way to copy them, in a gutter they never take.
 Item {
@@ -23,7 +22,6 @@ Item {
   required property string steps
   // The files the run attached, as JSON.
   required property string files
-  required property real at
   required property string stamp
   property bool continued: false
   property bool callsOpen: false
@@ -36,10 +34,9 @@ Item {
   readonly property string did: [summary.text].concat(outcomes.map(outcome => outcome.text)).filter(part => part !== "").join("  ·  ")
   readonly property string said: text + (partial !== "" ? (text !== "" ? "\n\n" : "") + partial : "")
   readonly property color tone: Omunculus.toneOf(who)
-  // A run that said and did nothing leaves no trace in the conversation.
-  readonly property bool empty: !streaming && said === "" && lines.length === 0 && attached.length === 0
-  property double now: Date.now()
-  readonly property int worked: Math.max(0, Math.round(now / 1000 - at))
+  // A run that has said and done nothing so far leaves no trace in the
+  // conversation; the working line says that the team works.
+  readonly property bool empty: said === "" && lines.length === 0 && attached.length === 0
   // Room beside the words kept for the copy button.
   readonly property real gutter: copy.implicitWidth + 12
   // About 70 characters at most per line.
@@ -48,9 +45,6 @@ Item {
 
   visible: !empty
   implicitHeight: empty ? 0 : body.y + body.height + 2
-
-  // The time worked is counted in seconds while nothing has been said.
-  Timer { running: turn.streaming && turn.said === ""; interval: 1000; repeat: true; triggeredOnStart: true; onTriggered: turn.now = Date.now() }
 
   HoverHandler { id: hover }
 
@@ -114,20 +108,6 @@ Item {
       }
     }
 
-    // Working and nothing to show yet: the trace, and for how long.
-    Row {
-      visible: turn.streaming && turn.said === "" && turn.calls.length === 0
-      spacing: 10
-      LoadingTrace {
-        anchors.verticalCenter: parent.verticalCenter
-        width: 120
-        height: 16
-        running: parent.visible
-        tone: turn.tone
-      }
-      Label { anchors.verticalCenter: parent.verticalCenter; text: "Working " + turn.worked + "s"; color: turn.tone; font.pixelSize: 11; font.letterSpacing: 1 }
-    }
-
     // What it did, on one dim line; the calls open below it.
     Item {
       visible: turn.did !== "" || turn.summary.failed
@@ -140,7 +120,7 @@ Item {
         Label {
           anchors.verticalCenter: parent.verticalCenter
           width: Math.min(implicitWidth, turn.widest - 24)
-          text: turn.did + (turn.streaming ? (turn.did !== "" ? "  ·  " : "") + "working " + turn.worked + "s" : "")
+          text: turn.did
           color: pointer.containsMouse ? Theme.foreground : Theme.dim
           font.pixelSize: 11
           elide: Text.ElideRight

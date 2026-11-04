@@ -31,11 +31,19 @@ defmodule Omunculus.GuiActivityTest do
     if (out.since !== 40) throw Error("since");
     if (out.stage.name !== "design" || out.stage.index !== 2 || out.stage.count !== 6 || out.stage.next !== "propose")
       throw Error("stage " + JSON.stringify(out.stage));
-    if (out.headline !== "DESIGN TEAM IS WORKING  -  DESIGNER: WRITING FILES  -  STEP 2 OF 6") throw Error(out.headline);
+    if (out.headline !== "BAKERY SITE  -  DESIGNER: WRITING FILES  -  STEP 2 OF 6: DESIGN") throw Error(out.headline);
     const opening = Activity.status(Object.assign({}, base, {
-      runs: [run("r1", "sales", "w2")], calling: {w2: "work"}, callArgs: {w2: {title: "Bakery website"}}, runStarts: {r1: 40}
+      runs: [run("r1", "sales", "w2")], calling: {w2: "work"}, callArgs: {w2: {works: [{title: "Bakery website"}]}}, runStarts: {r1: 40}
     }));
     if (!opening.headline.includes("SALES: OPENING WORK: BAKERY WEBSITE")) throw Error(opening.headline);
+    const starting = Activity.status(Object.assign({}, base, {runs: [run("r1", "seller", "w2")]}));
+    if (starting.headline !== "BAKERY SITE  -  SELLER IS GETTING STARTED  -  STEP 2 OF 6: DESIGN") throw Error(starting.headline);
+    const request = Activity.status({runs: [run("r1", "sales", "")], works: [], requests: [], lanes: {}, calling: {}, now: 100});
+    if (request.headline !== "YOUR REQUEST  -  SALES IS GETTING STARTED") throw Error(request.headline);
+    const long = Activity.status(Object.assign({}, base, {
+      works: [{id: "w1", title: "A".repeat(50), state: "open"}], lanes: {}, runs: [run("r1", "sales", "w1")], calling: {w1: "read"}
+    }));
+    if (long.headline !== "A".repeat(39) + "…  -  SALES: READING FILES") throw Error(long.headline);
     const rows = Object.fromEntries(out.rows.map(r => [r.work, r]));
     if (rows.w1.state !== "waiting-team" || rows.w1.depth !== 0 || rows.w1.agent !== "design-agent") throw Error("w1 " + JSON.stringify(rows.w1));
     if (rows.w2.state !== "working" || rows.w2.phrase !== "Writing files" || rows.w2.since !== 40 || rows.w2.parent !== "w1" || rows.w2.depth !== 1)
@@ -107,8 +115,11 @@ defmodule Omunculus.GuiActivityTest do
     out = Phrases.summarize(Array.from({length: 4}, () => bad("next_stage")));
     if (out.hidden !== 0 || out.failed !== 4 || out.failedText !== "The team is having trouble moving on") throw Error(JSON.stringify(out));
     if (Phrases.summarize([ok("mystery")]).text !== "Worked") throw Error("unknown");
-    const titled = {name: "work", ok: true, args: {title: "Bakery website", goal: "x"}};
-    if (Phrases.phrase("work", titled.args) !== "Opening work: Bakery website" || Phrases.phrase("work", {}) !== "Opening work") throw Error("titled phrase");
+    const titled = {name: "work", ok: true, args: {report: "r", works: [{title: "Bakery website", goal: "x"}]}};
+    const several = {name: "work", ok: true, args: {works: [{title: "Bakery website"}, {title: "Menu"}, {title: "About"}]}};
+    if (Phrases.phrase("work", several.args) !== "Opening work: Bakery website +2 more") throw Error("several phrase");
+    if (Phrases.summarize([several]).text !== "Opened work: Bakery website +2 more") throw Error("several summary");
+    if (Phrases.phrase("work", titled.args) !== "Opening work: Bakery website" || Phrases.phrase("work", {works: []}) !== "Opening work") throw Error("titled phrase");
     if (Phrases.summarize([titled]).text !== "Opened work: Bakery website") throw Error("titled summary");
     if (Phrases.summarize([titled, titled]).text !== "Opened 2 pieces of work") throw Error("titled many");
     if (Phrases.summarize([ok("work")]).text !== "Opened some work") throw Error("untitled summary");

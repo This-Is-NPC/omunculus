@@ -38,9 +38,9 @@ function status(input) {
     headline = upper(Requests.label(forYou[0].requester)) + " IS WAITING FOR YOUR ANSWER";
   } else if (focus) {
     state = "working";
-    const team = stage.name ? upper(stage.name) + " TEAM" : "THE TEAM";
-    headline = team + " IS WORKING  -  " + upper(focus.agent) + ": " + upper(Phrases.phrase(calling[focus.work_id || ""] || "", callArgs[focus.work_id || ""]))
-      + (stage.count > 0 ? "  -  STEP " + stage.index + " OF " + stage.count : "");
+    const call = calling[focus.work_id || ""];
+    const doing = call ? upper(focus.agent) + ": " + upper(Phrases.phrase(call, callArgs[focus.work_id || ""])) : upper(focus.agent) + " IS GETTING STARTED";
+    headline = [subject(works), doing].concat(stage.count > 0 ? ["STEP " + stage.index + " OF " + stage.count + ": " + upper(stage.name)] : []).join("  -  ");
     since = starts[focus.id] === undefined ? null : starts[focus.id];
   } else if (forTeam.length > 0) {
     state = "waiting-team";
@@ -54,6 +54,15 @@ function status(input) {
     headline = "DELIVERED";
   }
   return { state: state, headline: headline, since: since, stage: stage, rows: rows, loop: loopOf(runs) };
+}
+
+// What the team works on: the first root work's title, cut at 40 characters,
+// or "YOUR REQUEST" before any work exists.
+function subject(works) {
+  const root = works.find(work => !work.parent_id && work.title);
+  if (!root) return "YOUR REQUEST";
+  const title = upper(root.title);
+  return title.length > 40 ? title.slice(0, 39) + "…" : title;
 }
 
 // A work waiting on nothing: it broke, and its parent decides.

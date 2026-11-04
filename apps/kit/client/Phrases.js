@@ -19,9 +19,12 @@ const tools = {
 const unknown = { now: "Working", once: "worked", many: "worked" };
 const trouble = 3;
 
-// The title in a call's args, for the tools that name their object.
+// The title of the object a call names, for the tools that name theirs: the
+// first of a `work` call's works, with "+N more" when it opens several.
 function titleOf(tool, args) {
-  return tool.titled && args && typeof args.title === "string" && args.title !== "" ? args.title : "";
+  const works = tool.titled && args && Array.isArray(args.works) ? args.works : [];
+  const title = works.length > 0 && works[0] && typeof works[0].title === "string" ? works[0].title : "";
+  return title !== "" && works.length > 1 ? title + " +" + (works.length - 1) + " more" : title;
 }
 
 // What a tool is doing while it runs, with the title of its object when the
