@@ -338,29 +338,41 @@ so. Entered by one of them, its pages (`PagesView`) are in three levels
 The registry's level:
 
 - PROJECTS (`ProjectsView`, `ProjectsTable`), every project of the
-  registry: its id, `· OPEN` after the one the window is on, its
+  registry, under a rule of its state (NEEDS YOU, WORKING, IDLE, NOT
+  REACHABLE, READING): its id, `· OPEN` after the one the window is on, its
   conversations and open works (not done or cancelled), its last activity
   (the newest conversation begun or work changed, "Today 22:22") and its
   state: WAITING FOR YOU and how many, WORKING and how many, IDLE, NOT
   REACHABLE when its socket did not answer, or READING… until its
-  conversations are read. `/` searches the ids; the chips ALL, WAITING FOR
-  YOU and WORKING, shown while a project is in either state, keep those.
-  Enter or a click opens the project at its conversations. The
-  conversations cell says as much as fits, never cut: "15 conversations ·
-  14 open works", "15 conversations · 14 open", "15 conversations", "15
+  conversations are read. The search line (`/`) searches the ids; the chips
+  ALL, WAITING FOR YOU and WORKING, shown while a project is in either
+  state, keep those, on one line that scrolls sideways (`ChipStrip`). A
+  list the filters empty offers CLEAR FILTERS. Enter or a click opens the
+  project at its conversations; ↑ on the first row goes back to the search.
+  The conversations cell says as much as fits, never cut: "15 conversations
+  · 14 open works", "15 conversations · 14 open", "15 conversations", "15
   conv.", then "15" (`Projects.conversationsText`). Under 700 px a row
-  stacks: the id, then its conversations and last activity, its state on
-  the right; the last activity goes before the conversations would shorten
-  past "15 conversations";
+  stacks: the id, then its conversations and last activity, its state at
+  the top right; the last activity goes before the conversations would
+  shorten past "15 conversations". The view's `readout`, "3 PROJECTS",
+  counts the rows listed;
 - BOARD, the works of every project.
 
 The project's level:
 
-- CONVERSATIONS, the project's, filtered by what agents do there and what
-  was first said, which it opens from. Each has a state: NOT STARTED (nothing
-  was said; hidden under ALL, shown by its chip), WAITING FOR YOU, WORKING,
-  DONE (every work done or cancelled) or IDLE. It began "Today 21:59",
-  "Yesterday 21:59" or "03 Nov 21:59";
+- CONVERSATIONS (`HistoryView`, `ConversationsTable`), the project's, under
+  a rule of the day each began, newest first, filtered by what agents do
+  there and by their titles and what was first said in them, which it opens
+  from. A row's title is its first work's, else what was first said; under
+  it, the agent that work is with, when it began ("Today 21:59", "Yesterday
+  21:59" or "03 Nov 21:59"), how many works it holds and the stage its first
+  work is at (read from the project's works, which the window follows while
+  entered). Its state is at the top right: NOT STARTED (nothing was said;
+  hidden under ALL, shown by its chip), WAITING FOR YOU, WORKING (behind a
+  dot), DONE (every work done or cancelled) or IDLE. Each row's `⋯` opens
+  the conversation at its TEAM or its LOG instead of its chat. A list the
+  filters empty offers CLEAR FILTERS; ↑ on the first row goes back to the
+  search. The view's `readout`, "12 CONVERSATIONS", counts the rows listed;
 - BOARD, the same board, opened kept to the project's works, every
   project's one click away.
 
@@ -393,19 +405,28 @@ and whether it shows the outline or the map, are kept meanwhile.
 The board (`BoardView`) is a kanban, a column per state: open, waiting on a
 child, a request or your next message, broken (waiting with nothing named,
 for its parent to decide), done and cancelled, the latest changed first.
+Each column opens with a rule of its state and how many works it holds,
+what the state means on hover.
 
-Each card (`BoardCard`) is the work first — its project, its title, in a
-workflow the stage it is at of how many, waiting what on, its conversation
-and the work it came from — then, small, its agent's portrait and name and
-its age, its border lit while an agent runs on it.
+Each card (`BoardCard`) is framed as a list row: the work's title, and at
+the top right its age, or RUNNING behind a dot while an agent runs on it
+(its border lit then); under it, behind a dot in its agent's colour, the
+agent, the project, in a workflow the stage it is at of how many, and
+waiting what on; then its conversation and the work it came from. A work
+done or cancelled steps back.
 
-BY STATE (Alt+S), BY AGENT (Alt+A) and BY PROJECT (Alt+J) cross the columns with a lane
-of each, chips keep one project, and `/` filters by title, project,
-conversation, workflow, stage or agent. The arrows move across and down the
-columns, and Enter or a click opens the work on a page of its own. Opened
-from the registry's level it shows every project, ALL PROJECTS lit; from a
-project's, that project's chip is lit. The chip chosen holds while the
-level stays the same.
+BY STATE (Alt+S), BY AGENT (Alt+A) and BY PROJECT (Alt+J) cross the columns
+with a lane of each, opened by a rule of its name (an agent's in its colour)
+and count. `#project` chips keep one project, and the filter line (`/`)
+filters by title, project, conversation, workflow, stage or agent. The
+arrows move across and down the columns, and Enter or a click opens the work
+on a page of its own. Under 700 px the board is one list (`DataTable`)
+instead: each work a row of title, the same lines under it and its age or
+RUNNING at the top right, under a rule of its state, and of its lane while
+grouped. Opened from the registry's level it shows every project, ALL
+PROJECTS lit; from a project's, that project's chip is lit. The chip chosen
+holds while the level stays the same. The view's `readout`, "24 WORKS",
+counts the works shown.
 
 ## A work's page
 

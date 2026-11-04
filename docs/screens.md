@@ -70,10 +70,12 @@ two: PROJECTS and BOARD.
 
 ### 2. Projects
 
-Every project of the server's registry: its id, OPEN beside the one the
-window is on, its conversations and open works, its last activity, and its
-state — WAITING FOR YOU, WORKING, IDLE, NOT REACHABLE or READING… — waiting
-for you first. Chips keep those waiting for you or working. NEW PROJECT
+Every project of the server's registry, under a rule of its state (NEEDS
+YOU, WORKING, IDLE): its id, OPEN beside the one the window is on, its
+conversations and open works, its last activity, and its state at the top
+right — WAITING FOR YOU, WORKING, IDLE, NOT REACHABLE or READING… — waiting
+for you first. Under the search line, chips keep those waiting for you or
+working. NEW PROJECT
 registers another with the server: its id and the path of its config file.
 The masthead names the way to every page from here on; the project's name
 in it opens this page, and `▲ 2 ELSEWHERE` on its right, while requests wait
@@ -88,8 +90,8 @@ for you in other projects, opens it with those waiting picked out.
 
 ### 3. A new conversation
 
-A card for each agent of depth 0 a conversation can be with, its portrait
-on it. The conversation keeps the agent its first message names.
+A card for each agent of depth 0 a conversation can be with: its portrait,
+its name in its colour and its role, its number at the top left. The conversation keeps the agent its first message names.
 
 | Keys | What they do |
 | --- | --- |
@@ -98,12 +100,14 @@ on it. The conversation keeps the agent its first message names.
 
 ### 4. Conversations
 
-The project's conversations, filtered by what agents do there and what was
-first said.
+The project's conversations under a rule of the day each began: its title,
+under it the agent, when it began, its works and stage, and its state at the
+top right. Under the search line, chips filter by what agents do there; a
+row's `⋯` opens it at its team or its log.
 
 | Keys | What they do |
 | --- | --- |
-| ↑ · ↓ | choose |
+| ↑ · ↓ | choose; ↑ on the first row, the search |
 | Enter | open |
 | Ctrl+N | new conversation |
 | / | search |
@@ -198,8 +202,10 @@ agent. It has no keys of its own.
 
 ### 10. Board
 
-The works of every project of the registry as a kanban, a column per state;
-opened from a project, kept to its works, every project's one chip away.
+The works of every project of the registry as a kanban, a column per state
+under a rule of each; opened from a project, kept to its works, every
+project's one chip away. Under 700 px it is one list, the works under a rule
+of their state.
 
 | Keys | What they do |
 | --- | --- |
