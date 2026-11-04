@@ -311,10 +311,10 @@ FocusScope {
     id: drill
     visible: row.full && row.folds
     anchors { right: parent.right; rightMargin: Theme.space.trail; verticalCenter: parent.verticalCenter }
-    name: "chevron-right"
+    name: "open"
     quiet: true
     highlighted: row.active
-    tip: "the works it handed down"
+    tip: "open its level: the works it handed down"
     // A row is moved over by its list; its tool is pointed at.
     activeFocusOnTab: false
     onClicked: row.drilled()

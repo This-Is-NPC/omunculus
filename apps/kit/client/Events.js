@@ -14,6 +14,13 @@ function first(value) {
   return flat(String(value === undefined || value === null ? "" : value).trim().split("\n")[0]);
 }
 
+// Why a failed call failed, on one line: a command's error is the last line
+// of its output, any other tool's the first.
+function reason(name, output) {
+  const lines = String(output === undefined || output === null ? "" : output).split("\n").map(flat).filter(line => line !== "");
+  return (name === "bash" ? lines[lines.length - 1] : lines[0]) || "";
+}
+
 function plural(count, one, many) { return count + " " + (count === 1 ? one : many); }
 
 // A participant as the log names it: "you" for a person, else the agent.
@@ -62,7 +69,7 @@ function tool(body) {
   if (body.ok === false && Phrases.missed(body.name, body.output))
     return Phrases.miss(body.args);
   const failed = body.ok === false;
-  const output = typeof body.output === "string" ? first(body.output) : "";
+  const output = typeof body.output === "string" ? reason(body.name, body.output) : "";
   if (hook(body))
     return body.name + " hook " + (failed ? "failed" + colon(output) : "ran");
   if (body.name === "end")

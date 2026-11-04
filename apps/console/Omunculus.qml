@@ -134,8 +134,6 @@ Singleton {
   property var questionsOf: ({})
   // Who asked each request, by request id, as the log names them.
   property var askersOf: ({})
-  // The newest comment of each work, {who, text} on one line, by work id.
-  property var noteOf: ({})
   // Work id -> the stages it went through, as Progress.journal keeps them.
   property var journeys: ({})
   // Work id -> its title, as the events that made it gave it, before the
@@ -469,7 +467,6 @@ Singleton {
     callsOf = {}
     questionsOf = {}
     askersOf = {}
-    noteOf = {}
     journeys = {}
     titles = {}
     runStarts = {}
@@ -737,6 +734,7 @@ Singleton {
       work: event.work_id || "",
       what: Events.what(event.type, body, who, questionsOf, event.request_id, askersOf),
       ok: !failed,
+      tool: event.type === "tool" && !Events.hook(body) ? body.name : "",
       asks: event.type === "request" && !!body.arbiter && Requests.human(body.arbiter),
       raw: JSON.stringify(event)
     })
@@ -815,7 +813,7 @@ Singleton {
     keep("callsOf", work, {
       firstFailed: was.firstFailed || (fails ? line.name : ""),
       firstArgs: was.firstFailed ? was.firstArgs : fails ? line.args : {},
-      firstError: was.firstFailed ? was.firstError : fails ? (String(line.output || "").split("\n").find(each => each.trim() !== "") || "").trim() : "",
+      firstError: was.firstFailed ? was.firstError : fails ? Events.reason(line.name, line.output) : "",
       count: was.count + (call ? 1 : 0),
       failed: was.failed + (fails ? 1 : 0),
       open: open,
@@ -894,7 +892,9 @@ Singleton {
     case "comment":
       if (body.body) {
         say(key, event.run_id, who, body.body, stamp, at)
-        keep("noteOf", work, { who: who, text: String(body.body).replace(/\s+/g, " ").trim() })
+        // News on a root work shows in the main thread too, where the person looks.
+        if (key !== "" && key === work && !parentOf[work] && !works.some(item => item.id === work && item.parent_id))
+          append("", { kind: "note", who: who, text: body.body, stamp: stamp, at: at, work: work })
       }
       break
     case "model": {

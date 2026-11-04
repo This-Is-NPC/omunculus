@@ -173,9 +173,10 @@ failed, how many, what was attempted and why the first failed ("5 failed:
 could not move to the next stage (reason)"), in the error tone only if the work itself
 failed; when each failed tool later succeeded, a dim "5 retried" instead,
 its stages when it has a workflow, and the round with
-who sent it back. Under the state, the work's newest comment is one quoted
-line in its agent's words ("seller: “Thank you, Ana. We are preparing…”"),
-folded or not, so the person reads what the team says it is doing. Until the work's data arrives, it shows the title the event
+who sent it back. A comment on a work of the conversation's own (not one nested below it) also
+appears in the main thread at its own time, as a compact line: the agent in its
+tone, "noted", and the text in two lines, unfolding when long. It is the team's
+news, not a message to you. Until the work's data arrives, it shows the title the event
 named and "Handing down…", or nothing when the event named none. A work that
 waits on a branch says who works below it ("● designer working", in the
 working tone) and else what it waits for. Waiting on you reads "⚠ NEEDS YOU",
@@ -526,11 +527,14 @@ A conversation's level, in place of the project's once one is opened:
 - LOG, every event one line: when (local, `hh:mm:ss`), its kind in a word
   ("question", "step", "reply", "passed up"), what it says as one plain
   sentence ("sales asks you 5 questions: …", "passed 5 questions up"; the
-  event's raw type, JSON and milliseconds only in its card), who, and FAILED
-  or NEEDS YOU at the right, under rules naming the day and each run.
+  event's raw type, JSON and milliseconds only in its card), who, and FAILED,
+  RETRIED or NEEDS YOU at the right, under rules naming the day and each run.
   A call reads in plain words ("read design/rounds.md", "looked in design/",
-  "ran: npx build", "could not read design/rounds.md: permission denied"),
-  never by its tool name; a lookup that found nothing is dim ("found no
+  "looked at design/README.md", "ran a command on quotes/", "could not read
+  design/rounds.md: permission denied"), never by its tool name; a command
+  is worded by the files it touches and its raw line is in the row's card; a
+  failed command gives the last line of its output as the reason; a failure
+  a later call of the same tool settled is dim with RETRIED, not red; a lookup that found nothing is dim ("found no
   quotes yet"), not FAILED. An answer names whom it answers ("answered
   seller: …") and leaves out the request ids the agent echoed. Plumbing (a run's
   start and end, hooks, replies without text, and a call whose result has a

@@ -96,8 +96,6 @@ SurfaceFrame {
     const attempt = failed + " failed" + (tally.firstFailed ? ": " + Phrases.stepFailure(tally.firstFailed, tally.firstArgs) : "")
     return { text: attempt + (tally.firstError ? " (" + tally.firstError + ")" : ""), short: attempt, keep: true }
   }
-  // The newest comment on the work, one quoted line in its agent's tone.
-  readonly property var note: Omunculus.noteOf[work] || null
   readonly property var stepper: node && staged && node.steps.length > 0 ? Progress.stepper(node.steps, node.round, budget) : null
 
   readonly property bool showsTranscript: expanded && tab === "transcript"
@@ -188,15 +186,6 @@ SurfaceFrame {
               font.pixelSize: 11
             }
           }
-        }
-
-        Label {
-          visible: block.note !== null
-          width: parent.width
-          text: block.note ? block.note.who + ": “" + block.note.text + "”" : ""
-          color: Theme.dim
-          font.pixelSize: 11
-          elide: Text.ElideRight
         }
 
         Row {

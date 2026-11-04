@@ -17,6 +17,8 @@ import "kit/ui"
 // End back to the newest, and Tab moves into the tools of the entry it is on.
 // A request is a card only while it waits on you; your answer reads as a
 // bubble, and what the team asked among itself is an exchange (TeamRow). A
+// note a handed-down work's agent left on its work is a line of its own
+// where it was left (TeamNote). A
 // work handed down is a SubWorkBlock where it was, which unfolds into its own
 // thread nested here. A question for you that arrives while the view follows
 // is held by its top. While agents work and what you said or answered is
@@ -143,13 +145,14 @@ Item {
 
   // How the entry at `row` shows: "card" for a request waiting on you,
   // "answer" for one you answered, "team" for the rest, "none" for one
-  // another gathers; "turn", "work" and "speech" for the rest of the thread.
+  // another gathers; "turn", "work", "note" and "speech" for the rest of the
+  // thread.
   function roleAt(row) {
     const entry = model.get(row)
     if (!entry)
       return "none"
     if (entry.kind !== "request")
-      return ["turn", "work"].includes(entry.kind) ? entry.kind : "speech"
+      return ["turn", "work", "note"].includes(entry.kind) ? entry.kind : "speech"
     const request = Omunculus.requests.find(item => item.id === entry.key)
     if (!request || contained.has(entry.key))
       return "none"
@@ -295,7 +298,7 @@ Item {
       return false
     const previous = timeline.model.get(index - 1)
     const current = timeline.model.get(index)
-    return !["request", "work"].includes(previous.kind) && !["request", "work"].includes(current.kind)
+    return !["request", "work", "note"].includes(previous.kind) && !["request", "work", "note"].includes(current.kind)
       && previous.who === current.who && current.at - previous.at < root.pause
   }
 
@@ -408,7 +411,7 @@ Item {
         id: slot
         y: entry.gap
         width: entry.width
-        sourceComponent: ({ card: request, answer: answer, team: team, turn: turn, work: handed, speech: speech })[entry.role] || null
+        sourceComponent: ({ card: request, answer: answer, team: team, turn: turn, work: handed, note: teamNote, speech: speech })[entry.role] || null
 
         FocusRing { shown: entry.selected; anchors.margins: 0 }
       }
@@ -494,6 +497,16 @@ Item {
           nesting: root.nesting
           stamp: entry.stamp
           onOpened: work => root.openWork(work)
+        }
+      }
+
+      Component {
+        id: teamNote
+        TeamNote {
+          width: entry.width
+          who: entry.who
+          text: entry.text
+          stamp: entry.stamp
         }
       }
 
