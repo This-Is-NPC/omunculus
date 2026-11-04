@@ -46,6 +46,8 @@ Singleton {
   // The agent the conversation on screen is with: the one its first message
   // named, or the one picked for a new or an empty one; every message names it again.
   property string agent: ""
+  // The agent the last message of this window went to; "" before any.
+  property string lastAgent: ""
   // Whom a new conversation may be with: the agents of depth 0 not only in workflows.
   readonly property var talkable: setup ? setup.agents.filter(each => each.depth === 0 && !each.workflow_only) : []
   readonly property var conversation: conversations.find(item => item.id === conversationId) || null
@@ -464,8 +466,10 @@ Singleton {
     const body = { message: value }
     if (work)
       body.work_id = work
-    else if (agent !== "")
+    else if (agent !== "") {
       body.agent = agent
+      lastAgent = agent
+    }
     http.post(socket, base + "/conversations/" + conversationId + "/messages", body, files || [], () => {
       if (done)
         done()

@@ -45,6 +45,13 @@ agent. When several agents of depth 0 may take it, its chat shows the same
 cards in place of the timeline and the composer, and the card chosen is the
 agent its first message names; Esc goes back. With one, the server names it.
 
+Each card shows the agent's role, the first sentence of its text without a
+leading "You are the", and the model it runs on in a tooltip. The first time
+no card is chosen and Enter does nothing until one is (a click, its number, or
+the arrows and Enter). Afterwards the agent last talked to in the window comes
+first, chosen and marked LAST USED; the others follow in the order of the
+setup.
+
 ## Threads
 
 The console folds the events into threads: the main one, yours with the root
@@ -282,7 +289,14 @@ Choosing another page of the level replaces the one on screen, while every
 move into another level, conversation or project is remembered. BACK
 returns to exactly where it was, its page, project, conversation and the
 node picked, and from the first page entered to the start, the board
-keeping its grouping, filter and the card the keyboard was on.
+keeping its grouping, filter and the card the keyboard was on. A conversation
+that has no message yet is left for the picker it was made on, or for the
+list; a page of a conversation is never shown without one.
+
+A tooltip shows below its control after 450 ms of pointer or Tab focus. A
+press, Esc on the control, or the control being hidden or disabled closes it,
+and it stays closed until the pointer leaves and comes back. One shows at a
+time.
 
 ## Commands by page
 
