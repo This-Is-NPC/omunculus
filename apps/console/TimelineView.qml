@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "kit/client/Requests.js" as Requests
 import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
@@ -12,6 +13,10 @@ import "kit/ui"
 // by its top, so its first words stay readable. From the keyboard, Tab reaches
 // it on the newest entry: ↑/↓ and PgUp/PgDn move, Home goes to the first and
 // End back to the newest, and Tab moves into the tools of the entry it is on.
+// A request is a card only while it waits on you; your answer reads as a
+// bubble, and what the team asked among itself is one muted line, the lines of
+// a stretch gathered under "Team activity". A question for you that arrives
+// while the view follows is held by its top.
 Item {
   id: root
 
@@ -35,6 +40,14 @@ Item {
   // the end of, which it does not hold.
   property string held: ""
   property string released: ""
+  // Whether `held` is a question for you rather than a streaming turn.
+  property bool holdingCard: false
+  // The activity of the conversation, or null before it is wired in.
+  readonly property var activity: Omunculus.activity || null
+  // The requests no other request gathers; the rest are its climb.
+  readonly property var contained: Requests.contained(Omunculus.requests)
+  // Which stretches of team rows the person opened (true) or closed (false), by first key.
+  property var opened: ({})
 
   // Counts a new entry when the view is away from the end; speech has no key.
   function arrived(key) {
@@ -45,14 +58,99 @@ Item {
     root.unseen++
   }
 
+  function rowOf(key) {
+    for (let row = 0; row < model.count; row++) {
+      if (model.get(row).key === key)
+        return row
+    }
+    return -1
+  }
+
   // Brings the entry of `key` into view, and stops following the end.
   function reveal(key) {
-    for (let row = 0; row < model.count; row++) {
-      if (model.get(row).key === key) {
-        timeline.following = false
-        timeline.positionViewAtIndex(row, ListView.Center)
-        return
-      }
+    const row = rowOf(key)
+    if (row < 0)
+      return
+    timeline.following = false
+    timeline.positionViewAtIndex(row, ListView.Center)
+  }
+
+  // How the entry at `row` shows: "card" for a request waiting on you,
+  // "answer" for one you answered, "team" for the rest, "none" for one
+  // another gathers; "turn" and "speech" for the rest of the thread.
+  function roleAt(row) {
+    const entry = model.get(row)
+    if (!entry)
+      return "none"
+    if (entry.kind !== "request")
+      return entry.kind === "turn" ? "turn" : "speech"
+    const request = Omunculus.requests.find(item => item.id === entry.key)
+    if (!request || contained.has(entry.key))
+      return "none"
+    if (Requests.pending(request) && Requests.human(request.arbiter))
+      return "card"
+    const answer = Omunculus.replies[entry.key]
+    return answer && answer.who === "you" ? "answer" : "team"
+  }
+
+  // The stretch of team rows around `row`: where it starts, how many rows it
+  // has, which of them this is, and whether the team is still at work in it.
+  function stretch(row) {
+    if (revision < 0 || row < 0 || row >= model.count)
+      return null
+    let first = row
+    let last = row
+    for (let at = row - 1; at >= 0 && ["team", "none"].includes(roleAt(at)); at--)
+      if (roleAt(at) === "team") first = at
+    for (let at = row + 1; at < model.count && ["team", "none"].includes(roleAt(at)); at++)
+      if (roleAt(at) === "team") last = at
+    let size = 0
+    let place = 0
+    for (let at = first; at <= last; at++) {
+      if (roleAt(at) !== "team")
+        continue
+      size++
+      if (at < row) place++
+    }
+    let live = !!activity && activity.state === "working"
+    for (let at = last + 1; live && at < model.count; at++)
+      live = roleAt(at) === "none"
+    return { first: model.get(first).key, size: size, place: place, live: live, span: model.get(last).at - model.get(first).at }
+  }
+
+  // The header of a stretch: while the team works, for how long; after, how long it did.
+  function stretchTitle(group) {
+    const minutes = Math.round(group.span / 60)
+    if (group.live)
+      return "Team is working  " + Math.floor(Math.max(0, group.span) / 60) + ":" + String(Math.floor(Math.max(0, group.span) % 60)).padStart(2, "0")
+    return (minutes < 1 ? "Worked under a minute" : "Worked " + minutes + " min") + "  ·  Team activity (" + group.size + " steps)"
+  }
+
+  // Whether the row at `place` of a stretch shows: all when opened, none when
+  // closed, and by default the last three while the team works.
+  function stretchShows(group) {
+    const choice = opened[group.first]
+    return choice !== undefined ? choice : group.live && group.size - group.place <= 3
+  }
+
+  // The newest question waiting on you, by key; "" when none.
+  readonly property string newestCard: {
+    if (revision < 0)
+      return ""
+    for (let row = model.count - 1; row >= 0; row--) {
+      if (roleAt(row) === "card")
+        return model.get(row).key
+    }
+    return ""
+  }
+  onNewestCardChanged: {
+    if (newestCard !== "" && timeline.following) {
+      held = newestCard
+      holdingCard = true
+    } else if (newestCard === "" && holdingCard) {
+      held = ""
+      holdingCard = false
+      Qt.callLater(timeline.follow)
     }
   }
 
@@ -61,6 +159,7 @@ Item {
     const newest = timeline.count > 0 ? timeline.model.get(timeline.count - 1) : null
     root.released = newest && newest.streaming ? newest.key : ""
     root.held = ""
+    root.holdingCard = false
     timeline.following = true
     if (timeline.currentIndex >= 0)
       timeline.currentIndex = timeline.count - 1
@@ -100,6 +199,8 @@ Item {
     streams = {}
     held = ""
     released = ""
+    holdingCard = false
+    opened = ({})
   }
 
   // The keyboard is on the timeline or in the entry it is on.
@@ -136,8 +237,9 @@ Item {
       const entry = itemAtIndex(last)
       if (entry && entry.streaming && entry.key !== root.released && entry.height > root.height - topMargin - bottomMargin)
         root.held = entry.key
-      if (entry && entry.key !== "" && entry.key === root.held)
-        positionViewAtIndex(last, ListView.Beginning)
+      const heldRow = root.held !== "" ? root.rowOf(root.held) : -1
+      if (heldRow >= 0)
+        positionViewAtIndex(heldRow, ListView.Beginning)
       else
         positionViewAtEnd()
     }
@@ -201,7 +303,8 @@ Item {
       required property bool fresh
 
       width: timeline.width
-      sourceComponent: kind === "request" ? (root.requestsShown ? request : null) : kind === "turn" ? turn : speech
+      readonly property string role: root.revision >= 0 && kind === "request" && root.requestsShown ? root.roleAt(index) : kind
+      sourceComponent: ({ card: request, answer: answer, team: team, turn: turn, speech: speech })[role] || null
       readonly property bool selected: ListView.isCurrentItem && root.keyboard
 
       FocusRing { shown: entry.selected; anchors.margins: 0 }
@@ -247,6 +350,77 @@ Item {
       }
 
       Component {
+        id: answer
+        AnswerBubble {
+          id: said
+          readonly property var asked: Omunculus.requests.find(item => item.id === entry.key) || null
+          readonly property var reply: Omunculus.replies[entry.key] || null
+          width: entry.width
+          asker: asked ? Requests.label(asked.requester) : ""
+          question: asked ? String(asked.reason || "") : ""
+          body: reply ? reply.body || reply.option : ""
+          stamp: entry.stamp
+        }
+      }
+
+      Component {
+        id: team
+        Column {
+          id: stretched
+          readonly property var group: root.stretch(entry.index)
+          readonly property var asked: Omunculus.requests.find(item => item.id === entry.key) || null
+          readonly property var reply: Omunculus.replies[entry.key] || null
+          readonly property string by: asked ? Requests.label(asked.requester) : ""
+          readonly property string to: asked ? Requests.label(asked.arbiter) : ""
+          readonly property string work: asked ? (Omunculus.work(asked.work_id || "") || { title: "" }).title : ""
+          readonly property bool forYou: !!asked && Requests.human(asked.arbiter)
+          width: entry.width
+          spacing: 2
+
+          Item {
+            visible: !!stretched.group && stretched.group.place === 0
+            width: parent.width
+            height: visible ? 24 : 0
+            Row {
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: 6
+              Icon { anchors.verticalCenter: parent.verticalCenter; name: stretched.group && root.stretchShows(stretched.group) ? "chevron-down" : "chevron-right"; size: 10; color: Theme.dim }
+              Label { anchors.verticalCenter: parent.verticalCenter; text: stretched.group ? root.stretchTitle(stretched.group) : ""; color: Theme.dim; font.pixelSize: 11 }
+            }
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: {
+                const next = Object.assign({}, root.opened)
+                next[stretched.group.first] = !root.stretchShows(stretched.group)
+                root.opened = next
+              }
+            }
+          }
+
+          TeamRow {
+            visible: !!stretched.group && root.stretchShows(stretched.group)
+            width: parent.width
+            height: visible ? implicitHeight : 0
+            summary: stretched.reply && stretched.reply.who !== "you" && stretched.forYou
+              ? stretched.reply.who.toUpperCase() + " answered this for you: " + stretched.reply.body
+              : stretched.by.toUpperCase() + " asked " + stretched.to.toUpperCase() + (stretched.work !== "" ? " about " + stretched.work : "")
+                + (stretched.reply ? "  -  answered by " + stretched.reply.who.toUpperCase() : "")
+            question: stretched.asked ? String(stretched.asked.reason || "") : ""
+            answer: stretched.reply ? stretched.reply.body : ""
+            stamp: entry.stamp
+            // An open question the agent above decides can still be answered by you.
+            RequestDecision {
+              visible: !!stretched.asked && Requests.pending(stretched.asked)
+              width: parent.width
+              key: entry.key
+              stamp: entry.stamp
+            }
+          }
+        }
+      }
+
+      Component {
         id: turn
         AgentTurn {
           width: entry.width
@@ -264,6 +438,17 @@ Item {
     }
   }
 
+  // A cut line reads as continuing.
+  Rectangle {
+    anchors { left: parent.left; right: parent.right; top: parent.top }
+    height: 16
+    visible: !timeline.atYBeginning
+    gradient: Gradient {
+      GradientStop { position: 0; color: Theme.background }
+      GradientStop { position: 1; color: Qt.alpha(Theme.background, 0) }
+    }
+  }
+
   NewPill {
     anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 10 }
     count: root.unseen
@@ -274,8 +459,8 @@ Item {
     anchors.centerIn: parent
     visible: timeline.count === 0
     text: root.emptyText
-    color: Theme.line
+    color: Theme.dim
     font.pixelSize: 11
-    font.letterSpacing: 3
+    font.letterSpacing: 2
   }
 }

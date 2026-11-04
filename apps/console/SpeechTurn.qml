@@ -21,7 +21,8 @@ Item {
   readonly property var attached: JSON.parse(files)
   readonly property color tone: Omunculus.toneOf(who)
   // At most this wide: the whole width on a narrow window, about three quarters otherwise.
-  readonly property real widest: turn.width < 520 ? turn.width : turn.width * 0.78
+  // About 70 characters at most per line.
+  readonly property real widest: Math.min(620, turn.width < 520 ? turn.width : turn.width * 0.78)
   readonly property real inset: 10
 
   implicitHeight: (chips.visible ? chips.y + chips.height : body.y + body.height) + 2
@@ -40,8 +41,8 @@ Item {
       x: turn.mine ? body.width - width : 0
       Rectangle { visible: turn.mine; width: 5; height: 5; anchors.verticalCenter: parent.verticalCenter; color: turn.tone }
       Portrait { visible: !turn.mine && !turn.note && turn.who !== ""; width: 20; height: 20; anchors.verticalCenter: parent.verticalCenter; agent: turn.who; source: Omunculus.imageOf(turn.who); tone: Omunculus.toneOf(turn.who) }
-      Label { text: turn.note ? "NOTE" : turn.who.toUpperCase(); color: turn.tone; font.pixelSize: 10; font.letterSpacing: 2.5 }
-      Label { text: turn.stamp; color: Qt.alpha(turn.tone, 0.7); font.pixelSize: 9; font.letterSpacing: 1 }
+      Label { text: turn.note ? "NOTE" : turn.who.toUpperCase(); color: turn.tone; font.pixelSize: 11; font.letterSpacing: 2 }
+      Label { text: turn.stamp; color: Theme.dim; font.pixelSize: 11 }
     }
 
     Rectangle {
