@@ -4,7 +4,8 @@ import QtQuick.Layouts
 import "kit/client/Shortcuts.js" as Shortcuts
 import "kit/ui"
 
-// ShortcutsDialog lists every key the window answers to, by where it works;
+// ShortcutsDialog lists every key the window answers to, by where it works,
+// each key beside what it does, or above it in a dialog under 480 px wide;
 // ? or F1 opens it and the arrows or PgUp/PgDn scroll it.
 ModalDialog {
   id: dialog
@@ -92,17 +93,21 @@ ModalDialog {
             Kicker { Layout.fillWidth: true; text: group.modelData[0] }
             Repeater {
               model: group.modelData[1]
-              delegate: RowLayout {
+              delegate: GridLayout {
                 id: key
                 required property var modelData
                 Layout.fillWidth: true
-                spacing: 14
+                columns: list.width < 480 ? 1 : 2
+                columnSpacing: 14
+                rowSpacing: 2
                 Label {
-                  Layout.preferredWidth: 200
+                  Layout.preferredWidth: key.columns === 1 ? -1 : 200
+                  Layout.fillWidth: key.columns === 1
                   text: key.modelData[0]
                   color: Theme.primary
                   font.pixelSize: 11
                   font.letterSpacing: 1
+                  wrapMode: Text.Wrap
                 }
                 Label {
                   Layout.fillWidth: true
