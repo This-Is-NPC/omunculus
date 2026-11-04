@@ -931,6 +931,11 @@ Singleton {
     if (event.type === "start-run") {
       keep("runThread", event.run_id, threadOf(work))
       keep("runStarts", event.run_id, at)
+      // A new run has made no call yet.
+      if (work) {
+        keep("calling", work, "")
+        keep("callArgs", work, {})
+      }
     }
     // Where the event shows: its run's thread, else its work's.
     const key = runThread[event.run_id] !== undefined ? runThread[event.run_id] : threadOf(work)
@@ -1091,7 +1096,7 @@ Singleton {
   Timer {
     interval: 1000
     repeat: true
-    running: root.running.length > 0
+    running: root.running.length > 0 || (!!root.progress && !!root.progress.focus && !Progress.closed(root.progress.focus.state))
     onTriggered: root.tick = Date.now() / 1000
   }
 

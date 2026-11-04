@@ -108,23 +108,33 @@ Item {
 
   // Brings the newest question into view and puts the keyboard in its words.
   // Hidden, it waits for the view to show (the page calls it again then); a
-  // card whose row is not built yet is looked for again a few times.
-  function focusCard(tries = 5) {
+  // card whose row or form is not built yet is tried again every 100 ms, ten
+  // times at most, until the keyboard is inside it.
+  function focusCard() {
     if (newestCard === "" || !visible)
       return
+    focusTries = 10
+    focusRetry.restart()
+    tryFocusCard()
+  }
+  property int focusTries: 0
+  function tryFocusCard() {
     reveal(newestCard, true)
-    Qt.callLater(() => {
-      const card = cardItem()
-      if (!card) {
-        if (tries > 0)
-          focusCard(tries - 1)
-        return
-      }
+    const card = cardItem()
+    if (card) {
       if (card.kind === "needs-you")
         card.focusWords()
       else
         card.focusDecision()
-    })
+    }
+    if (cardFocused() || --focusTries <= 0)
+      focusRetry.stop()
+  }
+  Timer {
+    id: focusRetry
+    interval: 100
+    repeat: true
+    onTriggered: root.tryFocusCard()
   }
 
   // Decides the request of `key` with `option`, as its card's own options do,
@@ -172,7 +182,11 @@ Item {
     }
     return ""
   }
+  // A card that arrives while the keyboard is free is offered to the page.
+  signal cardArrived
   onNewestCardChanged: {
+    if (newestCard !== "" && !inEntry)
+      cardArrived()
     if (newestCard !== "" && timeline.following) {
       held = newestCard
       holdingCard = true

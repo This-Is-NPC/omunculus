@@ -47,11 +47,11 @@ Column {
     : Phrases.did(lone.name, lone.args)
   readonly property string failedPrefix: summary.failed + " failed"
   readonly property var header: Progress.fit([
-    { text: lone ? loneText : count === 1 ? "1 step" : count + " steps", short: lone ? loneText : count + " steps", keep: true },
+    count > 0 ? { text: lone ? loneText : count === 1 ? "1 step" : count + " steps", short: lone ? loneText : count + " steps", keep: true } : null,
     summary.failed > 0 ? { text: failedPrefix + ": " + (failedRow ? Phrases.stepFailure(failedRow.name, failedRow.args) : ""), short: failedPrefix, keep: true } : null
   ].filter(part => part !== null), budget - 6).filter(text => text !== "")
 
-  visible: rows.length > 0
+  visible: count > 0 || summary.failed > 0
   spacing: Theme.space.line
 
   FontMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: 11 }

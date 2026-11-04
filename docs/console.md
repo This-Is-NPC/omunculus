@@ -218,7 +218,7 @@ in its tone, the stage of the work in focus and how long it has run, in
 words: "● SALES · STAGE 2/6 · 18 MINUTES SO FAR", "TOOK 3 MINUTES"
 once done, the stage's name being the stepper's under it; "WAITING FOR YOU
 SINCE 22:43", in the warning tone, in place of the clock while a question
-waits on you; before any work, "● SALES · STARTING" while its first run goes or the person has written,
+waits on you, also when the work asking is a sub-work; the clock keeps counting while any work is open; before any work, "● SALES · STARTING" while its first run goes or the person has written,
 NOT STARTED before any, the agent giving way as the width shrinks. From 700 px of its own width the counts
 follow: "· 2 AGENTS · US$ 0.04", shown when more than one agent ran and
 once the provider priced a call; each opens what it counts, the team and the cost, and
@@ -296,7 +296,7 @@ dim while the box is empty. A sent message empties the box at once and shows
 in the thread as your bubble, dim, with SENDING… where the time goes, until the
 server's copy replaces it in place; if the server refuses it, the bubble goes
 and the words come back to the box. While a question waits on you, form or not, the keyboard
-goes to its card (a form's first unanswered field), not the box, and the box says "or
+goes to its card (a form's first unanswered field), not the box, for every question that arrives while the box is empty, and the box says "or
 say something else to sales"; the count of what
 arrived out of view rises above the form's floating actions. Under 420 px its
 buttons show their icons only.

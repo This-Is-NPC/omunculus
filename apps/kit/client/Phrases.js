@@ -123,7 +123,7 @@ function touched(line) {
     const found = args.filter((word, at) => !/^\d+$/.test(word) && word !== "/dev/null" && (/\/|\.\w+$/.test(word) || (at === 0 && (listers.includes(command) || readers.includes(command)) && /^[\w.~-]+$/.test(word))))
       .map(word => listers.includes(command) && !/\/$|\.\w+$/.test(word) ? word + "/" : word);
     if (found.length === 0) continue;
-    found.forEach(word => { if (!names.includes(word)) names.push(word); });
+    found.map(word => [".", "./"].includes(word) ? "the project" : word).forEach(word => { if (!names.includes(word)) names.push(word); });
     verbs.add(readers.includes(command) ? "looked at" : listers.includes(command) ? "looked in" : "");
   }
   return { verb: verbs.size === 1 && !verbs.has("") ? [...verbs][0] : tools.bash.past, names: names };

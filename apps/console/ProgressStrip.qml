@@ -104,7 +104,7 @@ ColumnLayout {
       const lasted = Progress.duration(took ? focus.finishedIn : open ? Math.max(0, tick - focus.created) : focus.branch.seconds).toUpperCase()
       // Waiting on you stops the clock: it says since when, in the warning tone.
       const since = lastEvent > 0 ? " SINCE " + Time.clock(new Date(lastEvent * 1000).toISOString(), Date.now()) : ""
-      if (focus.state === "needs-you")
+      if (focus.state === "needs-you" || focus.waitingOn === "you")
         segments.push({ text: "WAITING FOR YOU" + since, short: "WAITING", tone: Theme.warning, keep: true })
       else
         segments.push({ text: took ? "TOOK " + lasted : focus.state === "cancelled" ? lasted : lasted + " SO FAR", short: lasted, keep: true })

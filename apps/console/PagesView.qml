@@ -705,6 +705,9 @@ Item {
             thread: ""
             emptyText: Omunculus.agent ? "WITH " + Omunculus.agent.toUpperCase() : ""
             onAnswered: mainComposer.focusEntry()
+            // Every form that arrives takes the keyboard from an empty box,
+            // not only the first.
+            onCardArrived: if (mainComposer.empty && view.page === "chat") Qt.callLater(timeline.focusCard)
             onOpenWork: work => view.openThread(work)
             onOpenLog: work => view.showLog(work)
           }
