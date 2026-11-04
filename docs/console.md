@@ -193,8 +193,10 @@ A conversation's level, in place of the project's once one is opened:
 - MAP, the orchestration map;
 - LOG, every event a row of a table that filters by text and opens an event
   whole;
-- COST, what the conversation used, model calls, tokens and cost, in all and
-  by agent (`CostView`).
+- COST, what the conversation used, in all and then by agent, the busiest
+  first: model calls, tokens read by the model (with those from cache),
+  tokens written and cost. One note says when the provider sends no price
+  (`CostView`).
 
 ## The board
 
