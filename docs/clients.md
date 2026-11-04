@@ -141,8 +141,8 @@ All are QML on Quickshell and share `apps/kit`:
   spent, and fits one-line stages and phrases to a width in characters;
   `Calls.js`, which groups a run's tool calls into rows and reads the diff
   of an edit or a write from its args; `Phrases.js`, which says a tool call
-  in plain words and in brief; `Project`, the project a window was opened on, whether the server answers and the
-  window's last message, which the console and the studio share; and
+  in plain words and in brief; `Project`, the project a window is on, or only the registry it was
+  opened on, whether the server answers and the window's last message, which the console and the studio share; and
   `Model.js`, which reads the text a model event carries.
 
 Each app reaches the kit through a `kit` link to `apps/kit/`, since
