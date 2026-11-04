@@ -134,7 +134,8 @@ agents from the one you wrote to down to that one ("SALES › SELLER"; a run
 of the front agent outside any work stands alone), with how long it has
 worked, and its trace beside what it does: "● SALES WORKING 6 s" over
 "Getting started". The header strip does not say it again then: its state
-word and its now line stay off the chat while the row shows.
+word and its now line stay off the chat while the row shows, the line
+leaving its room blank so the tabs under it do not move.
 Once its words are whole, the "more" button beside them, in a gutter
 they never take, copies them or shows the log of the run's work (the
 thread's `openLog`).

@@ -334,11 +334,14 @@ ColumnLayout {
     elide: Text.ElideRight
   }
 
-  // Who works and what on, fitted, after the state; the silence, when long, after it.
+  // Who works and what on, fitted, after the state; the silence, when long,
+  // after it. While the thread shows who works, the line keeps its room
+  // blank, so nothing under it moves as runs start and end.
   RowLayout {
     Layout.fillWidth: true
     Layout.leftMargin: Theme.space.line
-    visible: strip.moving && !strip.threadWorking
+    visible: strip.moving
+    opacity: strip.threadWorking ? 0 : 1
     spacing: Theme.space.tight
 
     // The state: the trace while working, unless motion is reduced.
