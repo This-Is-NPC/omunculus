@@ -8,12 +8,15 @@ import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
 ShellRoot {
-  // The omunculus window. At the start: a new conversation, the project's
-  // conversations or the board. Entered: the pages of the level on screen
-  // down the left — the project's conversations and board, or the chat, team,
-  // log and cost of the conversation open — the one on screen beside the bar
-  // of its commands, and the page under them; on a narrow window the rail is
-  // hidden and the bar's page switcher lists the pages. Back from the first
+  // The omunculus window. At the start: on a project, a new conversation,
+  // its conversations, the board or the projects; on the registry alone, the
+  // projects or the board. Entered: the pages of the level on screen down
+  // the left — the registry's projects and board, a project's conversations
+  // and board, or the chat, team, log and cost of the conversation open —
+  // the one on screen beside the bar of its commands, and the page under
+  // them; on a narrow window the rail is hidden and the bar's page switcher
+  // lists the pages. The masthead names the way to the page, and says how
+  // many requests wait for you in the other projects. Back from the first
   // page entered is back to the start.
   FloatingWindow {
     id: panel
@@ -50,6 +53,23 @@ ShellRoot {
       pagesView.go(pages[(index + pages.length) % pages.length])
       Qt.callLater(pagesView.focusEntry)
     }
+
+    // The ways in at the start: on a project, a new conversation, its
+    // conversations, the board and the projects; on the registry alone, the
+    // projects and the board.
+    readonly property var ways: {
+      const projects = { key: "start-projects", page: "projects", text: "PROJECTS", icon: "folder" }
+      const board = { key: "start-board", page: "board", text: "BOARD", icon: "board" }
+      return Omunculus.registry ? [projects, board] : [
+        { key: "start-new", page: "new", text: "NEW CONVERSATION", icon: "play" },
+        { key: "start-history", page: "conversations", text: "CONVERSATIONS", icon: "list" },
+        board, projects
+      ]
+    }
+
+    // The way to the page on screen, as the masthead takes it: entered, the
+    // pages'; at the start, the project, or nothing on the registry.
+    readonly property var crumbs: started ? pagesView.crumbs : Omunculus.registry ? [] : [{ text: Omunculus.project }]
 
     // Whether a dialog holds the keyboard, so the keys of the pages wait.
     readonly property bool dialogOpen: shortcuts.visible || pagesView.dialogOpen
@@ -99,7 +119,21 @@ ShellRoot {
         Masthead {
           Layout.fillWidth: true
           Layout.fillHeight: false
-          section: !panel.started ? Omunculus.project : panel.size === "narrow" ? pagesView.shortHeading : pagesView.heading
+          crumbs: panel.crumbs
+          // Requests waiting for you in the other projects; it opens them,
+          // the waiting ones picked out.
+          RowLayout {
+            visible: panel.started && Omunculus.elsewhere > 0
+            spacing: 6
+            Icon { name: "warning"; size: 10; color: Theme.warning }
+            LinkLabel {
+              value: Omunculus.elsewhere + (panel.width < 700 ? "" : " ELSEWHERE")
+              color: Theme.warning
+              font.pixelSize: 10
+              font.letterSpacing: 2
+              onClicked: pagesView.showProjects("waiting")
+            }
+          }
           // Entered, the page's bar gives the readout.
           StatusLine {
             message: panel.started ? "" : Omunculus.message
@@ -124,13 +158,9 @@ ShellRoot {
             Keys.onPressed: event => {
               if (!Typing.idle)
                 return
-              const key = event.text.toUpperCase()
-              if (Shortcuts.keys("start-new").includes(key))
-                beginButton.press()
-              else if (Shortcuts.keys("start-history").includes(key))
-                historyButton.press()
-              else if (Shortcuts.keys("start-board").includes(key))
-                boardButton.press()
+              const at = panel.ways.findIndex(way => Shortcuts.keys(way.key).includes(event.text.toUpperCase()))
+              if (at >= 0)
+                (wayButtons.itemAt(at) as TraceButton).press()
             }
 
             Column {
@@ -139,49 +169,36 @@ ShellRoot {
               // never past the view's edges on a short window.
               y: Math.round(Math.max(0, Math.min(parent.height - height, (parent.height - height) / 2 + Math.min(90, Math.max(0, parent.height / 6)))))
               spacing: 14
-              TraceButton {
-                id: beginButton
-                anchors.horizontalCenter: parent.horizontalCenter
-                implicitWidth: Math.min(260, panel.width - 40)
-                implicitHeight: 48
-                role: "navigation"
-                icon: "play"
-                text: "NEW CONVERSATION"
-                enabled: Omunculus.connected
-                tip: Shortcuts.label("start-new")
-                onClicked: panel.enter("new")
-              }
-              TraceButton {
-                id: historyButton
-                anchors.horizontalCenter: parent.horizontalCenter
-                implicitWidth: Math.min(260, panel.width - 40)
-                role: "navigation"
-                icon: "list"
-                text: "CONVERSATIONS"
-                enabled: Omunculus.connected
-                tip: Shortcuts.label("start-history")
-                onClicked: panel.enter("conversations")
-              }
-              TraceButton {
-                id: boardButton
-                anchors.horizontalCenter: parent.horizontalCenter
-                implicitWidth: Math.min(260, panel.width - 40)
-                role: "navigation"
-                icon: "board"
-                text: "BOARD"
-                enabled: Omunculus.connected
-                tip: Shortcuts.label("start-board")
-                onClicked: panel.enter("board")
+              // The first way in stands taller.
+              Repeater {
+                id: wayButtons
+                model: panel.ways
+                delegate: TraceButton {
+                  required property var modelData
+                  required property int index
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  implicitWidth: Math.min(260, panel.width - 40)
+                  implicitHeight: index === 0 ? 48 : 44
+                  role: "navigation"
+                  icon: modelData.icon
+                  text: modelData.text
+                  enabled: Omunculus.connected
+                  tip: Shortcuts.label(modelData.key)
+                  onClicked: panel.enter(modelData.page)
+                }
               }
               Item { width: 1; height: 6 }
               DecodeLabel {
+                readonly property int count: Omunculus.boardProjects.length
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Math.max(0, panel.width - 40)
-                value: Omunculus.connected ? "Project " + Omunculus.project + " · its agents wait for a word"
-                  : "The server does not answer"
+                value: !Omunculus.connected ? "The server does not answer"
+                  : !Omunculus.registry ? "Project " + Omunculus.project + " · its agents wait for a word"
+                  : count > 0 ? count + (count === 1 ? " project" : " projects") + " · pick one to talk with its agents"
+                  : "Pick a project to talk with its agents"
                 soft: true
                 horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
+                wrapMode: Text.Wrap
                 color: Omunculus.connected ? Theme.dim : Theme.warning
                 font.pixelSize: 10
                 font.letterSpacing: 2
@@ -278,7 +295,7 @@ ShellRoot {
               onActivated: panel.choose(rail.current - 1)
             }
             Shortcut {
-              enabled: panel.started && !panel.dialogOpen
+              enabled: panel.started && !panel.dialogOpen && Omunculus.project !== ""
               sequences: Shortcuts.keys("new-conversation")
               onActivated: pagesView.newConversation()
             }
@@ -292,6 +309,12 @@ ShellRoot {
         active: Quickshell.env("OMUNCULUS_TEXT_AUDIT") === "1"
         sourceComponent: TextAudit {}
       }
+      // The projects, from anywhere, a field being written too.
+      Shortcut {
+        enabled: !panel.dialogOpen && Omunculus.connected
+        sequences: Shortcuts.keys("projects")
+        onActivated: panel.started ? pagesView.showProjects("") : panel.enter("projects")
+      }
       Shortcut { enabled: frame.bare; sequence: "?"; onActivated: shortcuts.open() }
       Shortcut { sequence: "F1"; onActivated: shortcuts.open() }
     }
@@ -300,17 +323,35 @@ ShellRoot {
   // `quickshell ipc --path apps/console call omunculus <function>`, e.g. from a shortcut.
   IpcHandler {
     target: "omunculus"
-    function newConversation(): void { panel.started ? pagesView.newConversation() : panel.enter("new") }
+    function newConversation(): void {
+      if (Omunculus.project === "")
+        return
+      panel.started ? pagesView.newConversation() : panel.enter("new")
+    }
     function conversations(): void { page("conversations") }
     function open(conversationId: string): void {
+      if (Omunculus.project === "")
+        return
       if (!panel.started)
         panel.enter("conversations")
       pagesView.openConversation(conversationId)
     }
-    // A page by its name: conversations or board, or, with a conversation
-    // open, chat, map, log or cost.
+    function projects(): void { page("projects") }
+    // A project of the registry, by its id, at its conversations.
+    function project(id: string): void {
+      const place = Omunculus.boardProjects.find(item => item.id === id)
+      if (!place)
+        return
+      if (!panel.started)
+        panel.enter("projects")
+      pagesView.openProject(place)
+    }
+    // A page by its name: projects, conversations or board, or, with a
+    // conversation open, chat, map, log or cost.
     function page(name: string): void {
-      if (!["conversations", "board"].includes(name) && !(pagesView.open && pagesView.inConversation.includes(name)))
+      if (!["projects", "conversations", "board"].includes(name) && !(pagesView.open && pagesView.inConversation.includes(name)))
+        return
+      if (name === "conversations" && Omunculus.project === "")
         return
       if (panel.started)
         pagesView.go(name)

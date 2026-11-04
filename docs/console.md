@@ -6,10 +6,14 @@ the store or the TOML.
 ## Requirements and launch
 
 It needs Quickshell, `curl` with WebSocket support and a Wayland session.
-`apps/kit/run console` takes the server registry and a project id, which may
-be left out when the registry holds one project. `mix omunculus.socket`
-resolves the project's socket, and the launcher passes both as
-`OMUNCULUS_SOCKET` and `OMUNCULUS_PROJECT`, as it does for every app.
+`apps/kit/run console` takes the server registry and, optionally, a project
+id. `mix omunculus.socket` resolves the project's socket, and the launcher
+passes both as `OMUNCULUS_SOCKET` and `OMUNCULUS_PROJECT`, as it does for
+every app. Without an id, a registry of one project opens on it; a registry
+of several opens on the registry itself, with an empty `OMUNCULUS_PROJECT`
+and the socket of one of its projects, from which `GET /v1/projects` lists
+them all. `--project` is where the window starts, not a lock: any project of
+the registry opens from PROJECTS.
 
 ## How it reads the project
 
@@ -41,6 +45,27 @@ copy of eco's overlay, Omarchy's voice session app. Every request goes
 through `apps/kit/client`'s `Http`, which finds the scripts beside it. Each
 app reaches the kit through its `kit` link to `apps/kit/`, since Quickshell
 imports only from within the folder it runs.
+
+## How it reads the registry
+
+While the window is entered, at any level, `Omunculus` follows every project
+the window's socket lists (`GET /v1/projects`, `watchRegistry`): on its own
+socket, its conversations (`GET /conversations`), each one's snapshot for
+its summary, its works (`GET /works`) and its setup, then its project
+stream. An event re-summarizes only the conversation it is of and reads
+again only its project's works, once events pause for 250 ms; a new
+conversation reads its project's conversations again. A project whose
+socket does not answer is marked not reachable. The kit's `Projects.js`
+turns all of it into `projectRows`, one per project, sorted waiting for you
+first, then working, then the latest activity, then the id, and
+`elsewhere`, the requests waiting for you in the projects the window is not
+on.
+
+`switchProject` moves the window to another project: the conversation on
+screen closes (its agents go on), and the project's conversations, setup
+and capabilities are read once its socket answers. What was typed in the
+chat's composer and not sent is kept by conversation (`composerDrafts`) and
+comes back when it opens again.
 
 ## A new conversation
 
@@ -285,9 +310,28 @@ detail, beside the map.
 
 ## Pages
 
-The window opens on its start, clean: NEW CONVERSATION (N), CONVERSATIONS
-(H) and BOARD (B), keys of this screen only, and the project's name. Entered by one of them, its pages
-(`PagesView`) are in two levels, only those of the level on screen showing.
+The window opens on its start, clean. On a project: NEW CONVERSATION (N),
+CONVERSATIONS (H), BOARD (B) and PROJECTS (P), keys of this screen only,
+and "Project agency · its agents wait for a word". On the registry alone:
+PROJECTS and BOARD, and "3 projects · pick one to talk with its agents".
+When the server does not answer, the ways in are disabled and the line says
+so. Entered by one of them, its pages (`PagesView`) are in three levels
+(`level`), only those of the level on screen showing.
+
+The registry's level:
+
+- PROJECTS (`ProjectsView`, `ProjectsTable`), every project of the
+  registry: its id, `· OPEN` after the one the window is on, its
+  conversations and open works (not done or cancelled), its last activity
+  (the newest conversation begun or work changed, "Today 22:22") and its
+  state: WAITING FOR YOU and how many, WORKING and how many, IDLE, NOT
+  REACHABLE when its socket did not answer, or READING… until its
+  conversations are read. `/` searches the ids; the chips ALL, WAITING FOR
+  YOU and WORKING, shown while a project is in either state, keep those.
+  Enter or a click opens the project at its conversations. Under 700 px a
+  row stacks: the id, then its conversations and last activity, its state
+  on the right;
+- BOARD, the works of every project.
 
 The project's level:
 
@@ -296,10 +340,8 @@ The project's level:
   was said; hidden under ALL, shown by its chip), WAITING FOR YOU, WORKING,
   DONE (every work done or cancelled) or IDLE. It began "Today 21:59",
   "Yesterday 21:59" or "03 Nov 21:59";
-- BOARD, the works of every project the window's socket lists
-  (`GET /v1/projects`), each read on its own socket through `GET /works`
-  and kept live by its project stream (`GET /stream`) while the board is on
-  screen.
+- BOARD, the same board, opened kept to the project's works, every
+  project's one click away.
 
 A conversation's level, in place of the project's once one is opened:
 
@@ -339,7 +381,10 @@ its age, its border lit while an agent runs on it.
 BY STATE (Alt+S), BY AGENT (Alt+A) and BY PROJECT (Alt+J) cross the columns with a lane
 of each, chips keep one project, and `/` filters by title, project,
 conversation, workflow, stage or agent. The arrows move across and down the
-columns, and Enter or a click opens the work on a page of its own.
+columns, and Enter or a click opens the work on a page of its own. Opened
+from the registry's level it shows every project, ALL PROJECTS lit; from a
+project's, that project's chip is lit. The chip chosen holds while the
+level stays the same.
 
 ## A work's page
 
@@ -364,10 +409,14 @@ first when it is another one (`Omunculus.switchProject`).
 
 ## The masthead, the carousel and the bar
 
-The masthead names the page: the project, then the conversation open (the
-title of its first work, else what was first said in it) and its page, or the
-page; under 700 px only the conversation, or the page, since the bar names
-the page. As in the studio, the pages of the level are a rail down the left
+The masthead names the way to the page in crumbs: PROJECTS or BOARD on the
+registry's level; the project, then the page, on a project's; the project,
+the conversation open (the title of its first work, else what was first
+said in it) and its page in a conversation. The project's crumb opens
+PROJECTS, and the conversation's its chat. Crumbs that do not fit elide from
+the left, the project's never below 8 characters. While requests wait for
+you in other projects, the masthead's right shows `▲ 2 ELSEWHERE` (only
+`▲ 2` under 700 px), which opens PROJECTS with WAITING FOR YOU lit. As in the studio, the pages of the level are a rail down the left
 edge (the kit's `TabRail`) in a fixed order, the one on screen marked in its
 place, beside the bar of its commands (the kit's `PageBar`). From 1100 px the
 rail shows the pages' names; from 700 px it is folded to their numbers and
@@ -393,8 +442,9 @@ The window is at least 360 by 480 px; its margins shrink with its width.
 
 Choosing another page of the level replaces the one on screen, while every
 move into another level, conversation, project or a work's thread is
-remembered. BACK returns to exactly where it was, its page, project,
-conversation and the work picked, and from the first page entered to the
+remembered. BACK returns to exactly where it was, its page, level,
+project, conversation and the work picked, switching back to the project
+it was on, and from the first page entered to the
 start, the board keeping its grouping, filter and the card the keyboard was
 on. On the team page BACK first lets go of the detail page or the level
 shown. A conversation that has no message yet, or is not made yet, is left
@@ -412,7 +462,12 @@ logs each text drawn out of its box, the window or a clipping item as a
 
 ## Commands by page
 
-- On CONVERSATIONS, NEW CONVERSATION (Ctrl+N, from anywhere entered).
+- On PROJECTS, NEW PROJECT, which asks for an id and the path of the
+  project's config (typed, or picked with PICK FILE) and registers it with
+  the server (`POST /v1/projects`, the kit's `NewProjectDialog`); the list
+  is read again with the new row picked. It has no key. FILTER (`/`).
+- On CONVERSATIONS, NEW CONVERSATION (Ctrl+N, from anywhere entered on a
+  project).
 - On CHAT, while a request waits on you REPLY (Alt+R), which brings the newest
   question into view and puts the keyboard in its card; PROGRESS (Alt+P),
   which opens or closes the progress and puts the keyboard in it; while a
@@ -445,7 +500,7 @@ picker and the keys dialog:
   and in a request's words send what is written there; no other key does.
 - Bare keys, for navigation without effect: the digit of a page, `/`, `[`
   and `]` on the team page, `?`, F1 and Esc, the digits of the cards of the
-  picker, and N, H and B on the start screen. They act only while an item to navigate has the keyboard and
+  picker, and N, H, B and P on the start screen. They act only while an item to navigate has the keyboard and
   no text field saw a key in the last second (`Typing`, marked by every
   `TextArea` and `TextBox`), so text that lost its field is not taken for
   commands. With nothing holding the keyboard, a printable key does nothing
@@ -453,13 +508,15 @@ picker and the keys dialog:
   field.
 - Chords, which a field being written leaves to them: Ctrl and the digit of
   a page, Ctrl+Tab and Ctrl+Shift+Tab for the next or the previous page,
-  Ctrl+N for a new conversation, and Alt with a letter for the commands of a
+  Ctrl+N for a new conversation, Ctrl+P for the projects, and Alt with a
+  letter for the commands of a
   page (R, P, M, O, W, C, E, L, G, F, S, A, J).
 
-The IPC's `start`, `page <name>` (`conversations`, `board` and, with a
-conversation open, `chat`, `map`, `log`, `cost`), `conversations`,
-`agents`, `log`, `board`, `open <id>`, `work <id>` (a work of the board, on
-its page), `newConversation` and `back` move it too, and `send <message>`
+The IPC's `start`, `page <name>` (`projects`, `conversations`, `board` and,
+with a conversation open, `chat`, `map`, `log`, `cost`), `projects`,
+`project <id>` (a project of the registry, at its conversations),
+`conversations`, `agents`, `log`, `board`, `open <id>`, `work <id>` (a work
+of the board, on its page), `newConversation` and `back` move it too, and `send <message>`
 sends a message to the conversation open, as the composer does.
 
 `?` or F1 opens a dialog of every key, by where it works

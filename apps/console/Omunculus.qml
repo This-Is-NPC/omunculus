@@ -5,15 +5,17 @@ import Quickshell.Io
 import "kit/client"
 import "kit/client/Model.js" as Model
 import "kit/client/Phrases.js" as Phrases
+import "kit/client/Projects.js" as Projects
 import "kit/client/Progress.js" as Progress
 import "kit/client/Requests.js" as Requests
 import "kit/client/Time.js" as Time
 import "kit/client/Usage.js" as Usage
 import "kit/ui"
 
-// Omunculus is the project as the window sees it: whether the server answers,
-// its conversations, and the one on screen folded into threads a person can
-// follow. The main thread is yours with the root agent; each work handed down
+// Omunculus is the server's registry and the project on screen as the window
+// sees them: whether the server answers, every project's conversations,
+// works and state, the project's conversations, and the one on screen folded
+// into threads a person can follow. The main thread is yours with the root agent; each work handed down
 // has a thread of its own, where its agent says and does what it does. A run
 // at depth 0 belongs to the main thread, a deeper one to its work's. Every
 // read and command goes to the server's local socket through curl; the event
@@ -22,23 +24,31 @@ Singleton {
   id: root
 
   // The project the window is on and its socket: the one it was opened on,
-  // until a card of another project's is opened on the board.
+  // until another is opened; none, on the registry's socket, when it was
+  // opened without one.
   Project {
-    id: client
+    id: connection
     onReached: {
+      root.loadProjects()
+      if (root.registry)
+        return
       root.loadConversations()
       root.loadSetup()
       root.loadCapabilities()
     }
   }
-  property alias socket: client.socket
-  property alias project: client.project
-  property alias base: client.base
-  property alias connected: client.connected
-  property alias message: client.message
-  property alias messageIsError: client.messageIsError
-  property alias noticeCount: client.noticeCount
-  readonly property Http http: client.http
+  // The project's client, for what the kit asks one of.
+  readonly property Project client: connection
+  // Whether the window is on no project yet, only on the server's registry.
+  readonly property alias registry: connection.registry
+  property alias socket: connection.socket
+  property alias project: connection.project
+  property alias base: connection.base
+  property alias connected: connection.connected
+  property alias message: connection.message
+  property alias messageIsError: connection.messageIsError
+  property alias noticeCount: connection.noticeCount
+  readonly property Http http: connection.http
   // The project capabilities the member holds, such as project.manage_config.
   property var capabilities: []
   property var conversations: []
@@ -64,6 +74,9 @@ Singleton {
   property var runs: []
   property var requests: []
   property var inbox: []
+  // What was typed in the main composer and not sent, by conversation id; a
+  // conversation opened again gets its words back.
+  property var composerDrafts: ({})
   // What was typed in the forms of requests and not sent, by request id:
   // {answers, at}, `at` the box the keyboard was in or -1; a form rebuilt
   // takes its words and the keyboard back from it.
@@ -141,20 +154,29 @@ Singleton {
   // the views count from it.
   property real tick: Date.now() / 1000
 
-  // The board: every project the window's socket lists, as {id, socket},
-  // and by project id its works, its setup as the config route gives it,
-  // its conversations, and the runs open on its works (run id -> work id),
-  // all kept from each project's stream while the board is watched. A work
-  // on the board carries its `project`.
+  // The registry: every project the window's socket lists, as {id, socket},
+  // by id, and by project id its works, its setup as the config route gives
+  // it, its conversations, and the runs open on its works (run id -> work
+  // id), all kept from each project's stream while the registry is watched;
+  // and the ids of those whose socket did not answer. A work on the board
+  // carries its `project`.
   property var boardProjects: []
   property var boardWorks: ({})
   property var boardSetups: ({})
   property var boardConversations: ({})
   property var boardRuns: ({})
-  // Whether the board is on screen, and whether its projects' streams are
-  // read, once the projects are known.
-  property bool boardWanted: false
+  property var unreachable: ({})
+  // Whether the registry is watched, the window entered, and whether its
+  // projects' streams are read, once the projects are known.
+  property bool registryWanted: false
   property bool watching: false
+  // Each project as a row of the projects page, in its order, and how many
+  // requests wait for you in the projects the window is not on.
+  readonly property var projectRows: Projects.sort(Projects.rows({
+    projects: boardProjects, conversations: boardConversations, works: boardWorks, summaries: summaries,
+    unreachable: new Set(Object.keys(unreachable)), current: project
+  }))
+  readonly property int elsewhere: Projects.elsewhere(projectRows)
   readonly property var board: [].concat(...boardProjects.map(place => boardWorks[place.id] || []))
   // The works an agent runs on now, each as "project/work id".
   readonly property var boardBusy: [].concat(...Object.keys(boardRuns).map(id => Object.values(boardRuns[id]).map(work => id + "/" + work)))
@@ -174,7 +196,7 @@ Singleton {
   function copy(text) {
     clipboard.command = ["wl-copy", "--", text]
     clipboard.startDetached()
-    client.tell("copied", false)
+    connection.tell("copied", false)
   }
   Process { id: clipboard }
 
@@ -189,7 +211,7 @@ Singleton {
 
   function loadCapabilities() {
     const on = project
-    client.call("GET", base + "/capabilities", null, false, data => {
+    connection.call("GET", base + "/capabilities", null, false, data => {
       if (on === project)
         capabilities = data.items
     })
@@ -198,8 +220,8 @@ Singleton {
   // Puts back the files the work `key` changed, in the workspace it ran in;
   // `done` follows once it did; a refusal is told as a sentence.
   function revert(key, done) {
-    client.call("POST", base + "/works/" + key + "/revert", {}, true, () => {
-      client.tell("reverted", false)
+    connection.call("POST", base + "/works/" + key + "/revert", {}, true, () => {
+      connection.tell("reverted", false)
       done()
     })
   }
@@ -230,7 +252,7 @@ Singleton {
 
   function loadConversations() {
     const on = project
-    client.call("GET", base + "/conversations", null, false, data => {
+    connection.call("GET", base + "/conversations", null, false, data => {
       if (on !== project)
         return
       conversations = data.items.slice().sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -269,25 +291,36 @@ Singleton {
     return said || (began ? "conversation of " + Time.began(began.created_at, Date.now()) : "a conversation")
   }
 
-  // Follows every project's works while the board is on screen, from what
-  // each project's stream sends from its start.
-  function watchBoard(on) {
-    boardWanted = on
+  // Reads the projects of the registry, in the order of their ids; while
+  // the registry is watched, each one not read yet is read in full.
+  function loadProjects() {
+    connection.call("GET", "/v1/projects", null, false, data => {
+      const listed = data.items.slice().sort((a, b) => a.id.localeCompare(b.id))
+      const read = new Set(watching ? boardProjects.map(place => place.id) : [])
+      if (JSON.stringify(listed) !== JSON.stringify(boardProjects))
+        boardProjects = listed
+      if (!registryWanted)
+        return
+      listed.filter(place => !read.has(place.id)).forEach(readProject)
+      watching = true
+    })
+  }
+
+  // Follows every project while the window is entered, from what each
+  // project's stream sends from its start.
+  function watchRegistry(on) {
+    registryWanted = on
     watching = false
     if (!on)
       return
     boardRuns = {}
-    client.call("GET", "/v1/projects", null, false, data => {
-      if (!boardWanted)
-        return
-      boardProjects = data.items
-      for (const place of data.items) {
-        loadWorks(place)
-        loadBoardConversations(place)
-        http.setup(place.socket, place.id, read => keep("boardSetups", place.id, read))
-      }
-      watching = true
-    })
+    loadProjects()
+  }
+
+  function readProject(place) {
+    loadWorks(place)
+    loadBoardConversations(place, true)
+    http.setup(place.socket, place.id, read => keep("boardSetups", place.id, read))
   }
 
   function loadWorks(place) {
@@ -295,19 +328,27 @@ Singleton {
       const works = data.items.map(work => Object.assign({ project: place.id }, work))
       keep("boardWorks", place.id, works)
       meet(works.map(work => agentOf(work)))
-    })
+    }, () => {})
   }
 
-  function loadBoardConversations(place) {
+  // Reads a project's conversations, and, with `all`, each one's summary;
+  // a socket that does not answer marks its project not reachable.
+  function loadBoardConversations(place, all) {
     http.call(place.socket, "GET", "/v1/projects/" + place.id + "/conversations", null, false, data => {
       keep("boardConversations", place.id, data.items)
-      summarize(place, data.items.map(item => item.id))
-    })
+      if (unreachable[place.id]) {
+        const rest = Object.assign({}, unreachable)
+        delete rest[place.id]
+        unreachable = rest
+      }
+      if (all)
+        summarize(place, data.items.map(item => item.id))
+    }, () => keep("unreachable", place.id, true))
   }
 
-  // What an event of a project's stream changes on the board: the runs open,
-  // the project's works, and, for a new conversation or what was first said
-  // in one, the project's conversations.
+  // What an event of a project's stream changes: the runs open, the
+  // project's works, the summary of the conversation it is of, and, for a
+  // new conversation, the project's conversations.
   function boardEvent(place, event) {
     if (event.type === "run.delta")
       return
@@ -319,23 +360,31 @@ Singleton {
         delete runs[event.run_id]
       keep("boardRuns", place.id, runs)
     }
-    if (event.type === "conversation" || event.type === "prompt")
+    if (event.type === "conversation")
       staleConversations[place.id] = place
+    if (event.conversation_id)
+      staleSummaries[event.conversation_id] = place
     staleWorks[place.id] = place
     boardTimer.restart()
   }
-  // The projects whose works or conversations are read again once events
-  // pause.
+  // The projects whose works or conversations are read again, and the
+  // conversations summarized again (id -> its project), once events pause.
   property var staleWorks: ({})
   property var staleConversations: ({})
+  property var staleSummaries: ({})
   Timer {
     id: boardTimer
     interval: 250
     onTriggered: {
       Object.values(root.staleWorks).forEach(place => root.loadWorks(place))
-      Object.values(root.staleConversations).forEach(place => root.loadBoardConversations(place))
+      Object.values(root.staleConversations).forEach(place => root.loadBoardConversations(place, false))
+      const ids = {}
+      for (const [id, place] of Object.entries(root.staleSummaries))
+        (ids[place.id] = ids[place.id] || { place: place, list: [] }).list.push(id)
+      Object.values(ids).forEach(each => root.summarize(each.place, each.list))
       root.staleWorks = {}
       root.staleConversations = {}
+      root.staleSummaries = {}
     }
   }
   Instantiator {
@@ -355,20 +404,18 @@ Singleton {
     }
   }
 
-  // Opens the window on another project the socket listed, as {id, socket}:
-  // its conversations and its setup, the conversation on screen closed.
+  // Opens the window on another project the socket listed, as {id, socket},
+  // or on none, the registry, with an empty id: the conversation on screen
+  // closed, its agents going on; the project's conversations, setup and
+  // capabilities are read once its socket answers.
   function switchProject(place) {
     if (place.id === project)
       return
-    close()
-    project = place.id
-    socket = place.socket
+    clear("")
     setup = null
     capabilities = []
     conversations = []
-    loadConversations()
-    loadSetup()
-    loadCapabilities()
+    connection.switchTo(place)
   }
 
   // The file of an agent's image, of the window's project or of another one
@@ -435,7 +482,7 @@ Singleton {
   function open(id) {
     clear(id)
     // The history comes in one read, before the stream resumes after it.
-    client.call("GET", base + "/conversations/" + id + "/events", null, false, data => {
+    connection.call("GET", base + "/conversations/" + id + "/events", null, false, data => {
       if (id !== conversationId)
         return
       replaying = true
@@ -461,7 +508,7 @@ Singleton {
     if (conversationId === "")
       return
     const id = conversationId
-    client.call("GET", base + "/conversations/" + id + "/snapshot", null, false, data => {
+    connection.call("GET", base + "/conversations/" + id + "/snapshot", null, false, data => {
       if (id !== conversationId)
         return
       works = data.works
@@ -488,7 +535,7 @@ Singleton {
   function send(text, work, files, done, failed) {
     const value = text.trim()
     const refuse = reason => {
-      client.tell("could not send: " + reason, true)
+      connection.tell("could not send: " + reason, true)
       if (failed)
         failed()
     }
@@ -502,7 +549,7 @@ Singleton {
     if (agent === "")
       return refuse("no conversation is open")
     const name = agent
-    client.call("POST", base + "/conversations", {}, true, data => {
+    connection.call("POST", base + "/conversations", {}, true, data => {
       loadConversations()
       open(data.id)
       agent = name
@@ -526,13 +573,13 @@ Singleton {
   }
 
   // Says something on the status line.
-  function tell(text, isError) { client.tell(text, isError) }
+  function tell(text, isError) { connection.tell(text, isError) }
 
   // Saves a file attached in the conversation to the downloads directory and
   // opens it.
   function openAttachment(file) {
     http.openAttachment(socket, base + "/conversations/" + conversationId + "/attachments/" + file.sha256, file)
-    client.tell("opening " + file.name, false)
+    connection.tell("opening " + file.name, false)
   }
 
   // A note on a work: context its agents read, not a new run.
@@ -540,7 +587,7 @@ Singleton {
     const value = text.trim()
     if (value === "" || !work)
       return
-    client.call("POST", base + "/conversations/" + conversationId + "/comments", { body: value, work_id: work }, true, () => client.tell("noted", false))
+    connection.call("POST", base + "/conversations/" + conversationId + "/comments", { body: value, work_id: work }, true, () => connection.tell("noted", false))
   }
 
   // Answers a request with words and an option, of the request itself or, by
@@ -549,14 +596,14 @@ Singleton {
   function reply(requestId, option, body, path) {
     keep("sending", requestId, "sending")
     acted()
-    client.call("POST", base + "/conversations/" + conversationId + "/requests/" + requestId + "/reply",
+    connection.call("POST", base + "/conversations/" + conversationId + "/requests/" + requestId + "/reply",
       Requests.answer(option, body, path), true, null, reason => failedSend(requestId, reason))
   }
 
   // Marks the answer to a request as not sent, and says why.
   function failedSend(requestId, reason) {
     keep("sending", requestId, "failed")
-    client.tell(reason, true)
+    connection.tell(reason, true)
   }
 
   // Raises a request waiting on you to whoever decides above you, as one
@@ -569,13 +616,13 @@ Singleton {
     origins[Requests.label(request.requester)] = requestId
     keep("sending", requestId, "sending")
     acted()
-    client.call("POST", base + "/conversations/" + conversationId + "/requests/escalate",
-      { reason: reason, origins: origins }, true, () => client.tell("escalated", false),
+    connection.call("POST", base + "/conversations/" + conversationId + "/requests/escalate",
+      { reason: reason, origins: origins }, true, () => connection.tell("escalated", false),
       why => failedSend(requestId, why))
   }
 
   function markRead(inboxId) {
-    client.call("POST", base + "/conversations/" + conversationId + "/inbox/" + inboxId + "/read", {}, true, () => refresh())
+    connection.call("POST", base + "/conversations/" + conversationId + "/inbox/" + inboxId + "/read", {}, true, () => refresh())
   }
 
   function work(id) {

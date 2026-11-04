@@ -39,6 +39,8 @@ defmodule Omunculus.GuiShortcutsTest do
     if (new Set(ids).size !== ids.length) throw Error("duplicate id");
     if (chord("reply") !== "Alt+R" || label("page") !== "1 · 2 · …") throw Error("lookups");
     if (rows("team").length === 0) throw Error("rows");
+    if (chord("projects") !== "Ctrl+P" || find("projects").mutates) throw Error("projects");
+    if (keys("start-projects")[0] !== "P" || find("start-projects").tier !== 1) throw Error("start-projects");
     """)
   end
 end
