@@ -19,7 +19,9 @@ import "kit/ui"
 // sentence. Who decides, you or an agent you can overrule, and each decision
 // it gathers from below, under its part, are shown as before. The card's
 // actions sit at its bottom left: its options, SEND while words are written,
-// "I can't answer this", and DENY last. Sending shows the answer dimmed at
+// "I can't answer this", and DENY last; a numbered list's form holds its
+// own, which float on the view's bottom edge while the form's end is out of
+// view, and the heading counts its answers. Sending shows the answer dimmed at
 // once, answered it collapses to the question and your answer, and a failure
 // reopens it with the words kept.
 SurfaceFrame {
@@ -396,6 +398,8 @@ SurfaceFrame {
       visible: active
       sourceComponent: QuestionForm {
         parsed: card.form
+        fill: card.fill
+        bleed: Theme.space.inset - card.border.width
         draftKey: card.key
         sending: card.busy
         onSubmitted: text => card.answerInWords(text)

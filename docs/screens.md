@@ -120,7 +120,9 @@ The chat between you and the root agent: what each of you said and, under
 each run, its tool calls, folded to one line that counts them and unfolding
 to one row per call. A work handed down is a SUB-WORK block where it was,
 which unfolds into its own transcript, changes and runs. A question for you
-is a card in the thread; what an agent asked another is an exchange in the
+is a card in the thread; a numbered list of questions keeps SEND and I CAN'T
+ANSWER THIS on the view's bottom edge, with how many questions are below,
+until the card's end comes into view. What an agent asked another is an exchange in the
 thread it was asked in, which DECIDE INSTEAD lets you answer. Over the tabs
 of every page of the conversation, a header strip says whom it is with, the
 stage, how long, how many agents and calls, with ANSWER while a question

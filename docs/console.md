@@ -269,15 +269,18 @@ the masthead: the first root work's title, else the first message), or the
 work of the question's origin when the harness passed it up.
 
 `QuestionForm` puts "N OF M" answered in the card's heading, and SEND and
-"I CAN'T ANSWER THIS" at the bottom of the card, after the last item. Each
-item is its number, its question wrapped in sentence case at a 620 px
-measure and a box (`TextBlock`) as wide as the card's text that grows with
-its text, with the toggle chip "I DON'T
+"I CAN'T ANSWER THIS" at the end of the form, after the last item. While
+that end is below the view, the two float on the view's bottom edge over the
+card's fill and a hairline, with "N MORE QUESTIONS BELOW" at the right
+(above them under 520 px) while items start under them; the chip brings the
+first of those into view with the keyboard in its box. Each item is its
+number, its question wrapped in sentence case at a 620 px measure and a box
+(`TextBlock`) as wide as the card's text that grows with its text, with the toggle chip "I DON'T
 KNOW YET" under it, which fills the box and, switched off, restores what was
 typed. Enter moves to the next box that can take the keyboard (it stays in
-the box when none can), Enter in the last and Ctrl+Enter in any send, and a
-box that takes the keyboard scrolls into view without changing whether the
-thread follows its end. The form's model is held by value (`formJson` of
+the box when none can), Enter in the last and Ctrl+Enter in any send, and the
+item whose box takes the keyboard scrolls into view above the floating
+actions without changing whether the thread follows its end. The form's model is held by value (`formJson` of
 `RequestDecision`), and what was typed, with the box the keyboard was in, is
 kept in `Omunculus.drafts` by request, so a form rebuilt takes both back; the
 thread keeps two views of entries each way, and a box taking the keyboard
