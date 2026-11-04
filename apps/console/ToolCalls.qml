@@ -4,12 +4,14 @@ import QtQuick.Layouts
 import "kit/client/Calls.js" as Calls
 import "kit/client/Phrases.js" as Phrases
 import "kit/client/Progress.js" as Progress
-import "kit/client/Requests.js" as Requests
 import "kit/ui"
 
-// ToolCalls is what one run called, as a group under its words. Folded, one
-// line counts the calls, how many failed and the first that did; while the
-// run is open its last three calls show live below it.
+// ToolCalls is what one run called, as a group under its words: system rows,
+// the log and not a message, dim and small, the step mark in the rows' mark
+// column. Folded, one line counts the calls, how many failed and the first
+// that did; while the run is open its last three calls show live below it. A
+// run that said nothing names its agent at the line's start, and how long it
+// worked and when at its end, in place of a turn's heading.
 // Unfolded, one row per call: the raw tool name, its args in brief, and under
 // a failed call its output, six lines and then all on demand. An ask or an
 // escalate names whom it goes to, never its question: the request's card or
@@ -24,6 +26,10 @@ Column {
   required property var steps
   // Whether the run is still open.
   property bool live: false
+  // For a run that said nothing: its agent, how long it worked, and when.
+  property string who: ""
+  property string worked: ""
+  property string stamp: ""
   property bool open: false
 
   readonly property var summary: Calls.group(steps.map(step => ["ask", "escalate"].includes(step.name) && !step.outcome
@@ -36,7 +42,7 @@ Column {
 
   // The header in characters of its font, so it never runs past the width,
   // with room for the separators between its parts.
-  readonly property int budget: Math.max(8, Math.floor((width - 18) / metrics.advanceWidth("M")) - 1)
+  readonly property int budget: Math.max(8, Math.floor((width - Theme.size.mark - stampWidth.advanceWidth - Theme.size.gutter) / (metrics.advanceWidth / metrics.text.length)) - 1)
   // A lone call that went well is named by what it did, not counted.
   readonly property var lone: count === 1 && summary.failed === 0 ? steps.find(step => !step.outcome && !step.hook) || null : null
   // A lone reply is named by whom it answers; the person's answers passed on
@@ -47,22 +53,25 @@ Column {
     : Phrases.did(lone.name, lone.args)
   readonly property string failedPrefix: summary.failed + " failed"
   readonly property var header: Progress.fit([
+    who !== "" ? { text: who, keep: true, agent: true } : null,
     count > 0 ? { text: lone ? loneText : count === 1 ? "1 step" : count + " steps", short: lone ? loneText : count + " steps", keep: true } : null,
-    summary.failed > 0 ? { text: failedPrefix + ": " + (failedRow ? Phrases.stepFailure(failedRow.name, failedRow.args) : ""), short: failedPrefix, keep: true } : null
-  ].filter(part => part !== null), budget - 6).filter(text => text !== "")
+    summary.failed > 0 ? { text: failedPrefix + ": " + (failedRow ? Phrases.stepFailure(failedRow.name, failedRow.args) : ""), short: failedPrefix, keep: true } : null,
+    worked !== "" ? { text: worked } : null
+  ].filter(part => part !== null), budget - 6)
 
   visible: count > 0 || summary.failed > 0
   spacing: Theme.space.line
 
-  FontMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: 11 }
+  TextMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: Theme.type.log.size; text: "MMMMMMMMMM" }
+  TextMetrics { id: stampWidth; font.family: Theme.fontFamily; font.pixelSize: Theme.type.stamp.size; text: group.stamp }
 
   Item {
     id: head
-    width: Math.min(group.width, line.implicitWidth + Theme.space.line)
+    width: group.width
     height: Theme.size.stackedLine
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
-    Accessible.name: group.header.join(" · ")
+    Accessible.name: group.header.filter(text => text !== "").join(" · ")
     Keys.onPressed: event => {
       if ([Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space].includes(event.key)) {
         group.open = !group.open
@@ -70,28 +79,48 @@ Column {
       }
     }
 
+    Icon {
+      anchors.verticalCenter: parent.verticalCenter
+      name: group.summary.failed > 0 ? "warning" : "step"
+      size: Theme.type.log.size
+      color: group.summary.failed > 0 ? Theme.error : Theme.dim
+    }
     Row {
       id: line
+      x: Theme.size.mark
       anchors.verticalCenter: parent.verticalCenter
       spacing: Theme.space.tight
-      Icon { anchors.verticalCenter: parent.verticalCenter; name: group.open ? "chevron-down" : "chevron-right"; size: 10; color: pointer.containsMouse ? Theme.foreground : Theme.dim }
       Repeater {
+        // The agent leads with no separator after it.
         model: group.header
         delegate: Label {
           required property string modelData
           required property int index
+          readonly property bool agent: group.who !== "" && index === 0
+          visible: modelData !== ""
           // A delegate torn down has no parent.
           anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-          text: (index > 0 ? "· " : "") + modelData
-          color: modelData.startsWith(group.failedPrefix) && group.summary.failed > 0 ? Theme.error
+          text: (index > (group.who !== "" ? 1 : 0) ? "· " : "") + modelData
+          color: agent ? Omunculus.toneOf(group.who)
+            : modelData.startsWith(group.failedPrefix) && group.summary.failed > 0 ? Theme.error
             : pointer.containsMouse ? Theme.foreground : Theme.dim
-          font.pixelSize: 11
+          font.pixelSize: Theme.type.log.size
         }
       }
+      Icon { anchors.verticalCenter: parent.verticalCenter; name: group.open ? "chevron-down" : "chevron-right"; size: Theme.type.log.size - 1; color: pointer.containsMouse ? Theme.foreground : Theme.dim }
+    }
+    Label {
+      visible: group.stamp !== ""
+      anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+      text: group.stamp
+      color: Theme.faint
+      font.pixelSize: Theme.type.stamp.size
+      font.letterSpacing: Theme.type.stamp.tracking
     }
     MouseArea {
       id: pointer
-      anchors.fill: parent
+      width: line.x + line.width
+      height: parent.height
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: group.open = !group.open
@@ -108,7 +137,7 @@ Column {
       readonly property bool failed: !modelData.outcome && !modelData.ok
       property bool diffOpen: false
       property bool outputAll: false
-      x: Theme.space.block
+      x: Theme.size.mark
       width: group.width - x
       spacing: Theme.space.row
 
@@ -119,14 +148,14 @@ Column {
           Layout.alignment: Qt.AlignTop
           text: call.modelData.outcome ? ({ continue: "→", reopen: "↩", break: "✕" })[call.modelData.name] || "✓" : call.failed ? "✕" : "✓"
           color: call.failed ? Theme.error : call.modelData.name === "break" ? Theme.warning : call.modelData.outcome ? Theme.primary : Theme.success
-          font.pixelSize: 11
+          font.pixelSize: Theme.type.log.size
         }
         Label {
           visible: !call.modelData.outcome && !(call.modelData.hook && call.modelData.ok)
           Layout.maximumWidth: call.width * 0.4
           text: call.modelData.name
           color: call.failed ? Theme.error : Theme.foreground
-          font.pixelSize: 11
+          font.pixelSize: Theme.type.log.size
           elide: Text.ElideRight
         }
         Label {
@@ -134,7 +163,7 @@ Column {
           Layout.minimumWidth: 0
           text: call.modelData.brief
           color: call.modelData.outcome ? Theme.foreground : Theme.dim
-          font.pixelSize: 11
+          font.pixelSize: Theme.type.log.size
           elide: Text.ElideRight
         }
         // An edit's or write's size, which opens what it changed.
@@ -142,7 +171,7 @@ Column {
           visible: call.diff !== null
           text: (call.diffOpen ? "▾ " : "▸ ") + (call.diff ? (call.diff.removed ? "diff +" + call.diff.added.length + " −" + call.diff.removed.length : "+" + call.diff.total + " lines") : "")
           color: diffPointer.containsMouse ? Theme.foreground : Theme.dim
-          font.pixelSize: 11
+          font.pixelSize: Theme.type.log.size
           MouseArea {
             id: diffPointer
             anchors.fill: parent
@@ -160,7 +189,7 @@ Column {
         width: parent.width - x
         text: call.modelData.output
         color: Theme.error
-        font.pixelSize: 11
+        font.pixelSize: Theme.type.log.size
         wrapMode: Text.Wrap
         maximumLineCount: call.outputAll ? 100000 : 6
         elide: Text.ElideRight
@@ -170,7 +199,7 @@ Column {
         x: Theme.space.section
         text: call.outputAll ? "show less" : "show all"
         color: allPointer.containsMouse ? Theme.foreground : Theme.dim
-        font.pixelSize: 11
+        font.pixelSize: Theme.type.log.size
         font.underline: true
         MouseArea {
           id: allPointer
@@ -202,7 +231,7 @@ Column {
               width: lines.width
               text: (modelData.added ? "+ " : "− ") + modelData.text
               color: modelData.added ? Theme.success : Theme.error
-              font.pixelSize: 11
+              font.pixelSize: Theme.type.log.size
               elide: Text.ElideRight
             }
           }
@@ -211,7 +240,7 @@ Column {
             width: lines.width
             text: call.diff ? "… " + (call.diff.total - call.diff.added.length) + " more lines" : ""
             color: Theme.dim
-            font.pixelSize: 11
+            font.pixelSize: Theme.type.log.size
             elide: Text.ElideRight
           }
         }

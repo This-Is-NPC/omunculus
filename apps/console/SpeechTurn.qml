@@ -58,7 +58,7 @@ Item {
     Rectangle {
       width: parent.width
       height: line.implicitHeight + Theme.space.inset
-      color: turn.mine ? Theme.highlight : Qt.tint(Theme.background, Qt.alpha(turn.tone, 0.1))
+      color: turn.mine ? Theme.bubble() : Theme.bubble(turn.tone)
       Prose {
         id: line
         anchors.verticalCenter: parent.verticalCenter

@@ -129,21 +129,29 @@ opens it at its team or its log.
 
 ### 5. Chat
 
-The chat between you and the root agent: what each of you said and, under
-each run, its tool calls, folded to one line that counts them and unfolding
-to one row per call. A work handed down is a SUB-WORK block where it was,
-which unfolds into its own transcript, changes and runs. A question for you
+The chat between you and the root agent, read as a history from the top
+down, each kind of entry in a form of its own. What you said is a filled
+bubble on the right; what an agent says is a bubble on the left tinted with
+its colour, under its name and time. A note an agent of the team left is an
+outlined card headed NOTE FROM SELLER. The rest is the log, small, dim rows
+with an icon at the left: each run's tool calls, folded to one line that
+counts them and unfolding to one row per call, and a run that said nothing
+is that line alone, with its agent's name. A work handed down is a sub-work
+row where it was, which unfolds into its own transcript, changes and runs;
+each run of the works below leaves a row when it ends ("designer worked 4
+min · 12 steps"). A question for you
 is a card in the thread; a numbered list of questions keeps SEND and I CAN'T
 ANSWER THIS on the view's bottom edge, with how many questions are below,
 until the card's end comes into view. What an agent asked another is an exchange in the
-thread it was asked in, which DECIDE INSTEAD lets you answer. Over the tabs
+thread it was asked in, its question quoted in a frame, which DECIDE INSTEAD
+lets you answer. While an agent works, a live line at the end of the thread
+says who works, from the agent you wrote to down to the one at work, what it
+does and for how long, and leaves its row when that run ends. Over the tabs
 of every page of the conversation, a header strip says whom it is with, the
 stage, or that the conversation is starting, how long, and how many agents
 and replies, each count opening the team or the cost, with the chevron and
-ANSWER while a question waits on you; under it two lines say the stages of
-the work in focus and who works on it, doing what, for how long, or what you
-are asked ("sales asks you 7 questions"). While agents work after your
-message, a working row in the thread says who works and on what, once. The
+ANSWER while a question waits on you; under it one line says the stages of
+the work in focus. The
 chevron or Alt+P open the progress: the works nested by stage and level, beside the
 thread from 1100 px, a card over it from 700 px, a sheet over the chat below.
 While a decision waits on you, its options are numbered chips over the

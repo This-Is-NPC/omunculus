@@ -6,16 +6,17 @@ import "kit/client/Progress.js" as Progress
 import "kit/ui"
 
 // SubWorkBlock is a work handed down, in the thread of the run that handed it
-// down, where it did: a frame headed SUB-WORK with its agent and title, one
-// line with its state, how long and how many tool calls, its stages when it
-// has a workflow, and the round with who sent it back when it was. Choosing
-// it unfolds it in place, indented, into tabs (01 TRANSCRIPT, the work's own
+// down, where it did: a system row of the log, the branch mark in the rows'
+// mark column, SUB-WORK with its agent and title, then under them one line
+// with its state, how long and how many tool calls, its stages when it has a
+// workflow, and the round with who sent it back when it was. Choosing it
+// unfolds it in place, in a frame under the row, into tabs (01 TRANSCRIPT, the work's own
 // thread at most 480 px tall with its own scroll, 02 CHANGES and 03 RUNS). A
 // block two levels down only opens. The open tool at its top right shows the
 // work as a transcript of its own. The conversation's own work leaves out its
 // title and stages, which the masthead and the strip show; until the work's
 // data arrives, the block shows the title and "Handing down…".
-SurfaceFrame {
+Item {
   id: block
 
   // The work handed down.
@@ -75,7 +76,7 @@ SurfaceFrame {
 
   // The status line and the stages, in characters of their font; the status
   // keeps room for its separators.
-  readonly property int budget: Math.max(8, Math.floor((width - 28) / metrics.advanceWidth("M")) - 1)
+  readonly property int budget: Math.max(8, Math.floor((width - Theme.size.mark - Theme.size.controlDense - Theme.space.gap) / (metrics.advanceWidth / metrics.text.length)) - 1)
   readonly property var status: Progress.fit([
     { text: glyph + " " + word, keep: true },
     node && node.round > 1 ? { text: "round " + node.round, keep: true } : null,
@@ -123,17 +124,16 @@ SurfaceFrame {
       opened(work)
   }
 
-  implicitHeight: present ? content.implicitHeight + Theme.space.insetTop + Theme.space.inset : 0
-  variant: "outline"
+  implicitHeight: present ? content.implicitHeight + Theme.space.tight + Theme.space.row : 0
   // Its own flag: `visible` also follows the page that holds it.
   readonly property bool present: arrived || title !== ""
   visible: present
 
-  FontMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: 11 }
+  TextMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: Theme.type.log.size; text: "MMMMMMMMMM" }
 
   ColumnLayout {
     id: content
-    anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: Theme.space.insetTop; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset }
+    anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: Theme.space.tight }
     spacing: Theme.space.tight
 
     Item {
@@ -155,35 +155,39 @@ SurfaceFrame {
         id: heading
         width: parent.width
         spacing: Theme.space.tight
-        Icon { visible: block.expandable; name: block.expanded ? "chevron-down" : "chevron-right"; size: 10; color: pointer.containsMouse ? Theme.foreground : Theme.dim }
-        Label { text: "SUB-WORK"; color: Theme.dim; font.pixelSize: Theme.type.kicker.size; font.letterSpacing: Theme.type.kicker.tracking }
+        Item {
+          Layout.preferredWidth: Theme.size.mark - heading.spacing
+          Layout.preferredHeight: Theme.type.log.size
+          Icon { anchors.verticalCenter: parent.verticalCenter; name: "branch"; size: Theme.type.log.size; color: Theme.dim }
+        }
+        Label { text: "sub-work"; color: Theme.dim; font.pixelSize: Theme.type.log.size }
         Label {
-          Layout.minimumWidth: 0
-          Layout.maximumWidth: implicitWidth
-          Layout.fillWidth: true
+          // The agent stays whole; the title gives way.
           text: block.agent
           color: Omunculus.toneOf(block.agent)
-          font.pixelSize: 11
-          font.bold: true
+          font.pixelSize: Theme.type.log.size
           elide: Text.ElideRight
         }
         Label {
           visible: block.titled
           Layout.fillWidth: true
+          Layout.maximumWidth: implicitWidth
           Layout.minimumWidth: 0
           text: block.title
           color: Theme.foreground
-          font.pixelSize: 11
+          font.pixelSize: Theme.type.log.size
           elide: Text.ElideRight
         }
-        Item { visible: !block.titled; Layout.fillWidth: true }
+        Icon { visible: block.expandable; name: block.expanded ? "chevron-down" : "chevron-right"; size: Theme.type.log.size - 1; color: pointer.containsMouse ? Theme.foreground : Theme.dim }
+        Item { Layout.fillWidth: true }
         Label { visible: block.stamp !== ""; text: block.stamp; color: Theme.faint; font.pixelSize: Theme.type.stamp.size; font.letterSpacing: Theme.type.stamp.tracking }
       }
 
       Column {
         id: lines
+        x: Theme.size.mark
         y: heading.height + Theme.space.line
-        width: parent.width
+        width: parent.width - x
         spacing: Theme.space.row
 
         Row {
@@ -195,7 +199,7 @@ SurfaceFrame {
               required property int index
               text: (index > 0 ? "  ·  " : "") + modelData
               color: index === 0 ? block.stateTone : /^\d+ failed/.test(modelData) && block.condition === "failed" ? Theme.error : Theme.dim
-              font.pixelSize: 11
+              font.pixelSize: Theme.type.log.size
             }
           }
         }
@@ -209,7 +213,7 @@ SurfaceFrame {
               required property var modelData
               text: modelData.text
               color: modelData.status === "current" ? Theme.primary : modelData.status === "done" ? Theme.success : Theme.dim
-              font.pixelSize: 11
+              font.pixelSize: Theme.type.log.size
               font.bold: modelData.status === "current"
             }
           }
@@ -222,7 +226,7 @@ SurfaceFrame {
             ? "↩ Round " + block.node.round + " · sent back by " + block.node.sentBack.by + (block.node.sentBack.why ? ": \"" + block.node.sentBack.why + "\"" : "")
             : block.node ? "↩ Round " + block.node.round : ""
           color: Theme.warning
-          font.pixelSize: 11
+          font.pixelSize: Theme.type.log.size
           wrapMode: Text.Wrap
           maximumLineCount: 3
           elide: Text.ElideRight
@@ -239,60 +243,70 @@ SurfaceFrame {
       FocusRing { anchors.margins: -Theme.space.line }
     }
 
-    // Unfolded: the tabs, and what the tab shows, indented.
-    Flow {
+    // Unfolded: the tabs, and what the tab shows, framed under the row.
+    SurfaceFrame {
       Layout.fillWidth: true
-      Layout.topMargin: Theme.space.line
+      Layout.leftMargin: Theme.size.mark
       visible: block.expanded
-      spacing: Theme.space.block
-      Repeater {
-        model: [{ name: "transcript", text: "TRANSCRIPT" }, { name: "changes", text: "CHANGES" }, { name: "runs", text: "RUNS" }]
-        delegate: Tab {
-          required property var modelData
-          required property int index
-          label: modelData.text
-          digit: "0" + (index + 1)
-          current: block.tab === modelData.name
-          onChosen: block.tab = modelData.name
+      implicitHeight: unfolded.implicitHeight + Theme.space.insetTop + Theme.space.inset
+      variant: "outline"
+
+      ColumnLayout {
+        id: unfolded
+        anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: Theme.space.insetTop; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset }
+        spacing: Theme.space.tight
+        Flow {
+          Layout.fillWidth: true
+          Layout.topMargin: Theme.space.line
+          visible: block.expanded
+          spacing: Theme.space.block
+          Repeater {
+            model: [{ name: "transcript", text: "TRANSCRIPT" }, { name: "changes", text: "CHANGES" }, { name: "runs", text: "RUNS" }]
+            delegate: Tab {
+              required property var modelData
+              required property int index
+              label: modelData.text
+              digit: "0" + (index + 1)
+              current: block.tab === modelData.name
+              onChosen: block.tab = modelData.name
+            }
+          }
+        }
+
+        Loader {
+          id: transcript
+          Layout.fillWidth: true
+          Layout.preferredHeight: Math.min(480, implicitHeight)
+          visible: block.showsTranscript
+        }
+        Connections {
+          target: transcript.item
+          ignoreUnknownSignals: true
+          function onOpenWork(work) { block.opened(work) }
+        }
+
+        Loader {
+          Layout.fillWidth: true
+          Layout.preferredHeight: active ? 320 : 0
+          active: block.expanded && block.tab === "changes"
+          visible: active
+          sourceComponent: WorkChanges { key: block.work }
+        }
+
+        Loader {
+          Layout.fillWidth: true
+          Layout.preferredHeight: active ? 320 : 0
+          active: block.expanded && block.tab === "runs"
+          visible: active
+          sourceComponent: WorkRuns { key: block.work }
         }
       }
-    }
-
-    Loader {
-      id: transcript
-      Layout.fillWidth: true
-      Layout.leftMargin: Theme.space.block
-      Layout.preferredHeight: Math.min(480, implicitHeight)
-      visible: block.showsTranscript
-    }
-    Connections {
-      target: transcript.item
-      ignoreUnknownSignals: true
-      function onOpenWork(work) { block.opened(work) }
-    }
-
-    Loader {
-      Layout.fillWidth: true
-      Layout.leftMargin: Theme.space.block
-      Layout.preferredHeight: active ? 320 : 0
-      active: block.expanded && block.tab === "changes"
-      visible: active
-      sourceComponent: WorkChanges { key: block.work }
-    }
-
-    Loader {
-      Layout.fillWidth: true
-      Layout.leftMargin: Theme.space.block
-      Layout.preferredHeight: active ? 320 : 0
-      active: block.expanded && block.tab === "runs"
-      visible: active
-      sourceComponent: WorkRuns { key: block.work }
     }
   }
 
   IconButton {
     id: opener
-    anchors { right: parent.right; top: parent.top; rightMargin: Theme.space.inset; topMargin: Theme.space.insetTop }
+    anchors { right: parent.right; top: parent.top; topMargin: Theme.space.tight }
     name: "open"
     tip: "show this work as a transcript of its own"
     onClicked: block.opened(block.work)

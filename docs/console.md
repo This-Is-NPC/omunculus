@@ -115,10 +115,18 @@ agent, and one per work drawn as a block in a thread (handed down, or a root wor
 run opened), where its agent's runs show. A run on any other work, or none,
 belongs to the main thread.
 
-Each line (`SpeechTurn`) and each agent's turn (`AgentTurn`) is a box under a
-heading of its speaker's tone dot, name and time, as in eco: yours on the
-right, an agent's on the left tinted with its colour; a line that continues
-the same speaker's turn drops the heading. The chat shows no portraits; they
+Every kind of entry has its own form, the same across the thread. Messages are
+filled bubbles: each line (`SpeechTurn`) and each agent's turn that speaks
+(`AgentTurn`) is a bubble under a heading of its speaker's tone dot, name and
+time, as in eco: yours on the right, filled with the text's ink at a low
+alpha; an agent's on the left, filled with a tint of its colour
+(`Theme.bubble`); a line that continues the same speaker's turn drops the
+heading. Body text in every bubble and card reads at more than 10:1 on its
+fill. Everything else an agent did is the log: system rows (`LogLine`,
+`ToolCalls`, `SubWorkBlock`, the exchange's line), unframed, at the log's
+smaller size (`Theme.type.log`), dim, each with its icon in a mark column of
+their own (`Theme.size.mark`) and its time at the right, so they read as
+secondary to what was said. The chat shows no portraits; they
 stay in the agent picker and on the team page. A turn's heading says how
 long the run has worked, in the short form used everywhere: "Working 12 s"
 while it is open, "Worked 3 min" after. An agent's name and dot take its tone (`Omunculus.toneOf`) wherever
@@ -128,14 +136,23 @@ agent you wrote to, and stay while it is open; no two are within 30° of
 hue, and none within 30° of the accent, success, warning or error. A theme
 whose colours leave little room yields fewer tones, and they then repeat. The board's agents have their own, in the order the window meets them.
 While
-agents work and what you said or answered is still the newest thing in the
-thread, a working row under it, in the tone of the agent at work, names the
-agents from the one you wrote to down to that one ("SALES › SELLER"; a run
-of the front agent outside any work stands alone), with how long it has
-worked, and its trace beside what it does: "● SALES WORKING 6 s" over
-"Getting started". The header strip does not say it again then: its state
-word and its now line stay off the chat while the row shows, the line
-leaving its room blank so the tabs under it do not move.
+an agent works for the thread, its end holds a live line (`Progress.live`):
+a dot breathing in the tone of the agent at work, the agents from the one you
+wrote to down to that one, each in its tone ("sales › seller › design-lead ›
+designer"; a run of the front agent outside any work stands alone; short of
+room the first give way to "…"), "working" and its clock, the trace at the
+row's end, and under them what it does: "Thinking · wrote files", with "· no
+news for 12 minutes" after ten minutes without an event. A call is known only
+once it finished, so the line says the last one in the past, after
+"Thinking", and a run that has made no call for 15 s reads "Thinking", not
+"Getting started"; "· round N" follows the clock once a work is sent back. It updates in place,
+and it gives way to that agent's own turn while the turn streams in the
+thread and shows something. A work's own page names the chain from its work
+down; a thread nested in a sub-work block has none, the block says it. When
+a run of a work below ends, it leaves a line of the log in the main thread at
+that moment: "✓ designer  worked 4 min · 12 steps", or "failed after 4 min"
+in the error tone, so the chat tells the team's work in order. Who works is
+the chat's to say; the header strip does not repeat it.
 Once its words are whole, the "more" button beside them, in a gutter
 they never take, copies them or shows the log of the run's work (the
 thread's `openLog`).
@@ -151,9 +168,12 @@ What an agent says, a request's reason and a work's goal and notes are the
 kit's `Prose`, their web addresses links that open in the browser.
 
 Under its words, a turn's tool calls are one group (`ToolCalls`, from the
-kit's `Calls.group`). Folded, one line counts them, how many failed and the
-first that did, in plain words: "9 steps · 1 failed: could not move to the next stage"; a lookup that found nothing (a folder not there yet) is no failure; a lone call that went well is named by what it did ("Passed a question up", "Looked in design/", "Ran: npx build"; a reply, by whom it answers: "Passed your answer to seller", or "answers" for a numbered form), and a turn that says nothing keeps its heading, so these lines never stand under no name; how long the run
-worked is the turn's to say. While the run is open its last three calls show
+kit's `Calls.group`), system rows behind the step mark ("›_"), its chevron
+after the words. A turn that said nothing is that line alone, with no
+heading: its agent in its tone leads it and how long it worked ends it,
+"sales  Passed your answers to seller · worked 3 s", the time at the right.
+Folded, one line counts them, how many failed and the
+first that did, in plain words: "9 steps · 1 failed: could not move to the next stage"; a lookup that found nothing (a folder not there yet) is no failure; a lone call that went well is named by what it did ("Passed a question up", "Looked in design/", "Ran: npx build"; a reply, by whom it answers: "Passed your answer to seller", or "answers" for a numbered form), and a turn that says nothing names its agent on that line, so these lines never stand under no name. While the run is open its last three calls show
 live under it. Unfolded, each call is a row with the raw tool name and its args
 in brief (`Phrases.brief`: the path of a file tool, the command of `bash`, whom an `ask` or
 `escalate` goes to and never its question, which its card or exchange shows,
@@ -168,8 +188,9 @@ nothing takes no room, not even the gap between entries, and words with no
 text and no files are not added to the thread.
 
 A work handed down is a block (`SubWorkBlock`) in the thread of the run that
-handed it down, where it did; so is a root work a run opened. A card headed
-SUB-WORK with its agent, title and time, it says its state, for how long and
+handed it down, where it did; so is a root work a run opened. A system row
+behind the branch mark, "sub-work" with its agent, title and time, it says on
+a second line its state, for how long and
 how many steps (tool calls; hook runs are not steps, here and in the turn):
 with those of the works it handed down, then how many are its own ("34 steps
 · 20 its own"), so the count moves while the team works; and, when some
@@ -178,17 +199,19 @@ could not move to the next stage (reason)"), in the error tone only if the work 
 failed; when each failed tool later succeeded, a dim "5 retried" instead,
 its stages when it has a workflow, and the round with
 who sent it back. A comment on a work of the conversation's own (not one nested below it) also
-appears in the main thread at its own time, as a compact line: the agent in its
-tone, "noted", and the text in two lines, unfolding when long, and, for the
-newest note once the conversation's work is done, its result: "DELIVERED", whole, at the body size in the full tone,
-without the width cap. The strip's "✓ DONE" then takes the chat to it. Its addresses are links
+appears in the main thread at its own time, as a quoted card (`TeamNote`):
+outlined, headed by a quote mark, NOTE FROM and the agent in its tone, the
+time at its right, and the text at the body size in the full tone, at most as
+wide as a bubble, six lines and then unfolding by its heading; for the
+newest note once the conversation's work is done, its result: DELIVERED BY and
+the agent, in the success tone, whole and as wide as the thread. The strip's "✓ DONE" then takes the chat to it. Its addresses are links
 in the accent. It is the team's news, not a message to you. Until the work's data arrives, it shows the title the event
 named and "Handing down…", or nothing when the event named none. A work that
 waits on a branch says who works below it ("● designer working", in the
 working tone) and else what it waits for. Waiting on you reads "⚠ NEEDS YOU",
 as everywhere, in the line's frame, since only the card can be acted on; the
 conversation's own work leaves out its title and stages, which the masthead
-and the strip show. Choosing it unfolds it in place, indented, into the tabs
+and the strip show. Choosing it unfolds it in place, in an outlined frame under its row, into the tabs
 01 TRANSCRIPT (the work's own thread, at most 480 px tall with its own
 scroll), 02 CHANGES and 03 RUNS; a block two levels down does not unfold.
 The open glyph at its top right shows the work's thread as a page of its own
@@ -208,9 +231,10 @@ reply says nothing in the bar when it succeeds; the card shows it. A
 question for you that arrives while the view follows is held by its top.
 
 What an agent asks another is an exchange (`TeamRow`) in the thread it was
-asked in: "seller asked design-lead · design-lead decides", each agent in its
-tone, the question in its first three lines and, once answered, who answered
-and what. It is open while it waits, and DECIDE INSTEAD opens the request's
+asked in: a system row behind the people mark, "seller asked design-lead ·
+design-lead decides", each agent in its tone, and under it, in an outlined
+frame at the body size, the question in its first three lines and, once
+answered, who answered and what. It is open while it waits, and DECIDE INSTEAD opens the request's
 card in place, to answer it yourself. A request another gathers (`Requests.contained`), as the
 lower ones of a question passed up, is not shown on its own.
 
@@ -229,25 +253,17 @@ once the provider priced a call; each opens what it counts, the team and the cos
 the agents' tip names them. At its right the chevron, which opens the full
 view, and ANSWER, in the warning tone and with the count when more than one
 waits, while a question waits on you, which puts the keyboard in the newest
-question's card on the chat. Under it, unframed, two lines: the stages of
+question's card on the chat. This is the overview; who works and on what is
+the chat's live line, and on the team, log and cost pages their own views say
+how the work stands. Under it, unframed, one line: the stages of
 the work in focus, the newest open root work (`Stepper`: "✓ qualify › ●
 design · round 2 › ○ assess …", shorter forms as the width shrinks, down to
 one dot per stage and the current name), or its title when it has no stages
-and the masthead does not already say it; then who works on it, from its
-agent down to the one at work, what that one does and its clock: "seller ›
-design-lead › designer: Thinking · wrote site/index.html · 4:12". A call is
-known only once it finished, so the line says the last one in the past, after
-"Thinking", and never claims a call still runs while the run's clock goes on;
-a run that has made no call for 15 s reads "Thinking", not "Getting started".
-The chain names only the agents the one at work works under, from the top, also for an agent that picks up an answer when it is on the path. Once you have written, both lines keep their
-room, blank until there is something to say, so the tabs below hold their
-place from the first message. While a question waits on you
-that line counts what you are asked as its card does: "sales asks you 7
-questions" for a numbered form, "to decide", "for a permission"
-(`Progress.asking`), with "again" when you already answered that asker on that work, and "· round N" once a work is sent back; a team working with no event for ten minutes says so.
-A finished conversation says "✓ DONE · TOOK 1 HOUR 20 MINUTES" in the success
-tone in the strip's top line, and the second line stays blank. The two lines are hidden
-while no work exists and no agent runs.
+and the masthead does not already say it. Once you have written, the line
+keeps its room, blank until there is something to say, so the tabs below hold
+their place from the first message. A finished conversation says "✓ DONE ·
+TOOK 1 HOUR 20 MINUTES" in the success tone in the strip's top line. The line
+is hidden while no work exists and no agent runs.
 
 The chevron and Alt+P open the full view, on the chat
 (`ProgressSheet`, holding a `ProgressTree`): what waits on you with ANSWER,

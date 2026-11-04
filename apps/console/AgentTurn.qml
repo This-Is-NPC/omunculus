@@ -4,15 +4,17 @@ import QtQuick.Layouts
 import "kit/client/Progress.js" as Progress
 import "kit/ui"
 
-// AgentTurn is one run of an agent in the conversation, said like a line of
-// chat: on the left, under a heading of the agent's tone dot, its name, the
-// time and how long it has worked ("Working 0:12" while the run is open,
-// "Worked 1 minute" after), its words drawn as they stream in a box tinted with
-// its colour, the files it attached, and the group of its tool calls
-// (ToolCalls). Until the agent says or does anything the turn is not drawn.
-// A turn that continues the same agent's and says something drops its heading. Once it has
-// said something, the "more" button beside the words, in a gutter they never
-// take, copies them or shows the run's work in the log.
+// AgentTurn is one run of an agent in the conversation. One that speaks is a
+// line of chat: on the left, under a heading of the agent's tone dot, its
+// name, the time and how long it has worked ("Working 0:12" while the run is
+// open, "Worked 1 minute" after), its words drawn as they stream in a bubble
+// tinted with its colour, the files it attached, and under them the group of
+// its tool calls (ToolCalls), the log's rows. One that only acted is those
+// rows alone, its agent, how long and when on their line, with no heading.
+// Until the agent says or does anything the turn is not drawn. A turn that
+// continues the same agent's drops its heading. Once it has said something,
+// the "more" button beside the words, in a gutter they never take, copies
+// them or shows the run's work in the log.
 Item {
   id: turn
 
@@ -52,15 +54,16 @@ Item {
   // About 70 characters at most per line, the gutter kept for the menu.
   readonly property real widest: Math.min(620, turn.width < Theme.size.measureFrom ? turn.width - Theme.size.gutter : Math.min(turn.width * Theme.size.measure, turn.width - Theme.size.gutter))
   readonly property real inset: Theme.size.bubbleInset
-  // Steps alone never stand under no name.
-  readonly property bool headed: !continued || said === ""
+  // Words or files head with the agent; steps alone name it on their line.
+  readonly property bool speaks: said !== "" || attached.length > 0
+  readonly property bool headed: speaks && !continued
 
   visible: !empty
   implicitHeight: empty ? 0 : body.y + body.height + Theme.space.row
 
   Column {
     id: body
-    y: turn.headed ? Theme.space.inset : Theme.space.row
+    y: turn.headed ? Theme.space.inset : turn.speaks ? Theme.space.row : Theme.space.line
     width: turn.widest
     spacing: Theme.space.line
 
@@ -106,7 +109,7 @@ Item {
       visible: turn.said !== ""
       width: Math.min(turn.widest, line.implicitWidth + 2 * turn.inset)
       height: line.implicitHeight + Theme.space.inset
-      color: Qt.tint(Theme.background, Qt.alpha(turn.tone, 0.1))
+      color: Theme.bubble(turn.tone)
       Prose {
         id: line
         anchors.verticalCenter: parent.verticalCenter
@@ -138,9 +141,13 @@ Item {
     }
 
     ToolCalls {
-      width: turn.widest
+      // Under words, the rows keep the bubble's measure; alone, the thread's width.
+      width: turn.speaks ? turn.widest : turn.width
       steps: turn.lines
       live: turn.streaming
+      who: turn.speaks ? "" : turn.who
+      worked: turn.speaks ? "" : turn.worked.toLowerCase()
+      stamp: turn.speaks ? "" : turn.stamp
     }
   }
 

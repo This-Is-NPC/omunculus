@@ -4,9 +4,10 @@ import QtQuick.Layouts
 import "kit/client/Requests.js" as Requests
 import "kit/ui"
 
-// TeamRow is an exchange between agents, where it was asked: who asked whom
-// and who decides, each agent named in its tone, the question in its first
-// three lines, and once answered who answered and what. It is open while it waits, and then DECIDE INSTEAD
+// TeamRow is an exchange between agents, where it was asked: a system row of
+// who asked whom and who decides, each agent named in its tone, the people
+// mark in the rows' mark column; under it, quoted in an outlined frame, the
+// question in its first three lines, and once answered who answered and what. It is open while it waits, and then DECIDE INSTEAD
 // opens the request's card in place, so you can answer it yourself, and its
 // close folds it back; choosing its line folds and unfolds the rest of the
 // question and the answer.
@@ -56,7 +57,11 @@ Item {
       RowLayout {
         anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
         spacing: Theme.space.tight
-        Icon { name: "people"; size: 11; color: Theme.dim }
+        Item {
+          Layout.preferredWidth: Theme.size.mark - Theme.space.tight
+          Layout.preferredHeight: Theme.type.log.size
+          Icon { anchors.verticalCenter: parent.verticalCenter; name: "people"; size: Theme.type.log.size; color: Theme.dim }
+        }
         // Each agent named in its tone, the words between them dim.
         RowLayout {
           Layout.fillWidth: true
@@ -71,7 +76,7 @@ Item {
               Layout.minimumWidth: 0
               text: modelData.text
               color: modelData.agent ? Omunculus.toneOf(modelData.agent) : pointer.containsMouse ? Theme.foreground : Theme.dim
-              font.pixelSize: 11
+              font.pixelSize: Theme.type.log.size
               elide: Text.ElideRight
             }
           }
@@ -89,56 +94,64 @@ Item {
       FocusRing { anchors.margins: -2 }
     }
 
-    ColumnLayout {
+    SurfaceFrame {
       Layout.fillWidth: true
-      Layout.leftMargin: Theme.space.block + Theme.space.line
+      Layout.leftMargin: Theme.size.mark
       Layout.maximumWidth: 620
-      spacing: Theme.space.tight
+      visible: row.question !== "" || (row.open && row.reply !== null)
+      implicitHeight: quoted.implicitHeight + Theme.space.insetTop + Theme.space.inset
+      variant: "outline"
 
-      // Folded, the first three lines of the question; open, all of it.
-      Label {
-        Layout.fillWidth: true
-        visible: !row.open && row.question !== ""
-        text: Omunculus.inline(row.question)
-        color: Theme.dim
-        font.pixelSize: 11
-        wrapMode: Text.Wrap
-        maximumLineCount: 3
-        elide: Text.ElideRight
-      }
-      Prose {
-        Layout.fillWidth: true
-        visible: row.open && row.question !== ""
-        source: Omunculus.inline(row.question)
-        color: Theme.dim
-        font.pixelSize: 11
-        wrapMode: Text.Wrap
-      }
+      ColumnLayout {
+        id: quoted
+        anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: Theme.space.insetTop; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset }
+        spacing: Theme.space.tight
 
-      Label {
-        Layout.fillWidth: true
-        visible: row.open && row.reply !== null
-        text: "answered by " + (row.reply ? row.reply.who : "") + ":"
-        color: Theme.dim
-        font.pixelSize: 11
-        elide: Text.ElideRight
-      }
-      Prose {
-        Layout.fillWidth: true
-        visible: row.open && row.answer !== ""
-        source: Omunculus.inline(row.answer)
-        color: Theme.foreground
-        font.pixelSize: 11
-        wrapMode: Text.Wrap
-      }
+        // Folded, the first three lines of the question; open, all of it.
+        Label {
+          Layout.fillWidth: true
+          visible: !row.open && row.question !== ""
+          text: Omunculus.inline(row.question)
+          color: Theme.foreground
+          font.pixelSize: Theme.type.body.size
+          wrapMode: Text.Wrap
+          maximumLineCount: 3
+          elide: Text.ElideRight
+        }
+        Prose {
+          Layout.fillWidth: true
+          visible: row.open && row.question !== ""
+          source: Omunculus.inline(row.question)
+          color: Theme.foreground
+          font.pixelSize: Theme.type.body.size
+          wrapMode: Text.Wrap
+        }
 
-      TraceButton {
-        visible: row.open && row.pending && !row.deciding
-        dense: true
-        role: "progress"
-        text: "DECIDE INSTEAD"
-        tip: "answer it yourself, in place of " + row.to
-        onClicked: row.deciding = true
+        Label {
+          Layout.fillWidth: true
+          visible: row.open && row.reply !== null
+          text: "answered by " + (row.reply ? row.reply.who : "") + ":"
+          color: Theme.dim
+          font.pixelSize: Theme.type.log.size
+          elide: Text.ElideRight
+        }
+        Prose {
+          Layout.fillWidth: true
+          visible: row.open && row.answer !== ""
+          source: Omunculus.inline(row.answer)
+          color: Theme.foreground
+          font.pixelSize: Theme.type.body.size
+          wrapMode: Text.Wrap
+        }
+
+        TraceButton {
+          visible: row.open && row.pending && !row.deciding
+          dense: true
+          role: "progress"
+          text: "DECIDE INSTEAD"
+          tip: "answer it yourself, in place of " + row.to
+          onClicked: row.deciding = true
+        }
       }
     }
 

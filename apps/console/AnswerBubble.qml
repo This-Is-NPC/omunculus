@@ -80,16 +80,16 @@ Item {
       Row {
         id: line
         visible: !bubble.open
-        x: Theme.space.block
+        x: Theme.size.mark
         width: parent.width - x
         readonly property color ink: pointer.containsMouse ? Theme.foreground : Theme.dim
-        Label { id: who; text: bubble.asker; color: Omunculus.toneOf(bubble.asker); font.pixelSize: 11 }
-        Label { id: by; text: bubble.lead; color: line.ink; font.pixelSize: 11 }
+        Label { id: who; text: bubble.asker; color: Omunculus.toneOf(bubble.asker); font.pixelSize: Theme.type.log.size }
+        Label { id: by; text: bubble.lead; color: line.ink; font.pixelSize: Theme.type.log.size }
         Label {
           width: Math.max(0, line.width - by.width - who.width)
           text: bubble.unlock !== "" ? "" : ": " + bubble.first
           color: line.ink
-          font.pixelSize: 11
+          font.pixelSize: Theme.type.log.size
           maximumLineCount: 1
           elide: Text.ElideRight
         }
@@ -136,7 +136,7 @@ Item {
       x: bubble.width - width
       width: Math.min(bubble.widest, said.contentWidth + 2 * Theme.size.bubbleInset)
       height: said.implicitHeight + Theme.space.inset
-      color: Theme.highlight
+      color: Theme.bubble()
       Prose {
         id: said
         anchors.verticalCenter: parent.verticalCenter
