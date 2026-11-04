@@ -86,10 +86,15 @@ SurfaceFrame {
 
   onStateChanged: if (state === "failed") focusWords()
 
+  // An answer or an escalation went out; `keyboard` says whether the
+  // keyboard was in the card.
+  signal sent(bool keyboard)
+
   // Chooses an option, with the words as its body: the request's own or, by
   // the parts of path, that of a decision it gathers.
   function decide(option, body, path) {
     sentText = body !== "" ? body : labelOf(option)
+    sent(Focus.within(Window.activeFocusItem, card))
     Omunculus.reply(key, option, body, path)
   }
 
@@ -99,6 +104,7 @@ SurfaceFrame {
     if (body === "")
       return
     sentText = body
+    sent(Focus.within(Window.activeFocusItem, card))
     Omunculus.reply(key, "", body)
   }
 
@@ -113,6 +119,7 @@ SurfaceFrame {
     if (reason === "" || !yours)
       return
     sentText = reason
+    sent(Focus.within(Window.activeFocusItem, card))
     Omunculus.escalate(key, reason)
   }
 
@@ -239,8 +246,8 @@ SurfaceFrame {
       wrapMode: Text.Wrap
     }
 
-    // Your answer, or what the agent above chose, as a bubble: dim while it
-    // goes.
+    // Your answer, or what the agent above chose, as a bubble on the right with
+    // its text left aligned: dim while it goes.
     ColumnLayout {
       Layout.fillWidth: true
       visible: card.busy || card.settled
@@ -259,6 +266,7 @@ SurfaceFrame {
           text: card.busy ? card.sentText : !card.answer ? "" : (card.answer.option ? card.labelOf(card.answer.option) : "") + (card.answer.option && card.answer.body && card.answer.body !== card.answer.option ? ": " : "") + (card.answer.body && card.answer.body !== card.answer.option ? card.answer.body : "")
           color: card.busy ? card.dim : Theme.foreground
           font.pixelSize: 12
+          horizontalAlignment: Text.AlignLeft
           wrapMode: Text.Wrap
         }
       }
