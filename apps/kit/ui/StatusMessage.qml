@@ -13,7 +13,7 @@ Rectangle {
   border.color: variant === "toast" ? Qt.alpha(tone, 0.5) : Theme.line
 
   HoverHandler { id: hover }
-  Hint { visible: hover.hovered && status.width < 160; text: status.message }
+  Hint { active: hover.hovered && status.width < 160; text: status.message }
 
   Row {
     visible: status.variant === "compact"

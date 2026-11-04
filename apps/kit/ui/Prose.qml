@@ -97,7 +97,7 @@ Label {
   FocusRing { anchors.margins: -4 }
 
   Hint {
-    visible: prose.pointed !== ""
+    active: prose.pointed !== ""
     delay: prose.hoveredLink !== "" ? 300 : 0
     text: prose.pointed + (prose.hoveredLink === "" ? "\nenter opens it" + (prose.links.length > 1 ? "  ·  ←→ " + (prose.chosen + 1) + " of " + prose.links.length : "") : "")
   }

@@ -60,5 +60,5 @@ Rectangle {
   }
 
   MouseArea { id: pointer; anchors.fill: parent; hoverEnabled: true }
-  Hint { visible: pointer.containsMouse; text: chip.tipText }
+  Hint { active: pointer.containsMouse; text: chip.tipText }
 }

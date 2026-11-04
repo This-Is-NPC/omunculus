@@ -36,5 +36,5 @@ Rectangle {
   }
 
   MouseArea { id: pointer; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
-  Hint { visible: pointer.containsMouse; text: card.skill.description }
+  Hint { active: pointer.containsMouse; text: card.skill.description }
 }

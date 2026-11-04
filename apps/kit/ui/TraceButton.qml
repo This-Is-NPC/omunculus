@@ -16,7 +16,6 @@ Rectangle {
   property bool armed: false
   property bool filled: false
   property bool busy: false
-  property bool allowClickWhileBusy: false
   property color tone: role === "guarded" ? Theme.error : Theme.primary
   readonly property bool primary: role === "primary"
   readonly property bool running: busy
@@ -43,12 +42,14 @@ Rectangle {
 
   Keys.onReturnPressed: press()
   Keys.onSpacePressed: press()
+  Keys.onEscapePressed: event => { event.accepted = hint.visible; hint.dismiss() }
 
   onArmedChanged: if (armed) guardNudge.restart()
 
   function press() {
-    if (!enabled || (running && !allowClickWhileBusy))
+    if (!enabled || running)
       return
+    hint.dismiss()
     if (role === "navigation") {
       if (depart.running)
         return
@@ -56,8 +57,6 @@ Rectangle {
     }
     clicked()
   }
-
-  function restartTrace() { trace.restart() }
 
   SequentialAnimation {
     id: depart
@@ -124,10 +123,11 @@ Rectangle {
     anchors { fill: parent; margins: -4 }
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
+    onPressed: hint.dismiss()
     onClicked: button.press()
   }
 
   GuardNudge { id: guardNudge; targetObject: contentShift }
   FocusRing { border.color: button.armed ? Theme.background : Theme.primary }
-  Hint { visible: (button.hovered || button.activeFocus) && button.tip.length > 0; text: button.tip }
+  Hint { id: hint; active: button.hovered || button.activeFocus; text: button.tip }
 }

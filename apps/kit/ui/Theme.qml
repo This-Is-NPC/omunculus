@@ -16,6 +16,8 @@ Singleton {
     cyan: "#8fae9a", muted: "#494543", green: "#86d27a",
     yellow: "#ffb347", red: "#ff5544", magenta: "#c4a7e7"
   })
+  // The hint on screen, so that only one shows at a time.
+  property var shownHint: null
   property string mode: "dark"
   property var palette: ({})
   property color background: fallback.background

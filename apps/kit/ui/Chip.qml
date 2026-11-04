@@ -88,7 +88,7 @@ Rectangle {
   FocusRing {}
 
   Hint {
-    visible: (mouse.containsMouse || chip.activeFocus) && text.length > 0
+    active: (mouse.containsMouse || chip.activeFocus) && text.length > 0
     text: chip.reason || chip.tip
   }
 }

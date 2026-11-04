@@ -25,7 +25,8 @@ Rectangle {
   Behavior on border.color { ColorAnimation { duration: 150 } }
   Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
 
-  function press() { if (enabled) { tap.restart(); clicked() } }
+  function press() { if (enabled) { hint.dismiss(); tap.restart(); clicked() } }
+  Keys.onEscapePressed: event => { event.accepted = hint.visible; hint.dismiss() }
   Keys.onReturnPressed: press()
   Keys.onSpacePressed: press()
 
@@ -73,8 +74,9 @@ Rectangle {
     anchors { fill: parent; margins: -4 }
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
+    onPressed: hint.dismiss()
     onClicked: button.press()
   }
   FocusRing {}
-  Hint { visible: (pointer.containsMouse || button.activeFocus) && button.tip.length > 0; text: button.tip }
+  Hint { id: hint; active: pointer.containsMouse || button.activeFocus; text: button.tip }
 }
