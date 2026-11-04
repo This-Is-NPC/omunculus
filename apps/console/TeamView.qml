@@ -9,9 +9,11 @@ import "kit/ui"
 // time, under a breadcrumb once it has gone down into a work, and the work
 // picked in full (NodeDetail). At the conversation's level the agent that
 // talks with the person is the head of the team ("sales · talks with you ·
-// 2 agents", with what it asks), the works nested under it. A level
-// is a work's own row, then the works it handed down, a row each, under a
-// rule for the stage that handed them down ("STAGE DESIGN · 2 IN PARALLEL");
+// 2 agents", with what it asks), the works nested under it, a block in per
+// level. A level is a work's own row, then the works it handed down, a row
+// each, under a rule (at the rows' indent) for the stage that handed them
+// down ("STAGE DESIGN · 2 IN PARALLEL"); a work at work, on the way to it or
+// with a question for you below shows its open works under it, a level in;
 // those done or cancelled fold into one rule per stage, "✓ 2 sub-works done ·
 // 18 min", unless a question waiting on you climbed from there. A row's tool
 // goes down to the works below it; the conversation's level is its root
@@ -108,7 +110,14 @@ FocusScope {
     const list = []
     // A filter shows every row it keeps.
     const isFolded = (key, unless) => kept !== null ? false : opened[key] !== undefined ? !opened[key] : unless
-    const workRow = (node, self) => ({ kind: "work", key: node.work, node: node, drills: !self && Progress.kidsOf(node).length > 0 })
+    const head = front !== null ? 1 : 0
+    const workRow = (node, self, depth) => ({ kind: "work", key: node.work, node: node, depth: depth, drills: !self && Progress.kidsOf(node).length > 0 })
+    // A work, then the open works under it that are at work or on the way to
+    // it, each one level deeper.
+    const place = (node, depth) => {
+      list.push(workRow(node, false, depth))
+      Progress.opened(node, progress.path).filter(keeps).forEach(kid => place(kid, depth + 1))
+    }
     const node = byWork[here] || null
     if (front !== null)
       list.push({ kind: "front", key: "front", front: front })
@@ -116,16 +125,16 @@ FocusScope {
       const open = roots.filter(each => !closed(each))
       const earlier = open.length > 0 ? roots.filter(closed).filter(keeps) : []
       for (const root of (open.length > 0 ? open : roots).filter(keeps))
-        list.push(workRow(root, false))
+        place(root, head)
       if (earlier.length > 0) {
         const folded = isFolded("earlier", true)
-        list.push({ kind: "done", key: "earlier", folded: folded, text: earlier.length + " done earlier" })
+        list.push({ kind: "done", key: "earlier", depth: head, folded: folded, text: earlier.length + " done earlier" })
         if (!folded)
-          earlier.forEach(root => list.push(workRow(root, false)))
+          earlier.forEach(root => list.push(workRow(root, false, head)))
       }
       return list
     }
-    list.push(workRow(node, true))
+    list.push(workRow(node, true, head))
     node.groups.forEach((group, at) => {
       const shown = group.nodes.filter(keeps)
       if (shown.length === 0)
@@ -134,14 +143,14 @@ FocusScope {
       const finished = shown.filter(closed)
       const title = [group.step ? "stage " + group.step : "", group.parallel && going.length > 1 ? Progress.together(group) : ""]
         .filter(part => part).join(" · ")
-      list.push({ kind: "rule", key: "rule:" + at, text: title || "sub-works" })
-      going.forEach(kid => list.push(workRow(kid, false)))
+      list.push({ kind: "rule", key: "rule:" + at, depth: head + 1, text: title || "sub-works" })
+      going.forEach(kid => place(kid, head + 1))
       if (finished.length > 0) {
         const key = doneKey(node, at)
         const folded = isFolded(key, !finished.some(kid => kid.below !== ""))
-        list.push({ kind: "done", key: key, folded: folded, text: Progress.finished(finished) })
+        list.push({ kind: "done", key: key, depth: head + 1, folded: folded, text: Progress.finished(finished) })
         if (!folded)
-          finished.forEach(kid => list.push(workRow(kid, false)))
+          finished.forEach(kid => list.push(workRow(kid, false, head + 1)))
       }
     })
     return list
@@ -348,7 +357,7 @@ FocusScope {
         visible: !team.mapShown
         Chip { text: "NEEDS YOU " + team.needsYou; checked: team.chip === "needs-you"; alert: team.needsYou > 0; accent: Theme.warning; onClicked: team.chip = checked ? "all" : "needs-you" }
         Chip { text: "WORKING " + team.working; checked: team.chip === "working"; onClicked: team.chip = checked ? "all" : "working" }
-        Chip { text: "ALL " + team.flat.length; checked: team.chip === "all"; onClicked: team.chip = "all" }
+        Chip { text: "ALL " + team.flat.length + (team.flat.length === 1 ? " WORK" : " WORKS"); checked: team.chip === "all"; onClicked: team.chip = "all" }
       }
 
       Breadcrumb {
@@ -381,6 +390,8 @@ FocusScope {
           required property var modelData
           required property int index
           readonly property bool focused: outline.activeFocus && outline.currentIndex === index
+          // A level in, what it groups sits one block further.
+          readonly property real indent: (modelData.depth || 0) * Theme.space.block
 
           width: outline.width
           height: modelData.kind === "work" ? (node.item ? node.item.implicitHeight : 0)
@@ -389,7 +400,9 @@ FocusScope {
           // A stage, a parallel group.
           Kicker {
             visible: line.modelData.kind === "rule"
-            anchors.fill: parent
+            x: line.indent
+            width: parent.width - x
+            height: parent.height
             text: line.modelData.text || ""
           }
 
@@ -399,7 +412,7 @@ FocusScope {
             visible: line.modelData.kind === "done"
             anchors.fill: parent
             RowLayout {
-              anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: Theme.space.line }
+              anchors { left: parent.left; leftMargin: line.indent; right: parent.right; bottom: parent.bottom; bottomMargin: Theme.space.line }
               spacing: Theme.space.gap
               Label {
                 text: "✓"
@@ -463,7 +476,7 @@ FocusScope {
           Loader {
             id: node
             active: line.modelData.kind === "work"
-            x: team.front !== null ? Theme.space.block : 0
+            x: line.indent
             width: parent.width - x
             sourceComponent: ProgressNode {
               node: line.modelData.node

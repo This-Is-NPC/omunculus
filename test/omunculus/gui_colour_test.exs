@@ -31,6 +31,21 @@ defmodule Omunculus.GuiColourTest do
     assert {"", 0} = Omunculus.GuiModules.run(["Colour"], script)
   end
 
+  test "hue, hueApart and spread order colours by how different their hues are" do
+    script = """
+    const near = (a, b) => Math.abs(a - b) < 0.01;
+    if (!near(Colour.hue("#ff0000"), 0) || !near(Colour.hue("#00ff00"), 1 / 3) || !near(Colour.hue("#0000ff"), 2 / 3)) throw Error("primaries");
+    if (Colour.hue("#808080") !== -1) throw Error("grey has no hue");
+    if (!near(Colour.hueApart(0.95, 0.05), 0.1)) throw Error("wraps around");
+    if (Colour.hueApart(-1, 0.5) !== 0) throw Error("grey is no apart");
+    // red, a near red, green, blue: the near red comes last.
+    const order = Colour.spread(["#ff0000", "#ff2a00", "#00ff00", "#0000ff"]);
+    if (order[0] !== "#ff0000" || order[3] !== "#ff2a00" || order.length !== 4) throw Error("spread " + order);
+    """
+
+    assert {"", 0} = Omunculus.GuiModules.run(["Colour"], script)
+  end
+
   test "dim and foreground reach 4.5:1 on every surface the thread uses" do
     themes = [
       fallback(),

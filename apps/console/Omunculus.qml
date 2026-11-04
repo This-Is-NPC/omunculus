@@ -181,8 +181,11 @@ Singleton {
   // The works an agent runs on now, each as "project/work id".
   readonly property var boardBusy: [].concat(...Object.keys(boardRuns).map(id => Object.values(boardRuns[id]).map(work => id + "/" + work)))
 
-  // Agent name -> its colour, in the order agents first appear.
+  // Agent name -> its colour, in the order agents first appear in the
+  // conversation on screen; the board's agents have their own, in the order
+  // the window meets them.
   property var tones: ({})
+  property var boardTones: ({})
 
   readonly property var running: runs.filter(run => run.status === "open")
   readonly property var waiting: requests.filter(request => Requests.pending(request) && Requests.human(request.arbiter))
@@ -322,7 +325,7 @@ Singleton {
     http.call(place.socket, "GET", "/v1/projects/" + place.id + "/works", null, false, data => {
       const works = data.items.map(work => Object.assign({ project: place.id }, work))
       keep("boardWorks", place.id, works)
-      meet(works.map(work => agentOf(work)))
+      meet(works.map(work => agentOf(work)), true)
     }, () => {})
   }
 
@@ -513,7 +516,6 @@ Singleton {
       const unsettled = Object.keys(sending).filter(key => requests.some(request => request.id === key && Requests.pending(request)))
       if (unsettled.length !== Object.keys(sending).length)
         sending = Object.fromEntries(unsettled.map(key => [key, sending[key]]))
-      meet(works.map(work => work.assignee))
       const next = Object.assign({}, summaries)
       next[id] = Projects.summary(data)
       summaries = next
@@ -667,18 +669,24 @@ Singleton {
   }
 
   function toneOf(name) {
-    return name === "you" ? Theme.primary : tones[name] || Theme.dim
+    return name === "you" ? Theme.primary : tones[name] || boardTones[name] || Theme.dim
   }
 
-  // Gives each agent its colour the first time the window meets it.
-  function meet(names) {
-    const fresh = names.filter(name => name && name !== "you" && name !== "harness" && tones[name] === undefined)
+  // Gives each agent its colour the first time it appears: in the
+  // conversation on screen, or, with `board`, on the board. A conversation's
+  // colours stay while it is open.
+  function meet(names, board) {
+    const known = board ? boardTones : tones
+    const fresh = Array.from(new Set(names.filter(name => name && name !== "you" && name !== "harness" && known[name] === undefined)))
     if (fresh.length === 0)
       return
-    const next = Object.assign({}, tones)
+    const next = Object.assign({}, known)
     for (const name of fresh)
       next[name] = Theme.agentPalette[Object.keys(next).length % Theme.agentPalette.length]
-    tones = next
+    if (board)
+      boardTones = next
+    else
+      tones = next
   }
 
   // Streamed Markdown with its open marks closed — a fence, bold, inline

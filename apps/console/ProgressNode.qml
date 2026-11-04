@@ -58,6 +58,16 @@ FocusScope {
   readonly property var steps: node.steps
   readonly property var asks: node.asks
   readonly property var asked: node.asked
+  // The works working below a work that waits on them: it reads as them at
+  // work, not as blocked.
+  readonly property var underway: node.state === "waiting" ? Progress.underway(node) : []
+  readonly property bool busy: underway.length > 0
+  readonly property string shownState: busy ? "working" : node.state
+  readonly property string asWords: busy
+    ? Array.from(new Set(underway.map(each => each.agent))).join(", ") + " working"
+    : node.state === "waiting" ? node.doing : ""
+  // The state's words, the state's own when who works does not fit its room.
+  readonly property string saying: asWords !== "" && markFont.advanceWidth(asWords) <= rowBody.width * 0.55 - Theme.space.cell - Theme.space.line ? asWords : ""
   readonly property string clock: node.state === "working" && node.since !== null
     ? Progress.clock(Math.max(0, Math.round(now - node.since))) : ""
 
@@ -83,10 +93,11 @@ FocusScope {
     return usage.priced > 0 ? Omunculus.money(usage.cost) : Omunculus.tokens(usage.input) + " read" + Theme.type.meta.separator + Omunculus.tokens(usage.output) + " written"
   }
 
-  // Full: the branch's time, steps (tool calls) and cost, and what is below it.
-  readonly property string totals: {
+  // Full: the branch's time, steps (tool calls) and cost, and what is below
+  // it, as parts that give way whole, last first.
+  readonly property var totals: {
     if (!full)
-      return ""
+      return []
     const branch = node.branch
     const below = Progress.below(Progress.kidsOf(node))
     const parts = below !== "" ? [below] : []
@@ -96,7 +107,7 @@ FocusScope {
     const money = spent(branch.usage)
     if (money !== "")
       parts.push(money)
-    return parts.join(Theme.type.meta.separator)
+    return parts
   }
 
   // Incoming requests, one badge per agent asking.
@@ -112,6 +123,8 @@ FocusScope {
     const at = steps.findIndex(step => step.status === "current")
     return lane && at >= 0 ? lane.name + " · stage " + (at + 1) + " of " + steps.length + ": " + steps[at].name : ""
   }
+
+  FontMetrics { id: markFont; font: stateMark.font }
 
   implicitWidth: 240
   implicitHeight: full ? rowBody.implicitHeight + Theme.space.cell * 2
@@ -168,9 +181,12 @@ FocusScope {
       }
       // The state, at the top right.
       StateMark {
+        id: stateMark
         Layout.alignment: Qt.AlignTop
-        Layout.maximumWidth: rowBody.width * 0.45
-        state: row.node.state
+        Layout.fillWidth: false
+        Layout.maximumWidth: rowBody.width * 0.55
+        state: row.shownState
+        text: row.saying
         clock: row.clock
       }
     }
@@ -224,20 +240,33 @@ FocusScope {
       Label {
         id: stage
         visible: row.steps.length > 0 && meta.tight
-        Layout.preferredWidth: Math.max(0, meta.stagesWidth - track.Layout.preferredWidth - track.Layout.rightMargin)
-        text: row.node.at >= 0 ? (row.node.at + 1) + "/" + row.node.count + " " + row.steps[row.node.at].name
-          + (row.node.round > 0 ? " r" + row.node.round : "") : ""
+        // The stage's name gives way whole, leaving its place: "2/4".
+        text: {
+          if (row.node.at < 0)
+            return ""
+          const place = (row.node.at + 1) + "/" + row.node.count
+          const full = place + " " + row.steps[row.node.at].name + (row.node.round > 0 ? " r" + row.node.round : "")
+          return metrics.advanceWidth(full) <= meta.stagesRoom - track.Layout.preferredWidth - track.Layout.rightMargin ? full : place
+        }
         color: Theme.primary
         font.pixelSize: Theme.type.meta.size
-        elide: Text.ElideRight
       }
       Label {
-        Layout.preferredWidth: Math.max(0, Math.min(implicitWidth, meta.stagesRoom - meta.stagesWidth))
-        text: Theme.type.meta.separator + row.totals
+        id: totalsLabel
+        readonly property real room: Math.max(0, meta.stagesRoom - meta.stagesWidth)
+        // The longest run of the parts, from the first, that fits.
+        text: {
+          for (let count = row.totals.length; count > 0; count--) {
+            const shown = Theme.type.meta.separator + row.totals.slice(0, count).join(Theme.type.meta.separator)
+            if (metrics.advanceWidth(shown) <= room)
+              return shown
+          }
+          return ""
+        }
         color: Theme.dim
         font.pixelSize: Theme.type.meta.size
-        elide: Text.ElideRight
       }
+      FontMetrics { id: metrics; font: totalsLabel.font }
       Item { Layout.fillWidth: true }
     }
 
