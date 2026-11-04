@@ -182,12 +182,14 @@ menu holds ESCALATE, which makes the words the reason it goes up.
 
 ### 7. Team
 
-The works of the conversation a level at a time, under a breadcrumb: a
-work's own row, then the works it handed down under a rule for the stage
+The works of the conversation a level at a time, under a breadcrumb once
+you have gone down into a work. At the conversation's level the agent that
+talks with you heads the team, with what it asks you, and the works nest
+under it. A work's own row, then the works it handed down under a rule for the stage
 that handed them down ("STAGE DESIGN · 2 IN PARALLEL"), those done folded
 into one rule. A row is the work's title and state, its agent, stages and
-branch's time, calls and cost, and a badge for what it waits on (⇡) and
-what it is asked (⇣); its tool goes down a level. Chips keep the works that
+branch's time, steps and cost, and a badge for the climb of what it waits on
+(⇡ seller › sales › you) and what it is asked (⇣); its tool goes down a level. Chips keep the works that
 need you or work. The work picked shows in full under a header strip with
 ANSWER or OPEN THREAD, in the tabs OVERVIEW, THREAD, REQUESTS, CHANGES, RUNS
 and LOG: beside the outline from 1100 px, as a page over it narrower. From
@@ -219,15 +221,17 @@ Every event of the conversation, a row each, which opens whole.
 | / | filter the events |
 | Esc | empty the filter, then back to the rows |
 
-Each row is what the event says over when, what kind, who and on which
-work. Chips keep the events that ask you or failed, and pickers one agent's
-or one level's; a rule names each day and each run. Opened from a work of
+Each row is one line: when, its kind, what the event says, who. Chips keep
+the events that need you or failed, a picker one agent's, and BEHIND THE
+SCENES brings back the plumbing (run starts and ends, hooks), dimmed; a rule
+names each day and each run. Opened from a work of
 the team, it is kept to that work.
 
 ### 9. Cost
 
 What the conversation used: model calls, tokens and cost in all in a
-header strip, then a row per agent. It has no keys of its own.
+header strip, then a row per agent; with no price from the provider, no cost
+column, only a note. It has no keys of its own.
 
 ### 10. Board
 

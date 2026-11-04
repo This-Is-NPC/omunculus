@@ -317,20 +317,33 @@ ColumnLayout {
       y: -form.lift
       width: dock.width - (form.narrow || !hint.visible ? 0 : hint.width + Theme.space.gap)
       spacing: Theme.space.tight
+      // The main action: it stays readable while it waits for an answer.
       TraceButton {
         dense: true
-        role: "progress"
+        role: "primary"
         icon: "enter"
         text: "SEND"
         tip: "send your answers  Ctrl+Enter"
         busy: form.sending
         reason: form.sending ? "" : form.ready ? "" : "answer at least one question first"
         enabled: !form.sending
+        opacity: form.ready || form.sending ? 1 : 0.75
         onClicked: form.send()
       }
+      Label {
+        visible: !form.ready && !form.sending
+        height: Theme.size.controlDense
+        verticalAlignment: Text.AlignVCenter
+        text: "answer at least one to send"
+        color: Theme.dim
+        font.pixelSize: Theme.type.tab.size
+      }
+      // Giving up is quiet; it takes the accent only under the pointer.
       TraceButton {
+        id: decline
         dense: true
-        role: "progress"
+        role: "action"
+        tone: decline.hovered ? Theme.primary : Theme.dim
         text: "I CAN'T ANSWER THIS"
         tip: "tell the team you can't answer, so they sort it out"
         enabled: !form.sending

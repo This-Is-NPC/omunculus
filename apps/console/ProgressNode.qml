@@ -10,16 +10,17 @@ import "kit/client/Progress.js" as Progress
 // "compact", in the chat's progress: an open work (working, needs you,
 // waiting, stopped, failed) is a framed card — its agent and state, its
 // title, its stages, what it calls or does, a send-back with its reason, the
-// questions it asked and its tool calls; a done, cancelled or coming work is
+// questions it asked and its steps; a done, cancelled or coming work is
 // one line. Picked, it shows its details instead of the questions' first
 // lines: its agent's last words, its questions in full and the ways to its
 // thread, log and map.
 //
 // "full", a row of the TEAM page, as a table row: its title with its state at
 // the top right, a meta line of its agent, its stages (a track on a narrow
-// window), its branch's time, calls and cost and what is below it, and a
-// badge for each request between it and others — "⇡ waiting for you" is the
-// one to answer — and for a work below it that needs you. A row with works
+// window), its branch's time, steps and cost and what is below it, and a
+// badge for each request between it and others — its climb, "⇡ seller ›
+// sales › you"; the one to you in the warning tone — and for a work below it
+// that needs you. A row with works
 // below it has a tool at its right that goes down to them.
 FocusScope {
   id: row
@@ -74,14 +75,15 @@ FocusScope {
     return found
   }
 
-  // A tally's money when the provider priced it, else its tokens.
+  // A tally's money when the provider priced it, else its tokens, worded as
+  // the cost page does.
   function spent(usage) {
     if (usage.calls === 0)
       return ""
-    return usage.priced > 0 ? Omunculus.money(usage.cost) : Omunculus.tokens(usage.input + usage.output) + " tokens"
+    return usage.priced > 0 ? Omunculus.money(usage.cost) : Omunculus.tokens(usage.input) + " read" + Theme.type.meta.separator + Omunculus.tokens(usage.output) + " written"
   }
 
-  // Full: the branch's time, calls and cost, and what is below it.
+  // Full: the branch's time, steps (tool calls) and cost, and what is below it.
   readonly property string totals: {
     if (!full)
       return ""
@@ -90,7 +92,7 @@ FocusScope {
     const parts = below !== "" ? [below] : []
     parts.push(node.finishedIn !== null ? "took " + Progress.span(node.finishedIn) : Progress.span(branch.seconds))
     if (branch.calls > 0)
-      parts.push(branch.calls + (branch.calls === 1 ? " call" : " calls"))
+      parts.push(branch.calls + (branch.calls === 1 ? " step" : " steps"))
     const money = spent(branch.usage)
     if (money !== "")
       parts.push(money)
@@ -248,9 +250,9 @@ FocusScope {
         model: row.full ? row.asks : []
         delegate: Chip {
           required property var modelData
-          text: "⇡ waiting for " + (modelData.human ? "you" : modelData.to)
+          text: "⇡ " + modelData.chain.join(" › ")
           accent: modelData.human ? Theme.warning : Theme.primary
-          checked: modelData.human
+          alert: modelData.human
           tip: modelData.question.split("\n")[0]
           onClicked: row.requestPicked(modelData.id)
         }
@@ -459,7 +461,7 @@ FocusScope {
       visible: row.node.calls > 0
       spacing: 0
       Label {
-        text: row.node.calls + (row.node.calls === 1 ? " tool call" : " tool calls")
+        text: row.node.calls + (row.node.calls === 1 ? " step" : " steps")
         color: Theme.dim
         font.pixelSize: Theme.type.tab.size
       }

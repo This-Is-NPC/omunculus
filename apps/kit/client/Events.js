@@ -1,6 +1,7 @@
 .pragma library
 .import "Model.js" as Model
 .import "Phrases.js" as Phrases
+.import "Questions.js" as Questions
 .import "Requests.js" as Requests
 
 // Text on one line: runs of white space as one space.
@@ -23,6 +24,12 @@ function party(participant) {
 
 // Text with ": " before it, or "" when there is none.
 function colon(text) { return text ? ": " + text : ""; }
+
+// How many questions a request text asks: its numbered items, else one.
+function questions(text) {
+  const form = Questions.parse(text);
+  return form ? form.items.length : 1;
+}
 
 // How many tool calls a model reply without text makes, in the shapes
 // Model.text reads; 0 when none is recognised.
@@ -47,6 +54,10 @@ function tool(body) {
   const output = typeof body.output === "string" ? first(body.output) : "";
   if (hook(body))
     return body.name + " hook " + (failed ? "failed" + colon(output) : "ran");
+  if (body.name === "end")
+    return (body.via === "escalate" ? "finished after passing up" : "finished") + (failed ? ", failed" + colon(output) : "");
+  if (body.name === "assemble")
+    return "got ready" + (failed ? ", failed" + colon(output) : "");
   const brief = Phrases.brief(body.name, body.args);
   return flat([body.name, brief].join(" ")) + (body.via ? ", after " + body.via : "") + (failed ? " failed" + colon(output) : "");
 }
@@ -63,7 +74,8 @@ function opened(body) {
 // What an event says, as one plain sentence for the log: who asks whom what,
 // what was passed up, what a tool or hook did. `who` is the event's actor;
 // the event itself stays whole in the detail card, never on this line.
-function what(type, body, who) {
+// `asked` maps a request id to how many questions it asked.
+function what(type, body, who, asked) {
   const given = body && typeof body === "object" ? body : {};
   switch (type) {
   case "prompt":
@@ -74,22 +86,25 @@ function what(type, body, who) {
     const said = flat(Model.text(body));
     if (said) return said;
     const count = calls(given);
-    return count > 0 ? "calls " + plural(count, "tool", "tools") : "replied without text";
+    return count > 0 ? "planned " + plural(count, "step", "steps") : "had nothing to add";
   }
   case "tool":
     return tool(given);
   case "start-run":
-    return flat((given.agent || who || "a run") + " starts" + (given.depth !== undefined ? " at level " + given.depth : ""));
+    return flat((given.agent || who || "a run") + " started");
   case "end-run":
-    return given.error ? "run failed" + colon(first(given.error)) : "run ended";
+    return given.error ? "run failed" + colon(first(given.error)) : "run finished";
   case "request": {
     const asker = party(given.requester) || who || "someone";
-    const asked = party(given.arbiter);
-    return asker + (asker === "you" ? " ask " : " asks ") + (asked || "the team") + colon(first(given.reason));
+    const arbiter = party(given.arbiter);
+    const count = questions(given.reason);
+    const how = count > 1 ? " " + plural(count, "question", "questions") : "";
+    return asker + (asker === "you" ? " ask " : " asks ") + (arbiter || "the team") + how + colon(count > 1 ? first(Questions.parse(given.reason).intro) : first(given.reason));
   }
   case "escalate": {
-    const parts = Object.keys(given.origins || {});
-    return "passed " + plural(parts.length, "question", "questions") + " up" + (parts.length > 0 ? " from " + parts.join(", ") : "");
+    const known = asked || {};
+    const total = Object.values(given.origins || {}).reduce((sum, id) => sum + (known[id] || 1), 0);
+    return "passed " + plural(total, "question", "questions") + " up";
   }
   case "reply": {
     const said = first(given.body);
@@ -103,7 +118,7 @@ function what(type, body, who) {
   case "continue":
     return given.to ? "moved on from " + (given.from || "its stage") + " to " + given.to : "finished" + (given.from ? " at " + given.from : "");
   case "end":
-    return "ended";
+    return "finished";
   case "break":
     return "stopped" + colon(first(given.body));
   case "wait":
@@ -130,5 +145,41 @@ function what(type, body, who) {
     return "joined the project" + (given.role ? " as " + given.role : "");
   default:
     return flat(type.replace(/[.\-_]/g, " "));
+  }
+}
+
+// Whether an event is plumbing: it carries no news for the person — a run's
+// start and end, a hook, a model reply without text.
+function minor(type, body) {
+  const given = body && typeof body === "object" ? body : {};
+  switch (type) {
+  case "start-run":
+  case "end":
+    return true;
+  case "end-run":
+    return !given.error;
+  case "tool":
+    return hook(given) ? given.ok !== false : ["end", "assemble"].includes(given.name) && given.ok !== false;
+  case "model":
+    return !Model.text(body);
+  default:
+    return false;
+  }
+}
+
+// An event's kind as the person reads it.
+function kind(type, body) {
+  switch (type) {
+  case "prompt": return "message";
+  case "comment": return "note";
+  case "model": return "reply";
+  case "tool": return body && typeof body === "object" && hook(body) ? "hook" : "step";
+  case "start-run":
+  case "end-run": return "run";
+  case "request": return "question";
+  case "escalate": return "passed up";
+  case "reply": return "answer";
+  case "break": return "stopped";
+  default: return flat(type.replace(/[.\-_]/g, " "));
   }
 }

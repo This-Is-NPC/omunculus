@@ -6,7 +6,10 @@ import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
 // TeamView is the TEAM page: the works of the conversation a level at a
-// time, under a breadcrumb, and the work picked in full (NodeDetail). A level
+// time, under a breadcrumb once it has gone down into a work, and the work
+// picked in full (NodeDetail). At the conversation's level the agent that
+// talks with the person is the head of the team ("sales · talks with you ·
+// 2 agents", with what it asks), the works nested under it. A level
 // is a work's own row, then the works it handed down, a row each, under a
 // rule for the stage that handed them down ("STAGE DESIGN · 2 IN PARALLEL");
 // those done or cancelled fold into one rule per stage, "✓ 2 sub-works done ·
@@ -67,6 +70,8 @@ FocusScope {
   // The two works at the ends of the request whose badge was picked.
   property var linked: []
 
+  // The agent that talks with the person, at the conversation's level.
+  readonly property var front: progress && progress.front && (here === "" || byWork[here].parent === "") ? progress.front : null
   readonly property int needsYou: flat.filter(node => node.state === "needs-you").length
   readonly property int working: flat.filter(node => node.state === "working").length
 
@@ -105,6 +110,8 @@ FocusScope {
     const isFolded = (key, unless) => kept !== null ? false : opened[key] !== undefined ? !opened[key] : unless
     const workRow = (node, self) => ({ kind: "work", key: node.work, node: node, drills: !self && Progress.kidsOf(node).length > 0 })
     const node = byWork[here] || null
+    if (front !== null)
+      list.push({ kind: "front", key: "front", front: front })
     if (node === null) {
       const open = roots.filter(each => !closed(each))
       const earlier = open.length > 0 ? roots.filter(closed).filter(keeps) : []
@@ -339,14 +346,14 @@ FocusScope {
         Layout.fillWidth: true
         Layout.preferredHeight: implicitHeight
         visible: !team.mapShown
-        Chip { text: "NEEDS YOU " + team.needsYou; checked: team.chip === "needs-you"; accent: Theme.warning; onClicked: team.chip = checked ? "all" : "needs-you" }
+        Chip { text: "NEEDS YOU " + team.needsYou; checked: team.chip === "needs-you"; alert: team.needsYou > 0; accent: Theme.warning; onClicked: team.chip = checked ? "all" : "needs-you" }
         Chip { text: "WORKING " + team.working; checked: team.chip === "working"; onClicked: team.chip = checked ? "all" : "working" }
         Chip { text: "ALL " + team.flat.length; checked: team.chip === "all"; onClicked: team.chip = "all" }
       }
 
       Breadcrumb {
         Layout.fillWidth: true
-        visible: !team.mapShown && team.here !== ""
+        visible: !team.mapShown && team.level !== "" && team.here !== ""
         trail: [{ text: "Conversation" }].concat(team.trailOf(team.here).map(node => ({ text: node.title || node.agent })))
         onChosen: index => {
           const chain = team.trailOf(team.here)
@@ -376,7 +383,8 @@ FocusScope {
           readonly property bool focused: outline.activeFocus && outline.currentIndex === index
 
           width: outline.width
-          height: modelData.kind === "work" ? (node.item ? node.item.implicitHeight : 0) : Theme.size.rule
+          height: modelData.kind === "work" ? (node.item ? node.item.implicitHeight : 0)
+            : modelData.kind === "front" ? Theme.size.strip : Theme.size.rule
 
           // A stage, a parallel group.
           Kicker {
@@ -426,11 +434,37 @@ FocusScope {
             FocusRing { shown: line.focused }
           }
 
-          // A work.
+          // The agent that talks with the person, the head of the team.
+          RowLayout {
+            visible: line.modelData.kind === "front"
+            anchors { fill: parent; leftMargin: Theme.space.cell; rightMargin: Theme.space.cell }
+            spacing: Theme.space.gap
+            Dot { Layout.alignment: Qt.AlignVCenter; tone: Omunculus.toneOf(line.modelData.front ? line.modelData.front.agent : "") }
+            Label {
+              Layout.fillWidth: true
+              Layout.minimumWidth: 0
+              text: line.modelData.front ? line.modelData.front.agent
+                + Theme.type.meta.separator + "talks with you"
+                + Theme.type.meta.separator + line.modelData.front.agents + (line.modelData.front.agents === 1 ? " agent" : " agents") : ""
+              color: line.modelData.front ? Omunculus.toneOf(line.modelData.front.agent) : Theme.dim
+              font.pixelSize: Theme.type.body.size
+              elide: Text.ElideRight
+            }
+            Chip {
+              visible: !!line.modelData.front && line.modelData.front.asking !== ""
+              text: line.modelData.front ? "⇡ " + (line.width < 480 ? "" : "asks you ") + line.modelData.front.asking : ""
+              accent: Theme.warning
+              alert: true
+              onClicked: team.requestPicked("", line.modelData.front.ask)
+            }
+          }
+
+          // A work, nested under the head when there is one.
           Loader {
             id: node
             active: line.modelData.kind === "work"
-            width: parent.width
+            x: team.front !== null ? Theme.space.block : 0
+            width: parent.width - x
             sourceComponent: ProgressNode {
               node: line.modelData.node
               mode: "full"
@@ -461,7 +495,7 @@ FocusScope {
         // Moves the keyboard `by` rows past the rules; the detail follows a work.
         function step(by) {
           let at = currentIndex + by
-          while (at >= 0 && at < count && team.rows[at].kind === "rule")
+          while (at >= 0 && at < count && ["rule", "front"].includes(team.rows[at].kind))
             at += by
           if (at < 0 || at >= count)
             return

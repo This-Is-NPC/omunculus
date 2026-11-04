@@ -192,6 +192,16 @@ defmodule Omunculus.GuiProgressTest do
     """)
   end
 
+  test "the front agent heads a team of other agents' works" do
+    run!("""
+    const out = Progress.build(base);
+    check(out.front && out.front.agent === "sales" && out.front.agents === 1 && out.front.asking === "" && out.front.ask === "", "front", out.front);
+    const same = Progress.build(Object.assign({}, base, {rootAgent: "seller"}));
+    check(same.front === null, "root work is the front agent's own", same.front);
+    check(Progress.build({works: [], rootAgent: "sales", now: 60}).front === null, "no works", "");
+    """)
+  end
+
   test "a depth-0 run without any work is working, with no focus" do
     run!("""
     const out = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], runStarts: {r0: 50}, rootAgent: "sales", now: 60});

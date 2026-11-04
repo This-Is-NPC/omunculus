@@ -129,6 +129,8 @@ Singleton {
   // Work id -> its tool calls: {count, failed, last: {text, at}}, `last` the
   // newest call or outcome.
   property var callsOf: ({})
+  // Request id -> how many questions it asked, for the log's sentences.
+  property var questionsOf: ({})
   // Work id -> the stages it went through, as Progress.journal keeps them.
   property var journeys: ({})
   // Work id -> its title, as the events that made it gave it, before the
@@ -140,8 +142,6 @@ Singleton {
   // it ended in an error.
   property var runStarts: ({})
   property var runErrors: ({})
-  // Run id -> its agent's depth.
-  property var runDepth: ({})
   // Request id -> "sending" while its answer goes, "failed" when it did not
   // reach the server; cleared once the answer is read back.
   property var sending: ({})
@@ -459,11 +459,11 @@ Singleton {
     tones = {}
     usage = { all: Usage.tally(), agents: {}, works: {} }
     callsOf = {}
+    questionsOf = {}
     journeys = {}
     titles = {}
     runStarts = {}
     runErrors = {}
-    runDepth = {}
     sending = {}
     lastEventAt = 0
     works = []
@@ -704,20 +704,23 @@ Singleton {
   // The event as a row of the log page.
   function record(event) {
     const body = event.body || {}
+    if (event.type === "request" && event.request_id)
+      questionsOf[event.request_id] = Events.questions(body.reason)
     const failed = event.type === "break" || (event.type === "tool" && body.ok === false) || (event.type === "end-run" && !!body.error)
     const who = event.type === "start-run" ? body.agent || "" : Progress.actorOf(event)
     eventLog.append({
       id: event.cursor || event.at + event.type,
       at: event.at,
-      time: Time.precise(event.at),
+      time: Time.second(event.at),
       type: event.type,
+      kind: Events.kind(event.type, body),
+      minor: Events.minor(event.type, body),
       who: who,
       run: event.run_id || "",
       work: event.work_id || "",
-      what: Events.what(event.type, body, who),
+      what: Events.what(event.type, body, who, questionsOf),
       ok: !failed,
       asks: event.type === "request" && !!body.arbiter && Requests.human(body.arbiter),
-      depth: Number(event.type === "start-run" ? body.depth : runDepth[event.run_id]) || 0,
       raw: JSON.stringify(event)
     })
   }
@@ -782,8 +785,8 @@ Singleton {
   function step(runId, work, line) {
     const was = callsOf[work] || { count: 0, failed: 0, last: null }
     keep("callsOf", work, {
-      count: was.count + (line.outcome ? 0 : 1),
-      failed: was.failed + (!line.outcome && !line.ok ? 1 : 0),
+      count: was.count + (line.outcome || line.hook ? 0 : 1),
+      failed: was.failed + (!line.outcome && !line.hook && !line.ok ? 1 : 0),
       last: line.hook ? was.last : { text: line.outcome ? line.text : (line.name + "  " + Phrases.brief(line.name, line.args)).trim(), at: line.at }
     })
     const place = rows[runId]
@@ -842,7 +845,6 @@ Singleton {
     if (event.type === "start-run") {
       keep("runThread", event.run_id, Number(body.depth) > 0 && work ? work : "")
       keep("runStarts", event.run_id, at)
-      keep("runDepth", event.run_id, Number(body.depth) || 0)
     }
     // Where the event shows: its run's thread, else its work's.
     const key = runThread[event.run_id] !== undefined ? runThread[event.run_id] : threadOf(work)
