@@ -40,7 +40,7 @@ ColumnLayout {
   function take() {
     const value = entry.text.trim()
     if (value)
-      entry.text = ""
+      entry.clear()
     return value
   }
 
@@ -61,24 +61,23 @@ ColumnLayout {
     noting = false
   }
 
-  Rectangle {
+  InputFrame {
     Layout.fillWidth: true
-    implicitHeight: 42
+    implicitHeight: row.implicitHeight
     color: Theme.highlight
-    border.color: entry.activeFocus ? Theme.primary : Theme.line
-    border.width: entry.activeFocus ? 2 : 1
-    Behavior on border.color { ColorAnimation { duration: 140 } }
+    focused: entry.focused
 
     RowLayout {
+      id: row
       anchors { fill: parent; leftMargin: 14; rightMargin: 8 }
       spacing: 10
-      Icon { name: "chevron-right"; size: 14; color: entry.activeFocus ? Theme.primary : Theme.dim }
-      TextBox {
+      Icon { Layout.alignment: Qt.AlignTop; Layout.topMargin: 15; name: "chevron-right"; size: 14; color: entry.focused ? Theme.primary : Theme.dim }
+      TextArea {
         id: entry
         Layout.fillWidth: true
+        framed: false
         placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? (Omunculus.agent ? "say to " + Omunculus.agent + " what you need" : "say what you need") : "write to " + ((Omunculus.work(composer.work) || {}).assignee || "this work")
-        background: Item {}
-        onAccepted: composer.noting ? composer.note() : composer.submit()
+        onSubmitted: composer.noting ? composer.note() : composer.submit()
         Keys.onEscapePressed: event => {
           if (composer.noting)
             composer.noting = false
@@ -89,6 +88,8 @@ ColumnLayout {
       TraceButton {
         id: pendingButton
         dense: true
+        Layout.alignment: Qt.AlignBottom
+        Layout.bottomMargin: 7
         role: "navigation"
         visible: composer.pendingShown && Omunculus.pending > 0
         tone: Theme.warning
@@ -107,6 +108,8 @@ ColumnLayout {
       }
       TraceButton {
         dense: true
+        Layout.alignment: Qt.AlignBottom
+        Layout.bottomMargin: 7
         role: composer.noting ? "primary" : "progress"
         implicitWidth: composer.compact ? 32 : 110
         visible: composer.work !== ""
@@ -118,6 +121,8 @@ ColumnLayout {
       TraceButton {
         id: sendButton
         dense: true
+        Layout.alignment: Qt.AlignBottom
+        Layout.bottomMargin: 7
         role: "progress"
         implicitWidth: composer.compact ? 32 : 86
         busy: composer.busy
