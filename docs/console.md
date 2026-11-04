@@ -97,10 +97,15 @@ The console folds the events into threads: the main one, yours with the root
 agent, and one per work handed down, where its agent's runs show. A run at
 depth 0 belongs to the main thread, a deeper one to its work's.
 
-Each agent's turn (`AgentTurn`) shows its portrait, small, beside its name, or
-its initial in its colour while it has none (`Portrait`); yours shows none.
-Its header says how long the run has worked: "Working 0:12" while it is
-open, "Worked 1 min" after.
+Each line (`SpeechTurn`) and each agent's turn (`AgentTurn`) is a box under a
+heading of its speaker's tone dot, name and time, as in eco: yours on the
+right, an agent's on the left tinted with its colour; a line that continues
+the same speaker's turn drops the heading. The chat shows no portraits; they
+stay in the agent picker and on the team page. A turn's heading says how
+long the run has worked: "Working 0:12" while it is open, "Worked 1 min"
+after. Once its words are whole, the "more" button beside them, in a gutter
+they never take, copies them or shows the log of the run's work (the
+thread's `openLog`).
 
 A note the harness left, as when it stopped a work and tells you so, is no
 one's words: it reads NOTE, muted, where a speaker's name would be, as in
@@ -135,9 +140,9 @@ RUNS; a block two levels down only has OPEN. OPEN shows the work's thread as
 a page of its own (see [Pages](#pages)).
 
 A request is a card only while it waits on you, and it is in the main
-thread. Your answer reads as a bubble on the right (`AnswerBubble`), its text
-left aligned with the line breaks kept and the bubble as wide as the text,
-up to 620 px. Above it the question is one dim line at the thread's left
+thread. Your answer reads as a bubble on the right (`AnswerBubble`) under
+YOU ANSWERED and the time, its text left aligned with the line breaks kept
+and the bubble as wide as the text, up to 620 px. Above it the question is one dim line at the thread's left
 margin, "Asked by SALES: " and its first line with words, cut at 120
 characters, with " (N questions)" when it is a numbered list; Enter, Space or
 a click opens it in place to its full text. Sending an answer, like sending
