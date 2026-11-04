@@ -72,8 +72,9 @@ and picking one draws it.
 The flow's bar holds what the project can be given — an agent, a workflow, a
 model, a provider, a workspace — each opening the section it is added in;
 when the names do not fit, each drops its ADD. NEW PROJECT asks for an id and
-the path of an `omunculus.toml`, and registers it with the running server
-(`POST /v1/projects`); the flow then draws it.
+the path of an `omunculus.toml`, typed or chosen with PICK FILE, and
+registers it with the running server (`POST /v1/projects`); the flow then
+draws it. A refusal shows in the dialog, which stays open.
 
 ## The other sections
 

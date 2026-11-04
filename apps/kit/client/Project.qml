@@ -59,6 +59,13 @@ QtObject {
     check()
   }
 
+  // Adds the project `id`, whose config is the file at `config`, to the
+  // running server, which writes it into its registry. `failed` gets the
+  // reason.
+  function registerProject(id, config, done, failed) {
+    call("POST", "/v1/projects", { id: id, config: config }, false, done, failed)
+  }
+
   function tell(text, isError) {
     message = text
     messageIsError = isError

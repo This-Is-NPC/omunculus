@@ -3,22 +3,6 @@ import Quickshell
 import "kit/ui"
 
 ShellRoot {
-  // A word pressed as a link, as the projects in the corner are; the
-  // keyboard reaches it, and its hit area is larger than its letters.
-  component Link: DecodeLabel {
-    id: link
-    property bool current: false
-    signal clicked()
-    activeFocusOnTab: true
-    Keys.onReturnPressed: clicked()
-    Keys.onSpacePressed: clicked()
-    color: current ? Theme.primary : linkPointer.containsMouse || activeFocus ? Theme.foreground : Theme.dim
-    font.pixelSize: 11
-    font.letterSpacing: 4
-    MouseArea { id: linkPointer; anchors { fill: parent; margins: -12 } hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: link.clicked() }
-    FocusRing { anchors.margins: -4 }
-  }
-
   // The studio, laid out as a canvas: the sections a carousel down the left,
   // the one on screen at its head beside the bar of its commands; the flow
   // fills the whole window under them, the other sections stand right of the
@@ -159,7 +143,7 @@ ShellRoot {
           Label { anchors.verticalCenter: parent.verticalCenter; text: "STUDIO"; color: Theme.secondary; font.pixelSize: 10; font.letterSpacing: 4 }
           Repeater {
             model: Studio.projects.length > 0 ? Studio.projects.map(project => project.id) : [Studio.project]
-            delegate: Link {
+            delegate: LinkLabel {
               id: projectName
               required property string modelData
               anchors.verticalCenter: parent.verticalCenter
@@ -173,7 +157,8 @@ ShellRoot {
 
       NewProjectDialog {
         id: newProject
-        onRegistered: id => { flow.projectId = id; window.page = 0 }
+        client: Studio.client
+        onRegistered: id => { Studio.loadOverviews(); flow.projectId = id; window.page = 0 }
       }
 
       ZoomControl {
