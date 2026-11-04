@@ -5,7 +5,8 @@ import QtQuick
 // row stacks its cells into lines instead. A row opens on click or Enter, or,
 // when the table `picks`, a click picks it and a double click opens it; ↑/↓
 // move, Delete asks to remove it, Esc asks to go back. Rows may also carry a
-// status cell.
+// status cell. Cells show their text as it is; with `decode` a new row's cells
+// decode into view.
 Item {
   id: table
 
@@ -28,10 +29,8 @@ Item {
   // Whether the records are still to come: the empty list shows it loads.
   property bool loading: false
   property bool active: false
-  // A row's height beside its columns, as a log's denser rows.
-  property int rowHeight: 52
-  // Whether the list keeps to its newest row while it is read at its end.
-  property bool followsEnd: false
+  // Whether the cells of rows new to the list decode into view.
+  property bool decode: false
   readonly property bool compact: width < 700
   readonly property int headerHeight: compact ? 0 : 32
   // The ids of the records listed last, so a change decodes only the new ones.
@@ -45,6 +44,8 @@ Item {
   implicitHeight: headerHeight + (compact ? 0 : 10) + list.topMargin + list.bottomMargin + Math.max(52, list.contentHeight)
   onActiveChanged: if (active) list.forceActiveFocus()
   onRowsChanged: {
+    if (!decode)
+      return
     const before = listed
     listed = new Set(rows.map(entry => idOf(entry)))
     if (active)
@@ -106,10 +107,6 @@ Item {
     model: table.rows
     keyNavigationEnabled: true
     activeFocusOnTab: true
-    // At the end when last moved, so a new row keeps it there.
-    property bool atEnd: true
-    onMovementEnded: atEnd = atYEnd
-    onCountChanged: if (table.followsEnd && atEnd) Qt.callLater(positionViewAtEnd)
     onActiveFocusChanged: {
       if (activeFocus && currentIndex < 0 && count > 0)
         currentIndex = 0
@@ -164,7 +161,7 @@ Item {
       }
 
       width: list.width
-      height: table.compact ? 22 + lineCount * 20 : table.rowHeight
+      height: table.compact ? 22 + lineCount * 20 : 52
       color: marked ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
       border.color: marked ? Theme.primary : Theme.line
       Behavior on color { ColorAnimation { duration: 120 } }
@@ -185,8 +182,9 @@ Item {
             rightPadding: 12
             value: modelData
             soft: true
-            revealOnStage: !table.compact
-            color: row.color(index)
+            revealOnStage: table.decode && !table.compact
+            // The row is gone while its cells are torn down.
+            color: row ? row.color(index) : Theme.dim
             font.pixelSize: index === 0 ? 11 : 10
             elide: Text.ElideRight
           }
@@ -209,8 +207,8 @@ Item {
             // A line with nothing to say takes no room, but the title's.
             visible: index === 0 || value !== ""
             soft: true
-            revealOnStage: table.compact
-            color: row.color(modelData[0])
+            revealOnStage: table.decode && table.compact
+            color: row ? row.color(modelData[0]) : Theme.dim
             font.pixelSize: index === 0 ? 12 : 10
             elide: Text.ElideRight
           }
