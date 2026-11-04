@@ -68,12 +68,12 @@ ModalDialog {
           id: config
           Layout.fillWidth: true
           dense: true
-          placeholderText: "/path/to/omunculus.toml"
+          placeholderText: "/path/to/the project config"
           onAccepted: dialog.submit()
         }
         Chip {
           text: "PICK FILE"
-          tip: "choose the project's omunculus.toml"
+          tip: "choose the project config"
           onClicked: picker.open()
         }
       }
