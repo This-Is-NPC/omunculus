@@ -27,7 +27,8 @@ So each screen below says what it holds in words.
 
 `apps/kit/run console --config <server.toml> [--project <id>]`, where
 `<server.toml>` and `<id>` are placeholders for the server registry and a
-project id of it.
+project id of it. Without `--project`, a registry of several projects opens
+on the registry: the projects and the board.
 
 These keys work on every screen of the console:
 
@@ -35,9 +36,10 @@ These keys work on every screen of the console:
 | --- | --- |
 | Tab · Shift+Tab | move between controls |
 | Enter · Space | press the control |
-| 1 · 2 · … | the page of that number: the conversations and the board, or, in a conversation, its chat, team, log and cost; only while you navigate, not a second after typing |
+| 1 · 2 · … | the page of that number: the projects and the board, a project's conversations and the board, or, in a conversation, its chat, team, log and cost; only while you navigate, not a second after typing |
 | Ctrl+1 · Ctrl+2 · … | the same, from a field being written or the picker |
 | Ctrl+Tab · Ctrl+Shift+Tab | the next or the previous page |
+| Ctrl+P | the projects, also from a field being written |
 | Esc | let go of what the page holds, then back to where you were, at last the start |
 | Alt + a key of the page | the key, from a field being written |
 | ? · F1 | the keys dialog, which lists these tables |
@@ -51,20 +53,40 @@ escalates, reverts, deletes or cancels has a key of its own outside a field,
 and a key pressed with no field to take it only says "Click a field to type".
 
 The console answers Quickshell IPC too (`quickshell ipc --path apps/console
-call omunculus <function>`): `start`, `page <name>`, `conversations`,
+call omunculus <function>`): `start`, `page <name>`, `projects`,
+`project <id>`, `conversations`,
 `agents`, `log`, `board`, `open <conversation id>`, `work <work id>`,
 `newConversation`, `back` and `send <message>`.
 
 ### 1. The start
 
-The project's name and three ways in: NEW CONVERSATION, CONVERSATIONS and
-BOARD.
+On a project, its name and four ways in: NEW CONVERSATION, CONVERSATIONS,
+BOARD and PROJECTS. On the registry alone, how many projects it holds and
+two: PROJECTS and BOARD.
 
 | Keys | What they do |
 | --- | --- |
-| N · H · B | a new conversation, the conversations, the board |
+| N · H · B · P | a new conversation, the conversations, the board, the projects |
 
-### 2. A new conversation
+### 2. Projects
+
+Every project of the server's registry: its id, OPEN beside the one the
+window is on, its conversations and open works, its last activity, and its
+state — WAITING FOR YOU, WORKING, IDLE, NOT REACHABLE or READING… — waiting
+for you first. Chips keep those waiting for you or working. NEW PROJECT
+registers another with the server: its id and the path of its config file.
+The masthead names the way to every page from here on; the project's name
+in it opens this page, and `▲ 2 ELSEWHERE` on its right, while requests wait
+for you in other projects, opens it with those waiting picked out.
+
+| Keys | What they do |
+| --- | --- |
+| ↑ · ↓ | choose |
+| Enter | open it, at its conversations |
+| / | search the ids |
+| Esc | back |
+
+### 3. A new conversation
 
 A card for each agent of depth 0 a conversation can be with, its portrait
 on it. The conversation keeps the agent its first message names.
@@ -74,7 +96,7 @@ on it. The conversation keeps the agent its first message names.
 | ← · → · ↑ · ↓ | choose whom it is with |
 | 1 … 9 · Enter | choose them; the conversation is made by the first message, not by the choice |
 
-### 3. Conversations
+### 4. Conversations
 
 The project's conversations, filtered by what agents do there and what was
 first said.
@@ -86,7 +108,7 @@ first said.
 | Ctrl+N | new conversation |
 | / | search |
 
-### 4. Chat
+### 5. Chat
 
 The chat between you and the root agent: what each of you said and, under
 each run, its tool calls, folded to one line that counts them and unfolding
@@ -100,7 +122,7 @@ chevron, PROGRESS or Alt+P open the progress: the works nested by stage and
 level, beside the thread from 1100 px, a card over it from 700 px, a sheet
 over the chat below. A conversation with no message yet, opened from the
 conversations, first asks whom it is with, on the cards of
-[a new conversation](#2-a-new-conversation) when several agents of depth 0
+[a new conversation](#3-a-new-conversation) when several agents of depth 0
 may take it.
 
 A sub-work's OPEN, or OPEN in the progress, shows that work's thread as a
@@ -118,7 +140,7 @@ OPEN IN TEAM (Alt+O) shows it on the team page.
 | ↑ · ↓ · → · ←, in the progress | move, unfold, fold |
 | Esc, in a question's card or the progress | back to the composer; the sheet closes |
 
-### 5. A request
+### 6. A request
 
 A request's decision, over the page: who asked, what for and who decides,
 its options as buttons, and a field for words, which ANSWER, DENY or
@@ -128,7 +150,7 @@ ESCALATE carry.
 | --- | --- |
 | Enter | in its words: answer, or escalate when escalating |
 
-### 6. Team
+### 7. Team
 
 Every work of the conversation, one row each, nested under the stage of the
 work that handed it down, siblings handed down together headed "N in
@@ -156,7 +178,7 @@ the works as a chart, one card per work, the work picked beside it.
 | Alt+F | the whole map in view |
 | Esc | the detail, then the outline, then back |
 
-### 7. Log
+### 8. Log
 
 Every event of the conversation, a row each, which opens whole.
 
@@ -169,14 +191,15 @@ Chips keep the events that ask you, the failed ones, one agent's or one
 depth's; a title row begins each run. Opened from a work of the team, it is
 kept to that work.
 
-### 8. Cost
+### 9. Cost
 
 What the conversation used: model calls, tokens and cost, in all and by
 agent. It has no keys of its own.
 
-### 9. Board
+### 10. Board
 
-The works of every project of the registry as a kanban, a column per state.
+The works of every project of the registry as a kanban, a column per state;
+opened from a project, kept to its works, every project's one chip away.
 
 | Keys | What they do |
 | --- | --- |
@@ -186,7 +209,7 @@ The works of every project of the registry as a kanban, a column per state.
 | / | filter the works |
 | Esc | empty the filter, then back to the works |
 
-### 10. A work
+### 11. A work
 
 One work read as an issue: where it is and its title on top; its
 description, goal, questions and notes, then its RUNS, CHANGES and PROMPT on
@@ -199,7 +222,7 @@ right.
 | Alt+O | its conversation's team, the work picked |
 | Esc | back |
 
-### 11. The keys dialog
+### 12. The keys dialog
 
 `?` or F1 opens it on any screen: every key above, by where it works. The
 arrows and PgUp/PgDn scroll it.
@@ -211,7 +234,7 @@ arrows and PgUp/PgDn scroll it.
 `newThread`, `open <key>`, `search <query>`, `fold folders|threads` and
 `reply`.
 
-### 12. The threads
+### 13. The threads
 
 The folders — all threads, those waiting for you and those working — the
 project chips, and the threads of the folder, newest first, each with its
@@ -225,7 +248,7 @@ state. A command bar holds NEW THREAD and MARK ALL READ.
 | Ctrl+B | fold the folders to a rail |
 | Ctrl+L | fold the threads to a rail of their agents' portraits |
 
-### 13. A thread
+### 14. A thread
 
 One conversation with an agent of depth 0, newest first: what you wrote,
 what the agent said to you, and each request whose decision is yours, with
@@ -237,7 +260,7 @@ its options. Its state and what happens next head it.
 | Alt+Up · Alt+Down | the thread before or after |
 | Esc | close the reply, then the thread |
 
-### 14. A new thread
+### 15. A new thread
 
 A dialog: its To, an agent of depth 0 of one project, and the first
 message, with the files it carries.
@@ -252,7 +275,7 @@ are a carousel down the left edge:
 | 1 … 8 · Ctrl+1 … Ctrl+8 | the section of that number |
 | Ctrl+Tab · Ctrl+Shift+Tab | the next or the previous section |
 
-### 15. Flow
+### 16. Flow
 
 The project as a flowchart: you, then a row per depth with its agents and
 the workflows a work there may go through, each workspace a zone. The bar
@@ -266,14 +289,14 @@ adds an agent, a workflow, a model, a provider or a workspace.
 | Tab · Enter | reach an agent's box and pick it |
 | Esc | let the agent go |
 
-### 16. Secrets, models, agents, workflows, tools, skills, project
+### 17. Secrets, models, agents, workflows, tools, skills, project
 
 A table of the section's items. A click picks a row; a double click or
 Enter opens it. The project section holds the policy, the access (with the
 project's members, which it adds and removes), the usage of the model
 replies, and the workspaces.
 
-### 17. An item
+### 18. An item
 
 One item on a screen of its kind, in three columns: its image and facts,
 its description, and what is related to it, each related item opening in

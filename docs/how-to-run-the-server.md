@@ -84,7 +84,8 @@ in [the server](server.md#tcp-listener).
    ```
 
 6. Open an app on it. `--project` may be left out while the registry holds
-   one project.
+   one project; the console opens without it on a registry of several too,
+   at its projects.
 
    ```console
    $ <checkout>/apps/kit/run console --config server.toml

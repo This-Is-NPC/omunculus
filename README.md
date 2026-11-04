@@ -65,13 +65,14 @@ contract that the apps and any other client share.
 The command line is `omunculus <command> [--key value]`; every command is
 in [the command line](docs/cli.md).
 
-The console, the window on a project, takes these keys everywhere; each
-screen's own are in [the screens](docs/screens.md):
+The console, the window on the server's projects, takes these keys
+everywhere; each screen's own are in [the screens](docs/screens.md):
 
 | Keys | What they do |
 | --- | --- |
 | 1 · 2 · … | the page of that number |
 | Ctrl+Tab · Ctrl+Shift+Tab | the next or the previous page |
+| Ctrl+P | the projects |
 | Esc | let go of what the page holds, then back |
 | ? · F1 | every key, by where it works |
 
