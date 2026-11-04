@@ -46,7 +46,9 @@ These keys work on every screen of the console:
 
 Under 700 px there is no rail of pages: the bar's page switcher names the
 page and lists the others, and the commands that do not fit are in its `⋯`
-menu. The window is at least 360 by 480 px.
+menu. In a conversation there is neither rail nor bar: tabs under its head
+choose its pages, and the masthead's `$`, `⋯` and × open its cost, its rarer
+actions and the conversations. The window is at least 360 by 480 px.
 
 Typed text never runs a command: nothing that sends, answers, grants, denies,
 escalates, reverts, deletes or cancels has a key of its own outside a field,
@@ -119,12 +121,16 @@ each run, its tool calls, folded to one line that counts them and unfolding
 to one row per call. A work handed down is a SUB-WORK block where it was,
 which unfolds into its own transcript, changes and runs. A question for you
 is a card in the thread; what an agent asked another is an exchange in the
-thread it was asked in, which DECIDE INSTEAD lets you answer. Over the
-thread, two lines say the stages of the work in focus and who works on it,
-doing what, for how long, with ANSWER while a question waits on you; its
-chevron, PROGRESS or Alt+P open the progress: the works nested by stage and
-level, beside the thread from 1100 px, a card over it from 700 px, a sheet
-over the chat below. A conversation with no message yet, opened from the
+thread it was asked in, which DECIDE INSTEAD lets you answer. Over the tabs
+of every page of the conversation, a header strip says whom it is with, the
+stage, how long, how many agents and calls, with ANSWER while a question
+waits on you, else PROGRESS; under it two lines say the stages of the work in
+focus and who works on it, doing what, for how long. The chevron, PROGRESS or
+Alt+P open the progress: the works nested by stage and level, beside the
+thread from 1100 px, a card over it from 700 px, a sheet over the chat below.
+While a decision waits on you, its options are numbered chips over the
+composer, then PROGRESS; one pressed decides it. The clip in the composer
+attaches files. A conversation with no message yet, opened from the
 conversations, first asks whom it is with, on the cards of
 [a new conversation](#3-a-new-conversation) when several agents of depth 0
 may take it.
@@ -137,6 +143,7 @@ OPEN IN TEAM (Alt+O) shows it on the team page.
 | --- | --- |
 | Alt+R | put the keyboard in the words of the newest question waiting on you |
 | Alt+P | open or close the progress, the keyboard in it |
+| Alt+1 … Alt+9 | the quick chip of that number: an option of the newest decision, which decides it, then the progress |
 | Alt+M | show the oldest note to you and mark it read |
 | Ctrl+N | new conversation |
 | Enter, in the composer | send |
@@ -174,9 +181,9 @@ the works as a chart, one card per work, the work picked beside it.
 | [ · ] | the previous or next tab |
 | / | filter the works |
 | Alt+R | answer what waits on you nearest the work picked |
-| Alt+E | open the decision of what it asked you, to escalate |
-| Alt+W | write to its agent |
-| Alt+C | leave it a note, without a run |
+| Alt+E | open the decision of what it asked you, to escalate (`⋯` ESCALATE) |
+| Alt+W | write to its agent (`⋯` WRITE TO ITS AGENT) |
+| Alt+C | leave it a note, without a run (`⋯` LEAVE A NOTE) |
 | Alt+M | mark its notes read |
 | Alt+L · Alt+G | its LOG and CHANGES tabs |
 | Alt+F | the whole map in view |

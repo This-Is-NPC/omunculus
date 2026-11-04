@@ -1,8 +1,9 @@
 .pragma library
 
 // Every key the window answers to, in tiers.
-//   0  no key at all: anything that creates, sends, answers, grants, denies,
-//      escalates, reverts, deletes or cancels is pressed or clicked.
+//   0  no key of its own: anything that creates, sends, answers, grants,
+//      denies, escalates, reverts, deletes or cancels is pressed or clicked,
+//      or, a numbered quick chip over the composer, chosen by its chord.
 //   1  a bare key, only for navigation without effect; it acts only while a
 //      navigation item has the keyboard and no text field saw a key for a
 //      second, so text that lost its field is never taken for commands.
@@ -30,7 +31,9 @@ const table = [
   { id: "new-conversation", keys: ["Ctrl+N"], tier: 2, mutates: false, where: ["conversations", "chat"], what: "new conversation" },
   { id: "reply", keys: ["Alt+R"], tier: 2, mutates: false, where: ["chat", "team", "work"],
     what: "answer what waits on you: the newest request, the one nearest the work picked, or the work's" },
-  { id: "progress", keys: ["Alt+P"], tier: 2, mutates: false, where: ["chat"], what: "open or close the progress of the works" },
+  { id: "progress", keys: ["Alt+P"], tier: 2, mutates: false, where: ["chat"], what: "open or close the progress of the works, on the chat from any page of the conversation" },
+  { id: "quick", keys: ["Alt+1", "Alt+2", "Alt+3", "Alt+4", "Alt+5", "Alt+6", "Alt+7", "Alt+8", "Alt+9"], tier: 2, mutates: true, label: "Alt+1 … Alt+9", where: ["chat"],
+    what: "the quick chip of that number over the composer: an option of the newest decision waiting on you, which decides it, then the progress" },
   { id: "mark-read", keys: ["Alt+M"], tier: 2, mutates: true, where: ["chat", "team"], what: "show the oldest note to you and mark it read, or the work's notes" },
   { id: "open-team", keys: ["Alt+O"], tier: 2, mutates: false, where: ["work", "thread"], what: "its conversation's team, the work picked" },
   { id: "write", keys: ["Alt+W"], tier: 2, mutates: false, where: ["team"], what: "write to the agent of the work picked" },

@@ -13,30 +13,34 @@ import "kit/ui"
 // their works. A project's: its conversations, and the board, its works
 // first, every project's one click away, where a card opens its work on a
 // page of its own, from where its conversation's team opens; whom a new
-// conversation is with is chosen on a screen of the conversations. A
-// conversation's, once one
-// is open, in place of the project's: its chat, yours with the root agent,
-// where each question for you is a card, under the progress strip and, opened,
-// the progress beside the thread (a card over it on a medium window, a sheet
-// over the page on a narrow one); the team, the outline of the works and the
-// work picked in full (TeamView); the log, every event a row; and what it
-// cost. A work's thread also opens as a page of its own, under the way down to
-// it. The log, the team and the cost are loaded when first on screen. Each
-// page gives the commands of its bar: on the chat, to answer what waits on
-// you there, read its notes and open the progress; on the team, what you can
-// do to the work picked — answer or escalate what waits, write to its agent,
-// leave it a note, mark its notes read. On the chat a request is answered in
-// its card; elsewhere in its decision, opened over the page. Every
-// move into another level, conversation or project is remembered, so BACK, and
-// Esc once the page has let go of what it holds, return to exactly where it
-// was: the page, its level, its project, its conversation and the node
-// picked; back from the first page entered is back to the start. While the
-// pages are entered, every project of the registry is followed.
+// conversation is with is chosen on a screen of the conversations. Each page
+// of these two levels gives the commands of its bar and the count of its
+// readout. A conversation's, once one is open, in place of the project's,
+// under its head: the header strip, with the conversation's meta, ANSWER
+// while something waits on you and its progress on two lines, and its tabs.
+// The chat, yours with the root agent, where each question for you is a
+// card, the quick chips of the newest decision over the composer, and,
+// opened, the progress beside the thread (a card over it on a medium window,
+// a sheet over the page on a narrow one); the team, the outline of the works
+// and the work picked in full (TeamView); the log, every event a row; and
+// what it cost. A work's thread also opens as a page of its own, under the
+// way down to it. The log, the team and the cost are loaded when first on
+// screen. A conversation's pages have no bar: their rarer actions are the
+// items of the masthead's menu (`more`), and their keys are chords. On the
+// chat a request is answered in its card; elsewhere in its decision, opened
+// over the page. Every move into another level, conversation or project is
+// remembered, so BACK, and Esc once the page has let go of what it holds,
+// return to exactly where it was: the page, its level, its project, its
+// conversation and the node picked; back from the first page entered is
+// back to the start. While the pages are entered, every project of the
+// registry is followed.
 Item {
   id: view
 
   property bool active: false
   property bool short: false
+  // Between the blocks of a page: the head, the tabs, the content.
+  readonly property int gap: short ? Theme.space.blockShort : Theme.space.block
   // Back from the first page entered.
   signal startWanted()
 
@@ -54,13 +58,15 @@ Item {
   // a screen of the conversations.
   property string page: "conversations"
   readonly property int tabIndex: pages.indexOf(({ new: "conversations", work: "board", thread: "chat" })[page] || page)
+  // Whether a conversation's pages are on screen, under its head and tabs.
+  readonly property bool inside: level === "conversation"
   readonly property string title: page === "new" ? "new conversation" : page
-  // What the page is called in the masthead: the map is the team, a thread
-  // is its work's title.
-  readonly property string pageName: page === "map" ? "team" : page === "thread" ? Omunculus.titleOf(threadWork) : page
+  // What a page is called on its tab and the rail: the map is the team.
+  function nameOf(name) { return name === "map" ? "team" : name }
   // The way to the page, for the masthead, as {text, run}: on the registry
   // the page; on a project its id, which opens the projects, then the page;
-  // in a conversation, then its subject, which opens its chat, then the page.
+  // in a conversation, then its subject, which opens its chat, and on a
+  // thread its work's title. A conversation's tabs name its page.
   readonly property var crumbs: {
     if (level === "registry")
       return [{ text: title }]
@@ -70,7 +76,7 @@ Item {
     const subject = { text: Omunculus.subject || "new conversation" }
     if (page !== "chat")
       subject.run = () => view.go("chat")
-    return place.concat([subject, { text: pageName }])
+    return place.concat([subject], page === "thread" ? [{ text: Omunculus.titleOf(threadWork) }] : [])
   }
   // Whether the chat asks whom an empty conversation is with.
   readonly property bool asking: page === "chat" && Omunculus.whomAsked
@@ -122,6 +128,16 @@ Item {
       remember()
     show(name)
   }
+
+  // Chooses a page of the level by its place, round from either end, and
+  // gives it the keyboard.
+  function choose(index) {
+    go(pages[(index + pages.length) % pages.length])
+    Qt.callLater(focusEntry)
+  }
+
+  // Leaves the conversation for the list of the project's; BACK returns.
+  function leave() { go("conversations") }
 
   // Enters the pages from the start, at a page, with nothing behind it.
   function enter(name) {
@@ -178,11 +194,12 @@ Item {
     threadWork = at.thread
   }
 
-  function openConversation(id) {
+  // Opens a conversation at one of its pages, its chat for none.
+  function openConversation(id, at) {
     remember()
     if (id !== Omunculus.conversationId)
       Omunculus.open(id)
-    show("chat")
+    show(at || "chat")
   }
 
   // Whom a new conversation is with.
@@ -262,15 +279,47 @@ Item {
     timeline.focusCard()
   }
 
+  // Answers what waits on you: on the team, nearest the work picked; on a
+  // work's page, what it asked; elsewhere in the conversation, the newest
+  // question for you, on the chat.
+  function answer() {
+    if (page === "map") {
+      if (replyTo !== "")
+        decision.show(replyTo, false)
+    } else if (page === "work") {
+      if (workAsks.length > 0)
+        decision.show(workAsks[0].id, false)
+    } else {
+      go("chat")
+      Qt.callLater(replyNow)
+    }
+  }
+
   // Opens or closes the progress; opened, the keyboard goes to its tree
   // when `focusing`, or always over a narrow chat, where it covers the
-  // composer; closed, back to the composer.
+  // composer; closed, back to the composer. From another page of the
+  // conversation it opens on the chat.
   function toggleProgress(focusing) {
+    if (page !== "chat") {
+      go("chat")
+      progressChoice = true
+      return
+    }
     progressChoice = !progressShown
     if (!progressShown)
       mainComposer.focusEntry()
     else if (focusing || chat.progressMode === "sheet")
       Qt.callLater(() => { if (chat.progressArea()) chat.progressArea().focusTree() })
+  }
+
+  // Shows the oldest note to you on the chat and marks it read.
+  function readNote() {
+    const note = Omunculus.unread[0]
+    if (!note)
+      return
+    go("chat")
+    Qt.callLater(() => timeline.reveal(note.id))
+    Omunculus.markRead(note.id)
   }
 
   // The team page and the log, while they are loaded.
@@ -285,71 +334,48 @@ Item {
   readonly property var askedOfYou: asked.filter(request => Requests.human(request.arbiter))
   readonly property var notesHere: node === "" ? [] : Omunculus.unreadFrom(node)
 
+  // What the team asks to be answered: what waits on you nearest the work
+  // picked, else what the work asked, instead of whoever decides; "" for
+  // nothing. A work's page answers what its work asked you.
+  readonly property string nearest: page === "map" && team ? team.nearestForYou() : ""
+  readonly property string replyTo: nearest !== "" ? nearest : asked.length > 0 ? asked[0].id : ""
+  readonly property var workAsks: page === "work" ? Omunculus.asked(workKey).filter(request => Requests.human(request.arbiter)) : []
+
+  // What the page on screen counts, at the end of its bar, as its list says it.
+  readonly property string readout: page === "projects" ? projectsList.readout
+    : page === "conversations" ? conversations.readout
+    : page === "board" ? board.readout
+    : ""
+
   // The commands of the page on screen, as the PageBar takes them; those with
-  // a `key` answer to it too.
+  // a `key` answer to it too. A conversation's pages have none.
   readonly property var commands: {
+    if (inside)
+      return []
     const last = history.length > 0 ? history[history.length - 1] : null
-    // On the team page, BACK lets go of what the page holds first.
-    const back = { text: "BACK", role: "back", tip: "back to the " + (last ? ({ map: "team" })[last.page] || last.page : "start") + "  " + Shortcuts.label("back"),
-      run: () => { if (!(view.page === "map" && team && team.back())) view.back() } }
-    // A new conversation: the main action of the conversations, another on the chat.
-    const fresh = role => ({ text: "NEW CONVERSATION", short: "NEW", icon: "plus", role: role, tip: "start another conversation  " + Shortcuts.label("new-conversation"),
-      run: () => view.newConversation() })
+    const back = { text: "BACK", role: "back", tip: "back to the " + (last ? nameOf(last.page) : "start") + "  " + Shortcuts.label("back"),
+      run: () => view.back() }
     if (page === "projects")
       return [
         back,
-        { text: "NEW PROJECT", short: "NEW", icon: "plus", role: "primary", tip: "add a project to the server's registry", run: () => view.newProject() },
-        { text: "FILTER", icon: "search", tip: "filter the projects  /", run: () => projectsList.focusFilter() }
+        { text: "NEW PROJECT", short: "NEW", icon: "plus", role: "primary", tip: "add a project to the server's registry", run: () => view.newProject() }
       ]
     if (page === "conversations")
-      return [back, fresh("primary")]
-    if (page === "new" || page === "cost")
-      return [back]
-    if (page === "work") {
-      const waiting = Omunculus.asked(workKey).filter(request => Requests.human(request.arbiter))
       return [
         back,
-        { text: "REPLY", icon: "enter", role: "primary", tone: Theme.warning, key: Shortcuts.chord("reply"), tip: "answer what it asked you  " + Shortcuts.label("reply"),
-          shown: waiting.length > 0, run: () => decision.show(waiting[0].id, false) },
+        { text: "NEW CONVERSATION", short: "NEW", icon: "plus", role: "primary", tip: "start another conversation  " + Shortcuts.label("new-conversation"),
+          run: () => view.newConversation() },
+        { text: "BOARD", icon: "board", tip: "the works of the project", run: () => view.go("board") },
+        { text: "PROJECTS", icon: "folder", tip: "every project of the server  " + Shortcuts.label("projects"), run: () => view.showProjects("") }
+      ]
+    if (page === "work")
+      return [
+        back,
+        { text: "ANSWER", icon: "enter", tone: Theme.warning, key: Shortcuts.chord("reply"), tip: "answer what it asked you  " + Shortcuts.label("reply"),
+          shown: workAsks.length > 0, run: () => view.answer() },
         { text: "OPEN IN TEAM", short: "TEAM", icon: "people", key: Shortcuts.chord("open-team"), tip: "its conversation's team, the work picked  " + Shortcuts.label("open-team"),
           run: () => view.openWork({ id: workKey, project: Omunculus.project, conversation_id: Omunculus.conversationId }) }
       ]
-    }
-    if (page === "thread")
-      return [
-        back,
-        { text: "OPEN IN TEAM", short: "TEAM", icon: "people", key: Shortcuts.chord("open-team"), tip: "the team, this work picked  " + Shortcuts.label("open-team"),
-          run: () => view.openWork({ id: threadWork, project: Omunculus.project, conversation_id: Omunculus.conversationId }) },
-        { text: "LOG", icon: "list", tip: "the log kept to this work", run: () => view.showLog(threadWork) }
-      ]
-    if (page === "map") {
-      // Alt+R answers what waits on you nearest the work picked, else what
-      // the work asked, instead of whoever decides.
-      const nearest = team ? team.nearestForYou() : ""
-      const replyTo = nearest !== "" ? nearest : asked.length > 0 ? asked[0].id : ""
-      const mapAllowed = !!team && team.mapAllowed
-      return [
-        back,
-        { text: "REPLY", icon: "enter", role: "primary", tone: nearest !== "" ? Theme.warning : Theme.primary, key: Shortcuts.chord("reply"),
-          tip: (nearest !== "" ? "answer what waits on you, nearest the work picked" : "answer what it asked, instead of whoever decides") + "  " + Shortcuts.label("reply"),
-          shown: replyTo !== "", run: () => decision.show(replyTo, false) },
-        { text: "OUTLINE", icon: "list", group: "view", checked: teamShownAs !== "map", shown: mapAllowed,
-          tip: "the works as an outline", run: () => view.teamShownAs = "outline" },
-        { text: "MAP", icon: "map", group: "view", checked: teamShownAs === "map", shown: mapAllowed,
-          tip: "the works as a map, one card each", run: () => view.teamShownAs = "map" },
-        { text: "WRITE", icon: "edit", key: Shortcuts.chord("write"), tip: "write to its agent  " + Shortcuts.label("write"),
-          shown: node !== "", run: () => team.write(false) },
-        { text: "NOTE", icon: "plus", key: Shortcuts.chord("comment"), tip: "a note for its agents, without a run  " + Shortcuts.label("comment"),
-          shown: node !== "", run: () => team.write(true) },
-        { text: "ESCALATE", icon: "chevron-up", key: Shortcuts.chord("escalate"), tip: "raise what it asked you to whoever decides above you  " + Shortcuts.label("escalate"),
-          shown: askedOfYou.length > 0, run: () => decision.show(askedOfYou[0].id, true) },
-        { text: "MARK READ", icon: "check", key: Shortcuts.chord("mark-read"), tip: (notesHere.length > 1 ? "mark its " + notesHere.length + " notes read" : "mark its note read") + "  " + Shortcuts.label("mark-read"),
-          shown: notesHere.length > 0, run: () => notesHere.forEach(note => Omunculus.markRead(note.id)) },
-        { text: "FIT", icon: "map", key: Shortcuts.chord("fit"), tip: "the whole map in view  " + Shortcuts.label("fit"),
-          shown: mapAllowed && teamShownAs === "map", run: () => team.fit() },
-        { text: "FILTER", icon: "search", tip: "filter the works  /", run: () => team.focusFilter() }
-      ]
-    }
     if (page === "board")
       return [
         back,
@@ -358,41 +384,88 @@ Item {
         { text: "BY AGENT", short: "AGENT", icon: "people", key: Shortcuts.chord("by-agent"), group: "view", checked: board.group === "agent",
           tip: "a lane per agent  " + Shortcuts.label("by-agent"), run: () => board.group = "agent" },
         { text: "BY PROJECT", short: "PROJECT", icon: "folder", key: Shortcuts.chord("by-project"), group: "view", checked: board.group === "project",
-          tip: "a lane per project  " + Shortcuts.label("by-project"), run: () => board.group = "project" },
-        { text: "FILTER", icon: "search", tip: "filter the works  /", run: () => board.focusFilter() }
+          tip: "a lane per project  " + Shortcuts.label("by-project"), run: () => board.group = "project" }
       ]
-    if (page === "log") {
-      const picked = !!events && events.picked !== null
-      return [
-        back,
-        { text: "FILTER", icon: "search", tip: "filter the events  /", run: () => events.focusFilter() },
-        { text: picked ? "COPY EVENT" : "COPY LOG", icon: "copy", tip: picked ? "copy the event picked" : "copy the events shown",
-          enabled: picked || (!!events && events.source.count > 0), run: () => events.copy() }
-      ]
-    }
-    return [
-      back,
-      { text: "REPLY  " + Omunculus.waiting.length, short: "REPLY", icon: "enter", role: "primary", tone: Theme.warning, key: Shortcuts.chord("reply"),
-        tip: "answer the newest question waiting on you" + (Omunculus.waiting.length > 1 ? ", of " + Omunculus.waiting.length : "") + "  " + Shortcuts.label("reply"),
-        shown: Omunculus.waiting.length > 0, run: () => view.replyNow() },
-      { text: "PROGRESS", icon: "list", key: Shortcuts.chord("progress"), checked: progressShown,
-        tip: (progressShown ? "close" : "open") + " the progress of the works  " + Shortcuts.label("progress"),
-        shown: !asking, run: () => view.toggleProgress(true) },
-      { text: "MARK READ", icon: "check", tone: Theme.warning, key: Shortcuts.chord("mark-read"),
-        tip: "show the oldest note to you and mark it read" + (Omunculus.unread.length > 1 ? ", of " + Omunculus.unread.length : "") + "  " + Shortcuts.label("mark-read"),
-        shown: Omunculus.unread.length > 0, run: () => {
-          timeline.reveal(Omunculus.unread[0].id)
-          Omunculus.markRead(Omunculus.unread[0].id)
-        } },
-      fresh(undefined)
-    ]
+    return [back]
   }
 
-  // Chords of the page that are no command of its bar: the team's tabs.
-  readonly property var chords: page === "map" && team ? [
-    { key: Shortcuts.chord("team-log"), run: () => view.team.showTab("log") },
-    { key: Shortcuts.chord("team-changes"), run: () => view.team.showTab("changes") }
-  ] : []
+  // The rarer actions of a conversation's page, as the masthead's ActionMenu
+  // takes them, each with what it runs.
+  readonly property var more: {
+    if (!inside)
+      return []
+    const items = []
+    const add = (id, icon, text, run, chosen) => items.push({ id: id, icon: icon, text: text, run: run, chosen: !!chosen })
+    if (page === "map" && team) {
+      if (team.mapAllowed) {
+        add("outline", "list", "AS AN OUTLINE", () => view.teamShownAs = "outline", teamShownAs !== "map")
+        add("map", "map", "AS A MAP", () => view.teamShownAs = "map", teamShownAs === "map")
+      }
+      if (teamShownAs === "map" && team.mapAllowed)
+        add("fit", "map", "FIT THE MAP", () => view.team.fit())
+      if (node !== "") {
+        add("write", "edit", "WRITE TO ITS AGENT", () => view.team.write(false))
+        add("comment", "plus", "LEAVE A NOTE", () => view.team.write(true))
+      }
+      if (askedOfYou.length > 0)
+        add("escalate", "chevron-up", "ESCALATE", () => decision.show(view.askedOfYou[0].id, true))
+      if (notesHere.length > 0)
+        add("mark-read", "check", notesHere.length > 1 ? "MARK " + notesHere.length + " NOTES READ" : "MARK ITS NOTE READ",
+          () => view.notesHere.forEach(note => Omunculus.markRead(note.id)))
+    }
+    if (page === "log" && events && (events.picked !== null || events.source.count > 0))
+      add("copy", "copy", events.picked !== null ? "COPY THE EVENT" : "COPY THE LOG", () => view.events.copy())
+    if (page === "thread") {
+      add("open-team", "people", "OPEN IN TEAM", () => view.openWork({ id: view.threadWork, project: Omunculus.project, conversation_id: Omunculus.conversationId }))
+      add("log", "list", "ITS LOG", () => view.showLog(view.threadWork))
+    }
+    add("new", "plus", "NEW CONVERSATION", () => view.newConversation())
+    return items
+  }
+
+  // The quick chips over the chat's composer: the options of the newest
+  // decision waiting on you, which decide it as they are, without words —
+  // a grant saved for good is chosen on its card — then PROGRESS; none while
+  // no decision waits.
+  readonly property var quick: {
+    const request = Omunculus.deciding
+    if (!request)
+      return []
+    const options = [].concat(...Requests.choices(request).map(choice => choice.options
+      .filter(option => !option.startsWith("grant_"))
+      .map(option => ({
+        text: option.replace(/_/g, " ").toUpperCase(),
+        tip: option.replace(/_/g, " ") + ", to what " + Requests.label(choice.request.requester) + " asks",
+        run: () => Omunculus.reply(request.id, option, "", choice.path)
+      }))))
+    return options.concat([{ text: "PROGRESS", tip: (progressShown ? "close" : "open") + " the progress of the works", run: () => view.toggleProgress(true) }])
+  }
+
+  // The chords of the page that no command of its bar has: those of a
+  // conversation's pages, its menu's and the quick chips', which a field
+  // being written leaves to them. None is a bare key.
+  readonly property var chords: {
+    if (!inside)
+      return []
+    const chord = (id, run) => ({ key: Shortcuts.chord(id), run: run })
+    const all = [chord("reply", () => view.answer()), chord("progress", () => view.toggleProgress(true))]
+    if (page === "chat" && Omunculus.unread.length > 0)
+      all.push(chord("mark-read", () => view.readNote()))
+    if (page === "chat" && !asking)
+      quick.slice(0, Shortcuts.keys("quick").length).forEach((chip, index) => all.push({ key: Shortcuts.keys("quick")[index], run: chip.run }))
+    if (page === "map" && team) {
+      all.push(chord("team-log", () => view.team.showTab("log")), chord("team-changes", () => view.team.showTab("changes")))
+      more.filter(item => ["write", "comment", "escalate", "mark-read", "fit"].includes(item.id)).forEach(item => all.push(chord(item.id, item.run)))
+    }
+    if (page === "thread")
+      all.push(chord("open-team", more.find(item => item.id === "open-team").run))
+    return all
+  }
+
+  // The room a composer takes at the bottom of the page, which the toasts
+  // stay above.
+  readonly property real bottomRoom: page === "chat" && !asking ? mainComposer.height + gap
+    : page === "thread" ? threadComposer.height + gap : 0
 
   // Whether the decision of a request is open over the page.
   readonly property bool dialogOpen: decision.visible || newProjectDialog.visible
@@ -474,295 +547,334 @@ Item {
     }
   }
 
-  Stage {
-    anchors.fill: parent
-    shown: view.page === "projects"
+  // A conversation's head: its header strip and lines, and its tabs, which
+  // wrap on a narrow window. Asking whom it is with, it has none yet.
+  ColumnLayout {
+    id: head
+    anchors { left: parent.left; right: parent.right; top: parent.top }
+    visible: view.inside && !view.asking
+    spacing: view.gap
 
-    ProjectsView {
-      id: projectsList
-      anchors.fill: parent
-      active: parent.shown && view.active
-      focus: view.page === "projects"
-      onOpened: place => view.openProject(place)
-      onLeave: view.back()
+    ProgressStrip {
+      Layout.fillWidth: true
+      progress: Omunculus.progress
+      lastEvent: Omunculus.lastEventAt
+      waiting: Omunculus.waiting.length
+      calls: Omunculus.usage.all.calls
+      expanded: view.progressShown && view.page === "chat"
+      onToggle: view.toggleProgress(false)
+      onAnswer: view.answer()
+    }
+
+    Flow {
+      Layout.fillWidth: true
+      spacing: Theme.space.section
+      Repeater {
+        model: view.inside ? view.pages : []
+        delegate: Tab {
+          required property string modelData
+          required property int index
+          label: view.nameOf(modelData)
+          digit: String(index + 1).padStart(2, "0")
+          current: view.tabIndex === index
+          // The log says when a work failed.
+          alert: modelData === "log" && !!Omunculus.progress && Omunculus.progress.state === "failed"
+          onChosen: view.choose(index)
+        }
+      }
     }
   }
 
-  Stage {
-    anchors.fill: parent
-    shown: view.page === "conversations"
+  // The page on screen, under the head while there is one.
+  Item {
+    id: body
+    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; top: head.visible ? head.bottom : parent.top; topMargin: head.visible ? view.gap : 0 }
 
-    HistoryView {
-      id: conversations
+    Stage {
       anchors.fill: parent
-      active: parent.shown && view.active
-      focus: view.page === "conversations"
-      onOpened: id => view.openConversation(id)
-      onLeave: view.back()
+      shown: view.page === "projects"
+
+      ProjectsView {
+        id: projectsList
+        anchors.fill: parent
+        active: parent.shown && view.active
+        focus: view.page === "projects"
+        onOpened: place => view.openProject(place)
+        onLeave: view.back()
+      }
     }
-  }
 
-  Stage {
-    anchors.fill: parent
-    shown: view.page === "chat"
-    // The composer takes the keyboard once the chat can show it.
-    onVisibleChanged: if (visible) Qt.callLater(view.focusEntry)
-
-    Item {
-      id: chat
+    Stage {
       anchors.fill: parent
-      // Where the progress opens, by the window's width: docked beside the
-      // thread, a card over it, or a sheet over the whole chat.
-      readonly property string progressMode: ({ wide: "dock", medium: "card", narrow: "sheet" })[Breakpoints.size(Window.width)]
-      // The item the progress is in, while it is open.
-      function progressArea(): ProgressSheet { return (dockLoader.item || cardLoader.item) as ProgressSheet }
-      readonly property bool docked: dockLoader.active && progressMode === "dock"
+      shown: view.page === "conversations"
 
-      ColumnLayout {
-        anchors {
-          left: parent.left
-          top: parent.top
-          bottom: parent.bottom
-          right: chat.docked ? dockLoader.left : parent.right
-          rightMargin: chat.docked ? 16 : 0
+      HistoryView {
+        id: conversations
+        anchors.fill: parent
+        active: parent.shown && view.active
+        focus: view.page === "conversations"
+        onOpened: (id, at) => view.openConversation(id, at)
+        onLeave: view.back()
+      }
+    }
+
+    Stage {
+      anchors.fill: parent
+      shown: view.page === "chat"
+      // The composer takes the keyboard once the chat can show it.
+      onVisibleChanged: if (visible) Qt.callLater(view.focusEntry)
+
+      Item {
+        id: chat
+        anchors.fill: parent
+        // Where the progress opens, by the window's width: docked beside the
+        // thread, a card over it, or a sheet over the whole chat.
+        readonly property string progressMode: ({ wide: "dock", medium: "card", narrow: "sheet" })[Breakpoints.size(Window.width)]
+        // The item the progress is in, while it is open.
+        function progressArea(): ProgressSheet { return (dockLoader.item || cardLoader.item) as ProgressSheet }
+        readonly property bool docked: dockLoader.active && progressMode === "dock"
+
+        ColumnLayout {
+          anchors {
+            left: parent.left
+            top: parent.top
+            bottom: parent.bottom
+            right: chat.docked ? dockLoader.left : parent.right
+            rightMargin: chat.docked ? Theme.space.section : 0
+          }
+          spacing: view.gap
+
+          // Medium: the progress under the tabs, pushing the thread down.
+          Loader {
+            id: cardLoader
+            Layout.fillWidth: true
+            visible: active
+            active: view.progressShown && chat.progressMode === "card" && !view.asking
+            sourceComponent: progressView
+          }
+
+          TimelineView {
+            id: timeline
+            visible: !view.asking
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            thread: ""
+            onAnswered: mainComposer.focusEntry()
+            onOpenWork: work => view.openThread(work)
+            onOpenLog: work => view.showLog(work)
+          }
+
+          // An empty conversation opened from the list names no agent yet.
+          AgentPicker {
+            id: whom
+            visible: view.asking
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            onPicked: name => Omunculus.agent = name
+            onBack: view.back()
+          }
+
+          // The quick chips keep their room on a short window, not their keys.
+          Composer {
+            id: mainComposer
+            visible: !view.asking
+            Layout.fillWidth: true
+            quick: view.quick
+            chipsShown: !view.short
+          }
         }
-        spacing: view.short ? 10 : 14
 
-        ProgressStrip {
-          Layout.fillWidth: true
-          visible: !view.asking
-          progress: Omunculus.progress
-          lastEvent: Omunculus.lastEventAt
-          expanded: view.progressShown
-          onToggle: view.toggleProgress(false)
-          onAnswer: view.replyNow()
-        }
-
-        // Medium: the progress under the strip, pushing the thread down.
+        // Wide: the progress beside the thread, the page's full height;
+        // narrow: a sheet over the whole chat.
         Loader {
-          id: cardLoader
-          Layout.fillWidth: true
+          id: dockLoader
+          z: 2
+          anchors { top: parent.top; bottom: parent.bottom; right: parent.right }
+          width: chat.progressMode === "dock" ? 380 : chat.width
+          active: view.progressShown && chat.progressMode !== "card" && !view.asking
           visible: active
-          active: view.progressShown && chat.progressMode === "card" && !view.asking
           sourceComponent: progressView
         }
 
-        TimelineView {
-          id: timeline
-          visible: !view.asking
+        // Each place loads it only in its own mode; the card is at most
+        // 55 % of the chat's height.
+        Component {
+          id: progressView
+          ProgressSheet {
+            mode: chat.progressMode
+            maximumHeight: chat.height * 0.55
+            progress: Omunculus.progress
+            onClosed: {
+              view.progressChoice = false
+              mainComposer.focusEntry()
+            }
+            onEscaped: mainComposer.focusEntry()
+            onAnswer: view.replyNow()
+            onOpenThread: work => view.openThread(work)
+            onOpenLog: work => view.showLog(work)
+            onOpenMap: work => {
+              // The team shows the map where there is room for it.
+              view.teamShownAs = "map"
+              view.openWork({ id: work, project: Omunculus.project, conversation_id: Omunculus.conversationId })
+            }
+          }
+        }
+      }
+    }
+
+    // A work's thread, as a page of its own: the way down to it, its
+    // transcript, and a composer to its agent. A crumb goes back up, the first
+    // one to the chat.
+    Stage {
+      anchors.fill: parent
+      shown: view.page === "thread"
+
+      ColumnLayout {
+        anchors.fill: parent
+        spacing: view.gap
+
+        Breadcrumb {
+          id: threadTrail
+          readonly property var works: view.trailOf(view.threadWork)
           Layout.fillWidth: true
-          Layout.fillHeight: true
-          thread: ""
-          onAnswered: mainComposer.focusEntry()
-          onOpenWork: work => view.openThread(work)
+          trail: [{ text: "Conversation" }].concat(works.map(work => ({ text: work.title || "a work" })))
+          onChosen: index => {
+            if (index === 0)
+              view.go("chat")
+            else if (works[index - 1].id !== view.threadWork)
+              view.openThread(works[index - 1].id)
+          }
         }
 
-        // An empty conversation opened from the list names no agent yet.
-        AgentPicker {
-          id: whom
-          visible: view.asking
+        TimelineView {
           Layout.fillWidth: true
           Layout.fillHeight: true
-          onPicked: name => Omunculus.agent = name
-          onBack: view.back()
+          thread: Omunculus.threadOf(view.threadWork)
+          emptyText: "NOTHING SAID HERE YET"
+          onOpenWork: work => view.openThread(work)
+          onOpenLog: work => view.showLog(work)
         }
 
         Composer {
-          id: mainComposer
-          visible: !view.asking
+          id: threadComposer
           Layout.fillWidth: true
+          work: view.threadWork
         }
       }
+    }
 
-      // Wide: the progress beside the thread, the page's full height;
-      // narrow: a sheet over the whole chat.
+    // Whom a new conversation is with.
+    Stage {
+      anchors.fill: parent
+      shown: view.page === "new"
+
+      AgentPicker {
+        id: picker
+        anchors.fill: parent
+        focus: parent.shown
+        // The conversation is made by its first message, not by the pick.
+        onPicked: name => {
+          view.remember()
+          Omunculus.agent = name
+          view.show("chat")
+        }
+        onBack: view.back()
+      }
+    }
+
+    // The team, the log and the cost are loaded while on screen.
+    Stage {
+      id: teamStage
+      anchors.fill: parent
+      shown: view.page === "map"
+
       Loader {
-        id: dockLoader
-        z: 2
-        anchors { top: parent.top; bottom: parent.bottom; right: parent.right }
-        width: chat.progressMode === "dock" ? 380 : chat.width
-        active: view.progressShown && chat.progressMode !== "card" && !view.asking
-        visible: active
-        sourceComponent: progressView
-      }
-
-      // Each place loads it only in its own mode; the card is at most
-      // 55 % of the chat's height.
-      Component {
-        id: progressView
-        ProgressSheet {
-          mode: chat.progressMode
-          maximumHeight: chat.height * 0.55
-          progress: Omunculus.progress
-          onClosed: {
-            view.progressChoice = false
-            mainComposer.focusEntry()
-          }
-          onEscaped: mainComposer.focusEntry()
-          onAnswer: view.replyNow()
-          onOpenThread: work => view.openThread(work)
+        id: agentsPage
+        anchors.fill: parent
+        active: teamStage.shown || teamStage.visible
+        focus: view.page === "map"
+        sourceComponent: TeamView {
+          onLeave: view.back()
           onOpenLog: work => view.showLog(work)
-          onOpenMap: work => {
-            // The team shows the map where there is room for it.
-            view.teamShownAs = "map"
-            view.openWork({ id: work, project: Omunculus.project, conversation_id: Omunculus.conversationId })
-          }
+        }
+      }
+      // The work picked and the view shown are kept here, so they outlive the page.
+      Connections {
+        target: view.team
+        function onPickedChanged() { view.pickedNode = view.team.picked }
+        function onShownAsChanged() { view.teamShownAs = view.team.shownAs }
+      }
+      Binding {
+        target: view.team
+        property: "picked"
+        value: view.pickedNode
+        when: view.team !== null
+      }
+      Binding {
+        target: view.team
+        property: "shownAs"
+        value: view.teamShownAs
+        when: view.team !== null
+      }
+    }
+
+    Stage {
+      id: logStage
+      anchors.fill: parent
+      shown: view.page === "log"
+
+      Loader {
+        id: logPage
+        anchors.fill: parent
+        active: logStage.shown || logStage.visible
+        focus: view.page === "log"
+        sourceComponent: LogView {
+          filter: view.logFilter
+          onLeave: view.back()
         }
       }
     }
-  }
 
-  // A work's thread, as a page of its own: the way down to it, its
-  // transcript, and a composer to its agent. A crumb goes back up, the first
-  // one to the chat.
-  Stage {
-    anchors.fill: parent
-    shown: view.page === "thread"
-
-    ColumnLayout {
+    Stage {
+      id: costStage
       anchors.fill: parent
-      spacing: view.short ? 10 : 14
+      shown: view.page === "cost"
 
-      Breadcrumb {
-        id: threadTrail
-        readonly property var works: view.trailOf(view.threadWork)
-        Layout.fillWidth: true
-        trail: [{ text: "Conversation" }].concat(works.map(work => ({ text: work.title || "a work" })))
-        onChosen: index => {
-          if (index === 0)
-            view.go("chat")
-          else if (works[index - 1].id !== view.threadWork)
-            view.openThread(works[index - 1].id)
-        }
-      }
-
-      TimelineView {
-        Layout.fillWidth: true
-        Layout.fillHeight: true
-        thread: Omunculus.threadOf(view.threadWork)
-        emptyText: "NOTHING SAID HERE YET"
-        onOpenWork: work => view.openThread(work)
-      }
-
-      Composer {
-        id: threadComposer
-        Layout.fillWidth: true
-        work: view.threadWork
+      Loader {
+        id: costPage
+        anchors.fill: parent
+        active: costStage.shown || costStage.visible
+        focus: view.page === "cost"
+        sourceComponent: CostView { onLeave: view.back() }
       }
     }
-  }
 
-  // Whom a new conversation is with.
-  Stage {
-    anchors.fill: parent
-    shown: view.page === "new"
-
-    AgentPicker {
-      id: picker
+    Stage {
       anchors.fill: parent
-      focus: parent.shown
-      // The conversation is made by its first message, not by the pick.
-      onPicked: name => {
-        view.remember()
-        Omunculus.agent = name
-        view.show("chat")
-      }
-      onBack: view.back()
-    }
-  }
+      shown: view.page === "board"
 
-  // The team, the log and the cost are loaded while on screen.
-  Stage {
-    id: teamStage
-    anchors.fill: parent
-    shown: view.page === "map"
-
-    Loader {
-      id: agentsPage
-      anchors.fill: parent
-      active: teamStage.shown || teamStage.visible
-      focus: view.page === "map"
-      sourceComponent: TeamView {
+      BoardView {
+        id: board
+        anchors.fill: parent
+        focus: view.page === "board"
         onLeave: view.back()
-        onOpenLog: work => view.showLog(work)
+        onOpened: work => view.showWork(work)
       }
-    }
-    // The work picked and the view shown are kept here, so they outlive the page.
-    Connections {
-      target: view.team
-      function onPickedChanged() { view.pickedNode = view.team.picked }
-      function onShownAsChanged() { view.teamShownAs = view.team.shownAs }
-    }
-    Binding {
-      target: view.team
-      property: "picked"
-      value: view.pickedNode
-      when: view.team !== null
-    }
-    Binding {
-      target: view.team
-      property: "shownAs"
-      value: view.teamShownAs
-      when: view.team !== null
-    }
-  }
 
-  Stage {
-    id: logStage
-    anchors.fill: parent
-    shown: view.page === "log"
+    }
 
-    Loader {
-      id: logPage
+    Stage {
       anchors.fill: parent
-      active: logStage.shown || logStage.visible
-      focus: view.page === "log"
-      sourceComponent: LogView {
-        filter: view.logFilter
+      shown: view.page === "work"
+
+      WorkView {
+        id: workPage
+        anchors.fill: parent
+        focus: view.page === "work"
+        key: view.workKey
         onLeave: view.back()
+        onPicked: key => view.showOther(key)
       }
-    }
-  }
-
-  Stage {
-    id: costStage
-    anchors.fill: parent
-    shown: view.page === "cost"
-
-    Loader {
-      id: costPage
-      anchors.fill: parent
-      active: costStage.shown || costStage.visible
-      focus: view.page === "cost"
-      sourceComponent: CostView { onLeave: view.back() }
-    }
-  }
-
-  Stage {
-    anchors.fill: parent
-    shown: view.page === "board"
-
-    BoardView {
-      id: board
-      anchors.fill: parent
-      focus: view.page === "board"
-      onLeave: view.back()
-      onOpened: work => view.showWork(work)
-    }
-
-  }
-
-  Stage {
-    anchors.fill: parent
-    shown: view.page === "work"
-
-    WorkView {
-      id: workPage
-      anchors.fill: parent
-      focus: view.page === "work"
-      key: view.workKey
-      onLeave: view.back()
-      onPicked: key => view.showOther(key)
     }
   }
 

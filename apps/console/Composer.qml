@@ -1,24 +1,32 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Shortcuts.js" as Shortcuts
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
 // Composer is where you write: in the main thread, to the root agent; in a
 // work, to that work's agent, or a note its agents read without a new run,
-// which Enter leaves while the box is noting. A message carries the files
-// picked under the box; a note carries none. In the main thread, the words
-// not sent are kept for the conversation they were written in, and come
-// back when it is open again.
-// Sending shows the trace while the agent you write to is working; the agents
-// below it never hold it. The words stay in the box, dimmed, until the server
-// took the message, and come back to be sent again if it did not. Under 420
-// px of its own width its buttons show their icons only.
+// which Enter leaves while the box is noting. Over the box, the quick chips
+// it is given, numbered as Alt and the number choose them, then the files
+// the message carries; the clip in the box picks more, and a note carries
+// none. In the main thread, the words not sent are kept for the conversation
+// they were written in, and come back when it is open again.
+// SEND shows the trace while the agent you write to is working, and still
+// sends; the agents below it never hold it. The words stay in the box,
+// dimmed, until the server took the message, and come back to be sent again
+// if it did not. Under 420 px of its own width its buttons show their icons
+// only.
 ColumnLayout {
   id: composer
 
   property bool compact: Breakpoints.tight(width)
   // The work written to, or "" for the main thread.
   property string work: ""
+  // The quick chips over the box, [{text, tip, run}]; the chords that choose
+  // them are the window's. `chipsShown` false keeps their room, not their keys.
+  property var quick: []
+  property bool chipsShown: true
   // Whether the agent written to has a run open: the root agent's, at depth 0,
   // in the main thread; the work's own in a work.
   readonly property bool busy: work === "" ? Omunculus.running.some(run => String(run.depth) === "0") : Omunculus.busy(work)
@@ -27,7 +35,7 @@ ColumnLayout {
   // on Esc, the box writes to the agent again.
   property bool noting: false
 
-  spacing: 10
+  spacing: Theme.space.tight
 
   // A message on its way keeps its words in the box, whatever opens.
   Connections {
@@ -78,17 +86,48 @@ ColumnLayout {
     noting = false
   }
 
+  Flow {
+    Layout.fillWidth: true
+    visible: composer.chipsShown && composer.quick.length > 0
+    spacing: Theme.space.tight
+    Repeater {
+      model: composer.quick
+      delegate: Chip {
+        required property var modelData
+        required property int index
+        readonly property var keys: Shortcuts.keys("quick")
+        text: (index < keys.length ? (index + 1) + "  " : "") + modelData.text
+        tip: modelData.tip + (index < keys.length ? "  " + keys[index] : "")
+        onClicked: modelData.run()
+      }
+    }
+  }
+
+  FilePicker {
+    id: files
+    Layout.fillWidth: true
+    visible: paths.length > 0 && !composer.noting
+  }
+
   InputFrame {
     Layout.fillWidth: true
     implicitHeight: row.implicitHeight
     color: Theme.highlight
     focused: entry.focused
 
+    // The chevron sits by the first line and the buttons by the last, each
+    // centred on a box of one line.
     RowLayout {
       id: row
-      anchors { fill: parent; leftMargin: 14; rightMargin: 8 }
-      spacing: 10
-      Icon { Layout.alignment: Qt.AlignTop; Layout.topMargin: 15; name: "chevron-right"; size: 14; color: entry.focused ? Theme.primary : Theme.dim }
+      anchors { left: parent.left; right: parent.right; leftMargin: Theme.space.inset; rightMargin: Theme.space.trail }
+      spacing: Theme.space.gap
+      Icon {
+        Layout.alignment: Qt.AlignTop
+        Layout.topMargin: (Theme.size.control - Theme.type.input.chevron) / 2
+        name: "chevron-right"
+        size: Theme.type.input.chevron
+        color: entry.focused ? Theme.primary : Theme.dim
+      }
       TextArea {
         id: entry
         Layout.fillWidth: true
@@ -103,12 +142,21 @@ ColumnLayout {
             event.accepted = false
         }
       }
+      IconButton {
+        Layout.alignment: Qt.AlignBottom
+        Layout.bottomMargin: (Theme.size.control - height) / 2
+        visible: !composer.noting
+        name: "attach"
+        size: Theme.type.input.chevron
+        tip: "files to send with the message"
+        onClicked: files.pick()
+      }
       TraceButton {
         dense: true
         Layout.alignment: Qt.AlignBottom
-        Layout.bottomMargin: 7
+        Layout.bottomMargin: (Theme.size.control - height) / 2
         role: composer.noting ? "primary" : "progress"
-        implicitWidth: composer.compact ? 32 : 110
+        implicitWidth: composer.compact ? Breakpoints.target(Window.width) : 110
         visible: composer.work !== ""
         icon: "plus"
         text: composer.compact ? "" : "NOTE"
@@ -116,23 +164,18 @@ ColumnLayout {
         onClicked: composer.note()
       }
       TraceButton {
-        id: sendButton
         dense: true
         Layout.alignment: Qt.AlignBottom
-        Layout.bottomMargin: 7
+        Layout.bottomMargin: (Theme.size.control - height) / 2
         role: "progress"
-        implicitWidth: composer.compact ? 32 : 86
+        implicitWidth: composer.compact ? Breakpoints.target(Window.width) : 86
+        busy: composer.busy
+        allowClickWhileBusy: true
         icon: "enter"
         text: composer.compact ? "" : "SEND"
         tip: "SEND"
         onClicked: composer.submit()
       }
     }
-  }
-
-  FilePicker {
-    id: files
-    Layout.fillWidth: true
-    visible: !composer.noting
   }
 }

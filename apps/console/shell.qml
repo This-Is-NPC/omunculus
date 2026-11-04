@@ -10,20 +10,24 @@ import "kit/ui"
 ShellRoot {
   // The omunculus window. At the start: on a project, a new conversation,
   // its conversations, the board or the projects; on the registry alone, the
-  // projects or the board. Entered: the pages of the level on screen down
-  // the left — the registry's projects and board, a project's conversations
-  // and board, or the chat, team, log and cost of the conversation open —
-  // the one on screen beside the bar of its commands, and the page under
-  // them; on a narrow window the rail is hidden and the bar's page switcher
-  // lists the pages. The masthead names the way to the page, and, while a
-  // project is open, says how many requests wait for you in the other
-  // projects. Back from the first page entered is back to the start.
+  // projects or the board. Entered: on the registry and a project, the pages
+  // of the level down the left — the registry's projects and board, a
+  // project's conversations and board — the one on screen beside the bar of
+  // its commands, and the page under them; on a narrow window the rail is
+  // hidden and the bar's page switcher lists the pages. In a conversation,
+  // its pages under its own head and tabs (PagesView), with no rail and no
+  // bar: the masthead's buttons open its cost, its menu of rarer actions and
+  // close it, back to the list. The masthead names the way to the page; while
+  // a project is open, a notice says how many requests wait for you in the
+  // other projects, and in a conversation, how many notes to you are unread.
+  // Back from the first page entered is back to the start.
   FloatingWindow {
     id: panel
 
     title: "omunculus"
     implicitWidth: 1080
-    implicitHeight: 720
+    // 3 : 2.
+    implicitHeight: implicitWidth * 2 / 3
     minimumSize: Qt.size(360, 480)
     color: Theme.background
 
@@ -43,16 +47,14 @@ ShellRoot {
       started = true
     }
 
-    // What the rail calls a page: the map is the team.
-    function pageName(page) { return page === "map" ? "team" : page }
+    // The window's margin, and the room between its masthead and the rest.
+    readonly property int margin: short ? Theme.space.pageShort : Theme.space.page
+    readonly property int section: short ? Theme.space.sectionShort : Theme.space.section
 
-    // Chooses a page by its place, round from either end, and gives it the
-    // keyboard, so the rail folds away.
-    function choose(index) {
-      const pages = pagesView.pages
-      pagesView.go(pages[(index + pages.length) % pages.length])
-      Qt.callLater(pagesView.focusEntry)
-    }
+    // The counts of the notices put away, -1 for none; a notice shows again
+    // once its count changes.
+    property int elsewhereKept: -1
+    property int notesKept: -1
 
     // The ways in at the start: on a project, a new conversation, its
     // conversations, the board and the projects; on the registry alone, the
@@ -113,26 +115,56 @@ ShellRoot {
 
       ColumnLayout {
         anchors.fill: parent
-        anchors.margins: panel.short ? Math.min(12, Breakpoints.margin(panel.width)) : Breakpoints.margin(panel.width)
-        spacing: panel.short ? 10 : 18
+        anchors.margins: panel.margin
+        spacing: panel.section
 
         Masthead {
           Layout.fillWidth: true
           Layout.fillHeight: false
+          tight: panel.short
           crumbs: panel.crumbs
           // Requests waiting for you in the other projects, while one is
           // open; it opens them, the waiting ones picked out.
-          RowLayout {
-            visible: panel.started && pagesView.level !== "registry" && Omunculus.elsewhere > 0
-            spacing: 6
-            Icon { name: "warning"; size: 10; color: Theme.warning }
-            LinkLabel {
-              value: Omunculus.elsewhere + (panel.width < 700 ? "" : " ELSEWHERE")
-              color: Theme.warning
-              font.pixelSize: 10
-              font.letterSpacing: 2
-              onClicked: pagesView.showProjects("waiting")
-            }
+          NoticeChip {
+            readonly property int count: Omunculus.elsewhere
+            shown: panel.started && pagesView.level !== "registry" && count > 0 && panel.elsewhereKept < 0
+            text: count + (panel.size === "narrow" ? " ELSEWHERE" : " WAITING ELSEWHERE")
+            tip: "the projects where requests wait for you"
+            closeTip: "put it away until it changes"
+            onOpened: pagesView.showProjects("waiting")
+            onDismissed: panel.elsewhereKept = count
+            onCountChanged: panel.elsewhereKept = -1
+          }
+          // The notes to you of the conversation open, unread; it shows the
+          // oldest and marks it read.
+          NoticeChip {
+            readonly property int count: Omunculus.unread.length
+            shown: panel.started && pagesView.inside && count > 0 && panel.notesKept < 0
+            text: count + (count === 1 ? " NOTE" : " NOTES")
+            tip: "show the oldest note to you and mark it read  " + Shortcuts.label("mark-read")
+            closeTip: "put it away until another comes"
+            onOpened: pagesView.readNote()
+            onDismissed: panel.notesKept = count
+            onCountChanged: panel.notesKept = -1
+          }
+          IconButton {
+            visible: panel.started && pagesView.inside && pagesView.open
+            name: "cost"
+            tip: "what it cost"
+            highlighted: pagesView.page === "cost"
+            onClicked: pagesView.go("cost")
+          }
+          ActionMenu {
+            visible: panel.started && pagesView.inside
+            tip: "more"
+            items: pagesView.more
+            onChosen: id => pagesView.more.find(item => item.id === id).run()
+          }
+          IconButton {
+            visible: panel.started && pagesView.inside
+            name: "close"
+            tip: "close it, back to the conversations"
+            onClicked: pagesView.leave()
           }
         }
 
@@ -160,8 +192,8 @@ ShellRoot {
               // Whole pixels, or the first button's top hairline is not drawn;
               // never past the view's edges on a short window.
               y: Math.round(Math.max(0, Math.min(parent.height - height, (parent.height - height) / 2 + Math.min(90, Math.max(0, parent.height / 6)))))
-              spacing: 14
-              // The first way in stands taller.
+              spacing: panel.short ? Theme.space.blockShort : Theme.space.block
+              // The first way in is the main one, and stands taller.
               Repeater {
                 id: wayButtons
                 model: panel.ways
@@ -170,9 +202,9 @@ ShellRoot {
                   required property int index
                   // A delegate torn down has no parent.
                   anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
-                  implicitWidth: Math.min(260, panel.width - 40)
-                  implicitHeight: index === 0 ? 48 : 44
-                  role: "navigation"
+                  implicitWidth: Math.min(260, panel.width - 2 * panel.margin)
+                  implicitHeight: index === 0 ? Theme.size.control + Theme.space.line : Theme.size.control
+                  role: index === 0 ? "primary" : "navigation"
                   icon: modelData.icon
                   text: modelData.text
                   enabled: Omunculus.connected
@@ -180,11 +212,11 @@ ShellRoot {
                   onClicked: panel.enter(modelData.page)
                 }
               }
-              Item { width: 1; height: 6 }
+              Item { width: 1; height: Theme.space.tight }
               DecodeLabel {
                 readonly property int count: Omunculus.boardProjects.length
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: Math.max(0, panel.width - 40)
+                width: Math.max(0, panel.width - 2 * panel.margin)
                 value: !Omunculus.connected ? "The server does not answer"
                   : !Omunculus.registry ? "Project " + Omunculus.project + " · its agents wait for a word"
                   : count > 0 ? count + (count === 1 ? " project" : " projects") + " · pick one to talk with its agents"
@@ -193,13 +225,14 @@ ShellRoot {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 color: Omunculus.connected ? Theme.dim : Theme.warning
-                font.pixelSize: 10
-                font.letterSpacing: 2
+                font.pixelSize: Theme.type.meta.size
+                font.letterSpacing: Theme.type.meta.tracking
               }
             }
           }
 
-          // Entered: the pages, the bar of the one shown, and the page.
+          // Entered: the pages, the rail and the bar of the one shown over a
+          // project's or the registry's, and the page.
           Stage {
             anchors.fill: parent
             shown: panel.started
@@ -208,33 +241,45 @@ ShellRoot {
 
             PagesView {
               id: pagesView
-              anchors { left: bar.left; right: parent.right; top: bar.bottom; topMargin: panel.short ? 10 : 16; bottom: parent.bottom }
+              // Beside the rail and under the bar, while they are there.
+              anchors {
+                fill: parent
+                leftMargin: chrome.visible ? bar.x : 0
+                topMargin: chrome.visible ? bar.height + panel.section : 0
+              }
               active: panel.started
               onStartWanted: panel.started = false
               short: panel.short
             }
 
-            TabRail {
-              id: rail
-              // Over the bar and the page while it unfolds, opaque.
-              z: 1
-              tabs: pagesView.pages.map(name => ({ name: panel.pageName(name) }))
-              current: pagesView.tabIndex
-              onChosen: index => panel.choose(index)
-              onEscaped: pagesView.focusEntry()
-            }
+            Item {
+              id: chrome
+              anchors.fill: parent
+              visible: !pagesView.inside
 
-            PageBar {
-              id: bar
-              // No rail on a narrow window: the bar takes the whole width.
-              anchors { left: parent.left; leftMargin: rail.visible ? rail.foldedWidth + 16 : 0; right: parent.right }
-              height: rail.headHeight
-              commands: pagesView.commands
-              section: rail.current
-              pages: rail.tabs
-              current: rail.current
-              pageSwitcher: true
-              onPageChosen: index => panel.choose(index)
+              TabRail {
+                id: rail
+                // Over the bar and the page while it unfolds, opaque.
+                z: 1
+                tabs: pagesView.pages.map(name => ({ name: pagesView.nameOf(name) }))
+                current: pagesView.tabIndex
+                onChosen: index => pagesView.choose(index)
+                onEscaped: pagesView.focusEntry()
+              }
+
+              PageBar {
+                id: bar
+                // No rail on a narrow window: the bar takes the whole width.
+                anchors { left: parent.left; leftMargin: rail.visible ? rail.foldedWidth + Theme.space.section : 0; right: parent.right }
+                height: rail.headHeight
+                commands: pagesView.commands
+                readout: pagesView.readout
+                section: rail.current
+                pages: rail.tabs
+                current: rail.current
+                pageSwitcher: true
+                onPageChosen: index => pagesView.choose(index)
+              }
             }
 
             // The digit a page shows chooses it while a page is being navigated
@@ -249,18 +294,19 @@ ShellRoot {
                 Shortcut {
                   enabled: panel.started && !panel.dialogOpen && frame.bare && !pagesView.digitsTaken
                   sequence: Shortcuts.keys("page")[numbered.index]
-                  onActivated: panel.choose(numbered.index)
+                  onActivated: pagesView.choose(numbered.index)
                 }
                 Shortcut {
                   enabled: panel.started && !panel.dialogOpen
                   sequence: Shortcuts.keys("page-chord")[numbered.index]
-                  onActivated: panel.choose(numbered.index)
+                  onActivated: pagesView.choose(numbered.index)
                 }
               }
             }
-            // The chords of the page's commands, Alt+R to reply and the like,
-            // and of the page's other chords, which a field being written
-            // leaves to them. They have no bare key: what is typed never runs one.
+            // The chords of the page's commands and of its other chords, Alt+R
+            // to answer, Alt and a quick chip's number and the like, which a
+            // field being written leaves to them. They have no bare key: what
+            // is typed never runs one.
             Repeater {
               model: pagesView.commands.filter(command => command.key && command.shown !== false && command.enabled !== false).concat(pagesView.chords)
               delegate: Item {
@@ -276,12 +322,12 @@ ShellRoot {
             Shortcut {
               enabled: panel.started && !panel.dialogOpen
               sequences: Shortcuts.keys("next-page")
-              onActivated: panel.choose(rail.current + 1)
+              onActivated: pagesView.choose(pagesView.tabIndex + 1)
             }
             Shortcut {
               enabled: panel.started && !panel.dialogOpen
               sequences: Shortcuts.keys("previous-page")
-              onActivated: panel.choose(rail.current - 1)
+              onActivated: pagesView.choose(pagesView.tabIndex - 1)
             }
             Shortcut {
               enabled: panel.started && !panel.dialogOpen && Omunculus.project !== ""
@@ -293,10 +339,10 @@ ShellRoot {
       }
 
       ShortcutsDialog { id: shortcuts }
-      // What the window tells, at its bottom right.
+      // What the window tells, at its bottom right, above the composer.
       ToastStack {
-        anchors { right: parent.right; bottom: parent.bottom; margins: Breakpoints.margin(panel.width) }
-        width: Math.min(340, panel.width - 2 * Breakpoints.margin(panel.width))
+        anchors { right: parent.right; bottom: parent.bottom; margins: panel.margin; bottomMargin: panel.margin + (panel.started ? pagesView.bottomRoom : 0) }
+        width: Math.min(340, panel.width - 2 * panel.margin)
         maxHeight: panel.height / 2
         notices: Omunculus.notices.items
         onDismissed: id => Omunculus.notices.dismiss(id)

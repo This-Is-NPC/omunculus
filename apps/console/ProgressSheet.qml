@@ -24,25 +24,25 @@ Rectangle {
   signal escaped()
 
   readonly property bool card: mode === "card"
-  readonly property real margin: 12
 
   // Puts the keyboard on the tree's first row that does something.
   function focusTree() { tree.forceActiveFocus(); tree.move(-1, 1) }
 
   color: Theme.background
   border.color: Theme.line
-  implicitHeight: Math.min(maximumHeight, (header.visible ? header.implicitHeight + 8 : 0) + tree.implicitHeight + 2 * margin)
+  implicitHeight: Math.min(maximumHeight, (header.visible ? header.implicitHeight + column.spacing : 0) + tree.implicitHeight + Theme.space.insetTop * 2)
   Keys.onEscapePressed: mode === "sheet" ? closed() : escaped()
 
   ColumnLayout {
-    anchors { fill: parent; margins: sheet.margin }
-    spacing: 8
+    id: column
+    anchors { fill: parent; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset; topMargin: Theme.space.insetTop; bottomMargin: Theme.space.insetTop }
+    spacing: Theme.space.tight
 
     RowLayout {
       id: header
       Layout.fillWidth: true
       visible: !sheet.card
-      spacing: 8
+      spacing: Theme.space.gap
       TraceButton {
         visible: sheet.mode === "sheet"
         role: "navigation"
@@ -57,8 +57,8 @@ Rectangle {
         horizontalAlignment: sheet.mode === "sheet" ? Text.AlignHCenter : Text.AlignLeft
         text: "PROGRESS"
         color: Theme.dim
-        font.pixelSize: 11
-        font.letterSpacing: 3
+        font.pixelSize: Theme.type.kicker.size
+        font.letterSpacing: Theme.type.kicker.tracking
         elide: Text.ElideRight
       }
       IconButton {

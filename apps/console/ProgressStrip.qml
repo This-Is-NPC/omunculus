@@ -3,15 +3,19 @@ import QtQuick
 import QtQuick.Layouts
 import "kit/ui"
 import "kit/client/Progress.js" as Progress
+import "kit/client/Shortcuts.js" as Shortcuts
 
-// ProgressStrip is the conversation's progress on two lines, pinned over the
-// chat: the stages of the work in focus, then who works on it, from its agent
-// down to the one at work, what that one does and for how long. A question
-// waiting on you takes the second line, with ANSWER; a finished work says how
-// long it took. Both lines are fitted in characters to their width. The
-// chevron opens and closes the full view. Hidden while nothing was handed
-// to anyone and no agent runs.
-Item {
+// ProgressStrip is the conversation's head: a 40 px strip with its meta —
+// the agent it is with, the stage of the work in focus, how long it has run,
+// how many agents and model calls — and its action at the right: ANSWER,
+// in the warning tone, while something waits on you, else PROGRESS once there
+// is a work. Under it, unframed, two lines: the stages of the work in focus,
+// with the chevron that opens the full view, and who works on it, from its
+// agent down to the one at work, what that one does and for how long; a
+// question waiting on you takes that line, and a finished work says how long
+// it took. Every line is fitted in characters to its width. The two lines
+// are hidden while nothing was handed to anyone and no agent runs.
+ColumnLayout {
   id: strip
 
   // Omunculus.progress, or null; whether the full view is open.
@@ -19,6 +23,10 @@ Item {
   property bool expanded: false
   // The time of the conversation's newest event, in seconds; 0 when unknown.
   property real lastEvent: 0
+  // How many requests wait on you.
+  property int waiting: 0
+  // The model calls of the conversation.
+  property int calls: 0
   // Seconds of silence after which a working team is said to have no news.
   readonly property int quiet: 600
 
@@ -33,9 +41,38 @@ Item {
   readonly property real tick: Omunculus.tick
   readonly property bool working: phase === "working"
   readonly property int silence: working && lastEvent > 0 ? Math.round(tick - lastEvent) : 0
+  // Whether there is progress to show under the strip.
+  readonly property bool moving: progress !== null && (progress.roots.length > 0 || phase !== "idle")
 
-  // Line 2's parts, for Progress.fit: the chain above the agent at work gives
-  // way first, then what it does; the agent and the clock stay.
+  // The meta's parts, for Progress.fit: the counts give way first, then the
+  // agent; the stage and the time stay.
+  readonly property var meta: {
+    const focus = focusNode
+    const segments = [{ text: (Omunculus.agent || Omunculus.lastAgent).toUpperCase(), lead: true }]
+    if (focus && focus.count > 0) {
+      const at = Math.min(focus.at, focus.count - 1)
+      segments.push({ text: "STAGE " + (at + 1) + " OF " + focus.count + " " + String(focus.steps[at].name).toUpperCase(), short: "STAGE " + (at + 1) + "/" + focus.count, keep: true })
+    }
+    if (focus)
+      segments.push({ text: Progress.span(focus.finishedIn !== null ? focus.finishedIn : focus.branch.seconds).toUpperCase(), keep: true })
+    const agents = progress ? progress.counts.agents : 0
+    if (agents > 0)
+      segments.push({ text: agents + (agents === 1 ? " AGENT" : " AGENTS") })
+    if (calls > 0)
+      segments.push({ text: calls + (calls === 1 ? " CALL" : " CALLS") })
+    // The agent carries the separator after it, so it goes with it; the
+    // others carry the one before them.
+    const separator = Theme.type.meta.separator
+    const shown = segments.filter(segment => segment.text !== "")
+    const join = (text, index) => shown[index].lead ? text + (shown.length > 1 ? separator : "")
+      : index === 0 || shown[index - 1].lead ? text : separator + text
+    return shown.map((segment, index) => ({
+      text: join(segment.text, index), short: segment.short !== undefined ? join(segment.short, index) : undefined, keep: segment.keep
+    }))
+  }
+
+  // The now line's parts: the chain above the agent at work gives way
+  // first, then what it does; the agent and the clock stay.
   readonly property var parts: {
     if (forYou.length > 0) {
       const asker = forYou[0].asker
@@ -58,30 +95,124 @@ Item {
 
   readonly property string stall: silence > quiet ? " · no news for " + Progress.span(silence) : ""
 
-  visible: progress !== null && (progress.roots.length > 0 || phase !== "idle")
-  implicitHeight: visible ? 52 : 0
+  spacing: Theme.space.line
   Accessible.role: Accessible.StatusBar
   Accessible.name: progress ? progress.spoken : ""
 
-  MouseArea {
-    anchors.fill: parent
-    cursorShape: Qt.PointingHandCursor
-    onClicked: strip.toggle()
+  // A line of parts fitted in characters to its width; when a glyph still
+  // draws wider than counted, it gives back a character, at most three times.
+  component Fitted: Item {
+    id: room
+    property var parts: []
+    property alias font: line.font
+    property alias color: line.color
+    property int slack: 0
+    readonly property int budget: Math.max(1, Math.floor(width / Math.max(1, metrics.advanceWidth("0") + line.font.letterSpacing)) - slack)
+    readonly property string fitted: width > 0 ? Progress.fit(parts, budget).join("") : ""
+    Layout.fillWidth: true
+    Layout.minimumWidth: 0
+    implicitHeight: line.implicitHeight
+    onWidthChanged: slack = 0
+    onPartsChanged: slack = 0
+    FontMetrics { id: metrics; font: line.font }
+    TextMetrics {
+      id: drawn
+      font: line.font
+      text: room.fitted
+      onAdvanceWidthChanged: Qt.callLater(() => { if (drawn.advanceWidth > room.width + 0.5 && room.slack < 3) room.slack++ })
+    }
+    Label {
+      id: line
+      width: room.width
+      anchors.verticalCenter: parent.verticalCenter
+      text: room.fitted
+      elide: Text.ElideRight
+    }
   }
 
+  // The strip: the meta, and the action at its right.
+  Rectangle {
+    Layout.fillWidth: true
+    implicitHeight: Theme.size.strip
+    color: "transparent"
+    border.color: Theme.line
+
+    RowLayout {
+      anchors { fill: parent; leftMargin: Theme.space.inset; rightMargin: Theme.space.trail }
+      spacing: Theme.space.gap
+
+      Fitted {
+        Layout.fillHeight: true
+        parts: strip.meta
+        color: Theme.dim
+        font.pixelSize: Theme.type.meta.size
+        font.letterSpacing: Theme.type.meta.tracking
+      }
+      TraceButton {
+        Layout.alignment: Qt.AlignVCenter
+        visible: strip.waiting > 0 || strip.moving
+        dense: true
+        role: "progress"
+        tone: strip.waiting > 0 ? Theme.warning : Theme.primary
+        icon: strip.waiting > 0 ? "enter" : "list"
+        text: strip.waiting > 0 ? "ANSWER" + (strip.waiting > 1 ? "  " + strip.waiting : "") : "PROGRESS"
+        tip: strip.waiting > 0 ? "answer the newest question waiting on you" + (strip.waiting > 1 ? ", of " + strip.waiting : "") + "  " + Shortcuts.label("reply")
+          : (strip.expanded ? "close" : "open") + " the progress of the works  " + Shortcuts.label("progress")
+        onClicked: strip.waiting > 0 ? strip.answer() : strip.toggle()
+      }
+    }
+  }
+
+  // The stages of the work in focus, else its title; the chevron opens the
+  // full view.
   RowLayout {
-    anchors { fill: parent; leftMargin: 4; rightMargin: 0 }
-    spacing: 10
+    Layout.fillWidth: true
+    Layout.leftMargin: Theme.space.line
+    visible: strip.moving
+    spacing: Theme.space.gap
+
+    Stepper {
+      Layout.fillWidth: true
+      Layout.alignment: Qt.AlignVCenter
+      visible: steps.length > 0
+      size: 12
+      steps: strip.focusNode ? strip.focusNode.steps : []
+      round: strip.focusNode ? strip.focusNode.round : 0
+      tip: strip.focusNode ? strip.focusNode.title : ""
+    }
+    Label {
+      Layout.fillWidth: true
+      Layout.alignment: Qt.AlignVCenter
+      visible: !strip.focusNode || strip.focusNode.steps.length === 0
+      text: strip.focusNode ? strip.focusNode.title : Omunculus.subject
+      color: Theme.foreground
+      font.pixelSize: Theme.type.body.size
+      font.bold: true
+      elide: Text.ElideRight
+    }
+    IconButton {
+      Layout.alignment: Qt.AlignVCenter
+      name: strip.expanded ? "chevron-up" : "chevron-down"
+      tip: (strip.expanded ? "close" : "open") + " the progress"
+      highlighted: strip.expanded
+      onClicked: strip.toggle()
+    }
+  }
+
+  // Who works and what on, fitted, after the state; the silence, when long, after it.
+  RowLayout {
+    Layout.fillWidth: true
+    Layout.leftMargin: Theme.space.line
+    visible: strip.moving
+    spacing: Theme.space.tight
 
     // The state: the trace while working, unless motion is reduced.
     Item {
-      Layout.preferredWidth: 28
-      Layout.preferredHeight: 12
+      Layout.preferredWidth: Theme.size.gutter
+      Layout.preferredHeight: Theme.type.meta.size
       Layout.alignment: Qt.AlignVCenter
       LoadingTrace {
-        anchors.centerIn: parent
-        width: 28
-        height: 10
+        anchors.fill: parent
         running: strip.working && !Theme.reducedMotion
         tone: Theme.primary
       }
@@ -92,90 +223,19 @@ Item {
         showWord: false
       }
     }
-
-    ColumnLayout {
-      Layout.fillWidth: true
-      Layout.minimumWidth: 0
-      Layout.alignment: Qt.AlignVCenter
-      spacing: 4
-
-      // Line 1: the stages of the work in focus, else its title.
-      Stepper {
-        Layout.fillWidth: true
-        visible: steps.length > 0
-        size: 12
-        steps: strip.focusNode ? strip.focusNode.steps : []
-        round: strip.focusNode ? strip.focusNode.round : 0
-        tip: strip.focusNode ? strip.focusNode.title : ""
-      }
-      Label {
-        Layout.fillWidth: true
-        visible: !strip.focusNode || strip.focusNode.steps.length === 0
-        text: strip.focusNode ? strip.focusNode.title : Omunculus.subject
-        color: Theme.foreground
-        font.pixelSize: 12
-        font.bold: true
-        elide: Text.ElideRight
-      }
-
-      // Line 2: who works and what on, fitted; the silence, when long, after it.
-      RowLayout {
-        Layout.fillWidth: true
-        spacing: 0
-        Item {
-          id: room
-          Layout.fillWidth: true
-          Layout.minimumWidth: 0
-          implicitHeight: second.implicitHeight
-          property int slack: 0
-          readonly property int budget: Math.max(1, Math.floor(width / Math.max(1, metrics.advanceWidth("0"))) - slack)
-          readonly property string fitted: width > 0 ? Progress.fit(parts, budget).join("") : ""
-          readonly property var parts: strip.parts
-          onWidthChanged: slack = 0
-          onPartsChanged: slack = 0
-          FontMetrics { id: metrics; font: second.font }
-          TextMetrics {
-            id: drawn
-            font: second.font
-            text: room.fitted
-            onAdvanceWidthChanged: Qt.callLater(() => { if (drawn.advanceWidth > room.width + 0.5 && room.slack < 3) room.slack++ })
-          }
-          Label {
-            id: second
-            width: room.width
-            text: room.fitted
-            color: strip.forYou.length > 0 ? Theme.warning : Theme.dim
-            font.pixelSize: 11
-            elide: Text.ElideRight
-          }
-        }
-        Label {
-          visible: strip.stall !== ""
-          Layout.maximumWidth: strip.width * 0.4
-          text: strip.stall
-          elide: Text.ElideRight
-          color: Theme.warning
-          font.pixelSize: 11
-        }
-      }
+    Fitted {
+      parts: strip.parts
+      color: strip.forYou.length > 0 ? Theme.warning : Theme.dim
+      font.pixelSize: Theme.type.meta.size
+      font.letterSpacing: Theme.type.meta.tracking / 2
     }
-
-    Chip {
-      visible: strip.forYou.length > 0
-      Layout.alignment: Qt.AlignVCenter
-      text: "ANSWER"
-      accent: Theme.warning
-      checked: true
-      onClicked: strip.answer()
-    }
-
-    IconButton {
-      Layout.alignment: Qt.AlignVCenter
-      implicitWidth: 32
-      implicitHeight: 32
-      name: strip.expanded ? "chevron-up" : "chevron-down"
-      tip: (strip.expanded ? "close" : "open") + " the progress"
-      onClicked: strip.toggle()
+    Label {
+      visible: strip.stall !== ""
+      Layout.maximumWidth: strip.width * 0.4
+      text: strip.stall
+      elide: Text.ElideRight
+      color: Theme.warning
+      font.pixelSize: Theme.type.meta.size
     }
   }
 }

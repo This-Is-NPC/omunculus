@@ -186,6 +186,12 @@ Singleton {
   readonly property var running: runs.filter(run => run.status === "open")
   readonly property var waiting: requests.filter(request => Requests.pending(request) && Requests.human(request.arbiter))
   readonly property var unread: inbox.filter(item => !item.read_at)
+  // The newest request waiting on you that offers options, none gathering
+  // it from below; null for none.
+  readonly property var deciding: {
+    const gathered = Requests.contained(requests)
+    return waiting.filter(request => !gathered.has(request.id) && Requests.choices(request).length > 0).pop() || null
+  }
   // What waits on you: requests to decide and notes to read.
   readonly property int pending: waiting.length + unread.length
   // Requests still waiting, on you or on an agent.
