@@ -183,7 +183,7 @@ A request is a card only while it waits on you, and it is in the main
 thread. Your answer reads as a bubble on the right (`AnswerBubble`) under
 YOU ANSWERED and the time, its text left aligned with the line breaks kept
 and the bubble as wide as the text, up to 620 px. Above it the question is one dim line at the thread's left
-margin, "Asked by SALES · 4 questions: " (the asker in its tone, the count of a numbered list
+margin, "Asked by SALES · 4 questions: " (whoever first asked it, in their tone, the count of a numbered list
 kept whole) and its first line with words, cut at 120 characters; Enter, Space or
 a click opens it in place to its full text. Sending an answer, like sending
 a message, takes the view to the end, so it never counts as news; when the
@@ -277,8 +277,8 @@ grows with the text up to eight lines, then scrolls. Enter sends, Shift+Enter
 breaks the line, and a pasted text keeps its line breaks. While the agent
 written to works, SEND keeps its caption with the trace along its foot, its
 tip says "sales is working; SEND still sends", and it still sends. SEND is
-dim while the box is empty. While a numbered form waits on you, the keyboard
-goes to the form's first unanswered field, not the box, and the box says "or
+dim while the box is empty. While a question waits on you, form or not, the keyboard
+goes to its card (a form's first unanswered field), not the box, and the box says "or
 say something else to sales"; the count of what
 arrived out of view rises above the form's floating actions. Under 420 px its
 buttons show their icons only.
@@ -293,9 +293,8 @@ mailbox.
 ## Requests
 
 A request's card (`RequestDecision`) is built as eco's answer card. Its
-heading names the kind, who asks (the names in the agents' tones, as
-everywhere they appear, from the asker up when the question climbed:
-"seller › sales asks") and on which work, and the time, on two lines when
+heading names the kind, who asks (the asker in their tone, then how it came to you when it
+climbed: "design-lead asks · via seller › sales") and on which work, and the time, on two lines when
 the card is under 520 px, with its tools at the top right: copy
 the question, the "more" menu that holds ESCALATE while it waits on you, and
 close where the card opened in place of another (DECIDE INSTEAD). Its kinds:

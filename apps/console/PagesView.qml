@@ -519,7 +519,7 @@ Item {
       threadComposer.focusEntry()
     else if (asking)
       whom.forceActiveFocus()
-    else if (mainComposer.formWaits && mainComposer.empty)
+    else if (mainComposer.answerWaits && mainComposer.empty)
       timeline.focusCard()
     else
       mainComposer.focusEntry()
@@ -559,11 +559,11 @@ Item {
     Qt.callLater(focusEntry)
   }
   onAskingChanged: Qt.callLater(focusEntry)
-  // A form that arrives takes the keyboard from an empty box.
+  // A question that arrives takes the keyboard from an empty box.
   Connections {
     target: mainComposer
     function onFormWaitsChanged() {
-      if (mainComposer.formWaits && mainComposer.empty && view.page === "chat")
+      if (mainComposer.answerWaits && mainComposer.empty && view.page === "chat")
         Qt.callLater(view.focusEntry)
     }
   }

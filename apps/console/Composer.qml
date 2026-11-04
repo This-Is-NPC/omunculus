@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import "kit/client/Questions.js" as Questions
+import "kit/client/Requests.js" as Requests
 import "kit/client/Shortcuts.js" as Shortcuts
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
@@ -35,9 +35,9 @@ ColumnLayout {
   readonly property bool busy: work === "" ? Omunculus.running.some(run => String(run.depth) === "0") : Omunculus.busy(work)
   // The agent written to, "" when none is known yet.
   readonly property string addressee: work === "" ? Omunculus.agent : (Omunculus.work(work) || {}).assignee || ""
-  // Whether a numbered form waits on you in the main thread: its answers go
-  // in its card, so the box does not invite them.
-  readonly property bool formWaits: work === "" && Omunculus.waiting.some(request => Questions.parse(request.reason) !== null)
+  // Whether a question waits on you in the main thread: its answer goes in
+  // its card, so the box does not invite it.
+  readonly property bool answerWaits: work === "" && Omunculus.waiting.some(request => Requests.kind(request) === "needs-you")
 
   // Whether the box holds nothing to send.
   readonly property bool empty: entry.text.trim() === ""
@@ -143,7 +143,7 @@ ColumnLayout {
         id: entry
         Layout.fillWidth: true
         framed: false
-        placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? composer.formWaits ? "or say something else" + (composer.addressee ? " to " + composer.addressee : "") : composer.addressee ? "say to " + composer.addressee + " what you need" : "say what you need" : "write to " + (composer.addressee || "this work")
+        placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? composer.answerWaits ? "or say something else" + (composer.addressee ? " to " + composer.addressee : "") : composer.addressee ? "say to " + composer.addressee + " what you need" : "say what you need" : "write to " + (composer.addressee || "this work")
         onSubmitted: composer.noting ? composer.note() : composer.submit()
         onTextChanged: if (composer.work === "" && Omunculus.conversationId !== "") Omunculus.composerDrafts[Omunculus.conversationId] = text
         Keys.onEscapePressed: event => {

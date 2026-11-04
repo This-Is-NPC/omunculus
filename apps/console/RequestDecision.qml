@@ -50,7 +50,7 @@ SurfaceFrame {
   readonly property string about: subject !== Omunculus.subject ? subject : ""
   // Who passed it up, from the asker up, and how each level worded it.
   readonly property var climb: request ? Requests.chain(request).reverse() : []
-  // Who it climbed through to reach you, the asker first: seller › sales.
+  // The asker first, then who passed it on toward you: design-lead, seller, sales.
   readonly property var askers: {
     const names = climb.map(level => Requests.label(level.requester))
     if (request && !Omunculus.noted[key])
@@ -59,6 +59,11 @@ SurfaceFrame {
     return unique.length > 0 ? unique : asker !== "" ? [asker] : []
   }
   readonly property string passers: climb.slice(1).map(level => Requests.label(level.requester)).join(" › ")
+  // Which of its own buttons the card offers, from its state and not from
+  // their visibility, which follows the column that holds them.
+  readonly property bool sends: open && !formLoader.active && (escalating || (kind !== "permission" && hasWords))
+  readonly property bool cannotShown: open && kind === "needs-you" && !formLoader.active && !escalating
+  readonly property bool denies: open && options.includes("deny") && !escalating
   readonly property var options: request ? Object.keys(request.options || {}) : []
   // Its own options, then those of the decisions it gathers from below still
   // waiting, each {part, path, options, request}, as an escalation keeps a
@@ -237,7 +242,7 @@ SurfaceFrame {
       Asks {
         visible: !card.stacked
         Layout.alignment: Qt.AlignVCenter
-        Layout.maximumWidth: content.width * 0.3
+        Layout.maximumWidth: content.width * 0.5
         names: card.askers
         dim: card.dim
       }
@@ -275,7 +280,7 @@ SurfaceFrame {
       Layout.fillWidth: true
       spacing: Theme.space.tight
       Asks {
-        Layout.maximumWidth: content.width * 0.6
+        Layout.maximumWidth: content.width
         names: card.askers
         dim: card.dim
       }
@@ -501,7 +506,7 @@ SurfaceFrame {
 
       Flow {
         id: actions
-        readonly property bool shown: ownOptions.count > 0 || ownGuarded.count > 0 || send.visible || cannot.visible || deny.visible
+        readonly property bool shown: ownOptions.count > 0 || ownGuarded.count > 0 || card.sends || card.cannotShown || card.denies
         Layout.fillWidth: true
         spacing: Theme.space.tight
         Repeater {
@@ -518,9 +523,10 @@ SurfaceFrame {
         }
         TraceButton {
           id: send
-          visible: card.open && !formLoader.active && (card.escalating || (card.kind !== "permission" && card.hasWords))
+          visible: card.sends
           dense: true
           role: "progress"
+          filled: card.hasWords
           icon: card.escalating ? "chevron-up" : "enter"
           text: card.escalating ? "ESCALATE" : "SEND"
           tip: card.escalating ? "raise it, with your words as the reason, to whoever decides above you" : "answer in your words, choosing no option"
@@ -530,7 +536,7 @@ SurfaceFrame {
         }
         TraceButton {
           id: cannot
-          visible: card.open && card.kind === "needs-you" && !formLoader.active && !card.escalating
+          visible: card.cannotShown
           dense: true
           role: "progress"
           text: "I CAN'T ANSWER THIS"
@@ -550,7 +556,7 @@ SurfaceFrame {
         }
         TraceButton {
           id: deny
-          visible: card.open && card.options.includes("deny") && !card.escalating
+          visible: card.denies
           dense: true
           role: "guarded"
           icon: "close"
@@ -606,44 +612,35 @@ SurfaceFrame {
     font.letterSpacing: Theme.type.meta.tracking
   }
 
-  // Who asks, in their tone, from the asker up ("seller › sales"), then
-  // "asks"; the names elide first.
+  // Who asks in their tone, then "asks", then how it came to you ("· via
+  // seller › sales"); the way elides first.
   component Asks: RowLayout {
     id: asks
     property var names: []
     property color dim
     Layout.fillWidth: false
     spacing: 0
-    Repeater {
-      model: asks.names
-      delegate: RowLayout {
-        id: who
-        required property string modelData
-        required property int index
-        spacing: 0
-        Label {
-          visible: who.index > 0
-          text: " › "
-          color: asks.dim
-          font.pixelSize: Theme.type.meta.size
-          font.letterSpacing: 1
-        }
-        Label {
-          Layout.fillWidth: true
-          Layout.minimumWidth: 0
-          text: who.modelData
-          color: Omunculus.toneOf(who.modelData)
-          font.pixelSize: Theme.type.meta.size
-          font.letterSpacing: 1
-          elide: Text.ElideRight
-        }
-      }
+    Label {
+      text: asks.names[0] || ""
+      color: Omunculus.toneOf(text)
+      font.pixelSize: Theme.type.meta.size
+      font.letterSpacing: 1
     }
     Label {
       text: " asks"
       color: asks.dim
       font.pixelSize: Theme.type.meta.size
       font.letterSpacing: 1
+    }
+    Label {
+      visible: asks.names.length > 1
+      Layout.fillWidth: true
+      Layout.minimumWidth: 0
+      text: "  ·  via " + asks.names.slice(1).join(" › ")
+      color: asks.dim
+      font.pixelSize: Theme.type.meta.size
+      font.letterSpacing: 1
+      elide: Text.ElideRight
     }
   }
 
