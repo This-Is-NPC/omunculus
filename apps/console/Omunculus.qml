@@ -74,6 +74,9 @@ Singleton {
   property var runs: []
   property var requests: []
   property var inbox: []
+  // What was typed in the main composer and not sent, by conversation id; a
+  // conversation opened again gets its words back.
+  property var composerDrafts: ({})
   // What was typed in the forms of requests and not sent, by request id:
   // {answers, at}, `at` the box the keyboard was in or -1; a form rebuilt
   // takes its words and the keyboard back from it.

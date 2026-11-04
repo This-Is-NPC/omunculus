@@ -6,7 +6,9 @@ import "kit/ui"
 // Composer is where you write: in the main thread, to the root agent; in a
 // work, to that work's agent, or a note its agents read without a new run,
 // which Enter leaves while the box is noting. A message carries the files
-// picked under the box; a note carries none.
+// picked under the box; a note carries none. In the main thread, the words
+// not sent are kept for the conversation they were written in, and come
+// back when it is open again.
 // Sending shows the trace while the agent you write to is working; the agents
 // below it never hold it. The words stay in the box, dimmed, until the server
 // took the message, and come back to be sent again if it did not. Under 420
@@ -26,6 +28,16 @@ ColumnLayout {
   property bool noting: false
 
   spacing: 10
+
+  // A message on its way keeps its words in the box, whatever opens.
+  Connections {
+    target: Omunculus
+    enabled: composer.work === ""
+    function onConversationIdChanged() {
+      if (!entry.sending)
+        entry.text = Omunculus.composerDrafts[Omunculus.conversationId] || ""
+    }
+  }
 
   // Put the keyboard in the box; in a work, `note` makes Enter leave a note.
   function focusEntry(note) {
@@ -83,6 +95,7 @@ ColumnLayout {
         framed: false
         placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? (Omunculus.agent ? "say to " + Omunculus.agent + " what you need" : "say what you need") : "write to " + ((Omunculus.work(composer.work) || {}).assignee || "this work")
         onSubmitted: composer.noting ? composer.note() : composer.submit()
+        onTextChanged: if (composer.work === "" && Omunculus.conversationId !== "") Omunculus.composerDrafts[Omunculus.conversationId] = text
         Keys.onEscapePressed: event => {
           if (composer.noting)
             composer.noting = false
