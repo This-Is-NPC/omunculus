@@ -131,7 +131,7 @@ defmodule Omunculus.GuiProgressTest do
     const asked = at([seller, sales]);
     const n = nodes(asked);
     check(asked.state === "needs-you" && n.w1.state === "needs-you" && n.w1.doing === "Waiting for your answer", "needs you", n.w1);
-    check(asked.forYou.length === 1 && asked.forYou[0].work === "w1" && asked.forYou[0].title === "Bakery website" && asked.forYou[0].asker === "sales", "forYou", asked.forYou);
+    check(asked.forYou.length === 1 && asked.forYou[0].work === "w1" && asked.forYou[0].title === "Bakery website" && asked.forYou[0].asker === "seller", "forYou", asked.forYou);
     check(n.w1.asks.length === 1 && n.w1.asks[0].id === "p1" && n.w1.asks[0].human, "asks", n.w1.asks);
     check(n.w2.state === "done" && n.w3.state === "done", "done below", [n.w2.state, n.w3.state]);
     const toSales = nodes(at([seller, Object.assign({}, sales, {arbiter: agent("sales")})]));
@@ -152,6 +152,19 @@ defmodule Omunculus.GuiProgressTest do
     check(n.w1.state === "waiting" && n.w1.below === "c" && n.w3.below === "", "below", [n.w1.below, n.w3.below]);
     const plain = nodes(Progress.build(base));
     check(plain.w1.below === "" && plain.w2.below === "", "nothing below", plain.w1.below);
+    """)
+  end
+
+  test "a question counts once: the works it climbed through wait for your answer" do
+    run!("""
+    const low = {id: "a", status: "escalated", arbiter: agent("seller"), requester: agent("designer"), work_id: "w3", reason: "Which logo?", origins: {}};
+    const mid = {id: "b", status: "escalated", arbiter: agent("sales"), requester: agent("seller"), work_id: "w2", reason: "passed", origins: {p: low}};
+    const top = {id: "c", status: "pending", arbiter: human, requester: agent("sales"), work_id: null, reason: "Which logo?", origins: {p: mid}};
+    const out = Progress.build(Object.assign({}, base, {runs: [], requests: [low, mid, top]}));
+    const n = nodes(out);
+    check(n.w3.state === "needs-you" && n.w3.asks.length === 1 && n.w3.asks[0].id === "c", "asker", n.w3);
+    check(n.w2.state === "waiting" && n.w2.word === "Waiting" && n.w2.doing === "Waiting for your answer to designer" && n.w2.asks.length === 0 && n.w2.below === "", "passer", n.w2);
+    check(n.w1.below === "c" && out.flat.filter(each => each.state === "needs-you").length === 1 && out.forYou.length === 1 && out.forYou[0].asker === "designer", "once", out.forYou);
     """)
   end
 
@@ -221,7 +234,7 @@ defmodule Omunculus.GuiProgressTest do
     run!("""
     const out = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], runStarts: {r0: 50}, rootAgent: "sales", now: 60});
     check(out.state === "working" && out.focus === null && out.roots.length === 0 && out.path.length === 0, "working", out);
-    check(JSON.stringify(out.now) === JSON.stringify({agent: "sales", doing: "Getting started", since: 50}), "now", out.now);
+    check(JSON.stringify(out.now) === JSON.stringify({agent: "sales", doing: "Getting started", since: 50, loose: true}), "now", out.now);
     const asking = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], calling: {"": "ask"}, rootAgent: "sales", now: 60});
     check(asking.now.doing === "Asking a teammate", "calling", asking.now);
     const idle = Progress.build({works: [], rootAgent: "sales", now: 60});

@@ -305,12 +305,24 @@ function build(input) {
   const askerOf = request => Requests.works(request).map(id => byWork[id]).filter(each => each)
     .reduce((deepest, each) => !deepest || each.level > deepest.level ? each : deepest, null);
 
-  // Each pending request: on every node it holds a question of, and on the
-  // nearest node at or above the asking one whose agent decides it.
+  // One question counts once: only the work that asks it needs you. The works
+  // it climbed through wait for your answer to it.
+  for (const each of flat) {
+    if (each.state !== "needs-you") continue;
+    const mine = inner.get(each).asking.filter(request => Requests.human(request.arbiter));
+    if (mine.some(request => askerOf(request) === each)) continue;
+    const asker = askerOf(mine[0]);
+    each.state = "waiting";
+    each.word = word("waiting");
+    each.waitingOn = "you";
+    each.doing = "Waiting for your answer to " + (asker ? asker.agent : "the team");
+  }
+
+  // Each pending request: on the node that asked it, and on the nearest node
+  // at or above the asking one whose agent decides it.
   for (const request of pending) {
     const asker = askerOf(request);
-    const holding = flat.filter(each => inner.get(each).asking.includes(request));
-    if (!asker || holding.length === 0) continue;
+    if (!asker) continue;
     const human = Requests.human(request.arbiter);
     let to = null;
     if (!human) {
@@ -319,20 +331,20 @@ function build(input) {
     }
     const chain = Requests.chain(request).map(origin => Requests.label(origin.requester)).reverse()
       .concat([Requests.label(request.requester), human ? "you" : Requests.label(request.arbiter)]);
-    for (const each of holding)
-      each.asks.push({
-        id: request.id, to: human ? "you" : Requests.label(request.arbiter), human: human,
-        question: request.reason || "", toWork: to ? to.work : null, chain: chain
-      });
+    asker.asks.push({
+      id: request.id, to: human ? "you" : Requests.label(request.arbiter), human: human,
+      question: request.reason || "", toWork: to ? to.work : null, chain: chain
+    });
     if (to) to.asked.push({ id: request.id, from: Requests.label(request.requester), fromWork: asker.work, question: request.reason || "" });
   }
 
-  // Above a work that needs you, each work says so, keeping its own state.
+  // Above a work that needs you, each work that does not hold its question
+  // says so, keeping its own state.
   for (const each of flat) {
     if (each.state !== "needs-you") continue;
     const ask = each.asks.find(item => item.human);
     for (let at = byWork[each.parent]; at && ask; at = byWork[at.parent])
-      if (at.below === "") at.below = ask.id;
+      if (at.below === "" && !inner.get(at).asking.some(request => request.id === ask.id)) at.below = ask.id;
   }
 
   const hidden = Requests.contained(requests);
@@ -345,7 +357,7 @@ function build(input) {
     const kind = Requests.kind(request);
     const form = kind === "needs-you" ? Questions.parse(question) : null;
     return {
-      id: request.id, asker: Requests.label(passed.length > 0 ? passed[0].requester : request.requester),
+      id: request.id, asker: passed.length > 0 ? Requests.label(passed[0].requester) : of ? of.agent : Requests.label(request.requester),
       work: of ? of.work : "", title: of ? of.title : "", question: question, kind: kind, asks: form ? form.items.length : 1
     };
   });
@@ -364,7 +376,7 @@ function build(input) {
   else if (loose) doing = {
     agent: loose.agent || input.rootAgent || "",
     doing: calling[""] ? Phrases.phrase(calling[""], callArgs[""]) : "Getting started",
-    since: runStart(loose)
+    since: runStart(loose), loose: true
   };
   else if (leaf) doing = { agent: leaf.agent, doing: leaf.doing, since: leaf.since };
 
@@ -387,7 +399,7 @@ function build(input) {
   // The agent that talks with the person, when its works are other agents':
   // the root of the team, and what it asks the person.
   const front = input.rootAgent && roots.some(each => each.agent !== input.rootAgent)
-    ? { agent: input.rootAgent, agents: agents.length, asking: asking(forYou), ask: forYou.length > 0 ? forYou[0].id : "" }
+    ? { agent: input.rootAgent, agents: agents.length, asking: asking(forYou), ask: forYou.length > 0 ? forYou[0].id : "", asker: forYou.length > 0 ? forYou[0].asker : "" }
     : null;
 
   return { state: state, roots: roots, focus: focus, flat: flat, path: path, now: doing, forYou: forYou, agents: agents, counts: counts, spoken: spoken, front: front };

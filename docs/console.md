@@ -211,8 +211,8 @@ once done, the stage's name being the stepper's under it; "WAITING FOR YOU
 SINCE 22:43", in the warning tone, in place of the clock while a question
 waits on you; before any work, "● SALES · STARTING" while its first run goes,
 NOT STARTED before any, the agent giving way as the width shrinks. From 700 px of its own width the counts
-follow: "· 2 AGENTS · 212 CALLS", shown when more than one agent ran and
-once a call was made; each opens what it counts, the team and the cost, and
+follow: "· 2 AGENTS · 212 REPLIES", shown when more than one agent ran and
+once the model replied (a reply is one model call; a step is a tool call); each opens what it counts, the team and the cost, and
 the agents' tip names them. At its right the chevron, which opens the full
 view, and ANSWER, in the warning tone and with the count when more than one
 waits, while a question waits on you, which puts the keyboard in the newest
@@ -247,11 +247,12 @@ or folds, Esc returns to the composer.
 
 A work's state follows its questions up their climb. An escalated question
 is held by the pending request that gathers it, at any depth
-(`Requests.holder`): a work whose question climbed to you needs you, even
-when the request now waiting on you belongs to no work, as one an agent at
-depth 0 escalated; one whose question an agent holds waits on that agent. A
-question for you counts for the deepest work it climbed from
-(`Requests.works`). A work waiting for an answer that is not read yet says
+(`Requests.holder`). A question for you counts once, for the deepest work it
+climbed from (`Requests.works`): that work alone needs you, even when the
+request now waiting on you belongs to no work, as one an agent at depth 0
+escalated. The works it climbed through wait ("Waiting for your answer to
+design-lead"); one whose question an agent holds waits on that agent. The
+NEEDS YOU chip of the team counts these questions. A work waiting for an answer that is not read yet says
 "Waiting for an answer". The works above one that needs you keep their own
 state, and a done or coming one there is not folded.
 
@@ -398,7 +399,8 @@ included; ALL names its unit ("ALL 3 WORKS"). A request badge shows its climb (`
 tone when it is to you; `⇡ designer › design-lead`; `⇣ 1 question from
 designer`); the NEEDS YOU chip is lit while a count above zero waits. A badge goes to the
 other end of its request, lights both rows and opens the request in the
-detail; `⇣ needs you below`, on the works above one that needs you, does
+detail; `⇣ needs you below`, on the works above one that needs you and do not hold
+its question, does
 the same with that work's question.
 
 The work picked shows in full (`NodeDetail`). Its header strip names its

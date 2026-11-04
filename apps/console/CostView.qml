@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import "kit/ui"
 
 // CostView is what the conversation open has used. A header strip sums it
-// up — the model calls, the tokens read by the model (with those from
+// up — the model replies, the tokens read by the model (with those from
 // cache) and written by it — with its cost at the right; then a row per
 // agent, the busiest first, its name in its colour over the same figures,
 // its cost at the top right, "-" for an agent none priced. When no provider reported a price there is no
@@ -24,12 +24,12 @@ FocusScope {
   // A tally's calls and tokens, as one line.
   function used(tally) {
     return [
-      tally.calls + (tally.calls === 1 ? " call" : " calls"),
+      tally.calls + (tally.calls === 1 ? " reply" : " replies"),
       Omunculus.tokens(tally.input) + " read" + (tally.cached > 0 ? " (" + Omunculus.tokens(tally.cached) + " from cache)" : ""),
       Omunculus.tokens(tally.output) + " written"
     ].join(Theme.type.meta.separator)
   }
-  // A tally's cost, "-" when none of its calls was priced.
+  // A tally's cost, "-" when none of its replies was priced.
   function spent(tally) {
     if (tally.priced === 0)
       return "-"
