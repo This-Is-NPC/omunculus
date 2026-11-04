@@ -7,8 +7,8 @@ import "kit/ui"
 // up — the model calls, the tokens read by the model (with those from
 // cache) and written by it — with its cost at the right; then a row per
 // agent, the busiest first, its name in its colour over the same figures,
-// its cost at the top right, "-" when its provider reported none. One note
-// says when no provider did. Esc leaves.
+// its cost at the top right, "-" for an agent none priced. When no provider reported a price there is no
+// cost anywhere, only one note saying so. Esc leaves.
 FocusScope {
   id: view
 
@@ -64,8 +64,9 @@ FocusScope {
           wrapMode: Text.Wrap
         }
         Label {
+          visible: !view.unpriced
           text: view.spent(view.all)
-          color: view.all.priced === 0 ? Theme.dim : Theme.primary
+          color: Theme.primary
           font.pixelSize: Theme.type.input.size
         }
       }
@@ -88,15 +89,13 @@ FocusScope {
       active: view.activeFocus
       rows: view.agents
       idOf: entry => entry.name
-      columns: [
-        { title: "Agent", weight: 0.25 },
-        { title: "Used", weight: 0.55 },
-        { title: "Cost", weight: 0.2 }
-      ]
-      cells: entry => [entry.name, view.used(entry), view.spent(entry)]
+      columns: view.unpriced
+        ? [{ title: "Agent", weight: 0.25 }, { title: "Used", weight: 0.75 }]
+        : [{ title: "Agent", weight: 0.25 }, { title: "Used", weight: 0.55 }, { title: "Cost", weight: 0.2 }]
+      cells: entry => view.unpriced ? [entry.name, view.used(entry)] : [entry.name, view.used(entry), view.spent(entry)]
       tone: (entry, column) => column === 0 ? Omunculus.toneOf(entry.name) : column === 2 && entry.priced === 0 ? Theme.dim : ""
       stacked: [[0], [1]]
-      status: 2
+      status: view.unpriced ? -1 : 2
       emptyText: "Nothing used yet."
       onBackRequested: view.leave()
     }
