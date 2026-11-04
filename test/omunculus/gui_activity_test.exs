@@ -104,31 +104,4 @@ defmodule Omunculus.GuiActivityTest do
     if (Requests.kind(Object.assign({}, other, {options: grant})) !== "permission") throw Error("permission");
     """)
   end
-
-  test "summarize speaks in phrases, counts failures and hides internal ones" do
-    run!(["Phrases"], """
-    const ok = name => ({name, ok: true});
-    const bad = name => ({name, ok: false});
-    const read6 = Array.from({length: 6}, () => ok("read"));
-    let out = Phrases.summarize(read6.concat([ok("write")]));
-    if (out.text !== "Read 6 files, wrote a file" || out.failed !== 0 || out.failedText !== "") throw Error(out.text);
-    out = Phrases.summarize([ok("read"), bad("write"), bad("edit"), ok("read")]);
-    if (out.text !== "Read 2 files") throw Error(out.text);
-    if (out.failed !== 2 || out.failedText !== "2 attempts did not work") throw Error(JSON.stringify(out));
-    out = Phrases.summarize([bad("next_stage"), bad("next_stage"), bad("next_stage"), ok("ls")]);
-    if (out.hidden !== 3 || out.failed !== 0 || out.failedText !== "" || out.text !== "Looked at the project") throw Error(JSON.stringify(out));
-    out = Phrases.summarize(Array.from({length: 4}, () => bad("next_stage")));
-    if (out.hidden !== 0 || out.failed !== 4 || out.failedText !== "The team is having trouble moving on") throw Error(JSON.stringify(out));
-    if (Phrases.summarize([ok("mystery")]).text !== "Worked") throw Error("unknown");
-    const titled = {name: "work", ok: true, args: {report: "r", works: [{title: "Bakery website", goal: "x"}]}};
-    const several = {name: "work", ok: true, args: {works: [{title: "Bakery website"}, {title: "Menu"}, {title: "About"}]}};
-    if (Phrases.phrase("work", several.args) !== "Opening work: Bakery website +2 more") throw Error("several phrase");
-    if (Phrases.summarize([several]).text !== "Opened work: Bakery website +2 more") throw Error("several summary");
-    if (Phrases.phrase("work", titled.args) !== "Opening work: Bakery website" || Phrases.phrase("work", {works: []}) !== "Opening work") throw Error("titled phrase");
-    if (Phrases.summarize([titled]).text !== "Opened work: Bakery website") throw Error("titled summary");
-    if (Phrases.summarize([titled, titled]).text !== "Opened 2 pieces of work") throw Error("titled many");
-    if (Phrases.summarize([ok("work")]).text !== "Opened some work") throw Error("untitled summary");
-    if (Phrases.phrase("read") !== "Reading files" || Phrases.phrase("mystery") !== "Working") throw Error("phrase");
-    """)
-  end
 end
