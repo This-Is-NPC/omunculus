@@ -366,6 +366,19 @@ function kidsOf(node) {
   return node.groups.reduce((all, group) => all.concat(group.nodes), []);
 }
 
+// The works a node handed down, in words: "1 sub-work done", "2 sub-works,
+// 1 working", "3 sub-works, 1 done"; "" when it has none. Cancelled ones
+// count as finished.
+function below(kids) {
+  if (kids.length === 0) return "";
+  const works = kids.length + (kids.length === 1 ? " sub-work" : " sub-works");
+  const working = kids.filter(kid => kid.state === "working").length;
+  const finished = kids.filter(kid => kid.state === "done" || kid.state === "cancelled").length;
+  if (finished === kids.length) return works + " done";
+  if (working > 0) return works + ", " + working + " working";
+  return finished > 0 ? works + ", " + finished + " done" : works;
+}
+
 // A group of works handed down together, in words: "3 in parallel · 1
 // working · 2 done".
 function together(group) {

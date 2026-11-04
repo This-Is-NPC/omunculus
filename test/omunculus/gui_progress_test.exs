@@ -164,6 +164,18 @@ defmodule Omunculus.GuiProgressTest do
     """)
   end
 
+  test "below says in plain words what a work handed down" do
+    run!("""
+    const kids = states => states.map(state => ({state}));
+    check(Progress.below([]) === "", "none", "");
+    check(Progress.below(kids(["done"])) === "1 sub-work done", "one done", "");
+    check(Progress.below(kids(["done", "cancelled"])) === "2 sub-works done", "all finished", "");
+    check(Progress.below(kids(["working", "done"])) === "2 sub-works, 1 working", "working", "");
+    check(Progress.below(kids(["waiting", "done", "up-next"])) === "3 sub-works, 1 done", "some done", "");
+    check(Progress.below(kids(["waiting"])) === "1 sub-work", "open", "");
+    """)
+  end
+
   test "step seconds count a stage visited twice, and again marks a stage due again" do
     run!("""
     const n = nodes(Progress.build(base));

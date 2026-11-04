@@ -19,9 +19,12 @@ Item {
   property int slack: 0
 
   readonly property real advance: metrics.advanceWidth("0")
-  readonly property int budget: Math.max(1, Math.floor(width / Math.max(1, advance)) - slack)
+  // A width of whole characters is not cut short by rounding.
+  readonly property int budget: Math.max(1, Math.floor(width / Math.max(1, advance) + 0.01) - slack)
   readonly property var tokens: steps.length > 0 && width > 0 ? Progress.stepper(steps, round, budget).tokens : []
   readonly property string plain: tokens.map(token => token.text).join("")
+  // The width of the longest form, all it would take.
+  readonly property real natural: whole.advanceWidth
 
   visible: steps.length > 0
   implicitHeight: visible ? metrics.height : 0
@@ -36,6 +39,11 @@ Item {
   }
 
   FontMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: stepper.size }
+  TextMetrics {
+    id: whole
+    font: drawn.font
+    text: stepper.steps.length > 0 ? Progress.stepper(stepper.steps, stepper.round, Infinity).tokens.map(token => token.text).join("") : ""
+  }
   TextMetrics {
     id: drawn
     font.family: Theme.fontFamily

@@ -86,19 +86,15 @@ FocusScope {
     if (!full)
       return ""
     const branch = node.branch
-    const kids = Progress.kidsOf(node)
-    const going = kids.filter(kid => kid.state !== "done" && kid.state !== "cancelled")
-    const working = kids.filter(kid => kid.state === "working").length
-    const parts = []
-    if (kids.length > 0)
-      parts.push(kids.length + " below" + (working > 0 ? " · " + working + " working" : going.length === 0 ? " · done" : ""))
+    const below = Progress.below(Progress.kidsOf(node))
+    const parts = below !== "" ? [below] : []
     parts.push(node.finishedIn !== null ? "took " + Progress.span(node.finishedIn) : Progress.span(branch.seconds))
     if (branch.calls > 0)
       parts.push(branch.calls + (branch.calls === 1 ? " call" : " calls"))
     const money = spent(branch.usage)
     if (money !== "")
       parts.push(money)
-    return parts.join(" · ")
+    return parts.join(Theme.type.meta.separator)
   }
 
   // Incoming requests, one badge per agent asking.
@@ -177,29 +173,37 @@ FocusScope {
       }
     }
 
-    // Its agent, its stages, its branch.
+    // Its agent, its stages, its branch. The branch's totals give way first,
+    // then the stages, so the agent and where it is stay.
     RowLayout {
       id: meta
       // A narrow window shows the stages as a track.
       readonly property bool tight: Breakpoints.size(row.Window.width) === "narrow"
+      readonly property real agentWidth: Math.min(agent.implicitWidth, rowBody.width * 0.3)
+      readonly property real stagesRoom: Math.max(0, rowBody.width - agentWidth - (separator.visible ? separator.implicitWidth : 0))
+      readonly property real stagesWidth: row.steps.length === 0 ? 0
+        : tight ? Math.min(stagesRoom, track.Layout.preferredWidth + track.Layout.rightMargin + stage.implicitWidth)
+        : Math.min(stagesRoom, stepper.natural)
       Layout.fillWidth: true
       spacing: 0
       Label {
-        Layout.maximumWidth: rowBody.width * 0.3
+        id: agent
+        Layout.preferredWidth: meta.agentWidth
         text: row.node.agent
         color: row.agentTone
         font.pixelSize: Theme.type.meta.size
         elide: Text.ElideRight
       }
       Label {
+        id: separator
         visible: row.steps.length > 0
         text: Theme.type.meta.separator
         color: Theme.dim
         font.pixelSize: Theme.type.meta.size
       }
       Stepper {
-        Layout.fillWidth: true
-        Layout.minimumWidth: 0
+        id: stepper
+        Layout.preferredWidth: meta.stagesWidth
         visible: row.steps.length > 0 && !meta.tight
         steps: row.steps
         round: row.node.round
@@ -208,6 +212,7 @@ FocusScope {
       }
       // The stages as a track, and the stage it is at.
       ProgressTrack {
+        id: track
         visible: row.steps.length > 0 && meta.tight
         Layout.preferredWidth: Theme.size.control
         Layout.preferredHeight: Theme.space.tight
@@ -215,23 +220,23 @@ FocusScope {
         fraction: row.node.state === "done" ? 1 : row.node.count > 0 ? row.node.at / row.node.count : 0
       }
       Label {
+        id: stage
         visible: row.steps.length > 0 && meta.tight
-        Layout.fillWidth: true
-        Layout.minimumWidth: 0
+        Layout.preferredWidth: Math.max(0, meta.stagesWidth - track.Layout.preferredWidth - track.Layout.rightMargin)
         text: row.node.at >= 0 ? (row.node.at + 1) + "/" + row.node.count + " " + row.steps[row.node.at].name
           + (row.node.round > 0 ? " r" + row.node.round : "") : ""
         color: Theme.primary
         font.pixelSize: Theme.type.meta.size
         elide: Text.ElideRight
       }
-      Item { Layout.fillWidth: true; visible: row.steps.length === 0 }
       Label {
-        Layout.preferredWidth: Math.min(implicitWidth, rowBody.width * 0.5)
+        Layout.preferredWidth: Math.max(0, Math.min(implicitWidth, meta.stagesRoom - meta.stagesWidth))
         text: Theme.type.meta.separator + row.totals
         color: Theme.dim
         font.pixelSize: Theme.type.meta.size
         elide: Text.ElideRight
       }
+      Item { Layout.fillWidth: true }
     }
 
     // What waits between it and others, and below it.

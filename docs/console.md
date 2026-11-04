@@ -316,8 +316,10 @@ the question climbed from there.
 A row (`ProgressNode` in full) is a table row: the work's title with its
 state at the top right, a meta line of its agent, its stages (`Stepper`;
 under 700 px a track filled to the stage it is at, and that stage) and its
-branch's works below, time, calls and cost, and a badge per request
-between it and others. A row with works below it has a tool at its right
+branch's works below in words ("1 sub-work done", "2 sub-works, 1
+working"), time, calls and cost, and a badge per request between it and
+others. Short of room, the branch's totals give way first, then the
+stages; the agent stays. A row with works below it has a tool at its right
 that goes down to them. The keyboard's row has the focus ring. Chips keep
 the works that need you or work, with the works above them, and `/`
 filters by title, agent or stage; a filter shows a done row only on the
