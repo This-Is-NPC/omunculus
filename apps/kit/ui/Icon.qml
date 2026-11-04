@@ -54,7 +54,8 @@ Item {
 
     ShapePath {
       strokeColor: icon.color
-      strokeWidth: icon.weight * 16 / icon.size
+      // The dots of "more" are strokes of no length: a heavier one fills them.
+      strokeWidth: (icon.name === "more" ? 2 : 1) * icon.weight * 16 / icon.size
       fillColor: "transparent"
       capStyle: ShapePath.RoundCap
       joinStyle: ShapePath.RoundJoin
