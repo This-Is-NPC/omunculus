@@ -46,6 +46,8 @@ SurfaceFrame {
   // conversation's own subject.
   readonly property var origin: passed.length > 0 ? Omunculus.work(passed[0].work_id || "") : null
   readonly property string subject: origin ? origin.title : work ? work.title : Omunculus.subject
+  // The subject when it is not the conversation's own, which the masthead has.
+  readonly property string about: subject !== Omunculus.subject ? subject : ""
   // Who passed it up, from the asker up, and how each level worded it.
   readonly property var climb: request ? Requests.chain(request).reverse() : []
   readonly property string passers: climb.slice(1).map(level => Requests.label(level.requester)).join(" › ")
@@ -232,11 +234,11 @@ SurfaceFrame {
         dim: card.dim
       }
       Label {
-        visible: !card.stacked
+        visible: !card.stacked && text !== ""
         Layout.fillWidth: true
         Layout.minimumWidth: 0
         Layout.alignment: Qt.AlignVCenter
-        text: card.subject
+        text: card.about
         color: card.dim
         font.pixelSize: Theme.type.meta.size
         font.letterSpacing: 1
@@ -270,9 +272,10 @@ SurfaceFrame {
         dim: card.dim
       }
       Label {
+        visible: card.about !== ""
         Layout.fillWidth: true
         Layout.minimumWidth: 0
-        text: "·  " + card.subject
+        text: "·  " + card.about
         color: card.dim
         font.pixelSize: Theme.type.meta.size
         font.letterSpacing: 1
