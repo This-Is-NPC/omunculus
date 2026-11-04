@@ -223,7 +223,8 @@ While a decision waits on you, numbered quick chips sit over the composer:
 the options of the newest one (`Omunculus.deciding`, from
 `Requests.choices`, without the grants saved for good, which are chosen on
 its card), then PROGRESS: "1 ADJUST  2 APPROVE  3 PROGRESS". Pressing an
-option, or Alt and its number, decides it, without words. On a window under
+option, or Alt and its number, decides it, without words, through its card,
+which comes into view and shows the option chosen while it goes. On a window under
 560 px tall the chips are hidden; their chords still answer.
 
 The composer is the kit's `TextArea` in a frame with a chevron: one line that

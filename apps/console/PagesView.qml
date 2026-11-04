@@ -421,7 +421,7 @@ Item {
       .map(option => ({
         text: option.replace(/_/g, " ").toUpperCase(),
         tip: option.replace(/_/g, " ") + ", to what " + Requests.label(choice.request.requester) + " asks",
-        run: () => Omunculus.reply(request.id, option, "", choice.path)
+        run: () => timeline.decide(request.id, option, choice.path)
       }))))
     return options.concat([{ text: "PROGRESS", tip: (progressShown ? "close" : "open") + " the progress of the works", run: () => view.toggleProgress(true) }])
   }

@@ -108,6 +108,16 @@ Item {
     })
   }
 
+  // Decides the request of `key` with `option`, as its card's own options do,
+  // so the card shows what was sent while it goes.
+  function decide(key, option, path) {
+    reveal(key)
+    const row = rowOf(key)
+    const entry = row >= 0 ? timeline.itemAtIndex(row) : null
+    if (entry && entry.content)
+      (entry.content as RequestDecision).decide(option, "", path)
+  }
+
   // Whether the keyboard is inside the card of a question.
   function cardFocused() {
     const card = cardItem()
