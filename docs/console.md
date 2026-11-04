@@ -229,8 +229,10 @@ which comes into view and shows the option chosen while it goes. On a window und
 
 The composer is the kit's `TextArea` in a frame with a chevron: one line that
 grows with the text up to eight lines, then scrolls. Enter sends, Shift+Enter
-breaks the line, and a pasted text keeps its line breaks. SEND shows the
-trace while the agent written to works, and still sends. Under 420 px its
+breaks the line, and a pasted text keeps its line breaks. While the agent
+written to works, SEND keeps its caption over a faint trace across the
+whole button, its tip says "sales is working; SEND still sends", and it
+still sends. Under 420 px its
 buttons show their icons only.
 
 The clip in the composer's frame picks files for the message, which show

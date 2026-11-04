@@ -12,8 +12,9 @@ import "kit/ui"
 // the message carries; the clip in the box picks more, and a note carries
 // none. In the main thread, the words not sent are kept for the conversation
 // they were written in, and come back when it is open again.
-// SEND shows the trace while the agent you write to is working, and still
-// sends; the agents below it never hold it. The words stay in the box,
+// SEND keeps its caption over the trace while the agent you write to is
+// working, says so on hover, and still sends; the agents below it never
+// hold it. The words stay in the box,
 // dimmed, until the server took the message, and come back to be sent again
 // if it did not. Under 420 px of its own width its buttons show their icons
 // only.
@@ -30,6 +31,8 @@ ColumnLayout {
   // Whether the agent written to has a run open: the root agent's, at depth 0,
   // in the main thread; the work's own in a work.
   readonly property bool busy: work === "" ? Omunculus.running.some(run => String(run.depth) === "0") : Omunculus.busy(work)
+  // The agent written to, "" when none is known yet.
+  readonly property string addressee: work === "" ? Omunculus.agent : (Omunculus.work(work) || {}).assignee || ""
 
   // Whether Enter leaves a note rather than sends; once a note is left, or
   // on Esc, the box writes to the agent again.
@@ -132,7 +135,7 @@ ColumnLayout {
         id: entry
         Layout.fillWidth: true
         framed: false
-        placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? (Omunculus.agent ? "say to " + Omunculus.agent + " what you need" : "say what you need") : "write to " + ((Omunculus.work(composer.work) || {}).assignee || "this work")
+        placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? (composer.addressee ? "say to " + composer.addressee + " what you need" : "say what you need") : "write to " + (composer.addressee || "this work")
         onSubmitted: composer.noting ? composer.note() : composer.submit()
         onTextChanged: if (composer.work === "" && Omunculus.conversationId !== "") Omunculus.composerDrafts[Omunculus.conversationId] = text
         Keys.onEscapePressed: event => {
@@ -173,7 +176,7 @@ ColumnLayout {
         allowClickWhileBusy: true
         icon: "enter"
         text: composer.compact ? "" : "SEND"
-        tip: "SEND"
+        tip: composer.busy ? (composer.addressee || "the agent") + " is working; SEND still sends" : "SEND"
         onClicked: composer.submit()
       }
     }

@@ -7,7 +7,10 @@ import "Breakpoints.js" as Breakpoints
 // error tone; any other ("progress", "action") stays in place. `filled`
 // draws it solid in its tone, as a bar's main action is. With a `reason` it is
 // off: it reads disabled and does nothing, but says why on hover. It is never
-// wider than `maximumWidth`, its caption eliding instead.
+// wider than `maximumWidth`, its caption eliding instead. `busy`, the trace
+// runs in place of its caption; one that still acts while busy
+// (`allowClickWhileBusy`) keeps its caption over a faint trace that crosses
+// the whole button.
 Rectangle {
   id: button
 
@@ -26,6 +29,8 @@ Rectangle {
   property color tone: role === "guarded" ? Theme.error : Theme.primary
   readonly property bool primary: role === "primary"
   readonly property bool running: busy
+  // The caption stays while the trace runs: pressing still does something.
+  readonly property bool captioned: allowClickWhileBusy
   readonly property bool off: !enabled || reason !== ""
   readonly property bool hovered: pointer.containsMouse && reason === ""
   readonly property color ink: armed || filled ? Theme.readable(Theme.background, tone, Theme.foreground) : tone
@@ -78,7 +83,14 @@ Rectangle {
 
   LoadingTrace {
     id: trace
-    anchors { fill: parent; leftMargin: Theme.space.cell; rightMargin: Theme.space.cell; topMargin: 7; bottomMargin: 7 }
+    anchors {
+      fill: parent
+      leftMargin: button.captioned ? 0 : Theme.space.cell
+      rightMargin: button.captioned ? 0 : Theme.space.cell
+      topMargin: 7
+      bottomMargin: 7
+    }
+    opacity: button.captioned ? 0.3 : 1
     running: button.running
     tone: button.tone
     backdrop: button.color
@@ -91,8 +103,8 @@ Rectangle {
     clip: true
     Row {
       id: content
-      // Back once the trace has reached the end and gone.
-      visible: !trace.visible
+      // Back once the trace has reached the end and gone, unless it stays.
+      visible: button.captioned || !trace.visible
       anchors.centerIn: parent
       spacing: Theme.space.gap
       transform: Translate { id: contentShift }
