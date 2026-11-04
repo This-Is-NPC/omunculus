@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/client/Questions.js" as Questions
+import "kit/client/Phrases.js" as Phrases
 import "kit/client/Requests.js" as Requests
 import "kit/ui/focus.js" as Focus
 import "kit/ui"
@@ -164,7 +165,7 @@ SurfaceFrame {
     if (granted.kind === "resource")
       return { "sandbox.write": "write files in " + (place.root || "its workspace"), "sandbox.network": "use the network" }[granted.name] || "use " + granted.name
     if (granted.kind === "tool")
-      return granted.name.replace(/_/g, " ")
+      return Phrases.act(granted.name) || granted.name.replace(/_/g, " ")
     return "reach " + granted.name
   }
 
