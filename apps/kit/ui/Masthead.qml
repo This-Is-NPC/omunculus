@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "Breakpoints.js" as Breakpoints
 
 // Masthead is the window's top line: the name, the crumbs of where the window
 // is, the readout on the right, and a hairline that fades out from an accent
@@ -53,6 +54,9 @@ ColumnLayout {
 
   RowLayout {
     Layout.fillWidth: true
+    // As tall with or without an icon button on the right, so the rule
+    // does not move between pages.
+    Layout.minimumHeight: Breakpoints.target(Window.width)
     spacing: Theme.space.gap
     Label { visible: mast.branded; text: "OMUNCULUS"; font.pixelSize: 15; font.bold: true; font.letterSpacing: 6 }
     Label { visible: mast.branded && mast.shown.length > 0; text: "╱"; color: Theme.primary; font.pixelSize: 13 }
