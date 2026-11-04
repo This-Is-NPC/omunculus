@@ -106,10 +106,10 @@ headline). Its
 SHOW button, while a question waits on you, brings the question's card into view and puts the keyboard in
 its words; a click anywhere else on the line opens the team.
 
-On the chat, the team (`TeamPanel`) toggles beside the thread with T or the
+On the chat, the team (`TeamPanel`) toggles beside the thread with Alt+T or the
 bar's TEAM; in a window under 900 px wide it opens as a sheet over the thread.
 Esc in a question's card or in the panel returns to the composer. The bar's
-REPLY carries the number of questions waiting on you, and R or REPLY puts the
+REPLY carries the number of questions waiting on you, and Alt+R or REPLY puts the
 keyboard in the words of the newest one.
 
 The composer is the kit's `TextArea`: one line that grows with the text up to
@@ -231,7 +231,7 @@ Each scrolls and copies what it shows.
 ## Pages
 
 The window opens on its start, clean: NEW CONVERSATION (N), CONVERSATIONS
-(H) and BOARD (B), and the project's name. Entered by one of them, its pages
+(H) and BOARD (B), keys of this screen only, and the project's name. Entered by one of them, its pages
 (`PagesView`) are in two levels, only those of the level on screen showing.
 
 The project's level:
@@ -297,7 +297,7 @@ the conversation's agent, the works it handed down, each opening on its
 page, what comes next — the next stage or whom it reports to — where it
 works, and how long ago it began and last changed.
 
-Its bar has REPLY (R) while it asked you something and OPEN IN MAP (O), its
+Its bar has REPLY (Alt+R) while it asked you something and OPEN IN MAP (Alt+O), its
 conversation's map with it picked. The window turns to the work's project
 first when it is another one (`Omunculus.switchProject`).
 
@@ -339,32 +339,47 @@ time.
 
 ## Commands by page
 
-- On CONVERSATIONS, NEW CONVERSATION (N).
-- On CHAT, while a request waits on you REPLY (R), which brings the newest
-  question into view and puts the keyboard in its card; TEAM (T), which
+- On CONVERSATIONS, NEW CONVERSATION (Ctrl+N, from anywhere entered).
+- On CHAT, while a request waits on you REPLY (Alt+R), which brings the newest
+  question into view and puts the keyboard in its card; TEAM (Alt+T), which
   shows or hides the team beside the chat; while a note to you is unread
-  MARK READ (M), which brings the oldest into view and marks it read; then
-  NEW CONVERSATION (N). Elsewhere a request is answered in its decision
+  MARK READ (Alt+M), which brings the oldest into view and marks it read; then
+  NEW CONVERSATION (Ctrl+N). Elsewhere a request is answered in its decision
   (`RequestDialog`, the card over the page).
-- On TEAM, FIT (F) and, while something waits on you, PENDING, which picks
+- On TEAM, FIT (Alt+F) and, while something waits on you, PENDING, which picks
   it. With a node picked, instead of FIT and PENDING, what applies to it:
-  REPLY (R) while it has a pending request, the one waiting on you first;
-  ESCALATE (E) while one waits on you, which opens the decision with Enter
-  escalating; COMMENT (C) for a work, which puts the keyboard in its
+  REPLY (Alt+R) while it has a pending request, the one waiting on you first;
+  ESCALATE (Alt+E) while one waits on you, which opens the decision with Enter
+  escalating; COMMENT (Alt+C) for a work, which puts the keyboard in its
   inspector's composer with Enter leaving a note (Esc back to writing);
-  MARK READ (M) while it has notes unread, all of them; and WRITE (W), the
+  MARK READ (Alt+M) while it has notes unread, all of them; and WRITE (Alt+W), the
   composer writing to its agent. The in-place cards and the note's check
   still answer and mark one.
 - On LOG, FILTER (`/`) and COPY, the event picked or else the rows shown.
 - On COST, BACK.
-- On BOARD, its groupings and FILTER (`/`).
+- On BOARD, its groupings (Alt+S, Alt+A, Alt+P) and FILTER (`/`).
 
 ## Keys and IPC
 
-The digit each page shows, or Ctrl with it, chooses it, and a command's
-letter, or Alt with it, runs the command, a field being written keeping its
-digits and letters and the picker of a new conversation its digits.
-Ctrl+Tab and Ctrl+Shift+Tab go to the next or the previous page.
+Typed text never runs a command. The keys are in tiers, one table,
+`apps/kit/client/Shortcuts.js`, read by the shell, the pages' commands, the
+picker and the keys dialog:
+
+- No key: anything that creates, sends, answers, grants, denies, escalates,
+  reverts, deletes or cancels is pressed or clicked. Enter in the composer
+  and in a request's words send what is written there; no other key does.
+- Bare keys, for navigation without effect: the digit of a page, `/`, `?`,
+  F1 and Esc, the digits of the cards of the picker, and N, H and B on the
+  start screen. They act only while an item to navigate has the keyboard and
+  no text field saw a key in the last second (`Typing`, marked by every
+  `TextArea` and `TextBox`), so text that lost its field is not taken for
+  commands. With nothing holding the keyboard, a printable key does nothing
+  but say "Click a field to type"; text is never redirected into another
+  field.
+- Chords, which a field being written leaves to them: Ctrl and the digit of
+  a page, Ctrl+Tab and Ctrl+Shift+Tab for the next or the previous page,
+  Ctrl+N for a new conversation, and Alt with a letter for the commands of a
+  page's bar (R, T, M, O, W, C, E, F, S, A, P).
 
 The IPC's `start`, `page <name>` (`conversations`, `board` and, with a
 conversation open, `chat`, `map`, `log`, `cost`), `conversations`,

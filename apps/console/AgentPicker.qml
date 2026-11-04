@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Shortcuts.js" as Shortcuts
 import "kit/ui"
 
 // AgentPicker is whom a new conversation is with: a card for each agent of
@@ -35,9 +36,12 @@ FocusScope {
   onAgentsChanged: grid.currentIndex = start
 
   Keys.onEscapePressed: back()
+  // The digits pick only with the cards in hand and no text just written.
   Keys.onPressed: event => {
-    const index = event.key - Qt.Key_1
-    if (index >= 0 && index < Math.min(9, agents.length)) {
+    if (!grid.activeFocus || !Typing.idle)
+      return
+    const index = Shortcuts.keys("pick").indexOf(event.text)
+    if (index >= 0 && index < agents.length) {
       picked(agents[index].name)
       event.accepted = true
     }

@@ -15,6 +15,9 @@ C.TextField {
   selectedTextColor: Theme.badgeForeground
   leftPadding: dense ? 10 : 14
   rightPadding: dense ? 10 : 14
+  // Marks that text is being written, and leaves the key to the box.
+  Keys.priority: Keys.BeforeItem
+  Keys.onPressed: Typing.mark()
   topPadding: 6
   bottomPadding: 6
   background: InputFrame {

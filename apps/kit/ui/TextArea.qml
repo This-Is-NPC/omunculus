@@ -75,6 +75,9 @@ ColumnLayout {
           else
             area.submitted(text)
         }
+        // Marks that text is being written, and leaves the key to the box.
+        Keys.priority: Keys.BeforeItem
+        Keys.onPressed: Typing.mark()
         Keys.onReturnPressed: event => enter(event)
         Keys.onEnterPressed: event => enter(event)
         // Tab moves on, as from a one-line field, instead of typing a tab.

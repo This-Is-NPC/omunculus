@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import "kit/client/Requests.js" as Requests
+import "kit/client/Shortcuts.js" as Shortcuts
 import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
@@ -183,9 +184,9 @@ Item {
   // a `key` answer to it too.
   readonly property var commands: {
     const last = history.length > 0 ? history[history.length - 1] : null
-    const back = { text: "BACK", role: "back", tip: "back to the " + (last ? last.page : "start") + "  esc", run: () => view.back() }
+    const back = { text: "BACK", role: "back", tip: "back to the " + (last ? last.page : "start") + "  " + Shortcuts.label("back"), run: () => view.back() }
     // A new conversation: the main action of the conversations, another on the chat.
-    const fresh = role => ({ text: "NEW CONVERSATION", short: "NEW", icon: "plus", role: role, key: "N", tip: "start another conversation  n",
+    const fresh = role => ({ text: "NEW CONVERSATION", short: "NEW", icon: "plus", role: role, tip: "start another conversation  " + Shortcuts.label("new-conversation"),
       run: () => view.newConversation() })
     if (page === "conversations")
       return [back, fresh("primary")]
@@ -195,9 +196,9 @@ Item {
       const waiting = Omunculus.asked(workKey).filter(request => Requests.human(request.arbiter))
       return [
         back,
-        { text: "REPLY", icon: "enter", role: "primary", tone: Theme.warning, key: "R", tip: "answer what it asked you  r",
+        { text: "REPLY", icon: "enter", role: "primary", tone: Theme.warning, key: Shortcuts.chord("reply"), tip: "answer what it asked you  " + Shortcuts.label("reply"),
           shown: waiting.length > 0, run: () => decision.show(waiting[0].id, false) },
-        { text: "OPEN IN MAP", short: "MAP", icon: "map", key: "O", tip: "its conversation's map, the work picked  o",
+        { text: "OPEN IN MAP", short: "MAP", icon: "map", key: Shortcuts.chord("open-map"), tip: "its conversation's map, the work picked  " + Shortcuts.label("open-map"),
           run: () => view.openWork({ id: workKey, project: Omunculus.project, conversation_id: Omunculus.conversationId }) }
       ]
     }
@@ -205,15 +206,15 @@ Item {
     if (page === "map" && node !== null)
       return [
         back,
-        { text: "REPLY", icon: "enter", role: "primary", tone: askedOfYou.length > 0 ? Theme.warning : Theme.primary, key: "R",
-          tip: (askedOfYou.length > 0 ? "answer what it asked you" : "answer what it asked, instead of whoever decides") + "  r",
+        { text: "REPLY", icon: "enter", role: "primary", tone: askedOfYou.length > 0 ? Theme.warning : Theme.primary, key: Shortcuts.chord("reply"),
+          tip: (askedOfYou.length > 0 ? "answer what it asked you" : "answer what it asked, instead of whoever decides") + "  " + Shortcuts.label("reply"),
           shown: asked.length > 0, run: () => decision.show(asked[0].id, false) },
-        { text: "WRITE", icon: "edit", key: "W", tip: "write to its agent  w", run: () => team.write(false) },
-        { text: "COMMENT", icon: "plus", key: "C", tip: "a note for its agents, without a run  c",
+        { text: "WRITE", icon: "edit", key: Shortcuts.chord("write"), tip: "write to its agent  " + Shortcuts.label("write"), run: () => team.write(false) },
+        { text: "COMMENT", icon: "plus", key: Shortcuts.chord("comment"), tip: "a note for its agents, without a run  " + Shortcuts.label("comment"),
           shown: node !== "", run: () => team.write(true) },
-        { text: "ESCALATE", icon: "chevron-up", key: "E", tip: "raise what it asked you to whoever decides above you  e",
+        { text: "ESCALATE", icon: "chevron-up", key: Shortcuts.chord("escalate"), tip: "raise what it asked you to whoever decides above you  " + Shortcuts.label("escalate"),
           shown: askedOfYou.length > 0, run: () => decision.show(askedOfYou[0].id, true) },
-        { text: "MARK READ", icon: "check", key: "M", tip: (notesHere.length > 1 ? "mark its " + notesHere.length + " notes read" : "mark its note read") + "  m",
+        { text: "MARK READ", icon: "check", key: Shortcuts.chord("mark-read"), tip: (notesHere.length > 1 ? "mark its " + notesHere.length + " notes read" : "mark its note read") + "  " + Shortcuts.label("mark-read"),
           shown: notesHere.length > 0, run: () => notesHere.forEach(note => Omunculus.markRead(note.id)) }
       ]
     if (page === "map")
@@ -221,17 +222,17 @@ Item {
         back,
         { text: Omunculus.pending + " PENDING", short: String(Omunculus.pending), icon: "warning", role: "primary", tone: Theme.warning,
           tip: "pick what waits on you", shown: Omunculus.pending > 0, run: () => team.pickPending() },
-        { text: "FIT", icon: "map", place: "end", tip: "the whole map in view  f", run: () => team.fit() }
+        { text: "FIT", icon: "map", place: "end", key: Shortcuts.chord("fit"), tip: "the whole map in view  " + Shortcuts.label("fit"), run: () => team.fit() }
       ]
     if (page === "board")
       return [
         back,
-        { text: "BY STATE", short: "STATE", icon: "board", key: "S", group: "view", checked: board.group === "",
-          tip: "the works by state alone  s", run: () => board.group = "" },
-        { text: "BY AGENT", short: "AGENT", icon: "people", key: "A", group: "view", checked: board.group === "agent",
-          tip: "a lane per agent  a", run: () => board.group = "agent" },
-        { text: "BY PROJECT", short: "PROJECT", icon: "folder", key: "P", group: "view", checked: board.group === "project",
-          tip: "a lane per project  p", run: () => board.group = "project" },
+        { text: "BY STATE", short: "STATE", icon: "board", key: Shortcuts.chord("by-state"), group: "view", checked: board.group === "",
+          tip: "the works by state alone  " + Shortcuts.label("by-state"), run: () => board.group = "" },
+        { text: "BY AGENT", short: "AGENT", icon: "people", key: Shortcuts.chord("by-agent"), group: "view", checked: board.group === "agent",
+          tip: "a lane per agent  " + Shortcuts.label("by-agent"), run: () => board.group = "agent" },
+        { text: "BY PROJECT", short: "PROJECT", icon: "folder", key: Shortcuts.chord("by-project"), group: "view", checked: board.group === "project",
+          tip: "a lane per project  " + Shortcuts.label("by-project"), run: () => board.group = "project" },
         { text: "FILTER", icon: "search", place: "end", tip: "filter the works  /", run: () => board.focusFilter() }
       ]
     if (page === "log") {
@@ -246,13 +247,13 @@ Item {
     }
     return [
       back,
-      { text: "REPLY  " + Omunculus.waiting.length, short: "REPLY", icon: "enter", role: "primary", tone: Theme.warning, key: "R",
-        tip: "answer the newest question waiting on you" + (Omunculus.waiting.length > 1 ? ", of " + Omunculus.waiting.length : "") + "  r",
+      { text: "REPLY  " + Omunculus.waiting.length, short: "REPLY", icon: "enter", role: "primary", tone: Theme.warning, key: Shortcuts.chord("reply"),
+        tip: "answer the newest question waiting on you" + (Omunculus.waiting.length > 1 ? ", of " + Omunculus.waiting.length : "") + "  " + Shortcuts.label("reply"),
         shown: Omunculus.waiting.length > 0, run: () => view.replyNow() },
-      { text: "TEAM", icon: "people", key: "T", tip: (teamOpen ? "close" : "open") + " the team beside the chat  t",
+      { text: "TEAM", icon: "people", key: Shortcuts.chord("team"), tip: (teamOpen ? "close" : "open") + " the team beside the chat  " + Shortcuts.label("team"),
         run: () => view.teamOpen = !view.teamOpen },
-      { text: "MARK READ", icon: "check", tone: Theme.warning, key: "M",
-        tip: "show the oldest note to you and mark it read" + (Omunculus.unread.length > 1 ? ", of " + Omunculus.unread.length : "") + "  m",
+      { text: "MARK READ", icon: "check", tone: Theme.warning, key: Shortcuts.chord("mark-read"),
+        tip: "show the oldest note to you and mark it read" + (Omunculus.unread.length > 1 ? ", of " + Omunculus.unread.length : "") + "  " + Shortcuts.label("mark-read"),
         shown: Omunculus.unread.length > 0, run: () => {
           timeline.reveal(Omunculus.unread[0].id)
           Omunculus.markRead(Omunculus.unread[0].id)

@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import "kit/client/Shortcuts.js" as Shortcuts
 import "kit/ui"
 
 ShellRoot {
@@ -53,19 +54,39 @@ ShellRoot {
     onClosed: Qt.quit()
 
     Rectangle {
+      id: frame
       anchors.fill: parent
       color: Theme.background
       border.color: Theme.line
 
       // When the keyboard is left on nothing — a dialog closed, a view changed —
-      // the page on screen takes it back.
+      // the page on screen takes it back, unless text was being written a
+      // moment ago: that text is not carried into another field, and the
+      // keyboard waits on the sink, where typing only says so.
       readonly property Item focused: Window.activeFocusItem
       // Nothing, or only the window itself, has the keyboard.
       function lost(item) { return !item || !item.parent || item === panel.contentItem }
       onFocusedChanged: if (lost(focused)) Qt.callLater(() => {
-        if (lost(Window.activeFocusItem))
+        if (!lost(Window.activeFocusItem))
+          return
+        if (!Typing.idle)
+          sink.forceActiveFocus()
+        else
           panel.started ? pagesView.focusEntry() : start.forceActiveFocus()
       })
+
+      // Whether the bare keys of navigation may act: an item to navigate has
+      // the keyboard, and no text field saw a key for a second.
+      readonly property bool bare: !lost(focused) && focused !== sink && Typing.idle
+
+      // Printable keys no one took are not commands and not text.
+      Keys.onPressed: event => {
+        if (event.text >= " " && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) {
+          Omunculus.tell("Click a field to type", false)
+          event.accepted = true
+        }
+      }
+      Item { id: sink }
 
       ColumnLayout {
         anchors.fill: parent
@@ -98,11 +119,14 @@ ShellRoot {
             focus: shown
             onShownChanged: if (shown) forceActiveFocus()
             Keys.onPressed: event => {
-              if (event.key === Qt.Key_N)
+              if (!Typing.idle)
+                return
+              const key = event.text.toUpperCase()
+              if (Shortcuts.keys("start-new").includes(key))
                 beginButton.press()
-              else if (event.key === Qt.Key_H)
+              else if (Shortcuts.keys("start-history").includes(key))
                 historyButton.press()
-              else if (event.key === Qt.Key_B)
+              else if (Shortcuts.keys("start-board").includes(key))
                 boardButton.press()
             }
 
@@ -121,7 +145,7 @@ ShellRoot {
                 icon: "play"
                 text: "NEW CONVERSATION"
                 enabled: Omunculus.connected
-                tip: "n"
+                tip: Shortcuts.label("start-new")
                 onClicked: panel.enter("new")
               }
               TraceButton {
@@ -132,7 +156,7 @@ ShellRoot {
                 icon: "list"
                 text: "CONVERSATIONS"
                 enabled: Omunculus.connected
-                tip: "h"
+                tip: Shortcuts.label("start-history")
                 onClicked: panel.enter("conversations")
               }
               TraceButton {
@@ -143,7 +167,7 @@ ShellRoot {
                 icon: "board"
                 text: "BOARD"
                 enabled: Omunculus.connected
-                tip: "b"
+                tip: Shortcuts.label("start-board")
                 onClicked: panel.enter("board")
               }
               Item { width: 1; height: 6 }
@@ -200,23 +224,30 @@ ShellRoot {
               notices: Omunculus.noticeCount
             }
 
-            // The digit a page shows, or Ctrl with it, chooses it (a field being written,
-            // or the picker of a new conversation, keeps its digits); Ctrl+Tab
-            // and Ctrl+Shift+Tab go to the next or the previous page.
+            // The digit a page shows chooses it while a page is being navigated
+            // (the picker of a new conversation keeps its digits); Ctrl with
+            // it chooses it from a field being written too. Ctrl+Tab and
+            // Ctrl+Shift+Tab go to the next or the previous page.
             Repeater {
               model: pagesView.pages.length
               delegate: Item {
+                id: numbered
                 required property int index
                 Shortcut {
+                  enabled: panel.started && !panel.dialogOpen && frame.bare && !pagesView.digitsTaken
+                  sequence: Shortcuts.keys("page")[numbered.index]
+                  onActivated: panel.choose(numbered.index)
+                }
+                Shortcut {
                   enabled: panel.started && !panel.dialogOpen
-                  sequences: pagesView.digitsTaken ? ["Ctrl+" + (index + 1)] : [String(index + 1), "Ctrl+" + (index + 1)]
-                  onActivated: panel.choose(index)
+                  sequence: Shortcuts.keys("page-chord")[numbered.index]
+                  onActivated: panel.choose(numbered.index)
                 }
               }
             }
-            // The keys of the page's commands, R to reply and the like, or
-            // Alt with them, which a field being written leaves to them; the
-            // field keeps the letters alone.
+            // The chords of the page's commands, Alt+R to reply and the like,
+            // which a field being written leaves to them. They have no bare
+            // key: what is typed never runs one.
             Repeater {
               model: pagesView.commands.filter(command => command.key && command.shown !== false && command.enabled !== false)
               delegate: Item {
@@ -224,27 +255,33 @@ ShellRoot {
                 required property var modelData
                 Shortcut {
                   enabled: panel.started && !panel.dialogOpen
-                  sequences: [keyed.modelData.key, "Alt+" + keyed.modelData.key]
+                  sequence: keyed.modelData.key
                   onActivated: keyed.modelData.run()
                 }
               }
             }
             Shortcut {
               enabled: panel.started && !panel.dialogOpen
-              sequence: "Ctrl+Tab"
+              sequences: Shortcuts.keys("next-page")
               onActivated: panel.choose(rail.current + 1)
             }
             Shortcut {
               enabled: panel.started && !panel.dialogOpen
-              sequences: ["Ctrl+Shift+Tab", "Ctrl+Backtab"]
+              sequences: Shortcuts.keys("previous-page")
               onActivated: panel.choose(rail.current - 1)
+            }
+            Shortcut {
+              enabled: panel.started && !panel.dialogOpen
+              sequences: Shortcuts.keys("new-conversation")
+              onActivated: pagesView.newConversation()
             }
           }
         }
       }
 
       ShortcutsDialog { id: shortcuts }
-      Shortcut { sequences: ["?", "F1"]; onActivated: shortcuts.open() }
+      Shortcut { enabled: frame.bare; sequence: "?"; onActivated: shortcuts.open() }
+      Shortcut { sequence: "F1"; onActivated: shortcuts.open() }
     }
   }
 

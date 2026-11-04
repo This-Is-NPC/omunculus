@@ -15,7 +15,7 @@ import "kit/ui"
 // an agent asked and still waits for is an arrow from it to whoever decides,
 // named after what it asked. Picking a node opens it beside the map: to
 // answer what it asked, read what it did, and write to it. A card the
-// keyboard reaches comes into view; F frames the whole map.
+// keyboard reaches comes into view; FIT (a chord of the bar) frames the whole map.
 Item {
   id: view
 
@@ -191,12 +191,6 @@ Item {
       picked = null
     else
       leave()
-  }
-  Keys.onPressed: event => {
-    if (event.key !== Qt.Key_F)
-      return
-    fit()
-    event.accepted = true
   }
 
   // The item the keyboard reaches on the map comes into the room left of the

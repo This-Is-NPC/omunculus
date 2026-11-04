@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Shortcuts.js" as Shortcuts
 import "kit/ui"
 
 // ShortcutsDialog lists every key the window answers to, by where it works;
@@ -13,60 +14,41 @@ ModalDialog {
   onOpened: scroll.forceActiveFocus()
 
   // [group, [[keys, what they do]…]]; keys are written as they are pressed.
+  // Those with a key of the table are read from it; the others are the keys
+  // of the controls themselves. Nothing that sends, answers, grants, denies,
+  // escalates, reverts, deletes or cancels has a key of its own.
   readonly property var groups: [
     ["everywhere", [
       ["Tab · Shift+Tab", "move between controls"],
-      ["Enter · Space", "press the control"],
-      ["1 · 2 · …", "the page of that number: the conversations and the board, or, in a conversation, its chat, team, log and cost"],
-      ["Ctrl+1 · Ctrl+2 · …", "the same, from a field being written or the picker"],
-      ["Ctrl+Tab · Ctrl+Shift+Tab", "the next or the previous page"],
-      ["Esc", "let go of what the page holds, then back to where you were, at last the start"],
-      ["Alt + a key of the bar", "the key, from a field being written"],
-      ["? · F1", "these keys"]
+      ["Enter · Space", "press the control"]
+    ].concat(Shortcuts.rows("everywhere"), [
+      ["Alt + a key of the bar", "the key, from a field being written"]
+    ])],
+    ["typing", [
+      ["any key", "text goes only into a field; with none under the cursor, keys do nothing but say so"],
+      ["a bare key", "acts only on what you navigate, a second after the last key typed in a field"]
     ]],
-    ["start", [
-      ["N · H · B", "a new conversation, the conversations, the board"]
-    ]],
+    ["start", Shortcuts.rows("start")],
     ["conversations", [
       ["↑ · ↓", "choose"],
-      ["Enter", "open"],
-      ["N", "new conversation"],
-      ["/", "search"]
-    ]],
+      ["Enter", "open"]
+    ].concat(Shortcuts.rows("conversations"))],
     ["new conversation", [
       ["← · → · ↑ · ↓", "choose whom it is with"],
-      ["1 … 9 · Enter", "start it with them"]
-    ]],
-    ["chat", [
-      ["R", "answer the newest request waiting on you"],
-      ["T", "show or hide the team beside the conversation"],
-      ["M", "show the oldest note to you and mark it read"],
-      ["N", "new conversation"]
-    ]],
-    ["team", [
-      ["F", "the whole map in view"],
-      ["R", "answer what the node picked asked"],
-      ["E", "escalate what it asked you"],
-      ["C", "leave it a note, without a run"],
-      ["M", "mark its notes read"],
-      ["W", "write to its agent"]
-    ]],
-    ["work", [
-      ["R", "answer what it asked you"],
-      ["O", "its conversation's map, the work picked"],
-      ["Esc", "back"]
-    ]],
+      ["Enter", "start it with them"]
+    ].concat(Shortcuts.rows("new conversation"))],
+    ["chat", Shortcuts.rows("chat")],
+    ["team", Shortcuts.rows("team")],
+    ["work", Shortcuts.rows("work").concat([["Esc", "back"]])],
     ["board", [
       ["← · → · ↑ · ↓", "move between the works, across and down the columns"],
-      ["Enter · Space", "open the work on its page"],
-      ["S · A · P", "by state, a lane per agent, a lane per project"],
-      ["/", "filter the works"],
+      ["Enter · Space", "open the work on its page"]
+    ].concat(Shortcuts.rows("board"), [
       ["Esc", "empty the filter, then back to the works"]
-    ]],
-    ["log", [
-      ["/", "filter the events"],
+    ])],
+    ["log", Shortcuts.rows("log").concat([
       ["Esc", "empty the filter, then back to the rows"]
-    ]],
+    ])],
     ["timeline", [
       ["↑ · ↓ · PgUp · PgDn", "move between entries"],
       ["Home · End", "first and last entry"],
@@ -78,7 +60,8 @@ ModalDialog {
       ["Esc", "write to the agent rather than note"]
     ]],
     ["request", [
-      ["Enter", "in its words: answer, or escalate when escalating"]
+      ["Enter", "in its words: answer, or escalate when escalating"],
+      ["Ctrl+Enter", "in a list of questions: send the answers"]
     ]]
   ]
 

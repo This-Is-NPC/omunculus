@@ -35,12 +35,16 @@ These keys work on every screen of the console:
 | --- | --- |
 | Tab · Shift+Tab | move between controls |
 | Enter · Space | press the control |
-| 1 · 2 · … | the page of that number: the conversations and the board, or, in a conversation, its chat, team, log and cost |
+| 1 · 2 · … | the page of that number: the conversations and the board, or, in a conversation, its chat, team, log and cost; only while you navigate, not a second after typing |
 | Ctrl+1 · Ctrl+2 · … | the same, from a field being written or the picker |
 | Ctrl+Tab · Ctrl+Shift+Tab | the next or the previous page |
 | Esc | let go of what the page holds, then back to where you were, at last the start |
 | Alt + a key of the bar | the key, from a field being written |
 | ? · F1 | the keys dialog, which lists these tables |
+
+Typed text never runs a command: nothing that sends, answers, grants, denies,
+escalates, reverts, deletes or cancels has a key of its own outside a field,
+and a key pressed with no field to take it only says "Click a field to type".
 
 The console answers Quickshell IPC too (`quickshell ipc --path apps/console
 call omunculus <function>`): `start`, `page <name>`, `conversations`,
@@ -75,7 +79,7 @@ first said.
 | --- | --- |
 | ↑ · ↓ | choose |
 | Enter | open |
-| N | new conversation |
+| Ctrl+N | new conversation |
 | / | search |
 
 ### 4. Chat
@@ -84,7 +88,7 @@ The chat between you and the root agent: what each of you said and, on a
 line below each run, what the agent did. A question for you is a card in
 the thread, and what the team asked among itself one muted line. Above the
 composer a line says whether the team works, waits or is done, with its step
-and time; T opens the team beside the chat, as a sheet in a narrow window. A
+and time; Alt+T opens the team beside the chat, as a sheet in a narrow window. A
 conversation with no message yet, opened from the
 conversations, first asks whom it is with, on the cards of
 [a new conversation](#2-a-new-conversation) when several agents of depth 0
@@ -92,10 +96,10 @@ may take it.
 
 | Keys | What they do |
 | --- | --- |
-| R | put the keyboard in the words of the newest question waiting on you |
-| T | show or hide the team beside the chat |
-| M | show the oldest note to you and mark it read |
-| N | new conversation |
+| Alt+R | put the keyboard in the words of the newest question waiting on you |
+| Alt+T | show or hide the team beside the chat |
+| Alt+M | show the oldest note to you and mark it read |
+| Ctrl+N | new conversation |
 | Enter, in the composer | send |
 | Shift+Enter, in the composer | break the line |
 | Esc, in a question's card or the team | back to the composer |
@@ -122,12 +126,12 @@ inspector: the work, and its RUNS, CHANGES and PROMPT.
 
 | Keys | What they do |
 | --- | --- |
-| F | the whole map in view |
-| R | answer what the node picked asked |
-| E | escalate what it asked you |
-| C | leave it a note, without a run |
-| M | mark its notes read |
-| W | write to its agent |
+| Alt+F | the whole map in view |
+| Alt+R | answer what the node picked asked |
+| Alt+E | open the decision of what it asked you, to escalate |
+| Alt+C | leave it a note, without a run |
+| Alt+M | mark its notes read |
+| Alt+W | write to its agent |
 
 ### 7. Log
 
@@ -155,7 +159,7 @@ The works of every project of the registry as a kanban, a column per state.
 | --- | --- |
 | ← · → · ↑ · ↓ | move between the works, across and down the columns |
 | Enter · Space | open the work on its page |
-| S · A · P | by state, a lane per agent, a lane per project |
+| Alt+S · Alt+A · Alt+P | by state, a lane per agent, a lane per project |
 | / | filter the works |
 | Esc | empty the filter, then back to the works |
 
@@ -168,8 +172,8 @@ right.
 
 | Keys | What they do |
 | --- | --- |
-| R | answer what it asked you |
-| O | its conversation's map, the work picked |
+| Alt+R | answer what it asked you |
+| Alt+O | its conversation's map, the work picked |
 | Esc | back |
 
 ### 11. The keys dialog

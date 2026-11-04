@@ -493,6 +493,9 @@ Singleton {
     })
   }
 
+  // Says something on the status line.
+  function tell(text, isError) { client.tell(text, isError) }
+
   // Saves a file attached in the conversation to the downloads directory and
   // opens it.
   function openAttachment(file) {
