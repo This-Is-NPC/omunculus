@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import "kit/client/Calls.js" as Calls
 import "kit/client/Phrases.js" as Phrases
 import "kit/client/Progress.js" as Progress
+import "kit/client/Requests.js" as Requests
 import "kit/ui"
 
 // ToolCalls is what one run called, as a group under its words. Folded, one
@@ -38,10 +39,16 @@ Column {
   readonly property int budget: Math.max(8, Math.floor((width - 18) / metrics.advanceWidth("M")) - 1)
   // A lone call that went well is named by what it did, not counted.
   readonly property var lone: count === 1 && summary.failed === 0 ? steps.find(step => !step.outcome && !step.hook) || null : null
+  // A lone reply is named by whom it answers; the person's answers passed on
+  // to a teammate say so.
+  readonly property var answered: lone && lone.name === "reply" ? Omunculus.requests.find(request => request.id === (lone.args || {}).request_id) || null : null
+  readonly property string loneText: !lone ? ""
+    : answered ? Phrases.replied(answered.requester && answered.requester.agent || "", Omunculus.requests.some(request => Requests.human(request.arbiter) && !Requests.pending(request)))
+    : Phrases.did(lone.name, lone.args)
   readonly property string failedPrefix: summary.failed + " failed"
   readonly property var header: Progress.fit([
-    { text: lone ? Phrases.did(lone.name, lone.args) : count === 1 ? "1 step" : count + " steps", short: lone ? Phrases.did(lone.name) : count + " steps", keep: true },
-    summary.failed > 0 ? { text: failedPrefix + ": " + (failedRow ? Phrases.failure(failedRow.name) : ""), short: failedPrefix, keep: true } : null
+    { text: lone ? loneText : count === 1 ? "1 step" : count + " steps", short: lone ? loneText : count + " steps", keep: true },
+    summary.failed > 0 ? { text: failedPrefix + ": " + (failedRow ? Phrases.stepFailure(failedRow.name, failedRow.args) : ""), short: failedPrefix, keep: true } : null
   ].filter(part => part !== null), budget - 6).filter(text => text !== "")
 
   visible: rows.length > 0

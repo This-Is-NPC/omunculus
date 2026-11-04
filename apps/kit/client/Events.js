@@ -22,6 +22,15 @@ function party(participant) {
   return Requests.human(participant) ? "you" : participant.agent || "";
 }
 
+// Text without the harness ids the model echoes: "request <hex>" and bare
+// hex runs of 12 characters or more.
+function unid(text) {
+  return String(text === undefined || text === null ? "" : text)
+    .replace(/\s*\(?\brequests?\s+[0-9a-f]{12,}\w*\)?/gi, "")
+    .replace(/\b(?=[0-9a-f]*\d)[0-9a-f]{12,}\b/gi, "")
+    .replace(/[ \t]{2,}/g, " ");
+}
+
 // Text with ": " before it, or "" when there is none.
 function colon(text) { return text ? ": " + text : ""; }
 
@@ -50,6 +59,8 @@ function hook(body) {
 }
 
 function tool(body) {
+  if (body.ok === false && Phrases.missed(body.name, body.output))
+    return Phrases.miss(body.args);
   const failed = body.ok === false;
   const output = typeof body.output === "string" ? first(body.output) : "";
   if (hook(body))
@@ -73,9 +84,9 @@ function opened(body) {
 // What an event says, as one plain sentence for the log: who asks whom what,
 // what was passed up, what a tool or hook did. `who` is the event's actor;
 // the event itself stays whole in the detail card, never on this line.
-// `asked` maps a request id to how many questions it asked; `requestId` is
-// the event's own request.
-function what(type, body, who, asked, requestId) {
+// `asked` maps a request id to how many questions it asked, `askers` to who
+// asked; `requestId` is the event's own request.
+function what(type, body, who, asked, requestId, askers) {
   const given = body && typeof body === "object" ? body : {};
   switch (type) {
   case "prompt":
@@ -110,9 +121,10 @@ function what(type, body, who, asked, requestId) {
     return "passed " + plural(total, "question", "questions") + " up";
   }
   case "reply": {
-    const said = first(given.body);
+    const said = first(unid(given.body));
     const option = Requests.chosen(given);
-    return option ? "chose " + option + (said && said !== option ? colon(said) : "") : "answered" + colon(said);
+    const asker = (askers || {})[requestId];
+    return option ? "chose " + option + (said && said !== option ? colon(said) : "") : "answered" + (asker ? " " + asker : "") + colon(said);
   }
   case "grant":
     return "granted " + flat(given.name) + (given.scope ? " for the " + given.scope : " for this work");
@@ -160,6 +172,8 @@ const echoed = ["comment", "delegate", "ask", "escalate", "continue", "next_stag
 // an event row of its own.
 function minor(type, body) {
   const given = body && typeof body === "object" ? body : {};
+  if (type === "tool" && given.ok === false && Phrases.missed(given.name, given.output))
+    return true;
   switch (type) {
   case "start-run":
   case "end":

@@ -52,6 +52,7 @@ function group(steps) {
     rows.push({
       name: step.name,
       brief: step.outcome ? String(step.text || "") : Phrases.brief(step.name, step.args),
+      args: step.args || {},
       ok: ok,
       output: String(step.output || ""),
       outcome: !!step.outcome,
