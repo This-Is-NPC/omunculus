@@ -536,6 +536,8 @@ Singleton {
   function send(text, work, files, done, failed) {
     const value = text.trim()
     const refuse = reason => {
+      if (!work)
+        dropPending()
       connection.tell("could not send: " + reason, true)
       if (failed)
         failed()
@@ -545,6 +547,8 @@ Singleton {
         failed()
       return
     }
+    if (!work)
+      showPending(value)
     if (conversationId !== "")
       return deliver(value, work, files, done, refuse)
     if (agent === "")
@@ -554,6 +558,8 @@ Singleton {
       loadConversations()
       open(data.id)
       agent = name
+      if (!work)
+        showPending(value)
       deliver(value, work, files, done, refuse)
     }, refuse)
   }
@@ -753,9 +759,32 @@ Singleton {
     model.append(Object.assign({
       kind: "speech", key: "", who: "", text: "", mine: false, note: false, stamp: "", at: 0, work: "",
       streaming: false, partial: "", steps: "[]", files: "[]",
-      fresh: !replaying
+      fresh: !replaying, pending: false
     }, entry))
     return { thread: key, row: model.count - 1 }
+  }
+
+  // The row of the person's words not yet echoed by the server, or -1.
+  function pendingRow() {
+    const model = threads[""]
+    for (let at = model ? model.count - 1 : -1; at >= 0; at--) {
+      if (model.get(at).pending)
+        return at
+    }
+    return -1
+  }
+
+  // Shows the words just sent in the main thread, dim, until the server's copy
+  // takes their place.
+  function showPending(text) {
+    dropPending()
+    append("", { who: "you", mine: true, text: text, pending: true })
+  }
+
+  function dropPending() {
+    const at = pendingRow()
+    if (at >= 0)
+      threads[""].remove(at)
   }
 
   function entryAt(place) { return threads[place.thread].get(place.row) }
@@ -884,7 +913,13 @@ Singleton {
     case "prompt":
       if (agent === "" && body.agent)
         agent = body.agent
-      append(key, { who: "you", mine: true, text: body.message || "", stamp: stamp, at: at, files: JSON.stringify(body.attachments || []) })
+      const waiting = key === "" ? pendingRow() : -1
+      if (waiting >= 0 && threads[""].get(waiting).text === (body.message || "")) {
+        // The server's copy takes the place of the words shown while sending.
+        threads[""].set(waiting, { stamp: stamp, at: at, files: JSON.stringify(body.attachments || []), pending: false })
+      } else {
+        append(key, { who: "you", mine: true, text: body.message || "", stamp: stamp, at: at, files: JSON.stringify(body.attachments || []) })
+      }
       break
     case "attach":
       say(key, event.run_id, who, String(body.note || ""), stamp, at, body.attachments || [])

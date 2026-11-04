@@ -66,13 +66,9 @@ ColumnLayout {
   // The focus work's title, when it says what the masthead does not.
   readonly property string title: focusNode && focusNode.steps.length === 0 && focusNode.title !== heading ? focusNode.title : ""
 
-  // Whether a message of the person's is on its way.
-  property bool sending: false
-  // Whether the person's message is in the thread or on its way: the
+  // Whether the person's message is in the thread, even still sending: the
   // conversation is starting even before its first run shows.
   readonly property bool said: {
-    if (sending)
-      return true
     const entries = Omunculus.thread("")
     for (let at = 0; at < entries.count; at++) {
       if (entries.get(at).mine)
@@ -84,7 +80,7 @@ ColumnLayout {
   // Where the conversation is before any work: starting while its first run
   // goes or once the person has written, working on later ones, not started
   // before any; else its state.
-  readonly property string opening: working ? (threadWorking ? "" : Omunculus.runs.length <= 1 ? "STARTING" : "WORKING")
+  readonly property string opening: working ? (Omunculus.runs.length <= 1 ? "STARTING" : "WORKING")
     : phase === "idle" ? (Omunculus.runs.length > 0 ? "" : said ? "STARTING" : "NOT STARTED")
     : phase === "needs-you" ? "" : Progress.word(phase).toUpperCase()
 
@@ -335,14 +331,23 @@ ColumnLayout {
     elide: Text.ElideRight
   }
 
+  // The line of the stages or title, kept blank once the person has written,
+  // so the tabs hold their place as the first run starts.
+  Item {
+    Layout.fillWidth: true
+    visible: strip.said && !(strip.moving && ((strip.focusNode && strip.focusNode.steps.length > 0) || strip.title !== ""))
+    implicitHeight: stageLine.height
+    FontMetrics { id: stageLine; font.family: Theme.fontFamily; font.pixelSize: 12 }
+  }
+
   // Who works and what on, fitted, after the state; the silence, when long,
   // after it. While the thread shows who works, the line keeps its room
   // blank, so nothing under it moves as runs start and end.
   RowLayout {
     Layout.fillWidth: true
     Layout.leftMargin: Theme.space.line
-    visible: strip.moving
-    opacity: strip.threadWorking ? 0 : 1
+    visible: strip.moving || strip.said
+    opacity: strip.moving && !strip.threadWorking ? 1 : 0
     spacing: Theme.space.tight
 
     // The state: the trace while working, unless motion is reduced.
