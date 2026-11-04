@@ -114,10 +114,11 @@ Singleton {
 
   // Eight colours for agents, as "#rrggbb": the theme's own made readable, then
   // their hues turned when it has fewer. None is near another, the accent, or
-  // the colours of success, warning and failure, so no agent reads as a state.
+  // the colours of success, warning and failure, or the text's own ink, so no
+  // agent reads as a state or as body text.
   readonly property var agentPalette: distinct([
     secondary, magenta, palette.orange, palette.blue, palette.bright_cyan,
-    palette.bright_magenta, palette.bright_blue, palette.light_foreground, foreground
+    palette.bright_magenta, palette.bright_blue
   ], 8)
   // Colours at least this far apart in RGB (0 to √3) read as different.
   readonly property real apart: 0.15
@@ -131,7 +132,7 @@ Singleton {
 
   function distinct(wanted, count) {
     const picked = []
-    const values = [primary, success, warning, error].map(color => rgb(String(color)))
+    const values = [primary, success, warning, error, foreground].map(color => rgb(String(color)))
     const take = color => {
       if (!color || picked.length === count)
         return
