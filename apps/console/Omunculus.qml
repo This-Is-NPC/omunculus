@@ -126,8 +126,9 @@ Singleton {
   // it: {calls, input, cached, output, cost, priced}, in all, by agent and by
   // work ("" for runs without one). Shown only when asked for.
   property var usage: ({ all: Usage.tally(), agents: {}, works: {} })
-  // Work id -> its tool calls: {count, failed, last: {text, at}}, `last` the
-  // newest call or outcome.
+  // Work id -> its tool calls: {count, failed, firstFailed, last: {text, at}},
+  // `firstFailed` the tool of the first failed call, `last` the newest call or
+  // outcome.
   property var callsOf: ({})
   // Request id -> how many questions it asked, for the log's sentences.
   property var questionsOf: ({})
@@ -791,10 +792,12 @@ Singleton {
   // Adds a line to the turn of the run it happened in, and makes it the
   // newest thing done on its work; a call is counted too.
   function step(runId, work, line) {
-    const was = callsOf[work] || { count: 0, failed: 0, last: null }
+    const was = callsOf[work] || { count: 0, failed: 0, firstFailed: "", last: null }
+    const fails = !line.outcome && !line.hook && !line.ok
     keep("callsOf", work, {
+      firstFailed: was.firstFailed || (fails ? line.name : ""),
       count: was.count + (line.outcome || line.hook ? 0 : 1),
-      failed: was.failed + (!line.outcome && !line.hook && !line.ok ? 1 : 0),
+      failed: was.failed + (fails ? 1 : 0),
       last: line.hook ? was.last : { text: line.outcome ? line.text : (line.name + "  " + Phrases.brief(line.name, line.args)).trim(), at: line.at }
     })
     const place = rows[runId]

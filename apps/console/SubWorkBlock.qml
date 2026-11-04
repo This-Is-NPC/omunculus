@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Phrases.js" as Phrases
 import "kit/client/Progress.js" as Progress
 import "kit/ui"
 
@@ -81,8 +82,10 @@ SurfaceFrame {
       : node && typeof node.finishedIn === "number" ? { text: "in " + Progress.span(node.finishedIn) }
       : null,
     node ? { text: node.calls === 1 ? "1 step" : node.calls + " steps", short: node.calls + " steps" } : null,
-    node && node.failed > 0 ? { text: node.failed + " failed", keep: true } : null
+    node && node.failed > 0 ? { text: node.failed + " failed" + (firstFailed !== "" ? ": " + Phrases.failure(firstFailed) : ""), short: node.failed + " failed", keep: true } : null
   ].filter(part => part !== null), budget - 15).filter(text => text !== "")
+  // The tool of its first failed call; "" when none is known.
+  readonly property string firstFailed: (Omunculus.callsOf[work] || {}).firstFailed || ""
   readonly property var stepper: node && staged && node.steps.length > 0 ? Progress.stepper(node.steps, node.round, budget) : null
 
   readonly property bool showsTranscript: expanded && tab === "transcript"
@@ -169,7 +172,7 @@ SurfaceFrame {
               required property string modelData
               required property int index
               text: (index > 0 ? "  ·  " : "") + modelData
-              color: index === 0 ? block.stateTone : modelData.endsWith(" failed") ? Theme.error : Theme.dim
+              color: index === 0 ? block.stateTone : /^\d+ failed/.test(modelData) && block.condition === "failed" ? Theme.error : Theme.dim
               font.pixelSize: 11
             }
           }
@@ -268,7 +271,7 @@ SurfaceFrame {
   IconButton {
     id: opener
     anchors { right: parent.right; top: parent.top; rightMargin: Theme.space.inset; topMargin: Theme.space.insetTop }
-    name: "chevron-right"
+    name: "open"
     tip: "show this work as a transcript of its own"
     onClicked: block.opened(block.work)
   }

@@ -147,7 +147,7 @@ kit's `Prose`, their web addresses links that open in the browser.
 
 Under its words, a turn's tool calls are one group (`ToolCalls`, from the
 kit's `Calls.group`). Folded, one line counts them, how many failed and the
-first that did, in plain words: "9 steps · 1 failed: moving to the next stage"; how long the run
+first that did, in plain words: "9 steps · 1 failed: moving to the next stage"; a lone call that went well is named by what it did ("Passed a question up"), and a turn that says nothing keeps its heading, so these lines never stand under no name; how long the run
 worked is the turn's to say. While the run is open its last three calls show
 live under it. Unfolded, each call is a row with the raw tool name and its args
 in brief (`Phrases.brief`: the path of a file tool, whom an `ask` or
@@ -166,6 +166,8 @@ A work handed down is a block (`SubWorkBlock`) in the thread of the run that
 handed it down, where it did; so is a root work a run opened. A card headed
 SUB-WORK with its agent, title and time, it says its state, for how long and
 how many steps (tool calls; hook runs are not steps, here and in the turn),
+and, when some failed, how many and the first in plain words ("5 failed:
+moving to the next stage"), in the error tone only if the work itself failed,
 its stages when it has a workflow, and the round with
 who sent it back. Until the work's data arrives, it shows the title the event
 named and "Handing down…", or nothing when the event named none. A work that
@@ -176,7 +178,7 @@ conversation's own work leaves out its title and stages, which the masthead
 and the strip show. Choosing it unfolds it in place, indented, into the tabs
 01 TRANSCRIPT (the work's own thread, at most 480 px tall with its own
 scroll), 02 CHANGES and 03 RUNS; a block two levels down does not unfold.
-The open tool at its top right shows the work's thread as a page of its own
+The open glyph at its top right shows the work's thread as a page of its own
 (see [Pages](#pages)).
 
 A request is a card only while it waits on you, and it is in the main
