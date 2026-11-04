@@ -25,13 +25,13 @@ SurfaceFrame {
   signal opened(string work)
 
   readonly property var record: Omunculus.work(work)
-  readonly property var progress: Omunculus.progress || null
+  readonly property var progress: Omunculus.progress
   readonly property var node: progress ? progress.flat.find(item => item.work === work) || null : null
   readonly property string agent: node ? node.agent : record ? Omunculus.agentOf(record) : ""
   readonly property string title: node ? node.title : record ? record.title : ""
   readonly property string condition: node ? node.state : record ? record.state : ""
   readonly property bool expandable: nesting < 2
-  readonly property real now: Omunculus.tick || Date.now() / 1000
+  readonly property real now: Omunculus.tick
   readonly property color stateTone: ({
     working: Theme.primary, "needs-you": Theme.warning, stopped: Theme.warning,
     failed: Theme.error, done: Theme.success

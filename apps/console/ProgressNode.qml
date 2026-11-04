@@ -36,12 +36,12 @@ FocusScope {
 
   readonly property bool full: mode === "full"
   readonly property bool quiet: ["done", "cancelled", "up-next"].includes(node.state)
-  readonly property real now: Omunculus.tick || Date.now() / 1000
+  readonly property real now: Omunculus.tick
   readonly property color agentTone: Omunculus.toneOf(node.agent)
-  readonly property var steps: node.steps || []
-  readonly property var asks: node.asks || []
-  readonly property var asked: node.asked || []
-  readonly property string clock: node.state === "working" && typeof node.since === "number"
+  readonly property var steps: node.steps
+  readonly property var asks: node.asks
+  readonly property var asked: node.asked
+  readonly property string clock: node.state === "working" && node.since !== null
     ? Progress.clock(Math.max(0, Math.round(now - node.since))) : ""
 
   // The state's icon, word and tone, as every progress view shows them.
@@ -61,7 +61,7 @@ FocusScope {
 
   // A tally's money when the provider priced it, else its tokens.
   function spent(usage) {
-    if (!usage || !usage.calls)
+    if (usage.calls === 0)
       return ""
     if (usage.priced > 0)
       return Omunculus.money(usage.cost)
@@ -71,9 +71,7 @@ FocusScope {
 
   readonly property string branchLine: {
     const branch = node.branch
-    if (!branch)
-      return ""
-    const parts = [Progress.span(branch.seconds || 0)]
+    const parts = [Progress.span(branch.seconds)]
     if (branch.agents > 1)
       parts.push(branch.agents + " agents")
     if (branch.calls > 0)
@@ -97,7 +95,7 @@ FocusScope {
     + (expanded ? more.implicitHeight + 8 : 0)
   activeFocusOnTab: true
   Accessible.role: Accessible.Button
-  Accessible.name: node.agent + ", " + (node.word || node.state) + (node.title ? ", " + node.title : "")
+  Accessible.name: node.agent + ", " + node.word + (node.title ? ", " + node.title : "")
   Keys.onReturnPressed: toggled()
   Keys.onSpacePressed: toggled()
 
@@ -141,8 +139,8 @@ FocusScope {
     Label {
       Layout.fillWidth: true
       Layout.minimumWidth: 0
-      readonly property string said: row.node.doing || row.node.word || ""
-      text: (row.node.title || "") + (said !== "" ? " · " + said.charAt(0).toLowerCase() + said.slice(1) : "")
+      readonly property string said: row.node.doing || row.node.word
+      text: row.node.title + (said !== "" ? " · " + said.charAt(0).toLowerCase() + said.slice(1) : "")
       color: Theme.dim
       font.pixelSize: 11
       elide: Text.ElideRight
@@ -201,7 +199,7 @@ FocusScope {
         id: head
         Layout.maximumWidth: card.width * 0.55
         state: row.node.state
-        word: row.node.word || ""
+        word: row.node.word
         clock: row.clock
       }
       Fold { visible: row.folds; folded: row.folded; onPressed: { row.forceActiveFocus(); row.foldToggled() } }
@@ -210,7 +208,7 @@ FocusScope {
     Label {
       Layout.fillWidth: true
       visible: text !== ""
-      text: row.node.title || ""
+      text: row.node.title
       color: Theme.foreground
       font.pixelSize: 12
       wrapMode: Text.Wrap
@@ -221,7 +219,7 @@ FocusScope {
     Stepper {
       Layout.fillWidth: true
       steps: row.steps
-      round: row.node.round || 0
+      round: row.node.round
       tip: {
         const lane = Omunculus.laneOf(Omunculus.work(row.node.work) || {})
         const at = row.steps.findIndex(step => step.status === "current")
@@ -244,7 +242,7 @@ FocusScope {
       Label {
         Layout.fillWidth: true
         Layout.minimumWidth: 0
-        text: row.node.lastCall ? row.node.lastCall.brief || "" : row.node.doing || ""
+        text: row.node.lastCall ? row.node.lastCall.brief : row.node.doing
         color: row.node.state === "failed" ? Theme.error : row.node.state === "stopped" || row.node.state === "needs-you" ? Theme.warning : Theme.dim
         font.pixelSize: 11
         elide: Text.ElideRight
@@ -253,7 +251,7 @@ FocusScope {
 
     Label {
       Layout.fillWidth: true
-      visible: (row.node.round || 0) > 0
+      visible: row.node.round > 0
       text: "↩ Round " + row.node.round + (row.node.sentBack ? " · sent back by " + row.node.sentBack.by
         + (row.node.sentBack.why ? ": \"" + row.node.sentBack.why + "\"" : "") : "")
       color: Theme.dim
@@ -273,7 +271,7 @@ FocusScope {
         Label {
           Layout.fillWidth: true
           Layout.minimumWidth: 0
-          text: "? asked " + (ask.modelData.human ? "you" : ask.modelData.to) + ": \"" + String(ask.modelData.question || "").split("\n")[0] + "\""
+          text: "? asked " + (ask.modelData.human ? "you" : ask.modelData.to) + ": \"" + ask.modelData.question.split("\n")[0] + "\""
           color: ask.modelData.human ? Theme.warning : Theme.foreground
           font.pixelSize: 11
           elide: Text.ElideRight
@@ -285,10 +283,10 @@ FocusScope {
     // "full": the team, with whoever holds the stage ringed, and the requests.
     Flow {
       Layout.fillWidth: true
-      visible: row.full && (row.node.team || []).length > 0
+      visible: row.full && row.node.team.length > 0
       spacing: 4
       Repeater {
-        model: row.full ? row.node.team || [] : []
+        model: row.full ? row.node.team : []
         delegate: Rectangle {
           id: member
           required property var modelData
@@ -320,7 +318,7 @@ FocusScope {
           text: "⇡ waiting for " + (modelData.human ? "you" : modelData.to)
           accent: modelData.human ? Theme.warning : Theme.primary
           checked: modelData.human
-          tip: String(modelData.question || "").split("\n")[0]
+          tip: modelData.question.split("\n")[0]
           onClicked: row.requestPicked(modelData.id)
         }
       }
@@ -329,7 +327,7 @@ FocusScope {
         delegate: Chip {
           required property var modelData
           text: "⇣ " + modelData.requests.length + (modelData.requests.length === 1 ? " question" : " questions") + " from " + modelData.from
-          tip: String(modelData.requests[0].question || "").split("\n")[0]
+          tip: modelData.requests[0].question.split("\n")[0]
           onClicked: row.requestPicked(modelData.requests[0].id)
         }
       }
@@ -345,7 +343,7 @@ FocusScope {
 
     RowLayout {
       Layout.fillWidth: true
-      visible: (row.node.calls || 0) > 0
+      visible: row.node.calls > 0
       spacing: 0
       Label {
         text: row.node.calls + (row.node.calls === 1 ? " tool call" : " tool calls")
@@ -353,7 +351,7 @@ FocusScope {
         font.pixelSize: 11
       }
       Label {
-        visible: (row.node.failed || 0) > 0
+        visible: row.node.failed > 0
         text: " · " + row.node.failed + " failed"
         color: Theme.error
         font.pixelSize: 11
@@ -396,7 +394,7 @@ FocusScope {
       delegate: Label {
         required property var modelData
         Layout.fillWidth: true
-        text: "Asked " + (modelData.human ? "you" : modelData.to) + ": " + (modelData.question || "")
+        text: "Asked " + (modelData.human ? "you" : modelData.to) + ": " + modelData.question
         color: modelData.human ? Theme.warning : Theme.foreground
         font.pixelSize: 12
         wrapMode: Text.Wrap

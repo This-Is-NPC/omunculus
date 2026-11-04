@@ -30,7 +30,7 @@ function two(n) { return String(n).padStart(2, "0"); }
 
 // A duration in words: "42 s", "3 min", "1 h 05 min".
 function span(total) {
-  const s = Math.max(0, Math.floor(total || 0));
+  const s = Math.max(0, Math.floor(total));
   if (s < 60) return s + " s";
   if (s < 3600) return Math.floor(s / 60) + " min";
   return Math.floor(s / 3600) + " h " + two(Math.floor(s % 3600 / 60)) + " min";
@@ -38,7 +38,7 @@ function span(total) {
 
 // A running clock: "0:42", "12:05", "1:02:03".
 function clock(total) {
-  const s = Math.max(0, Math.floor(total || 0));
+  const s = Math.max(0, Math.floor(total));
   const h = Math.floor(s / 3600);
   const m = Math.floor(s % 3600 / 60);
   return h > 0 ? h + ":" + two(m) + ":" + two(s % 60) : m + ":" + two(s % 60);
@@ -376,8 +376,8 @@ function forms(steps, round) {
 // {form, tokens: [{text, status}]}; status is done, current, next or
 // separator. The last form elides to fit any budget.
 function stepper(steps, round, budget) {
-  if (!steps || steps.length === 0) return { form: "F1", tokens: [] };
-  const all = forms(steps, round || 0);
+  if (steps.length === 0) return { form: "F1", tokens: [] };
+  const all = forms(steps, round);
   for (const each of all)
     if (joined(each[1]).length <= budget) return { form: each[0], tokens: each[1] };
   const last = all[all.length - 1][1][0];

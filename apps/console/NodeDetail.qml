@@ -53,11 +53,11 @@ FocusScope {
   readonly property var work: key !== "" ? Omunculus.work(key) : null
   readonly property string agent: node ? node.agent : work ? Omunculus.agentOf(work) : ""
   readonly property color agentTone: Omunculus.toneOf(agent)
-  readonly property var asks: node ? node.asks || [] : []
-  readonly property var asked: node ? node.asked || [] : []
-  readonly property var steps: node ? node.steps || [] : []
-  readonly property real now: Omunculus.tick || Date.now() / 1000
-  readonly property string clock: node && node.state === "working" && typeof node.since === "number"
+  readonly property var asks: node ? node.asks : []
+  readonly property var asked: node ? node.asked : []
+  readonly property var steps: node ? node.steps : []
+  readonly property real now: Omunculus.tick
+  readonly property string clock: node && node.state === "working" && node.since !== null
     ? Progress.clock(Math.max(0, Math.round(now - node.since))) : ""
 
   // The tab `step` places away, wrapping.
@@ -77,7 +77,7 @@ FocusScope {
 
   // A tally's money when the provider priced it, with its tokens.
   function cost(usage) {
-    if (!usage || !usage.calls)
+    if (usage.calls === 0)
       return ""
     const tokens = count => count >= 1000 ? Math.round(count / 1000) + "k" : String(count)
     return (usage.priced > 0 ? Omunculus.money(usage.cost) + " · " : "")
@@ -86,9 +86,7 @@ FocusScope {
 
   // A branch or work's time, agents and calls, as one line.
   function totals(tally) {
-    if (!tally)
-      return ""
-    const parts = [Progress.span(tally.seconds || 0)]
+    const parts = [Progress.span(tally.seconds)]
     if (tally.agents > 1)
       parts.push(tally.agents + " agents")
     if (tally.works > 1)
@@ -186,7 +184,7 @@ FocusScope {
             visible: pane.node !== null
             Layout.maximumWidth: 160
             state: pane.node ? pane.node.state : ""
-            word: pane.node ? pane.node.word || "" : ""
+            word: pane.node ? pane.node.word : ""
             clock: pane.clock
           }
         }
@@ -208,7 +206,7 @@ FocusScope {
     Stepper {
       Layout.fillWidth: true
       steps: pane.steps
-      round: pane.node ? pane.node.round || 0 : 0
+      round: pane.node ? pane.node.round : 0
       tip: pane.work && pane.work.workflow ? pane.work.workflow : ""
     }
 
@@ -267,7 +265,7 @@ FocusScope {
             Label {
               Layout.fillWidth: true
               Layout.minimumWidth: 0
-              text: pane.node ? (pane.node.lastCall ? pane.node.lastCall.brief || "" : pane.node.doing || "") : ""
+              text: pane.node ? (pane.node.lastCall ? pane.node.lastCall.brief : pane.node.doing) : ""
               color: Theme.dim
               font.pixelSize: 12
               elide: Text.ElideRight
@@ -306,7 +304,7 @@ FocusScope {
             model: pane.asks
             delegate: Value {
               required property var modelData
-              text: "⇡ " + (modelData.chain && modelData.chain.length > 0 ? modelData.chain.join(" › ") : modelData.to)
+              text: "⇡ " + modelData.chain.join(" › ")
               color: modelData.human ? Theme.warning : Theme.foreground
             }
           }
@@ -331,12 +329,12 @@ FocusScope {
         }
         Fact {
           name: "Team"
-          visible: !!(pane.node && (pane.node.team || []).length > 0)
+          visible: !!pane.node && pane.node.team.length > 0
           Flow {
             Layout.fillWidth: true
             spacing: 10
             Repeater {
-              model: pane.node ? pane.node.team || [] : []
+              model: pane.node ? pane.node.team : []
               delegate: Row {
                 id: member
                 required property var modelData
@@ -404,18 +402,18 @@ FocusScope {
         }
         Fact {
           name: "This work"
-          visible: pane.node !== null && !!pane.node.own
+          visible: pane.node !== null
           Value { text: pane.node ? pane.totals(pane.node.own) : ""; color: Theme.dim }
         }
         Fact {
           name: "Branch"
-          visible: !!(pane.node && pane.node.branch && pane.node.branch.works > 1)
+          visible: !!pane.node && pane.node.branch.works > 1
           Value { text: pane.node ? pane.totals(pane.node.branch) : ""; color: Theme.dim }
         }
         Fact {
           name: "Cost"
           visible: spent.text !== ""
-          Value { id: spent; text: pane.node && pane.node.branch ? pane.cost(pane.node.branch.usage) : ""; color: Theme.dim }
+          Value { id: spent; text: pane.node ? pane.cost(pane.node.branch.usage) : ""; color: Theme.dim }
         }
 
         Flow {

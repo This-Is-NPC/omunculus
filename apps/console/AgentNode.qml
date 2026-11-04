@@ -21,11 +21,11 @@ Rectangle {
   signal requestPicked(string id)
 
   readonly property color agentTone: Omunculus.toneOf(node.agent)
-  readonly property var asks: node.asks || []
-  readonly property var asked: node.asked || []
+  readonly property var asks: node.asks
+  readonly property var asked: node.asked
   readonly property bool quiet: ["done", "cancelled"].includes(node.state)
-  readonly property real now: Omunculus.tick || Date.now() / 1000
-  readonly property string clock: node.state === "working" && typeof node.since === "number"
+  readonly property real now: Omunculus.tick
+  readonly property string clock: node.state === "working" && node.since !== null
     ? Progress.clock(Math.max(0, Math.round(now - node.since))) : ""
 
   width: 240
@@ -34,7 +34,7 @@ Rectangle {
   Keys.onReturnPressed: chosen()
   Keys.onSpacePressed: chosen()
   Accessible.role: Accessible.Button
-  Accessible.name: node.agent + ", " + (node.word || node.state) + ", " + node.title
+  Accessible.name: node.agent + ", " + node.word + ", " + node.title
   color: selected ? Qt.tint(Theme.background, Qt.alpha(Theme.primary, 0.1)) : pointer.containsMouse ? Theme.highlight : Theme.background
   border.color: highlighted ? Theme.warning : selected ? Theme.primary : mark.tone
   border.width: selected || highlighted || node.state === "working" || node.state === "needs-you" ? 2 : 1
@@ -86,7 +86,7 @@ Rectangle {
           id: mark
           Layout.maximumWidth: 110
           state: card.node.state
-          word: card.node.word || ""
+          word: card.node.word
           clock: card.clock
         }
       }
@@ -98,8 +98,8 @@ Rectangle {
       }
       Stepper {
         Layout.fillWidth: true
-        steps: card.node.steps || []
-        round: card.node.round || 0
+        steps: card.node.steps
+        round: card.node.round
       }
       Item { Layout.fillHeight: true }
       // What it waits on and what it is asked; each badge picks its request.

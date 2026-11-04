@@ -91,7 +91,7 @@ Column {
     delegate: Column {
       id: call
       required property var modelData
-      readonly property var diff: modelData.diff || null
+      readonly property var diff: modelData.diff
       readonly property bool failed: !modelData.outcome && !modelData.ok
       property bool diffOpen: false
       property bool outputAll: false
@@ -119,7 +119,7 @@ Column {
         Label {
           Layout.fillWidth: true
           Layout.minimumWidth: 0
-          text: call.modelData.outcome ? call.modelData.text || call.modelData.brief || "" : call.modelData.brief || ""
+          text: call.modelData.brief
           color: call.modelData.outcome ? Theme.foreground : Theme.dim
           font.pixelSize: 11
           elide: Text.ElideRight
@@ -142,10 +142,10 @@ Column {
 
       Label {
         id: output
-        visible: call.failed && String(call.modelData.output || "") !== ""
+        visible: call.failed && call.modelData.output !== ""
         x: 18
         width: parent.width - 18
-        text: String(call.modelData.output || "")
+        text: call.modelData.output
         color: Theme.error
         font.pixelSize: 11
         wrapMode: Text.Wrap
@@ -183,7 +183,7 @@ Column {
           width: parent.width - 16
           Repeater {
             model: call.diffOpen && call.diff ? (call.diff.removed || []).map(text => ({ text: text, added: false }))
-              .concat((call.diff.added || []).map(text => ({ text: text, added: true }))) : []
+              .concat(call.diff.added.map(text => ({ text: text, added: true }))) : []
             delegate: Label {
               required property var modelData
               width: lines.width

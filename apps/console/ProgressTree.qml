@@ -27,7 +27,7 @@ Item {
   signal openMap(string work)
   signal escaped()
 
-  readonly property real now: Omunculus.tick || Date.now() / 1000
+  readonly property real now: Omunculus.tick
   readonly property real indent: Breakpoints.indent(width)
   // Folds the reader chose, by row key, over each row's default; the works
   // whose details show; the row the keyboard is on, and whether the
@@ -39,7 +39,7 @@ Item {
 
   readonly property var active: {
     const on = {}
-    for (const step of progress && progress.path ? progress.path : [])
+    for (const step of progress ? progress.path : [])
       on[step.work] = true
     return on
   }
@@ -70,7 +70,7 @@ Item {
     const place = (parent, kids, level) => {
       let group = null
       for (const kid of kids) {
-        const found = (parent.groups || []).find(each => each.parallel && each.nodes.some(node => node.work === kid.work)) || null
+        const found = parent.groups.find(each => each.parallel && each.nodes.some(node => node.work === kid.work)) || null
         if (found && found !== group) {
           const key = "group:" + found.nodes[0].work
           out.push({ kind: "group", key: key, level: level, text: groupLine(found.nodes), folds: true, folded: folded(key, false), fold: false })
@@ -90,21 +90,21 @@ Item {
         place(node, kids, level + 1)
     }
 
-    for (const ask of progress.forYou || [])
+    for (const ask of progress.forYou)
       out.push({ kind: "needs", key: "ask:" + ask.id, level: 0, ask: ask })
-    const roots = progress.roots || []
-    if (roots.length === 0 && progress.state !== "idle" && progress.now && progress.now.agent)
+    const roots = progress.roots
+    if (roots.length === 0 && progress.state !== "idle" && progress.now.agent)
       out.push({ kind: "now", key: "now", level: 0 })
     for (const root of roots) {
       out.push({ kind: "head", key: "head:" + root.work, level: 0, node: root })
-      const steps = root.steps || []
+      const steps = root.steps
       if (steps.length === 0) {
         place(root, Progress.kidsOf(root), 1)
         continue
       }
       steps.forEach((step, at) => {
         const key = root.work + "#" + at
-        const kids = step.children || []
+        const kids = step.children
         const quiet = step.status === "done"
         const shut = kids.length > 0 && folded(key, quiet)
         out.push({ kind: "stage", key: key, level: 0, node: root, step: step, folds: kids.length > 0, folded: shut, fold: quiet })
@@ -265,7 +265,7 @@ Item {
               }
               Label {
                 Layout.fillWidth: true
-                text: String(entry.modelData.ask.question || "").split("\n")[0]
+                text: entry.modelData.ask.question.split("\n")[0]
                 color: Theme.foreground
                 font.pixelSize: 12
                 wrapMode: Text.Wrap
@@ -302,7 +302,7 @@ Item {
             Label {
               Layout.fillWidth: true
               Layout.minimumWidth: 0
-              text: (run.now.doing || "") + (typeof run.now.since === "number" ? " · " + Progress.clock(Math.max(0, Math.round(tree.now - run.now.since))) : "")
+              text: run.now.doing + (run.now.since !== null ? " · " + Progress.clock(Math.max(0, Math.round(tree.now - run.now.since))) : "")
               color: Theme.dim
               font.pixelSize: 11
               elide: Text.ElideRight
@@ -321,7 +321,7 @@ Item {
             Label {
               Layout.fillWidth: true
               Layout.topMargin: 6
-              text: head.node.title || ""
+              text: head.node.title
               color: Theme.foreground
               font.pixelSize: 13
               font.bold: true
@@ -332,11 +332,11 @@ Item {
             Label {
               Layout.fillWidth: true
               text: {
-                const branch = head.node.branch || {}
+                const branch = head.node.branch
                 const parts = []
                 if (head.work && head.work.created_at)
                   parts.push("Started " + Time.clock(head.work.created_at, tree.now * 1000))
-                parts.push(head.node.finishedIn ? "took " + Progress.span(head.node.finishedIn) : Progress.span(branch.seconds || 0))
+                parts.push(head.node.finishedIn ? "took " + Progress.span(head.node.finishedIn) : Progress.span(branch.seconds))
                 if (branch.agents > 1)
                   parts.push(branch.agents + " agents")
                 return parts.join(" · ")
@@ -355,7 +355,7 @@ Item {
             id: stage
             readonly property var step: entry.modelData.step
             readonly property bool now: step.status === "current"
-            readonly property int round: now ? entry.modelData.node.round || 0 : 0
+            readonly property int round: now ? entry.modelData.node.round : 0
             readonly property string time: step.seconds > 0 ? Progress.span(step.seconds) : ""
             implicitHeight: 26
             color: entry.activeFocus || stageHover.hovered ? Theme.highlight : "transparent"

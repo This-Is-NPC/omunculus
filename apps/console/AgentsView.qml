@@ -22,7 +22,7 @@ Item {
   signal chosen(string work)
   signal requestPicked(string id)
 
-  readonly property var progress: Omunculus.progress || null
+  readonly property var progress: Omunculus.progress
   readonly property var roots: progress ? progress.roots : []
   readonly property var flat: progress ? progress.flat : []
 
@@ -62,7 +62,7 @@ Item {
       let x = left + (span[node.work] - row) / 2
       const centres = []
       node.groups.forEach((group, i) => {
-        const counts = group.counts || {}
+        const counts = group.counts
         const name = (group.step ? group.step + " stage" : "")
         const together = group.parallel ? group.nodes.length + " in parallel" + (counts.working ? " · " + counts.working + " working" : "") + (counts.done ? " · " + counts.done + " done" : "") : ""
         if (name || together)

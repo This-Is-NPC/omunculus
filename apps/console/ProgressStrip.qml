@@ -27,10 +27,10 @@ Item {
 
   readonly property string phase: progress ? progress.state : "idle"
   readonly property var focusNode: progress ? progress.focus : null
-  readonly property var forYou: progress ? progress.forYou || [] : []
-  readonly property var path: progress ? progress.path || [] : []
+  readonly property var forYou: progress ? progress.forYou : []
+  readonly property var path: progress ? progress.path : []
   readonly property var now: progress ? progress.now : null
-  readonly property real tick: Omunculus.tick || Date.now() / 1000
+  readonly property real tick: Omunculus.tick
   readonly property bool working: phase === "working"
   readonly property int silence: working && lastEvent > 0 ? Math.round(tick - lastEvent) : 0
 
@@ -44,24 +44,24 @@ Item {
               { text: " · " + asks + (asks === 1 ? " question" : " questions"), keep: true }]
     }
     if (phase === "done") {
-      const took = focusNode ? focusNode.finishedIn || (focusNode.branch || {}).seconds || 0 : 0
+      const took = focusNode ? focusNode.finishedIn || focusNode.branch.seconds : 0
       return [{ text: "Finished", keep: true }, { text: " · took " + Progress.span(took) }]
     }
     if (!now || !now.agent)
-      return [{ text: focusNode ? focusNode.doing || "" : "", elide: true, keep: true }]
+      return [{ text: focusNode ? focusNode.doing : "", elide: true, keep: true }]
     const above = path.map(step => step.agent).filter(agent => agent && agent !== now.agent)
-    const clock = typeof now.since === "number" && working ? Progress.clock(Math.max(0, Math.round(tick - now.since))) : ""
+    const clock = now.since !== null && working ? Progress.clock(Math.max(0, Math.round(tick - now.since))) : ""
     return (above.length > 0 ? [{ text: above.join(" › ") + " › ", short: "…› " }] : [])
-      .concat([{ text: now.agent, keep: true }, { text: ": " + (now.doing || ""), elide: true }])
+      .concat([{ text: now.agent, keep: true }, { text: ": " + now.doing, elide: true }])
       .concat(clock !== "" ? [{ text: " · " + clock, keep: true }] : [])
   }
 
   readonly property string stall: silence > quiet ? " · no news for " + Progress.span(silence) : ""
 
-  visible: progress !== null && ((progress.roots || []).length > 0 || phase !== "idle")
+  visible: progress !== null && (progress.roots.length > 0 || phase !== "idle")
   implicitHeight: visible ? 52 : 0
   Accessible.role: Accessible.StatusBar
-  Accessible.name: progress ? progress.spoken || "" : ""
+  Accessible.name: progress ? progress.spoken : ""
 
   MouseArea {
     anchors.fill: parent
@@ -104,14 +104,14 @@ Item {
         Layout.fillWidth: true
         visible: steps.length > 0
         size: 12
-        steps: strip.focusNode ? strip.focusNode.steps || [] : []
-        round: strip.focusNode ? strip.focusNode.round || 0 : 0
-        tip: strip.focusNode ? strip.focusNode.title || "" : ""
+        steps: strip.focusNode ? strip.focusNode.steps : []
+        round: strip.focusNode ? strip.focusNode.round : 0
+        tip: strip.focusNode ? strip.focusNode.title : ""
       }
       Label {
         Layout.fillWidth: true
-        visible: !strip.focusNode || (strip.focusNode.steps || []).length === 0
-        text: strip.focusNode ? strip.focusNode.title || "" : Omunculus.subject
+        visible: !strip.focusNode || strip.focusNode.steps.length === 0
+        text: strip.focusNode ? strip.focusNode.title : Omunculus.subject
         color: Theme.foreground
         font.pixelSize: 12
         font.bold: true

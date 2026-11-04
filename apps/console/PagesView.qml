@@ -531,7 +531,7 @@ Item {
         ProgressStrip {
           Layout.fillWidth: true
           visible: !view.asking
-          progress: Omunculus.progress || null
+          progress: Omunculus.progress
           lastEvent: Omunculus.lastEventAt
           expanded: view.progressShown
           onToggle: view.toggleProgress(false)
@@ -593,7 +593,7 @@ Item {
         ProgressSheet {
           mode: chat.progressMode
           maximumHeight: chat.height * 0.55
-          progress: Omunculus.progress || null
+          progress: Omunculus.progress
           onClosed: {
             view.progressChoice = false
             mainComposer.focusEntry()

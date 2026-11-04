@@ -28,7 +28,7 @@ FocusScope {
   signal leave()
   signal openLog(string work)
 
-  readonly property var progress: Omunculus.progress || null
+  readonly property var progress: Omunculus.progress
   readonly property var roots: progress ? progress.roots : []
   readonly property var flat: progress ? progress.flat : []
   readonly property var byWork: {
@@ -73,7 +73,7 @@ FocusScope {
       return null
     const keep = {}
     for (const node of flat) {
-      const text = [node.title, node.agent].concat((node.steps || []).map(step => step.name)).join(" ").toLowerCase()
+      const text = [node.title, node.agent].concat(node.steps.map(step => step.name)).join(" ").toLowerCase()
       const state = chip === "all" || node.state === chip
       if (state && words.every(word => text.includes(word)))
         for (let at = node; at && !keep[at.work]; at = byWork[at.parent])
@@ -120,7 +120,7 @@ FocusScope {
         }
         if (group.parallel) {
           const key = "group:" + node.work + ":" + at
-          const counts = group.counts || {}
+          const counts = group.counts
           const groupFolded = !filtering && isFolded(key, false)
           list.push({ kind: "group", key: key, indent: inner, folds: true, folded: groupFolded,
             text: group.nodes.length + " in parallel" + (counts.working ? " · " + counts.working + " working" : "")
@@ -207,7 +207,7 @@ FocusScope {
   // A request's badge: both its ends lit, the other end into view, the
   // request open in the detail of the row whose badge it was.
   function requestPicked(from, id) {
-    const asker = flat.find(node => (node.asks || []).some(ask => ask.id === id))
+    const asker = flat.find(node => node.asks.some(ask => ask.id === id))
     const ask = asker ? asker.asks.find(each => each.id === id) : null
     const decider = ask && ask.toWork ? ask.toWork : ""
     linked = [asker ? asker.work : "", decider].filter(work => work !== "")
@@ -227,7 +227,7 @@ FocusScope {
   // The request waiting on you nearest the work picked — its own, above it,
   // below it — else the newest.
   function nearestForYou() {
-    const human = node => (node.asks || []).filter(ask => ask.human).map(ask => ask.id)
+    const human = node => node.asks.filter(ask => ask.human).map(ask => ask.id)
     for (let at = pickedNode; at; at = byWork[at.parent])
       if (human(at).length > 0)
         return human(at)[0]
@@ -503,7 +503,7 @@ FocusScope {
               team.detailOpen = true
           }
           onRequestPicked: id => {
-            const asker = team.flat.find(node => (node.asks || []).some(ask => ask.id === id))
+            const asker = team.flat.find(node => node.asks.some(ask => ask.id === id))
             team.requestPicked(asker ? asker.work : team.picked, id)
           }
         }
@@ -573,7 +573,7 @@ FocusScope {
             const shown = group.nodes.filter(team.keeps)
             if (shown.length === 0)
               return
-            const counts = group.counts || {}
+            const counts = group.counts
             list.push({ kind: "head", text: "Sub-works" + (group.step ? " · " + group.step + " stage" : "")
               + (group.parallel ? " · " + group.nodes.length + " in parallel" + (counts.working ? " · " + counts.working + " working" : "") + (counts.done ? " · " + counts.done + " done" : "") : "") })
             shown.forEach(node => list.push({ kind: "work", node: node }))
