@@ -23,6 +23,7 @@ const tools = {
   continue: { now: "Moving the work on", done: "Moved the work on", act: "move the work on" },
   break: { now: "Stopping the work", done: "Stopped the work", act: "stop the work" },
   reopen: { now: "Sending work back", done: "Sent work back", act: "send work back" },
+  done: { now: "Finishing its part", done: "Finished its part", act: "finish its part" },
   send: { now: "Sending a message", done: "Sent a message", act: "send a message" }
 };
 const nameLimit = 60;
@@ -110,7 +111,7 @@ function touched(line) {
   const verbs = new Set();
   for (const words of commands(line)) {
     const command = words[0].split("/").pop();
-    if (talkers.includes(command)) continue;
+    if (talkers.includes(command) || command === "cd") continue;
     const args = [];
     let skip = patterned.includes(command) ? 1 : 0;
     for (let at = 1; at < words.length; at++) {
