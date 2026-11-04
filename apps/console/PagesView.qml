@@ -99,11 +99,9 @@ Item {
   property var progressChoice: null
   readonly property bool progressShown: progressChoice !== null ? progressChoice : chat.progressMode === "dock" && Omunculus.works.length > 0
   // The logged work the log is kept to, and, kept while the team page is
-  // not loaded, the work picked on it ("" for none) and whether it shows the
-  // outline or the map.
+  // not loaded, the work picked on it ("" for none).
   property string logFilter: ""
   property string pickedNode: ""
-  property string teamShownAs: "outline"
   // The work whose thread is on the thread page.
   property string threadWork: ""
 
@@ -435,8 +433,6 @@ Item {
     const items = []
     const add = (id, icon, text, run) => items.push({ id: id, icon: icon, text: text, run: run })
     if (page === "map" && team) {
-      if (teamShownAs === "map" && team.mapAllowed)
-        add("fit", "map", "FIT THE MAP", () => view.team.fit())
       if (node !== "") {
         add("write", "edit", "WRITE TO ITS AGENT", () => view.team.write(false))
         add("comment", "plus", "LEAVE A NOTE", () => view.team.write(true))
@@ -487,7 +483,7 @@ Item {
       quick.slice(0, Shortcuts.keys("quick").length).forEach((chip, index) => all.push({ key: Shortcuts.keys("quick")[index], run: chip.run }))
     if (page === "map" && team) {
       all.push(chord("team-log", () => view.team.showTab("log")), chord("team-changes", () => view.team.showTab("changes")))
-      more.filter(item => ["write", "comment", "fit"].includes(item.id)).forEach(item => all.push(chord(item.id, item.run)))
+      more.filter(item => ["write", "comment"].includes(item.id)).forEach(item => all.push(chord(item.id, item.run)))
       // The detail's menu has these too.
       if (askedOfYou.length > 0)
         all.push(chord("escalate", () => decision.show(view.askedOfYou[0].id, true)))
@@ -770,11 +766,7 @@ Item {
             onAnswer: view.replyNow()
             onOpenThread: work => view.openThread(work)
             onOpenLog: work => view.showLog(work)
-            onOpenMap: work => {
-              // The team shows the map where there is room for it.
-              view.teamShownAs = "map"
-              view.openInTeam(work)
-            }
+            onOpenTeam: work => view.openInTeam(work)
           }
         }
       }
@@ -857,24 +849,16 @@ Item {
           onDecide: (id, escalating) => decision.show(id, escalating)
         }
       }
-      // The work picked and the view shown are kept here, so they outlive the page.
+      // The work picked is kept here, so it outlives the page.
       Connections {
         target: view.team
         function onPickedChanged() { view.pickedNode = view.team.picked }
-        function onShownAsChanged() { view.teamShownAs = view.team.shownAs }
       }
       // A team going away keeps its values, so nothing is written back from it.
       Binding {
         target: view.team
         property: "picked"
         value: view.pickedNode
-        when: view.team !== null
-        restoreMode: Binding.RestoreNone
-      }
-      Binding {
-        target: view.team
-        property: "shownAs"
-        value: view.teamShownAs
         when: view.team !== null
         restoreMode: Binding.RestoreNone
       }

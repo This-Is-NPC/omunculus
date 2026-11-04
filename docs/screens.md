@@ -182,26 +182,28 @@ menu holds ESCALATE, which makes the words the reason it goes up.
 
 ### 7. Team
 
-The works of the conversation a level at a time, under a breadcrumb once
-you have gone down into a work. At the conversation's level the agent that
-talks with you heads the team, with its own state and what it asks you, and the works nest
-under it, each level one block further in. A work's own row, then the works
-it handed down under a rule for the stage that handed them down ("STAGE
-DESIGN · 2 IN PARALLEL"), those done folded into one rule. The works at work
-below a row show under it, so the agent at work is always in view. A row is the work's title and state, its agent, stages and
-branch's time and cost, its own steps, and a badge for the climb of what it waits on
-(⇡ seller › sales › you) and what it is asked (⇣); its tool goes down a level. Chips keep the works that
-need you or work. The work picked shows in full under a header strip with
-ANSWER or OPEN THREAD, in the tabs OVERVIEW, THREAD, REQUESTS, CHANGES, RUNS
-and LOG: beside the outline from 1100 px, as a page over it narrower. From
-900 px OUTLINE and MAP, beside the search line, show the works as a chart,
-one card per work, the work picked beside it.
+The conversation's agents as a tree, who handed work to whom, every level
+deep. The agent that talks with you is the root, with its own state and
+what it asks you; each work sits under the work that handed it down, lines
+joining it to its parent as in a file tree. A row is the work's mark (a
+chevron while it handed works down, else its agent's dot), its agent in its
+tone (a workflow's agents, the one at work lit), its title, and its state at
+the right: what it does and a clock, whom it waits on, Needs you. Under them
+its stages, time, steps and cost, and a badge for the climb of what it waits
+on (⇡ surgeon › administrator › seller › sales › you) and what it is asked
+(⇣). The paths at work or waiting are open; the done works under an open
+one fold into one line ("✓ 3 sub-works done · 30 min · toolsmith, surgeon
+×2"), those up next into another, each unfolding on a click. Chips keep the
+works that need you or work, with the works above them. The work picked
+shows in full under a header strip with ANSWER or OPEN THREAD, in the tabs
+OVERVIEW, THREAD, REQUESTS, CHANGES, RUNS and LOG: beside the tree from
+1100 px, as a page over it narrower.
 
 | Keys | What they do |
 | --- | --- |
-| ↑ · ↓ | move between the works; the detail follows |
-| → · ← | down a level or unfold; fold or up a level |
-| Enter | open its detail, or its tabs beside the outline |
+| ↑ · ↓ | move from row to row; the detail follows |
+| → · ← | unfold, or the first row under it; fold, or its parent |
+| Enter | open its detail, or its tabs beside the tree; a fold, unfold or fold it |
 | [ · ] | the previous or next tab |
 | / | filter the works |
 | Alt+R | answer what waits on you nearest the work picked |
@@ -210,8 +212,7 @@ one card per work, the work picked beside it.
 | Alt+C | leave it a note, without a run (`⋯` LEAVE A NOTE) |
 | Alt+M | mark its notes read (the detail's `⋯` MARK READ) |
 | Alt+L · Alt+G | its LOG and CHANGES tabs |
-| Alt+F | the whole map in view |
-| Esc | the detail, then the outline, then back |
+| Esc | the detail, then the tree, then back |
 
 ### 8. Log
 

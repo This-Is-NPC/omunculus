@@ -8,7 +8,7 @@ import "kit/ui"
 // NodeDetail is one work of the TEAM page in full. A header strip says its
 // agent, title, round and state, with its action at the right — ANSWER, in
 // the warning tone, while it or a work below it waits on you, else OPEN
-// THREAD — then LOG and MAP and, behind "more", ESCALATE and MARK READ. Under
+// THREAD — then LOG and, behind "more", ESCALATE and MARK READ. Under
 // it are its way down (Breadcrumb), its stages and the tabs. OVERVIEW: what
 // it does now and did last, a send-back or a stop and why, whom it waits on
 // and who asks it, its team, each stage's time, its branch's time, calls and
@@ -27,15 +27,12 @@ FocusScope {
   property var node: null
   // The way down to it, outermost first: [{text}].
   property var trail: []
-  // Whether it has a way back to the outline (a page over it).
+  // Whether it has a way back to the tree (a page over it).
   property bool closable: false
-  // Whether the map can show it.
-  property bool mappable: false
   signal closed()
   signal crumbChosen(int index)
   signal picked(string key)
   signal openLog(string work)
-  signal openMap(string work)
   // A request's decision, over the page: to answer it or, `escalating`, to
   // raise it.
   signal decide(string id, bool escalating)
@@ -173,7 +170,7 @@ FocusScope {
         IconButton {
           visible: pane.closable
           name: "chevron-left"
-          tip: "back to the outline  Esc"
+          tip: "back to the tree  Esc"
           onClicked: pane.closed()
         }
         Label {
@@ -203,7 +200,6 @@ FocusScope {
           onClicked: pane.answering !== "" ? pane.decide(pane.answering, false) : pane.show("thread")
         }
         IconButton { name: "list"; tip: "the log page, kept to its events"; onClicked: pane.openLog(pane.key) }
-        IconButton { visible: pane.mappable; name: "map"; tip: "the team's map, this work picked"; onClicked: pane.openMap(pane.key) }
         ActionMenu {
           readonly property var entries: [
             { id: "escalate", icon: "chevron-up", text: "ESCALATE", shown: pane.askedOfYou.length > 0 },

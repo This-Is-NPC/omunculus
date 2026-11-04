@@ -473,15 +473,6 @@ function underway(node) {
   return kidsOf(node).reduce((all, kid) => all.concat(kid.state === "working" ? [kid] : [], underway(kid)), []);
 }
 
-// The open works to show under `node` in an outline without going down: its
-// open sub-works when it is on the active `path` ([{work}]), has a work
-// running below it, or has one that needs you; none otherwise.
-function opened(node, path) {
-  const open = kidsOf(node).filter(kid => !closed(kid.state));
-  const live = node.branch.running > 0 || node.below !== "" || path.some(each => each.work === node.work);
-  return live ? open : [];
-}
-
 // The works a node handed down, in words: "1 sub-work done", "2 sub-works,
 // 1 working", "3 sub-works, 1 done", "4 sub-works, 1 working, 3 done", "10 sub-works, 1 working, 8 done, 1
 // cancelled"; "" when it has none.

@@ -19,7 +19,7 @@ Rectangle {
   signal answer(string id)
   signal openThread(string work)
   signal openLog(string work)
-  signal openMap(string work)
+  signal openTeam(string work)
   // Esc in the dock or the card: the keyboard goes back to the composer.
   signal escaped()
 
@@ -80,7 +80,7 @@ Rectangle {
         onAnswer: id => sheet.answer(id)
         onOpenThread: work => sheet.openThread(work)
         onOpenLog: work => sheet.openLog(work)
-        onOpenMap: work => sheet.openMap(work)
+        onOpenTeam: work => sheet.openTeam(work)
         onEscaped: sheet.mode === "sheet" ? sheet.closed() : sheet.escaped()
       }
     }

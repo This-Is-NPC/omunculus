@@ -41,7 +41,6 @@ const table = [
   { id: "escalate", keys: ["Alt+E"], tier: 2, mutates: false, where: ["team"], what: "open the decision of what it asked you, to escalate" },
   { id: "team-log", keys: ["Alt+L"], tier: 2, mutates: false, where: ["team"], what: "the log of the work picked" },
   { id: "team-changes", keys: ["Alt+G"], tier: 2, mutates: false, where: ["team"], what: "the changes of the work picked" },
-  { id: "fit", keys: ["Alt+F"], tier: 2, mutates: false, where: ["team"], what: "the whole map in view" },
   { id: "by-state", keys: ["Alt+S"], tier: 2, mutates: false, where: ["board"], what: "the works by state" },
   { id: "by-agent", keys: ["Alt+A"], tier: 2, mutates: false, where: ["board"], what: "a lane per agent" },
   { id: "by-project", keys: ["Alt+J"], tier: 2, mutates: false, where: ["board"], what: "a lane per project" },

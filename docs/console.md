@@ -261,8 +261,8 @@ is below it folded. Siblings handed down in one stage are headed "N in
 parallel", and the done and cancelled works of each place fold into one
 row, "✓ 2 sub-works done · 18 min", with "· 9 in all" when works lie below
 them, unless a question waiting on you climbed from there. Picking a work shows its agent's last words, its questions in
-full, and OPEN (its thread as a page), LOG (the log kept to it) and MAP (the
-team page's map, the work picked). ↑/↓ move, → unfolds, ← folds, Enter opens
+full, and OPEN (its thread as a page), LOG (the log kept to it) and TEAM (the
+team page, the work picked). ↑/↓ move, → unfolds, ← folds, Enter opens
 or folds, Esc returns to the composer.
 
 A work's state follows its questions up their climb. An escalated question
@@ -390,59 +390,76 @@ reason through
 
 ## The team
 
-The team page (`TeamView`) shows the works of the conversation a level at a
-time, under a breadcrumb once it has gone down into a work ("Conversation
-› Bakery website › Design preview"), each crumb going back up. At the
-conversation's level the agent that talks with you heads the team ("sales ·
-talks with you · 2 agents", with its own state at the right, as the rows
-show theirs: "Answering 0:05" while its run is open, "Needs you" while a
-question waits on you, "Waiting for seller" while a work of the team is open and no run is its own, "Idle" once nothing is open, and "⇡ asks you 5 questions" while it does)
-and the works nest under it, each level one block further in: a work's
-own row, then the rule naming the stage that handed works down (at the
-indent of the rows it heads) and those works. A level is a work's own row,
-then the works it handed down, a row each, under that rule and, when
-several run side by side, "2 in parallel · 1 working". A work at work, on
-the way to it, or with a question for you below shows its open works under
-it, one level deeper, without going down: the agent at work is always on
-screen, and WORKING counts those rows and the head when its run is open;
-the conversation's level is its root works, the one root's own level when
-there is a single one, the roots done before an open one folded under "N
-done earlier". The done and cancelled works of each stage, or of a work
-without a workflow, fold into one rule, "✓ 2 sub-works done · 18 min" (and
-"· 1 cancelled", "· 9 in all" with the works below them, so the folds add up to
-ALL N WORKS), which a click, Enter or → unfolds into their rows and ←
-folds again; it stays folded while the conversation waits on you, unless
-the question climbed from there. A work opened under another in the outline
-gets the same fold for its done sub-works after its open ones.
+The team page (`TeamView`) draws the conversation's agents as a tree, who
+handed work to whom, every level deep (`Team.rows`, one `TeamNode` a row).
+When the agent that talks with you hands its works to others, it is the
+root ("sales · talks with you · 11 agents", with its state at the right:
+"Needs you" while a question waits on you, the run it has open and its
+clock, "Waiting for seller" while a work of the team is open and no run is
+its own, "Idle" once nothing is open; and a badge "⇡ surgeon asks you 1
+question" while one does). Each work sits under the work that handed it
+down, one level further right; an elbow line joins it to its parent, and a
+line goes on down a level's column while rows of it follow, as in a file
+tree. The lines are in the faint ink, never coloured.
 
-A row (`ProgressNode` in full) is a table row: the work's title with its
-state at the top right (a work that waits on works at work reads "designer
-working", in the working tone), a meta line of its agent, its stages (`Stepper`;
-under 700 px a track filled to the stage it is at, and that stage) and its
-branch's works below in words ("1 sub-work done", "2 sub-works, 1
-working, 1 done", "4 sub-works, 1 working, 2 done, 1 cancelled"), time, the work's own steps (tool calls; hook runs and the
-sub-works' steps are not counted) and cost
-(tokens as "40k read · 2k written", as the cost page words them), and a
-badge per request between it and
-others. Short of room, the branch's totals give way first, a part at a
-time, then the stages; the agent stays. A row with works below it has a tool at its right
-that goes down to them. The keyboard's row has the focus ring. Chips keep
-the works that need you or work, with the works above them, and `/`
-filters by title, agent or stage; a filter shows a done row only on the
-way to a work it keeps. The chips' counts are of works, folded ones
-included; ALL names its unit ("ALL 3 WORKS"). A request badge shows its climb (`⇡ seller › sales › you`, in the warning
-tone when it is to you; `⇡ designer › design-lead`; `⇣ 1 question from
-designer`); the NEEDS YOU chip is lit while a count above zero waits. A badge goes to the
-other end of its request, lights both rows and opens the request in the
-detail; `⇣ needs you below`, on the works above one that needs you and do not hold
-its question, does
-the same with that work's question.
+```
+● sales  talks with you · 11 agents                       ⚠ Needs you
+└─▾ seller  Doce Ana, bakery in Campinas: new website   ✦ surgeon working
+    ├─› ✓ 2 sub-works done · 1 h 02 min · 3 in all · design-lead, language_lawyer
+    └─▾ administrator  Build the site from the approved design
+        ├─› ✓ 3 sub-works done · 30 min · toolsmith, surgeon ×2
+        ├─● surgeon › copilot  page: about   ✦ Thinking · ran a command 1:17
+        ├─● surgeon › copilot  page: order                       ⚠ Needs you
+        └─› ○ 2 up next · surgeon ×2
+```
+
+A work's row has its mark — a chevron while it handed works down, else a
+dot in its agent's tone — then its agent in that tone, its title, and its
+state at the right: what it does and a clock while it works, "Waiting for
+design-lead", "Needs you" in the warning tone, "Done", "Stopped". A work
+that waits on works at work below it reads as them at work ("surgeon
+working", in the working tone). A work in a workflow names the agents of
+its stages where there is room ("designer › design-reviewer › publisher"),
+the one at work lit and those to come faint. Under them are its stages
+(`Stepper`, in a shorter form when short of room), its time, its own steps
+(tool calls) and its branch's cost (tokens as "40k read · 2k written", as
+the cost page words them), and, while it is folded, what it handed down
+("3 sub-works, 1 working, 2 done"); short of room these give way a part at
+a time. Under 520 px of room the title goes under the agent. A badge per
+request between it and others shows its climb (`⇡ surgeon › administrator
+› seller › sales › you`, in the warning tone when it is to you; `⇣ 1
+question from designer`); it goes to the other end of the request, lights
+both rows and opens the request in the detail.
+
+What shows opens itself by what is going on (`Team.groups`). A work with a
+work still open below it shows its works, and so does a root, the rest
+folded behind their chevron. Under an open work, the done and cancelled
+ones fold into one line, "✓ 2 sub-works done · 18 min · design-lead,
+language_lawyer" (with "· 1 cancelled", and "· 9 in all" with the works
+below them, so the folds add up to ALL N WORKS), and those up next into
+another, "○ 2 up next · surgeon ×2", two or more each; under a work whose
+works are all done, three or more of one agent fold into one line at the
+place of the first. A work in a workflow counts as the agent of its first
+stage, the surgeon of a page its copilot reviewed. A fold stays folded
+unless a question waiting on you climbed from there. A click on a chevron
+or a fold, Enter on a fold, or → and ←, unfold and fold; what you unfolded
+or folded stays so while the page is open. Picking a work from elsewhere —
+a badge, OPEN IN TEAM, the detail's way down — opens the works above it and
+the fold it is in.
+
+Chips keep the works that need you or work, and `/` filters by title,
+agent or stage; a filter keeps the works above each it keeps and shows them
+all unfolded. The chips' counts are of works, folded ones included; ALL
+names its unit ("ALL 12 WORKS"). ↑ and ↓ move from row to row; → unfolds a
+folded work or fold, else goes to the first row under it; ← folds an
+unfolded one, else goes to its parent; Enter opens the detail, or its tabs
+beside the tree; the keyboard's row has the focus ring.
 
 The work picked shows in full (`NodeDetail`). Its header strip names its
 agent, title, round and state, with its action at the right: ANSWER, in
 the warning tone, while it or a work below it waits on you, which opens the
 decision (`decide` for the page to open `RequestDialog`), else OPEN THREAD;
-then LOG and, from 900 px, MAP, and behind "more" ESCALATE, while it asked
+then LOG, and behind "more" ESCALATE, while it asked
 you something, and MARK READ, while it left you notes. Under it are its way
 down (`Breadcrumb`), its stages and the tabs OVERVIEW (what it does now and
 did last, a send-back or a stop and why, whom it waits on and who asks it,
@@ -469,20 +486,9 @@ RUNS and LOG; `[` and `]`, or ← and → on the tabs, move between them.
   since the work's last change to it or is not writable there, and says
   why.
 
-From 1100 px the outline and the detail sit side by side, the focus work
-picked at first. Narrower, the outline takes the page and the detail opens
-as a page over it; BACK or Esc returns to the same row.
-
-From 900 px OUTLINE and MAP, a chip group at the right of the search line,
-switch the outline for the map (`AgentsView`, on the kit's `FlowCanvas`,
-which moves and zooms as the studio's flow does), remembered while the
-conversation is open. You are on top; each work is one card (`AgentNode`):
-the portrait and name of its agent, its state, title and stages, and its
-waiting badges, its children under it grouped by the stage that handed them
-down. Only the requests of the work picked are drawn, from the asker to
-whoever decides; agents with nothing to do show only with SHOW IDLE AGENTS.
-The map is never framed below its actual size; the canvas scrolls. The work
-picked shows in the same detail, beside the map.
+From 1100 px the tree and the detail sit side by side, the focus work
+picked at first. Narrower, the tree takes the page and the detail opens as
+a page over it; BACK or Esc returns to the same row.
 
 ## Pages
 
@@ -548,7 +554,7 @@ The project's level:
 A conversation's level, in place of the project's once one is opened:
 
 - CHAT, the chat with the root agent, its progress and its composer;
-- TEAM, the works of the conversation and the work picked in full. Its SHOW
+- TEAM, the conversation's agents as a tree and the work picked in full. Its SHOW
   IN LOG opens the LOG kept to that work, and BACK returns;
 - LOG, every event one line: when (local, `hh:mm:ss`), its kind in a word
   ("question", "step", "reply", "passed up"), what it says as one plain
@@ -588,8 +594,8 @@ chat), its transcript and a composer to its agent. The masthead's menu has
 OPEN IN TEAM (Alt+O), the team page with the work picked, and ITS LOG.
 
 The log, the team and the cost are loaded when first on screen and let go
-after it, so a closed page costs nothing; the work picked on the team page,
-and whether it shows the outline or the map, are kept meanwhile.
+after it, so a closed page costs nothing; the work picked on the team page
+is kept meanwhile.
 
 ## The board
 
@@ -670,8 +676,7 @@ LOG marked while a work failed, and shown once there is more than the chat; the 
 they choose the rail's pages. The masthead's right has, after the notices,
 `⋯` and × (back to the conversations; on a conversation that has
 said nothing, back to the picker it began on, as BACK and Esc do). The menu `⋯` holds the page's rarer actions that the page does
-not show itself, and NEW CONVERSATION: on TEAM, FIT THE MAP on the map, and
-WRITE TO ITS AGENT and LEAVE A NOTE with a work picked; on a thread, OPEN IN
+not show itself, and NEW CONVERSATION: on TEAM, WRITE TO ITS AGENT and LEAVE A NOTE with a work picked; on a thread, OPEN IN
 TEAM and ITS LOG. While notes to you are unread, a notice `1 NOTE`
 shows the oldest on the chat and marks it read (Alt+M); its × puts it away
 until another comes.
@@ -711,8 +716,7 @@ remembered. BACK returns to exactly where it was, its page, level,
 project, conversation and the work picked, switching back to the project
 it was on, and from the first page entered to the
 start, the board keeping its grouping, filter and the card the keyboard was
-on. On the team page BACK first lets go of the detail page or the level
-shown. A conversation that has no message yet, or is not made yet, is left
+on. On the team page BACK first lets go of the detail page. A conversation that has no message yet, or is not made yet, is left
 for the picker it began on, or for the list; a page of a conversation is
 never shown without one.
 
@@ -746,7 +750,7 @@ logs each text drawn out of its box, the window or a clipping item as a
   the work asked, instead of whoever decides. The items of `⋯` answer to
   their chords: WRITE TO ITS AGENT (Alt+W), the composer of its THREAD tab
   writing to its agent, and LEAVE A NOTE (Alt+C), the same composer leaving a
-  note (Esc back to writing); FIT THE MAP (Alt+F). Those of the detail's `⋯`
+  note (Esc back to writing). Those of the detail's `⋯`
   too: ESCALATE (Alt+E) while it asked you something, which opens the
   decision with Enter escalating, and the notes marked read (Alt+M), all of
   them. Alt+L and Alt+G open its LOG and
@@ -792,5 +796,5 @@ sends a message to the conversation open, as the composer does.
 
 `?` or F1 opens a dialog of every key, by where it works
 (`ShortcutsDialog`). Esc first lets go of what the page holds — the progress
-sheet, the team's detail page or level, the log's filter and the event
+sheet, the team's detail page, the log's filter and the event
 picked, the board's filter — then goes back as BACK does.

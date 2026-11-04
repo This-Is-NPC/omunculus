@@ -91,7 +91,7 @@ and the studio ask for `--project`:
 
 | App | Is |
 | --- | --- |
-| [`apps/console`](console.md) | the window on one project: its conversations, each as threads of its agents' runs with their tool calls and the works they handed down, the progress of its works, and the team page of its works, requests and agents, as an outline or a map; and a board of the works of every project of the registry, by state |
+| [`apps/console`](console.md) | the window on one project: its conversations, each as threads of its agents' runs with their tool calls and the works they handed down, the progress of its works, and the team page, its agents as a tree of who handed work to whom with their works and requests; and a board of the works of every project of the registry, by state |
 | [`apps/mailbox`](mailbox.md) | a mailbox over every project: a thread is a conversation with one agent of depth 0, and its requests to you are answered there |
 | [`apps/studio`](studio.md) | the settings of a project: its flowchart on a canvas, then one item of the config at a time |
 
@@ -170,6 +170,8 @@ All are QML on Quickshell and share `apps/kit`:
   which derives from a conversation's state and stage events where its
   works are, nested by stage and level, with what each does, waits on and
   spent, and fits one-line stages and phrases to a width in characters;
+  `Team.js`, which lays those works out as the team page's tree of agents,
+  what shows and what folds, and moves through it by key;
   `Calls.js`, which groups a run's tool calls into rows and reads the diff
   of an edit or a write from its args; `Phrases.js`, which says a tool call
   in plain words and in brief; `Events.js`, which says any event in one

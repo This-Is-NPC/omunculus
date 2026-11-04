@@ -27,7 +27,7 @@ Item {
   signal answer(string id)
   signal openThread(string work)
   signal openLog(string work)
-  signal openMap(string work)
+  signal openTeam(string work)
   signal escaped()
 
   readonly property real now: Omunculus.tick
@@ -244,7 +244,7 @@ Item {
             onFoldToggled: tree.toggle(entry.key, entry.modelData.fold)
             onOpenThread: work => tree.openThread(work)
             onOpenLog: work => tree.openLog(work)
-            onOpenMap: work => tree.openMap(work)
+            onOpenTeam: work => tree.openTeam(work)
           }
         }
 
