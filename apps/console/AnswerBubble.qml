@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "kit/client/Questions.js" as Questions
 import "kit/ui"
+import "kit/ui/Markdown.js" as Markdown
 
 // AnswerBubble is what you answered a question: your words in a bubble on the
 // right, left aligned with their line breaks kept, under a heading of your
@@ -28,7 +29,7 @@ Item {
   readonly property var form: Questions.parse(question)
   // The first line with words, its whitespace collapsed and cut at 120 characters.
   readonly property string first: {
-    const line = (question.split("\n").find(each => each.trim() !== "") || "").replace(/\s+/g, " ").trim()
+    const line = Markdown.plain(question.split("\n").find(each => each.trim() !== "") || "").replace(/\s+/g, " ").trim()
     return line.length > 120 ? line.slice(0, 119) + "…" : line
   }
   readonly property string via: route.length > 1 ? " · via " + route.slice(1).join(" › ") : ""

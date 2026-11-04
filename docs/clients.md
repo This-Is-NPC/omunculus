@@ -155,7 +155,7 @@ All are QML on Quickshell and share `apps/kit`:
   line after a list that is no item of it a paragraph of its own, rather
   than more of the last item; an image shows as its alt text and is never
   loaded (`Markdown.js`); its web addresses, bare or linked, are links in
-  the accent that the pointer turns over, Tab reaches, Left and Right pick
+  the accent that the pointer turns over, an inline code span sits on a tint, Tab reaches, Left and Right pick
   and Enter opens with `xdg-open`, only http and https. It knows nothing of
   Omunculus.
 - `apps/kit/client`: `Http`, which makes each request to a socket through
