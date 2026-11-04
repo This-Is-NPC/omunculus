@@ -32,12 +32,16 @@ defmodule Omunculus.GuiActivityTest do
     if (out.stage.name !== "design" || out.stage.index !== 2 || out.stage.count !== 6 || out.stage.next !== "propose")
       throw Error("stage " + JSON.stringify(out.stage));
     if (out.headline !== "BAKERY SITE  -  DESIGNER: WRITING FILES  -  STEP 2 OF 6: DESIGN") throw Error(out.headline);
+    if (JSON.stringify(out.parts) !== JSON.stringify({title: "BAKERY SITE", who: "DESIGNER", phrase: "WRITING FILES", step: "STEP 2 OF 6: DESIGN"}))
+      throw Error("parts " + JSON.stringify(out.parts));
     const opening = Activity.status(Object.assign({}, base, {
       runs: [run("r1", "sales", "w2")], calling: {w2: "work"}, callArgs: {w2: {works: [{title: "Bakery website"}]}}, runStarts: {r1: 40}
     }));
     if (!opening.headline.includes("SALES: OPENING WORK: BAKERY WEBSITE")) throw Error(opening.headline);
     const starting = Activity.status(Object.assign({}, base, {runs: [run("r1", "seller", "w2")]}));
     if (starting.headline !== "BAKERY SITE  -  SELLER IS GETTING STARTED  -  STEP 2 OF 6: DESIGN") throw Error(starting.headline);
+    if (JSON.stringify(starting.parts) !== JSON.stringify({title: "BAKERY SITE", who: "SELLER", phrase: "GETTING STARTED", step: "STEP 2 OF 6: DESIGN"}))
+      throw Error("starting parts " + JSON.stringify(starting.parts));
     const request = Activity.status({runs: [run("r1", "sales", "")], works: [], requests: [], lanes: {}, calling: {}, now: 100});
     if (request.headline !== "YOUR REQUEST  -  SALES IS GETTING STARTED") throw Error(request.headline);
     const long = Activity.status(Object.assign({}, base, {
@@ -58,6 +62,7 @@ defmodule Omunculus.GuiActivityTest do
     if (you.state !== "waiting-you" || you.headline !== "SALES IS WAITING FOR YOUR ANSWER") throw Error(JSON.stringify(you));
     const idle = Activity.status(base);
     if (idle.state !== "idle" || idle.headline !== "") throw Error("idle " + idle.state);
+    if (idle.parts.title !== "" || you.parts.who !== "") throw Error("parts only while working");
     const team = Activity.status(Object.assign({}, base, {requests: [
       {id: "q2", status: "pending", arbiter: agent("seller"), requester: agent("design-lead"), work_id: "w1"}]}));
     if (team.state !== "waiting-team" || team.headline !== "DESIGN-LEAD IS WAITING FOR SELLER") throw Error(team.headline);

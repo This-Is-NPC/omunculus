@@ -10,8 +10,8 @@ function upper(text) { return String(text || "").toUpperCase(); }
 // input: {runs: [{id, agent, depth, work_id, status, error?}], works, requests,
 // lanes (work id -> {name, steps: [{name, agent}], at} or null), calling (work
 // id -> last tool), callArgs (work id -> that call's args), runStarts (run id -> seconds), now (seconds)}.
-// Returns {state, headline, since, stage: {name, index, count, next},
-// rows: [{work, agent, depth, state, task, phrase, since, parent}], loop}.
+// Returns {state, headline, parts: {title, who, phrase, step}, since,
+// stage: {name, index, count, next}, rows: [{work, agent, depth, state, task, phrase, since, parent}], loop}.
 function status(input) {
   const runs = input.runs || [];
   const works = input.works || [];
@@ -33,14 +33,21 @@ function status(input) {
   let state = "idle";
   let headline = "";
   let since = null;
+  let parts = { title: "", who: "", phrase: "", step: "" };
   if (forYou.length > 0) {
     state = "waiting-you";
     headline = upper(Requests.label(forYou[0].requester)) + " IS WAITING FOR YOUR ANSWER";
   } else if (focus) {
     state = "working";
     const call = calling[focus.work_id || ""];
-    const doing = call ? upper(focus.agent) + ": " + upper(Phrases.phrase(call, callArgs[focus.work_id || ""])) : upper(focus.agent) + " IS GETTING STARTED";
-    headline = [subject(works), doing].concat(stage.count > 0 ? ["STEP " + stage.index + " OF " + stage.count + ": " + upper(stage.name)] : []).join("  -  ");
+    parts = {
+      title: subject(works),
+      who: upper(focus.agent),
+      phrase: call ? upper(Phrases.phrase(call, callArgs[focus.work_id || ""])) : "GETTING STARTED",
+      step: stage.count > 0 ? "STEP " + stage.index + " OF " + stage.count + ": " + upper(stage.name) : ""
+    };
+    const doing = call ? parts.who + ": " + parts.phrase : parts.who + " IS GETTING STARTED";
+    headline = [parts.title, doing].concat(parts.step !== "" ? [parts.step] : []).join("  -  ");
     since = starts[focus.id] === undefined ? null : starts[focus.id];
   } else if (forTeam.length > 0) {
     state = "waiting-team";
@@ -53,7 +60,7 @@ function status(input) {
     state = "done";
     headline = "DELIVERED";
   }
-  return { state: state, headline: headline, since: since, stage: stage, rows: rows, loop: loopOf(runs) };
+  return { state: state, headline: headline, parts: parts, since: since, stage: stage, rows: rows, loop: loopOf(runs) };
 }
 
 // What the team works on: the first root work's title, cut at 40 characters,

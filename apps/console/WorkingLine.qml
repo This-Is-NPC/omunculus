@@ -6,7 +6,10 @@ import "kit/ui"
 // line from the conversation's activity, with the state's icon, what the team
 // is doing, which step it is on and for how long. A question waiting for you
 // leads to its card; a team at work, to the team. It is hidden when idle. The
-// trace moves only while the team works.
+// trace moves only while the team works. A working team reads as the work's
+// title, who does what, the step and the clock: the title is the one part
+// that gives way, eliding, and is dropped below 700 px; below 520 px the step
+// is only its number, "1/6". The other parts are never cut.
 Item {
   id: line
 
@@ -29,6 +32,9 @@ Item {
   readonly property var stage: activity ? activity.stage || null : null
   // The headline of a working team already names its step.
   readonly property string step: !working && stage && stage.count > 0 ? "STEP " + stage.index + " OF " + stage.count : ""
+  readonly property var parts: working && activity ? activity.parts : null
+  readonly property bool narrow: width < 520
+  readonly property string stepText: !parts || parts.step === "" ? "" : narrow ? stage.index + "/" + stage.count : parts.step
   readonly property color tone: ({ working: Theme.primary, "waiting-you": Theme.warning, "waiting-team": Theme.warning, done: Theme.success, failed: Theme.error })[state] || Theme.dim
   readonly property string word: ({ working: "Working", "waiting-you": "Waiting for you", "waiting-team": "Waiting for the team", done: "Done", failed: "Failed" })[state] || ""
   readonly property string icon: ({ working: "spark", "waiting-you": "warning", "waiting-team": "people", done: "check", failed: "close" })[state] || ""
@@ -73,6 +79,7 @@ Item {
     }
     Icon { visible: line.working && Theme.reducedMotion; Layout.alignment: Qt.AlignVCenter; name: "more"; size: 12; color: line.tone }
     Label {
+      visible: !line.working
       Layout.alignment: Qt.AlignVCenter
       Layout.maximumWidth: line.width * 0.7
       text: line.activity ? line.activity.headline : ""
@@ -80,7 +87,32 @@ Item {
       font.pixelSize: 12
       elide: Text.ElideRight
     }
-    Label { visible: line.working; Layout.alignment: Qt.AlignVCenter; text: line.clock(line.elapsed); color: Theme.dim; font.pixelSize: 12 }
+    Label {
+      visible: line.parts !== null && line.width >= 700
+      Layout.alignment: Qt.AlignVCenter
+      Layout.minimumWidth: 0
+      text: line.parts ? line.parts.title : ""
+      color: Theme.foreground
+      font.pixelSize: 12
+      elide: Text.ElideRight
+    }
+    Label {
+      visible: line.parts !== null
+      Layout.alignment: Qt.AlignVCenter
+      Layout.minimumWidth: implicitWidth
+      text: line.parts ? line.parts.who + ": " + line.parts.phrase : ""
+      color: Theme.foreground
+      font.pixelSize: 12
+    }
+    Label {
+      visible: line.stepText !== ""
+      Layout.alignment: Qt.AlignVCenter
+      Layout.minimumWidth: implicitWidth
+      text: line.stepText
+      color: Theme.dim
+      font.pixelSize: 11
+    }
+    Label { visible: line.working; Layout.alignment: Qt.AlignVCenter; Layout.minimumWidth: implicitWidth; text: line.clock(line.elapsed); color: Theme.dim; font.pixelSize: 12 }
     Label {
       visible: line.working && !!line.activity.loop
       Layout.alignment: Qt.AlignVCenter
