@@ -203,7 +203,7 @@ Item {
       onMovementEnded: atEnd = atYEnd
       onCountChanged: if (atEnd) Qt.callLater(positionViewAtEnd)
       onActiveFocusChanged: if (activeFocus && currentIndex < 0 && count > 0) currentIndex = 0
-      Keys.onReturnPressed: if (currentItem) view.pick(currentItem.line)
+      Keys.onReturnPressed: if (currentIndex >= 0) view.pick(view.source.get(currentIndex))
       Keys.onEscapePressed: view.back()
 
       delegate: Item {

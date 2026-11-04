@@ -10,7 +10,7 @@ import "kit/ui"
 // model used and cost; a run still open says so. Above them, the work's
 // runs in all. Opening one shows it call by call; Esc goes back to the list.
 Item {
-  id: section
+  id: runsPane
 
   // The work, or "" for the root agent's own conversation.
   required property string key
@@ -137,14 +137,14 @@ Item {
   ColumnLayout {
     anchors.fill: parent
     spacing: 10
-    visible: section.opened === ""
+    visible: runsPane.opened === ""
 
     Label {
       Layout.fillWidth: true
-      text: section.own.length + (section.own.length === 1 ? " RUN" : " RUNS")
-        + "  ·  " + section.totals.failed + (section.totals.failed === 1 ? " FAILED CALL" : " FAILED CALLS")
-        + (section.totals.priced ? "  ·  " + Omunculus.money(section.totals.cost) : "")
-      color: section.totals.failed > 0 ? Theme.error : Theme.dim
+      text: runsPane.own.length + (runsPane.own.length === 1 ? " RUN" : " RUNS")
+        + "  ·  " + runsPane.totals.failed + (runsPane.totals.failed === 1 ? " FAILED CALL" : " FAILED CALLS")
+        + (runsPane.totals.priced ? "  ·  " + Omunculus.money(runsPane.totals.cost) : "")
+      color: runsPane.totals.failed > 0 ? Theme.error : Theme.dim
       font.pixelSize: 10
       font.letterSpacing: 2
       elide: Text.ElideRight
@@ -152,13 +152,13 @@ Item {
 
     Label {
       Layout.fillWidth: true
-      visible: section.failure !== "" || section.loading && Object.keys(section.summaries).length === 0 || section.own.length === 0
-      text: section.failure !== "" ? section.failure
-        : section.own.length === 0 ? "NO RUN OF THIS WORK YET"
+      visible: runsPane.failure !== "" || runsPane.loading && Object.keys(runsPane.summaries).length === 0 || runsPane.own.length === 0
+      text: runsPane.failure !== "" ? runsPane.failure
+        : runsPane.own.length === 0 ? "NO RUN OF THIS WORK YET"
         : "READING THE RUNS"
-      color: section.failure !== "" ? Theme.error : Theme.dim
-      font.pixelSize: section.failure !== "" ? 11 : 10
-      font.letterSpacing: section.failure !== "" ? 0 : 2
+      color: runsPane.failure !== "" ? Theme.error : Theme.dim
+      font.pixelSize: runsPane.failure !== "" ? 11 : 10
+      font.letterSpacing: runsPane.failure !== "" ? 0 : 2
       wrapMode: Text.Wrap
     }
 
@@ -171,16 +171,16 @@ Item {
       boundsBehavior: Flickable.StopAtBounds
       keyNavigationEnabled: true
       activeFocusOnTab: true
-      model: section.own
+      model: runsPane.own
       highlightFollowsCurrentItem: false
-      Keys.onReturnPressed: if (currentItem) section.open(section.own[currentIndex].id)
-      Keys.onSpacePressed: if (currentItem) section.open(section.own[currentIndex].id)
+      Keys.onReturnPressed: if (currentItem) runsPane.open(runsPane.own[currentIndex].id)
+      Keys.onSpacePressed: if (currentItem) runsPane.open(runsPane.own[currentIndex].id)
 
       delegate: Rectangle {
         id: card
         required property var modelData
         required property int index
-        readonly property var lines: section.summaries[modelData.id] || null
+        readonly property var lines: runsPane.summaries[modelData.id] || null
         readonly property bool current: list.activeFocus && list.currentIndex === index
         width: ListView.view.width
         implicitHeight: facts.implicitHeight + 20
@@ -210,7 +210,7 @@ Item {
             Label {
               Layout.fillWidth: true
               text: card.modelData.status === "open" ? "RUNNING"
-                : section.seconds(card.modelData) + (card.modelData.via ? "  ·  VIA " + String(card.modelData.via).toUpperCase() : "")
+                : runsPane.seconds(card.modelData) + (card.modelData.via ? "  ·  VIA " + String(card.modelData.via).toUpperCase() : "")
               color: card.modelData.status === "open" ? Theme.primary : Theme.dim
               font.pixelSize: 10
               font.letterSpacing: 1
@@ -225,7 +225,7 @@ Item {
               required property string modelData
               Layout.fillWidth: true
               text: modelData
-              color: section.lineTone(modelData)
+              color: runsPane.lineTone(modelData)
               font.pixelSize: 11
               wrapMode: Text.WrapAtWordBoundaryOrAnywhere
               maximumLineCount: 3
@@ -234,7 +234,7 @@ Item {
           }
           Label {
             Layout.fillWidth: true
-            visible: card.lines === null && card.modelData.status !== "open" && !section.loading && section.failure === ""
+            visible: card.lines === null && card.modelData.status !== "open" && !runsPane.loading && runsPane.failure === ""
             text: "not among the project's last closed runs"
             color: Theme.dim
             font.pixelSize: 11
@@ -249,7 +249,7 @@ Item {
           cursorShape: Qt.PointingHandCursor
           onClicked: {
             list.currentIndex = card.index
-            section.open(card.modelData.id)
+            runsPane.open(card.modelData.id)
           }
         }
       }
@@ -260,15 +260,15 @@ Item {
   ColumnLayout {
     anchors.fill: parent
     spacing: 10
-    visible: section.opened !== ""
+    visible: runsPane.opened !== ""
 
     RowLayout {
       Layout.fillWidth: true
       spacing: 8
-      IconButton { name: "chevron-left"; tip: "back to the runs  esc"; onClicked: section.back() }
+      IconButton { name: "chevron-left"; tip: "back to the runs  esc"; onClicked: runsPane.back() }
       Label {
         Layout.fillWidth: true
-        text: "RUN " + section.opened.slice(0, 8).toUpperCase()
+        text: "RUN " + runsPane.opened.slice(0, 8).toUpperCase()
         color: Theme.primary
         font.pixelSize: 10
         font.letterSpacing: 2
@@ -279,20 +279,20 @@ Item {
         role: "action"
         text: "PROMPT"
         tip: "the prompt this run was given"
-        onClicked: section.promptWanted(section.opened)
+        onClicked: runsPane.promptWanted(runsPane.opened)
       }
-      IconButton { name: "copy"; tip: "copy the run"; visible: section.detail !== ""; onClicked: Omunculus.copy(section.detail) }
+      IconButton { name: "copy"; tip: "copy the run"; visible: runsPane.detail !== ""; onClicked: Omunculus.copy(runsPane.detail) }
     }
 
     Label {
       Layout.fillWidth: true
-      visible: section.detail === ""
-      text: section.detailFailure !== "" ? section.detailFailure
-        : section.own.some(run => run.id === section.opened && run.status === "open") ? "STILL RUNNING; ITS CALLS SHOW ONCE IT CLOSES"
+      visible: runsPane.detail === ""
+      text: runsPane.detailFailure !== "" ? runsPane.detailFailure
+        : runsPane.own.some(run => run.id === runsPane.opened && run.status === "open") ? "STILL RUNNING; ITS CALLS SHOW ONCE IT CLOSES"
         : "READING THE RUN"
-      color: section.detailFailure !== "" ? Theme.error : Theme.dim
-      font.pixelSize: section.detailFailure !== "" ? 11 : 10
-      font.letterSpacing: section.detailFailure !== "" ? 0 : 2
+      color: runsPane.detailFailure !== "" ? Theme.error : Theme.dim
+      font.pixelSize: runsPane.detailFailure !== "" ? 11 : 10
+      font.letterSpacing: runsPane.detailFailure !== "" ? 0 : 2
       wrapMode: Text.Wrap
     }
 
@@ -300,14 +300,14 @@ Item {
       id: calls
       Layout.fillWidth: true
       Layout.fillHeight: true
-      visible: section.detail !== ""
-      text: section.detail
+      visible: runsPane.detail !== ""
+      text: runsPane.detail
       tone: line => /^\d+\. model:/.test(line) ? Theme.secondary
         : / → failed: /.test(line) ? Theme.error
         : /^run /.test(line) ? Theme.dim
         : Theme.foreground
     }
 
-    Item { Layout.fillHeight: true; visible: section.detail === "" }
+    Item { Layout.fillHeight: true; visible: runsPane.detail === "" }
   }
 }

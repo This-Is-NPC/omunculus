@@ -61,8 +61,8 @@ SurfaceFrame {
   readonly property string formJson: kind === "needs-you" ? JSON.stringify(Questions.parse(question)) : ""
   readonly property var form: formJson === "" ? null : JSON.parse(formJson)
   // Where the answer is: sending, failed, or neither.
-  readonly property string state: (Omunculus.sending || {})[key] || ""
-  readonly property bool busy: state === "sending"
+  readonly property string delivery: (Omunculus.sending || {})[key] || ""
+  readonly property bool busy: delivery === "sending"
   // Answered by you or on your behalf, and no longer waiting.
   readonly property bool settled: !open && answer !== null
   readonly property var badge: ({
@@ -82,7 +82,13 @@ SurfaceFrame {
   property bool wording: false
 
   // Put the keyboard in the words, or on the first way to decide.
-  function focusWords() { (formLoader.item || words).focusBox() }
+  function focusWords() {
+    const form = formLoader.item as QuestionForm
+    if (form)
+      form.focusBox()
+    else
+      words.focusBox()
+  }
   function focusDecision() {
     const first = content.nextItemInFocusChain(true)
     if (first && Focus.within(first, content))
@@ -91,7 +97,7 @@ SurfaceFrame {
       focusWords()
   }
 
-  onStateChanged: if (state === "failed") focusWords()
+  onDeliveryChanged: if (delivery === "failed") focusWords()
 
   // An answer or an escalation went out; `keyboard` says whether the
   // keyboard was in the card.
@@ -328,7 +334,7 @@ SurfaceFrame {
 
     StatusMessage {
       Layout.fillWidth: true
-      visible: card.state === "failed"
+      visible: card.delivery === "failed"
       kind: "error"
       message: "Could not send this. Try again."
     }
@@ -430,7 +436,7 @@ SurfaceFrame {
         Layout.maximumWidth: 620
         dense: true
         sending: card.busy
-        invalid: card.state === "failed"
+        invalid: card.delivery === "failed"
         label: card.raising ? "WHY IT GOES UP" : card.kind === "permission" ? "REASON FOR A NO (OPTIONAL)"
           : card.kind === "decision" ? "ADD A NOTE (OPTIONAL)" : "YOUR ANSWER"
         placeholderText: card.raising ? "why it goes up, for whoever decides above" : card.kind === "needs-you" ? "an answer in words" : ""

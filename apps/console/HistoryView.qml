@@ -21,13 +21,13 @@ ColumnLayout {
   function focusEntry() { table.focusRows() }
 
   function known(conversation) { return Omunculus.summaries[conversation.id] || null }
-  function count(state) { return Omunculus.conversations.filter(item => table.state(item) === state).length }
+  function count(state) { return Omunculus.conversations.filter(item => table.stateOf(item) === state).length }
   readonly property int working: count("WORKING")
   readonly property int waiting: count("WAITING FOR YOU")
   readonly property int fresh: count("NOT STARTED")
   readonly property var shown: Omunculus.conversations.filter(item => {
     const s = known(item)
-    const state = table.state(item)
+    const state = table.stateOf(item)
     const words = history.search.toLowerCase().split(/\s+/).filter(word => word)
     return (history.filter === "" ? state !== "NOT STARTED" || words.length > 0 : state === history.filter)
       && words.every(word => s && s.title.toLowerCase().includes(word))

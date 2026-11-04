@@ -31,7 +31,7 @@ Item {
   signal opened(var work)
   signal leave()
 
-  readonly property var states: [
+  readonly property var stateColumns: [
     { key: "open", tip: "an agent has it" },
     { key: "waiting", tip: "on a child, a request or your next message" },
     { key: "broken", tip: "it broke; its parent decides" },
@@ -57,8 +57,8 @@ Item {
   readonly property bool stacked: Breakpoints.size(width) === "narrow"
   // Every state where there is room for them all, else those with a work.
   readonly property var columns: {
-    const used = states.filter(state => shown.some(work => stateOf(work) === state.key))
-    return !stacked && width >= states.length * (narrowest + gap) || used.length === 0 ? states : used
+    const used = stateColumns.filter(state => shown.some(work => stateOf(work) === state.key))
+    return !stacked && width >= stateColumns.length * (narrowest + gap) || used.length === 0 ? stateColumns : used
   }
   readonly property real columnWidth: stacked ? width : Math.floor((width - (columns.length - 1) * gap) / columns.length)
   // The lane of a work: its agent's, or its project's.

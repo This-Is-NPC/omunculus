@@ -16,7 +16,7 @@ DataTable {
     return Omunculus.summaries[conversation.id] || null
   }
 
-  function state(conversation) {
+  function stateOf(conversation) {
     const known = summary(conversation)
     if (known === null)
       return ""
@@ -33,11 +33,11 @@ DataTable {
     return [
       known && known.title ? known.title : "new conversation",
       Time.began(conversation.created_at, Date.now()),
-      state(conversation)
+      stateOf(conversation)
     ]
   }
   tone: (conversation, column) => column === 2
-    ? ({ "WAITING FOR YOU": Theme.warning, WORKING: Theme.primary })[state(conversation)] || Theme.dim
+    ? ({ "WAITING FOR YOU": Theme.warning, WORKING: Theme.primary })[stateOf(conversation)] || Theme.dim
     : ""
   stacked: [[0], [1]]
   status: 2

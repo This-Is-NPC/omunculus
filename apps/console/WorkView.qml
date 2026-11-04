@@ -24,7 +24,7 @@ FocusScope {
   readonly property var work: key !== "" ? Omunculus.work(key) : null
   readonly property string agent: work ? Omunculus.agentOf(work) : ""
   readonly property var parentWork: work ? Omunculus.work(work.parent_id || "") : null
-  readonly property var children: Omunculus.works.filter(item => item.parent_id === key)
+  readonly property var handedDown: Omunculus.works.filter(item => item.parent_id === key)
   readonly property var running: Omunculus.running.find(run => (run.work_id || "") === key) || null
   // Its workflow's stages, {name, agent}, and the one it is at.
   readonly property var steps: {
@@ -186,15 +186,15 @@ FocusScope {
       Value { visible: view.parentWork === null; text: "you, through " + (Omunculus.agent || "the conversation's agent") }
     }
     Property {
-      name: view.children.length > 0 ? "HANDED DOWN  ·  " + view.children.length : "HANDED DOWN"
+      name: view.handedDown.length > 0 ? "HANDED DOWN  ·  " + view.handedDown.length : "HANDED DOWN"
       Repeater {
-        model: view.children
+        model: view.handedDown
         delegate: WorkLink {
           required property var modelData
           item: modelData
         }
       }
-      Value { visible: view.children.length === 0; text: "nothing"; color: Theme.dim }
+      Value { visible: view.handedDown.length === 0; text: "nothing"; color: Theme.dim }
     }
     Property {
       name: view.finished ? "REPORTED TO" : "NEXT"

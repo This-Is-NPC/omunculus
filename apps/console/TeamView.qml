@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import "kit/client/Requests.js" as Requests
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
