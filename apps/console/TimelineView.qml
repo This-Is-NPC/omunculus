@@ -498,6 +498,7 @@ Item {
         id: turn
         AgentTurn {
           width: entry.width
+          run: entry.key
           who: entry.who
           text: entry.text
           partial: entry.partial
