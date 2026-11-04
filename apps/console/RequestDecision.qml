@@ -164,7 +164,7 @@ SurfaceFrame {
     if (granted.kind === "resource")
       return { "sandbox.write": "write files in " + (place.root || "its workspace"), "sandbox.network": "use the network" }[granted.name] || "use " + granted.name
     if (granted.kind === "tool")
-      return "call the tool " + granted.name
+      return granted.name.replace(/_/g, " ")
     return "reach " + granted.name
   }
 
@@ -174,28 +174,10 @@ SurfaceFrame {
     const from = of || request
     if (!from)
       return ""
-    const who = Requests.label(from.requester)
     const job = Omunculus.work(from.work_id || "")
     const where = Omunculus.workspaceOf(job ? job.workspace || "" : "")
-    return ({
-      grant: "THIS WORK ONLY",
-      grant_agent: "FOR " + who.toUpperCase(),
-      grant_depth: "FOR ITS LEVEL",
-      grant_stage: "IN THE " + String(job && job.stage ? job.stage : "").toUpperCase() + " STAGE",
-      grant_workspace: where.name ? "IN FOLDER " + where.name : "IN THE PROJECT",
-      deny: "DENY"
-    })[option] || Requests.optionText(option)
+    return Requests.optionLabel(option, { who: Requests.label(from.requester), stage: job && job.stage ? job.stage : "", folder: where.name || "" })
   }
-
-  // A decision's options given once, apart from a no or a cancel, which go
-  // last: a grant first, then the rest in order.
-  function once(options) {
-    const rest = options.filter(option => option !== "grant" && !option.startsWith("grant_") && !guarded(option))
-    return (options.includes("grant") ? ["grant"] : []).concat(rest)
-  }
-  function guarded(option) { return option === "deny" || option === "cancel" }
-  // The scopes a decision's grant is saved for, always.
-  function always(options) { return options.filter(option => option.startsWith("grant_")) }
 
   // How many of a numbered list are answered, for the heading.
   readonly property string counted: formLoader.active && formLoader.item ? (formLoader.item as QuestionForm).answered + " OF " + form.items.length + " ANSWERED" : ""
@@ -294,7 +276,7 @@ SurfaceFrame {
     Label {
       Layout.fillWidth: true
       visible: card.wanted !== null && !card.settled
-      text: "asks for " + (card.wanted ? card.wanted.name : "") + "  —  to " + card.unlocks(card.wanted)
+      text: card.asker + " wants to " + card.unlocks(card.wanted)
       color: Theme.foreground
       font.pixelSize: Theme.type.cardBody.size
       lineHeight: Theme.type.cardBody.lineHeight
@@ -453,7 +435,7 @@ SurfaceFrame {
     ColumnLayout {
       id: decisions
       Layout.fillWidth: true
-      visible: card.open && (card.gathered.length > 0 || actions.shown || (!!card.own && card.always(card.own.options).length > 0))
+      visible: card.open && (card.gathered.length > 0 || actions.shown || (!!card.own && Requests.always(card.own.options).length > 0))
       enabled: !card.busy
       spacing: Theme.space.gap
 
@@ -477,11 +459,11 @@ SurfaceFrame {
             Layout.fillWidth: true
             spacing: Theme.space.tight
             Repeater {
-              model: card.once(choice.options).concat(choice.options.filter(option => card.guarded(option)))
+              model: Requests.ordered(choice.options.filter(option => !option.startsWith("grant_")))
               delegate: TraceButton {
                 required property string modelData
                 dense: true
-                role: modelData === "deny" || modelData === "cancel" ? "guarded" : "progress"
+                role: Requests.guarded(modelData) ? "guarded" : "progress"
                 icon: modelData === "grant" ? "check" : ""
                 text: card.labelOf(modelData, choice.modelData.request)
                 onClicked: choice.decide(modelData)
@@ -489,7 +471,7 @@ SurfaceFrame {
             }
           }
           AlwaysChips {
-            options: card.always(choice.options)
+            options: Requests.always(choice.options)
             labels: options.map(option => card.labelOf(option, choice.modelData.request))
             onChosen: option => choice.decide(option)
           }
@@ -503,7 +485,7 @@ SurfaceFrame {
         spacing: Theme.space.tight
         Repeater {
           id: ownOptions
-          model: card.open && card.own && !card.escalating ? card.once(card.own.options) : []
+          model: card.open && card.own && !card.escalating ? Requests.once(card.own.options) : []
           delegate: TraceButton {
             required property string modelData
             dense: true
@@ -559,7 +541,7 @@ SurfaceFrame {
       }
 
       AlwaysChips {
-        options: card.open && card.own && !card.escalating ? card.always(card.own.options) : []
+        options: card.open && card.own && !card.escalating ? Requests.always(card.own.options) : []
         labels: options.map(option => card.labelOf(option))
         onChosen: option => card.decide(option, card.note, [])
       }
@@ -636,23 +618,31 @@ SurfaceFrame {
     }
   }
 
-  // Always: each scope a grant saved in the project settings, as chips.
+  // Always: each scope a grant is saved for in the project settings, as chips
+  // behind a quiet disclosure, so that one click cannot save a standing grant.
   component AlwaysChips: ColumnLayout {
     id: always
     property var options: []
     // How each option reads on its chip.
     property var labels: []
+    property bool opened: false
     signal chosen(string option)
     Layout.fillWidth: true
     visible: options.length > 0
     spacing: Theme.space.tight
+    Chip {
+      text: always.opened ? "ALWAYS ALLOW" + Theme.type.meta.separator + "HIDE" : "ALWAYS ALLOW…"
+      onClicked: always.opened = !always.opened
+    }
     Caption {
       Layout.fillWidth: true
+      visible: always.opened
       wrapMode: Text.Wrap
-      text: "ALWAYS" + Theme.type.meta.separator + "SAVED IN THE PROJECT SETTINGS"
+      text: "SAVED IN THE PROJECT SETTINGS"
     }
     Flow {
       Layout.fillWidth: true
+      visible: always.opened
       spacing: Theme.space.tight
       Repeater {
         model: always.options

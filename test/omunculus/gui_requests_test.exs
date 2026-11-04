@@ -35,6 +35,18 @@ defmodule Omunculus.GuiRequestsTest do
     if (Requests.chose("grant_agent") !== "YOU CHOSE GRANT AGENT") throw Error("underscore");
     if (Requests.chose("adjust") !== "YOU ASKED TO ADJUST") throw Error("adjust");
     if (Requests.chose("") !== "") throw Error("words only");
+    if (Requests.chose("grant") !== "YOU GRANTED") throw Error("grant");
+    """)
+  end
+
+  test "options read and order the same on the card and its chips" do
+    run!(["Requests"], """
+    const all = ["deny", "grant_agent", "grant_depth", "grant", "grant_workspace"];
+    if (Requests.ordered(all).join() !== "grant,deny") throw Error("order " + Requests.ordered(all));
+    if (Requests.always(all).join() !== "grant_agent,grant_workspace") throw Error("always");
+    if (Requests.optionLabel("grant") !== "GRANT\u00a0\u00b7\u00a0THIS WORK ONLY") throw Error("grant label");
+    if (Requests.optionLabel("grant_agent", {who: "clerk"}) !== "FOR CLERK") throw Error("agent label");
+    if (Requests.optionLabel("approve") !== "APPROVE") throw Error("plain label");
     """)
   end
 

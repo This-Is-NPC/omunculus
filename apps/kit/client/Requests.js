@@ -42,11 +42,42 @@ function chosen(answer) {
 // An option as a button reads it: its words in capitals.
 function optionText(option) { return option.replace(/_/g, " ").toUpperCase(); }
 
+// An option as its card button and quick chip read it. `of` names where a
+// scope applies: {who, stage, folder}.
+function optionLabel(option, of) {
+  const at = of || {};
+  return ({
+    grant: "GRANT" + "\u00a0\u00b7\u00a0THIS WORK ONLY",
+    grant_agent: "FOR " + String(at.who || "").toUpperCase(),
+    grant_stage: "IN THE " + String(at.stage || "").toUpperCase() + " STAGE",
+    grant_workspace: at.folder ? "IN FOLDER " + at.folder : "IN THE PROJECT",
+    deny: "DENY"
+  })[option] || optionText(option);
+}
+
+// A no or a cancel: given last and never as a quick first choice.
+function guarded(option) { return option === "deny" || option === "cancel"; }
+
+// The scopes a grant is saved for, always. The depth scope names an agent's
+// level, not anyone the person knows, so it is not offered.
+function always(options) { return options.filter(option => option.startsWith("grant_") && option !== "grant_depth"); }
+
+// A decision's options given once, as its card shows them: a grant first,
+// then the rest in order, apart from a no or a cancel and the saved scopes.
+function once(options) {
+  const rest = options.filter(option => option !== "grant" && !option.startsWith("grant_") && !guarded(option));
+  return (options.includes("grant") ? ["grant"] : []).concat(rest);
+}
+
+// Every option in the card's order: those given once, then a no or a cancel.
+function ordered(options) { return once(options).concat(options.filter(guarded)); }
+
 // What the heading of your answer says of the option you chose; "" for an
 // answer in words. Adjusting is asking for changes, not choosing.
 function chose(option) {
   if (!option) return "";
-  return option === "adjust" ? "YOU ASKED TO ADJUST" : "YOU CHOSE " + optionText(option);
+  if (option === "adjust") return "YOU ASKED TO ADJUST";
+  return option === "grant" ? "YOU GRANTED" : "YOU CHOSE " + optionText(option);
 }
 
 // The first name a grant among a request's decisions gives, as {kind, name};

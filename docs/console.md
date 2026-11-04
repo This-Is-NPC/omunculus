@@ -322,10 +322,11 @@ the question, the "more" menu that holds ESCALATE while it waits on you, and
 close where the card opened in place of another (DECIDE INSTEAD). Its kinds:
 NEEDS YOU (an answer in words; a numbered list of questions has a box
 for each, `QuestionForm`), YOUR DECISION (a button per option and an optional
-note) and PERMISSION (the scopes that grant it — THIS WORK ONLY, FOR
-<AGENT>, FOR ITS LEVEL, IN THE <STAGE> STAGE, IN FOLDER <name> or IN THE
-PROJECT, and ALWAYS · SAVED
-IN THE PROJECT SETTINGS — and a no with a reason). Its question shows once,
+note) and PERMISSION (what the asker wants to do in plain words, GRANT · THIS WORK
+ONLY as its main action, and a no with a reason; behind "ALWAYS ALLOW…" are
+the scopes saved in the project settings — FOR <AGENT>, IN THE <STAGE> STAGE,
+IN FOLDER <name> or IN THE PROJECT). The quick chips under a card use its
+order and words, and the answer heads YOU GRANTED. Its question shows once,
 as its asker wrote it, in full contrast; one passed up has a chip naming
 through whom, in order, that opens the wordings of each level and the
 harness's own sentence. Its actions sit at its bottom left: its options,

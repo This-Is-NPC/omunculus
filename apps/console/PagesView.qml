@@ -455,10 +455,9 @@ Item {
     const progress = { text: "PROGRESS", tip: (progressShown ? "close" : "open") + " the progress of the works", run: () => view.toggleProgress(true) }
     if (timeline.decidingShown)
       return [progress]
-    const options = [].concat(...Requests.choices(request).map(choice => choice.options
-      .filter(option => !option.startsWith("grant_"))
+    const options = [].concat(...Requests.choices(request).map(choice => Requests.ordered(choice.options.filter(option => !option.startsWith("grant_")))
       .map(option => ({
-        text: option.replace(/_/g, " ").toUpperCase(),
+        text: Requests.optionLabel(option),
         tip: option.replace(/_/g, " ") + ", to what " + Requests.label(choice.request.requester) + " asks",
         run: () => timeline.decide(request.id, option, choice.path)
       }))))
