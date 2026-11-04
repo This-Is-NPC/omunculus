@@ -137,7 +137,7 @@ ColumnLayout {
     }
     if (!now || !now.agent)
       return [{ text: focusNode ? focusNode.doing : "", elide: true, keep: true }]
-    const above = now.loose ? [] : Progress.above(path, now.agent)
+    const above = now.loose && !path.some(step => step.agent === now.agent) ? [] : Progress.above(path, now.agent)
     const doing = Progress.lively(now.doing, now.since, tick)
     const clock = now.since !== null && working ? Progress.clock(Math.max(0, tick - now.since)) : ""
     const chain = above.reduce((all, agent) => all.concat([{ text: agent, tone: Omunculus.toneOf(agent) }, { text: " › " }]), [])
