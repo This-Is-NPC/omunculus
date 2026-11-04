@@ -17,7 +17,8 @@ const table = [
   { id: "previous-page", keys: ["Ctrl+Shift+Tab", "Ctrl+Backtab"], tier: 2, mutates: false, label: "Ctrl+Shift+Tab", where: ["everywhere"], what: "the previous page" },
   { id: "back", keys: ["Esc"], tier: 1, mutates: false, where: ["everywhere"],
     what: "let go of what the page holds, then back to where you were, at last the start" },
-  { id: "filter", keys: ["/"], tier: 1, mutates: false, where: ["conversations", "board", "log"], what: "search or filter" },
+  { id: "filter", keys: ["/"], tier: 1, mutates: false, where: ["conversations", "board", "team", "log"], what: "search or filter" },
+  { id: "tab", keys: ["[", "]"], tier: 1, mutates: false, where: ["team"], what: "the previous or next tab of the work picked" },
   { id: "help", keys: ["?", "F1"], tier: 1, mutates: false, where: ["everywhere"], what: "these keys" },
   { id: "start-new", keys: ["N"], tier: 1, mutates: false, where: ["start"], what: "a new conversation" },
   { id: "start-history", keys: ["H"], tier: 1, mutates: false, where: ["start"], what: "the conversations" },
@@ -25,17 +26,20 @@ const table = [
   { id: "pick", keys: ["1", "2", "3", "4", "5", "6", "7", "8", "9"], tier: 1, mutates: false, label: "1 … 9", where: ["new conversation"],
     what: "choose whom it is with, from the cards" },
   { id: "new-conversation", keys: ["Ctrl+N"], tier: 2, mutates: false, where: ["conversations", "chat"], what: "new conversation" },
-  { id: "reply", keys: ["Alt+R"], tier: 2, mutates: false, where: ["chat", "team", "work"], what: "answer what waits on you: the newest request, the node's or the work's" },
-  { id: "team", keys: ["Alt+T"], tier: 2, mutates: false, where: ["chat"], what: "show or hide the team beside the conversation" },
-  { id: "mark-read", keys: ["Alt+M"], tier: 2, mutates: true, where: ["chat", "team"], what: "show the oldest note to you and mark it read, or the node's notes" },
-  { id: "open-map", keys: ["Alt+O"], tier: 2, mutates: false, where: ["work"], what: "its conversation's map, the work picked" },
-  { id: "write", keys: ["Alt+W"], tier: 2, mutates: false, where: ["team"], what: "write to the agent of the node picked" },
+  { id: "reply", keys: ["Alt+R"], tier: 2, mutates: false, where: ["chat", "team", "work"],
+    what: "answer what waits on you: the newest request, the one nearest the work picked, or the work's" },
+  { id: "progress", keys: ["Alt+P"], tier: 2, mutates: false, where: ["chat"], what: "open or close the progress of the works" },
+  { id: "mark-read", keys: ["Alt+M"], tier: 2, mutates: true, where: ["chat", "team"], what: "show the oldest note to you and mark it read, or the work's notes" },
+  { id: "open-team", keys: ["Alt+O"], tier: 2, mutates: false, where: ["work", "thread"], what: "its conversation's team, the work picked" },
+  { id: "write", keys: ["Alt+W"], tier: 2, mutates: false, where: ["team"], what: "write to the agent of the work picked" },
   { id: "comment", keys: ["Alt+C"], tier: 2, mutates: false, where: ["team"], what: "leave it a note, without a run" },
   { id: "escalate", keys: ["Alt+E"], tier: 2, mutates: false, where: ["team"], what: "open the decision of what it asked you, to escalate" },
+  { id: "team-log", keys: ["Alt+L"], tier: 2, mutates: false, where: ["team"], what: "the log of the work picked" },
+  { id: "team-changes", keys: ["Alt+G"], tier: 2, mutates: false, where: ["team"], what: "the changes of the work picked" },
   { id: "fit", keys: ["Alt+F"], tier: 2, mutates: false, where: ["team"], what: "the whole map in view" },
   { id: "by-state", keys: ["Alt+S"], tier: 2, mutates: false, where: ["board"], what: "the works by state" },
   { id: "by-agent", keys: ["Alt+A"], tier: 2, mutates: false, where: ["board"], what: "a lane per agent" },
-  { id: "by-project", keys: ["Alt+P"], tier: 2, mutates: false, where: ["board"], what: "a lane per project" },
+  { id: "by-project", keys: ["Alt+J"], tier: 2, mutates: false, where: ["board"], what: "a lane per project" },
   { id: "send", keys: [], tier: 0, mutates: true, where: [], what: "send a message" },
   { id: "answer", keys: [], tier: 0, mutates: true, where: [], what: "answer a request" },
   { id: "grant", keys: [], tier: 0, mutates: true, where: [], what: "grant a permission" },
@@ -47,7 +51,7 @@ const table = [
 ]
 
 // The bare keys the window may answer to: pure navigation.
-const bareKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "/", "?", "F1", "Esc", "N", "H", "B"]
+const bareKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "/", "[", "]", "?", "F1", "Esc", "N", "H", "B"]
 
 // Whether a key sequence is a single key with no Ctrl, Alt or Meta.
 function isBare(sequence) {

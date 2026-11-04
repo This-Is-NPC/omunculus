@@ -1,8 +1,10 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import "kit/client/Shortcuts.js" as Shortcuts
+import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
 ShellRoot {
@@ -10,19 +12,20 @@ ShellRoot {
   // conversations or the board. Entered: the pages of the level on screen
   // down the left — the project's conversations and board, or the chat, team,
   // log and cost of the conversation open — the one on screen beside the bar
-  // of its commands, and the page under them; back from the first page
-  // entered is back to the start.
+  // of its commands, and the page under them; on a narrow window the rail is
+  // hidden and the bar's page switcher lists the pages. Back from the first
+  // page entered is back to the start.
   FloatingWindow {
     id: panel
 
     title: "omunculus"
     implicitWidth: 1080
     implicitHeight: 720
-    minimumSize: Qt.size(240, 320)
+    minimumSize: Qt.size(360, 480)
     color: Theme.background
 
-    // Below this width, controls drop their labels and keep their icons.
-    readonly property bool compact: width < 560
+    // The window's size class: "wide", "medium" or "narrow".
+    readonly property string size: Breakpoints.size(width)
     // Below this height, the window keeps its room for the conversation: tighter
     // margins, and the targets of the composer only as the one picked.
     readonly property bool short: height < 560
@@ -90,13 +93,13 @@ ShellRoot {
 
       ColumnLayout {
         anchors.fill: parent
-        anchors.margins: panel.short ? 12 : 20
+        anchors.margins: panel.short ? Math.min(12, Breakpoints.margin(panel.width)) : Breakpoints.margin(panel.width)
         spacing: panel.short ? 10 : 18
 
         Masthead {
           Layout.fillWidth: true
           Layout.fillHeight: false
-          section: panel.started ? pagesView.heading : Omunculus.project
+          section: !panel.started ? Omunculus.project : panel.size === "narrow" ? pagesView.shortHeading : pagesView.heading
           // Entered, the page's bar gives the readout.
           StatusLine {
             message: panel.started ? "" : Omunculus.message
@@ -198,9 +201,8 @@ ShellRoot {
               anchors { left: bar.left; right: parent.right; top: bar.bottom; topMargin: panel.short ? 10 : 16; bottom: parent.bottom }
               active: panel.started
               onStartWanted: panel.started = false
-              compact: panel.compact
               short: panel.short
-              }
+            }
 
             TabRail {
               id: rail
@@ -214,10 +216,15 @@ ShellRoot {
 
             PageBar {
               id: bar
-              anchors { left: parent.left; leftMargin: rail.foldedWidth + 16; right: parent.right }
+              // No rail on a narrow window: the bar takes the whole width.
+              anchors { left: parent.left; leftMargin: rail.visible ? rail.foldedWidth + 16 : 0; right: parent.right }
               height: rail.headHeight
               commands: pagesView.commands
               section: rail.current
+              pages: rail.tabs
+              current: rail.current
+              pageSwitcher: true
+              onPageChosen: index => panel.choose(index)
               message: Omunculus.message
               error: Omunculus.messageIsError
               offline: !Omunculus.connected
@@ -246,10 +253,10 @@ ShellRoot {
               }
             }
             // The chords of the page's commands, Alt+R to reply and the like,
-            // which a field being written leaves to them. They have no bare
-            // key: what is typed never runs one.
+            // and of the page's other chords, which a field being written
+            // leaves to them. They have no bare key: what is typed never runs one.
             Repeater {
-              model: pagesView.commands.filter(command => command.key && command.shown !== false && command.enabled !== false)
+              model: pagesView.commands.filter(command => command.key && command.shown !== false && command.enabled !== false).concat(pagesView.chords)
               delegate: Item {
                 id: keyed
                 required property var modelData
@@ -280,6 +287,11 @@ ShellRoot {
       }
 
       ShortcutsDialog { id: shortcuts }
+      // Logs the text drawn out of its place, when asked for.
+      Loader {
+        active: Quickshell.env("OMUNCULUS_TEXT_AUDIT") === "1"
+        sourceComponent: TextAudit {}
+      }
       Shortcut { enabled: frame.bare; sequence: "?"; onActivated: shortcuts.open() }
       Shortcut { sequence: "F1"; onActivated: shortcuts.open() }
     }

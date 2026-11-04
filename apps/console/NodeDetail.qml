@@ -456,6 +456,7 @@ FocusScope {
         thread: Omunculus.threadOf(pane.key)
         emptyText: "NOTHING SAID HERE YET"
         requestsShown: false
+        onOpenWork: work => pane.picked(work)
       }
       Composer {
         id: composer

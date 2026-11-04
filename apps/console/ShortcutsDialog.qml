@@ -42,13 +42,12 @@ ModalDialog {
     ["team", [
       ["↑ · ↓", "move between the works; the detail follows"],
       ["→ · ←", "unfold, fold; on a folded work, go to its parent"],
-      ["Enter", "open its detail, or its tabs beside the outline"],
-      ["[ · ]", "the previous or next tab of the detail"],
-      ["/", "filter the works"]
+      ["Enter", "open its detail, or its tabs beside the outline"]
     ].concat(Shortcuts.rows("team"), [
       ["Esc", "the detail, then the outline, then back"]
     ])],
     ["work", Shortcuts.rows("work").concat([["Esc", "back"]])],
+    ["thread", Shortcuts.rows("thread").concat([["Esc", "back"]])],
     ["board", [
       ["← · → · ↑ · ↓", "move between the works, across and down the columns"],
       ["Enter · Space", "open the work on its page"]
