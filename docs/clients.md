@@ -23,9 +23,11 @@ OpenAPI document the server publishes at `/openapi.json`.
 - Apps call each other only through Quickshell IPC
   (`quickshell ipc --path apps/<app> call …`), never by importing.
 - A launcher may find a project's socket with `mix omunculus.socket
-  <server.toml> [<id>]`, where the id may be left out while the registry
-  holds one project; from there, `GET /v1/projects` lists every project
-  of the registry with its socket.
+  <server.toml> [<id>] [--any]`, which prints the id and the socket
+  separated by a tab. The id may be left out while the registry holds one
+  project; with `--any`, a registry of several prints an empty id and the
+  socket of its first project by id. From there, `GET /v1/projects` lists
+  every project of the registry with its socket.
 
 ## The setup, read through the config routes
 
@@ -82,7 +84,10 @@ the file from external tools.
 `apps/` holds the clients that come with Omunculus, each a folder that
 `apps/kit/run <app> --config <server.toml> [--project <id>]` opens on a
 project, given as `OMUNCULUS_PROJECT` and its local socket as
-`OMUNCULUS_SOCKET`:
+`OMUNCULUS_SOCKET`. Without `--project`, a registry of one project opens on
+it; of several, the console opens on the registry, with an empty
+`OMUNCULUS_PROJECT` and the socket of one of its projects, while the mailbox
+and the studio ask for `--project`:
 
 | App | Is |
 | --- | --- |

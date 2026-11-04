@@ -3,6 +3,8 @@
 #   apps/kit/run <app> --config <server.toml> [--project <id>]
 # The app gets the project's id and local socket as OMUNCULUS_PROJECT and
 # OMUNCULUS_SOCKET; GET /v1/projects there lists the registry's others.
+# Without --project, a registry of one opens on it; of several, the console
+# opens on the registry (an empty id, a socket of it), the other apps refuse.
 set -euo pipefail
 
 usage() {
@@ -39,9 +41,16 @@ if [[ -z ${WAYLAND_DISPLAY:-} ]]; then
 fi
 [[ -n ${WAYLAND_DISPLAY:-} ]] || { printf '%s: no Wayland session found\n' "$name" >&2; exit 1; }
 
-# The last line: a compile before the task prints its own lines first.
-IFS=$'\t' read -r id socket < <(cd "$root" && mise exec -- mix omunculus.socket "$config" "${project[@]}" | tail -n 1)
-[[ -n ${socket:-} ]] || exit 1
+# Only the console has a projects screen to start from.
+any=()
+[[ $name == console ]] && any=(--any)
+# The last line: a compile before the task prints its own lines first. It is
+# split by hand, as read would drop the leading tab of an empty id.
+IFS= read -r line < <(cd "$root" && mise exec -- mix omunculus.socket "$config" "${project[@]}" "${any[@]}" | tail -n 1) || true
+[[ ${line:-} == *$'\t'* ]] || exit 1
+id=${line%%$'\t'*}
+socket=${line#*$'\t'}
+[[ -n $socket ]] || exit 1
 [[ -S $socket ]] || { printf '%s: no socket at %s; start `omunculus serve` first\n' "$name" "$socket" >&2; exit 1; }
 
 export XDG_RUNTIME_DIR WAYLAND_DISPLAY QT_QPA_PLATFORM=wayland
