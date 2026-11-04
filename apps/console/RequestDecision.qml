@@ -51,8 +51,11 @@ SurfaceFrame {
   readonly property string kind: request ? Requests.kind(request) : ""
   // The question as its asker wrote it.
   readonly property string question: passed.length > 0 ? passed.map(origin => origin.reason).join("\n\n") : request ? String(request.reason || "") : ""
-  // The question as a numbered list, when it is one a person answers.
-  readonly property var form: kind === "needs-you" ? Questions.parse(question) : null
+  // The question as a numbered list, when it is one a person answers. Its
+  // model is held by value: it changes only when the words of the question do,
+  // so the boxes being written in are never rebuilt by a refresh.
+  readonly property string formJson: kind === "needs-you" ? JSON.stringify(Questions.parse(question)) : ""
+  readonly property var form: formJson === "" ? null : JSON.parse(formJson)
   // Where the answer is: sending, failed, or neither.
   readonly property string state: (Omunculus.sending || {})[key] || ""
   readonly property bool busy: state === "sending"
@@ -361,6 +364,7 @@ SurfaceFrame {
       visible: active
       sourceComponent: QuestionForm {
         parsed: card.form
+        draftKey: card.key
         sending: card.busy
         onSubmitted: text => card.answerInWords(text)
         onDeclined: card.cannotAnswer()

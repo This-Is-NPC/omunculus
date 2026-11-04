@@ -63,6 +63,11 @@ Singleton {
   property var runs: []
   property var requests: []
   property var inbox: []
+  // What was typed in the forms of requests and not sent, by request id:
+  // {answers, at}, `at` the box the keyboard was in or -1; a form rebuilt
+  // takes its words and the keyboard back from it.
+  property var drafts: ({})
+  function draftOf(key) { return drafts[key] || (drafts[key] = { answers: [], at: -1 }) }
   // The latest event cursor of the open conversation; the stream resumes after it.
   property string cursor: ""
   // While the history of the conversation opened is read in, and once it was.
@@ -393,6 +398,7 @@ Singleton {
     notes = {}
     replies = {}
     noted = {}
+    drafts = {}
     tones = {}
     usage = { all: Usage.tally(), agents: {} }
     runStarts = {}

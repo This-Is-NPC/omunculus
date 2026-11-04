@@ -70,12 +70,14 @@ Item {
     return -1
   }
 
-  // Brings the entry of `key` into view, and stops following the end.
+  // Brings the entry of `key` into view, and stops following the end unless
+  // the keyboard is inside an entry, where the view stays as it is kept.
   function reveal(key) {
     const row = rowOf(key)
     if (row < 0)
       return
-    timeline.following = false
+    if (!inEntry)
+      timeline.following = false
     timeline.positionViewAtIndex(row, ListView.Center)
   }
 
@@ -242,6 +244,9 @@ Item {
     opened = ({})
   }
 
+  // The keyboard is inside an entry, in a form being written, not on the list.
+  readonly property bool inEntry: !timeline.activeFocus && Focus.within(Window.activeFocusItem, timeline.contentItem)
+
   // The keyboard is on the timeline or in the entry it is on.
   readonly property bool keyboard: timeline.activeFocus || (timeline.currentItem !== null && Focus.within(Window.activeFocusItem, timeline.currentItem))
 
@@ -301,7 +306,10 @@ Item {
     activeFocusOnTab: true
     keyNavigationEnabled: true
     onActiveFocusChanged: if (activeFocus && (currentIndex < 0 || currentIndex >= count)) currentIndex = count - 1
-    onCurrentIndexChanged: following = currentIndex === count - 1
+    onCurrentIndexChanged: if (!root.inEntry) following = currentIndex === count - 1
+    // Entries beyond the view are kept for two views each way, so a form
+    // scrolled away from while written in is not rebuilt.
+    cacheBuffer: root.height * 2
     Keys.onPressed: event => {
       const page = { [Qt.Key_PageDown]: 5, [Qt.Key_PageUp]: -5 }[event.key]
       if (page !== undefined)
@@ -348,6 +356,9 @@ Item {
       readonly property alias content: slot.item
       readonly property bool drawn: !!slot.item && slot.item.visible && slot.item.implicitHeight > 0
       readonly property bool selected: ListView.isCurrentItem && root.keyboard
+      // The entry the keyboard is in is the current one, so the list keeps it.
+      readonly property bool holdsKeyboard: Focus.within(Window.activeFocusItem, entry)
+      onHoldsKeyboardChanged: if (holdsKeyboard && timeline.currentIndex !== index) timeline.currentIndex = index
 
       width: timeline.width
       height: drawn ? slot.height + gap : 0

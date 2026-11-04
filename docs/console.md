@@ -148,8 +148,14 @@ work of the question's origin when the harness passed it up.
 "I CAN'T ANSWER THIS". Each item is its number, its question wrapped in
 sentence case and a full-width box that grows with its text; the toggle "I
 DON'T KNOW YET" on the box's row fills it and, switched off, restores what was
-typed. Enter moves to the next box, Enter in the last and Ctrl+Enter in any
-send, and a box that takes the keyboard scrolls into view. A line continues
+typed. Enter moves to the next box that can take the keyboard (it stays in
+the box when none can), Enter in the last and Ctrl+Enter in any send, and a
+box that takes the keyboard scrolls into view without changing whether the
+thread follows its end. The form's model is held by value (`formJson` of
+`RequestDecision`), and what was typed, with the box the keyboard was in, is
+kept in `Omunculus.drafts` by request, so a form rebuilt takes both back; the
+thread keeps two views of entries each way, and the entry the keyboard is in
+is its current one. A line continues
 its item when no blank line precedes it or it is indented; an unindented line
 after a blank one ends the list, and the closing paragraph shows after the
 last box and is not sent.

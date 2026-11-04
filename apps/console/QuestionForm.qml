@@ -22,6 +22,9 @@ ColumnLayout {
   // The parsed questions, as {intro, items:[{n, text}], outro}.
   required property var parsed
   property bool sending: false
+  // What the person wrote and where the keyboard was is kept under this key in
+  // Omunculus.drafts, so a form rebuilt takes both back.
+  property string draftKey: ""
   // The answers joined as one text reply.
   signal submitted(string text)
   // The person says they cannot answer.
@@ -47,16 +50,28 @@ ColumnLayout {
       boxes.itemAt(0).focusBox()
   }
 
-  // Scrolls the nearest scrolling view above `item` just enough to show it.
+  // Goes to the box after `from` that can take the keyboard; with none, or if
+  // that one refuses it, the keyboard stays where it is.
+  function advance(from) {
+    for (let at = from + 1; at < boxes.count; at++) {
+      const box = boxes.itemAt(at)
+      if (!box.canFocus)
+        continue
+      box.focusBox()
+      if (!box.focused)
+        boxes.itemAt(from).focusBox()
+      return
+    }
+  }
+
+  // Scrolls the nearest scrolling view above `item` just enough to show it;
+  // whether the view follows its end is not touched, as the keyboard is here.
   function reveal(item) {
     let view = item.parent
     while (view && typeof view.contentY !== "number")
       view = view.parent
     if (!view)
       return
-    // The view stops following its end once the person works in the form.
-    if (view.following !== undefined)
-      view.following = false
     const top = item.mapToItem(view.contentItem, 0, 0).y
     const margin = 12
     if (top - margin < view.contentY)
@@ -66,6 +81,10 @@ ColumnLayout {
   }
 
   spacing: 10
+
+  // Set as the form is torn down, so the keyboard it held is remembered.
+  property bool dying: false
+  Component.onDestruction: dying = true
 
   Shortcut {
     sequences: ["Ctrl+Return", "Ctrl+Enter"]
@@ -121,7 +140,17 @@ ColumnLayout {
       // Whether "I don't know yet" stands in the box, and what it replaced.
       property bool unknown: false
       property string kept: ""
+      readonly property bool canFocus: !field.sending
+      readonly property bool focused: field.focused
       function focusBox() { field.focusBox() }
+      // A form rebuilt takes back the words and the keyboard.
+      Component.onCompleted: {
+        const draft = Omunculus.draftOf(form.draftKey)
+        if (draft.answers[row.index])
+          field.text = draft.answers[row.index]
+        if (draft.at === row.index)
+          Qt.callLater(row.focusBox)
+      }
       Layout.fillWidth: true
       Layout.maximumWidth: 620
       spacing: 8
@@ -160,9 +189,20 @@ ColumnLayout {
             dense: true
             sending: form.sending || row.unknown
             placeholderText: "your answer"
-            onTextChanged: form.edits++
-            onFocusedChanged: if (focused) Qt.callLater(form.reveal, field)
-            onSubmitted: row.index < boxes.count - 1 ? boxes.itemAt(row.index + 1).focusBox() : form.send()
+            onTextChanged: {
+              form.edits++
+              Omunculus.draftOf(form.draftKey).answers[row.index] = text
+            }
+            onFocusedChanged: {
+              const draft = Omunculus.draftOf(form.draftKey)
+              if (focused) {
+                draft.at = row.index
+                Qt.callLater(form.reveal, field)
+              } else if (!form.dying && draft.at === row.index) {
+                draft.at = -1
+              }
+            }
+            onSubmitted: row.index < boxes.count - 1 ? form.advance(row.index) : form.send()
           }
           Chip {
             Layout.alignment: Qt.AlignTop
