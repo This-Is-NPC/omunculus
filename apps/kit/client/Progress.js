@@ -1,0 +1,410 @@
+.pragma library
+.import "Requests.js" as Requests
+.import "Phrases.js" as Phrases
+.import "Usage.js" as Usage
+
+// Where the conversation's works are, derived from the state and the stage
+// events and never stored. Times are in seconds.
+
+const words = {
+  working: "Working", "needs-you": "Needs you", waiting: "Waiting", stopped: "Stopped",
+  failed: "Failed", done: "Done", "up-next": "Up next", cancelled: "Cancelled", idle: ""
+};
+// Which state wins, first highest: for the conversation and for the path down.
+const order = ["needs-you", "working", "waiting", "stopped", "failed", "up-next"];
+const glyphs = { done: "✓", current: "●", next: "○" };
+
+// The word a state shows: "Working", "Needs you", ...
+function word(state) { return words[state] || ""; }
+
+// An ISO stamp or seconds as seconds; null for neither.
+function seconds(value) {
+  if (typeof value === "number") return value;
+  const parsed = typeof value === "string" ? Date.parse(value) : NaN;
+  return isNaN(parsed) ? null : parsed / 1000;
+}
+
+function firstLine(text) { return String(text || "").split("\n")[0].trim(); }
+
+function two(n) { return String(n).padStart(2, "0"); }
+
+// A duration in words: "42 s", "3 min", "1 h 05 min".
+function span(total) {
+  const s = Math.max(0, Math.floor(total || 0));
+  if (s < 60) return s + " s";
+  if (s < 3600) return Math.floor(s / 60) + " min";
+  return Math.floor(s / 3600) + " h " + two(Math.floor(s % 3600 / 60)) + " min";
+}
+
+// A running clock: "0:42", "12:05", "1:02:03".
+function clock(total) {
+  const s = Math.max(0, Math.floor(total || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor(s % 3600 / 60);
+  return h > 0 ? h + ":" + two(m) + ":" + two(s % 60) : m + ":" + two(s % 60);
+}
+
+// `text` in at most `budget` characters, ending in "…" when cut.
+function elide(text, budget) {
+  if (text.length <= budget) return text;
+  return budget <= 0 ? "" : text.slice(0, budget - 1) + "…";
+}
+
+function actorOf(event) {
+  const actor = event.actor || {};
+  return actor.kind === "agent" ? actor.id || "" : actor.kind === "harness" ? "harness" : actor.kind ? "you" : "";
+}
+
+// Adds a stage event to the journeys (work id -> {entered: [{stage, at,
+// round, from?}], rounds, stopped, sentBack, finishedAt}); the same object
+// back for any other event, so nothing recomputes.
+function journal(journeys, event) {
+  const type = event.type;
+  const id = event.work_id || "";
+  if (!["continue", "reopen", "break"].includes(type) || id === "") return journeys;
+  const body = event.body || {};
+  const at = seconds(event.at);
+  const was = journeys[id] || { entered: [], rounds: 0, stopped: null, sentBack: null, finishedAt: null };
+  const journey = Object.assign({}, was, { entered: was.entered.slice() });
+  const round = rounds => rounds > 0 ? rounds + 1 : 0;
+  if (type === "continue") {
+    if (body.to) {
+      const entry = { stage: body.to, at: at, round: round(journey.rounds) };
+      if (journey.entered.length === 0 && body.from) entry.from = body.from;
+      journey.entered.push(entry);
+    } else {
+      journey.finishedAt = at;
+    }
+    journey.stopped = null;
+  } else if (type === "reopen") {
+    journey.rounds = was.rounds + 1;
+    journey.entered.push({ stage: body.stage || "", at: at, round: round(journey.rounds) });
+    journey.sentBack = was.stopped || { by: actorOf(event), why: "", at: at };
+    journey.stopped = null;
+    journey.finishedAt = null;
+  } else {
+    journey.stopped = { by: actorOf(event), why: firstLine(body.body), at: at };
+  }
+  const next = Object.assign({}, journeys);
+  next[id] = journey;
+  return next;
+}
+
+function plus(a, b) {
+  const sum = Object.assign({}, a);
+  for (const key of Object.keys(b || {}))
+    if (typeof b[key] === "number") sum[key] = (sum[key] || 0) + b[key];
+  return sum;
+}
+
+function counted(nodes) {
+  return {
+    working: nodes.filter(node => node.state === "working").length,
+    waiting: nodes.filter(node => node.state === "waiting" || node.state === "needs-you").length,
+    done: nodes.filter(node => node.state === "done").length,
+    total: nodes.length
+  };
+}
+
+function rank(state) {
+  const at = order.indexOf(state);
+  return at < 0 ? order.length : at;
+}
+
+function closed(state) { return state === "done" || state === "cancelled"; }
+
+// The stage intervals of a work in a workflow, oldest first: {stage, from, to}.
+function intervals(lane, journey, created, end) {
+  const entered = journey ? journey.entered : [];
+  const first = entered.length === 0 ? lane.steps[lane.at].name
+    : entered[0].from || lane.steps[0].name;
+  const starts = [{ stage: first, at: created }].concat(entered);
+  return starts.map((start, i) => ({
+    stage: start.stage, from: start.at, to: i + 1 < starts.length ? starts[i + 1].at : end
+  }));
+}
+
+// The conversation's progress, {state, roots, focus, flat, path, now,
+// forYou, counts, spoken}: one node per work, nested under the stage that
+// handed it down, with what it does, what it waits on and what its branch
+// spent; the root to show, the path to the work active below it, and what
+// waits on you.
+// input: {works, lanes (work id -> laneOf), runs (with error), requests,
+// calling, callArgs, runStarts, journeys, rootAgent, now, usage (work id ->
+// Usage tally), calls (work id -> {count, failed, last: {text, at}})}.
+function build(input) {
+  const works = input.works || [];
+  const lanes = input.lanes || {};
+  const runs = input.runs || [];
+  const calling = input.calling || {};
+  const callArgs = input.callArgs || {};
+  const starts = input.runStarts || {};
+  const journeys = input.journeys || {};
+  const usage = input.usage || {};
+  const callsOf = input.calls || {};
+  const now = input.now || 0;
+  // Per node, while building: the latest end in its branch and its agents.
+  const inner = new Map();
+  const pending = (input.requests || []).filter(Requests.pending);
+  const known = new Set(works.map(work => work.id));
+  const runStart = run => starts[run.id] !== undefined ? starts[run.id] : seconds(run.started_at);
+  const runsOf = id => runs.filter(run => (run.work_id || "") === id);
+
+  const node = (work, level) => {
+    const id = work.id;
+    const lane = lanes[id] || null;
+    const journey = journeys[id] || null;
+    const mine = runsOf(id);
+    const run = mine.filter(each => each.status === "open").pop() || null;
+    const lastRun = mine[mine.length - 1] || null;
+    const asking = pending.filter(request => (request.work_id || "") === id);
+    const created = seconds(work.created_at) || 0;
+    const finishedAt = journey && journey.finishedAt !== null ? journey.finishedAt : null;
+    const end = finishedAt !== null ? finishedAt
+      : closed(work.state) ? seconds(work.updated_at) || now : now;
+    const kids = works.filter(item => item.parent_id === id)
+      .map(item => node(item, level + 1))
+      .sort((a, b) => a.created - b.created);
+
+    let state = "up-next";
+    let waitingOn = "";
+    if (run) state = "working";
+    else if (asking.some(request => Requests.human(request.arbiter))) state = "needs-you";
+    else if (work.state === "cancelled") state = "cancelled";
+    else if (work.state === "done") state = "done";
+    else if (work.state === "broken" || (work.state === "waiting" && !work.waiting))
+      state = lastRun && lastRun.error ? "failed" : "stopped";
+    else if (asking.length > 0) {
+      state = "waiting";
+      waitingOn = Array.from(new Set(asking.map(request => Requests.label(request.arbiter)))).join(", ");
+    } else if (work.state === "waiting" && work.waiting === "child") {
+      state = "waiting";
+      waitingOn = Array.from(new Set(kids.filter(kid => !closed(kid.state)).map(kid => kid.agent))).join(", ");
+    } else if (work.state === "waiting" && work.waiting === "message") {
+      state = "waiting";
+      waitingOn = "a message";
+    }
+
+    const agent = run ? run.agent : lane ? lane.steps[lane.at].agent : work.assignee || "";
+    const stopped = journey ? journey.stopped : null;
+    const ownSeconds = Math.max(0, end - created);
+    const finishedIn = state === "done" ? ownSeconds : null;
+    let doing = "";
+    if (state === "working") doing = calling[id] ? Phrases.phrase(calling[id], callArgs[id]) : "Getting started";
+    else if (state === "needs-you") doing = "Waiting for your answer";
+    else if (state === "waiting") doing = "Waiting for " + (waitingOn || "the team");
+    else if (state === "stopped") doing = stopped ? "Stopped by " + stopped.by + (stopped.why ? ": " + stopped.why : "") : "Stopped";
+    else if (state === "failed") doing = "Failed: " + firstLine(lastRun.error);
+    else if (state === "done") doing = "Done in " + span(finishedIn);
+    else if (state === "cancelled") doing = "Cancelled";
+
+    // Stages, and the children each was current for.
+    const spans = lane ? intervals(lane, journey, created, end) : [];
+    const groups = [];
+    const placed = spans.map(() => []);
+    for (const kid of kids) {
+      let at = spans.findIndex((each, i) => kid.created >= each.from
+        && (kid.created < each.to || (i === spans.length - 1 && kid.created <= each.to)));
+      if (at < 0) at = spans.length - 1;
+      if (at >= 0) placed[at].push(kid);
+    }
+    if (lane) spans.forEach((each, i) => {
+      if (placed[i].length > 0) groups.push({ step: each.stage, nodes: placed[i], parallel: placed[i].length > 1, counts: counted(placed[i]) });
+    });
+    else if (kids.length > 0) groups.push({ step: "", nodes: kids, parallel: kids.length > 1, counts: counted(kids) });
+    const steps = lane ? lane.steps.map((step, i) => {
+      const status = work.state === "done" || i < lane.at ? "done" : i === lane.at ? "current" : "next";
+      const spent = spans.filter(each => each.stage === step.name).reduce((sum, each) => sum + Math.max(0, each.to - each.from), 0);
+      return {
+        name: step.name, agent: step.agent, status: status, seconds: spent, again: status === "next" && spent > 0,
+        children: [].concat.apply([], spans.map((each, j) => each.stage === step.name ? placed[j] : []))
+      };
+    }) : [];
+
+    const team = lane
+      ? Array.from(new Set(lane.steps.map(step => step.agent))).map(name => ({ agent: name, current: name === agent }))
+      : [{ agent: work.assignee || agent, current: true }];
+    const tally = callsOf[id] || { count: 0, failed: 0, last: null };
+    const agentSeconds = mine.reduce((sum, each) => {
+      const from = runStart(each);
+      const to = each.status === "open" ? now : seconds(each.finished_at);
+      return from === null || to === null ? sum : sum + Math.max(0, to - from);
+    }, 0);
+    const own = { seconds: ownSeconds, agentSeconds: agentSeconds, calls: tally.count, failed: tally.failed, usage: plus(Usage.tally(), usage[id]) };
+    const agents = new Set(mine.map(each => each.agent));
+    kids.forEach(kid => inner.get(kid).agents.forEach(name => agents.add(name)));
+    const reach = kids.reduce((latest, kid) => Math.max(latest, inner.get(kid).reach), end);
+    const branch = kids.reduce((sum, kid) => ({
+      agentSeconds: sum.agentSeconds + kid.branch.agentSeconds,
+      works: sum.works + kid.branch.works,
+      calls: sum.calls + kid.branch.calls,
+      usage: plus(sum.usage, kid.branch.usage),
+      running: sum.running + kid.branch.running
+    }), { agentSeconds: agentSeconds, works: 1, calls: tally.count, usage: own.usage, running: mine.filter(each => each.status === "open").length });
+    branch.seconds = Math.max(0, reach - created);
+    branch.agents = agents.size;
+
+    let since = null;
+    if (run) since = runStart(run);
+    else if (!closed(state)) since = seconds(work.updated_at);
+
+    const made = {
+      work: id, title: work.title || "", level: level, parent: work.parent_id || "", agent: agent,
+      state: state, word: word(state), waitingOn: waitingOn, since: since, doing: doing,
+      lastCall: calling[id] ? { name: calling[id], brief: Phrases.brief(calling[id], callArgs[id]) } : null,
+      steps: steps, at: lane ? lane.at : -1, count: lane ? lane.steps.length : 0,
+      round: journey && journey.rounds > 0 ? journey.rounds + 1 : 0,
+      sentBack: journey ? journey.sentBack : null, stopped: state === "stopped" ? stopped : null,
+      asks: [], asked: [], calls: tally.count, failed: tally.failed,
+      children: lane ? [] : kids, groups: groups, team: team, last: tally.last || null,
+      own: own, branch: branch, finishedIn: finishedIn, created: created
+    };
+    inner.set(made, { reach: reach, agents: agents });
+    return made;
+  };
+
+  const newest = (a, b) => b.created - a.created;
+  const built = works.filter(work => !work.parent_id || !known.has(work.parent_id)).map(work => node(work, 0));
+  const roots = built.filter(each => !closed(each.state)).sort(newest)
+    .concat(built.filter(each => closed(each.state)).sort(newest));
+  const flat = [];
+  const visit = each => { flat.push(each); kidsOf(each).forEach(visit); };
+  roots.forEach(visit);
+  const byWork = {};
+  flat.forEach(each => { byWork[each.work] = each; });
+
+  // Each pending request: on the node that asks, and on the nearest node at
+  // or above it whose agent decides it.
+  for (const request of pending) {
+    const asker = byWork[request.work_id || ""];
+    if (!asker) continue;
+    const human = Requests.human(request.arbiter);
+    let to = null;
+    if (!human) {
+      const arbiter = Requests.label(request.arbiter);
+      for (let at = asker; at && !to; at = byWork[at.parent]) if (at.agent === arbiter) to = at;
+    }
+    const chain = Requests.chain(request).map(origin => Requests.label(origin.requester)).reverse()
+      .concat([Requests.label(request.requester), human ? "you" : Requests.label(request.arbiter)]);
+    asker.asks.push({
+      id: request.id, to: human ? "you" : Requests.label(request.arbiter), human: human,
+      question: request.reason || "", toWork: to ? to.work : null, chain: chain
+    });
+    if (to) to.asked.push({ id: request.id, from: Requests.label(request.requester), fromWork: asker.work, question: request.reason || "" });
+  }
+
+  const hidden = Requests.contained(input.requests || []);
+  const forYou = pending.filter(request => Requests.human(request.arbiter) && !hidden.has(request.id)).map(request => {
+    const of = byWork[request.work_id || ""];
+    return { id: request.id, asker: Requests.label(request.requester), work: request.work_id || "", title: of ? of.title : "", question: request.reason || "" };
+  });
+
+  const focus = roots.length === 0 ? null : roots[0];
+  const path = [];
+  for (let at = focus; at; ) {
+    path.push({ agent: at.agent, title: at.title, work: at.work });
+    at = kidsOf(at).filter(kid => !closed(kid.state)).sort((a, b) => rank(a.state) - rank(b.state) || newest(a, b))[0] || null;
+  }
+  const leaf = path.length > 0 ? byWork[path[path.length - 1].work] : null;
+  const open = runs.filter(run => run.status === "open");
+  const loose = open.filter(run => !(run.work_id || "")).pop() || null;
+  let doing = { agent: input.rootAgent || "", doing: "", since: null };
+  if (leaf && (leaf.state === "working" || leaf.state === "needs-you")) doing = { agent: leaf.agent, doing: leaf.doing, since: leaf.since };
+  else if (loose) doing = {
+    agent: loose.agent || input.rootAgent || "",
+    doing: calling[""] ? Phrases.phrase(calling[""], callArgs[""]) : "Getting started",
+    since: runStart(loose)
+  };
+  else if (leaf) doing = { agent: leaf.agent, doing: leaf.doing, since: leaf.since };
+
+  const lastRun = runs[runs.length - 1];
+  let state = "idle";
+  if (forYou.length > 0) state = "needs-you";
+  else if (open.length > 0) state = "working";
+  else if (flat.some(each => each.state === "waiting")) state = "waiting";
+  else if (flat.some(each => each.state === "stopped")) state = "stopped";
+  else if (flat.some(each => each.state === "failed") || (lastRun && lastRun.error)) state = "failed";
+  else if (roots.length > 0 && roots.every(each => closed(each.state)) && roots.some(each => each.state === "done")) state = "done";
+
+  const counts = counted(flat);
+  counts.agents = new Set(runs.map(run => run.agent)).size;
+  let spoken = "";
+  if (state === "needs-you") spoken = forYou[0].asker + " asks you: " + firstLine(forYou[0].question);
+  else if (state !== "idle") spoken = word(state) + ". " + (path.length > 1 ? path.map(each => each.agent).join(", ") : doing.agent) + (doing.doing ? ": " + doing.doing : "");
+
+  return { state: state, roots: roots, focus: focus, flat: flat, path: path, now: doing, forYou: forYou, counts: counts, spoken: spoken };
+}
+
+// A node's children in tree order: by stage for a work in a workflow.
+function kidsOf(node) {
+  return node.groups.reduce((all, group) => all.concat(group.nodes), []);
+}
+
+function token(text, status) { return { text: text, status: status }; }
+
+function joined(tokens) { return tokens.map(each => each.text).join(""); }
+
+// The one-line forms of a sequence of steps ({name, status}), longest first;
+// the separators are tokens of their own.
+function forms(steps, round) {
+  const done = steps.filter(step => step.status === "done");
+  const current = steps.find(step => step.status === "current") || null;
+  const next = steps.filter(step => step.status === "next");
+  const sep = token(" › ", "separator");
+  const long = current ? current.name + (round > 0 ? " · round " + round : "") : "";
+  const short = current ? current.name + (round > 0 ? " r" + round : "") : "";
+  const chain = parts => parts.reduce((all, part, i) => i === 0 ? [part] : all.concat([sep, part]), []);
+  const named = step => token(glyphs[step.status] + " " + (step === current ? long : step.name), step.status);
+  const doneCounted = done.length >= 2 ? [token(glyphs.done + " " + done.length, "done")] : done.map(named);
+  const middle = (current ? [named(current)] : []);
+  const f1 = chain(steps.map(named));
+  const f2 = chain(doneCounted.concat(middle, next.map(named)));
+  const f3 = next.length > 1
+    ? chain(doneCounted.concat(middle, [named(next[0]), token("+" + (next.length - 1), "next")]))
+    : f2;
+  const f4 = chain((done.length > 0 ? [token(glyphs.done + done.length, "done")] : [])
+    .concat(current ? [token(glyphs.current + " " + short, "current")] : [], next.length > 0 ? [named(next[0])] : []))
+    .concat(next.length > 1 ? [token(" ", "separator"), token("+" + (next.length - 1), "next")] : []);
+  const dots = steps.reduce((all, step, i) => all.concat(i === 0 ? [] : [token(" ", "separator")], [token(glyphs[step.status], step.status)]), []);
+  const f5 = dots.concat(current ? [token("  ", "separator"), token(short, "current")] : []);
+  const position = current ? steps.indexOf(current) + 1 : done.length;
+  const f6 = [token(position + "/" + steps.length + (current ? " " + short : ""), current ? "current" : "done")];
+  return [["F1", f1], ["F2", f2], ["F3", f3], ["F4", f4], ["F5", f5], ["F6", f6]];
+}
+
+// The longest form of the sequence that fits `budget` characters, as
+// {form, tokens: [{text, status}]}; status is done, current, next or
+// separator. The last form elides to fit any budget.
+function stepper(steps, round, budget) {
+  if (!steps || steps.length === 0) return { form: "F1", tokens: [] };
+  const all = forms(steps, round || 0);
+  for (const each of all)
+    if (joined(each[1]).length <= budget) return { form: each[0], tokens: each[1] };
+  const last = all[all.length - 1][1][0];
+  return { form: "F6", tokens: [token(elide(last.text, budget), last.status)] };
+}
+
+// One line of parts ({text, short?, elide?, keep?}) in at most `budget`
+// characters, as the text each part shows ("" for a part dropped), in
+// order: the short forms first, from the last part back; then the `elide`
+// part, down to 4 characters and "…"; then the parts without `keep`, from
+// the last back; then the `elide` part further, and last whatever still
+// does not fit is cut from the end.
+function fit(parts, budget) {
+  const texts = parts.map(part => part.text || "");
+  const total = () => texts.reduce((sum, text) => sum + text.length, 0);
+  for (let i = parts.length - 1; i >= 0 && total() > budget; i--)
+    if (typeof parts[i].short === "string") texts[i] = parts[i].short;
+  const soft = parts.findIndex(part => part.elide);
+  if (soft >= 0 && total() > budget) {
+    const room = budget - (total() - texts[soft].length);
+    texts[soft] = elide(texts[soft], Math.max(Math.min(5, texts[soft].length), room));
+  }
+  for (let i = parts.length - 1; i >= 0 && total() > budget; i--)
+    if (!parts[i].keep) texts[i] = "";
+  if (soft >= 0 && total() > budget)
+    texts[soft] = elide(texts[soft], Math.max(0, budget - (total() - texts[soft].length)));
+  for (let i = parts.length - 1; i >= 0 && total() > budget; i--)
+    texts[i] = elide(texts[i], Math.max(0, budget - (total() - texts[i].length)));
+  return texts;
+}
