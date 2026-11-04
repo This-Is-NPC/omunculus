@@ -3,8 +3,9 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "kit/client"
-import "kit/client/Activity.js" as Activity
 import "kit/client/Model.js" as Model
+import "kit/client/Phrases.js" as Phrases
+import "kit/client/Progress.js" as Progress
 import "kit/client/Requests.js" as Requests
 import "kit/client/Time.js" as Time
 import "kit/client/Usage.js" as Usage
@@ -74,12 +75,14 @@ Singleton {
   property bool replaying: false
   property bool loaded: false
   // Thread key ("" or a work id) -> its ListModel. Each entry: kind (speech,
-  // turn or request), key, who, text, mine, stamp, at (seconds), work,
+  // turn, request or work), key, who, text, mine, stamp, at (seconds), work,
   // streaming, partial (the text its model is writing), steps (JSON), and
   // fresh: it arrived while the conversation was open, rather than with its
-  // history. A turn is one run of an agent: what it said and what it did.
-  // Every request and every note to you also shows in the main thread, where
-  // it was made, keyed by its request or inbox id.
+  // history. A turn is one run of an agent: what it said and what it did. A
+  // work handed down shows, keyed by its id, in the thread of the run that
+  // handed it down. A request between agents shows in the thread it was asked
+  // in, keyed by its id; a request for you, and every note to you, in the
+  // main thread.
   property var threads: ({})
   // Whether the first message will make the conversation: it is with an agent
   // picked and none exists on the server yet.
@@ -107,9 +110,17 @@ Singleton {
   // workspaces, workspace, workflows, ...}; null until it answers.
   property var setup: null
   // What the open conversation's model calls used, as their providers reported
-  // it: {calls, input, cached, output, cost, priced}, in all and by agent. Shown
-  // only when asked for.
-  property var usage: ({ all: Usage.tally(), agents: {} })
+  // it: {calls, input, cached, output, cost, priced}, in all, by agent and by
+  // work ("" for runs without one). Shown only when asked for.
+  property var usage: ({ all: Usage.tally(), agents: {}, works: {} })
+  // Work id -> its tool calls: {count, failed, last: {text, at}}, `last` the
+  // newest call or outcome.
+  property var callsOf: ({})
+  // Work id -> the stages it went through, as Progress.journal keeps them.
+  property var journeys: ({})
+  // Work id -> its title, as the events that made it gave it, before the
+  // snapshot has the work.
+  property var titles: ({})
   // Every event of the open conversation as a row of the log page.
   property EventLog eventLog: EventLog {}
   // Run id -> when its run started (seconds), and run id -> why it ended, when
@@ -123,8 +134,12 @@ Singleton {
   property var sending: ({})
   // The time of the newest event of the open conversation, in seconds.
   property real lastEventAt: 0
-  // What the team is doing now, as Activity.status derives it.
-  property var activity: Activity.status({})
+  // Where the conversation's works are, as Progress.build derives it; null
+  // until it was first derived.
+  property var progress: null
+  // Now, in seconds, a second at a time while a run is open: the clocks of
+  // the views count from it.
+  property real tick: Date.now() / 1000
 
   // The board: every project the window's socket lists, as {id, socket},
   // and by project id its works, its setup as the config route gives it,
@@ -400,7 +415,10 @@ Singleton {
     noted = {}
     drafts = {}
     tones = {}
-    usage = { all: Usage.tally(), agents: {} }
+    usage = { all: Usage.tally(), agents: {}, works: {} }
+    callsOf = {}
+    journeys = {}
+    titles = {}
     runStarts = {}
     runErrors = {}
     runDepth = {}
@@ -655,15 +673,6 @@ Singleton {
     return text.replace(/`([^`\n]+)`/g, "$1")
   }
 
-  function brief(args) {
-    const parts = Object.keys(args || {}).map(key => {
-      const value = typeof args[key] === "string" ? args[key] : JSON.stringify(args[key])
-      return key + ": " + value
-    })
-    const line = parts.join("  ·  ").replace(/\s+/g, " ")
-    return line.length > 120 ? line.slice(0, 117) + "..." : line
-  }
-
   // The event as a row of the log page.
   function record(event) {
     const body = event.body || {}
@@ -753,23 +762,39 @@ Singleton {
     return "US$ " + (spent < 0.01 ? spent.toFixed(4) : spent.toFixed(2))
   }
 
-  // Adds one model call's reported usage to the conversation's and its agent's.
-  function count(who, reported) {
-    const next = { all: Object.assign({}, usage.all), agents: Object.assign({}, usage.agents) }
+  // Adds one model call's reported usage to the conversation's, its agent's
+  // and its work's.
+  function count(who, work, reported) {
+    const next = { all: Object.assign({}, usage.all), agents: Object.assign({}, usage.agents), works: Object.assign({}, usage.works) }
     next.agents[who] = Object.assign(Usage.tally(), next.agents[who] || {})
+    next.works[work] = Object.assign(Usage.tally(), next.works[work] || {})
     Usage.add(next.all, reported)
     Usage.add(next.agents[who], reported)
+    Usage.add(next.works[work], reported)
     usage = next
   }
 
-  // Adds a line to the turn of the run it happened in.
-  function step(runId, line) {
+  // Adds a line to the turn of the run it happened in, and makes it the
+  // newest thing done on its work; a call is counted too.
+  function step(runId, work, line) {
+    const was = callsOf[work] || { count: 0, failed: 0, last: null }
+    keep("callsOf", work, {
+      count: was.count + (line.outcome ? 0 : 1),
+      failed: was.failed + (!line.outcome && !line.ok ? 1 : 0),
+      last: line.hook ? was.last : { text: line.outcome ? line.text : (line.name + "  " + Phrases.brief(line.name, line.args)).trim(), at: line.at }
+    })
     const place = rows[runId]
     if (place === undefined)
       return
     const steps = JSON.parse(entryAt(place).steps)
     steps.push(line)
     update(place, "steps", JSON.stringify(steps))
+  }
+
+  // What a work made by an event is called, by its id.
+  function titleOf(id) {
+    const known = work(id)
+    return known && known.title ? known.title : titles[id] || "the work"
   }
 
   // Adds what was said, and the files attached with it, to the turn of its
@@ -797,6 +822,9 @@ Singleton {
     if (event.cursor)
       cursor = event.cursor
     record(event)
+    const next = Progress.journal(journeys, event)
+    if (next !== journeys)
+      journeys = next
     const body = event.body || {}
     const who = actorName(event.actor)
     const stamp = Time.clock(event.at, Date.now())
@@ -804,6 +832,10 @@ Singleton {
     const work = event.work_id || ""
     if (event.type === "delegate" && work)
       keep("parentOf", work, body.parent_id || "")
+    // A work made by a run: handed down, or a root one the run opened.
+    const made = work !== "" && (event.type === "delegate" || (event.type === "work" && !!event.run_id && typeof body.title === "string"))
+    if (made)
+      keep("titles", work, body.title || "")
     if (event.type === "start-run") {
       keep("runThread", event.run_id, Number(body.depth) > 0 && work ? work : "")
       keep("runStarts", event.run_id, at)
@@ -827,7 +859,7 @@ Singleton {
       break
     case "model": {
       if (body.usage)
-        count(who, body.usage)
+        count(who, work, body.usage)
       const said = Model.text(body)
       const place = rows[event.run_id]
       if (place !== undefined)
@@ -850,26 +882,39 @@ Singleton {
       break
     }
     case "tool": {
-      // The prompt, the end and the chained steps have entries of their own;
-      // a hook, called with the event alone, shows only when it fails.
-      const hook = body.args && typeof body.args.event === "object" && Object.keys(body.args).length === 1
-      if (!["assemble", "send", "end"].includes(body.name) && !body.via && !(hook && body.ok !== false)) {
-        step(event.run_id, { name: body.name, ok: body.ok !== false, text: hook ? "" : brief(body.args), args: body.args || {}, output: body.ok === false ? String(body.output || "") : "", outcome: false })
-        keep("calling", work, body.name)
-        keep("callArgs", work, body.args || {})
+      // The prompt and the end have entries of their own. A hook is called
+      // with the event alone; the turn folds those that passed.
+      const hook = !!body.args && typeof body.args.event === "object" && Object.keys(body.args).length === 1
+      if (!["assemble", "send", "end"].includes(body.name)) {
+        step(event.run_id, work, { name: body.name, ok: body.ok !== false, text: "", args: body.args || {}, output: body.ok === false ? String(body.output || "") : "", outcome: false, hook: hook, at: at })
+        if (!hook) {
+          keep("calling", work, body.name)
+          keep("callArgs", work, body.args || {})
+        }
       }
       break
     }
     case "continue":
-      step(event.run_id, { name: "continue", ok: true, text: body.to ? "moved the work to " + body.to : "closed the work", output: "", outcome: true })
+      step(event.run_id, work, { name: "continue", ok: true, text: body.to ? "moved on to " + body.to : "finished the work", output: "", outcome: true, at: at })
       break
     case "grant":
-      step(event.run_id, { name: "grant", ok: true, text: "granted " + body.name + (body.scope ? " for the " + body.scope : " for this work"), output: "", outcome: true })
+      step(event.run_id, work, { name: "grant", ok: true, text: "granted " + body.name + (body.scope ? " for the " + body.scope : " for this work"), output: "", outcome: true, at: at })
+      break
+    case "reopen":
+      step(event.run_id, work, { name: "reopen", ok: true, text: "sent \"" + titleOf(work) + "\" back to " + (body.stage || "its stage"), output: "", outcome: true, at: at })
+      break
+    case "break":
+      step(event.run_id, work, { name: "break", ok: true, text: "stopped: " + String(body.body || "").split("\n")[0].trim(), output: "", outcome: true, at: at })
+      break
+    case "delegate":
+    case "work":
+      if (made)
+        append(key, { kind: "work", key: work, who: who, stamp: stamp, at: at, work: work })
       break
     case "request":
       if (Requests.byHarness(event))
         keep("noted", event.request_id, true)
-      append("", { kind: "request", key: event.request_id, who: who, stamp: stamp, at: at, work: work })
+      append(!body.arbiter || Requests.human(body.arbiter) ? "" : key, { kind: "request", key: event.request_id, who: who, stamp: stamp, at: at, work: work })
       break
     case "reply":
       keep("replies", event.request_id, { option: Requests.chosen(body), who: who, body: body.body || "" })
@@ -900,27 +945,33 @@ Singleton {
     onReceived: event => root.handle(event)
   }
 
-  // Derives what the team is doing from the state, soon after it changes and
-  // each second while a run is open, so elapsed times keep moving.
+  // Derives where the works are from the state, soon after it changes; the
+  // clocks move with `tick` in between.
   function recompute() {
-    activityTimer.stop()
+    progressTimer.stop()
+    tick = Date.now() / 1000
     const lanes = {}
     for (const item of works)
       lanes[item.id] = laneOf(item)
-    activity = Activity.status({
+    progress = Progress.build({
       runs: runs.map(run => runErrors[run.id] ? Object.assign({}, run, { error: runErrors[run.id] }) : run),
-      works: works, requests: requests, lanes: lanes, calling: calling, callArgs: callArgs, runStarts: runStarts, now: Date.now() / 1000
+      works: works, requests: requests, lanes: lanes, calling: calling, callArgs: callArgs, runStarts: runStarts,
+      journeys: journeys, rootAgent: agent || lastAgent, now: tick, usage: usage.works, calls: callsOf
     })
   }
-  onWorksChanged: activityTimer.restart()
-  onRunsChanged: activityTimer.restart()
-  onRequestsChanged: activityTimer.restart()
-  onCallingChanged: activityTimer.restart()
-  onRunStartsChanged: activityTimer.restart()
-  onRunErrorsChanged: activityTimer.restart()
-  onSetupChanged: activityTimer.restart()
+  onWorksChanged: progressTimer.restart()
+  onRunsChanged: progressTimer.restart()
+  onRequestsChanged: progressTimer.restart()
+  onCallingChanged: progressTimer.restart()
+  onRunStartsChanged: progressTimer.restart()
+  onRunErrorsChanged: progressTimer.restart()
+  onSetupChanged: progressTimer.restart()
+  onJourneysChanged: progressTimer.restart()
+  onUsageChanged: progressTimer.restart()
+  onCallsOfChanged: progressTimer.restart()
+  onAgentChanged: progressTimer.restart()
   Timer {
-    id: activityTimer
+    id: progressTimer
     interval: 50
     onTriggered: root.recompute()
   }
@@ -928,7 +979,7 @@ Singleton {
     interval: 1000
     repeat: true
     running: root.running.length > 0
-    onTriggered: root.recompute()
+    onTriggered: root.tick = Date.now() / 1000
   }
 
   Timer {
