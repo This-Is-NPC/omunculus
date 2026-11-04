@@ -120,3 +120,10 @@ function chain(request) {
     return all.concat([{ requester: origin.requester, reason: origin.reason }], chain(origin));
   }, []);
 }
+
+// Who asked the question in a request: the deepest origin it climbed from, else
+// its own requester; a name for the card, the answered line and the strip.
+function asker(request) {
+  const climb = chain(request);
+  return label((climb.length > 0 ? climb[climb.length - 1] : request).requester);
+}

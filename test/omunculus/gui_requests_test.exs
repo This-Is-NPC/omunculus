@@ -40,6 +40,7 @@ defmodule Omunculus.GuiRequestsTest do
     const names = Requests.chain(top).map(c => Requests.label(c.requester));
     if (names.join() !== "lead,designer") throw Error("chain " + names);
     if (Requests.chain(other).length !== 0) throw Error("empty chain");
+    if (Requests.asker(top) !== "designer" || Requests.asker(other) !== "sales") throw Error("asker");
     if (Requests.kind(top) !== "needs-you" || Requests.kind(other) !== "needs-you") throw Error("needs-you");
     if (Requests.kind(low) !== "team") throw Error("team");
     if (Requests.kind(Object.assign({}, other, {status: "closed"})) !== "team") throw Error("closed");
