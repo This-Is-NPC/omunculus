@@ -28,9 +28,8 @@ Singleton {
   property alias socket: connection.socket
   property alias project: connection.project
   property alias connected: connection.connected
-  property alias message: connection.message
-  property alias messageIsError: connection.messageIsError
-  property alias noticeCount: connection.noticeCount
+  // What the window tells, as toasts.
+  readonly property Notices notices: connection.notices
   readonly property Http http: connection.http
   // The project's setup, as GET /v1/projects/{id}/config?whole=true gives it: {root, agents, models,
   // workspaces, workspace, workflows, document, literal_keys, revision, names};

@@ -134,14 +134,6 @@ ShellRoot {
               onClicked: pagesView.showProjects("waiting")
             }
           }
-          // Entered, the page's bar gives the readout.
-          StatusLine {
-            message: panel.started ? "" : Omunculus.message
-            error: Omunculus.messageIsError
-            offline: !panel.started && !Omunculus.connected
-            count: Omunculus.noticeCount
-            maxWidth: Math.max(0, panel.width - 480)
-          }
         }
 
         Item {
@@ -243,10 +235,6 @@ ShellRoot {
               current: rail.current
               pageSwitcher: true
               onPageChosen: index => panel.choose(index)
-              message: Omunculus.message
-              error: Omunculus.messageIsError
-              offline: !Omunculus.connected
-              notices: Omunculus.noticeCount
             }
 
             // The digit a page shows chooses it while a page is being navigated
@@ -305,6 +293,14 @@ ShellRoot {
       }
 
       ShortcutsDialog { id: shortcuts }
+      // What the window tells, at its bottom right.
+      ToastStack {
+        anchors { right: parent.right; bottom: parent.bottom; margins: Breakpoints.margin(panel.width) }
+        width: Math.min(340, panel.width - 2 * Breakpoints.margin(panel.width))
+        maxHeight: panel.height / 2
+        notices: Omunculus.notices.items
+        onDismissed: id => Omunculus.notices.dismiss(id)
+      }
       // Logs the text drawn out of its place, when asked for.
       Loader {
         active: Quickshell.env("OMUNCULUS_TEXT_AUDIT") === "1"

@@ -59,9 +59,9 @@ Singleton {
   readonly property int waiting: all.filter(thread => waitsOnYou(thread)).length
   readonly property int working: all.filter(thread => thread.working).length
 
-  property string message: ""
-  property bool messageIsError: false
-  property int noticeCount: 0
+  // What the window tells, as toasts; the server did not answer the last sweep.
+  property bool unreachable: false
+  readonly property Notices notices: Notices { offline: root.unreachable }
 
   // Thread key -> {cursor, events, snapshot}: what its thread is built from.
   property var cache: ({})
@@ -78,11 +78,7 @@ Singleton {
 
   Timer { interval: 2500; repeat: true; running: root.socket !== ""; onTriggered: root.sweep() }
 
-  function tell(text, isError) {
-    message = text
-    messageIsError = isError
-    noticeCount++
-  }
+  function tell(text, isError) { notices.tell(text, isError) }
 
   // Whether a thread holds what the search asks for: in its subject, agent,
   // project, any of its messages or the names of their files.
@@ -228,12 +224,14 @@ Singleton {
     sweeping = true
     const failed = () => {
       connected = false
+      unreachable = true
       sweeping = false
     }
     http.call(socket, "GET", "/v1/identity", null, false, identity => {
       me = identity
       http.call(socket, "GET", "/v1/projects", null, false, data => {
         connected = true
+        unreachable = false
         loadAgents(data.items)
         const pending = data.items.slice()
         const keys = []

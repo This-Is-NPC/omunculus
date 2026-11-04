@@ -65,7 +65,7 @@ ShellRoot {
         visible: window.page === 0
         leftInset: rail.x + rail.foldedWidth
         topInset: bar.y + bar.height
-        bottomInset: footer.height
+        bottomInset: foot.height
         onAgentPicked: name => settings.reveal("agents", name)
       }
 
@@ -87,7 +87,7 @@ ShellRoot {
       }
 
       Rectangle {
-        anchors { left: parent.left; leftMargin: rail.x + rail.foldedWidth + 16; right: parent.right; rightMargin: 20; top: bar.bottom; topMargin: 16; bottom: footer.top; bottomMargin: 12 }
+        anchors { left: parent.left; leftMargin: rail.x + rail.foldedWidth + 16; right: parent.right; rightMargin: 20; top: bar.bottom; topMargin: 16; bottom: foot.top; bottomMargin: 12 }
         visible: window.page !== 0
         color: Qt.alpha(Theme.background, 0.92)
         border.color: Theme.line
@@ -120,17 +120,13 @@ ShellRoot {
         height: rail.headHeight
         commands: window.commands
         section: window.page
-        message: Studio.message
-        error: Studio.messageIsError
-        offline: !Studio.connected
-        notices: Studio.noticeCount
       }
 
       // The footer: the studio, and the project the flow draws; with several
       // in the registry, each is named and picking one draws it. The
       // sections end above it.
       Rectangle {
-        id: footer
+        id: foot
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
         height: 52
         // Over the flow, it hides what runs under it.
@@ -156,6 +152,14 @@ ShellRoot {
         }
       }
 
+      // What the window tells, at its bottom right, over the footer.
+      ToastStack {
+        anchors { right: parent.right; rightMargin: 20; bottom: foot.top; bottomMargin: 12 }
+        maxHeight: window.height / 2
+        notices: Studio.notices.items
+        onDismissed: id => Studio.notices.dismiss(id)
+      }
+
       NewProjectDialog {
         id: newProject
         client: Studio.client
@@ -163,7 +167,7 @@ ShellRoot {
       }
 
       ZoomControl {
-        anchors { right: parent.right; rightMargin: 20; verticalCenter: footer.verticalCenter }
+        anchors { right: parent.right; rightMargin: 20; verticalCenter: foot.verticalCenter }
         visible: window.page === 0
         target: flow
       }

@@ -3,7 +3,7 @@ import Quickshell
 
 // Project is the project a window is on, on the server's local socket:
 // whether the server answers, asked again every few seconds, the requests to
-// it, and the last message the window shows. Opened with a socket and no
+// it, and the notices the window shows. Opened with a socket and no
 // project, it is on the server's registry, which that socket lists.
 QtObject {
   id: root
@@ -13,10 +13,9 @@ QtObject {
   readonly property bool registry: project === "" && socket !== ""
   readonly property string base: "/v1/projects/" + project
   property bool connected: false
-  property string message: ""
-  property bool messageIsError: false
-  // How many messages were told, so one told again shows again.
-  property int noticeCount: 0
+  // The server did not answer the last time it was asked.
+  property bool unreachable: false
+  readonly property Notices notices: Notices { offline: root.unreachable }
 
   // The server answers, the first time or after it did not.
   signal reached()
@@ -41,21 +40,25 @@ QtObject {
 
   function check() {
     call("GET", "/v1/identity", null, false, () => {
+      unreachable = false
       if (!connected) {
         connected = true
         reached()
       }
-    }, () => connected = false)
+    }, () => {
+      connected = false
+      unreachable = true
+    })
   }
 
   // Moves the window to another project of the registry, as {id, socket}:
-  // not connected and with no message until its socket answers.
+  // not connected and with no notice until its socket answers.
   function switchTo(place) {
     project = place.id
     socket = place.socket
     connected = false
-    message = ""
-    messageIsError = false
+    unreachable = false
+    notices.items = []
     check()
   }
 
@@ -66,11 +69,7 @@ QtObject {
     call("POST", "/v1/projects", { id: id, config: config }, false, done, failed)
   }
 
-  function tell(text, isError) {
-    message = text
-    messageIsError = isError
-    noticeCount++
-  }
+  function tell(text, isError) { notices.tell(text, isError) }
 
   // One HTTP request on the project's socket, as `Http.call` makes it.
   function call(method, path, body, idempotent, done, failed) {

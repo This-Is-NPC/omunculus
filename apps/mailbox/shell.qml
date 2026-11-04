@@ -55,13 +55,6 @@ ShellRoot {
           Layout.fillWidth: true
           crumbs: [{ text: window.narrow && window.reading ? "thread"
             : ({ all: "all threads", waiting: "waiting for you", working: "working" })[Mail.folder] }]
-          StatusLine {
-            message: Mail.message
-            error: Mail.messageIsError
-            offline: !Mail.connected
-            count: Mail.noticeCount
-            maxWidth: Math.max(0, window.width - 520)
-          }
         }
 
         CommandBar {
@@ -244,6 +237,14 @@ ShellRoot {
       }
 
       ComposeDialog { id: compose }
+      // What the window tells, at its bottom right.
+      ToastStack {
+        anchors { right: parent.right; bottom: parent.bottom; margins: window.short ? 12 : 20 }
+        width: Math.min(340, window.width - 40)
+        maxHeight: window.height / 2
+        notices: Mail.notices.items
+        onDismissed: id => Mail.notices.dismiss(id)
+      }
 
       Shortcut { sequence: "Ctrl+N"; onActivated: compose.open() }
       Shortcut { sequence: "/"; onActivated: window.search() }

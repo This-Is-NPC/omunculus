@@ -45,9 +45,8 @@ Singleton {
   property alias project: connection.project
   property alias base: connection.base
   property alias connected: connection.connected
-  property alias message: connection.message
-  property alias messageIsError: connection.messageIsError
-  property alias noticeCount: connection.noticeCount
+  // What the window tells, as toasts.
+  readonly property Notices notices: connection.notices
   readonly property Http http: connection.http
   // The project capabilities the member holds, such as project.manage_config.
   property var capabilities: []

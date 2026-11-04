@@ -299,7 +299,7 @@ Item {
       return [
         back,
         { text: "NEW PROJECT", short: "NEW", icon: "plus", role: "primary", tip: "add a project to the server's registry", run: () => view.newProject() },
-        { text: "FILTER", icon: "search", place: "end", tip: "filter the projects  /", run: () => projectsList.focusFilter() }
+        { text: "FILTER", icon: "search", tip: "filter the projects  /", run: () => projectsList.focusFilter() }
       ]
     if (page === "conversations")
       return [back, fresh("primary")]
@@ -345,9 +345,9 @@ Item {
           shown: askedOfYou.length > 0, run: () => decision.show(askedOfYou[0].id, true) },
         { text: "MARK READ", icon: "check", key: Shortcuts.chord("mark-read"), tip: (notesHere.length > 1 ? "mark its " + notesHere.length + " notes read" : "mark its note read") + "  " + Shortcuts.label("mark-read"),
           shown: notesHere.length > 0, run: () => notesHere.forEach(note => Omunculus.markRead(note.id)) },
-        { text: "FIT", icon: "map", place: "end", key: Shortcuts.chord("fit"), tip: "the whole map in view  " + Shortcuts.label("fit"),
+        { text: "FIT", icon: "map", key: Shortcuts.chord("fit"), tip: "the whole map in view  " + Shortcuts.label("fit"),
           shown: mapAllowed && teamShownAs === "map", run: () => team.fit() },
-        { text: "FILTER", icon: "search", place: "end", tip: "filter the works  /", run: () => team.focusFilter() }
+        { text: "FILTER", icon: "search", tip: "filter the works  /", run: () => team.focusFilter() }
       ]
     }
     if (page === "board")
@@ -359,14 +359,14 @@ Item {
           tip: "a lane per agent  " + Shortcuts.label("by-agent"), run: () => board.group = "agent" },
         { text: "BY PROJECT", short: "PROJECT", icon: "folder", key: Shortcuts.chord("by-project"), group: "view", checked: board.group === "project",
           tip: "a lane per project  " + Shortcuts.label("by-project"), run: () => board.group = "project" },
-        { text: "FILTER", icon: "search", place: "end", tip: "filter the works  /", run: () => board.focusFilter() }
+        { text: "FILTER", icon: "search", tip: "filter the works  /", run: () => board.focusFilter() }
       ]
     if (page === "log") {
       const picked = !!events && events.picked !== null
       return [
         back,
-        { text: "FILTER", icon: "search", place: "end", tip: "filter the events  /", run: () => events.focusFilter() },
-        { text: picked ? "COPY EVENT" : "COPY LOG", icon: "copy", place: "end", tip: picked ? "copy the event picked" : "copy the events shown",
+        { text: "FILTER", icon: "search", tip: "filter the events  /", run: () => events.focusFilter() },
+        { text: picked ? "COPY EVENT" : "COPY LOG", icon: "copy", tip: picked ? "copy the event picked" : "copy the events shown",
           enabled: picked || (!!events && events.source.count > 0), run: () => events.copy() }
       ]
     }
