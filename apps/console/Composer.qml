@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
 // Composer is where you write: in the main thread, to the root agent; in a
@@ -8,11 +9,12 @@ import "kit/ui"
 // picked under the box; a note carries none.
 // Sending shows the trace while the agent you write to is working; the agents
 // below it never hold it. The words stay in the box, dimmed, until the server
-// took the message, and come back to be sent again if it did not.
+// took the message, and come back to be sent again if it did not. Under 420
+// px of its own width its buttons show their icons only.
 ColumnLayout {
   id: composer
 
-  property bool compact: false
+  property bool compact: Breakpoints.tight(width)
   // The work written to, or "" for the main thread.
   property string work: ""
   // Whether the agent written to has a run open: the root agent's, at depth 0,
