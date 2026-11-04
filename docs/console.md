@@ -155,18 +155,26 @@ lower ones of a question passed up, is not shown on its own.
 
 ## The progress
 
-Over the chat, below the bar, the progress strip (`ProgressStrip`) is pinned
-on two lines: the stages of the work in focus, the newest open root work
-(`Stepper`: "✓ qualify › ● design · round 2 › ○ assess …", shorter forms as
-the width shrinks, down to one dot per stage and the current name), then who
-works on it, from its agent down to the one at work, what that one does and
-its clock: "seller › design-lead › designer: Writing files · 4:12". While a
-question waits on you the second line is "sales asks you · 1 question" with
-ANSWER, which puts the keyboard in the newest question's card; a finished
-work says how long it took, and a team working with no event for ten minutes
-says so. It is hidden while no work exists and no agent runs.
+A conversation's pages share its head (`ProgressStrip`), over the tabs. First
+a 40 px header strip with its meta — the agent it is with, the stage of the
+work in focus, how long it has run, how many agents ran and how many model
+calls were made: "SALES · STAGE 2 OF 6 DESIGN · 18 MIN · 4 AGENTS · 212
+CALLS", the counts and then the agent giving way as the width shrinks, the
+stage shortened to "STAGE 2/6" — and its action at the right: ANSWER, in the
+warning tone and with the count when more than one waits, while a question
+waits on you, which puts the keyboard in the newest question's card on the
+chat; else PROGRESS, once there is a work. Under it, unframed, two lines: the
+stages of the work in focus, the newest open root work (`Stepper`: "✓
+qualify › ● design · round 2 › ○ assess …", shorter forms as the width
+shrinks, down to one dot per stage and the current name), with the chevron
+that opens the full view; then who works on it, from its agent down to the
+one at work, what that one does and its clock: "seller › design-lead ›
+designer: Writing files · 4:12". While a question waits on you that line is
+"sales asks you · 1 question"; a finished work says how long it took, and a
+team working with no event for ten minutes says so. The two lines are hidden
+while no work exists and no agent runs.
 
-The strip's chevron, the bar's PROGRESS and Alt+P open the full view
+The chevron, PROGRESS and Alt+P open the full view, on the chat
 (`ProgressSheet`, holding a `ProgressTree`): what waits on you with ANSWER,
 then each root work, newest open first, with its title, start and length,
 its stages one per row with their agent and time, and under each stage the
@@ -198,17 +206,26 @@ scrolling inside; under 700 px it is a sheet over the whole chat, headed
 ‹ CHAT, PROGRESS and a close button, which Esc closes. Below 1100 px it starts
 closed.
 
-The bar's REPLY carries the number of questions waiting on you, and Alt+R or
-REPLY puts the keyboard in the words of the newest one. Esc in a question's
-card or in the progress returns to the composer.
+Alt+R, as ANSWER, puts the keyboard in the words of the newest question
+waiting on you, from any page of the conversation. Esc in a question's card
+or in the progress returns to the composer.
 
-The composer is the kit's `TextArea`: one line that grows with the text up to
-eight lines, then scrolls. Enter sends, Shift+Enter breaks the line, and a
-pasted text keeps its line breaks. Under 420 px its buttons show their icons
-only.
+While a decision waits on you, numbered quick chips sit over the composer:
+the options of the newest one (`Omunculus.deciding`, from
+`Requests.choices`, without the grants saved for good, which are chosen on
+its card), then PROGRESS: "1 ADJUST  2 APPROVE  3 PROGRESS". Pressing an
+option, or Alt and its number, decides it, without words. On a window under
+560 px tall the chips are hidden; their chords still answer.
 
-A message carries the files picked under the composer with the kit's
-`FilePicker`, sent through `Http.post`. A file a message or an agent's
+The composer is the kit's `TextArea` in a frame with a chevron: one line that
+grows with the text up to eight lines, then scrolls. Enter sends, Shift+Enter
+breaks the line, and a pasted text keeps its line breaks. SEND shows the
+trace while the agent written to works, and still sends. Under 420 px its
+buttons show their icons only.
+
+The clip in the composer's frame picks files for the message, which show
+over the box as chips (the kit's `FilePicker`, a click takes one off) and
+are sent through `Http.post`. A file a message or an agent's
 `attach` carries shows under it as the kit's `FileChip`, which
 `Http.openAttachment` saves to the downloads directory and opens, as in the
 mailbox.
@@ -381,8 +398,8 @@ A conversation's level, in place of the project's once one is opened:
 A work's thread also opens as a page of the chat, from a sub-work block's
 OPEN or the progress: the way down to it (`Breadcrumb`, "Conversation ›
 Bakery website › Home page", each crumb going back up, the first to the
-chat), its transcript and a composer to its agent. Its bar has OPEN IN TEAM
-(Alt+O), the team page with the work picked, and LOG.
+chat), its transcript and a composer to its agent. The masthead's menu has
+OPEN IN TEAM (Alt+O), the team page with the work picked, and ITS LOG.
 
 The log, the team and the cost are loaded when first on screen and let go
 after it, so a closed page costs nothing; the work picked on the team page,
@@ -424,25 +441,42 @@ the conversation's agent, the works it handed down, each opening on its
 page, what comes next — the next stage or whom it reports to — where it
 works, and how long ago it began and last changed.
 
-Its bar has REPLY (Alt+R) while it asked you something and OPEN IN TEAM
+Its bar has ANSWER (Alt+R), in the warning tone, while it asked you something, and OPEN IN TEAM
 (Alt+O), its conversation's team page with it picked. The window turns to the work's project
 first when it is another one (`Omunculus.switchProject`).
 
 ## The masthead, the rail and the bar
 
 The masthead names the way to the page in crumbs: PROJECTS or BOARD on the
-registry's level; the project, then the page, on a project's; the project,
-the conversation open (the title of its first work, else what was first
-said in it) and its page in a conversation. At the start it names the
+registry's level; the project, then the page, on a project's; the project and
+the conversation open (the title of its first work, else what was first said
+in it), and on a thread its work's title, in a conversation, whose tabs name
+its page. At the start it names the
 project, or nothing on the registry alone, and the slash after OMUNCULUS
 shows only before a crumb; under 560 px OMUNCULUS is left out, leaving the
 crumbs its room. The project's crumb opens PROJECTS, and the
 conversation's its chat. Crumbs that do not fit elide from the left, the
 project's never below 8 characters. While a project is open and requests
-wait for you in the other ones, the masthead's right shows `▲ 2 ELSEWHERE`
-(only `▲ 2` under 700 px), which opens PROJECTS with WAITING FOR YOU lit; at
-the start and on the registry's level, where the projects' list carries the
-count, it does not show. As in the studio, the pages of the level are a rail down the left
+wait for you in the other ones, the masthead's right shows the notice `2
+WAITING ELSEWHERE` (`2 ELSEWHERE` under 700 px), which opens PROJECTS with
+WAITING FOR YOU lit, and its × puts it away until the count changes; at the
+start and on the registry's level, where the projects' list carries the
+count, it does not show.
+
+In a conversation there is no rail and no bar. Its pages are eco's tabs under
+its head, `01 CHAT  02 TEAM  03 LOG  04 COST`, wrapping on a narrow window,
+LOG marked while a work failed; the digits and Ctrl with them choose them as
+they choose the rail's pages. The masthead's right has, after the notices,
+`$` (COST), `⋯` and × (back to the conversations; BACK and Esc still return
+in history). The menu `⋯` holds the page's rarer actions and NEW
+CONVERSATION: on TEAM, AS AN OUTLINE and AS A MAP from 900 px, FIT THE MAP,
+WRITE TO ITS AGENT and LEAVE A NOTE with a work picked, ESCALATE and the
+notes to mark read; on LOG, COPY THE EVENT or COPY THE LOG; on a thread,
+OPEN IN TEAM and ITS LOG. While notes to you are unread, a notice `1 NOTE`
+shows the oldest on the chat and marks it read (Alt+M); its × puts it away
+until another comes.
+
+On the registry's and a project's levels, as in the studio, the pages of the level are a rail down the left
 edge (the kit's `TabRail`) in a fixed order, the one on screen marked in its
 place, beside the bar of its commands (the kit's `PageBar`). From 1100 px the
 rail shows the pages' names; from 700 px it is folded to their numbers and
@@ -463,11 +497,12 @@ one their icons; when even those do not fit, the lowest ranked commands move
 into the menu of a `⋯` button.
 
 What the window tells — copied, sent, refused — shows as a toast at its
-bottom right: information closes itself after a few seconds, an error stays
+bottom right, above the composer: information closes itself after a few seconds, an error stays
 until closed, and while the server does not answer an error says so until it
 answers again.
 
-The window is at least 360 by 480 px; its margins shrink with its width.
+The window opens at 1080 by 720 px and is at least 360 by 480 px; its
+margin is 20 px, 10 px on a window under 560 px tall.
 
 Choosing another page of the level replaces the one on screen, while every
 move into another level, conversation, project or a work's thread is
@@ -497,25 +532,25 @@ logs each text drawn out of its box, the window or a clipping item as a
   is read again with the new row picked. It has no key. FILTER (`/`).
 - On CONVERSATIONS, NEW CONVERSATION (Ctrl+N, from anywhere entered on a
   project).
-- On CHAT, while a request waits on you REPLY (Alt+R), which brings the newest
-  question into view and puts the keyboard in its card; PROGRESS (Alt+P),
-  which opens or closes the progress and puts the keyboard in it; while a
-  note to you is unread MARK READ (Alt+M), which brings the oldest into view
-  and marks it read; then NEW CONVERSATION (Ctrl+N). Elsewhere a request is
+- In a conversation, from any of its pages: ANSWER (Alt+R) in the header
+  strip, which brings the newest question into view on the chat and puts the
+  keyboard in its card; PROGRESS and the chevron (Alt+P), which open or close
+  the progress on the chat and put the keyboard in it; the `1 NOTE` notice
+  (Alt+M on the chat); the quick chips (Alt+1 … Alt+9) on the chat; and NEW
+  CONVERSATION (Ctrl+N) in `⋯`. Elsewhere than on the chat a request is
   answered in its decision (`RequestDialog`, the card over the page).
-- On TEAM: REPLY (Alt+R), the request waiting on you nearest the work picked
+- On TEAM, Alt+R answers the request waiting on you nearest the work picked
   (its own, above it, below it), else the newest, or, with none for you, what
-  the work asked, instead of whoever decides; OUTLINE and MAP from 900 px;
-  with a work picked WRITE (Alt+W), the composer of its THREAD tab writing to
-  its agent, and NOTE (Alt+C), the same composer leaving a note (Esc back to
-  writing); ESCALATE (Alt+E) while it asked you something, which opens the
-  decision with Enter escalating; MARK READ (Alt+M) while it has notes
-  unread, all of them; FIT (Alt+F) on the map; and FILTER (`/`). Alt+L and
-  Alt+G open its LOG and CHANGES tabs, `[` and `]` the previous and next tab.
-  The in-place cards and the note's check still answer and mark one.
-- On a work's thread, OPEN IN TEAM (Alt+O) and LOG.
-- On LOG, FILTER (`/`) and COPY, the event picked or else the rows shown.
-- On COST, BACK.
+  the work asked, instead of whoever decides. The items of `⋯` answer to
+  their chords: WRITE TO ITS AGENT (Alt+W), the composer of its THREAD tab
+  writing to its agent, and LEAVE A NOTE (Alt+C), the same composer leaving a
+  note (Esc back to writing); ESCALATE (Alt+E) while it asked you something,
+  which opens the decision with Enter escalating; the notes marked read
+  (Alt+M), all of them; FIT THE MAP (Alt+F). Alt+L and Alt+G open its LOG and
+  CHANGES tabs, `[` and `]` the previous and next tab, `/` the filter. The
+  in-place cards and the note's check still answer and mark one.
+- On a work's thread, OPEN IN TEAM (Alt+O) and ITS LOG in `⋯`.
+- On LOG, `/` filters, and `⋯` copies the event picked or else the rows shown.
 - On BOARD, its groupings (Alt+S, Alt+A, Alt+J) and FILTER (`/`).
 
 ## Keys and IPC
@@ -524,9 +559,10 @@ Typed text never runs a command. The keys are in tiers, one table,
 `apps/kit/client/Shortcuts.js`, read by the shell, the pages' commands, the
 picker and the keys dialog:
 
-- No key: anything that creates, sends, answers, grants, denies, escalates,
-  reverts, deletes or cancels is pressed or clicked. Enter in the composer
-  and in a request's words send what is written there; no other key does.
+- No key of its own: anything that creates, sends, answers, grants, denies,
+  escalates, reverts, deletes or cancels is pressed or clicked. Enter in the
+  composer and in a request's words send what is written there, and a quick
+  chip over the composer is chosen by Alt and its number; no other key does.
 - Bare keys, for navigation without effect: the digit of a page, `/`, `[`
   and `]` on the team page, `?`, F1 and Esc, the digits of the cards of the
   picker, and N, H, B and P on the start screen. They act only while an item to navigate has the keyboard and
@@ -537,9 +573,9 @@ picker and the keys dialog:
   field.
 - Chords, which a field being written leaves to them: Ctrl and the digit of
   a page, Ctrl+Tab and Ctrl+Shift+Tab for the next or the previous page,
-  Ctrl+N for a new conversation, Ctrl+P for the projects, and Alt with a
-  letter for the commands of a
-  page (R, P, M, O, W, C, E, L, G, F, S, A, J).
+  Ctrl+N for a new conversation, Ctrl+P for the projects, Alt with a
+  letter for the commands of a page (R, P, M, O, W, C, E, L, G, F, S, A, J),
+  and Alt with a digit for the quick chips over the composer.
 
 The IPC's `start`, `page <name>` (`projects`, `conversations`, `board` and,
 with a conversation open, `chat`, `map`, `log`, `cost`), `projects`,

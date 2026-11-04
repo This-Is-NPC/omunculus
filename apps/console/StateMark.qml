@@ -20,7 +20,7 @@ RowLayout {
     "up-next": { icon: "more", tone: Theme.dim }
   })[state] || { icon: "more", tone: Theme.primary }
   readonly property color tone: look.tone
-  spacing: 4
+  spacing: Theme.space.line
   Icon { Layout.alignment: Qt.AlignVCenter; name: mark.look.icon; size: 12; color: mark.tone }
   Label {
     visible: mark.showWord
