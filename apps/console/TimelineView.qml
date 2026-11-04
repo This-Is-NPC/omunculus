@@ -89,7 +89,9 @@ Item {
       return
     if (!inEntry)
       timeline.following = false
-    timeline.positionViewAtIndex(row, ListView.Center)
+    // An entry taller than most of the view, a form, starts at its top.
+    const entry = timeline.itemAtIndex(row)
+    timeline.positionViewAtIndex(row, entry && entry.height > timeline.height * 0.6 ? ListView.Beginning : ListView.Center)
   }
 
   // The card of the newest question for you, once its entry exists.
