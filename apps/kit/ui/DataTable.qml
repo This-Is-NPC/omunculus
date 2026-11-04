@@ -2,8 +2,9 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic as C
 
-// DataTable lists records as rows of columns under a header; below 700 px each
-// row stacks its cells into lines instead. A row opens on click, Enter or
+// DataTable lists records as rows of columns under a header; below 700 px, or
+// at every width when it is `compact`, each row stacks its cells into lines
+// instead, with no header. A row opens on click, Enter or
 // Space, or, when the table `picks`, a click picks it and a double click opens
 // it; ↑/↓ move, ↑ on the first asks to leave upward, Delete asks to remove it,
 // Esc asks to go back. Each row may carry tools on its right, from `tools` (its
@@ -11,8 +12,11 @@ import QtQuick.Controls.Basic as C
 // only, or, `toolsLive`, every row's, row by row. Tools whose root has `act()`
 // take the row's Enter, Space and double click instead of opening it; Esc, or
 // Enter a tool leaves, goes back to the rows. Rows may also carry a status
-// cell, and be listed under group titles. Cells show their text as it is;
-// with `decode` a new row's cells decode into view.
+// cell, and be listed under group titles. The row the keyboard is on shows
+// it by a focus ring once a key was used on the rows, never because they
+// took the keyboard as they were shown or clicked; a picked row stays
+// outlined. Cells show their text as it is; with `decode` a new row's cells
+// decode into view.
 Item {
   id: table
 
@@ -61,13 +65,17 @@ Item {
   property bool active: false
   // Whether the cells of rows new to the list decode into view.
   property bool decode: false
-  readonly property bool compact: width < 700
+  property bool compact: width < 700
   // Below this a row shows its tools only when pointed at or selected, so its
   // text keeps the room.
   readonly property bool narrow: width < 360
   readonly property int headerHeight: compact ? 0 : 32
   // The ids of the records listed last, so a change decodes only the new ones.
   property var listed: new Set()
+  // Whether a key was used on the rows since they were shown or clicked: the
+  // release of the key that brought the keyboard to them, Tab or ↓ from the
+  // search, reaches them too.
+  property bool keyed: false
   // The record the keyboard is on, or null.
   readonly property var currentEntry: list.currentItem ? list.currentItem.modelData : null
 
@@ -82,7 +90,11 @@ Item {
   // Shown, the rows take the keyboard; a view made as it is shown is still
   // invisible when it turns active, so they take it once it shows, if
   // nothing holds it.
-  onActiveChanged: if (active) list.forceActiveFocus()
+  onActiveChanged: {
+    keyed = false
+    if (active)
+      list.forceActiveFocus()
+  }
   onVisibleChanged: {
     const holder = Window.activeFocusItem
     if (visible && active && (holder === null || holder === Window.contentItem))
@@ -207,6 +219,10 @@ Item {
     Keys.onSpacePressed: if (currentItem) currentItem.act()
     Keys.onDeletePressed: if (currentItem) table.removeRequested(currentItem.modelData)
     Keys.onTabPressed: event => event.accepted = table.toolsLive && currentItem !== null && currentItem.enterTools()
+    Keys.onReleased: event => {
+      table.keyed = true
+      event.accepted = false
+    }
     Keys.onEscapePressed: table.backRequested()
     Keys.onDownPressed: if (currentIndex < count - 1) table.step(1)
     Keys.onUpPressed: {
@@ -227,7 +243,10 @@ Item {
       // The stacked lines that hold text: the title's always.
       readonly property int lineCount: table.stacked.filter((line, i) => i === 0 || line.some(column => texts[column])).length
       readonly property bool current: ListView.isCurrentItem
-      readonly property bool marked: table.selectedId !== "" && table.selectedId === table.idOf(modelData) || (current && (list.activeFocus || toolScope.activeFocus))
+      readonly property bool picked: table.selectedId !== "" && table.selectedId === table.idOf(modelData)
+      readonly property bool marked: picked || (current && (list.activeFocus || toolScope.activeFocus))
+      // Lit as picked, or as the keyboard's once it moved here.
+      readonly property bool lit: picked || (marked && table.keyed)
       readonly property bool tooled: table.tools !== null && (!table.narrow || table.toolsAlways || hover.hovered || marked)
       readonly property real reserved: tooled ? table.toolsRoom : 0
 
@@ -281,12 +300,13 @@ Item {
       width: list.width
       height: table.compact ? Theme.size.stackedRow + lineCount * Theme.size.stackedLine : Theme.size.row
       opacity: table.dimmed(modelData) ? 0.4 : 1
-      color: marked ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
-      border.color: marked ? Theme.primary : Theme.line
+      color: lit ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
+      border.color: picked ? Theme.primary : Theme.line
       Behavior on color { ColorAnimation { duration: 120 } }
       Behavior on opacity { NumberAnimation { duration: 140 } }
 
       HoverHandler { id: hover }
+      FocusRing { shown: row.current && list.activeFocus && table.keyed }
 
       Row {
         visible: !table.compact
@@ -367,7 +387,10 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: table.picks ? row.pick() : row.open()
+        onClicked: {
+          table.keyed = false
+          table.picks ? row.pick() : row.open()
+        }
         onDoubleClicked: if (table.picks) row.act()
       }
 

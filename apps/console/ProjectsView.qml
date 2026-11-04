@@ -5,7 +5,7 @@ import "kit/client/Projects.js" as Projects
 import "kit/ui"
 
 // ProjectsView filters the projects of the server's registry — those
-// waiting for you, those agents work in, and their ids — and opens a
+// needing you, those agents work in, and their ids — and opens a
 // selected row at its conversations. Its readout counts what it lists, for
 // the bar. `/` goes to the search; ↓ or Enter back to the rows, ↑ on the
 // first row back to the search; Esc on them leaves.
@@ -64,9 +64,11 @@ ColumnLayout {
     }
     Chip {
       visible: list.waiting > 0 || list.filter === "waiting"
-      text: "WAITING FOR YOU  " + list.waiting
+      text: "NEEDS YOU  " + list.waiting
       icon: "warning"
       accent: Theme.warning
+      alert: list.waiting > 0
+      tip: "the projects where a conversation needs you"
       checked: list.filter === "waiting"
       dim: list.filter !== "waiting"
       onClicked: list.filter = "waiting"
@@ -75,6 +77,7 @@ ColumnLayout {
       visible: list.working > 0 || list.filter === "working"
       text: "WORKING  " + list.working
       icon: "play"
+      tip: "the projects where agents work and nothing needs you"
       checked: list.filter === "working"
       dim: list.filter !== "working"
       onClicked: list.filter = "working"

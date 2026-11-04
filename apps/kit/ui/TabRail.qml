@@ -3,10 +3,11 @@ import QtQuick
 import "Breakpoints.js" as Breakpoints
 
 // TabRail is an app's pages in a fixed order down the left edge, the one on
-// screen marked in its place. Folded, it takes only the width of the pages'
-// numbers; on a wide window it always shows their names; on a medium one,
-// under the pointer or with the keyboard in it, it unfolds as an opaque panel
-// over what is beside it; on a narrow one it is hidden and takes no width,
+// screen marked in its place. While its names take at most a fifth of the
+// window's width it always shows them beside their numbers; on a window
+// short of that, folded, it takes only the width of the numbers, and under
+// the pointer or with the keyboard in it, it unfolds as an opaque panel over
+// what is beside it; on a narrow one it is hidden and takes no width,
 // the bar's page switcher choosing the pages instead. One click chooses a
 // page and folds the rail, which stays folded until the pointer has left and
 // come back; Esc folds it too. Each page is a stop of the Tab chain: ↑ ↓ Home
@@ -27,11 +28,18 @@ Item {
   readonly property real tabHeight: 36
   readonly property real gap: 8
   readonly property real unfoldedWidth: 220
-  readonly property string size: Breakpoints.size(Window.window ? Window.window.width : 0)
-  // The window is wide enough to keep the names on screen.
-  readonly property bool wide: size === "wide"
+  readonly property real windowWidth: Window.window ? Window.window.width : 0
+  readonly property string size: Breakpoints.size(windowWidth)
+  // A character of a tab, monospaced, its tracking included.
+  readonly property real advance: tabFont.advanceWidth("0")
+  FontMetrics { id: tabFont; font.family: Theme.fontFamily; font.pixelSize: 12; font.letterSpacing: 2 }
+  // The width of a tab with its number and the longest name.
+  readonly property real namedWidth: Math.ceil(2 * Theme.space.cell + Theme.space.gap
+    + advance * (2 + tabs.reduce((most, tab) => Math.max(most, String(tab.name).length), 0)))
+  // The window has room to keep the names on screen.
+  readonly property bool wide: size !== "narrow" && windowWidth >= 5 * namedWidth
   // The width it keeps folded, which what is beside it leaves room for.
-  readonly property real foldedWidth: wide ? 160 : size === "medium" ? 52 : 0
+  readonly property real foldedWidth: size === "narrow" ? 0 : wide ? namedWidth : 52
   // How many of its tabs hold the keyboard: one, or none.
   property int focusedTabs: 0
   // Folded by a choice or Esc until the pointer and the keyboard have left.
@@ -129,7 +137,7 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
           visible: rail.named
           // Elided short of the tab's right edge.
-          width: Math.max(0, Math.min(implicitWidth, tab.width - 12 - digit.width - parent.spacing - 8))
+          width: Math.max(0, Math.min(implicitWidth, tab.width - 2 * Theme.space.cell - digit.width - parent.spacing))
           elide: Text.ElideRight
           text: tab.modelData.name.toUpperCase()
           color: tab.tone

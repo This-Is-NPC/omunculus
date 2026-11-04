@@ -64,7 +64,9 @@ call omunculus <function>`): `start`, `page <name>`, `projects`,
 
 On a project, its name and four ways in: NEW CONVERSATION, CONVERSATIONS,
 BOARD and PROJECTS. On the registry alone, how many projects it holds and
-two: PROJECTS and BOARD.
+two: PROJECTS and BOARD. Under them, in the warning tone, the projects
+where conversations need you and how many. The ⓘ at the top right opens the
+keys.
 
 | Keys | What they do |
 | --- | --- |
@@ -73,15 +75,16 @@ two: PROJECTS and BOARD.
 ### 2. Projects
 
 Every project of the server's registry, under a rule of its state (NEEDS
-YOU, WORKING, IDLE): its id, OPEN beside the one the window is on, its
-conversations and open works, its last activity, and its state at the top
-right — WAITING FOR YOU, WORKING, IDLE, NOT REACHABLE or READING… — waiting
-for you first. Under the search line, chips keep those waiting for you or
-working. NEW PROJECT
+YOU, WORKING, IDLE), two lines each: its id, OPEN beside the one the window
+is on, and its state at the top right — NEEDS YOU, WORKING, IDLE, NOT
+REACHABLE or READING…; under it its conversations, how many need you and
+how many agents work in, its works not finished and its last activity.
+Under the search line, chips keep those needing you or working. NEW PROJECT
 registers another with the server: its id and the path of its config file.
 The masthead names the way to every page from here on; the project's name
-in it opens this page, and `▲ 2 ELSEWHERE` on its right, while requests wait
-for you in other projects, opens it with those waiting picked out.
+in it opens this page, and `▲ 2 ELSEWHERE` on its right, while
+conversations need you in other projects, opens it with those projects
+picked out.
 
 | Keys | What they do |
 | --- | --- |
@@ -92,8 +95,12 @@ for you in other projects, opens it with those waiting picked out.
 
 ### 3. A new conversation
 
-A card for each agent of depth 0 a conversation can be with: its portrait,
-its name in its colour and its role, its number at the top left. The conversation keeps the agent its first message names.
+"Who do you want to talk with?": a card for each of the project's agents a
+conversation can be with, its portrait, its name and its role; under FOR
+THE PROJECT ITSELF, a smaller line for each agent that changes how the
+project works, each change only once you approve it. The keyboard is on the
+first card, its ring showing it; a card's tooltip gives its number. The
+conversation keeps the agent its first message names.
 
 | Keys | What they do |
 | --- | --- |
@@ -102,10 +109,14 @@ its name in its colour and its role, its number at the top left. The conversatio
 
 ### 4. Conversations
 
-The project's conversations under a rule of the day each began: its title,
-under it the agent, when it began, its works and stage, and its state at the
-top right. Under the search line, chips filter by what agents do there; a
-row's `⋯` opens it at its team or its log.
+The project's conversations, those needing you first, the longest waiting
+first, then the others under a rule of the day each began: its title and
+its state at the top right, what waits on you ("7 QUESTIONS", "A
+DECISION"); under it since when it waits, whom it is with and which agent
+holds its work at which stage ("sales · seller is at design (2/6)"), when
+it began and its works; then what the newest request asks. Under the
+search line, chips filter by state, ALL listing every one; a row's `⋯`
+opens it at its team or its log.
 
 | Keys | What they do |
 | --- | --- |

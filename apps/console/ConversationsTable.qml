@@ -1,19 +1,26 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "kit/client/Projects.js" as Projects
 import "kit/client/Time.js" as Time
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
-// ConversationsTable lists conversations in the DataTable under the day each
-// began: its title — its first work's, else what was first said in it — the
-// agent that work is with, when it began, how many works it holds, the stage
-// its first work is at, and its state, toned only while agents work in it or
-// something waits for you. Stacked, the title is over a line of the rest.
-// Each row's menu opens it at its team or its log. Its cells decode into view.
+// ConversationsTable lists conversations in the DataTable, those needing you
+// first under NEEDS YOU, the one waiting longest first, then the others under
+// the day each began, newest first as given. Each row, at every width: its
+// title — its first work's, else what was first said in it — with its state
+// at the top right, toned only while something waits for you or agents work
+// in it, saying what waits: questions, a decision, a permission; under it,
+// dim, since when it waits, whom it is with and which agent holds its first
+// work at which stage of how many, when it began and how many works it
+// holds; then what the newest request asks, or, under a work's title, what
+// was first said. Each row's menu opens it at its team or its log. Its cells
+// decode into view.
 DataTable {
   id: table
 
   decode: true
+  compact: true
   property var conversations: []
   // A row's menu chose where to open it: "map" or "log".
   signal openedAt(var conversation, string page)
@@ -35,43 +42,69 @@ DataTable {
     return root && root.title ? root.title : known && known.title ? known.title : "new conversation"
   }
 
-  function stateOf(conversation) {
-    const known = summary(conversation)
-    if (known === null)
-      return ""
-    return !known.started ? "NOT STARTED" : known.waiting > 0 ? "WAITING FOR YOU" : known.running > 0 ? "WORKING" : known.finished ? "DONE" : "IDLE"
+  // "not-started", "needs-you", "working", "done", "idle", or "" unread.
+  function stateOf(conversation) { return Projects.state(summary(conversation)) }
+
+  function stateText(conversation) {
+    const state = stateOf(conversation)
+    return state === "needs-you" ? Projects.waitsFor(summary(conversation).asks)
+      : ({ "not-started": "NOT STARTED", working: "WORKING", done: "DONE", idle: "IDLE" })[state] || ""
   }
 
-  // Each conversation with the day it is listed under, newest first as given.
-  rows: conversations.map(conversation => Object.assign({ day: Time.day(conversation.created_at, Date.now()) }, conversation))
-  section: "day"
-  columns: [
-    { title: "title", weight: 0.34 },
-    { title: "with", weight: 0.12 },
-    { title: "began", weight: 0.14 },
-    { title: "works", weight: 0.09 },
-    { title: "stage", weight: 0.13 },
-    { title: "state", weight: 0.18 }
-  ]
+  // Whom it is with, and the agent its first work is with, at its stage of
+  // the workflow while the work goes on: "sales · seller is at design (2/6)",
+  // or "sales is at qualify (1/6)" when they are the same.
+  function whoOf(conversation, root) {
+    const known = summary(conversation)
+    const partner = known ? known.agent : ""
+    const holder = root ? Omunculus.agentOf(root) : ""
+    const lane = root && root.state !== "done" && root.state !== "cancelled" ? Omunculus.laneOf(root) : null
+    const at = lane ? " is at " + lane.steps[lane.at].name + " (" + (lane.at + 1) + "/" + lane.steps.length + ")" : ""
+    if (holder === "" || holder === partner)
+      return partner !== "" ? partner + at : ""
+    return [partner, holder + at].filter(text => text !== "").join(table.separator)
+  }
+
+  // Needing you first, the longest waiting first, under NEEDS YOU; the others
+  // under their day, in the order given.
+  rows: {
+    const now = Date.now()
+    const needing = conversations.filter(conversation => stateOf(conversation) === "needs-you")
+      .sort((a, b) => summary(a).since.localeCompare(summary(b).since))
+      .map(conversation => Object.assign({ group: "NEEDS YOU" }, conversation))
+    const others = conversations.filter(conversation => stateOf(conversation) !== "needs-you")
+      .map(conversation => Object.assign({ group: Time.day(conversation.created_at, now) }, conversation))
+    return needing.concat(others)
+  }
+  section: "group"
   cells: conversation => {
+    const now = Date.now()
+    const known = summary(conversation)
     const works = worksOf(conversation)
     const root = rootOf(works)
+    const needing = stateOf(conversation) === "needs-you"
+    const said = needing ? known.question : root && root.title && known && known.title !== root.title ? known.title : ""
     return [
       titleOf(conversation),
-      root ? Omunculus.agentOf(root) : "",
-      Time.began(conversation.created_at, Date.now()),
-      works.length > 0 ? works.length + (works.length === 1 ? " work" : " works") : "",
-      root && root.stage ? "stage " + root.stage : "",
-      stateOf(conversation)
+      [
+        needing ? "waiting since " + Time.clock(known.since, now) : "",
+        whoOf(conversation, root),
+        Time.began(conversation.created_at, now),
+        works.length > 0 ? works.length + (works.length === 1 ? " work" : " works") : ""
+      ].filter(text => text !== "").join(table.separator),
+      stateText(conversation),
+      said ? "“" + said + "”" : ""
     ]
   }
-  tone: (conversation, column) => column === 5
-    ? ({ "WAITING FOR YOU": Theme.warning, WORKING: Theme.primary })[stateOf(conversation)] || Theme.dim
+  tone: (conversation, column) => column === 2
+    ? ({ "needs-you": Theme.warning, working: Theme.primary })[stateOf(conversation)] || Theme.dim
     : ""
-  dotted: conversation => stateOf(conversation) === "WORKING"
-  stacked: [[0], [1, 2, 3, 4]]
-  status: 5
+  dotted: conversation => stateOf(conversation) === "working"
+  stacked: [[0], [1], [3]]
+  status: 2
   emptyText: "no conversation yet"
+  // Every row's menu reads alike, in reach of the pointer and of Tab.
+  toolsLive: true
   toolsWidth: Breakpoints.target(Window.width)
   tools: rowMenu
 
