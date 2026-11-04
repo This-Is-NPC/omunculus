@@ -7,11 +7,14 @@ import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
-// PagesView is the window's pages, one on screen at a time, in two levels.
-// The project's: its conversations, and the board, the works of every
-// project the window reaches, where a card opens its work on a page of its
-// own, from where its conversation's team opens; whom a new conversation is
-// with is chosen on a screen of the conversations. A conversation's, once one
+// PagesView is the window's pages, one on screen at a time, in three levels.
+// The registry's: the projects of the server, where one opens at its
+// conversations and NEW PROJECT registers another, and the board of all
+// their works. A project's: its conversations, and the board, its works
+// first, every project's one click away, where a card opens its work on a
+// page of its own, from where its conversation's team opens; whom a new
+// conversation is with is chosen on a screen of the conversations. A
+// conversation's, once one
 // is open, in place of the project's: its chat, yours with the root agent,
 // where each question for you is a card, under the progress strip and, opened,
 // the progress beside the thread (a card over it on a medium window, a sheet
@@ -26,8 +29,9 @@ import "kit/ui"
 // its card; elsewhere in its decision, opened over the page. Every
 // move into another level, conversation or project is remembered, so BACK, and
 // Esc once the page has let go of what it holds, return to exactly where it
-// was: the page, its project, its conversation and the node picked; back
-// from the first page entered is back to the start.
+// was: the page, its level, its project, its conversation and the node
+// picked; back from the first page entered is back to the start. While the
+// pages are entered, every project of the registry is followed.
 Item {
   id: view
 
@@ -37,12 +41,15 @@ Item {
   signal startWanted()
 
   readonly property bool open: Omunculus.conversationId !== ""
-  // The pages of the level on screen, in their order: the project's, or the
-  // conversation's open.
+  // The pages of a conversation open, in their order.
   readonly property var inConversation: ["chat", "map", "log", "cost"]
   // The pages of a conversation: its own, and a work's thread, a page of the chat.
   readonly property var ofConversation: inConversation.concat(["thread"])
-  readonly property var pages: ofConversation.includes(page) ? (open ? inConversation : ["chat"]) : ["conversations", "board"]
+  // The level on screen: "registry", "project" or "conversation".
+  property string level: "project"
+  // The pages of the level on screen, in their order.
+  readonly property var pages: level === "conversation" ? (open ? inConversation : ["chat"])
+    : level === "registry" ? ["projects", "board"] : ["conversations", "board"]
   // The one on screen: a page, or "new", whom a new conversation is with,
   // a screen of the conversations.
   property string page: "conversations"
@@ -51,12 +58,20 @@ Item {
   // What the page is called in the masthead: the map is the team, a thread
   // is its work's title.
   readonly property string pageName: page === "map" ? "team" : page === "thread" ? Omunculus.titleOf(threadWork) : page
-  // What the masthead names: the board, or the project, then the
-  // conversation open and its page, or the page; on a narrow window, only
-  // the conversation, or the page, as the bar names the page.
-  readonly property string heading: page === "board" ? page
-    : Omunculus.project + "  /  " + (ofConversation.includes(page) ? (Omunculus.subject || "new conversation") + "  /  " + pageName : title)
-  readonly property string shortHeading: ofConversation.includes(page) ? Omunculus.subject || "new conversation" : title
+  // The way to the page, for the masthead, as {text, run}: on the registry
+  // the page; on a project its id, which opens the projects, then the page;
+  // in a conversation, then its subject, which opens its chat, then the page.
+  readonly property var crumbs: {
+    if (level === "registry")
+      return [{ text: title }]
+    const place = [{ text: Omunculus.project, run: () => view.go("projects") }]
+    if (level === "project")
+      return place.concat([{ text: title }])
+    const subject = { text: Omunculus.subject || "new conversation" }
+    if (page !== "chat")
+      subject.run = () => view.go("chat")
+    return place.concat([subject, { text: pageName }])
+  }
   // Whether the chat asks whom an empty conversation is with.
   readonly property bool asking: page === "chat" && Omunculus.whomAsked
   // Whether the page takes the digits alone, as the pickers of whom a
@@ -77,14 +92,26 @@ Item {
   // The work whose thread is on the thread page.
   property string threadWork: ""
 
-  // Where the window was before each move, the last last, as {page,
+  // Where the window was before each move, the last last, as {page, level,
   // project, socket, conversation, picked, work, thread}.
   property var history: []
 
   function here() {
-    return { page: page, project: Omunculus.project, socket: Omunculus.socket, conversation: Omunculus.conversationId, picked: pickedNode, work: workKey, thread: threadWork }
+    return { page: page, level: level, project: Omunculus.project, socket: Omunculus.socket, conversation: Omunculus.conversationId, picked: pickedNode, work: workKey, thread: threadWork }
   }
   function remember() { history = history.concat([here()]).slice(-50) }
+
+  // Puts a page on screen, at its level: the projects on the registry's,
+  // the conversations and whom a new one is with on a project's, the pages
+  // of a conversation on its own; the board and a work's page on the level
+  // they were reached from, a project's from a conversation.
+  function show(name) {
+    level = name === "projects" ? "registry"
+      : ofConversation.includes(name) ? "conversation"
+      : ["conversations", "new"].includes(name) || level === "conversation" ? "project"
+      : level
+    page = name
+  }
 
   // Goes to a page: one of the level on screen in place of the one there,
   // another level remembering where it was.
@@ -93,14 +120,32 @@ Item {
       return
     if (!pages.includes(name))
       remember()
-    page = name
+    show(name)
   }
 
   // Enters the pages from the start, at a page, with nothing behind it.
   function enter(name) {
     history = []
-    page = name
+    level = Omunculus.registry ? "registry" : "project"
+    show(name)
   }
+
+  // The projects, with the chip of a state lit, "" for ALL.
+  function showProjects(chip) {
+    go("projects")
+    projectsList.filter = chip
+  }
+
+  // Opens a project at its conversations; the conversation on screen of
+  // another one closes, and BACK returns to it.
+  function openProject(place) {
+    remember()
+    Omunculus.switchProject(place)
+    show("conversations")
+  }
+
+  // Asks for a project to add to the server's registry.
+  function newProject() { newProjectDialog.open() }
 
   // Back to where the window was before its last move, or to the start. A
   // conversation that has said nothing, or is not made yet, is left for the
@@ -126,7 +171,8 @@ Item {
         Omunculus.open(at.conversation)
     }
     // A page of a conversation has one open.
-    page = ofConversation.includes(at.page) && at.conversation === "" ? "conversations" : at.page
+    level = at.level
+    show(ofConversation.includes(at.page) && at.conversation === "" ? "conversations" : at.page)
     pickedNode = at.picked
     workKey = at.work
     threadWork = at.thread
@@ -136,15 +182,18 @@ Item {
     remember()
     if (id !== Omunculus.conversationId)
       Omunculus.open(id)
-    page = "chat"
+    show("chat")
   }
 
   // Whom a new conversation is with.
   function newConversation() {
     remember()
     Omunculus.close()
-    page = "new"
+    show("new")
   }
+
+  // The project the board was last opened on, "" on the registry's.
+  property string boardLevel: ""
 
   // The work on the work page.
   property string workKey: ""
@@ -164,7 +213,7 @@ Item {
     remember()
     reach(work)
     workKey = work.id
-    page = "work"
+    show("work")
   }
 
   // Shows another work of the conversation open on the work page.
@@ -178,14 +227,14 @@ Item {
     remember()
     reach(work)
     pickedNode = work.id
-    page = "map"
+    show("map")
   }
 
   // Opens the log kept to the events of a work; BACK returns.
   function showLog(work) {
     remember()
     logFilter = work
-    page = "log"
+    show("log")
   }
 
   // Shows a work's thread as a page of its own, under the way down to it.
@@ -194,7 +243,7 @@ Item {
       return
     remember()
     threadWork = work
-    page = "thread"
+    show("thread")
   }
 
   // The works from the conversation's root down to `work`, outermost first.
@@ -246,6 +295,12 @@ Item {
     // A new conversation: the main action of the conversations, another on the chat.
     const fresh = role => ({ text: "NEW CONVERSATION", short: "NEW", icon: "plus", role: role, tip: "start another conversation  " + Shortcuts.label("new-conversation"),
       run: () => view.newConversation() })
+    if (page === "projects")
+      return [
+        back,
+        { text: "NEW PROJECT", short: "NEW", icon: "plus", role: "primary", tip: "add a project to the server's registry", run: () => view.newProject() },
+        { text: "FILTER", icon: "search", place: "end", tip: "filter the projects  /", run: () => projectsList.focusFilter() }
+      ]
     if (page === "conversations")
       return [back, fresh("primary")]
     if (page === "new" || page === "cost")
@@ -340,10 +395,12 @@ Item {
   ] : []
 
   // Whether the decision of a request is open over the page.
-  readonly property bool dialogOpen: decision.visible
+  readonly property bool dialogOpen: decision.visible || newProjectDialog.visible
 
   function focusEntry() {
-    if (page === "conversations")
+    if (page === "projects")
+      projectsList.focusEntry()
+    else if (page === "conversations")
       conversations.focusEntry()
     else if (page === "board")
       board.focusEntry()
@@ -366,7 +423,11 @@ Item {
   }
 
   focus: active
-  onActiveChanged: if (active) focusEntry()
+  onActiveChanged: {
+    Omunculus.watchRegistry(active)
+    if (active)
+      focusEntry()
+  }
   // Esc in a question's card or in the progress returns to the composer;
   // the progress sheet over a narrow chat closes first.
   Keys.onEscapePressed: {
@@ -384,6 +445,14 @@ Item {
   onPageChanged: {
     if (page !== "log")
       logFilter = ""
+    // The board opens on the level's works, every project's on the
+    // registry's, the project's own on a project's; on the same level it
+    // keeps what it was kept to.
+    const kept = level === "registry" ? "" : Omunculus.project
+    if (page === "board" && kept !== boardLevel) {
+      board.project = kept
+      boardLevel = kept
+    }
     Qt.callLater(focusEntry)
   }
   onAskingChanged: Qt.callLater(focusEntry)
@@ -396,12 +465,26 @@ Item {
     function onConversationIdChanged() {
       // The conversation's pages go with it.
       if (!view.open && view.ofConversation.includes(view.page))
-        view.page = "conversations"
+        view.show("conversations")
       view.pickedNode = ""
       view.progressChoice = null
       if (view.events)
         view.events.picked = null
       Qt.callLater(view.focusEntry)
+    }
+  }
+
+  Stage {
+    anchors.fill: parent
+    shown: view.page === "projects"
+
+    ProjectsView {
+      id: projectsList
+      anchors.fill: parent
+      active: parent.shown && view.active
+      focus: view.page === "projects"
+      onOpened: place => view.openProject(place)
+      onLeave: view.back()
     }
   }
 
@@ -582,7 +665,7 @@ Item {
       onPicked: name => {
         view.remember()
         Omunculus.agent = name
-        view.page = "chat"
+        view.show("chat")
       }
       onBack: view.back()
     }
@@ -683,9 +766,16 @@ Item {
     }
   }
 
-  // The projects' streams are read while the board is on screen.
-  readonly property bool watching: active && page === "board"
-  onWatchingChanged: Omunculus.watchBoard(watching)
-
   RequestDialog { id: decision }
+
+  // Once a project is registered, the projects are read again and its row
+  // is picked.
+  NewProjectDialog {
+    id: newProjectDialog
+    client: Omunculus.client
+    onRegistered: id => {
+      Omunculus.loadProjects()
+      projectsList.selected = id
+    }
+  }
 }

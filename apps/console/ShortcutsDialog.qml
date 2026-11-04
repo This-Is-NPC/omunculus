@@ -30,6 +30,10 @@ ModalDialog {
       ["a bare key", "acts only on what you navigate, a second after the last key typed in a field"]
     ]],
     ["start", Shortcuts.rows("start")],
+    ["projects", [
+      ["↑ · ↓", "choose"],
+      ["Enter", "open it, at its conversations"]
+    ].concat(Shortcuts.rows("projects"))],
     ["conversations", [
       ["↑ · ↓", "choose"],
       ["Enter", "open"]
