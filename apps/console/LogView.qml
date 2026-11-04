@@ -2,18 +2,19 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/client/Time.js" as Time
-import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
-// LogView is the open conversation as a log: every event, oldest first, a row
-// each — when, what kind, who, and what it says on one line — under a title
-// where a run begins. The filter box keeps the rows whose text holds it, and
-// chips keep the ones that ask the person, the failed ones, one agent's, or
-// one depth's. On a narrow list a row takes two lines: when, what kind and who
-// over what it says. A row picked shows its event below, as the server sent it, the
-// first 20 KB unless all is asked. The list follows the newest row while it is
-// at the end. `/` goes to the filter; Esc there empties it, then goes back to
-// the rows; Esc on them closes the event picked, then leaves.
+// LogView is the open conversation as a log: every event, oldest first, a
+// row each, as a table row — what it says, then when, what kind, who and on
+// which work, FAILED or ASKS YOU at its top right — under a rule naming the
+// day, and one naming each run where it begins. The search line keeps the
+// rows whose text holds it; chips keep the ones that ask you or failed, and
+// two pickers one agent's or one level's. The count of rows sits at the
+// filters' right end, and "more" copies the event picked, else the rows
+// shown. A row picked shows its event in a card below, as the server sent
+// it, the first 20 KB unless all is asked. The list follows the newest row
+// while it is at the end. `/` goes to the search; Esc there empties it, then
+// goes back to the rows; Esc on them closes the event picked, then leaves.
 Item {
   id: view
 
@@ -39,8 +40,6 @@ Item {
   property var picked: null
   property string detail: ""
   property bool showAll: false
-  // Two-line rows and a shorter event head on a narrow list.
-  readonly property bool narrow: Breakpoints.size(list.width) === "narrow"
   readonly property bool filtered: filter.trim() !== "" || asksOnly || failedOnly || agent !== "" || depth >= 0
   readonly property var source: filtered ? shown : Omunculus.eventLog.rows
   property int seen: 0
@@ -114,8 +113,6 @@ Item {
   onDepthChanged: refilter()
 
   ListModel { id: shown }
-  // The room of a row's time, so the kind follows it on a narrow row.
-  TextMetrics { id: timeWidth; font.family: Theme.fontFamily; font.pixelSize: 11; text: "00:00:00.000" }
 
   Connections {
     target: Omunculus.eventLog.rows
@@ -138,51 +135,55 @@ Item {
 
   ColumnLayout {
     anchors.fill: parent
-    spacing: 10
+    spacing: Theme.space.block
 
+    FilterBox {
+      id: filterBox
+      Layout.fillWidth: true
+      placeholderText: "Search kinds, agents, runs, works and text…  /"
+      onApplied: value => view.filter = value
+      onLeave: list.forceActiveFocus()
+    }
+
+    // The filters, the count and the rare actions.
     RowLayout {
       Layout.fillWidth: true
-      spacing: 10
-      FilterBox {
-        id: filterBox
+      spacing: Theme.space.gap
+      ChipStrip {
         Layout.fillWidth: true
-        placeholderText: "filter by kind, agent, run, work or text"
-        onApplied: value => view.filter = value
-        onLeave: list.forceActiveFocus()
+        Layout.preferredHeight: implicitHeight
+        Chip { text: "ASKS ME"; checked: view.asksOnly; accent: Theme.warning; onClicked: view.asksOnly = !view.asksOnly }
+        Chip { text: "FAILED"; checked: view.failedOnly; accent: Theme.error; onClicked: view.failedOnly = !view.failedOnly }
+        Dropdown {
+          options: [""].concat(Omunculus.eventLog.agents)
+          current: view.agent
+          emphasized: view.agent !== ""
+          describe: option => option === "" ? "ALL AGENTS" : option.toUpperCase()
+          onPicked: option => view.agent = option
+        }
+        Dropdown {
+          visible: Omunculus.eventLog.depths.length > 1
+          options: ["-1"].concat(Omunculus.eventLog.depths.map(String))
+          current: String(view.depth)
+          emphasized: view.depth >= 0
+          describe: option => option === "-1" ? "ALL LEVELS" : "LEVEL " + option
+          onPicked: option => view.depth = Number(option)
+        }
       }
       Label {
         Layout.maximumWidth: implicitWidth
-        Layout.minimumWidth: 0
         Layout.fillWidth: true
-        elide: Text.ElideRight
-        text: list.count + (view.filtered ? " of " + Omunculus.eventLog.rows.count : "") + " events"
+        Layout.minimumWidth: 0
+        text: (list.count + (view.filtered ? " of " + Omunculus.eventLog.rows.count : "") + " events").toUpperCase()
         color: Theme.dim
-        font.pixelSize: 11
+        font.pixelSize: Theme.type.meta.size
+        font.letterSpacing: Theme.type.meta.tracking
+        elide: Text.ElideRight
       }
-    }
-
-    Flow {
-      Layout.fillWidth: true
-      spacing: 6
-      Chip { text: "ASKS ME"; checked: view.asksOnly; onClicked: view.asksOnly = !view.asksOnly }
-      Chip { text: "FAILED"; checked: view.failedOnly; onClicked: view.failedOnly = !view.failedOnly }
-      Repeater {
-        model: Omunculus.eventLog.agents
-        delegate: Chip {
-          required property string modelData
-          text: modelData.toUpperCase()
-          checked: view.agent === modelData
-          onClicked: view.agent = checked ? "" : modelData
-        }
-      }
-      Repeater {
-        model: Omunculus.eventLog.depths.length > 1 ? Omunculus.eventLog.depths : []
-        delegate: Chip {
-          required property int modelData
-          text: "DEPTH " + modelData
-          checked: view.depth === modelData
-          onClicked: view.depth = checked ? -1 : modelData
-        }
+      ActionMenu {
+        items: [{ id: "copy", icon: "copy", text: view.picked !== null ? "COPY EVENT" : "COPY LOG" }]
+        tip: "copy the event picked, else the rows shown"
+        onChosen: view.copy()
       }
     }
 
@@ -193,7 +194,7 @@ Item {
       clip: true
       topMargin: 1
       bottomMargin: 1
-      spacing: 2
+      spacing: Theme.space.row
       cacheBuffer: 0
       model: view.source
       keyNavigationEnabled: true
@@ -213,101 +214,98 @@ Item {
         readonly property var line: model
         readonly property var kind: view.kinds[model.type] || ({ icon: "more", tone: Theme.dim })
         readonly property bool marked: (view.picked !== null && view.picked.id === model.id) || (ListView.isCurrentItem && list.activeFocus)
-        readonly property real cell: Math.max(0, width - 24)
-        readonly property real tall: view.narrow ? 46 : 28
+        readonly property string status: !model.ok ? "FAILED" : model.asks ? "ASKS YOU" : ""
 
         width: list.width
-        height: (model.day !== "" ? 26 : 0) + (model.head !== "" ? 26 : 0) + tall
+        height: (model.day !== "" ? Theme.size.rule : 0) + (model.head !== "" ? Theme.size.rule : 0) + box.height
 
-        Label {
+        // The day, then the run it begins.
+        Kicker {
           visible: row.model.day !== ""
-          x: 12
-          width: parent.width - 24
-          height: 22
-          verticalAlignment: Text.AlignBottom
+          width: parent.width
+          height: Theme.size.rule
           text: row.model.day
-          color: Theme.dim
-          font.pixelSize: 11
-          font.letterSpacing: 1
-          elide: Text.ElideRight
         }
-
-        Label {
+        Kicker {
           visible: row.model.head !== ""
-          y: row.model.day !== "" ? 26 : 0
-          x: 12
-          width: parent.width - 24
-          height: 22
-          verticalAlignment: Text.AlignBottom
+          y: row.model.day !== "" ? Theme.size.rule : 0
+          width: parent.width
+          height: Theme.size.rule
           text: row.model.head
-          color: Theme.primary
-          font.pixelSize: 11
-          font.letterSpacing: 1
-          elide: Text.ElideRight
+          tone: Theme.primary
         }
 
         Rectangle {
+          id: box
           anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-          height: row.tall
-          color: row.marked ? Theme.highlight : "transparent"
+          height: Theme.size.stackedRow + Theme.size.stackedLine * 2
+          color: row.marked ? Theme.highlight : pointer.containsMouse ? Qt.alpha(Theme.primary, 0.035) : "transparent"
           border.color: row.marked ? Theme.primary : Theme.line
 
-          // Wide: four columns. Narrow: when, kind and who over what it says.
+          ColumnLayout {
+            anchors { left: parent.left; right: statusLabel.left; top: parent.top; leftMargin: Theme.space.cell; rightMargin: Theme.space.gap; topMargin: Theme.space.cell }
+            spacing: Theme.space.tight
+            Label {
+              Layout.fillWidth: true
+              text: row.model.what
+              color: row.model.ok ? Theme.foreground : Theme.error
+              font.pixelSize: Theme.type.body.size
+              elide: Text.ElideRight
+            }
+            // When, what kind, who, on which work.
+            RowLayout {
+              Layout.fillWidth: true
+              spacing: 0
+              Label {
+                text: row.model.time + Theme.type.meta.separator
+                color: Theme.dim
+                font.pixelSize: Theme.type.meta.size
+              }
+              Icon {
+                Layout.rightMargin: Theme.space.line
+                name: row.kind.icon
+                size: 10
+                color: row.kind.tone
+              }
+              Label {
+                text: row.model.type
+                color: row.kind.tone
+                font.pixelSize: Theme.type.meta.size
+              }
+              Label {
+                visible: row.model.who !== ""
+                Layout.maximumWidth: implicitWidth
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                text: Theme.type.meta.separator + row.model.who
+                color: Omunculus.toneOf(row.model.who)
+                font.pixelSize: Theme.type.meta.size
+                elide: Text.ElideRight
+              }
+              Label {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                text: row.model.work ? Theme.type.meta.separator + view.short(row.model.work) : ""
+                color: Theme.dim
+                font.pixelSize: Theme.type.meta.size
+                elide: Text.ElideRight
+              }
+            }
+          }
+
           Label {
-            x: 12
-            y: view.narrow ? 6 : 0
-            width: view.narrow ? implicitWidth : row.cell * 0.12
-            height: view.narrow ? 16 : parent.height
-            verticalAlignment: Text.AlignVCenter
-            text: row.model.time
-            color: Theme.dim
-            font.pixelSize: 11
-            elide: Text.ElideRight
+            id: statusLabel
+            anchors { right: parent.right; rightMargin: Theme.space.cell; top: parent.top; topMargin: Theme.space.cell }
+            text: row.status
+            color: row.model.ok ? Theme.warning : Theme.error
+            font.pixelSize: Theme.type.header.size
+            font.letterSpacing: Theme.type.header.tracking
           }
-          Icon {
-            id: kindIcon
-            x: view.narrow ? 12 + timeWidth.advanceWidth + 10 : 12 + row.cell * 0.12
-            y: view.narrow ? 8 : (parent.height - height) / 2
-            name: row.kind.icon
-            size: 12
-            color: row.kind.tone
-          }
-          Label {
-            id: typeLabel
-            x: kindIcon.x + 20
-            y: view.narrow ? 6 : 0
-            width: view.narrow ? Math.min(implicitWidth, row.cell * 0.4) : row.cell * 0.12 - 20
-            height: view.narrow ? 16 : parent.height
-            verticalAlignment: Text.AlignVCenter
-            text: row.model.type
-            color: row.kind.tone
-            font.pixelSize: 11
-            elide: Text.ElideRight
-          }
-          Label {
-            x: view.narrow ? typeLabel.x + typeLabel.width + 10 : 12 + row.cell * 0.24
-            y: view.narrow ? 6 : 0
-            width: view.narrow ? Math.max(0, parent.width - 12 - x) : row.cell * 0.14
-            height: view.narrow ? 16 : parent.height
-            verticalAlignment: Text.AlignVCenter
-            text: row.model.who
-            color: row.model.who === "" ? Theme.dim : Omunculus.toneOf(row.model.who)
-            font.pixelSize: 11
-            elide: Text.ElideRight
-          }
-          Label {
-            x: view.narrow ? 12 : 12 + row.cell * 0.38
-            y: view.narrow ? 24 : 0
-            width: view.narrow ? row.cell : row.cell * 0.62
-            height: view.narrow ? 16 : parent.height
-            verticalAlignment: Text.AlignVCenter
-            text: row.model.what
-            color: row.model.ok ? Theme.foreground : Theme.error
-            font.pixelSize: 11
-            elide: Text.ElideRight
-          }
+
           MouseArea {
+            id: pointer
             anchors.fill: parent
+            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: {
               list.currentIndex = row.index
@@ -320,66 +318,58 @@ Item {
 
       // Beside the rows' content, centred while there are none.
       Label {
-        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 20 }
+        anchors { left: parent.left; right: parent.right; top: parent.top; margins: Theme.space.page }
         visible: list.count === 0
         horizontalAlignment: Text.AlignHCenter
         text: Omunculus.replaying ? "reading the conversation" : "no event matches"
         color: Theme.dim
-        font.pixelSize: 11
+        font.pixelSize: Theme.type.tab.size
       }
     }
 
-    // The event picked.
-    Rectangle {
+    // The event picked, its tools at the top right.
+    Panel {
+      id: card
       Layout.fillWidth: true
-      Layout.preferredHeight: Math.min(view.height * 0.4, body.implicitHeight + head.implicitHeight + 30)
+      Layout.preferredHeight: Math.min(view.height * 0.4, body.implicitHeight + stamp.implicitHeight + Theme.size.strip + Theme.space.inset * 2)
       visible: view.picked !== null
-      color: "transparent"
-      border.color: Theme.line
-
-      RowLayout {
-        id: head
-        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; leftMargin: 12 }
-        spacing: 10
-        Label {
-          Layout.maximumWidth: implicitWidth
-          Layout.fillWidth: true
-          Layout.minimumWidth: 0
-          text: view.picked ? view.picked.type.toUpperCase() : ""
-          color: Theme.primary
-          font.pixelSize: 11
-          font.letterSpacing: 2
-          elide: Text.ElideRight
-        }
-        Label {
-          Layout.fillWidth: true
-          Layout.minimumWidth: 0
-          text: view.picked ? Time.full(view.picked.at) + (view.narrow ? "" : "  ·  UTC " + view.picked.at) : ""
-          color: Theme.dim
-          font.pixelSize: 11
-          elide: Text.ElideRight
-        }
+      title: view.picked ? view.picked.type : ""
+      tools: [
         Chip {
           visible: view.detail.length > view.detailLimit && !view.showAll
           text: "SHOW ALL"
+          tip: "the event whole, past its first 20 KB"
           onClicked: view.showAll = true
-        }
-        IconButton { name: "copy"; tip: "copy the event"; onClicked: view.copy() }
-        IconButton { name: "close"; tip: "close (Esc)"; onClicked: view.picked = null }
-      }
+        },
+        IconButton { name: "copy"; tip: "copy the event"; onClicked: view.copy() },
+        IconButton { name: "close"; tip: "close  Esc"; onClicked: view.picked = null }
+      ]
 
-      Flickable {
-        anchors { left: parent.left; right: parent.right; top: head.bottom; bottom: parent.bottom; margins: 10; leftMargin: 12 }
-        clip: true
-        contentHeight: body.implicitHeight
-        boundsBehavior: Flickable.StopAtBounds
+      ColumnLayout {
+        anchors.fill: parent
+        spacing: Theme.space.tight
         Label {
-          id: body
-          width: parent.width
-          text: view.showAll ? view.detail : view.detail.slice(0, view.detailLimit)
-          color: Theme.foreground
-          font.pixelSize: 11
-          wrapMode: Text.WrapAnywhere
+          id: stamp
+          Layout.fillWidth: true
+          text: view.picked ? Time.full(view.picked.at) + (card.width < 480 ? "" : "  ·  UTC " + view.picked.at) : ""
+          color: Theme.dim
+          font.pixelSize: Theme.type.meta.size
+          elide: Text.ElideRight
+        }
+        Flickable {
+          Layout.fillWidth: true
+          Layout.fillHeight: true
+          clip: true
+          contentHeight: body.implicitHeight
+          boundsBehavior: Flickable.StopAtBounds
+          Label {
+            id: body
+            width: parent.width
+            text: view.showAll ? view.detail : view.detail.slice(0, view.detailLimit)
+            color: Theme.foreground
+            font.pixelSize: Theme.type.tab.size
+            wrapMode: Text.WrapAnywhere
+          }
         }
       }
     }
