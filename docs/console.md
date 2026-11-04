@@ -244,7 +244,9 @@ grows with the text up to eight lines, then scrolls. Enter sends, Shift+Enter
 breaks the line, and a pasted text keeps its line breaks. While the agent
 written to works, SEND keeps its caption over a faint trace across the
 whole button, its tip says "sales is working; SEND still sends", and it
-still sends. Under 420 px its
+still sends. While a numbered form waits on you, the box says "answer the
+questions above, or say to sales what you need", and the count of what
+arrived out of view rises above the form's floating actions. Under 420 px its
 buttons show their icons only.
 
 The clip in the composer's frame picks files for the message, which show

@@ -588,8 +588,27 @@ Item {
     }
   }
 
+  // Whether the newest question's form ends below the view, where its
+  // actions float on the bottom edge (QuestionForm); the pill goes above them.
+  readonly property bool formFloats: {
+    // Read first, so the view's scrolling and size update it.
+    const shown = timeline.contentY
+    const tall = timeline.height
+    const row = newestCard !== "" ? rowOf(newestCard) : -1
+    const entry = row >= 0 ? timeline.itemAtIndex(row) : null
+    if (!entry || !entry.content || !entry.content.form)
+      return false
+    const top = entry.y - shown
+    return top < tall && top + entry.height > tall
+  }
+
   NewPill {
-    anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: Theme.space.gap }
+    anchors {
+      horizontalCenter: parent.horizontalCenter
+      bottom: parent.bottom
+      // Over a floating form's actions: a row of them, two when narrow.
+      bottomMargin: Theme.space.gap + (root.formFloats ? Theme.size.control + Theme.space.gap + (root.width < Theme.size.measureFrom ? Theme.size.control : 0) : 0)
+    }
     count: root.unseen
     onClicked: root.jump()
   }

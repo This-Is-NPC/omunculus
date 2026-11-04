@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Questions.js" as Questions
 import "kit/client/Shortcuts.js" as Shortcuts
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
@@ -33,6 +34,9 @@ ColumnLayout {
   readonly property bool busy: work === "" ? Omunculus.running.some(run => String(run.depth) === "0") : Omunculus.busy(work)
   // The agent written to, "" when none is known yet.
   readonly property string addressee: work === "" ? Omunculus.agent : (Omunculus.work(work) || {}).assignee || ""
+  // Whether a numbered form waits on you in the main thread: its answers go
+  // in its card, so the box does not invite them.
+  readonly property bool formWaits: work === "" && Omunculus.waiting.some(request => Questions.parse(request.reason) !== null)
 
   // Whether Enter leaves a note rather than sends; once a note is left, or
   // on Esc, the box writes to the agent again.
@@ -135,7 +139,7 @@ ColumnLayout {
         id: entry
         Layout.fillWidth: true
         framed: false
-        placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? (composer.addressee ? "say to " + composer.addressee + " what you need" : "say what you need") : "write to " + (composer.addressee || "this work")
+        placeholderText: composer.noting ? "a note for its agents, without a run" : composer.work === "" ? (composer.formWaits ? "answer the questions above, or " : "") + (composer.addressee ? "say to " + composer.addressee + " what you need" : "say what you need") : "write to " + (composer.addressee || "this work")
         onSubmitted: composer.noting ? composer.note() : composer.submit()
         onTextChanged: if (composer.work === "" && Omunculus.conversationId !== "") Omunculus.composerDrafts[Omunculus.conversationId] = text
         Keys.onEscapePressed: event => {
