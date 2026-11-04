@@ -88,6 +88,21 @@ defmodule Omunculus.GuiProjectsTest do
     """)
   end
 
+  test "conversationsText picks the longest candidate that fits its budget" do
+    run!("""
+    const texts = budget => Projects.conversationsText(15, 14, budget);
+    check(texts(40) === "15 conversations · 14 open works", "40 " + texts(40));
+    check(texts(26) === "15 conversations · 14 open", "26 " + texts(26));
+    check(texts(16) === "15 conversations", "16 " + texts(16));
+    check(texts(8) === "15 conv.", "8 " + texts(8));
+    check(texts(3) === "15", "3 " + texts(3));
+    for (const budget of [40, 26, 16, 8, 3]) check(texts(budget).length <= budget, "fits " + budget);
+    check(Projects.conversationsText(1, 1, 40) === "1 conversation · 1 open work", "one");
+    check(Projects.conversationsText(2, 0, 40) === "2 conversations", "no open works");
+    check(Projects.conversationsText(15, 0, 1) === "", "nothing fits");
+    """)
+  end
+
   test "elsewhere sums the waiting of every project but the open one" do
     run!("""
     const rows = Projects.rows(input({

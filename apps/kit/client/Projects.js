@@ -61,3 +61,13 @@ function filter(rows, text, chip) {
 function elsewhere(rows) {
   return rows.filter(row => !row.current).reduce((sum, row) => sum + row.waiting, 0);
 }
+
+// A project's conversations and open works in at most `budget` characters:
+// the first that fits of "15 conversations · 14 open works", "15
+// conversations · 14 open", "15 conversations", "15 conv." and "15"; the
+// open works only while there are some.
+function conversationsText(count, open, budget) {
+  const named = count + (count === 1 ? " conversation" : " conversations");
+  const works = open > 0 ? [named + " · " + open + (open === 1 ? " open work" : " open works"), named + " · " + open + " open"] : [];
+  return works.concat([named, count + " conv.", String(count)]).find(text => text.length <= budget) || "";
+}

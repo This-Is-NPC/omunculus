@@ -21,6 +21,8 @@ Item {
   property var stacked: [[0]]
   // The column shown at the top right of a stacked row, or -1.
   property int status: -1
+  // What joins the cells of a stacked line.
+  readonly property string separator: "  ·  "
   property var idOf: entry => entry.id
   property string selectedId: ""
   // Whether a click picks a row rather than opening it.
@@ -203,7 +205,7 @@ Item {
             required property var modelData
             required property int index
             width: stack.width
-            value: modelData.map(column => row.texts[column]).filter(text => text).join("  ·  ")
+            value: modelData.map(column => row.texts[column]).filter(text => text).join(table.separator)
             // A line with nothing to say takes no room, but the title's.
             visible: index === 0 || value !== ""
             soft: true

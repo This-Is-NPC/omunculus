@@ -345,9 +345,13 @@ The registry's level:
   REACHABLE when its socket did not answer, or READING… until its
   conversations are read. `/` searches the ids; the chips ALL, WAITING FOR
   YOU and WORKING, shown while a project is in either state, keep those.
-  Enter or a click opens the project at its conversations. Under 700 px a
-  row stacks: the id, then its conversations and last activity, its state
-  on the right;
+  Enter or a click opens the project at its conversations. The
+  conversations cell says as much as fits, never cut: "15 conversations ·
+  14 open works", "15 conversations · 14 open", "15 conversations", "15
+  conv.", then "15" (`Projects.conversationsText`). Under 700 px a row
+  stacks: the id, then its conversations and last activity, its state on
+  the right; the last activity goes before the conversations would shorten
+  past "15 conversations";
 - BOARD, the works of every project.
 
 The project's level:
