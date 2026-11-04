@@ -53,8 +53,8 @@ ShellRoot {
 
         Masthead {
           Layout.fillWidth: true
-          section: window.narrow && window.reading ? "thread"
-            : ({ all: "all threads", waiting: "waiting for you", working: "working" })[Mail.folder]
+          crumbs: [{ text: window.narrow && window.reading ? "thread"
+            : ({ all: "all threads", waiting: "waiting for you", working: "working" })[Mail.folder] }]
           StatusLine {
             message: Mail.message
             error: Mail.messageIsError
