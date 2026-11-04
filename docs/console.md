@@ -301,7 +301,7 @@ the masthead: the first root work's title, else the first message), or the
 work of the question's origin when the harness passed it up.
 
 `QuestionForm` puts "N OF M ANSWERED" in the card's heading (on its second
-line under 520 px), and SEND and "I CAN'T ANSWER THIS" at the end of the form, after the last item. While
+line under 520 px), and SEND (outlined, readable while it waits, with "answer at least one to send" beside it) and a quiet "I CAN'T ANSWER THIS" at the end of the form, after the last item. While
 that end is below the view, the two float on the view's bottom edge over the
 card's fill and a hairline, with "N MORE QUESTIONS BELOW" at the right
 (above them under 520 px) while items start under them; the chip brings the
@@ -337,8 +337,11 @@ reason through
 ## The team
 
 The team page (`TeamView`) shows the works of the conversation a level at a
-time, under a breadcrumb ("Conversation › Bakery website › Design
-preview"), each crumb going back up. A level is a work's own row, then the
+time, under a breadcrumb once it has gone down into a work ("Conversation
+› Bakery website › Design preview"), each crumb going back up. At the
+conversation's level the agent that talks with you heads the team ("sales ·
+talks with you · 2 agents", with "⇡ asks you 5 questions" while it does)
+and the works nest under it. A level is a work's own row, then the
 works it handed down, a row each, under a rule naming the stage that handed
 them down and, when several run side by side, "2 in parallel · 1 working";
 the conversation's level is its root works, the one root's own level when
@@ -353,15 +356,18 @@ A row (`ProgressNode` in full) is a table row: the work's title with its
 state at the top right, a meta line of its agent, its stages (`Stepper`;
 under 700 px a track filled to the stage it is at, and that stage) and its
 branch's works below in words ("1 sub-work done", "2 sub-works, 1
-working"), time, calls and cost, and a badge per request between it and
+working"), time, steps (tool calls; hook runs are not counted) and cost
+(tokens as "40k read · 2k written", as the cost page words them), and a
+badge per request between it and
 others. Short of room, the branch's totals give way first, then the
 stages; the agent stays. A row with works below it has a tool at its right
 that goes down to them. The keyboard's row has the focus ring. Chips keep
 the works that need you or work, with the works above them, and `/`
 filters by title, agent or stage; a filter shows a done row only on the
 way to a work it keeps. The chips' counts are of works, folded ones
-included. A waiting badge (`⇡ waiting for you`, lit, the one to answer;
-`⇡ waiting for design-lead`; `⇣ 1 question from designer`) goes to the
+included. A request badge shows its climb (`⇡ seller › sales › you`, in the warning
+tone when it is to you; `⇡ designer › design-lead`; `⇣ 1 question from
+designer`); the NEEDS YOU chip is lit while a count above zero waits. A badge goes to the
 other end of its request, lights both rows and opens the request in the
 detail; `⇣ needs you below`, on the works above one that needs you, does
 the same with that work's question.
@@ -476,12 +482,14 @@ A conversation's level, in place of the project's once one is opened:
 - CHAT, the chat with the root agent, its progress and its composer;
 - TEAM, the works of the conversation and the work picked in full. Its SHOW
   IN LOG opens the LOG kept to that work, and BACK returns;
-- LOG, every event a table row: what it says as one plain sentence ("sales
-  asks you: …", "passed 1 question up from design", "on-request hook ran",
-  "ended"; the event's JSON only in its card), then when (local,
-  `hh:mm:ss.zzz`), what kind, who and on which work, FAILED or ASKS YOU at
-  its top right, under rules naming the day and each run. A search line, the
-  chips ASKS ME and FAILED and an agent and a level picker filter it; the
+- LOG, every event one line: when (local, `hh:mm:ss`), its kind in a word
+  ("question", "step", "reply", "passed up"), what it says as one plain
+  sentence ("sales asks you 5 questions: …", "passed 5 questions up"; the
+  event's raw type, JSON and milliseconds only in its card), who, and FAILED
+  or NEEDS YOU at the right, under rules naming the day and each run.
+  Plumbing (a run's start and end, hooks, replies without text) is dimmer and
+  hidden until BEHIND THE SCENES is on. A search line, the chips NEEDS YOU,
+  FAILED and BEHIND THE SCENES and an agent picker filter it; the
   count of rows and a "more" menu with COPY, the event picked or else the
   rows shown, sit at the filters' right, or under them when they do not fit
   beside it. The event opened shows in a card
@@ -491,7 +499,8 @@ A conversation's level, in place of the project's once one is opened:
   model calls and the tokens read by the model (with those from cache) and
   written in all, and the cost at its right; then a row per agent, the
   busiest first, its cost at the top right, "-" when its provider reported
-  none. One note says when the provider sends no price.
+  none. When the provider sends no price, one note says so and the cost
+  column and figure are left out.
 
 A work's thread also opens as a page of the chat, from a sub-work block's
 OPEN or the progress: the way down to it (`Breadcrumb`, "Conversation ›
