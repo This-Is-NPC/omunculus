@@ -56,12 +56,6 @@ Item {
     opened = next
   }
 
-  function groupLine(nodes) {
-    const working = nodes.filter(node => node.state === "working").length
-    const done = nodes.filter(node => node.state === "done").length
-    return [nodes.length + " in parallel"].concat(working > 0 ? [working + " working"] : [], done > 0 ? [done + " done"] : []).join(" · ")
-  }
-
   // The rows to draw, in order: {kind, key, level, ...}.
   readonly property var rows: {
     const out = []
@@ -73,7 +67,7 @@ Item {
         const found = parent.groups.find(each => each.parallel && each.nodes.some(node => node.work === kid.work)) || null
         if (found && found !== group) {
           const key = "group:" + found.nodes[0].work
-          out.push({ kind: "group", key: key, level: level, text: groupLine(found.nodes), folds: true, folded: folded(key, false), fold: false })
+          out.push({ kind: "group", key: key, level: level, text: Progress.together(found), folds: true, folded: folded(key, false), fold: false })
         }
         group = found
         if (found && folded("group:" + found.nodes[0].work, false))

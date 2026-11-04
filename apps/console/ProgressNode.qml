@@ -63,10 +63,7 @@ FocusScope {
   function spent(usage) {
     if (usage.calls === 0)
       return ""
-    if (usage.priced > 0)
-      return Omunculus.money(usage.cost)
-    const tokens = usage.input + usage.output
-    return (tokens >= 1000 ? Math.round(tokens / 1000) + "k" : tokens) + " tokens"
+    return usage.priced > 0 ? Omunculus.money(usage.cost) : Omunculus.tokens(usage.input + usage.output) + " tokens"
   }
 
   readonly property string branchLine: {
@@ -199,7 +196,6 @@ FocusScope {
         id: head
         Layout.maximumWidth: card.width * 0.55
         state: row.node.state
-        word: row.node.word
         clock: row.clock
       }
       Fold { visible: row.folds; folded: row.folded; onPressed: { row.forceActiveFocus(); row.foldToggled() } }

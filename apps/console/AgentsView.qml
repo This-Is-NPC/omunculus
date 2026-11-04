@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Shapes
+import "kit/client/Progress.js" as Progress
 import "kit/ui"
 
 // AgentsView is the TEAM page's map: the conversation's works as a chart on
@@ -62,9 +63,8 @@ Item {
       let x = left + (span[node.work] - row) / 2
       const centres = []
       node.groups.forEach((group, i) => {
-        const counts = group.counts
         const name = (group.step ? group.step + " stage" : "")
-        const together = group.parallel ? group.nodes.length + " in parallel" + (counts.working ? " · " + counts.working + " working" : "") + (counts.done ? " · " + counts.done + " done" : "") : ""
+        const together = group.parallel ? Progress.together(group) : ""
         if (name || together)
           labels.push({ x: x, y: rowTop(level + 1) - 24, width: widths[i], text: [name, together].filter(part => part).join(" · ") })
         for (const kid of group.nodes) {

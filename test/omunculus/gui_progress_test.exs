@@ -3,7 +3,7 @@ defmodule Omunculus.GuiProgressTest do
 
   alias Omunculus.GuiModules
 
-  @modules ["Requests", "Phrases", "Usage", "Progress"]
+  @modules ["Requests", "Phrases", "Usage", "Time", "Progress"]
 
   # A sale at its design stage (w1), a design-lead work handed down in it
   # waiting on its child (w2), and a design work sent back once from review

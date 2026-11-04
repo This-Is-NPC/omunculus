@@ -83,5 +83,5 @@ function label(id) {
 // [keys, what] for each entry with keys listed under the group `where`.
 function rows(where) {
   return table.filter(entry => entry.keys.length > 0 && entry.where.includes(where))
-    .map(entry => [entry.label || entry.keys.join(" · "), entry.what])
+    .map(entry => [label(entry.id), entry.what])
 }

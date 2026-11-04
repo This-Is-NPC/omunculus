@@ -86,7 +86,6 @@ Rectangle {
           id: mark
           Layout.maximumWidth: 110
           state: card.node.state
-          word: card.node.word
           clock: card.clock
         }
       }

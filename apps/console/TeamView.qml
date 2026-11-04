@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "kit/client/Progress.js" as Progress
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/ui"
 
@@ -64,7 +65,6 @@ FocusScope {
   readonly property int working: flat.filter(node => node.state === "working").length
 
   function closed(node) { return node.state === "done" || node.state === "cancelled" }
-  function kidsOf(node) { return node.groups.reduce((all, group) => all.concat(group.nodes), []) }
 
   // The works the filters keep: those that match, and every work above one.
   readonly property var kept: {
@@ -98,7 +98,7 @@ FocusScope {
     const walk = (node, indent) => {
       if (!keeps(node))
         return
-      const kids = kidsOf(node).filter(keeps)
+      const kids = Progress.kidsOf(node).filter(keeps)
       const folded = kids.length > 0 && isFolded(node.work, closed(node) || node.state === "up-next")
       list.push({ kind: "work", key: node.work, node: node, indent: indent, folds: kids.length > 0, folded: folded && !filtering })
       if (folded && !filtering)
@@ -120,11 +120,9 @@ FocusScope {
         }
         if (group.parallel) {
           const key = "group:" + node.work + ":" + at
-          const counts = group.counts
           const groupFolded = !filtering && isFolded(key, false)
           list.push({ kind: "group", key: key, indent: inner, folds: true, folded: groupFolded,
-            text: group.nodes.length + " in parallel" + (counts.working ? " · " + counts.working + " working" : "")
-              + (counts.waiting ? " · " + counts.waiting + " waiting" : "") + (counts.done ? " · " + counts.done + " done" : "") })
+            text: Progress.together(group) })
           if (groupFolded)
             return
           inner++
@@ -573,9 +571,8 @@ FocusScope {
             const shown = group.nodes.filter(team.keeps)
             if (shown.length === 0)
               return
-            const counts = group.counts
             list.push({ kind: "head", text: "Sub-works" + (group.step ? " · " + group.step + " stage" : "")
-              + (group.parallel ? " · " + group.nodes.length + " in parallel" + (counts.working ? " · " + counts.working + " working" : "") + (counts.done ? " · " + counts.done + " done" : "") : "") })
+              + (group.parallel ? " · " + Progress.together(group) : "") })
             shown.forEach(node => list.push({ kind: "work", node: node }))
           })
         } else {
@@ -594,7 +591,7 @@ FocusScope {
         id: entry
         required property var modelData
         required property int index
-        readonly property bool drills: modelData.kind === "work" && team.kidsOf(modelData.node).length > 0
+        readonly property bool drills: modelData.kind === "work" && Progress.kidsOf(modelData.node).length > 0
         width: levelList.width
         height: modelData.kind === "head" ? 26 : card.implicitHeight
 

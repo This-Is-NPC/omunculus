@@ -79,9 +79,8 @@ FocusScope {
   function cost(usage) {
     if (usage.calls === 0)
       return ""
-    const tokens = count => count >= 1000 ? Math.round(count / 1000) + "k" : String(count)
     return (usage.priced > 0 ? Omunculus.money(usage.cost) + " · " : "")
-      + tokens(usage.input) + " read · " + tokens(usage.output) + " written"
+      + Omunculus.tokens(usage.input) + " read · " + Omunculus.tokens(usage.output) + " written"
   }
 
   // A branch or work's time, agents and calls, as one line.
@@ -184,7 +183,6 @@ FocusScope {
             visible: pane.node !== null
             Layout.maximumWidth: 160
             state: pane.node ? pane.node.state : ""
-            word: pane.node ? pane.node.word : ""
             clock: pane.clock
           }
         }

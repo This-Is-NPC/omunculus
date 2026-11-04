@@ -2,6 +2,7 @@
 .import "Requests.js" as Requests
 .import "Phrases.js" as Phrases
 .import "Usage.js" as Usage
+.import "Time.js" as Time
 
 // Where the conversation's works are, derived from the state and the stage
 // events and never stored. Times are in seconds.
@@ -26,14 +27,12 @@ function seconds(value) {
 
 function firstLine(text) { return String(text || "").split("\n")[0].trim(); }
 
-function two(n) { return String(n).padStart(2, "0"); }
-
 // A duration in words: "42 s", "3 min", "1 h 05 min".
 function span(total) {
   const s = Math.max(0, Math.floor(total));
   if (s < 60) return s + " s";
   if (s < 3600) return Math.floor(s / 60) + " min";
-  return Math.floor(s / 3600) + " h " + two(Math.floor(s % 3600 / 60)) + " min";
+  return Math.floor(s / 3600) + " h " + Time.two(Math.floor(s % 3600 / 60)) + " min";
 }
 
 // A running clock: "0:42", "12:05", "1:02:03".
@@ -41,7 +40,7 @@ function clock(total) {
   const s = Math.max(0, Math.floor(total));
   const h = Math.floor(s / 3600);
   const m = Math.floor(s % 3600 / 60);
-  return h > 0 ? h + ":" + two(m) + ":" + two(s % 60) : m + ":" + two(s % 60);
+  return h > 0 ? h + ":" + Time.two(m) + ":" + Time.two(s % 60) : m + ":" + Time.two(s % 60);
 }
 
 // `text` in at most `budget` characters, ending in "…" when cut.
@@ -50,6 +49,8 @@ function elide(text, budget) {
   return budget <= 0 ? "" : text.slice(0, budget - 1) + "…";
 }
 
+// Who an event's actor is: an agent by its name, the harness as "harness",
+// any person as "you"; "" for an event without one.
 function actorOf(event) {
   const actor = event.actor || {};
   return actor.kind === "agent" ? actor.id || "" : actor.kind === "harness" ? "harness" : actor.kind ? "you" : "";
@@ -338,6 +339,17 @@ function build(input) {
 // A node's children in tree order: by stage for a work in a workflow.
 function kidsOf(node) {
   return node.groups.reduce((all, group) => all.concat(group.nodes), []);
+}
+
+// A group of works handed down together, in words: "3 in parallel · 1
+// working · 2 done".
+function together(group) {
+  const counts = group.counts;
+  return [group.nodes.length + " in parallel"]
+    .concat(counts.working > 0 ? [counts.working + " working"] : [],
+      counts.waiting > 0 ? [counts.waiting + " waiting"] : [],
+      counts.done > 0 ? [counts.done + " done"] : [])
+    .join(" · ");
 }
 
 function token(text, status) { return { text: text, status: status }; }

@@ -729,7 +729,7 @@ Singleton {
       at: event.at,
       time: Time.precise(event.at),
       type: event.type,
-      who: event.type === "start-run" ? body.agent || "" : actorName(event.actor),
+      who: event.type === "start-run" ? body.agent || "" : Progress.actorOf(event),
       run: event.run_id || "",
       work: event.work_id || "",
       what: what(event.type, body),
@@ -761,14 +761,6 @@ Singleton {
     default:
       return json(body)
     }
-  }
-
-  // Who an event's actor is: an agent by its name, the harness as "harness",
-  // and any person as you.
-  function actorName(actor) {
-    if (!actor)
-      return ""
-    return actor.kind === "agent" ? actor.id : actor.kind === "harness" ? "harness" : "you"
   }
 
   function append(key, entry) {
@@ -807,6 +799,11 @@ Singleton {
   // A sum of money as the provider reported it, in US dollars.
   function money(spent) {
     return "US$ " + (spent < 0.01 ? spent.toFixed(4) : spent.toFixed(2))
+  }
+
+  // A count of tokens, in thousands from a thousand: 950, 12k.
+  function tokens(count) {
+    return count >= 1000 ? Math.round(count / 1000) + "k" : String(count)
   }
 
   // Adds one model call's reported usage to the conversation's, its agent's
@@ -873,7 +870,7 @@ Singleton {
     if (next !== journeys)
       journeys = next
     const body = event.body || {}
-    const who = actorName(event.actor)
+    const who = Progress.actorOf(event)
     const stamp = Time.clock(event.at, Date.now())
     const at = Date.parse(event.at) / 1000
     const work = event.work_id || ""
