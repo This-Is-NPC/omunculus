@@ -17,26 +17,26 @@ ModalDialog {
   enter: null
   exit: null
   onOpened: {
-    name.text = ""
-    config.text = ""
-    failure.message = ""
+    name.input.text = ""
+    config.input.text = ""
+    failure.text = ""
     sending = false
-    name.forceActiveFocus()
+    name.input.forceActiveFocus()
   }
 
   function submit() {
-    if (sending || name.text === "" || config.text === "")
+    if (sending || name.input.text === "" || config.input.text === "")
       return
-    const id = name.text
+    const id = name.input.text
     sending = true
-    failure.message = ""
-    client.registerProject(id, config.text, () => {
+    failure.text = ""
+    client.registerProject(id, config.input.text, () => {
       sending = false
       dialog.close()
       dialog.registered(id)
     }, reason => {
       sending = false
-      failure.message = reason
+      failure.text = reason
     })
   }
 
@@ -50,41 +50,41 @@ ModalDialog {
     ColumnLayout {
       id: form
       anchors.fill: parent
-      spacing: 10
+      spacing: Theme.space.gap
 
-      Caption { text: "ID" }
-      TextBox {
+      Field {
         id: name
         Layout.fillWidth: true
-        dense: true
-        onAccepted: config.forceActiveFocus()
+        label: "ID"
+        Connections {
+          target: name.input
+          function onAccepted() { config.input.forceActiveFocus() }
+        }
       }
 
-      Caption { Layout.topMargin: 8; text: "CONFIG" }
       RowLayout {
         Layout.fillWidth: true
         spacing: 8
-        TextBox {
+        Field {
           id: config
           Layout.fillWidth: true
-          dense: true
-          placeholderText: "/path/to/the project config"
-          onAccepted: dialog.submit()
+          label: "CONFIG"
+          placeholder: "/path/to/the project config"
+          Connections {
+            target: config.input
+            function onAccepted() { dialog.submit() }
+          }
         }
         Chip {
+          Layout.alignment: Qt.AlignBottom
           text: "PICK FILE"
           tip: "choose the project config"
           onClicked: picker.open()
         }
       }
 
-      StatusMessage {
-        id: failure
-        Layout.fillWidth: true
-        Layout.topMargin: 8
-        visible: message !== ""
-        kind: "error"
-      }
+      // Why the server refused it.
+      FieldError { id: failure; Layout.fillWidth: true }
 
       RowLayout {
         Layout.fillWidth: true
@@ -98,7 +98,7 @@ ModalDialog {
           icon: "plus"
           text: "REGISTER"
           busy: dialog.sending
-          enabled: name.text !== "" && config.text !== "" && !dialog.sending
+          enabled: name.input.text !== "" && config.input.text !== "" && !dialog.sending
           onClicked: dialog.submit()
         }
       }
@@ -109,6 +109,6 @@ ModalDialog {
     id: picker
     title: "The project's config"
     nameFilters: ["TOML files (*.toml)"]
-    onAccepted: config.text = decodeURIComponent(String(selectedFile).replace(/^file:\/\//, ""))
+    onAccepted: config.input.text = decodeURIComponent(String(selectedFile).replace(/^file:\/\//, ""))
   }
 }
