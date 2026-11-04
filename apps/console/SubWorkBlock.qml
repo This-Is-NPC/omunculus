@@ -11,7 +11,9 @@ import "kit/ui"
 // it unfolds it in place, indented, into tabs (01 TRANSCRIPT, the work's own
 // thread at most 480 px tall with its own scroll, 02 CHANGES and 03 RUNS). A
 // block two levels down only opens. The open tool at its top right shows the
-// work as a transcript of its own.
+// work as a transcript of its own. The conversation's own work leaves out its
+// title and stages, which the masthead and the strip show; until the work's
+// data arrives, the block shows the title and "Handing down…".
 SurfaceFrame {
   id: block
 
@@ -28,31 +30,60 @@ SurfaceFrame {
   readonly property var record: Omunculus.work(work)
   readonly property var progress: Omunculus.progress
   readonly property var node: progress ? progress.flat.find(item => item.work === work) || null : null
+  // Until the work's data arrives, the title the event named.
+  readonly property bool arrived: record !== null || node !== null
   readonly property string agent: node ? node.agent : record ? Omunculus.agentOf(record) : ""
-  readonly property string title: node ? node.title : record ? record.title : ""
+  readonly property string title: node ? node.title : record ? record.title : Omunculus.titles[work] || ""
   readonly property string condition: node ? node.state : record ? record.state : ""
   readonly property bool expandable: nesting < 2
   readonly property real now: Omunculus.tick
-  readonly property color stateTone: ({
+  // The agents at work below a work that waits on its branch.
+  readonly property var workers: {
+    if (!node || condition !== "waiting" || !progress)
+      return []
+    const parents = {}
+    for (const each of progress.flat)
+      parents[each.work] = each.parent
+    const below = each => {
+      for (let up = parents[each.work]; up; up = parents[up]) {
+        if (up === work)
+          return true
+      }
+      return false
+    }
+    return Array.from(new Set(progress.flat.filter(each => each.state === "working" && below(each)).map(each => each.agent)))
+  }
+  // The conversation's own work is named by the masthead and its stages by
+  // the strip.
+  readonly property bool titled: title !== Omunculus.subject
+  readonly property bool staged: !(progress && progress.focus && progress.focus.work === work)
+  readonly property color stateTone: workers.length > 0 ? Theme.primary : ({
     working: Theme.primary, "needs-you": Theme.warning, stopped: Theme.warning,
     failed: Theme.error, done: Theme.success
   })[condition] || Theme.dim
-  readonly property string glyph: ({
-    working: "●", "needs-you": "?", waiting: "○", stopped: "■", failed: "✕", done: "✓", cancelled: "–"
+  readonly property string glyph: workers.length > 0 ? "●" : ({
+    working: "●", "needs-you": "⚠", waiting: "○", stopped: "■", failed: "✕", done: "✓", cancelled: "–"
   })[condition] || "○"
+  // How the work stands, in words: who works below it, what it waits for, or
+  // its state.
+  readonly property string word: !node ? condition === "" ? "Handing down…" : condition.charAt(0).toUpperCase() + condition.slice(1)
+    : workers.length > 0 ? workers.join(", ") + " working"
+    : condition === "waiting" ? node.doing
+    : condition === "needs-you" ? node.word.toUpperCase()
+    : node.word
 
   // The status line and the stages, in characters of their font; the status
   // keeps room for its separators.
   readonly property int budget: Math.max(8, Math.floor((width - 28) / metrics.advanceWidth("M")) - 1)
   readonly property var status: Progress.fit([
-    { text: glyph + " " + (node ? node.word : condition.charAt(0).toUpperCase() + condition.slice(1)), keep: true },
+    { text: glyph + " " + word, keep: true },
     node && condition === "working" ? { text: Progress.clock(Math.max(0, now - node.since)), keep: true }
       : node && typeof node.finishedIn === "number" ? { text: "in " + Progress.span(node.finishedIn) }
       : null,
     node ? { text: node.calls === 1 ? "1 step" : node.calls + " steps", short: node.calls + " steps" } : null,
     node && node.failed > 0 ? { text: node.failed + " failed", keep: true } : null
   ].filter(part => part !== null), budget - 15).filter(text => text !== "")
-  readonly property var stepper: node && node.steps.length > 0 ? Progress.stepper(node.steps, node.round, budget) : null
+  readonly property var stepper: node && staged && node.steps.length > 0 ? Progress.stepper(node.steps, node.round, budget) : null
 
   readonly property bool showsTranscript: expanded && tab === "transcript"
   onShowsTranscriptChanged: {
@@ -69,10 +100,9 @@ SurfaceFrame {
       opened(work)
   }
 
-  implicitHeight: content.implicitHeight + Theme.space.insetTop + Theme.space.inset
+  implicitHeight: visible ? content.implicitHeight + Theme.space.insetTop + Theme.space.inset : 0
   variant: "outline"
-  tone: stateTone
-  active: condition === "needs-you"
+  visible: arrived || title !== ""
 
   FontMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: 11 }
 
@@ -113,6 +143,7 @@ SurfaceFrame {
           elide: Text.ElideRight
         }
         Label {
+          visible: block.titled
           Layout.fillWidth: true
           Layout.minimumWidth: 0
           text: block.title
