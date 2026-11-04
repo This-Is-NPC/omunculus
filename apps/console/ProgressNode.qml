@@ -93,8 +93,8 @@ FocusScope {
     return usage.priced > 0 ? Omunculus.money(usage.cost) : Omunculus.tokens(usage.input) + " read" + Theme.type.meta.separator + Omunculus.tokens(usage.output) + " written"
   }
 
-  // Full: the branch's time, steps (tool calls) and cost, and what is below
-  // it, as parts that give way whole, last first.
+  // Full: the branch's time and cost, the work's own steps (tool calls) and
+  // what is below it, as parts that give way whole, last first.
   readonly property var totals: {
     if (!full)
       return []
@@ -102,8 +102,8 @@ FocusScope {
     const below = Progress.below(Progress.kidsOf(node))
     const parts = below !== "" ? [below] : []
     parts.push(node.finishedIn !== null ? "took " + Progress.span(node.finishedIn) : Progress.span(branch.seconds))
-    if (branch.calls > 0)
-      parts.push(branch.calls + (branch.calls === 1 ? " step" : " steps"))
+    if (node.calls > 0)
+      parts.push(node.calls + (node.calls === 1 ? " step" : " steps"))
     const money = spent(branch.usage)
     if (money !== "")
       parts.push(money)

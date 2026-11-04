@@ -598,7 +598,7 @@ Item {
       progress: Omunculus.progress
       lastEvent: Omunculus.lastEventAt
       waiting: Omunculus.waiting.length
-      calls: Omunculus.usage.all.calls
+      usage: Omunculus.usage.all
       heading: view.named
       expanded: view.progressShown && view.page === "chat"
       threadWorking: view.page === "chat" && timeline.working !== null
