@@ -76,7 +76,7 @@ defmodule Omunculus.GuiCallsTest do
     if (Phrases.phrase("work", titled) !== "Opening work: Bakery website" || Phrases.phrase("work", {works: []}) !== "Opening work") throw Error("titled phrase");
     if (Phrases.phrase("read") !== "Reading files" || Phrases.phrase("mystery") !== "Working") throw Error("phrase");
     if (Phrases.did("escalate") !== "Passed a question up" || Phrases.did("mystery") !== "Made a call" || Phrases.did("work", titled) !== "Opened work: Bakery website") throw Error("did");
-    if (Phrases.failure("next_stage") !== "moving to the next stage" || Phrases.failure("mystery") !== "a call") throw Error("failure");
+    if (Phrases.did("ls", {path: "design"}) !== "Looked in design/" || Phrases.did("bash", {command: "npx build\\nmore"}) !== "Ran: npx build" || Phrases.did("bash") !== "Ran a command") throw Error("did folder and command");
     """)
   end
 
@@ -93,6 +93,19 @@ defmodule Omunculus.GuiCallsTest do
     same(Phrases.stepFailure("read", {path: "design/rounds.md"}), "could not read design/rounds.md");
     same(Phrases.stepFailure("continue", {}), "could not move the work on");
     same(Phrases.stepFailure("mystery", {}), "could not make a call");
+    same(Phrases.step("ls", {path: "design"}), "looked in design/");
+    same(Phrases.step("ls", {path: "design/"}), "looked in design/");
+    same(Phrases.step("bash", {command: "npx build --prod\\necho done"}), "ran: npx build --prod");
+    same(Phrases.step("bash", {command: "x".repeat(100)}), "ran: " + "x".repeat(59) + "…");
+    same(Phrases.stepFailure("bash", {command: "npx build"}), "could not run: npx build");
+    same(Phrases.stepFailure("bash", {}), "could not run a command");
+    const gone = "no such directory: quotes";
+    if (!Phrases.missed("ls", gone) || !Phrases.missed("read", "Error: file not found") || Phrases.missed("write", gone) || Phrases.missed("read", "permission denied")) throw Error("missed");
+    same(Phrases.miss({path: "quotes"}), "found no quotes yet");
+    same(Phrases.miss({}), "found nothing yet");
+    same(Phrases.replied("seller", true), "Passed your answers to seller");
+    same(Phrases.replied("seller", false), "Answered seller");
+    same(Phrases.replied("", false), "Answered");
     """)
   end
 end

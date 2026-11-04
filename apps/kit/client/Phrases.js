@@ -8,10 +8,10 @@ const tools = {
   read: { now: "Reading files", done: "Read files", act: "read", past: "read" },
   write: { now: "Writing files", done: "Wrote files", act: "write", past: "wrote" },
   edit: { now: "Editing a file", done: "Edited a file", act: "edit", past: "edited" },
-  ls: { now: "Looking at the project", done: "Looked at the project", act: "look at", past: "looked at" },
+  ls: { now: "Looking at the project", done: "Looked at the project", act: "look at", past: "looked in", folder: true },
   grep: { now: "Searching the project", done: "Searched the project", act: "search", past: "searched" },
   find: { now: "Looking for files", done: "Looked for files", act: "look for files in", past: "looked for files in" },
-  bash: { now: "Running a command", done: "Ran a command", act: "run a command" },
+  bash: { now: "Running a command", done: "Ran a command", act: "run a command", past: "ran:", line: true },
   ask: { now: "Asking a teammate", done: "Asked a teammate", act: "ask a teammate", past: "asked" },
   escalate: { now: "Passing a question up", done: "Passed a question up", act: "pass a question up", past: "passed a question up to" },
   reply: { now: "Answering", done: "Answered", act: "answer" },
@@ -25,9 +25,10 @@ const tools = {
   reopen: { now: "Sending work back", done: "Sent work back", act: "send work back" },
   send: { now: "Sending a message", done: "Sent a message", act: "send a message" }
 };
+const lineLimit = 60;
 const unknown = { now: "Working", done: "Made a call" };
 // The arg a tool row shows for the tools that name their object by it.
-const briefKeys = { read: "path", write: "path", edit: "path", ls: "path", grep: "path", find: "path", ask: "to", escalate: "to" };
+const briefKeys = { read: "path", write: "path", edit: "path", ls: "path", bash: "command", grep: "path", find: "path", ask: "to", escalate: "to" };
 
 // The title of the object a call names, for the tools that name theirs: the
 // first of a `work` call's works, with "+N more" when it opens several.
@@ -51,14 +52,9 @@ function phrase(name, args) {
 function did(name, args) {
   const tool = tools[name] || unknown;
   const title = titleOf(tool, args);
+  const named = tool.folder || tool.line ? object(name, args) : "";
+  if (named) return tool.past.charAt(0).toUpperCase() + tool.past.slice(1) + " " + named;
   return title ? tool.done + ": " + title : tool.done;
-}
-
-// What a failed call was doing, in plain words after "failed:" ("moving to
-// the next stage"); "a call" for a tool not in the table.
-function failure(name) {
-  const tool = tools[name];
-  return tool ? tool.now.charAt(0).toLowerCase() + tool.now.slice(1) : "a call";
 }
 
 // What a tool row shows after the tool's name: the path for the file tools,
@@ -74,12 +70,37 @@ function brief(name, args) {
 }
 
 // The object a call names by its arg, for the tools that have a `past` form
-// ("design/rounds.md" for a read); "" when it names none.
+// ("design/rounds.md" for a read, "design/" for a folder, the first line of a
+// command, elided); "" when it names none.
 function object(name, args) {
   const tool = tools[name];
   const key = briefKeys[name];
   const given = args && key && typeof args[key] === "string" ? args[key] : "";
-  return tool && tool.past ? given.replace(/\s+/g, " ").trim() : "";
+  if (!tool || !tool.past) return "";
+  if (tool.line) {
+    const line = given.trim().split("\n")[0].replace(/\s+/g, " ");
+    return line.length > lineLimit ? line.slice(0, lineLimit - 1) + "…" : line;
+  }
+  const path = given.replace(/\s+/g, " ").trim();
+  return tool.folder && path !== "" && !path.endsWith("/") ? path + "/" : path;
+}
+
+// Whether a failed lookup only found nothing (a folder or file not there yet):
+// a miss, not a failure.
+function missed(name, output) {
+  return ["read", "ls", "find", "grep"].includes(name) && /no such (file|directory)|not found/i.test(String(output || ""));
+}
+
+// A lookup that found nothing, in the log's words ("found no quotes yet").
+function miss(args) {
+  const path = args && typeof args.path === "string" ? args.path.replace(/\s+/g, " ").trim().replace(/\/$/, "") : "";
+  return path ? "found no " + path + " yet" : "found nothing yet";
+}
+
+// A reply, by whom it answers: the person's answers passed on, else an answer.
+function replied(asker, yours) {
+  const to = asker ? " " + asker : "";
+  return yours ? "Passed your answers to" + (to || " the team") : "Answered" + to;
 }
 
 // A finished call as the log's plain sentence ("read design/rounds.md",
@@ -97,5 +118,6 @@ function stepFailure(name, args) {
   const tool = tools[name];
   if (!tool) return "could not make a call";
   const named = object(name, args);
+  if (tool.line && named) return "could not run: " + named;
   return "could not " + tool.act + (named ? " " + named : "");
 }

@@ -132,6 +132,10 @@ Singleton {
   property var callsOf: ({})
   // Request id -> how many questions it asked, for the log's sentences.
   property var questionsOf: ({})
+  // Who asked each request, by request id, as the log names them.
+  property var askersOf: ({})
+  // The newest comment of each work, {who, text} on one line, by work id.
+  property var noteOf: ({})
   // Work id -> the stages it went through, as Progress.journal keeps them.
   property var journeys: ({})
   // Work id -> its title, as the events that made it gave it, before the
@@ -464,6 +468,8 @@ Singleton {
     usage = { all: Usage.tally(), agents: {}, works: {} }
     callsOf = {}
     questionsOf = {}
+    askersOf = {}
+    noteOf = {}
     journeys = {}
     titles = {}
     runStarts = {}
@@ -713,9 +719,11 @@ Singleton {
   // The event as a row of the log page.
   function record(event) {
     const body = event.body || {}
-    if (event.type === "request" && event.request_id)
+    if (event.type === "request" && event.request_id) {
       questionsOf[event.request_id] = Events.questions(body.reason)
-    const failed = event.type === "break" || (event.type === "tool" && body.ok === false) || (event.type === "end-run" && !!body.error)
+      askersOf[event.request_id] = Events.party(body.requester)
+    }
+    const failed = event.type === "break" || (event.type === "tool" && body.ok === false && !Phrases.missed(body.name, body.output)) || (event.type === "end-run" && !!body.error)
     const who = event.type === "start-run" ? body.agent || "" : Progress.actorOf(event)
     eventLog.append({
       id: event.cursor || event.at + event.type,
@@ -727,7 +735,7 @@ Singleton {
       who: who,
       run: event.run_id || "",
       work: event.work_id || "",
-      what: Events.what(event.type, body, who, questionsOf, event.request_id),
+      what: Events.what(event.type, body, who, questionsOf, event.request_id, askersOf),
       ok: !failed,
       asks: event.type === "request" && !!body.arbiter && Requests.human(body.arbiter),
       raw: JSON.stringify(event)
@@ -792,7 +800,7 @@ Singleton {
   // Adds a line to the turn of the run it happened in, and makes it the
   // newest thing done on its work; a call is counted too.
   function step(runId, work, line) {
-    const was = callsOf[work] || { count: 0, failed: 0, firstFailed: "", firstError: "", open: {}, retried: 0, last: null }
+    const was = callsOf[work] || { count: 0, failed: 0, firstFailed: "", firstArgs: {}, firstError: "", open: {}, retried: 0, last: null }
     const call = !line.outcome && !line.hook
     const fails = call && !line.ok
     // A later success of the same tool settles its earlier failures as retried.
@@ -806,6 +814,7 @@ Singleton {
       open[line.name] = (open[line.name] || 0) + 1
     keep("callsOf", work, {
       firstFailed: was.firstFailed || (fails ? line.name : ""),
+      firstArgs: was.firstFailed ? was.firstArgs : fails ? line.args : {},
       firstError: was.firstFailed ? was.firstError : fails ? (String(line.output || "").split("\n").find(each => each.trim() !== "") || "").trim() : "",
       count: was.count + (call ? 1 : 0),
       failed: was.failed + (fails ? 1 : 0),
@@ -883,8 +892,10 @@ Singleton {
       say(key, event.run_id, who, String(body.note || ""), stamp, at, body.attachments || [])
       break
     case "comment":
-      if (body.body)
+      if (body.body) {
         say(key, event.run_id, who, body.body, stamp, at)
+        keep("noteOf", work, { who: who, text: String(body.body).replace(/\s+/g, " ").trim() })
+      }
       break
     case "model": {
       if (body.usage)
@@ -915,7 +926,7 @@ Singleton {
       // hooks that passed.
       const hook = Events.hook(body)
       if (!["assemble", "send", "end"].includes(body.name)) {
-        step(event.run_id, work, { name: body.name, ok: body.ok !== false, text: "", args: body.args || {}, output: body.ok === false ? String(body.output || "") : "", outcome: false, hook: hook, at: at })
+        step(event.run_id, work, { name: body.name, ok: body.ok !== false || Phrases.missed(body.name, body.output), text: "", args: body.args || {}, output: body.ok === false ? String(body.output || "") : "", outcome: false, hook: hook, at: at })
         if (!hook) {
           keep("calling", work, body.name)
           keep("callArgs", work, body.args || {})

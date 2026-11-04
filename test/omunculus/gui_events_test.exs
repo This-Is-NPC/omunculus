@@ -35,6 +35,12 @@ defmodule Omunculus.GuiEventsTest do
     says("reply", {request_id: "r", option: "adjust", body: "darker brown"}, "you", "chose adjust: darker brown");
     says("reply", {request_id: "r", body: "", parts: {design: {body: "", option: "approve"}}}, "you", "chose approve");
     says("reply", {request_id: "r", body: "yes, go"}, "sales", "answered: yes, go");
+    const named = (body) => Events.what("reply", body, "sales", {}, "r", {r: "seller"});
+    check(named({request_id: "r", body: "yes, go"}) === "answered seller: yes, go", "asker", named({request_id: "r", body: "yes, go"}));
+    const leaked = named({request_id: "r", body: "The client answered (request bfd1bf41dcc7571d82223c6433001ab2) the questions, id 0123456789abcdef9 kept"});
+    check(leaked === "answered seller: The client answered the questions, id kept", "ids", leaked);
+    says("tool", {name: "ls", args: {path: "quotes"}, ok: false, output: "no such directory: quotes"}, "seller", "found no quotes yet");
+    check(Events.minor("tool", {name: "ls", args: {path: "quotes"}, ok: false, output: "no such directory: quotes"}) && !Events.minor("tool", {name: "write", args: {path: "q"}, ok: false, output: "disk full"}), "miss is minor", "");
     """)
   end
 
@@ -43,14 +49,14 @@ defmodule Omunculus.GuiEventsTest do
     says("tool", {name: "read", args: {path: "templates/a.md"}, ok: true, output: "x"}, "sales", "read templates/a.md");
     says("tool", {name: "end", via: "escalate", args: {}, ok: true}, "sales", "finished after passing up");
     says("tool", {name: "next_stage", args: {}, ok: false, output: "gate: Price missing\\nmore"}, "sales", "could not move to the next stage: gate: Price missing");
-    says("tool", {name: "read", args: {path: "design/rounds.md"}, ok: false, output: "no such file"}, "design-lead", "could not read design/rounds.md: no such file");
+    says("tool", {name: "read", args: {path: "design/rounds.md"}, ok: false, output: "permission denied"}, "design-lead", "could not read design/rounds.md: permission denied");
     says("tool", {name: "comment", args: {body: "Thank you, Ana."}, via: "work", ok: true, output: ""}, "sales", "wrote a note");
     says("tool", {name: "continue", args: {}, via: "next_stage", ok: true, output: ""}, "sales", "moved the work on");
     says("tool", {name: "delegate", args: {agent: "design-lead", goal: "Briefing"}, via: "work", ok: true, output: ""}, "seller", "handed work down");
     says("tool", {name: "work", args: {report: "x", works: [{title: "Bakery website", workflow: "sale"}]}, ok: true, output: ""}, "sales", "opened work: Bakery website");
     says("tool", {name: "escalate", args: {reason: "Before we start", origins: {a: "r1"}}, ok: true, output: ""}, "seller", "passed a question up");
     says("tool", {name: "ask", args: {question: "Hi"}, ok: true, output: ""}, "seller", "asked a teammate");
-    says("tool", {name: "bash", args: {command: "ls"}, ok: true, output: ""}, "design-lead", "ran a command");
+    says("tool", {name: "bash", args: {command: "ls"}, ok: true, output: ""}, "design-lead", "ran: ls");
     says("tool", {name: "deploy_preview", args: {}, ok: true, output: ""}, "design-lead", "made a call");
     for (const name of ["comment", "continue", "delegate", "work", "escalate", "ask", "next_stage", "reply"])
       check(Events.minor("tool", {name, args: {}, ok: true}) && !Events.minor("tool", {name, args: {}, ok: false, output: "refused"}), "echoed " + name, "");

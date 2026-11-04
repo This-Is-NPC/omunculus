@@ -148,10 +148,10 @@ kit's `Prose`, their web addresses links that open in the browser.
 
 Under its words, a turn's tool calls are one group (`ToolCalls`, from the
 kit's `Calls.group`). Folded, one line counts them, how many failed and the
-first that did, in plain words: "9 steps · 1 failed: moving to the next stage"; a lone call that went well is named by what it did ("Passed a question up"), and a turn that says nothing keeps its heading, so these lines never stand under no name; how long the run
+first that did, in plain words: "9 steps · 1 failed: could not move to the next stage"; a lookup that found nothing (a folder not there yet) is no failure; a lone call that went well is named by what it did ("Passed a question up", "Looked in design/", "Ran: npx build"; a reply, by whom it answers: "Passed your answers to seller"), and a turn that says nothing keeps its heading, so these lines never stand under no name; how long the run
 worked is the turn's to say. While the run is open its last three calls show
 live under it. Unfolded, each call is a row with the raw tool name and its args
-in brief (`Phrases.brief`: the path of a file tool, whom an `ask` or
+in brief (`Phrases.brief`: the path of a file tool, the command of `bash`, whom an `ask` or
 `escalate` goes to and never its question, which its card or exchange shows,
 the first work a `work` call opens), and a failed call shows its output, six
 lines and then all on demand. An `edit` opens a small diff of the lines it
@@ -169,10 +169,12 @@ SUB-WORK with its agent, title and time, it says its state, for how long and
 how many steps (tool calls; hook runs are not steps, here and in the turn),
 (the work's own, not those of the works it handed down) and, when some
 failed, how many, what was attempted and why the first failed ("5 failed:
-moving to the next stage (reason)"), in the error tone only if the work itself
+could not move to the next stage (reason)"), in the error tone only if the work itself
 failed; when each failed tool later succeeded, a dim "5 retried" instead,
 its stages when it has a workflow, and the round with
-who sent it back. Until the work's data arrives, it shows the title the event
+who sent it back. Under the state, the work's newest comment is one quoted
+line in its agent's words ("seller: “Thank you, Ana. We are preparing…”"),
+folded or not, so the person reads what the team says it is doing. Until the work's data arrives, it shows the title the event
 named and "Handing down…", or nothing when the event named none. A work that
 waits on a branch says who works below it ("● designer working", in the
 working tone) and else what it waits for. Waiting on you reads "⚠ NEEDS YOU",
@@ -525,8 +527,11 @@ A conversation's level, in place of the project's once one is opened:
   sentence ("sales asks you 5 questions: …", "passed 5 questions up"; the
   event's raw type, JSON and milliseconds only in its card), who, and FAILED
   or NEEDS YOU at the right, under rules naming the day and each run.
-  A call reads in plain words ("read design/rounds.md", "could not read
-  design/rounds.md: no such file"), never by its tool name. Plumbing (a run's
+  A call reads in plain words ("read design/rounds.md", "looked in design/",
+  "ran: npx build", "could not read design/rounds.md: permission denied"),
+  never by its tool name; a lookup that found nothing is dim ("found no
+  quotes yet"), not FAILED. An answer names whom it answers ("answered
+  seller: …") and leaves out the request ids the agent echoed. Plumbing (a run's
   start and end, hooks, replies without text, and a call whose result has a
   row of its own, such as a note or a question) is dimmer and hidden until BEHIND THE SCENES is on. A search line, the chips NEEDS YOU,
   FAILED and BEHIND THE SCENES and an agent picker filter it; the
