@@ -151,6 +151,7 @@ SurfaceFrame {
           font.pixelSize: 11
           elide: Text.ElideRight
         }
+        Item { visible: !block.titled; Layout.fillWidth: true }
         Label { visible: block.stamp !== ""; text: block.stamp; color: Theme.faint; font.pixelSize: Theme.type.stamp.size; font.letterSpacing: Theme.type.stamp.tracking }
       }
 
