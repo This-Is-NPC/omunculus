@@ -7,8 +7,9 @@ import "kit/ui"
 // TeamRow is an exchange between agents, where it was asked: who asked whom
 // and who decides, the question in its first three lines, and once answered
 // who answered and what. It is open while it waits, and then DECIDE INSTEAD
-// opens the request's card in place, so you can answer it yourself; choosing
-// its line folds and unfolds the rest of the question and the answer.
+// opens the request's card in place, so you can answer it yourself, and its
+// close folds it back; choosing its line folds and unfolds the rest of the
+// question and the answer.
 Item {
   id: row
 
@@ -29,16 +30,16 @@ Item {
   property bool open: pending
   property bool deciding: false
 
-  implicitHeight: content.implicitHeight + 2
+  implicitHeight: content.implicitHeight + Theme.space.row
 
   ColumnLayout {
     id: content
     width: row.width
-    spacing: 4
+    spacing: Theme.space.line
 
     Item {
       Layout.fillWidth: true
-      implicitHeight: 22
+      implicitHeight: Theme.size.stackedRow
       activeFocusOnTab: true
       Accessible.role: Accessible.Button
       Accessible.name: row.summary
@@ -51,7 +52,7 @@ Item {
 
       RowLayout {
         anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
-        spacing: 6
+        spacing: Theme.space.tight
         Icon { name: "people"; size: 11; color: Theme.dim }
         Label {
           Layout.fillWidth: true
@@ -61,7 +62,7 @@ Item {
           font.pixelSize: 11
           elide: Text.ElideRight
         }
-        Label { text: row.stamp; color: Theme.dim; font.pixelSize: 11 }
+        Label { text: row.stamp; color: Theme.line; font.pixelSize: Theme.type.stamp.size; font.letterSpacing: Theme.type.stamp.tracking }
         Icon { name: row.open ? "chevron-down" : "chevron-right"; size: 10; color: Theme.dim }
       }
       MouseArea {
@@ -76,9 +77,9 @@ Item {
 
     ColumnLayout {
       Layout.fillWidth: true
-      Layout.leftMargin: 17
+      Layout.leftMargin: Theme.space.block + Theme.space.line
       Layout.maximumWidth: 620
-      spacing: 6
+      spacing: Theme.space.tight
 
       // Folded, the first three lines of the question; open, all of it.
       Label {
@@ -135,6 +136,8 @@ Item {
       sourceComponent: RequestDecision {
         key: row.key
         stamp: row.stamp
+        closable: true
+        onClosed: row.deciding = false
       }
     }
   }

@@ -5,18 +5,16 @@ import "kit/client/Questions.js" as Questions
 import "kit/ui/focus.js" as Focus
 import "kit/ui"
 
-// QuestionForm answers a numbered list of questions item by item. Its top
-// row says how many are answered, with SEND and "I can't answer this", so
-// they never sit below the fold; narrow, they wrap onto lines. Each item is
-// its number, its question wrapped in sentence case, and a full-width box
-// that grows with its text, with a toggle beside the box, or under it when
-// the form is under 480 px, that fills "I don't know yet" and, off, restores
-// what was typed. Enter moves to the next box, Enter in the last and
-// Ctrl+Enter in any send; a box taking the keyboard scrolls into view in the
-// view around the form. SEND joins the answers into one text reply.
-// The closing paragraph of the message, if any, shows after the last box and
-// is not sent.
-// What was typed stays after a failure.
+// QuestionForm answers a numbered list of questions item by item. Each item
+// is its number, its question wrapped in sentence case, a full-width box that
+// grows with its text, and under it the toggle "I DON'T KNOW YET", which
+// fills the box and, off, restores what was typed. Enter moves to the next
+// box, Enter in the last and Ctrl+Enter in any send; a box taking the
+// keyboard scrolls into view in the view around the form. After the last
+// item, the card's actions: SEND, which joins the answers into one text
+// reply, and "I can't answer this". The closing paragraph of the message, if
+// any, shows after the last box and is not sent. How many are answered is
+// `answered`, for the card's heading. What was typed stays after a failure.
 ColumnLayout {
   id: form
 
@@ -51,16 +49,14 @@ ColumnLayout {
       boxes.itemAt(0).focusBox()
   }
 
-  // Goes to the box after `from` that can take the keyboard; with none, or if
-  // that one refuses it, the keyboard stays where it is.
+  // Goes to the box after `from` that can take the keyboard; with none, the
+  // keyboard stays where it is.
   function advance(from) {
     for (let at = from + 1; at < boxes.count; at++) {
       const box = boxes.itemAt(at)
       if (!box.canFocus)
         continue
       box.focusBox()
-      if (!box.focused)
-        boxes.itemAt(from).focusBox()
       return
     }
   }
@@ -74,14 +70,14 @@ ColumnLayout {
     if (!view)
       return
     const top = item.mapToItem(view.contentItem, 0, 0).y
-    const margin = 12
+    const margin = Theme.space.cell
     if (top - margin < view.contentY)
       view.contentY = top - margin
     else if (top + item.height + margin > view.contentY + view.height)
       view.contentY = top + item.height + margin - view.height
   }
 
-  spacing: 10
+  spacing: Theme.space.gap
 
   // Set as the form is torn down, so the keyboard it held is remembered.
   property bool dying: false
@@ -93,42 +89,14 @@ ColumnLayout {
     onActivated: form.send()
   }
 
-  Flow {
-    Layout.fillWidth: true
-    spacing: 10
-    Label {
-      height: send.height
-      verticalAlignment: Text.AlignVCenter
-      text: form.answered + " of " + form.items.length + " answered"
-      color: Theme.dim
-      font.pixelSize: 11
-      font.letterSpacing: 1
-    }
-    TraceButton {
-      id: send
-      dense: true
-      role: "primary"
-      icon: "enter"
-      text: "SEND"
-      enabled: form.ready && !form.sending
-      onClicked: form.send()
-    }
-    TraceButton {
-      dense: true
-      role: "progress"
-      text: "I CAN'T ANSWER THIS"
-      enabled: !form.sending
-      onClicked: form.declined()
-    }
-  }
-
   Prose {
     Layout.fillWidth: true
     Layout.maximumWidth: 620
     visible: form.parsed.intro !== ""
     source: Omunculus.inline(form.parsed.intro)
     color: Theme.foreground
-    font.pixelSize: 13
+    font.pixelSize: Theme.type.cardBody.size
+    lineHeight: Theme.type.cardBody.lineHeight
     wrapMode: Text.Wrap
   }
 
@@ -143,9 +111,8 @@ ColumnLayout {
       // Whether "I don't know yet" stands in the box, and what it replaced.
       property bool unknown: false
       property string kept: ""
-      readonly property bool canFocus: !field.sending
-      readonly property bool focused: field.focused
-      function focusBox() { field.focusBox() }
+      readonly property bool canFocus: !form.sending && !row.unknown
+      function focusBox() { field.forceActiveFocus() }
       // A form rebuilt takes back the words and the keyboard.
       Component.onCompleted: {
         const draft = Omunculus.draftOf(form.draftKey)
@@ -156,73 +123,71 @@ ColumnLayout {
       }
       Layout.fillWidth: true
       Layout.maximumWidth: 620
-      spacing: 8
+      spacing: Theme.space.tight
 
       Label {
         Layout.alignment: Qt.AlignTop
-        Layout.preferredWidth: 22
+        Layout.preferredWidth: Theme.size.gutter
         text: row.modelData.n + "."
         color: Theme.dim
-        font.pixelSize: 12
+        font.pixelSize: Theme.type.body.size
       }
 
       ColumnLayout {
         Layout.fillWidth: true
         Layout.preferredWidth: 0
-        spacing: 6
+        spacing: Theme.space.tight
 
         Label {
           Layout.fillWidth: true
           Layout.preferredWidth: 0
           text: row.modelData.text
           color: Theme.foreground
-          font.pixelSize: 13
+          font.pixelSize: Theme.type.body.size
+          lineHeight: Theme.type.body.lineHeight
           wrapMode: Text.Wrap
         }
 
-        GridLayout {
+        TextBlock {
+          id: field
           Layout.fillWidth: true
-          columns: form.width < 480 ? 1 : 2
-          columnSpacing: 8
-          rowSpacing: 6
-
-          TextArea {
-            id: field
-            Layout.fillWidth: true
-            Layout.preferredWidth: 0
-            Layout.alignment: Qt.AlignTop
-            dense: true
-            sending: form.sending || row.unknown
-            placeholderText: "your answer"
-            onTextChanged: {
-              form.edits++
-              Omunculus.draftOf(form.draftKey).answers[row.index] = text
-            }
-            onFocusedChanged: {
-              const draft = Omunculus.draftOf(form.draftKey)
-              if (focused) {
-                draft.at = row.index
-                Qt.callLater(form.reveal, field)
-              } else if (!form.dying && draft.at === row.index) {
-                draft.at = -1
-              }
-            }
-            onSubmitted: row.index < boxes.count - 1 ? form.advance(row.index) : form.send()
+          Layout.preferredWidth: 0
+          // One line tall, growing with its text.
+          implicitHeight: contentHeight + topPadding + bottomPadding
+          readOnly: form.sending || row.unknown
+          opacity: readOnly ? 0.5 : 1
+          placeholderText: "your answer"
+          Accessible.name: row.modelData.text
+          Keys.onPressed: Typing.mark()
+          onTextChanged: {
+            form.edits++
+            Omunculus.draftOf(form.draftKey).answers[row.index] = text
           }
-          Chip {
-            Layout.alignment: Qt.AlignTop
-            text: "I DON'T KNOW YET"
-            checked: row.unknown
-            enabled: !form.sending
-            onClicked: {
-              if (row.unknown) {
-                row.unknown = false
-                field.text = row.kept
-              } else {
-                row.kept = field.text
-                row.unknown = true
-                field.text = "I don't know yet"
-              }
+          onActiveFocusChanged: {
+            const draft = Omunculus.draftOf(form.draftKey)
+            if (activeFocus) {
+              draft.at = row.index
+              Qt.callLater(form.reveal, field)
+            } else if (!form.dying && draft.at === row.index) {
+              draft.at = -1
+            }
+          }
+          onAccepted: row.index < boxes.count - 1 ? form.advance(row.index) : form.send()
+        }
+
+        Chip {
+          text: "I DON'T KNOW YET"
+          checked: row.unknown
+          reason: form.sending ? "your answers are being sent" : ""
+          tip: row.unknown ? "write your own answer again" : "answer that you don't know yet"
+          onClicked: {
+            if (row.unknown) {
+              row.unknown = false
+              field.text = row.kept
+            } else {
+              row.kept = field.text
+              row.unknown = true
+              field.text = "I don't know yet"
             }
           }
         }
@@ -236,7 +201,32 @@ ColumnLayout {
     visible: form.parsed.outro !== ""
     source: Omunculus.inline(form.parsed.outro)
     color: Theme.foreground
-    font.pixelSize: 13
+    font.pixelSize: Theme.type.cardBody.size
+    lineHeight: Theme.type.cardBody.lineHeight
     wrapMode: Text.Wrap
+  }
+
+  Flow {
+    Layout.fillWidth: true
+    spacing: Theme.space.tight
+    TraceButton {
+      dense: true
+      role: "progress"
+      icon: "enter"
+      text: "SEND"
+      tip: "send your answers  Ctrl+Enter"
+      busy: form.sending
+      reason: form.sending ? "" : form.ready ? "" : "answer at least one question first"
+      enabled: !form.sending
+      onClicked: form.send()
+    }
+    TraceButton {
+      dense: true
+      role: "progress"
+      text: "I CAN'T ANSWER THIS"
+      tip: "tell the team you can't answer, so they sort it out"
+      enabled: !form.sending
+      onClicked: form.declined()
+    }
   }
 }

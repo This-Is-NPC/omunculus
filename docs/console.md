@@ -221,30 +221,37 @@ mailbox.
 
 ## Requests
 
-A request's card (`RequestDecision`) is one of three kinds, named in its
-header with who asks and on which work, on two lines when the card is under
-520 px: NEEDS YOU (an answer in words; a numbered list of questions has a box
+A request's card (`RequestDecision`) is built as eco's answer card. Its
+heading names the kind, who asks and on which work, and the time, on two
+lines when the card is under 520 px, with its tools at the top right: copy
+the question, the "more" menu that holds ESCALATE while it waits on you, and
+close where the card opened in place of another (DECIDE INSTEAD). Its kinds:
+NEEDS YOU (an answer in words; a numbered list of questions has a box
 for each, `QuestionForm`), YOUR DECISION (a button per option and an optional
 note) and PERMISSION (the scopes that grant it — THIS WORK ONLY, FOR
 <AGENT>, FOR ITS LEVEL, IN THE <STAGE> STAGE, IN FOLDER <name> or IN THE
 PROJECT, and ALWAYS · SAVED
-IN THE PROJECT SETTINGS — and a no with a reason). Its question shows as its
-asker wrote it, in full contrast; one passed up has a chip naming through
-whom, in order, that opens the wordings of each level and the harness's own
-sentence. "I can't answer this" tells the team so in a plain reply, and
-ESCALATE sits under MORE. Sending shows your answer dimmed with "Sending...";
-answered, the card shrinks to the question and your answer; a failure reopens
-it with your words kept and an error line.
+IN THE PROJECT SETTINGS — and a no with a reason). Its question shows once,
+as its asker wrote it, in full contrast; one passed up has a chip naming
+through whom, in order, that opens the wordings of each level and the
+harness's own sentence. Its actions sit at its bottom left: its options,
+SEND while words are written, "I can't answer this", which tells the team so
+in a plain reply, and DENY last. ESCALATE, from the menu, turns the words
+into the reason it goes up and the action into ESCALATE; ANSWER INSTEAD
+turns it back. Sending shows your answer dimmed under SENDING…; answered,
+the card shrinks to the question and your answer; a failure reopens it with
+your words kept and an error line. The words are written in the kit's
+`TextBlock`, one line tall and growing with its text.
 
 The header's title is the conversation's subject (`Omunculus.subject`, as in
 the masthead: the first root work's title, else the first message), or the
 work of the question's origin when the harness passed it up.
 
-`QuestionForm` shows, at the top of the card, "N of M answered" with SEND and
-"I CAN'T ANSWER THIS", which wrap onto lines when narrow. Each item is its
-number, its question wrapped in sentence case and a full-width box that grows
-with its text; the toggle "I DON'T KNOW YET", beside the box or under it when
-the form is under 480 px, fills it and, switched off, restores what was
+`QuestionForm` puts "N OF M" answered in the card's heading, and SEND and
+"I CAN'T ANSWER THIS" at the bottom of the card, after the last item. Each
+item is its number, its question wrapped in sentence case and a full-width
+box (`TextBlock`) that grows with its text, with the toggle chip "I DON'T
+KNOW YET" under it, which fills the box and, switched off, restores what was
 typed. Enter moves to the next box that can take the keyboard (it stays in
 the box when none can), Enter in the last and Ctrl+Enter in any send, and a
 box that takes the keyboard scrolls into view without changing whether the
@@ -266,7 +273,8 @@ in the mailbox).
 
 Every option carries the words of its field: SEND replies with them
 alone, omitting `option`; DENY gives them as the reason of a no; and, when
-it waits on you, ESCALATE raises it with them as the reason through
+it waits on you, ESCALATE (from the card's menu) raises it with them as the
+reason through
 `POST …/requests/escalate`, as one part named after its asker.
 
 ## The team

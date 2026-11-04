@@ -142,9 +142,10 @@ OPEN IN TEAM (Alt+O) shows it on the team page.
 
 ### 6. A request
 
-A request's decision, over the page: who asked, what for and who decides,
-its options as buttons, and a field for words, which ANSWER, DENY or
-ESCALATE carry.
+A request's decision, over the page, as its card: who asked, what for and
+who decides, a field for words, and its options as buttons at the bottom
+left, with SEND while words are written and DENY last. The card's "more"
+menu holds ESCALATE, which makes the words the reason it goes up.
 
 | Keys | What they do |
 | --- | --- |
