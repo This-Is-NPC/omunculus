@@ -66,12 +66,16 @@ Label {
       links.push(url)
       return "<a href=\"" + escape(url) + "\" style=\"color:" + Theme.primary + "\">" + label + "</a>"
     }
-    const text = String(value || "").replace(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)|<(https?:\/\/[^>\s]+)>|\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>`"'\[\]]+)|([A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})/gi,
-      (match, code, auto, label, target, bare, mail) => {
+    const text = String(value || "").replace(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)|<(https?:\/\/[^>\s]+)>|\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>`"'\[\]]+)|([A-Za-z0-9._%+-]+@[A-Za-z][A-Za-z0-9-]*(?:\.[A-Za-z][A-Za-z0-9-]*)*\.[A-Za-z]{2,})(?![\w.-]*\d)|([^\s<>`]+@[^\s<>`]+)/gi,
+      (match, code, auto, label, target, bare, mail, at) => {
         if (code)
           return match
         if (mail)
           return anchor("mailto:" + mail, escape(mail))
+        // A name with an @ that is no address ("node@22.23.3") is not one
+        // for Markdown either.
+        if (at)
+          return at.replace(/@/g, "&#64;")
         if (auto)
           return anchor(auto, escape(auto))
         if (target)
