@@ -148,16 +148,16 @@ Item {
     anchors.fill: parent
     contentWidth: view.wide
     contentHeight: view.tall + 40
-    topInset: idleChip.height + 8
-    bottomInset: zoom.height + 16
+    topInset: idleChip.height + Theme.space.tight
+    bottomInset: zoom.height + Theme.space.block
     onBackgroundClicked: view.chosen("")
     // Fitting never goes below the actual size, where the text stays at its
     // size; the canvas scrolls instead.
     onFramed: {
       if (world.scale < 1) {
         world.scale = 1
-        world.x = leftInset + 20
-        world.y = topInset + 20
+        world.x = leftInset + Theme.space.page
+        world.y = topInset + Theme.space.page
       }
       if (view.cardOf(view.picked))
         bringIntoView(view.cardOf(view.picked))
@@ -251,6 +251,8 @@ Item {
           readonly property var place: view.layout.places[modelData.work] || { x: 0, y: 0 }
           x: place.x
           y: place.y
+          width: view.cardWidth
+          height: view.cardHeight
           node: modelData
           selected: view.picked === modelData.work
           highlighted: view.highlighted.includes(modelData.work)
@@ -290,8 +292,8 @@ Item {
             x: arrow.modelData.x2 - 3
             y: arrow.modelData.y2 - 3
             width: 6
-            height: 6
-            radius: 3
+            height: width
+            radius: width / 2
             color: arrow.tone
           }
         }
@@ -311,11 +313,11 @@ Item {
           color: "transparent"
           border.color: Theme.line
           Row {
-            anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: 8 }
-            spacing: 8
+            anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: Theme.space.tight }
+            spacing: Theme.space.tight
             Portrait {
               width: 24
-              height: 24
+              height: width
               agent: idler.modelData
               source: Omunculus.imageOf(idler.modelData)
               tone: Omunculus.toneOf(idler.modelData)
@@ -336,7 +338,7 @@ Item {
 
   Chip {
     id: idleChip
-    anchors { left: parent.left; top: parent.top; margins: 8 }
+    anchors { left: parent.left; top: parent.top; margins: Theme.space.tight }
     text: "SHOW IDLE AGENTS"
     checked: view.showIdle
     tip: "the agents configured with nothing in this conversation"
