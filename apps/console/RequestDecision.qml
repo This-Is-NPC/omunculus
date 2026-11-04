@@ -58,7 +58,11 @@ SurfaceFrame {
   }
   // Which of its own buttons the card offers, from its state and not from
   // their visibility, which follows the column that holds them.
-  readonly property bool sends: open && !formLoader.active && (escalating || (kind !== "permission" && hasWords))
+  // A decision is sent by one of its options, which carry the words; SEND
+  // would send them with none chosen.
+  readonly property bool sends: open && !formLoader.active && (escalating || (kind !== "permission" && kind !== "decision" && hasWords))
+  // The column of its options, for the thread to tell when they are in view.
+  readonly property alias choicesRow: decisions
   readonly property bool cannotShown: open && kind === "needs-you" && !formLoader.active && !escalating
   readonly property bool denies: open && options.includes("deny") && !escalating
   readonly property var options: request ? Object.keys(request.options || {}) : []

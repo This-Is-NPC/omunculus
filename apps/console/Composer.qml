@@ -113,7 +113,8 @@ ColumnLayout {
         required property var modelData
         required property int index
         readonly property var keys: Shortcuts.keys("quick")
-        text: (index < keys.length ? (index + 1) + "  " : "") + modelData.text
+        // Its number is its key among others; alone, it would read as a count.
+        text: (composer.quick.length > 1 && index < keys.length ? (index + 1) + "  " : "") + modelData.text
         tip: modelData.tip + (index < keys.length ? "  " + keys[index] : "")
         onClicked: modelData.run()
       }

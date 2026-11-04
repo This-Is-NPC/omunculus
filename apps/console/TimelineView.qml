@@ -153,13 +153,17 @@ Item {
       (entry.content as RequestDecision).decide(option, (entry.content as RequestDecision).note, path)
   }
 
-  // Whether the newest decision waiting on you shows whole, its buttons with
-  // it, so the quick chips need not offer its options again.
+  // Whether the options of the newest decision waiting on you are in view,
+  // so the quick chips need not offer them again.
   readonly property bool decidingShown: {
     timeline.contentY; timeline.height; timeline.contentHeight; revision
     const row = Omunculus.deciding ? rowOf(Omunculus.deciding.id) : -1
     const entry = row >= 0 ? timeline.itemAtIndex(row) : null
-    return !!entry && entry.y >= timeline.contentY && entry.y + entry.height <= timeline.contentY + timeline.height
+    const options = entry && entry.content ? entry.content.choicesRow : null
+    if (!options || !options.visible)
+      return false
+    const top = options.mapToItem(timeline.contentItem, 0, 0).y
+    return top >= timeline.contentY && top + options.height <= timeline.contentY + timeline.height
   }
 
   // Whether the keyboard is inside the card of a question.

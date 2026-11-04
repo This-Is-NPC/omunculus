@@ -334,7 +334,8 @@ order and words, and the answer heads YOU GRANTED. Its question shows once,
 as its asker wrote it, in full contrast; one passed up has a chip naming
 through whom, in order, that opens the wordings of each level and the
 harness's own sentence. Its actions sit at its bottom left: its options,
-SEND while words are written, "I can't answer this", which tells the team so
+SEND while words are written (not on a decision, whose options carry the
+words), "I can't answer this", which tells the team so
 in a plain reply, and DENY last. ESCALATE, from the menu, turns the words
 into the reason it goes up and the action into ESCALATE; ANSWER INSTEAD
 turns it back. Sending shows your answer dimmed under SENDING…; answered,
