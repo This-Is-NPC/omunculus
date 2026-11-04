@@ -14,12 +14,11 @@ ColumnLayout {
   id: mast
   // Where the window is, outermost first: [{text, run}], `run` optional.
   property var crumbs: []
-  readonly property var trail: crumbs
   readonly property bool narrow: Breakpoints.size(Window.width) === "narrow"
   default property alias trailing: tail.data
   spacing: 10
 
-  readonly property string heading: trail.map(crumb => crumb.text).join(" / ")
+  readonly property string heading: crumbs.map(crumb => crumb.text).join(" / ")
   onHeadingChanged: if (!Theme.reducedMotion) sweep.restart()
 
   // The font is monospace, so the room is counted in characters.
@@ -28,15 +27,15 @@ ColumnLayout {
   readonly property real separatorWidth: advance + 2 * gap
   // The fewest characters each crumb keeps.
   function floorOf(index, length) {
-    const count = trail.length
+    const count = crumbs.length
     return index === count - 1 ? 0 : index === 0 ? Math.min(length, 8) : Math.min(length, 1)
   }
   // Each crumb's width in `room`, shortened from the left down to its floor;
   // one left whole is not bounded, so rounding never elides it.
   function widths(room) {
-    const lengths = trail.map(crumb => String(crumb.text).length)
+    const lengths = crumbs.map(crumb => String(crumb.text).length)
     const counts = lengths.slice()
-    let over = lengths.reduce((sum, length) => sum + length, 0) - Math.floor((room - separatorWidth * Math.max(0, trail.length - 1)) / advance)
+    let over = lengths.reduce((sum, length) => sum + length, 0) - Math.floor((room - separatorWidth * Math.max(0, crumbs.length - 1)) / advance)
     for (let index = 0; index < counts.length && over > 0; index++) {
       const cut = Math.min(over, counts[index] - floorOf(index, lengths[index]))
       counts[index] -= cut
@@ -44,8 +43,8 @@ ColumnLayout {
     }
     return counts.map((count, index) => count === lengths[index] ? Infinity : count * advance)
   }
-  readonly property real fullWidth: trail.reduce((sum, crumb) => sum + String(crumb.text).length * advance, 0) + separatorWidth * Math.max(0, trail.length - 1)
-  readonly property real floorWidth: trail.reduce((sum, crumb, index) => sum + floorOf(index, String(crumb.text).length) * advance, 0) + separatorWidth * Math.max(0, trail.length - 1)
+  readonly property real fullWidth: crumbs.reduce((sum, crumb) => sum + String(crumb.text).length * advance, 0) + separatorWidth * Math.max(0, crumbs.length - 1)
+  readonly property real floorWidth: crumbs.reduce((sum, crumb, index) => sum + floorOf(index, String(crumb.text).length) * advance, 0) + separatorWidth * Math.max(0, crumbs.length - 1)
 
   FontMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: 11 }
 
@@ -68,14 +67,14 @@ ColumnLayout {
         anchors.verticalCenter: parent.verticalCenter
         spacing: mast.gap
         Repeater {
-          model: mast.trail.length
+          model: mast.crumbs.length
           delegate: Row {
             id: crumb
             required property int index
-            readonly property var item: mast.trail[index] || ({ text: "" })
+            readonly property var item: mast.crumbs[index] || ({ text: "" })
             readonly property bool link: typeof item.run === "function"
             readonly property real room: area.widths[index] || 0
-            readonly property int elision: index === 0 || index === mast.trail.length - 1 ? Text.ElideRight : Text.ElideLeft
+            readonly property int elision: index === 0 || index === mast.crumbs.length - 1 ? Text.ElideRight : Text.ElideLeft
             spacing: mast.gap
             Label {
               visible: crumb.index > 0
