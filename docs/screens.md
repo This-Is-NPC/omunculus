@@ -185,9 +185,10 @@ menu holds ESCALATE, which makes the words the reason it goes up.
 The works of the conversation a level at a time, under a breadcrumb once
 you have gone down into a work. At the conversation's level the agent that
 talks with you heads the team, with what it asks you, and the works nest
-under it. A work's own row, then the works it handed down under a rule for the stage
-that handed them down ("STAGE DESIGN · 2 IN PARALLEL"), those done folded
-into one rule. A row is the work's title and state, its agent, stages and
+under it, each level one block further in. A work's own row, then the works
+it handed down under a rule for the stage that handed them down ("STAGE
+DESIGN · 2 IN PARALLEL"), those done folded into one rule. The works at work
+below a row show under it, so the agent at work is always in view. A row is the work's title and state, its agent, stages and
 branch's time, steps and cost, and a badge for the climb of what it waits on
 (⇡ seller › sales › you) and what it is asked (⇣); its tool goes down a level. Chips keep the works that
 need you or work. The work picked shows in full under a header strip with

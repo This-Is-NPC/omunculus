@@ -155,6 +155,21 @@ defmodule Omunculus.GuiProgressTest do
     """)
   end
 
+  test "underway lists who works below a work, and opened what an outline shows under it" do
+    run!("""
+    const out = Progress.build(base);
+    const n = nodes(out);
+    check(Progress.underway(n.w1).map(node => node.work).join() === "w3", "w3 works below w1", Progress.underway(n.w1));
+    check(Progress.underway(n.w3).length === 0, "nothing below w3", "");
+    check(Progress.opened(n.w1, []).map(node => node.work).join() === "w2", "running below", "");
+    check(Progress.opened(n.w2, []).map(node => node.work).join() === "w3", "running below, one deeper", "");
+    const idle = Progress.build(Object.assign({}, base, {runs: [], runStarts: {}}));
+    const still = nodes(idle);
+    check(Progress.opened(still.w2, []).length === 0, "idle, off the path", "");
+    check(Progress.opened(still.w2, [{work: "w2"}]).map(node => node.work).join() === "w3", "on the path", "");
+    """)
+  end
+
   test "finished folds done and cancelled sub-works into one line" do
     run!("""
     const node = (state, created, seconds) => ({state, created, branch: {seconds}});

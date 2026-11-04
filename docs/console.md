@@ -121,7 +121,11 @@ the same speaker's turn drops the heading. The chat shows no portraits; they
 stay in the agent picker and on the team page. A turn's heading says how
 long the run has worked: "Working 0:12" while it is open, "Worked 1 minute"
 after. An agent's name and dot take its tone (`Omunculus.toneOf`) wherever
-it is named: the turns, the header strip, its lines and the cards. While
+it is named: the turns, the header strip, its lines and the cards. Tones go
+by the order agents first appear in the conversation on screen, from the
+agent you wrote to, and stay while it is open; no two are within 30° of
+hue. The board's agents have their own, in the order the window meets them.
+While
 agents work and what you said or answered is still the newest thing in the
 thread, a working row under it, in the tone of the agent at work, names the
 agents from the one you wrote to down to that one, with how long it has
@@ -347,9 +351,14 @@ time, under a breadcrumb once it has gone down into a work ("Conversation
 › Bakery website › Design preview"), each crumb going back up. At the
 conversation's level the agent that talks with you heads the team ("sales ·
 talks with you · 2 agents", with "⇡ asks you 5 questions" while it does)
-and the works nest under it. A level is a work's own row, then the
-works it handed down, a row each, under a rule naming the stage that handed
-them down and, when several run side by side, "2 in parallel · 1 working";
+and the works nest under it, each level one block further in: a work's
+own row, then the rule naming the stage that handed works down (at the
+indent of the rows it heads) and those works. A level is a work's own row,
+then the works it handed down, a row each, under that rule and, when
+several run side by side, "2 in parallel · 1 working". A work at work, on
+the way to it, or with a question for you below shows its open works under
+it, one level deeper, without going down: the agent at work is always on
+screen, and WORKING counts those rows;
 the conversation's level is its root works, the one root's own level when
 there is a single one, the roots done before an open one folded under "N
 done earlier". The done and cancelled works of each stage, or of a work
@@ -359,19 +368,20 @@ folds again; it stays folded while the conversation waits on you, unless
 the question climbed from there.
 
 A row (`ProgressNode` in full) is a table row: the work's title with its
-state at the top right, a meta line of its agent, its stages (`Stepper`;
+state at the top right (a work that waits on works at work reads "designer
+working", in the working tone), a meta line of its agent, its stages (`Stepper`;
 under 700 px a track filled to the stage it is at, and that stage) and its
 branch's works below in words ("1 sub-work done", "2 sub-works, 1
 working"), time, steps (tool calls; hook runs are not counted) and cost
 (tokens as "40k read · 2k written", as the cost page words them), and a
 badge per request between it and
-others. Short of room, the branch's totals give way first, then the
-stages; the agent stays. A row with works below it has a tool at its right
+others. Short of room, the branch's totals give way first, a part at a
+time, then the stages; the agent stays. A row with works below it has a tool at its right
 that goes down to them. The keyboard's row has the focus ring. Chips keep
 the works that need you or work, with the works above them, and `/`
 filters by title, agent or stage; a filter shows a done row only on the
 way to a work it keeps. The chips' counts are of works, folded ones
-included. A request badge shows its climb (`⇡ seller › sales › you`, in the warning
+included; ALL names its unit ("ALL 3 WORKS"). A request badge shows its climb (`⇡ seller › sales › you`, in the warning
 tone when it is to you; `⇡ designer › design-lead`; `⇣ 1 question from
 designer`); the NEEDS YOU chip is lit while a count above zero waits. A badge goes to the
 other end of its request, lights both rows and opens the request in the
