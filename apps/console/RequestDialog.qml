@@ -5,8 +5,8 @@ import "kit/ui"
 
 // RequestDialog is one request's decision, opened from the bar of a page: its
 // card, to choose an option, answer in words or, escalating, raise it with the
-// words as the reason. It closes once the answer is sent, or when the request
-// no longer waits.
+// words as the reason. It closes when the request no longer waits, so a send
+// that fails leaves the card open with the words kept.
 ModalDialog {
   id: dialog
 
@@ -46,7 +46,6 @@ ModalDialog {
           width: scroll.width
           key: dialog.key
           escalating: dialog.escalating
-          onSent: dialog.close()
           onOpenChanged: if (!open && dialog.visible) dialog.close()
         }
       }
