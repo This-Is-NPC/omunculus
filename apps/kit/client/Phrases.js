@@ -24,7 +24,9 @@ const tools = {
   break: { now: "Stopping the work", done: "Stopped the work", act: "stop the work" },
   reopen: { now: "Sending work back", done: "Sent work back", act: "send work back" },
   done: { now: "Finishing its part", done: "Finished its part", act: "finish its part" },
-  send: { now: "Sending a message", done: "Sent a message", act: "send a message" }
+  send: { now: "Sending a message", done: "Sent a message", act: "send a message" },
+  deploy_preview: { now: "Publishing a preview", done: "Published a preview", act: "publish a preview of the site" },
+  promote: { now: "Publishing to production", done: "Published to production", act: "publish the site to production" }
 };
 const nameLimit = 60;
 // The commands that read what they name, and those that list it; a pattern
@@ -104,6 +106,19 @@ function commands(line) {
   return list.filter(each => each.length > 0);
 }
 
+// A path relative to the run's workspace: an absolute prefix up to and
+// including the `workspace/` folder (and a conversation's folder in it) goes.
+function relative(word) {
+  const root = /^\/(?:[^/]+\/)*?workspace(?:\/|$)(?:[^/]+\/[0-9a-f]{32}(?:\/|$))?/.exec(word);
+  return root ? word.slice(root[0].length) || "the project" : word;
+}
+
+// Whether a word is no file: a header ("Host:", "Content-Type: text/html") or
+// a URL / host:port.
+function remote(word) {
+  return /^[A-Za-z][\w-]*:/.test(word) || /^[\w.-]+:\d+(\/|$)/.test(word);
+}
+
 // What a shell command touches, as {verb, names}: the files and folders it
 // names ("design/README.md", "quotes/"), and how it treats them.
 function touched(line) {
@@ -121,10 +136,10 @@ function touched(line) {
       if (skip > 0) { skip--; continue; }
       args.push(word);
     }
-    const found = args.filter((word, at) => !/^\d+$/.test(word) && word !== "/dev/null" && (/\/|\.\w+$/.test(word) || (at === 0 && (listers.includes(command) || readers.includes(command)) && /^[\w.~-]+$/.test(word))))
+    const found = args.filter((word, at) => !/^\d+$/.test(word) && word !== "/dev/null" && !remote(word) && (/\/|\.\w+$/.test(word) || (at === 0 && (listers.includes(command) || readers.includes(command)) && /^[\w.~-]+$/.test(word))))
       .map(word => listers.includes(command) && !/\/$|\.\w+$/.test(word) ? word + "/" : word);
     if (found.length === 0) continue;
-    found.map(word => [".", "./"].includes(word) ? "the project" : word).forEach(word => { if (!names.includes(word)) names.push(word); });
+    found.map(word => [".", "./"].includes(word) ? "the project" : relative(word)).forEach(word => { if (!names.includes(word)) names.push(word); });
     verbs.add(readers.includes(command) ? "looked at" : listers.includes(command) ? "looked in" : "");
   }
   return { verb: verbs.size === 1 && !verbs.has("") ? [...verbs][0] : tools.bash.past, names: names };
@@ -185,6 +200,12 @@ function step(name, args) {
 
 // A failed call as the log's plain sentence, before the reason ("could not
 // read design/rounds.md").
+// A tool as a verb phrase the person reads ("publish the site to
+// production"); "" for a tool not in the table.
+function act(name) {
+  return tools[name] ? tools[name].act : "";
+}
+
 function stepFailure(name, args) {
   const tool = tools[name];
   if (!tool) return "could not make a call";
