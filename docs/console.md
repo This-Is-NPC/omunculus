@@ -17,7 +17,14 @@ The `Omunculus` singleton holds the project as the window sees it and makes
 every request through `curl` on the project's local socket. Views only bind
 that singleton. The conversation's event stream is `curl` on its WebSocket,
 whose frames `EventStream` splits into events. It reads the snapshot again
-after each event, and keeps every event as a line of a log too.
+after each event. Every event is also a row of `eventLog` (`EventLog`, a
+`ListModel`), taken at any rate and moved into the rows by a 150 ms timer, so
+a burst costs one layout; it is emptied for another conversation. From the
+state it derives, soon after each change and every second while a run is open,
+the `activity` (`Activity.status`): the team's state, its step and the rows of
+the team tree. It keeps when each run started and why it ended (`runStarts`,
+from the events), and, for each request being answered, `sending` or `failed`
+until the answer is read back.
 
 The theme and the controls more than one app uses are in `apps/kit/ui`, a
 copy of eco's overlay, Omarchy's voice session app. Every request goes
@@ -68,7 +75,15 @@ a "Team activity" line that shows the last three rows while the team works.
 A question for you that arrives while the view follows is held by its top.
 Above the composer, `WorkingLine` says from the conversation's `activity`
 whether the team works, waits on you or on itself, failed or is done, with the
-step and the time; it is hidden when idle.
+step and the time; it is hidden when idle. Its SHOW button, while a question
+waits on you, brings the question's card into view and puts the keyboard in
+its words; a click anywhere else on the line opens the team.
+
+On the chat, the team (`TeamPanel`) toggles beside the thread with T or the
+bar's TEAM; in a window under 900 px wide it opens as a sheet over the thread.
+Esc in a question's card or in the panel returns to the composer. The bar's
+REPLY carries the number of questions waiting on you, and R or REPLY puts the
+keyboard in the words of the newest one.
 
 The composer is the kit's `TextArea`: one line that grows with the text up to
 eight lines, then scrolls. Enter sends, Shift+Enter breaks the line, and a
@@ -190,13 +205,18 @@ The project's level:
 A conversation's level, in place of the project's once one is opened:
 
 - CHAT, the chat with the root agent and its composer;
-- MAP, the orchestration map;
+- TEAM, the team tree and the orchestration map. Its OPEN IN LOG opens the
+  LOG kept to that work, and BACK returns;
 - LOG, every event a row of a table that filters by text and opens an event
   whole;
 - COST, what the conversation used, in all and then by agent, the busiest
   first: model calls, tokens read by the model (with those from cache),
   tokens written and cost. One note says when the provider sends no price
   (`CostView`).
+
+The log, the team and the cost are loaded when first on screen and let go
+after it, so a closed page costs nothing; the node picked on the team page is
+kept meanwhile.
 
 ## The board
 
@@ -237,8 +257,9 @@ first when it is another one (`Omunculus.switchProject`).
 
 ## The masthead, the carousel and the bar
 
-The masthead names the page: the project, then the conversation open and
-its page, or the page. As in the studio, the pages of the level are a
+The masthead names the page: the project, then the conversation open (the
+title of its first work, else what was first said in it) and its page, or the
+page. As in the studio, the pages of the level are a
 rail down the left edge (the kit's `TabRail`) in a fixed order, the one on
 screen marked in its place, beside the bar of its commands (the kit's
 `PageBar`). The rail is folded to the pages' numbers; a window at least
@@ -266,11 +287,13 @@ keeping its grouping, filter and the card the keyboard was on.
 ## Commands by page
 
 - On CONVERSATIONS, NEW CONVERSATION (N).
-- On CHAT, while a request waits on you REPLY (R), which brings the oldest
-  into view and opens its decision (`RequestDialog`, the card over the
-  page); while a note to you is unread MARK READ (M), which brings the
-  oldest into view and marks it read; then NEW CONVERSATION (N).
-- On MAP, FIT (F) and, while something waits on you, PENDING, which picks
+- On CHAT, while a request waits on you REPLY (R), which brings the newest
+  question into view and puts the keyboard in its card; TEAM (T), which
+  shows or hides the team beside the chat; while a note to you is unread
+  MARK READ (M), which brings the oldest into view and marks it read; then
+  NEW CONVERSATION (N). Elsewhere a request is answered in its decision
+  (`RequestDialog`, the card over the page).
+- On TEAM, FIT (F) and, while something waits on you, PENDING, which picks
   it. With a node picked, instead of FIT and PENDING, what applies to it:
   REPLY (R) while it has a pending request, the one waiting on you first;
   ESCALATE (E) while one waits on you, which opens the decision with Enter

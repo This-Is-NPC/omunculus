@@ -35,7 +35,7 @@ These keys work on every screen of the console:
 | --- | --- |
 | Tab · Shift+Tab | move between controls |
 | Enter · Space | press the control |
-| 1 · 2 · … | the page of that number: the conversations and the board, or, in a conversation, its chat, map, log and cost |
+| 1 · 2 · … | the page of that number: the conversations and the board, or, in a conversation, its chat, team, log and cost |
 | Ctrl+1 · Ctrl+2 · … | the same, from a field being written or the picker |
 | Ctrl+Tab · Ctrl+Shift+Tab | the next or the previous page |
 | Esc | let go of what the page holds, then back to where you were, at last the start |
@@ -81,18 +81,24 @@ first said.
 ### 4. Chat
 
 The chat between you and the root agent: what each of you said and, on a
-line below each run, what the agent did. The composer under it counts what
-waits on you. A conversation with no message yet, opened from the
+line below each run, what the agent did. A question for you is a card in
+the thread, and what the team asked among itself one muted line. Above the
+composer a line says whether the team works, waits or is done, with its step
+and time; T opens the team beside the chat, as a sheet in a narrow window. A
+conversation with no message yet, opened from the
 conversations, first asks whom it is with, on the cards of
 [a new conversation](#2-a-new-conversation) when several agents of depth 0
 may take it.
 
 | Keys | What they do |
 | --- | --- |
-| R | answer the oldest request waiting on you |
+| R | put the keyboard in the words of the newest question waiting on you |
+| T | show or hide the team beside the chat |
 | M | show the oldest note to you and mark it read |
 | N | new conversation |
 | Enter, in the composer | send |
+| Shift+Enter, in the composer | break the line |
+| Esc, in a question's card or the team | back to the composer |
 
 ### 5. A request
 
@@ -104,9 +110,11 @@ ESCALATE carry.
 | --- | --- |
 | Enter | in its words: answer, or escalate when escalating |
 
-### 6. Map
+### 6. Team
 
-The works of the conversation as a flowchart: you on top, a row per depth,
+The team tree: the step the work is at, then a row per work with its state,
+agent, task and time, and under it the details of the row picked, with OPEN
+IN LOG. Below, the works of the conversation as a flowchart: you on top, a row per depth,
 each work a card with its agent, model, title, state and the tool it calls
 while it runs; a work in a workflow a lane of its stages. Requests and
 unread notes hang from the work that made them. Picking a work opens its
@@ -129,6 +137,10 @@ Every event of the conversation, a row each, which opens whole.
 | --- | --- |
 | / | filter the events |
 | Esc | empty the filter, then back to the rows |
+
+Chips keep the events that ask you, the failed ones, one agent's or one
+depth's; a title row begins each run. Opened from a work of the team, it is
+kept to that work.
 
 ### 8. Cost
 
