@@ -114,12 +114,16 @@ function question(request, noted) {
 }
 
 // The request this one repeats: the last one already answered, from the same
-// asker on the same work, given `replies` by request id; null when none.
+// asker on the same work at the same stage, offering the same options, given
+// `replies` by request id; null when none. Another decision of that asker
+// (the proposal after the preview) is no repeat.
 function repeated(request, requests, replies) {
   const work = request.work_id || "";
   const who = asker(request);
+  const offered = each => JSON.stringify(choices(each).map(choice => choice.options.slice().sort()));
   const before = requests.filter(each => each.id !== request.id && !pending(each) && replies[each.id]
-    && (each.work_id || "") === work && asker(each) === who);
+    && (each.work_id || "") === work && asker(each) === who
+    && (each.stage || "") === (request.stage || "") && offered(each) === offered(request));
   return before.length > 0 ? before[before.length - 1] : null;
 }
 

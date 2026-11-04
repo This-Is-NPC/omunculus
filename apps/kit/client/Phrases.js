@@ -111,6 +111,9 @@ function commands(line) {
 // the machine's scratch folders are named as one.
 function relative(word) {
   if (/^\/(?:var\/)?tmp(?:\/|$)/.test(word)) return "a scratch folder";
+  const workspaceAt = word.indexOf("workspace");
+  if (workspaceAt < 0 && /^(~\/|\/home\/|\/root\/)/.test(word)) return "a home folder";
+  if (workspaceAt < 0 && /^\/(usr|etc|opt|bin|lib|var)(\/|$)/.test(word)) return "the system";
   const root = /^\/(?:[^/]+\/)*?workspace(?:\/|$)(?:[^/]+\/[0-9a-f]{32}(?:\/|$))?/.exec(word);
   return root ? word.slice(root[0].length) || "the project" : word;
 }

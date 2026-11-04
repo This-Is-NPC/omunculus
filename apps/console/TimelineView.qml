@@ -365,7 +365,9 @@ Item {
       if (entry && entry.streaming && entry.key !== root.released && entry.height > root.height - topMargin - bottomMargin)
         root.held = entry.key
       const heldRow = root.held !== "" ? root.rowOf(root.held) : -1
-      if (heldRow >= 0)
+      // A held entry that fits shows whole, its bottom with it.
+      const held = heldRow >= 0 ? itemAtIndex(heldRow) : null
+      if (heldRow >= 0 && !(held && held.height <= root.height - topMargin - bottomMargin))
         positionViewAtIndex(heldRow, ListView.Beginning)
       else
         positionViewAtEnd()

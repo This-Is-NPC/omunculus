@@ -113,6 +113,17 @@ defmodule Omunculus.GuiRequestsTest do
     if (Requests.repeated(ask("n", "pending", "w2", "lead"), list, replies) !== null) throw Error("answered request only");
     if (Requests.repeated(ask("n", "pending", "w1", "third"), list, replies) !== null) throw Error("same asker");
     if (Requests.repeated(list[0], [list[0]], replies) !== null) throw Error("not itself");
+    // The preview, then the proposal, then the owner's decision: one asker, one
+    // work, other options; none repeats the one before.
+    const decide = (id, status, options) => Object.assign(ask(id, status, "w1", "seller"), {options: Object.fromEntries(options.map(option => [option, {}]))});
+    const preview = decide("p", "closed", ["aprovar", "pedir-mudancas"]);
+    const proposal = decide("q", "closed", ["accept", "adjust", "refuse"]);
+    const owner = decide("r", "pending", ["approve", "deny"]);
+    const answered = {p: {stamp: "10:25"}, q: {stamp: "10:35"}};
+    if (Requests.repeated(proposal, [preview, proposal], answered) !== null) throw Error("a proposal after a preview is no repeat");
+    if (Requests.repeated(owner, [preview, proposal, owner], answered) !== null) throw Error("the owner's decision is no repeat");
+    const again = decide("s", "pending", ["aprovar", "pedir-mudancas"]);
+    if ((Requests.repeated(again, [preview, proposal, again], answered) || {}).id !== "p") throw Error("the same decision again is");
     """)
   end
 end

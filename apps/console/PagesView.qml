@@ -453,8 +453,9 @@ Item {
     if (!request)
       return []
     const progress = { text: "PROGRESS", tip: (progressShown ? "close" : "open") + " the progress of the works", run: () => view.toggleProgress(true) }
+    // The card's own buttons decide it; the strip opens the progress.
     if (timeline.decidingShown)
-      return [progress]
+      return []
     const options = [].concat(...Requests.choices(request).map(choice => Requests.ordered(choice.options.filter(option => !option.startsWith("grant_")))
       .map(option => ({
         text: Requests.optionLabel(option),

@@ -293,8 +293,8 @@ the options of the newest one (`Omunculus.deciding`, from
 its card), then PROGRESS: "1 ADJUST  2 APPROVE  3 PROGRESS". Pressing an
 option, or Alt and its number, decides it with the note written in the card,
 through that card, which comes into view and shows the option chosen while it
-goes. While the card shows whole, with its own buttons, the chips offer only
-PROGRESS. On a window under
+goes. While the card's own buttons are in view there are no chips. On a
+window under
 560 px tall the chips are hidden; their chords still answer.
 
 The composer is the kit's `TextArea` in a frame with a chevron: one line that

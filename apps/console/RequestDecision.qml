@@ -286,7 +286,7 @@ SurfaceFrame {
       Layout.fillWidth: true
       Layout.maximumWidth: 620
       visible: card.earlierReply !== null
-      text: card.earlierReply ? "asked again after your answer at " + card.earlierReply.stamp + ": " + (Events.readable(card.earlierReply.body || Requests.optionText(card.earlierReply.option)).replace(/\s+/g, " ").trim()) : ""
+      text: card.earlierReply ? "asked again after your answer at " + card.earlierReply.stamp + ": " + (Events.readable(card.earlierReply.option && card.earlierReply.body === card.earlierReply.option ? Requests.optionText(card.earlierReply.option) : card.earlierReply.body || Requests.optionText(card.earlierReply.option)).replace(/\s+/g, " ").trim()) : ""
       color: card.dim
       font.pixelSize: Theme.type.meta.size
       maximumLineCount: 1
