@@ -43,16 +43,10 @@ Item {
   property string page: "conversations"
   readonly property int tabIndex: pages.indexOf(page === "new" ? "conversations" : page === "work" ? "board" : page)
   readonly property string title: page === "new" ? "new conversation" : page
-  // What the conversation is called: its first work's title, else what was
-  // first said in it.
-  readonly property string subject: {
-    const first = Omunculus.works.find(work => !work.parent_id)
-    return first && first.title ? first.title : Omunculus.title
-  }
   // What the masthead names: the board, or the project, then the
   // conversation open and its page, or the page; the map is the team.
   readonly property string heading: page === "board" ? page
-    : Omunculus.project + "  /  " + (inConversation.includes(page) ? subject + "  /  " + (page === "map" ? "team" : page) : title)
+    : Omunculus.project + "  /  " + (inConversation.includes(page) ? Omunculus.subject + "  /  " + (page === "map" ? "team" : page) : title)
   // Whether the chat asks whom an empty conversation is with.
   readonly property bool asking: page === "chat" && Omunculus.whomAsked
   // Whether the page takes the digits alone, as the pickers of whom a
@@ -315,6 +309,10 @@ Item {
   onAskingChanged: Qt.callLater(focusEntry)
   Connections {
     target: Omunculus
+    function onLoadedChanged() {
+      if (Omunculus.loaded)
+        Qt.callLater(view.focusEntry)
+    }
     function onConversationIdChanged() {
       // The conversation's pages go with it.
       if (!view.open && view.inConversation.includes(view.page))
@@ -343,6 +341,8 @@ Item {
   Stage {
     anchors.fill: parent
     shown: view.page === "chat"
+    // The composer takes the keyboard once the chat can show it.
+    onVisibleChanged: if (visible) Qt.callLater(view.focusEntry)
 
     Item {
       id: chat

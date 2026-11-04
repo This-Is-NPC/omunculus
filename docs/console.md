@@ -70,8 +70,10 @@ What an agent says, a request's reason and a work's goal and notes are the
 kit's `Prose`, their web addresses links that open in the browser.
 
 An agent's turn says what it did in plain phrases from the kit's
-`Phrases` ("Read 6 files"), never a tool's name; calls that failed are counted
-apart, in the error tone, and open to the call and why it failed.
+`Phrases` ("Read 6 files", "Opened work: Bakery website +2 more"), never a
+tool's name; calls that failed are counted apart, in the error tone, and open
+to the call and why it failed. A turn that has said and done nothing yet is
+not drawn: the working line says the team works.
 
 In the main thread a request is a card only while it waits on you. Your answer
 reads as a right-aligned bubble (`AnswerBubble`) with the question as one dim
@@ -82,8 +84,11 @@ a "Team activity" line that shows the last three rows while the team works.
 A question for you that arrives while the view follows is held by its top.
 Above the composer, `WorkingLine` says from the conversation's `activity`
 whether the team works, waits on you or on itself, failed or is done, with the
-step and the time; it is hidden when idle. Its SHOW button, while a question
-waits on you, brings the question's card into view and puts the keyboard in
+step and the time; it is hidden when idle. While the team works its headline
+reads "BAKERY WEBSITE  -  SELLER: WRITING FILES  -  STEP 1 OF 6: QUALIFY": the
+first work's title (YOUR REQUEST before one exists), the agent and what it
+does ("SELLER IS GETTING STARTED" before its first call), and the step. Its
+SHOW button, while a question waits on you, brings the question's card into view and puts the keyboard in
 its words; a click anywhere else on the line opens the team.
 
 On the chat, the team (`TeamPanel`) toggles beside the thread with T or the
@@ -115,6 +120,17 @@ sentence. "I can't answer this" tells the team so in a plain reply, and
 ESCALATE sits under MORE. Sending shows your answer dimmed with "Sending...";
 answered, the card shrinks to the question and your answer; a failure reopens
 it with your words kept and an error line.
+
+The header's title is the conversation's subject (`Omunculus.subject`, as in
+the masthead: the first root work's title, else the first message), or the
+work of the question's origin when the harness passed it up.
+
+`QuestionForm` shows, at the top of the card, "N of M answered" with SEND and
+"I CAN'T ANSWER THIS". Each item is its number, its question wrapped in
+sentence case and a full-width box that grows with its text; the toggle "I
+DON'T KNOW YET" on the box's row fills it and, switched off, restores what was
+typed. Enter moves to the next box, Enter in the last and Ctrl+Enter in any
+send, and a box that takes the keyboard scrolls into view.
 
 While it is pending it has its options as buttons, and so are those of
 every decision it gathers from below — an origin still waiting whose options
