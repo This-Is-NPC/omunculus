@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/client/Progress.js" as Progress
-import "kit/client/Requests.js" as Requests
 import "kit/ui"
 
 // NodeDetail is one work of the TEAM page in full: its agent, title, way

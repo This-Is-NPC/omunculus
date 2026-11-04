@@ -646,20 +646,6 @@ Singleton {
     return lane ? lane.steps[lane.at].agent : work.assignee || ""
   }
 
-  // The works under `id` in tree order, each with its depth below it; `id`
-  // itself first when `self`, and "" for every work of the conversation.
-  function tree(id, self) {
-    const ordered = []
-    const visit = (parent, level) => works
-      .filter(item => (item.parent_id || "") === parent)
-      .forEach(item => { ordered.push({ work: item, level: level }); visit(item.id, level + 1) })
-    const top = self ? work(id) : null
-    if (top)
-      ordered.push({ work: top, level: 0 })
-    visit(id, top ? 1 : 0)
-    return ordered
-  }
-
   // Whether an agent is running on the work now ("" for runs without one),
   // the requests it made that still wait, and the notes from it you have not read.
   function busy(id) { return running.some(run => (run.work_id || "") === id) }
