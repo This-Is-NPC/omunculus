@@ -132,13 +132,14 @@ nothing takes no room, not even the gap between entries, and words with no
 text and no files are not added to the thread.
 
 A work handed down is a block (`SubWorkBlock`) in the thread of the run that
-handed it down, where it did; so is a root work a run opened. Headed
-SUB-WORK with its agent and title, it says its state, for how long and how
-many tool calls, its stages when it has a workflow, and the round with who
-sent it back. Choosing it unfolds it in place, indented, into TRANSCRIPT (the
-work's own thread, at most 480 px tall with its own scroll), CHANGES and
-RUNS; a block two levels down only has OPEN. OPEN shows the work's thread as
-a page of its own (see [Pages](#pages)).
+handed it down, where it did; so is a root work a run opened. A card headed
+SUB-WORK with its agent, title and time, it says its state, for how long and
+how many tool calls, its stages when it has a workflow, and the round with
+who sent it back. Choosing it unfolds it in place, indented, into the tabs
+01 TRANSCRIPT (the work's own thread, at most 480 px tall with its own
+scroll), 02 CHANGES and 03 RUNS; a block two levels down does not unfold.
+The open tool at its top right shows the work's thread as a page of its own
+(see [Pages](#pages)).
 
 A request is a card only while it waits on you, and it is in the main
 thread. Your answer reads as a bubble on the right (`AnswerBubble`) under

@@ -125,7 +125,7 @@ conversations, first asks whom it is with, on the cards of
 [a new conversation](#3-a-new-conversation) when several agents of depth 0
 may take it.
 
-A sub-work's OPEN, or OPEN in the progress, shows that work's thread as a
+A sub-work's open tool (›), or OPEN in the progress, shows that work's thread as a
 page of its own, under the way down to it, with a composer to its agent;
 OPEN IN TEAM (Alt+O) shows it on the team page.
 
