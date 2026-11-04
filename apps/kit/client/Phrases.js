@@ -11,7 +11,7 @@ const tools = {
   ask: { now: "Asking a teammate", once: "asked a teammate", many: "asked a teammate {n} times" },
   escalate: { now: "Passing a question up", once: "passed a question up", many: "passed {n} questions up" },
   reply: { now: "Answering", once: "answered", many: "answered {n} times" },
-  work: { now: "Opening work", once: "opened some work", many: "opened {n} pieces of work" },
+  work: { now: "Opening work", once: "opened some work", many: "opened {n} pieces of work", titled: { now: "Opening work", once: "opened work" } },
   next_stage: { now: "Moving to the next step", once: "moved to the next step", many: "tried to move on {n} times", internal: true },
   grant: { now: "Granting a permission", once: "granted a permission", many: "granted {n} permissions" },
   continue: { now: "Moving the work on", once: "moved the work on", many: "moved the work on {n} times" }
@@ -19,10 +19,21 @@ const tools = {
 const unknown = { now: "Working", once: "worked", many: "worked" };
 const trouble = 3;
 
-// What a tool is doing while it runs; "Working" for one not in the table.
-function phrase(name) { return (tools[name] || unknown).now; }
+// The title in a call's args, for the tools that name their object.
+function titleOf(tool, args) {
+  return tool.titled && args && typeof args.title === "string" && args.title !== "" ? args.title : "";
+}
 
-// Calls ({name, ok, ...}) as {text, failed, failedText, hidden}: the successes
+// What a tool is doing while it runs, with the title of its object when the
+// call's args carry one ("Opening work: Bakery website"); "Working" for a tool
+// not in the table.
+function phrase(name, args) {
+  const tool = tools[name] || unknown;
+  const title = titleOf(tool, args);
+  return title ? tool.titled.now + ": " + title : tool.now;
+}
+
+// Calls ({name, ok, args?, ...}) as {text, failed, failedText, hidden}: the successes
 // with consecutive calls of one kind joined ("Read 6 files, wrote a file"),
 // the failures counted apart, and the failed internal calls hidden until
 // they pass three.
@@ -39,13 +50,13 @@ function summarize(calls) {
     }
     const last = groups[groups.length - 1];
     if (last && last.tool === tool) last.n++;
-    else groups.push({ tool: tool, n: 1 });
+    else groups.push({ tool: tool, n: 1, title: titleOf(tool, call.args) });
   }
   const stuck = internal > trouble;
   const parts = [];
   if (failed > 0) parts.push(failed + (failed === 1 ? " attempt" : " attempts") + " did not work");
   if (stuck) parts.push("The team is having trouble moving on");
-  const text = groups.map(group => group.n === 1 ? group.tool.once : group.tool.many.replace("{n}", group.n)).join(", ");
+  const text = groups.map(group => group.n === 1 ? (group.title ? group.tool.titled.once + ": " + group.title : group.tool.once) : group.tool.many.replace("{n}", group.n)).join(", ");
   return {
     text: text.charAt(0).toUpperCase() + text.slice(1),
     failed: failed + (stuck ? internal : 0),

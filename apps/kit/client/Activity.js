@@ -9,7 +9,7 @@ function upper(text) { return String(text || "").toUpperCase(); }
 // What the conversation's team is doing now, derived and never stored.
 // input: {runs: [{id, agent, depth, work_id, status, error?}], works, requests,
 // lanes (work id -> {name, steps: [{name, agent}], at} or null), calling (work
-// id -> last tool), runStarts (run id -> seconds), now (seconds)}.
+// id -> last tool), callArgs (work id -> that call's args), runStarts (run id -> seconds), now (seconds)}.
 // Returns {state, headline, since, stage: {name, index, count, next},
 // rows: [{work, agent, depth, state, task, phrase, since, parent}], loop}.
 function status(input) {
@@ -17,13 +17,14 @@ function status(input) {
   const works = input.works || [];
   const lanes = input.lanes || {};
   const calling = input.calling || {};
+  const callArgs = input.callArgs || {};
   const starts = input.runStarts || {};
   const open = runs.filter(run => run.status === "open");
   const asking = (input.requests || []).filter(Requests.pending);
   const forYou = asking.filter(request => Requests.human(request.arbiter));
   const forTeam = asking.filter(request => !Requests.human(request.arbiter));
 
-  const rows = tree(works).map(entry => row(entry, open, asking, lanes, calling, starts));
+  const rows = tree(works).map(entry => row(entry, open, asking, lanes, calling, callArgs, starts));
   const stage = stageOf(works, lanes);
   const focus = open.slice().sort((a, b) => (a.depth || 0) - (b.depth || 0)).pop() || null;
   const lastRun = runs[runs.length - 1];
@@ -38,7 +39,7 @@ function status(input) {
   } else if (focus) {
     state = "working";
     const team = stage.name ? upper(stage.name) + " TEAM" : "THE TEAM";
-    headline = team + " IS WORKING  -  " + upper(focus.agent) + ": " + upper(Phrases.phrase(calling[focus.work_id || ""] || ""))
+    headline = team + " IS WORKING  -  " + upper(focus.agent) + ": " + upper(Phrases.phrase(calling[focus.work_id || ""] || "", callArgs[focus.work_id || ""]))
       + (stage.count > 0 ? "  -  STEP " + stage.index + " OF " + stage.count : "");
     since = starts[focus.id] === undefined ? null : starts[focus.id];
   } else if (forTeam.length > 0) {
@@ -68,7 +69,7 @@ function tree(works) {
   return ordered;
 }
 
-function row(entry, open, asking, lanes, calling, starts) {
+function row(entry, open, asking, lanes, calling, callArgs, starts) {
   const work = entry.work;
   const lane = lanes[work.id] || null;
   const run = open.find(each => (each.work_id || "") === work.id) || null;
@@ -85,7 +86,7 @@ function row(entry, open, asking, lanes, calling, starts) {
     depth: entry.level,
     state: state,
     task: work.title || "",
-    phrase: run ? Phrases.phrase(calling[work.id] || "") : "",
+    phrase: run ? Phrases.phrase(calling[work.id] || "", callArgs[work.id]) : "",
     since: run && starts[run.id] !== undefined ? starts[run.id] : null,
     parent: work.parent_id || ""
   };

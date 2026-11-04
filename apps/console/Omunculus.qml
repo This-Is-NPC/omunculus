@@ -77,6 +77,8 @@ Singleton {
   property var runThread: ({})
   // Work id ("" for runs without one) -> the tool its agent called last.
   property var calling: ({})
+  // Work id -> the args of that call.
+  property var callArgs: ({})
   // Inbox id -> the text its notify event carried, and request id -> how it
   // was answered ({option, who, body}); the snapshot has neither.
   property var notes: ({})
@@ -382,6 +384,7 @@ Singleton {
     parentOf = {}
     runThread = {}
     calling = {}
+    callArgs = {}
     threads = {}
     notes = {}
     replies = {}
@@ -812,8 +815,9 @@ Singleton {
       // a hook, called with the event alone, shows only when it fails.
       const hook = body.args && typeof body.args.event === "object" && Object.keys(body.args).length === 1
       if (!["assemble", "send", "end"].includes(body.name) && !body.via && !(hook && body.ok !== false)) {
-        step(event.run_id, { name: body.name, ok: body.ok !== false, text: hook ? "" : brief(body.args), output: body.ok === false ? String(body.output || "") : "", outcome: false })
+        step(event.run_id, { name: body.name, ok: body.ok !== false, text: hook ? "" : brief(body.args), args: body.args || {}, output: body.ok === false ? String(body.output || "") : "", outcome: false })
         keep("calling", work, body.name)
+        keep("callArgs", work, body.args || {})
       }
       break
     }
@@ -866,7 +870,7 @@ Singleton {
       lanes[item.id] = laneOf(item)
     activity = Activity.status({
       runs: runs.map(run => runErrors[run.id] ? Object.assign({}, run, { error: runErrors[run.id] }) : run),
-      works: works, requests: requests, lanes: lanes, calling: calling, runStarts: runStarts, now: Date.now() / 1000
+      works: works, requests: requests, lanes: lanes, calling: calling, callArgs: callArgs, runStarts: runStarts, now: Date.now() / 1000
     })
   }
   onWorksChanged: activityTimer.restart()

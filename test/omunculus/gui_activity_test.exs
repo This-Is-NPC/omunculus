@@ -32,6 +32,10 @@ defmodule Omunculus.GuiActivityTest do
     if (out.stage.name !== "design" || out.stage.index !== 2 || out.stage.count !== 6 || out.stage.next !== "propose")
       throw Error("stage " + JSON.stringify(out.stage));
     if (out.headline !== "DESIGN TEAM IS WORKING  -  DESIGNER: WRITING FILES  -  STEP 2 OF 6") throw Error(out.headline);
+    const opening = Activity.status(Object.assign({}, base, {
+      runs: [run("r1", "sales", "w2")], calling: {w2: "work"}, callArgs: {w2: {title: "Bakery website"}}, runStarts: {r1: 40}
+    }));
+    if (!opening.headline.includes("SALES: OPENING WORK: BAKERY WEBSITE")) throw Error(opening.headline);
     const rows = Object.fromEntries(out.rows.map(r => [r.work, r]));
     if (rows.w1.state !== "waiting-team" || rows.w1.depth !== 0 || rows.w1.agent !== "design-agent") throw Error("w1 " + JSON.stringify(rows.w1));
     if (rows.w2.state !== "working" || rows.w2.phrase !== "Writing files" || rows.w2.since !== 40 || rows.w2.parent !== "w1" || rows.w2.depth !== 1)
@@ -103,6 +107,11 @@ defmodule Omunculus.GuiActivityTest do
     out = Phrases.summarize(Array.from({length: 4}, () => bad("next_stage")));
     if (out.hidden !== 0 || out.failed !== 4 || out.failedText !== "The team is having trouble moving on") throw Error(JSON.stringify(out));
     if (Phrases.summarize([ok("mystery")]).text !== "Worked") throw Error("unknown");
+    const titled = {name: "work", ok: true, args: {title: "Bakery website", goal: "x"}};
+    if (Phrases.phrase("work", titled.args) !== "Opening work: Bakery website" || Phrases.phrase("work", {}) !== "Opening work") throw Error("titled phrase");
+    if (Phrases.summarize([titled]).text !== "Opened work: Bakery website") throw Error("titled summary");
+    if (Phrases.summarize([titled, titled]).text !== "Opened 2 pieces of work") throw Error("titled many");
+    if (Phrases.summarize([ok("work")]).text !== "Opened some work") throw Error("untitled summary");
     if (Phrases.phrase("read") !== "Reading files" || Phrases.phrase("mystery") !== "Working") throw Error("phrase");
     """)
   end

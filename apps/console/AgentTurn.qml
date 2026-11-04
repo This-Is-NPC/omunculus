@@ -179,7 +179,7 @@ Item {
           Row {
             spacing: 8
             Icon { anchors.verticalCenter: parent.verticalCenter; name: call.modelData.ok ? "check" : "close"; size: 10; color: call.modelData.ok ? Theme.success : Theme.error }
-            Label { text: Phrases.phrase(call.modelData.name); color: Theme.foreground; font.pixelSize: 11 }
+            Label { text: Phrases.phrase(call.modelData.name, call.modelData.args); color: Theme.foreground; font.pixelSize: 11 }
           }
           Label {
             visible: call.modelData.text !== ""
