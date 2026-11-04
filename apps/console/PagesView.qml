@@ -171,10 +171,11 @@ Item {
   }
 
   // Opens a project at its conversations; the conversation on screen of
-  // another one closes, and BACK returns to it.
-  function openProject(place) {
+  // another one closes, and BACK returns to it; `chip` lights a filter.
+  function openProject(place, chip) {
     remember()
     Omunculus.switchProject(place)
+    conversations.filter = chip || ""
     show("conversations")
   }
 

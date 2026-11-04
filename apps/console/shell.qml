@@ -165,7 +165,7 @@ ShellRoot {
           IconButton {
             visible: panel.started && pagesView.inside
             name: "close"
-            tip: "close it, back to the conversations"
+            tip: pagesView.fresh ? "close it, back to choosing whom to talk with" : "close it, back to the conversations"
             onClicked: pagesView.leave()
           }
         }
