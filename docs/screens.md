@@ -268,7 +268,7 @@ message, with the files it carries.
 ## The studio
 
 `apps/kit/run studio --config <server.toml> [--project <id>]`. Its sections
-are a carousel down the left edge:
+are a rail down the left edge, in a fixed order:
 
 | Keys | What they do |
 | --- | --- |

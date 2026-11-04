@@ -3,10 +3,10 @@ import Quickshell
 import "kit/ui"
 
 ShellRoot {
-  // The studio, laid out as a canvas: the sections a carousel down the left,
-  // the one on screen at its head beside the bar of its commands; the flow
-  // fills the whole window under them, the other sections stand right of the
-  // carousel over the canvas's dots.
+  // The studio, laid out as a canvas: the sections a rail down the left, the
+  // one on screen marked beside the bar of its commands; the flow fills the
+  // whole window under them, the other sections stand right of the rail over
+  // the canvas's dots.
   FloatingWindow {
     id: window
 

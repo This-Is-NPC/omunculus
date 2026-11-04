@@ -407,7 +407,7 @@ Its bar has REPLY (Alt+R) while it asked you something and OPEN IN TEAM
 (Alt+O), its conversation's team page with it picked. The window turns to the work's project
 first when it is another one (`Omunculus.switchProject`).
 
-## The masthead, the carousel and the bar
+## The masthead, the rail and the bar
 
 The masthead names the way to the page in crumbs: PROJECTS or BOARD on the
 registry's level; the project, then the page, on a project's; the project,
