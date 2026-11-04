@@ -108,6 +108,7 @@ Item {
       leave()
   }
 
+  Component.onCompleted: refilter()
   onFilterChanged: refilter()
   onAsksOnlyChanged: refilter()
   onFailedOnlyChanged: refilter()
