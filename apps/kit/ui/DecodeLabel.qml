@@ -3,7 +3,9 @@ import QtQuick
 // DecodeLabel reveals a label's changed text from left to right, using the
 // selected glyph set until each character resolves. Spacing and punctuation are
 // never scrambled, so the text keeps its shape. Labels and short state text
-// only: text a reader follows as it grows is drawn as it is.
+// only: text a reader follows as it grows is drawn as it is. With reduced
+// motion the text appears at once. Assistive technology reads the value, never
+// the glyphs in between.
 Label {
   id: label
 
@@ -19,6 +21,7 @@ Label {
   property bool ready: false
 
   text: value
+  Accessible.name: value
   onValueChanged: {
     if (ready && autoPlay)
       replay()
@@ -35,6 +38,11 @@ Label {
   // way takes a new value on its next frame: text arriving faster than frames
   // never lays the label out more than once a frame.
   function replay() {
+    if (Theme.reducedMotion) {
+      scramble.stop()
+      text = value
+      return
+    }
     if (!value.length) {
       scramble.stop()
       text = ""

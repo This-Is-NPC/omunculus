@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "../client/Colour.js" as Colour
 
 Singleton {
   id: root
@@ -30,6 +31,9 @@ Singleton {
   readonly property color dim: readable(palette.muted || foreground, background, foreground)
   readonly property color badgeForeground: background
   readonly property string fontFamily: "monospace"
+  // The desktop asks for no animation: read once at start; motion stays on
+  // when the setting cannot be read.
+  property bool reducedMotion: false
 
   // Eight colours for agents, as "#rrggbb": the theme's own made readable, then
   // their hues turned when it has fewer. None is near another, the accent, or
@@ -71,6 +75,12 @@ Singleton {
           take(String(Qt.hsla((color.hslHue + turn / 12) % 1, color.hslSaturation, color.hslLightness, 1)))
       }
     return picked
+  }
+
+  Process {
+    running: true
+    command: ["gsettings", "get", "org.gnome.desktop.interface", "enable-animations"]
+    stdout: StdioCollector { onStreamFinished: root.reducedMotion = text.trim() === "false" }
   }
 
   FileView {
@@ -120,30 +130,14 @@ Singleton {
     return match ? [1, 2, 3].map(i => parseInt(match[i], 16) / 255) : null
   }
 
-  function luminance(color) {
-    const channel = value => value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4)
-    return 0.2126 * channel(color[0]) + 0.7152 * channel(color[1]) + 0.0722 * channel(color[2])
-  }
-
-  function contrast(a, b) {
-    const first = luminance(a)
-    const second = luminance(b)
-    return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05)
-  }
-
+  // `wanted` moved toward `ink` until it reads on `base` (Colour.js).
   function readable(wanted, base, ink) {
-    const color = rgb(wanted)
-    const backgroundColor = rgb(base)
-    const foregroundColor = rgb(ink)
-    if (!color || !backgroundColor || !foregroundColor)
-      return ink
-    for (let step = 0; step <= 20; step++) {
-      const amount = step / 20
-      const mixed = color.map((channel, index) => channel + (foregroundColor[index] - channel) * amount)
-      if (contrast(mixed, backgroundColor) >= 4.5)
-        return Qt.rgba(mixed[0], mixed[1], mixed[2], 1)
-    }
-    return ink
+    return Colour.readable(String(wanted), String(base), String(ink))
+  }
+
+  // The dim tone, adjusted to read on `fill`, a surface over the background.
+  function readableOn(fill) {
+    return readable(palette.muted || foreground, Qt.tint(background, fill), foreground)
   }
 
   function apply(toml) {

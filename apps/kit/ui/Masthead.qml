@@ -8,22 +8,22 @@ ColumnLayout {
   property string section
   default property alias trailing: tail.data
   spacing: 10
-  onSectionChanged: sweep.restart()
+  onSectionChanged: if (!Theme.reducedMotion) sweep.restart()
 
   RowLayout {
     Layout.fillWidth: true
     spacing: 10
     Label { text: "OMUNCULUS"; font.pixelSize: 15; font.bold: true; font.letterSpacing: 6 }
     Label { text: "╱"; color: Theme.primary; font.pixelSize: 13 }
-    DecodeLabel {
+    Label {
       Layout.fillWidth: true
       // The section name keeps its room before the readout on the right, but
       // elides on a narrow window: a wider minimum would widen the whole view.
       Layout.minimumWidth: Math.min(implicitWidth, 60)
-      value: mast.section.toUpperCase()
+      text: mast.section.toUpperCase()
       color: Theme.dim
-      font.pixelSize: 10
-      font.letterSpacing: 3
+      font.pixelSize: 11
+      font.letterSpacing: 2
       elide: Text.ElideRight
     }
     RowLayout { id: tail; spacing: 14 }

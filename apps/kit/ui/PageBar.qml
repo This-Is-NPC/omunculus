@@ -34,7 +34,7 @@ Rectangle {
   border.color: Theme.line
   clip: true
 
-  onSectionChanged: arrive.restart()
+  onSectionChanged: if (!Theme.reducedMotion) arrive.restart()
 
   RowLayout {
     anchors { fill: parent; leftMargin: 8; rightMargin: 12 }

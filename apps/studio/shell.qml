@@ -56,12 +56,11 @@ ShellRoot {
       ? [adding("AGENT", 3, "agents", "primary"), adding("WORKFLOW", 4, "workflows"), adding("MODEL", 2, "models"), adding("PROVIDER", 1, "auth"), adding("WORKSPACE", 7, "workspaces"), { text: "NEW PROJECT", short: "PROJECT", icon: "plus", run: () => newProject.open() }]
       : settings.commands
 
-    // Chooses a section and gives it the keyboard, so the carousel folds
+    // Chooses a section and gives it the keyboard, so the rail folds
     // away and the arrows reach what is on screen.
     function choose(index) {
       settings.forget()
       page = (index + sections.length) % sections.length
-      rail.pinned = false
       Qt.callLater(() => page === 0 ? flow.forceActiveFocus() : settings.takeFocus())
     }
 
@@ -183,7 +182,7 @@ ShellRoot {
         target: flow
       }
 
-      // 1 to 8, or Ctrl with them, choose a section (a field being written keeps its digits); Ctrl+Tab and Ctrl+Shift+Tab turn the carousel.
+      // 1 to 8, or Ctrl with them, choose a section (a field being written keeps its digits); Ctrl+Tab and Ctrl+Shift+Tab go to the next or the previous section.
       Repeater {
         model: window.sections.length
         delegate: Item {
