@@ -13,15 +13,15 @@ C.TextField {
   placeholderTextColor: Theme.dim
   selectionColor: Theme.primary
   selectedTextColor: Theme.badgeForeground
-  leftPadding: dense ? 10 : 14
-  rightPadding: dense ? 10 : 14
+  leftPadding: dense ? Theme.space.gap : Theme.space.inset
+  rightPadding: dense ? Theme.space.gap : Theme.space.inset
   // Marks that text is being written, and leaves the key to the box.
   Keys.priority: Keys.BeforeItem
   Keys.onPressed: Typing.mark()
-  topPadding: 6
-  bottomPadding: 6
+  topPadding: Theme.space.tight
+  bottomPadding: Theme.space.tight
   background: InputFrame {
-    implicitHeight: box.dense ? 30 : 44
+    implicitHeight: box.dense ? 30 : Theme.size.control
     focused: box.activeFocus
     invalid: box.invalid
   }

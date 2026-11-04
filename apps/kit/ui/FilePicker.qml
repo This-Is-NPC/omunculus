@@ -17,7 +17,7 @@ Flow {
     return picked
   }
 
-  spacing: 6
+  spacing: Theme.space.tight
 
   Chip {
     icon: "plus"

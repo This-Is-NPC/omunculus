@@ -28,14 +28,14 @@ ColumnLayout {
   // Focus given to the area, as forceActiveFocus() on it, goes to its box.
   onActiveFocusChanged: if (activeFocus) input.forceActiveFocus()
 
-  spacing: 6
+  spacing: Theme.space.tight
   opacity: sending ? 0.5 : 1
 
   Caption { visible: area.label !== ""; text: area.label.toUpperCase() }
 
   Item {
     Layout.fillWidth: true
-    implicitHeight: Math.min(Math.max(input.implicitHeight, area.dense ? 30 : 44), Math.ceil(metrics.lineSpacing * area.maxLines) + input.topPadding + input.bottomPadding)
+    implicitHeight: Math.min(Math.max(input.implicitHeight, area.dense ? 30 : Theme.size.control), Math.ceil(metrics.lineSpacing * area.maxLines) + input.topPadding + input.bottomPadding)
 
     InputFrame {
       visible: area.framed
@@ -62,10 +62,10 @@ ColumnLayout {
         selectionColor: Theme.primary
         selectedTextColor: Theme.badgeForeground
         wrapMode: TextEdit.Wrap
-        leftPadding: area.dense ? 10 : 14
-        rightPadding: area.dense ? 10 : 14
-        topPadding: area.dense ? 6 : 12
-        bottomPadding: area.dense ? 6 : 12
+        leftPadding: area.dense ? Theme.space.gap : Theme.space.inset
+        rightPadding: area.dense ? Theme.space.gap : Theme.space.inset
+        topPadding: area.dense ? Theme.space.tight : Theme.space.cell
+        bottomPadding: area.dense ? Theme.space.tight : Theme.space.cell
         background: null
         Accessible.name: area.label !== "" ? area.label : placeholderText
 

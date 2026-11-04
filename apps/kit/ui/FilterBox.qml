@@ -11,7 +11,7 @@ TextBox {
   signal leave()
 
   dense: true
-  rightPadding: typing.running ? 66 : 10
+  rightPadding: typing.running ? 66 : Theme.space.gap
   onTextChanged: typing.restart()
 
   Timer {
@@ -21,7 +21,7 @@ TextBox {
   }
 
   LoadingTrace {
-    anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
+    anchors { right: parent.right; rightMargin: Theme.space.gap; verticalCenter: parent.verticalCenter }
     width: 48
     height: 12
     running: typing.running

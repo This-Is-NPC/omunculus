@@ -1,0 +1,53 @@
+# The kit's drawn geometry, which no layout token names: a file, or a file
+# and one of its properties. scripts/check-spacing reads it.
+
+# Icons, traces and rings, drawn to their own grid.
+apps/kit/ui/Icon.qml
+apps/kit/ui/EcgTrace.qml
+apps/kit/ui/FocusRing.qml
+apps/kit/ui/ZoomControl.qml
+
+# A control's own parts: underlines, badges, swatches, hairline separators,
+# the room a trace or an indent takes, and its inner paddings.
+apps/kit/ui/Chip.qml spacing
+apps/kit/ui/Chip.qml height
+apps/kit/ui/ChoiceRow.qml leftMargin
+apps/kit/ui/CommandRow.qml height
+apps/kit/ui/DataTable.qml leftPadding
+apps/kit/ui/DataTable.qml topMargin
+apps/kit/ui/DataTable.qml spacing
+apps/kit/ui/DataTable.qml height
+apps/kit/ui/Dropdown.qml rightMargin
+apps/kit/ui/FilterBox.qml rightPadding
+apps/kit/ui/FilterBox.qml height
+apps/kit/ui/Hint.qml padding
+apps/kit/ui/IconButton.qml height
+apps/kit/ui/Kicker.qml implicitHeight
+apps/kit/ui/MenuPopup.qml height
+apps/kit/ui/MenuPopup.qml leftPadding
+apps/kit/ui/PageBar.qml implicitHeight
+apps/kit/ui/PageBar.qml leftMargin
+apps/kit/ui/PageBar.qml rightMargin
+apps/kit/ui/PopupFrame.qml margins
+apps/kit/ui/StatusMessage.qml implicitHeight
+apps/kit/ui/StatusMessage.qml spacing
+apps/kit/ui/Tab.qml height
+apps/kit/ui/Tab.qml spacing
+apps/kit/ui/TabRail.qml height
+apps/kit/ui/TextArea.qml implicitHeight
+apps/kit/ui/TextBlock.qml implicitHeight
+apps/kit/ui/TextBox.qml implicitHeight
+apps/kit/ui/TraceButton.qml topMargin
+apps/kit/ui/TraceButton.qml bottomMargin
+apps/kit/ui/TraceButton.qml height
+
+# A dialog's or a panel's frame around its content, and its button rows.
+apps/kit/ui/ConfirmDialog.qml implicitHeight
+apps/kit/ui/ConfirmDialog.qml spacing
+apps/kit/ui/DialogFooter.qml spacing
+apps/kit/ui/Masthead.qml spacing
+apps/kit/ui/NewProjectDialog.qml implicitHeight
+apps/kit/ui/NewProjectDialog.qml spacing
+apps/kit/ui/NewProjectDialog.qml Layout.topMargin
+apps/kit/ui/Panel.qml implicitHeight
+apps/kit/ui/Panel.qml spacing

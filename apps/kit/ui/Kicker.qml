@@ -8,14 +8,14 @@ Item {
   implicitHeight: label.implicitHeight + 14
   Label {
     id: label
-    anchors { left: parent.left; bottom: parent.bottom; bottomMargin: 4 }
+    anchors { left: parent.left; bottom: parent.bottom; bottomMargin: Theme.space.line }
     text: kicker.text.toUpperCase()
     color: kicker.tone
     font.pixelSize: 10
     font.letterSpacing: 3
   }
   Rectangle {
-    anchors { left: label.right; leftMargin: 10; right: parent.right; verticalCenter: label.verticalCenter }
+    anchors { left: label.right; leftMargin: Theme.space.gap; right: parent.right; verticalCenter: label.verticalCenter }
     height: 1
     color: Theme.line
   }
