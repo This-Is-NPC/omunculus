@@ -2,10 +2,11 @@ import QtQuick
 import "kit/ui"
 
 // SpeechTurn is one thing said in the conversation, in a box, with the files
-// attached with it below: yours on the right, each agent's on the left tinted
-// with its colour, under its portrait; a note the harness left, no one's
-// words, on the left too, muted, under NOTE where a name would be. A line that continues the same
-// speaker's turn drops the name and time and sits close to the one before.
+// attached with it below: yours on the right, its lines left aligned in the
+// box; each agent's on the left tinted with its colour, under its portrait; a
+// note the harness left, no one's words, on the left too, muted, under NOTE
+// where a name would be. A line that continues the same speaker's turn drops
+// the name and time and sits close to the one before.
 Item {
   id: turn
 
@@ -54,7 +55,8 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         x: turn.inset
         width: parent.width - 2 * turn.inset
-        horizontalAlignment: turn.mine ? Text.AlignRight : Text.AlignLeft
+        // Yours sits on the right, its lines read from the left.
+        horizontalAlignment: Text.AlignLeft
         plain: turn.mine
         source: turn.mine ? turn.text : Omunculus.inline(turn.text)
         color: Theme.foreground

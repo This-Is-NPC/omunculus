@@ -1,83 +1,141 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
+import "kit/client/Requests.js" as Requests
 import "kit/ui"
 
-// TeamRow is one thing the team did among itself, on one muted line: who
-// asked whom, and what came of it. Choosing it opens the question and the
-// answer below; what it is given as children shows there too.
+// TeamRow is an exchange between agents, where it was asked: who asked whom
+// and who decides, the question in its first three lines, and once answered
+// who answered and what. It is open while it waits, and then DECIDE INSTEAD
+// opens the request's card in place, so you can answer it yourself; choosing
+// its line folds and unfolds the rest of the question and the answer.
 Item {
   id: row
 
-  // The line, the question asked and the answer to it, if any.
-  property string summary
-  property string question
-  property string answer
+  // The request.
+  required property string key
   property string stamp
-  property bool open: false
-  default property alias more: extra.data
 
-  readonly property bool expandable: question !== "" || answer !== "" || extra.children.length > 0
+  readonly property var asked: Omunculus.requests.find(item => item.id === key) || null
+  readonly property var reply: Omunculus.replies[key] || null
+  readonly property bool pending: !!asked && Requests.pending(asked)
+  readonly property string by: asked ? Requests.label(asked.requester) : ""
+  readonly property string to: asked ? Requests.label(asked.arbiter) : ""
+  readonly property bool forYou: !!asked && Requests.human(asked.arbiter)
+  readonly property string question: asked ? String(asked.reason || "") : ""
+  readonly property string answer: reply ? String(reply.body || reply.option || "") : ""
+  readonly property string summary: reply && reply.who !== "you" && forYou ? reply.who + " answered this for you"
+    : by + " asked " + to + (pending ? "  ·  " + to + " decides" : asked && asked.status === "escalated" ? "  ·  passed up" : "")
+  property bool open: pending
+  property bool deciding: false
 
-  implicitHeight: head.height + (open ? details.height + 4 : 0) + 2
+  implicitHeight: content.implicitHeight + 2
 
-  Item {
-    id: head
-    width: Math.min(row.width, line.implicitWidth + 18)
-    height: 22
-    Row {
-      id: line
-      anchors.verticalCenter: parent.verticalCenter
+  ColumnLayout {
+    id: content
+    width: row.width
+    spacing: 4
+
+    Item {
+      Layout.fillWidth: true
+      implicitHeight: 22
+      activeFocusOnTab: true
+      Accessible.role: Accessible.Button
+      Accessible.name: row.summary
+      Keys.onPressed: event => {
+        if ([Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space].includes(event.key)) {
+          row.open = !row.open
+          event.accepted = true
+        }
+      }
+
+      RowLayout {
+        anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
+        spacing: 6
+        Icon { name: "people"; size: 11; color: Theme.dim }
+        Label {
+          Layout.fillWidth: true
+          Layout.minimumWidth: 0
+          text: row.summary
+          color: pointer.containsMouse ? Theme.foreground : Theme.dim
+          font.pixelSize: 11
+          elide: Text.ElideRight
+        }
+        Label { text: row.stamp; color: Theme.dim; font.pixelSize: 11 }
+        Icon { name: row.open ? "chevron-down" : "chevron-right"; size: 10; color: Theme.dim }
+      }
+      MouseArea {
+        id: pointer
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: row.open = !row.open
+      }
+      FocusRing { anchors.margins: -2 }
+    }
+
+    ColumnLayout {
+      Layout.fillWidth: true
+      Layout.leftMargin: 17
+      Layout.maximumWidth: 620
       spacing: 6
-      Icon { anchors.verticalCenter: parent.verticalCenter; name: "people"; size: 11; color: Theme.dim }
-      Label { anchors.verticalCenter: parent.verticalCenter; text: "TEAM"; color: Theme.dim; font.pixelSize: 11; font.letterSpacing: 1.5 }
+
+      // Folded, the first three lines of the question; open, all of it.
       Label {
-        anchors.verticalCenter: parent.verticalCenter
-        width: Math.min(implicitWidth, row.width - 120)
-        text: row.summary
-        color: pointer.containsMouse ? Theme.foreground : Theme.dim
+        Layout.fillWidth: true
+        visible: !row.open && row.question !== ""
+        text: Omunculus.inline(row.question)
+        color: Theme.dim
+        font.pixelSize: 11
+        wrapMode: Text.Wrap
+        maximumLineCount: 3
+        elide: Text.ElideRight
+      }
+      Prose {
+        Layout.fillWidth: true
+        visible: row.open && row.question !== ""
+        source: Omunculus.inline(row.question)
+        color: Theme.dim
+        font.pixelSize: 11
+        wrapMode: Text.Wrap
+      }
+
+      Label {
+        Layout.fillWidth: true
+        visible: row.open && row.reply !== null
+        text: "answered by " + (row.reply ? row.reply.who : "") + ":"
+        color: Theme.dim
         font.pixelSize: 11
         elide: Text.ElideRight
       }
-      Label { anchors.verticalCenter: parent.verticalCenter; text: row.stamp; color: Theme.dim; font.pixelSize: 11 }
-      Icon { visible: row.expandable; anchors.verticalCenter: parent.verticalCenter; name: row.open ? "chevron-down" : "chevron-right"; size: 10; color: Theme.dim }
-    }
-    MouseArea {
-      id: pointer
-      anchors.fill: parent
-      enabled: row.expandable
-      hoverEnabled: true
-      cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-      onClicked: row.open = !row.open
-    }
-  }
+      Prose {
+        Layout.fillWidth: true
+        visible: row.open && row.answer !== ""
+        source: Omunculus.inline(row.answer)
+        color: Theme.foreground
+        font.pixelSize: 11
+        wrapMode: Text.Wrap
+      }
 
-  Column {
-    id: details
-    visible: row.open
-    y: head.height + 4
-    x: 17
-    width: Math.min(620, row.width - 17)
-    spacing: 6
-    Prose {
-      visible: row.question !== ""
-      width: parent.width
-      source: Omunculus.inline(row.question)
-      color: Theme.dim
-      font.pixelSize: 11
-      wrapMode: Text.Wrap
+      TraceButton {
+        visible: row.open && row.pending && !row.deciding
+        dense: true
+        role: "progress"
+        text: "DECIDE INSTEAD"
+        tip: "answer it yourself, in place of " + row.to
+        onClicked: row.deciding = true
+      }
     }
-    Prose {
-      visible: row.answer !== ""
-      width: parent.width
-      source: Omunculus.inline(row.answer)
-      color: Theme.foreground
-      font.pixelSize: 11
-      wrapMode: Text.Wrap
-    }
-    Item {
-      id: extra
-      width: parent.width
-      height: childrenRect.height
+
+    // The request's own card, to answer it in place of the agent that decides.
+    Loader {
+      Layout.fillWidth: true
+      active: row.open && row.pending && row.deciding
+      visible: active
+      sourceComponent: RequestDecision {
+        key: row.key
+        stamp: row.stamp
+      }
     }
   }
 }

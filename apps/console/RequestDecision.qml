@@ -11,8 +11,9 @@ import "kit/ui"
 // of questions has a box for each); YOUR DECISION, with a button for each
 // option and an optional note; or PERMISSION, with the scopes that grant it
 // and a no with a reason. The header says the kind, who asks and on which
-// work. The question is shown as its asker wrote it; when the harness passed
-// it up, a line says through whom and opens the harness's own sentence. Who
+// work, on two lines when the card is narrow. The question is shown as its
+// asker wrote it; when it was passed up, a chip says through whom, in order,
+// and opens the wordings of each level and the harness's own sentence. Who
 // decides, you or an agent you can overrule, and each decision it gathers
 // from below, under its part, are shown as before. "I can't answer this"
 // sends the team a plain reply. Sending shows the answer dimmed at once,
@@ -37,6 +38,9 @@ SurfaceFrame {
   // conversation's own subject.
   readonly property var origin: passed.length > 0 ? Omunculus.work(passed[0].work_id || "") : null
   readonly property string subject: origin ? origin.title : work ? work.title : Omunculus.subject
+  // Who passed it up, from the asker up, and how each level worded it.
+  readonly property var climb: request ? Requests.chain(request).reverse() : []
+  readonly property string passers: climb.slice(1).map(level => Requests.label(level.requester)).join(" › ")
   readonly property var options: request ? Object.keys(request.options || {}) : []
   // Its own options, then those of the decisions it gathers from below still
   // waiting, each {part, path, options, request}, as an escalation keeps a
@@ -146,16 +150,18 @@ SurfaceFrame {
     const who = Requests.label(from.requester)
     const job = Omunculus.work(from.work_id || "")
     const where = Omunculus.workspaceOf(job ? job.workspace || "" : "")
-    const configured = Omunculus.setup ? Omunculus.setup.agents.find(item => item.name === who) : null
     return ({
       grant: "THIS WORK ONLY",
       grant_agent: "FOR " + who.toUpperCase(),
-      grant_depth: configured ? "AT DEPTH " + configured.depth : "AT ITS DEPTH",
-      grant_stage: "IN STAGE " + String(job && job.stage ? job.stage : "").toUpperCase(),
-      grant_workspace: "IN " + (where.name ? "WORKSPACE " + where.name.toUpperCase() : "THE PROJECT"),
+      grant_depth: "FOR ITS LEVEL",
+      grant_stage: "IN THE " + String(job && job.stage ? job.stage : "").toUpperCase() + " STAGE",
+      grant_workspace: where.name ? "IN FOLDER " + where.name : "IN THE PROJECT",
       deny: "DENY"
     })[option] || option.replace(/_/g, " ").toUpperCase()
   }
+
+  // Narrow, the header takes two lines.
+  readonly property bool stacked: width < 520
 
   implicitHeight: content.implicitHeight + 24
   variant: yours ? "filled" : "outline"
@@ -167,6 +173,8 @@ SurfaceFrame {
     anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12; leftMargin: 14; rightMargin: 14 }
     spacing: 10
 
+    // The kind, who asks and on what, and when; under 520 px, who asks and
+    // on what go on a line of their own.
     RowLayout {
       Layout.fillWidth: true
       spacing: 10
@@ -178,9 +186,23 @@ SurfaceFrame {
         font.pixelSize: 11
         font.letterSpacing: 1.5
       }
-      Label { Layout.alignment: Qt.AlignVCenter; text: card.asker + " asks"; color: Omunculus.toneOf(card.asker); font.pixelSize: 12 }
-      Label {
+      Item {
+        visible: card.stacked
         Layout.fillWidth: true
+      }
+      Label {
+        visible: !card.stacked
+        Layout.alignment: Qt.AlignVCenter
+        Layout.maximumWidth: content.width * 0.4
+        text: card.asker + " asks"
+        color: Omunculus.toneOf(card.asker)
+        font.pixelSize: 12
+        elide: Text.ElideRight
+      }
+      Label {
+        visible: !card.stacked
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
         Layout.alignment: Qt.AlignVCenter
         text: card.subject
         color: card.dim
@@ -188,6 +210,26 @@ SurfaceFrame {
         elide: Text.ElideRight
       }
       Label { Layout.alignment: Qt.AlignVCenter; text: card.stamp; color: card.dim; font.pixelSize: 11 }
+    }
+    RowLayout {
+      visible: card.stacked
+      Layout.fillWidth: true
+      spacing: 6
+      Label {
+        Layout.maximumWidth: content.width * 0.6
+        text: card.asker + " asks"
+        color: Omunculus.toneOf(card.asker)
+        font.pixelSize: 12
+        elide: Text.ElideRight
+      }
+      Label {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        text: "·  " + card.subject
+        color: card.dim
+        font.pixelSize: 11
+        elide: Text.ElideRight
+      }
     }
 
     Label {
@@ -224,17 +266,20 @@ SurfaceFrame {
     }
 
     Chip {
+      Layout.maximumWidth: content.width
       visible: card.passed.length > 0 && !card.settled
-      text: "Passed up by " + card.passed.map(origin => Requests.label(origin.requester)).join(", ")
+      text: "passed up by " + (card.passers !== "" ? card.passers : "the harness")
       icon: card.wording ? "chevron-up" : "chevron-down"
       onClicked: card.wording = !card.wording
     }
 
+    // How each level above the asker worded it, then the harness's sentence.
     Label {
       Layout.fillWidth: true
       Layout.maximumWidth: 620
       visible: card.passed.length > 0 && card.wording && !card.settled
-      text: card.request ? card.request.reason || "" : ""
+      text: card.climb.slice(1).map(level => Requests.label(level.requester) + ": " + String(level.reason || "")).concat(card.request ? [String(card.request.reason || "")] : [])
+        .filter(line => line.trim() !== "").join("\n\n")
       color: card.dim
       font.pixelSize: 11
       wrapMode: Text.Wrap
@@ -307,7 +352,9 @@ SurfaceFrame {
         spacing: 6
 
         Caption {
+          Layout.fillWidth: true
           visible: !choice.own
+          wrapMode: Text.Wrap
           text: choice.modelData.part.replace(/_/g, " ").toUpperCase() + "  ·  " + Requests.label(choice.modelData.request.requester).toUpperCase() + " ASKS"
         }
         Flow {
@@ -329,14 +376,16 @@ SurfaceFrame {
               dense: true
               role: modelData === "deny" || modelData === "cancel" ? "guarded" : "progress"
               text: card.labelOf(modelData, choice.modelData.request)
-                onClicked: choice.decide(modelData)
+              onClicked: choice.decide(modelData)
             }
           }
         }
-        // Always: each scope a grant written into the TOML.
+        // Always: each scope a grant saved in the project settings.
         Caption {
+          Layout.fillWidth: true
           visible: choice.always.length > 0
-          text: "ALWAYS  ·  WRITTEN INTO OMUNCULUS.TOML"
+          wrapMode: Text.Wrap
+          text: "ALWAYS  ·  SAVED IN THE PROJECT SETTINGS"
         }
         Flow {
           Layout.fillWidth: true

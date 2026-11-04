@@ -7,12 +7,13 @@ import "kit/ui"
 
 // QuestionForm answers a numbered list of questions item by item. Its top
 // row says how many are answered, with SEND and "I can't answer this", so
-// they never sit below the fold. Each item is its number, its question
-// wrapped in sentence case, and a full-width box that grows with its text,
-// with a toggle on the box's row that fills "I don't know yet" and, off,
-// restores what was typed. Enter moves to the next box, Enter in the last
-// and Ctrl+Enter in any send; a box taking the keyboard scrolls into view
-// in the view around the form. SEND joins the answers into one text reply.
+// they never sit below the fold; narrow, they wrap onto lines. Each item is
+// its number, its question wrapped in sentence case, and a full-width box
+// that grows with its text, with a toggle beside the box, or under it when
+// the form is under 480 px, that fills "I don't know yet" and, off, restores
+// what was typed. Enter moves to the next box, Enter in the last and
+// Ctrl+Enter in any send; a box taking the keyboard scrolls into view in the
+// view around the form. SEND joins the answers into one text reply.
 // The closing paragraph of the message, if any, shows after the last box and
 // is not sent.
 // What was typed stays after a failure.
@@ -92,17 +93,19 @@ ColumnLayout {
     onActivated: form.send()
   }
 
-  RowLayout {
+  Flow {
     Layout.fillWidth: true
     spacing: 10
     Label {
-      Layout.alignment: Qt.AlignVCenter
+      height: send.height
+      verticalAlignment: Text.AlignVCenter
       text: form.answered + " of " + form.items.length + " answered"
       color: Theme.dim
       font.pixelSize: 11
       font.letterSpacing: 1
     }
     TraceButton {
+      id: send
       dense: true
       role: "primary"
       icon: "enter"
@@ -177,9 +180,11 @@ ColumnLayout {
           wrapMode: Text.Wrap
         }
 
-        RowLayout {
+        GridLayout {
           Layout.fillWidth: true
-          spacing: 8
+          columns: form.width < 480 ? 1 : 2
+          columnSpacing: 8
+          rowSpacing: 6
 
           TextArea {
             id: field

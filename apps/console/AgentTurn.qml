@@ -1,20 +1,22 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import "kit/client/Phrases.js" as Phrases
+import QtQuick.Layouts
+import "kit/client/Progress.js" as Progress
 import "kit/ui"
 
 // AgentTurn is one run of an agent in the conversation, said like a line of
-// chat: on the left, under the agent's portrait and name in its colour, its
-// words drawn as they stream, and the files it attached.
-// Below them, one dim line says what it did in plain phrases — "Read 6
-// files", how many attempts did not work, the work it closed or the access it
-// granted; clicking it lists the calls in place, with why a failed one
-// failed. Until the agent says or does anything the turn is not drawn.
-// A turn that continues the same agent's drops its name and time. Hovering
-// the words shows the way to copy them, in a gutter they never take.
+// chat: on the left, under the agent's portrait, its name in its colour, the
+// time and how long it has worked ("Working 0:12" while the run is open,
+// "Worked 1 min" after), its words drawn as they stream, the files it
+// attached, and the group of its tool calls (ToolCalls). Until the agent says
+// or does anything the turn is not drawn. A turn that continues the same
+// agent's drops its header. Hovering the words shows the way to copy them,
+// in a gutter they never take.
 Item {
   id: turn
 
+  // The run.
+  required property string run
   required property string who
   required property string text
   required property string partial
@@ -24,18 +26,22 @@ Item {
   required property string files
   required property string stamp
   property bool continued: false
-  property bool callsOpen: false
 
   readonly property var lines: JSON.parse(steps)
-  readonly property var calls: lines.filter(line => !line.outcome)
-  readonly property var outcomes: lines.filter(line => line.outcome)
   readonly property var attached: JSON.parse(files)
-  readonly property var summary: Phrases.summarize(calls)
-  readonly property string did: [summary.text].concat(outcomes.map(outcome => outcome.text)).filter(part => part !== "").join("  ·  ")
+  // When the run started and ended, in seconds; the end is 0 while it is open.
+  readonly property real started: Omunculus.runStarts[run] || 0
+  readonly property real ended: {
+    const record = Omunculus.runs.find(item => item.id === run)
+    return record && record.finished_at ? Date.parse(record.finished_at) / 1000 : 0
+  }
+  readonly property string worked: started <= 0 ? ""
+    : streaming ? "Working " + Progress.clock(Math.max(0, (Omunculus.tick || Date.now() / 1000) - started))
+    : ended > 0 ? "Worked " + Progress.span(Math.max(0, ended - started)) : ""
   readonly property string said: text + (partial !== "" ? (text !== "" ? "\n\n" : "") + partial : "")
   readonly property color tone: Omunculus.toneOf(who)
   // A run that has said and done nothing so far leaves no trace in the
-  // conversation; the working line says that the team works.
+  // conversation; the progress strip says that the team works.
   readonly property bool empty: said === "" && lines.length === 0 && attached.length === 0
   // Room beside the words kept for the copy button.
   readonly property real gutter: copy.implicitWidth + 12
@@ -64,12 +70,20 @@ Item {
     width: turn.widest
     spacing: 4
 
-    Row {
+    RowLayout {
       visible: !turn.continued
+      width: turn.widest
       spacing: 8
-      Portrait { width: 20; height: 20; anchors.verticalCenter: parent.verticalCenter; agent: turn.who; source: Omunculus.imageOf(turn.who); tone: Omunculus.toneOf(turn.who) }
-      Label { text: turn.who.toUpperCase(); color: turn.tone; font.pixelSize: 11; font.letterSpacing: 2 }
-      Label { text: turn.stamp; color: Theme.dim; font.pixelSize: 11 }
+      Portrait { Layout.preferredWidth: 20; Layout.preferredHeight: 20; agent: turn.who; source: Omunculus.imageOf(turn.who); tone: Omunculus.toneOf(turn.who) }
+      Label { Layout.minimumWidth: 0; Layout.maximumWidth: implicitWidth; Layout.fillWidth: true; text: turn.who.toUpperCase(); color: turn.tone; font.pixelSize: 11; font.letterSpacing: 2; font.bold: true; elide: Text.ElideRight }
+      Label {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        text: turn.stamp + (turn.worked !== "" ? "  ·  " + turn.worked : "")
+        color: Theme.dim
+        font.pixelSize: 11
+        elide: Text.ElideRight
+      }
     }
 
     Rectangle {
@@ -108,79 +122,10 @@ Item {
       }
     }
 
-    // What it did, on one dim line; the calls open below it.
-    Item {
-      visible: turn.did !== "" || turn.summary.failed
-      width: Math.min(turn.widest, did.implicitWidth + 18)
-      height: did.implicitHeight + 4
-      Row {
-        id: did
-        spacing: 6
-        Icon { anchors.verticalCenter: parent.verticalCenter; name: turn.callsOpen ? "chevron-down" : "chevron-right"; size: 10; color: pointer.containsMouse ? turn.tone : Theme.dim }
-        Label {
-          anchors.verticalCenter: parent.verticalCenter
-          width: Math.min(implicitWidth, turn.widest - 24)
-          text: turn.did
-          color: pointer.containsMouse ? Theme.foreground : Theme.dim
-          font.pixelSize: 11
-          elide: Text.ElideRight
-        }
-        Icon { visible: turn.summary.failed; anchors.verticalCenter: parent.verticalCenter; name: "close"; size: 10; color: Theme.error }
-        Label {
-          visible: turn.summary.failed
-          anchors.verticalCenter: parent.verticalCenter
-          text: turn.summary.failedText
-          color: Theme.error
-          font.pixelSize: 11
-        }
-      }
-      MouseArea {
-        id: pointer
-        anchors.fill: parent
-        enabled: turn.calls.length > 0
-        hoverEnabled: true
-        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: turn.callsOpen = !turn.callsOpen
-      }
-    }
-
-    Column {
-      visible: turn.callsOpen
-      x: 16
-      width: turn.widest - 16
-      spacing: 6
-      Repeater {
-        model: turn.callsOpen ? turn.calls : []
-        delegate: Column {
-          id: call
-          required property var modelData
-          width: parent.width
-          spacing: 2
-          Row {
-            spacing: 8
-            Icon { anchors.verticalCenter: parent.verticalCenter; name: call.modelData.ok ? "check" : "close"; size: 10; color: call.modelData.ok ? Theme.success : Theme.error }
-            Label { text: Phrases.phrase(call.modelData.name, call.modelData.args); color: Theme.foreground; font.pixelSize: 11 }
-          }
-          Label {
-            visible: call.modelData.text !== ""
-            x: 18
-            width: parent.width - 18
-            text: call.modelData.text
-            color: Theme.dim
-            font.pixelSize: 11
-            wrapMode: Text.Wrap
-          }
-          Label {
-            visible: call.modelData.output !== ""
-            x: 18
-            width: parent.width - 18
-            text: call.modelData.output
-            color: Theme.error
-            font.pixelSize: 11
-            wrapMode: Text.Wrap
-          }
-        }
-      }
+    ToolCalls {
+      width: turn.widest
+      steps: turn.lines
+      live: turn.streaming
     }
   }
 }
