@@ -85,7 +85,7 @@ Item {
         running: strip.working && !Theme.reducedMotion
         tone: Theme.primary
       }
-      ProgressNode.StateMark {
+      StateMark {
         anchors.centerIn: parent
         visible: !strip.working || Theme.reducedMotion
         state: strip.working ? "" : strip.forYou.length > 0 ? "needs-you" : strip.phase

@@ -82,7 +82,7 @@ Rectangle {
           font.bold: true
           elide: Text.ElideRight
         }
-        ProgressNode.StateMark {
+        StateMark {
           id: mark
           Layout.maximumWidth: 110
           state: card.node.state

@@ -182,7 +182,7 @@ FocusScope {
             font.bold: true
             elide: Text.ElideRight
           }
-          ProgressNode.StateMark {
+          StateMark {
             visible: pane.node !== null
             Layout.maximumWidth: 160
             state: pane.node ? pane.node.state : ""
