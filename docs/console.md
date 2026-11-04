@@ -170,8 +170,9 @@ text and no files are not added to the thread.
 A work handed down is a block (`SubWorkBlock`) in the thread of the run that
 handed it down, where it did; so is a root work a run opened. A card headed
 SUB-WORK with its agent, title and time, it says its state, for how long and
-how many steps (tool calls; hook runs are not steps, here and in the turn),
-(the work's own, not those of the works it handed down) and, when some
+how many steps (tool calls; hook runs are not steps, here and in the turn):
+its own, then, while it handed work down, how many with its team ("20 steps
+· 34 with its team"), so the count moves while the team works; and, when some
 failed, how many, what was attempted and why the first failed ("5 failed:
 could not move to the next stage (reason)"), in the error tone only if the work itself
 failed; when each failed tool later succeeded, a dim "5 retried" instead,

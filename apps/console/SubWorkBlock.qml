@@ -81,10 +81,19 @@ SurfaceFrame {
     node && condition === "working" ? { text: Progress.clock(Math.max(0, now - node.since)), keep: true }
       : node && typeof node.finishedIn === "number" ? { text: "in " + Progress.span(node.finishedIn) }
       : null,
-    node ? { text: node.calls === 1 ? "1 step" : node.calls + " steps", short: node.calls + " steps" } : null,
+    node ? { text: block.steps, short: block.steps } : null,
     node && node.failed > 0 ? failures : null
   ].filter(part => part !== null), budget - 15).filter(text => text !== "")
   readonly property var tally: Omunculus.callsOf[work] || {}
+  // Its own steps, and with those of the works it handed down, so the count
+  // moves while its team works.
+  readonly property string steps: {
+    if (!node)
+      return ""
+    const all = node.branch ? node.branch.calls : node.calls
+    const said = count => count === 1 ? "1 step" : count + " steps"
+    return all > node.calls ? said(node.calls) + " · " + all + " with its team" : said(node.calls)
+  }
   // The failed calls: said as retried, in dim, when each of their tools
   // succeeded later; else what was attempted and why the first one failed.
   readonly property var failures: {

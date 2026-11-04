@@ -254,7 +254,7 @@ SurfaceFrame {
         elide: Text.ElideRight
       }
       Item {
-        visible: card.stacked
+        visible: card.stacked || card.about === ""
         Layout.fillWidth: true
       }
       Counted {

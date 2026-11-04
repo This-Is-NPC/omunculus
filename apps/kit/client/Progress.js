@@ -274,8 +274,9 @@ function build(input) {
       agentSeconds: sum.agentSeconds + kid.branch.agentSeconds,
       works: sum.works + kid.branch.works,
       usage: plus(sum.usage, kid.branch.usage),
-      running: sum.running + kid.branch.running
-    }), { agentSeconds: agentSeconds, works: 1, usage: own.usage, running: mine.filter(each => each.status === "open").length });
+      running: sum.running + kid.branch.running,
+      calls: sum.calls + kid.branch.calls
+    }), { agentSeconds: agentSeconds, works: 1, usage: own.usage, running: mine.filter(each => each.status === "open").length, calls: own.calls });
     branch.seconds = Math.max(0, reach - created);
     branch.agents = agents.size;
 
