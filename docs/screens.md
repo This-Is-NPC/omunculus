@@ -82,8 +82,9 @@ how many agents work in, its works not finished and its last activity.
 Under the search line, chips keep those needing you or working. NEW PROJECT
 registers another with the server: its id and the path of its config file.
 The masthead names the way to every page from here on; the project's name
-in it opens this page, and `▲ 2 ELSEWHERE` on its right, while requests wait
-for you in other projects, opens it with those waiting picked out.
+in it opens this page, and `▲ 2 ELSEWHERE` on its right, while
+conversations need you in other projects, opens it with those projects
+picked out.
 
 | Keys | What they do |
 | --- | --- |

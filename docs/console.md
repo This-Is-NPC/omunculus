@@ -547,10 +547,10 @@ project, or, on the registry alone, READY (OFFLINE while the server does not
 answer), and the slash after OMUNCULUS shows only before a crumb; under 560 px OMUNCULUS is left out, leaving the
 crumbs its room. The project's crumb opens PROJECTS, and the
 conversation's its chat. Crumbs that do not fit elide from the left, the
-project's never below 8 characters. While a project is open and requests
-wait for you in the other ones, the masthead's right shows the notice `2
-WAITING ELSEWHERE` (`2 ELSEWHERE` under 700 px), which opens PROJECTS with
-WAITING FOR YOU lit, and its × puts it away until the count changes; at the
+project's never below 8 characters. While a project is open and
+conversations need you in the other ones, the masthead's right shows their
+count in the notice `2 WAITING ELSEWHERE` (`2 ELSEWHERE` under 700 px),
+which opens PROJECTS with NEEDS YOU lit, and its × puts it away until the count changes; at the
 start and on the registry's level, where the projects' list carries the
 count, it does not show.
 
