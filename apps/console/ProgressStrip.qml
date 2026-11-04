@@ -4,11 +4,12 @@ import QtQuick.Layouts
 import "kit/ui"
 import "kit/ui/Breakpoints.js" as Breakpoints
 import "kit/client/Progress.js" as Progress
+import "kit/client/Time.js" as Time
 import "kit/client/Shortcuts.js" as Shortcuts
 
 // ProgressStrip is the conversation's head: a 40 px strip with its meta —
-// the agent it is with, in its tone; the stage of the work in focus and how
-// long it has run, or, before any work, that the conversation is starting —
+// the agent it is with, in its tone; the stage of the work in focus (the
+// stepper under names it) and how long it has run, or, before any work, that the conversation is starting —
 // then, where there is room, how many agents ran and how many model calls
 // they made, each opening what it counts (the team, the cost); at its right
 // the chevron that opens the full progress, and ANSWER, in the warning tone,
@@ -19,7 +20,9 @@ import "kit/client/Shortcuts.js" as Shortcuts
 // its card counts it, and a finished work says how long it took. Every agent
 // is named in its own tone. Every line is fitted in characters to its width.
 // The two lines are hidden while nothing was handed to anyone and no agent
-// runs.
+// runs; the second also while the thread under the strip shows its own
+// working row, so the work is said once. Waiting on you, the meta says so,
+// in the warning tone, in place of the clock, which stops.
 ColumnLayout {
   id: strip
 
@@ -35,6 +38,9 @@ ColumnLayout {
   // What the masthead calls the conversation; a title saying the same is not
   // repeated under the strip.
   property string heading: ""
+  // Whether the thread beside already says who works and on what, so the
+  // strip does not say it again.
+  property bool threadWorking: false
   // Seconds of silence after which a working team is said to have no news.
   readonly property int quiet: 600
 
@@ -62,7 +68,7 @@ ColumnLayout {
 
   // Where the conversation is before any work: starting while its first run
   // goes, working on later ones, not started before any; else its state.
-  readonly property string opening: working ? (Omunculus.runs.length <= 1 ? "STARTING" : "WORKING")
+  readonly property string opening: working ? (threadWorking ? "" : Omunculus.runs.length <= 1 ? "STARTING" : "WORKING")
     : phase === "idle" ? (Omunculus.runs.length === 0 ? "NOT STARTED" : "")
     : phase === "needs-you" ? "" : Progress.word(phase).toUpperCase()
 
@@ -73,8 +79,9 @@ ColumnLayout {
     const segments = who !== "" ? [{ text: who.toUpperCase(), tone: Omunculus.toneOf(who), lead: true }] : []
     if (focus && focus.count > 0) {
       const at = Math.min(focus.at, focus.count - 1)
-      segments.push({ text: "STAGE " + (at + 1) + " OF " + focus.count + " " + String(focus.steps[at].name).toUpperCase(), short: "STAGE " + (at + 1) + "/" + focus.count, keep: true })
-    } else if (focus && focus.state !== "needs-you") {
+      // The stepper under the strip names the stage.
+      segments.push({ text: "STAGE " + (at + 1) + "/" + focus.count, keep: true })
+    } else if (focus && focus.state !== "needs-you" && !(threadWorking && focus.state === "working")) {
       segments.push({ text: focus.word.toUpperCase(), keep: true })
     } else if (opening !== "") {
       segments.push({ text: opening, keep: true })
@@ -82,7 +89,12 @@ ColumnLayout {
     if (focus) {
       const took = focus.finishedIn !== null
       const lasted = Progress.duration(took ? focus.finishedIn : focus.branch.seconds).toUpperCase()
-      segments.push({ text: took ? "TOOK " + lasted : focus.state === "cancelled" ? lasted : lasted + " SO FAR", short: lasted, keep: true })
+      // Waiting on you stops the clock: it says since when, in the warning tone.
+      const since = lastEvent > 0 ? " SINCE " + Time.clock(new Date(lastEvent * 1000).toISOString(), Date.now()) : ""
+      if (focus.state === "needs-you")
+        segments.push({ text: "WAITING FOR YOU" + since, short: "WAITING", tone: Theme.warning, keep: true })
+      else
+        segments.push({ text: took ? "TOOK " + lasted : focus.state === "cancelled" ? lasted : lasted + " SO FAR", short: lasted, keep: true })
     }
     // The agent carries the separator after it, so it goes with it; the
     // others carry the one before them.
@@ -310,7 +322,7 @@ ColumnLayout {
   RowLayout {
     Layout.fillWidth: true
     Layout.leftMargin: Theme.space.line
-    visible: strip.moving
+    visible: strip.moving && !strip.threadWorking
     spacing: Theme.space.tight
 
     // The state: the trace while working, unless motion is reduced.
