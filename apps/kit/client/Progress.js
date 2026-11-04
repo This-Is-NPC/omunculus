@@ -245,7 +245,7 @@ function build(input) {
     if (state === "working") doing = phrasing(id);
     else if (state === "needs-you") doing = "Waiting for your answer";
     else if (state === "waiting") doing = "Waiting for " + (waitingOn || "the team");
-    else if (state === "stopped") doing = stopped ? "Stopped by " + stopped.by + (stopped.why ? ": " + stopped.why : "") : "Stopped";
+    else if (state === "stopped") doing = stopped ? "Sent back for fixes" + (stopped.by && stopped.by !== agent ? " by " + stopped.by : "") + (stopped.why ? ": " + stopped.why : "") : "Stopped";
     else if (state === "failed") doing = "Failed: " + firstLine(lastRun.error);
     else if (state === "done") doing = "Done in " + span(finishedIn);
     else if (state === "cancelled") doing = "Cancelled";
@@ -508,9 +508,20 @@ function together(group) {
     .join(" · ");
 }
 
+// How many works `nodes` hold, counting those below them.
+function within(nodes) {
+  return nodes.reduce((sum, node) => sum + 1 + within(kidsOf(node)), 0);
+}
+
+// "9 in all" when works lie below `nodes`, so a fold adds up to the works counted.
+function inAll(nodes) {
+  const all = within(nodes);
+  return all > nodes.length ? [all + " in all"] : [];
+}
+
 // Sub-works done and cancelled, folded into one line, in words: "2 sub-works
-// done · 18 min · 1 cancelled", the time from the first one's start to the
-// last end in their branches.
+// done · 18 min · 1 cancelled · 9 in all", the time from the first one's start
+// to the last end in their branches, the total when works lie below them.
 function finished(nodes) {
   const done = nodes.filter(node => node.state === "done").length;
   const cancelled = nodes.length - done;
@@ -518,7 +529,7 @@ function finished(nodes) {
   const to = Math.max.apply(null, nodes.map(node => node.created + node.branch.seconds));
   const works = count => count + (count === 1 ? " sub-work " : " sub-works ");
   return [done > 0 ? works(done) + "done" : works(cancelled) + "cancelled", span(to - from)]
-    .concat(done > 0 && cancelled > 0 ? [cancelled + " cancelled"] : []).join(" · ");
+    .concat(done > 0 && cancelled > 0 ? [cancelled + " cancelled"] : [], inAll(nodes)).join(" · ");
 }
 
 function token(text, status) { return { text: text, status: status }; }

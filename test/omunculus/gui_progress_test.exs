@@ -106,8 +106,11 @@ defmodule Omunculus.GuiProgressTest do
     const stopJournal = Progress.journal({}, {type: "break", work_id: "w9", at: iso(1100), actor: by("designer"), body: {body: "no menu given"}});
     const stopped = Progress.build({works: broken, lanes: {}, journeys: stopJournal, runs: [run("r9", "designer", "w9", {status: "done"})], now: 2000});
     const s = stopped.flat[0];
-    check(stopped.state === "stopped" && s.state === "stopped" && s.doing === "Stopped by designer: no menu given", "stopped", s);
+    check(stopped.state === "stopped" && s.state === "stopped" && s.doing === "Sent back for fixes: no menu given", "stopped", s);
     check(s.stopped.by === "designer" && s.since === 1100, "stopped by", s.stopped);
+    const reviewed = Progress.journal({}, {type: "break", work_id: "w9", at: iso(1100), actor: by("seller"), body: {body: "no menu given"}});
+    const by_other = Progress.build({works: broken, lanes: {}, journeys: reviewed, runs: [run("r9", "designer", "w9", {status: "done"})], now: 2000});
+    check(by_other.flat[0].doing === "Sent back for fixes by seller: no menu given", "stopped by another", by_other.flat[0].doing);
     const other = Progress.build({works: broken, lanes: {}, journeys: stopJournal, runs: [run("r9", "designer", "w9", {status: "done"}), run("r8", "administrator", "", {depth: 1})], runStarts: {r8: 1900}, now: 2000});
     check(other.state === "working" && other.now.agent === "administrator" && other.now.state === "working" && other.now.since === 1900, "open run beats a stopped leaf", other.now);
     const failed = Progress.build({works: broken, lanes: {}, runs: [run("r9", "designer", "w9", {status: "done", error: "model refused\\nmore"})], now: 2000});
@@ -187,10 +190,12 @@ defmodule Omunculus.GuiProgressTest do
 
   test "finished folds done and cancelled sub-works into one line" do
     run!("""
-    const node = (state, created, seconds) => ({state, created, branch: {seconds}});
+    const node = (state, created, seconds) => ({state, created, branch: {seconds}, groups: []});
     check(Progress.finished([node("done", 100, 300), node("done", 200, 980)]) === "2 sub-works done · 18 min", "two", "");
     check(Progress.finished([node("done", 100, 42), node("cancelled", 110, 10)]) === "1 sub-work done · 42 s · 1 cancelled", "cancelled", "");
     check(Progress.finished([node("cancelled", 100, 5)]) === "1 sub-work cancelled · 5 s", "only cancelled", "");
+    const parent = Object.assign(node("done", 100, 50), {groups: [{nodes: [node("done", 100, 5), node("done", 100, 5)]}]});
+    check(Progress.finished([parent, node("done", 100, 50)]) === "2 sub-works done · 50 s · 4 in all", "in all", Progress.finished([parent, node("done", 100, 50)]));
     """)
   end
 

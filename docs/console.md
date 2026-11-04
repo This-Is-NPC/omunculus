@@ -258,8 +258,8 @@ what it calls, the round with who sent it back and why, the questions it
 asked and its tool calls; a done, cancelled or coming one is one line, what
 is below it folded. Siblings handed down in one stage are headed "N in
 parallel", and the done and cancelled works of each place fold into one
-row, "✓ 2 sub-works done · 18 min", unless a question waiting on you
-climbed from there. Picking a work shows its agent's last words, its questions in
+row, "✓ 2 sub-works done · 18 min", with "· 9 in all" when works lie below
+them, unless a question waiting on you climbed from there. Picking a work shows its agent's last words, its questions in
 full, and OPEN (its thread as a page), LOG (the log kept to it) and MAP (the
 team page's map, the work picked). ↑/↓ move, → unfolds, ← folds, Enter opens
 or folds, Esc returns to the composer.
@@ -408,7 +408,8 @@ the conversation's level is its root works, the one root's own level when
 there is a single one, the roots done before an open one folded under "N
 done earlier". The done and cancelled works of each stage, or of a work
 without a workflow, fold into one rule, "✓ 2 sub-works done · 18 min" (and
-"· 1 cancelled"), which a click, Enter or → unfolds into their rows and ←
+"· 1 cancelled", "· 9 in all" with the works below them, so the folds add up to
+ALL N WORKS), which a click, Enter or → unfolds into their rows and ←
 folds again; it stays folded while the conversation waits on you, unless
 the question climbed from there. A work opened under another in the outline
 gets the same fold for its done sub-works after its open ones.
@@ -552,12 +553,13 @@ A conversation's level, in place of the project's once one is opened:
   ("question", "step", "reply", "passed up"), what it says as one plain
   sentence ("sales asks you 5 questions: …", "passed 5 questions up"; the
   event's raw type, JSON and milliseconds only in its card), who, and FAILED,
-  RETRIED or NEEDS YOU at the right, under rules naming the day and each run.
+  RETRIED or NEEDS YOU at the right (NEEDS YOU only while that question is
+  still open), under rules naming the day and each run.
   A call reads in plain words ("read design/rounds.md", "looked in design/",
   "looked at design/README.md", "ran a command on quotes/", "could not read
   design/rounds.md: permission denied"), never by its tool name; a command
   is worded by the files it touches, named relative to the workspace (never a
-  header or a URL), and its raw line is in the row's card; a
+  header or a URL; a glob reads "the .html files in site/"), and its raw line is in the row's card; a
   failed command gives the last line of its output as the reason; a failure
   a later call of the same tool settled is dim with RETRIED, not red; a lookup that found nothing is dim ("found no
   quotes yet"), not FAILED. An answer names whom it answers ("answered

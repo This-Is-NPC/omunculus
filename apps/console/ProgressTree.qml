@@ -15,7 +15,7 @@ import "kit/client/Time.js" as Time
 // and a done, cancelled or coming work, keeps what is below it folded until
 // unfolded, unless a question waiting on you climbed from there; the done
 // and cancelled works of each place fold into one row, "✓ 2 sub-works done ·
-// 18 min". ↑/↓ move
+// 18 min · 9 in all". ↑/↓ move
 // between rows, → unfolds, ← folds, Enter opens a work's details or folds a
 // row, Esc leaves.
 Item {
@@ -123,7 +123,7 @@ Item {
         } else {
           const done = kids.filter(kid => kid.state === "done").length
           out.push({ kind: "more", key: key + "+", level: 1, of: key, fold: quiet,
-            text: kids.length + (kids.length === 1 ? " sub-work" : " sub-works") + (done === kids.length ? " done" : done > 0 ? " · " + done + " done" : "") })
+            text: kids.length + (kids.length === 1 ? " sub-work" : " sub-works") + (done === kids.length ? " done" : done > 0 ? " · " + done + " done" : "") + Progress.inAll(kids).map(text => " · " + text).join("") })
         }
       })
     }
