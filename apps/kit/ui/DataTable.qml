@@ -2,8 +2,9 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic as C
 
-// DataTable lists records as rows of columns under a header; below 700 px each
-// row stacks its cells into lines instead. A row opens on click, Enter or
+// DataTable lists records as rows of columns under a header; below 700 px, or
+// at every width when it is `compact`, each row stacks its cells into lines
+// instead, with no header. A row opens on click, Enter or
 // Space, or, when the table `picks`, a click picks it and a double click opens
 // it; ↑/↓ move, ↑ on the first asks to leave upward, Delete asks to remove it,
 // Esc asks to go back. Each row may carry tools on its right, from `tools` (its
@@ -61,7 +62,7 @@ Item {
   property bool active: false
   // Whether the cells of rows new to the list decode into view.
   property bool decode: false
-  readonly property bool compact: width < 700
+  property bool compact: width < 700
   // Below this a row shows its tools only when pointed at or selected, so its
   // text keeps the room.
   readonly property bool narrow: width < 360
