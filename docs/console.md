@@ -197,8 +197,17 @@ first when it is another one (`Omunculus.switchProject`).
 
 The masthead names the page: the project, then the conversation open and
 its page, or the page. As in the studio, the pages of the level are a
-carousel down the left edge (the kit's `TabRail`), the one on screen at its
-head beside the bar of its commands (the kit's `PageBar`).
+rail down the left edge (the kit's `TabRail`) in a fixed order, the one on
+screen marked in its place, beside the bar of its commands (the kit's
+`PageBar`). The rail is folded to the pages' numbers; a window at least
+1100 px wide always shows their names, a narrower one unfolds the rail as
+an opaque panel over the page while the pointer or the keyboard is in it.
+One click chooses a page and folds the rail, which stays folded until the
+pointer has left and come back, and the page takes the keyboard; Esc folds
+it too. The chat, team, log and cost pages are named so in the rail. The
+masthead and the rail show their names as plain text. When the desktop
+setting `enable-animations` is off, nothing in the window slides, sweeps or
+decodes.
 
 The bar ranks the commands — BACK apart, the page's main action solid (NEW
 CONVERSATION on CONVERSATIONS, REPLY where something waits on you, PENDING
@@ -237,7 +246,7 @@ keeping its grouping, filter and the card the keyboard was on.
 The digit each page shows, or Ctrl with it, chooses it, and a command's
 letter, or Alt with it, runs the command, a field being written keeping its
 digits and letters and the picker of a new conversation its digits.
-Ctrl+Tab and Ctrl+Shift+Tab turn the carousel.
+Ctrl+Tab and Ctrl+Shift+Tab go to the next or the previous page.
 
 The IPC's `start`, `page <name>` (`conversations`, `board` and, with a
 conversation open, `chat`, `map`, `log`, `cost`), `conversations`,

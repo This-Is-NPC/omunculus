@@ -7,7 +7,7 @@ import "kit/ui"
 ShellRoot {
   // The omunculus window. At the start: a new conversation, the project's
   // conversations or the board. Entered: the pages of the level on screen
-  // down the left — the project's conversations and board, or the chat, map,
+  // down the left — the project's conversations and board, or the chat, team,
   // log and cost of the conversation open — the one on screen beside the bar
   // of its commands, and the page under them; back from the first page
   // entered is back to the start.
@@ -36,12 +36,14 @@ ShellRoot {
       started = true
     }
 
+    // What the rail calls a page: the map is the team.
+    function pageName(page) { return page === "map" ? "team" : page }
+
     // Chooses a page by its place, round from either end, and gives it the
-    // keyboard, so the carousel folds away.
+    // keyboard, so the rail folds away.
     function choose(index) {
       const pages = pagesView.pages
       pagesView.go(pages[(index + pages.length) % pages.length])
-      rail.pinned = false
       Qt.callLater(pagesView.focusEntry)
     }
 
@@ -178,11 +180,12 @@ ShellRoot {
 
             TabRail {
               id: rail
-              // Over the bar and the page while it unfolds.
+              // Over the bar and the page while it unfolds, opaque.
               z: 1
-              tabs: pagesView.pages.map(name => ({ name: name }))
+              tabs: pagesView.pages.map(name => ({ name: panel.pageName(name) }))
               current: pagesView.tabIndex
               onChosen: index => panel.choose(index)
+              onEscaped: pagesView.focusEntry()
             }
 
             PageBar {

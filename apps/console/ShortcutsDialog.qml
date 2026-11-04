@@ -17,7 +17,7 @@ ModalDialog {
     ["everywhere", [
       ["Tab · Shift+Tab", "move between controls"],
       ["Enter · Space", "press the control"],
-      ["1 · 2 · …", "the page of that number: the conversations and the board, or, in a conversation, its chat, map, log and cost"],
+      ["1 · 2 · …", "the page of that number: the conversations and the board, or, in a conversation, its chat, team, log and cost"],
       ["Ctrl+1 · Ctrl+2 · …", "the same, from a field being written or the picker"],
       ["Ctrl+Tab · Ctrl+Shift+Tab", "the next or the previous page"],
       ["Esc", "let go of what the page holds, then back to where you were, at last the start"],
@@ -38,11 +38,12 @@ ModalDialog {
       ["1 … 9 · Enter", "start it with them"]
     ]],
     ["chat", [
-      ["R", "answer the oldest request waiting on you"],
+      ["R", "answer the newest request waiting on you"],
+      ["T", "show or hide the team beside the conversation"],
       ["M", "show the oldest note to you and mark it read"],
       ["N", "new conversation"]
     ]],
-    ["map", [
+    ["team", [
       ["F", "the whole map in view"],
       ["R", "answer what the node picked asked"],
       ["E", "escalate what it asked you"],
@@ -73,6 +74,7 @@ ModalDialog {
     ]],
     ["composer", [
       ["Enter", "send, or leave the note"],
+      ["Shift+Enter", "a new line"],
       ["Esc", "write to the agent rather than note"]
     ]],
     ["request", [

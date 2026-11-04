@@ -94,7 +94,7 @@ All are QML on Quickshell and share `apps/kit`:
 
 - `apps/kit/ui`: the theme and the controls more than one app uses, among
   them `FlowCanvas`, a canvas that moves, zooms and pinches, and its
-  `ZoomControl`, and `TabRail`, an app's pages as a carousel down the left
+  `ZoomControl`, and `TabRail`, an app's pages in a fixed order down the left
   edge, with `PageBar`, the commands of the page on screen beside it, ranked
   — BACK apart, the page's actions in a `CommandRow`, and its tools at the
   end as icons — and the app's readout, which the app gives it; `CommandRow`,
