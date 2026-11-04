@@ -60,7 +60,7 @@ Item {
 
   Column {
     id: body
-    y: turn.headed ? Theme.space.inset : Theme.space.row : Theme.space.inset
+    y: turn.headed ? Theme.space.inset : Theme.space.row
     width: turn.widest
     spacing: Theme.space.line
 
