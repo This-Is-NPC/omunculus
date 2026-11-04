@@ -22,7 +22,8 @@ ColumnLayout {
   signal opened(string id, string page)
   signal leave()
 
-  readonly property string readout: shown.length + (shown.length === 1 ? " CONVERSATION" : " CONVERSATIONS")
+  // A filter or search that narrows the list reads "14 OF 17".
+  readonly property string readout: (shown.length === Omunculus.conversations.length ? "" : shown.length + " OF ") + Omunculus.conversations.length + (Omunculus.conversations.length === 1 ? " CONVERSATION" : " CONVERSATIONS")
 
   function focusEntry() { table.focusRows() }
 

@@ -22,7 +22,8 @@ ColumnLayout {
   signal opened(var place)
   signal leave()
 
-  readonly property string readout: shown.length + (shown.length === 1 ? " PROJECT" : " PROJECTS")
+  // A filter or search that narrows the list reads "1 OF 2".
+  readonly property string readout: (shown.length === Omunculus.projectRows.length ? "" : shown.length + " OF ") + Omunculus.projectRows.length + (Omunculus.projectRows.length === 1 ? " PROJECT" : " PROJECTS")
 
   function focusEntry() { table.focusRows() }
   function focusFilter() { searchBox.forceActiveFocus() }

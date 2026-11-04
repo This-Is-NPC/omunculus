@@ -456,6 +456,7 @@ The registry's level:
   tone while it counts any. A list the filters empty offers CLEAR FILTERS.
   Enter or a click opens the project at its conversations; ↑ on the first
   row goes back to the search. The view's `readout`, "3 PROJECTS", counts
+  the projects, and reads "1 OF 3 PROJECTS" while a filter or search narrows
   the rows listed;
 - BOARD, the works of every project.
 
@@ -479,7 +480,8 @@ The project's level:
   work's title, what was first said. Each row's `⋯` opens the conversation
   at its TEAM or its LOG instead of its chat. A list the filters empty
   offers CLEAR FILTERS; ↑ on the first row goes back to the search. The
-  view's `readout`, "16 CONVERSATIONS", counts the rows listed;
+  view's `readout`, "16 CONVERSATIONS", counts the project's conversations and reads
+  "14 OF 16 CONVERSATIONS" while a filter or search narrows the rows listed;
 - BOARD, the same board, opened kept to the project's works, every
   project's one click away.
 
