@@ -137,14 +137,17 @@ function intervals(lane, journey, created, end) {
 }
 
 // The conversation's progress, {state, roots, focus, flat, path, now,
-// forYou, agents, counts, spoken}: one node per work, nested under the stage
+// forYou, agents, counts, spoken, front}: one node per work, nested under the stage
 // that handed it down, with what it does, what it waits on and what its
 // branch spent; the root to show, the path to the work active below it, what
-// waits on you, as its card asks it, and the agents that ran, first first.
+// waits on you, as its card asks it, and the agents that ran, first first;
+// `front`, the agent that talks with the person when the works are other
+// agents' ({agent, agents, asking, ask}), else null. A node's `calls` are its
+// tool calls, shown as steps: the model calls are in `usage`.
 // input: {works, lanes (work id -> laneOf), runs (with error), requests,
 // noted (request id -> true for one the harness passed on), calling,
 // callArgs, runStarts, journeys, rootAgent, now, usage (work id -> Usage
-// tally), calls (work id -> {count, failed, last: {text, at}})}.
+// tally), calls (work id -> tool calls {count, failed, last: {text, at}})}.
 function build(input) {
   const works = input.works || [];
   const lanes = input.lanes || {};
@@ -381,7 +384,13 @@ function build(input) {
   if (state === "needs-you") spoken = forYou[0].asker + " asks you: " + firstLine(forYou[0].question);
   else if (state !== "idle") spoken = word(state) + ". " + (path.length > 1 ? path.map(each => each.agent).join(", ") : doing.agent) + (doing.doing ? ": " + doing.doing : "");
 
-  return { state: state, roots: roots, focus: focus, flat: flat, path: path, now: doing, forYou: forYou, agents: agents, counts: counts, spoken: spoken };
+  // The agent that talks with the person, when its works are other agents':
+  // the root of the team, and what it asks the person.
+  const front = input.rootAgent && roots.some(each => each.agent !== input.rootAgent)
+    ? { agent: input.rootAgent, agents: agents.length, asking: asking(forYou), ask: forYou.length > 0 ? forYou[0].id : "" }
+    : null;
+
+  return { state: state, roots: roots, focus: focus, flat: flat, path: path, now: doing, forYou: forYou, agents: agents, counts: counts, spoken: spoken, front: front };
 }
 
 // What requests for you ask (forYou entries), in words after "asks you":
