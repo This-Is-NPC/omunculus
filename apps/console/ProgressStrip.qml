@@ -10,8 +10,8 @@ import "kit/client/Shortcuts.js" as Shortcuts
 // ProgressStrip is the conversation's head: a 40 px strip with its meta —
 // the agent it is with, in its tone; the stage of the work in focus (the
 // stepper under names it) and how long it has run, or, before any work, that the conversation is starting —
-// then, where there is room, how many agents ran and how many model calls
-// they made, each opening what it counts (the team, the cost); at its right
+// then, where there is room, how many agents ran and what the
+// conversation has cost, each opening what it counts (the team, the cost); at its right
 // the chevron that opens the full progress, and ANSWER, in the warning tone,
 // while something waits on you. Under it, unframed, two lines: the stages of
 // the work in focus, or its title where the masthead does not already say
@@ -33,8 +33,8 @@ ColumnLayout {
   property real lastEvent: 0
   // How many requests wait on you.
   property int waiting: 0
-  // The model replies of the conversation.
-  property int calls: 0
+  // What the conversation's model calls used and cost, as the cost view tallies it.
+  property var usage: null
   // What the masthead calls the conversation; a title saying the same is not
   // repeated under the strip.
   property string heading: ""
@@ -46,7 +46,7 @@ ColumnLayout {
 
   signal toggle()
   signal answer()
-  // The agents counted, or the calls, are wanted.
+  // The agents counted, or the cost, are wanted.
   signal openTeam()
   signal openCost()
 
@@ -268,9 +268,9 @@ ColumnLayout {
           onChosen: strip.openTeam()
         }
         Count {
-          visible: strip.calls > 0
-          text: strip.calls + (strip.calls === 1 ? " REPLY" : " REPLIES")
-          tip: "the model replies and what they cost; open the cost"
+          visible: !!strip.usage && strip.usage.priced > 0
+          text: strip.usage ? Omunculus.money(strip.usage.cost) : ""
+          tip: "what this conversation has cost; open the cost"
           onChosen: strip.openCost()
         }
       }
