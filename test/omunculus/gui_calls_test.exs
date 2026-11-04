@@ -107,6 +107,7 @@ defmodule Omunculus.GuiCallsTest do
     same(Phrases.did("bash", {command: "ls quotes"}), "Looked in quotes/");
     same(Phrases.step("bash", {command: "ls ."}), "looked in the project");
     same(Phrases.step("bash", {command: "cat design/README.md; ls ./"}), "ran a command on design/README.md, the project");
+    same(Phrases.step("bash", {command: "cat site/*.html; ls *.css"}), "ran a command on the .html files in site/, the .css files");
     same(Phrases.step("bash", {command: "cd /home/x/proj/workspace && cat design/README.md"}), "looked at design/README.md");
     same(Phrases.step("bash", {command: "cd /home/x/proj/workspace; ls design"}), "looked in design/");
     const root = "/home/howl/p/dev/agency/workspace/clients/922610b3576cd2757ce772c32381c4cc";

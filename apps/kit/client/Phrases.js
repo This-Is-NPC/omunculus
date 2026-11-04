@@ -115,7 +115,10 @@ function relative(word) {
   if (workspaceAt < 0 && /^(~\/|\/home\/|\/root\/)/.test(word)) return "a home folder";
   if (workspaceAt < 0 && /^\/(usr|etc|opt|bin|lib|var)(\/|$)/.test(word)) return "the system";
   const root = /^\/(?:[^/]+\/)*?workspace(?:\/|$)(?:[^/]+\/[0-9a-f]{32}(?:\/|$))?/.exec(word);
-  return root ? word.slice(root[0].length) || "the project" : word;
+  const name = root ? word.slice(root[0].length) || "the project" : word;
+  // A glob is no name the client knows: `site/*.html` is "the .html files in site/".
+  const glob = /^(.*\/)?\*(\.\w+)$/.exec(name);
+  return glob ? "the " + glob[2] + " files" + (glob[1] ? " in " + glob[1] : "") : name;
 }
 
 // Whether a word is no file: a header ("Host:", "Content-Type: text/html") or
