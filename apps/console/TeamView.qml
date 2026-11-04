@@ -468,6 +468,7 @@ FocusScope {
             }
             StateMark {
               visible: !!line.modelData.front
+              Layout.fillWidth: false
               Layout.maximumWidth: line.width * 0.4
               state: line.modelData.front ? line.modelData.front.state : ""
               text: !line.modelData.front ? "" : line.modelData.front.state === "working" || line.modelData.front.state === "waiting" ? line.modelData.front.doing : line.modelData.front.state === "idle" ? "Idle" : ""
