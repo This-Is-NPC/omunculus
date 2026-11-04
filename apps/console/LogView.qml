@@ -10,11 +10,12 @@ import "kit/ui"
 // day, and one naming each run where it begins. The search line keeps the
 // rows whose text holds it; chips keep the ones that ask you or failed, and
 // two pickers one agent's or one level's. The count of rows sits at the
-// filters' right end, and "more" copies the event picked, else the rows
-// shown. A row picked shows its event in a card below, as the server sent
-// it, the first 20 KB unless all is asked. The list follows the newest row
-// while it is at the end. `/` goes to the search; Esc there empties it, then
-// goes back to the rows; Esc on them closes the event picked, then leaves.
+// filters' right end, or under them when they would not fit beside it, and
+// "more" copies the event picked, else the rows shown. A row picked shows
+// its event in a card below, as the server sent it, the first 20 KB unless
+// all is asked. The list follows the newest row while it is at the end. `/`
+// goes to the search; Esc there empties it, then goes back to the rows; Esc
+// on them closes the event picked, then leaves.
 Item {
   id: view
 
@@ -145,11 +146,19 @@ Item {
       onLeave: list.forceActiveFocus()
     }
 
-    // The filters, the count and the rare actions.
-    RowLayout {
+    // The filters, the count and the rare actions; the count and the menu
+    // go under the chips when all would not fit on one line, so neither
+    // covers a chip.
+    GridLayout {
+      id: filters
+      readonly property bool stacked: chips.contentWidth + tally.implicitWidth + menu.implicitWidth + columnSpacing * 2 > width
       Layout.fillWidth: true
-      spacing: Theme.space.gap
+      columns: stacked ? 2 : 3
+      columnSpacing: Theme.space.gap
+      rowSpacing: Theme.space.tight
       ChipStrip {
+        id: chips
+        Layout.columnSpan: filters.stacked ? 2 : 1
         Layout.fillWidth: true
         Layout.preferredHeight: implicitHeight
         Chip { text: "ASKS ME"; checked: view.asksOnly; accent: Theme.warning; onClicked: view.asksOnly = !view.asksOnly }
@@ -171,7 +180,8 @@ Item {
         }
       }
       Label {
-        Layout.maximumWidth: implicitWidth
+        id: tally
+        Layout.maximumWidth: filters.stacked ? Number.POSITIVE_INFINITY : implicitWidth
         Layout.fillWidth: true
         Layout.minimumWidth: 0
         text: (list.count + (view.filtered ? " of " + Omunculus.eventLog.rows.count : "") + " events").toUpperCase()
@@ -181,6 +191,7 @@ Item {
         elide: Text.ElideRight
       }
       ActionMenu {
+        id: menu
         items: [{ id: "copy", icon: "copy", text: view.picked !== null ? "COPY EVENT" : "COPY LOG" }]
         tip: "copy the event picked, else the rows shown"
         onChosen: view.copy()

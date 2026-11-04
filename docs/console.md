@@ -437,7 +437,8 @@ A conversation's level, in place of the project's once one is opened:
   its top right, under rules naming the day and each run. A search line, the
   chips ASKS ME and FAILED and an agent and a level picker filter it; the
   count of rows and a "more" menu with COPY, the event picked or else the
-  rows shown, sit at the filters' right. The event opened shows in a card
+  rows shown, sit at the filters' right, or under them when they do not fit
+  beside it. The event opened shows in a card
   under the list, with its local time and the server's ISO stamp as UTC and
   its copy and close tools at the top right;
 - COST, what the conversation used (`CostView`): a header strip with the

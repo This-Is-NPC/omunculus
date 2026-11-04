@@ -14,6 +14,8 @@ Item {
   readonly property bool holdsFocus: focused !== null && Focus.within(focused, row)
 
   implicitHeight: row.implicitHeight
+  // The width its chips take on one line, scrolled or not.
+  readonly property real contentWidth: row.implicitWidth
 
   onFocusedChanged: if (holdsFocus) reveal(focused)
 
