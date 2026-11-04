@@ -55,6 +55,21 @@ the mailbox, and the log names its events' actor `harness`.
 What an agent says, a request's reason and a work's goal and notes are the
 kit's `Prose`, their web addresses links that open in the browser.
 
+An agent's turn says what it did in plain phrases from the kit's
+`Phrases` ("Read 6 files"), never a tool's name; calls that failed are counted
+apart, in the error tone, and open to the call and why it failed.
+
+In the main thread a request is a card only while it waits on you. Your answer
+reads as a right-aligned bubble (`AnswerBubble`) with the question as one dim
+line above it. What the team asked among itself, and a request another
+gathers (`Requests.contained`), is not a card: it is one muted `TeamRow`
+that opens to the question and the answer, and a stretch of them folds under
+a "Team activity" line that shows the last three rows while the team works.
+A question for you that arrives while the view follows is held by its top.
+Above the composer, `WorkingLine` says from the conversation's `activity`
+whether the team works, waits on you or on itself, failed or is done, with the
+step and the time; it is hidden when idle.
+
 A message carries the files picked under the composer with the kit's
 `FilePicker`, sent through `Http.post`. A file a message or an agent's
 `attach` carries shows under it as the kit's `FileChip`, which
