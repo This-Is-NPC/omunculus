@@ -82,16 +82,17 @@ Item {
   }
 
   // Brings the entry of `key` into view, and stops following the end unless
-  // the keyboard is inside an entry, where the view stays as it is kept.
-  function reveal(key) {
+  // the keyboard is inside an entry, where the view stays as it is kept. An
+  // entry that takes the keyboard, or is taller than most of the view, starts
+  // at its top, so a form shows its first questions.
+  function reveal(key, top = false) {
     const row = rowOf(key)
     if (row < 0)
       return
     if (!inEntry)
       timeline.following = false
-    // An entry taller than most of the view, a form, starts at its top.
     const entry = timeline.itemAtIndex(row)
-    timeline.positionViewAtIndex(row, entry && entry.height > timeline.height * 0.6 ? ListView.Beginning : ListView.Center)
+    timeline.positionViewAtIndex(row, top || (entry && entry.height > timeline.height * 0.6) ? ListView.Beginning : ListView.Center)
   }
 
   // The card of the newest question for you, once its entry exists.
@@ -105,7 +106,7 @@ Item {
   function focusCard() {
     if (newestCard === "")
       return
-    reveal(newestCard)
+    reveal(newestCard, true)
     Qt.callLater(() => {
       const card = cardItem()
       if (!card)
