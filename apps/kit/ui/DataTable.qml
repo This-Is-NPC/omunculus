@@ -154,7 +154,7 @@ Item {
       function reveal() {
         const cells = table.compact ? lines : wide
         for (let i = 0; i < cells.count; i++) {
-          const cell = cells.itemAt(i)
+          const cell = cells.itemAt(i) as DecodeLabel
           if (cell)
             cell.replay()
         }

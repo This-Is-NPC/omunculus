@@ -25,7 +25,7 @@ C.Popup {
   focus: true
   FocusKeeper { popup: modal }
   padding: 0
-  background: Rectangle { color: Theme.background; border.color: edge }
+  background: Rectangle { color: Theme.background; border.color: modal.edge }
   C.Overlay.modal: Rectangle { color: Qt.alpha(Theme.background, 0.75) }
   enter: Transition {
     NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 140 }

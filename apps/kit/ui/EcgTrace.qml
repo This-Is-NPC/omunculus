@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Shapes
 
@@ -214,6 +215,7 @@ Item {
     // Pieces meet end to end with flat caps: the curve's tangent runs on across
     // the joint, and no overlap draws a brighter dot there.
     Shape {
+      id: line
       property var points: []
       anchors.fill: parent
       preferredRendererType: Shape.CurveRenderer
@@ -224,7 +226,7 @@ Item {
         fillColor: "transparent"
         joinStyle: ShapePath.RoundJoin
         capStyle: ShapePath.FlatCap
-        PathPolyline { path: points }
+        PathPolyline { path: line.points }
       }
     }
   }

@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 
 // LoadingTrace is the trace drawn while something loads: it moves in from the
@@ -21,7 +22,7 @@ Item {
     progress = 0
     fill.restart()
     if (body.item)
-      body.item.seed()
+      (body.item as EcgTrace).seed()
   }
 
   onRunningChanged: {
