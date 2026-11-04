@@ -86,7 +86,7 @@ project, given as `OMUNCULUS_PROJECT` and its local socket as
 
 | App | Is |
 | --- | --- |
-| [`apps/console`](console.md) | the window on one project: its conversations, each as threads of its agents' runs, and the orchestration map of its agents, works and requests; and a board of the works of every project of the registry, by state |
+| [`apps/console`](console.md) | the window on one project: its conversations, each as threads of its agents' runs with their tool calls and the works they handed down, the progress of its works, and the team page of its works, requests and agents, as an outline or a map; and a board of the works of every project of the registry, by state |
 | [`apps/mailbox`](mailbox.md) | a mailbox over every project: a thread is a conversation with one agent of depth 0, and its requests to you are answered there |
 | [`apps/studio`](studio.md) | the settings of a project: its flowchart on a canvas, then one item of the config at a time |
 
@@ -130,8 +130,13 @@ All are QML on Quickshell and share `apps/kit`:
   agents' images in Quickshell's cache, and `Requests.js`, the helpers
   that read a request's status and participants, the decisions it gathers
   from below and the option a reply chose, whether the harness opened it
-  and the questions it then passes on, and build a reply; `Project`, the
-  project a window was opened on, whether the server answers and the
+  and the questions it then passes on, and build a reply; `Progress.js`,
+  which derives from a conversation's state and stage events where its
+  works are, nested by stage and level, with what each does, waits on and
+  spent, and fits one-line stages and phrases to a width in characters;
+  `Calls.js`, which groups a run's tool calls into rows and reads the diff
+  of an edit or a write from its args; `Phrases.js`, which says a tool call
+  in plain words and in brief; `Project`, the project a window was opened on, whether the server answers and the
   window's last message, which the console and the studio share; and
   `Model.js`, which reads the text a model event carries.
 

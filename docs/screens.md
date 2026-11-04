@@ -39,8 +39,12 @@ These keys work on every screen of the console:
 | Ctrl+1 · Ctrl+2 · … | the same, from a field being written or the picker |
 | Ctrl+Tab · Ctrl+Shift+Tab | the next or the previous page |
 | Esc | let go of what the page holds, then back to where you were, at last the start |
-| Alt + a key of the bar | the key, from a field being written |
+| Alt + a key of the page | the key, from a field being written |
 | ? · F1 | the keys dialog, which lists these tables |
+
+Under 700 px there is no rail of pages: the bar's page switcher names the
+page and lists the others, and the commands that do not fit are in its `⋯`
+menu. The window is at least 360 by 480 px.
 
 Typed text never runs a command: nothing that sends, answers, grants, denies,
 escalates, reverts, deletes or cancels has a key of its own outside a field,
@@ -84,25 +88,35 @@ first said.
 
 ### 4. Chat
 
-The chat between you and the root agent: what each of you said and, on a
-line below each run, what the agent did. A question for you is a card in
-the thread, and what the team asked among itself one muted line. Above the
-composer a line says whether the team works, waits or is done, with its step
-and time; Alt+T opens the team beside the chat, as a sheet in a narrow window. A
-conversation with no message yet, opened from the
+The chat between you and the root agent: what each of you said and, under
+each run, its tool calls, folded to one line that counts them and unfolding
+to one row per call. A work handed down is a SUB-WORK block where it was,
+which unfolds into its own transcript, changes and runs. A question for you
+is a card in the thread; what an agent asked another is an exchange in the
+thread it was asked in, which DECIDE INSTEAD lets you answer. Over the
+thread, two lines say the stages of the work in focus and who works on it,
+doing what, for how long, with ANSWER while a question waits on you; its
+chevron, PROGRESS or Alt+P open the progress: the works nested by stage and
+level, beside the thread from 1100 px, a card over it from 700 px, a sheet
+over the chat below. A conversation with no message yet, opened from the
 conversations, first asks whom it is with, on the cards of
 [a new conversation](#2-a-new-conversation) when several agents of depth 0
 may take it.
 
+A sub-work's OPEN, or OPEN in the progress, shows that work's thread as a
+page of its own, under the way down to it, with a composer to its agent;
+OPEN IN TEAM (Alt+O) shows it on the team page.
+
 | Keys | What they do |
 | --- | --- |
 | Alt+R | put the keyboard in the words of the newest question waiting on you |
-| Alt+T | show or hide the team beside the chat |
+| Alt+P | open or close the progress, the keyboard in it |
 | Alt+M | show the oldest note to you and mark it read |
 | Ctrl+N | new conversation |
 | Enter, in the composer | send |
 | Shift+Enter, in the composer | break the line |
-| Esc, in a question's card or the team | back to the composer |
+| ↑ · ↓ · → · ←, in the progress | move, unfold, fold |
+| Esc, in a question's card or the progress | back to the composer; the sheet closes |
 
 ### 5. A request
 
@@ -116,22 +130,31 @@ ESCALATE carry.
 
 ### 6. Team
 
-The team tree: the step the work is at, then a row per work with its state,
-agent, task and time, and under it the details of the row picked, with OPEN
-IN LOG. Below, the works of the conversation as a flowchart: you on top, a row per depth,
-each work a card with its agent, model, title, state and the tool it calls
-while it runs; a work in a workflow a lane of its stages. Requests and
-unread notes hang from the work that made them. Picking a work opens its
-inspector: the work, and its RUNS, CHANGES and PROMPT.
+Every work of the conversation, one row each, nested under the stage of the
+work that handed it down, siblings handed down together headed "N in
+parallel": its agent and state, title, stages, what it does, what it waits on
+(⇡) and what it is asked (⇣), and its branch's time, calls and cost. Chips
+keep the works that need you or work. The work picked shows in full, in the
+tabs OVERVIEW, THREAD, REQUESTS, CHANGES, RUNS and LOG: beside the outline
+from 1100 px, as a page over it from 700 px; under 700 px each level is a
+page under a breadcrumb, a row going one level down. From 900 px MAP shows
+the works as a chart, one card per work, the work picked beside it.
 
 | Keys | What they do |
 | --- | --- |
-| Alt+F | the whole map in view |
-| Alt+R | answer what the node picked asked |
+| ↑ · ↓ | move between the works; the detail follows |
+| → · ← | unfold, fold; on a folded work, go to its parent |
+| Enter | open its detail, or its tabs beside the outline |
+| [ · ] | the previous or next tab |
+| / | filter the works |
+| Alt+R | answer what waits on you nearest the work picked |
 | Alt+E | open the decision of what it asked you, to escalate |
+| Alt+W | write to its agent |
 | Alt+C | leave it a note, without a run |
 | Alt+M | mark its notes read |
-| Alt+W | write to its agent |
+| Alt+L · Alt+G | its LOG and CHANGES tabs |
+| Alt+F | the whole map in view |
+| Esc | the detail, then the outline, then back |
 
 ### 7. Log
 
@@ -159,7 +182,7 @@ The works of every project of the registry as a kanban, a column per state.
 | --- | --- |
 | ← · → · ↑ · ↓ | move between the works, across and down the columns |
 | Enter · Space | open the work on its page |
-| Alt+S · Alt+A · Alt+P | by state, a lane per agent, a lane per project |
+| Alt+S · Alt+A · Alt+J | by state, a lane per agent, a lane per project |
 | / | filter the works |
 | Esc | empty the filter, then back to the works |
 
@@ -173,7 +196,7 @@ right.
 | Keys | What they do |
 | --- | --- |
 | Alt+R | answer what it asked you |
-| Alt+O | its conversation's map, the work picked |
+| Alt+O | its conversation's team, the work picked |
 | Esc | back |
 
 ### 11. The keys dialog
