@@ -171,8 +171,8 @@ A work handed down is a block (`SubWorkBlock`) in the thread of the run that
 handed it down, where it did; so is a root work a run opened. A card headed
 SUB-WORK with its agent, title and time, it says its state, for how long and
 how many steps (tool calls; hook runs are not steps, here and in the turn):
-its own, then, while it handed work down, how many with its team ("20 steps
-· 34 with its team"), so the count moves while the team works; and, when some
+with those of the works it handed down, then how many are its own ("34 steps
+· 20 its own"), so the count moves while the team works; and, when some
 failed, how many, what was attempted and why the first failed ("5 failed:
 could not move to the next stage (reason)"), in the error tone only if the work itself
 failed; when each failed tool later succeeded, a dim "5 retried" instead,
@@ -234,7 +234,9 @@ design · round 2 › ○ assess …", shorter forms as the width shrinks, down 
 one dot per stage and the current name), or its title when it has no stages
 and the masthead does not already say it; then who works on it, from its
 agent down to the one at work, what that one does and its clock: "seller ›
-design-lead › designer: Writing files · 4:12". Once you have written, both lines keep their
+design-lead › designer: Thinking · wrote site/index.html · 4:12". A call is
+known only once it finished, so the line says the last one in the past, after
+"Thinking", and never claims a call still runs while the run's clock goes on. Once you have written, both lines keep their
 room, blank until there is something to say, so the tabs below hold their
 place from the first message. While a question waits on you
 that line counts what you are asked as its card does: "sales asks you 7

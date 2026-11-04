@@ -80,7 +80,7 @@ defmodule Omunculus.GuiProgressTest do
     check(n.w1.level === 0 && n.w2.level === 1 && n.w3.level === 2 && n.w3.parent === "w2", "levels", [n.w1.level, n.w2.level, n.w3.level]);
     check(n.w1.state === "waiting" && n.w1.waitingOn === "design-lead" && n.w1.agent === "seller" && n.w1.at === 1 && n.w1.count === 6, "w1", n.w1);
     check(n.w2.state === "waiting" && n.w2.waitingOn === "designer" && n.w2.doing === "Waiting for designer", "w2", n.w2);
-    check(n.w3.state === "working" && n.w3.word === "Working" && n.w3.since === 1900 && n.w3.doing === "Writing files", "w3", n.w3);
+    check(n.w3.state === "working" && n.w3.word === "Working" && n.w3.since === 1900 && n.w3.doing === "Thinking · wrote files", "w3", n.w3);
     check(JSON.stringify(n.w3.lastCall) === JSON.stringify({name: "write", brief: "site/index.html"}), "lastCall", n.w3.lastCall);
     check(n.w3.round === 2 && n.w3.sentBack.by === "design-reviewer" && n.w3.stopped === null, "round", n.w3);
     check(JSON.stringify(n.w3.team) === JSON.stringify([{agent: "designer", current: true}, {agent: "design-reviewer", current: false}, {agent: "publisher", current: false}]), "team", n.w3.team);
@@ -88,9 +88,9 @@ defmodule Omunculus.GuiProgressTest do
     check(n.w3.steps.map(step => step.status).join() === "current,next,next", "w3 statuses", n.w3.steps);
     check(out.path.map(each => each.agent).join(" › ") === "seller › design-lead › designer", "path", out.path);
     check(out.path[2].title === "Home page" && out.path[2].work === "w3", "path leaf", out.path[2]);
-    check(JSON.stringify(out.now) === JSON.stringify({agent: "designer", doing: "Writing files", since: 1900}), "now", out.now);
+    check(JSON.stringify(out.now) === JSON.stringify({agent: "designer", doing: "Thinking · wrote files", since: 1900}), "now", out.now);
     check(out.counts.working === 1 && out.counts.waiting === 2 && out.counts.total === 3 && out.counts.agents === 1, "counts", out.counts);
-    check(out.spoken === "Working. seller, design-lead, designer: Writing files", "spoken", out.spoken);
+    check(out.spoken === "Working. seller, design-lead, designer: Thinking · wrote files", "spoken", out.spoken);
     """)
   end
 
@@ -242,7 +242,7 @@ defmodule Omunculus.GuiProgressTest do
     check(out.state === "working" && out.focus === null && out.roots.length === 0 && out.path.length === 0, "working", out);
     check(JSON.stringify(out.now) === JSON.stringify({agent: "sales", doing: "Getting started", since: 50, loose: true}), "now", out.now);
     const asking = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], calling: {"": "ask"}, rootAgent: "sales", now: 60});
-    check(asking.now.doing === "Asking a teammate", "calling", asking.now);
+    check(asking.now.doing === "Thinking · asked a teammate", "calling", asking.now);
     const answer = {id: "q9", status: "answered", arbiter: human, requester: agent("seller"), work_id: null, reason: "x", origins: {}};
     const replying = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], calling: {"": "reply"}, callArgs: {"": {request_id: "q9"}}, requests: [answer], rootAgent: "sales", now: 60});
     check(replying.now.doing === "Passed your answers to seller", "live reply says what the finished one will", replying.now);

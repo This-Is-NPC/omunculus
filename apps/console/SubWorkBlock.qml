@@ -85,14 +85,14 @@ SurfaceFrame {
     node && node.failed > 0 ? failures : null
   ].filter(part => part !== null), budget - 15).filter(text => text !== "")
   readonly property var tally: Omunculus.callsOf[work] || {}
-  // Its own steps, and with those of the works it handed down, so the count
-  // moves while its team works.
+  // Its steps with those of the works it handed down, so the count moves
+  // while its team works, then how many are its own.
   readonly property string steps: {
     if (!node || (node.branch ? node.branch.calls : node.calls) === 0)
       return ""
     const all = node.branch ? node.branch.calls : node.calls
     const said = count => count === 1 ? "1 step" : count + " steps"
-    return all > node.calls ? said(node.calls) + " · " + all + " with its team" : said(node.calls)
+    return all > node.calls ? said(all) + " · " + node.calls + " its own" : said(node.calls)
   }
   // The failed calls: said as retried, in dim, when each of their tools
   // succeeded later; else what was attempted and why the first one failed.

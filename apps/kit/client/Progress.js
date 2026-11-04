@@ -168,11 +168,15 @@ function build(input) {
   const known = new Set(works.map(work => work.id));
   const runStart = run => starts[run.id] !== undefined ? starts[run.id] : seconds(run.started_at);
   const runsOf = id => runs.filter(run => (run.work_id || "") === id);
-  // What the call in flight on a work says; a reply says what the finished
-  // one will, by whom it answers.
+  // What an open run on a work is doing: calls are known only once they
+  // finished, so between them it thinks, after the last one it made; a reply
+  // says what it does, by whom it answers.
   const phrasing = id => {
     if (!calling[id]) return "Getting started";
-    if (calling[id] !== "reply") return Phrases.phrase(calling[id], callArgs[id]);
+    if (calling[id] !== "reply") {
+      const last = Phrases.did(calling[id], callArgs[id]);
+      return "Thinking · " + last.charAt(0).toLowerCase() + last.slice(1);
+    }
     const answered = requests.find(request => request.id === (callArgs[id] || {}).request_id);
     return Phrases.replied(answered && answered.requester ? answered.requester.agent || "" : "", requests.some(request => Requests.human(request.arbiter) && !Requests.pending(request)));
   };
