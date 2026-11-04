@@ -17,15 +17,16 @@ import "kit/ui"
 // End back to the newest, and Tab moves into the tools of the entry it is on.
 // A request is a card only while it waits on you; your answer reads as a
 // bubble, and what the team asked among itself is an exchange (TeamRow). A
-// note a handed-down work's agent left on its work is a line of its own
-// where it was left (TeamNote). A
-// work handed down is a SubWorkBlock where it was, which unfolds into its own
-// thread nested here. A question for you that arrives while the view follows
-// is held by its top. While agents work and what you said or answered is
-// still the newest thing the thread draws, a working row under it says who
-// works, from the agent you wrote to down to the one at work, what that one
-// does and for how long. Its implicit height is its entries', for a thread
-// nested in a block, which says itself that its agents work.
+// note a handed-down work's agent left on its work is a card of its own
+// where it was left (TeamNote). A work handed down is a SubWorkBlock where it
+// was, which unfolds into its own thread nested here; each run of the works
+// below that ended is a line of the log in the main thread (LogLine), "designer
+// worked 4 min · 12 steps". A question for you that arrives while the view
+// follows is held by its top. While an agent works for the thread, a live line
+// at its end says who, from the agent you wrote to down to the one at work,
+// what that one does and for how long, unless that agent's own turn streams
+// here and says it. Its implicit height is its entries', for a thread nested
+// in a block, which says itself that its agents work.
 Item {
   id: root
 
@@ -180,14 +181,14 @@ Item {
 
   // How the entry at `row` shows: "card" for a request waiting on you,
   // "answer" for one you answered, "team" for the rest, "none" for one
-  // another gathers; "turn", "work", "note" and "speech" for the rest of the
-  // thread.
+  // another gathers; "turn", "work", "note", "worked" and "speech" for the
+  // rest of the thread.
   function roleAt(row) {
     const entry = model.get(row)
     if (!entry)
       return "none"
     if (entry.kind !== "request")
-      return ["turn", "work", "note"].includes(entry.kind) ? entry.kind : "speech"
+      return ["turn", "work", "note", "worked"].includes(entry.kind) ? entry.kind : "speech"
     const request = Omunculus.requests.find(item => item.id === entry.key)
     if (!request || contained.has(entry.key))
       return "none"
@@ -282,41 +283,20 @@ Item {
     }
   }
 
-  // Whether what you said or answered is the newest thing the thread
-  // draws: a turn that has said and done nothing yet draws nothing.
-  readonly property bool yoursLast: {
-    if (changes < 0 || revision < 0)
-      return false
+  // Who works for this thread, as {chain, agent, doing, since, round}
+  // (Progress.live); null when no one does, in a thread nested in a block, or
+  // while that agent's own turn streams here and shows it.
+  readonly property var working: {
+    const live = nesting > 0 ? null : Progress.live(Omunculus.progress, thread, Omunculus.agent || Omunculus.lastAgent)
+    if (!live || changes < 0)
+      return null
     for (let row = model.count - 1; row >= 0; row--) {
       const entry = model.get(row)
-      if (entry.kind === "turn" && entry.text === "" && entry.partial === "" && entry.steps === "[]" && entry.files === "[]")
-        continue
-      const role = roleAt(row)
-      if (role !== "none")
-        return role === "answer" || (role === "speech" && entry.mine)
-    }
-    return false
-  }
-
-  // Who works in this thread while what you said is its newest line, as
-  // {chain, agent, doing, since}: the agents above the one at work, that
-  // one, what it does and since when; null otherwise.
-  readonly property var working: {
-    const progress = Omunculus.progress
-    if (nesting > 0 || !yoursLast || !progress)
-      return null
-    if (thread === "") {
-      const now = progress.now
-      if (progress.state !== "working" || now.state !== "working" || !now.agent)
+      if (entry.kind === "turn" && entry.streaming && entry.who === live.agent
+          && (entry.text !== "" || entry.partial !== "" || entry.files !== "[]" || JSON.parse(entry.steps).some(line => !(line.hook && line.ok))))
         return null
-      // The front agent heads the chain of the works below it; its own run,
-      // outside any work, stands alone.
-      const leaf = progress.path.length > 0 ? progress.path[progress.path.length - 1].agent : ""
-      const chain = now.agent === leaf ? [Omunculus.agent || Omunculus.lastAgent].concat(progress.path.map(step => step.agent)) : []
-      return { chain: chain.filter((agent, at) => agent && agent !== now.agent && chain.indexOf(agent) === at), agent: now.agent, doing: now.doing, since: now.since }
     }
-    const node = progress.flat.find(each => each.work === thread)
-    return node && node.state === "working" ? { chain: [], agent: node.agent, doing: node.doing, since: node.since } : null
+    return live
   }
 
   // Another thread on screen starts at its end.
@@ -337,6 +317,9 @@ Item {
   // The keyboard is on the timeline or in the entry it is on.
   readonly property bool keyboard: timeline.activeFocus || (timeline.currentItem !== null && Focus.within(Window.activeFocusItem, timeline.currentItem))
 
+  // Seconds of silence after which a working team is said to have no news.
+  readonly property int quiet: 600
+
   // Seconds of silence after which a speaker's next line starts a new turn.
   readonly property int pause: 120
 
@@ -349,7 +332,8 @@ Item {
       return false
     const previous = timeline.model.get(index - 1)
     const current = timeline.model.get(index)
-    return !["request", "work", "note"].includes(previous.kind) && !["request", "work", "note"].includes(current.kind)
+    const apart = ["request", "work", "note", "worked"]
+    return !apart.includes(previous.kind) && !apart.includes(current.kind)
       && previous.who === current.who && current.at - previous.at < root.pause
   }
 
@@ -465,7 +449,7 @@ Item {
         id: slot
         y: entry.gap
         width: entry.width
-        sourceComponent: ({ card: request, answer: answer, team: team, turn: turn, work: handed, note: teamNote, speech: speech })[entry.role] || null
+        sourceComponent: ({ card: request, answer: answer, team: team, turn: turn, work: handed, note: teamNote, worked: worked, speech: speech })[entry.role] || null
 
         FocusRing { shown: entry.selected; anchors.margins: 0 }
       }
@@ -573,6 +557,19 @@ Item {
       }
 
       Component {
+        id: worked
+        LogLine {
+          width: entry.width
+          names: [entry.who]
+          text: entry.text
+          failed: entry.text.startsWith("failed")
+          icon: entry.text.startsWith("failed") ? "warning" : "check"
+          tone: entry.text.startsWith("failed") ? Theme.error : Theme.dim
+          stamp: entry.stamp
+        }
+      }
+
+      Component {
         id: turn
         AgentTurn {
           width: entry.width
@@ -593,87 +590,25 @@ Item {
     }
   }
 
-  // The working row: the names over a box in the tone of the one at work,
-  // its trace beside what it does.
+  // The live line: who works for the thread, the one at work last, in its
+  // tone, with its clock; what it does under them; a long silence after it.
   Component {
     id: workingRow
     Item {
-      id: row
-      readonly property var live: root.working
-      readonly property color tone: live ? Omunculus.toneOf(live.agent) : Theme.dim
-      readonly property string clock: live && live.since !== null ? Progress.span(Omunculus.tick - live.since) : ""
+      readonly property var at: root.working
+      readonly property real silence: Omunculus.lastEventAt > 0 ? Omunculus.tick - Omunculus.lastEventAt : 0
       width: timeline.width
-      height: live ? body.y + body.height + Theme.space.row : 0
-      visible: live !== null
-      Accessible.role: Accessible.StaticText
-      Accessible.name: live ? live.chain.concat([live.agent]).join(", ") + " working: " + live.doing : ""
-
-      Column {
-        id: body
+      height: at ? line.y + line.implicitHeight : 0
+      visible: at !== null
+      LogLine {
+        id: line
         y: Theme.space.inset
         width: parent.width
-        spacing: Theme.space.line
-
-        Row {
-          spacing: Theme.space.tight
-          Dot { anchors.verticalCenter: parent.verticalCenter; tone: row.tone }
-          Repeater {
-            model: row.live ? row.live.chain.concat([row.live.agent]) : []
-            delegate: Label {
-              required property string modelData
-              required property int index
-              text: (index > 0 ? "› " : "") + modelData.toUpperCase()
-              color: Omunculus.toneOf(modelData)
-              font.pixelSize: Theme.type.name.size
-              font.letterSpacing: Theme.type.name.tracking
-            }
-          }
-          Label {
-            anchors.verticalCenter: parent.verticalCenter
-            text: ("Working" + (row.clock !== "" ? " " + row.clock : "")).toUpperCase()
-            color: Theme.dim
-            font.pixelSize: Theme.type.stamp.size
-            font.letterSpacing: Theme.type.stamp.tracking
-          }
-        }
-
-        Rectangle {
-          width: Math.min(parent.width, 2 * Theme.size.gutter + Theme.space.gap + Math.ceil(doing.implicitWidth) + 2 * Theme.size.bubbleInset)
-          height: line.implicitHeight + Theme.space.inset
-          color: Qt.tint(Theme.background, Qt.alpha(row.tone, 0.1))
-          RowLayout {
-            id: line
-            x: Theme.size.bubbleInset
-            width: parent.width - 2 * Theme.size.bubbleInset
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Theme.space.gap
-            Item {
-              Layout.preferredWidth: 2 * Theme.size.gutter
-              Layout.preferredHeight: Theme.type.body.size
-              Layout.alignment: Qt.AlignVCenter
-              LoadingTrace {
-                anchors.fill: parent
-                running: row.live !== null && !Theme.reducedMotion
-                tone: row.tone
-                backdrop: Qt.tint(Theme.background, Qt.alpha(row.tone, 0.1))
-              }
-              Dot {
-                anchors.centerIn: parent
-                visible: Theme.reducedMotion
-                tone: row.tone
-              }
-            }
-            Label {
-              id: doing
-              Layout.fillWidth: true
-              Layout.minimumWidth: 0
-              text: row.live ? Progress.lively(row.live.doing, row.live.since, Omunculus.tick) : ""
-              color: Theme.dim
-              font.pixelSize: Theme.type.body.size
-              elide: Text.ElideRight
-            }
-          }
-        }
+        live: true
+        tone: parent.at ? Omunculus.toneOf(parent.at.agent) : Theme.dim
+        names: parent.at ? parent.at.chain.concat([parent.at.agent]) : []
+        text: parent.at ? "working" + (parent.at.since !== null ? " " + Progress.clock(Omunculus.tick - parent.at.since) : "") + (parent.at.round > 1 ? " · round " + parent.at.round : "") : ""
+        detail: parent.at ? Progress.lively(parent.at.doing, parent.at.since, Omunculus.tick) + (parent.silence > root.quiet ? " · no news for " + Progress.duration(parent.silence) : "") : ""
       }
     }
   }

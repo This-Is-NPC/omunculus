@@ -606,7 +606,6 @@ Item {
       usage: Omunculus.usage.all
       heading: view.named
       expanded: view.progressShown && view.page === "chat"
-      threadWorking: view.page === "chat" && timeline.working !== null
       onToggle: view.toggleProgress(false)
       onAnswer: view.answer()
       onOpenResult: view.showResult()

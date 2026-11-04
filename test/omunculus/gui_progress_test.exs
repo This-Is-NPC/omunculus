@@ -410,4 +410,31 @@ defmodule Omunculus.GuiProgressTest do
     check(Progress.lively("Thinking · read a file", 100, 500) === "Thinking · read a file" && Progress.lively("Getting started", null, 500) === "Getting started", "lively other", "");
     """)
   end
+
+  test "a thread's live entry names who works for it, from its agent down" do
+    run!("""
+    const out = Progress.build(base);
+    const main = Progress.live(out, "", "sales");
+    check(JSON.stringify(main) === JSON.stringify({chain: ["sales", "seller", "design-lead"], agent: "designer", doing: "Thinking · wrote files", since: 1900, round: 2}), "main", main);
+    const lead = Progress.live(out, "w2", "sales");
+    check(JSON.stringify(lead.chain) === JSON.stringify(["design-lead"]) && lead.agent === "designer", "a work's thread from it down", lead);
+    const own = Progress.live(out, "w3", "sales");
+    check(own.chain.length === 0 && own.agent === "designer", "the work at work", own);
+    const done = Progress.build(Object.assign({}, base, {runs: [run("r3", "designer", "w3", {status: "done"})]}));
+    check(Progress.live(done, "", "sales") === null && Progress.live(null, "", "sales") === null, "no one works", done.now);
+    const loose = Progress.build(Object.assign({}, base, {works: [], lanes: {}, journeys: {}, runs: [run("r0", "sales", "", {depth: 0})], runStarts: {r0: 1990}}));
+    const alone = Progress.live(loose, "", "sales");
+    check(alone.chain.length === 0 && alone.agent === "sales" && alone.doing === "Getting started", "the front agent alone", alone);
+    check(Progress.live(loose, "w9", "sales") === null, "another work's thread", "");
+    """)
+  end
+
+  test "a run below leaves how long it worked and its steps" do
+    run!("""
+    check(Progress.worked(240, 12, false) === "worked 4 min · 12 steps", "worked", Progress.worked(240, 12, false));
+    check(Progress.worked(8, 1, false) === "worked 8 s · 1 step", "one step", Progress.worked(8, 1, false));
+    check(Progress.worked(8, 0, false) === "worked 8 s", "no step", Progress.worked(8, 0, false));
+    check(Progress.worked(90, 3, true) === "failed after 1 min · 3 steps", "failed", Progress.worked(90, 3, true));
+    """)
+  end
 end

@@ -59,6 +59,35 @@ function above(path, agent) {
   return (at >= 0 ? names.slice(0, at) : names.filter(name => name !== agent)).filter((name, index, all) => all.indexOf(name) === index);
 }
 
+// Who works for a thread at the moment, as the thread's live entry says it:
+// {chain, agent, doing, since, round}, the agents above the one at work, from
+// the top, that one, what it does and since when; null when no one works for
+// it. The main thread ("") is the front agent's, which heads the chain of the
+// works below it; its own run outside any work stands alone. A work's thread
+// names the chain from that work down, or its own agent while it works.
+function live(progress, thread, front) {
+  if (!progress || !progress.now || progress.now.state !== "working" || !progress.now.agent) return null;
+  const now = progress.now;
+  const entry = chain => ({ chain: chain.filter((name, at) => name && name !== now.agent && chain.indexOf(name) === at), agent: now.agent, doing: now.doing, since: now.since, round: now.round || 0 });
+  const path = progress.path || [];
+  if (thread === "") {
+    const onPath = path.some(step => step.agent === now.agent);
+    return entry(now.loose && !onPath ? [] : [front].concat(above(path, now.agent)));
+  }
+  const from = path.findIndex(step => step.work === thread);
+  if (from >= 0 && path.slice(from).some(step => step.agent === now.agent)) return entry(above(path.slice(from), now.agent));
+  const node = (progress.flat || []).find(each => each.work === thread);
+  return node && node.state === "working"
+    ? { chain: [], agent: node.agent, doing: node.doing, since: node.since, round: node.round || 0 } : null;
+}
+
+// What a run of a work below left in the main thread once it ended: "worked
+// 4 min · 12 steps", or "failed after 4 min" when it ended in an error.
+function worked(seconds, steps, failed) {
+  const lasted = (failed ? "failed after " : "worked ") + span(seconds);
+  return steps > 0 ? lasted + " · " + steps + (steps === 1 ? " step" : " steps") : lasted;
+}
+
 // A running clock: "0:42", "12:05", "1:02:03".
 function clock(total) {
   const s = Math.max(0, Math.floor(total));

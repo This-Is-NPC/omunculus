@@ -18,7 +18,8 @@ import "kit/ui"
 // works and state, the project's conversations, and the one on screen folded
 // into threads a person can follow. The main thread is yours with the root agent; each work handed down
 // has a thread of its own, where its agent says and does what it does. A run
-// at depth 0 belongs to the main thread, a deeper one to its work's. Every
+// at depth 0 belongs to the main thread, a deeper one to its work's, and leaves a
+// line in the main thread when it ends, so that thread tells the team's work in order. Every
 // read and command goes to the server's local socket through curl; the event
 // stream is the conversation's WebSocket.
 Singleton {
@@ -983,6 +984,13 @@ Singleton {
       if (place !== undefined) {
         update(place, "streaming", false)
         update(place, "partial", "")
+        // A run below leaves a line in the main thread, so it tells the
+        // team's work in order: who worked, how long and how many steps.
+        if (place.thread !== "") {
+          const ran = entryAt(place)
+          const calls = JSON.parse(ran.steps).filter(line => !line.outcome && !line.hook).length
+          append("", { kind: "worked", key: event.run_id, who: ran.who, text: Progress.worked(at - (runStarts[event.run_id] || at), calls, !!body.error), stamp: stamp, at: at, work: work })
+        }
       }
       break
     }

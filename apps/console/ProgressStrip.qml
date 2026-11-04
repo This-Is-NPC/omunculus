@@ -7,23 +7,22 @@ import "kit/client/Progress.js" as Progress
 import "kit/client/Time.js" as Time
 import "kit/client/Shortcuts.js" as Shortcuts
 
-// ProgressStrip is the conversation's head: a 40 px strip with its meta —
-// the agent it is with, in its tone; the stage of the work in focus (the
-// stepper under names it) and how long it has run, or, before any work, that the conversation is starting —
-// then, where there is room, how many agents ran and what the
-// conversation has cost, each opening what it counts (the team, the cost); at its right
-// the chevron that opens the full progress, and ANSWER, in the warning tone,
-// while something waits on you. Under it, unframed, two lines: the stages of
-// the work in focus, or its title where the masthead does not already say
-// it; and who works on it, from its agent down to the one at work, what that
-// one does and for how long; what waits on you takes that line, counted as
-// its card counts it. A finished conversation says so in the meta, "✓ DONE"
-// and how long it took, in the success tone, and leaves that line blank. Every agent
-// is named in its own tone. Every line is fitted in characters to its width.
-// The two lines are hidden while nothing was handed to anyone and no agent
-// runs; the second also while the thread under the strip shows its own
-// working row, so the work is said once. Waiting on you, the meta says so,
-// in the warning tone, in place of the clock, which stops.
+// ProgressStrip is the conversation's head, its overview: a 40 px strip with
+// its meta — the agent it is with, in its tone; the stage of the work in
+// focus (the stepper under names it) and how long it has run, or, before any
+// work, that the conversation is starting — then, where there is room, how
+// many agents ran and what the conversation has cost, each opening what it
+// counts (the team, the cost); at its right the chevron that opens the full
+// progress, and ANSWER, in the warning tone, while something waits on you.
+// Under it, unframed, one line: the stages of the work in focus, or its title
+// where the masthead does not already say it. Who works and on what is the
+// chat's to say, in its live line, not the head's. A finished conversation
+// says so in the meta, "✓ DONE" and how long it took, in the success tone.
+// Every agent is named in its own tone, and the meta is fitted in characters
+// to its width. The line is hidden while nothing was handed to anyone and no
+// agent runs, and keeps its room once the person has written, so the tabs
+// under it never move. Waiting on you, the meta says so, in the warning tone,
+// in place of the clock, which stops.
 ColumnLayout {
   id: strip
 
@@ -39,11 +38,6 @@ ColumnLayout {
   // What the masthead calls the conversation; a title saying the same is not
   // repeated under the strip.
   property string heading: ""
-  // Whether the thread beside already says who works and on what, so the
-  // strip does not say it again.
-  property bool threadWorking: false
-  // Seconds of silence after which a working team is said to have no news.
-  readonly property int quiet: 600
 
   signal toggle()
   signal answer()
@@ -55,13 +49,9 @@ ColumnLayout {
 
   readonly property string phase: progress ? progress.state : "idle"
   readonly property var focusNode: progress ? progress.focus : null
-  readonly property var forYou: progress ? progress.forYou : []
-  readonly property var path: progress ? progress.path : []
-  readonly property var now: progress ? progress.now : null
   readonly property var agents: progress ? progress.agents : []
   readonly property real tick: Omunculus.tick
   readonly property bool working: phase === "working"
-  readonly property int silence: working && lastEvent > 0 ? Math.round(tick - lastEvent) : 0
   // Whether there is progress to show under the strip.
   readonly property bool moving: progress !== null && (progress.roots.length > 0 || phase !== "idle")
   // The agent the conversation is with.
@@ -98,7 +88,7 @@ ColumnLayout {
       const at = Math.min(focus.at, focus.count - 1)
       // The stepper under the strip names the stage.
       segments.push({ text: "STAGE " + (at + 1) + "/" + focus.count, keep: true })
-    } else if (focus && focus.state !== "needs-you" && !(threadWorking && focus.state === "working")) {
+    } else if (focus && focus.state !== "needs-you") {
       segments.push({ text: focus.word.toUpperCase(), keep: true })
     } else if (opening !== "") {
       segments.push({ text: opening, keep: true })
@@ -127,29 +117,6 @@ ColumnLayout {
       pieces: segment.lead && shown.length > 1 ? [{ text: segment.text, tone: segment.tone }, { text: separator }] : undefined
     }))
   }
-
-  // The now line's parts: the chain above the agent at work gives way
-  // first, then what it does; the agent and the clock stay.
-  readonly property var parts: {
-    if (forYou.length > 0) {
-      const askers = Array.from(new Set(forYou.map(ask => ask.asker)))
-      const named = askers.map((name, index) => ({ text: name + (index < askers.length - 1 ? ", " : ""), tone: Omunculus.toneOf(name),
-        pieces: index < askers.length - 1 ? [{ text: name, tone: Omunculus.toneOf(name) }, { text: ", " }] : undefined, elide: index === 0, keep: true }))
-      return named.concat([{ text: (askers.length > 1 ? " ask you " : " asks you ") + Progress.asking(forYou) + (forYou.some(ask => ask.again) ? " again" : ""), tone: Theme.warning, keep: true }])
-    }
-    if (!now || !now.agent)
-      return [{ text: focusNode ? focusNode.doing : "", elide: true, keep: true }]
-    const above = now.loose && !path.some(step => step.agent === now.agent) ? [] : Progress.above(path, now.agent)
-    const doing = Progress.lively(now.doing, now.since, tick)
-    const clock = now.since !== null && working ? Progress.clock(Math.max(0, tick - now.since)) : ""
-    const chain = above.reduce((all, agent) => all.concat([{ text: agent, tone: Omunculus.toneOf(agent) }, { text: " › " }]), [])
-    return (above.length > 0 ? [{ text: chain.map(piece => piece.text).join(""), short: "…› ", pieces: chain }] : [])
-      .concat([{ text: now.agent, tone: Omunculus.toneOf(now.agent), keep: true }, { text: doing !== "" ? ": " + doing : "", elide: true }])
-      .concat(now.round > 1 ? [{ text: " · round " + now.round, keep: true }] : [])
-      .concat(clock !== "" ? [{ text: " · " + clock, keep: true }] : [])
-  }
-
-  readonly property string stall: silence > quiet ? " · no news for " + Progress.duration(silence) : ""
 
   spacing: Theme.space.line
   Accessible.role: Accessible.StatusBar
@@ -357,50 +324,5 @@ ColumnLayout {
     visible: strip.said && !(strip.moving && ((strip.focusNode && strip.focusNode.steps.length > 0) || strip.title !== ""))
     implicitHeight: stageLine.height
     FontMetrics { id: stageLine; font.family: Theme.fontFamily; font.pixelSize: 12 }
-  }
-
-  // Who works and what on, fitted, after the state; the silence, when long,
-  // after it. While the thread shows who works, the line keeps its room
-  // blank, so nothing under it moves as runs start and end.
-  RowLayout {
-    Layout.fillWidth: true
-    Layout.leftMargin: Theme.space.line
-    visible: strip.moving || strip.said
-    opacity: strip.moving && !strip.threadWorking && strip.phase !== "done" ? 1 : 0
-    spacing: Theme.space.tight
-
-    // The state: the trace while working, unless motion is reduced.
-    Item {
-      readonly property bool traced: strip.working && !Theme.reducedMotion
-      Layout.preferredWidth: traced ? Theme.size.gutter : mark.implicitWidth
-      Layout.preferredHeight: Theme.type.meta.size
-      Layout.alignment: Qt.AlignVCenter
-      LoadingTrace {
-        anchors.fill: parent
-        running: parent.traced
-        tone: Theme.primary
-      }
-      StateMark {
-        id: mark
-        anchors.verticalCenter: parent.verticalCenter
-        visible: !parent.traced
-        state: strip.working ? "working" : strip.forYou.length > 0 ? "needs-you" : strip.phase
-        showWord: false
-      }
-    }
-    Fitted {
-      parts: strip.parts
-      font.pixelSize: Theme.type.meta.size
-      font.letterSpacing: Theme.type.meta.tracking / 2
-    }
-    Label {
-      visible: strip.stall !== ""
-      Layout.maximumWidth: strip.width * 0.4
-      text: strip.stall
-      elide: Text.ElideRight
-      color: Theme.warning
-      font.pixelSize: Theme.type.meta.size
-    }
-    Item { Layout.fillWidth: true }
   }
 }
