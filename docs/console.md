@@ -268,8 +268,8 @@ The header's title is the conversation's subject (`Omunculus.subject`, as in
 the masthead: the first root work's title, else the first message), or the
 work of the question's origin when the harness passed it up.
 
-`QuestionForm` puts "N OF M" answered in the card's heading, and SEND and
-"I CAN'T ANSWER THIS" at the end of the form, after the last item. While
+`QuestionForm` puts "N OF M ANSWERED" in the card's heading (on its second
+line under 520 px), and SEND and "I CAN'T ANSWER THIS" at the end of the form, after the last item. While
 that end is below the view, the two float on the view's bottom edge over the
 card's fill and a hairline, with "N MORE QUESTIONS BELOW" at the right
 (above them under 520 px) while items start under them; the chip brings the

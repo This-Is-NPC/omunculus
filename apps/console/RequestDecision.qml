@@ -192,6 +192,9 @@ SurfaceFrame {
   // The scopes a decision's grant is saved for, always.
   function always(options) { return options.filter(option => option.startsWith("grant_")) }
 
+  // How many of a numbered list are answered, for the heading.
+  readonly property string counted: formLoader.active && formLoader.item ? (formLoader.item as QuestionForm).answered + " OF " + form.items.length + " ANSWERED" : ""
+
   // Narrow, the header takes two lines.
   readonly property bool stacked: width < Theme.size.measureFrom
 
@@ -205,8 +208,9 @@ SurfaceFrame {
     anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: Theme.space.insetTop; leftMargin: Theme.space.inset; rightMargin: Theme.space.inset }
     spacing: Theme.space.gap
 
-    // The kind, who asks and on what, and when, beside the tools; under
-    // 520 px, who asks and on what go on a line of their own.
+    // The kind, who asks and on what, how many of a numbered list are
+    // answered, and when, beside the tools; under 520 px, who asks, on what
+    // and the count go on a line of their own.
     RowLayout {
       Layout.fillWidth: true
       Layout.rightMargin: tools.width + Theme.space.gap
@@ -245,14 +249,11 @@ SurfaceFrame {
         visible: card.stacked
         Layout.fillWidth: true
       }
-      // How many of a numbered list are answered.
-      Label {
-        visible: formLoader.active && formLoader.item !== null
+      Counted {
+        visible: !card.stacked && text !== ""
         Layout.alignment: Qt.AlignVCenter
-        text: formLoader.item ? (formLoader.item as QuestionForm).answered + " OF " + card.form.items.length : ""
+        text: card.counted
         color: card.dim
-        font.pixelSize: Theme.type.header.size
-        font.letterSpacing: Theme.type.meta.tracking
       }
       Label {
         Layout.alignment: Qt.AlignVCenter
@@ -282,6 +283,11 @@ SurfaceFrame {
         font.pixelSize: Theme.type.meta.size
         font.letterSpacing: 1
         elide: Text.ElideRight
+      }
+      Counted {
+        visible: text !== ""
+        text: card.counted
+        color: card.dim
       }
     }
 
@@ -578,6 +584,12 @@ SurfaceFrame {
       tip: "close"
       onClicked: card.closed()
     }
+  }
+
+  // The count of a numbered list's answers, in the heading's readout type.
+  component Counted: Label {
+    font.pixelSize: Theme.type.header.size
+    font.letterSpacing: Theme.type.meta.tracking
   }
 
   // Always: each scope a grant saved in the project settings, as chips.
