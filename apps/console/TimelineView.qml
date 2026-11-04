@@ -351,7 +351,9 @@ Item {
 
       width: timeline.width
       height: drawn ? slot.height + gap : 0
-      visible: drawn
+      // Not `visible: drawn`: an item's visible follows its parent's, so the
+      // entry would never see its content shown.
+      clip: !drawn
 
       Loader {
         id: slot
