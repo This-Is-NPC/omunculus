@@ -109,22 +109,32 @@ Item {
   // Brings the newest question into view and puts the keyboard in its words.
   // Hidden, it waits for the view to show (the page calls it again then); a
   // card whose row or form is not built yet is tried again every 100 ms, ten
-  // times at most, until the keyboard is inside it.
+  // times at most, until the keyboard is inside it and it is in view, so
+  // a card placed while rows were still unmeasured is placed again.
   function focusCard() {
     if (newestCard === "" || !visible)
       return
     focusTries = 10
     focusRetry.restart()
+    reveal(newestCard, true)
     tryFocusCard()
   }
   property int focusTries: 0
   function tryFocusCard() {
-    reveal(newestCard, true)
+    if (!cardShown())
+      reveal(newestCard, true)
     const card = cardItem()
     if (card)
       card.focusWords()
-    if (cardFocused() || --focusTries <= 0)
+    if (cardFocused() && cardShown() || --focusTries <= 0)
       focusRetry.stop()
+  }
+  // Whether the newest question's entry shows whole, or from its top when it is
+  // taller than the view.
+  function cardShown() {
+    const row = newestCard !== "" ? rowOf(newestCard) : -1
+    const entry = row >= 0 ? timeline.itemAtIndex(row) : null
+    return !!entry && entry.y >= timeline.contentY - 1 && entry.y + Math.min(entry.height, timeline.height) <= timeline.contentY + timeline.height + 1
   }
   Timer {
     id: focusRetry
@@ -187,6 +197,18 @@ Item {
     }
     return ""
   }
+  // The row of the newest note a work's agent left, or -1.
+  readonly property int newestNote: {
+    if (revision < 0)
+      return -1
+    for (let row = model.count - 1; row >= 0; row--) {
+      if (roleAt(row) === "note")
+        return row
+    }
+    return -1
+  }
+  // Whether the conversation's work is done: its closing note shows whole.
+  readonly property bool finished: !!Omunculus.progress && Omunculus.progress.state === "done"
   // A card that arrives while the keyboard is free is offered to the page.
   signal cardArrived
   onNewestCardChanged: {
@@ -417,14 +439,14 @@ Item {
       readonly property int gap: Theme.space.line
       readonly property string role: root.revision >= 0 && kind === "request" && root.requestsShown ? root.roleAt(index) : kind
       readonly property alias content: slot.item
-      readonly property bool drawn: !!slot.item && slot.item.visible && slot.item.implicitHeight > 0
+      readonly property bool drawn: slot.status === Loader.Ready && slot.item.implicitHeight > 0
       readonly property bool selected: ListView.isCurrentItem && root.keyboard
       readonly property bool rises: kind === "request" || kind === "work"
 
       width: timeline.width
       height: drawn ? slot.height + gap : 0
-      // Not `visible: drawn`: an item's visible follows its parent's, so the
-      // entry would never see its content shown.
+      // Not tied to the content's `visible`, which follows the page that holds
+      // the thread: hidden, every entry would measure 0 and the view fall to its top.
       clip: !drawn
 
       Loader {
@@ -529,6 +551,7 @@ Item {
           who: entry.who
           text: entry.text
           stamp: entry.stamp
+          unfolded: root.finished && entry.index === root.newestNote
         }
       }
 

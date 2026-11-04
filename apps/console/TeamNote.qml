@@ -6,7 +6,8 @@ import "kit/ui"
 // TeamNote is a note a work's agent left on its work, where it was left: its
 // agent named in its tone, "noted", and the text in a line or two, dim. It is
 // the team's news, not a message to you: only the front agent talks to the
-// client. A long note unfolds by choosing its line.
+// client. A long note unfolds by choosing its line, or is unfolded by the
+// thread, once the work is done. Its text is Prose: an address in it is a link.
 Item {
   id: note
 
@@ -14,7 +15,10 @@ Item {
   required property string text
   property string stamp
 
-  property bool open: false
+  // Unfolded by the thread; `chosen` flips it, the person's own fold.
+  property bool unfolded: false
+  property bool chosen: false
+  readonly property bool open: unfolded !== chosen
   readonly property bool long: words.truncated || open && words.lineCount > 2
 
   implicitHeight: content.implicitHeight + Theme.space.row
@@ -32,7 +36,7 @@ Item {
       Accessible.name: note.who + " noted: " + note.text
       Keys.onPressed: event => {
         if (note.long && [Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space].includes(event.key)) {
-          note.open = !note.open
+          note.chosen = !note.chosen
           event.accepted = true
         }
       }
@@ -50,17 +54,17 @@ Item {
         anchors.fill: parent
         enabled: note.long
         cursorShape: note.long ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: note.open = !note.open
+        onClicked: note.chosen = !note.chosen
       }
       FocusRing { anchors.margins: -2 }
     }
 
-    Label {
+    Prose {
       id: words
       Layout.fillWidth: true
       Layout.leftMargin: Theme.space.block + Theme.space.line
       Layout.maximumWidth: 620
-      text: Omunculus.inline(note.text)
+      source: Omunculus.inline(note.text)
       color: Theme.dim
       font.pixelSize: 11
       wrapMode: Text.Wrap

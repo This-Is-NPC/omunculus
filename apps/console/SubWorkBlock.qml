@@ -122,9 +122,11 @@ SurfaceFrame {
       opened(work)
   }
 
-  implicitHeight: visible ? content.implicitHeight + Theme.space.insetTop + Theme.space.inset : 0
+  implicitHeight: present ? content.implicitHeight + Theme.space.insetTop + Theme.space.inset : 0
   variant: "outline"
-  visible: arrived || title !== ""
+  // Its own flag: `visible` also follows the page that holds it.
+  readonly property bool present: arrived || title !== ""
+  visible: present
 
   FontMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: 11 }
 
