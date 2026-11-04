@@ -55,6 +55,10 @@ the mailbox, and the log names its events' actor `harness`.
 What an agent says, a request's reason and a work's goal and notes are the
 kit's `Prose`, their web addresses links that open in the browser.
 
+The composer is the kit's `TextArea`: one line that grows with the text up to
+eight lines, then scrolls. Enter sends, Shift+Enter breaks the line, and a
+pasted text keeps its line breaks.
+
 A message carries the files picked under the composer with the kit's
 `FilePicker`, sent through `Http.post`. A file a message or an agent's
 `attach` carries shows under it as the kit's `FileChip`, which
