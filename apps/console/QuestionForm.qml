@@ -32,6 +32,8 @@ ColumnLayout {
   // reaches, so the floating actions cover the card's width.
   property color fill: "transparent"
   property real bleed: 0
+  // The dim words' tone, kept readable on the card's fill.
+  readonly property color dim: Theme.readableOn(fill)
   // The answers joined as one text reply.
   signal submitted(string text)
   // The person says they cannot answer.
@@ -128,19 +130,22 @@ ColumnLayout {
   }
 
   // Scrolls the nearest view that scrolls just enough to show `item` above
-  // the floating actions, or its top when it is taller; whether the view
-  // follows its end is not touched, as the keyboard is here.
+  // the floating actions, or its top when it is taller; the last box shows
+  // the asker's closing paragraph with it. Whether the view follows its end
+  // is not touched, as the keyboard is here.
   function reveal(item) {
     const view = views.find(each => each.contentHeight > each.height)
     if (!view)
       return
     const top = item.mapToItem(view.contentItem, 0, 0).y
+    const last = outro.visible && item === boxes.itemAt(boxes.count - 1) ? outro : item
+    const end = last.mapToItem(view.contentItem, 0, 0).y + last.height
     const margin = Theme.space.cell
     const room = view.height - bar.height - margin
-    if (top - margin < view.contentY || item.height + margin > room)
+    if (top - margin < view.contentY || end - top + margin > room)
       view.contentY = top - margin
-    else if (top + item.height > view.contentY + room)
-      view.contentY = top + item.height - room
+    else if (end > view.contentY + room)
+      view.contentY = end - room
   }
 
   spacing: Theme.space.gap
@@ -208,7 +213,7 @@ ColumnLayout {
         Layout.alignment: Qt.AlignTop
         Layout.preferredWidth: Theme.size.gutter
         text: row.modelData.n + "."
-        color: Theme.dim
+        color: form.dim
         font.pixelSize: Theme.type.body.size
       }
 
@@ -257,6 +262,7 @@ ColumnLayout {
 
         Chip {
           text: "I DON'T KNOW YET"
+          restInk: form.dim
           checked: row.unknown
           reason: form.sending ? "your answers are being sent" : ""
           tip: row.unknown ? "write your own answer again" : "answer that you don't know yet"
@@ -276,6 +282,7 @@ ColumnLayout {
   }
 
   Prose {
+    id: outro
     Layout.fillWidth: true
     Layout.maximumWidth: 620
     visible: form.parsed.outro !== ""
@@ -350,7 +357,7 @@ ColumnLayout {
         height: Theme.size.controlDense
         verticalAlignment: Text.AlignVCenter
         text: "answer at least one to send"
-        color: Theme.dim
+        color: form.dim
         font.pixelSize: Theme.type.tab.size
       }
       // Giving up is quiet; it takes the accent only under the pointer.
@@ -358,7 +365,7 @@ ColumnLayout {
         id: decline
         dense: true
         role: "action"
-        tone: decline.hovered ? Theme.primary : Theme.dim
+        tone: decline.hovered ? Theme.primary : form.dim
         text: "I CAN'T ANSWER THIS"
         tip: "tell the team you can't answer, so they sort it out"
         enabled: !form.sending

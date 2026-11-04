@@ -55,7 +55,9 @@ Rectangle {
   Keys.onReturnPressed: press()
   Keys.onSpacePressed: press()
 
-  property color ink: chip.checked || chip.alert ? chip.accent : (chip.hovered ? Theme.foreground : Theme.dim)
+  // The ink at rest; a chip on a tinted fill lifts it to stay readable.
+  property color restInk: Theme.dim
+  property color ink: chip.checked || chip.alert ? chip.accent : (chip.hovered ? Theme.foreground : chip.restInk)
   Behavior on ink { ColorAnimation { duration: 140 } }
 
   Row {
