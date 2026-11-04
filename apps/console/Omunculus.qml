@@ -1071,7 +1071,7 @@ Singleton {
       lanes[item.id] = laneOf(item)
     progress = Progress.build({
       runs: runs.map(run => runErrors[run.id] ? Object.assign({}, run, { error: runErrors[run.id] }) : run),
-      works: works, requests: requests, noted: noted, lanes: lanes, calling: calling, callArgs: callArgs, runStarts: runStarts,
+      works: works, requests: requests, noted: noted, replies: replies, lanes: lanes, calling: calling, callArgs: callArgs, runStarts: runStarts,
       journeys: journeys, rootAgent: agent || lastAgent, now: tick, usage: usage.works, calls: callsOf
     })
   }

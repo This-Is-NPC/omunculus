@@ -21,7 +21,7 @@ const tools = {
   next_stage: { now: "Moving to the next stage", done: "Moved to the next stage", act: "move to the next stage" },
   grant: { now: "Granting a permission", done: "Granted a permission", act: "grant a permission" },
   continue: { now: "Moving the work on", done: "Moved the work on", act: "move the work on" },
-  break: { now: "Stopping the work", done: "Stopped the work", act: "stop the work" },
+  break: { now: "Asking for fixes", done: "Asked for fixes", act: "ask for fixes" },
   reopen: { now: "Sending work back", done: "Sent work back", act: "send work back" },
   done: { now: "Finishing its part", done: "Finished its part", act: "finish its part" },
   send: { now: "Sending a message", done: "Sent a message", act: "send a message" },
@@ -107,8 +107,10 @@ function commands(line) {
 }
 
 // A path relative to the run's workspace: an absolute prefix up to and
-// including the `workspace/` folder (and a conversation's folder in it) goes.
+// including the `workspace/` folder (and a conversation's folder in it) goes;
+// the machine's scratch folders are named as one.
 function relative(word) {
+  if (/^\/(?:var\/)?tmp(?:\/|$)/.test(word)) return "a scratch folder";
   const root = /^\/(?:[^/]+\/)*?workspace(?:\/|$)(?:[^/]+\/[0-9a-f]{32}(?:\/|$))?/.exec(word);
   return root ? word.slice(root[0].length) || "the project" : word;
 }
@@ -184,10 +186,11 @@ function miss(args) {
   return path ? "found no " + path + " yet" : "found nothing yet";
 }
 
-// A reply, by whom it answers: the person's answers passed on, else an answer.
-function replied(asker, yours) {
+// A reply, by whom it answers: the person's `answers` passed on (how many
+// they gave, 0 when none), else an answer.
+function replied(asker, answers) {
   const to = asker ? " " + asker : "";
-  return yours ? "Passed your answers to" + (to || " the team") : "Answered" + to;
+  return answers > 0 ? "Passed your " + (answers === 1 ? "answer" : "answers") + " to" + (to || " the team") : "Answered" + to;
 }
 
 // A finished call as the log's plain sentence ("read design/rounds.md",

@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "kit/client/Questions.js" as Questions
+import "kit/client/Events.js" as Events
 import "kit/client/Phrases.js" as Phrases
 import "kit/client/Requests.js" as Requests
 import "kit/ui/focus.js" as Focus
@@ -51,6 +52,9 @@ SurfaceFrame {
   readonly property string about: subject !== Omunculus.subject ? subject : ""
   // Who passed it up, from the asker up, and how each level worded it.
   readonly property var climb: request ? Requests.chain(request).reverse() : []
+  // The answered request this one repeats, and what you said to it.
+  readonly property var earlier: open ? Requests.repeated(request, Omunculus.requests, Omunculus.replies) : null
+  readonly property var earlierReply: earlier ? Omunculus.replies[earlier.id] : null
   // The asker first, then who passed it on toward you: design-lead, seller, sales.
   readonly property var askers: {
     const unique = request ? Requests.route(request, Omunculus.noted[key]) : []
@@ -280,6 +284,17 @@ SurfaceFrame {
 
     Label {
       Layout.fillWidth: true
+      Layout.maximumWidth: 620
+      visible: card.earlierReply !== null
+      text: card.earlierReply ? "asked again after your answer at " + card.earlierReply.stamp + ": " + (Events.readable(card.earlierReply.body || Requests.optionText(card.earlierReply.option)).replace(/\s+/g, " ").trim()) : ""
+      color: card.dim
+      font.pixelSize: Theme.type.meta.size
+      maximumLineCount: 1
+      elide: Text.ElideRight
+    }
+
+    Label {
+      Layout.fillWidth: true
       visible: card.wanted !== null && !card.settled
       text: card.asker + " wants to " + card.unlocks(card.wanted)
       color: Theme.foreground
@@ -294,7 +309,7 @@ SurfaceFrame {
       Layout.fillWidth: true
       Layout.maximumWidth: 620
       visible: !!card.request && card.question !== "" && !card.settled && card.form === null
-      source: Omunculus.inline(card.question)
+      source: Omunculus.inline(Events.readable(card.question))
       color: Theme.foreground
       font.pixelSize: Theme.type.cardBody.size
       lineHeight: Theme.type.cardBody.lineHeight
@@ -304,7 +319,7 @@ SurfaceFrame {
       Layout.fillWidth: true
       Layout.maximumWidth: 620
       visible: card.settled
-      text: card.question.replace(/\s+/g, " ")
+      text: Events.readable(card.question).replace(/\s+/g, " ")
       color: card.dim
       font.pixelSize: Theme.type.body.size
       maximumLineCount: 2
@@ -314,7 +329,7 @@ SurfaceFrame {
 
     Chip {
       Layout.maximumWidth: content.width
-      visible: card.passed.length > 0 && !card.settled
+      visible: (card.passed.length > 0 || card.climb.length > 1) && !card.settled
       text: "how each level worded it"
       icon: card.wording ? "chevron-up" : "chevron-down"
       tip: card.wording ? "hide how each level worded it" : "show how each level worded it"
@@ -325,7 +340,7 @@ SurfaceFrame {
     Label {
       Layout.fillWidth: true
       Layout.maximumWidth: 620
-      visible: card.passed.length > 0 && card.wording && !card.settled
+      visible: (card.passed.length > 0 || card.climb.length > 1) && card.wording && !card.settled
       text: card.climb.slice(1).map(level => Requests.label(level.requester) + ": " + String(level.reason || "")).concat(card.request ? [String(card.request.reason || "")] : [])
         .filter(line => line.trim() !== "").join("\n\n")
       color: card.dim

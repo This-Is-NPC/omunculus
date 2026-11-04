@@ -152,7 +152,7 @@ kit's `Prose`, their web addresses links that open in the browser.
 
 Under its words, a turn's tool calls are one group (`ToolCalls`, from the
 kit's `Calls.group`). Folded, one line counts them, how many failed and the
-first that did, in plain words: "9 steps · 1 failed: could not move to the next stage"; a lookup that found nothing (a folder not there yet) is no failure; a lone call that went well is named by what it did ("Passed a question up", "Looked in design/", "Ran: npx build"; a reply, by whom it answers: "Passed your answers to seller"), and a turn that says nothing keeps its heading, so these lines never stand under no name; how long the run
+first that did, in plain words: "9 steps · 1 failed: could not move to the next stage"; a lookup that found nothing (a folder not there yet) is no failure; a lone call that went well is named by what it did ("Passed a question up", "Looked in design/", "Ran: npx build"; a reply, by whom it answers: "Passed your answer to seller", or "answers" for a numbered form), and a turn that says nothing keeps its heading, so these lines never stand under no name; how long the run
 worked is the turn's to say. While the run is open its last three calls show
 live under it. Unfolded, each call is a row with the raw tool name and its args
 in brief (`Phrases.brief`: the path of a file tool, the command of `bash`, whom an `ask` or
@@ -243,7 +243,7 @@ room, blank until there is something to say, so the tabs below hold their
 place from the first message. While a question waits on you
 that line counts what you are asked as its card does: "sales asks you 7
 questions" for a numbered form, "to decide", "for a permission"
-(`Progress.asking`); a team working with no event for ten minutes says so.
+(`Progress.asking`), with "again" when you already answered that asker on that work, and "· round N" once a work is sent back; a team working with no event for ten minutes says so.
 A finished conversation says "✓ DONE · TOOK 1 HOUR 20 MINUTES" in the success
 tone in the strip's top line, and the second line stays blank. The two lines are hidden
 while no work exists and no agent runs.

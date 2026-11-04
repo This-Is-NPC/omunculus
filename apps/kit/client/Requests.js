@@ -40,7 +40,7 @@ function chosen(answer) {
 }
 
 // An option as a button reads it: its words in capitals.
-function optionText(option) { return option.replace(/_/g, " ").toUpperCase(); }
+function optionText(option) { return option.replace(/[-_]/g, " ").toUpperCase(); }
 
 // An option as its card button and quick chip read it. `of` names where a
 // scope applies: {who, stage, folder}.
@@ -111,6 +111,16 @@ function passedOn(request) {
 function question(request, noted) {
   const passed = noted ? passedOn(request) : [];
   return passed.length > 0 ? passed.map(origin => origin.reason).join("\n\n") : String(request.reason || "");
+}
+
+// The request this one repeats: the last one already answered, from the same
+// asker on the same work, given `replies` by request id; null when none.
+function repeated(request, requests, replies) {
+  const work = request.work_id || "";
+  const who = asker(request);
+  const before = requests.filter(each => each.id !== request.id && !pending(each) && replies[each.id]
+    && (each.work_id || "") === work && asker(each) === who);
+  return before.length > 0 ? before[before.length - 1] : null;
 }
 
 // The ids of every request some other request gathers from below through its

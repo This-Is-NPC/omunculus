@@ -78,6 +78,7 @@ SurfaceFrame {
   readonly property int budget: Math.max(8, Math.floor((width - 28) / metrics.advanceWidth("M")) - 1)
   readonly property var status: Progress.fit([
     { text: glyph + " " + word, keep: true },
+    node && node.round > 1 ? { text: "round " + node.round, keep: true } : null,
     node && condition === "working" ? { text: Progress.clock(Math.max(0, now - node.since)), keep: true }
       : node && typeof node.finishedIn === "number" ? { text: "in " + Progress.span(node.finishedIn) }
       : null,

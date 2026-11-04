@@ -124,9 +124,13 @@ defmodule Omunculus.GuiCallsTest do
     if (!Phrases.missed("ls", gone) || !Phrases.missed("read", "Error: file not found") || Phrases.missed("write", gone) || Phrases.missed("read", "permission denied")) throw Error("missed");
     same(Phrases.miss({path: "quotes"}), "found no quotes yet");
     same(Phrases.miss({}), "found nothing yet");
-    same(Phrases.replied("seller", true), "Passed your answers to seller");
-    same(Phrases.replied("seller", false), "Answered seller");
-    same(Phrases.replied("", false), "Answered");
+    same(Phrases.replied("seller", 1), "Passed your answer to seller");
+    same(Phrases.replied("seller", 3), "Passed your answers to seller");
+    same(Phrases.replied("seller", 0), "Answered seller");
+    same(Phrases.did("break", {}), "Asked for fixes");
+    same(Phrases.relative("/tmp/x/y.md"), "a scratch folder");
+    same(Phrases.relative("/var/tmp"), "a scratch folder");
+    same(Phrases.replied("", 0), "Answered");
     """)
   end
 end

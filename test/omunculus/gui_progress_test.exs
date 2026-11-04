@@ -88,7 +88,7 @@ defmodule Omunculus.GuiProgressTest do
     check(n.w3.steps.map(step => step.status).join() === "current,next,next", "w3 statuses", n.w3.steps);
     check(out.path.map(each => each.agent).join(" › ") === "seller › design-lead › designer", "path", out.path);
     check(out.path[2].title === "Home page" && out.path[2].work === "w3", "path leaf", out.path[2]);
-    check(JSON.stringify(out.now) === JSON.stringify({agent: "designer", doing: "Thinking · wrote files", since: 1900, state: "working"}), "now", out.now);
+    check(JSON.stringify(out.now) === JSON.stringify({agent: "designer", doing: "Thinking · wrote files", since: 1900, state: "working", round: 2}), "now", out.now);
     check(out.counts.working === 1 && out.counts.waiting === 2 && out.counts.total === 3 && out.counts.agents === 1, "counts", out.counts);
     check(out.spoken === "Working. seller, design-lead, designer: Thinking · wrote files", "spoken", out.spoken);
     """)
@@ -99,7 +99,7 @@ defmodule Omunculus.GuiProgressTest do
     const ask = {id: "q1", status: "pending", arbiter: human, requester: agent("seller"), work_id: "w1", reason: "What is the bakery called?\\nAnd where?"};
     const out = Progress.build(Object.assign({}, base, {requests: [ask]}));
     check(out.state === "needs-you" && nodes(out).w1.state === "needs-you" && nodes(out).w1.doing === "Waiting for your answer", "needs-you", out.state);
-    check(JSON.stringify(out.forYou) === JSON.stringify([{id: "q1", asker: "seller", work: "w1", title: "Bakery website", question: ask.reason, kind: "needs-you", asks: 1}]), "forYou", out.forYou);
+    check(JSON.stringify(out.forYou) === JSON.stringify([{id: "q1", asker: "seller", again: false, work: "w1", title: "Bakery website", question: ask.reason, kind: "needs-you", asks: 1}]), "forYou", out.forYou);
     check(out.spoken === "seller asks you: What is the bakery called?", "spoken", out.spoken);
     check(out.path.map(each => each.agent).join() === "seller,design-lead,designer", "path keeps going down", out.path);
     const broken = [{id: "w9", title: "Menu", state: "waiting", assignee: "designer", created_at: iso(1000), updated_at: iso(1100)}];
@@ -249,7 +249,7 @@ defmodule Omunculus.GuiProgressTest do
     check(asking.now.doing === "Thinking · asked a teammate", "calling", asking.now);
     const answer = {id: "q9", status: "answered", arbiter: human, requester: agent("seller"), work_id: null, reason: "x", origins: {}};
     const replying = Progress.build({works: [], runs: [run("r0", "sales", "", {depth: 0})], calling: {"": "reply"}, callArgs: {"": {request_id: "q9"}}, requests: [answer], rootAgent: "sales", now: 60});
-    check(replying.now.doing === "Passed your answers to seller", "live reply says what the finished one will", replying.now);
+    check(replying.now.doing === "Passed your answer to seller", "live reply says what the finished one will", replying.now);
     const idle = Progress.build({works: [], rootAgent: "sales", now: 60});
     check(idle.state === "idle" && idle.now.agent === "sales" && idle.now.doing === "" && idle.spoken === "", "idle", idle);
     """)
@@ -316,6 +316,12 @@ defmodule Omunculus.GuiProgressTest do
       origins: {a: {requester: agent("designer"), reason: "1. Colours?\\n2. Fonts?"}}};
     const relayed = Progress.build(Object.assign({}, base, {requests: [passed], noted: {q2: true}}));
     check(relayed.forYou[0].asker === "designer" && relayed.forYou[0].asks === 2, "passed on", relayed.forYou);
+    const answered = {id: "q0", status: "closed", arbiter: human, requester: agent("seller"), work_id: "w1", reason: "Which one?"};
+    const again = Progress.build(Object.assign({}, base, {requests: [answered, form], replies: {q0: {stamp: "09:48"}}}));
+    check(again.forYou[0].again === true && out.forYou[0].again === false, "asked again", again.forYou);
+    check(Progress.given([answered], answered, {}) === 1 && Progress.given([], answered, {}) === 0, "one answer given");
+    const numbered = Object.assign({}, answered, {reason: "1. A?\\n2. B?"});
+    check(Progress.given([numbered], numbered, {}) === 2, "numbered answers given");
     const one = kind => [{kind: kind, asks: 1}];
     check(Progress.asking(one("needs-you")) === "1 question", "one question", Progress.asking(one("needs-you")));
     check(Progress.asking(one("decision")) === "to decide", "decision", Progress.asking(one("decision")));

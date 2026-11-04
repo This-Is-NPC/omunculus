@@ -31,7 +31,7 @@ Item {
   // The first line with words, with no ids, its whitespace collapsed and cut
   // at 120 characters.
   readonly property string first: {
-    const line = Events.unid(Markdown.plain(question.split("\n").find(each => each.trim() !== "") || "")).replace(/\bon work\s+(?=[,.;)]|$)/gi, "").replace(/\s+/g, " ").trim()
+    const line = Events.readable(Markdown.plain(question.split("\n").find(each => each.trim() !== "") || "")).replace(/\s+/g, " ").trim()
     return line.length > 120 ? line.slice(0, 119) + "…" : line
   }
   readonly property string via: route.length > 1 ? " · via " + route.slice(1).join(" › ") : ""

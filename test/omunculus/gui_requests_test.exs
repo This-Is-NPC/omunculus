@@ -47,6 +47,8 @@ defmodule Omunculus.GuiRequestsTest do
     if (Requests.optionLabel("grant") !== "GRANT\u00a0\u00b7\u00a0THIS WORK ONLY") throw Error("grant label");
     if (Requests.optionLabel("grant_agent", {who: "clerk"}) !== "FOR CLERK") throw Error("agent label");
     if (Requests.optionLabel("approve") !== "APPROVE") throw Error("plain label");
+    if (Requests.optionLabel("pedir-mudancas") !== "PEDIR MUDANCAS") throw Error("hyphen label");
+    if (Requests.chose("pedir-mudancas") !== "YOU CHOSE PEDIR MUDANCAS") throw Error("hyphen chose");
     """)
   end
 
@@ -98,6 +100,19 @@ defmodule Omunculus.GuiRequestsTest do
     if (Requests.holder(loose, all) !== null || Requests.holder(done, all) !== null) throw Error("no holder");
     if (Requests.works(top).join() !== "w2,w3") throw Error("works " + Requests.works(top));
     if (Requests.works(done).join() !== "w1" || Requests.works(loose).join() !== "w2") throw Error("own work");
+    """)
+  end
+
+  test "repeated finds the answered request a new one asks again" do
+    run!(["Requests"], """
+    const ask = (id, status, work, who) => ({id: id, status: status, arbiter: human, requester: agent(who), work_id: work, reason: "q"});
+    const replies = {a: {stamp: "09:48"}, b: {stamp: "09:50"}};
+    const list = [ask("a", "closed", "w1", "lead"), ask("b", "closed", "w1", "lead"), ask("c", "closed", "w2", "lead"),
+      ask("d", "closed", "w1", "other"), ask("n", "pending", "w1", "lead")];
+    if (Requests.repeated(list[4], list, replies).id !== "b") throw Error("the last answered one");
+    if (Requests.repeated(ask("n", "pending", "w2", "lead"), list, replies) !== null) throw Error("answered request only");
+    if (Requests.repeated(ask("n", "pending", "w1", "third"), list, replies) !== null) throw Error("same asker");
+    if (Requests.repeated(list[0], [list[0]], replies) !== null) throw Error("not itself");
     """)
   end
 end

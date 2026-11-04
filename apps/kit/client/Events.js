@@ -47,6 +47,11 @@ function unid(text) {
     .replace(/[ \t]{2,}/g, " ");
 }
 
+// Text the person reads: no ids, and no "on work" left dangling by one.
+function readable(text) {
+  return unid(text).replace(/\bon work\s+(?=[,.;)]|$)/gi, "").replace(/ +(?=[,.;])/g, "");
+}
+
 // Text with ": " before it, or "" when there is none.
 function colon(text) { return text ? ": " + text : ""; }
 

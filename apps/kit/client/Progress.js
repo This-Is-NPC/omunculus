@@ -191,7 +191,7 @@ function build(input) {
       return "Thinking · " + last.charAt(0).toLowerCase() + last.slice(1);
     }
     const answered = requests.find(request => request.id === (callArgs[id] || {}).request_id);
-    return Phrases.replied(answered && answered.requester ? answered.requester.agent || "" : "", requests.some(request => Requests.human(request.arbiter) && !Requests.pending(request)));
+    return Phrases.replied(answered && answered.requester ? answered.requester.agent || "" : "", given(requests, answered, noted));
   };
 
   const node = (work, level) => {
@@ -383,7 +383,7 @@ function build(input) {
     const kind = Requests.kind(request);
     const form = kind === "needs-you" ? Questions.parse(question) : null;
     return {
-      id: request.id, asker: Requests.asker(request),
+      id: request.id, asker: Requests.asker(request), again: Requests.repeated(request, requests, input.replies || {}) !== null,
       work: of ? of.work : "", title: of ? of.title : "", question: question, kind: kind, asks: form ? form.items.length : 1
     };
   });
@@ -398,7 +398,7 @@ function build(input) {
   const open = runs.filter(run => run.status === "open");
   const loose = open.filter(run => !(run.work_id || "")).pop() || null;
   let doing = { agent: input.rootAgent || "", doing: "", since: null, state: "idle" };
-  if (leaf && (leaf.state === "working" || leaf.state === "needs-you")) doing = { agent: leaf.agent, doing: leaf.doing, since: leaf.since, state: leaf.state };
+  if (leaf && (leaf.state === "working" || leaf.state === "needs-you")) doing = { agent: leaf.agent, doing: leaf.doing, since: leaf.since, state: leaf.state, round: leaf.round };
   else if (loose) doing = {
     agent: loose.agent || input.rootAgent || "",
     doing: phrasing(""),
@@ -408,7 +408,7 @@ function build(input) {
     // An open run outranks a closed leaf: the agent that works now.
     const run = open[open.length - 1];
     doing = { agent: run.agent || input.rootAgent || "", doing: phrasing(run.work_id || ""), since: runStart(run), state: "working" };
-  } else if (leaf) doing = { agent: leaf.agent, doing: leaf.doing, since: leaf.since, state: leaf.state };
+  } else if (leaf) doing = { agent: leaf.agent, doing: leaf.doing, since: leaf.since, state: leaf.state, round: leaf.round };
 
   const lastRun = runs[runs.length - 1];
   let state = "idle";
@@ -440,6 +440,14 @@ function build(input) {
     : null;
 
   return { state: state, roots: roots, focus: focus, flat: flat, path: path, now: doing, forYou: forYou, agents: agents, counts: counts, spoken: spoken, front: front };
+}
+
+// How many answers of yours a reply passes on: 0 when you answered none, else
+// the items of the numbered question answered, or one.
+function given(requests, answered, noted) {
+  if (!requests.some(request => Requests.human(request.arbiter) && !Requests.pending(request))) return 0;
+  const form = answered ? Questions.parse(Requests.question(answered, noted[answered.id])) : null;
+  return form ? form.items.length : 1;
 }
 
 // What requests for you ask (forYou entries), in words after "asks you":

@@ -133,7 +133,7 @@ ColumnLayout {
       const askers = Array.from(new Set(forYou.map(ask => ask.asker)))
       const named = askers.map((name, index) => ({ text: name + (index < askers.length - 1 ? ", " : ""), tone: Omunculus.toneOf(name),
         pieces: index < askers.length - 1 ? [{ text: name, tone: Omunculus.toneOf(name) }, { text: ", " }] : undefined, elide: index === 0, keep: true }))
-      return named.concat([{ text: (askers.length > 1 ? " ask you " : " asks you ") + Progress.asking(forYou), tone: Theme.warning, keep: true }])
+      return named.concat([{ text: (askers.length > 1 ? " ask you " : " asks you ") + Progress.asking(forYou) + (forYou.some(ask => ask.again) ? " again" : ""), tone: Theme.warning, keep: true }])
     }
     if (!now || !now.agent)
       return [{ text: focusNode ? focusNode.doing : "", elide: true, keep: true }]
@@ -143,6 +143,7 @@ ColumnLayout {
     const chain = above.reduce((all, agent) => all.concat([{ text: agent, tone: Omunculus.toneOf(agent) }, { text: " › " }]), [])
     return (above.length > 0 ? [{ text: chain.map(piece => piece.text).join(""), short: "…› ", pieces: chain }] : [])
       .concat([{ text: now.agent, tone: Omunculus.toneOf(now.agent), keep: true }, { text: doing !== "" ? ": " + doing : "", elide: true }])
+      .concat(now.round > 1 ? [{ text: " · round " + now.round, keep: true }] : [])
       .concat(clock !== "" ? [{ text: " · " + clock, keep: true }] : [])
   }
 

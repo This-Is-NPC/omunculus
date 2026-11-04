@@ -74,6 +74,7 @@ defmodule Omunculus.GuiEventsTest do
       check(!/next_stage|after |comment|continue/.test(Events.what(type, body, "sales")), "raw words", Events.what(type, body, "sales"));
     says("tool", {name: "on-request", args: {event: {actor_id: "sales"}}, ok: true}, "sales", "on-request hook ran");
     says("tool", {name: "on-break", args: {event: {}}, ok: false, output: "exit 1"}, "harness", "on-break hook failed: exit 1");
+    check(Events.readable("is waiting on work 135a434edbcdd61f0c6ef1d29a363dbc, which broke") === "is waiting, which broke", "readable", Events.readable("is waiting on work 135a434edbcdd61f0c6ef1d29a363dbc, which broke"));
     check(Events.hook({args: {event: {}}}) && !Events.hook({args: {event: {}, path: "a"}}) && !Events.hook({}), "hook", "");
     says("end", {}, "sales", "finished");
     says("tool", {name: "end", args: {}, ok: false, output: "refused: work 3cb71b446f56d82a451f4caa6b5cb220 below yours broke and waits on you: reopen it"}, "sales", "could not finish: a work below is still open");
