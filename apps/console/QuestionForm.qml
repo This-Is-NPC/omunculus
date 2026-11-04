@@ -13,11 +13,13 @@ import "kit/ui"
 // restores what was typed. Enter moves to the next box, Enter in the last
 // and Ctrl+Enter in any send; a box taking the keyboard scrolls into view
 // in the view around the form. SEND joins the answers into one text reply.
+// The closing paragraph of the message, if any, shows after the last box and
+// is not sent.
 // What was typed stays after a failure.
 ColumnLayout {
   id: form
 
-  // The parsed questions, as {intro, items:[{n, text}]}.
+  // The parsed questions, as {intro, items:[{n, text}], outro}.
   required property var parsed
   property bool sending: false
   // The answers joined as one text reply.
@@ -181,5 +183,15 @@ ColumnLayout {
         }
       }
     }
+  }
+
+  Prose {
+    Layout.fillWidth: true
+    Layout.maximumWidth: 620
+    visible: form.parsed.outro !== ""
+    source: Omunculus.inline(form.parsed.outro)
+    color: Theme.foreground
+    font.pixelSize: 13
+    wrapMode: Text.Wrap
   }
 }
