@@ -365,7 +365,7 @@ function build(input) {
     const kind = Requests.kind(request);
     const form = kind === "needs-you" ? Questions.parse(question) : null;
     return {
-      id: request.id, asker: passed.length > 0 ? Requests.label(passed[0].requester) : of ? of.agent : Requests.label(request.requester),
+      id: request.id, asker: Requests.asker(request),
       work: of ? of.work : "", title: of ? of.title : "", question: question, kind: kind, asks: form ? form.items.length : 1
     };
   });

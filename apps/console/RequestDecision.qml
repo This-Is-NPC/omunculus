@@ -55,7 +55,6 @@ SurfaceFrame {
     const unique = request ? Requests.route(request, Omunculus.noted[key]) : []
     return unique.length > 0 ? unique : asker !== "" ? [asker] : []
   }
-  readonly property string passers: climb.slice(1).map(level => Requests.label(level.requester)).join(" › ")
   // Which of its own buttons the card offers, from its state and not from
   // their visibility, which follows the column that holds them.
   readonly property bool sends: open && !formLoader.active && (escalating || (kind !== "permission" && hasWords))
@@ -335,7 +334,7 @@ SurfaceFrame {
     Chip {
       Layout.maximumWidth: content.width
       visible: card.passed.length > 0 && !card.settled
-      text: "passed up by " + (card.passers !== "" ? card.passers : "the harness")
+      text: "how each level worded it"
       icon: card.wording ? "chevron-up" : "chevron-down"
       tip: card.wording ? "hide how each level worded it" : "show how each level worded it"
       onClicked: card.wording = !card.wording
